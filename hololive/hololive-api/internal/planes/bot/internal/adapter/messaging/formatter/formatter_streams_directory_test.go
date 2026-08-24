@@ -25,11 +25,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
@@ -50,17 +51,17 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 		{
 			ID:             "abc123",
 			Title:          longTitle,
-			ChannelName:    "사쿠라 미코",
+			ChannelName:    testMemberSakuraMiko,
 			StartScheduled: &future,
 			ViewerCount:    &viewer,
-			Channel:        &domain.Channel{Name: "사쿠라 미코", Org: &orgHololive},
+			Channel:        &domain.Channel{Name: testMemberSakuraMiko, Org: &orgHololive},
 			Status:         domain.StreamStatusUpcoming,
 		},
 	}
 
 	live := formatter.FormatLiveStreams(t.Context(), streams)
 	assert.Contains(t, live, "라이브 목록")
-	assert.Contains(t, live, "사쿠라 미코")
+	assert.Contains(t, live, testMemberSakuraMiko)
 	assert.NotContains(t, live, "[Holo]")
 	assert.Contains(t, live, "https://youtube.com/watch?v=abc123")
 	assert.NotContains(t, live, "\u200b")
@@ -70,7 +71,7 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	assert.Contains(t, upcoming, "https://youtube.com/watch?v=abc123")
 	assert.NotContains(t, upcoming, "\u200b")
 
-	channel := &domain.Channel{Name: "사쿠라 미코"}
+	channel := &domain.Channel{Name: testMemberSakuraMiko}
 	schedule := formatter.ChannelSchedule(t.Context(), channel, streams, 7)
 	assert.Contains(t, schedule, "채널 일정")
 	assert.Contains(t, schedule, "https://youtube.com/watch?v=abc123")
@@ -159,7 +160,7 @@ func TestStreamHelpers(t *testing.T) {
 
 		unknownOrg := "NewOrg"
 
-		stream = &domain.Stream{ChannelName: "테스트", Channel: &domain.Channel{Org: &unknownOrg}}
+		stream = &domain.Stream{ChannelName: testDisplayName, Channel: &domain.Channel{Org: &unknownOrg}}
 		assert.Equal(t, "[NewOrg] 테스트", formatter.formatChannelName(t.Context(), stream))
 
 		stream = &domain.Stream{ChannelName: "채널명"}
@@ -182,7 +183,7 @@ func TestPrepareMemberDirectoryGroupsAndMemberDirectory(t *testing.T) {
 		{
 			GroupName: "  JP 1기생  ",
 			Members: []MemberDirectoryEntry{
-				{PrimaryName: "사쿠라 미코", SecondaryName: "Sakura Miko"},
+				{PrimaryName: testMemberSakuraMiko, SecondaryName: "Sakura Miko"},
 				{PrimaryName: "  ", SecondaryName: ""},
 			},
 		},
@@ -243,12 +244,12 @@ func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 		{
 			name: "Hololive org suppresses tag",
 			stream: &domain.Stream{
-				ChannelName: "사쿠라 미코",
+				ChannelName: testMemberSakuraMiko,
 				Channel: &domain.Channel{
 					Org: new("Hololive"),
 				},
 			},
-			want: "사쿠라 미코",
+			want: testMemberSakuraMiko,
 		},
 		{
 			name:   "nil stream returns empty",

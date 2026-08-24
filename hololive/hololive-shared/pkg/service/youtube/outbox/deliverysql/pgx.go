@@ -26,8 +26,10 @@ func IsNilDB(db any) bool {
 	if db == nil {
 		return true
 	}
+
 	value := reflect.ValueOf(db)
 	kind := value.Kind()
+
 	if kind == reflect.Chan ||
 		kind == reflect.Func ||
 		kind == reflect.Interface ||
@@ -36,6 +38,7 @@ func IsNilDB(db any) bool {
 		kind == reflect.Slice {
 		return value.IsNil()
 	}
+
 	return false
 }
 
@@ -43,9 +46,11 @@ func AsQuerier(db any) dbx.Querier {
 	if IsNilDB(db) {
 		return nil
 	}
+
 	if typed, ok := db.(dbx.Querier); ok {
 		return typed
 	}
+
 	return nil
 }
 
@@ -54,6 +59,7 @@ func ExecDeliverySQL(ctx context.Context, db dbx.Querier, action, query string, 
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
+
 	return tag.RowsAffected(), nil
 }
 
@@ -61,6 +67,7 @@ func SelectDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action, qu
 	if err := pgxscan.Select(ctx, db, dest, PostgresPlaceholders(query), args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
+
 	return nil
 }
 
@@ -69,9 +76,11 @@ func GetDeliverySQL(ctx context.Context, db dbx.Querier, dest any, action, query
 	if err == nil {
 		return true, nil
 	}
+
 	if pgxscan.NotFound(err) {
 		return false, nil
 	}
+
 	return false, fmt.Errorf("%s: %w", action, err)
 }
 
@@ -79,6 +88,7 @@ func DeliveryInClause(column string, count int) string {
 	if count <= 0 {
 		return "FALSE"
 	}
+
 	return column + " IN (" + inDeliveryPlaceholders(count) + ")"
 }
 
@@ -86,6 +96,7 @@ func inDeliveryPlaceholders(count int) string {
 	if count <= 0 {
 		return "NULL"
 	}
+
 	return strings.TrimSuffix(strings.Repeat("?, ", count), ", ")
 }
 
@@ -93,6 +104,7 @@ func AppendDeliveryInt64Args(args []any, values []int64) []any {
 	for _, value := range values {
 		args = append(args, value)
 	}
+
 	return args
 }
 
@@ -100,6 +112,7 @@ func AppendDeliveryStringArgs(args []any, values []string) []any {
 	for _, value := range values {
 		args = append(args, value)
 	}
+
 	return args
 }
 
@@ -107,6 +120,7 @@ func AppendDeliveryOutboxKindArgs(args []any, values ...domain.OutboxKind) []any
 	for _, value := range values {
 		args = append(args, string(value))
 	}
+
 	return args
 }
 
@@ -114,6 +128,7 @@ func AppendDeliveryOutboxStatusArgs(args []any, values ...domain.OutboxStatus) [
 	for _, value := range values {
 		args = append(args, string(value))
 	}
+
 	return args
 }
 
@@ -121,13 +136,15 @@ func AppendDeliveryAlarmTypeArgs(args []any, values ...domain.AlarmType) []any {
 	for _, value := range values {
 		args = append(args, string(value))
 	}
+
 	return args
 }
 
 func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) error) error {
 	if db == nil {
-		return fmt.Errorf("db is nil")
+		return errors.New("db is nil")
 	}
+
 	if fn == nil {
 		return nil
 	}
@@ -137,7 +154,12 @@ func InDeliveryTx(ctx context.Context, db DeliveryDB, fn func(tx dbx.Querier) er
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer rollbackDeliveryTxOnPanic(ctx, tx)
-	return finishDeliveryTx(ctx, tx, fn(tx))
+
+	if err := finishDeliveryTx(ctx, tx, fn(tx)); err != nil {
+		return fmt.Errorf("finish delivery tx: %w", err)
+	}
+
+	return nil
 }
 
 func rollbackDeliveryTxOnPanic(ctx context.Context, tx pgx.Tx) {
@@ -146,6 +168,7 @@ func rollbackDeliveryTxOnPanic(ctx context.Context, tx pgx.Tx) {
 		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			slog.Default().Warn("delivery transaction rollback after panic failed", slog.Any("error", rollbackErr))
 		}
+
 		panic(p)
 	}
 }
@@ -155,30 +178,40 @@ func finishDeliveryTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
+
 		return fnErr
 	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
+
 	return nil
 }
 
 func PostgresPlaceholders(query string) string {
 	var out strings.Builder
+
 	index := 1
+
 	for i := range len(query) {
 		if query[i] != '?' {
 			out.WriteByte(query[i])
+
 			continue
 		}
+
 		fmt.Fprintf(&out, "$%d", index)
+
 		index++
 	}
+
 	return out.String()
 }
 
 func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, error) {
 	var item domain.YouTubeNotificationOutbox
+
 	err := row.Scan(
 		&item.ID,
 		&item.Kind,
@@ -196,11 +229,13 @@ func ScanOutboxRow(row pgx.CollectableRow) (domain.YouTubeNotificationOutbox, er
 	if err != nil {
 		return item, fmt.Errorf("scan outbox row: %w", err)
 	}
+
 	return item, nil
 }
 
 func ScanDeliveryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDelivery, error) {
 	var item domain.YouTubeNotificationDelivery
+
 	err := row.Scan(
 		&item.ID,
 		&item.OutboxID,
@@ -216,6 +251,7 @@ func ScanDeliveryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDelivery
 	if err != nil {
 		return item, fmt.Errorf("scan delivery row: %w", err)
 	}
+
 	return item, nil
 }
 
@@ -224,9 +260,14 @@ const deleteBatchYield = 10 * time.Millisecond
 func YieldBetweenDeleteBatches(ctx context.Context) error {
 	timer := time.NewTimer(deleteBatchYield)
 	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("yield between delete batches: %w", err)
+		}
+
+		return nil
 	case <-timer.C:
 		return nil
 	}

@@ -21,6 +21,7 @@
 package llm
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
@@ -32,6 +33,7 @@ func NewPresetClient(baseURL, apiKey, model string, logger *slog.Logger, opts ..
 	}
 
 	o := &Options{}
+
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -44,18 +46,27 @@ func NewPresetClient(baseURL, apiKey, model string, logger *slog.Logger, opts ..
 	if o.SchemaName != "" {
 		presetOpts = append(presetOpts, openaipreset.WithSchemaName(o.SchemaName))
 	}
+
 	if o.Temperature != nil {
 		presetOpts = append(presetOpts, openaipreset.WithTemperature(*o.Temperature))
 	}
+
 	if o.ReasoningEffort != "" {
 		presetOpts = append(presetOpts, openaipreset.WithReasoningEffort(o.ReasoningEffort))
 	}
+
 	if o.ChatCompletions {
 		presetOpts = append(presetOpts, openaipreset.WithChatCompletions())
 	}
+
 	if o.CostTracker != nil {
 		presetOpts = append(presetOpts, openaipreset.WithUsageReporter(costTrackerUsageReporter{tracker: o.CostTracker}))
 	}
 
-	return openaipreset.New(baseURL, apiKey, model, presetOpts...)
+	out, err := openaipreset.New(baseURL, apiKey, model, presetOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("preset client: %w", err)
+	}
+
+	return out, nil
 }

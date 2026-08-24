@@ -34,13 +34,21 @@ type SetNXResult struct {
 	Err      error
 }
 
-type Client interface {
+type DataCache interface {
 	KeyValueCache
 	SetCache
 	HashCache
-	ScriptCache
+}
+
+type DomainCache interface {
 	StreamCache
 	MemberCache
+}
+
+type Client interface {
+	DataCache
+	DomainCache
+	ScriptCache
 	ConnectionManager
 	LowLevelCache
 }

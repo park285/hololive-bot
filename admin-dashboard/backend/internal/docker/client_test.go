@@ -6,6 +6,7 @@ func TestParseHealth(t *testing.T) {
 	if got := parseHealth("Up 2 hours (healthy)"); got == nil || *got != "healthy" {
 		t.Fatalf("unexpected health: %v", got)
 	}
+
 	if got := parseHealth("Exited (0) 2 hours ago"); got != nil {
 		t.Fatalf("unexpected health: %v", got)
 	}
@@ -16,9 +17,11 @@ func TestIsManaged(t *testing.T) {
 	if !client.IsManaged("hololive-admin-api") {
 		t.Fatal("hololive container should be managed")
 	}
+
 	if client.IsManaged("hololive-admin-api-init") {
 		t.Fatal("init container should be excluded")
 	}
+
 	if client.IsManaged("random") {
 		t.Fatal("random container should not be managed")
 	}
@@ -34,6 +37,7 @@ func TestStopBlocked(t *testing.T) {
 		"hololive-admin-api": false,
 		"docker-proxy":       false,
 	}
+
 	for name, want := range cases {
 		if got := client.stopBlocked(name); got != want {
 			t.Fatalf("stopBlocked(%q) = %v, want %v", name, got, want)

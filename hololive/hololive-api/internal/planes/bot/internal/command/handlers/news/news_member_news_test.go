@@ -27,12 +27,16 @@ import (
 	"strings"
 	"testing"
 
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+const (
+	testNewsRoomID   = "room-a"
+	testNewsRoomName = "room-name"
 )
 
 type stubMemberNewsService struct {
@@ -105,7 +109,7 @@ func TestMemberNewsCommand_NoMembersMessage(t *testing.T) {
 
 	cmd := NewMemberNewsCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-a", RoomName: "room-name"}, map[string]any{"period": "weekly"})
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}, map[string]any{"period": "weekly"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -119,7 +123,7 @@ func TestMemberNewsCommand_NoMembersMessage(t *testing.T) {
 func TestMemberNewsCommand_EnsureBaseDepsError(t *testing.T) {
 	cmd := NewMemberNewsCommand(&handlercore.Dependencies{})
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-a"}, map[string]any{"period": "weekly"})
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testNewsRoomID}, map[string]any{"period": "weekly"})
 	if err == nil {
 		t.Fatal("expected ensure base deps error, got nil")
 	}
@@ -147,7 +151,7 @@ func TestMemberNewsCommand_ServiceNotInitializedUsesSendError(t *testing.T) {
 	}
 
 	cmd := NewMemberNewsCommand(deps)
-	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-a", RoomName: "room-name"}, map[string]any{"period": "weekly"}); err != nil {
+	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}, map[string]any{"period": "weekly"}); err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
 
@@ -177,7 +181,7 @@ func TestMemberNewsCommand_ServiceErrorUsesSendError(t *testing.T) {
 
 	cmd := NewMemberNewsCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-a", RoomName: "room-name"}, map[string]any{"period": "weekly"})
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}, map[string]any{"period": "weekly"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -205,13 +209,13 @@ func TestMemberNewsSubscriptionCommand_SubscribeAndStatus(t *testing.T) {
 	}
 
 	cmd := NewMemberNewsSubscriptionCommand(deps)
-	ctx := &domain.CommandContext{Room: "room-a", RoomName: "room-name"}
+	ctx := &domain.CommandContext{Room: testNewsRoomID, RoomName: testNewsRoomName}
 
 	if err := cmd.Execute(t.Context(), ctx, map[string]any{"action": "on"}); err != nil {
 		t.Fatalf("subscribe action returned error: %v", err)
 	}
 
-	if stub.subscribedRoomID != "room-a" || stub.subscribedRoomName != "room-name" {
+	if stub.subscribedRoomID != testNewsRoomID || stub.subscribedRoomName != testNewsRoomName {
 		t.Fatalf("subscribe room args mismatch: id=%q name=%q", stub.subscribedRoomID, stub.subscribedRoomName)
 	}
 

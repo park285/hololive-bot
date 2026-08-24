@@ -21,11 +21,11 @@
 package providers
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
@@ -34,13 +34,20 @@ import (
 // 분산 제한이 활성화된 경우 Valkey 기반 SlidingWindowLimiter를 함께 구성합니다.
 func ProvideYouTubeRateLimiter(cacheClient cache.Client, logger *slog.Logger) (*ratelimiter.RateLimiter, error) {
 	ytCfg := settings.DefaultYouTubeOperationalConfig()
-	return ProvideYouTubeRateLimiterWithConfig(&ytCfg, cacheClient, logger)
+
+	out, err := ProvideYouTubeRateLimiterWithConfig(&ytCfg, cacheClient, logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide youtube rate limiter with config: %w", err)
+	}
+
+	return out, nil
 }
 
 func ProvideYouTubeRateLimiterWithConfig(ytCfg *settings.YouTubeConfig, cacheClient cache.Client, logger *slog.Logger) (*ratelimiter.RateLimiter, error) {
 	if ytCfg == nil {
-		return nil, fmt.Errorf("youtube config is nil")
+		return nil, errors.New("youtube config is nil")
 	}
+
 	limiter := ratelimiter.New(ytCfg.RequestInterval)
 
 	drl := ytCfg.DistributedRateLimit
@@ -56,6 +63,7 @@ func ProvideYouTubeRateLimiterWithConfig(ytCfg *settings.YouTubeConfig, cacheCli
 	if err != nil {
 		return nil, fmt.Errorf("initialize youtube distributed rate limiter: %w", err)
 	}
+
 	if err := limiter.ConfigureDistributed(
 		distributedLimiter,
 		drl.Limit,

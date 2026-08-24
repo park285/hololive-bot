@@ -28,9 +28,9 @@ import (
 )
 
 const (
-	// AppScheme: 앱 Deep Link 스키마 (Android에서 등록 필요)
+	// AppScheme: 앱 Deep Link 스키마 (Android에서 등록 필요).
 	AppScheme = "hololive-app"
-	// CallbackPath: 콜백 경로
+	// CallbackPath: 콜백 경로.
 	CallbackPath = "callback"
 )
 
@@ -40,11 +40,13 @@ func BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc string) string {
 
 	if errorParam != "" {
 		params.Set("error", errorParam)
+
 		if errorDesc != "" {
 			params.Set("error_description", errorDesc)
 		}
 	} else if code != "" {
 		params.Set("code", code)
+
 		if state != "" {
 			params.Set("state", state)
 		}
@@ -53,10 +55,11 @@ func BuildOAuthDeepLinkURL(code, state, errorParam, errorDesc string) string {
 	if len(params) > 0 {
 		return baseURL + "?" + params.Encode()
 	}
+
 	return baseURL
 }
 
-// oauthRedirectTmpl: Deep Link 리디렉트 HTML 템플릿 (XSS 방어를 위해 html/template 사용)
+// oauthRedirectTmpl: Deep Link 리디렉트 HTML 템플릿 (XSS 방어를 위해 html/template 사용).
 var oauthRedirectTmpl = template.Must(template.New("oauth").Parse(`<!DOCTYPE html>
 <html>
 <head>
@@ -130,6 +133,7 @@ func trustedOAuthDeepLinkURL(deepLinkURL string) string {
 	if err != nil || parsed.Scheme != AppScheme {
 		return fmt.Sprintf("%s://%s", AppScheme, CallbackPath)
 	}
+
 	return deepLinkURL
 }
 
@@ -155,8 +159,10 @@ func BuildOAuthRedirectHTML(deepLinkURL string, isError bool) string {
 	}
 
 	var buf bytes.Buffer
+
 	if err := oauthRedirectTmpl.Execute(&buf, data); err != nil {
 		return "<!DOCTYPE html><html><body><p>렌더링 오류</p></body></html>"
 	}
+
 	return buf.String()
 }

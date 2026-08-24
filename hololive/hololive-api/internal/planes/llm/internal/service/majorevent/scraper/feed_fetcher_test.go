@@ -26,7 +26,11 @@ func (r *trackingReadCloser) Read(p []byte) (int, error) {
 	if r.readErr != nil {
 		return 0, r.readErr
 	}
-	return r.reader.Read(p)
+
+	out, err := r.reader.Read(p)
+
+	//nolint:wrapcheck // io.ReadAll이 io.EOF를 등가 비교하므로 센티널을 그대로 돌려줘야 한다.
+	return out, err
 }
 
 func (r *trackingReadCloser) Close() error {
@@ -53,7 +57,9 @@ func TestFeedFetcherReadResponseBodyAcceptsExactLimit(t *testing.T) {
 func TestFeedFetcherReadResponseBodyRejectsUnknownLengthOverflow(t *testing.T) {
 	body := newTrackingReadCloser("12345")
 	closeErr := errors.New("close failed")
+
 	body.closeErr = closeErr
+
 	fetcher := &FeedFetcher{maxBodyLen: 4}
 
 	_, err := fetcher.readResponseBody(&http.Response{
@@ -102,8 +108,10 @@ func TestFeedFetcherReadResponseBodyPreservesReadAndCloseErrors(t *testing.T) {
 	readErr := errors.New("read failed")
 	closeErr := errors.New("close failed")
 	body := newTrackingReadCloser("")
+
 	body.readErr = readErr
 	body.closeErr = closeErr
+
 	fetcher := &FeedFetcher{maxBodyLen: 4}
 
 	_, err := fetcher.readResponseBody(&http.Response{
@@ -121,7 +129,9 @@ func TestFeedFetcherReadResponseBodyPreservesReadAndCloseErrors(t *testing.T) {
 func TestFeedFetcherReadResponseBodyReturnsCloseErrorAfterRead(t *testing.T) {
 	closeErr := errors.New("close failed")
 	body := newTrackingReadCloser("1234")
+
 	body.closeErr = closeErr
+
 	fetcher := &FeedFetcher{maxBodyLen: 4}
 
 	got, err := fetcher.readResponseBody(&http.Response{

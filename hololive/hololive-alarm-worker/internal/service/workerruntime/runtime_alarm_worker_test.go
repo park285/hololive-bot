@@ -3,6 +3,7 @@ package workerruntime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,13 +14,16 @@ import (
 
 func TestNotificationEgressRunnerStartsAllActiveRunners(t *testing.T) {
 	var firstStarts, secondStarts atomic.Int32
+
 	runner := notificationEgressRunner{runners: []NamedScheduler{
 		{Name: "first", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
 			firstStarts.Add(1)
+
 			return nil
 		})},
 		{Name: "second", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
 			secondStarts.Add(1)
+
 			return nil
 		})},
 	}}
@@ -32,10 +36,12 @@ func TestNotificationEgressRunnerStartsAllActiveRunners(t *testing.T) {
 
 func TestNotificationEgressRunnerSkipsNilSchedulers(t *testing.T) {
 	var starts atomic.Int32
+
 	runner := notificationEgressRunner{runners: []NamedScheduler{
 		{Name: "nil-runner", Scheduler: nil},
 		{Name: "active", Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
 			starts.Add(1)
+
 			return nil
 		})},
 	}}
@@ -51,6 +57,7 @@ func TestNotificationEgressRunnerReturnsNilWhenNoActiveRunners(t *testing.T) {
 	}}
 
 	done := make(chan error, 1)
+
 	go func() { done <- runner.Start(t.Context()) }()
 
 	select {
@@ -73,16 +80,19 @@ func TestNotificationEgressRunnerReturnsNilAfterRunnerExitOnContextCancel(t *tes
 			close(cancelObserved)
 			<-release
 			close(runnerExited)
+
 			return nil
 		})},
 	}}
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
+
 	go func() { done <- runner.Start(ctx) }()
 
 	<-started
 	cancel()
+
 	select {
 	case <-cancelObserved:
 	case <-time.After(2 * time.Second):
@@ -118,10 +128,10 @@ func TestNotificationEgressRunnerWrapsRunnerFailure(t *testing.T) {
 	}}
 
 	err := runner.Start(t.Context())
-
 	if err == nil {
 		t.Fatal("Start() error = nil, want wrapped runner failure")
 	}
+
 	require.ErrorIs(t, err, sentinel)
 	assert.Contains(t, err.Error(), "notification egress runner stopped")
 }
@@ -129,7 +139,11 @@ func TestNotificationEgressRunnerWrapsRunnerFailure(t *testing.T) {
 type runtimeAlarmSchedulerFunc func(context.Context) error
 
 func (f runtimeAlarmSchedulerFunc) Start(ctx context.Context) error {
-	return f(ctx)
+	if err := f(ctx); err != nil {
+		return fmt.Errorf("f: %w", err)
+	}
+
+	return nil
 }
 
 func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
@@ -144,11 +158,13 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 			close(cancelObserved)
 			<-release
 			close(schedulerExited)
+
 			return nil
 		}),
 	}
 
 	runtime.Start(t.Context(), make(chan error, 1))
+
 	select {
 	case <-schedulerStarted:
 	case <-time.After(2 * time.Second):
@@ -156,6 +172,7 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 	}
 
 	shutdownDone := make(chan error, 1)
+
 	go func() {
 		shutdownDone <- runtime.Shutdown(t.Context())
 	}()
@@ -165,6 +182,7 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("scheduler did not observe shutdown cancellation")
 	}
+
 	select {
 	case err := <-shutdownDone:
 		t.Fatalf("Shutdown returned before scheduler exit: %v", err)
@@ -172,11 +190,13 @@ func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 	}
 
 	close(release)
+
 	select {
 	case <-schedulerExited:
 	case <-time.After(2 * time.Second):
 		t.Fatal("scheduler did not exit after release")
 	}
+
 	select {
 	case err := <-shutdownDone:
 		require.NoError(t, err)
@@ -194,11 +214,13 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 			close(schedulerStarted)
 			<-release
 			close(schedulerExited)
+
 			return nil
 		}),
 	}
 
 	runtime.Start(t.Context(), make(chan error, 1))
+
 	select {
 	case <-schedulerStarted:
 	case <-time.After(2 * time.Second):
@@ -207,7 +229,9 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 
 	shutdownCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
+
 	shutdownDone := make(chan error, 1)
+
 	go func() {
 		shutdownDone <- runtime.Shutdown(shutdownCtx)
 	}()
@@ -217,12 +241,14 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("shutdown context did not reach its deadline")
 	}
+
 	select {
 	case err := <-shutdownDone:
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Shutdown blocked past its context deadline")
 	}
+
 	select {
 	case <-schedulerExited:
 		t.Fatal("scheduler exited despite ignoring cancellation")
@@ -230,6 +256,7 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 	}
 
 	close(release)
+
 	select {
 	case <-schedulerExited:
 	case <-time.After(2 * time.Second):

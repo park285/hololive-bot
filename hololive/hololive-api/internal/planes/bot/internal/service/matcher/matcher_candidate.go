@@ -25,10 +25,11 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 // tryExactValkeyMatch: 동적 Valkey 데이터에서 정확한 매칭을 시도함 (Holodex 호출 없이).
@@ -60,11 +61,13 @@ func preferHololiveCandidate(provider domain.MemberDataProvider, candidates []*m
 	if provider == nil {
 		return nil
 	}
+
 	for _, candidate := range candidates {
-		if member := provider.FindMemberByChannelID(candidate.channelID); member != nil && member.Org == "Hololive" {
+		if member := provider.FindMemberByChannelID(candidate.channelID); member != nil && member.Org == orgHololive {
 			return candidate
 		}
 	}
+
 	return nil
 }
 
@@ -114,6 +117,7 @@ func memberHasPartialAliasMatch(member *domain.Member, queryNorm string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -211,6 +215,7 @@ func fallbackChannelFromCandidate(candidate *matchCandidate) *domain.Channel {
 	if candidate.memberName != "" {
 		fallback.EnglishName = toStringPtr(candidate.memberName)
 	}
+
 	return fallback
 }
 
@@ -218,10 +223,12 @@ func (mm *Matcher) applyCachedChannelNameFallback(ctx context.Context, fallback 
 	if mm.cache == nil {
 		return
 	}
+
 	cachedName, cacheErr := mm.cache.HGet(ctx, constants.RedisKeys.AlarmMemberNames, candidate.channelID)
 	if cacheErr != nil || cachedName == "" {
 		return
 	}
+
 	fallback.Name = cachedName
 	mm.logger.Debug("Using cached channel name as fallback",
 		slog.String("channel_id", candidate.channelID),
@@ -233,9 +240,11 @@ func applyCandidateNameFallback(channel *domain.Channel, candidate *matchCandida
 	if candidate.memberName == "" {
 		return
 	}
+
 	if channel.Name == "" {
 		channel.Name = candidate.memberName
 	}
+
 	if channel.EnglishName == nil {
 		channel.EnglishName = toStringPtr(candidate.memberName)
 	}
@@ -282,6 +291,7 @@ func (mm *Matcher) loadDynamicMembers(ctx context.Context) map[string]string {
 	members, err := mm.cache.GetAllMembers(ctx)
 	if err != nil {
 		mm.logger.Warn("Failed to load dynamic members", slog.Any("error", err))
+
 		return map[string]string{}
 	}
 

@@ -23,8 +23,9 @@ package messaging
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/webhook"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestParseMessage_CompactAlarmAdd(t *testing.T) {
@@ -172,7 +173,7 @@ func TestParseMessage_UpcomingLimitAndMember(t *testing.T) {
 	}
 
 	member, ok := result.Params["member"].(string)
-	if !ok || member != "페코라" {
+	if !ok || member != testMemberPekora {
 		t.Fatalf("expected member=페코라, got %v", result.Params["member"])
 	}
 }
@@ -248,7 +249,7 @@ func TestParseMessage_MemberNewsSubscriptionOff(t *testing.T) {
 	}
 
 	action, ok := result.Params["action"].(string)
-	if !ok || action != "off" {
+	if !ok || action != testActionOff {
 		t.Fatalf("expected action=off, got %v", result.Params["action"])
 	}
 }
@@ -267,7 +268,7 @@ func TestParseMessage_MemberNewsSubscriptionStatus(t *testing.T) {
 	}
 
 	action, ok := result.Params["action"].(string)
-	if !ok || action != "status" {
+	if !ok || action != testActionStatus {
 		t.Fatalf("expected action=status, got %v", result.Params["action"])
 	}
 }
@@ -348,7 +349,7 @@ func TestParseMessage_ParserPriority_NewsSubscriptionOverNews(t *testing.T) {
 	}
 
 	action, ok := result.Params["action"].(string)
-	if !ok || action != "status" {
+	if !ok || action != testActionStatus {
 		t.Fatalf("expected action=status, got %v", result.Params["action"])
 	}
 }

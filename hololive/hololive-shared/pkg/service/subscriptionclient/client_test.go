@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	"github.com/kapu/hololive-shared/pkg/service/subscriptionclient"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const testSubscriptionsPath = "/internal/subscriptions"
@@ -36,9 +37,11 @@ func assertStatusLookupRequest(t *testing.T, r *http.Request) {
 	if r.Method != http.MethodGet {
 		t.Errorf("method = %q, want %q", r.Method, http.MethodGet)
 	}
+
 	if want := testSubscriptionsPath + "/room-42"; r.URL.Path != want {
 		t.Errorf("path = %q, want %q", r.URL.Path, want)
 	}
+
 	if got := r.Header.Get(httputil.HeaderAPIKey); got != "test-api-key" {
 		t.Errorf("api key header = %q, want %q", got, "test-api-key")
 	}
@@ -56,15 +59,17 @@ func TestIsSubscribedReturnsServerStatus(t *testing.T) {
 			client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assertStatusLookupRequest(t, r)
 				w.Header().Set("Content-Type", "application/json")
+
 				if err := jsonv2.MarshalWrite(w, subscription.SubscriptionStatusResponse{Subscribed: tc.subscribed}); err != nil {
 					t.Errorf("encode response: %v", err)
 				}
 			}))
 
-			got, err := client.IsSubscribed(context.Background(), " room-42 ")
+			got, err := client.IsSubscribed(t.Context(), " room-42 ")
 			if err != nil {
 				t.Fatalf("IsSubscribed() error = %v", err)
 			}
+
 			if got != tc.subscribed {
 				t.Fatalf("IsSubscribed() = %v, want %v", got, tc.subscribed)
 			}
@@ -74,6 +79,7 @@ func TestIsSubscribedReturnsServerStatus(t *testing.T) {
 
 func TestClientRejectsEmptyRoomIDWithoutRequest(t *testing.T) {
 	var requests atomic.Int32
+
 	client := newTestClient(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		requests.Add(1)
 	}))
@@ -84,6 +90,8 @@ func TestClientRejectsEmptyRoomIDWithoutRequest(t *testing.T) {
 	}{
 		{name: "IsSubscribed", call: func(ctx context.Context) error {
 			_, err := client.IsSubscribed(ctx, "   ")
+
+			//nolint:wrapcheck // 같은 테이블의 다른 케이스와 마찬가지로 클라이언트 오류를 그대로 넘겨야 단언 조건이 나란해진다.
 			return err
 		}},
 		{name: "Subscribe", call: func(ctx context.Context) error {
@@ -94,10 +102,11 @@ func TestClientRejectsEmptyRoomIDWithoutRequest(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.call(context.Background())
+			err := tc.call(t.Context())
 			if err == nil {
 				t.Fatal("expected error for empty room id, got nil")
 			}
+
 			if !strings.Contains(err.Error(), "room id is required") {
 				t.Fatalf("error = %q, want it to mention required room id", err)
 			}
@@ -114,13 +123,15 @@ func TestIsSubscribedReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
-	_, err := client.IsSubscribed(context.Background(), "room-1")
+	_, err := client.IsSubscribed(t.Context(), "room-1")
 	if err == nil {
 		t.Fatal("expected error for 500 response, got nil")
 	}
+
 	if !httputil.IsStatus(err, http.StatusInternalServerError) {
 		t.Fatalf("error = %v, want APIError with status 500", err)
 	}
+
 	if !strings.Contains(err.Error(), "check status") {
 		t.Fatalf("error = %q, want check status wrapping", err)
 	}
@@ -129,15 +140,17 @@ func TestIsSubscribedReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 func TestIsSubscribedFailsOnMalformedResponseBody(t *testing.T) {
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		if _, err := w.Write([]byte("not-json")); err != nil {
 			t.Errorf("write response: %v", err)
 		}
 	}))
 
-	_, err := client.IsSubscribed(context.Background(), "room-1")
+	_, err := client.IsSubscribed(t.Context(), "room-1")
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}
+
 	if !strings.Contains(err.Error(), "decode response") {
 		t.Fatalf("error = %q, want decode response wrapping", err)
 	}
@@ -148,13 +161,14 @@ func TestIsSubscribedHonorsContextDeadline(t *testing.T) {
 		<-r.Context().Done()
 	}))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	_, err := client.IsSubscribed(ctx, "room-1")
 	if err == nil {
 		t.Fatal("expected deadline error, got nil")
 	}
+
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error = %v, want context.DeadlineExceeded in chain", err)
 	}
@@ -165,26 +179,33 @@ func TestSubscribeSendsTrimmedJSONPayload(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want %q", r.Method, http.MethodPost)
 		}
+
 		if r.URL.Path != testSubscriptionsPath {
 			t.Errorf("path = %q, want %q", r.URL.Path, testSubscriptionsPath)
 		}
+
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
 			t.Errorf("content type = %q, want %q", got, "application/json")
 		}
+
 		var req subscription.SubscribeRequest
+
 		if err := jsonv2.UnmarshalRead(r.Body, &req); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
+
 		if req.RoomID != "room-7" {
 			t.Errorf("room_id = %q, want %q", req.RoomID, "room-7")
 		}
+
 		if req.RoomName != "홀로 방" {
 			t.Errorf("room_name = %q, want %q", req.RoomName, "홀로 방")
 		}
+
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	if err := client.Subscribe(context.Background(), " room-7 ", " 홀로 방 "); err != nil {
+	if err := client.Subscribe(t.Context(), " room-7 ", " 홀로 방 "); err != nil {
 		t.Fatalf("Subscribe() error = %v", err)
 	}
 }
@@ -194,10 +215,11 @@ func TestSubscribeReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 
-	err := client.Subscribe(context.Background(), "room-7", "room name")
+	err := client.Subscribe(t.Context(), "room-7", "room name")
 	if err == nil {
 		t.Fatal("expected error for 503 response, got nil")
 	}
+
 	if !httputil.IsStatus(err, http.StatusServiceUnavailable) {
 		t.Fatalf("error = %v, want APIError with status 503", err)
 	}
@@ -208,13 +230,15 @@ func TestUnsubscribeSendsDeleteForTrimmedRoomID(t *testing.T) {
 		if r.Method != http.MethodDelete {
 			t.Errorf("method = %q, want %q", r.Method, http.MethodDelete)
 		}
+
 		if want := testSubscriptionsPath + "/room-9"; r.URL.Path != want {
 			t.Errorf("path = %q, want %q", r.URL.Path, want)
 		}
+
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	if err := client.Unsubscribe(context.Background(), " room-9 "); err != nil {
+	if err := client.Unsubscribe(t.Context(), " room-9 "); err != nil {
 		t.Fatalf("Unsubscribe() error = %v", err)
 	}
 }
@@ -224,10 +248,11 @@ func TestUnsubscribeReturnsAPIErrorForNonSuccessStatus(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 
-	err := client.Unsubscribe(context.Background(), "room-9")
+	err := client.Unsubscribe(t.Context(), "room-9")
 	if err == nil {
 		t.Fatal("expected error for 404 response, got nil")
 	}
+
 	if !httputil.IsStatus(err, http.StatusNotFound) {
 		t.Fatalf("error = %v, want APIError with status 404", err)
 	}

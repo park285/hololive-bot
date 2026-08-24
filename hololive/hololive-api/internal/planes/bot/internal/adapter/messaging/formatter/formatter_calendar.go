@@ -67,6 +67,7 @@ func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayVi
 	var days []calendarDayView
 
 	currentDay := 0
+
 	for _, e := range entries {
 		if e.Member == nil {
 			continue
@@ -78,6 +79,7 @@ func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayVi
 		}
 
 		last := len(days) - 1
+
 		days[last].Entries = append(days[last].Entries, calendarEntryView{
 			Name:       calendarMemberDisplayName(e.Member),
 			IsBirthday: e.Kind == domain.CelebrationKindBirthday,
@@ -90,6 +92,7 @@ func calendarDayViews(month int, entries []domain.CalendarEntry) []calendarDayVi
 
 func calendarEntryCount(days []calendarDayView) int {
 	count := 0
+
 	for _, d := range days {
 		count += len(d.Entries)
 	}
@@ -101,11 +104,14 @@ func calendarMemberDisplayName(m *domain.Member) string {
 	if m == nil {
 		return ""
 	}
+
 	if m.ShortKoreanName != "" {
 		return m.ShortKoreanName
 	}
+
 	if m.NameKo != "" {
 		return m.NameKo
 	}
+
 	return m.Name
 }

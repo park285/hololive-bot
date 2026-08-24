@@ -32,30 +32,40 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 	if !ok {
 		return false
 	}
+
 	if !isYouTubeOutboxKaringKind(kind) {
 		return false
 	}
+
 	if len(rows) == 0 || len(outboxes) == 0 {
 		return true
 	}
+
 	payload, err := d.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
 	if err != nil {
 		d.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
+
 		return true
 	}
+
 	sendReq, err := buildDeliveryKaringSendRequest(roomID, outboxes)
 	if err != nil {
 		d.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
+
 		return true
 	}
 
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, mode)
+
 	if err := d.sendYouTubeOutboxKaring(ctx, sender, roomID, &payload); err != nil {
 		d.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
+
 		return true
 	}
+
 	d.recordKaringSuccess(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, result, mu)
+
 	return true
 }
 
@@ -80,13 +90,17 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 	defer cancel()
 
 	if err := d.karingMu.LockContext(sendCtx); err != nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return d.wrapKaringTimeoutError(sendCtx, "wait for youtube outbox karing send slot", err)
 	}
+
 	defer d.karingMu.Unlock()
 
 	if err := sender.SendYouTubeOutboxKaring(sendCtx, roomID, payload); err != nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return d.wrapKaringTimeoutError(sendCtx, "send youtube outbox karing", err)
 	}
+
 	return nil
 }
 
@@ -94,6 +108,7 @@ func (d *SendEngine) karingSendContext(ctx context.Context) (context.Context, co
 	if d.config.DeliverySendTimeout > 0 {
 		return context.WithTimeoutCause(ctx, d.config.DeliverySendTimeout, errDeliverySendTimeout)
 	}
+
 	return ctx, func() {}
 }
 
@@ -101,6 +116,7 @@ func (d *SendEngine) wrapKaringTimeoutError(ctx context.Context, action string, 
 	if errors.Is(context.Cause(ctx), errDeliverySendTimeout) {
 		return fmt.Errorf("%s timed out after %s: %w", action, d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
 	}
+
 	return fmt.Errorf("%s: %w", action, err)
 }
 
@@ -114,6 +130,7 @@ func (d *SendEngine) buildYouTubeOutboxKaringPayload(
 	if err != nil || strings.TrimSpace(memberName) == "" {
 		memberName = d.formatter.vtuberFallback(ctx)
 	}
+
 	payload := domain.YouTubeOutboxDispatchPayload{
 		OutboxIDs:  make([]int64, 0, len(outboxes)),
 		Kind:       kind,
@@ -130,17 +147,20 @@ func (d *SendEngine) buildYouTubeOutboxKaringPayload(
 			Payload:   outboxes[i].Payload,
 		})
 	}
+
 	if err := payload.Validate(); err != nil {
 		return domain.YouTubeOutboxDispatchPayload{}, fmt.Errorf("build youtube outbox karing payload: %w", err)
 	}
+
 	return payload, nil
 }
 
 func buildDeliveryKaringSendRequest(roomID string, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {
 	req, err := buildDeliverySendRequest(roomID, "karing", outboxes)
 	if err != nil {
-		return deliverySendRequest{}, err
+		return deliverySendRequest{}, fmt.Errorf("build delivery send request: %w", err)
 	}
+
 	return req, nil
 }
 

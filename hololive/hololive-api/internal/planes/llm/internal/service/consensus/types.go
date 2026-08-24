@@ -51,6 +51,7 @@ type FinalOutputReviewResponse struct {
 
 func StageContext(parent context.Context, requested time.Duration) (context.Context, context.CancelFunc, bool) {
 	const reserve = 250 * time.Millisecond
+
 	if requested <= 0 {
 		requested = time.Second
 	}
@@ -60,12 +61,14 @@ func StageContext(parent context.Context, requested time.Duration) (context.Cont
 		if remaining <= 0 {
 			return nil, nil, false
 		}
+
 		if remaining < requested {
 			requested = remaining
 		}
 	}
 
 	ctx, cancel := context.WithTimeout(parent, requested)
+
 	return ctx, cancel, true
 }
 
@@ -83,12 +86,15 @@ func NeedsAdjudication(verdict *ReviewVerdict, confidenceThreshold float64) bool
 	if verdict == nil {
 		return false
 	}
+
 	if !verdict.Approved {
 		return true
 	}
+
 	if HasCriticalIssues(verdict.Issues) {
 		return true
 	}
+
 	return verdict.Confidence < confidenceThreshold
 }
 
@@ -98,5 +104,6 @@ func HasCriticalIssues(issues []ReviewIssue) bool {
 			return true
 		}
 	}
+
 	return false
 }

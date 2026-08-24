@@ -26,6 +26,7 @@ func NormalizeCommunityShortsDeliveryPath(path string) string {
 	if trimmed == "" {
 		return CommunityShortsDeliveryPath
 	}
+
 	return trimmed
 }
 

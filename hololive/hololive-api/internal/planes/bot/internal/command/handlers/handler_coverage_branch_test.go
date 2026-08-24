@@ -24,11 +24,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubCoverageStreamProvider struct{}
@@ -46,7 +45,7 @@ func (s *stubCoverageStreamProvider) GetChannelSchedule(_ context.Context, _ str
 }
 
 func (s *stubCoverageStreamProvider) GetChannel(_ context.Context, _ string) (*domain.Channel, error) {
-	return nil, nil
+	return nil, errTestStubNoChannel
 }
 
 func TestParseUpcomingIntParam(t *testing.T) {
@@ -60,35 +59,35 @@ func TestParseUpcomingIntParam(t *testing.T) {
 		{
 			name:         "missing key uses default",
 			params:       map[string]any{},
-			key:          "hours",
+			key:          testParamHours,
 			defaultValue: 24,
 			want:         24,
 		},
 		{
 			name:         "nil map uses default",
 			params:       nil,
-			key:          "hours",
+			key:          testParamHours,
 			defaultValue: 12,
 			want:         12,
 		},
 		{
 			name:         "int value",
-			params:       map[string]any{"hours": 48},
-			key:          "hours",
+			params:       map[string]any{testParamHours: 48},
+			key:          testParamHours,
 			defaultValue: 24,
 			want:         48,
 		},
 		{
 			name:         "float64 value",
-			params:       map[string]any{"hours": 36.9},
-			key:          "hours",
+			params:       map[string]any{testParamHours: 36.9},
+			key:          testParamHours,
 			defaultValue: 24,
 			want:         36,
 		},
 		{
 			name:         "unsupported type uses default",
-			params:       map[string]any{"hours": "36"},
-			key:          "hours",
+			params:       map[string]any{testParamHours: "36"},
+			key:          testParamHours,
 			defaultValue: 24,
 			want:         24,
 		},
@@ -165,19 +164,19 @@ func TestParseUpcomingOptions(t *testing.T) {
 		},
 		{
 			name:             "caps hours and limit",
-			params:           map[string]any{"hours": 200.0, "limit": 120.0},
+			params:           map[string]any{testParamHours: 200.0, testParamLimit: 120.0},
 			wantHours:        168,
 			wantDisplayLimit: 100,
 		},
 		{
 			name:             "show all overrides limit",
-			params:           map[string]any{"hours": 0, "limit": 2, "all": true},
+			params:           map[string]any{testParamHours: 0, testParamLimit: 2, "all": true},
 			wantHours:        24,
 			wantDisplayLimit: 0,
 		},
 		{
 			name:             "normalizes low limit",
-			params:           map[string]any{"hours": 36, "limit": -1},
+			params:           map[string]any{testParamHours: 36, testParamLimit: -1},
 			wantHours:        36,
 			wantDisplayLimit: 0,
 		},

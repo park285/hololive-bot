@@ -33,5 +33,6 @@ func rejectRetiredYouTubeProducerEnv() error {
 			return fmt.Errorf("%s is retired; use YOUTUBE_REQUEST_INTERVAL_SECONDS and YOUTUBE_DISTRIBUTED_RATELIMIT_*", key)
 		}
 	}
+
 	return nil
 }

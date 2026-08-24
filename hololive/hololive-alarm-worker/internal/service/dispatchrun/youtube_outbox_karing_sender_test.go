@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type karingSenderStubIrisSender struct {
@@ -30,6 +31,7 @@ func (s *karingSenderStubIrisSender) SendMessageWithClientRequestID(_ context.Co
 	s.sendMessageCalls = append(s.sendMessageCalls, karingSenderStubMessageCall{
 		roomID: roomID, message: message, clientRequestID: clientRequestID,
 	})
+
 	return nil
 }
 
@@ -41,11 +43,11 @@ func (s *karingSenderStubIrisSender) SendKaringContentList(_ context.Context, _ 
 func TestYouTubeOutboxKaringSenderNilInnerReturnsPinnedError(t *testing.T) {
 	sender := YouTubeOutboxKaringSender{sender: nil}
 
-	require.EqualError(t, sender.SendMessage(t.Context(), "room-1", "hi"),
+	require.EqualError(t, sender.SendMessage(t.Context(), testAlarmRoomID, "hi"),
 		"youtube outbox karing sender: sender is nil")
-	require.EqualError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "hi", "req-1"),
+	require.EqualError(t, sender.SendMessageWithClientRequestID(t.Context(), testAlarmRoomID, "hi", "req-1"),
 		"youtube outbox karing sender: sender is nil")
-	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), "room-1", &domain.YouTubeOutboxDispatchPayload{}),
+	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), testAlarmRoomID, &domain.YouTubeOutboxDispatchPayload{}),
 		"youtube outbox karing sender: sender is nil")
 }
 
@@ -53,10 +55,10 @@ func TestYouTubeOutboxKaringSenderForwardsSendMessage(t *testing.T) {
 	stub := &karingSenderStubIrisSender{}
 	sender := NewYouTubeOutboxKaringSender(stub, nil)
 
-	require.NoError(t, sender.SendMessage(t.Context(), "room-1", "hello"))
+	require.NoError(t, sender.SendMessage(t.Context(), testAlarmRoomID, "hello"))
 
 	require.Len(t, stub.sendMessageCalls, 1)
-	assert.Equal(t, "room-1", stub.sendMessageCalls[0].roomID)
+	assert.Equal(t, testAlarmRoomID, stub.sendMessageCalls[0].roomID)
 	assert.Equal(t, "hello", stub.sendMessageCalls[0].message)
 	assert.Empty(t, stub.sendMessageCalls[0].clientRequestID)
 }
@@ -65,10 +67,10 @@ func TestYouTubeOutboxKaringSenderForwardsSendMessageWithClientRequestID(t *test
 	stub := &karingSenderStubIrisSender{}
 	sender := NewYouTubeOutboxKaringSender(stub, nil)
 
-	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "hello", "req-1"))
+	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), testAlarmRoomID, "hello", "req-1"))
 
 	require.Len(t, stub.sendMessageCalls, 1)
-	assert.Equal(t, "room-1", stub.sendMessageCalls[0].roomID)
+	assert.Equal(t, testAlarmRoomID, stub.sendMessageCalls[0].roomID)
 	assert.Equal(t, "hello", stub.sendMessageCalls[0].message)
 	assert.Equal(t, "req-1", stub.sendMessageCalls[0].clientRequestID)
 }
@@ -79,7 +81,7 @@ func TestYouTubeOutboxKaringSenderForwardsKaringChunks(t *testing.T) {
 	payload := domain.YouTubeOutboxDispatchPayload{
 		Kind:       domain.OutboxKindNewVideo,
 		AlarmType:  domain.OutboxKindNewVideo.ToAlarmType(),
-		ChannelID:  "UCtest",
+		ChannelID:  testAlarmChannelID,
 		MemberName: "Outbox Member",
 		Items: []domain.YouTubeOutboxItem{{
 			OutboxID:  1,

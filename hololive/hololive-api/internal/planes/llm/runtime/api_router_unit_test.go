@@ -21,8 +21,7 @@
 package runtime
 
 import (
-	"context"
-	"io"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -30,22 +29,20 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-
-	jsonv2 "encoding/json/v2"
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func newDiscardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
@@ -56,7 +53,7 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 		c.String(http.StatusOK, "pong")
 	})
 
-	server := sharedserver.NewH2CServer(":32004", router, "")
+	server := sharedserver.NewHTTPServer(":32004", router, "")
 	require.NotNil(t, server)
 
 	assert.Equal(t, ":32004", server.Addr)
@@ -66,7 +63,7 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 	assert.Equal(t, constants.ServerTimeout.Idle, server.IdleTimeout)
 	assert.Equal(t, constants.ServerTimeout.MaxHeaderBytes, server.MaxHeaderBytes)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ping", http.NoBody)
 	rr := httptest.NewRecorder()
 	server.Handler.ServeHTTP(rr, req)
 
@@ -76,11 +73,12 @@ func TestProvideAPIServer_ConfigAndHandler(t *testing.T) {
 
 func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	prevMode := gin.Mode()
+
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
 
-	router, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), httputil.AdminAuthConfig{Disabled: true})
+	router, err := buildHealthOnlyRouter(t.Context(), newDiscardLogger(), httputil.AdminAuthConfig{Disabled: true})
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
@@ -88,19 +86,20 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	assert.Equal(t, gin.PlatformCloudflare, router.TrustedPlatform)
 
 	t.Run("health", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 
 		var payload map[string]any
+
 		require.NoError(t, jsonv2.Unmarshal(rr.Body.Bytes(), &payload))
 		assert.Equal(t, "ok", payload["status"])
 	})
 
 	t.Run("metrics", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
@@ -110,16 +109,17 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("metrics require api key when configured", func(t *testing.T) {
-		protectedRouter, err := buildHealthOnlyRouter(context.Background(), newDiscardLogger(), httputil.AdminAuthConfig{APIKey: "test-key"})
+		protectedRouter, err := buildHealthOnlyRouter(t.Context(), newDiscardLogger(), httputil.AdminAuthConfig{APIKey: "test-key"})
 		require.NoError(t, err)
 
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 		rr := httptest.NewRecorder()
 		protectedRouter.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
-		reqWithKey := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", http.NoBody)
+		reqWithKey := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
 		reqWithKey.Header.Set(common.APIKeyHeader, "test-key")
+
 		rrWithKey := httptest.NewRecorder()
 		protectedRouter.ServeHTTP(rrWithKey, reqWithKey)
 		assert.Equal(t, http.StatusOK, rrWithKey.Code)
@@ -127,19 +127,20 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 	})
 
 	t.Run("ready", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ready", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 
 		var payload map[string]any
+
 		require.NoError(t, jsonv2.Unmarshal(rr.Body.Bytes(), &payload))
 		assert.Equal(t, "ok", payload["status"])
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/unknown", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/unknown", http.NoBody)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusNotFound, rr.Code)
@@ -148,6 +149,7 @@ func TestBuildHealthOnlyRouter_Endpoints(t *testing.T) {
 
 func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
+
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
@@ -156,7 +158,7 @@ func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	server, err := buildLLMSchedulerHTTPServer(
-		context.Background(),
+		t.Context(),
 		32005,
 		logger,
 		triggerHandler,
@@ -171,6 +173,7 @@ func TestBuildLLMSchedulerHTTPServer_FailsClosedWithoutAPIKey(t *testing.T) {
 
 func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
+
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
@@ -179,7 +182,7 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
 	server, err := buildLLMSchedulerHTTPServer(
-		context.Background(),
+		t.Context(),
 		32006,
 		logger,
 		triggerHandler,
@@ -190,13 +193,14 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, server)
 
-	withoutKeyReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	withoutKeyReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	withoutKeyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(withoutKeyRR, withoutKeyReq)
 	assert.Equal(t, http.StatusUnauthorized, withoutKeyRR.Code)
 
-	withKeyReq := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	withKeyReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	withKeyReq.Header.Set(common.APIKeyHeader, "test-key")
+
 	withKeyRR := httptest.NewRecorder()
 	server.Handler.ServeHTTP(withKeyRR, withKeyReq)
 	assert.Equal(t, http.StatusServiceUnavailable, withKeyRR.Code)
@@ -204,6 +208,7 @@ func TestBuildLLMSchedulerHTTPServer_WithAPIKey(t *testing.T) {
 
 func TestBuildLLMSchedulerHTTPServer_FailsClosedForInternalDataRoutesWithoutAPIKey(t *testing.T) {
 	prevMode := gin.Mode()
+
 	t.Cleanup(func() {
 		gin.SetMode(prevMode)
 	})
@@ -211,7 +216,7 @@ func TestBuildLLMSchedulerHTTPServer_FailsClosedForInternalDataRoutesWithoutAPIK
 	logger := newDiscardLogger()
 
 	server, err := buildLLMSchedulerHTTPServer(
-		context.Background(),
+		t.Context(),
 		32007,
 		logger,
 		nil,

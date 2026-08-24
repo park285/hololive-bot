@@ -30,11 +30,11 @@ type StreamStatus string
 
 // StreamStatus 상수 목록.
 const (
-	// StreamStatusLive: 방송 진행 중
+	// StreamStatusLive: 방송 진행 중.
 	StreamStatusLive StreamStatus = "live"
-	// StreamStatusUpcoming: 방송 예정
+	// StreamStatusUpcoming: 방송 예정.
 	StreamStatusUpcoming StreamStatus = "upcoming"
-	// StreamStatusPast: 방송 종료됨
+	// StreamStatusPast: 방송 종료됨.
 	StreamStatusPast StreamStatus = "past"
 )
 
@@ -99,6 +99,7 @@ func (s *Stream) GetYouTubeURL() string {
 	if s.Link != nil && *s.Link != "" {
 		return *s.Link
 	}
+
 	return YouTubeWatchURL(s.ID)
 }
 
@@ -114,6 +115,7 @@ func (s *Stream) TimeUntilStart() *time.Duration {
 	}
 
 	duration := s.StartScheduled.Sub(now)
+
 	return new(duration)
 }
 

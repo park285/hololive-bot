@@ -60,42 +60,52 @@ func reconcileTrackingRowsWithPersistedSendState(ctx context.Context, tx batchDB
 
 	outboxRows, err := loadPersistedOutboxSentState(ctx, tx, inputs)
 	if err != nil {
-		return err
+		return fmt.Errorf("load persisted outbox sent state: %w", err)
 	}
+
 	if len(outboxRows) == 0 {
 		return nil
 	}
 
 	sentAtByIdentity, identityByOutboxID, outboxIDs := buildPersistedSentStateMaps(outboxRows)
 	if err := mergePersistedDeliverySentState(ctx, tx, outboxIDs, identityByOutboxID, sentAtByIdentity); err != nil {
-		return err
+		return fmt.Errorf("merge persisted delivery sent state: %w", err)
 	}
+
 	if len(sentAtByIdentity) == 0 {
 		return nil
 	}
+
 	applyPersistedSentStateToTrackingRows(trackingRows, sentAtByIdentity)
+
 	return nil
 }
 
 func collectTrackingIdentityInputs(trackingRows []*domain.YouTubeContentAlarmTracking) []persistedOutboxSentStateInput {
 	inputs := make([]persistedOutboxSentStateInput, 0, len(trackingRows))
 	identitySeen := make(map[string]struct{}, len(trackingRows))
+
 	for i := range trackingRows {
 		row := trackingRows[i]
 		if row == nil || !isCommunityShortsOutboxKind(row.Kind) {
 			continue
 		}
+
 		contentID := strings.TrimSpace(row.ContentID)
 		if contentID == "" {
 			continue
 		}
+
 		identityKey := notificationIdentityKey(row.Kind, contentID)
 		if _, ok := identitySeen[identityKey]; ok {
 			continue
 		}
+
 		identitySeen[identityKey] = struct{}{}
+
 		inputs = append(inputs, persistedOutboxSentStateInput{Kind: row.Kind, ContentID: contentID})
 	}
+
 	return inputs
 }
 
@@ -105,18 +115,23 @@ func loadPersistedOutboxSentState(
 	inputs []persistedOutboxSentStateInput,
 ) ([]persistedOutboxSentStateRow, error) {
 	args := make([]any, 0, len(inputs)*2)
+
 	var values strings.Builder
+
 	appendValuesPlaceholders(&values, len(inputs), 2)
+
 	for i := range inputs {
 		args = append(args, inputs[i].Kind, inputs[i].ContentID)
 	}
 
 	var outboxRows []persistedOutboxSentStateRow
+
 	if err := dbx.SelectSQL(ctx, tx, &outboxRows, "query outbox rows", `
 		WITH input(kind, content_id) AS (
 			VALUES `+values.String()+mustSQL("repository_batch_persisted_state_0117_01.sql"), args...); err != nil {
 		return nil, fmt.Errorf("query outbox rows: %w", err)
 	}
+
 	return outboxRows, nil
 }
 
@@ -126,18 +141,23 @@ func buildPersistedSentStateMaps(
 	sentAtByIdentity := make(map[string]time.Time, len(outboxRows))
 	identityByOutboxID := make(map[int64]string, len(outboxRows))
 	outboxIDs := make([]int64, 0, len(outboxRows))
+
 	for i := range outboxRows {
 		contentID := strings.TrimSpace(outboxRows[i].ContentID)
 		if contentID == "" {
 			continue
 		}
+
 		identityKey := notificationIdentityKey(outboxRows[i].Kind, contentID)
+
 		identityByOutboxID[outboxRows[i].ID] = identityKey
 		outboxIDs = append(outboxIDs, outboxRows[i].ID)
+
 		if outboxRows[i].SentAt != nil && !outboxRows[i].SentAt.IsZero() {
 			updateIdentitySentAtMin(sentAtByIdentity, identityKey, yttimestamp.Normalize(*outboxRows[i].SentAt))
 		}
 	}
+
 	return sentAtByIdentity, identityByOutboxID, outboxIDs
 }
 
@@ -153,20 +173,26 @@ func mergePersistedDeliverySentState(
 	}
 
 	var deliveryRows []persistedDeliverySentStateRow
+
 	args := dbx.AnyArgs(outboxIDs)
+
 	args = append(args, domain.OutboxStatusSent)
+
 	if err := dbx.SelectSQL(ctx, tx, &deliveryRows, "query sent delivery rows", mustSQL("repository_batch_persisted_state_0162_02.sql")+dbx.InPlaceholders(len(outboxIDs))+`)
 		  AND status = ?
 		  AND sent_at IS NOT NULL`, args...); err != nil {
 		return fmt.Errorf("query sent delivery rows: %w", err)
 	}
+
 	for i := range deliveryRows {
 		identityKey, ok := identityByOutboxID[deliveryRows[i].OutboxID]
 		if !ok || deliveryRows[i].SentAt == nil || deliveryRows[i].SentAt.IsZero() {
 			continue
 		}
+
 		updateIdentitySentAtMin(sentAtByIdentity, identityKey, yttimestamp.Normalize(*deliveryRows[i].SentAt))
 	}
+
 	return nil
 }
 
@@ -187,10 +213,12 @@ func applyPersistedSentStateToTrackingRow(
 	if !ok {
 		return
 	}
+
 	sentAt, ok := sentAtByIdentity[notificationIdentityKey(row.Kind, contentID)]
 	if !ok {
 		return
 	}
+
 	applyTrackingAlarmSentAt(row, sentAt)
 }
 
@@ -198,7 +226,9 @@ func persistedSentStateContentID(row *domain.YouTubeContentAlarmTracking) (strin
 	if row == nil || !isCommunityShortsOutboxKind(row.Kind) {
 		return "", false
 	}
+
 	contentID := strings.TrimSpace(row.ContentID)
+
 	return contentID, contentID != ""
 }
 
@@ -206,7 +236,9 @@ func applyTrackingAlarmSentAt(row *domain.YouTubeContentAlarmTracking, sentAt ti
 	if row.AlarmSentAt != nil && !sentAt.Before(*row.AlarmSentAt) {
 		return
 	}
+
 	sentAtCopy := sentAt
+
 	row.AlarmSentAt = &sentAtCopy
 }
 
@@ -214,12 +246,15 @@ func updateIdentitySentAtMin(sentAtByIdentity map[string]time.Time, identityKey 
 	if candidate.IsZero() {
 		return
 	}
+
 	if existing, ok := sentAtByIdentity[identityKey]; ok {
 		if candidate.Before(existing) {
 			sentAtByIdentity[identityKey] = candidate
 		}
+
 		return
 	}
+
 	sentAtByIdentity[identityKey] = candidate
 }
 

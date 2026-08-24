@@ -43,8 +43,10 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-
 
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+
 	workerChannelFull := false
 	doneCh, cancelDone := dispatcherDoneChannel(ctx, stopCh)
+
 	defer cancelDone()
 
 	for {
@@ -54,10 +56,12 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-
 		if signal == dispatcherSignalStop {
 			return
 		}
+
 		if signal == dispatcherSignalWake {
 			workerChannelFull = false
 			continue
 		}
+
 		if signal == dispatcherSignalTimer {
 			workerChannelFull = s.dispatchDueJobs(jobCh)
 		}
@@ -66,6 +70,7 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-
 
 func dispatcherDoneChannel(ctx context.Context, stopCh <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
 	dispatchCtx, cancel := context.WithCancel(ctx)
+
 	panicguard.Go(nil, "youtube-poller-dispatch-cancel", func() {
 		select {
 		case <-stopCh:
@@ -73,6 +78,7 @@ func dispatcherDoneChannel(ctx context.Context, stopCh <-chan struct{}) (<-chan 
 		case <-dispatchCtx.Done():
 		}
 	})
+
 	return dispatchCtx.Done(), cancel
 }
 
@@ -94,6 +100,7 @@ func (s *Scheduler) resetDispatchTimer(timer *time.Timer, workerChannelFull bool
 		default:
 		}
 	}
+
 	timer.Reset(s.nextDispatchDelay(workerChannelFull))
 }
 
@@ -104,6 +111,7 @@ func (s *Scheduler) nextDispatchDelay(workerChannelFull bool) time.Duration {
 	if workerChannelFull {
 		return 50 * time.Millisecond
 	}
+
 	if len(s.jobs) == 0 {
 		return time.Second
 	}
@@ -112,16 +120,18 @@ func (s *Scheduler) nextDispatchDelay(workerChannelFull bool) time.Duration {
 	if wait < 0 {
 		return 0
 	}
+
 	return wait
 }
 
-// dispatchDueJobs: 실행 시간이 된 작업 전달
+// dispatchDueJobs: 실행 시간이 된 작업 전달.
 func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer s.observeOldestDueAge()
 
 	now := time.Now()
+
 	for len(s.jobs) > 0 {
 		job := s.jobs[0]
 		if job.NextRunAt.After(now) {
@@ -138,6 +148,7 @@ func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 			// 채널 가득 참 - 현재 슬롯 anchor를 유지한 채 재시도한다.
 			s.metrics.SchedulerDispatchDefer.WithLabelValues("worker_channel_full").Inc()
 			heap.Push(&s.jobs, job)
+
 			return true
 		}
 	}
@@ -148,6 +159,7 @@ func (s *Scheduler) dispatchDueJobs(jobCh chan<- *Job) bool {
 func (s *Scheduler) observeOldestDueAge() {
 	if len(s.jobs) == 0 {
 		s.metrics.ObserveSchedulerOldestDueAge(0)
+
 		return
 	}
 

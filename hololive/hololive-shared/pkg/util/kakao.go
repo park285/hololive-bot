@@ -27,7 +27,7 @@ import (
 
 // 카카오 메시지 관련 상수 목록.
 const (
-	// KakaoSeeMorePadding: 카카오톡 '전체 보기' 기능을 위한 패딩 길이
+	// KakaoSeeMorePadding: 카카오톡 '전체 보기' 기능을 위한 패딩 길이.
 	KakaoSeeMorePadding   = 500
 	KakaoSeeMoreThreshold = 250
 	KakaoZeroWidthSpace   = "\u200b"
@@ -40,6 +40,7 @@ func FoldForSeeMore(text string, threshold int) string {
 	if threshold <= 0 || utf8.RuneCountInString(text) <= threshold {
 		return text
 	}
+
 	// 단발 ZWSP는 MarkdownNeutralize가 남긴 것이므로, 패딩 판정은 연속 2개 이상으로만 한다.
 	if strings.Contains(text, KakaoZeroWidthSpace+KakaoZeroWidthSpace) {
 		return text

@@ -22,6 +22,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -30,7 +31,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -79,9 +79,11 @@ func NewScheduler(
 		formatter:        formatter,
 		outboxRepository: outboxRepository,
 	}
+
 	for _, opt := range opts {
 		opt(scheduler)
 	}
+
 	return scheduler
 }
 
@@ -89,6 +91,7 @@ func (s *Scheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
 	}
+
 	s.digest.SetClock(clockFn)
 }
 
@@ -96,6 +99,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
+
 	s.digest.Start(ctx, &schedulerkit.Config{
 		Logger:           s.digest.Logger,
 		WaitingLog:       "Member news scheduler waiting",
@@ -114,6 +118,7 @@ func (s *Scheduler) Stop() {
 	if s == nil {
 		return
 	}
+
 	s.digest.Stop()
 }
 
@@ -129,19 +134,22 @@ func (s *Scheduler) calculateNextRun(now time.Time) time.Time {
 	if !target.After(nowKST) {
 		target = target.AddDate(0, 0, 7)
 	}
+
 	return target
 }
 
 func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 	if s == nil {
-		return fmt.Errorf("member news scheduler is nil")
-	}
-	if s.service == nil {
-		return fmt.Errorf("member news service is nil")
+		return errors.New("member news scheduler is nil")
 	}
 
-	weekKey := startOfWeek(s.digest.Clock()).Format("2006-01-02")
-	return runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
+	if s.service == nil {
+		return errors.New("member news service is nil")
+	}
+
+	weekKey := startOfWeek(s.digest.Clock()).Format(time.DateOnly)
+
+	if err := runMemberNewsDigest(ctx, s.digest, s.service, s.processRoomDigest, &digestDispatchConfig{
 		periodKey:        weekKey,
 		periodFieldName:  "week_key",
 		resultMessage:    "Member news weekly result",
@@ -149,7 +157,11 @@ func (s *Scheduler) SendWeeklyDigest(ctx context.Context) error {
 		lockKey:          fmt.Sprintf("membernews:lock:weekly:%s", weekKey),
 		skipMessage:      "Member news weekly skipped: no subscribed room",
 		lockSkipMessage:  "Member news weekly execution skipped: lock already acquired",
-	})
+	}); err != nil {
+		return fmt.Errorf("run member news digest: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Scheduler) processRoomDigest(ctx context.Context, weekKey, roomID string) delivery.SendResult {
@@ -161,5 +173,6 @@ func startOfWeek(t time.Time) time.Time {
 	kstNow := t.In(util.KSTZone)
 	daysFromMonday := (int(kstNow.Weekday()) - int(time.Monday) + 7) % 7
 	start := kstNow.AddDate(0, 0, -daysFromMonday)
+
 	return time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, util.KSTZone)
 }

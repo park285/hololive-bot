@@ -26,12 +26,14 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"golang.org/x/sync/singleflight"
 )
+
+const orgHololive = "Hololive"
 
 // matchCacheMaxEntries 는 matchCache 의 size-bound. 키가 사용자 query(외부 입력)라
 // burst 시 무한정 성장할 수 있어, TTL 만으로 부족한 상한을 강제한다.
@@ -75,7 +77,6 @@ type ChannelSelector interface {
 
 // 다양한 매칭 전략(정확 일치, 부분 일치, 별명 검색 등)을 순차적으로 시도한다.
 type Matcher struct {
-	ctx                   context.Context
 	membersData           domain.MemberDataProvider
 	cache                 cache.Client
 	holodex               *holodexprovider.Service
@@ -100,7 +101,6 @@ func NewMatcher(
 	logger *slog.Logger,
 ) *Matcher {
 	mm := &Matcher{
-		ctx:                   ctx,
 		membersData:           membersData,
 		cache:                 cacheClient,
 		holodex:               holodexService,

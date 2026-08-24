@@ -10,6 +10,7 @@ import (
 
 func TestWrapPublishFailurePreservesFailureSemantics(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name      string
 		source    error
@@ -23,13 +24,16 @@ func TestWrapPublishFailurePreservesFailureSemantics(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := wrapPublishFailure("publish", test.source)
 			if !errors.Is(err, test.source) {
 				t.Fatalf("wrapped error does not preserve source: %v", err)
 			}
+
 			if got := collecterr.CodeOf(err); got != test.wantCode {
 				t.Fatalf("CodeOf() = %q, want %q", got, test.wantCode)
 			}
+
 			if got := collecterr.ClassOf(err); got != test.wantClass {
 				t.Fatalf("ClassOf() = %q, want %q", got, test.wantClass)
 			}

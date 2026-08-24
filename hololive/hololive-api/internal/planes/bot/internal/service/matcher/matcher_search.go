@@ -27,10 +27,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (mm *Matcher) maybeCleanupMatchCache() {
@@ -52,19 +52,20 @@ func (mm *Matcher) maybeCleanupMatchCache() {
 }
 
 // 캐시된 결과가 있으면 반환하고, 없으면 여러 매칭 전략을 시도한다.
-func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, error) {
+// 매칭에 실패하면 (nil, false, nil)을 반환하며, 이 미발견 결과도 캐시에 저장한다.
+func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	normalizedQuery := stringutil.Normalize(query)
 	cacheKey := fmt.Sprintf("match:%s", normalizedQuery)
 
 	mm.matchCacheMu.RLock()
 
-	cached, found := mm.matchCache[cacheKey]
+	cached, cacheHit := mm.matchCache[cacheKey]
 	mm.matchCacheMu.RUnlock()
 
-	if found {
+	if cacheHit {
 		age := time.Since(cached.Timestamp)
 		if age < mm.matchCacheTTL {
-			return cached.Channel, nil
+			return cached.Channel, cached.Channel != nil, nil
 		}
 
 		mm.matchCacheMu.Lock()
@@ -72,15 +73,18 @@ func (mm *Matcher) FindBestMatch(ctx context.Context, query string) (*domain.Cha
 		mm.matchCacheMu.Unlock()
 	}
 
-	channel, err := mm.findBestMatchImpl(ctx, query)
-
+	channel, found, err := mm.findBestMatchImpl(ctx, query)
 	if err == nil {
 		mm.storeMatch(cacheKey, channel)
 	}
 
 	mm.maybeCleanupMatchCache()
 
-	return channel, err
+	if err != nil {
+		return nil, false, fmt.Errorf("find best match impl: %w", err)
+	}
+
+	return channel, found, nil
 }
 
 // storeMatch 는 matchCache 에 결과를 저장하되, matchCacheMaxEntries 상한을 강제한다.
@@ -111,15 +115,20 @@ func (mm *Matcher) storeMatch(cacheKey string, channel *domain.Channel) {
 func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
 	cutoff := now.Add(-mm.matchCacheTTL)
 
-	var oldestKey string
-	var oldestTS time.Time
+	var (
+		oldestKey string
+		oldestTS  time.Time
+	)
+
 	hasOldest := false
 
 	for key, entry := range mm.matchCache {
 		if entry == nil || entry.Timestamp.Before(cutoff) {
 			delete(mm.matchCache, key)
+
 			return true
 		}
+
 		if !hasOldest || entry.Timestamp.Before(oldestTS) {
 			oldestKey = key
 			oldestTS = entry.Timestamp
@@ -129,32 +138,33 @@ func (mm *Matcher) evictOneMatchLocked(now time.Time) bool {
 
 	if hasOldest {
 		delete(mm.matchCache, oldestKey)
+
 		return true
 	}
+
 	return false
 }
 
-func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, error) {
+func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	queryNorm := normalizeMatcherTerm(query)
 
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
 
-	if channel := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm)); channel != nil {
-		return channel, nil
+	channel := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm))
+	if channel == nil {
+		mm.logger.Debug("No match found in internal data",
+			slog.String("query_token", privacylog.Pseudonym(queryNorm)),
+		)
 	}
 
-	mm.logger.Debug("No match found in internal data",
-		slog.String("query_token", privacylog.Pseudonym(queryNorm)),
-	)
-
-	return nil, nil
+	return channel, channel != nil, nil
 }
 
-func (mm *Matcher) GetAllMembers() []*domain.Member {
-	provider := mm.providerWithContext(mm.ctx)
+func (mm *Matcher) GetAllMembers(ctx context.Context) []*domain.Member {
+	provider := mm.providerWithContext(ctx)
 	if provider == nil {
 		return nil
 	}
@@ -172,7 +182,8 @@ func (mm *Matcher) GetMemberByChannelID(ctx context.Context, channelID string) *
 }
 
 // "이름 (그룹)" 형식을 파싱하고, 동명이인 발생 시 AmbiguousMatchError를 반환합니다.
-func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, error) {
+// 매칭에 실패하면 (nil, false, nil)을 반환합니다.
+func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string) (*domain.Channel, bool, error) {
 	name, org := ParseNameWithOrg(query)
 
 	name = mm.normalizeQuery(name)
@@ -181,28 +192,33 @@ func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string
 
 	snapshot, err := mm.getSnapshot(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get member matcher snapshot: %w", err)
+		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
 
 	if snapshot.dynamicLoadErr != nil {
-		return nil, snapshot.dynamicLoadErr
+		return nil, false, snapshot.dynamicLoadErr
 	}
 
 	candidates := mm.exactNameMembers(snapshot, nameNorm, org)
 
 	if len(candidates) == 0 {
-		return mm.FindBestMatch(ctx, query)
+		out, found, err := mm.FindBestMatch(ctx, query)
+		if err != nil {
+			return nil, false, fmt.Errorf("find best match: %w", err)
+		}
+
+		return out, found, nil
 	}
 
 	if len(candidates) == 1 {
-		return mm.memberToChannel(candidates[0]), nil
+		return mm.memberToChannel(candidates[0]), true, nil
 	}
 
 	if org == "" {
-		return nil, NewAmbiguousMatchError(query, candidates)
+		return nil, false, NewAmbiguousMatchError(query, candidates)
 	}
 
-	return mm.memberToChannel(candidates[0]), nil
+	return mm.memberToChannel(candidates[0]), true, nil
 }
 
 func (mm *Matcher) memberToChannel(m *domain.Member) *domain.Channel {

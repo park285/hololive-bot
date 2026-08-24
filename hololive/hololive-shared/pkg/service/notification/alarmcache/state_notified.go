@@ -2,14 +2,16 @@ package alarmcache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/logging"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func NormalizeScheduledMinute(startScheduled time.Time) time.Time {
@@ -29,15 +31,19 @@ func NotifiedMinuteKey(streamID string, startScheduled time.Time, minutesUntil i
 func (s *State) MarkAsNotified(ctx context.Context, streamID string, startScheduled time.Time, minutesUntil int) error {
 	streamID = strings.TrimSpace(streamID)
 	if streamID == "" {
-		return fmt.Errorf("mark as notified: stream id is empty")
+		return errors.New("mark as notified: stream id is empty")
 	}
 
 	canonicalKey := NotifiedMinuteKey(streamID, startScheduled, minutesUntil)
 	if err := s.Cache.Set(ctx, canonicalKey, "1", constants.CacheTTL.NotificationSent); err != nil {
-		return logging.LogAndWrapError(ctx, s.Logger, "mark as notified", err,
+		if logErr := logging.LogAndWrapError(ctx, s.Logger, "mark as notified", err,
 			slog.String("stream_id", streamID),
 			slog.Int("minutes_until", minutesUntil),
-		)
+		); logErr != nil {
+			return fmt.Errorf("log and wrap error: %w", logErr)
+		}
+
+		return nil
 	}
 
 	return nil
@@ -50,6 +56,7 @@ func (s *State) WasNotified(ctx context.Context, streamID string, startScheduled
 	}
 
 	var marker string
+
 	if err := s.Cache.Get(ctx, NotifiedMinuteKey(streamID, startScheduled, minutesUntil), &marker); err == nil && marker == "1" {
 		return true
 	}

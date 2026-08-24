@@ -27,11 +27,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
+
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/park285/shared-go/v2/pkg/outputguard"
-	"github.com/park285/shared-go/v2/pkg/promptguard"
+)
+
+const (
+	testRoomID1 = "room1"
+	testRoomID2 = "room2"
+	testRoomID3 = "room3"
 )
 
 type mockFormatter struct {
@@ -56,17 +63,17 @@ func TestWeekKeyFromGetWeekRange(t *testing.T) {
 	}{
 		{
 			name:     "Monday trigger → same Monday as key",
-			now:      time.Date(2026, 1, 19, 9, 0, 0, 0, kst),
+			now:      time.Date(2026, time.January, 19, 9, 0, 0, 0, kst),
 			expected: "2026-01-19",
 		},
 		{
 			name:     "Wednesday trigger → this Monday as key",
-			now:      time.Date(2026, 1, 21, 12, 0, 0, 0, kst),
+			now:      time.Date(2026, time.January, 21, 12, 0, 0, 0, kst),
 			expected: "2026-01-19",
 		},
 		{
 			name:     "Sunday trigger → this Monday as key",
-			now:      time.Date(2026, 1, 25, 10, 0, 0, 0, kst),
+			now:      time.Date(2026, time.January, 25, 10, 0, 0, 0, kst),
 			expected: "2026-01-19",
 		},
 	}
@@ -74,7 +81,8 @@ func TestWeekKeyFromGetWeekRange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			weekStart, _ := GetWeekRange(tt.now)
-			weekKey := weekStart.Format("2006-01-02")
+			weekKey := weekStart.Format(time.DateOnly)
+
 			if weekKey != tt.expected {
 				t.Errorf("expected weekKey %q, got %q", tt.expected, weekKey)
 			}
@@ -94,25 +102,25 @@ func TestScheduler_calculateNextRun(t *testing.T) {
 	}{
 		{
 			name:         "Sunday evening -> next Monday 09:00",
-			now:          time.Date(2026, 1, 18, 20, 0, 0, 0, kst),
+			now:          time.Date(2026, time.January, 18, 20, 0, 0, 0, kst),
 			expectedDay:  19,
 			expectedHour: 9,
 		},
 		{
 			name:         "Monday 08:59 -> same day 09:00",
-			now:          time.Date(2026, 1, 19, 8, 59, 0, 0, kst),
+			now:          time.Date(2026, time.January, 19, 8, 59, 0, 0, kst),
 			expectedDay:  19,
 			expectedHour: 9,
 		},
 		{
 			name:         "Monday 09:01 -> next week Monday",
-			now:          time.Date(2026, 1, 19, 9, 1, 0, 0, kst),
+			now:          time.Date(2026, time.January, 19, 9, 1, 0, 0, kst),
 			expectedDay:  26,
 			expectedHour: 9,
 		},
 		{
 			name:         "Wednesday -> next Monday",
-			now:          time.Date(2026, 1, 21, 10, 0, 0, 0, kst),
+			now:          time.Date(2026, time.January, 21, 10, 0, 0, 0, kst),
 			expectedDay:  26,
 			expectedHour: 9,
 		},
@@ -126,12 +134,15 @@ func TestScheduler_calculateNextRun(t *testing.T) {
 			if nextKST.Weekday() != time.Monday {
 				t.Errorf("expected Monday, got %v", nextKST.Weekday())
 			}
+
 			if nextKST.Day() != tt.expectedDay {
 				t.Errorf("expected day %d, got %d", tt.expectedDay, nextKST.Day())
 			}
+
 			if nextKST.Hour() != tt.expectedHour {
 				t.Errorf("expected hour %d, got %d", tt.expectedHour, nextKST.Hour())
 			}
+
 			if !next.After(tt.now) {
 				t.Error("next run should be after now")
 			}
@@ -147,9 +158,11 @@ func TestNewScheduler(t *testing.T) {
 	if scheduler == nil {
 		t.Fatal("NewScheduler returned nil")
 	}
+
 	if scheduler.formatter == nil {
 		t.Error("formatter not set")
 	}
+
 	if scheduler.digest == nil {
 		t.Error("digest not initialized")
 	}
@@ -166,16 +179,18 @@ func TestScheduler_StopOnce(t *testing.T) {
 
 func TestGetWeekRange_MondayKST(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
-	monday := time.Date(2026, 1, 19, 9, 0, 0, 0, kst)
+	monday := time.Date(2026, time.January, 19, 9, 0, 0, 0, kst)
 
 	start, end := GetWeekRange(monday)
 
 	if start.Weekday() != time.Monday {
 		t.Errorf("start should be Monday, got %v", start.Weekday())
 	}
+
 	if end.Weekday() != time.Sunday {
 		t.Errorf("end should be Sunday, got %v", end.Weekday())
 	}
+
 	if !start.Before(end) {
 		t.Error("start should be before end")
 	}
@@ -223,6 +238,7 @@ func (m *mockEventRepository) MarkEventsAsNotified(_ context.Context, eventIDs [
 	m.markedWeekly = true
 	m.markedEventIDs = eventIDs
 	m.markedWeekKey = weekKey
+
 	return m.markWeeklyErr
 }
 
@@ -230,6 +246,7 @@ func (m *mockEventRepository) MarkEventsAsMonthlyNotified(_ context.Context, eve
 	m.markedMonthly = true
 	m.markedEventIDs = eventIDs
 	m.markedMonthKey = monthKey
+
 	return m.markMonthlyErr
 }
 
@@ -250,6 +267,7 @@ func testRooms(ids ...string) []*domain.EventRoomSubscription {
 	for i, id := range ids {
 		rooms[i] = &domain.EventRoomSubscription{RoomID: id}
 	}
+
 	return rooms
 }
 
@@ -258,19 +276,20 @@ func testEvents(ids ...int) []*domain.MajorEvent {
 	for i, id := range ids {
 		events[i] = &domain.MajorEvent{ID: id, Title: fmt.Sprintf("Event %d", id)}
 	}
+
 	return events
 }
 
 func TestSendWeeklyNotification_AllSuccess_MarksEvents(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:  testRooms("room1", "room2"),
+		rooms:  testRooms(testRoomID1, testRoomID2),
 		events: testEvents(1, 2, 3),
 	}
 	outbox := newMockOutboxRepository()
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	err := scheduler.SendWeeklyNotification(context.Background())
+	err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -278,9 +297,11 @@ func TestSendWeeklyNotification_AllSuccess_MarksEvents(t *testing.T) {
 	if !repository.markedWeekly {
 		t.Error("expected events to be marked as notified")
 	}
+
 	if len(repository.markedEventIDs) != 3 {
 		t.Errorf("expected 3 marked event IDs, got %d", len(repository.markedEventIDs))
 	}
+
 	if len(outbox.enqueuedItems) != 2 {
 		t.Errorf("expected 2 enqueued items, got %d", len(outbox.enqueuedItems))
 	}
@@ -288,15 +309,17 @@ func TestSendWeeklyNotification_AllSuccess_MarksEvents(t *testing.T) {
 
 func TestSendWeeklyNotification_PartialEnqueueFailure_NoMarking(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:  testRooms("room1", "room2", "room3"),
+		rooms:  testRooms(testRoomID1, testRoomID2, testRoomID3),
 		events: testEvents(1, 2),
 	}
 	outbox := newMockOutboxRepository()
-	outbox.enqueueErr["room2"] = fmt.Errorf("db error")
+
+	outbox.enqueueErr[testRoomID2] = errors.New("db error")
+
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	err := scheduler.SendWeeklyNotification(context.Background())
+	err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error (partial failure returns nil): %v", err)
 	}
@@ -308,16 +331,18 @@ func TestSendWeeklyNotification_PartialEnqueueFailure_NoMarking(t *testing.T) {
 
 func TestSendWeeklyNotification_AllEnqueueFail_ReturnsError(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:  testRooms("room1", "room2"),
+		rooms:  testRooms(testRoomID1, testRoomID2),
 		events: testEvents(1),
 	}
 	outbox := newMockOutboxRepository()
-	outbox.enqueueErr["room1"] = fmt.Errorf("db error")
-	outbox.enqueueErr["room2"] = fmt.Errorf("db error")
+
+	outbox.enqueueErr[testRoomID1] = errors.New("db error")
+	outbox.enqueueErr[testRoomID2] = errors.New("db error")
+
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	err := scheduler.SendWeeklyNotification(context.Background())
+	err := scheduler.SendWeeklyNotification(t.Context())
 	if err == nil {
 		t.Fatal("expected error when all rooms fail to enqueue")
 	}
@@ -329,13 +354,13 @@ func TestSendWeeklyNotification_AllEnqueueFail_ReturnsError(t *testing.T) {
 
 func TestSendWeeklyNotification_NoEvents_ReturnsNil(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:  testRooms("room1"),
+		rooms:  testRooms(testRoomID1),
 		events: []*domain.MajorEvent{},
 	}
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendWeeklyNotification(context.Background())
+	err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -352,7 +377,7 @@ func TestSendWeeklyNotification_NoRooms_ReturnsNil(t *testing.T) {
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendWeeklyNotification(context.Background())
+	err := scheduler.SendWeeklyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -372,14 +397,14 @@ func newTestMonthlyScheduler(repository EventRepository, outbox outboxEnqueuer, 
 
 func TestSendMonthlyNotification_AllSuccess_MarksEvents(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:         testRooms("room1", "room2"),
+		rooms:         testRooms(testRoomID1, testRoomID2),
 		monthlyEvents: testEvents(10, 20),
 	}
 	outbox := newMockOutboxRepository()
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestMonthlyScheduler(repository, outbox, locker)
 
-	err := scheduler.SendMonthlyNotification(context.Background())
+	err := scheduler.SendMonthlyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -387,6 +412,7 @@ func TestSendMonthlyNotification_AllSuccess_MarksEvents(t *testing.T) {
 	if !repository.markedMonthly {
 		t.Error("expected events to be marked as monthly notified")
 	}
+
 	if len(repository.markedEventIDs) != 2 {
 		t.Errorf("expected 2 marked event IDs, got %d", len(repository.markedEventIDs))
 	}
@@ -394,15 +420,17 @@ func TestSendMonthlyNotification_AllSuccess_MarksEvents(t *testing.T) {
 
 func TestSendMonthlyNotification_PartialFailure_NoMarking(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:         testRooms("room1", "room2"),
+		rooms:         testRooms(testRoomID1, testRoomID2),
 		monthlyEvents: testEvents(10),
 	}
 	outbox := newMockOutboxRepository()
-	outbox.enqueueErr["room1"] = fmt.Errorf("db error")
+
+	outbox.enqueueErr[testRoomID1] = errors.New("db error")
+
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestMonthlyScheduler(repository, outbox, locker)
 
-	err := scheduler.SendMonthlyNotification(context.Background())
+	err := scheduler.SendMonthlyNotification(t.Context())
 	if err != nil {
 		t.Fatalf("unexpected error (partial failure returns nil): %v", err)
 	}
@@ -420,7 +448,7 @@ func TestSendWeeklyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing.
 
 	scheduler := newTestScheduler(nil, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendWeeklyNotification(context.Background())
+	err := scheduler.SendWeeklyNotification(t.Context())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
@@ -434,7 +462,7 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 
 	scheduler := newTestMonthlyScheduler(nil, newMockOutboxRepository(), locker)
 
-	err := scheduler.SendMonthlyNotification(context.Background())
+	err := scheduler.SendMonthlyNotification(t.Context())
 	if !errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 		t.Errorf("expected ErrNotificationInProgress, got: %v", err)
 	}
@@ -442,14 +470,14 @@ func TestSendMonthlyNotification_ConcurrentLockHeld_ReturnsInProgress(t *testing
 
 func TestSendWeeklyNotification_EnqueueMarking_AllSuccess_Marks(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:  testRooms("room1"),
+		rooms:  testRooms(testRoomID1),
 		events: testEvents(1),
 	}
 	outbox := newMockOutboxRepository()
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	if err := scheduler.SendWeeklyNotification(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 
@@ -460,15 +488,17 @@ func TestSendWeeklyNotification_EnqueueMarking_AllSuccess_Marks(t *testing.T) {
 
 func TestSendWeeklyNotification_EnqueueMarking_PartialFail_NoMark(t *testing.T) {
 	repository := &mockEventRepository{
-		rooms:  testRooms("room1", "room2"),
+		rooms:  testRooms(testRoomID1, testRoomID2),
 		events: testEvents(1),
 	}
 	outbox := newMockOutboxRepository()
-	outbox.enqueueErr["room2"] = fmt.Errorf("fail")
+
+	outbox.enqueueErr[testRoomID2] = errors.New("fail")
+
 	locker := &mockNotificationLocker{acquireAcquired: true}
 	scheduler := newTestScheduler(repository, outbox, locker)
 
-	if err := scheduler.SendWeeklyNotification(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyNotification(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyNotification() error = %v", err)
 	}
 
@@ -482,5 +512,6 @@ func newMajorEventPromptGuardForSchedulerTest() *promptguard.Guard {
 	if err != nil {
 		panic(err)
 	}
+
 	return guard
 }

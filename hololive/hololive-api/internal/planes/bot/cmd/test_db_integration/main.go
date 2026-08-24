@@ -27,11 +27,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+
+	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 func main() {
@@ -43,6 +43,7 @@ func main() {
 	postgresConfig := postgresConfigFromEnv()
 	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
 	runtime, err := botruntime.BuildDBIntegrationRuntime(buildCtx, &postgresConfig, logger)
+
 	buildCancel()
 
 	if err != nil {
@@ -76,6 +77,7 @@ func runIntegrationChecks(ctx context.Context, runtime *botruntime.DBIntegration
 
 	memberCount = runRepositoryChecks(ctx, runtime, testChannelID)
 	runCacheCheck(ctx, runtime, testChannelID)
+
 	channelIDCount = runAdapterChecks(ctx, runtime, testChannelID)
 
 	return memberCount, channelIDCount
@@ -100,6 +102,7 @@ func runRepositoryChecks(ctx context.Context, runtime *botruntime.DBIntegrationR
 
 	if foundMember == nil {
 		log.Fatal("Korone not found")
+
 		return 0
 	}
 
@@ -113,6 +116,7 @@ func runRepositoryChecks(ctx context.Context, runtime *botruntime.DBIntegrationR
 
 	if foundMember == nil {
 		log.Fatal("Alias '코로네' not found")
+
 		return 0
 	}
 
@@ -133,6 +137,7 @@ func runCacheCheck(ctx context.Context, runtime *botruntime.DBIntegrationRuntime
 
 	if foundMember == nil {
 		log.Fatal("Korone not in cache")
+
 		return
 	}
 
@@ -146,6 +151,7 @@ func runAdapterChecks(ctx context.Context, runtime *botruntime.DBIntegrationRunt
 	foundMember := adapterCtx.FindMemberByChannelID(testChannelID)
 	if foundMember == nil {
 		log.Fatal("Adapter failed")
+
 		return 0
 	}
 
@@ -187,6 +193,7 @@ func envOrDefaultInt(key string, fallback int) int {
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		log.Printf("⚠ Invalid integer environment value for %s, using default %d\n", key, fallback)
+
 		return fallback
 	}
 

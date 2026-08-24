@@ -2,6 +2,7 @@ package observation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,14 +16,16 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
 	if len(records) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("upsert alarm state batch: db is nil")
+		return errors.New("upsert alarm state batch: db is nil")
 	}
 
 	normalized, err := normalizeAlarmStateBatchRecords(records)
 	if err != nil {
-		return err
+		return fmt.Errorf("normalize alarm state batch records: %w", err)
 	}
+
 	now := yttimestamp.Normalize(time.Now())
 	finalAuthorizedExpr := `CASE
                 WHEN youtube_community_shorts_alarm_states.authorized_at IS NULL THEN EXCLUDED.authorized_at
@@ -38,8 +41,9 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
             END`
 	deliveryStatusExpr := buildAlarmStateDeliveryStatusExpr(finalAuthorizedExpr, finalAlarmSentExpr)
 	query, args := buildAlarmStateUpsertQuery(normalized, now, finalAuthorizedExpr, finalAlarmSentExpr, deliveryStatusExpr)
+
 	if _, err := dbx.ExecSQL(ctx, r.db, "upsert alarm state batch: exec query", query, args...); err != nil {
-		return err
+		return fmt.Errorf("exec SQL: %w", err)
 	}
 
 	return nil
@@ -48,6 +52,7 @@ func (r *alarmStateRepository) UpsertAlarmStateBatch(ctx context.Context, record
 func normalizeAlarmStateBatchRecords(records []*domain.YouTubeCommunityShortsAlarmState) ([]*domain.YouTubeCommunityShortsAlarmState, error) {
 	normalizedByIdentity := make(map[string]*domain.YouTubeCommunityShortsAlarmState, len(records))
 	normalizedOrder := make([]string, 0, len(records))
+
 	for i, record := range records {
 		normalizedRecord, err := normalizeAlarmState(record)
 		if err != nil {
@@ -80,13 +85,18 @@ func buildAlarmStateUpsertQuery(
 	deliveryStatusExpr string,
 ) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*11)
+
 	var sb strings.Builder
+
 	sb.WriteString(mustSQL("alarm_state_repository_upsert_0084_01.sql"))
+
 	for i, record := range normalized {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
+
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
 		args = append(args,
 			record.Kind,
 			record.PostID,
@@ -101,6 +111,7 @@ func buildAlarmStateUpsertQuery(
 			now,
 		)
 	}
+
 	sb.WriteString(mustSQL("alarm_state_repository_upsert_0108_02.sql"))
 	sb.WriteString(finalAuthorizedExpr)
 	sb.WriteString(`,
@@ -112,52 +123,60 @@ func buildAlarmStateUpsertQuery(
 	sb.WriteString(`,
             updated_at = EXCLUDED.updated_at
     `)
+
 	return sb.String(), args
 }
 
 func normalizeAlarmStateClaim(record *domain.YouTubeCommunityShortsAlarmState) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	normalizedRecord, err := normalizeAlarmState(record)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize alarm state: %w", err)
 	}
+
 	expectedPostID := canonicalTrackingIdentity(normalizedRecord.Kind, normalizedRecord.ContentID)
 	if expectedPostID != normalizedRecord.PostID {
-		return nil, fmt.Errorf("post id/content id mismatch")
+		return nil, errors.New("post id/content id mismatch")
 	}
+
 	if normalizedRecord.AuthorizedAt == nil || normalizedRecord.AuthorizedAt.IsZero() {
-		return nil, fmt.Errorf("authorized_at is empty")
+		return nil, errors.New("authorized_at is empty")
 	}
+
 	if normalizedRecord.AlarmSentAt != nil && !normalizedRecord.AlarmSentAt.IsZero() {
-		return nil, fmt.Errorf("alarm_sent_at must be empty")
+		return nil, errors.New("alarm_sent_at must be empty")
 	}
 
 	authorizedAt := normalizeDatabaseTimestamp(*normalizedRecord.AuthorizedAt)
+
 	normalizedRecord.AuthorizedAt = &authorizedAt
 	normalizedRecord.AlarmSentAt = nil
 	normalizedRecord.DeliveryStatus = domain.YouTubeCommunityShortsAlarmStateStatusEnqueued
+
 	return normalizedRecord, nil
 }
 
 func normalizeAlarmState(record *domain.YouTubeCommunityShortsAlarmState) (*domain.YouTubeCommunityShortsAlarmState, error) {
 	if record == nil {
-		return nil, fmt.Errorf("record is nil")
+		return nil, errors.New("record is nil")
 	}
 
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(record.Kind, record.PostID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize source post identity: %w", err)
 	}
+
 	_, normalizedContentID, err := normalizeIdentity(record.Kind, record.ContentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize identity: %w", err)
 	}
 
 	normalizedChannelID := strings.TrimSpace(record.ChannelID)
 	if normalizedChannelID == "" {
-		return nil, fmt.Errorf("channel id is empty")
+		return nil, errors.New("channel id is empty")
 	}
+
 	if record.DetectedAt.IsZero() {
-		return nil, fmt.Errorf("detected_at is empty")
+		return nil, errors.New("detected_at is empty")
 	}
 
 	actualPublishedAt := yttimestamp.NormalizePtr(record.ActualPublishedAt)
@@ -189,23 +208,29 @@ func mergeNormalizedAlarmState(existing, next *domain.YouTubeCommunityShortsAlar
 	if existing == nil {
 		return next
 	}
+
 	if next == nil {
 		return existing
 	}
 
 	merged := *existing
+
 	if strings.TrimSpace(next.ContentID) != "" {
 		merged.ContentID = next.ContentID
 	}
+
 	if strings.TrimSpace(next.ChannelID) != "" {
 		merged.ChannelID = next.ChannelID
 	}
+
 	if next.ActualPublishedAt != nil {
 		merged.ActualPublishedAt = next.ActualPublishedAt
 	}
+
 	if next.DetectedAt.Before(merged.DetectedAt) {
 		merged.DetectedAt = next.DetectedAt
 	}
+
 	merged.AuthorizedAt = earliestAlarmStateTimestamp(merged.AuthorizedAt, next.AuthorizedAt)
 	merged.AlarmSentAt = earliestAlarmStateTimestamp(merged.AlarmSentAt, next.AlarmSentAt)
 	merged.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(merged.AuthorizedAt, merged.AlarmSentAt)
@@ -217,9 +242,11 @@ func earliestAlarmStateTimestamp(existing, next *time.Time) *time.Time {
 	if existing == nil {
 		return next
 	}
+
 	if next != nil && next.Before(*existing) {
 		return next
 	}
+
 	return existing
 }
 

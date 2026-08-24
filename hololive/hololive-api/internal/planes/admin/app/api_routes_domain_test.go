@@ -24,16 +24,10 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/app/http"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
-
-type routeSpec struct {
-	method string
-	path   string
-}
 
 func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 	ctx := t.Context()
@@ -44,10 +38,10 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -62,80 +56,81 @@ func TestAPIRouter_DomainRoutesRegistered(t *testing.T) {
 		routeSet[route.Method+" "+route.Path] = struct{}{}
 	}
 
-	expectedByDomain := map[string][]routeSpec{
-		"oauth": {
-			{method: "GET", path: "/oauth/callback"},
-		},
-		"auth": {
-			{method: "POST", path: "/api/auth/register"},
-			{method: "POST", path: "/api/auth/login"},
-			{method: "POST", path: "/api/auth/logout"},
-			{method: "POST", path: "/api/auth/refresh"},
-			{method: "GET", path: "/api/auth/me"},
-			{method: "POST", path: "/api/auth/password/reset-request"},
-			{method: "POST", path: "/api/auth/password/reset"},
-		},
-		"member": {
-			{method: "GET", path: "/api/holo/members"},
-			{method: "POST", path: "/api/holo/members"},
-			{method: "POST", path: "/api/holo/members/:id/aliases"},
-			{method: "DELETE", path: "/api/holo/members/:id/aliases"},
-			{method: "PATCH", path: "/api/holo/members/:id/graduation"},
-			{method: "PATCH", path: "/api/holo/members/:id/channel"},
-			{method: "PATCH", path: "/api/holo/members/:id/name"},
-		},
-		"alarm": {
-			{method: "GET", path: "/api/holo/alarms"},
-			{method: "DELETE", path: "/api/holo/alarms"},
-		},
-		"room": {
-			{method: "GET", path: "/api/holo/rooms"},
-			{method: "POST", path: "/api/holo/rooms"},
-			{method: "DELETE", path: "/api/holo/rooms"},
-			{method: "POST", path: "/api/holo/rooms/acl"},
-		},
-		"stats_stream": {
-			{method: "GET", path: "/api/holo/stats"},
-			{method: "GET", path: "/api/holo/stats/system"},
-			{method: "GET", path: "/api/holo/stats/youtube/community-shorts"},
-			{method: "GET", path: "/api/holo/streams/live"},
-			{method: "GET", path: "/api/holo/streams/upcoming"},
-			{method: "GET", path: "/api/holo/channels"},
-			{method: "GET", path: "/api/holo/channels/search"},
-		},
-		"settings": {
-			{method: "GET", path: "/api/holo/logs"},
-			{method: "GET", path: "/api/holo/settings"},
-			{method: "POST", path: "/api/holo/settings"},
-			{method: "POST", path: "/api/holo/settings/llm"},
-			{method: "POST", path: "/api/holo/names/room"},
-			{method: "POST", path: "/api/holo/names/user"},
-		},
-		"template": {
-			{method: "GET", path: "/api/holo/templates"},
-			{method: "GET", path: "/api/holo/templates/:key"},
-			{method: "PUT", path: "/api/holo/templates/:key"},
-			{method: "DELETE", path: "/api/holo/templates/:key"},
-			{method: "POST", path: "/api/holo/templates/:key/preview"},
-			{method: "GET", path: "/api/holo/templates/:key/revisions"},
-			{method: "GET", path: "/api/holo/templates/:key/revisions/:id"},
-		},
-		"profile": {
-			{method: "GET", path: "/api/holo/profiles"},
-			{method: "GET", path: "/api/holo/profiles/name"},
-		},
-		"major_event": {
-			{method: "POST", path: "/api/holo/majorevent/trigger"},
-			{method: "POST", path: "/api/holo/majorevent/monthly-trigger"},
-		},
-	}
-
-	for domain, routes := range expectedByDomain {
+	for domain, routes := range expectedAdminAPIDomainRoutes() {
 		for _, route := range routes {
-			key := route.method + " " + route.path
-			if _, ok := routeSet[key]; !ok {
-				t.Errorf("domain=%s missing route %s", domain, key)
+			if _, ok := routeSet[route]; !ok {
+				t.Errorf("domain=%s missing route %s", domain, route)
 			}
 		}
+	}
+}
+
+func expectedAdminAPIDomainRoutes() map[string][]string {
+	return map[string][]string{
+		"oauth": {
+			"GET /oauth/callback",
+		},
+		"auth": {
+			"POST /api/auth/register",
+			"POST /api/auth/login",
+			"POST /api/auth/logout",
+			"POST /api/auth/refresh",
+			"GET /api/auth/me",
+			"POST /api/auth/password/reset-request",
+			"POST /api/auth/password/reset",
+		},
+		"member": {
+			"GET /api/holo/members",
+			"POST /api/holo/members",
+			"POST /api/holo/members/:id/aliases",
+			"DELETE /api/holo/members/:id/aliases",
+			"PATCH /api/holo/members/:id/graduation",
+			"PATCH /api/holo/members/:id/channel",
+			"PATCH /api/holo/members/:id/name",
+		},
+		"alarm": {
+			"GET /api/holo/alarms",
+			"DELETE /api/holo/alarms",
+		},
+		"room": {
+			"GET /api/holo/rooms",
+			"POST /api/holo/rooms",
+			"DELETE /api/holo/rooms",
+			"POST /api/holo/rooms/acl",
+		},
+		"stats_stream": {
+			"GET /api/holo/stats",
+			"GET /api/holo/stats/system",
+			"GET /api/holo/stats/youtube/community-shorts",
+			"GET /api/holo/streams/live",
+			"GET /api/holo/streams/upcoming",
+			"GET /api/holo/channels",
+			"GET /api/holo/channels/search",
+		},
+		"settings": {
+			"GET /api/holo/logs",
+			"GET /api/holo/settings",
+			"POST /api/holo/settings",
+			"POST /api/holo/settings/llm",
+			"POST /api/holo/names/room",
+			"POST /api/holo/names/user",
+		},
+		"template": {
+			"GET /api/holo/templates",
+			"GET /api/holo/templates/:key",
+			"PUT /api/holo/templates/:key",
+			"DELETE /api/holo/templates/:key",
+			"POST /api/holo/templates/:key/preview",
+			"GET /api/holo/templates/:key/revisions",
+			"GET /api/holo/templates/:key/revisions/:id",
+		},
+		"profile": {
+			"GET /api/holo/profiles",
+			"GET /api/holo/profiles/name",
+		},
+		"major_event": {
+			"POST /api/holo/majorevent/trigger",
+			"POST /api/holo/majorevent/monthly-trigger",
+		},
 	}
 }

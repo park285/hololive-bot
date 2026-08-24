@@ -6,14 +6,13 @@ import (
 	"log/slog"
 	"testing"
 
-	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 type upcomingStreamProviderStub struct {
@@ -34,7 +33,7 @@ func (s *upcomingStreamProviderStub) GetChannelSchedule(_ context.Context, _ str
 }
 
 func (s *upcomingStreamProviderStub) GetChannel(_ context.Context, _ string) (*domain.Channel, error) {
-	return nil, nil
+	return nil, errTestStubNoChannel
 }
 
 func setupUpcomingTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -44,6 +43,7 @@ func setupUpcomingTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
 		t.Fatalf("clear templates: %v", err)
 	}
+
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO notification_templates(template_key, channel_id, body)
 		VALUES ($1, NULL, $2)
@@ -76,7 +76,7 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 	holodex := &upcomingStreamProviderStub{
 		upcomingStreams: []*domain.Stream{
 			{ID: "s1", Title: "테스트 방송 1", ChannelName: "미코"},
-			{ID: "s2", Title: "테스트 방송 2", ChannelName: "페코라"},
+			{ID: "s2", Title: "테스트 방송 2", ChannelName: testMemberPekora},
 		},
 	}
 
@@ -92,7 +92,8 @@ func TestUpcomingCommand_Execute_AllUpcoming_GoldenPath(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -124,8 +125,9 @@ func TestUpcomingCommand_Execute_AllUpcoming_WithOverflow(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"limit": 5,
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		testParamLimit: 5,
 	})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -157,7 +159,8 @@ func TestUpcomingCommand_Execute_AllUpcoming_QueryError(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -171,14 +174,14 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 	var sentMessage string
 
 	memberProvider := newContextAwareMemberProvider([]*domain.Member{{
-		ChannelID: "ch-miko",
+		ChannelID: testChannelMiko,
 		Name:      "미코",
 	}})
 
 	holodex := &upcomingStreamProviderStub{
 		upcomingStreams: []*domain.Stream{
-			{ID: "s1", Title: "미코 방송", ChannelID: "ch-miko", ChannelName: "미코"},
-			{ID: "s2", Title: "페코라 방송", ChannelID: "ch-peko", ChannelName: "페코라"},
+			{ID: "s1", Title: "미코 방송", ChannelID: testChannelMiko, ChannelName: "미코"},
+			{ID: "s2", Title: "페코라 방송", ChannelID: "ch-peko", ChannelName: testMemberPekora},
 		},
 	}
 
@@ -195,8 +198,9 @@ func TestUpcomingCommand_Execute_MemberUpcoming_GoldenPath(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "미코",
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: "미코",
 	})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -211,13 +215,13 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 	var sentMessage string
 
 	memberProvider := newContextAwareMemberProvider([]*domain.Member{{
-		ChannelID: "ch-miko",
+		ChannelID: testChannelMiko,
 		Name:      "미코",
 	}})
 
 	holodex := &upcomingStreamProviderStub{
 		upcomingStreams: []*domain.Stream{
-			{ID: "s1", Title: "페코라 방송", ChannelID: "ch-peko", ChannelName: "페코라"},
+			{ID: "s1", Title: "페코라 방송", ChannelID: "ch-peko", ChannelName: testMemberPekora},
 		},
 	}
 
@@ -234,8 +238,9 @@ func TestUpcomingCommand_Execute_MemberUpcoming_NoStreams(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "미코",
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: "미코",
 	})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -250,7 +255,7 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 	var sentError string
 
 	memberProvider := newContextAwareMemberProvider([]*domain.Member{{
-		ChannelID: "ch-miko",
+		ChannelID: testChannelMiko,
 		Name:      "미코",
 	}})
 
@@ -273,8 +278,9 @@ func TestUpcomingCommand_Execute_MemberUpcoming_QueryError(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "미코",
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: "미코",
 	})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -305,8 +311,8 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 	}
 
 	cmd := NewUpcomingCommand(deps)
-	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "존재하지않는멤버",
+	if err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: "존재하지않는멤버",
 	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -319,7 +325,7 @@ func TestUpcomingCommand_Execute_MemberNotFound(t *testing.T) {
 func TestUpcomingCommand_Execute_NilDeps(t *testing.T) {
 	cmd := NewUpcomingCommand(nil)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, nil)
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil)
 	if err == nil {
 		t.Fatal("expected error for nil deps")
 	}

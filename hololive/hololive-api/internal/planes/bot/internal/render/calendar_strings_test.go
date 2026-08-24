@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
@@ -31,6 +31,7 @@ func TestCalendarStrings_NilStoreFallbackByteEqual(t *testing.T) {
 	t.Parallel()
 
 	m := newCalendarMetrics(1)
+
 	for _, c := range calendarStringCases() {
 		if got := c.got(t.Context(), &m); got != c.want {
 			t.Errorf("%s nil-store = %q, want %q", c.name, got, c.want)
@@ -45,6 +46,7 @@ func TestCalendarStrings_SeededStoreByteEqual(t *testing.T) {
 	}
 
 	m := newCalendarMetrics(1)
+
 	m.strings = store
 
 	for _, c := range calendarStringCases() {

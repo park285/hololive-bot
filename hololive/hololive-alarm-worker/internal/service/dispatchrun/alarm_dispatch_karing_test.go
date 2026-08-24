@@ -26,28 +26,32 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestAlarmDispatchClientRequestID(t *testing.T) {
 	t.Parallel()
 
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
 	envelope.DispatchOutboxID = 42
 	envelope.ClaimKeys = []string{"claim-a", "claim-b"}
+
 	group := alarmDispatchGroup{
-		roomID:    "room-1",
+		roomID:    testAlarmRoomID,
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	}
 	changed := alarmDispatchGroup{
 		roomID:    group.roomID,
 		envelopes: append([]domain.AlarmQueueEnvelope(nil), group.envelopes...),
 	}
+
 	changed.envelopes[0].DispatchOutboxID = 43
 
 	first := alarmDispatchClientRequestID(group, 0, 1)
@@ -82,11 +86,11 @@ func TestApplyAlarmDispatchKaringReceiver(t *testing.T) {
 			name:             "non-numeric room id sets ReceiverName",
 			roomID:           " room-1 ",
 			req:              &iris.KaringContentListRequest{},
-			wantReceiverName: "room-1",
+			wantReceiverName: testAlarmRoomID,
 		},
 		{
 			name:   "nil request is no-op",
-			roomID: "room-1",
+			roomID: testAlarmRoomID,
 		},
 	}
 
@@ -97,9 +101,11 @@ func TestApplyAlarmDispatchKaringReceiver(t *testing.T) {
 			require.NotPanics(t, func() {
 				applyAlarmDispatchKaringReceiver(tc.req, tc.roomID)
 			})
+
 			if tc.req == nil {
 				return
 			}
+
 			assert.Equal(t, tc.wantReceiverRoomID, tc.req.ReceiverRoomID)
 			assert.Equal(t, tc.wantReceiverName, tc.req.ReceiverName)
 		})
@@ -133,9 +139,10 @@ func TestAlarmDispatchKaringTemplateID(t *testing.T) {
 func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 	t.Parallel()
 
-	start := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.May, 16, 12, 0, 0, 0, time.UTC)
 	thumbnail := "https://i.ytimg.com/vi/stream-a/maxresdefault.jpg"
-	first := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
+
 	first.Channel.Name = "Member A"
 	first.Stream.ID = "stream-a"
 	first.Stream.Title = "Stream A"
@@ -143,7 +150,8 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 	first.Stream.StartScheduled = &start
 	first.Stream.Thumbnail = &thumbnail
 
-	second := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
+
 	second.Channel.Name = "Member B"
 	second.Stream.ID = "stream-b"
 	second.Stream.Title = "Stream B"
@@ -175,13 +183,14 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 func TestBuildAlarmDispatchKaringContentListRequestsLiveCatchupUsesLiveLabels(t *testing.T) {
 	t.Parallel()
 
-	start := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	start := time.Date(2026, time.May, 16, 12, 0, 0, 0, time.UTC)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
 	envelope.Notification.MinutesUntil = 5
 	envelope.Notification.Stream.StartActual = &start
 
 	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, alarmDispatchGroup{
-		roomID:        "room-1",
+		roomID:        testAlarmRoomID,
 		minutesUntil:  5,
 		envelopes:     []domain.AlarmQueueEnvelope{envelope},
 		notifications: []domain.AlarmNotification{envelope.Notification},
@@ -202,12 +211,15 @@ func TestBuildAlarmDispatchKaringExtraArgsPremiereLabels(t *testing.T) {
 		ON CONFLICT (namespace, key) DO UPDATE SET value = EXCLUDED.value
 	`)
 	require.NoError(t, err)
+
 	store := messagestrings.NewStore(pool, slog.Default())
 	require.NoError(t, store.Load(t.Context()))
 
-	premiere := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	premiere := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
+
 	premiere.Stream.IsPremiere = true
-	regular := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+
+	regular := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
 
 	for _, tc := range []struct {
 		name          string
@@ -227,7 +239,9 @@ func TestBuildAlarmDispatchKaringExtraArgsPremiereLabels(t *testing.T) {
 			minutesUntil: 5,
 			notifications: func() []domain.AlarmNotification {
 				n := premiere
+
 				n.MinutesUntil = 5
+
 				return []domain.AlarmNotification{n}
 			}(),
 			wantTitle:    "설정 선행공개 5분 전 알림",
@@ -238,9 +252,13 @@ func TestBuildAlarmDispatchKaringExtraArgsPremiereLabels(t *testing.T) {
 			minutesUntil: 5,
 			notifications: func() []domain.AlarmNotification {
 				p := premiere
+
 				p.MinutesUntil = 5
+
 				r := regular
+
 				r.MinutesUntil = 5
+
 				return []domain.AlarmNotification{p, r}
 			}(),
 			wantTitle:    "방송 5분 전 알림",
@@ -273,12 +291,16 @@ func TestBuildAlarmDispatchKaringExtraArgsPremiereFallbacks(t *testing.T) {
 		  AND key IN ('alarm_title_live_premiere', 'alarm_title_prelive_premiere')
 	`)
 	require.NoError(t, err)
+
 	store := messagestrings.NewStore(pool, slog.Default())
 	require.NoError(t, store.Load(t.Context()))
 
-	premiere := alarmDispatchRunnerTestEnvelope("room-1", nil).Notification
+	premiere := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
+
 	premiere.Stream.IsPremiere = true
+
 	prelive := premiere
+
 	prelive.MinutesUntil = 5
 
 	startingArgs := buildAlarmDispatchKaringExtraArgs(t.Context(), store, alarmDispatchGroup{
@@ -298,7 +320,8 @@ func TestBuildAlarmDispatchKaringExtraArgsPremiereFallbacks(t *testing.T) {
 func TestAlarmDispatchEnvelopeClientRequestIDParts(t *testing.T) {
 	t.Parallel()
 
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
 	envelope.DispatchOutboxID = 42
 	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	envelope.Notification.AlarmType = domain.AlarmTypeCommunity

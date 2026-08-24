@@ -49,8 +49,10 @@ func (f *ResponseFormatter) FormatSubscriberCount(ctx context.Context, memberNam
 
 func uint64ToInt64(value uint64) int64 {
 	const maxInt64 = uint64(1<<63 - 1)
+
 	if value > maxInt64 {
 		return int64(maxInt64)
 	}
+
 	return int64(value)
 }

@@ -3,11 +3,11 @@ package dispatchoutbox
 import (
 	"context"
 	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -64,21 +64,26 @@ func insertEvents(ctx context.Context, tx pgx.Tx, events []eventInsert) (result0
 	if len(events) == 0 {
 		return eventIDs, 0, nil
 	}
+
 	rows, _ := buildEventBatchRows(events)
+
 	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: marshal batch: %w", err)
 	}
+
 	eventIDs, inserted, err := insertEventBatch(ctx, tx, raw)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("insert event batch: %w", err)
 	}
+
 	return eventIDs, inserted, nil
 }
 
 func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1 map[string]string) {
 	rows := make([]eventBatchRow, 0, len(events))
 	expectedHashes := make(map[string]string, len(events))
+
 	for _, event := range events {
 		rows = append(rows, eventBatchRow{
 			EventKey:    event.EventKey,
@@ -91,6 +96,7 @@ func buildEventBatchRows(events []eventInsert) (result0 []eventBatchRow, result1
 		})
 		expectedHashes[event.EventKey] = event.PayloadHash
 	}
+
 	return rows, expectedHashes
 }
 
@@ -102,17 +108,23 @@ func insertEventBatch(ctx context.Context, tx pgx.Tx, raw []byte) (result0 map[s
 	defer rows.Close()
 
 	eventIDs := make(map[string]int64)
+
 	for rows.Next() {
 		var row insertedEventRow
+
 		if err := rows.Scan(&row.ID, &row.EventKey, &row.PayloadHash); err != nil {
 			return nil, 0, fmt.Errorf("insert dispatch events: scan: %w", err)
 		}
+
 		eventIDs[row.EventKey] = row.ID
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("insert dispatch events: rows: %w", err)
 	}
+
 	inserted := len(eventIDs)
+
 	return eventIDs, inserted, nil
 }
 
@@ -120,6 +132,7 @@ func truncateHash(h string) string {
 	if len(h) <= 8 {
 		return h
 	}
+
 	return h[:8] + "..."
 }
 
@@ -127,24 +140,30 @@ func insertDeliveries(ctx context.Context, tx pgx.Tx, deliveries []deliveryInser
 	if len(deliveries) == 0 {
 		return 0, nil
 	}
+
 	rows, err := buildDeliveryBatchRows(deliveries)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("build delivery batch rows: %w", err)
 	}
+
 	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return 0, fmt.Errorf("insert dispatch deliveries: marshal batch: %w", err)
 	}
-	if err := ensureSendUnits(ctx, tx, raw); err != nil {
-		return 0, err
+
+	if unitErr := ensureSendUnits(ctx, tx, raw); unitErr != nil {
+		return 0, fmt.Errorf("ensure send units: %w", unitErr)
 	}
+
 	selected, inserted, err := insertDeliveryBatch(ctx, tx, raw)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("insert delivery batch: %w", err)
 	}
+
 	if selected != len(deliveries) {
 		return 0, fmt.Errorf("insert dispatch deliveries: selected %d of %d rows", selected, len(deliveries))
 	}
+
 	return inserted, nil
 }
 
@@ -152,6 +171,7 @@ func ensureSendUnits(ctx context.Context, tx pgx.Tx, raw []byte) error {
 	if _, err := tx.Exec(ctx, mustSQL("repository_insert_0179_01.sql"), jsonbRecordsetParam(raw)); err != nil {
 		return fmt.Errorf("insert dispatch send units: %w", err)
 	}
+
 	return nil
 }
 
@@ -162,6 +182,7 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 		if delivery.EventID <= 0 {
 			return nil, fmt.Errorf("insert dispatch deliveries: missing event id for event_key=%s", delivery.EventKey)
 		}
+
 		rows = append(rows, deliveryBatchRow{
 			EventID:          delivery.EventID,
 			RoomID:           delivery.RoomID,
@@ -174,6 +195,7 @@ func buildDeliveryBatchRows(deliveries []deliveryInsert) ([]deliveryBatchRow, er
 			Status:           string(delivery.Status),
 		})
 	}
+
 	return rows, nil
 }
 
@@ -182,6 +204,7 @@ func insertDeliveryBatch(ctx context.Context, tx pgx.Tx, raw []byte) (selected, 
 	if err != nil {
 		return 0, 0, fmt.Errorf("insert dispatch deliveries: %w", err)
 	}
+
 	return selected, inserted, nil
 }
 
@@ -189,16 +212,20 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 	events := make(map[string]eventInsert, len(envelopes))
 	deliveries := make([]deliveryInsert, 0, len(envelopes))
 	seenDeliveries := make(map[string]struct{}, len(envelopes))
+
 	var collisions []eventCollision
+
 	for i := range envelopes {
 		collision, err := appendPreparedBatchRow(&envelopes[i], status, events, &deliveries, seenDeliveries, result)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("append prepared batch row: %w", err)
 		}
+
 		if collision != nil {
 			collisions = append(collisions, *collision)
 		}
 	}
+
 	if status == StatusPending {
 		assignSendUnits(deliveries)
 	}
@@ -207,6 +234,7 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 	for key := range events {
 		eventRows = append(eventRows, events[key])
 	}
+
 	return eventRows, deliveries, collisions, nil
 }
 
@@ -220,13 +248,16 @@ func appendPreparedBatchRow(
 ) (*eventCollision, error) {
 	event, delivery, err := buildLedgerRows(envelope, status)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build ledger rows: %w", err)
 	}
+
 	collision := addPreparedEvent(events, &event, result)
+
 	if _, exists := seenDeliveries[delivery.DedupeKey]; !exists {
 		seenDeliveries[delivery.DedupeKey] = struct{}{}
 		*deliveries = append(*deliveries, delivery)
 	}
+
 	return collision, nil
 }
 
@@ -234,15 +265,18 @@ func addPreparedEvent(events map[string]eventInsert, event *eventInsert, result 
 	existing, ok := events[event.EventKey]
 	if ok && existing.PayloadHash != event.PayloadHash {
 		result.HashConflictEvents++
+
 		return &eventCollision{
 			Event:               *event,
 			ExistingPayloadHash: existing.PayloadHash,
 		}
 	}
+
 	if !ok {
 		events[event.EventKey] = *event
 		result.RequestedEvents++
 	}
+
 	return nil
 }
 
@@ -251,28 +285,33 @@ func (r *PgxRepository) insertPreparedBatch(ctx context.Context, eventRows []eve
 	if err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: begin tx: %w", err)
 	}
+
 	defer func() {
 		err = finishDispatchBatch(ctx, tx, err, recover())
 	}()
 
 	collisions, deliveries, err := prepareBatchDeliveriesForInsert(ctx, tx, eventRows, deliveries, preflightCollisions, result, r.logger)
 	if err != nil {
-		return *result, err
+		return *result, fmt.Errorf("prepare batch deliveries for insert: %w", err)
 	}
 
 	insertedDeliveries, err := insertDeliveries(ctx, tx, deliveries)
 	if err != nil {
-		return *result, err
+		return *result, fmt.Errorf("insert deliveries: %w", err)
 	}
+
 	result.InsertedDeliveries = insertedDeliveries
 	result.DuplicateDeliveries = result.RequestedDeliveries - insertedDeliveries
+
 	if recordErr := recordEventCollisions(ctx, tx, collisions); recordErr != nil {
 		err = recordErr
 		return *result, err
 	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: commit: %w", err)
 	}
+
 	return processedPublishBatchResult(result), nil
 }
 
@@ -282,79 +321,13 @@ func finishDispatchBatch(ctx context.Context, tx pgx.Tx, err error, panicValue a
 		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			slog.Default().Warn("dispatch batch rollback after panic failed", slog.Any("error", rollbackErr))
 		}
+
 		panic(panicValue)
 	}
-	return rollbackDispatchBatchOnError(ctx, tx, err)
-}
 
-func rollbackDispatchBatchOnError(ctx context.Context, tx pgx.Tx, err error) error {
-	if err == nil {
-		return nil
-	}
-	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-		return errors.Join(err, fmt.Errorf("rollback dispatch batch: %w", rollbackErr))
-	}
-	return err
-}
-
-func prepareBatchDeliveriesForInsert(
-	ctx context.Context,
-	tx pgx.Tx,
-	eventRows []eventInsert,
-	deliveries []deliveryInsert,
-	preflightCollisions []eventCollision,
-	result *PublishBatchResult,
-	logger *slog.Logger,
-) ([]eventCollision, []deliveryInsert, error) {
-	eventIDs, collisions, err := insertPreparedEvents(ctx, tx, eventRows, result, logger)
-	if err != nil {
-		return nil, nil, err
-	}
-	collisions = append(preflightCollisions, collisions...)
-	collisions = attachCollisionEventIDs(collisions, eventIDs)
-	repointCollisionDeliveryEventIDs(eventIDs, collisions)
-	assignDeliveryEventIDs(deliveries, eventIDs)
-	return collisions, deliveries, nil
-}
-
-func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result *PublishBatchResult, logger *slog.Logger) (map[string]int64, []eventCollision, error) {
-	existingRows, err := loadExistingEventRows(ctx, tx, eventRows)
-	if err != nil {
-		return nil, nil, err
-	}
-	classified := classifyEventPreflight(eventRows, existingRows)
-	eventIDs := classified.EventIDs
-	collisions := classified.Collisions
-
-	insertedEventIDs, insertedEvents, err := insertEvents(ctx, tx, classified.InsertEvents)
-	if err != nil {
-		return nil, nil, err
-	}
-	mergeEventIDs(eventIDs, insertedEventIDs)
-
-	missingEvents := missingInsertedEvents(classified.InsertEvents, insertedEventIDs)
-	if len(missingEvents) > 0 {
-		concurrentRows, err := loadExistingEventRows(ctx, tx, missingEvents)
-		if err != nil {
-			return nil, nil, err
-		}
-		concurrent := classifyEventPreflight(missingEvents, concurrentRows)
-		if len(concurrent.InsertEvents) > 0 {
-			return nil, nil, fmt.Errorf("insert dispatch events: found %d of %d inserted rows", len(insertedEventIDs), len(classified.InsertEvents))
-		}
-		mergeEventIDs(eventIDs, concurrent.EventIDs)
-		collisions = append(collisions, concurrent.Collisions...)
+	if rollbackErr := rollbackDispatchBatchOnError(ctx, tx, err); rollbackErr != nil {
+		return fmt.Errorf("rollback dispatch batch on error: %w", rollbackErr)
 	}
 
-	logEventCollisions(logger, collisions)
-	result.InsertedEvents = insertedEvents
-	result.DuplicateEvents = len(eventRows) - insertedEvents - len(collisions)
-	result.HashConflictEvents += len(collisions)
-	return eventIDs, collisions, nil
-}
-
-func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64) {
-	for i := range deliveries {
-		deliveries[i].EventID = eventIDs[deliveries[i].EventKey]
-	}
+	return nil
 }

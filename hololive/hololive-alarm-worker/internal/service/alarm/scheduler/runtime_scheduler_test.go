@@ -26,9 +26,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/stretchr/testify/require"
 )
 
 type fakeRunner struct{}
@@ -64,18 +65,18 @@ func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan struct{})
+	done := make(chan error, 1)
 
 	go func() {
-		defer close(done)
-		require.NoError(t, runtimeScheduler.Start(ctx))
+		done <- runtimeScheduler.Start(ctx)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {
-	case <-done:
+	case err := <-done:
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("runtime scheduler did not stop after cancellation")
 	}
@@ -101,18 +102,18 @@ func TestRuntimeSchedulerStart_TwitchLoopOptional(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan struct{})
+	done := make(chan error, 1)
 
 	go func() {
-		require.NoError(t, runtimeScheduler.Start(ctx))
-		close(done)
+		done <- runtimeScheduler.Start(ctx)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {
-	case <-done:
+	case err := <-done:
+		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("runtime scheduler did not stop with twitch loop disabled")
 	}

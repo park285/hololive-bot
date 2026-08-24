@@ -75,10 +75,11 @@ func ensureVerifiedReaperClient(ctx context.Context) error {
 
 	conn, err := connectSessionReaper(ctx, findSessionReaper, registerReaperSessionFilters)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect session reaper: %w", err)
 	}
 
 	verifiedReaperConn = conn
+
 	return nil
 }
 
@@ -94,9 +95,11 @@ func connectSessionReaper(
 		if err == nil {
 			return conn, nil
 		}
+
 		if !isTransientReaperError(err) {
-			return nil, err
+			return nil, fmt.Errorf("try connect session reaper: %w", err)
 		}
+
 		if waitErr := waitReaperRetry(ctx); waitErr != nil {
 			return nil, errors.Join(err, waitErr)
 		}
@@ -112,6 +115,7 @@ func tryConnectSessionReaper(
 	if err != nil {
 		return nil, fmt.Errorf("find session reaper: %w", err)
 	}
+
 	if !found {
 		return nil, errSessionReaperUnavailable
 	}
@@ -120,6 +124,7 @@ func tryConnectSessionReaper(
 	if err != nil {
 		return nil, fmt.Errorf("register reaper session filters: %w", err)
 	}
+
 	return conn, nil
 }
 
@@ -129,7 +134,11 @@ func waitReaperRetry(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		return context.Cause(ctx)
+		if err := context.Cause(ctx); err != nil {
+			return fmt.Errorf("cause: %w", err)
+		}
+
+		return nil
 	case <-timer.C:
 		return nil
 	}
@@ -141,6 +150,7 @@ func isTransientReaperError(err error) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -149,6 +159,7 @@ func findSessionReaper(ctx context.Context) (_ sessionReaper, _ bool, err error)
 	if err != nil {
 		return sessionReaper{}, false, fmt.Errorf("new docker provider: %w", err)
 	}
+
 	defer func() {
 		if closeErr := provider.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close docker provider: %w", closeErr))
@@ -165,7 +176,12 @@ func findSessionReaper(ctx context.Context) (_ sessionReaper, _ bool, err error)
 		return sessionReaper{}, false, fmt.Errorf("list session reaper containers: %w", err)
 	}
 
-	return sessionReaperFromList(ctx, provider, resp)
+	out1, out2, err := sessionReaperFromList(ctx, provider, resp)
+	if err != nil {
+		return out1, out2, fmt.Errorf("session reaper from list: %w", err)
+	}
+
+	return out1, out2, nil
 }
 
 func sessionReaperFromList(
@@ -187,6 +203,7 @@ func sessionReaperFromList(
 	if err != nil {
 		return sessionReaper{}, false, fmt.Errorf("daemon host: %w", err)
 	}
+
 	for _, port := range item.Ports {
 		if port.PublicPort != 0 {
 			return sessionReaper{
@@ -195,38 +212,50 @@ func sessionReaperFromList(
 			}, true, nil
 		}
 	}
+
 	return sessionReaper{}, false, fmt.Errorf("%w: no published port", errSessionReaperUnavailable)
 }
 
 func registerReaperSessionFilters(ctx context.Context, reaper sessionReaper) (net.Conn, error) {
 	var dialer net.Dialer
+
 	conn, err := dialer.DialContext(ctx, "tcp", reaper.endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dial reaper %s: %w", reaper.endpoint, err)
 	}
 
+	if handshakeErr := handshakeReaperSession(ctx, conn, reaper.version); handshakeErr != nil {
+		return nil, fmt.Errorf("close on error: %w", closeOnError(handshakeErr, conn))
+	}
+
+	return conn, nil
+}
+
+func handshakeReaperSession(ctx context.Context, conn net.Conn, version string) error {
 	if deadline, ok := ctx.Deadline(); ok {
 		if err := conn.SetDeadline(deadline); err != nil {
-			return nil, closeOnError(fmt.Errorf("set handshake deadline: %w", err), conn)
+			return fmt.Errorf("set handshake deadline: %w", err)
 		}
 	}
 
-	if _, err := conn.Write([]byte(reaperSessionFilterLine(reaper.version))); err != nil {
-		return nil, closeOnError(fmt.Errorf("write session filters: %w", err), conn)
+	if _, err := conn.Write([]byte(reaperSessionFilterLine(version))); err != nil {
+		return fmt.Errorf("write session filters: %w", err)
 	}
 
 	ack := make([]byte, len(reaperAck))
 	if _, err := io.ReadFull(conn, ack); err != nil {
-		return nil, closeOnError(fmt.Errorf("read reaper ack: %w", err), conn)
+		return fmt.Errorf("read reaper ack: %w", err)
 	}
+
 	if string(ack) != reaperAck {
-		return nil, closeOnError(fmt.Errorf("unexpected reaper response: %q", ack), conn)
+		return fmt.Errorf("unexpected reaper response: %q", ack)
 	}
 
 	if err := conn.SetDeadline(time.Time{}); err != nil {
-		return nil, closeOnError(fmt.Errorf("clear handshake deadline: %w", err), conn)
+		return fmt.Errorf("clear handshake deadline: %w", err)
 	}
-	return conn, nil
+
+	return nil
 }
 
 func reaperSessionFilterLine(version string) string {
@@ -234,9 +263,11 @@ func reaperSessionFilterLine(version string) string {
 		"&label=org.testcontainers.lang=go" +
 		"&label=org.testcontainers.reap=true" +
 		"&label=org.testcontainers.sessionId=" + testcontainers.SessionID()
+
 	if version != "" {
 		line += "&label=" + reaperVersionLabel + "=" + version
 	}
+
 	return line + "\n"
 }
 
@@ -244,5 +275,6 @@ func closeOnError(err error, conn net.Conn) error {
 	if closeErr := conn.Close(); closeErr != nil {
 		return errors.Join(err, fmt.Errorf("close reaper conn: %w", closeErr))
 	}
+
 	return err
 }

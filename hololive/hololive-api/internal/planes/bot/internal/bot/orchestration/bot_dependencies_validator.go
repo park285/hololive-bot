@@ -35,19 +35,26 @@ func validateBotDependencies(deps *Dependencies) (streamRuntime, error) {
 	stream := deps.streamDeps()
 
 	if err := validateCoreDependencies(&core); err != nil {
+		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
 		return nil, err
 	}
 
 	if err := validateMessagingDependencies(messaging); err != nil {
-		return nil, err
-	}
-	if err := validateDataDependencies(data); err != nil {
-		return nil, err
-	}
-	if err := validateStreamDependencies(&stream); err != nil {
+		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
 		return nil, err
 	}
 
+	if err := validateDataDependencies(data); err != nil {
+		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
+		return nil, err
+	}
+
+	if err := validateStreamDependencies(&stream); err != nil {
+		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
+		return nil, err
+	}
+
+	//nolint:wrapcheck // runtime type 검증의 leaf 오류에 중복 validation context를 붙이지 않는다.
 	return validateStreamRuntime(&stream)
 }
 
@@ -55,9 +62,11 @@ func validateCoreDependencies(core *coreDependencies) error {
 	if core == nil {
 		return errors.New("core dependencies are required")
 	}
+
 	if core.logger == nil {
 		return errors.New("logger dependency is required")
 	}
+
 	return nil
 }
 
@@ -65,12 +74,15 @@ func validateMessagingDependencies(messaging messagingDependencies) error {
 	if messaging.client == nil {
 		return errors.New("iris client dependency is required")
 	}
+
 	if messaging.messageAdapter == nil {
 		return errors.New("message adapter dependency is required")
 	}
+
 	if messaging.formatter == nil {
 		return errors.New("response formatter dependency is required")
 	}
+
 	return nil
 }
 
@@ -78,9 +90,11 @@ func validateDataDependencies(data dataDependencies) error {
 	if data.cache == nil {
 		return errors.New("cache dependency is required")
 	}
+
 	if data.postgres == nil {
 		return errors.New("postgres dependency is required")
 	}
+
 	return nil
 }
 
@@ -88,21 +102,27 @@ func validateStreamDependencies(stream *streamDependencies) error {
 	if stream == nil {
 		return errors.New("stream dependencies are required")
 	}
+
 	if stream.holodex == nil {
 		return errors.New("holodex dependency is required")
 	}
+
 	if stream.profiles == nil {
 		return errors.New("profile service dependency is required")
 	}
+
 	if stream.alarm == nil {
 		return errors.New("alarm service dependency is required")
 	}
+
 	if stream.matcher == nil {
 		return errors.New("matcher dependency is required")
 	}
+
 	if stream.membersData == nil {
 		return errors.New("member data dependency is required")
 	}
+
 	return nil
 }
 
@@ -110,9 +130,11 @@ func validateStreamRuntime(stream *streamDependencies) (streamRuntime, error) {
 	if stream == nil {
 		return nil, errors.New("stream dependencies are required")
 	}
+
 	holodexRuntime, ok := stream.holodex.(streamRuntime)
 	if !ok {
 		return nil, errors.New("holodex dependency does not implement stream runtime interface")
 	}
+
 	return holodexRuntime, nil
 }

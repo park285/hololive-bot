@@ -29,11 +29,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Valkey 키 접두사 (alarmservice alarm_types.go 별칭과 1:1 대응)
+// Valkey 키 접두사(alarmservice alarm_types.go 별칭과 1:1 대응).
 const (
 	AlarmKeyPrefix                    = "alarm:"
 	AlarmRegistryKey                  = "alarm:registry"
@@ -106,6 +107,7 @@ func IsRoomAlarmKey(key string) bool {
 	}
 
 	suffix := strings.TrimPrefix(trimmed, AlarmKeyPrefix)
+
 	return suffix != "" && !strings.Contains(suffix, ":")
 }
 
@@ -159,14 +161,16 @@ func NotifiedKey(streamID string) string {
 
 // - minutesUntil == 0 -> "live"
 // - targetMinutes에 포함 -> "target"
-// - 그 외 -> minutesUntil 문자열
+// - 그 외 -> minutesUntil 문자열.
 func NotificationCategory(targetMinutes []int, minutesUntil int) string {
 	if minutesUntil == 0 {
 		return "live"
 	}
+
 	if slices.Contains(targetMinutes, minutesUntil) {
 		return "target"
 	}
+
 	return strconv.Itoa(minutesUntil)
 }
 
@@ -178,6 +182,7 @@ func normalizedScheduledUnix(t time.Time) int64 {
 	if t.IsZero() {
 		return 0
 	}
+
 	return NormalizeScheduledMinute(t).Unix()
 }
 
@@ -191,7 +196,9 @@ func normalizeTitleForFingerprint(title string) string {
 	}
 
 	var builder strings.Builder
+
 	builder.Grow(len(base))
+
 	for _, r := range base {
 		switch r {
 		case '?', '(', ')', '&', ',', ':', ';',
@@ -202,6 +209,7 @@ func normalizeTitleForFingerprint(title string) string {
 			builder.WriteRune(r)
 		}
 	}
+
 	return builder.String()
 }
 
@@ -210,59 +218,66 @@ func BuildTitleFingerprint(title, streamID string) string {
 	if normalized == "" {
 		normalized = normalizeTitleForFingerprint(streamID)
 	}
+
 	if normalized == "" {
 		normalized = "untitled"
 	}
 
 	h := sha256.Sum256([]byte(normalized))
+
 	return hex.EncodeToString(h[:8])
 }
 
-// "notified:claim:{roomID}:{streamID}:{scheduleUnix}:{category}"
+// "notified:claim:{roomID}:{streamID}:{scheduleUnix}:{category}".
 func BuildNotifyClaimKey(roomID, streamID string, startScheduled time.Time, category string) string {
 	scheduleUnix := normalizedScheduledUnix(startScheduled)
 	return fmt.Sprintf("%s%s:%s:%d:%s", NotifyClaimKeyPrefix, roomID, streamID, scheduleUnix, category)
 }
 
-// "notified:claim:event:{roomID}:{channelID}:{scheduleUnix}:{titleFP}:{category}"
+// "notified:claim:event:{roomID}:{channelID}:{scheduleUnix}:{titleFP}:{category}".
 func BuildLogicalEventClaimKey(roomID, channelID, streamID, title string, startScheduled time.Time, category string) string {
 	scheduleUnix := normalizedScheduledUnix(startScheduled)
 	titleFP := BuildTitleFingerprint(title, streamID)
+
 	return fmt.Sprintf("%s%s:%s:%d:%s:%s", NotifyLogicalClaimKeyPrefix, roomID, channelID, scheduleUnix, titleFP, category)
 }
 
-// "notified:upcoming:event:{roomID}:{channelID}:{scheduleUnix}:{titleFP}"
+// "notified:upcoming:event:{roomID}:{channelID}:{scheduleUnix}:{titleFP}".
 func BuildUpcomingEventKey(roomID, channelID, streamID, title string, startScheduled time.Time) string {
 	scheduleUnix := NormalizeScheduledMinute(startScheduled).Unix()
 	titleFP := BuildTitleFingerprint(title, streamID)
+
 	return fmt.Sprintf("%s%s:%s:%d:%s", UpcomingEventKeyPrefix, roomID, channelID, scheduleUnix, titleFP)
 }
 
-// "notified:schedule:transition:{streamID}:{oldUnix}:{newUnix}"
+// "notified:schedule:transition:{streamID}:{oldUnix}:{newUnix}".
 func BuildScheduleTransitionKey(streamID string, oldScheduled, newScheduled time.Time) string {
 	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
 	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
+
 	return fmt.Sprintf("%s%s:%d:%d", ScheduleTransitionKeyPrefix, streamID, oldUnix, newUnix)
 }
 
-// "notified:schedule:transition:room:{roomID}:{streamID}:{oldUnix}:{newUnix}"
+// "notified:schedule:transition:room:{roomID}:{streamID}:{oldUnix}:{newUnix}".
 func BuildRoomScheduleTransitionKey(roomID, streamID string, oldScheduled, newScheduled time.Time) string {
 	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
 	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
+
 	return fmt.Sprintf("%s%s:%s:%d:%d", RoomScheduleTransitionKeyPrefix, roomID, streamID, oldUnix, newUnix)
 }
 
-// "notified:schedule:index:{roomID}:{channelID}:{titleFP}"
+// "notified:schedule:index:{roomID}:{channelID}:{titleFP}".
 func BuildLogicalScheduleIndexKey(roomID, channelID, streamID, title string) string {
 	titleFP := BuildTitleFingerprint(title, streamID)
 	return fmt.Sprintf("%s%s:%s:%s", LogicalScheduleIndexKeyPrefix, roomID, channelID, titleFP)
 }
 
-// "notified:schedule:transition:event:{roomID}:{channelID}:{titleFP}:{oldUnix}:{newUnix}"
+// "notified:schedule:transition:event:{roomID}:{channelID}:{titleFP}:{oldUnix}:{newUnix}".
 func BuildLogicalScheduleTransitionKey(roomID, channelID, streamID, title string, oldScheduled, newScheduled time.Time) string {
 	oldUnix := NormalizeScheduledMinute(oldScheduled).Unix()
 	newUnix := NormalizeScheduledMinute(newScheduled).Unix()
 	titleFP := BuildTitleFingerprint(title, streamID)
+
 	return fmt.Sprintf("%s%s:%s:%s:%d:%d", LogicalScheduleTransitionKeyPrefix, roomID, channelID, titleFP, oldUnix, newUnix)
 }
 

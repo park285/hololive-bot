@@ -27,13 +27,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	alarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 )
 
 func TestLoadMemberNamesByChannel(t *testing.T) {
@@ -50,21 +51,26 @@ func TestLoadMemberNamesByChannel(t *testing.T) {
 	t.Run("deduplicates channel ids and returns member names", func(t *testing.T) {
 		t.Parallel()
 
-		var gotKey string
-		var gotFields []string
+		var (
+			gotKey    string
+			gotFields []string
+		)
+
 		cacheClient := &cachemocks.Client{
 			BatchHGetFunc: func(_ context.Context, key string, fields []string) (map[string]string, error) {
 				gotKey = key
+
 				gotFields = append([]string(nil), fields...)
-				return map[string]string{"channel-1": "Member One"}, nil
+
+				return map[string]string{testChannelID1: "Member One"}, nil
 			},
 		}
 
-		got, err := LoadMemberNamesByChannel(t.Context(), cacheClient, []string{"channel-1", "channel-1", "channel-2"})
+		got, err := LoadMemberNamesByChannel(t.Context(), cacheClient, []string{testChannelID1, testChannelID1, testChannelID2})
 		require.NoError(t, err)
 		assert.Equal(t, alarmkeys.MemberNameKey, gotKey)
-		assert.Equal(t, []string{"channel-1", "channel-2"}, gotFields)
-		assert.Equal(t, map[string]string{"channel-1": "Member One"}, got)
+		assert.Equal(t, []string{testChannelID1, testChannelID2}, gotFields)
+		assert.Equal(t, map[string]string{testChannelID1: "Member One"}, got)
 	})
 
 	t.Run("wraps cache error", func(t *testing.T) {
@@ -76,9 +82,9 @@ func TestLoadMemberNamesByChannel(t *testing.T) {
 			},
 		}
 
-		_, err := LoadMemberNamesByChannel(t.Context(), cacheClient, []string{"channel-1"})
+		_, err := LoadMemberNamesByChannel(t.Context(), cacheClient, []string{testChannelID1})
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "load member names by channel")
+		require.ErrorContains(t, err, "load member names by channel")
 		assert.ErrorContains(t, err, "batch hget failed")
 	})
 }
@@ -88,23 +94,23 @@ func TestApplyMemberNamesToStreams(t *testing.T) {
 
 	streamWithBlankChannel := &domain.Stream{Channel: &domain.Channel{}}
 	streamWithoutChannel := &domain.Stream{}
-	streamSkipped := &domain.Stream{ChannelName: "Original", Channel: &domain.Channel{ID: "channel-2", Name: "Original"}}
+	streamSkipped := &domain.Stream{ChannelName: "Original", Channel: &domain.Channel{ID: testChannelID2, Name: "Original"}}
 	streamsByChannel := map[string][]*domain.Stream{
-		"channel-1": {streamWithBlankChannel, nil},
-		"channel-2": {streamSkipped},
-		"channel-3": {streamWithoutChannel},
+		testChannelID1: {streamWithBlankChannel, nil},
+		testChannelID2: {streamSkipped},
+		"channel-3":    {streamWithoutChannel},
 	}
 
 	ApplyMemberNamesToStreams(streamsByChannel, map[string]string{
-		"channel-1": " Member One ",
-		"channel-2": "   ",
-		"channel-3": "Member Three",
+		testChannelID1: " Member One ",
+		testChannelID2: "   ",
+		"channel-3":    "Member Three",
 	})
 	ApplyMemberNameToStream(nil, "channel-x", "ignored")
 
 	assert.Equal(t, "Member One", streamWithBlankChannel.ChannelName)
 	require.NotNil(t, streamWithBlankChannel.Channel)
-	assert.Equal(t, "channel-1", streamWithBlankChannel.Channel.ID)
+	assert.Equal(t, testChannelID1, streamWithBlankChannel.Channel.ID)
 	assert.Equal(t, "Member One", streamWithBlankChannel.Channel.Name)
 
 	assert.Equal(t, "Original", streamSkipped.ChannelName)
@@ -126,19 +132,19 @@ func TestChannelNameForMember(t *testing.T) {
 		want       string
 	}{
 		"uses trimmed member name": {
-			channelID:  "channel-1",
+			channelID:  testChannelID1,
 			memberName: " Member ",
 			fallback:   "Fallback",
 			want:       "Member",
 		},
 		"uses fallback when member is blank": {
-			channelID: "channel-1",
+			channelID: testChannelID1,
 			fallback:  " Fallback ",
 			want:      "Fallback",
 		},
 		"uses trimmed channel id last": {
 			channelID: " channel-1 ",
-			want:      "channel-1",
+			want:      testChannelID1,
 		},
 	}
 
@@ -157,9 +163,9 @@ func TestRoomNotificationsWithScheduleChanges(t *testing.T) {
 	current := previous.Add(5 * time.Minute)
 	stream := &domain.Stream{
 		ID:             "stream-schedule-change",
-		ChannelID:      "channel-1",
+		ChannelID:      testChannelID1,
 		StartScheduled: &current,
-		Channel:        &domain.Channel{ID: "channel-1", Name: "Channel One"},
+		Channel:        &domain.Channel{ID: testChannelID1, Name: "Channel One"},
 	}
 	change := &dedup.ScheduleChange{
 		PreviousScheduled: previous,
@@ -171,15 +177,15 @@ func TestRoomNotificationsWithScheduleChanges(t *testing.T) {
 		t.Parallel()
 
 		notifications := RoomNotificationsWithScheduleChanges(
-			[]string{"room-1", "room-2", ""},
+			[]string{testRoomID1, testRoomID2, ""},
 			stream.Channel,
 			stream,
 			8,
-			map[string]*dedup.ScheduleChange{"room-1": change},
+			map[string]*dedup.ScheduleChange{testRoomID1: change},
 			true,
 		)
 		require.Len(t, notifications, 1)
-		assert.Equal(t, "room-1", notifications[0].RoomID)
+		assert.Equal(t, testRoomID1, notifications[0].RoomID)
 		assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
 		assert.Equal(t, alarmkeys.FormatScheduled(previous), notifications[0].ScheduleChangePreviousStart)
 	})
@@ -188,11 +194,11 @@ func TestRoomNotificationsWithScheduleChanges(t *testing.T) {
 		t.Parallel()
 
 		notifications := RoomNotificationsWithScheduleChanges(
-			[]string{"room-1", "room-2"},
+			[]string{testRoomID1, testRoomID2},
 			stream.Channel,
 			stream,
 			5,
-			map[string]*dedup.ScheduleChange{"room-1": change},
+			map[string]*dedup.ScheduleChange{testRoomID1: change},
 			false,
 		)
 		require.Len(t, notifications, 2)
@@ -204,7 +210,7 @@ func TestRoomNotificationsWithScheduleChanges(t *testing.T) {
 		t.Parallel()
 
 		assert.Nil(t, RoomNotificationsWithScheduleChanges(nil, stream.Channel, stream, 5, nil, false))
-		assert.Nil(t, RoomNotificationsWithScheduleChanges([]string{"room-1"}, stream.Channel, nil, 5, nil, false))
+		assert.Nil(t, RoomNotificationsWithScheduleChanges([]string{testRoomID1}, stream.Channel, nil, 5, nil, false))
 	})
 }
 
@@ -233,37 +239,42 @@ func TestScheduleChangeNotificationHelpers(t *testing.T) {
 func TestLoadSubscriberRoomsByChannelFallsBackToSequentialLookup(t *testing.T) {
 	t.Parallel()
 
-	var mu sync.Mutex
-	var calledKeys []string
+	var (
+		mu         sync.Mutex
+		calledKeys []string
+	)
+
 	cacheClient := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client {
 			return nil
 		},
 		SMembersFunc: func(_ context.Context, key string) ([]string, error) {
 			mu.Lock()
+
 			calledKeys = append(calledKeys, key)
 			mu.Unlock()
 
 			switch key {
-			case alarmkeys.ChannelSubscribersKeyPrefix + "channel-1":
-				return []string{"room-1", "room-2"}, nil
-			case alarmkeys.ChannelSubscribersKeyPrefix + "channel-2":
-				return []string{"room-3"}, nil
+			case alarmkeys.ChannelSubscribersKeyPrefix + testChannelID1:
+				return []string{testRoomID1, testRoomID2}, nil
+			case alarmkeys.ChannelSubscribersKeyPrefix + testChannelID2:
+				return []string{testRoomID3}, nil
 			default:
 				return nil, nil
 			}
 		},
 	}
 
-	got, err := LoadSubscriberRoomsByChannel(t.Context(), cacheClient, []string{"channel-1", "channel-2", "channel-1"})
+	got, err := LoadSubscriberRoomsByChannel(t.Context(), cacheClient, []string{testChannelID1, testChannelID2, testChannelID1})
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"room-1", "room-2"}, got["channel-1"])
-	assert.ElementsMatch(t, []string{"room-3"}, got["channel-2"])
+	assert.ElementsMatch(t, []string{testRoomID1, testRoomID2}, got[testChannelID1])
+	assert.ElementsMatch(t, []string{testRoomID3}, got[testChannelID2])
 
 	mu.Lock()
 	defer mu.Unlock()
+
 	assert.ElementsMatch(t, []string{
-		alarmkeys.ChannelSubscribersKeyPrefix + "channel-1",
-		alarmkeys.ChannelSubscribersKeyPrefix + "channel-2",
+		alarmkeys.ChannelSubscribersKeyPrefix + testChannelID1,
+		alarmkeys.ChannelSubscribersKeyPrefix + testChannelID2,
 	}, calledKeys)
 }

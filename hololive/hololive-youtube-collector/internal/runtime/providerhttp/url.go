@@ -1,6 +1,7 @@
 package providerhttp
 
 import (
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -11,40 +12,55 @@ import (
 func ParseHolodexBaseURL(raw string) (*url.URL, error) {
 	parsed, err := parseProviderBaseURL(raw, "holodex")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse provider base URL: %w", err)
 	}
+
 	if !validHolodexPath(parsed.Path) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex base URL path prefix is invalid")
 	}
+
 	return parsed, nil
 }
 
 func ParseOfficialScheduleBaseURL(raw string) (*url.URL, error) {
 	parsed, err := parseProviderBaseURL(raw, "official schedule")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse provider base URL: %w", err)
 	}
+
 	if parsed.Path != "" && parsed.Path != "/" {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule base URL must be an HTTPS origin")
 	}
+
 	return parsed, nil
 }
 
 func parseProviderBaseURL(raw, name string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL is invalid")
 	}
+
 	if parsed.User != nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must not include userinfo")
 	}
+
 	if !isHTTPSProviderURL(parsed) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must be HTTPS")
 	}
+
 	if hasDisallowedProviderURLParts(parsed) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must not include query, fragment, or escaped path")
 	}
+
 	copied := *parsed
+
 	return &copied, nil
 }
 
@@ -60,8 +76,10 @@ func validHolodexPath(value string) bool {
 	if value == "" || value == "/" {
 		return true
 	}
+
 	if !strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") || strings.Contains(value, "//") {
 		return false
 	}
+
 	return path.Clean(value) == value
 }

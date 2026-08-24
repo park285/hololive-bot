@@ -25,7 +25,9 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
 	)
+
 	failedAt := time.Now()
+
 	mr.logger.Warn("Failed to build grouped delivery request",
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
@@ -35,6 +37,7 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key")
+
 	for i := range validRows {
 		mr.recordDeliveryFailure(result, mu, "dedupe key", validRows[i].ID, validRows[i].OutboxID)
 	}
@@ -56,6 +59,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
 	)
+
 	failedAt := time.Now()
 	reason := deliveryFailureReason(sendErr)
 	mr.logger.Warn("Failed to send grouped delivery",
@@ -67,6 +71,7 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 		slog.Any("error", sendErr))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", reason, sendErr)
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", reason)
+
 	for i := range validRows {
 		mr.recordDeliveryFailureWithRetryAfter(result, mu, reason, validRows[i].ID, validRows[i].OutboxID, deliveryRetryAfter(sendErr))
 	}
@@ -84,6 +89,7 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 ) {
 	roomID, channelID, kind := groupedDeliveryFields(group)
 	sentAt := time.Now()
+
 	mr.logger.Info("Sent grouped delivery",
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
@@ -94,10 +100,12 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, sentAt, "grouped", "success", "")
 
 	mu.Lock()
+
 	for i := range validRows {
 		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, validRows[i].ID)
 		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, validRows[i].OutboxID)
 	}
+
 	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	mu.Unlock()
 }
@@ -106,5 +114,6 @@ func groupedDeliveryFields(group *deliveryGroup) (result1, result2 string, resul
 	if group == nil {
 		return "", "", ""
 	}
+
 	return group.roomID, group.channelID, group.kind
 }

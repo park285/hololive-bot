@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type collectorReadiness struct {
@@ -50,34 +51,46 @@ func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) 
 func (r *collectorReadiness) respond(c *gin.Context) {
 	if r.disabled {
 		r.respondDisabled(c)
+
 		return
 	}
+
 	cfg := settings.YouTubeCollectorConfig{}
+
 	if r.appConfig != nil {
 		cfg = r.appConfig.Collector
 	}
+
 	probeCtx, cancel := context.WithTimeout(c.Request.Context(), cfg.ReadinessTimeout)
+
 	defer cancel()
+
 	deps := r.deps(&cfg)
 	body := evaluateReadiness(probeCtx, &deps)
+
 	payload, err := jsonv2.Marshal(body)
 	if err != nil {
 		fallback := readinessResponse{Runtime: runtimeName, Helper: helperNotReady}
+
 		fallback = notReady(&fallback, ReadyDegraded, "scheduler")
 		c.Status(readinessHTTPStatus(&fallback))
+
 		return
 	}
+
 	c.Data(readinessHTTPStatus(&body), gin.MIMEJSON, payload)
 }
 
 func (r *collectorReadiness) respondDisabled(c *gin.Context) {
 	capacity := 0
+
 	if r.appConfig != nil && r.appConfig.WorkerProfile != nil {
 		worker := r.appConfig.WorkerProfile.Loaded.Profile.Workers["collection"]
 		if worker.Queue.Capacity.Items != nil {
 			capacity = int(*worker.Queue.Capacity.Items)
 		}
 	}
+
 	ginjson.Respond(c, 200, readinessResponse{
 		Status: "ready", Runtime: runtimeName, InstanceID: collectorInstanceID(r.appConfig), State: ReadyReady,
 		Helper: "disabled", HandoffStatus: HandoffNone, DueJobsExact: true, QueueCapacity: capacity,
@@ -86,13 +99,17 @@ func (r *collectorReadiness) respondDisabled(c *gin.Context) {
 
 func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readinessDeps {
 	var helper helperHealth
+
 	if r != nil && r.infra != nil && r.infra.youtubejs != nil {
 		helper = r.infra.youtubejs
 	}
+
 	var sched schedulerView
+
 	if r != nil && r.scheduler != nil {
 		sched = r.scheduler
 	}
+
 	return readinessDeps{
 		instanceID:    collectorInstanceID(r.appConfig),
 		helperTimeout: cfg.HelperHealthTimeout,
@@ -109,5 +126,6 @@ func collectorInstanceID(appConfig *settings.YouTubeCollectorRuntimeConfig) stri
 	if appConfig == nil {
 		return ""
 	}
+
 	return strings.TrimSpace(appConfig.Collector.InstanceID)
 }

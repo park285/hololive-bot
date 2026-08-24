@@ -28,9 +28,11 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 )
 
-type threadIDContextKey struct{}
-type replyIdentityContextKey struct{}
-type imageContentTypeContextKey struct{}
+type (
+	threadIDContextKey         struct{}
+	replyIdentityContextKey    struct{}
+	imageContentTypeContextKey struct{}
+)
 
 type replyIdentityState struct {
 	id      string
@@ -70,6 +72,7 @@ func appendThreadIDOption(ctx context.Context, opts []iris.SendOption) []iris.Se
 	if id, ok := ThreadIDFromContext(ctx); ok {
 		return append(opts, iris.WithThreadID(id))
 	}
+
 	return opts
 }
 
@@ -78,6 +81,7 @@ func WithImageContentType(ctx context.Context, contentType string) context.Conte
 	if value == "" {
 		return ctx
 	}
+
 	return context.WithValue(ctx, imageContentTypeContextKey{}, value)
 }
 
@@ -85,7 +89,9 @@ func ImageContentTypeFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
 	}
+
 	value, ok := ctx.Value(imageContentTypeContextKey{}).(string)
+
 	return value, ok && value != ""
 }
 

@@ -22,17 +22,14 @@ package runtime
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
-
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -43,7 +40,7 @@ func (fakeMajorEventLLMClient) GenerateJSON(context.Context, string, string, map
 }
 
 func searchProviderTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestProvideExaSearcher(t *testing.T) {
@@ -52,7 +49,7 @@ func TestProvideExaSearcher(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		t.Parallel()
 
-		searcher := provideExaSearcher(settings.ExaConfig{Enabled: false, APIKey: "key"}, searchProviderTestLogger())
+		searcher := provideExaSearcher(settings.ExaConfig{Enabled: false, APIKey: testProviderKey}, searchProviderTestLogger())
 		assert.Nil(t, searcher)
 	})
 
@@ -90,8 +87,8 @@ func TestProvideEventSummarizer_Default(t *testing.T) {
 	)
 	require.NotNil(t, summarizer)
 
-	got := summarizer.Summarize(context.Background(), nil, mesummarizer.SummaryTypeWeekly, "2026-W10")
-	assert.Equal(t, "", got)
+	got := summarizer.Summarize(t.Context(), nil, mesummarizer.SummaryTypeWeekly, "2026-W10")
+	assert.Empty(t, got)
 }
 
 func TestProvideEventSummarizer_ConsensusEnabled(t *testing.T) {
@@ -119,6 +116,6 @@ func TestProvideEventSummarizer_ConsensusEnabled(t *testing.T) {
 	require.NotNil(t, summarizer)
 
 	events := []domain.MajorEvent{}
-	got := summarizer.Summarize(context.Background(), events, mesummarizer.SummaryTypeWeekly, "2026-W10")
-	assert.Equal(t, "", got)
+	got := summarizer.Summarize(t.Context(), events, mesummarizer.SummaryTypeWeekly, "2026-W10")
+	assert.Empty(t, got)
 }

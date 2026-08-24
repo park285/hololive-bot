@@ -2,6 +2,7 @@ package youtubejscollector
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -29,34 +30,64 @@ func (r *ViewerRunner) JobID() sourceobservation.JobID {
 }
 
 func (r *ViewerRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
-	if r == nil || r.client == nil {
+	if invalidViewerRunner(r) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js viewer client is not configured")
 	}
+
 	if input == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
+
 	spec := input.Spec()
 	if looksLikeYouTubeChannelID(spec.SubjectKey) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "viewer_sample subject must be a video id")
 	}
+
 	started := time.Now()
+
 	result, err := r.client.FetchViewer(ctx, youtubejs.ViewerRequest{
 		VideoID:                 spec.SubjectKey,
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("fetch viewer: %w", err)
 	}
-	if err := validateViewerIdentity(spec.SubjectKey, &result); err != nil {
-		return collectutil.CollectResult{}, err
+
+	if validateErr := validateViewerIdentity(spec.SubjectKey, &result); validateErr != nil {
+		return collectutil.CollectResult{}, fmt.Errorf("validate viewer identity: %w", validateErr)
 	}
+
 	generation, err := input.Generation(contract.KindViewerSample)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("generation: %w", err)
 	}
+
+	envelope, err := viewerEnvelope(input, &result, generation)
+	if err != nil {
+		return collectutil.CollectResult{}, fmt.Errorf("%w", err)
+	}
+
+	out, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+	if err != nil {
+		return out, fmt.Errorf("complete from envelopes: %w", err)
+	}
+
+	return out, nil
+}
+
+func invalidViewerRunner(r *ViewerRunner) bool {
+	return r == nil || r.client == nil
+}
+
+func viewerEnvelope(input *collectutil.RunInput, result *youtubejs.ViewerResult, generation int64) (contract.Envelope, error) {
+	spec := input.Spec()
 	lease := input.Lease()
 	windowStart := lease.ScheduledFor.UTC()
 	windowSeconds := collectutil.SampleWindowSeconds(spec.PollInterval)
+
 	envelope, err := collectutil.Envelope(
 		contract.ProviderYouTubeJS,
 		contract.KindViewerSample,
@@ -65,12 +96,13 @@ func (r *ViewerRunner) Collect(ctx context.Context, input *collectutil.RunInput)
 		&lease,
 		contract.CompletenessComplete,
 		contract.ContinuityNotApplicable,
-		viewerPayload(spec.SubjectKey, &result, windowStart, windowSeconds),
+		viewerPayload(spec.SubjectKey, result, windowStart, windowSeconds),
 	)
 	if err != nil {
-		return collectutil.CollectResult{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
+		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
 	}
-	return collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+
+	return envelope, nil
 }
 
 func looksLikeYouTubeChannelID(value string) bool {

@@ -16,7 +16,7 @@ func BuildChannelPostDeliverySummaries(posts []PostSendCount) ([]ChannelPostDeli
 
 	accumulators, err := buildChannelPostDeliverySummaryAccumulators(posts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build channel post delivery summary accumulators: %w", err)
 	}
 
 	summaries := make([]ChannelPostDeliverySummary, 0, len(accumulators))
@@ -27,9 +27,11 @@ func BuildChannelPostDeliverySummaries(posts []PostSendCount) ([]ChannelPostDeli
 	sort.SliceStable(summaries, func(i, j int) bool {
 		left := channelPostDeliverySummarySortTime(&summaries[i])
 		right := channelPostDeliverySummarySortTime(&summaries[j])
+
 		if !left.Equal(right) {
 			return left.After(right)
 		}
+
 		return summaries[i].ChannelID < summaries[j].ChannelID
 	})
 
@@ -51,6 +53,7 @@ func buildChannelPostDeliverySummaryAccumulators(
 			return nil, fmt.Errorf("post[%d] %s: %w", i, strings.TrimSpace(posts[i].ContentID), err)
 		}
 	}
+
 	return accumulators, nil
 }
 
@@ -67,6 +70,7 @@ func channelPostDeliverySummaryAccumulatorFor(
 		summary: ChannelPostDeliverySummary{ChannelID: channelID},
 	}
 	accumulators[channelID] = accumulator
+
 	return accumulator
 }
 
@@ -77,16 +81,19 @@ type channelPostDeliverySummaryAccumulator struct {
 func (a *channelPostDeliverySummaryAccumulator) add(post *PostSendCount) error {
 	observedAt, err := PostLatencyObservedAt(post)
 	if err != nil {
-		return err
+		return fmt.Errorf("post latency observed at: %w", err)
 	}
+
 	observedAt = observedAt.UTC()
 
 	a.addObservedAt(observedAt)
+
 	a.summary.DetectedPostCount++
 
 	if err := a.addDetectedPostType(post.AlarmType); err != nil {
-		return err
+		return fmt.Errorf("add detected post type: %w", err)
 	}
+
 	a.addDeliveryResult(post)
 
 	return nil
@@ -96,6 +103,7 @@ func (a *channelPostDeliverySummaryAccumulator) addObservedAt(observedAt time.Ti
 	if a.summary.EarliestObservedAt == nil || observedAt.Before(a.summary.EarliestObservedAt.UTC()) {
 		a.summary.EarliestObservedAt = CloneUTCTimePtr(&observedAt)
 	}
+
 	if a.summary.LatestObservedAt == nil || observedAt.After(a.summary.LatestObservedAt.UTC()) {
 		a.summary.LatestObservedAt = CloneUTCTimePtr(&observedAt)
 	}
@@ -112,6 +120,7 @@ func (a *channelPostDeliverySummaryAccumulator) addDetectedPostType(alarmType do
 	default:
 		return fmt.Errorf("unknown alarm type: %s", alarmType)
 	}
+
 	return nil
 }
 
@@ -119,11 +128,13 @@ func (a *channelPostDeliverySummaryAccumulator) addDeliveryResult(post *PostSend
 	if hasChannelPostDeliverySendActivity(post) {
 		a.summary.AlarmSentPostCount++
 	}
+
 	if hasChannelPostDeliverySuccess(post) {
 		a.summary.SuccessPostCount++
 	} else {
 		a.summary.DetectedUnsentPostCount++
 	}
+
 	if hasChannelPostDeliveryFailure(post) {
 		a.summary.FailedPostCount++
 	}
@@ -153,8 +164,10 @@ func channelPostDeliverySummarySortTime(summary *ChannelPostDeliverySummary) tim
 	if summary.LatestObservedAt != nil {
 		return summary.LatestObservedAt.UTC()
 	}
+
 	if summary.EarliestObservedAt != nil {
 		return summary.EarliestObservedAt.UTC()
 	}
+
 	return time.Time{}
 }

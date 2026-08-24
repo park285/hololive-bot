@@ -23,13 +23,15 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 type majorEventContextKey struct{}
@@ -37,20 +39,30 @@ type majorEventContextKey struct{}
 type weeklyMajorEventSchedulerFunc func(context.Context) error
 
 func (f weeklyMajorEventSchedulerFunc) SendWeeklyNotification(ctx context.Context) error {
-	return f(ctx)
+	if err := f(ctx); err != nil {
+		return fmt.Errorf("f: %w", err)
+	}
+
+	return nil
 }
 
 type monthlyMajorEventSchedulerFunc func(context.Context) error
 
 func (f monthlyMajorEventSchedulerFunc) SendMonthlyNotification(ctx context.Context) error {
-	return f(ctx)
+	if err := f(ctx); err != nil {
+		return fmt.Errorf("f: %w", err)
+	}
+
+	return nil
 }
 
 func TestMajorEventHandler_HandlerSignatures(t *testing.T) {
 	t.Parallel()
 
-	var _ gin.HandlerFunc = (&MajorEventHandler{}).TriggerMajorEventNotification
-	var _ gin.HandlerFunc = (&MajorEventHandler{}).TriggerMajorEventMonthlyNotification
+	var (
+		_ gin.HandlerFunc = (&MajorEventHandler{}).TriggerMajorEventNotification
+		_ gin.HandlerFunc = (&MajorEventHandler{}).TriggerMajorEventMonthlyNotification
+	)
 }
 
 func TestMajorEventHandler_WeeklyNotificationDependencyErrors(t *testing.T) {
@@ -141,6 +153,7 @@ func TestMajorEventHandler_WeeklyNotificationUsesRequestContext(t *testing.T) {
 		}),
 	}}
 	ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
+
 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), majorEventContextKey{}, "weekly"))
 
 	handler.TriggerMajorEventNotification(ctx)
@@ -238,6 +251,7 @@ func TestMajorEventHandler_MonthlyNotificationUsesRequestContext(t *testing.T) {
 		}),
 	}}
 	ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
+
 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), majorEventContextKey{}, "monthly"))
 
 	handler.TriggerMajorEventMonthlyNotification(ctx)

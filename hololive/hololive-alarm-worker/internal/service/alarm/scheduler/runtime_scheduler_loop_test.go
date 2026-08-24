@@ -28,12 +28,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNextLoopDelay(t *testing.T) {
@@ -108,10 +109,12 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 		t.Parallel()
 
 		var calls atomic.Int32
+
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
 				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
 					calls.Add(1)
+
 					return delivery.SendResult{}, nil
 				},
 			},
@@ -126,13 +129,19 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 		t.Parallel()
 
 		notifications := []*domain.AlarmNotification{{RoomID: "room-1"}}
-		var calls atomic.Int32
-		var gotNotifications []*domain.AlarmNotification
+
+		var (
+			calls            atomic.Int32
+			gotNotifications []*domain.AlarmNotification
+		)
+
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
 				send: func(_ context.Context, notifications []*domain.AlarmNotification) (delivery.SendResult, error) {
 					calls.Add(1)
+
 					gotNotifications = notifications
+
 					return delivery.SendResult{Sent: 1}, nil
 				},
 			},
@@ -149,11 +158,14 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 
 		notifications := []*domain.AlarmNotification{{RoomID: "room-1"}, {RoomID: "room-2"}}
 		sendErr := errors.New("sender failed")
+
 		var calls atomic.Int32
+
 		s := &RuntimeScheduler{
 			notifier: &senderFunc{
 				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
 					calls.Add(1)
+
 					return delivery.SendResult{Sent: 1, Failed: 1}, sendErr
 				},
 			},
@@ -236,6 +248,7 @@ func TestRuntimeSchedulerRunAlarmCacheRecoveryLoop(t *testing.T) {
 		go func() {
 			done <- s.runAlarmCacheRecoveryLoop(ctx)
 		}()
+
 		cancel()
 
 		select {
@@ -308,6 +321,11 @@ func TestIsCacheFailure(t *testing.T) {
 	})
 }
 
+const (
+	testPlatformMappingKey      = "platform:key"
+	testPlatformMappingEmptyKey = "platform:empty"
+)
+
 func TestRuntimeSchedulerPlatformMappingMissing(t *testing.T) {
 	t.Parallel()
 
@@ -319,21 +337,21 @@ func TestRuntimeSchedulerPlatformMappingMissing(t *testing.T) {
 	}{
 		{
 			name:        "returns false when key exists",
-			existsByKey: map[string]bool{"platform:key": true},
+			existsByKey: map[string]bool{testPlatformMappingKey: true},
 			want:        false,
-			wantCalls:   []string{"platform:key"},
+			wantCalls:   []string{testPlatformMappingKey},
 		},
 		{
 			name:        "returns false when key missing but empty marker exists",
-			existsByKey: map[string]bool{"platform:empty": true},
+			existsByKey: map[string]bool{testPlatformMappingEmptyKey: true},
 			want:        false,
-			wantCalls:   []string{"platform:key", "platform:empty"},
+			wantCalls:   []string{testPlatformMappingKey, testPlatformMappingEmptyKey},
 		},
 		{
 			name:        "returns true when key and empty marker are missing",
 			existsByKey: map[string]bool{},
 			want:        true,
-			wantCalls:   []string{"platform:key", "platform:empty"},
+			wantCalls:   []string{testPlatformMappingKey, testPlatformMappingEmptyKey},
 		},
 	}
 
@@ -342,21 +360,26 @@ func TestRuntimeSchedulerPlatformMappingMissing(t *testing.T) {
 			t.Parallel()
 
 			var calls []string
+
 			cache := cachemocks.NewStrictClient()
+
 			cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
 				calls = append(calls, key)
+
 				exists, ok := tc.existsByKey[key]
+
 				if ok {
 					return exists, nil
 				}
 
 				return false, nil
 			}
+
 			s := &RuntimeScheduler{cacheClient: cache}
 
 			got, err := s.platformMappingMissing(t.Context(), alarmPlatformMappingKeys{
-				key:            "platform:key",
-				emptyMarkerKey: "platform:empty",
+				key:            testPlatformMappingKey,
+				emptyMarkerKey: testPlatformMappingEmptyKey,
 			})
 
 			require.NoError(t, err)

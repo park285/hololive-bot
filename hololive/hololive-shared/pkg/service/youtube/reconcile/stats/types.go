@@ -80,16 +80,20 @@ type Decision struct {
 
 func (s *State) clone() State {
 	cloned := *s
+
 	cloned.Head = s.Head.clone()
 	cloned.Slot = make([]SlotEvidence, len(s.Slot))
+
 	for i := range s.Slot {
 		cloned.Slot[i] = s.Slot[i].clone()
 	}
+
 	return cloned
 }
 
 func (h *Head) clone() Head {
 	cloned := *h
+
 	cloned.LastResolvedScheduledFor = copyTimePointer(h.LastResolvedScheduledFor)
 	cloned.LastResolvedSubscriberCount = copyCount(h.LastResolvedSubscriberCount)
 	cloned.LastResolvedViewCount = copyCount(h.LastResolvedViewCount)
@@ -99,22 +103,27 @@ func (h *Head) clone() Head {
 	cloned.PriorResolvedViewCount = copyCount(h.PriorResolvedViewCount)
 	cloned.PriorResolvedVideoCount = copyCount(h.PriorResolvedVideoCount)
 	cloned.UnresolvedScheduledFor = copyTimePointer(h.UnresolvedScheduledFor)
+
 	return cloned
 }
 
 func (s *SlotEvidence) clone() SlotEvidence {
 	cloned := *s
+
 	cloned.SubscriberCount = copyCount(s.SubscriberCount)
 	cloned.ViewCount = copyCount(s.ViewCount)
 	cloned.VideoCount = copyCount(s.VideoCount)
+
 	return cloned
 }
 
 func (e *Evidence) clone() Evidence {
 	cloned := *e
+
 	cloned.Sample.SubscriberCount = copyCount(e.Sample.SubscriberCount)
 	cloned.Sample.ViewCount = copyCount(e.Sample.ViewCount)
 	cloned.Sample.VideoCount = copyCount(e.Sample.VideoCount)
+
 	return cloned
 }
 
@@ -122,5 +131,6 @@ func copyTimePointer(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
+
 	return copyTime(*value)
 }

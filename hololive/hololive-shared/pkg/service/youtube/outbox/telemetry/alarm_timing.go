@@ -17,8 +17,10 @@ func CommunityShortsAlarmTimingForTelemetryRow(row *domain.YouTubeNotificationDe
 	alarmSentAt := row.AlarmSentAt
 	if alarmSentAt == nil && strings.EqualFold(strings.TrimSpace(row.SendResult), "success") && !row.EventAt.IsZero() {
 		eventAt := row.EventAt.UTC()
+
 		alarmSentAt = &eventAt
 	}
+
 	return CommunityShortsAlarmTimingForTracking(row.ActualPublishedAt, alarmSentAt, row.AlarmLatencyMillis)
 }
 
@@ -31,5 +33,6 @@ func CommunityShortsAlarmTimingForTracking(
 	if timing.AlarmLatencyMillis == nil && alarmLatencyMillis != nil {
 		timing.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(alarmLatencyMillis)
 	}
+
 	return timing
 }

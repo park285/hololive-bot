@@ -1,12 +1,12 @@
 package scraping
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +29,7 @@ func TestBrowserSnapshotEngineRequiresExplicitFetcher(t *testing.T) {
 }
 
 func TestCaptureBrowserDiagnosticSnapshotRequiresParserDriftHealth(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	store := newChannelHealthTestStore()
 	sink := &captureSink{}
 	client := NewClient(
@@ -46,14 +46,16 @@ func TestCaptureBrowserDiagnosticSnapshotRequiresParserDriftHealth(t *testing.T)
 }
 
 func TestCaptureBrowserDiagnosticSnapshotRequiresSnapshotEnabled(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	store := newChannelHealthTestStore()
 	serverCalled := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		serverCalled = true
+
 		w.Header().Set("Content-Type", "application/json")
 		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>rendered</html>"}`)
 	}))
+
 	defer server.Close()
 
 	client := NewClient(
@@ -72,16 +74,19 @@ func TestCaptureBrowserDiagnosticSnapshotRequiresSnapshotEnabled(t *testing.T) {
 }
 
 func TestCaptureBrowserDiagnosticSnapshotReservesIntervalBeforeFetch(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	store := newChannelHealthTestStore()
 	sink := &captureSink{}
 	serverCalls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		serverCalls++
+
 		w.Header().Set("Content-Type", "application/json")
 		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>rendered</html>"}`)
 	}))
+
 	defer server.Close()
+
 	client := NewClient(
 		WithStateStore(store),
 		WithSnapshotSink(sink),
@@ -105,14 +110,15 @@ func TestCaptureBrowserDiagnosticSnapshotReservesIntervalBeforeFetch(t *testing.
 
 func TestBrowserSnapshotFetcherPostsSnapshotRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, http.MethodPost, r.Method)
 		w.Header().Set("Content-Type", "application/json")
 		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>rendered</html>"}`)
 	}))
 	defer server.Close()
+
 	fetcher := NewBrowserSnapshotFetcher(server.URL, time.Second)
 
-	resp, err := fetcher.FetchPage(context.Background(), pageFetchRequest{
+	resp, err := fetcher.FetchPage(t.Context(), pageFetchRequest{
 		URL:    "https://www.youtube.com/channel/UC_TEST",
 		Header: http.Header{"User-Agent": []string{"test"}},
 	})

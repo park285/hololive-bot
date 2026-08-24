@@ -76,6 +76,7 @@ func TestMarkdownNeutralize(t *testing.T) {
 			"d~" + KakaoZeroWidthSpace +
 			"e]" + KakaoZeroWidthSpace +
 			"f#" + KakaoZeroWidthSpace + "g"
+
 		if got != want {
 			t.Errorf("MarkdownNeutralize = %q, want %q", got, want)
 		}
@@ -123,6 +124,7 @@ func TestMarkdownNeutralize_Idempotent(t *testing.T) {
 
 	in := "**굵게** [제목](https://example.com) ~~취소선~~ # 헤딩"
 	once := MarkdownNeutralize(in)
+
 	if twice := MarkdownNeutralize(once); twice != once {
 		t.Errorf("MarkdownNeutralize is not idempotent: %q != %q", twice, once)
 	}
@@ -202,13 +204,16 @@ func TestFoldSurvivesNeutralizedBody(t *testing.T) {
 	if folded == neutralized {
 		t.Fatal("neutralize된 본문이 fold되지 않음")
 	}
+
 	if !strings.Contains(folded, strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding)) {
 		t.Errorf("ZWSP %d-run 패딩이 삽입되지 않음", KakaoSeeMorePadding)
 	}
+
 	head := "*" + KakaoZeroWidthSpace + "*" + KakaoZeroWidthSpace + "헤더 라인"
 	if !strings.HasPrefix(folded, head) {
 		t.Error("첫 줄이 보존되지 않음")
 	}
+
 	if again := FoldForSeeMore(folded, KakaoSeeMoreThreshold); again != folded {
 		t.Error("neutralize된 본문에서 fold가 멱등하지 않음")
 	}

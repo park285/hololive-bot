@@ -1,6 +1,7 @@
 package providerhttp
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -23,13 +24,17 @@ type ProviderHTTPClient struct {
 
 func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, error) {
 	if err := cfg.validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate: %w", err)
 	}
+
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "http.DefaultTransport is not *http.Transport")
 	}
+
 	transport := base.Clone()
+
 	transport.MaxConnsPerHost = cfg.MaxConnsPerHost
 	transport.MaxIdleConnsPerHost = cfg.MaxIdleConnsPerHost
 	transport.IdleConnTimeout = cfg.IdleConnTimeout
@@ -38,6 +43,7 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 	transport.ExpectContinueTimeout = time.Second
 	transport.DisableCompression = false
 	transport.DialContext = (&net.Dialer{Timeout: cfg.DialTimeout, KeepAlive: 30 * time.Second}).DialContext
+
 	return &ProviderHTTPClient{
 		client: &http.Client{
 			Timeout:       cfg.RequestTimeout,
@@ -51,13 +57,18 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 
 func WrapProviderHTTPDoer(doer HTTPDoer) (*ProviderHTTPClient, error) {
 	if doer == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP doer is nil")
 	}
+
 	if client, ok := doer.(*http.Client); ok {
 		cloned := *client
+
 		cloned.CheckRedirect = rejectRedirect
+
 		return &ProviderHTTPClient{client: &cloned, owned: false}, nil
 	}
+
 	return &ProviderHTTPClient{doer: doer, owned: false}, nil
 }
 
@@ -67,28 +78,47 @@ func rejectRedirect(_ *http.Request, _ []*http.Request) error {
 
 func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if c == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP client is not configured")
 	}
+
 	if req == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "provider HTTP request is nil")
 	}
+
 	if c.doer != nil {
-		return c.doer.Do(req)
+		out, err := c.doer.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("do: %w", err)
+		}
+
+		return out, nil
 	}
+
 	if c.client == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP client is not configured")
 	}
-	return c.client.Do(req)
+
+	out, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("do: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *ProviderHTTPClient) Close() error {
 	if c == nil || !c.owned {
 		return nil
 	}
+
 	c.closeOnce.Do(func() {
 		if c.transport != nil {
 			c.transport.CloseIdleConnections()
 		}
 	})
+
 	return nil
 }

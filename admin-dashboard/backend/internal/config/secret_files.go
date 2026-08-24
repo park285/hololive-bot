@@ -44,8 +44,9 @@ var adminSecretFiles = []secretFileSpec{
 func LoadSecure() (cfg *Config, err error) {
 	restore, err := applySecretFiles()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("apply secret files: %w", err)
 	}
+
 	defer func() {
 		if restoreErr := restore(); restoreErr != nil {
 			cfg = nil
@@ -55,11 +56,13 @@ func LoadSecure() (cfg *Config, err error) {
 
 	cfg, err = Load()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load: %w", err)
 	}
+
 	if len([]byte(cfg.SessionSecret)) < minSessionSecretBytes {
 		return nil, fmt.Errorf("SESSION_SECRET must be at least %d bytes", minSessionSecretBytes)
 	}
+
 	return cfg, nil
 }
 
@@ -71,6 +74,7 @@ func applySecretFiles() (func() error, error) {
 			return nil, errors.Join(err, swap.restore())
 		}
 	}
+
 	return swap.restore, nil
 }
 
@@ -79,27 +83,36 @@ func (swap *secretEnvSwap) apply(spec secretFileSpec) error {
 	if path == "" {
 		return nil
 	}
+
 	if directSecretConfigured(spec) {
 		return fmt.Errorf("config: %s cannot be combined with %s or its aliases", spec.fileEnv, spec.valueEnv)
 	}
+
 	value, err := readSecretFile(path)
 	if err != nil {
 		return fmt.Errorf("config: read %s: %w", spec.fileEnv, err)
 	}
+
 	original, set := os.LookupEnv(spec.valueEnv)
+
 	swap.originals[spec.valueEnv] = secretEnvValue{value: original, set: set}
+
 	if err := os.Setenv(spec.valueEnv, value); err != nil {
 		return fmt.Errorf("config: materialize %s: %w", spec.fileEnv, err)
 	}
+
 	swap.applied = append(swap.applied, spec.valueEnv)
+
 	return nil
 }
 
 func (swap *secretEnvSwap) restore() error {
 	var restoreErr error
+
 	for _, key := range slices.Backward(swap.applied) {
 		restoreErr = errors.Join(restoreErr, restoreSecretEnvKey(key, swap.originals[key]))
 	}
+
 	return restoreErr
 }
 
@@ -108,11 +121,14 @@ func restoreSecretEnvKey(key string, original secretEnvValue) error {
 		if err := os.Setenv(key, original.value); err != nil {
 			return fmt.Errorf("config: restore %s: %w", key, err)
 		}
+
 		return nil
 	}
+
 	if err := os.Unsetenv(key); err != nil {
 		return fmt.Errorf("config: unset %s: %w", key, err)
 	}
+
 	return nil
 }
 
@@ -120,68 +136,93 @@ func directSecretConfigured(spec secretFileSpec) bool {
 	if value, ok := os.LookupEnv(spec.valueEnv); ok && value != "" {
 		return true
 	}
+
 	for _, alias := range spec.aliases {
 		if value, ok := os.LookupEnv(alias); ok && value != "" {
 			return true
 		}
 	}
+
 	return false
 }
 
 func readSecretFile(path string) (string, error) {
 	info, err := statSecretFile(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("stat secret file: %w", err)
 	}
+
 	data, err := readVerifiedSecretFile(path, info)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read verified secret file: %w", err)
 	}
-	return sanitizeSecretValue(path, data)
+
+	out, err := sanitizeSecretValue(path, data)
+	if err != nil {
+		return out, fmt.Errorf("sanitize secret value: %w", err)
+	}
+
+	return out, nil
 }
 
 func statSecretFile(path string) (os.FileInfo, error) {
 	info, err := os.Lstat(path) // #nosec G703 -- the administrator-configured secret path is checked before and after opening
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lstat: %w", err)
 	}
+
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s is not a regular file", path)
 	}
+
 	if info.Size() > maxSecretFileBytes {
 		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
 	}
+
 	return info, nil
 }
 
 func readVerifiedSecretFile(path string, info os.FileInfo) (data []byte, err error) {
 	file, err := os.Open(path) // #nosec G304,G703 -- file identity is compared with the preceding non-symlink Lstat result
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open: %w", err)
 	}
+
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close %s: %w", path, closeErr))
 		}
 	}()
+
 	openedInfo, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stat: %w", err)
 	}
+
 	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
 		return nil, fmt.Errorf("%s changed while opening", path)
 	}
-	return io.ReadAll(io.LimitReader(file, maxSecretFileBytes+1))
+
+	out, err := io.ReadAll(io.LimitReader(file, maxSecretFileBytes+1))
+	if err != nil {
+		return out, fmt.Errorf("read all: %w", err)
+	}
+
+	return out, nil
 }
 
 func sanitizeSecretValue(path string, data []byte) (string, error) {
 	if len(data) > maxSecretFileBytes {
 		return "", fmt.Errorf("%s exceeds %d bytes", path, maxSecretFileBytes)
 	}
+
 	value := strings.TrimSuffix(string(data), "\n")
+
 	value = strings.TrimSuffix(value, "\r")
+
 	if strings.ContainsAny(value, "\x00\r\n") {
 		return "", fmt.Errorf("%s contains embedded NUL or newline", path)
 	}
+
 	return value, nil
 }

@@ -47,6 +47,7 @@ func Run(logger *slog.Logger, name string, fn func()) {
 			logPanic(logger, name, r)
 		}
 	}()
+
 	fn()
 }
 
@@ -54,20 +55,28 @@ func RunE(logger *slog.Logger, name string, fn func() error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			logPanic(logger, name, r)
+
 			if recovered, ok := r.(error); ok {
 				err = fmt.Errorf("%s: recovered panic: %w", name, recovered)
 				return
 			}
+
 			err = fmt.Errorf("%s: recovered panic: %v", name, r)
 		}
 	}()
-	return fn()
+
+	if err := fn(); err != nil {
+		return fmt.Errorf("fn: %w", err)
+	}
+
+	return nil
 }
 
 func logPanic(logger *slog.Logger, name string, recovered any) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	logger.Error("background goroutine panic recovered",
 		slog.String("guard", name),
 		slog.Any("panic", fmt.Sprintf("%v", recovered)),

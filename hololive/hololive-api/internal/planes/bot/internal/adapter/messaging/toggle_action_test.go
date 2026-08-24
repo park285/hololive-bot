@@ -26,11 +26,11 @@ func TestParseToggleAction(t *testing.T) {
 	t.Parallel()
 
 	aliases := map[string]string{
-		"켜기":  "on",
-		"on":  "on",
-		"끄기":  "off",
-		"off": "off",
-		"상태":  "status",
+		"켜기":  testActionOn,
+		"on":  testActionOn,
+		"끄기":  testActionOff,
+		"off": testActionOff,
+		"상태":  testActionStatus,
 	}
 
 	tests := []struct {
@@ -39,14 +39,14 @@ func TestParseToggleAction(t *testing.T) {
 		fallback string
 		want     string
 	}{
-		{name: "empty args returns fallback", args: nil, fallback: "status", want: "status"},
-		{name: "empty slice returns fallback", args: []string{}, fallback: "status", want: "status"},
-		{name: "mapped on", args: []string{"켜기"}, fallback: "status", want: "on"},
-		{name: "mapped off ascii", args: []string{"off"}, fallback: "status", want: "off"},
-		{name: "mapped status", args: []string{"상태"}, fallback: "status", want: "status"},
-		{name: "unmapped first arg returns fallback", args: []string{"몰라"}, fallback: "status", want: "status"},
-		{name: "uses only first arg", args: []string{"on", "끄기"}, fallback: "status", want: "on"},
-		{name: "normalizes case", args: []string{"ON"}, fallback: "status", want: "on"},
+		{name: "empty args returns fallback", args: nil, fallback: testActionStatus, want: testActionStatus},
+		{name: "empty slice returns fallback", args: []string{}, fallback: testActionStatus, want: testActionStatus},
+		{name: "mapped on", args: []string{"켜기"}, fallback: testActionStatus, want: testActionOn},
+		{name: "mapped off ascii", args: []string{"off"}, fallback: testActionStatus, want: testActionOff},
+		{name: "mapped status", args: []string{"상태"}, fallback: testActionStatus, want: testActionStatus},
+		{name: "unmapped first arg returns fallback", args: []string{"몰라"}, fallback: testActionStatus, want: testActionStatus},
+		{name: "uses only first arg", args: []string{"on", "끄기"}, fallback: testActionStatus, want: testActionOn},
+		{name: "normalizes case", args: []string{"ON"}, fallback: testActionStatus, want: testActionOn},
 	}
 
 	for _, tt := range tests {

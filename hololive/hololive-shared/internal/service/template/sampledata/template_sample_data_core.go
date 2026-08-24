@@ -33,13 +33,14 @@ func templateSampleCoreData() map[domain.TemplateKey]any {
 	addTemplateStatsCalendarSamples(data)
 	addTemplateMemberLookupSamples(data)
 	addTemplateCelebrationSamples(data)
+
 	return data
 }
 
 func addTemplateCelebrationSamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyCelebrationBirthday] = &domain.CelebrationDispatchPayload{
 		Kind:       domain.CelebrationKindBirthday,
-		MemberName: "시라카미 후부키",
+		MemberName: sampleMemberFubuki,
 		ChannelID:  "UCdn5BQ06XqgXoAxIhbqw5Rg",
 		Ordinal:    2,
 	}
@@ -51,7 +52,7 @@ func addTemplateCelebrationSamples(data map[domain.TemplateKey]any) {
 	}
 	data[domain.TemplateKeyCelebrationBirthdayStream] = &domain.CelebrationDispatchPayload{
 		Kind:              domain.CelebrationKindBirthdayStream,
-		MemberName:        "시라카미 후부키",
+		MemberName:        sampleMemberFubuki,
 		ChannelID:         "UCdn5BQ06XqgXoAxIhbqw5Rg",
 		VideoID:           "birthday-stream-1",
 		StreamTitle:       "【생일 방송】후부키 생일 기념 라이브!",
@@ -215,7 +216,7 @@ func templateLiveStreamSamples() []map[string]any {
 
 func templateUpcomingStreamSamples() []map[string]any {
 	return []map[string]any{
-		{fieldChannelName: "시라카미 후부키", fieldTitle: "노래방 방송", "TimeInfo": "30분 후", fieldURL: "https://youtu.be/upcoming123"},
+		{fieldChannelName: sampleMemberFubuki, fieldTitle: "노래방 방송", "TimeInfo": "30분 후", fieldURL: "https://youtu.be/upcoming123"},
 	}
 }
 
@@ -260,19 +261,19 @@ func addTemplateAlarmDispatchSamples(data map[domain.TemplateKey]any) {
 		"IsScheduled":     false,
 		"IsPremiere":      false,
 		fieldMemberName:   sampleMemberMiko,
-		"MinutesUntil":    5,
+		fieldMinutesUntil: 5,
 		fieldTitle:        "마인크래프트 건축",
 		"CollabMembers":   "",
 		"ScheduleMessage": "",
 		fieldURL:          "https://youtu.be/stream123",
 	}
 	data[domain.TemplateKeyAlarmDispatchNotificationGroup] = map[string]any{
-		"IsStarting":   false,
-		"MinutesUntil": 5,
-		"AllPremiere":  false,
+		"IsStarting":      false,
+		fieldMinutesUntil: 5,
+		"AllPremiere":     false,
 		"Entries": []map[string]any{
-			{"IsStarting": false, "IsScheduled": false, "IsPremiere": false, fieldMemberName: sampleMemberMiko, "MinutesUntil": 5, fieldTitle: "마인크래프트 건축", "CollabMembers": "스이세이, 스바루", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
-			{"IsStarting": false, "IsScheduled": true, "IsPremiere": true, fieldMemberName: "호시마치 스이세이", "MinutesUntil": 0, fieldTitle: "노래 방송", "CollabMembers": "", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
+			{"IsStarting": false, "IsScheduled": false, "IsPremiere": false, fieldMemberName: sampleMemberMiko, fieldMinutesUntil: 5, fieldTitle: "마인크래프트 건축", "CollabMembers": "스이세이, 스바루", "ScheduleMessage": "", fieldURL: "https://youtu.be/stream123"},
+			{"IsStarting": false, "IsScheduled": true, "IsPremiere": true, fieldMemberName: "호시마치 스이세이", fieldMinutesUntil: 0, fieldTitle: "노래 방송", "CollabMembers": "", "ScheduleMessage": "21:00 시작 예정", fieldURL: ""},
 		},
 	}
 }
@@ -298,9 +299,9 @@ func templateNextStreamSample() map[string]any {
 
 func templateAlarmNotificationGroupSample() map[string]any {
 	return map[string]any{
-		fieldCount:       2,
-		"MinutesUntil":   5,
-		"ScheduledTimes": []string{"21:00"},
+		fieldCount:        2,
+		fieldMinutesUntil: 5,
+		"ScheduledTimes":  []string{"21:00"},
 		"Entries": []map[string]any{
 			{"Index": 1, fieldChannelName: sampleMemberMiko, "ScheduledKST": "21:00", fieldTitle: "마인크래프트 건축", fieldURL: "https://youtu.be/stream123"},
 			{"Index": 2, fieldChannelName: "호시마치 스이세이", "ScheduledKST": "", fieldTitle: "노래 방송", fieldURL: "https://youtu.be/stream456"},
@@ -313,7 +314,7 @@ func templateAlarmNotificationSample(minutesUntil int) map[string]any {
 		fieldEmoji:         map[string]string{fieldBell: "🔔"},
 		fieldChannelName:   sampleMemberMiko,
 		fieldTitle:         "마인크래프트 건축",
-		"MinutesUntil":     minutesUntil,
+		fieldMinutesUntil:  minutesUntil,
 		fieldURL:           "https://youtu.be/stream123",
 		"ScheduledTimeKST": "21:00",
 		"ScheduleMessage":  "",
@@ -344,7 +345,7 @@ func addTemplateDirectoryMilestoneSamples(data map[domain.TemplateKey]any) {
 
 func templateProfileSample() map[string]any {
 	return map[string]any{
-		"Names":       []string{"시라카미 후부키", "Shirakami Fubuki", "白上フブキ"},
+		"Names":       []string{sampleMemberFubuki, "Shirakami Fubuki", "白上フブキ"},
 		"Catchphrase": "친구야!",
 		"Summary":     "홀로라이브 1기생 여우 VTuber",
 		"Highlights":  []string{"고양이 아님", "FOX"},

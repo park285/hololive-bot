@@ -22,10 +22,10 @@ type provider interface {
 type providerFactory func(context.Context, *telemetry.Config) (provider, error)
 
 type ManagedRuntime[T Runtime] struct {
-	runtime  T
-	provider provider
-	logger   *slog.Logger
-	close    sync.Once
+	runtime   T
+	provider  provider
+	logger    *slog.Logger
+	closeOnce sync.Once
 }
 
 func BuildRuntime[T Runtime](
@@ -34,7 +34,12 @@ func BuildRuntime[T Runtime](
 	logger *slog.Logger,
 	build func(context.Context) (T, error),
 ) (*ManagedRuntime[T], error) {
-	return buildRuntime(ctx, config, logger, build, newProvider)
+	out, err := buildRuntime(ctx, config, logger, build, newProvider)
+	if err != nil {
+		return nil, fmt.Errorf("build runtime: %w", err)
+	}
+
+	return out, nil
 }
 
 func buildRuntime[T Runtime](
@@ -52,7 +57,8 @@ func buildRuntime[T Runtime](
 	runtime, err := build(ctx)
 	if err != nil {
 		shutdownProvider(ctx, traceProvider, logger)
-		return nil, err
+
+		return nil, fmt.Errorf("build: %w", err)
 	}
 
 	return &ManagedRuntime[T]{
@@ -63,21 +69,32 @@ func buildRuntime[T Runtime](
 }
 
 func newProvider(ctx context.Context, config *telemetry.Config) (provider, error) {
-	return telemetry.NewProvider(ctx, *config)
+	out, err := telemetry.NewProvider(ctx, *config)
+	if err != nil {
+		return nil, fmt.Errorf("provider: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ManagedRuntime[T]) Run() error {
 	if r == nil {
 		return nil
 	}
-	return r.runtime.Run()
+
+	if err := r.runtime.Run(); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ManagedRuntime[T]) Close() {
 	if r == nil {
 		return
 	}
-	r.close.Do(func() {
+
+	r.closeOnce.Do(func() {
 		r.runtime.Close()
 		shutdownProvider(context.Background(), r.provider, r.logger)
 	})
@@ -87,10 +104,12 @@ func shutdownProvider(ctx context.Context, traceProvider provider, logger *slog.
 	if traceProvider == nil {
 		return
 	}
+
 	if err := traceProvider.Shutdown(ctx); err != nil {
 		if logger == nil {
 			logger = slog.Default()
 		}
+
 		logger.Error(
 			"telemetry provider shutdown failed",
 			slog.String("error", sharedlogging.RedactDiagnostic(err.Error())),

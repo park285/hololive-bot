@@ -39,7 +39,9 @@ func errorRetryDelay(interval time.Duration, consecutiveFailures int, minBackoff
 	}
 
 	delay := exponentialRetryBackoff(minBackoff, maxBackoff, consecutiveFailures)
+
 	delay = min(capRetryDelayByInterval(delay, interval), maxBackoff)
+
 	return delay
 }
 
@@ -47,24 +49,30 @@ func normalizeRetryBackoffBounds(minBackoff, maxBackoff time.Duration) (result1,
 	if minBackoff <= 0 {
 		minBackoff = 30 * time.Second
 	}
+
 	if maxBackoff <= 0 {
 		maxBackoff = 5 * time.Minute
 	}
+
 	if maxBackoff < minBackoff {
 		maxBackoff = minBackoff
 	}
+
 	return minBackoff, maxBackoff
 }
 
 func exponentialRetryBackoff(minBackoff, maxBackoff time.Duration, consecutiveFailures int) time.Duration {
 	delay := minBackoff
+
 	for i := 1; i < consecutiveFailures; i++ {
 		if delay >= maxBackoff/2 {
 			delay = maxBackoff
 			break
 		}
+
 		delay *= 2
 	}
+
 	return delay
 }
 
@@ -72,6 +80,7 @@ func capRetryDelayByInterval(delay, interval time.Duration) time.Duration {
 	if interval > 0 && interval < delay {
 		return interval
 	}
+
 	return delay
 }
 
@@ -79,14 +88,17 @@ func advanceNextRunAt(scheduledAt time.Time, interval time.Duration, now time.Ti
 	if interval <= 0 {
 		return now
 	}
+
 	if scheduledAt.IsZero() {
 		return now
 	}
+
 	if scheduledAt.After(now) {
 		return scheduledAt
 	}
 
 	skipped := now.Sub(scheduledAt)/interval + 1
+
 	return scheduledAt.Add(time.Duration(int64(skipped) * interval.Nanoseconds()))
 }
 
@@ -98,6 +110,7 @@ func nextPollAt(now time.Time, interval, offset time.Duration) time.Time {
 	if offset < 0 {
 		offset = 0
 	}
+
 	if offset >= interval {
 		offset %= interval
 	}
@@ -114,7 +127,9 @@ func calculateOffset(key string, interval time.Duration) time.Duration {
 	if interval <= 0 {
 		return 0
 	}
+
 	h := sha256.Sum256([]byte(key))
 	fraction := float64(binary.BigEndian.Uint32(h[:4])) / float64(^uint32(0))
+
 	return time.Duration(float64(interval) * fraction)
 }

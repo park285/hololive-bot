@@ -22,24 +22,39 @@ package alarmservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// errAlarmRecordNotFound는 대상 알람이 없다는 정상 결과이며, 호출부는 오류가 아닌 미존재로 다뤄야 한다.
+var errAlarmRecordNotFound = errors.New("alarm record not found")
+
 func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
 	roomID = strings.TrimSpace(roomID)
 	channelID = strings.TrimSpace(channelID)
+
 	if roomID == "" || channelID == "" {
-		return nil, nil
+		return nil, errAlarmRecordNotFound
 	}
 
 	if as.alarmRepository != nil {
-		return as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID)
+		record, err := as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID)
+		if err != nil {
+			return nil, fmt.Errorf("find alarm record for mutation from repository: %w", err)
+		}
+
+		return record, nil
 	}
 
-	return as.findAlarmRecordForMutationFromCache(ctx, roomID, channelID)
+	record, err := as.findAlarmRecordForMutationFromCache(ctx, roomID, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("find alarm record for mutation from cache: %w", err)
+	}
+
+	return record, nil
 }
 
 func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
@@ -52,11 +67,13 @@ func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Con
 		if alarm == nil || strings.TrimSpace(alarm.ChannelID) != channelID {
 			continue
 		}
+
 		cloned := *alarm
+
 		return &cloned, nil
 	}
 
-	return nil, nil
+	return nil, errAlarmRecordNotFound
 }
 
 func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
@@ -64,14 +81,16 @@ func (as *AlarmService) findAlarmRecordForMutationFromCache(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("check room alarm membership: %w", err)
 	}
+
 	if !exists {
-		return nil, nil
+		return nil, errAlarmRecordNotFound
 	}
 
 	registryKey := as.getRegistryKey(roomID)
+
 	currentTypes, err := as.currentCachedAlarmTypes(ctx, channelID, registryKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("current cached alarm types: %w", err)
 	}
 
 	return &domain.Alarm{
@@ -85,14 +104,17 @@ func (as *AlarmService) currentCachedAlarmTypes(ctx context.Context, channelID, 
 	currentTypes := make(domain.AlarmTypes, 0, len(domain.AllAlarmTypes))
 	for _, alarmType := range domain.AllAlarmTypes {
 		subscriberKey := as.channelSubscribersKeyByType(channelID, alarmType)
+
 		isSubscriber, err := as.cache.SIsMember(ctx, subscriberKey, registryKey)
 		if err != nil {
 			return nil, fmt.Errorf("check subscriber type %s: %w", alarmType, err)
 		}
+
 		if isSubscriber {
 			currentTypes = append(currentTypes, alarmType)
 		}
 	}
+
 	if len(currentTypes) == 0 {
 		currentTypes = append(domain.AlarmTypes(nil), domain.DefaultAlarmTypes...)
 	}
@@ -130,10 +152,12 @@ func uniqueAlarmChannelIDs(alarms []*domain.Alarm) []string {
 
 	seen := make(map[string]struct{}, len(alarms))
 	channelIDs := make([]string, 0, len(alarms))
+
 	for _, alarm := range alarms {
 		if alarm == nil || alarm.ChannelID == "" {
 			continue
 		}
+
 		if _, ok := seen[alarm.ChannelID]; ok {
 			continue
 		}

@@ -22,6 +22,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -40,8 +41,9 @@ type RuntimeScheduler struct {
 // NewRuntimeScheduler는 RuntimeScheduler를 생성한다.
 func NewRuntimeScheduler(repository *majorevent.Repository, logger *slog.Logger) (*RuntimeScheduler, error) {
 	if repository == nil {
-		return nil, fmt.Errorf("new major event scraper runtime scheduler: repository is nil")
+		return nil, errors.New("new major event scraper runtime scheduler: repository is nil")
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -50,6 +52,7 @@ func NewRuntimeScheduler(repository *majorevent.Repository, logger *slog.Logger)
 
 	fetcher := NewFeedFetcher(httpClient, DefaultFeedFetcherConfig())
 	parser := NewRSSParser()
+
 	service, err := NewService(repository, fetcher, parser, DefaultServiceConfig(), logger)
 	if err != nil {
 		return nil, fmt.Errorf("new major event scraper runtime scheduler: new service: %w", err)
@@ -61,6 +64,7 @@ func NewRuntimeScheduler(repository *majorevent.Repository, logger *slog.Logger)
 	}
 
 	linkChecker := NewLinkChecker(httpClient, DefaultLinkCheckerConfig(), logger)
+
 	maintenanceScheduler, err := NewMaintenanceScheduler(repository, linkChecker, DefaultMaintenanceConfig(), logger)
 	if err != nil {
 		return nil, fmt.Errorf("new major event scraper runtime scheduler: new maintenance scheduler: %w", err)
@@ -78,9 +82,11 @@ func (r *RuntimeScheduler) Start(ctx context.Context) {
 	if r == nil {
 		return
 	}
+
 	if r.feedScheduler != nil {
 		r.feedScheduler.Start(ctx)
 	}
+
 	if r.maintenanceScheduler != nil {
 		r.maintenanceScheduler.Start(ctx)
 	}
@@ -91,12 +97,15 @@ func (r *RuntimeScheduler) Stop() {
 	if r == nil {
 		return
 	}
+
 	if r.feedScheduler != nil {
 		r.feedScheduler.Stop()
 	}
+
 	if r.maintenanceScheduler != nil {
 		r.maintenanceScheduler.Stop()
 	}
+
 	if r.logger != nil {
 		r.logger.Info("Major event scraper runtime scheduler stopped")
 	}

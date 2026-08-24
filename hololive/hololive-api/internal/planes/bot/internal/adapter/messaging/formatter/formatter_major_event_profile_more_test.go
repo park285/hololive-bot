@@ -24,10 +24,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestFormatMajorEventCommandMessages(t *testing.T) {
@@ -145,10 +146,8 @@ const cmdProfileGolden = `👤 Shirakami Fubuki (시라카미 후부키 / 白上
 
 공식 프로필: https://hololive.example/fubuki`
 
-func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
-	t.Parallel()
-
-	raw := &domain.TalentProfile{
+func newProfileTestFixture() (raw *domain.TalentProfile, translated *domain.Translated) {
+	raw = &domain.TalentProfile{
 		EnglishName:  "Shirakami Fubuki",
 		JapaneseName: "白上フブキ",
 		Catchphrase:  "Friend!",
@@ -164,7 +163,7 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 		},
 		OfficialURL: "https://hololive.example/fubuki",
 	}
-	translated := &domain.Translated{
+	translated = &domain.Translated{
 		DisplayName: "시라카미 후부키 (Shirakami Fubuki)",
 		Catchphrase: "친구야!",
 		Summary:     "홀로라이브 1기생",
@@ -174,6 +173,14 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 			{Label: "특기", Value: "노래\n게임"},
 		},
 	}
+
+	return raw, translated
+}
+
+func TestProfileHelpers(t *testing.T) {
+	t.Parallel()
+
+	raw, translated := newProfileTestFixture()
 
 	assert.Equal(t, "친구야!", getTranslatedText("친구야!", "Friend!"))
 	assert.Equal(t, "Friend!", getTranslatedText(" ", "Friend!"))
@@ -207,6 +214,12 @@ func TestProfileHelpersAndFormatTalentProfile(t *testing.T) {
 	assert.Equal(t, []string{"A", "B"}, uniqueNames)
 
 	assert.Contains(t, talentDisplayNames(raw, translated), "시라카미 후부키")
+}
+
+func TestFormatTalentProfile(t *testing.T) {
+	t.Parallel()
+
+	raw, translated := newProfileTestFixture()
 
 	store := setupFormatterTestStore(t)
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{

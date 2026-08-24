@@ -18,11 +18,14 @@ func (q *blockingQuerier) Query(ctx context.Context, _ string, _ ...any) (pgx.Ro
 	case q.queried <- struct{}{}:
 	default:
 	}
+
 	<-ctx.Done()
+
 	err := ctx.Err()
 	if err == nil {
 		err = context.Canceled
 	}
+
 	return nil, err
 }
 
@@ -41,9 +44,11 @@ func TestEnsureLoadedBoundsLazyLoadTimeout(t *testing.T) {
 	if got != "" {
 		t.Fatalf("Get during failed load = %q, want empty", got)
 	}
+
 	if elapsed > time.Second {
 		t.Fatalf("ensureLoaded blocked %v, want bounded near loadTimeout", elapsed)
 	}
+
 	select {
 	case <-q.queried:
 	default:
@@ -55,11 +60,15 @@ func TestEnsureLoadedDoesNotPinReloadMuBeyondTimeout(t *testing.T) {
 	store, _ := newBlockingStore(100 * time.Millisecond)
 
 	const callers = 4
+
 	done := make(chan time.Duration, callers)
+
 	for range callers {
 		go func() {
 			start := time.Now()
+
 			store.Get(NamespaceMisc, "x")
+
 			done <- time.Since(start)
 		}()
 	}

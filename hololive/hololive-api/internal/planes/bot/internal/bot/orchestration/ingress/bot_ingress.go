@@ -25,12 +25,12 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/webhook"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
@@ -81,6 +81,7 @@ func NewMessageIngress(
 		logger:         logger,
 		selfSender:     selfSender,
 	}
+
 	for _, opt := range opts {
 		if opt != nil {
 			opt(ingress)
@@ -108,6 +109,7 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 	}
 
 	roomType, roomLinkID := roomChatFromMessage(message)
+
 	if i.rooms != nil {
 		i.rooms.Observe(ctx, chatID, roomType, roomLinkID)
 	}
@@ -135,6 +137,7 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 func (i *MessageIngress) canHandleMessage(ctx context.Context, message *webhook.Message) bool {
 	if message == nil {
 		i.logWarn(ctx, "Nil message received")
+
 		return false
 	}
 
@@ -144,6 +147,7 @@ func (i *MessageIngress) canHandleMessage(ctx context.Context, message *webhook.
 
 	if i.messageAdapter == nil {
 		i.logWarn(ctx, "Message adapter is not configured")
+
 		return false
 	}
 
@@ -181,12 +185,14 @@ func (i *MessageIngress) parseCommand(ctx context.Context, message *webhook.Mess
 	parsed := i.messageAdapter.ParseMessage(message)
 	if parsed == nil {
 		i.logWarn(ctx, "Parsed command is nil", roomAttr)
+
 		return nil
 	}
 
 	if parsed.Type == domain.CommandUnknown {
 		summaryAttrs := messageSummaryAttrs(message.Msg)
 		attrs := make([]slog.Attr, 0, 1+len(summaryAttrs))
+
 		attrs = append(attrs, roomAttr)
 		attrs = append(attrs, summaryAttrs...)
 		i.logDebug(ctx,
@@ -210,6 +216,7 @@ func (i *MessageIngress) logCommandReceived(
 	if i.logger == nil || parsed == nil {
 		return
 	}
+
 	ctx = sharedlog.WithComponent(sharedlog.WithRuntime(ctx, "bot"), "ingress")
 	sharedlog.Debug(
 		ctx,

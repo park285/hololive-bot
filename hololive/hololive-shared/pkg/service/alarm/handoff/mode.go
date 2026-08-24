@@ -18,6 +18,7 @@ func ParseMode(raw string) (Mode, error) {
 	if mode == "" {
 		return ModeOff, nil
 	}
+
 	switch mode {
 	case ModeOff, ModeShadow, ModeCutover:
 		return mode, nil

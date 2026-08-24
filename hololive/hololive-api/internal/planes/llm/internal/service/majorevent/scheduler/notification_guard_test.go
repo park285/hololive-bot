@@ -22,13 +22,14 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/outputguard"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type mockOutboxRepository struct {
@@ -53,12 +54,14 @@ func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOu
 	if err, ok := m.enqueueErr[roomID]; ok {
 		return err
 	}
+
 	m.enqueuedItems = append(m.enqueuedItems, enqueueRecord{
 		Kind:      kind,
 		PeriodKey: periodKey,
 		RoomID:    roomID,
 		Message:   message,
 	})
+
 	return nil
 }
 
@@ -91,19 +94,22 @@ var testLogger = sharedlogging.NewLogger
 
 func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 	repository := newMockOutboxRepository()
-	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}, {roomID: "room3"}}
+	rooms := []roomTarget{{roomID: testRoomID1}, {roomID: testRoomID2}, {roomID: testRoomID3}}
 
-	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
+	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
 
 	if result.Sent != 3 {
 		t.Errorf("expected 3 sent, got %d", result.Sent)
 	}
+
 	if result.Failed != 0 {
 		t.Errorf("expected 0 failed, got %d", result.Failed)
 	}
+
 	if result.Attempted != 3 {
 		t.Errorf("expected 3 attempted, got %d", result.Attempted)
 	}
+
 	if len(repository.enqueuedItems) != 3 {
 		t.Errorf("expected 3 enqueued items, got %d", len(repository.enqueuedItems))
 	}
@@ -111,33 +117,40 @@ func TestEnqueueToRooms_AllSuccess(t *testing.T) {
 
 func TestEnqueueToRooms_PartialFailure(t *testing.T) {
 	repository := newMockOutboxRepository()
-	repository.enqueueErr["room2"] = fmt.Errorf("db error")
-	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}, {roomID: "room3"}}
 
-	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
+	repository.enqueueErr[testRoomID2] = errors.New("db error")
+
+	rooms := []roomTarget{{roomID: testRoomID1}, {roomID: testRoomID2}, {roomID: testRoomID3}}
+
+	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
 
 	if result.Sent != 2 {
 		t.Errorf("expected 2 sent, got %d", result.Sent)
 	}
+
 	if result.Failed != 1 {
 		t.Errorf("expected 1 failed, got %d", result.Failed)
 	}
-	if len(result.FailedRooms) != 1 || result.FailedRooms[0] != "room2" {
+
+	if len(result.FailedRooms) != 1 || result.FailedRooms[0] != testRoomID2 {
 		t.Errorf("expected FailedRooms=[room2], got %v", result.FailedRooms)
 	}
 }
 
 func TestEnqueueToRooms_AllFail(t *testing.T) {
 	repository := newMockOutboxRepository()
-	repository.enqueueErr["room1"] = fmt.Errorf("db error")
-	repository.enqueueErr["room2"] = fmt.Errorf("db error")
-	rooms := []roomTarget{{roomID: "room1"}, {roomID: "room2"}}
 
-	result := enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
+	repository.enqueueErr[testRoomID1] = errors.New("db error")
+	repository.enqueueErr[testRoomID2] = errors.New("db error")
+
+	rooms := []roomTarget{{roomID: testRoomID1}, {roomID: testRoomID2}}
+
+	result := enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "msg", outputguard.NewGuard(), testLogger())
 
 	if result.Failed != 2 {
 		t.Errorf("expected 2 failed, got %d", result.Failed)
 	}
+
 	if result.Sent != 0 {
 		t.Errorf("expected 0 sent, got %d", result.Sent)
 	}
@@ -145,20 +158,23 @@ func TestEnqueueToRooms_AllFail(t *testing.T) {
 
 func TestEnqueueToRooms_VerifiesKindAndPeriodKey(t *testing.T) {
 	repository := newMockOutboxRepository()
-	rooms := []roomTarget{{roomID: "room1"}}
+	rooms := []roomTarget{{roomID: testRoomID1}}
 
-	enqueueToRooms(context.Background(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", outputguard.NewGuard(), testLogger())
+	enqueueToRooms(t.Context(), repository, rooms, domain.DeliveryKindMajorEventMonthly, "2026-02", "test msg", outputguard.NewGuard(), testLogger())
 
 	if len(repository.enqueuedItems) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(repository.enqueuedItems))
 	}
+
 	item := repository.enqueuedItems[0]
 	if item.Kind != domain.DeliveryKindMajorEventMonthly {
 		t.Errorf("expected kind %s, got %s", domain.DeliveryKindMajorEventMonthly, item.Kind)
 	}
+
 	if item.PeriodKey != "2026-02" {
 		t.Errorf("expected periodKey 2026-02, got %s", item.PeriodKey)
 	}
+
 	if item.Message != "test msg" {
 		t.Errorf("expected message 'test msg', got %s", item.Message)
 	}

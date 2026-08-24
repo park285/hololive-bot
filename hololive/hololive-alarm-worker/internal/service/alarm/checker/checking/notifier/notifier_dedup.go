@@ -11,15 +11,56 @@ import (
 )
 
 func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKeys []string, claimed bool, err error) {
+	notifyKey, logicalKey := n.notificationDedupKeys(payload)
+
+	notifyClaimed, logicalClaimed := n.dedupService.TryClaimPair(
+		ctx, notifyKey, logicalKey, constants.CacheTTL.NotificationSent,
+	)
+
+	if !notifyClaimed {
+		if logicalClaimed {
+			n.releaseClaimsBestEffort(ctx, []string{logicalKey}, "release logical claim after notification dedup skip")
+		}
+
+		return nil, false, nil
+	}
+
+	if !logicalClaimed {
+		n.releaseClaimsBestEffort(ctx, []string{notifyKey}, "release notification claim after logical dedup skip")
+
+		return nil, false, nil
+	}
+
+	claimKeys = compactClaimKeys(notifyKey, logicalKey)
+
+	scheduleClaimKeys, scheduleClaimed, err := n.claimScheduleChangeDedup(ctx, payload)
+	if err != nil {
+		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change claim error")
+
+		return nil, false, fmt.Errorf("claim schedule change: %w", err)
+	}
+
+	if !scheduleClaimed {
+		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change dedup skip")
+
+		return nil, false, nil
+	}
+
+	return append(claimKeys, scheduleClaimKeys...), true, nil
+}
+
+func (n *Notifier) notificationDedupKeys(payload *sendInput) (string, string) {
 	category := keys.NotificationCategory(
 		n.dedupService.TargetMinutesSnapshot(),
 		payload.notification.MinutesUntil,
 	)
 	dedupeScheduled := payload.startScheduled
+
 	if payload.notification.IsLiveCatchup() {
 		category = keys.NotificationCategoryLiveCatchup
 		dedupeScheduled = time.Time{}
 	}
+
 	notifyKey := keys.BuildNotifyClaimKey(
 		payload.notification.RoomID,
 		payload.streamID,
@@ -35,39 +76,14 @@ func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKey
 		category,
 	)
 
-	notifyClaimed, logicalClaimed := n.dedupService.TryClaimPair(
-		ctx, notifyKey, logicalKey, constants.CacheTTL.NotificationSent,
-	)
-
-	if !notifyClaimed {
-		if logicalClaimed {
-			n.releaseClaimsBestEffort(ctx, []string{logicalKey}, "release logical claim after notification dedup skip")
-		}
-		return nil, false, nil
-	}
-	if !logicalClaimed {
-		n.releaseClaimsBestEffort(ctx, []string{notifyKey}, "release notification claim after logical dedup skip")
-		return nil, false, nil
-	}
-
-	claimKeys = compactClaimKeys(notifyKey, logicalKey)
-	scheduleClaimKeys, scheduleClaimed, err := n.claimScheduleChangeDedup(ctx, payload)
-	if err != nil {
-		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change claim error")
-		return nil, false, fmt.Errorf("claim schedule change: %w", err)
-	}
-	if !scheduleClaimed {
-		n.releaseClaimsBestEffort(ctx, append(claimKeys, scheduleClaimKeys...), "failed to release claims after schedule change dedup skip")
-		return nil, false, nil
-	}
-
-	return append(claimKeys, scheduleClaimKeys...), true, nil
+	return notifyKey, logicalKey
 }
 
 func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendInput) (claimKeys []string, claimed bool, err error) {
 	if payload == nil || payload.notification == nil {
 		return nil, true, nil
 	}
+
 	if strings.TrimSpace(payload.notification.ScheduleChangeMessage) == "" {
 		return nil, true, nil
 	}
@@ -82,6 +98,7 @@ func (n *Notifier) claimScheduleChangeDedup(ctx context.Context, payload *sendIn
 	if err != nil {
 		return claimKeys, false, fmt.Errorf("claim notification schedule change: %w", err)
 	}
+
 	if !claimed {
 		return claimKeys, false, nil
 	}

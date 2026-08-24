@@ -22,16 +22,17 @@ package middleware
 
 import (
 	"bytes"
-	"context"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 )
+
+const healthPath = "/health"
 
 func TestShouldSkipPath(t *testing.T) {
 	t.Parallel()
@@ -46,8 +47,8 @@ func TestShouldSkipPath(t *testing.T) {
 	}{
 		{
 			name:      "정확히 일치 → true",
-			path:      "/health",
-			exactSkip: map[string]bool{"/health": true},
+			path:      healthPath,
+			exactSkip: map[string]bool{healthPath: true},
 			want:      true,
 		},
 		{
@@ -65,7 +66,7 @@ func TestShouldSkipPath(t *testing.T) {
 		{
 			name:       "어떤 패턴에도 불일치 → false",
 			path:       "/api/data",
-			exactSkip:  map[string]bool{"/health": true},
+			exactSkip:  map[string]bool{healthPath: true},
 			prefixSkip: []string{"/metrics"},
 			suffixSkip: []string{"/stream"},
 			want:       false,
@@ -172,20 +173,23 @@ func TestLoggerMiddleware_TruncatesOverlongForwardedHeaders(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	var buf bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	router := gin.New()
 	if err := router.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
 		t.Fatalf("SetTrustedProxies 에러: %v", err)
 	}
-	router.Use(LoggerMiddleware(context.Background(), logger))
+
+	router.Use(LoggerMiddleware(t.Context(), logger))
 	router.GET("/inspect", func(c *gin.Context) {
 		c.Status(http.StatusUnauthorized)
 	})
 
 	overlongXFF := strings.Repeat("9", 4096)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inspect", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/inspect", http.NoBody)
+
 	req.RemoteAddr = "10.10.0.5:4321"
 	req.Header.Set("X-Forwarded-For", overlongXFF)
 	req.Header.Set("X-Real-IP", overlongXFF)
@@ -194,15 +198,18 @@ func TestLoggerMiddleware_TruncatesOverlongForwardedHeaders(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	var entry map[string]any
+
 	if err := jsonv2.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
 		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
 	}
 
 	wantTruncated := truncateHeader(overlongXFF)
 	gotXFF, ok := entry["x_forwarded_for"].(string)
+
 	if !ok || gotXFF != wantTruncated {
 		t.Fatalf("x_forwarded_for = %v, want truncated to %d chars", entry["x_forwarded_for"], len(wantTruncated))
 	}
+
 	gotRealIP, ok := entry["x_real_ip"].(string)
 	if !ok || gotRealIP != wantTruncated {
 		t.Fatalf("x_real_ip = %v, want truncated to %d chars", entry["x_real_ip"], len(wantTruncated))
@@ -214,7 +221,7 @@ func TestLogDebugf_NoPanic(t *testing.T) {
 
 	// 패닉 없이 실행되는지만 검증 (스모크 테스트)
 	logger := slog.Default()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 패닉 발생 시 테스트가 실패하므로 별도 assertion 불필요
 	LogDebugf(ctx, logger, "테스트 메시지", slog.String("key", "value"))
@@ -226,18 +233,21 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 
 	var buf bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	router := gin.New()
 	if err := router.SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
 		t.Fatalf("SetTrustedProxies 에러: %v", err)
 	}
-	router.Use(LoggerMiddleware(context.Background(), logger))
+
+	router.Use(LoggerMiddleware(t.Context(), logger))
 	router.GET("/inspect", func(c *gin.Context) {
 		c.Status(http.StatusUnauthorized)
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inspect", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/inspect", http.NoBody)
+
 	req.RemoteAddr = "10.10.0.5:4321"
 	req.Header.Set("User-Agent", "curl/8.5.0")
 	req.Header.Set("X-Forwarded-For", "203.0.113.10")
@@ -251,6 +261,7 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 	}
 
 	var entry map[string]any
+
 	if err := jsonv2.Unmarshal(bytes.TrimSpace(buf.Bytes()), &entry); err != nil {
 		t.Fatalf("로그 JSON 파싱 실패: %v, raw=%s", err, buf.String())
 	}
@@ -258,15 +269,19 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 	if got := entry["msg"]; got != "HTTP" {
 		t.Fatalf("msg = %v, want HTTP", got)
 	}
+
 	if got := entry["ip"]; got != "203.0.113.10" {
 		t.Fatalf("ip = %v, want 203.0.113.10", got)
 	}
+
 	if got := entry["remote_addr"]; got != "10.10.0.5:4321" {
 		t.Fatalf("remote_addr = %v, want 10.10.0.5:4321", got)
 	}
+
 	if got := entry["x_forwarded_for"]; got != "203.0.113.10" {
 		t.Fatalf("x_forwarded_for = %v, want 203.0.113.10", got)
 	}
+
 	if got := entry["x_real_ip"]; got != "203.0.113.11" {
 		t.Fatalf("x_real_ip = %v, want 203.0.113.11", got)
 	}
@@ -276,9 +291,9 @@ func TestLoggerMiddleware_IncludesRequestSourceFields(t *testing.T) {
 func TestSkipPathMatcher_WildcardSuffixPatternCoversSubpaths(t *testing.T) {
 	t.Parallel()
 
-	matcher := newSkipPathMatcher([]string{"/debug/pprof*", "/health"})
+	matcher := newSkipPathMatcher([]string{"/debug/pprof*", healthPath})
 
-	skipped := []string{"/debug/pprof", "/debug/pprof/", "/debug/pprof/profile", "/debug/pprof/heap", "/health"}
+	skipped := []string{"/debug/pprof", "/debug/pprof/", "/debug/pprof/profile", "/debug/pprof/heap", healthPath}
 	for _, path := range skipped {
 		if !matcher.shouldSkip(path) {
 			t.Errorf("shouldSkip(%q) = false, want true", path)

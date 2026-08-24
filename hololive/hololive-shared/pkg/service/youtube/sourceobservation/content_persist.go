@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -20,25 +21,35 @@ func persistContentDecision(
 	decision *content.Decision,
 ) error {
 	if writer == nil {
-		return fmt.Errorf("persist content decision: canonical writer is not configured")
+		return errors.New("persist content decision: canonical writer is not configured")
 	}
+
 	videos, notifications, tracking := contentArtifacts(observation.EffectiveAt, decision)
 	if err := writer.PersistVideosTx(ctx, tx, videos, notifications, tracking, decision.Watermark); err != nil {
-		return err
+		return fmt.Errorf("persist videos tx: %w", err)
 	}
+
 	if err := persistContentFieldUpdates(ctx, tx, decision.FieldUpdates, observation.EffectiveAt); err != nil {
-		return err
+		return fmt.Errorf("persist content field updates: %w", err)
 	}
+
 	if err := persistContentClocks(ctx, tx, observation.ObservationKind, decision.Clocks); err != nil {
-		return err
+		return fmt.Errorf("persist content clocks: %w", err)
 	}
+
 	if err := persistContentAbsence(ctx, tx, observation, decision.AbsenceSlot); err != nil {
-		return err
+		return fmt.Errorf("persist content absence: %w", err)
 	}
+
 	if err := persistContentHead(ctx, tx, observation, decision.EarliestCompleteAt); err != nil {
-		return err
+		return fmt.Errorf("persist content head: %w", err)
 	}
-	return persistContentConflicts(ctx, tx, observation, decision.Conflicts)
+
+	if err := persistContentConflicts(ctx, tx, observation, decision.Conflicts); err != nil {
+		return fmt.Errorf("persist content conflicts: %w", err)
+	}
+
+	return nil
 }
 
 func contentArtifacts(
@@ -49,14 +60,17 @@ func contentArtifacts(
 	for i := range decision.Videos {
 		videos = append(videos, domainVideo(decision.Videos[i], effectiveAt))
 	}
+
 	notifications := make([]*domain.YouTubeNotificationOutbox, 0, len(decision.Notifications))
 	for i := range decision.Notifications {
 		notifications = append(notifications, domainNotification(&decision.Notifications[i]))
 	}
+
 	tracking := make([]*domain.YouTubeContentAlarmTracking, 0, len(decision.Tracking))
 	for i := range decision.Tracking {
 		tracking = append(tracking, domainTracking(&decision.Tracking[i], effectiveAt))
 	}
+
 	return videos, notifications, tracking
 }
 
@@ -75,9 +89,11 @@ func domainVideo(entity content.Entity, seenAt time.Time) *domain.YouTubeVideo {
 func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotificationOutbox {
 	video := domainVideo(intent.Video, time.Time{})
 	payload := polling.MustMarshalJSON(video)
+
 	if intent.Kind == domain.OutboxKindNewShort {
 		payload = polling.BuildShortNotificationPayload(video, intent.ContentID)
 	}
+
 	return &domain.YouTubeNotificationOutbox{
 		Kind:      intent.Kind,
 		ChannelID: intent.ChannelID,
@@ -110,6 +126,7 @@ func persistContentFieldUpdates(ctx context.Context, tx dbx.Tx, updates []conten
 			return fmt.Errorf("update content video fields: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -118,10 +135,12 @@ func persistContentClocks(ctx context.Context, tx dbx.Tx, kind contract.Observat
 		if clocks[i].LastPositiveValueSHA256 == "" {
 			continue
 		}
+
 		if err := upsertContentClock(ctx, tx, kind, &clocks[i]); err != nil {
-			return err
+			return fmt.Errorf("upsert content clock: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -129,10 +148,12 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 	if slot == nil {
 		return nil
 	}
+
 	coverage, err := content.MarshalCoverage(slot.Coverage)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal coverage: %w", err)
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_content_absence_upsert_0039_39.sql"),
@@ -148,6 +169,7 @@ func persistContentAbsence(ctx context.Context, tx dbx.Tx, observation *Observat
 	); err != nil {
 		return fmt.Errorf("upsert content absence slot: %w", err)
 	}
+
 	return nil
 }
 
@@ -161,6 +183,7 @@ func persistContentHead(ctx context.Context, tx dbx.Tx, observation *Observation
 	); err != nil {
 		return fmt.Errorf("upsert content channel head: %w", err)
 	}
+
 	return nil
 }
 
@@ -184,6 +207,7 @@ func persistContentConflicts(ctx context.Context, tx dbx.Tx, observation *Observ
 			return fmt.Errorf("insert content reconciliation conflict: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -191,5 +215,6 @@ func boundedVideoTitle(title string) string {
 	if len(title) > 500 {
 		return title[:500]
 	}
+
 	return title
 }

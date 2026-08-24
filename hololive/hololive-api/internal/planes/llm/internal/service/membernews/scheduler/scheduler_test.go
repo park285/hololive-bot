@@ -35,6 +35,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
+const (
+	testRoomID     = "room-1"
+	testLockHandle = "tok"
+)
+
 type mockDigestService struct {
 	rooms      []model.SubscribedRoom
 	digests    map[string]*model.Digest
@@ -45,9 +50,11 @@ func (m *mockDigestService) GenerateRoomDigest(_ context.Context, roomID string,
 	if err, ok := m.digestErrs[roomID]; ok && err != nil {
 		return nil, err
 	}
+
 	if digest, ok := m.digests[roomID]; ok {
 		return digest, nil
 	}
+
 	return &model.Digest{
 		Headline: "H",
 		TopItems: []model.SummaryItem{{Member: "A", Category: "event", Title: "T", DateText: "2026-02-20", Summary: "S", SourceURL: "https://hololive.hololivepro.com/news/1"}},
@@ -64,10 +71,11 @@ func (mockFormatter) FormatMemberNewsDigest(_ context.Context, digest *model.Dig
 	if digest == nil {
 		return ""
 	}
+
 	return digest.Headline
 }
 
-// mockNotificationLocker: delivery.NotificationLocker 구현
+// mockNotificationLocker: delivery.NotificationLocker 구현.
 type mockNotificationLocker struct {
 	acquireToken    string
 	acquireAcquired bool
@@ -84,7 +92,9 @@ func (m *mockNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.
 func (m *mockNotificationLocker) Release(_ context.Context, lockKey, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	m.releaseCalls = append(m.releaseCalls, lockKey)
+
 	return nil
 }
 
@@ -96,7 +106,7 @@ func (m *mockNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string
 	return nil
 }
 
-// mockOutboxRepository: outboxEnqueuer 구현
+// mockOutboxRepository: outboxEnqueuer 구현.
 type mockOutboxRepository struct {
 	mu            sync.Mutex
 	enqueuedItems []enqueueRecord
@@ -119,64 +129,71 @@ func newMockOutboxRepository() *mockOutboxRepository {
 func (m *mockOutboxRepository) Enqueue(_ context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	if err, ok := m.enqueueErr[roomID]; ok {
 		return err
 	}
+
 	m.enqueuedItems = append(m.enqueuedItems, enqueueRecord{
 		Kind:      kind,
 		PeriodKey: periodKey,
 		RoomID:    roomID,
 		Message:   message,
 	})
+
 	return nil
 }
 
 func TestScheduler_LockAlreadyHeldSkipsExecution(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error when lock held, got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 0 {
 		t.Fatalf("expected no enqueued items, got %d", len(outbox.enqueuedItems))
 	}
 }
 
 func TestScheduler_EnqueueSuccessForAllRooms(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}, {RoomID: "room-2"}}}
-	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}, {RoomID: "room-2"}}}
+	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 2 {
 		t.Errorf("expected 2 enqueued items, got %d", len(outbox.enqueuedItems))
 	}
 }
 
 func TestScheduler_AllEnqueueFailureReturnsError(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
-	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
+	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	outbox.enqueueErr["room-1"] = errors.New("db error")
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+
+	outbox.enqueueErr[testRoomID] = errors.New("db error")
+
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err == nil {
-		t.Fatalf("expected error when all rooms fail to enqueue")
+	if err := scheduler.SendWeeklyDigest(t.Context()); err == nil {
+		t.Fatal("expected error when all rooms fail to enqueue")
 	}
 }
 
@@ -190,18 +207,18 @@ func TestScheduler_CalculateNextRunMonday0900KST(t *testing.T) {
 	}{
 		{
 			name: "before monday target same day",
-			now:  time.Date(2026, 2, 16, 8, 30, 0, 0, util.KSTZone), // Monday
-			want: time.Date(2026, 2, 16, 9, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.February, 16, 8, 30, 0, 0, util.KSTZone), // Monday
+			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, util.KSTZone),
 		},
 		{
 			name: "exact monday target next week",
-			now:  time.Date(2026, 2, 16, 9, 0, 0, 0, util.KSTZone),
-			want: time.Date(2026, 2, 23, 9, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.February, 16, 9, 0, 0, 0, util.KSTZone),
+			want: time.Date(2026, time.February, 23, 9, 0, 0, 0, util.KSTZone),
 		},
 		{
 			name: "sunday moves next day monday",
-			now:  time.Date(2026, 2, 15, 23, 0, 0, 0, util.KSTZone), // Sunday
-			want: time.Date(2026, 2, 16, 9, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.February, 15, 23, 0, 0, 0, util.KSTZone), // Sunday
+			want: time.Date(2026, time.February, 16, 9, 0, 0, 0, util.KSTZone),
 		},
 	}
 
@@ -219,7 +236,7 @@ func TestScheduler_LifecycleNilGuards(t *testing.T) {
 	var scheduler *Scheduler
 
 	scheduler.SetClock(time.Now)
-	scheduler.Start(context.Background())
+	scheduler.Start(t.Context())
 	scheduler.Stop()
 }
 
@@ -230,17 +247,20 @@ func TestScheduler_PartialEnqueueFailure(t *testing.T) {
 			{RoomID: "room-ok"},
 		},
 	}
-	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
+	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
+
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error for partial failure with at least one success, got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 1 {
 		t.Errorf("expected 1 enqueued item, got %d", len(outbox.enqueuedItems))
 	}
@@ -253,31 +273,32 @@ func TestScheduler_NoMembersSkipCountsAsSkipped(t *testing.T) {
 			"room-no-members": model.ErrNoSubscribedMembers,
 		},
 	}
-	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
+	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error for all-skip(no members), got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 0 {
 		t.Errorf("expected no enqueued items for skip, got %d", len(outbox.enqueuedItems))
 	}
 }
 
 func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: "tok-1", acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("SendWeeklyDigest() error = %v", err)
 	}
 
@@ -289,17 +310,18 @@ func TestScheduler_LockReleasedOnCompletion(t *testing.T) {
 func TestScheduler_LockAcquireGracefulDegradation(t *testing.T) {
 	// Graceful degradation: locker는 Valkey 장애 시 (token, true, nil) 반환.
 	// 스케줄러는 정상 진행.
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireToken: "degraded", acquireAcquired: true}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewScheduler(service, mockFormatter{}, locker, outbox, nil, WithOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendWeeklyDigest(context.Background()); err != nil {
+	if err := scheduler.SendWeeklyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error with graceful degradation, got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 1 {
 		t.Errorf("expected 1 enqueued item, got %d", len(outbox.enqueuedItems))
 	}
@@ -309,12 +331,13 @@ func TestDispatchDigestRoomsCountsRecoveredPanicAsFailure(t *testing.T) {
 	t.Parallel()
 
 	rooms := []model.SubscribedRoom{{RoomID: "room-panic"}, {RoomID: "room-ok"}}
-	result := dispatchDigestRooms(context.Background(), rooms, &digestDispatchConfig{
+	result := dispatchDigestRooms(t.Context(), rooms, &digestDispatchConfig{
 		periodKey: "2026-W28",
 		processRoom: func(_ context.Context, _, roomID string) delivery.SendResult {
 			if roomID == "room-panic" {
 				panic("digest panic")
 			}
+
 			return delivery.SendResult{Attempted: 1, Sent: 1}
 		},
 	})
@@ -322,6 +345,7 @@ func TestDispatchDigestRoomsCountsRecoveredPanicAsFailure(t *testing.T) {
 	if result.Attempted != 2 || result.Sent != 1 || result.Failed != 1 {
 		t.Fatalf("dispatch result = %+v, want attempted=2 sent=1 failed=1", result)
 	}
+
 	if len(result.FailedRooms) != 1 || result.FailedRooms[0] != "room-panic" {
 		t.Fatalf("FailedRooms = %#v, want [room-panic]", result.FailedRooms)
 	}

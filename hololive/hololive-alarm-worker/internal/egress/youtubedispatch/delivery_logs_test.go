@@ -1,7 +1,7 @@
 package youtubedispatch
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,26 +14,51 @@ import (
 func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_FiltersAndOrdersRows(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
-	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
+	seeded := slices.Concat(
+		communityShortsDeliveryLogInWindowRows(now),
+		communityShortsDeliveryLogOutOfScopeRows(now),
+	)
 
+	require.NoError(t, insertDeliveryTestRows(db, seeded).Error)
+
+	repository := telemetry.NewRepository(db)
+
+	rows, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 0)
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+
+	require.Equal(t, int64(103), rows[0].DeliveryID)
+	require.Equal(t, "fallback-event-only", rows[0].ContentID)
+	require.Nil(t, rows[0].ActualPublishedAt)
+	require.Nil(t, rows[0].DetectedAt)
+	require.Equal(t, seeded[2].EventAt, rows[0].EventAt.UTC())
+
+	require.Equal(t, int64(102), rows[1].DeliveryID)
+	require.Equal(t, "short-recent", rows[1].ContentID)
+	require.Nil(t, rows[1].ActualPublishedAt)
+	require.NotNil(t, rows[1].DetectedAt)
+	require.Equal(t, *seeded[1].DetectedAt, rows[1].DetectedAt.UTC())
+
+	require.Equal(t, int64(101), rows[2].DeliveryID)
+	require.Equal(t, "post-community", rows[2].ContentID)
+	require.NotNil(t, rows[2].ActualPublishedAt)
+	require.Equal(t, *seeded[0].ActualPublishedAt, rows[2].ActualPublishedAt.UTC())
+}
+
+func communityShortsDeliveryLogInWindowRows(now time.Time) []deliveryTelemetryTestBufferModel {
 	communityPublishedAt := now.Add(-2 * time.Hour)
 	communityDetectedAt := now.Add(-119 * time.Minute)
 	communityEventAt := now.Add(-118 * time.Minute)
 	shortDetectedAt := now.Add(-30 * time.Minute)
 	shortEventAt := now.Add(-29 * time.Minute)
 	fallbackEventAt := now.Add(-10 * time.Minute)
-	oldPublishedAt := now.Add(-30 * time.Hour)
-	oldDetectedAt := now.Add(-29 * time.Hour)
-	oldEventAt := now.Add(-29 * time.Hour)
-	livePublishedAt := now.Add(-15 * time.Minute)
-	liveDetectedAt := now.Add(-14 * time.Minute)
-	liveEventAt := now.Add(-13 * time.Minute)
 
-	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
+	return []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:        101,
 			AttemptOrdinal:    1,
@@ -41,14 +66,14 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 			ChannelID:         "UC_COMMUNITY",
 			ContentID:         "post-community",
 			PostID:            "post-community",
-			RoomID:            "room-community",
+			RoomID:            testRoomCommunity,
 			AlarmType:         string(domain.AlarmTypeCommunity),
 			ActualPublishedAt: &communityPublishedAt,
 			DetectedAt:        &communityDetectedAt,
-			DedupeKey:         "youtube-notification:COMMUNITY_POST:post-community",
+			DedupeKey:         testDedupeKeyCommunityPost,
 			DeliveryPath:      telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:      "grouped",
-			SendResult:        "success",
+			DeliveryMode:      deliveryModeGrouped,
+			SendResult:        sendResultSuccess,
 			EventAt:           communityEventAt,
 			NextAttemptAt:     communityEventAt,
 		},
@@ -59,13 +84,13 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 			ChannelID:      "UC_SHORT",
 			ContentID:      "short-recent",
 			PostID:         "short-recent",
-			RoomID:         "room-short",
+			RoomID:         testRoomShort,
 			AlarmType:      string(domain.AlarmTypeShorts),
 			DetectedAt:     &shortDetectedAt,
 			DedupeKey:      "youtube-notification:NEW_SHORT:short-recent",
 			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "failure",
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultFailure,
 			FailureReason:  "retry",
 			EventAt:        shortEventAt,
 			NextAttemptAt:  shortEventAt,
@@ -81,11 +106,23 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 			AlarmType:      string(domain.AlarmTypeCommunity),
 			DedupeKey:      "youtube-notification:COMMUNITY_POST:fallback-event-only",
 			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
 			EventAt:        fallbackEventAt,
 			NextAttemptAt:  fallbackEventAt,
 		},
+	}
+}
+
+func communityShortsDeliveryLogOutOfScopeRows(now time.Time) []deliveryTelemetryTestBufferModel {
+	oldPublishedAt := now.Add(-30 * time.Hour)
+	oldDetectedAt := now.Add(-29 * time.Hour)
+	oldEventAt := now.Add(-29 * time.Hour)
+	livePublishedAt := now.Add(-15 * time.Minute)
+	liveDetectedAt := now.Add(-14 * time.Minute)
+	liveEventAt := now.Add(-13 * time.Minute)
+
+	return []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:        104,
 			AttemptOrdinal:    1,
@@ -93,14 +130,14 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 			ChannelID:         "UC_OLD",
 			ContentID:         "post-old",
 			PostID:            "post-old",
-			RoomID:            "room-old",
+			RoomID:            testRoomOld,
 			AlarmType:         string(domain.AlarmTypeCommunity),
 			ActualPublishedAt: &oldPublishedAt,
 			DetectedAt:        &oldDetectedAt,
 			DedupeKey:         "youtube-notification:COMMUNITY_POST:post-old",
 			DeliveryPath:      telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:      "grouped",
-			SendResult:        "success",
+			DeliveryMode:      deliveryModeGrouped,
+			SendResult:        sendResultSuccess,
 			EventAt:           oldEventAt,
 			NextAttemptAt:     oldEventAt,
 		},
@@ -117,49 +154,29 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Filter
 			DetectedAt:        &liveDetectedAt,
 			DedupeKey:         "youtube-notification:NEW_VIDEO:video-live",
 			DeliveryPath:      telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:      "grouped",
-			SendResult:        "success",
+			DeliveryMode:      deliveryModeGrouped,
+			SendResult:        sendResultSuccess,
 			EventAt:           liveEventAt,
 			NextAttemptAt:     liveEventAt,
 		},
-	}).Error)
-
-	repository := telemetry.NewRepository(db)
-	rows, err := repository.ListCommunityShortsDeliveryLogsSince(ctx, windowStart, 0)
-	require.NoError(t, err)
-	require.Len(t, rows, 3)
-
-	require.Equal(t, int64(103), rows[0].DeliveryID)
-	require.Equal(t, "fallback-event-only", rows[0].ContentID)
-	require.Nil(t, rows[0].ActualPublishedAt)
-	require.Nil(t, rows[0].DetectedAt)
-	require.Equal(t, fallbackEventAt, rows[0].EventAt.UTC())
-
-	require.Equal(t, int64(102), rows[1].DeliveryID)
-	require.Equal(t, "short-recent", rows[1].ContentID)
-	require.Nil(t, rows[1].ActualPublishedAt)
-	require.NotNil(t, rows[1].DetectedAt)
-	require.Equal(t, shortDetectedAt, rows[1].DetectedAt.UTC())
-
-	require.Equal(t, int64(101), rows[2].DeliveryID)
-	require.Equal(t, "post-community", rows[2].ContentID)
-	require.NotNil(t, rows[2].ActualPublishedAt)
-	require.Equal(t, communityPublishedAt, rows[2].ActualPublishedAt.UTC())
+	}
 }
 
 func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_RespectsLimit(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
-	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	windowStart := now.Add(-24 * time.Hour)
 
 	rows := make([]deliveryTelemetryTestBufferModel, 0, 3)
+
 	for i := range 3 {
 		publishedAt := now.Add(time.Duration(-(i + 1)) * time.Hour)
 		eventAt := publishedAt.Add(time.Minute)
+
 		rows = append(rows, deliveryTelemetryTestBufferModel{
 			DeliveryID:        int64(200 + i),
 			AttemptOrdinal:    1,
@@ -172,12 +189,13 @@ func TestDeliveryTelemetryRepository_ListCommunityShortsDeliveryLogsSince_Respec
 			ActualPublishedAt: &publishedAt,
 			DedupeKey:         "youtube-notification:COMMUNITY_POST:" + publishedAt.Format(time.RFC3339),
 			DeliveryPath:      telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:      "grouped",
-			SendResult:        "success",
+			DeliveryMode:      deliveryModeGrouped,
+			SendResult:        sendResultSuccess,
 			EventAt:           eventAt,
 			NextAttemptAt:     eventAt,
 		})
 	}
+
 	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
 
 	repository := telemetry.NewRepository(db)

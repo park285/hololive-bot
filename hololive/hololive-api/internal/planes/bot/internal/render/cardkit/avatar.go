@@ -26,14 +26,17 @@ func AvatarCircle(img *image.RGBA, cx, cy, r int, photo image.Image, name string
 
 	if photo != nil {
 		DrawCircularImage(img, photo, cx, cy, r, style.Background)
+
 		return
 	}
 
 	FillCircle(img, cx, cy, r, style.Accent)
+
 	initial := FirstRune(DropUncoveredRunes(style.Initials, name))
 	if initial == "" {
 		return
 	}
+
 	iw := MeasureText(style.Initials, initial)
 	DrawText(img, style.Initials, cx-iw/2, cy+style.InitialDrop, style.TextColor, initial)
 }
@@ -42,10 +45,12 @@ func FirstRune(s string) string {
 	if s == "" {
 		return ""
 	}
+
 	r, _ := utf8.DecodeRuneInString(s)
 	if r == utf8.RuneError {
 		return ""
 	}
+
 	return string(r)
 }
 
@@ -59,7 +64,9 @@ func DrawCircularImage(dst *image.RGBA, src image.Image, cx, cy, r int, bgCol co
 			if dist > fr+0.5 {
 				continue
 			}
+
 			c := avatar.RGBAAt(dx+r, dy+r)
+
 			c = applyEdgeBlend(c, bgCol, dist, fr)
 			dst.Set(cx+dx, cy+dy, c)
 		}
@@ -74,6 +81,7 @@ func resizeAvatarSource(src image.Image, size int) *image.RGBA {
 	srcRect := image.Rect(cropMinX, cropMinY, cropMinX+side, cropMinY+side)
 	dst := image.NewRGBA(image.Rect(0, 0, size, size))
 	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, srcRect, xdraw.Src, nil)
+
 	return dst
 }
 
@@ -87,6 +95,7 @@ func sharpenAvatar(src *image.RGBA) *image.RGBA {
 
 	dst := image.NewRGBA(bounds)
 	copy(dst.Pix, src.Pix)
+
 	for y := bounds.Min.Y + 1; y < bounds.Max.Y-1; y++ {
 		for x := bounds.Min.X + 1; x < bounds.Max.X-1; x++ {
 			center := src.RGBAAt(x, y)
@@ -102,6 +111,7 @@ func sharpenAvatar(src *image.RGBA) *image.RGBA {
 			})
 		}
 	}
+
 	return dst
 }
 
@@ -114,5 +124,6 @@ func applyEdgeBlend(c, bgCol color.RGBA, dist, fr float64) color.RGBA {
 	if dist > fr-0.5 {
 		return blendRGBA(c, bgCol, fr+0.5-dist)
 	}
+
 	return c
 }

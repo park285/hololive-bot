@@ -62,12 +62,12 @@ func TestDedupeSearchResults(t *testing.T) {
 		{
 			name: "duplicate URL removed",
 			input: []model.SearchResult{
-				{Title: "A", URL: "https://example.com/1"},
-				{Title: "B", URL: "https://example.com/1"},
+				{Title: "A", URL: testLinkOne},
+				{Title: "B", URL: testLinkOne},
 				{Title: "C", URL: "https://example.com/2"},
 			},
 			wantLen:  2,
-			wantURLs: []string{"https://example.com/1", "https://example.com/2"},
+			wantURLs: []string{testLinkOne, "https://example.com/2"},
 		},
 		{
 			name: "empty URL uses title+date composite key",
@@ -98,6 +98,7 @@ func TestDedupeSearchResults(t *testing.T) {
 			if len(got) != tt.wantLen {
 				t.Errorf("dedupeSearchResults() returned %d items, want %d", len(got), tt.wantLen)
 			}
+
 			for i, wantURL := range tt.wantURLs {
 				if i < len(got) && got[i].URL != wantURL {
 					t.Errorf("result[%d].URL = %q, want %q", i, got[i].URL, wantURL)
@@ -121,6 +122,7 @@ func TestDedupeSearchResults_MaxCap(t *testing.T) {
 	if len(capped) > maxSearchResults {
 		t.Errorf("capSearchResults() returned %d items, want <= %d", len(capped), maxSearchResults)
 	}
+
 	if len(capped) != maxSearchResults {
 		t.Errorf("capSearchResults() returned %d items, want exactly %d", len(capped), maxSearchResults)
 	}

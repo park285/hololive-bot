@@ -20,7 +20,10 @@
 
 package handlercore
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type SubscriptionPort interface {
 	IsSubscribed(ctx context.Context, roomID string) (bool, error)
@@ -50,44 +53,139 @@ func NewSubscriptionFlow(cfg *SubscriptionFlowConfig) SubscriptionFlow {
 }
 
 func (f SubscriptionFlow) Subscribe(ctx context.Context, roomID, roomName string) error {
-	isSubscribed, err := f.cfg.Port.IsSubscribed(ctx, roomID)
+	isSubscribed, handled, err := f.subscriptionState(ctx, roomID)
 	if err != nil {
-		return f.cfg.OnCheckError(ctx, err)
+		return fmt.Errorf("check subscription state: %w", err)
+	}
+
+	if handled {
+		return nil
 	}
 
 	if isSubscribed {
-		return f.cfg.OnAlreadySubscribed(ctx)
+		if subscribedErr := f.alreadySubscribed(ctx); subscribedErr != nil {
+			return fmt.Errorf("%w", subscribedErr)
+		}
+
+		return nil
 	}
 
-	if err := f.cfg.Port.Subscribe(ctx, roomID, roomName); err != nil {
-		return f.cfg.OnSubscribeError(ctx, err)
+	handled, err = f.subscribePort(ctx, roomID, roomName)
+	if err != nil {
+		return fmt.Errorf("%w", err)
 	}
 
-	return f.cfg.OnSubscribed(ctx)
+	if handled {
+		return nil
+	}
+
+	if err := f.cfg.OnSubscribed(ctx); err != nil {
+		return fmt.Errorf("on subscribed: %w", err)
+	}
+
+	return nil
 }
 
 func (f SubscriptionFlow) Unsubscribe(ctx context.Context, roomID string) error {
-	isSubscribed, err := f.cfg.Port.IsSubscribed(ctx, roomID)
+	isSubscribed, handled, err := f.subscriptionState(ctx, roomID)
 	if err != nil {
-		return f.cfg.OnCheckError(ctx, err)
+		return fmt.Errorf("check subscription state: %w", err)
+	}
+
+	if handled {
+		return nil
 	}
 
 	if !isSubscribed {
-		return f.cfg.OnNotSubscribed(ctx)
+		if notSubscribedErr := f.notSubscribed(ctx); notSubscribedErr != nil {
+			return fmt.Errorf("%w", notSubscribedErr)
+		}
+
+		return nil
 	}
 
+	handled, err = f.unsubscribePort(ctx, roomID)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	if handled {
+		return nil
+	}
+
+	if err := f.cfg.OnUnsubscribed(ctx); err != nil {
+		return fmt.Errorf("on unsubscribed: %w", err)
+	}
+
+	return nil
+}
+
+func (f SubscriptionFlow) alreadySubscribed(ctx context.Context) error {
+	if err := f.cfg.OnAlreadySubscribed(ctx); err != nil {
+		return fmt.Errorf("on already subscribed: %w", err)
+	}
+
+	return nil
+}
+
+func (f SubscriptionFlow) subscribePort(ctx context.Context, roomID, roomName string) (bool, error) {
+	if err := f.cfg.Port.Subscribe(ctx, roomID, roomName); err != nil {
+		if replyErr := f.cfg.OnSubscribeError(ctx, err); replyErr != nil {
+			return true, fmt.Errorf("on subscribe error: %w", replyErr)
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (f SubscriptionFlow) notSubscribed(ctx context.Context) error {
+	if err := f.cfg.OnNotSubscribed(ctx); err != nil {
+		return fmt.Errorf("on not subscribed: %w", err)
+	}
+
+	return nil
+}
+
+func (f SubscriptionFlow) unsubscribePort(ctx context.Context, roomID string) (bool, error) {
 	if err := f.cfg.Port.Unsubscribe(ctx, roomID); err != nil {
-		return f.cfg.OnUnsubscribeError(ctx, err)
+		if replyErr := f.cfg.OnUnsubscribeError(ctx, err); replyErr != nil {
+			return true, fmt.Errorf("on unsubscribe error: %w", replyErr)
+		}
+
+		return true, nil
 	}
 
-	return f.cfg.OnUnsubscribed(ctx)
+	return false, nil
+}
+
+func (f SubscriptionFlow) subscriptionState(ctx context.Context, roomID string) (bool, bool, error) {
+	isSubscribed, err := f.cfg.Port.IsSubscribed(ctx, roomID)
+	if err == nil {
+		return isSubscribed, false, nil
+	}
+
+	if replyErr := f.cfg.OnCheckError(ctx, err); replyErr != nil {
+		return false, true, fmt.Errorf("on check error: %w", replyErr)
+	}
+
+	return false, true, nil
 }
 
 func (f SubscriptionFlow) Status(ctx context.Context, roomID string) error {
 	isSubscribed, err := f.cfg.Port.IsSubscribed(ctx, roomID)
 	if err != nil {
-		return f.cfg.OnCheckError(ctx, err)
+		if replyErr := f.cfg.OnCheckError(ctx, err); replyErr != nil {
+			return fmt.Errorf("on check error: %w", replyErr)
+		}
+
+		return nil
 	}
 
-	return f.cfg.OnStatus(ctx, isSubscribed)
+	if err := f.cfg.OnStatus(ctx, isSubscribed); err != nil {
+		return fmt.Errorf("on status: %w", err)
+	}
+
+	return nil
 }

@@ -80,10 +80,13 @@ func NewValkeyCostCeiling(cacheClient cache.Client, monthlyCeiling int64, logger
 	if cacheClient == nil || monthlyCeiling <= 0 {
 		return nil
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	initCostMetrics()
+
 	return &ValkeyCostCeiling{
 		cache:          cacheClient,
 		monthlyCeiling: monthlyCeiling,
@@ -100,6 +103,7 @@ func (v *ValkeyCostCeiling) RecordUsage(ctx context.Context, provider, model str
 	if v == nil || tokens <= 0 {
 		return
 	}
+
 	if llmCostTokensTotal != nil {
 		llmCostTokensTotal.WithLabelValues(provider).Add(float64(tokens))
 	}
@@ -110,14 +114,17 @@ func (v *ValkeyCostCeiling) RecordUsage(ctx context.Context, provider, model str
 		builder.Incrby().Key(key).Increment(tokens).Build(),
 		builder.Expire().Key(key).Seconds(int64(costCeilingKeyTTL.Seconds())).Build(),
 	)
+
 	if len(results) == 0 {
 		return
 	}
+
 	total, err := results[0].AsInt64()
 	if err != nil {
 		v.logger.WarnContext(ctx, "llm cost ceiling: failed to increment monthly token counter",
 			slog.String("provider", provider),
 			slog.String("error_type", llmErrorType(err)))
+
 		return
 	}
 
@@ -130,6 +137,7 @@ func (v *ValkeyCostCeiling) warnCeilingExceeded(ctx context.Context, provider, m
 	if llmCostCeilingExceed != nil {
 		llmCostCeilingExceed.Inc()
 	}
+
 	v.logger.WarnContext(ctx, "llm monthly token ceiling exceeded",
 		slog.String("provider", provider),
 		slog.String("model", model),

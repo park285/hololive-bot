@@ -22,6 +22,8 @@ package twitch
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -31,12 +33,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
-	jsonv2 "encoding/json/v2"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const maxUserLoginsPerRequest = 100
@@ -73,6 +74,7 @@ func NewClient(cfg *ClientConfig, logger *slog.Logger) *Client {
 	if cfg == nil {
 		cfg = &ClientConfig{}
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -83,18 +85,22 @@ func NewClient(cfg *ClientConfig, logger *slog.Logger) *Client {
 	if baseURL == "" {
 		baseURL = d.BaseURL
 	}
+
 	authURL := cfg.AuthURL
 	if authURL == "" {
 		authURL = d.AuthURL
 	}
+
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = d.Timeout
 	}
+
 	tokenRefreshSkew := cfg.TokenRefreshSkew
 	if tokenRefreshSkew == 0 {
 		tokenRefreshSkew = d.TokenRefreshSkew
 	}
+
 	maxBody := cfg.MaxResponseBodyBytes
 	if maxBody == 0 {
 		maxBody = settings.DefaultMaxResponseBodyBytes
@@ -152,10 +158,14 @@ func (c *Client) refreshToken(ctx context.Context) error {
 
 	tokenResp, err := c.requestToken(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("request token: %w", err)
 	}
 
-	return c.storeTokenResponse(tokenResp)
+	if err := c.storeTokenResponse(tokenResp); err != nil {
+		return fmt.Errorf("store token response: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) requestToken(ctx context.Context) (TokenResponse, error) {
@@ -175,11 +185,13 @@ func (c *Client) requestToken(ctx context.Context) (TokenResponse, error) {
 	if err != nil {
 		return TokenResponse{}, fmt.Errorf("do token request: %w", twitchTokenRequestError(err, resp == nil))
 	}
+
 	if resp == nil {
-		return TokenResponse{}, fmt.Errorf("do token request: nil response")
+		return TokenResponse{}, errors.New("do token request: nil response")
 	}
-	if err := validateTokenResponse(resp); err != nil {
-		return TokenResponse{}, err
+
+	if validateErr := validateTokenResponse(resp); validateErr != nil {
+		return TokenResponse{}, fmt.Errorf("validate token response: %w", validateErr)
 	}
 
 	defer func() {
@@ -194,6 +206,7 @@ func (c *Client) requestToken(ctx context.Context) (TokenResponse, error) {
 	}
 
 	var tokenResp TokenResponse
+
 	if err := jsonv2.Unmarshal(body, &tokenResp); err != nil {
 		return TokenResponse{}, fmt.Errorf("unmarshal token response: %w", err)
 	}
@@ -205,26 +218,30 @@ func twitchTokenRequestError(err error, nilResponse bool) error {
 	if nilResponse {
 		return fmt.Errorf("nil response: %w", err)
 	}
+
 	return err
 }
 
 func validateTokenResponse(resp *http.Response) error {
 	if resp == nil {
-		return fmt.Errorf("do token request: nil response")
+		return errors.New("do token request: nil response")
 	}
+
 	if resp.Body == nil {
-		return fmt.Errorf("do token request: nil response body")
+		return errors.New("do token request: nil response body")
 	}
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("token request failed: status %d", resp.StatusCode)
 	}
+
 	return nil
 }
 
 func (c *Client) storeTokenResponse(tokenResp TokenResponse) error {
 	accessToken := strings.TrimSpace(tokenResp.AccessToken)
 	if accessToken == "" {
-		return fmt.Errorf("twitch token response missing access_token")
+		return errors.New("twitch token response missing access_token")
 	}
 
 	if tokenResp.ExpiresIn <= 0 {
@@ -249,6 +266,7 @@ func (c *Client) currentTokenExpiry() time.Time {
 	if !ok {
 		return time.Time{}
 	}
+
 	return expiry
 }
 
@@ -257,6 +275,7 @@ func (c *Client) currentToken() string {
 	if !ok {
 		return ""
 	}
+
 	return token
 }
 

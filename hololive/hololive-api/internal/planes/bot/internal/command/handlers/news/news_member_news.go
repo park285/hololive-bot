@@ -26,12 +26,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type MemberNewsCommand struct {
@@ -56,28 +55,57 @@ func (c *MemberNewsCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	if c.Deps().MemberNews == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsServiceNotInitialized)
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsServiceNotInitialized); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
-	period := membernewscontracts.PeriodWeekly
-
-	if rawPeriod, ok := params["period"].(string); ok {
-		period = membernewscontracts.NormalizePeriod(membernewscontracts.Period(rawPeriod))
-	}
+	period := memberNewsPeriod(params)
 
 	digest, err := c.Deps().MemberNews.GenerateRoomDigest(ctx, cmdCtx.Room, period)
 	if err != nil {
-		if stdErrors.Is(err, membernewscontracts.ErrNoSubscribedMembers) {
-			return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsNoMembers(ctx))
+		if replyErr := c.replyMemberNewsFailure(ctx, cmdCtx.Room, err); replyErr != nil {
+			return fmt.Errorf("reply member news failure: %w", replyErr)
 		}
 
-		c.Deps().Logger.Error("Member news command failed",
-			privacylog.RoomIDAttr(cmdCtx.Room),
-			slog.Any("error", err),
-		)
-
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsQueryFailed)
+		return nil
 	}
 
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsDigest(ctx, digest))
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNewsDigest(ctx, digest)); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
+}
+
+func memberNewsPeriod(params map[string]any) membernewscontracts.Period {
+	rawPeriod, ok := params["period"].(string)
+	if !ok {
+		return membernewscontracts.PeriodWeekly
+	}
+
+	return membernewscontracts.NormalizePeriod(membernewscontracts.Period(rawPeriod))
+}
+
+func (c *MemberNewsCommand) replyMemberNewsFailure(ctx context.Context, room string, digestErr error) error {
+	if stdErrors.Is(digestErr, membernewscontracts.ErrNoSubscribedMembers) {
+		if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.FormatMemberNewsNoMembers(ctx)); err != nil {
+			return fmt.Errorf("send message: %w", err)
+		}
+
+		return nil
+	}
+
+	c.Deps().Logger.Error("Member news command failed",
+		privacylog.RoomIDAttr(room),
+		slog.Any("error", digestErr),
+	)
+
+	if err := c.Deps().SendError(ctx, room, messaging.ErrMemberNewsQueryFailed); err != nil {
+		return fmt.Errorf("send error: %w", err)
+	}
+
+	return nil
 }

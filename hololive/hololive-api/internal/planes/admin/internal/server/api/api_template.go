@@ -27,11 +27,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type messageResponse struct {
@@ -92,6 +93,7 @@ func (h *TemplateHandler) GetTemplates(c *gin.Context) {
 	templates, err := h.templateAdmin.List(ctx, keyPtr, channelPtr)
 	if err != nil {
 		sharedserver.RespondError(c, 500, "failed to list templates", nil)
+
 		return
 	}
 
@@ -112,6 +114,7 @@ func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, template.ErrTemplateKeyNotFound) {
 			sharedserver.RespondError(c, 404, "template not found", nil)
+
 			return
 		}
 
@@ -130,6 +133,7 @@ func (h *TemplateHandler) GetTemplateByKey(c *gin.Context) {
 
 func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 	var req templateUpsertRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
@@ -155,6 +159,7 @@ func (h *TemplateHandler) UpsertTemplate(c *gin.Context) {
 	tmpl, err := h.templateAdmin.Save(ctx, key, channelPtr, req.Body)
 	if err != nil {
 		h.respondTemplateSaveError(c, key, err)
+
 		return
 	}
 
@@ -181,6 +186,7 @@ func (h *TemplateHandler) DeleteTemplateOverride(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, template.ErrChannelIDRequired) {
 			sharedserver.RespondError(c, 400, "channel_id required for delete (cannot delete default template)", nil)
+
 			return
 		}
 
@@ -194,6 +200,7 @@ func (h *TemplateHandler) DeleteTemplateOverride(c *gin.Context) {
 
 func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 	var req templatePreviewRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
@@ -213,6 +220,7 @@ func (h *TemplateHandler) PreviewTemplate(c *gin.Context) {
 	rendered, sampleData, err := h.templateAdmin.Preview(ctx, key, req.Body)
 	if err != nil {
 		h.respondTemplatePreviewError(c, key, err)
+
 		return
 	}
 
@@ -259,6 +267,7 @@ func (h *TemplateHandler) GetTemplateRevisions(c *gin.Context) {
 	revisions, err := h.templateAdmin.GetRevisions(ctx, key, channelPtr)
 	if err != nil {
 		sharedserver.RespondError(c, 500, "failed to get revisions", nil)
+
 		return
 	}
 
@@ -282,6 +291,7 @@ func (h *TemplateHandler) GetTemplateRevision(c *gin.Context) {
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		sharedserver.RespondError(c, 400, "invalid revision id", nil)
+
 		return
 	}
 
@@ -289,6 +299,7 @@ func (h *TemplateHandler) GetTemplateRevision(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, template.ErrRevisionNotFound) {
 			sharedserver.RespondError(c, 404, "revision not found", nil)
+
 			return
 		}
 

@@ -37,30 +37,32 @@ func TestMember_GetAllAliases(t *testing.T) {
 		{
 			// Aliases가 nil → 빈 슬라이스 반환
 			name:   "nil Aliases",
-			member: &domain.Member{Name: "페코라", Aliases: nil},
+			member: &domain.Member{Name: testNamePekora, Aliases: nil},
 			want:   []string{},
 		},
 		{
 			// Ko, Ja 별명 모두 있을 때 → 합산 반환 (Ko 먼저)
 			name: "Ko, Ja 별명 모두 있음",
 			member: &domain.Member{
-				Name: "페코라",
+				Name: testNamePekora,
 				Aliases: &domain.Aliases{
-					Ko: []string{"페코", "페코라"},
+					Ko: []string{"페코", testNamePekora},
 					Ja: []string{"ぺこら", "ぺこ"},
 				},
 			},
-			want: []string{"페코", "페코라", "ぺこら", "ぺこ"},
+			want: []string{"페코", testNamePekora, "ぺこら", "ぺこ"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.member.GetAllAliases()
 			if len(got) != len(tt.want) {
 				t.Fatalf("GetAllAliases() 길이 = %d, want %d", len(got), len(tt.want))
 			}
+
 			for i, v := range got {
 				if v != tt.want[i] {
 					t.Errorf("GetAllAliases()[%d] = %q, want %q", i, v, tt.want[i])
@@ -76,7 +78,7 @@ func TestMember_HasAlias(t *testing.T) {
 	member := &domain.Member{
 		Name: "우사다 페코라",
 		Aliases: &domain.Aliases{
-			Ko: []string{"페코", "페코라"},
+			Ko: []string{"페코", testNamePekora},
 			Ja: []string{"ぺこら", "ぺこ"},
 		},
 	}
@@ -109,6 +111,7 @@ func TestMember_HasAlias(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := member.HasAlias(tt.alias)
 			if got != tt.want {
 				t.Errorf("HasAlias(%q) = %v, want %v", tt.alias, got, tt.want)
@@ -128,13 +131,13 @@ func TestMember_GetOrg(t *testing.T) {
 		{
 			// Org 빈 문자열 → 기본값 "Hololive" 반환
 			name:   "빈 Org",
-			member: &domain.Member{Name: "테스트", Org: ""},
+			member: &domain.Member{Name: testName, Org: ""},
 			want:   "Hololive",
 		},
 		{
 			// Org에 값이 있으면 해당 값 반환
 			name:   "비어있지 않은 Org",
-			member: &domain.Member{Name: "테스트", Org: "Nijisanji"},
+			member: &domain.Member{Name: testName, Org: "Nijisanji"},
 			want:   "Nijisanji",
 		},
 	}
@@ -142,6 +145,7 @@ func TestMember_GetOrg(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.member.GetOrg()
 			if got != tt.want {
 				t.Errorf("GetOrg() = %q, want %q", got, tt.want)
@@ -175,6 +179,7 @@ func TestMember_GetDisplayName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.member.GetDisplayName()
 			if got != tt.want {
 				t.Errorf("GetDisplayName() = %q, want %q", got, tt.want)
@@ -207,6 +212,7 @@ func TestMember_GetChzzkLiveURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.member.GetChzzkLiveURL()
 			if got != tt.want {
 				t.Errorf("GetChzzkLiveURL() = %q, want %q", got, tt.want)

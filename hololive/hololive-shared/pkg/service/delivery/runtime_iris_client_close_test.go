@@ -1,7 +1,6 @@
 package delivery
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,8 +18,8 @@ func TestRuntimeIrisClientCloseRejectsSendAfterClose(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRuntimeIrisClient(server.URL, "bot-token", "", nil, iris.WithHTTPClient(server.Client()), iris.WithTransport("http1"))
-	if err := client.SendMessage(context.Background(), "room-1", "hello"); err != nil {
+	client := NewRuntimeIrisClient(server.URL, testBotToken, "", nil, iris.WithHTTPClient(server.Client()), iris.WithTransport("http1"))
+	if err := client.SendMessage(t.Context(), testRoomID, "hello"); err != nil {
 		t.Fatalf("SendMessage() before Close error = %v, want nil", err)
 	}
 
@@ -28,7 +27,7 @@ func TestRuntimeIrisClientCloseRejectsSendAfterClose(t *testing.T) {
 		t.Fatalf("Close() error = %v, want nil", err)
 	}
 
-	err := client.SendMessage(context.Background(), "room-1", "world")
+	err := client.SendMessage(t.Context(), testRoomID, "world")
 	if err == nil || !strings.Contains(err.Error(), "client is closed") {
 		t.Fatalf("SendMessage() after Close error = %v, want containing %q", err, "client is closed")
 	}

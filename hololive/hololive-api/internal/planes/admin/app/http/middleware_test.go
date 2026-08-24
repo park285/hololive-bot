@@ -1,11 +1,11 @@
 package apphttp
 
 import (
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,6 +21,7 @@ func TestCorsOriginGuard_ForbiddenResponseContract(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/test", http.NoBody)
 	req.Header.Set("Origin", "https://blocked.example")
+
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -29,6 +30,7 @@ func TestCorsOriginGuard_ForbiddenResponseContract(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}

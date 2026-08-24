@@ -25,17 +25,20 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 )
 
 func generateToken(prefix string, byteLen int) (string, error) {
 	if byteLen <= 0 {
-		return "", fmt.Errorf("byteLen must be positive")
+		return "", errors.New("byteLen must be positive")
 	}
+
 	b := make([]byte, byteLen)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("failed to read random bytes: %w", err)
 	}
+
 	return prefix + base64.RawURLEncoding.EncodeToString(b), nil
 }
 

@@ -50,6 +50,7 @@ func (s *stubMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
 func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	tempDir := t.TempDir()
 	allowlistPath := filepath.Join(tempDir, "allowlist.json")
+
 	if err := os.WriteFile(allowlistPath, []byte(`{"official_accounts":["hololivetv"]}`), 0o600); err != nil {
 		t.Fatalf("write allowlist: %v", err)
 	}
@@ -63,6 +64,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("official domain validate error: %v", err)
 	}
+
 	if tier != model.SourceTierOfficial {
 		t.Fatalf("expected official tier, got %s", tier)
 	}
@@ -71,19 +73,21 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("media domain validate error: %v", err)
 	}
+
 	if tier != model.SourceTierMedia {
 		t.Fatalf("expected media tier, got %s", tier)
 	}
 
 	_, _, err = validator.ValidateSourceURL("https://x.com/not_allowed/status/1")
 	if err == nil {
-		t.Fatalf("expected x account allowlist error")
+		t.Fatal("expected x account allowlist error")
 	}
 
 	tier, _, err = validator.ValidateSourceURL("https://x.com/hololivetv/status/1")
 	if err != nil {
 		t.Fatalf("allowed x account validate error: %v", err)
 	}
+
 	if tier != model.SourceTierOfficial {
 		t.Fatalf("expected x account to be official, got %s", tier)
 	}
@@ -91,6 +95,7 @@ func TestSourceValidator_XAllowlistAndDomainValidation(t *testing.T) {
 
 func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	memberData := &stubMemberDataProvider{channelIDs: []string{"UC_TEST_OFFICIAL"}}
+
 	validator, err := NewSourceValidator("", memberData, nil)
 	if err != nil {
 		t.Fatalf("new source validator: %v", err)
@@ -100,6 +105,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtube official validate error: %v", err)
 	}
+
 	if tier != model.SourceTierOfficial {
 		t.Fatalf("expected official tier for allowed channel, got %s", tier)
 	}
@@ -108,6 +114,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtube unknown channel validate error: %v", err)
 	}
+
 	if tier != model.SourceTierCommunity {
 		t.Fatalf("expected community tier for unknown channel, got %s", tier)
 	}
@@ -117,6 +124,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtu.be validate error: %v", err)
 	}
+
 	if tier != model.SourceTierCommunity {
 		t.Fatalf("expected community tier for youtu.be short link (unverifiable channel), got %s", tier)
 	}
@@ -125,6 +133,7 @@ func TestSourceValidator_YouTubeOfficialChannelClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("youtube watch validate error: %v", err)
 	}
+
 	if tier != model.SourceTierCommunity {
 		t.Fatalf("expected community tier for youtube watch link (unverifiable channel), got %s", tier)
 	}
@@ -137,9 +146,10 @@ func TestSourceValidator_HasCorroboration(t *testing.T) {
 	}
 
 	if !validator.HasCorroboration("참고: https://hololive.hololivepro.com/news/123") {
-		t.Fatalf("expected corroboration to be true")
+		t.Fatal("expected corroboration to be true")
 	}
+
 	if validator.HasCorroboration("비공식 글만 있음") {
-		t.Fatalf("expected corroboration to be false")
+		t.Fatal("expected corroboration to be false")
 	}
 }

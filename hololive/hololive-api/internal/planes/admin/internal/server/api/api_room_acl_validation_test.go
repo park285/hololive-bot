@@ -37,6 +37,7 @@ func TestRoomHandlerSetACLRejectsInvalidModeBeforeEnabledMutation(t *testing.T) 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
+
 	if !strings.Contains(rec.Body.String(), "invalid ACL mode") {
 		t.Fatalf("body=%s want invalid ACL mode response", rec.Body.String())
 	}

@@ -76,12 +76,15 @@ func DefaultConfig() Config {
 func NormalizeDispatcherConfig(config *Config) Config {
 	if config == nil {
 		defaults := DefaultConfig()
+
 		config = &defaults
 	}
+
 	defaults := DefaultConfig()
 	normalizeDispatcherCoreConfig(config, &defaults)
 	normalizeDispatcherDeliveryConfig(config, &defaults)
 	normalizeDispatcherTelemetryConfig(config, &defaults)
+
 	return *config
 }
 
@@ -89,24 +92,31 @@ func normalizeDispatcherCoreConfig(config, defaults *Config) {
 	if config.BatchSize <= 0 {
 		config.BatchSize = defaults.BatchSize
 	}
+
 	if config.LockTimeout <= 0 {
 		config.LockTimeout = defaults.LockTimeout
 	}
+
 	if config.PollInterval <= 0 {
 		config.PollInterval = defaults.PollInterval
 	}
+
 	if config.AggregateSyncInterval <= 0 {
 		config.AggregateSyncInterval = defaults.AggregateSyncInterval
 	}
+
 	if config.ReviveInterval <= 0 {
 		config.ReviveInterval = defaults.ReviveInterval
 	}
+
 	if config.ReviveFreshnessWindow <= 0 {
 		config.ReviveFreshnessWindow = defaults.ReviveFreshnessWindow
 	}
+
 	if config.ClaimFreshnessWindow <= 0 {
 		config.ClaimFreshnessWindow = defaults.ClaimFreshnessWindow
 	}
+
 	minClaimFreshnessWindow := config.ReviveFreshnessWindow + config.ReviveInterval
 	if config.ClaimFreshnessWindow < minClaimFreshnessWindow {
 		config.ClaimFreshnessWindow = minClaimFreshnessWindow
@@ -117,9 +127,11 @@ func normalizeDispatcherDeliveryConfig(config, defaults *Config) {
 	if config.DeliveryParallelism <= 0 {
 		config.DeliveryParallelism = defaults.DeliveryParallelism
 	}
+
 	if config.DeliverySendTimeout <= 0 {
 		config.DeliverySendTimeout = defaults.DeliverySendTimeout
 	}
+
 	if config.SubscriberLookupParallelism <= 0 {
 		config.SubscriberLookupParallelism = defaults.SubscriberLookupParallelism
 	}
@@ -129,15 +141,19 @@ func normalizeDispatcherTelemetryConfig(config, defaults *Config) {
 	if config.TelemetryBackfillBatch <= 0 {
 		config.TelemetryBackfillBatch = defaults.TelemetryBackfillBatch
 	}
+
 	if config.TelemetryPollInterval <= 0 {
 		config.TelemetryPollInterval = defaults.TelemetryPollInterval
 	}
+
 	if config.TelemetryFlushBatch <= 0 {
 		config.TelemetryFlushBatch = defaults.TelemetryFlushBatch
 	}
+
 	if config.TelemetryRetryBackoff <= 0 {
 		config.TelemetryRetryBackoff = defaults.TelemetryRetryBackoff
 	}
+
 	if config.TelemetryRetention <= 0 {
 		config.TelemetryRetention = defaults.TelemetryRetention
 	}

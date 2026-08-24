@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	"github.com/park285/shared-go/v2/pkg/httputil"
+
+	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 )
 
 type Client struct {
@@ -31,19 +32,21 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("request: %w", err)
 	}
+
 	if resp == nil {
-		return false, fmt.Errorf("request: nil response")
+		return false, errors.New("request: nil response")
 	}
 
-	if err := c.HTTPClient.CheckStatus(resp); err != nil {
+	if checkErr := c.HTTPClient.CheckStatus(resp); checkErr != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			return false, errors.Join(fmt.Errorf("check status: %w", err), fmt.Errorf("close response body: %w", closeErr))
+			return false, errors.Join(fmt.Errorf("check status: %w", checkErr), fmt.Errorf("close response body: %w", closeErr))
 		}
-		return false, fmt.Errorf("check status: %w", err)
+
+		return false, fmt.Errorf("check status: %w", checkErr)
 	}
 
-	var parsed subscription.SubscriptionStatusResponse
-	if err := c.HTTPClient.DecodeJSON(resp, &parsed); err != nil {
+	parsed, err := c.HTTPClient.DecodeJSON[subscription.SubscriptionStatusResponse](resp)
+	if err != nil {
 		return false, fmt.Errorf("decode response: %w", err)
 	}
 
@@ -53,6 +56,7 @@ func (c *Client) IsSubscribed(ctx context.Context, roomID string) (bool, error) 
 func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 	roomID = strings.TrimSpace(roomID)
 	roomName = strings.TrimSpace(roomName)
+
 	if roomID == "" {
 		return errors.New("room id is required")
 	}
@@ -69,14 +73,16 @@ func (c *Client) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
+
 	if resp == nil {
-		return fmt.Errorf("request: nil response")
+		return errors.New("request: nil response")
 	}
 
 	if err := c.HTTPClient.CheckStatus(resp); err != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			return errors.Join(fmt.Errorf("check status: %w", err), fmt.Errorf("close response body: %w", closeErr))
 		}
+
 		return fmt.Errorf("check status: %w", err)
 	}
 
@@ -102,14 +108,16 @@ func (c *Client) Unsubscribe(ctx context.Context, roomID string) error {
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
+
 	if resp == nil {
-		return fmt.Errorf("request: nil response")
+		return errors.New("request: nil response")
 	}
 
 	if err := c.HTTPClient.CheckStatus(resp); err != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			return errors.Join(fmt.Errorf("check status: %w", err), fmt.Errorf("close response body: %w", closeErr))
 		}
+
 		return fmt.Errorf("check status: %w", err)
 	}
 

@@ -73,7 +73,7 @@ func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
 }
 
-// tryClaimKey: SETNX 기반 키 선점 (Valkey 장애 시 fail-closed)
+// SETNX 기반 키 선점(Valkey 장애 시 fail-closed).
 func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) bool {
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
 	if err != nil {
@@ -81,12 +81,15 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 			slog.String("claim_key_token", privacylog.Pseudonym(key)),
 			slog.String("error", err.Error()),
 		)
+
 		return false
 	}
+
 	s.logger.Debug("dedup claim result",
 		slog.String("claim_key_token", privacylog.Pseudonym(key)),
 		slog.Bool("acquired", acquired),
 	)
+
 	return acquired
 }
 

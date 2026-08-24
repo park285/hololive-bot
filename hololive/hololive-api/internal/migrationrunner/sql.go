@@ -14,6 +14,7 @@ func mustSQL(name string) string {
 	if err != nil {
 		panic(err)
 	}
+
 	return nonEmptyAsset("SQL", name, string(query))
 }
 
@@ -22,6 +23,7 @@ func mustPattern(name string) string {
 	if err != nil {
 		panic(err)
 	}
+
 	return nonEmptyAsset("pattern", name, string(pattern))
 }
 
@@ -30,5 +32,6 @@ func nonEmptyAsset(kind, name, value string) string {
 	if text == "" {
 		panic(fmt.Sprintf("empty %s asset %s", kind, name))
 	}
+
 	return text
 }

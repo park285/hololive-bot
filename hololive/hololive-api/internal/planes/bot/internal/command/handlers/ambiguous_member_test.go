@@ -25,7 +25,6 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,6 +32,7 @@ import (
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type subscriberHolodexStub struct {
@@ -53,13 +53,13 @@ func (s *subscriberHolodexStub) GetChannelSchedule(context.Context, string, int,
 
 func (s *subscriberHolodexStub) GetChannel(_ context.Context, channelID string) (*domain.Channel, error) {
 	count := s.subscriberCount
-	return &domain.Channel{ID: channelID, Name: "Aqua", SubscriberCount: &count}, nil
+	return &domain.Channel{ID: channelID, Name: testMemberAqua, SubscriberCount: &count}, nil
 }
 
 func ambiguousMembersFixture() []*domain.Member {
 	return []*domain.Member{
-		{ChannelID: "ch-aqua-holo", Name: "Aqua", Org: "Hololive"},
-		{ChannelID: "ch-aqua-indie", Name: "Aqua", Org: "Independents"},
+		{ChannelID: "ch-aqua-holo", Name: testMemberAqua, Org: "Hololive"},
+		{ChannelID: "ch-aqua-indie", Name: testMemberAqua, Org: "Independents"},
 	}
 }
 
@@ -73,6 +73,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) str
 	t.Helper()
 
 	var captured string
+
 	deps := &handlercore.Dependencies{
 		Alarm:     &alarmListViewerStub{},
 		Matcher:   matcherService,
@@ -83,14 +84,15 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) str
 		},
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("alarm ambiguous path should use SendMessage, not SendError")
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"action": "add",
-		"member": "Aqua",
+	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		testParamAction: "add",
+		paramMember:     testMemberAqua,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, captured, "alarm should emit ambiguous-member message")
@@ -105,6 +107,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 		gotMessage  string
 		sendErrSeen bool
 	)
+
 	deps := &handlercore.Dependencies{
 		Holodex:   &liveStreamProviderStub{},
 		Matcher:   newAmbiguousMatcher(),
@@ -120,8 +123,8 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Aqua",
+	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "live should not fall through to a not-found error on ambiguity")
@@ -135,6 +138,7 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		gotMessage  string
 		sendErrSeen bool
 	)
+
 	deps := &handlercore.Dependencies{
 		Holodex:   &scheduleStreamProviderStub{},
 		Matcher:   newAmbiguousMatcher(),
@@ -150,8 +154,8 @@ func TestScheduleCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewScheduleCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Aqua",
+	err := NewScheduleCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "schedule should not fall through to a not-found error on ambiguity")
@@ -165,6 +169,7 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		gotMessage  string
 		sendErrSeen bool
 	)
+
 	deps := &handlercore.Dependencies{
 		Holodex:   &upcomingStreamProviderStub{},
 		Matcher:   newAmbiguousMatcher(),
@@ -180,8 +185,8 @@ func TestUpcomingCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *test
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewUpcomingCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Aqua",
+	err := NewUpcomingCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "upcoming should not fall through to a not-found error on ambiguity")
@@ -195,6 +200,7 @@ func TestSubscriberCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *te
 		gotMessage  string
 		sendErrSeen bool
 	)
+
 	deps := &handlercore.Dependencies{
 		Holodex:     &subscriberHolodexStub{subscriberCount: 12345},
 		Matcher:     newAmbiguousMatcher(),
@@ -211,8 +217,8 @@ func TestSubscriberCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *te
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewSubscriberCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Aqua",
+	err := NewSubscriberCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
 	assert.False(t, sendErrSeen, "subscriber should not fall through to a not-found error on ambiguity")

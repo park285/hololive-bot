@@ -49,6 +49,7 @@ func TestChzzkLiveURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := domain.ChzzkLiveURL(tt.channelID); got != tt.want {
 				t.Errorf("ChzzkLiveURL(%q) = %q, want %q", tt.channelID, got, tt.want)
 			}
@@ -79,6 +80,7 @@ func TestYouTubeWatchURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := domain.YouTubeWatchURL(tt.videoID); got != tt.want {
 				t.Errorf("YouTubeWatchURL(%q) = %q, want %q", tt.videoID, got, tt.want)
 			}

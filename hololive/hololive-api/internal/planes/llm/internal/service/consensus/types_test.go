@@ -7,7 +7,7 @@ import (
 )
 
 func TestStageContextCapsToParentDeadline(t *testing.T) {
-	parent, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	parent, cancel := context.WithTimeout(t.Context(), 1500*time.Millisecond)
 	defer cancel()
 
 	parentDeadline, ok := parent.Deadline()
@@ -19,6 +19,7 @@ func TestStageContextCapsToParentDeadline(t *testing.T) {
 	if !ok {
 		t.Fatal("StageContext() ok = false, want true")
 	}
+
 	defer childCancel()
 
 	childDeadline, ok := child.Deadline()
@@ -33,16 +34,18 @@ func TestStageContextCapsToParentDeadline(t *testing.T) {
 }
 
 func TestStageContextReturnsFalseWhenNoBudgetLeft(t *testing.T) {
-	parent, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	parent, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
 	defer cancel()
 
 	child, childCancel, ok := StageContext(parent, 10*time.Second)
 	if ok {
 		t.Fatal("StageContext() ok = true, want false")
 	}
+
 	if child != nil {
 		t.Fatalf("StageContext() child = %v, want nil", child)
 	}
+
 	if childCancel != nil {
 		t.Fatal("StageContext() cancel should be nil when budget is exhausted")
 	}
@@ -55,20 +58,20 @@ func TestNormalizeSeverity(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"critical", "critical"},
-		{"warning", "warning"},
-		{"info", "info"},
-		{"CRITICAL", "critical"},
-		{"Warning", "warning"},
-		{"INFO", "info"},
-		{"  critical  ", "critical"},
-		{"\tWARNING\n", "warning"},
-		{"", "info"},
-		{"   ", "info"},
-		{"unknown", "info"},
-		{"high", "info"},
-		{"criticalish", "info"},
-		{"crit", "info"},
+		{testSeverityCritical, testSeverityCritical},
+		{testSeverityWarning, testSeverityWarning},
+		{testSeverityInfo, testSeverityInfo},
+		{"CRITICAL", testSeverityCritical},
+		{"Warning", testSeverityWarning},
+		{"INFO", testSeverityInfo},
+		{"  critical  ", testSeverityCritical},
+		{"\tWARNING\n", testSeverityWarning},
+		{"", testSeverityInfo},
+		{"   ", testSeverityInfo},
+		{"unknown", testSeverityInfo},
+		{"high", testSeverityInfo},
+		{"criticalish", testSeverityInfo},
+		{"crit", testSeverityInfo},
 	}
 
 	for _, c := range cases {
@@ -88,11 +91,11 @@ func TestHasCriticalIssues(t *testing.T) {
 	}{
 		{"nil", nil, false},
 		{"empty", []ReviewIssue{}, false},
-		{"single critical", []ReviewIssue{{Severity: "critical"}}, true},
-		{"single warning", []ReviewIssue{{Severity: "warning"}}, false},
-		{"single info", []ReviewIssue{{Severity: "info"}}, false},
-		{"critical among others", []ReviewIssue{{Severity: "info"}, {Severity: "critical"}, {Severity: "warning"}}, true},
-		{"none critical", []ReviewIssue{{Severity: "warning"}, {Severity: "info"}}, false},
+		{"single critical", []ReviewIssue{{Severity: testSeverityCritical}}, true},
+		{"single warning", []ReviewIssue{{Severity: testSeverityWarning}}, false},
+		{"single info", []ReviewIssue{{Severity: testSeverityInfo}}, false},
+		{"critical among others", []ReviewIssue{{Severity: testSeverityInfo}, {Severity: testSeverityCritical}, {Severity: testSeverityWarning}}, true},
+		{"none critical", []ReviewIssue{{Severity: testSeverityWarning}, {Severity: testSeverityInfo}}, false},
 		{"uppercase critical not matched", []ReviewIssue{{Severity: "CRITICAL"}}, false},
 		{"empty severity", []ReviewIssue{{Severity: ""}}, false},
 	}
@@ -122,13 +125,13 @@ func TestNeedsAdjudication(t *testing.T) {
 		},
 		{
 			"approved with critical issue",
-			&ReviewVerdict{Approved: true, Confidence: 1.0, Issues: []ReviewIssue{{Severity: "critical"}}},
+			&ReviewVerdict{Approved: true, Confidence: 1.0, Issues: []ReviewIssue{{Severity: testSeverityCritical}}},
 			0.85,
 			true,
 		},
 		{
 			"approved high confidence no critical",
-			&ReviewVerdict{Approved: true, Confidence: 0.9, Issues: []ReviewIssue{{Severity: "warning"}}},
+			&ReviewVerdict{Approved: true, Confidence: 0.9, Issues: []ReviewIssue{{Severity: testSeverityWarning}}},
 			0.85,
 			false,
 		},
@@ -152,7 +155,7 @@ func TestNeedsAdjudication(t *testing.T) {
 		},
 		{
 			"not approved overrides critical and confidence",
-			&ReviewVerdict{Approved: false, Confidence: 0.0, Issues: []ReviewIssue{{Severity: "critical"}}},
+			&ReviewVerdict{Approved: false, Confidence: 0.0, Issues: []ReviewIssue{{Severity: testSeverityCritical}}},
 			0.85,
 			true,
 		},
@@ -170,7 +173,7 @@ func TestNeedsAdjudication(t *testing.T) {
 		},
 		{
 			"approved critical takes priority over confidence pass",
-			&ReviewVerdict{Approved: true, Confidence: 1.0, Issues: []ReviewIssue{{Severity: "info"}, {Severity: "critical"}}},
+			&ReviewVerdict{Approved: true, Confidence: 1.0, Issues: []ReviewIssue{{Severity: testSeverityInfo}, {Severity: testSeverityCritical}}},
 			0.85,
 			true,
 		},

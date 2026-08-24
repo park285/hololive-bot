@@ -12,6 +12,7 @@ func (r *Repository) ListPostLatencyPeriodSummaries(ctx context.Context, periods
 	if err != nil {
 		return nil, fmt.Errorf("list post latency period summaries: %w", err)
 	}
+
 	if len(normalizedPeriods) == 0 {
 		return []analytics.PostLatencyPeriodSummary{}, nil
 	}

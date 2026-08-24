@@ -26,8 +26,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
+	chzzk2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/chzzk"
+	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -35,12 +37,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-
-	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
-	chzzk2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/chzzk"
-	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
@@ -102,7 +100,7 @@ func NewRuntimeScheduler(
 	logger *slog.Logger,
 ) (*RuntimeScheduler, error) {
 	if err := validateRuntimeSchedulerDeps(cacheClient, holodexService, chzzkClient, twitchClient, alarmCRUD); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate runtime scheduler deps: %w", err)
 	}
 
 	logger = runtimeSchedulerLogger(logger)
@@ -124,7 +122,7 @@ func NewRuntimeScheduler(
 		logger,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("runtime scheduler youtube checker: %w", err)
 	}
 
 	chzzkChecker, err := chzzk2.NewChzzkChecker(cacheClient, chzzkClient, logger)
@@ -132,16 +130,42 @@ func NewRuntimeScheduler(
 		return nil, fmt.Errorf("new runtime scheduler: create chzzk checker: %w", err)
 	}
 
-	twitchChecker, err := newOptionalTwitchChecker(cacheClient, twitchClient, twitchEnabled, logger)
-	if err != nil {
-		return nil, err
+	twitchResult := buildOptionalTwitchChecker(cacheClient, twitchClient, twitchEnabled, logger)
+	if twitchResult.err != nil {
+		return nil, fmt.Errorf("build optional twitch checker: %w", twitchResult.err)
 	}
+
 	notifierService, err := checknotifier.NewNotifier(dedupService, queuePublisher, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
-	return newRuntimeSchedulerInstance(cacheClient, alarmCRUD, youtubeChecker, chzzkChecker, twitchChecker, notifierService, dedupService, youtubeInterval, logger), nil
+	return newRuntimeSchedulerInstance(cacheClient, alarmCRUD, youtubeChecker, chzzkChecker, twitchResult.checker, notifierService, dedupService, youtubeInterval, logger), nil
+}
+
+type optionalTwitchCheckerResult struct {
+	checker checking.Runner
+	err     error
+}
+
+func buildOptionalTwitchChecker(
+	cacheClient cache.Client,
+	twitchClient *twitch.Client,
+	enabled bool,
+	logger *slog.Logger,
+) optionalTwitchCheckerResult {
+	if !enabled {
+		logger.Info("Twitch alarm loop disabled")
+
+		return optionalTwitchCheckerResult{}
+	}
+
+	checker, err := newTwitchChecker(cacheClient, twitchClient, logger)
+	if err != nil {
+		return optionalTwitchCheckerResult{err: fmt.Errorf("new twitch checker: %w", err)}
+	}
+
+	return optionalTwitchCheckerResult{checker: checker}
 }
 
 func newRuntimeSchedulerYouTubeChecker(

@@ -22,6 +22,7 @@ package member
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -90,13 +91,17 @@ type memoryMember struct {
 func NewMemberCache(ctx context.Context, repository *Repository, cacheService cache.KeyValueCache, logger *slog.Logger, config CacheConfig) (*Cache, error) {
 	ctx = memberCacheContext(ctx)
 	config = normalizeMemberCacheConfig(config)
+
 	mc := newMemberCache(repository, cacheService, logger, config)
+
 	if err := mc.configureEpoch(ctx, cacheService); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("configure epoch: %w", err)
 	}
+
 	if config.WarmUp {
 		mc.warmUpAtStartup(ctx)
 	}
+
 	return mc, nil
 }
 
@@ -104,6 +109,7 @@ func memberCacheContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}
+
 	return ctx
 }
 
@@ -115,15 +121,19 @@ func normalizeMemberCacheConfig(config CacheConfig) CacheConfig {
 	if config.ValkeyTTL == 0 {
 		config.ValkeyTTL = constants.MemberCacheDefaults.ValkeyTTL
 	}
+
 	if config.WarmUpChunkSize == 0 {
 		config.WarmUpChunkSize = constants.MemberCacheDefaults.WarmUpChunkSize
 	}
+
 	if config.WarmUpMaxGoroutines == 0 {
 		config.WarmUpMaxGoroutines = constants.MemberCacheDefaults.WarmUpMaxGoroutines
 	}
+
 	if config.EpochReconcileInterval == 0 {
 		config.EpochReconcileInterval = constants.MemberCacheDefaults.EpochReconcileInterval
 	}
+
 	return config
 }
 
@@ -146,17 +156,21 @@ func (c *Cache) configureEpoch(ctx context.Context, cacheService cache.KeyValueC
 	if cacheService == nil {
 		return nil
 	}
+
 	lowLevel, ok := cacheService.(cache.LowLevelCache)
 	if !ok || lowLevel.GetClient() == nil {
-		return fmt.Errorf("member cache requires low-level Valkey access for epoch coordination")
+		return errors.New("member cache requires low-level Valkey access for epoch coordination")
 	}
+
 	c.epoch = newValkeyMemberEpochAuthority(lowLevel.GetClient())
 	if err := c.reconcileEpoch(ctx, epochReconcileStartup); err != nil && c.logger != nil {
 		c.logger.Warn("member cache epoch unavailable at startup; cache bypass enabled", slog.Any("error", err))
 	}
+
 	panicguard.Go(c.logger, "member-cache-epoch-subscription", func() {
 		c.runEpochReconciliation(memberEpochRuntimeContext(ctx))
 	})
+
 	return nil
 }
 
@@ -172,8 +186,14 @@ func (c *Cache) cacheEnabled() bool {
 
 func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
 	if c.cacheBypassRequired("channel") {
-		return c.repository.FindByChannelID(ctx, channelID)
+		out, err := c.repository.FindByChannelID(ctx, channelID)
+		if err != nil {
+			return nil, fmt.Errorf("find by channel ID: %w", err)
+		}
+
+		return out, nil
 	}
+
 	if member, ok := c.loadChannelFromMemory(channelID); ok {
 		return member, nil
 	}
@@ -185,21 +205,26 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 
 	dbMember, err := c.repository.FindByChannelID(ctx, channelID)
 	if err != nil {
-		return nil, err
-	}
-	if dbMember == nil {
-		return nil, nil
+		return nil, fmt.Errorf("find by channel ID: %w", err)
 	}
 
-	c.cacheMember(ctx, dbMember, generation, "")
+	if dbMember != nil {
+		c.cacheMember(ctx, dbMember, generation, "")
+	}
 
 	return dbMember, nil
 }
 
 func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, error) {
 	if c.cacheBypassRequired("name") {
-		return c.repository.FindByName(ctx, name)
+		out, err := c.repository.FindByName(ctx, name)
+		if err != nil {
+			return nil, fmt.Errorf("find by name: %w", err)
+		}
+
+		return out, nil
 	}
+
 	if member, ok := c.loadNameFromMemory(name); ok {
 		return member, nil
 	}
@@ -211,13 +236,13 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 
 	dbMember, err := c.repository.FindByName(ctx, name)
 	if err != nil {
-		return nil, err
-	}
-	if dbMember == nil {
-		return nil, nil
+		return nil, fmt.Errorf("find by name: %w", err)
 	}
 
-	c.cacheMember(ctx, dbMember, generation, "")
+	if dbMember != nil {
+		c.cacheMember(ctx, dbMember, generation, "")
+	}
+
 	return dbMember, nil
 }
 
@@ -229,10 +254,13 @@ func (c *Cache) loadChannelFromMemory(channelID string) (*domain.Member, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	if member, ok := val.(*memoryMember); ok {
 		return member.member, true
 	}
+
 	c.byChannelID.Delete(channelID)
+
 	return nil, false
 }
 
@@ -244,10 +272,13 @@ func (c *Cache) loadNameFromMemory(name string) (*domain.Member, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	if member, ok := val.(*memoryMember); ok {
 		return member.member, true
 	}
+
 	c.byName.Delete(name)
+
 	return nil, false
 }
 
@@ -255,21 +286,28 @@ func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID s
 	if !c.distributedCacheUsable() {
 		return nil
 	}
+
 	c.snapshotMu.RLock()
+
 	defer c.snapshotMu.RUnlock()
+
 	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
 
 	cacheKey := c.epochDataKey(memberChannelKeyPrefix + channelID)
+
 	var member domain.Member
+
 	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
 		owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
 		if owned != nil {
 			c.storePointMemberInMemoryLocked(owned, generation)
 		}
+
 		return owned
 	}
+
 	return nil
 }
 
@@ -277,100 +315,29 @@ func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, g
 	if !c.distributedCacheUsable() {
 		return nil
 	}
+
 	c.snapshotMu.RLock()
+
 	defer c.snapshotMu.RUnlock()
+
 	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
 
 	cacheKey := c.epochDataKey(memberNameKeyPrefix + name)
+
 	var member domain.Member
+
 	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
 		owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
 		if owned != nil {
 			c.storePointMemberInMemoryLocked(owned, generation)
 		}
+
 		return owned
 	}
+
 	return nil
 }
 
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.
-func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, error) {
-	if c.cacheBypassRequired("alias") {
-		return c.repository.FindByAlias(ctx, alias)
-	}
-	generation := c.currentSnapshotGeneration()
-	if member := c.getAliasFromCache(ctx, alias, generation); member != nil {
-		return member, nil
-	}
-
-	dbMember, err := c.repository.FindByAlias(ctx, alias)
-	if err != nil {
-		return nil, err
-	}
-	if dbMember == nil {
-		return nil, nil
-	}
-
-	c.cacheMember(ctx, dbMember, generation, alias)
-
-	return dbMember, nil
-}
-
-func (c *Cache) getAliasFromCache(ctx context.Context, alias string, generation uint64) *domain.Member {
-	if !c.distributedCacheUsable() {
-		return nil
-	}
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-	if c.snapshotGeneration.Load() != generation {
-		return nil
-	}
-
-	cacheKey := c.epochDataKey(memberAliasKeyPrefix + alias)
-	var member domain.Member
-	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
-		return nil
-	}
-	owned := c.snapshotOwnedAliasMemberLocked(alias, &member, generation)
-	if owned != nil {
-		c.storePointMemberInMemoryLocked(owned, generation)
-	}
-	return owned
-}
-
-func (c *Cache) GetAllChannelIDs(ctx context.Context) ([]string, error) {
-	if c.cacheBypassRequired("channel_ids") {
-		return c.repository.GetAllChannelIDs(ctx)
-	}
-	c.snapshotMu.RLock()
-	if val, ok := c.allMembers.Load(allChannelIDsKey); ok {
-		if channelIDs, ok := val.([]string); ok {
-			c.snapshotMu.RUnlock()
-			return channelIDs, nil
-		}
-		c.allMembers.Delete(allChannelIDsKey)
-	}
-	c.snapshotMu.RUnlock()
-	generation := c.currentSnapshotGeneration()
-
-	channelIDs, err := c.repository.GetAllChannelIDs(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	c.snapshotMu.RLock()
-	if c.snapshotGeneration.Load() == generation {
-		c.allMembers.Store(allChannelIDsKey, channelIDs)
-	}
-	c.snapshotMu.RUnlock()
-
-	return channelIDs, nil
-}
-
-func (c *Cache) currentSnapshotGeneration() uint64 {
-	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
-	return c.snapshotGeneration.Load()
-}

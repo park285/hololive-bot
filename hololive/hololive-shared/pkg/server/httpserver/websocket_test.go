@@ -21,7 +21,6 @@
 package httpserver
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -50,6 +49,7 @@ func TestParseOrigins(t *testing.T) {
 			if len(got) != len(tt.want) {
 				t.Fatalf("parseOrigins(%q) len = %d, want %d", tt.raw, len(got), len(tt.want))
 			}
+
 			for i := range got {
 				if got[i] != tt.want[i] {
 					t.Errorf("parseOrigins(%q)[%d] = %q, want %q", tt.raw, i, got[i], tt.want[i])
@@ -58,6 +58,8 @@ func TestParseOrigins(t *testing.T) {
 		})
 	}
 }
+
+const testAllowedOrigin = "https://bot.example.com"
 
 func TestCheckOrigin(t *testing.T) {
 	tests := []struct {
@@ -68,31 +70,31 @@ func TestCheckOrigin(t *testing.T) {
 	}{
 		{
 			name:    "allowed origin passes",
-			origins: []string{"https://bot.example.com", "https://admin.example.com"},
-			origin:  "https://bot.example.com",
+			origins: []string{testAllowedOrigin, "https://admin.example.com"},
+			origin:  testAllowedOrigin,
 			want:    true,
 		},
 		{
 			name:    "disallowed origin fails",
-			origins: []string{"https://bot.example.com"},
+			origins: []string{testAllowedOrigin},
 			origin:  "https://evil.example.com",
 			want:    false,
 		},
 		{
 			name:    "empty env var denies all",
 			origins: nil,
-			origin:  "https://bot.example.com",
+			origin:  testAllowedOrigin,
 			want:    false,
 		},
 		{
 			name:    "case insensitive matching",
 			origins: []string{"https://Bot.Example.COM"},
-			origin:  "https://bot.example.com",
+			origin:  testAllowedOrigin,
 			want:    true,
 		},
 		{
 			name:    "empty origin header denied",
-			origins: []string{"https://bot.example.com"},
+			origins: []string{testAllowedOrigin},
 			origin:  "",
 			want:    false,
 		},
@@ -110,15 +112,18 @@ func TestCheckOrigin(t *testing.T) {
 			orig := wsAllowedOrigins.Load()
 			origins := tt.origins
 			wsAllowedOrigins.Store(&origins)
+
 			defer func() { wsAllowedOrigins.Store(orig) }()
 
-			r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/ws", http.NoBody)
+			r, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost/ws", http.NoBody)
 			if err != nil {
 				t.Fatalf("new request: %v", err)
 			}
+
 			if tt.origin != "" {
 				r.Header.Set("Origin", tt.origin)
 			}
+
 			r.Host = "localhost:8080"
 
 			got := checkOrigin(r)
@@ -138,9 +143,11 @@ func TestInitWSUpgrader(t *testing.T) {
 	if len(origins) != 2 {
 		t.Fatalf("allowedWSOrigins() len = %d, want 2", len(origins))
 	}
+
 	if origins[0] != "https://a.com" {
 		t.Errorf("allowedWSOrigins()[0] = %q, want %q", origins[0], "https://a.com")
 	}
+
 	if origins[1] != "https://b.com" {
 		t.Errorf("allowedWSOrigins()[1] = %q, want %q", origins[1], "https://b.com")
 	}
@@ -155,10 +162,11 @@ func TestInitWSUpgrader_EmptyDeniesAll(t *testing.T) {
 		t.Fatalf("allowedWSOrigins() should be empty, got %d", len(origins))
 	}
 
-	r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost/ws", http.NoBody)
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost/ws", http.NoBody)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
+
 	r.Header.Set("Origin", "https://anything.com")
 
 	if checkOrigin(r) {
@@ -176,6 +184,7 @@ func TestWSUpgrader_DisallowedOriginReturns403(t *testing.T) {
 		if err != nil {
 			return
 		}
+
 		if err := conn.Close(); err != nil {
 			t.Errorf("close websocket connection: %v", err)
 		}
@@ -188,24 +197,29 @@ func TestWSUpgrader_DisallowedOriginReturns403(t *testing.T) {
 	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{
 		"Origin": []string{"https://evil.example.com"},
 	})
+
 	if resp != nil && resp.Body != nil {
 		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				t.Errorf("close handshake response body: %v", err)
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("close handshake response body: %v", closeErr)
 			}
 		}()
 	}
+
 	if conn != nil {
-		if err := conn.Close(); err != nil {
-			t.Errorf("close websocket connection: %v", err)
+		if closeErr2 := conn.Close(); closeErr2 != nil {
+			t.Errorf("close websocket connection: %v", closeErr2)
 		}
 	}
+
 	if err == nil {
 		t.Fatal("expected websocket handshake failure for disallowed origin")
 	}
+
 	if resp == nil {
 		t.Fatal("expected HTTP response on handshake failure")
 	}
+
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}

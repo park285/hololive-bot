@@ -22,66 +22,66 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"slices"
 	"testing"
 
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubCommandInitStreamProvider struct{}
 
-func (s *stubCommandInitStreamProvider) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
+func (s *stubCommandInitStreamProvider) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
 	return nil, nil
 }
 
-func (s *stubCommandInitStreamProvider) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, error) {
+func (s *stubCommandInitStreamProvider) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
 	return nil, nil
 }
 
-func (s *stubCommandInitStreamProvider) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {
+func (s *stubCommandInitStreamProvider) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
 	return nil, nil
 }
 
-func (s *stubCommandInitStreamProvider) GetChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
-	return nil, nil
+func (s *stubCommandInitStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
+	return &domain.Channel{}, nil
 }
 func (s *stubCommandInitStreamProvider) Stop() {}
 
 type stubCommandInitMajorEventRepository struct{}
 
-func (s *stubCommandInitMajorEventRepository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
+func (s *stubCommandInitMajorEventRepository) IsSubscribed(context.Context, string) (bool, error) {
 	return false, nil
 }
 
-func (s *stubCommandInitMajorEventRepository) Subscribe(ctx context.Context, roomID, roomName string) error {
+func (s *stubCommandInitMajorEventRepository) Subscribe(context.Context, string, string) error {
 	return nil
 }
 
-func (s *stubCommandInitMajorEventRepository) Unsubscribe(ctx context.Context, roomID string) error {
+func (s *stubCommandInitMajorEventRepository) Unsubscribe(context.Context, string) error {
 	return nil
 }
 
 type stubCommandInitMemberNewsService struct{}
 
-func (s *stubCommandInitMemberNewsService) GenerateRoomDigest(ctx context.Context, roomID string, period membernewscontracts.Period) (*membernewscontracts.Digest, error) {
-	return nil, nil
+func (s *stubCommandInitMemberNewsService) GenerateRoomDigest(context.Context, string, membernewscontracts.Period) (*membernewscontracts.Digest, error) {
+	return &membernewscontracts.Digest{}, nil
 }
 
-func (s *stubCommandInitMemberNewsService) SubscribeRoom(ctx context.Context, roomID, roomName string) error {
+func (s *stubCommandInitMemberNewsService) SubscribeRoom(context.Context, string, string) error {
 	return nil
 }
 
-func (s *stubCommandInitMemberNewsService) UnsubscribeRoom(ctx context.Context, roomID string) error {
+func (s *stubCommandInitMemberNewsService) UnsubscribeRoom(context.Context, string) error {
 	return nil
 }
 
-func (s *stubCommandInitMemberNewsService) IsRoomSubscribed(ctx context.Context, roomID string) (bool, error) {
+func (s *stubCommandInitMemberNewsService) IsRoomSubscribed(context.Context, string) (bool, error) {
 	return false, nil
 }
 
@@ -103,7 +103,11 @@ func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 	s.executed++
 
 	if s.exec != nil {
-		return s.exec(ctx, cmdCtx, params)
+		if err := s.exec(ctx, cmdCtx, params); err != nil {
+			return fmt.Errorf("exec: %w", err)
+		}
+
+		return nil
 	}
 
 	return nil
@@ -111,7 +115,7 @@ func (s *stubCommandInitCommand) Execute(ctx context.Context, cmdCtx *domain.Com
 
 func TestCommandInitView_DefensiveCopyCommandBuilders(t *testing.T) {
 	external := orchcmd.CommandBuilder(func(_ *handlercore.Dependencies) handlercore.Command {
-		return &stubCommandInitCommand{name: "external"}
+		return &stubCommandInitCommand{name: testExternalCommandName}
 	})
 	b := &Bot{
 		commandBuilders: []orchcmd.CommandBuilder{external},
@@ -170,7 +174,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		commandBuilders: []orchcmd.CommandBuilder{
 			nil,
 			func(_ *handlercore.Dependencies) handlercore.Command {
-				return &stubCommandInitCommand{name: "external"}
+				return &stubCommandInitCommand{name: testExternalCommandName}
 			},
 		},
 	}
@@ -188,7 +192,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 	}
 
 	wantNames := []string{
-		"help",
+		testHelpCommandName,
 		"live",
 		"upcoming",
 		"schedule",
@@ -200,7 +204,7 @@ func TestCommandInitView_AssemblesCommands(t *testing.T) {
 		"major_event",
 		"member_news",
 		"news_subscription",
-		"external",
+		testExternalCommandName,
 	}
 	if !slices.Equal(gotNames, wantNames) {
 		t.Fatalf("command names = %v, want %v", gotNames, wantNames)
@@ -214,14 +218,18 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 	registry.Register(target)
 
 	var builtDeps *handlercore.Dependencies
+
 	builder := orchcmd.CommandBuilder(func(deps *handlercore.Dependencies) handlercore.Command {
 		builtDeps = deps
 
 		return &stubCommandInitCommand{
-			name: "external",
-			exec: func(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
-				_, err := deps.Dispatcher.Publish(ctx, cmdCtx, handlercore.Event{Type: targetName})
-				return err
+			name: testExternalCommandName,
+			exec: func(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
+				if _, err := deps.Dispatcher.Publish(ctx, cmdCtx, handlercore.Event{Type: targetName}); err != nil {
+					return fmt.Errorf("publish dispatcher event: %w", err)
+				}
+
+				return nil
 			},
 		}
 	})
@@ -235,8 +243,9 @@ func TestCommandInitView_ExternalCommandBuilderUsesCurrentDependencies(t *testin
 	commands := view.buildCommands(deps)
 
 	var external handlercore.Command
+
 	for _, cmd := range commands {
-		if cmd.Name() == "external" {
+		if cmd.Name() == testExternalCommandName {
 			external = cmd
 			break
 		}

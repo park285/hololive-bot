@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ func BuildPostLatencyPeriodSummaries(posts []PostSendCount, periods []PostLatenc
 	if err != nil {
 		return nil, fmt.Errorf("build post latency period summaries: %w", err)
 	}
+
 	if len(normalizedPeriods) == 0 {
 		return []PostLatencyPeriodSummary{}, nil
 	}
@@ -22,7 +24,7 @@ func BuildPostLatencyPeriodSummaries(posts []PostSendCount, periods []PostLatenc
 
 	for i := range posts {
 		if err := addPostToLatencyPeriodSummaries(accumulators, normalizedPeriods, &posts[i], i); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("add post to latency period summaries: %w", err)
 		}
 	}
 
@@ -46,6 +48,7 @@ func newPostLatencyPeriodSummaryAccumulators(periods []PostLatencyPeriod) []post
 			EndAt:   periods[i].EndAt,
 		}
 	}
+
 	return accumulators
 }
 
@@ -64,10 +67,12 @@ func addPostToLatencyPeriodSummaries(
 		if !postObservedInLatencyPeriod(observedAt, periods[j]) {
 			continue
 		}
+
 		if err := accumulators[j].add(post); err != nil {
 			return fmt.Errorf("post[%d] %s: %w", index, strings.TrimSpace(post.ContentID), err)
 		}
 	}
+
 	return nil
 }
 
@@ -80,6 +85,7 @@ func finalizePostLatencyPeriodSummaries(accumulators []postLatencyPeriodSummaryA
 	for i := range accumulators {
 		summaries = append(summaries, accumulators[i].finalize())
 	}
+
 	return summaries
 }
 
@@ -87,11 +93,13 @@ func (a *postLatencyPeriodSummaryAccumulator) add(post *PostSendCount) error {
 	a.summary.TotalPostCount++
 
 	if err := a.addAlarmType(post.AlarmType); err != nil {
-		return err
+		return fmt.Errorf("add alarm type: %w", err)
 	}
+
 	a.addAlarmSendStatus(post)
 	a.addLatencyResult(post)
 	a.addLatencySample(post)
+
 	return nil
 }
 
@@ -134,13 +142,16 @@ func (a *postLatencyPeriodSummaryAccumulator) addLatencyExceeded(post *PostSendC
 
 	if *post.AlarmLatencyExceeded {
 		a.addExceededPost(post.AlarmType)
+
 		return
 	}
+
 	a.summary.WithinTargetPostCount++
 }
 
 func (a *postLatencyPeriodSummaryAccumulator) addExceededPost(alarmType domain.AlarmType) {
 	a.summary.ExceededPostCount++
+
 	switch alarmType {
 	case domain.AlarmTypeCommunity:
 		a.summary.CommunityExceededPostCount++
@@ -154,9 +165,12 @@ func (a *postLatencyPeriodSummaryAccumulator) addExceededPost(alarmType domain.A
 func (a *postLatencyPeriodSummaryAccumulator) addLatencySample(post *PostSendCount) {
 	if post.AlarmLatencyMillis != nil {
 		latencyMillis := *post.AlarmLatencyMillis
+
 		a.latencySumMillis += latencyMillis
 		a.latencyMeasuredCount++
+
 		a.latencySamplesMillis = append(a.latencySamplesMillis, latencyMillis)
+
 		if a.latencyMeasuredCount == 1 || latencyMillis > a.maxLatencyMillis {
 			a.maxLatencyMillis = latencyMillis
 		}
@@ -171,9 +185,11 @@ func (a *postLatencyPeriodSummaryAccumulator) finalize() PostLatencyPeriodSummar
 	averageLatencyMillis := a.latencySumMillis / a.latencyMeasuredCount
 	p95LatencyMillis := discretePercentileMillis(a.latencySamplesMillis, 95, 100)
 	maxLatencyMillis := a.maxLatencyMillis
+
 	a.summary.AverageLatencyMillis = &averageLatencyMillis
 	a.summary.P95LatencyMillis = p95LatencyMillis
 	a.summary.MaxLatencyMillis = &maxLatencyMillis
+
 	return a.summary
 }
 
@@ -186,8 +202,11 @@ func discretePercentileMillis(samples []int64, numerator, denominator int) *int6
 	slices.Sort(sorted)
 
 	rank := max((numerator*len(sorted)+denominator-1)/denominator, 1)
+
 	rank = min(rank, len(sorted))
+
 	value := sorted[rank-1]
+
 	return &value
 }
 
@@ -200,8 +219,9 @@ func NormalizePostLatencyPeriods(periods []PostLatencyPeriod) ([]PostLatencyPeri
 	for i := range periods {
 		period, err := normalizePostLatencyPeriod(periods[i], i)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("normalize post latency period: %w", err)
 		}
+
 		normalized = append(normalized, period)
 	}
 
@@ -213,15 +233,18 @@ func normalizePostLatencyPeriod(period PostLatencyPeriod, index int) (PostLatenc
 	if label == "" {
 		return PostLatencyPeriod{}, fmt.Errorf("period at index %d: label is empty", index)
 	}
+
 	if period.StartAt.IsZero() {
 		return PostLatencyPeriod{}, fmt.Errorf("period %q: start at is empty", label)
 	}
+
 	if period.EndAt.IsZero() {
 		return PostLatencyPeriod{}, fmt.Errorf("period %q: end at is empty", label)
 	}
 
 	startAt := period.StartAt.UTC()
 	endAt := period.EndAt.UTC()
+
 	if !endAt.After(startAt) {
 		return PostLatencyPeriod{}, fmt.Errorf("period %q: end at must be after start at", label)
 	}
@@ -240,6 +263,7 @@ func EarliestPostLatencyPeriodStart(periods []PostLatencyPeriod) time.Time {
 			earliest = periods[i].StartAt
 		}
 	}
+
 	return earliest
 }
 
@@ -247,8 +271,10 @@ func PostLatencyObservedAt(post *PostSendCount) (time.Time, error) {
 	if post.ActualPublishedAt != nil {
 		return post.ActualPublishedAt.UTC(), nil
 	}
+
 	if post.DetectedAt != nil {
 		return post.DetectedAt.UTC(), nil
 	}
-	return time.Time{}, fmt.Errorf("observed at is empty")
+
+	return time.Time{}, errors.New("observed at is empty")
 }

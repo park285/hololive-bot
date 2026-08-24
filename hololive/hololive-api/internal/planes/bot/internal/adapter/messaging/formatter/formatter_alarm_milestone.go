@@ -60,6 +60,7 @@ func (f *ResponseFormatter) FormatAmbiguousMembers(ctx context.Context, candidat
 	}
 
 	firstName := ""
+
 	if len(candidates) > 0 {
 		firstName = candidates[0].GetDisplayName()
 	}

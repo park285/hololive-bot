@@ -28,9 +28,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type guardrailEvidenceSource struct {
@@ -61,7 +62,11 @@ func (s *guardrailEvidenceSource) RecentlyDispatchedStreamIDs(
 	[]string,
 	time.Time,
 ) (map[string]struct{}, error) {
-	return s.dispatched, s.dispatchErr
+	if s.dispatchErr != nil {
+		return nil, s.dispatchErr
+	}
+
+	return s.dispatched, nil
 }
 
 func (s *guardrailEvidenceSource) RecentlySentLiveStreamRooms(
@@ -69,25 +74,28 @@ func (s *guardrailEvidenceSource) RecentlySentLiveStreamRooms(
 	[]string,
 	time.Time,
 ) (map[string]map[string]struct{}, error) {
-	return s.sentRooms, s.sentRoomsErr
+	if s.sentRoomsErr != nil {
+		return nil, s.sentRoomsErr
+	}
+
+	return s.sentRooms, nil
 }
 
-func TestPersistedLiveGuardrailMetaFromSession(t *testing.T) {
-	t.Parallel()
+type persistedLiveGuardrailMetaCase struct {
+	session       PersistedYouTubeLiveSession
+	subscriberMap map[string][]string
+	seen          map[string]struct{}
+	wantOK        bool
+	wantStreamID  string
+	wantChannelID string
+	wantRooms     []string
+}
 
-	now := time.Date(2026, time.May, 24, 10, 0, 0, 0, time.UTC)
+func persistedLiveGuardrailMetaCases(now time.Time) map[string]persistedLiveGuardrailMetaCase {
 	graceBoundary := now.Add(-persistedLiveGuardrailGraceWindow)
 	lastSeenAt := now.Add(-time.Second)
 
-	tests := map[string]struct {
-		session       PersistedYouTubeLiveSession
-		subscriberMap map[string][]string
-		seen          map[string]struct{}
-		wantOK        bool
-		wantStreamID  string
-		wantChannelID string
-		wantRooms     []string
-	}{
+	return map[string]persistedLiveGuardrailMetaCase{
 		"accepts live session at grace boundary with channel fallback": {
 			session: PersistedYouTubeLiveSession{
 				Stream: &domain.Stream{
@@ -99,68 +107,75 @@ func TestPersistedLiveGuardrailMetaFromSession(t *testing.T) {
 				LiveFirstSeenAt: graceBoundary,
 			},
 			subscriberMap: map[string][]string{
-				"channel-from-object": {"room-1", "room-1", "", "room-2"},
+				"channel-from-object": {testRoomID1, testRoomID1, "", testRoomID2},
 			},
 			wantOK:        true,
 			wantStreamID:  "stream-live",
 			wantChannelID: "channel-from-object",
-			wantRooms:     []string{"room-1", "room-2"},
+			wantRooms:     []string{testRoomID1, testRoomID2},
 		},
 		"rejects nil stream": {
 			session:       PersistedYouTubeLiveSession{},
-			subscriberMap: map[string][]string{"channel-1": {"room-1"}},
+			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
 		"rejects non live stream": {
 			session: PersistedYouTubeLiveSession{
-				Stream: &domain.Stream{ID: "stream-upcoming", ChannelID: "channel-1", Status: domain.StreamStatusUpcoming},
+				Stream: &domain.Stream{ID: "stream-upcoming", ChannelID: testChannelID1, Status: domain.StreamStatusUpcoming},
 			},
-			subscriberMap: map[string][]string{"channel-1": {"room-1"}},
+			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
 		"rejects empty stream id": {
 			session: PersistedYouTubeLiveSession{
-				Stream:     &domain.Stream{ChannelID: "channel-1", Status: domain.StreamStatusLive},
+				Stream:     &domain.Stream{ChannelID: testChannelID1, Status: domain.StreamStatusLive},
 				LastSeenAt: graceBoundary,
 			},
-			subscriberMap: map[string][]string{"channel-1": {"room-1"}},
+			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
 		"rejects fresh observation inside grace window": {
 			session: PersistedYouTubeLiveSession{
-				Stream:     &domain.Stream{ID: "stream-fresh", ChannelID: "channel-1", Status: domain.StreamStatusLive},
+				Stream:     &domain.Stream{ID: "stream-fresh", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
 				LastSeenAt: now.Add(-persistedLiveGuardrailGraceWindow + time.Second),
 			},
-			subscriberMap: map[string][]string{"channel-1": {"room-1"}},
+			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
 		"rejects zero observed time": {
 			session: PersistedYouTubeLiveSession{
-				Stream: &domain.Stream{ID: "stream-zero", ChannelID: "channel-1", Status: domain.StreamStatusLive},
+				Stream: &domain.Stream{ID: "stream-zero", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
 			},
-			subscriberMap: map[string][]string{"channel-1": {"room-1"}},
+			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 		},
 		"rejects duplicate stream id": {
 			session: PersistedYouTubeLiveSession{
-				Stream:     &domain.Stream{ID: "stream-live", ChannelID: "channel-1", Status: domain.StreamStatusLive},
+				Stream:     &domain.Stream{ID: "stream-live", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
 				LastSeenAt: graceBoundary,
 			},
-			subscriberMap: map[string][]string{"channel-1": {"room-1"}},
+			subscriberMap: map[string][]string{testChannelID1: {testRoomID1}},
 			seen:          map[string]struct{}{"stream-live": {}},
 		},
 		"rejects live stream without subscriber rooms": {
 			session: PersistedYouTubeLiveSession{
-				Stream:     &domain.Stream{ID: "stream-no-room", ChannelID: "channel-1", Status: domain.StreamStatusLive},
+				Stream:     &domain.Stream{ID: "stream-no-room", ChannelID: testChannelID1, Status: domain.StreamStatusLive},
 				LastSeenAt: graceBoundary,
 			},
-			subscriberMap: map[string][]string{"channel-1": nil},
+			subscriberMap: map[string][]string{testChannelID1: nil},
 		},
 		"rejects live stream without channel id": {
 			session: PersistedYouTubeLiveSession{
 				Stream:     &domain.Stream{ID: "stream-no-channel", Status: domain.StreamStatusLive},
 				LastSeenAt: graceBoundary,
 			},
-			subscriberMap: map[string][]string{"": {"room-1"}},
+			subscriberMap: map[string][]string{"": {testRoomID1}},
 		},
 	}
+}
 
-	for name, tc := range tests {
+func TestPersistedLiveGuardrailMetaFromSession(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.May, 24, 10, 0, 0, 0, time.UTC)
+	lastSeenAt := now.Add(-time.Second)
+
+	for name, tc := range persistedLiveGuardrailMetaCases(now) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -171,6 +186,7 @@ func TestPersistedLiveGuardrailMetaFromSession(t *testing.T) {
 
 			meta, ok := persistedLiveGuardrailMetaFromSession(tc.session, tc.subscriberMap, seen, now)
 			assert.Equal(t, tc.wantOK, ok)
+
 			if !tc.wantOK {
 				return
 			}
@@ -196,18 +212,18 @@ func TestMissingLiveDeliveryRooms(t *testing.T) {
 			want: nil,
 		},
 		"all rooms sent": {
-			rooms:     []string{"room-1", "room-2"},
-			sentRooms: map[string]struct{}{"room-1": {}, "room-2": {}},
+			rooms:     []string{testRoomID1, testRoomID2},
+			sentRooms: map[string]struct{}{testRoomID1: {}, testRoomID2: {}},
 			want:      []string{},
 		},
 		"deduplicates rooms before detecting missing": {
-			rooms:     []string{"room-1", "room-1", "", "room-2", "room-3"},
-			sentRooms: map[string]struct{}{"room-2": {}},
-			want:      []string{"room-1", "room-3"},
+			rooms:     []string{testRoomID1, testRoomID1, "", testRoomID2, testRoomID3},
+			sentRooms: map[string]struct{}{testRoomID2: {}},
+			want:      []string{testRoomID1, testRoomID3},
 		},
 		"nil sent map marks unique rooms missing": {
-			rooms: []string{"room-1", "room-1", "room-2"},
-			want:  []string{"room-1", "room-2"},
+			rooms: []string{testRoomID1, testRoomID1, testRoomID2},
+			want:  []string{testRoomID1, testRoomID2},
 		},
 	}
 
@@ -232,14 +248,14 @@ func TestRecentLiveDispatchEvidenceErrorWrapping(t *testing.T) {
 
 	evidence, err := checker.recentLiveDispatchEvidence(
 		t.Context(),
-		[]string{"stream-1"},
+		[]string{testStreamID1},
 		time.Date(2026, time.May, 24, 9, 0, 0, 0, time.UTC),
 	)
 	require.Error(t, err)
 	assert.True(t, evidence.deliveryCheckFailed)
-	assert.ErrorContains(t, err, "pg dispatch evidence")
-	assert.ErrorContains(t, err, "dispatch lookup failed")
-	assert.ErrorContains(t, err, "pg sent delivery evidence")
+	require.ErrorContains(t, err, "pg dispatch evidence")
+	require.ErrorContains(t, err, "dispatch lookup failed")
+	require.ErrorContains(t, err, "pg sent delivery evidence")
 	assert.ErrorContains(t, err, "sent room lookup failed")
 }
 
@@ -273,13 +289,13 @@ func TestObservePersistedLiveGuardrailsReturnsSentRooms(t *testing.T) {
 	checker := &YouTubeChecker{
 		persistedLiveSource: &guardrailEvidenceSource{
 			sentRooms: map[string]map[string]struct{}{
-				"stream-1": {"room-1": {}},
+				testStreamID1: {testRoomID1: {}},
 			},
 		},
 		logger: newCheckerTestLogger(),
 	}
 	sessions := []PersistedYouTubeLiveSession{{
-		Stream:          &domain.Stream{ID: "stream-1", ChannelID: "channel-1", Status: domain.StreamStatusLive},
+		Stream:          &domain.Stream{ID: testStreamID1, ChannelID: testChannelID1, Status: domain.StreamStatusLive},
 		LastSeenAt:      now,
 		LiveFirstSeenAt: now.Add(-3 * time.Minute),
 	}}
@@ -287,22 +303,22 @@ func TestObservePersistedLiveGuardrailsReturnsSentRooms(t *testing.T) {
 	evidence := checker.observePersistedLiveGuardrails(
 		t.Context(),
 		sessions,
-		map[string][]*domain.Stream{"channel-1": {sessions[0].Stream}},
-		map[string][]string{"channel-1": {"room-1", "room-2"}},
+		map[string][]*domain.Stream{testChannelID1: {sessions[0].Stream}},
+		map[string][]string{testChannelID1: {testRoomID1, testRoomID2}},
 		now,
 	)
-	assert.Contains(t, evidence.sentRoomsByStreamID["stream-1"], "room-1")
+	assert.Contains(t, evidence.sentRoomsByStreamID[testStreamID1], testRoomID1)
 }
 
 func TestObservePersistedLiveGuardrailsLoadsSentRoomsDuringGrace(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.August, 17, 0, 32, 0, 0, time.UTC)
-	stream := &domain.Stream{ID: "stream-grace", ChannelID: "channel-1", Status: domain.StreamStatusLive}
+	stream := &domain.Stream{ID: "stream-grace", ChannelID: testChannelID1, Status: domain.StreamStatusLive}
 	checker := &YouTubeChecker{
 		persistedLiveSource: &guardrailEvidenceSource{
 			sentRooms: map[string]map[string]struct{}{
-				stream.ID: {"room-1": {}},
+				stream.ID: {testRoomID1: {}},
 			},
 		},
 		logger: newCheckerTestLogger(),
@@ -316,11 +332,11 @@ func TestObservePersistedLiveGuardrailsLoadsSentRoomsDuringGrace(t *testing.T) {
 	evidence := checker.observePersistedLiveGuardrails(
 		t.Context(),
 		sessions,
-		map[string][]*domain.Stream{"channel-1": {stream}},
-		map[string][]string{"channel-1": {"room-1"}},
+		map[string][]*domain.Stream{testChannelID1: {stream}},
+		map[string][]string{testChannelID1: {testRoomID1}},
 		now,
 	)
-	assert.Contains(t, evidence.sentRoomsByStreamID[stream.ID], "room-1")
+	assert.Contains(t, evidence.sentRoomsByStreamID[stream.ID], testRoomID1)
 }
 
 func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *testing.T) {
@@ -328,10 +344,10 @@ func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *test
 
 	now := time.Date(2026, time.May, 24, 10, 0, 0, 0, time.UTC)
 	meta := persistedLiveGuardrailMeta{
-		streamID:   "stream-1",
-		channelID:  "channel-1",
+		streamID:   testStreamID1,
+		channelID:  testChannelID1,
 		lastSeenAt: now.Add(-3 * time.Minute),
-		rooms:      []string{"room-1", "room-2"},
+		rooms:      []string{testRoomID1, testRoomID2},
 	}
 
 	tests := map[string]struct {
@@ -341,33 +357,33 @@ func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *test
 		"accepts complete room delivery": {
 			evidence: recentLiveDispatchEvidence{
 				sentRoomsByStreamID: map[string]map[string]struct{}{
-					"stream-1": {"room-1": {}, "room-2": {}},
+					testStreamID1: {testRoomID1: {}, testRoomID2: {}},
 				},
 			},
 		},
 		"logs partial delivery when some rooms are missing": {
 			evidence: recentLiveDispatchEvidence{
 				sentRoomsByStreamID: map[string]map[string]struct{}{
-					"stream-1": {"room-1": {}},
+					testStreamID1: {testRoomID1: {}},
 				},
 			},
 			wantLog: "alarm.youtube.live_guardrail.partial_delivery",
 		},
 		"logs missing delivery when dispatch exists but no room delivery exists": {
 			evidence: recentLiveDispatchEvidence{
-				pgDispatchedStreamIDs: map[string]struct{}{"stream-1": {}},
+				pgDispatchedStreamIDs: map[string]struct{}{testStreamID1: {}},
 			},
 			wantLog: "alarm.youtube.live_guardrail.missing_delivery",
 		},
 		"accepts stream dispatch when delivery lookup failed": {
 			evidence: recentLiveDispatchEvidence{
-				pgDispatchedStreamIDs: map[string]struct{}{"stream-1": {}},
+				pgDispatchedStreamIDs: map[string]struct{}{testStreamID1: {}},
 				deliveryCheckFailed:   true,
 			},
 		},
 		"accepts valkey notified evidence": {
 			evidence: recentLiveDispatchEvidence{
-				valkeyNotifiedStreamIDs: map[string]struct{}{"stream-1": {}},
+				valkeyNotifiedStreamIDs: map[string]struct{}{testStreamID1: {}},
 			},
 		},
 		"logs missing dispatch with no evidence": {
@@ -381,18 +397,21 @@ func TestObservePersistedLiveGuardrailMetaLogsOnlyRejectedDeliveryStates(t *test
 			t.Parallel()
 
 			var buf bytes.Buffer
+
 			checker := &YouTubeChecker{
 				logger: slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})),
 			}
 
 			checker.observePersistedLiveGuardrailMeta(&meta, tc.evidence, now.Add(-persistedLiveDispatchRecentWindow))
+
 			if tc.wantLog == "" {
 				assert.Empty(t, buf.String())
+
 				return
 			}
 
 			require.Contains(t, buf.String(), tc.wantLog)
-			assert.Contains(t, buf.String(), "stream-1")
+			assert.Contains(t, buf.String(), testStreamID1)
 		})
 	}
 }

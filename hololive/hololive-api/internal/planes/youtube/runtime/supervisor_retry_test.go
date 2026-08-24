@@ -12,12 +12,14 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func TestRetryableObservationErrorClassification(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name string
 		err  error
@@ -53,6 +55,7 @@ func TestRetryableObservationErrorClassification(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := retryableObservationError(tc.err); got != tc.want {
 				t.Fatalf("retryableObservationError(%v) = %t, want %t", tc.err, got, tc.want)
 			}
@@ -61,17 +64,23 @@ func TestRetryableObservationErrorClassification(t *testing.T) {
 }
 
 func TestNonRetryableConsumeErrorDeadLettersWithoutExit(t *testing.T) {
-	var retries atomic.Int64
-	var deadLettered atomic.Int64
-	var input sourceobservation.DeadLetterInput
+	var (
+		retries      atomic.Int64
+		deadLettered atomic.Int64
+		input        sourceobservation.DeadLetterInput
+	)
+
 	runtime := newTestRuntime(deadLetterClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
+
 			return contract.StatusPending, nil
 		},
 		deadLetter: func(_ context.Context, in sourceobservation.DeadLetterInput) error {
 			deadLettered.Add(1)
+
 			input = in
+
 			return nil
 		},
 	}, fakeConsumer{
@@ -86,24 +95,30 @@ func TestNonRetryableConsumeErrorDeadLettersWithoutExit(t *testing.T) {
 		SubjectKey:      "UC_POISON",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); err != nil {
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v, want nil after dead letter", err)
 	}
+
 	if deadLettered.Load() != 1 {
 		t.Fatalf("dead letter calls = %d, want 1", deadLettered.Load())
 	}
+
 	if retries.Load() != 0 {
 		t.Fatalf("poison observation retried %d time(s)", retries.Load())
 	}
+
 	if input.ObservationID != observation.ObservationID || input.LeaseToken != observation.LeaseToken {
 		t.Fatalf("DeadLetter input = %#v", input)
 	}
+
 	if input.ErrorCode == "" || !strings.Contains(input.ErrorDetail, "22P02") {
 		t.Fatalf("DeadLetter error fields = (%q, %q)", input.ErrorCode, input.ErrorDetail)
 	}
+
 	if !runtime.Degraded() {
 		t.Fatal("immediate dead letter did not degrade the plane")
 	}
+
 	if _, ok := runtime.inFlight.Load(observation.Key()); ok {
 		t.Fatal("dead-lettered observation remained in flight")
 	}
@@ -126,9 +141,10 @@ func TestDeadLetterClaimLostDoesNotDegrade(t *testing.T) {
 		SubjectKey:      "UC_LOST",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); err != nil {
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v", err)
 	}
+
 	if runtime.Degraded() {
 		t.Fatal("lost claim during dead letter degraded the plane")
 	}
@@ -151,25 +167,31 @@ func TestDeadLetterWriteFailureFailsClosed(t *testing.T) {
 		SubjectKey:      "UC_DLQ_FAIL",
 	}
 
-	err := runtime.processClaim(context.Background(), observation)
+	err := runtime.processClaim(t.Context(), observation)
 	if err == nil || !strings.Contains(err.Error(), "dead letter observation 33") || !strings.Contains(err.Error(), "dead letter write failed") {
 		t.Fatalf("processClaim() error = %v, want wrapped dead letter failure", err)
 	}
+
 	if _, ok := runtime.inFlight.Load(observation.Key()); ok {
 		t.Fatal("observation remained in flight after dead letter failure")
 	}
 }
 
 func TestConnectionLossConsumeErrorIsRetried(t *testing.T) {
-	var retries atomic.Int64
-	var deadLettered atomic.Int64
+	var (
+		retries      atomic.Int64
+		deadLettered atomic.Int64
+	)
+
 	runtime := newTestRuntime(deadLetterClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
+
 			return contract.StatusPending, nil
 		},
 		deadLetter: func(context.Context, sourceobservation.DeadLetterInput) error {
 			deadLettered.Add(1)
+
 			return nil
 		},
 	}, fakeConsumer{
@@ -184,12 +206,14 @@ func TestConnectionLossConsumeErrorIsRetried(t *testing.T) {
 		SubjectKey:      "UC_CONN_LOSS",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); err != nil {
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v", err)
 	}
+
 	if retries.Load() != 1 || deadLettered.Load() != 0 {
 		t.Fatalf("retries = %d, dead letters = %d; want 1, 0", retries.Load(), deadLettered.Load())
 	}
+
 	if runtime.Degraded() {
 		t.Fatal("transient connection loss degraded the plane")
 	}
@@ -197,6 +221,7 @@ func TestConnectionLossConsumeErrorIsRetried(t *testing.T) {
 
 type deadLetterClaimer struct {
 	fakeClaimer
+
 	deadLetter func(context.Context, sourceobservation.DeadLetterInput) error
 }
 
@@ -204,5 +229,10 @@ func (c deadLetterClaimer) DeadLetter(ctx context.Context, input sourceobservati
 	if c.deadLetter == nil {
 		return nil
 	}
-	return c.deadLetter(ctx, input)
+
+	if err := c.deadLetter(ctx, input); err != nil {
+		return fmt.Errorf("dead letter: %w", err)
+	}
+
+	return nil
 }

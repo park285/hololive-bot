@@ -1,7 +1,6 @@
 package claim
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -16,9 +15,9 @@ func TestMemoryCache_ClaimEmptyKeyReturnsErr(t *testing.T) {
 		key  ClaimKey
 	}{
 		{name: "empty scope", key: ClaimKey{Subject: "video-1"}},
-		{name: "empty subject", key: ClaimKey{Scope: "youtube_outbox_delivery"}},
+		{name: "empty subject", key: ClaimKey{Scope: testClaimScopeOutboxDelivery}},
 		{name: "blank scope", key: ClaimKey{Scope: " ", Subject: "video-1"}},
-		{name: "blank subject", key: ClaimKey{Scope: "youtube_outbox_delivery", Subject: "\t"}},
+		{name: "blank subject", key: ClaimKey{Scope: testClaimScopeOutboxDelivery, Subject: "\t"}},
 	}
 
 	for _, tt := range tests {
@@ -26,7 +25,8 @@ func TestMemoryCache_ClaimEmptyKeyReturnsErr(t *testing.T) {
 			t.Parallel()
 
 			cache := NewMemoryCache()
-			_, err := cache.Claim(context.Background(), tt.key, "worker-a", time.Minute)
+			_, err := cache.Claim(t.Context(), tt.key, "worker-a", time.Minute)
+
 			if !errors.Is(err, ErrEmptyKey) {
 				t.Fatalf("Claim() error = %v, want %v", err, ErrEmptyKey)
 			}
@@ -43,7 +43,8 @@ func TestMemoryCache_ClaimEmptyHolderReturnsErr(t *testing.T) {
 			t.Parallel()
 
 			cache := NewMemoryCache()
-			_, err := cache.Claim(context.Background(), testClaimKey(), holder, time.Minute)
+			_, err := cache.Claim(t.Context(), testClaimKey(), holder, time.Minute)
+
 			if !errors.Is(err, ErrEmptyHolder) {
 				t.Fatalf("Claim() error = %v, want %v", err, ErrEmptyHolder)
 			}
@@ -60,7 +61,8 @@ func TestMemoryCache_ClaimZeroTTLReturnsErr(t *testing.T) {
 			t.Parallel()
 
 			cache := NewMemoryCache()
-			_, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", ttl)
+			_, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", ttl)
+
 			if !errors.Is(err, ErrInvalidTTL) {
 				t.Fatalf("Claim() error = %v, want %v", err, ErrInvalidTTL)
 			}
@@ -71,10 +73,10 @@ func TestMemoryCache_ClaimZeroTTLReturnsErr(t *testing.T) {
 func TestMemoryCache_ClaimNewKeyReturnsStatus(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
 	cache := newMemoryCacheAt(now)
 
-	status, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", 30*time.Second)
+	status, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", 30*time.Second)
 	if err != nil {
 		t.Fatalf("Claim() error = %v", err)
 	}
@@ -82,12 +84,15 @@ func TestMemoryCache_ClaimNewKeyReturnsStatus(t *testing.T) {
 	if status.Holder != "worker-a" {
 		t.Fatalf("Claim() holder = %q, want %q", status.Holder, "worker-a")
 	}
+
 	if !status.AcquiredAt.Equal(now) {
 		t.Fatalf("Claim() acquired_at = %s, want %s", status.AcquiredAt, now)
 	}
+
 	if want := now.Add(30 * time.Second); !status.ExpiresAt.Equal(want) {
 		t.Fatalf("Claim() expires_at = %s, want %s", status.ExpiresAt, want)
 	}
+
 	if status.RetryAfter != 0 {
 		t.Fatalf("Claim() retry_after = %s, want 0", status.RetryAfter)
 	}
@@ -96,27 +101,31 @@ func TestMemoryCache_ClaimNewKeyReturnsStatus(t *testing.T) {
 func TestMemoryCache_ClaimExistingHolderReturnsAlreadyHeld(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
 	cache := newMemoryCacheAt(now)
 
-	first, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", time.Minute)
+	first, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", time.Minute)
 	if err != nil {
 		t.Fatalf("initial Claim() error = %v", err)
 	}
 
-	status, err := cache.Claim(context.Background(), testClaimKey(), "worker-b", time.Minute)
+	status, err := cache.Claim(t.Context(), testClaimKey(), "worker-b", time.Minute)
 	if !errors.Is(err, ErrAlreadyHeld) {
 		t.Fatalf("Claim() error = %v, want %v", err, ErrAlreadyHeld)
 	}
+
 	if status.Holder != "worker-a" {
 		t.Fatalf("Claim() holder = %q, want original holder", status.Holder)
 	}
+
 	if !status.AcquiredAt.Equal(first.AcquiredAt) {
 		t.Fatalf("Claim() acquired_at = %s, want %s", status.AcquiredAt, first.AcquiredAt)
 	}
+
 	if !status.ExpiresAt.Equal(first.ExpiresAt) {
 		t.Fatalf("Claim() expires_at = %s, want %s", status.ExpiresAt, first.ExpiresAt)
 	}
+
 	if status.RetryAfter != time.Minute {
 		t.Fatalf("Claim() retry_after = %s, want %s", status.RetryAfter, time.Minute)
 	}
@@ -125,25 +134,30 @@ func TestMemoryCache_ClaimExistingHolderReturnsAlreadyHeld(t *testing.T) {
 func TestMemoryCache_ClaimAfterExpiryReturnsNewStatus(t *testing.T) {
 	t.Parallel()
 
-	current := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	current := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
 	cache := NewMemoryCache()
+
 	cache.now = func() time.Time { return current }
 
-	if _, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", 10*time.Second); err != nil {
+	if _, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", 10*time.Second); err != nil {
 		t.Fatalf("initial Claim() error = %v", err)
 	}
 
 	current = current.Add(11 * time.Second)
-	status, err := cache.Claim(context.Background(), testClaimKey(), "worker-b", 20*time.Second)
+
+	status, err := cache.Claim(t.Context(), testClaimKey(), "worker-b", 20*time.Second)
 	if err != nil {
 		t.Fatalf("Claim() after expiry error = %v", err)
 	}
+
 	if status.Holder != "worker-b" {
 		t.Fatalf("Claim() holder = %q, want %q", status.Holder, "worker-b")
 	}
+
 	if !status.AcquiredAt.Equal(current) {
 		t.Fatalf("Claim() acquired_at = %s, want %s", status.AcquiredAt, current)
 	}
+
 	if want := current.Add(20 * time.Second); !status.ExpiresAt.Equal(want) {
 		t.Fatalf("Claim() expires_at = %s, want %s", status.ExpiresAt, want)
 	}
@@ -152,19 +166,20 @@ func TestMemoryCache_ClaimAfterExpiryReturnsNewStatus(t *testing.T) {
 func TestMemoryCache_ReleaseByOriginalHolderClears(t *testing.T) {
 	t.Parallel()
 
-	cache := newMemoryCacheAt(time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC))
-	if _, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", time.Minute); err != nil {
+	cache := newMemoryCacheAt(time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC))
+	if _, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", time.Minute); err != nil {
 		t.Fatalf("Claim() error = %v", err)
 	}
 
-	if err := cache.Release(context.Background(), testClaimKey(), "worker-a"); err != nil {
+	if err := cache.Release(t.Context(), testClaimKey(), "worker-a"); err != nil {
 		t.Fatalf("Release() error = %v", err)
 	}
 
-	status, err := cache.Claim(context.Background(), testClaimKey(), "worker-b", time.Minute)
+	status, err := cache.Claim(t.Context(), testClaimKey(), "worker-b", time.Minute)
 	if err != nil {
 		t.Fatalf("Claim() after Release() error = %v", err)
 	}
+
 	if status.Holder != "worker-b" {
 		t.Fatalf("Claim() holder = %q, want %q", status.Holder, "worker-b")
 	}
@@ -173,12 +188,12 @@ func TestMemoryCache_ReleaseByOriginalHolderClears(t *testing.T) {
 func TestMemoryCache_ReleaseByDifferentHolderReturnsMismatch(t *testing.T) {
 	t.Parallel()
 
-	cache := newMemoryCacheAt(time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC))
-	if _, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", time.Minute); err != nil {
+	cache := newMemoryCacheAt(time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC))
+	if _, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", time.Minute); err != nil {
 		t.Fatalf("Claim() error = %v", err)
 	}
 
-	err := cache.Release(context.Background(), testClaimKey(), "worker-b")
+	err := cache.Release(t.Context(), testClaimKey(), "worker-b")
 	if !errors.Is(err, ErrHolderMismatch) {
 		t.Fatalf("Release() error = %v, want %v", err, ErrHolderMismatch)
 	}
@@ -188,7 +203,7 @@ func TestMemoryCache_ReleaseNonExistentIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	cache := NewMemoryCache()
-	if err := cache.Release(context.Background(), testClaimKey(), "worker-a"); err != nil {
+	if err := cache.Release(t.Context(), testClaimKey(), "worker-a"); err != nil {
 		t.Fatalf("Release() error = %v", err)
 	}
 }
@@ -196,19 +211,23 @@ func TestMemoryCache_ReleaseNonExistentIsIdempotent(t *testing.T) {
 func TestMemoryCache_ClaimRetryAfterIsExpiresMinusNow(t *testing.T) {
 	t.Parallel()
 
-	current := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	current := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
 	cache := NewMemoryCache()
+
 	cache.now = func() time.Time { return current }
 
-	if _, err := cache.Claim(context.Background(), testClaimKey(), "worker-a", 30*time.Second); err != nil {
+	if _, err := cache.Claim(t.Context(), testClaimKey(), "worker-a", 30*time.Second); err != nil {
 		t.Fatalf("initial Claim() error = %v", err)
 	}
 
 	current = current.Add(12 * time.Second)
-	status, err := cache.Claim(context.Background(), testClaimKey(), "worker-b", time.Minute)
+
+	status, err := cache.Claim(t.Context(), testClaimKey(), "worker-b", time.Minute)
+
 	if !errors.Is(err, ErrAlreadyHeld) {
 		t.Fatalf("Claim() error = %v, want %v", err, ErrAlreadyHeld)
 	}
+
 	if want := 18 * time.Second; status.RetryAfter != want {
 		t.Fatalf("Claim() retry_after = %s, want %s", status.RetryAfter, want)
 	}
@@ -216,42 +235,50 @@ func TestMemoryCache_ClaimRetryAfterIsExpiresMinusNow(t *testing.T) {
 
 func newMemoryCacheAt(now time.Time) *MemoryCache {
 	cache := NewMemoryCache()
+
 	cache.now = func() time.Time { return now }
+
 	return cache
 }
 
 func testClaimKey() ClaimKey {
-	return ClaimKey{Scope: "youtube_outbox_delivery", Subject: "video-1"}
+	return ClaimKey{Scope: testClaimScopeOutboxDelivery, Subject: "video-1"}
 }
 
 func TestMemoryCache_ClaimSweepsExpiredEntriesOfOtherKeys(t *testing.T) {
 	t.Parallel()
 
-	current := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	current := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
 	cache := NewMemoryCache()
+
 	cache.now = func() time.Time { return current }
 
 	const stale = 32
+
 	for i := range stale {
-		key := ClaimKey{Scope: "youtube_outbox_delivery", Subject: fmt.Sprintf("video-%d", i)}
-		if _, err := cache.Claim(context.Background(), key, "worker-a", 10*time.Second); err != nil {
+		key := ClaimKey{Scope: testClaimScopeOutboxDelivery, Subject: fmt.Sprintf("video-%d", i)}
+		if _, err := cache.Claim(t.Context(), key, "worker-a", 10*time.Second); err != nil {
 			t.Fatalf("Claim(%v) error = %v", key, err)
 		}
 	}
+
 	if got := cache.holdingsLen(); got != stale {
 		t.Fatalf("holdings len = %d, want %d", got, stale)
 	}
 
 	current = current.Add(memoryClaimSweepInterval + time.Second)
-	liveKey := ClaimKey{Scope: "youtube_outbox_delivery", Subject: "video-live"}
-	if _, err := cache.Claim(context.Background(), liveKey, "worker-b", time.Minute); err != nil {
+
+	liveKey := ClaimKey{Scope: testClaimScopeOutboxDelivery, Subject: "video-live"}
+
+	if _, err := cache.Claim(t.Context(), liveKey, "worker-b", time.Minute); err != nil {
 		t.Fatalf("Claim(%v) error = %v", liveKey, err)
 	}
 
 	if got := cache.holdingsLen(); got != 1 {
 		t.Fatalf("holdings len after sweep = %d, want 1 (only the live claim)", got)
 	}
-	if _, err := cache.Claim(context.Background(), liveKey, "worker-c", time.Minute); !errors.Is(err, ErrAlreadyHeld) {
+
+	if _, err := cache.Claim(t.Context(), liveKey, "worker-c", time.Minute); !errors.Is(err, ErrAlreadyHeld) {
 		t.Fatalf("live claim must survive the sweep: error = %v, want %v", err, ErrAlreadyHeld)
 	}
 }
@@ -259,5 +286,6 @@ func TestMemoryCache_ClaimSweepsExpiredEntriesOfOtherKeys(t *testing.T) {
 func (c *MemoryCache) holdingsLen() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	return len(c.holdings)
 }

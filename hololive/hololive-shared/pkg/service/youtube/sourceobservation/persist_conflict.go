@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
@@ -29,5 +30,9 @@ func persistReconcileConflict(
 		attemptedSHA,
 		decision,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("insert reconcile conflict: %w", err)
+	}
+
+	return nil
 }

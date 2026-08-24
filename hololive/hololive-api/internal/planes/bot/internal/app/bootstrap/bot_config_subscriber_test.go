@@ -27,17 +27,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type recordingAlarmCRUD struct {
 	stubAlarmCRUD
+
 	targets     []int
 	calls       int
 	ctxErr      error
@@ -48,9 +50,11 @@ type recordingAlarmCRUD struct {
 
 func (r *recordingAlarmCRUD) UpdateAlarmAdvanceMinutes(ctx context.Context, _ int) []int {
 	r.calls++
+
 	r.ctxErr = ctx.Err()
 	r.ctxValue = ctx.Value(bootstrapTestContextKey{})
 	r.deadline, r.hasDeadline = ctx.Deadline()
+
 	return append([]int(nil), r.targets...)
 }
 
@@ -66,15 +70,17 @@ func (r *recordingSettings) Get() settings.Settings {
 func (r *recordingSettings) Update(newSettings settings.Settings) error {
 	r.updates = append(r.updates, newSettings)
 	r.current = newSettings
+
 	return nil
 }
 
 func newExpiringBuildContext(t *testing.T) context.Context {
 	t.Helper()
 
-	ctx := context.WithValue(context.Background(), bootstrapTestContextKey{}, "build-context")
+	ctx := context.WithValue(t.Context(), bootstrapTestContextKey{}, "build-context")
 	ctx, cancel := context.WithTimeout(ctx, time.Millisecond)
 	t.Cleanup(cancel)
+
 	return ctx
 }
 
@@ -96,10 +102,11 @@ func TestBuildAlarmAdvanceMinutesHandlerOutlivesBuildContext(t *testing.T) {
 	require.ErrorIs(t, buildCtx.Err(), context.DeadlineExceeded)
 
 	before := time.Now()
+
 	handler(contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 10})
 
 	require.Equal(t, 1, alarmCRUD.calls)
-	assert.NoError(t, alarmCRUD.ctxErr)
+	require.NoError(t, alarmCRUD.ctxErr)
 	assert.Equal(t, "build-context", alarmCRUD.ctxValue)
 	require.True(t, alarmCRUD.hasDeadline)
 	assert.WithinDuration(t, before.Add(constants.RequestTimeout.AlarmService), alarmCRUD.deadline, 2*time.Second)
@@ -137,7 +144,7 @@ func TestBuildACLReloadHandlerOutlivesBuildContext(t *testing.T) {
 		t.Context(),
 		true,
 		acl.ACLModeWhitelist,
-		[]string{"room-a"},
+		[]string{testRoomA},
 		newACLPostgresMock(t),
 		cachemocks.NewLenientClient(),
 		slog.New(slog.DiscardHandler),
@@ -146,6 +153,7 @@ func TestBuildACLReloadHandlerOutlivesBuildContext(t *testing.T) {
 	require.NotNil(t, service)
 
 	var logs bytes.Buffer
+
 	buildCtx := newExpiringBuildContext(t)
 	handler := buildACLReloadHandler(
 		buildCtx,
@@ -156,7 +164,7 @@ func TestBuildACLReloadHandlerOutlivesBuildContext(t *testing.T) {
 	<-buildCtx.Done()
 	require.ErrorIs(t, buildCtx.Err(), context.DeadlineExceeded)
 
-	handler(contractssettings.ACLPayloadV1{Reason: "test", Room: "room-a", Mode: "whitelist"})
+	handler(contractssettings.ACLPayloadV1{Reason: "test", Room: testRoomA, Mode: "whitelist"})
 
 	assert.Contains(t, logs.String(), "Reloaded ACL after config update")
 	assert.NotContains(t, logs.String(), "Failed to reload ACL after config update")

@@ -42,7 +42,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 
 	selection, err := c.resolveYouTubeUpcomingSelection(ctx, stream, subscriberRooms, window)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve youtube upcoming selection: %w", err)
 	}
 
 	if !selection.selected {
@@ -56,6 +56,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 
 	if alreadyNotified {
 		observeYouTubeUpcomingDecision("already_notified", selection.minutesUntil, selection.label, window)
+
 		return nil, nil
 	}
 
@@ -93,15 +94,19 @@ func (c *YouTubeChecker) resolveYouTubeUpcomingSelection(
 	minutesUntil, targetCrossed := targetPolicy.HighestCrossed(*stream.StartScheduled, window)
 
 	var scheduleChanges map[string]*dedup.ScheduleChange
+
 	if !targetCrossed {
 		changes, err := c.detectRoomScheduleChanges(ctx, stream, subscriberRooms)
 		if err != nil {
 			return youtubeUpcomingSelection{}, fmt.Errorf("build upcoming notifications: detect schedule change: %w", err)
 		}
+
 		if len(changes) == 0 {
 			observeYouTubeUpcomingNoMinuteDecision("no_target", window)
+
 			return youtubeUpcomingSelection{}, nil
 		}
+
 		scheduleChanges = changes
 		minutesUntil = currentMinutesUntil
 	}
@@ -126,10 +131,12 @@ func buildYouTubeUpcomingRoomNotifications(
 	if resolvedStream == nil {
 		return nil
 	}
+
 	notificationScheduleChanges := selection.scheduleChanges
 	if selection.targetCrossed {
 		notificationScheduleChanges = nil
 	}
+
 	return RoomNotificationsWithScheduleChanges(
 		subscriberRooms,
 		resolvedStream.Channel,
@@ -168,7 +175,7 @@ func (c *YouTubeChecker) detectRoomScheduleChanges(
 	subscriberRooms []string,
 ) (map[string]*dedup.ScheduleChange, error) {
 	if stream == nil {
-		return nil, nil
+		return map[string]*dedup.ScheduleChange{}, nil
 	}
 
 	channelID := stream.ChannelID
@@ -177,14 +184,17 @@ func (c *YouTubeChecker) detectRoomScheduleChanges(
 	}
 
 	changes := make(map[string]*dedup.ScheduleChange)
+
 	for _, roomID := range UniqueStrings(subscriberRooms) {
 		change, err := c.dedupService.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
 		if err != nil {
 			return nil, fmt.Errorf("detect room schedule changes: room %s: %w", roomID, err)
 		}
+
 		if change == nil {
 			continue
 		}
+
 		changes[roomID] = change
 	}
 

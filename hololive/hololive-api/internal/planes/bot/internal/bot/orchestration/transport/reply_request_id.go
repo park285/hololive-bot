@@ -78,9 +78,11 @@ func formatReplyClientRequestID(token string, ordinal uint64) string {
 
 func reissuedReplyClientRequestID(clientRequestID string, generation int) string {
 	clientRequestID = strings.TrimSpace(clientRequestID)
+
 	if generation <= 0 {
 		return clientRequestID
 	}
+
 	if clientRequestID == "" {
 		return ""
 	}
@@ -89,16 +91,19 @@ func reissuedReplyClientRequestID(clientRequestID string, generation int) string
 	if err == nil {
 		return candidate
 	}
+
 	if errors.Is(err, iris.ErrReplyReissueGenerationOutOfRange) ||
 		errors.Is(err, iris.ErrReplyReissueBaseAlreadyReissued) {
 		return ""
 	}
 
 	fallbackBase := formatReplyClientRequestID(hashedReplyIDToken(clientRequestID), 0)
+
 	candidate, err = iris.ReissuedClientRequestID(fallbackBase, generation)
 	if err != nil {
 		return ""
 	}
+
 	return candidate
 }
 
@@ -123,5 +128,6 @@ func isValidReplyClientRequestID(id string) bool {
 
 func isReplyClientRequestIDRune(r rune) bool {
 	const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
+
 	return strings.ContainsRune(allowed, r)
 }

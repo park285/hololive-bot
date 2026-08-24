@@ -22,8 +22,8 @@ package httpserver
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -31,10 +31,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 )
 
 type stubMajorEvent struct {
@@ -56,32 +54,39 @@ type stubMemberNewsWeekly struct {
 func (s *stubMemberNewsWeekly) SendWeeklyDigest(_ context.Context) error { return s.err }
 
 func newDiscardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func newTriggerRouter(h *TriggerHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
+
 	r := gin.New()
 	h.RegisterInternalRoutesWithoutAuth(r.Group("/"))
+
 	return r
 }
 
 // postTrigger: 트리거 엔드포인트에 POST 요청을 보내고 응답을 반환합니다.
 func postTrigger(t *testing.T, r *gin.Engine, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, http.NoBody)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, http.NoBody)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
+
 	return rec
 }
 
 // unmarshalBody: 응답 본문을 map으로 파싱합니다.
 func unmarshalBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
+
 	var m map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &m); err != nil {
 		t.Fatalf("응답 본문 파싱 실패: %v", err)
 	}
+
 	return m
 }
 
@@ -100,7 +105,7 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 			name:        "스케줄러 nil → 503",
 			scheduler:   nil,
 			wantStatus:  http.StatusServiceUnavailable,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "major_event_scheduler_unavailable",
 		},
 		{
@@ -114,14 +119,14 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 			name:        "이미 진행 중 → 409",
 			scheduler:   &stubMajorEvent{err: triggercontracts.ErrNotificationInProgress},
 			wantStatus:  http.StatusConflict,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "notification_in_progress",
 		},
 		{
 			name:        "일반 오류 → 500",
 			scheduler:   &stubMajorEvent{err: errors.New("db timeout")},
 			wantStatus:  http.StatusInternalServerError,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "internal_server_error",
 		},
 	}
@@ -137,6 +142,7 @@ func TestTriggerWeeklyNotification(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
+
 			body := unmarshalBody(t, rec)
 			if got := body[tt.wantBodyKey]; got != tt.wantBodyVal {
 				t.Fatalf("body[%q] = %v, want %q", tt.wantBodyKey, got, tt.wantBodyVal)
@@ -160,7 +166,7 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 			name:        "스케줄러 nil → 503",
 			scheduler:   nil,
 			wantStatus:  http.StatusServiceUnavailable,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "major_event_monthly_scheduler_unavailable",
 		},
 		{
@@ -174,14 +180,14 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 			name:        "이미 진행 중 → 409",
 			scheduler:   &stubMajorEventMonthly{err: triggercontracts.ErrNotificationInProgress},
 			wantStatus:  http.StatusConflict,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "notification_in_progress",
 		},
 		{
 			name:        "일반 오류 → 500",
 			scheduler:   &stubMajorEventMonthly{err: errors.New("timeout")},
 			wantStatus:  http.StatusInternalServerError,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "internal_server_error",
 		},
 	}
@@ -197,6 +203,7 @@ func TestTriggerMonthlyNotification(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
+
 			body := unmarshalBody(t, rec)
 			if got := body[tt.wantBodyKey]; got != tt.wantBodyVal {
 				t.Fatalf("body[%q] = %v, want %q", tt.wantBodyKey, got, tt.wantBodyVal)
@@ -220,7 +227,7 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 			name:        "스케줄러 nil → 503",
 			scheduler:   nil,
 			wantStatus:  http.StatusServiceUnavailable,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "member_news_weekly_scheduler_unavailable",
 		},
 		{
@@ -234,7 +241,7 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 			name:        "오류 발생 → 500",
 			scheduler:   &stubMemberNewsWeekly{err: errors.New("fetch failed")},
 			wantStatus:  http.StatusInternalServerError,
-			wantBodyKey: "error",
+			wantBodyKey: responseKeyError,
 			wantBodyVal: "internal_server_error",
 		},
 	}
@@ -250,6 +257,7 @@ func TestTriggerMemberNewsWeekly(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
+
 			body := unmarshalBody(t, rec)
 			if got := body[tt.wantBodyKey]; got != tt.wantBodyVal {
 				t.Fatalf("body[%q] = %v, want %q", tt.wantBodyKey, got, tt.wantBodyVal)
@@ -310,10 +318,12 @@ func TestRegisterInternalRoutesWithAuth(t *testing.T) {
 			r := gin.New()
 			h.RegisterInternalRoutesWithAuth(r.Group("/"), tt.apiKey)
 
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
+
 			if tt.headerVal != "" {
 				req.Header.Set(common.APIKeyHeader, tt.headerVal)
 			}
+
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, req)
 

@@ -21,18 +21,20 @@
 package sampledata
 
 const (
-	fieldMemberName  = "MemberName"
-	fieldChannelName = "ChannelName"
-	fieldName        = "Name"
-	fieldTitle       = "Title"
-	fieldURL         = "URL"
-	fieldKind        = "Kind"
-	fieldCount       = "Count"
-	fieldPrefix      = "Prefix"
-	fieldEmoji       = "Emoji"
-	fieldBell        = "Bell"
-	fieldAlarm       = "Alarm"
+	fieldMemberName   = "MemberName"
+	fieldChannelName  = "ChannelName"
+	fieldMinutesUntil = "MinutesUntil"
+	fieldName         = "Name"
+	fieldTitle        = "Title"
+	fieldURL          = "URL"
+	fieldKind         = "Kind"
+	fieldCount        = "Count"
+	fieldPrefix       = "Prefix"
+	fieldEmoji        = "Emoji"
+	fieldBell         = "Bell"
+	fieldAlarm        = "Alarm"
 
-	sampleMemberMiko = "사쿠라 미코"
-	sampleSubs200Man = "200만"
+	sampleMemberMiko   = "사쿠라 미코"
+	sampleMemberFubuki = "시라카미 후부키"
+	sampleSubs200Man   = "200만"
 )

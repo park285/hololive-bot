@@ -22,17 +22,20 @@ func groupAlarmDispatchEnvelopesForKaring(envelopes []domain.AlarmQueueEnvelope,
 	if !karingEnabled {
 		return groupAlarmDispatchEnvelopes(envelopes)
 	}
+
 	grouped := groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchKaringGroupKey)
 	split := make([]alarmDispatchGroup, 0, len(grouped))
+
 	for i := range grouped {
 		split = append(split, splitAlarmDispatchKaringGroup(grouped[i])...)
 	}
+
 	return split
 }
 
 // 한 그룹이 여러 chunk로 나뉘면 앞 chunk만 전송된 뒤 뒤 chunk가 502로 실패하는 부분 성공이 가능하고,
 // 그 실패는 not-admitted라 envelopeCount와 무관하게 재시도되어 전체를 retry-solo로 재그룹한다 —
-// 이미 전송된 item이 다른 ClientRequestID로 다시 나간다. chunk 경계에서 미리 잘라 그 상태를 없앤다.
+// 이미 전송된 item이 다른 ClientRequestID로 다시 나간다. 그래서 chunk 경계에서 미리 잘라 둔다.
 func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGroup {
 	if len(group.envelopes) <= alarmDispatchKaringMaxItemsPerRequest ||
 		len(group.envelopes) != len(group.notifications) {
@@ -43,6 +46,7 @@ func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGrou
 	for i := range order {
 		order[i] = i
 	}
+
 	// buildAlarmDispatchKaringContentListRequests와 같은 정렬이어야 분할 결과가 기존 chunk 경계와
 	// 일치하고, 드레인 순서가 ClientRequestID에 새지 않는다.
 	sort.SliceStable(order, func(a, b int) bool {
@@ -54,13 +58,17 @@ func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGrou
 	for start := 0; start < len(order); start += alarmDispatchKaringMaxItemsPerRequest {
 		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(order))
 		sub := alarmDispatchGroup{roomID: group.roomID, minutesUntil: group.minutesUntil}
+
 		for _, index := range order[start:end] {
 			envelope := group.envelopes[index]
+
 			sub.envelopes = append(sub.envelopes, envelope)
 			sub.notifications = append(sub.notifications, group.notifications[index])
 		}
+
 		groups = append(groups, sub)
 	}
+
 	return groups
 }
 
@@ -70,17 +78,22 @@ func groupAlarmDispatchEnvelopesByKey(
 ) []alarmDispatchGroup {
 	groups := make([]alarmDispatchGroup, 0, len(envelopes))
 	index := map[string]int{}
+
 	for i := range envelopes {
 		envelope := &envelopes[i]
 		key := alarmDispatchRegroupKey(envelope, keyFunc)
 		groupIndex, ok := index[key]
+
 		if !ok {
 			index[key] = len(groups)
 			groups = append(groups, newAlarmDispatchGroup(envelope))
+
 			continue
 		}
+
 		appendAlarmDispatchEnvelope(&groups[groupIndex], envelope)
 	}
+
 	return groups
 }
 
@@ -90,9 +103,11 @@ func alarmDispatchRegroupKey(envelope *domain.AlarmQueueEnvelope, keyFunc func(*
 	if envelope != nil && envelope.SendUnitID > 0 {
 		return fmt.Sprintf("send-unit|%d", envelope.SendUnitID)
 	}
+
 	if envelope != nil && envelope.Retry != nil && envelope.Retry.Attempt > 0 {
 		return fmt.Sprintf("retry-solo|%d", envelope.DispatchOutboxID)
 	}
+
 	return keyFunc(envelope)
 }
 
@@ -100,6 +115,7 @@ func newAlarmDispatchGroup(envelope *domain.AlarmQueueEnvelope) alarmDispatchGro
 	if envelope == nil {
 		return alarmDispatchGroup{}
 	}
+
 	return alarmDispatchGroup{
 		roomID:        envelope.Notification.RoomID,
 		minutesUntil:  envelope.Notification.MinutesUntil,
@@ -112,6 +128,7 @@ func appendAlarmDispatchEnvelope(group *alarmDispatchGroup, envelope *domain.Ala
 	if group == nil || envelope == nil {
 		return
 	}
+
 	group.minutesUntil = minAlarmDispatchMinutes(group.minutesUntil, envelope.Notification.MinutesUntil)
 	group.envelopes = append(group.envelopes, *envelope)
 	group.notifications = append(group.notifications, envelope.Notification)
@@ -121,9 +138,11 @@ func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 	if envelope == nil {
 		return ""
 	}
+
 	if key, ok := alarmDispatchSourceGroupKey(envelope); ok {
 		return key
 	}
+
 	return alarmDispatchTimeGroupKey(envelope)
 }
 
@@ -131,6 +150,7 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return alarmDispatchCelebrationGroupKey(envelope), true
 	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return fmt.Sprintf("%s|source|%s|%s|%s|%s",
 			envelope.Notification.RoomID,
@@ -140,6 +160,7 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 			envelope.YouTubeOutbox.Identity(),
 		), true
 	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
 		return fmt.Sprintf("%s|source|%s|%s|%s",
 			envelope.Notification.RoomID,
@@ -148,6 +169,7 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 			envelope.DeliveryDigest.ContentIdentity(),
 		), true
 	}
+
 	return "", false
 }
 
@@ -160,6 +182,7 @@ func alarmDispatchCelebrationGroupKey(envelope *domain.AlarmQueueEnvelope) strin
 	if envelope.Celebration.VideoID != "" {
 		key += "|" + envelope.Celebration.VideoID
 	}
+
 	return key
 }
 
@@ -168,6 +191,7 @@ func alarmDispatchTimeGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 		minuteBucket := envelope.Notification.Stream.StartScheduled.UTC().Unix() / 60
 		return fmt.Sprintf("%s|scheduled|%d", envelope.Notification.RoomID, minuteBucket)
 	}
+
 	return fmt.Sprintf("%s|minutes|%d", envelope.Notification.RoomID, envelope.Notification.MinutesUntil)
 }
 
@@ -175,19 +199,25 @@ func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 	if envelope == nil {
 		return ""
 	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest && envelope.DeliveryDigest != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
+
 	phase := "prelive"
+
 	if envelope.Notification.IsStarting() {
 		phase = "starting"
 	}
+
 	return fmt.Sprintf(
 		"%s|karing|%s|%s|minutes|%d",
 		envelope.Notification.RoomID,
@@ -201,8 +231,10 @@ func minAlarmDispatchMinutes(current, next int) int {
 	if next < 0 {
 		return current
 	}
+
 	if current < 0 || next < current {
 		return next
 	}
+
 	return current
 }

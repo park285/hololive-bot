@@ -26,9 +26,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/valkey-io/valkey-go"
 )
 
 // 캐시 갱신은 의도적으로 비원자(sequential)다: alarm 키들은 hash tag가 없어 단일
@@ -41,17 +42,25 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (i
 
 	alarmTypes, err := normalizeAlarmTypesStrict(record.AlarmTypes, domain.DefaultAlarmTypes)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("normalize alarm types strict: %w", err)
 	}
+
 	cacheRecord := *record
+
 	cacheRecord.AlarmTypes = alarmTypes
 	cacheRecord.MemberName = as.resolveCacheMemberName(ctx, cacheRecord.ChannelID, cacheRecord.MemberName)
 
-	return as.cacheAlarmSequential(ctx, &cacheRecord)
+	out, err := as.cacheAlarmSequential(ctx, &cacheRecord)
+	if err != nil {
+		return out, stdErrors.Join(err)
+	}
+
+	return out, nil
 }
 
 func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain.Alarm) (int64, error) {
 	alarmKey := as.getAlarmKey(record.RoomID)
+
 	added, err := as.cache.SAdd(ctx, alarmKey, []string{record.ChannelID})
 	if err != nil {
 		return 0, fmt.Errorf("add room alarm: %w", err)
@@ -63,7 +72,7 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 	}
 
 	if err := as.cacheAlarmSubscribersSequential(ctx, record, registryKey); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("cache alarm subscribers sequential: %w", err)
 	}
 
 	if _, err := as.cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{record.ChannelID}); err != nil {
@@ -71,7 +80,7 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 	}
 
 	if err := as.cacheAlarmMetadataSequential(ctx, record); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("cache alarm metadata sequential: %w", err)
 	}
 
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
@@ -84,8 +93,10 @@ func (as *AlarmService) cacheAlarmSequential(ctx context.Context, record *domain
 func (as *AlarmService) cacheAlarmSubscribersSequential(ctx context.Context, record *domain.Alarm, registryKey string) error {
 	builder := as.cache.Builder()
 	saddCmds := make([]valkey.Completed, len(record.AlarmTypes))
+
 	for i, alarmType := range record.AlarmTypes {
 		subsKey := as.channelSubscribersKeyByType(record.ChannelID, alarmType)
+
 		saddCmds[i] = builder.Sadd().Key(subsKey).Member(registryKey).Build()
 	}
 
@@ -127,6 +138,7 @@ func (as *AlarmService) markAlarmCacheChanged(ctx context.Context) error {
 	if err := as.cache.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
 		return fmt.Errorf("clear empty subscriber cache marker: %w", err)
 	}
+
 	if err := as.cache.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0); err != nil {
 		return fmt.Errorf("set channel registry version: %w", err)
 	}

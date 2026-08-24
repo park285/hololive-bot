@@ -5,16 +5,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func (r *BotRuntime) WorkerRegistrations() []workercontract.Registration {
 	if r == nil || r.durable == nil {
 		return nil
 	}
+
 	durable := r.durable
+
 	return []workercontract.Registration{
 		{
 			WorkerID:          "bot_webhook_inbox",
@@ -43,8 +46,10 @@ func (r *BotRuntime) InstallWorkerRegistry(ctx context.Context, registry *worker
 	if r == nil {
 		return
 	}
+
 	r.workerRegistry = registry
 	r.workerProfileChecker = checker
+
 	if r.Config != nil && strings.TrimSpace(r.Config.Server.MetricsAddr) != "" {
 		r.MetricsServer = sharedserver.NewMetricsServer(ctx, r.Config.Server.MetricsAddr, r.Config.Server.APIKey, registry)
 	}
@@ -54,5 +59,6 @@ func (r *BotRuntime) startWorkerProfileChecker(ctx context.Context) {
 	if r == nil || r.workerProfileChecker == nil {
 		return
 	}
+
 	panicguard.Go(r.Logger, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
 }

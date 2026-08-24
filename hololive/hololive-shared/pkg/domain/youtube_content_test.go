@@ -68,6 +68,7 @@ func TestOutboxKind_ToAlarmType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.kind.ToAlarmType()
 			if got != tt.want {
 				t.Errorf("ToAlarmType() = %q, want %q", got, tt.want)
@@ -124,6 +125,7 @@ func TestOutboxKind_ToTemplateKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.kind.ToTemplateKey()
 			if got != tt.want {
 				t.Errorf("ToTemplateKey() = %q, want %q", got, tt.want)
@@ -181,13 +183,16 @@ func TestYouTubeNotificationOutbox_DedupeKey(t *testing.T) {
 			got, err := tt.item.DedupeKey()
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("DedupeKey() error = nil, want error")
+					t.Fatal("DedupeKey() error = nil, want error")
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatalf("DedupeKey() error = %v", err)
 			}
+
 			if got != tt.want {
 				t.Fatalf("DedupeKey() = %q, want %q", got, tt.want)
 			}
@@ -222,21 +227,26 @@ func TestThumbnailsJSON_Value(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			val, err := tt.thumbnails.Value()
 			if err != nil {
 				t.Fatalf("Value() 오류: %v", err)
 			}
+
 			if tt.wantNil {
 				if val != nil {
 					t.Errorf("Value() = %v, want nil", val)
 				}
+
 				return
 			}
+
 			// 유효한 경우 string 타입이어야 한다 (pgx jsonb 컬럼 요구사항)
 			s, ok := val.(string)
 			if !ok {
 				t.Fatalf("Value() 타입 = %T, want string", val)
 			}
+
 			if s == "" {
 				t.Error("Value() 반환 JSON 문자열이 비어있음")
 			}
@@ -286,17 +296,23 @@ func TestThumbnailsJSON_Scan(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			var result domain.ThumbnailsJSON
+
 			err := result.Scan(tt.input)
+
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Scan() 오류 = %v, wantErr = %v", err, tt.wantErr)
 			}
+
 			if tt.wantErr {
 				return
 			}
+
 			if tt.wantNil && result != nil {
 				t.Errorf("Scan() result = %v, want nil", result)
 			}
+
 			if !tt.wantNil && result == nil {
 				t.Error("Scan() result가 nil, 파싱된 값이 있어야 함")
 			}

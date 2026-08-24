@@ -51,8 +51,10 @@ func (d *ClaimManager) selectClaimedDeliveries(
 ) deliveryClaimSelection {
 	safeRows := make([]domain.YouTubeNotificationDelivery, len(rows))
 	copy(safeRows, rows)
+
 	safeOutboxes := make([]domain.YouTubeNotificationOutbox, len(outboxes))
 	copy(safeOutboxes, outboxes)
+
 	selection := deliveryClaimSelection{
 		sendRows:       make([]domain.YouTubeNotificationDelivery, 0, len(safeRows)),
 		sendOutboxes:   make([]domain.YouTubeNotificationOutbox, 0, len(safeOutboxes)),
@@ -60,6 +62,7 @@ func (d *ClaimManager) selectClaimedDeliveries(
 		rowClaimTokens: make([][]dispatchstate.ClaimToken, 0, len(safeRows)),
 	}
 	limit := min(len(safeOutboxes), len(safeRows))
+
 	if limit == 0 {
 		return selection
 	}
@@ -81,18 +84,21 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 	claimIdentity, err := deliveryClaimIdentityForOutbox(outbox)
 	if err != nil {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve community/shorts delivery claim identity before send", err)
+
 		return
 	}
 
 	result, err := reuseCache.ResolveClaim(ctx, claimIdentity, d.claimDeliveryResolver(row, outbox))
 	if err != nil {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to claim community/shorts alarm state before send", err)
+
 		return
 	}
 
 	cr, ok := result.Decision.Value.(claimResult)
 	if !ok {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Unexpected community/shorts claim result type before send", fmt.Errorf("claim result type %T", result.Decision.Value))
+
 		return
 	}
 
@@ -102,10 +108,13 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 		roomDecision, roomErr := d.resolveRoomDeliveryDecision(ctx, row, outbox)
 		if roomErr != nil {
 			d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve per-room community/shorts sent state before send", roomErr)
+
 			return
 		}
+
 		decision = roomDecision
 	}
+
 	d.applyDeliveryClaimDecision(ctx, selection, row, outbox, decision, cr.claimToken, result.Hit)
 }
 
@@ -117,17 +126,20 @@ type claimResult struct {
 func (d *ClaimManager) claimDeliveryResolver(
 	row *domain.YouTubeNotificationDelivery,
 	outbox *domain.YouTubeNotificationOutbox,
-) func(ctx context.Context) (claim.Decision, *claim.Token, error) {
-	return func(ctx context.Context) (claim.Decision, *claim.Token, error) {
-		decision, claimToken, claimErr := d.tryClaimDelivery(ctx, row, outbox)
+) claim.ComputeFn {
+	return func(ctx context.Context) (claim.ComputeResult, error) {
+		resolved, claimErr := d.tryClaimDelivery(ctx, row, outbox)
 		if claimErr != nil {
-			return claim.Decision{}, nil, claimErr
+			return claim.ComputeResult{}, fmt.Errorf("try claim delivery: %w", claimErr)
 		}
+
 		var token *claim.Token
-		if claimToken != nil {
-			token = &claim.Token{AuthorizedAt: claimToken.AuthorizedAt}
+
+		if resolved.claimToken != nil {
+			token = &claim.Token{AuthorizedAt: resolved.claimToken.AuthorizedAt}
 		}
-		return claim.Decision{Value: claimResult{decision: decision, claimToken: claimToken}}, token, nil
+
+		return claim.ComputeResult{Decision: claim.Decision{Value: resolved}, Token: token}, nil
 	}
 }
 
@@ -138,12 +150,15 @@ func (d *ClaimManager) resolveRoomDeliveryDecision(
 ) (deliveryClaimDecision, error) {
 	received, err := d.roomAlreadyReceivedPost(ctx, row, outbox)
 	if err != nil {
-		return deliveryClaimDecisionRetryLater, err
+		return deliveryClaimDecisionRetryLater, fmt.Errorf("room already received post: %w", err)
 	}
+
 	if received {
 		return deliveryClaimDecisionAlreadySent, nil
 	}
+
 	d.logClaimIssue("Proceeding with community/shorts delivery because this room has not received the already-sent post", row, outbox, slog.LevelInfo)
+
 	return deliveryClaimDecisionProceed, nil
 }
 
@@ -155,6 +170,7 @@ func (d *ClaimManager) retryDeliveryClaimSelection(
 	err error,
 ) {
 	d.logClaimIssue(message, row, outbox, slog.LevelWarn, slog.Any("error", err))
+
 	selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
 	selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
 }
@@ -173,6 +189,7 @@ func (d *ClaimManager) applyDeliveryClaimDecision(
 		appendProceedingDeliveryClaim(selection, row, outbox, claimToken, reused)
 	case deliveryClaimDecisionAlreadySent:
 		d.logClaimIssue("Skipped community/shorts delivery because the post was already sent", row, outbox, slog.LevelInfo)
+
 		selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, row.ID)
 		selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outbox.ID)
 	case deliveryClaimDecisionRetryLater:
@@ -187,15 +204,19 @@ func (d *ClaimManager) applyRetryLaterDeliveryClaim(
 	outbox *domain.YouTubeNotificationOutbox,
 ) {
 	d.logClaimIssue("Skipped community/shorts delivery because another execution owns the post claim", row, outbox, slog.LevelInfo)
+
 	deferred, err := d.deferDeliveryClaim(ctx, row)
 	if err != nil {
 		d.logClaimIssue("Failed to defer community/shorts delivery without consuming an attempt", row, outbox, slog.LevelWarn, slog.Any("error", err))
 	}
+
 	if !deferred {
 		selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
 		selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+
 		return
 	}
+
 	selection.deferredDeliveryIDs = append(selection.deferredDeliveryIDs, row.ID)
 }
 
@@ -205,13 +226,17 @@ func (d *ClaimManager) deferDeliveryClaim(ctx context.Context, row *domain.YouTu
 	}
 
 	nextAttemptAt := time.Now().UTC()
+
 	if d.config.RetryBackoff > 0 {
 		nextAttemptAt = nextAttemptAt.Add(d.config.RetryBackoff)
 	}
+
 	query := mustSQL("dispatcher_claim_gate_0195_02.sql")
 	args := []any{domain.OutboxStatusPending, nextAttemptAt, row.ID, store.DeliveryStatusSending}
+
 	if row.LockedAt != nil {
 		query += " AND locked_at = ?"
+
 		args = append(args, *row.LockedAt)
 	}
 
@@ -219,6 +244,7 @@ func (d *ClaimManager) deferDeliveryClaim(ctx context.Context, row *domain.YouTu
 	if err != nil {
 		return false, fmt.Errorf("defer delivery claim: %w", err)
 	}
+
 	return affected > 0, nil
 }
 
@@ -230,11 +256,14 @@ func appendProceedingDeliveryClaim(
 	reused bool,
 ) {
 	rowClaimTokens := []dispatchstate.ClaimToken(nil)
+
 	if claimToken != nil && !reused {
 		token := *claimToken
+
 		selection.claimTokens = append(selection.claimTokens, token)
 		rowClaimTokens = []dispatchstate.ClaimToken{token}
 	}
+
 	selection.sendRows = append(selection.sendRows, *row)
 	selection.sendOutboxes = append(selection.sendOutboxes, *outbox)
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
@@ -243,6 +272,7 @@ func appendProceedingDeliveryClaim(
 func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection *deliveryClaimSelection) {
 	if len(selection.alreadySentDeliveryIDs) > 0 {
 		mu.Lock()
+
 		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)
 		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, selection.alreadySentOutboxIDs...)
 		mu.Unlock()
@@ -250,9 +280,11 @@ func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult,
 
 	for i := range selection.retryDeliveryIDs {
 		outboxID := int64(0)
+
 		if i < len(selection.retryOutboxIDs) {
 			outboxID = selection.retryOutboxIDs[i]
 		}
+
 		d.recordDeliveryFailure(result, mu, deliveryFailureReasonPreSendClaim, selection.retryDeliveryIDs[i], outboxID)
 	}
 }
@@ -264,6 +296,7 @@ func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Con
 	}
 
 	sentAt := dispatchstate.CanonicalSentAtNow()
+
 	if err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
 		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
 	}); err != nil {
@@ -283,6 +316,7 @@ func recoverSuccessfulCommunityShortsSentStateTx(
 	if err != nil {
 		return fmt.Errorf("load sent-state recovery marks: %w", err)
 	}
+
 	if len(marks) > 0 {
 		if err := observation.NewRepositoryContext(ctx, tx).MarkAlarmSentBatch(ctx, marks); err != nil {
 			return fmt.Errorf("persist sent-state recovery marks: %w", err)
@@ -295,7 +329,7 @@ func recoverSuccessfulCommunityShortsSentStateTx(
 	}
 
 	if err := markRecoveredSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
-		return err
+		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
 	}
 
 	return nil
@@ -303,12 +337,15 @@ func recoverSuccessfulCommunityShortsSentStateTx(
 
 func markRecoveredSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
 	args := []any{domain.OutboxStatusSent, sentAt}
+
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, store.DeliveryStatusSending)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "mark recovered sent delivery rows", mustSQL("dispatcher_claim_gate_0230_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
 	}
+
 	return nil
 }
 
@@ -317,5 +354,6 @@ func alarmSentMarkIdentities(marks []observation.AlarmSentMark) []timeline.PostT
 	for i := range marks {
 		identities = append(identities, timeline.PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
 	}
+
 	return identities
 }

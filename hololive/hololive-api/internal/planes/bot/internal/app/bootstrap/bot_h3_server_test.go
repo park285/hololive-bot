@@ -18,19 +18,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
+const testLoopbackAddr = "127.0.0.1:0"
+
 func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	t.Parallel()
 
 	certFile, keyFile := writeLocalhostCertificate(t)
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			H3Addr:     "127.0.0.1:0",
+			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
 		},
 	}
 
 	buildCtx, buildCancel := context.WithCancel(t.Context())
+
 	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
 		buildCtx, appConfig, nil, nil, nil, nil,
 		reloadingTLSCertificateOptions{reloadInterval: 10 * time.Millisecond},
@@ -38,32 +41,39 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)
 	}
+
 	buildCancel()
 
 	first, err := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
 	if err != nil {
 		t.Fatalf("first GetCertificate() error = %v", err)
 	}
+
 	firstSerial := certificateSerial(t, first)
 
 	runCtx, runCancel := context.WithCancel(t.Context())
 	defer runCancel()
+
 	startCertReload(runCtx)
 
 	overwriteLocalhostCertificate(t, certFile, keyFile)
 
 	deadline := time.Now().Add(3 * time.Second)
+
 	for {
 		cert, getErr := server.TLSConfig.GetCertificate(&tls.ClientHelloInfo{})
 		if getErr != nil {
 			t.Fatalf("GetCertificate() error = %v", getErr)
 		}
+
 		if certificateSerial(t, cert) != firstSerial {
 			return
 		}
+
 		if time.Now().After(deadline) {
 			t.Fatal("certificate was not reloaded after build context ended")
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }
@@ -74,7 +84,7 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 	certFile, keyFile := writeLocalhostCertificate(t)
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			H3Addr:     "127.0.0.1:0",
+			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
 		},
@@ -85,24 +95,30 @@ func TestBuildBotHTTP3ServerLoadsTLSConfig(t *testing.T) {
 		t.Fatalf("BuildBotHTTP3Server() error = %v", err)
 	}
 
-	if server.Addr != "127.0.0.1:0" {
+	if server.Addr != testLoopbackAddr {
 		t.Fatalf("Addr = %q, want 127.0.0.1:0", server.Addr)
 	}
+
 	if server.TLSConfig == nil {
 		t.Fatal("TLSConfig = nil")
 	}
+
 	if server.TLSConfig.MinVersion != tls.VersionTLS13 {
 		t.Fatalf("MinVersion = %x, want %x", server.TLSConfig.MinVersion, tls.VersionTLS13)
 	}
+
 	if server.TLSConfig.GetCertificate == nil {
 		t.Fatal("GetCertificate = nil")
 	}
+
 	if server.QUICConfig == nil {
 		t.Fatal("QUICConfig = nil")
 	}
+
 	if server.QUICConfig.InitialPacketSize != 1200 {
 		t.Fatalf("InitialPacketSize = %d, want 1200", server.QUICConfig.InitialPacketSize)
 	}
+
 	if server.QUICConfig.DisablePathMTUDiscovery {
 		t.Fatal("DisablePathMTUDiscovery = true, want default PMTUD enabled")
 	}
@@ -114,7 +130,7 @@ func TestBuildBotHTTP3ServerServesCachedCertificateFiles(t *testing.T) {
 	certFile, keyFile := writeLocalhostCertificate(t)
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			H3Addr:     "127.0.0.1:0",
+			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
 		},
@@ -156,7 +172,7 @@ func TestBuildBotHTTP3ServerKeepsPreviousCertificateWhenReloadFails(t *testing.T
 	certFile, keyFile := writeLocalhostCertificate(t)
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			H3Addr:     "127.0.0.1:0",
+			H3Addr:     testLoopbackAddr,
 			H3CertFile: certFile,
 			H3KeyFile:  keyFile,
 		},
@@ -200,6 +216,7 @@ func writeLocalhostCertificate(t *testing.T) (certFile, keyFile string) {
 
 	certPEM, keyPEM := generateLocalhostCertificate(t)
 	dir := t.TempDir()
+
 	certFile = filepath.Join(dir, "localhost.crt")
 	keyFile = filepath.Join(dir, "localhost.key")
 

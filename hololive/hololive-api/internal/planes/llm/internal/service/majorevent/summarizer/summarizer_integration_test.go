@@ -114,19 +114,22 @@ func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
 	t.Logf("\n=== Weekly User Prompt ===\n%s\n=== END ===", prompt)
 
 	if !strings.Contains(prompt, "4건") {
-		t.Errorf("이벤트 수(4건)가 프롬프트에 없음")
+		t.Error("이벤트 수(4건)가 프롬프트에 없음")
 	}
+
 	if !strings.Contains(prompt, "2026-02-21") {
 		t.Error("periodKey가 프롬프트에 없음")
 	}
 
 	// JSON 배열 형식 검증
 	var promptEvents []eventForPrompt
+
 	// 프롬프트에서 JSON 부분 추출
 	idx := strings.Index(prompt, "[")
 	if idx == -1 {
 		t.Fatal("프롬프트에 JSON 배열이 없음")
 	}
+
 	jsonPart := prompt[idx:]
 	if err := jsonv2.Unmarshal([]byte(jsonPart), &promptEvents); err != nil {
 		t.Fatalf("프롬프트 JSON 파싱 실패: %v", err)
@@ -141,9 +144,11 @@ func TestIntegration_BuildUserPrompt_Output(t *testing.T) {
 		if pe.DateStr == "" || pe.DateStr == "TBA" {
 			t.Errorf("event %q has no date", pe.Title)
 		}
+
 		if pe.Title == "" {
 			t.Error("event title is empty")
 		}
+
 		fmt.Printf("  prompt event: title=%q date=%q members=%q\n", pe.Title, pe.DateStr, pe.Members)
 	}
 }

@@ -27,12 +27,12 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -63,7 +63,7 @@ func NewTwitchChecker(cacheClient cache.Client, twitchClient *twitch.Client, log
 func (c *TwitchChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
 	inputs, err := c.loadCheckInputs(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load check inputs: %w", err)
 	}
 
 	streamsResponse, err := c.twitchClient.GetStreams(ctx, inputs.loginsToLookup)
@@ -208,6 +208,7 @@ func buildTwitchLiveStream(youtubeChannelID, memberName string, streamData *twit
 	if channelName == "" {
 		channelName = strings.TrimSpace(streamData.UserLogin)
 	}
+
 	channelName = checking.ChannelNameForMember(youtubeChannelID, memberName, channelName)
 
 	title := strings.TrimSpace(streamData.Title)

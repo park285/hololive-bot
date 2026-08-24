@@ -33,6 +33,7 @@ func reflectStringField(v any, name string) string {
 	if !ok {
 		return ""
 	}
+
 	return reflectStringValue(field)
 }
 
@@ -41,6 +42,7 @@ func reflectStringValue(field reflect.Value) string {
 	if kind == reflect.String {
 		return strings.TrimSpace(field.String())
 	}
+
 	return reflectIntegerString(field)
 }
 
@@ -77,6 +79,7 @@ func reflectSignedIntegerString(field reflect.Value) string {
 	if field.Int() == 0 {
 		return ""
 	}
+
 	return strconv.FormatInt(field.Int(), 10)
 }
 
@@ -84,6 +87,7 @@ func reflectUnsignedIntegerString(field reflect.Value) string {
 	if field.Uint() == 0 {
 		return ""
 	}
+
 	return strconv.FormatUint(field.Uint(), 10)
 }
 
@@ -92,6 +96,7 @@ func reflectTimeField(v any, name string) time.Time {
 	if !ok {
 		return time.Time{}
 	}
+
 	return reflectTimeValue(field)
 }
 
@@ -110,15 +115,17 @@ func reflectStructField(v any, name string) (reflect.Value, bool) {
 	if !field.IsValid() {
 		return reflect.Value{}, false
 	}
+
 	return field, true
 }
 
 func reflectTimeValue(field reflect.Value) time.Time {
 	if field.Type() == reflect.TypeFor[time.Time]() {
-		parsed, ok := field.Interface().(time.Time)
+		parsed, ok := reflect.TypeAssert[time.Time](field)
 		if !ok {
 			return time.Time{}
 		}
+
 		return parsed
 	}
 
@@ -129,6 +136,7 @@ func reflectTimeValue(field reflect.Value) time.Time {
 	if parsed := reflectSignedUnixTime(field); !parsed.IsZero() {
 		return parsed
 	}
+
 	return reflectUnsignedUnixTime(field)
 }
 
@@ -136,10 +144,12 @@ func reflectSignedUnixTime(field reflect.Value) time.Time {
 	if field.Kind() < reflect.Int || field.Kind() > reflect.Int64 {
 		return time.Time{}
 	}
+
 	raw := field.Int()
 	if raw <= 0 {
 		return time.Time{}
 	}
+
 	return unixByMagnitude(raw)
 }
 
@@ -147,13 +157,16 @@ func reflectUnsignedUnixTime(field reflect.Value) time.Time {
 	if field.Kind() < reflect.Uint || field.Kind() > reflect.Uint64 {
 		return time.Time{}
 	}
+
 	raw := field.Uint()
 	if raw <= 0 {
 		return time.Time{}
 	}
+
 	if raw > uint64(math.MaxInt64) {
 		return time.Time{}
 	}
+
 	return unixByMagnitude(int64(raw))
 }
 
@@ -167,8 +180,8 @@ func parseChzzkTime(raw string) time.Time {
 		time.RFC3339Nano,
 		time.RFC3339,
 		"2006-01-02T15:04:05.000Z07:00",
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
+		time.RFC3339,
+		time.DateTime,
 		"2006-01-02T15:04:05",
 	}
 	for _, layout := range layouts {

@@ -7,11 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const alarmPrivacySentinel = "SENTINEL"
@@ -64,9 +63,11 @@ func TestHandleInvalidAlwaysAnswersWithTheUsageError(t *testing.T) {
 			if len(*sent) != 1 {
 				t.Fatalf("SendError calls = %d, want 1", len(*sent))
 			}
+
 			if (*sent)[0].room != cmdCtx.Room {
 				t.Fatalf("SendError room = %q, want %q", (*sent)[0].room, cmdCtx.Room)
 			}
+
 			if (*sent)[0].message != messaging.ErrInvalidAlarmUsage {
 				t.Fatalf("SendError message = %q, want %q", (*sent)[0].message, messaging.ErrInvalidAlarmUsage)
 			}
@@ -93,6 +94,7 @@ func TestHandleInvalidLogKeepsRoomIDWithoutUserInput(t *testing.T) {
 	if !strings.Contains(logged, `"`+privacylog.KeyRoomID+`":"123456789"`) {
 		t.Fatalf("log record lost the room correlation key: %s", logged)
 	}
+
 	if strings.Contains(logged, alarmPrivacySentinel) {
 		t.Fatalf("log record leaked user input: %s", logged)
 	}

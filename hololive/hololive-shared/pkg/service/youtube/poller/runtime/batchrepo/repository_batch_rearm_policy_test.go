@@ -21,7 +21,6 @@
 package batchrepo
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -65,13 +64,13 @@ func TestPgxBatchRepositoryPersistVideosDoesNotReactivateFailedLiveStreamOutbox(
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	createdAt := time.Date(2026, 4, 10, 1, 0, 0, 0, time.UTC)
+	createdAt := time.Date(2026, time.April, 10, 1, 0, 0, 0, time.UTC)
 	nextAttemptAt := createdAt.Add(5 * time.Minute)
 	existingOutbox := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindLiveStream,
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		ContentID:     "live-1",
 		Payload:       `{"video_id":"live-1","version":"old"}`,
 		Status:        domain.OutboxStatusFailed,
@@ -82,20 +81,20 @@ func TestPgxBatchRepositoryPersistVideosDoesNotReactivateFailedLiveStreamOutbox(
 	}
 	require.NoError(t, db.Create(&existingOutbox).Error)
 
-	err := persistVideos(repository, ctx, []*domain.YouTubeVideo{{
+	err := persistVideos(ctx, repository, []*domain.YouTubeVideo{{
 		VideoID:      "live-1",
-		ChannelID:    "channel-1",
+		ChannelID:    testChannelID,
 		Title:        "title-live-1",
 		IsLiveReplay: true,
 		ViewCount:    999,
 	}}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindLiveStream,
-		ChannelID: "channel-1",
+		ChannelID: testChannelID,
 		ContentID: "live-1",
 		Payload:   `{"video_id":"live-1","version":"new"}`,
 		Status:    domain.OutboxStatusPending,
 	}}, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeVideo,
 		Initialized:   true,
 		LastContentID: "live-1",
@@ -103,6 +102,7 @@ func TestPgxBatchRepositoryPersistVideosDoesNotReactivateFailedLiveStreamOutbox(
 	require.NoError(t, err)
 
 	var outboxRows []domain.YouTubeNotificationOutbox
+
 	require.NoError(t, db.Order("id ASC").Find(&outboxRows).Error)
 	require.Len(t, outboxRows, 1)
 	require.Equal(t, existingOutbox.ID, outboxRows[0].ID)

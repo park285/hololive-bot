@@ -107,31 +107,31 @@ func TestMajorEventCommand_RepositoryErrorPathsUseSendError(t *testing.T) {
 		{
 			name:       "subscribe status check failure",
 			repository: &stubMajorEventRepository{isSubscribedErr: errors.New("boom")},
-			params:     map[string]any{"action": "on"},
+			params:     map[string]any{testParamAction: "on"},
 			want:       messaging.ErrMajorEventStatusCheckFailed,
 		},
 		{
 			name:       "subscribe failure",
 			repository: &stubMajorEventRepository{isSubscribed: false, subscribeErr: errors.New("boom")},
-			params:     map[string]any{"action": "on"},
+			params:     map[string]any{testParamAction: "on"},
 			want:       messaging.ErrMajorEventSubscribeFailed,
 		},
 		{
 			name:       "unsubscribe status check failure",
 			repository: &stubMajorEventRepository{isSubscribedErr: errors.New("boom")},
-			params:     map[string]any{"action": "off"},
+			params:     map[string]any{testParamAction: "off"},
 			want:       messaging.ErrMajorEventStatusCheckFailed,
 		},
 		{
 			name:       "unsubscribe failure",
 			repository: &stubMajorEventRepository{isSubscribed: true, unsubscribeErr: errors.New("boom")},
-			params:     map[string]any{"action": "off"},
+			params:     map[string]any{testParamAction: "off"},
 			want:       messaging.ErrMajorEventUnsubscribeFailed,
 		},
 		{
 			name:       "status status check failure",
 			repository: &stubMajorEventRepository{isSubscribedErr: errors.New("boom")},
-			params:     map[string]any{"action": "status"},
+			params:     map[string]any{testParamAction: "status"},
 			want:       messaging.ErrMajorEventStatusCheckFailed,
 		},
 	}

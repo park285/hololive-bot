@@ -42,12 +42,15 @@ func (s *stubDistributedLimiter) Allow(_ context.Context, _ string, _ int, _ tim
 	if len(s.decisions) == 0 {
 		return ratelimit.Decision{Allowed: true}, nil
 	}
+
 	if len(s.decisions) == 1 {
 		return s.decisions[0], nil
 	}
 
 	d := s.decisions[0]
+
 	s.decisions = s.decisions[1:]
+
 	return d, nil
 }
 
@@ -59,11 +62,12 @@ func TestRateLimiter_WaitWithBucket_DistributedDeniedThenAllowed(t *testing.T) {
 			{Allowed: true},
 		},
 	}
+
 	if err := rl.ConfigureDistributed(dist, 1, time.Second); err != nil {
 		t.Fatalf("configure distributed limiter: %v", err)
 	}
 
-	if err := rl.WaitWithBucket(context.Background(), "youtube:producer:videos"); err != nil {
+	if err := rl.WaitWithBucket(t.Context(), "youtube:producer:videos"); err != nil {
 		t.Fatalf("wait with bucket: %v", err)
 	}
 }
@@ -75,18 +79,20 @@ func TestRateLimiter_WaitWithBucket_DistributedDeniedWithoutRetryAfter(t *testin
 			{Allowed: false, RetryAfter: 0},
 		},
 	}
+
 	if err := rl.ConfigureDistributed(dist, 1, time.Second); err != nil {
 		t.Fatalf("configure distributed limiter: %v", err)
 	}
 
-	if err := rl.WaitWithBucket(context.Background(), "youtube:producer:videos"); err == nil {
-		t.Fatalf("expected error but got nil")
+	if err := rl.WaitWithBucket(t.Context(), "youtube:producer:videos"); err == nil {
+		t.Fatal("expected error but got nil")
 	}
 }
 
 func TestDistributedBucketFromURL(t *testing.T) {
 	got := distributedBucketFromURL("https://www.youtube.com/channel/UC123/videos")
 	want := "youtube:producer:channel:UC123:videos"
+
 	if got != want {
 		t.Fatalf("bucket mismatch: got %q want %q", got, want)
 	}

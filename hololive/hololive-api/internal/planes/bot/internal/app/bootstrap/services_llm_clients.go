@@ -3,11 +3,10 @@ package bootstrap
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/membernews"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func ResolveLLMSchedulerClients(

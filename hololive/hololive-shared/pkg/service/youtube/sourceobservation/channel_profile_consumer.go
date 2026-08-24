@@ -14,36 +14,41 @@ func (c *Consumer) reconcileProfile(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-) (profile.Decision, ReconcileResult, error) {
-	evidence, err := profileEvidenceFromObservation(claimed)
+) (ReconcileResult, error) {
+	steps := channelReconcileSteps[profile.Evidence, profile.State, profile.Decision]{
+		name:      "profile",
+		subject:   func(evidence profile.Evidence) string { return evidence.Sample.ChannelID },
+		evidence:  profileEvidenceFromObservation,
+		loadState: loadProfileState,
+		reduce: func(state profile.State, evidence profile.Evidence) (profile.Decision, error) {
+			return profile.Reduce(state, evidence, c.profilePolicy())
+		},
+		persist:      persistProfileDecision,
+		applications: func(decision profile.Decision) []Application { return mapProfileApplications(decision.Applications) },
+	}
+
+	result, err := steps.reconcile(ctx, tx, claimed)
 	if err != nil {
-		return profile.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("reconcile profile: %w", err)
 	}
-	if err := lockLiveSubject(ctx, tx, "profile:"+evidence.Sample.ChannelID); err != nil {
-		return profile.Decision{}, ReconcileResult{}, err
-	}
-	state, err := loadProfileState(ctx, tx, evidence.Sample.ChannelID)
-	if err != nil {
-		return profile.Decision{}, ReconcileResult{}, err
-	}
-	decision, err := profile.Reduce(state, evidence, profile.Policy{
+
+	return result, nil
+}
+
+func (c *Consumer) profilePolicy() profile.Policy {
+	return profile.Policy{
 		ClearMinObservations: c.channel.ProfileClearMinObservations,
 		ClearStability:       c.channel.ProfileClearStability,
-	})
-	if err != nil {
-		return profile.Decision{}, ReconcileResult{}, err
 	}
-	if err := persistProfileDecision(ctx, tx, claimed, &decision); err != nil {
-		return profile.Decision{}, ReconcileResult{}, err
-	}
-	return decision, ReconcileResult{Applications: mapProfileApplications(decision.Applications)}, nil
 }
 
 func profileEvidenceFromObservation(observation *Observation) (profile.Evidence, error) {
 	var payload contract.ChannelProfileV1
+
 	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return profile.Evidence{}, fmt.Errorf("decode channel profile payload: %w", err)
 	}
+
 	return profile.Evidence{
 		ObservationID: observation.ID,
 		Provider:      observation.Provider,
@@ -74,5 +79,6 @@ func mapProfileApplications(items []profile.Application) []Application {
 			Decision:   items[i].Decision,
 		}
 	}
+
 	return applications
 }

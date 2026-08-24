@@ -4,15 +4,15 @@ import (
 	"log/slog"
 	"time"
 
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	envutil "github.com/park285/shared-go/v2/pkg/envutil"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/celebration"
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	workerruntime "github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 func buildCelebrationRunnerScheduler(
@@ -25,8 +25,10 @@ func buildCelebrationRunnerScheduler(
 		if logger != nil {
 			logger.Info("Celebration runner disabled")
 		}
+
 		return nil
 	}
+
 	if infra == nil || infra.Postgres == nil {
 		return nil
 	}
@@ -57,8 +59,10 @@ func buildBirthdayStreamRunnerScheduler(
 		if logger != nil {
 			logger.Info("Birthday stream runner disabled")
 		}
+
 		return nil
 	}
+
 	if infra == nil || infra.Postgres == nil {
 		return nil
 	}

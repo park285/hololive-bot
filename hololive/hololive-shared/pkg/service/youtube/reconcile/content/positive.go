@@ -2,6 +2,8 @@ package content
 
 import "time"
 
+const entityKindVideo = "youtube_video"
+
 func applyPositives(session *reduceSession) {
 	for i := range session.evidence.Videos {
 		applyPositive(session, &session.evidence.Videos[i])
@@ -13,25 +15,33 @@ func applyPositive(session *reduceSession, entity *Entity) {
 	if !ok {
 		session.state.Videos[entity.VideoID] = newEntityState(entity, session.evidence)
 		markApplied(session, *entity)
+
 		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_video", EntityKey: entity.VideoID, Decision: "APPLIED",
+			EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "APPLIED",
 		})
 		applyStoredNegatives(session, entity.VideoID)
+
 		return
 	}
+
 	if session.evidence.EffectiveAt.Before(existing.Clock.LastPositiveEffectiveAt) {
 		applyOlderPositive(session, &existing, entity)
+
 		return
 	}
+
 	if session.evidence.EffectiveAt.Equal(existing.Clock.LastPositiveEffectiveAt) {
 		applyEqualTimePositive(session, &existing, entity)
+
 		return
 	}
+
 	applyNewerPositive(session, &existing, entity)
 }
 
 func newEntityState(entity *Entity, evidence *Evidence) EntityState {
 	digest := valueDigest(entity)
+
 	return EntityState{
 		Entity:                   *entity,
 		FirstPositiveEffectiveAt: evidence.EffectiveAt,
@@ -49,9 +59,10 @@ func applyOlderPositive(session *reduceSession, existing *EntityState, entity *E
 	if session.evidence.EffectiveAt.Before(existing.FirstPositiveEffectiveAt) {
 		existing.FirstPositiveEffectiveAt = session.evidence.EffectiveAt
 	}
+
 	session.state.Videos[entity.VideoID] = *existing
 	session.applications = append(session.applications, Application{
-		EntityKind: "youtube_video", EntityKey: entity.VideoID, Decision: "OLDER_POSITIVE_RETAINED",
+		EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "OLDER_POSITIVE_RETAINED",
 	})
 }
 
@@ -65,14 +76,17 @@ func applyEqualTimePositive(session *reduceSession, existing *EntityState, entit
 			AttemptedValueSHA256: digest,
 		})
 		session.applications = append(session.applications, Application{
-			EntityKind: "youtube_video", EntityKey: entity.VideoID, Decision: "CONFLICT_KEEP",
+			EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "CONFLICT_KEEP",
 		})
+
 		return
 	}
+
 	clearMissingIfDue(existing, session.evidence.EffectiveAt)
 	commitPositive(session, existing)
+
 	session.applications = append(session.applications, Application{
-		EntityKind: "youtube_video", EntityKey: entity.VideoID, Decision: "REPLAY",
+		EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "REPLAY",
 	})
 }
 
@@ -81,6 +95,7 @@ func applyNewerPositive(session *reduceSession, existing *EntityState, entity *E
 	if digest != existing.LastPositiveValueSHA256 {
 		session.fieldUpdates = append(session.fieldUpdates, *entity)
 	}
+
 	existing.Entity = *entity
 	existing.LastPositiveValueSHA256 = digest
 	existing.LastPositiveScopeSHA256 = session.evidence.ScopeSHA256
@@ -89,8 +104,9 @@ func applyNewerPositive(session *reduceSession, existing *EntityState, entity *E
 	existing.Clock.LastPositiveReceivedAt = session.evidence.ReceivedAt
 	clearMissingIfDue(existing, session.evidence.EffectiveAt)
 	commitPositive(session, existing)
+
 	session.applications = append(session.applications, Application{
-		EntityKind: "youtube_video", EntityKey: entity.VideoID, Decision: "APPLIED",
+		EntityKind: entityKindVideo, EntityKey: entity.VideoID, Decision: "APPLIED",
 	})
 }
 
@@ -110,9 +126,11 @@ func shouldClearMissing(entity *EntityState, positiveAt time.Time) bool {
 	if cutoff == nil {
 		cutoff = entity.Clock.MissingSinceEffectiveAt
 	}
+
 	if cutoff == nil {
 		return false
 	}
+
 	return !positiveAt.Before(*cutoff)
 }
 

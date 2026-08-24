@@ -33,7 +33,7 @@ type LatencyClassificationIdentity struct {
 }
 
 // PostLatencyClassificationPersister는 트랜잭션 커밋 후 post 지연 분류를 저장하는 seam입니다.
-// batchrepo가 outbox/delivery 계층에 직접 의존하지 않도록 추상화합니다.
+// 이 seam은 batchrepo가 outbox/delivery 계층에 직접 의존하지 않도록 추상화합니다.
 type PostLatencyClassificationPersister interface {
 	PersistPostLatencyClassificationsByIdentities(ctx context.Context, identities []LatencyClassificationIdentity) error
 }

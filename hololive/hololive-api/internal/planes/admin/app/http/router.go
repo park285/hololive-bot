@@ -28,17 +28,16 @@ import (
 	"net"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-api/internal/readiness"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-shared/pkg/server/middleware"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 func ProvideAPIRouter(
@@ -51,24 +50,25 @@ func ProvideAPIRouter(
 	readyProbe ...*sharedreadiness.Probe,
 ) (*gin.Engine, error) {
 	if err := validateAPIRouterInputs(appConfig, domainHandlers, authHandler); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate API router inputs: %w", err)
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	router, err := newAPIRouter(ctx, appConfig, logger, readyProbe...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("API router: %w", err)
 	}
 
 	adminAllowedIPs, err := buildAdminAllowedIPs(appConfig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build admin allowed i ps: %w", err)
 	}
 
 	if err := registerAPIRoutes(router, appConfig.Server.APIKey, cacheClient, logger, domainHandlers, authHandler, adminAllowedIPs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("register API routes: %w", err)
 	}
 
 	logger.Info("api_key_auth_enabled")
@@ -81,9 +81,11 @@ func buildAdminAllowedIPs(appConfig *settings.Config) ([]*net.IPNet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse admin allowed IPs: %w", err)
 	}
+
 	if strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production") && len(adminAllowedIPs) == 0 {
 		return nil, errors.New("ADMIN_ALLOWED_IPS must be configured in production")
 	}
+
 	return adminAllowedIPs, nil
 }
 
@@ -95,18 +97,23 @@ func validateAPIRouterInputs(
 	if appConfig == nil {
 		return errors.New("config must not be nil")
 	}
+
 	if strings.TrimSpace(appConfig.Server.APIKey) == "" {
 		return errors.New("API_SECRET_KEY required")
 	}
+
 	if domainHandlers == nil {
 		return errors.New("domain handlers must not be nil")
 	}
+
 	if err := validateDomainHandlers(domainHandlers); err != nil {
-		return err
+		return fmt.Errorf("validate domain handlers: %w", err)
 	}
+
 	if authHandler == nil {
 		return errors.New("auth handler must not be nil")
 	}
+
 	return nil
 }
 
@@ -131,6 +138,7 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 			return errors.New(required.err)
 		}
 	}
+
 	return nil
 }
 
@@ -138,13 +146,14 @@ func newAPIRouter(ctx context.Context, appConfig *settings.Config, logger *slog.
 	if appConfig == nil {
 		return nil, errors.New("config must not be nil")
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	isProduction := strings.EqualFold(strings.TrimSpace(appConfig.Environment), "production")
 	if err := validateAPICORSConfig(appConfig, isProduction); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate APICORS config: %w", err)
 	}
 
 	routerOptions := &sharedserver.RuntimeRouterOptions{
@@ -161,13 +170,14 @@ func newAPIRouter(ctx context.Context, appConfig *settings.Config, logger *slog.
 			middleware.ClientHintsMiddleware(),
 		},
 	}
+
 	if probe := readiness.Pick(readyProbe...); probe != nil {
 		routerOptions.InternalReadyResponder = readiness.GinHandler(ctx, probe)
 	}
 
 	router, err := sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("runtime router: %w", err)
 	}
 
 	warnMissingProductionCORS(logger, appConfig, isProduction)
@@ -182,6 +192,7 @@ func validateAPICORSConfig(appConfig *settings.Config, isProduction bool) error 
 	if isProduction && appConfig.CORS.Enforce && (len(origins) == 0 || containsWildcard(origins)) {
 		return errors.New("explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true")
 	}
+
 	return nil
 }
 
@@ -189,6 +200,7 @@ func warnMissingProductionCORS(logger *slog.Logger, appConfig *settings.Config, 
 	if !isProduction || !appConfig.CORS.MissingInProduction {
 		return
 	}
+
 	logger.Warn(
 		"cors_allowed_origins_missing_in_production_monitor_mode",
 		slog.Bool("cors_enforce", appConfig.CORS.Enforce),

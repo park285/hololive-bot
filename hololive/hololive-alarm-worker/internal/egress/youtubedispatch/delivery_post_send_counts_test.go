@@ -1,10 +1,11 @@
 package youtubedispatch
 
 import (
-	"context"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -31,259 +32,93 @@ type deliveryTelemetryTestTrackingModel struct {
 }
 
 func (deliveryTelemetryTestTrackingModel) TableName() string {
-	return "youtube_content_alarm_tracking"
+	return testTableContentAlarmTracking
+}
+
+type postSendCountOutboxes struct {
+	community deliveryTelemetryTestOutboxModel
+	short     deliveryTelemetryTestOutboxModel
+	old       deliveryTelemetryTestOutboxModel
+	nonTarget deliveryTelemetryTestOutboxModel
+}
+
+type postSendCountTimes struct {
+	now                           time.Time
+	communityPublishedAt          time.Time
+	communityDetectedAt           time.Time
+	communityAlarmSentAt          time.Time
+	communityAlarmLatencyMillis   int64
+	communityAlarmLatencyExceeded bool
+	communityFirstSuccessAt       time.Time
+	communitySecondSuccessAt      time.Time
+	communityFailureAt            time.Time
+	shortPublishedAt              time.Time
+	shortDetectedAt               time.Time
+	shortAlarmSentAt              time.Time
+	shortAlarmLatencyMillis       int64
+	shortAlarmLatencyExceeded     bool
+	shortSuccessAt                time.Time
+	zeroPublishedAt               time.Time
+	zeroDetectedAt                time.Time
+	oldPublishedAt                time.Time
+	oldDetectedAt                 time.Time
+	oldRecentSuccessAt            time.Time
+	nonTargetPublishedAt          time.Time
+	nonTargetDetectedAt           time.Time
+	nonTargetSuccessAt            time.Time
+}
+
+func newPostSendCountTimes(now time.Time) postSendCountTimes {
+	communityPublishedAt := now.Add(-3 * time.Hour)
+	communityAlarmSentAt := now.Add(-108 * time.Minute)
+	shortPublishedAt := now.Add(-90 * time.Minute)
+	shortAlarmSentAt := now.Add(-44 * time.Minute)
+
+	return postSendCountTimes{
+		now:                           now,
+		communityPublishedAt:          communityPublishedAt,
+		communityDetectedAt:           now.Add(-2*time.Hour - 30*time.Minute),
+		communityAlarmSentAt:          communityAlarmSentAt,
+		communityAlarmLatencyMillis:   int64(communityAlarmSentAt.Sub(communityPublishedAt) / time.Millisecond),
+		communityAlarmLatencyExceeded: true,
+		communityFirstSuccessAt:       now.Add(-110 * time.Minute),
+		communitySecondSuccessAt:      now.Add(-100 * time.Minute),
+		communityFailureAt:            now.Add(-95 * time.Minute),
+		shortPublishedAt:              shortPublishedAt,
+		shortDetectedAt:               now.Add(-80 * time.Minute),
+		shortAlarmSentAt:              shortAlarmSentAt,
+		shortAlarmLatencyMillis:       int64(shortAlarmSentAt.Sub(shortPublishedAt) / time.Millisecond),
+		shortAlarmLatencyExceeded:     true,
+		shortSuccessAt:                now.Add(-45 * time.Minute),
+		zeroPublishedAt:               now.Add(-70 * time.Minute),
+		zeroDetectedAt:                now.Add(-65 * time.Minute),
+		oldPublishedAt:                now.Add(-26 * time.Hour),
+		oldDetectedAt:                 now.Add(-25 * time.Hour),
+		oldRecentSuccessAt:            now.Add(-30 * time.Minute),
+		nonTargetPublishedAt:          now.Add(-40 * time.Minute),
+		nonTargetDetectedAt:           now.Add(-35 * time.Minute),
+		nonTargetSuccessAt:            now.Add(-20 * time.Minute),
+	}
 }
 
 func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
-	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
-	windowStart := now.Add(-24 * time.Hour)
+	times := newPostSendCountTimes(time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC))
+	windowStart := times.now.Add(-24 * time.Hour)
+	outboxes := seedPostSendCountOutboxes(t, db, times.now)
 
-	communityPublishedAt := now.Add(-3 * time.Hour)
-	communityDetectedAt := now.Add(-2*time.Hour - 30*time.Minute)
-	shortPublishedAt := now.Add(-90 * time.Minute)
-	shortDetectedAt := now.Add(-80 * time.Minute)
-	communityAlarmSentAt := now.Add(-108 * time.Minute)
-	communityAlarmLatencyMillis := int64(communityAlarmSentAt.Sub(communityPublishedAt) / time.Millisecond)
-	communityAlarmLatencyExceeded := true
-	shortAlarmSentAt := now.Add(-44 * time.Minute)
-	shortAlarmLatencyMillis := int64(shortAlarmSentAt.Sub(shortPublishedAt) / time.Millisecond)
-	shortAlarmLatencyExceeded := true
-	zeroPublishedAt := now.Add(-70 * time.Minute)
-	zeroDetectedAt := now.Add(-65 * time.Minute)
-	oldPublishedAt := now.Add(-26 * time.Hour)
-	oldDetectedAt := now.Add(-25 * time.Hour)
-	nonTargetPublishedAt := now.Add(-40 * time.Minute)
-	nonTargetDetectedAt := now.Add(-35 * time.Minute)
-
-	communityOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_community",
-		ContentID:     "post-community",
-		Payload:       `{"post_id":"post-community","content_text":"community body"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: now,
-		CreatedAt:     now.Add(-2 * time.Hour),
-	}
-	shortOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindNewShort),
-		ChannelID:     "UC_short",
-		ContentID:     "short-video",
-		Payload:       `{"video_id":"short-video","title":"short title"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: now,
-		CreatedAt:     now.Add(-75 * time.Minute),
-	}
-	oldOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_old",
-		ContentID:     "post-old-window",
-		Payload:       `{"post_id":"post-old-window","content_text":"old body"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: now,
-		CreatedAt:     now.Add(-25 * time.Hour),
-	}
-	nonTargetOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindNewVideo),
-		ChannelID:     "UC_video",
-		ContentID:     "video-ignored",
-		Payload:       `{"video_id":"video-ignored","title":"ignored"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: now,
-		CreatedAt:     now.Add(-30 * time.Minute),
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &communityOutbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &shortOutbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &oldOutbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &nonTargetOutbox).Error)
-
-	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
-		{
-			Kind:                 string(domain.OutboxKindCommunityPost),
-			ContentID:            communityOutbox.ContentID,
-			ChannelID:            communityOutbox.ChannelID,
-			ActualPublishedAt:    &communityPublishedAt,
-			DetectedAt:           communityDetectedAt,
-			AlarmSentAt:          &communityAlarmSentAt,
-			AlarmLatencyMillis:   &communityAlarmLatencyMillis,
-			AlarmLatencyExceeded: &communityAlarmLatencyExceeded,
-			CreatedAt:            now,
-			UpdatedAt:            now,
-		},
-		{
-			Kind:                 string(domain.OutboxKindNewShort),
-			ContentID:            shortOutbox.ContentID,
-			ChannelID:            shortOutbox.ChannelID,
-			ActualPublishedAt:    &shortPublishedAt,
-			DetectedAt:           shortDetectedAt,
-			AlarmSentAt:          &shortAlarmSentAt,
-			AlarmLatencyMillis:   &shortAlarmLatencyMillis,
-			AlarmLatencyExceeded: &shortAlarmLatencyExceeded,
-			CreatedAt:            now,
-			UpdatedAt:            now,
-		},
-		{
-			Kind:              string(domain.OutboxKindCommunityPost),
-			ContentID:         "post-zero-send",
-			ChannelID:         "UC_zero",
-			ActualPublishedAt: &zeroPublishedAt,
-			DetectedAt:        zeroDetectedAt,
-			CreatedAt:         now,
-			UpdatedAt:         now,
-		},
-		{
-			Kind:              string(domain.OutboxKindCommunityPost),
-			ContentID:         oldOutbox.ContentID,
-			ChannelID:         oldOutbox.ChannelID,
-			ActualPublishedAt: &oldPublishedAt,
-			DetectedAt:        oldDetectedAt,
-			CreatedAt:         now,
-			UpdatedAt:         now,
-		},
-		{
-			Kind:              string(domain.OutboxKindNewVideo),
-			ContentID:         nonTargetOutbox.ContentID,
-			ChannelID:         nonTargetOutbox.ChannelID,
-			ActualPublishedAt: &nonTargetPublishedAt,
-			DetectedAt:        nonTargetDetectedAt,
-			CreatedAt:         now,
-			UpdatedAt:         now,
-		},
-	}).Error)
-
-	communityFirstSuccessAt := now.Add(-110 * time.Minute)
-	communitySecondSuccessAt := now.Add(-100 * time.Minute)
-	communityFailureAt := now.Add(-95 * time.Minute)
-	shortSuccessAt := now.Add(-45 * time.Minute)
-	oldRecentSuccessAt := now.Add(-30 * time.Minute)
-	nonTargetSuccessAt := now.Add(-20 * time.Minute)
-
-	rows := []deliveryTelemetryTestBufferModel{
-		{
-			DeliveryID:     1001,
-			AttemptOrdinal: 1,
-			OutboxID:       communityOutbox.ID,
-			ChannelID:      communityOutbox.ChannelID,
-			ContentID:      communityOutbox.ContentID,
-			PostID:         communityOutbox.ContentID,
-			RoomID:         "room-a",
-			AlarmType:      string(domain.AlarmTypeCommunity),
-			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-community",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
-			EventAt:        communityFirstSuccessAt,
-			NextAttemptAt:  communityFirstSuccessAt,
-		},
-		{
-			DeliveryID:     1001,
-			AttemptOrdinal: 2,
-			OutboxID:       communityOutbox.ID,
-			ChannelID:      communityOutbox.ChannelID,
-			ContentID:      communityOutbox.ContentID,
-			PostID:         communityOutbox.ContentID,
-			RoomID:         "room-a",
-			AlarmType:      string(domain.AlarmTypeCommunity),
-			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-community",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
-			EventAt:        communitySecondSuccessAt,
-			NextAttemptAt:  communitySecondSuccessAt,
-		},
-		{
-			DeliveryID:     1002,
-			AttemptOrdinal: 1,
-			OutboxID:       communityOutbox.ID,
-			ChannelID:      communityOutbox.ChannelID,
-			ContentID:      communityOutbox.ContentID,
-			PostID:         communityOutbox.ContentID,
-			RoomID:         "room-b",
-			AlarmType:      string(domain.AlarmTypeCommunity),
-			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-community",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
-			EventAt:        communitySecondSuccessAt,
-			NextAttemptAt:  communitySecondSuccessAt,
-		},
-		{
-			DeliveryID:     1003,
-			AttemptOrdinal: 1,
-			OutboxID:       communityOutbox.ID,
-			ChannelID:      communityOutbox.ChannelID,
-			ContentID:      communityOutbox.ContentID,
-			PostID:         communityOutbox.ContentID,
-			RoomID:         "room-c",
-			AlarmType:      string(domain.AlarmTypeCommunity),
-			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-community",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "failure",
-			FailureReason:  "send message",
-			EventAt:        communityFailureAt,
-			NextAttemptAt:  communityFailureAt,
-		},
-		{
-			DeliveryID:     2001,
-			AttemptOrdinal: 1,
-			OutboxID:       shortOutbox.ID,
-			ChannelID:      shortOutbox.ChannelID,
-			ContentID:      shortOutbox.ContentID,
-			PostID:         shortOutbox.ContentID,
-			RoomID:         "room-short",
-			AlarmType:      string(domain.AlarmTypeShorts),
-			DedupeKey:      "youtube-notification:NEW_SHORT:short-video",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "per_room",
-			SendResult:     "success",
-			EventAt:        shortSuccessAt,
-			NextAttemptAt:  shortSuccessAt,
-		},
-		{
-			DeliveryID:     3001,
-			AttemptOrdinal: 1,
-			OutboxID:       oldOutbox.ID,
-			ChannelID:      oldOutbox.ChannelID,
-			ContentID:      oldOutbox.ContentID,
-			PostID:         oldOutbox.ContentID,
-			RoomID:         "room-old",
-			AlarmType:      string(domain.AlarmTypeCommunity),
-			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-old-window",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
-			EventAt:        oldRecentSuccessAt,
-			NextAttemptAt:  oldRecentSuccessAt,
-		},
-		{
-			DeliveryID:     4001,
-			AttemptOrdinal: 1,
-			OutboxID:       nonTargetOutbox.ID,
-			ChannelID:      nonTargetOutbox.ChannelID,
-			ContentID:      nonTargetOutbox.ContentID,
-			PostID:         nonTargetOutbox.ContentID,
-			RoomID:         "room-video",
-			AlarmType:      string(domain.AlarmTypeLive),
-			DedupeKey:      "youtube-notification:NEW_VIDEO:video-ignored",
-			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "per_room",
-			SendResult:     "success",
-			EventAt:        nonTargetSuccessAt,
-			NextAttemptAt:  nonTargetSuccessAt,
-		},
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
+	seedPostSendCountTracking(t, db, outboxes, times)
+	require.NoError(t, insertDeliveryTestRows(db, slices.Concat(
+		postSendCountCommunityTelemetryRows(outboxes, times),
+		postSendCountOtherTelemetryRows(outboxes, times),
+	)).Error)
 
 	repository := telemetry.NewRepository(db)
+
 	summaries, err := repository.ListPostSendCountsSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, summaries, 3)
@@ -293,137 +128,445 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsSince_AggregatesPerPost(t
 		byContentID[summaries[i].ContentID] = summaries[i]
 	}
 
-	communitySummary, ok := byContentID[communityOutbox.ContentID]
+	communitySummary, ok := byContentID[outboxes.community.ContentID]
 	require.True(t, ok)
-	require.Equal(t, domain.OutboxKindCommunityPost, communitySummary.OutboxKind)
-	require.Equal(t, domain.AlarmTypeCommunity, communitySummary.AlarmType)
-	require.Equal(t, communityOutbox.ChannelID, communitySummary.ChannelID)
-	require.Equal(t, communityOutbox.ContentID, communitySummary.PostID)
-	require.Equal(t, int64(1), communitySummary.OutboxCount)
-	require.Equal(t, int64(3), communitySummary.SuccessSendCount)
-	require.Equal(t, int64(2), communitySummary.SuccessRoomCount)
-	require.Equal(t, int64(1), communitySummary.DuplicateSuccessCount)
-	require.Equal(t, int64(1), communitySummary.FailedAttemptCount)
-	require.NotNil(t, communitySummary.FirstEventAt)
-	require.Equal(t, communityFirstSuccessAt, *communitySummary.FirstEventAt)
-	require.NotNil(t, communitySummary.LastEventAt)
-	require.Equal(t, communityFailureAt, *communitySummary.LastEventAt)
-	require.NotNil(t, communitySummary.FirstSuccessAt)
-	require.Equal(t, communityFirstSuccessAt, *communitySummary.FirstSuccessAt)
-	require.NotNil(t, communitySummary.LastSuccessAt)
-	require.Equal(t, communitySecondSuccessAt, *communitySummary.LastSuccessAt)
-	require.NotNil(t, communitySummary.ActualPublishedAt)
-	require.Equal(t, communityPublishedAt, *communitySummary.ActualPublishedAt)
-	require.NotNil(t, communitySummary.DetectedAt)
-	require.Equal(t, communityDetectedAt, *communitySummary.DetectedAt)
-	require.NotNil(t, communitySummary.AlarmSentAt)
-	require.Equal(t, communityAlarmSentAt, *communitySummary.AlarmSentAt)
-	require.NotNil(t, communitySummary.AlarmLatencyMillis)
-	require.Equal(t, int64(72*time.Minute/time.Millisecond), *communitySummary.AlarmLatencyMillis)
-	require.NotNil(t, communitySummary.AlarmLatencyExceeded)
-	require.True(t, *communitySummary.AlarmLatencyExceeded)
+	assertCommunityPostSendCount(t, communitySummary, outboxes.community, times)
 
-	shortSummary, ok := byContentID[shortOutbox.ContentID]
+	shortSummary, ok := byContentID[outboxes.short.ContentID]
 	require.True(t, ok)
-	require.Equal(t, domain.OutboxKindNewShort, shortSummary.OutboxKind)
-	require.Equal(t, domain.AlarmTypeShorts, shortSummary.AlarmType)
-	require.Equal(t, shortOutbox.ContentID, shortSummary.PostID)
-	require.Equal(t, int64(1), shortSummary.OutboxCount)
-	require.Equal(t, int64(1), shortSummary.SuccessSendCount)
-	require.Equal(t, int64(1), shortSummary.SuccessRoomCount)
-	require.Equal(t, int64(0), shortSummary.DuplicateSuccessCount)
-	require.Equal(t, int64(0), shortSummary.FailedAttemptCount)
-	require.NotNil(t, shortSummary.FirstEventAt)
-	require.Equal(t, shortSuccessAt, *shortSummary.FirstEventAt)
-	require.NotNil(t, shortSummary.LastEventAt)
-	require.Equal(t, shortSuccessAt, *shortSummary.LastEventAt)
-	require.NotNil(t, shortSummary.FirstSuccessAt)
-	require.Equal(t, shortSuccessAt, *shortSummary.FirstSuccessAt)
-	require.NotNil(t, shortSummary.LastSuccessAt)
-	require.Equal(t, shortSuccessAt, *shortSummary.LastSuccessAt)
-	require.NotNil(t, shortSummary.ActualPublishedAt)
-	require.Equal(t, shortPublishedAt, *shortSummary.ActualPublishedAt)
-	require.NotNil(t, shortSummary.DetectedAt)
-	require.Equal(t, shortDetectedAt, *shortSummary.DetectedAt)
-	require.NotNil(t, shortSummary.AlarmSentAt)
-	require.Equal(t, shortAlarmSentAt, *shortSummary.AlarmSentAt)
-	require.NotNil(t, shortSummary.AlarmLatencyMillis)
-	require.Equal(t, int64(46*time.Minute/time.Millisecond), *shortSummary.AlarmLatencyMillis)
-	require.NotNil(t, shortSummary.AlarmLatencyExceeded)
-	require.True(t, *shortSummary.AlarmLatencyExceeded)
+	assertShortPostSendCount(t, shortSummary, outboxes.short, times)
 
 	zeroSummary, ok := byContentID["post-zero-send"]
 	require.True(t, ok)
-	require.Equal(t, domain.OutboxKindCommunityPost, zeroSummary.OutboxKind)
-	require.Equal(t, domain.AlarmTypeCommunity, zeroSummary.AlarmType)
-	require.Equal(t, "UC_zero", zeroSummary.ChannelID)
-	require.Equal(t, "post-zero-send", zeroSummary.PostID)
-	require.Equal(t, int64(0), zeroSummary.OutboxCount)
-	require.Equal(t, int64(0), zeroSummary.SuccessSendCount)
-	require.Equal(t, int64(0), zeroSummary.SuccessRoomCount)
-	require.Equal(t, int64(0), zeroSummary.DuplicateSuccessCount)
-	require.Equal(t, int64(0), zeroSummary.FailedAttemptCount)
-	require.Nil(t, zeroSummary.FirstEventAt)
-	require.Nil(t, zeroSummary.LastEventAt)
-	require.Nil(t, zeroSummary.FirstSuccessAt)
-	require.Nil(t, zeroSummary.LastSuccessAt)
-	require.NotNil(t, zeroSummary.ActualPublishedAt)
-	require.Equal(t, zeroPublishedAt, *zeroSummary.ActualPublishedAt)
-	require.NotNil(t, zeroSummary.DetectedAt)
-	require.Equal(t, zeroDetectedAt, *zeroSummary.DetectedAt)
-	require.Nil(t, zeroSummary.AlarmSentAt)
-	require.Nil(t, zeroSummary.AlarmLatencyMillis)
-	require.Nil(t, zeroSummary.AlarmLatencyExceeded)
+	assertZeroPostSendCount(t, zeroSummary, times)
 
-	_, exists := byContentID[oldOutbox.ContentID]
+	_, exists := byContentID[outboxes.old.ContentID]
 	require.False(t, exists)
-	_, exists = byContentID[nonTargetOutbox.ContentID]
+
+	_, exists = byContentID[outboxes.nonTarget.ContentID]
 	require.False(t, exists)
+}
+
+func seedPostSendCountOutboxes(t *testing.T, db *pgxpool.Pool, now time.Time) postSendCountOutboxes {
+	t.Helper()
+
+	rows := seedDeliveryTelemetryOutboxes(t, db, now, []deliveryTelemetryOutboxSpec{
+		{
+			kind:      domain.OutboxKindCommunityPost,
+			channelID: "UC_community",
+			contentID: "post-community",
+			payload:   `{"post_id":"post-community","content_text":"community body"}`,
+			status:    domain.OutboxStatusSent,
+			createdAt: now.Add(-2 * time.Hour),
+		},
+		{
+			kind:      domain.OutboxKindNewShort,
+			channelID: "UC_short",
+			contentID: "short-video",
+			payload:   `{"video_id":"short-video","title":"short title"}`,
+			status:    domain.OutboxStatusSent,
+			createdAt: now.Add(-75 * time.Minute),
+		},
+		{
+			kind:      domain.OutboxKindCommunityPost,
+			channelID: "UC_old",
+			contentID: "post-old-window",
+			payload:   `{"post_id":"post-old-window","content_text":"old body"}`,
+			status:    domain.OutboxStatusSent,
+			createdAt: now.Add(-25 * time.Hour),
+		},
+		{
+			kind:      domain.OutboxKindNewVideo,
+			channelID: "UC_video",
+			contentID: "video-ignored",
+			payload:   `{"video_id":"video-ignored","title":"ignored"}`,
+			status:    domain.OutboxStatusSent,
+			createdAt: now.Add(-30 * time.Minute),
+		},
+	})
+
+	return postSendCountOutboxes{
+		community: rows[0],
+		short:     rows[1],
+		old:       rows[2],
+		nonTarget: rows[3],
+	}
+}
+
+func seedPostSendCountTracking(
+	t *testing.T,
+	db *pgxpool.Pool,
+	outboxes postSendCountOutboxes,
+	times postSendCountTimes,
+) {
+	t.Helper()
+
+	communityPublishedAt := times.communityPublishedAt
+	communityAlarmSentAt := times.communityAlarmSentAt
+	communityAlarmLatencyMillis := times.communityAlarmLatencyMillis
+	communityAlarmLatencyExceeded := times.communityAlarmLatencyExceeded
+	shortPublishedAt := times.shortPublishedAt
+	shortAlarmSentAt := times.shortAlarmSentAt
+	shortAlarmLatencyMillis := times.shortAlarmLatencyMillis
+	shortAlarmLatencyExceeded := times.shortAlarmLatencyExceeded
+	zeroPublishedAt := times.zeroPublishedAt
+	oldPublishedAt := times.oldPublishedAt
+	nonTargetPublishedAt := times.nonTargetPublishedAt
+
+	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
+		{
+			Kind:                 string(domain.OutboxKindCommunityPost),
+			ContentID:            outboxes.community.ContentID,
+			ChannelID:            outboxes.community.ChannelID,
+			ActualPublishedAt:    &communityPublishedAt,
+			DetectedAt:           times.communityDetectedAt,
+			AlarmSentAt:          &communityAlarmSentAt,
+			AlarmLatencyMillis:   &communityAlarmLatencyMillis,
+			AlarmLatencyExceeded: &communityAlarmLatencyExceeded,
+			CreatedAt:            times.now,
+			UpdatedAt:            times.now,
+		},
+		{
+			Kind:                 string(domain.OutboxKindNewShort),
+			ContentID:            outboxes.short.ContentID,
+			ChannelID:            outboxes.short.ChannelID,
+			ActualPublishedAt:    &shortPublishedAt,
+			DetectedAt:           times.shortDetectedAt,
+			AlarmSentAt:          &shortAlarmSentAt,
+			AlarmLatencyMillis:   &shortAlarmLatencyMillis,
+			AlarmLatencyExceeded: &shortAlarmLatencyExceeded,
+			CreatedAt:            times.now,
+			UpdatedAt:            times.now,
+		},
+		{
+			Kind:              string(domain.OutboxKindCommunityPost),
+			ContentID:         "post-zero-send",
+			ChannelID:         "UC_zero",
+			ActualPublishedAt: &zeroPublishedAt,
+			DetectedAt:        times.zeroDetectedAt,
+			CreatedAt:         times.now,
+			UpdatedAt:         times.now,
+		},
+		{
+			Kind:              string(domain.OutboxKindCommunityPost),
+			ContentID:         outboxes.old.ContentID,
+			ChannelID:         outboxes.old.ChannelID,
+			ActualPublishedAt: &oldPublishedAt,
+			DetectedAt:        times.oldDetectedAt,
+			CreatedAt:         times.now,
+			UpdatedAt:         times.now,
+		},
+		{
+			Kind:              string(domain.OutboxKindNewVideo),
+			ContentID:         outboxes.nonTarget.ContentID,
+			ChannelID:         outboxes.nonTarget.ChannelID,
+			ActualPublishedAt: &nonTargetPublishedAt,
+			DetectedAt:        times.nonTargetDetectedAt,
+			CreatedAt:         times.now,
+			UpdatedAt:         times.now,
+		},
+	}).Error)
+}
+
+func postSendCountCommunityTelemetryRows(
+	outboxes postSendCountOutboxes,
+	times postSendCountTimes,
+) []deliveryTelemetryTestBufferModel {
+	return []deliveryTelemetryTestBufferModel{
+		{
+			DeliveryID:     1001,
+			AttemptOrdinal: 1,
+			OutboxID:       outboxes.community.ID,
+			ChannelID:      outboxes.community.ChannelID,
+			ContentID:      outboxes.community.ContentID,
+			PostID:         outboxes.community.ContentID,
+			RoomID:         testRoomA,
+			AlarmType:      string(domain.AlarmTypeCommunity),
+			DedupeKey:      testDedupeKeyCommunityPost,
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
+			EventAt:        times.communityFirstSuccessAt,
+			NextAttemptAt:  times.communityFirstSuccessAt,
+		},
+		{
+			DeliveryID:     1001,
+			AttemptOrdinal: 2,
+			OutboxID:       outboxes.community.ID,
+			ChannelID:      outboxes.community.ChannelID,
+			ContentID:      outboxes.community.ContentID,
+			PostID:         outboxes.community.ContentID,
+			RoomID:         testRoomA,
+			AlarmType:      string(domain.AlarmTypeCommunity),
+			DedupeKey:      testDedupeKeyCommunityPost,
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
+			EventAt:        times.communitySecondSuccessAt,
+			NextAttemptAt:  times.communitySecondSuccessAt,
+		},
+		{
+			DeliveryID:     1002,
+			AttemptOrdinal: 1,
+			OutboxID:       outboxes.community.ID,
+			ChannelID:      outboxes.community.ChannelID,
+			ContentID:      outboxes.community.ContentID,
+			PostID:         outboxes.community.ContentID,
+			RoomID:         "room-b",
+			AlarmType:      string(domain.AlarmTypeCommunity),
+			DedupeKey:      testDedupeKeyCommunityPost,
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
+			EventAt:        times.communitySecondSuccessAt,
+			NextAttemptAt:  times.communitySecondSuccessAt,
+		},
+		{
+			DeliveryID:     1003,
+			AttemptOrdinal: 1,
+			OutboxID:       outboxes.community.ID,
+			ChannelID:      outboxes.community.ChannelID,
+			ContentID:      outboxes.community.ContentID,
+			PostID:         outboxes.community.ContentID,
+			RoomID:         "room-c",
+			AlarmType:      string(domain.AlarmTypeCommunity),
+			DedupeKey:      testDedupeKeyCommunityPost,
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultFailure,
+			FailureReason:  deliveryReasonSendMessage,
+			EventAt:        times.communityFailureAt,
+			NextAttemptAt:  times.communityFailureAt,
+		},
+	}
+}
+
+func postSendCountOtherTelemetryRows(
+	outboxes postSendCountOutboxes,
+	times postSendCountTimes,
+) []deliveryTelemetryTestBufferModel {
+	return []deliveryTelemetryTestBufferModel{
+		{
+			DeliveryID:     2001,
+			AttemptOrdinal: 1,
+			OutboxID:       outboxes.short.ID,
+			ChannelID:      outboxes.short.ChannelID,
+			ContentID:      outboxes.short.ContentID,
+			PostID:         outboxes.short.ContentID,
+			RoomID:         testRoomShort,
+			AlarmType:      string(domain.AlarmTypeShorts),
+			DedupeKey:      "youtube-notification:NEW_SHORT:short-video",
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModePerRoom,
+			SendResult:     sendResultSuccess,
+			EventAt:        times.shortSuccessAt,
+			NextAttemptAt:  times.shortSuccessAt,
+		},
+		{
+			DeliveryID:     3001,
+			AttemptOrdinal: 1,
+			OutboxID:       outboxes.old.ID,
+			ChannelID:      outboxes.old.ChannelID,
+			ContentID:      outboxes.old.ContentID,
+			PostID:         outboxes.old.ContentID,
+			RoomID:         testRoomOld,
+			AlarmType:      string(domain.AlarmTypeCommunity),
+			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-old-window",
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
+			EventAt:        times.oldRecentSuccessAt,
+			NextAttemptAt:  times.oldRecentSuccessAt,
+		},
+		{
+			DeliveryID:     4001,
+			AttemptOrdinal: 1,
+			OutboxID:       outboxes.nonTarget.ID,
+			ChannelID:      outboxes.nonTarget.ChannelID,
+			ContentID:      outboxes.nonTarget.ContentID,
+			PostID:         outboxes.nonTarget.ContentID,
+			RoomID:         "room-video",
+			AlarmType:      string(domain.AlarmTypeLive),
+			DedupeKey:      "youtube-notification:NEW_VIDEO:video-ignored",
+			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
+			DeliveryMode:   deliveryModePerRoom,
+			SendResult:     sendResultSuccess,
+			EventAt:        times.nonTargetSuccessAt,
+			NextAttemptAt:  times.nonTargetSuccessAt,
+		},
+	}
+}
+
+func assertCommunityPostSendCount(
+	t *testing.T,
+	summary analytics.PostSendCount,
+	outbox deliveryTelemetryTestOutboxModel,
+	times postSendCountTimes,
+) {
+	t.Helper()
+
+	require.Equal(t, domain.OutboxKindCommunityPost, summary.OutboxKind)
+	require.Equal(t, domain.AlarmTypeCommunity, summary.AlarmType)
+	require.Equal(t, outbox.ChannelID, summary.ChannelID)
+	require.Equal(t, outbox.ContentID, summary.PostID)
+	require.Equal(t, int64(1), summary.OutboxCount)
+	require.Equal(t, int64(3), summary.SuccessSendCount)
+	require.Equal(t, int64(2), summary.SuccessRoomCount)
+	require.Equal(t, int64(1), summary.DuplicateSuccessCount)
+	require.Equal(t, int64(1), summary.FailedAttemptCount)
+	require.NotNil(t, summary.FirstEventAt)
+	require.Equal(t, times.communityFirstSuccessAt, *summary.FirstEventAt)
+	require.NotNil(t, summary.LastEventAt)
+	require.Equal(t, times.communityFailureAt, *summary.LastEventAt)
+	require.NotNil(t, summary.FirstSuccessAt)
+	require.Equal(t, times.communityFirstSuccessAt, *summary.FirstSuccessAt)
+	require.NotNil(t, summary.LastSuccessAt)
+	require.Equal(t, times.communitySecondSuccessAt, *summary.LastSuccessAt)
+	require.NotNil(t, summary.ActualPublishedAt)
+	require.Equal(t, times.communityPublishedAt, *summary.ActualPublishedAt)
+	require.NotNil(t, summary.DetectedAt)
+	require.Equal(t, times.communityDetectedAt, *summary.DetectedAt)
+	require.NotNil(t, summary.AlarmSentAt)
+	require.Equal(t, times.communityAlarmSentAt, *summary.AlarmSentAt)
+	require.NotNil(t, summary.AlarmLatencyMillis)
+	require.Equal(t, int64(72*time.Minute/time.Millisecond), *summary.AlarmLatencyMillis)
+	require.NotNil(t, summary.AlarmLatencyExceeded)
+	require.True(t, *summary.AlarmLatencyExceeded)
+}
+
+func assertShortPostSendCount(
+	t *testing.T,
+	summary analytics.PostSendCount,
+	outbox deliveryTelemetryTestOutboxModel,
+	times postSendCountTimes,
+) {
+	t.Helper()
+
+	require.Equal(t, domain.OutboxKindNewShort, summary.OutboxKind)
+	require.Equal(t, domain.AlarmTypeShorts, summary.AlarmType)
+	require.Equal(t, outbox.ContentID, summary.PostID)
+	require.Equal(t, int64(1), summary.OutboxCount)
+	require.Equal(t, int64(1), summary.SuccessSendCount)
+	require.Equal(t, int64(1), summary.SuccessRoomCount)
+	require.Equal(t, int64(0), summary.DuplicateSuccessCount)
+	require.Equal(t, int64(0), summary.FailedAttemptCount)
+	require.NotNil(t, summary.FirstEventAt)
+	require.Equal(t, times.shortSuccessAt, *summary.FirstEventAt)
+	require.NotNil(t, summary.LastEventAt)
+	require.Equal(t, times.shortSuccessAt, *summary.LastEventAt)
+	require.NotNil(t, summary.FirstSuccessAt)
+	require.Equal(t, times.shortSuccessAt, *summary.FirstSuccessAt)
+	require.NotNil(t, summary.LastSuccessAt)
+	require.Equal(t, times.shortSuccessAt, *summary.LastSuccessAt)
+	require.NotNil(t, summary.ActualPublishedAt)
+	require.Equal(t, times.shortPublishedAt, *summary.ActualPublishedAt)
+	require.NotNil(t, summary.DetectedAt)
+	require.Equal(t, times.shortDetectedAt, *summary.DetectedAt)
+	require.NotNil(t, summary.AlarmSentAt)
+	require.Equal(t, times.shortAlarmSentAt, *summary.AlarmSentAt)
+	require.NotNil(t, summary.AlarmLatencyMillis)
+	require.Equal(t, int64(46*time.Minute/time.Millisecond), *summary.AlarmLatencyMillis)
+	require.NotNil(t, summary.AlarmLatencyExceeded)
+	require.True(t, *summary.AlarmLatencyExceeded)
+}
+
+func assertZeroPostSendCount(t *testing.T, summary analytics.PostSendCount, times postSendCountTimes) {
+	t.Helper()
+
+	require.Equal(t, domain.OutboxKindCommunityPost, summary.OutboxKind)
+	require.Equal(t, domain.AlarmTypeCommunity, summary.AlarmType)
+	require.Equal(t, "UC_zero", summary.ChannelID)
+	require.Equal(t, "post-zero-send", summary.PostID)
+	require.Equal(t, int64(0), summary.OutboxCount)
+	require.Equal(t, int64(0), summary.SuccessSendCount)
+	require.Equal(t, int64(0), summary.SuccessRoomCount)
+	require.Equal(t, int64(0), summary.DuplicateSuccessCount)
+	require.Equal(t, int64(0), summary.FailedAttemptCount)
+	require.Nil(t, summary.FirstEventAt)
+	require.Nil(t, summary.LastEventAt)
+	require.Nil(t, summary.FirstSuccessAt)
+	require.Nil(t, summary.LastSuccessAt)
+	require.NotNil(t, summary.ActualPublishedAt)
+	require.Equal(t, times.zeroPublishedAt, *summary.ActualPublishedAt)
+	require.NotNil(t, summary.DetectedAt)
+	require.Equal(t, times.zeroDetectedAt, *summary.DetectedAt)
+	require.Nil(t, summary.AlarmSentAt)
+	require.Nil(t, summary.AlarmLatencyMillis)
+	require.Nil(t, summary.AlarmLatencyExceeded)
+}
+
+type postSendCountWindowFixture struct {
+	insideOutbox   deliveryTelemetryTestOutboxModel
+	outsideOutbox  deliveryTelemetryTestOutboxModel
+	insideEventAt  time.Time
+	outsideEventAt time.Time
 }
 
 func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_AppliesUpperBound(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
-	windowStart := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	windowStart := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 	windowEnd := windowStart.Add(45 * time.Minute)
+	fixture := seedPostSendCountWindowFixture(t, db, windowStart, windowEnd)
+
+	require.NoError(t, insertDeliveryTestRows(db, postSendCountWindowTelemetryRows(fixture)).Error)
+
+	repository := telemetry.NewRepository(db)
+
+	rows, err := repository.ListPostSendCountsWithinPublishedWindow(ctx, windowStart, windowEnd)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, fixture.insideOutbox.ContentID, rows[0].ContentID)
+	require.Equal(t, int64(1), rows[0].SuccessSendCount)
+}
+
+func seedPostSendCountWindowFixture(
+	t *testing.T,
+	db *pgxpool.Pool,
+	windowStart, windowEnd time.Time,
+) postSendCountWindowFixture {
+	t.Helper()
+
 	insidePublishedAt := windowStart.Add(20 * time.Minute)
 	insideDetectedAt := insidePublishedAt.Add(2 * time.Minute)
-	insideEventAt := insideDetectedAt.Add(1 * time.Minute)
 	outsidePublishedAt := windowEnd.Add(5 * time.Minute)
 	outsideDetectedAt := outsidePublishedAt.Add(2 * time.Minute)
-	outsideEventAt := outsideDetectedAt.Add(1 * time.Minute)
 
-	insideOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_inside",
-		ContentID:     "post-inside-window",
-		Payload:       `{"post_id":"post-inside-window"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: insideEventAt,
-		CreatedAt:     insideDetectedAt,
+	fixture := postSendCountWindowFixture{
+		insideOutbox: deliveryTelemetryTestOutboxModel{
+			Kind:          string(domain.OutboxKindCommunityPost),
+			ChannelID:     "UC_inside",
+			ContentID:     "post-inside-window",
+			Payload:       `{"post_id":"post-inside-window"}`,
+			Status:        string(domain.OutboxStatusSent),
+			AttemptCount:  0,
+			NextAttemptAt: insideDetectedAt.Add(1 * time.Minute),
+			CreatedAt:     insideDetectedAt,
+		},
+		outsideOutbox: deliveryTelemetryTestOutboxModel{
+			Kind:          string(domain.OutboxKindNewShort),
+			ChannelID:     "UC_outside",
+			ContentID:     "post-outside-window",
+			Payload:       `{"video_id":"post-outside-window"}`,
+			Status:        string(domain.OutboxStatusSent),
+			AttemptCount:  0,
+			NextAttemptAt: outsideDetectedAt.Add(1 * time.Minute),
+			CreatedAt:     outsideDetectedAt,
+		},
+		insideEventAt:  insideDetectedAt.Add(1 * time.Minute),
+		outsideEventAt: outsideDetectedAt.Add(1 * time.Minute),
 	}
-	outsideOutbox := deliveryTelemetryTestOutboxModel{
-		Kind:          string(domain.OutboxKindNewShort),
-		ChannelID:     "UC_outside",
-		ContentID:     "post-outside-window",
-		Payload:       `{"video_id":"post-outside-window"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  0,
-		NextAttemptAt: outsideEventAt,
-		CreatedAt:     outsideDetectedAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &insideOutbox).Error)
-	require.NoError(t, insertDeliveryTestRows(db, &outsideOutbox).Error)
 
+	require.NoError(t, insertDeliveryTestRows(db, &fixture.insideOutbox).Error)
+	require.NoError(t, insertDeliveryTestRows(db, &fixture.outsideOutbox).Error)
 	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestTrackingModel{
 		{
 			Kind:              string(domain.OutboxKindCommunityPost),
-			ContentID:         insideOutbox.ContentID,
-			ChannelID:         insideOutbox.ChannelID,
+			ContentID:         fixture.insideOutbox.ContentID,
+			ChannelID:         fixture.insideOutbox.ChannelID,
 			ActualPublishedAt: &insidePublishedAt,
 			DetectedAt:        insideDetectedAt,
 			CreatedAt:         insideDetectedAt,
@@ -431,8 +574,8 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 		{
 			Kind:              string(domain.OutboxKindNewShort),
-			ContentID:         outsideOutbox.ContentID,
-			ChannelID:         outsideOutbox.ChannelID,
+			ContentID:         fixture.outsideOutbox.ContentID,
+			ChannelID:         fixture.outsideOutbox.ChannelID,
 			ActualPublishedAt: &outsidePublishedAt,
 			DetectedAt:        outsideDetectedAt,
 			CreatedAt:         outsideDetectedAt,
@@ -440,45 +583,42 @@ func TestDeliveryTelemetryRepository_ListPostSendCountsWithinPublishedWindow_App
 		},
 	}).Error)
 
-	require.NoError(t, insertDeliveryTestRows(db, []deliveryTelemetryTestBufferModel{
+	return fixture
+}
+
+func postSendCountWindowTelemetryRows(fixture postSendCountWindowFixture) []deliveryTelemetryTestBufferModel {
+	return []deliveryTelemetryTestBufferModel{
 		{
 			DeliveryID:     9001,
 			AttemptOrdinal: 1,
-			OutboxID:       insideOutbox.ID,
-			ChannelID:      insideOutbox.ChannelID,
-			ContentID:      insideOutbox.ContentID,
-			PostID:         insideOutbox.ContentID,
+			OutboxID:       fixture.insideOutbox.ID,
+			ChannelID:      fixture.insideOutbox.ChannelID,
+			ContentID:      fixture.insideOutbox.ContentID,
+			PostID:         fixture.insideOutbox.ContentID,
 			RoomID:         "room-inside",
 			AlarmType:      string(domain.AlarmTypeCommunity),
 			DedupeKey:      "youtube-notification:COMMUNITY_POST:post-inside-window",
 			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
-			EventAt:        insideEventAt,
-			NextAttemptAt:  insideEventAt,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
+			EventAt:        fixture.insideEventAt,
+			NextAttemptAt:  fixture.insideEventAt,
 		},
 		{
 			DeliveryID:     9002,
 			AttemptOrdinal: 1,
-			OutboxID:       outsideOutbox.ID,
-			ChannelID:      outsideOutbox.ChannelID,
-			ContentID:      outsideOutbox.ContentID,
-			PostID:         outsideOutbox.ContentID,
+			OutboxID:       fixture.outsideOutbox.ID,
+			ChannelID:      fixture.outsideOutbox.ChannelID,
+			ContentID:      fixture.outsideOutbox.ContentID,
+			PostID:         fixture.outsideOutbox.ContentID,
 			RoomID:         "room-outside",
 			AlarmType:      string(domain.AlarmTypeShorts),
 			DedupeKey:      "youtube-notification:NEW_SHORT:post-outside-window",
 			DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-			DeliveryMode:   "grouped",
-			SendResult:     "success",
-			EventAt:        outsideEventAt,
-			NextAttemptAt:  outsideEventAt,
+			DeliveryMode:   deliveryModeGrouped,
+			SendResult:     sendResultSuccess,
+			EventAt:        fixture.outsideEventAt,
+			NextAttemptAt:  fixture.outsideEventAt,
 		},
-	}).Error)
-
-	repository := telemetry.NewRepository(db)
-	rows, err := repository.ListPostSendCountsWithinPublishedWindow(ctx, windowStart, windowEnd)
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, insideOutbox.ContentID, rows[0].ContentID)
-	require.Equal(t, int64(1), rows[0].SuccessSendCount)
+	}
 }

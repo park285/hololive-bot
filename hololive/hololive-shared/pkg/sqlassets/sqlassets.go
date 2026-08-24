@@ -30,9 +30,11 @@ func MustReader(assets fs.FS, directory string) func(string) string {
 		if err != nil {
 			panic(fmt.Errorf("read embedded SQL %q: %w", queryPath, err))
 		}
+
 		if strings.TrimSpace(string(query)) == "" {
 			panic(fmt.Errorf("empty embedded SQL %q", queryPath))
 		}
+
 		return string(query)
 	}
 }

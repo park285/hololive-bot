@@ -22,23 +22,29 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-api/internal/readiness"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/park285/shared-go/v2/pkg/httputil"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func buildHealthOnlyRouter(ctx context.Context, logger *slog.Logger, authConfig httputil.AdminAuthConfig) (*gin.Engine, error) {
-	return sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
+	out, err := sharedserver.NewRuntimeRouter(ctx, logger, &sharedserver.RuntimeRouterOptions{
 		APIKey:             authConfig.APIKey,
 		DisableMetricsAuth: authConfig.Disabled,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("runtime router: %w", err)
+	}
+
+	return out, nil
 }
 
 func buildTriggerRouter(
@@ -54,15 +60,25 @@ func buildTriggerRouter(
 			if triggerHandler == nil {
 				return nil
 			}
+
 			if strings.TrimSpace(apiKey) == "" {
-				return fmt.Errorf("API_SECRET_KEY required")
+				return errors.New("API_SECRET_KEY required")
 			}
+
 			triggerHandler.RegisterInternalRoutesWithAuth(router.Group(""), apiKey)
+
 			return nil
 		},
 	}
+
 	if probe := readiness.Pick(readyProbe...); probe != nil {
 		routerOptions.InternalReadyResponder = readiness.GinHandler(ctx, probe)
 	}
-	return sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
+
+	out, err := sharedserver.NewRuntimeRouter(ctx, logger, routerOptions)
+	if err != nil {
+		return nil, fmt.Errorf("runtime router: %w", err)
+	}
+
+	return out, nil
 }

@@ -37,6 +37,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
+const testReplyRequestID = "r-1"
+
 type statusResult struct {
 	snap *iris.ReplyStatusSnapshot
 	err  error
@@ -54,11 +56,17 @@ func (s *stubStatusGetter) GetReplyStatus(context.Context, string) (*iris.ReplyS
 	if s.onCall != nil {
 		s.onCall(s.calls)
 	}
-	return s.snap, s.err
+
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	return s.snap, nil
 }
 
 type stubAcceptedSender struct {
 	stubStatusGetter
+
 	acceptErr     error
 	accepted      *iris.ReplyAcceptedResponse
 	acceptCalls   int
@@ -68,21 +76,31 @@ type stubAcceptedSender struct {
 
 func (s *stubAcceptedSender) SendMessageAccepted(_ context.Context, _, _ string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	s.acceptCalls++
+
 	s.optsByAttempt = append(s.optsByAttempt, append([]iris.SendOption(nil), opts...))
+
 	if s.onAccept != nil {
 		s.onAccept(s.acceptCalls)
 	}
+
 	if s.acceptErr != nil {
 		return nil, s.acceptErr
 	}
+
 	if s.accepted != nil {
 		return s.accepted, nil
 	}
+
 	return &iris.ReplyAcceptedResponse{RequestID: "r-accepted"}, nil
 }
 
 func (s *stubAcceptedSender) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return s.SendMessageAccepted(ctx, room, markdown, opts...)
+	out, err := s.SendMessageAccepted(ctx, room, markdown, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("send message accepted: %w", err)
+	}
+
+	return out, nil
 }
 
 func lostAdmissionResponseError() error {
@@ -91,9 +109,11 @@ func lostAdmissionResponseError() error {
 
 func irisConflictWithCode(code string) error {
 	body := "{}"
+
 	if code != "" {
 		body = fmt.Sprintf(`{"code":%q}`, code)
 	}
+
 	return &iris.HTTPError{
 		StatusCode: http.StatusConflict,
 		URL:        "https://iris/reply",
@@ -121,6 +141,7 @@ func capturedSendOptions(t *testing.T, opts []iris.SendOption) (clientRequestID,
 
 	// iris.SendOption이 적용하는 구조체가 비공개라 리플렉션 외에는 적용값을 읽을 수 없다.
 	box := reflect.New(reflect.TypeFor[iris.SendOption]().In(0).Elem())
+
 	for _, opt := range opts {
 		reflect.ValueOf(opt).Call([]reflect.Value{box})
 	}
@@ -133,11 +154,14 @@ func sendOptionStringField(t *testing.T, box reflect.Value, name string) string 
 
 	field := box.Elem().FieldByName(name)
 	require.True(t, field.IsValid(), "send option field %s is missing", name)
-	value, ok := field.Interface().(*string)
+
+	value, ok := reflect.TypeAssert[*string](field)
 	require.True(t, ok, "send option field %s is not *string", name)
+
 	if value == nil {
 		return ""
 	}
+
 	return *value
 }
 
@@ -185,70 +209,87 @@ func (c *stubBotClient) recordSend(room, message string, opts []iris.SendOption)
 
 func (c *stubBotClient) SendMessage(_ context.Context, room, message string, opts ...iris.SendOption) error {
 	c.recordSend(room, message, opts)
+
 	return c.sendErr
 }
 
 func (c *stubBotClient) SendMessageAccepted(_ context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.acceptCalls++
 	c.recordSend(room, message, opts)
+
 	if c.acceptErr != nil {
 		return nil, c.acceptErr
 	}
+
 	if c.accepted != nil {
 		return c.accepted, nil
 	}
+
 	return &iris.ReplyAcceptedResponse{RequestID: "r-default"}, nil
 }
 
 func (c *stubBotClient) SendImage(_ context.Context, room string, imageData []byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.imageCalls++
+
 	c.lastImageRoom = room
 	c.lastImage = imageData
 	c.imagesByAttempt = append(c.imagesByAttempt, imageData)
 	c.lastOptsLen = len(opts)
 	c.lastOpts = append([]iris.SendOption(nil), opts...)
 	c.optsByAttempt = append(c.optsByAttempt, c.lastOpts)
+
 	if c.onImage != nil {
 		c.onImage(c.imageCalls)
 	}
+
 	if c.imageErr != nil {
 		return nil, c.imageErr
 	}
+
 	if c.imageAccepted != nil {
 		return c.imageAccepted, nil
 	}
+
 	return &iris.ReplyAcceptedResponse{RequestID: "r-image"}, nil
 }
 
 func (c *stubBotClient) SendMultipleImages(_ context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.multiImageCalls++
+
 	c.lastImageRoom = room
 	c.lastImages = images
 	c.multiImagesByAttempt = append(c.multiImagesByAttempt, images)
 	c.lastOptsLen = len(opts)
 	c.lastOpts = append([]iris.SendOption(nil), opts...)
 	c.optsByAttempt = append(c.optsByAttempt, c.lastOpts)
+
 	if c.onMultiImage != nil {
 		c.onMultiImage(c.multiImageCalls)
 	}
+
 	if c.multiErr != nil {
 		return nil, c.multiErr
 	}
+
 	if c.multiAccepted != nil {
 		return c.multiAccepted, nil
 	}
+
 	return &iris.ReplyAcceptedResponse{RequestID: "r-images"}, nil
 }
 
 func (c *stubBotClient) SendMarkdown(_ context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.markdownCalls++
 	c.recordSend(room, markdown, opts)
+
 	if c.markdownErr != nil {
 		return nil, c.markdownErr
 	}
+
 	if c.accepted != nil {
 		return c.accepted, nil
 	}
+
 	return &iris.ReplyAcceptedResponse{RequestID: "r-markdown"}, nil
 }
 
@@ -257,12 +298,20 @@ func (c *stubBotClient) GetReplyStatus(context.Context, string) (*iris.ReplyStat
 	if c.statusErr != nil {
 		return nil, c.statusErr
 	}
+
 	if len(c.statuses) == 0 {
-		return &iris.ReplyStatusSnapshot{State: "handoff_completed"}, nil
+		return &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}, nil
 	}
+
 	r := c.statuses[0]
+
 	c.statuses = c.statuses[1:]
-	return r.snap, r.err
+
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	return r.snap, nil
 }
 
 func (c *stubBotClient) Ping(context.Context) bool { return c.pingResult }
@@ -275,29 +324,38 @@ func TestWithThreadIDAndFromContext(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty and whitespace threadID leaves context untagged", func(t *testing.T) {
+		t.Parallel()
+
 		for _, in := range []string{"", "   ", "\t\n"} {
-			ctx := WithThreadID(context.Background(), in)
+			ctx := WithThreadID(t.Context(), in)
 			_, ok := ThreadIDFromContext(ctx)
 			assert.False(t, ok, "input %q", in)
 		}
 	})
 
 	t.Run("valid threadID round trips trimmed", func(t *testing.T) {
-		ctx := WithThreadID(context.Background(), "  t-1  ")
+		t.Parallel()
+
+		ctx := WithThreadID(t.Context(), "  t-1  ")
 		id, ok := ThreadIDFromContext(ctx)
 		require.True(t, ok)
 		assert.Equal(t, "t-1", id)
 	})
 
 	t.Run("nil context returns false", func(t *testing.T) {
+		t.Parallel()
+
 		var nilCtx context.Context
+
 		id, ok := ThreadIDFromContext(nilCtx)
 		assert.False(t, ok)
 		assert.Empty(t, id)
 	})
 
 	t.Run("missing value returns false", func(t *testing.T) {
-		id, ok := ThreadIDFromContext(context.Background())
+		t.Parallel()
+
+		id, ok := ThreadIDFromContext(t.Context())
 		assert.False(t, ok)
 		assert.Empty(t, id)
 	})
@@ -307,22 +365,29 @@ func TestWithReplyIdentityAndFromContext(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty and whitespace identity leaves context untagged", func(t *testing.T) {
+		t.Parallel()
+
 		for _, in := range []string{"", "  ", "\t"} {
-			ctx := WithReplyIdentity(context.Background(), in)
+			ctx := WithReplyIdentity(t.Context(), in)
 			_, ok := ReplyIdentityFromContext(ctx)
 			assert.False(t, ok, "input %q", in)
 		}
 	})
 
 	t.Run("valid identity round trips trimmed", func(t *testing.T) {
-		ctx := WithReplyIdentity(context.Background(), "  user-1 ")
+		t.Parallel()
+
+		ctx := WithReplyIdentity(t.Context(), "  user-1 ")
 		id, ok := ReplyIdentityFromContext(ctx)
 		require.True(t, ok)
 		assert.Equal(t, "user-1", id)
 	})
 
 	t.Run("nil context returns false", func(t *testing.T) {
+		t.Parallel()
+
 		var nilCtx context.Context
+
 		id, ok := ReplyIdentityFromContext(nilCtx)
 		assert.False(t, ok)
 		assert.Empty(t, id)
@@ -332,18 +397,19 @@ func TestWithReplyIdentityAndFromContext(t *testing.T) {
 func TestThreadIDAndReplyIdentityKeysAreIndependent(t *testing.T) {
 	t.Parallel()
 
-	threadOnly := WithThreadID(context.Background(), "t-1")
+	threadOnly := WithThreadID(t.Context(), "t-1")
 	_, hasIdentity := ReplyIdentityFromContext(threadOnly)
 	assert.False(t, hasIdentity)
 
-	identityOnly := WithReplyIdentity(context.Background(), "u-1")
+	identityOnly := WithReplyIdentity(t.Context(), "u-1")
 	_, hasThread := ThreadIDFromContext(identityOnly)
 	assert.False(t, hasThread)
 
-	both := WithReplyIdentity(WithThreadID(context.Background(), "t-2"), "u-2")
+	both := WithReplyIdentity(WithThreadID(t.Context(), "t-2"), "u-2")
 	tid, ok := ThreadIDFromContext(both)
 	require.True(t, ok)
 	assert.Equal(t, "t-2", tid)
+
 	rid, ok := ReplyIdentityFromContext(both)
 	require.True(t, ok)
 	assert.Equal(t, "u-2", rid)
@@ -367,9 +433,9 @@ func TestAppendReplyClientRequestID(t *testing.T) {
 func TestReplyStatusFailedError(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "iris reply r-1 failed", replyStatusFailedError{requestID: "r-1"}.Error())
-	assert.Equal(t, "iris reply r-1 failed: boom", replyStatusFailedError{requestID: "r-1", detail: "boom"}.Error())
-	assert.Equal(t, "iris reply r-1 failed", replyStatusFailedError{requestID: "r-1", detail: "   "}.Error())
+	assert.Equal(t, "iris reply r-1 failed", replyStatusFailedError{requestID: testReplyRequestID}.Error())
+	assert.Equal(t, "iris reply r-1 failed: boom", replyStatusFailedError{requestID: testReplyRequestID, detail: "boom"}.Error())
+	assert.Equal(t, "iris reply r-1 failed", replyStatusFailedError{requestID: testReplyRequestID, detail: "   "}.Error())
 }
 
 func TestIsReplyStatusFailed(t *testing.T) {
@@ -385,6 +451,7 @@ func TestReplyStatusDetail(t *testing.T) {
 	t.Parallel()
 
 	assert.Empty(t, replyStatusDetail(&iris.ReplyStatusSnapshot{}))
+
 	detail := "d1"
 	assert.Equal(t, "d1", replyStatusDetail(&iris.ReplyStatusSnapshot{Detail: &detail}))
 }
@@ -414,6 +481,8 @@ func TestClassifyReplyState(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tc.want, classifyReplyState(tc.state))
 		})
 	}
@@ -439,12 +508,17 @@ func TestReplyHandoffStatusResult(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			outcome, err := replyHandoffStatusResult("r-1", &iris.ReplyStatusSnapshot{State: tc.state})
+			t.Parallel()
+
+			outcome, err := replyHandoffStatusResult(testReplyRequestID, &iris.ReplyStatusSnapshot{State: tc.state})
 			assert.Equal(t, tc.wantOutcome, outcome)
+
 			if tc.wantErr == nil {
 				require.NoError(t, err)
+
 				return
 			}
+
 			require.Error(t, err)
 			assert.True(t, tc.wantErr(err), "unexpected error kind: %v", err)
 			assert.False(t, isReplyOutcomeUnknown(err) && isReplyStatusFailed(err), "unknown and failed must stay disjoint")
@@ -452,7 +526,7 @@ func TestReplyHandoffStatusResult(t *testing.T) {
 	}
 
 	detail := "callback failed"
-	_, err := replyHandoffStatusResult("r-2", &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail})
+	_, err := replyHandoffStatusResult("r-2", &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "iris reply r-2 failed: callback failed")
 }
@@ -460,9 +534,11 @@ func TestReplyHandoffStatusResult(t *testing.T) {
 func TestCheckReplyHandoffStatus(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("getter error stays in flight so polling can retry, never success", func(t *testing.T) {
+		t.Parallel()
+
 		cause := errors.New("boom")
 		outcome, err := checkReplyHandoffStatus(ctx, &stubStatusGetter{err: cause}, "r")
 		assert.Equal(t, replyOutcomeInFlight, outcome)
@@ -471,6 +547,8 @@ func TestCheckReplyHandoffStatus(t *testing.T) {
 	})
 
 	t.Run("nil status is outcome unknown, never success", func(t *testing.T) {
+		t.Parallel()
+
 		outcome, err := checkReplyHandoffStatus(ctx, &stubStatusGetter{snap: nil}, "r")
 		assert.Equal(t, replyOutcomeUnknown, outcome)
 		require.Error(t, err)
@@ -478,14 +556,18 @@ func TestCheckReplyHandoffStatus(t *testing.T) {
 	})
 
 	t.Run("handoff completed succeeds", func(t *testing.T) {
-		getter := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}
+		t.Parallel()
+
+		getter := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}
 		outcome, err := checkReplyHandoffStatus(ctx, getter, "r")
 		assert.Equal(t, replyOutcomeHandoffCompleted, outcome)
 		require.NoError(t, err)
 	})
 
 	t.Run("failed status returns failed error", func(t *testing.T) {
-		outcome, err := checkReplyHandoffStatus(ctx, &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "failed"}}, "r")
+		t.Parallel()
+
+		outcome, err := checkReplyHandoffStatus(ctx, &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed}}, "r")
 		assert.Equal(t, replyOutcomeFailed, outcome)
 		require.Error(t, err)
 		assert.True(t, isReplyStatusFailed(err))
@@ -497,15 +579,20 @@ func TestWaitReplyStatusPoll(t *testing.T) {
 	t.Parallel()
 
 	t.Run("canceled context returns true", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		assert.True(t, waitReplyStatusPoll(ctx, make(chan time.Time)))
 	})
 
 	t.Run("tick returns false", func(t *testing.T) {
+		t.Parallel()
+
 		ch := make(chan time.Time, 1)
 		ch <- time.Now()
-		assert.False(t, waitReplyStatusPoll(context.Background(), ch))
+
+		assert.False(t, waitReplyStatusPoll(t.Context(), ch))
 	})
 }
 
@@ -513,21 +600,27 @@ func TestWaitForReplyHandoff(t *testing.T) {
 	t.Parallel()
 
 	t.Run("completes on first handoff_completed", func(t *testing.T) {
-		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}
-		require.NoError(t, waitForReplyHandoff(context.Background(), g, "r"))
+		t.Parallel()
+
+		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}
+		require.NoError(t, waitForReplyHandoff(t.Context(), g, "r"))
 		assert.Equal(t, 1, g.calls)
 	})
 
 	t.Run("failed status returns failed error", func(t *testing.T) {
-		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "failed"}}
-		err := waitForReplyHandoff(context.Background(), g, "r")
+		t.Parallel()
+
+		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed}}
+		err := waitForReplyHandoff(t.Context(), g, "r")
 		require.Error(t, err)
 		assert.True(t, isReplyStatusFailed(err))
 		assert.False(t, isReplyOutcomeUnknown(err))
 	})
 
 	t.Run("transient getter errors keep polling until the deadline", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 900*time.Millisecond)
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), 900*time.Millisecond)
 		defer cancel()
 
 		g := &stubStatusGetter{err: errors.New("status down")}
@@ -540,28 +633,39 @@ func TestWaitForReplyHandoff(t *testing.T) {
 	})
 
 	t.Run("a transient getter error followed by handoff_completed succeeds", func(t *testing.T) {
+		t.Parallel()
+
 		g := &stubStatusGetter{err: errors.New("blip")}
+
 		g.onCall = func(call int) {
 			if call >= 2 {
 				g.err = nil
-				g.snap = &iris.ReplyStatusSnapshot{State: "handoff_completed"}
+				g.snap = &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}
 			}
 		}
 
-		require.NoError(t, waitForReplyHandoff(context.Background(), g, "r"))
+		require.NoError(t, waitForReplyHandoff(t.Context(), g, "r"))
 		assert.Equal(t, 2, g.calls)
 	})
+}
+
+func TestWaitForReplyHandoffEndsPolling(t *testing.T) {
+	t.Parallel()
 
 	t.Run("nil status ends polling as outcome unknown", func(t *testing.T) {
+		t.Parallel()
+
 		g := &stubStatusGetter{snap: nil}
-		err := waitForReplyHandoff(context.Background(), g, "r")
+		err := waitForReplyHandoff(t.Context(), g, "r")
 		require.Error(t, err)
 		assert.True(t, isReplyOutcomeUnknown(err))
 		assert.Equal(t, 1, g.calls)
 	})
 
 	t.Run("context cancellation while in flight is outcome unknown", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(t.Context())
 		g := &stubStatusGetter{
 			snap:   &iris.ReplyStatusSnapshot{State: "queued"},
 			onCall: func(int) { cancel() },
@@ -573,8 +677,11 @@ func TestWaitForReplyHandoff(t *testing.T) {
 	})
 
 	t.Run("deadline exceeded while in flight is outcome unknown", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		t.Parallel()
+
+		ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 		defer cancel()
+
 		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "sending"}}
 		err := waitForReplyHandoff(ctx, g, "r")
 		require.Error(t, err)
@@ -587,24 +694,30 @@ func TestWaitForAcceptedReplyHandoff(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil accepted is outcome unknown, never success", func(t *testing.T) {
-		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}
-		err := waitForAcceptedReplyHandoff(context.Background(), g, nil)
+		t.Parallel()
+
+		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}
+		err := waitForAcceptedReplyHandoff(t.Context(), g, nil)
 		require.Error(t, err)
 		assert.True(t, isReplyOutcomeUnknown(err))
 		assert.Equal(t, 0, g.calls)
 	})
 
 	t.Run("blank request id is outcome unknown, never success", func(t *testing.T) {
-		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}
-		err := waitForAcceptedReplyHandoff(context.Background(), g, &iris.ReplyAcceptedResponse{RequestID: "   "})
+		t.Parallel()
+
+		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}
+		err := waitForAcceptedReplyHandoff(t.Context(), g, &iris.ReplyAcceptedResponse{RequestID: "   "})
 		require.Error(t, err)
 		assert.True(t, isReplyOutcomeUnknown(err))
 		assert.Equal(t, 0, g.calls)
 	})
 
 	t.Run("request id triggers polling", func(t *testing.T) {
-		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: "failed"}}
-		err := waitForAcceptedReplyHandoff(context.Background(), g, &iris.ReplyAcceptedResponse{RequestID: "r-1"})
+		t.Parallel()
+
+		g := &stubStatusGetter{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed}}
+		err := waitForAcceptedReplyHandoff(t.Context(), g, &iris.ReplyAcceptedResponse{RequestID: testReplyRequestID})
 		require.Error(t, err)
 		assert.True(t, isReplyStatusFailed(err))
 		assert.Equal(t, 1, g.calls)
@@ -614,92 +727,111 @@ func TestWaitForAcceptedReplyHandoff(t *testing.T) {
 func TestSendReply(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	const clientRequestID = "hololive:v1:message:m-1:reply:0"
-
 	for laneName, newLane := range replyLanesUnderTest() {
 		t.Run(laneName+" lane", func(t *testing.T) {
-			t.Run("non transport accept error is returned without re-post", func(t *testing.T) {
-				s := &stubAcceptedSender{acceptErr: errors.New("nope")}
-				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
-				require.Error(t, err)
-				assert.Equal(t, 1, s.acceptCalls, "rejected admission must not be re-posted")
-				assert.Equal(t, 0, s.calls)
-			})
+			t.Parallel()
 
-			t.Run("lost admission response is re-posted once then reported unknown", func(t *testing.T) {
-				s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
-				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
-				require.Error(t, err)
-				assert.True(t, isReplyOutcomeUnknown(err))
-				assert.Equal(t, replyAdmissionMaxAttempts, s.acceptCalls)
-			})
-
-			t.Run("a rejection after a lost attempt stays unknown, not a plain failure", func(t *testing.T) {
-				s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
-				s.onAccept = func(call int) {
-					if call >= 2 {
-						s.acceptErr = errors.New("iris returned 500")
-					}
-				}
-
-				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
-				require.Error(t, err)
-				assert.True(t, isReplyOutcomeUnknown(err),
-					"the lost first attempt may already have been admitted, so the rejection is not authoritative")
-				assert.Equal(t, replyAdmissionMaxAttempts, s.acceptCalls)
-			})
-
-			t.Run("lost admission response without a stable id is not re-posted", func(t *testing.T) {
-				s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
-				err := sendReply(ctx, newLane(s), "room", "msg", "", nil)
-				require.Error(t, err)
-				assert.True(t, isReplyOutcomeUnknown(err))
-				assert.Equal(t, 1, s.acceptCalls)
-			})
-
-			t.Run("accepted then handoff_completed succeeds", func(t *testing.T) {
-				s := &stubAcceptedSender{
-					accepted: &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-					snap:     &iris.ReplyStatusSnapshot{State: "handoff_completed"},
-				}
-				require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
-				assert.Equal(t, 1, s.acceptCalls)
-			})
-
-			t.Run("accepted then failed is terminal without re-post", func(t *testing.T) {
-				detail := "boom"
-				s := &stubAcceptedSender{
-					accepted: &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-					snap:     &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail},
-				}
-				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
-				require.Error(t, err)
-				assert.True(t, isReplyStatusFailed(err))
-				assert.Equal(t, 1, s.acceptCalls, "failed is terminal and must not be re-posted")
-			})
-
-			t.Run("accepted then outcome_unknown does not re-post", func(t *testing.T) {
-				s := &stubAcceptedSender{
-					accepted: &iris.ReplyAcceptedResponse{RequestID: "r-1"},
-					snap:     &iris.ReplyStatusSnapshot{State: "outcome_unknown"},
-				}
-				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
-				require.Error(t, err)
-				assert.True(t, isReplyOutcomeUnknown(err))
-				assert.Equal(t, 1, s.acceptCalls, "unknown outcome must not be re-posted")
-			})
-
-			t.Run("blank request id is outcome unknown without re-post", func(t *testing.T) {
-				s := &stubAcceptedSender{accepted: &iris.ReplyAcceptedResponse{RequestID: ""}}
-				err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
-				require.Error(t, err)
-				assert.True(t, isReplyOutcomeUnknown(err))
-				assert.Equal(t, 1, s.acceptCalls)
-				assert.Equal(t, 0, s.calls)
-			})
+			testSendReplyAdmission(t, newLane)
+			testSendReplyHandoff(t, newLane)
 		})
 	}
+}
+
+func testSendReplyAdmission(t *testing.T, newLane func(*stubAcceptedSender) replyLane) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	const clientRequestID = "hololive:v1:message:m-1:reply:0"
+
+	t.Run("non transport accept error is returned without re-post", func(t *testing.T) {
+		s := &stubAcceptedSender{acceptErr: errors.New("nope")}
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.Equal(t, 1, s.acceptCalls, "rejected admission must not be re-posted")
+		assert.Equal(t, 0, s.calls)
+	})
+
+	t.Run("lost admission response is re-posted once then reported unknown", func(t *testing.T) {
+		s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.Equal(t, replyAdmissionMaxAttempts, s.acceptCalls)
+	})
+
+	t.Run("a rejection after a lost attempt stays unknown, not a plain failure", func(t *testing.T) {
+		s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
+
+		s.onAccept = func(call int) {
+			if call >= 2 {
+				s.acceptErr = errors.New("iris returned 500")
+			}
+		}
+
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.True(t, isReplyOutcomeUnknown(err),
+			"the lost first attempt may already have been admitted, so the rejection is not authoritative")
+		assert.Equal(t, replyAdmissionMaxAttempts, s.acceptCalls)
+	})
+
+	t.Run("lost admission response without a stable id is not re-posted", func(t *testing.T) {
+		s := &stubAcceptedSender{acceptErr: lostAdmissionResponseError()}
+		err := sendReply(ctx, newLane(s), "room", "msg", "", nil)
+		require.Error(t, err)
+		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.Equal(t, 1, s.acceptCalls)
+	})
+}
+
+func testSendReplyHandoff(t *testing.T, newLane func(*stubAcceptedSender) replyLane) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	const clientRequestID = "hololive:v1:message:m-1:reply:0"
+
+	t.Run("accepted then handoff_completed succeeds", func(t *testing.T) {
+		s := &stubAcceptedSender{
+			accepted: &iris.ReplyAcceptedResponse{RequestID: testReplyRequestID},
+			snap:     &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted},
+		}
+		require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
+		assert.Equal(t, 1, s.acceptCalls)
+	})
+
+	t.Run("accepted then failed is terminal without re-post", func(t *testing.T) {
+		detail := "boom"
+		s := &stubAcceptedSender{
+			accepted: &iris.ReplyAcceptedResponse{RequestID: testReplyRequestID},
+			snap:     &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail},
+		}
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.True(t, isReplyStatusFailed(err))
+		assert.Equal(t, 1, s.acceptCalls, "failed is terminal and must not be re-posted")
+	})
+
+	t.Run("accepted then outcome_unknown does not re-post", func(t *testing.T) {
+		s := &stubAcceptedSender{
+			accepted: &iris.ReplyAcceptedResponse{RequestID: testReplyRequestID},
+			snap:     &iris.ReplyStatusSnapshot{State: "outcome_unknown"},
+		}
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.Equal(t, 1, s.acceptCalls, "unknown outcome must not be re-posted")
+	})
+
+	t.Run("blank request id is outcome unknown without re-post", func(t *testing.T) {
+		s := &stubAcceptedSender{accepted: &iris.ReplyAcceptedResponse{RequestID: ""}}
+		err := sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil)
+		require.Error(t, err)
+		assert.True(t, isReplyOutcomeUnknown(err))
+		assert.Equal(t, 1, s.acceptCalls)
+		assert.Equal(t, 0, s.calls)
+	})
 }
 
 func TestSendReplyConflictReissue(t *testing.T) {
@@ -707,7 +839,10 @@ func TestSendReplyConflictReissue(t *testing.T) {
 
 	for laneName, newLane := range replyLanesUnderTest() {
 		t.Run(laneName+" lane", func(t *testing.T) {
+			t.Parallel()
+
 			testSendReplyConflictReissue(t, newLane)
+			testSendReplyConflictReissueTerminal(t, newLane)
 		})
 	}
 }
@@ -715,14 +850,16 @@ func TestSendReplyConflictReissue(t *testing.T) {
 func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender) replyLane) {
 	t.Helper()
 
-	ctx := context.Background()
+	ctx := t.Context()
+
 	const clientRequestID = "hololive:v1:message:m-1:reply:0"
 
 	t.Run("failed conflict reissues once and succeeds", func(t *testing.T) {
 		s := &stubAcceptedSender{
-			snap:      &iris.ReplyStatusSnapshot{State: "handoff_completed"},
+			snap:      &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted},
 			acceptErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed),
 		}
+
 		s.onAccept = func(call int) {
 			if call == 2 {
 				s.acceptErr = nil
@@ -731,6 +868,7 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 
 		require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
 		require.Len(t, s.optsByAttempt, 2)
+
 		first, _ := capturedSendOptions(t, s.optsByAttempt[0])
 		second, _ := capturedSendOptions(t, s.optsByAttempt[1])
 		assert.Equal(t, clientRequestID, first)
@@ -744,7 +882,9 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 		require.Error(t, err)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
 		require.Len(t, s.optsByAttempt, iris.ReplyReissueMaxGenerations+1)
+
 		wantIDs := []string{clientRequestID, clientRequestID + ":r1", clientRequestID + ":r2"}
+
 		for i, opts := range s.optsByAttempt {
 			got, _ := capturedSendOptions(t, opts)
 			assert.Equal(t, wantIDs[i], got)
@@ -753,6 +893,7 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 
 	t.Run("already exists on a reissued generation is terminal", func(t *testing.T) {
 		s := &stubAcceptedSender{acceptErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+
 		s.onAccept = func(call int) {
 			if call == 2 {
 				s.acceptErr = irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDAlreadyExists)
@@ -763,9 +904,18 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 		require.Error(t, err)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDAlreadyExists, iris.HTTPErrorCode(err))
 		require.Len(t, s.optsByAttempt, 2)
+
 		last, _ := capturedSendOptions(t, s.optsByAttempt[1])
 		assert.Equal(t, clientRequestID+":r1", last)
 	})
+}
+
+func testSendReplyConflictReissueTerminal(t *testing.T, newLane func(*stubAcceptedSender) replyLane) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	const clientRequestID = "hololive:v1:message:m-1:reply:0"
 
 	t.Run("other conflicts remain terminal without reissue", func(t *testing.T) {
 		for _, code := range []string{
@@ -787,9 +937,10 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 
 	t.Run("failed conflict after a lost attempt advances generation", func(t *testing.T) {
 		s := &stubAcceptedSender{
-			snap:      &iris.ReplyStatusSnapshot{State: "handoff_completed"},
+			snap:      &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted},
 			acceptErr: lostAdmissionResponseError(),
 		}
+
 		s.onAccept = func(call int) {
 			switch call {
 			case 2:
@@ -801,6 +952,7 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 
 		require.NoError(t, sendReply(ctx, newLane(s), "room", "msg", clientRequestID, nil))
 		require.Len(t, s.optsByAttempt, 3)
+
 		first, _ := capturedSendOptions(t, s.optsByAttempt[0])
 		second, _ := capturedSendOptions(t, s.optsByAttempt[1])
 		third, _ := capturedSendOptions(t, s.optsByAttempt[2])
@@ -813,16 +965,21 @@ func testSendReplyConflictReissue(t *testing.T, newLane func(*stubAcceptedSender
 func TestCommandTransportSendMessage(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("nil transport returns configuration error", func(t *testing.T) {
+		t.Parallel()
+
 		var tr *CommandTransport
+
 		err := tr.SendMessage(ctx, "room", "hi")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
 	})
 
 	t.Run("nil client returns configuration error", func(t *testing.T) {
+		t.Parallel()
+
 		tr := NewCommandTransport(nil, nil)
 		err := tr.SendMessage(ctx, "room", "hi")
 		require.Error(t, err)
@@ -830,6 +987,8 @@ func TestCommandTransportSendMessage(t *testing.T) {
 	})
 
 	t.Run("plain accept error returns after single attempt", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{acceptErr: errors.New("iris down")}
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendMessage(inboundCtx(ctx), "room-x", "hi")
@@ -840,19 +999,29 @@ func TestCommandTransportSendMessage(t *testing.T) {
 	})
 
 	t.Run("success on first attempt", func(t *testing.T) {
-		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		t.Parallel()
+
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}}}
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "hi"))
 		assert.Equal(t, 1, c.acceptCalls)
 		assert.Equal(t, 0, c.markdownCalls)
 		assert.Equal(t, "hi", c.lastMessage)
 	})
+}
+
+func TestCommandTransportSendMessageFailedStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("failed status is terminal and is never re-posted", func(t *testing.T) {
+		t.Parallel()
+
 		detail := "cb failed"
 		c := &stubBotClient{statuses: []statusResult{
-			{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
-			{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
+			{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail}},
+			{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}},
 		}}
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendMessage(inboundCtx(ctx), "room", "hi")
@@ -862,20 +1031,30 @@ func TestCommandTransportSendMessage(t *testing.T) {
 	})
 
 	t.Run("failed status surfaces the wrapped failed error", func(t *testing.T) {
+		t.Parallel()
+
 		detail := "cb failed"
 		c := &stubBotClient{statuses: []statusResult{
-			{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
+			{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail}},
 		}}
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendMessage(inboundCtx(ctx), "room", "hi")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send message: ")
 		assert.Contains(t, err.Error(), "cb failed")
-		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
+		require.NotErrorIs(t, err, ErrReplyOutcomeUnknown)
 		assert.Equal(t, 1, c.acceptCalls)
 	})
+}
+
+func TestCommandTransportSendMessageOptions(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("persistent status query errors surface outcome unknown to the caller", func(t *testing.T) {
+		t.Parallel()
+
 		deadlineCtx, cancel := context.WithTimeout(inboundCtx(ctx), 700*time.Millisecond)
 		defer cancel()
 
@@ -888,6 +1067,8 @@ func TestCommandTransportSendMessage(t *testing.T) {
 	})
 
 	t.Run("thread id in context adds an extra send option", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(WithThreadID(inboundCtx(ctx), "t-1"), "room", "hi"))
@@ -895,6 +1076,8 @@ func TestCommandTransportSendMessage(t *testing.T) {
 	})
 
 	t.Run("no thread id yields a single client-request-id option", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "hi"))
@@ -902,6 +1085,8 @@ func TestCommandTransportSendMessage(t *testing.T) {
 	})
 
 	t.Run("without an inbound identity no client request id is attached", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		tr := NewCommandTransport(c, nil)
 		require.NoError(t, tr.SendMessage(ctx, "room", "hi"))
@@ -915,11 +1100,14 @@ func TestCommandTransportSendMessage(t *testing.T) {
 func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
+
 	const wantRequestID = "hololive:v1:message:m-1:reply:0"
 
 	t.Run("markdown lane sends through SendMarkdown with the stable request id", func(t *testing.T) {
-		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		t.Parallel()
+
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}}}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room-md", "**hi**"))
@@ -935,18 +1123,22 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 	})
 
 	t.Run("regular chat renders unicode on the accepted lane", func(t *testing.T) {
-		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		t.Parallel()
+
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}}}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
-		ctx := WithRoomChat(inboundCtx(ctx), "MultiChat", "")
-		require.NoError(t, tr.SendMessage(ctx, "room-reg", "## **hi**"))
+		chatCtx := WithRoomChat(inboundCtx(ctx), "MultiChat", "")
+		require.NoError(t, tr.SendMessage(chatCtx, "room-reg", "## **hi**"))
 		assert.Equal(t, 1, c.acceptCalls)
 		assert.Equal(t, 0, c.markdownCalls)
 		assert.Equal(t, "【𝗵𝗶】", c.lastMessage)
 	})
 
 	t.Run("disabled flag keeps the accepted lane", func(t *testing.T) {
-		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}}}}
+		t.Parallel()
+
+		c := &stubBotClient{statuses: []statusResult{{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}}}}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(false))
 
 		require.NoError(t, tr.SendMessage(inboundCtx(ctx), "room", "**hi**"))
@@ -959,10 +1151,12 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 	})
 
 	t.Run("failed handoff is terminal on the markdown lane", func(t *testing.T) {
+		t.Parallel()
+
 		detail := "cb failed"
 		c := &stubBotClient{statuses: []statusResult{
-			{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}},
-			{snap: &iris.ReplyStatusSnapshot{State: "handoff_completed"}},
+			{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail}},
+			{snap: &iris.ReplyStatusSnapshot{State: replyStateHandoffCompleted}},
 		}}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
@@ -976,8 +1170,18 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 		requestID, _ := capturedSendOptions(t, c.optsByAttempt[0])
 		assert.Equal(t, wantRequestID, requestID)
 	})
+}
+
+func TestCommandTransportSendMessageMarkdownLaneAdmission(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	const wantRequestID = "hololive:v1:message:m-1:reply:0"
 
 	t.Run("send error returns after a single markdown attempt", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{markdownErr: errors.New("iris down")}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
@@ -989,6 +1193,8 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 	})
 
 	t.Run("lost admission response is re-posted with the same request id", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{markdownErr: lostAdmissionResponseError()}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
@@ -1005,6 +1211,8 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 	})
 
 	t.Run("thread id is forwarded on the markdown lane", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		tr := NewCommandTransport(c, nil, WithMarkdownReplies(true))
 
@@ -1017,6 +1225,8 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 	})
 
 	t.Run("nil option is ignored", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		tr := NewCommandTransport(c, nil, nil, WithMarkdownReplies(true))
 
@@ -1028,16 +1238,21 @@ func TestCommandTransportSendMessageMarkdownLane(t *testing.T) {
 func TestCommandTransportSendImage(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("nil transport returns configuration error", func(t *testing.T) {
+		t.Parallel()
+
 		var tr *CommandTransport
+
 		err := tr.SendImage(ctx, "room", []byte("x"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
 	})
 
 	t.Run("nil client returns configuration error", func(t *testing.T) {
+		t.Parallel()
+
 		tr := NewCommandTransport(nil, nil)
 		err := tr.SendImage(ctx, "room", []byte("x"))
 		require.Error(t, err)
@@ -1045,6 +1260,8 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 
 	t.Run("client error is wrapped without room id", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{imageErr: errors.New("img down")}
 		tr := NewCommandTransport(c, nil)
 		err := tr.SendImage(ctx, "room", []byte("x"))
@@ -1054,6 +1271,8 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 
 	t.Run("success forwards bytes and returns nil", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		data := []byte{0x89, 0x50, 0x4E, 0x47}
 		require.NoError(t, tr(c).SendImage(ctx, "room-1", data))
@@ -1062,31 +1281,45 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 
 	t.Run("failed reply status is wrapped with detail", func(t *testing.T) {
+		t.Parallel()
+
 		detail := "image lease last modified mismatch"
 		c := &stubBotClient{
 			imageAccepted: &iris.ReplyAcceptedResponse{RequestID: "r-img"},
-			statuses:      []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}}},
+			statuses:      []statusResult{{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail}}},
 		}
 		err := tr(c).SendImage(ctx, "room", []byte("x"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send image: ")
 		assert.Contains(t, err.Error(), "image lease last modified mismatch")
-		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
+		assert.NotErrorIs(t, err, ErrReplyOutcomeUnknown)
 	})
 
 	t.Run("lost admission response does not advance the image generation", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{imageErr: lostAdmissionResponseError()}
 		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("x"))
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrReplyOutcomeUnknown)
 		require.Len(t, c.optsByAttempt, 1)
+
 		requestID, _ := capturedSendOptions(t, c.optsByAttempt[0])
 		assert.Equal(t, "hololive:v1:message:m-1:reply:0", requestID)
 	})
+}
+
+func TestCommandTransportSendImageConflictReissue(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("failed conflict reissues with the same image payload", func(t *testing.T) {
+		t.Parallel()
+
 		data := []byte("image-payload")
 		c := &stubBotClient{imageErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+
 		c.onImage = func(call int) {
 			if call == 2 {
 				c.imageErr = nil
@@ -1096,6 +1329,7 @@ func TestCommandTransportSendImage(t *testing.T) {
 		require.NoError(t, tr(c).SendImage(inboundCtx(ctx), "room", data))
 		require.Len(t, c.optsByAttempt, 2)
 		require.Len(t, c.imagesByAttempt, 2)
+
 		first, _ := capturedSendOptions(t, c.optsByAttempt[0])
 		second, _ := capturedSendOptions(t, c.optsByAttempt[1])
 		assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
@@ -1105,6 +1339,8 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 
 	t.Run("failed conflict exhausts two image reissue generations", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{imageErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("image-payload"))
@@ -1112,11 +1348,13 @@ func TestCommandTransportSendImage(t *testing.T) {
 		require.ErrorIs(t, err, iris.ErrPermanent)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
 		require.Len(t, c.optsByAttempt, iris.ReplyReissueMaxGenerations+1)
+
 		wantIDs := []string{
 			"hololive:v1:message:m-1:reply:0",
 			"hololive:v1:message:m-1:reply:0:r1",
 			"hololive:v1:message:m-1:reply:0:r2",
 		}
+
 		for i, opts := range c.optsByAttempt {
 			got, _ := capturedSendOptions(t, opts)
 			assert.Equal(t, wantIDs[i], got)
@@ -1124,6 +1362,8 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 
 	t.Run("other image conflicts remain terminal without reissue", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{imageErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDOutcomeUnknown)}
 
 		err := tr(c).SendImage(inboundCtx(ctx), "room", []byte("image-payload"))
@@ -1133,19 +1373,23 @@ func TestCommandTransportSendImage(t *testing.T) {
 	})
 
 	t.Run("a plain rejection stays a terminal failure", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{imageErr: errors.New("img rejected")}
 		err := tr(c).SendImage(ctx, "room", []byte("x"))
 		require.Error(t, err)
-		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
+		assert.NotErrorIs(t, err, ErrReplyOutcomeUnknown)
 	})
 }
 
 func TestCommandTransportSendImages(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("multiple images are sent as one album", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		images := [][]byte{[]byte("one"), []byte("two"), []byte("three")}
 
@@ -1156,6 +1400,8 @@ func TestCommandTransportSendImages(t *testing.T) {
 	})
 
 	t.Run("single image preserves the single image lane", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 
 		require.NoError(t, tr(c).SendImages(ctx, "room-1", [][]byte{[]byte("one")}))
@@ -1164,55 +1410,76 @@ func TestCommandTransportSendImages(t *testing.T) {
 	})
 
 	t.Run("thread and stable request id are forwarded, one ordinal per emission", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		images := [][]byte{[]byte("one"), []byte("two")}
-		ctx := WithReplyIdentity(WithThreadID(ctx, "t-1"), "message:m-1")
+		threadCtx := WithReplyIdentity(WithThreadID(ctx, "t-1"), "message:m-1")
 
-		require.NoError(t, tr(c).SendImages(ctx, "room-1", images))
+		require.NoError(t, tr(c).SendImages(threadCtx, "room-1", images))
 		assert.Equal(t, 2, c.lastOptsLen)
+
 		requestID, threadID := capturedSendOptions(t, c.lastOpts)
 		assert.Equal(t, "t-1", threadID)
 		assert.Equal(t, "hololive:v1:message:m-1:reply:0", requestID)
 
-		require.NoError(t, tr(c).SendImages(ctx, "room-1", images))
+		require.NoError(t, tr(c).SendImages(threadCtx, "room-1", images))
+
 		requestID, _ = capturedSendOptions(t, c.lastOpts)
 		assert.Equal(t, "hololive:v1:message:m-1:reply:1", requestID,
 			"a second emission inside one inbound message must not reuse the first ordinal")
 	})
 
 	t.Run("without an inbound identity no client request id is attached", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 
 		require.NoError(t, tr(c).SendImages(WithThreadID(ctx, "t-1"), "room-1", [][]byte{[]byte("one"), []byte("two")}))
+
 		requestID, threadID := capturedSendOptions(t, c.lastOpts)
 		assert.Equal(t, "t-1", threadID)
 		assert.Empty(t, requestID)
 	})
+}
+
+func TestCommandTransportSendImagesFailures(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("client error is wrapped without room id", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{multiErr: errors.New("album down")}
 
 		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send images: ")
 		assert.Contains(t, err.Error(), "album down")
-		assert.False(t, errors.Is(err, ErrReplyOutcomeUnknown))
+		assert.NotErrorIs(t, err, ErrReplyOutcomeUnknown)
 	})
 
 	t.Run("lost admission response does not advance the album generation", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{multiErr: lostAdmissionResponseError()}
 
 		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrReplyOutcomeUnknown)
 		require.Len(t, c.optsByAttempt, 1)
+
 		requestID, _ := capturedSendOptions(t, c.optsByAttempt[0])
 		assert.Equal(t, "hololive:v1:message:m-1:reply:0", requestID)
 	})
 
 	t.Run("failed conflict reissues with the same album payload", func(t *testing.T) {
+		t.Parallel()
+
 		images := [][]byte{[]byte("one"), []byte("two")}
 		c := &stubBotClient{multiErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
+
 		c.onMultiImage = func(call int) {
 			if call == 2 {
 				c.multiErr = nil
@@ -1222,6 +1489,7 @@ func TestCommandTransportSendImages(t *testing.T) {
 		require.NoError(t, tr(c).SendImages(inboundCtx(ctx), "room", images))
 		require.Len(t, c.optsByAttempt, 2)
 		require.Len(t, c.multiImagesByAttempt, 2)
+
 		first, _ := capturedSendOptions(t, c.optsByAttempt[0])
 		second, _ := capturedSendOptions(t, c.optsByAttempt[1])
 		assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
@@ -1229,8 +1497,16 @@ func TestCommandTransportSendImages(t *testing.T) {
 		assert.Equal(t, images, c.multiImagesByAttempt[0])
 		assert.Equal(t, images, c.multiImagesByAttempt[1])
 	})
+}
+
+func TestCommandTransportSendImagesReissueExhaustion(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("failed conflict exhausts two album reissue generations", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{multiErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDFailed)}
 
 		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
@@ -1238,11 +1514,13 @@ func TestCommandTransportSendImages(t *testing.T) {
 		require.ErrorIs(t, err, iris.ErrPermanent)
 		assert.Equal(t, iris.HTTPErrorCodeClientRequestIDFailed, iris.HTTPErrorCode(err))
 		require.Len(t, c.optsByAttempt, iris.ReplyReissueMaxGenerations+1)
+
 		wantIDs := []string{
 			"hololive:v1:message:m-1:reply:0",
 			"hololive:v1:message:m-1:reply:0:r1",
 			"hololive:v1:message:m-1:reply:0:r2",
 		}
+
 		for i, opts := range c.optsByAttempt {
 			got, _ := capturedSendOptions(t, opts)
 			assert.Equal(t, wantIDs[i], got)
@@ -1250,6 +1528,8 @@ func TestCommandTransportSendImages(t *testing.T) {
 	})
 
 	t.Run("other album conflicts remain terminal without reissue", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{multiErr: irisConflictWithCode(iris.HTTPErrorCodeClientRequestIDPayloadMismatch)}
 
 		err := tr(c).SendImages(inboundCtx(ctx), "room", [][]byte{[]byte("one"), []byte("two")})
@@ -1259,10 +1539,12 @@ func TestCommandTransportSendImages(t *testing.T) {
 	})
 
 	t.Run("failed reply status is wrapped with detail", func(t *testing.T) {
+		t.Parallel()
+
 		detail := "album lease last modified mismatch"
 		c := &stubBotClient{
 			multiAccepted: &iris.ReplyAcceptedResponse{RequestID: "r-images"},
-			statuses:      []statusResult{{snap: &iris.ReplyStatusSnapshot{State: "failed", Detail: &detail}}},
+			statuses:      []statusResult{{snap: &iris.ReplyStatusSnapshot{State: replyStateFailed, Detail: &detail}}},
 		}
 
 		err := tr(c).SendImages(ctx, "room", [][]byte{[]byte("one"), []byte("two")})
@@ -1275,10 +1557,13 @@ func TestCommandTransportSendImages(t *testing.T) {
 func TestCommandTransportSendError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("nil transport returns wrapped configuration error", func(t *testing.T) {
+		t.Parallel()
+
 		var tr *CommandTransport
+
 		err := tr.SendError(ctx, "room", "some_key")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "send error message")
@@ -1286,6 +1571,8 @@ func TestCommandTransportSendError(t *testing.T) {
 	})
 
 	t.Run("nil formatter sends fallback sentinel", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		require.NoError(t, tr(c).SendError(ctx, "room", "any_key"))
 		assert.Equal(t, "room", c.lastRoom)
@@ -1293,6 +1580,8 @@ func TestCommandTransportSendError(t *testing.T) {
 	})
 
 	t.Run("formatter without strings resolves unknown key to sentinel", func(t *testing.T) {
+		t.Parallel()
+
 		c := &stubBotClient{}
 		formatter := messageformatter.NewResponseFormatter("!", nil)
 		transport := NewCommandTransport(c, formatter)

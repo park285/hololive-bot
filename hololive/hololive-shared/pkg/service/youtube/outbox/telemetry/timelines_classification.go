@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ import (
 
 func (r *Repository) PersistPostLatencyClassificationsByOutboxIDs(ctx context.Context, outboxIDs []int64) error {
 	if r == nil || r.db == nil {
-		return fmt.Errorf("persist post latency classifications by outbox ids: db is nil")
+		return errors.New("persist post latency classifications by outbox ids: db is nil")
 	}
 
 	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
@@ -24,9 +25,11 @@ func (r *Repository) PersistPostLatencyClassificationsByOutboxIDs(ctx context.Co
 	if err != nil {
 		return fmt.Errorf("persist post latency classifications by outbox ids: %w", err)
 	}
+
 	if err := r.persistPostLatencyClassifications(ctx, rows); err != nil {
 		return fmt.Errorf("persist post latency classifications by outbox ids: %w", err)
 	}
+
 	return nil
 }
 
@@ -35,13 +38,14 @@ func (r *Repository) PersistPostLatencyClassificationsByIdentities(
 	identities []timeline.PostTrackingIdentity,
 ) error {
 	if r == nil || r.db == nil {
-		return fmt.Errorf("persist post latency classifications by identities: db is nil")
+		return errors.New("persist post latency classifications by identities: db is nil")
 	}
 
 	normalized, err := timeline.NormalizePostTrackingIdentities(identities)
 	if err != nil {
 		return fmt.Errorf("persist post latency classifications by identities: %w", err)
 	}
+
 	if len(normalized) == 0 {
 		return nil
 	}
@@ -50,9 +54,11 @@ func (r *Repository) PersistPostLatencyClassificationsByIdentities(
 	if err != nil {
 		return fmt.Errorf("persist post latency classifications by identities: %w", err)
 	}
+
 	if err := r.persistPostLatencyClassifications(ctx, rows); err != nil {
 		return fmt.Errorf("persist post latency classifications by identities: %w", err)
 	}
+
 	return nil
 }
 
@@ -63,11 +69,13 @@ func (r *Repository) persistPostLatencyClassifications(ctx context.Context, rows
 
 	updatedAt := time.Now().UTC()
 	seen := make(map[string]struct{}, len(rows))
+
 	for i := range rows {
 		contentID, ok := markPostLatencyClassificationRowSeen(&rows[i], seen)
 		if !ok {
 			continue
 		}
+
 		if err := r.updatePostLatencyClassification(ctx, &rows[i], contentID, updatedAt); err != nil {
 			return fmt.Errorf("update persisted latency classification: kind=%s content_id=%s: %w", rows[i].OutboxKind, contentID, err)
 		}
@@ -90,6 +98,7 @@ func markPostLatencyClassificationRowSeen(row *timeline.PostDeliveryTimeline, se
 	if _, ok := seen[key]; ok {
 		return "", false
 	}
+
 	seen[key] = struct{}{}
 
 	return contentID, true
@@ -102,10 +111,12 @@ func (r *Repository) updatePostLatencyClassification(
 	updatedAt time.Time,
 ) error {
 	status, delaySource, internalDelayCause := normalizedPostLatencyClassificationPersistenceValues(row)
+
 	_, err := r.db.Exec(ctx, mustSQL("timelines_classification_0105_01.sql"), string(status), string(delaySource), string(internalDelayCause), updatedAt, row.OutboxKind, contentID)
 	if err != nil {
 		return fmt.Errorf("update post latency classification: %w", err)
 	}
+
 	return nil
 }
 
@@ -116,10 +127,12 @@ func normalizedPostLatencyClassificationPersistenceValues(
 	if status == "" {
 		status = timeline.PostLatencyClassificationStatusInsufficientEvidence
 	}
+
 	delaySource := row.DelaySource
 	if delaySource == "" {
 		delaySource = timeline.PostDelaySourceNone
 	}
+
 	internalDelayCause := row.InternalDelayCause
 	if internalDelayCause == "" {
 		internalDelayCause = timeline.PostInternalDelayCauseNone

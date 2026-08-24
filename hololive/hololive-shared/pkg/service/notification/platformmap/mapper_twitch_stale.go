@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func (m *Mapper) removeOwnedTwitchLoginMappingsExcept(ctx context.Context, channelID, desiredLogin string) error {
@@ -18,6 +19,7 @@ func (m *Mapper) removeOwnedTwitchLoginMappingsExcept(ctx context.Context, chann
 		if !isStaleOwnedTwitchLoginMapping(login, ownerChannelID, channelID, desiredLogin) {
 			continue
 		}
+
 		if err := m.cache.HDel(ctx, sharedalarmkeys.TwitchLoginMapKey, login); err != nil {
 			return fmt.Errorf("delete stale twitch login mapping: %w", err)
 		}
@@ -31,8 +33,10 @@ func isStaleOwnedTwitchLoginMapping(login, ownerChannelID, channelID, desiredLog
 	if normalizedLogin == "" {
 		return false
 	}
+
 	if stringutil.TrimSpace(ownerChannelID) != channelID {
 		return false
 	}
+
 	return normalizedLogin != desiredLogin || login != normalizedLogin
 }

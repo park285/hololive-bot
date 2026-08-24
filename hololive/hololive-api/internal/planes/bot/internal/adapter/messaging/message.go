@@ -24,9 +24,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type MessageAdapter struct {
@@ -36,11 +37,22 @@ type MessageAdapter struct {
 }
 
 const (
+	paramAction = "action"
+	paramMember = "member"
+	paramType   = "type"
+	paramDays   = "days"
+	paramTopic  = "topic"
+	paramLimit  = "limit"
+)
+
+const (
 	actionStatus = "status" // 공통: 구독 상태 조회
+	actionOn     = "on"
+	actionOff    = "off"
 
 	memberNewsActionStatus = actionStatus
-	memberNewsActionOn     = "on"
-	memberNewsActionOff    = "off"
+	memberNewsActionOn     = actionOn
+	memberNewsActionOff    = actionOff
 )
 
 func normalizeCommandPrefix(prefix string) string {

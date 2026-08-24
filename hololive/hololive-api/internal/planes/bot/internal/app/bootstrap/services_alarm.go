@@ -7,16 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func InitAlarmDependencies(
@@ -62,7 +60,9 @@ func InitAlarmModeComponents(
 		if err != nil {
 			return nil, fmt.Errorf("configure alarm worker client: %w", err)
 		}
+
 		httpClient := httputil.NewExternalAPIClient(10 * time.Second)
+
 		return &AlarmModeComponents{
 			AlarmCRUD:        alarmClient,
 			ChzzkClient:      ProvideChzzkClient(httpClient, appConfig.Chzzk, logger),
@@ -83,7 +83,7 @@ func InitAlarmModeComponents(
 		logger,
 	)
 	if alarmErr != nil {
-		return nil, alarmErr
+		return nil, fmt.Errorf("init alarm dependencies: %w", alarmErr)
 	}
 
 	if warnErr := alarmDeps.AlarmService.WarmCacheFromDB(ctx); warnErr != nil {

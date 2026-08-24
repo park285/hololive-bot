@@ -2,6 +2,7 @@ package alarmservice
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -21,5 +22,9 @@ func (as *AlarmService) MarkUpcomingEventNotified(
 	roomID, channelID string,
 	stream *domain.Stream,
 ) error {
-	return as.cacheState.MarkUpcomingEventNotified(ctx, roomID, channelID, stream)
+	if err := as.cacheState.MarkUpcomingEventNotified(ctx, roomID, channelID, stream); err != nil {
+		return fmt.Errorf("mark upcoming event notified: %w", err)
+	}
+
+	return nil
 }

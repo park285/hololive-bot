@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -13,7 +14,12 @@ import (
 type thumbnailRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f thumbnailRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 type trackedThumbnailBody struct {
@@ -23,7 +29,17 @@ type trackedThumbnailBody struct {
 }
 
 func (b *trackedThumbnailBody) Read(p []byte) (int, error) {
-	return b.reader.Read(p)
+	out, err := b.reader.Read(p)
+	if err == nil {
+		return out, nil
+	}
+
+	// io.ReadAll은 io.EOF를 == 로 비교하므로, 감싸면 정상 종료가 읽기 실패로 뒤바뀐다.
+	if errors.Is(err, io.EOF) {
+		return out, io.EOF
+	}
+
+	return out, fmt.Errorf("read: %w", err)
 }
 
 func (b *trackedThumbnailBody) Close() error {
@@ -39,7 +55,7 @@ func (failingThumbnailReader) Read([]byte) (int, error) {
 
 func TestBroadcastThumbnailCandidatesPromoteMaxres(t *testing.T) {
 	entry := handlercore.BroadcastHistoryEntry{
-		VideoID:      "AqxEw3kXcgU",
+		VideoID:      testVideoID,
 		ThumbnailURL: "https://i.ytimg.com/vi/AqxEw3kXcgU/hqdefault.jpg",
 	}
 
@@ -47,6 +63,7 @@ func TestBroadcastThumbnailCandidatesPromoteMaxres(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("expected candidates")
 	}
+
 	if got[0] != "https://i.ytimg.com/vi/AqxEw3kXcgU/maxresdefault.jpg" {
 		t.Fatalf("first candidate = %q", got[0])
 	}
@@ -54,7 +71,7 @@ func TestBroadcastThumbnailCandidatesPromoteMaxres(t *testing.T) {
 
 func TestBroadcastThumbnailCandidatesRejectMismatchedStoredURL(t *testing.T) {
 	entry := handlercore.BroadcastHistoryEntry{
-		VideoID:      "AqxEw3kXcgU",
+		VideoID:      testVideoID,
 		ThumbnailURL: "https://i.ytimg.com/vi/OtherVideo1/hqdefault.jpg",
 	}
 
@@ -62,11 +79,13 @@ func TestBroadcastThumbnailCandidatesRejectMismatchedStoredURL(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("expected fallback candidates")
 	}
+
 	for _, candidate := range got {
 		if strings.Contains(candidate, "OtherVideo1") {
 			t.Fatalf("candidate %q uses mismatched stored video id", candidate)
 		}
 	}
+
 	if got[0] != "https://i.ytimg.com/vi/AqxEw3kXcgU/maxresdefault.jpg" {
 		t.Fatalf("first candidate = %q, want canonical maxres for requested video", got[0])
 	}
@@ -74,15 +93,17 @@ func TestBroadcastThumbnailCandidatesRejectMismatchedStoredURL(t *testing.T) {
 
 func TestYouTubeThumbnailDownloaderFallsBack(t *testing.T) {
 	var paths []string
+
 	client := &http.Client{Transport: thumbnailRoundTripper(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.Path)
 		if strings.HasSuffix(req.URL.Path, "/sddefault.jpg") {
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Header:     http.Header{"Content-Type": []string{"image/jpeg"}},
+				Header:     http.Header{"Content-Type": []string{testContentTypeJPEG}},
 				Body:       io.NopCloser(strings.NewReader("jpeg")),
 			}, nil
 		}
+
 		return &http.Response{
 			StatusCode: http.StatusNotFound,
 			Header:     http.Header{"Content-Type": []string{"text/plain"}},
@@ -91,13 +112,15 @@ func TestYouTubeThumbnailDownloaderFallsBack(t *testing.T) {
 	})}
 	downloader := NewYouTubeThumbnailDownloader(client)
 
-	body, contentType, err := downloader.Download(t.Context(), &handlercore.BroadcastHistoryEntry{VideoID: "AqxEw3kXcgU"})
+	body, contentType, err := downloader.Download(t.Context(), &handlercore.BroadcastHistoryEntry{VideoID: testVideoID})
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
-	if string(body) != "jpeg" || contentType != "image/jpeg" {
+
+	if string(body) != "jpeg" || contentType != testContentTypeJPEG {
 		t.Fatalf("Download() = %q %q", string(body), contentType)
 	}
+
 	if len(paths) < 2 || !strings.HasSuffix(paths[0], "/maxresdefault.jpg") || !strings.HasSuffix(paths[len(paths)-1], "/sddefault.jpg") {
 		t.Fatalf("paths = %v", paths)
 	}
@@ -156,27 +179,27 @@ func TestYouTubeThumbnailDownloaderClosesEveryResponseBody(t *testing.T) {
 		{
 			name:        "oversized body",
 			statusCode:  http.StatusOK,
-			contentType: "image/jpeg",
+			contentType: testContentTypeJPEG,
 			reader:      io.LimitReader(zeroReader{}, maxBroadcastThumbnailBytes+1),
 			wantErr:     true,
 		},
 		{
 			name:        "read failure",
 			statusCode:  http.StatusOK,
-			contentType: "image/jpeg",
+			contentType: testContentTypeJPEG,
 			reader:      failingThumbnailReader{},
 			wantErr:     true,
 		},
 		{
 			name:        "success",
 			statusCode:  http.StatusOK,
-			contentType: "image/jpeg",
+			contentType: testContentTypeJPEG,
 			reader:      strings.NewReader("jpeg"),
 		},
 		{
 			name:        "close failure",
 			statusCode:  http.StatusOK,
-			contentType: "image/jpeg",
+			contentType: testContentTypeJPEG,
 			reader:      strings.NewReader("jpeg"),
 			closeErr:    errors.New("close failed"),
 			wantErr:     true,
@@ -201,6 +224,7 @@ func TestYouTubeThumbnailDownloaderClosesEveryResponseBody(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("downloadCandidate() error = %v, wantErr %v", err, tt.wantErr)
 			}
+
 			if !body.closed {
 				t.Fatal("response body was not closed")
 			}
@@ -214,5 +238,6 @@ func (zeroReader) Read(p []byte) (int, error) {
 	for i := range p {
 		p[i] = 0
 	}
+
 	return len(p), nil
 }

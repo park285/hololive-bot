@@ -21,9 +21,8 @@
 package settings_test
 
 import (
-	"testing"
-
 	jsonv2 "encoding/json/v2"
+	"testing"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
@@ -34,6 +33,7 @@ func TestSettingsPubSubContractConstants(t *testing.T) {
 	if contractssettings.PubSubChannelV1 != "config:update" {
 		t.Fatalf("PubSubChannelV1 = %q", contractssettings.PubSubChannelV1)
 	}
+
 	if contractssettings.ConfigUpdateVersionV1 != 1 {
 		t.Fatalf("ConfigUpdateVersionV1 = %d", contractssettings.ConfigUpdateVersionV1)
 	}
@@ -41,9 +41,11 @@ func TestSettingsPubSubContractConstants(t *testing.T) {
 	if contractssettings.UpdateTypeScraperProxy != "scraper_proxy" {
 		t.Fatalf("UpdateTypeScraperProxy = %q", contractssettings.UpdateTypeScraperProxy)
 	}
+
 	if contractssettings.UpdateTypeAlarmAdvanceMinutes != "alarm_advance_minutes" {
 		t.Fatalf("UpdateTypeAlarmAdvanceMinutes = %q", contractssettings.UpdateTypeAlarmAdvanceMinutes)
 	}
+
 	if contractssettings.UpdateTypeMemberNewsRunNow != "membernews_weekly_run_now" {
 		t.Fatalf("UpdateTypeMemberNewsRunNow = %q", contractssettings.UpdateTypeMemberNewsRunNow)
 	}
@@ -68,17 +70,21 @@ func TestConfigUpdateV1_JSONContract(t *testing.T) {
 	}
 
 	var decoded contractssettings.ConfigUpdateV1
+
 	if err := jsonv2.Unmarshal(b, &decoded); err != nil {
 		t.Fatalf("Unmarshal update error = %v", err)
 	}
+
 	if decoded.Type != contractssettings.UpdateTypeScraperProxy {
 		t.Fatalf("decoded.Type = %q", decoded.Type)
 	}
 
 	var decodedPayload contractssettings.ScraperProxyPayloadV1
+
 	if err := jsonv2.Unmarshal(decoded.Payload, &decodedPayload); err != nil {
 		t.Fatalf("Unmarshal payload error = %v", err)
 	}
+
 	if decodedPayload.Enabled != true {
 		t.Fatalf("decodedPayload.Enabled = %v", decodedPayload.Enabled)
 	}

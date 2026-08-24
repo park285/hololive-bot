@@ -3,6 +3,7 @@ package streamfeed
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -10,10 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/streamcommon"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/streamcommon"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
@@ -50,12 +50,12 @@ func NewService(streams orgStreamSource, chzzkClient chzzkScheduleClient, member
 
 func (s *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, error) {
 	if s.streams == nil {
-		return nil, fmt.Errorf("get live streams by org: stream source is nil")
+		return nil, errors.New("get live streams by org: stream source is nil")
 	}
 
 	liveStreams, err := s.streams.GetLiveStreamsByOrg(ctx, org)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get live streams by org: %w", err)
 	}
 
 	return s.mergeStelliveLiveStreams(ctx, org, liveStreams), nil
@@ -63,12 +63,12 @@ func (s *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 
 func (s *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org string) ([]*domain.Stream, error) {
 	if s.streams == nil {
-		return nil, fmt.Errorf("get upcoming streams by org: stream source is nil")
+		return nil, errors.New("get upcoming streams by org: stream source is nil")
 	}
 
 	upcomingStreams, err := s.streams.GetUpcomingStreamsByOrg(ctx, hours, org)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get upcoming streams by org: %w", err)
 	}
 
 	return s.mergeStelliveUpcomingStreams(ctx, org, hours, upcomingStreams), nil
@@ -87,11 +87,14 @@ func (s *Service) getActiveStelliveMembers() []*domain.Member {
 	now := time.Now()
 
 	s.stelliveMembersMu.RLock()
+
 	if now.Before(s.stelliveMembersExpiresAt) && s.stelliveMembers != nil {
 		members := cloneMembers(s.stelliveMembers)
 		s.stelliveMembersMu.RUnlock()
+
 		return members
 	}
+
 	s.stelliveMembersMu.RUnlock()
 
 	s.stelliveMembersMu.Lock()
@@ -102,8 +105,10 @@ func (s *Service) getActiveStelliveMembers() []*domain.Member {
 	}
 
 	filtered := activeStelliveMembers(s.members.GetAllMembers())
+
 	s.stelliveMembers = cloneMembers(filtered)
 	s.stelliveMembersExpiresAt = time.Now().Add(constants.CacheTTL.ChannelSchedule)
+
 	return cloneMembers(s.stelliveMembers)
 }
 
@@ -125,9 +130,11 @@ func activeStelliveMembers(members []*domain.Member) []*domain.Member {
 		if member == nil || member.IsGraduated || member.ChzzkChannelID == "" {
 			continue
 		}
+
 		if !strings.EqualFold(member.Org, constants.HolodexAPIParams.OrgStellive) {
 			continue
 		}
+
 		filtered = append(filtered, member)
 	}
 
@@ -140,6 +147,7 @@ func mergeLiveStreams(base []*domain.Stream, members []*domain.Member, lives []c
 
 	for i := range lives {
 		live := &lives[i]
+
 		merged = mergeLiveStream(merged, memberByChzzk[live.ChannelID], live)
 	}
 
@@ -151,6 +159,7 @@ func membersByChzzkChannelID(members []*domain.Member) map[string]*domain.Member
 	for _, member := range members {
 		memberByChzzk[member.ChzzkChannelID] = member
 	}
+
 	return memberByChzzk
 }
 
@@ -158,10 +167,13 @@ func mergeLiveStream(merged []*domain.Stream, member *domain.Member, live *chzzk
 	if member == nil {
 		return merged
 	}
+
 	if existing := findLiveStreamByChannel(merged, member.ChannelID); existing != nil {
 		updateExistingLiveStream(existing, member)
+
 		return merged
 	}
+
 	return append(merged, buildChzzkLiveStream(member, live))
 }
 
@@ -169,9 +181,12 @@ func updateExistingLiveStream(existing *domain.Stream, member *domain.Member) {
 	existing.ChzzkChannelID = member.ChzzkChannelID
 	existing.ChzzkLiveURL = member.GetChzzkLiveURL()
 	existing.IsIntegrated = existing.HasYouTubeInfo()
+
 	if !existing.HasYouTubeInfo() {
 		existing.IsChzzkOnly = true
+
 		link := existing.ChzzkLiveURL
+
 		existing.Link = &link
 	}
 }
@@ -180,11 +195,13 @@ func buildChzzkLiveStream(member *domain.Member, live *chzzk.LiveData) *domain.S
 	if live == nil {
 		return nil
 	}
+
 	liveURL := member.GetChzzkLiveURL()
 	thumbnail := live.LiveThumbnailImageURL
 	link := liveURL
 	now := time.Now().UTC().Truncate(time.Minute)
 	org := member.GetOrg()
+
 	return &domain.Stream{
 		ID:             buildChzzkStreamID(member.ChzzkChannelID, "live", live.LiveTitle, now),
 		Title:          live.LiveTitle,
@@ -221,12 +238,14 @@ func buildUpcomingStreams(member *domain.Member, scheduledLives []chzzk.Schedule
 		if err != nil {
 			continue
 		}
+
 		if !startAt.After(now) || startAt.After(cutoff) {
 			continue
 		}
 
 		link := liveURL
 		org := member.GetOrg()
+
 		streams = append(streams, &domain.Stream{
 			ID:             buildChzzkStreamID(member.ChzzkChannelID, "schedule", scheduledLive.LiveTitle, startAt),
 			Title:          scheduledLive.LiveTitle,
@@ -257,6 +276,7 @@ func mergeUpcomingStreams(base, additions []*domain.Stream) []*domain.Stream {
 	}
 
 	slices.SortStableFunc(merged, compareUpcomingStreams)
+
 	return merged
 }
 
@@ -264,21 +284,27 @@ func mergeUpcomingStream(merged []*domain.Stream, addition *domain.Stream) []*do
 	if addition == nil {
 		return merged
 	}
+
 	if existing := streamcommon.FindByChannelAndScheduledMinute(merged, addition); existing != nil {
 		updateExistingUpcomingStream(existing, addition)
+
 		return merged
 	}
+
 	return append(merged, addition)
 }
 
 func updateExistingUpcomingStream(existing, addition *domain.Stream) {
 	existing.ChzzkChannelID = addition.ChzzkChannelID
 	existing.ChzzkLiveURL = addition.ChzzkLiveURL
+
 	if existing.HasYouTubeInfo() {
 		existing.IsIntegrated = true
 		existing.IsChzzkOnly = false
+
 		return
 	}
+
 	existing.IsChzzkOnly = true
 	existing.Link = addition.Link
 }
@@ -287,6 +313,7 @@ func compareUpcomingStreams(a, b *domain.Stream) int {
 	if result, ok := compareNilStreams(a, b); ok {
 		return result
 	}
+
 	return compareOptionalTime(a.StartScheduled, b.StartScheduled)
 }
 
@@ -294,12 +321,15 @@ func compareNilStreams(a, b *domain.Stream) (int, bool) {
 	if a == nil && b == nil {
 		return 0, true
 	}
+
 	if a == nil {
 		return 1, true
 	}
+
 	if b == nil {
 		return -1, true
 	}
+
 	return 0, false
 }
 
@@ -307,18 +337,23 @@ func compareOptionalTime(a, b *time.Time) int {
 	if a == nil && b == nil {
 		return 0
 	}
+
 	if a == nil {
 		return 1
 	}
+
 	if b == nil {
 		return -1
 	}
+
 	if a.Before(*b) {
 		return -1
 	}
+
 	if a.After(*b) {
 		return 1
 	}
+
 	return 0
 }
 
@@ -328,11 +363,12 @@ func findLiveStreamByChannel(streams []*domain.Stream, channelID string) *domain
 			return stream
 		}
 	}
+
 	return nil
 }
 
-// 피드 표시용 임시 ID로, live는 분 단위 bucket이라 값이 매분 바뀐다. dedup/저장 키 사용 금지 —
-// alarm-worker의 stable identity(chzzk_checker.go)와 다른 것이 의도다.
+// 피드 표시용 임시 ID로, live는 분 단위 bucket이라 값이 매분 바뀐다. 따라서 dedup이나 저장 키로 쓰면 안 된다.
+// 이는 alarm-worker의 stable identity(chzzk_checker.go)와 다른 것이 의도다.
 func buildChzzkStreamID(chzzkChannelID, kind, title string, at time.Time) string {
 	seed := strings.Join([]string{
 		strings.TrimSpace(chzzkChannelID),
@@ -341,5 +377,6 @@ func buildChzzkStreamID(chzzkChannelID, kind, title string, at time.Time) string
 		at.UTC().Format(time.RFC3339),
 	}, "|")
 	sum := sha256.Sum256([]byte(seed))
+
 	return fmt.Sprintf("chzzk:%s:%s:%x", strings.TrimSpace(chzzkChannelID), strings.TrimSpace(kind), sum[:8])
 }

@@ -16,7 +16,7 @@ import (
 func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 	t.Parallel()
 
-	actualPublishedAt := time.Date(2026, 4, 10, 2, 15, 0, 0, time.UTC)
+	actualPublishedAt := time.Date(2026, time.April, 10, 2, 15, 0, 0, time.UTC)
 	detectedAt := actualPublishedAt.Add(35 * time.Second)
 	alarmSentAt := detectedAt.Add(25 * time.Second)
 	alarmLatencyMillis := int64(alarmSentAt.Sub(actualPublishedAt) / time.Millisecond)
@@ -28,7 +28,7 @@ func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 		ChannelID:          "UC_community_observe",
 		ContentID:          "community:post-observe",
 		PostID:             "UgkxCommunityObserve",
-		RoomID:             "room-community",
+		RoomID:             testRoomCommunity,
 		AlarmType:          domain.AlarmTypeCommunity,
 		ActualPublishedAt:  &actualPublishedAt,
 		DetectedAt:         &detectedAt,
@@ -36,8 +36,8 @@ func TestBuildDeliveryAuditLogAttrsIncludesCommunityTimingFields(t *testing.T) {
 		AlarmLatencyMillis: &alarmLatencyMillis,
 		DedupeKey:          "youtube-notification:COMMUNITY_POST:community:post-observe",
 		DeliveryPath:       telemetry.CommunityShortsDeliveryPath,
-		DeliveryMode:       "grouped",
-		SendResult:         "success",
+		DeliveryMode:       deliveryModeGrouped,
+		SendResult:         sendResultSuccess,
 		EventAt:            alarmSentAt,
 	}
 
@@ -70,9 +70,9 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesLatencyClassificati
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      "youtube-notification:NEW_SHORT:short-latency-classification",
 		DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-		DeliveryMode:   "per_room",
-		SendResult:     "success",
-		EventAt:        time.Date(2026, 4, 10, 2, 20, 0, 0, time.UTC),
+		DeliveryMode:   deliveryModePerRoom,
+		SendResult:     sendResultSuccess,
+		EventAt:        time.Date(2026, time.April, 10, 2, 20, 0, 0, time.UTC),
 	}
 	classification := timeline.PostLatencyClassificationResult{
 		Status:             timeline.PostLatencyClassificationStatusExceeded,
@@ -123,9 +123,9 @@ func TestBuildDeliveryAuditLogAttrsWithClassificationIncludesExternalDelayReason
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      "youtube-notification:NEW_SHORT:short-external-reason-code",
 		DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-		DeliveryMode:   "per_room",
-		SendResult:     "success",
-		EventAt:        time.Date(2026, 4, 10, 2, 25, 0, 0, time.UTC),
+		DeliveryMode:   deliveryModePerRoom,
+		SendResult:     sendResultSuccess,
+		EventAt:        time.Date(2026, time.April, 10, 2, 25, 0, 0, time.UTC),
 	}
 	classification := timeline.PostLatencyClassificationResult{
 		Status:             timeline.PostLatencyClassificationStatusExceeded,

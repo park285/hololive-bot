@@ -24,11 +24,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type liveStreamView struct {
@@ -74,6 +75,7 @@ type channelScheduleTemplateData struct {
 
 func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*domain.Stream) string {
 	data := f.liveStreamsTemplateData(ctx, streams)
+
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, data)
 	if err != nil {
 		return messagestrings.FallbackSentinel
@@ -99,11 +101,13 @@ func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*doma
 	for i, stream := range streams {
 		views[i] = f.liveStreamView(ctx, stream)
 	}
+
 	return views
 }
 
 func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.Stream) liveStreamView {
 	viewerCount := 0
+
 	if stream.ViewerCount != nil {
 		viewerCount = *stream.ViewerCount
 	}
@@ -118,7 +122,9 @@ func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.S
 
 func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*domain.Stream, hours int) string {
 	data := upcomingStreamsTemplateData{Count: len(streams), Hours: hours}
+
 	streams = limitedStreamList(streams)
+
 	if len(streams) > 0 {
 		data.Streams = make([]upcomingStreamView, len(streams))
 		for i, stream := range streams {
@@ -149,6 +155,7 @@ func limitedStreamList(streams []*domain.Stream) []*domain.Stream {
 
 func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain.Channel, streams []*domain.Stream, days int) string {
 	data := f.channelScheduleTemplateData(ctx, channel, streams, days)
+
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdChannelSchedule, data)
 	if err != nil {
 		return messagestrings.FallbackSentinel
@@ -170,6 +177,7 @@ func channelScheduleName(channel *domain.Channel) string {
 	if channel == nil {
 		return ""
 	}
+
 	return channel.GetDisplayName()
 }
 
@@ -183,6 +191,7 @@ func (f *ResponseFormatter) scheduleEntryViews(ctx context.Context, streams []*d
 	for i, stream := range streams {
 		entries[i] = f.scheduleEntryView(ctx, stream)
 	}
+
 	return entries
 }
 
@@ -197,6 +206,7 @@ func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domai
 	}
 
 	entry.TimeInfo = f.streamTimeInfo(ctx, stream)
+
 	return entry
 }
 
@@ -237,6 +247,7 @@ func (f *ResponseFormatter) formatChannelName(ctx context.Context, stream *domai
 
 	name := stream.ChannelName
 	displayOrg := f.streamDisplayOrg(ctx, stream)
+
 	if displayOrg == "" {
 		return name
 	}
@@ -248,6 +259,7 @@ func (f *ResponseFormatter) streamDisplayOrg(ctx context.Context, stream *domain
 	if stream.Channel == nil || stream.Channel.Org == nil {
 		return ""
 	}
+
 	return f.formatStreamOrg(ctx, *stream.Channel.Org)
 }
 
@@ -259,6 +271,7 @@ func (f *ResponseFormatter) formatStreamOrg(ctx context.Context, org string) str
 	if label := f.messageStrings.GetContext(ctx, messagestrings.NamespaceOrg, org); label != "" {
 		return label
 	}
+
 	return org
 }
 

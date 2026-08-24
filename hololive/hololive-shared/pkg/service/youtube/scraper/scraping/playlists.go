@@ -23,11 +23,13 @@ package scraping
 import (
 	"context"
 	"encoding/json/jsontext"
+	"errors"
 	"fmt"
+
+	"github.com/tidwall/gjson"
 
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/tidwall/gjson"
 )
 
 func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults int) ([]*parser.Playlist, error) {
@@ -37,7 +39,7 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 
 	data, err := c.fetchPlaylistBrowseData(ctx, channelID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch playlist browse data: %w", err)
 	}
 
 	return c.playlistsFromBrowseData(&data, channelID, maxResults), nil
@@ -45,22 +47,24 @@ func (c *Client) GetPlaylists(ctx context.Context, channelID string, maxResults 
 
 func (c *Client) fetchPlaylistBrowseData(ctx context.Context, channelID string) (gjson.Result, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/playlists", channelID)
+
 	html, err := c.fetchPage(ctx, url)
 	if err != nil {
-		return gjson.Result{}, err
+		return gjson.Result{}, fmt.Errorf("fetch page: %w", err)
 	}
 
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
 		return gjson.Result{}, fmt.Errorf("failed to extract ytInitialData: %w", err)
 	}
+
 	if !jsontext.Value(jsonStr).IsValid() {
-		return gjson.Result{}, fmt.Errorf("invalid ytInitialData JSON")
+		return gjson.Result{}, errors.New("invalid ytInitialData JSON")
 	}
 
 	data := gjson.Parse(jsonStr)
 	if err := checkAlerts(&data); err != nil {
-		return gjson.Result{}, err
+		return gjson.Result{}, fmt.Errorf("check alerts: %w", err)
 	}
 
 	return data, nil
@@ -74,6 +78,7 @@ func (c *Client) playlistsFromBrowseData(data *gjson.Result, channelID string, m
 		if i >= maxResults {
 			break
 		}
+
 		playlist := c.parseGridPlaylistRenderer(&item, channelID)
 		if playlist != nil {
 			playlists = append(playlists, playlist)
@@ -96,10 +101,13 @@ func collectPlaylistItemsFromBrowseData(data *gjson.Result) []gjson.Result {
 		content.Get("sectionListRenderer.contents").ForEach(func(_, section gjson.Result) bool {
 			gridItems := section.Get("itemSectionRenderer.contents.0.gridRenderer.items")
 			appendGridPlaylistRenderers(&playlistItems, &gridItems)
+
 			shelfItems := section.Get("itemSectionRenderer.contents.0.shelfRenderer.content.horizontalListRenderer.items")
 			appendGridPlaylistRenderers(&playlistItems, &shelfItems)
+
 			return true
 		})
+
 		return false
 	})
 
@@ -116,11 +124,12 @@ func appendGridPlaylistRenderers(target *[]gjson.Result, items *gjson.Result) {
 		if renderer.Exists() {
 			*target = append(*target, renderer)
 		}
+
 		return true
 	})
 }
 
-// parseGridPlaylistRenderer: gridPlaylistRenderer JSON을 Playlist 구조체로 변환
+// parseGridPlaylistRenderer: gridPlaylistRenderer JSON을 Playlist 구조체로 변환.
 func (c *Client) parseGridPlaylistRenderer(playlist *gjson.Result, channelID string) *parser.Playlist {
 	playlistID := playlist.Get("playlistId").String()
 	if playlistID == "" {
@@ -128,12 +137,14 @@ func (c *Client) parseGridPlaylistRenderer(playlist *gjson.Result, channelID str
 	}
 
 	var thumbnails []parser.Thumbnail
+
 	playlist.Get("thumbnail.thumbnails").ForEach(func(_, t gjson.Result) bool {
 		thumbnails = append(thumbnails, parser.Thumbnail{
 			URL:    t.Get("url").String(),
 			Width:  int(t.Get("width").Int()),
 			Height: int(t.Get("height").Int()),
 		})
+
 		return true
 	})
 

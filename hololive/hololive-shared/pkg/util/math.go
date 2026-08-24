@@ -36,15 +36,18 @@ func Unique(nums []int) []int {
 	return result
 }
 
-// 예: 10000 -> "1만", 12345 -> "1만 2345", 500 -> "500"
+// 예: 10000 -> "1만", 12345 -> "1만 2345", 500 -> "500".
 func FormatKoreanNumber(n int64) string {
 	if n >= 10000 {
 		man := n / 10000
 		remainder := n % 10000
+
 		if remainder == 0 {
 			return fmt.Sprintf("%d만", man)
 		}
+
 		return fmt.Sprintf("%d만 %d", man, remainder)
 	}
+
 	return fmt.Sprintf("%d", n)
 }

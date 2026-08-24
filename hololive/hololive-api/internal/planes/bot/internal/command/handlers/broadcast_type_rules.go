@@ -22,6 +22,7 @@ package handlers
 
 import (
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -30,27 +31,38 @@ import (
 
 func mustLoadBroadcastRules(data []byte) broadcastTypeRules {
 	var rules broadcastTypeRules
+
 	if err := jsonv2.Unmarshal(data, &rules, jsonv2.RejectUnknownMembers(true)); err != nil {
 		panic(fmt.Sprintf("load broadcast type rules: %v", err))
 	}
+
 	if err := validateBroadcastRules(&rules); err != nil {
 		panic(fmt.Sprintf("validate broadcast type rules: %v", err))
 	}
+
 	normalizeBroadcastRules(&rules)
+
 	return rules
 }
 
 func validateBroadcastRules(rules *broadcastTypeRules) error {
 	if strings.TrimSpace(rules.Version) == "" {
-		return fmt.Errorf("missing version")
+		return errors.New("missing version")
 	}
+
 	if err := validateBroadcastTopics(rules.Topics); err != nil {
-		return err
+		return fmt.Errorf("validate broadcast topics: %w", err)
 	}
+
 	if err := validateBroadcastRuleSet("title rule", rules.TitleRules); err != nil {
-		return err
+		return fmt.Errorf("validate broadcast rule set: %w", err)
 	}
-	return validateBroadcastRuleSet("generic title rule", rules.Generic)
+
+	if err := validateBroadcastRuleSet("generic title rule", rules.Generic); err != nil {
+		return fmt.Errorf("validate broadcast rule set: %w", err)
+	}
+
+	return nil
 }
 
 func validateBroadcastTopics(topics map[string]broadcasttype.Type) error {
@@ -59,6 +71,7 @@ func validateBroadcastTopics(topics map[string]broadcasttype.Type) error {
 			return fmt.Errorf("topic %q uses unknown type %q", topic, typ)
 		}
 	}
+
 	return nil
 }
 
@@ -67,10 +80,12 @@ func validateBroadcastRuleSet(kind string, rules []broadcastTitleRule) error {
 		if !knownBroadcastType(rule.Type) {
 			return fmt.Errorf("%s uses unknown type %q", kind, rule.Type)
 		}
+
 		if len(rule.Keywords) == 0 {
 			return fmt.Errorf("%s %q has no keywords", kind, rule.Type)
 		}
 	}
+
 	return nil
 }
 
@@ -79,15 +94,18 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 	for topic, typ := range rules.Topics {
 		topics[normalizeBroadcastTopic(topic)] = typ
 	}
+
 	rules.Topics = topics
 	for i := range rules.TitleRules {
 		rules.TitleRules[i].Keywords = normalizeBroadcastKeywords(rules.TitleRules[i].Keywords)
 		rules.TitleRules[i].RejectKeywords = normalizeBroadcastKeywords(rules.TitleRules[i].RejectKeywords)
 	}
+
 	for i := range rules.Generic {
 		rules.Generic[i].Keywords = normalizeBroadcastKeywords(rules.Generic[i].Keywords)
 		rules.Generic[i].RejectKeywords = normalizeBroadcastKeywords(rules.Generic[i].RejectKeywords)
 	}
+
 	rules.GameTag.RejectKeywords = normalizeBroadcastKeywords(rules.GameTag.RejectKeywords)
 	rules.GameTag.Exact = normalizeBroadcastTitleTags(rules.GameTag.Exact)
 	rules.GameTag.Contains = normalizeBroadcastKeywords(rules.GameTag.Contains)
@@ -96,17 +114,21 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 func normalizeBroadcastKeywords(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	normalized := make([]string, 0, len(values))
+
 	for _, value := range values {
 		value = normalizeBroadcastText(value)
 		if value == "" {
 			continue
 		}
+
 		if _, ok := seen[value]; ok {
 			continue
 		}
+
 		seen[value] = struct{}{}
 		normalized = append(normalized, value)
 	}
+
 	return normalized
 }
 
@@ -118,6 +140,7 @@ func normalizeBroadcastTitleTags(values []string) []string {
 			normalized = append(normalized, value)
 		}
 	}
+
 	return normalized
 }
 

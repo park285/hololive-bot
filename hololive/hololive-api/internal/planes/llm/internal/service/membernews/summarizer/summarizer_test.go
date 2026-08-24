@@ -34,6 +34,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
+const (
+	testMemberMiko     = "사쿠라 미코"
+	testMemberSuisei   = "호시마치 스이세이"
+	testSourceURLNews1 = "https://hololive.hololivepro.com/news/1"
+)
+
 type fakeLLM struct {
 	response string
 	err      error
@@ -43,6 +49,7 @@ func (f *fakeLLM) GenerateJSON(_ context.Context, _, _ string, _ map[string]any)
 	if f.err != nil {
 		return "", f.err
 	}
+
 	return f.response, nil
 }
 
@@ -53,7 +60,7 @@ type testSourceValidator struct {
 func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return model.SourceTierCommunity, "", fmt.Errorf("source url is empty")
+		return model.SourceTierCommunity, "", errors.New("source url is empty")
 	}
 
 	parsed, err := url.Parse(rawURL)
@@ -62,17 +69,20 @@ func (v *testSourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier
 	}
 
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+
 	host = strings.TrimPrefix(host, "www.")
 
 	if host == "x.com" || host == "twitter.com" {
 		segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 		if len(segments) == 0 || strings.TrimSpace(segments[0]) == "" {
-			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not found")
+			return model.SourceTierCommunity, "", errors.New("x.com account not found")
 		}
+
 		account := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(segments[0])), "@")
 		if _, ok := v.allowedXAccounts[account]; !ok {
 			return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
 		}
+
 		return model.SourceTierOfficial, parsed.String(), nil
 	}
 
@@ -104,6 +114,7 @@ func (v *testSourceValidator) HasCorroboration(text string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -119,19 +130,23 @@ func TestSummarizer_SchemaSuccess(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
-	digest, err := s.Summarize(context.Background(), &input)
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+
+	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
+
 	if len(digest.TopItems) != 1 {
 		t.Fatalf("expected 1 top item, got %d", len(digest.TopItems))
 	}
+
 	if digest.ResultType != sharedmodel.SummaryResultPrimary {
 		t.Fatalf("result_type = %q, want %q", digest.ResultType, sharedmodel.SummaryResultPrimary)
 	}
+
 	if digest.TopItems[0].SourceURL == "" {
-		t.Fatalf("expected non-empty source url")
+		t.Fatal("expected non-empty source url")
 	}
 }
 
@@ -149,14 +164,17 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
   "omitted_count":0
 }`}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
-	digest, err := s.Summarize(context.Background(), &input)
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+
+	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
+
 	if len(digest.TopItems) != 1 {
 		t.Fatalf("expected 1 valid top item after drop, got %d", len(digest.TopItems))
 	}
+
 	if digest.TopItems[0].Title != "valid" {
 		t.Fatalf("expected remaining item to be valid, got %q", digest.TopItems[0].Title)
 	}
@@ -166,14 +184,17 @@ func TestSummarizer_LLMFailureUsesFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
-	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
-	digest, err := s.Summarize(context.Background(), &input)
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+
+	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
+
 	if len(digest.TopItems) == 0 {
-		t.Fatalf("fallback should provide non-empty top items")
+		t.Fatal("fallback should provide non-empty top items")
 	}
+
 	if digest.ResultType != sharedmodel.SummaryResultFallback {
 		t.Fatalf("result_type = %q, want %q", digest.ResultType, sharedmodel.SummaryResultFallback)
 	}
@@ -198,8 +219,8 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "SUISIEI LIVE",
 				Description: "official event",
 			},
-			EffectiveDate: time.Date(2026, 2, 21, 12, 0, 0, 0, util.KSTZone),
-			MemberText:    "호시마치 스이세이",
+			EffectiveDate: time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
+			MemberText:    testMemberSuisei,
 			Category:      model.CategorySoloLive,
 			SourceTier:    model.SourceTierOfficial,
 			SourceURL:     "https://hololive.hololivepro.com/news/2",
@@ -209,8 +230,8 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 				Title:       "Miko Goods",
 				Description: "official goods",
 			},
-			EffectiveDate: time.Date(2026, 2, 22, 12, 0, 0, 0, util.KSTZone),
-			MemberText:    "사쿠라 미코",
+			EffectiveDate: time.Date(2026, time.February, 22, 12, 0, 0, 0, util.KSTZone),
+			MemberText:    testMemberMiko,
 			Category:      model.CategoryGoods,
 			SourceTier:    model.SourceTierOfficial,
 			SourceURL:     "https://hololive.hololivepro.com/news/3",
@@ -219,10 +240,11 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 
 	input := model.SummarizeInput{
 		Period:     model.PeriodWeekly,
-		Now:        time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
+		Now:        time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
 		Candidates: candidates,
 	}
-	digest, err := s.Summarize(context.Background(), &input)
+
+	digest, err := s.Summarize(t.Context(), &input)
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
@@ -230,9 +252,11 @@ func TestSummarizer_OmittedCountUsesServerCalculatedValue(t *testing.T) {
 	if digest.TotalCount != 3 {
 		t.Fatalf("expected total_count=3, got %d", digest.TotalCount)
 	}
+
 	if len(digest.TopItems) != 1 {
 		t.Fatalf("expected top_items=1, got %d", len(digest.TopItems))
 	}
+
 	if digest.OmittedCount != 2 {
 		t.Fatalf("expected omitted_count=2(total-top), got %d", digest.OmittedCount)
 	}
@@ -246,22 +270,27 @@ func mustValidatorWithAllowlist(t *testing.T) model.SourceURLValidator {
 			"hololivetv": {},
 		},
 	}
+
 	return validator
 }
 
 func TestBuildDeterministicFallback_NaturalFormat(t *testing.T) {
 	candidates := sampleCandidates()
 	digest := BuildDeterministicFallback(model.PeriodWeekly, candidates)
+
 	if digest.ResultType != sharedmodel.SummaryResultFallback {
 		t.Fatalf("result_type = %q, want %q", digest.ResultType, sharedmodel.SummaryResultFallback)
 	}
+
 	for _, item := range digest.TopItems {
 		if strings.Contains(item.Summary, "[") {
 			t.Errorf("Summary should not contain brackets, got %q", item.Summary)
 		}
+
 		// M/D( 패턴 확인 (예: "2/20(")
 		matched := false
-		for i := 0; i < len(item.Summary); i++ {
+
+		for i := range len(item.Summary) {
 			if item.Summary[i] == '/' && i > 0 && i+1 < len(item.Summary) {
 				if item.Summary[i-1] >= '0' && item.Summary[i-1] <= '9' {
 					matched = true
@@ -269,6 +298,7 @@ func TestBuildDeterministicFallback_NaturalFormat(t *testing.T) {
 				}
 			}
 		}
+
 		if !matched {
 			t.Errorf("Summary should contain M/D( date pattern, got %q", item.Summary)
 		}
@@ -279,13 +309,15 @@ func TestSummarizer_EmptyCandidatesUsesEmptyResultType(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{response: "{}"}, nil, validator, nil)
 
-	digest, err := s.Summarize(context.Background(), &model.SummarizeInput{Period: model.PeriodWeekly})
+	digest, err := s.Summarize(t.Context(), &model.SummarizeInput{Period: model.PeriodWeekly})
 	if err != nil {
 		t.Fatalf("summarize error: %v", err)
 	}
+
 	if digest.ResultType != sharedmodel.SummaryResultEmpty {
 		t.Fatalf("result_type = %q, want %q", digest.ResultType, sharedmodel.SummaryResultEmpty)
 	}
+
 	if len(digest.TopItems) != 0 {
 		t.Fatalf("expected empty top items, got %d", len(digest.TopItems))
 	}
@@ -295,6 +327,7 @@ func TestBuildDeterministicFallback_CategoryLocalized(t *testing.T) {
 	// sampleCandidates uses CategoryEvent → "이벤트"
 	candidates := sampleCandidates()
 	digest := BuildDeterministicFallback(model.PeriodWeekly, candidates)
+
 	for _, item := range digest.TopItems {
 		if strings.Contains(item.Summary, "event") || strings.Contains(item.Summary, "solo_live") {
 			t.Errorf("Summary should use Korean category label, got %q", item.Summary)
@@ -304,6 +337,7 @@ func TestBuildDeterministicFallback_CategoryLocalized(t *testing.T) {
 
 func TestMemberNewsSystemPrompt_ContainsGuide(t *testing.T) {
 	prompt := memberNewsSystemPrompt()
+
 	for _, keyword := range []string{"translation_guide", "tone", "field_format"} {
 		if !strings.Contains(prompt, keyword) {
 			t.Errorf("prompt should contain %q", keyword)
@@ -312,7 +346,8 @@ func TestMemberNewsSystemPrompt_ContainsGuide(t *testing.T) {
 }
 
 func sampleCandidates() []model.FilteredCandidate {
-	date := time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone)
+	date := time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone)
+
 	return []model.FilteredCandidate{
 		{
 			Candidate: model.Candidate{
@@ -320,10 +355,10 @@ func sampleCandidates() []model.FilteredCandidate {
 				Description: "official news",
 			},
 			EffectiveDate: date,
-			MemberText:    "사쿠라 미코",
+			MemberText:    testMemberMiko,
 			Category:      model.CategoryEvent,
 			SourceTier:    model.SourceTierOfficial,
-			SourceURL:     "https://hololive.hololivepro.com/news/1",
+			SourceURL:     testSourceURLNews1,
 		},
 	}
 }

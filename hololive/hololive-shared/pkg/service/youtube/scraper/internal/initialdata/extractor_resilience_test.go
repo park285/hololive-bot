@@ -10,6 +10,7 @@ func TestExtractSupportsWindowDotYtInitialData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Extract returned error: %v", err)
 	}
+
 	if got == "" || got[0] != '{' {
 		t.Fatalf("unexpected extracted payload: %q", got)
 	}
@@ -23,6 +24,7 @@ func TestPickBestYtInitialDataCandidateSkipsInvalidJSON(t *testing.T) {
 	if !ok {
 		t.Fatal("expected valid candidate")
 	}
+
 	if got == "{invalid" {
 		t.Fatal("invalid candidate selected")
 	}
@@ -43,6 +45,7 @@ func TestPickBestYtInitialDataCandidateRejectsAllInvalidJSON(t *testing.T) {
 	if ok {
 		t.Fatalf("all-invalid candidates must not be returned as success, got %q", got)
 	}
+
 	if got != "" {
 		t.Fatalf("got = %q, want empty string", got)
 	}

@@ -49,6 +49,7 @@ func NewRepositoryWithContracts(
 	if repository.fenceVerifier == nil {
 		repository.fenceVerifier = sqlPublishFenceVerifier{jobs: jobContracts}
 	}
+
 	return repository
 }
 
@@ -56,5 +57,6 @@ func (r *Repository) validate() error {
 	if r == nil || r.pool == nil || r.supported == nil || r.jobContracts == nil || r.fenceVerifier == nil {
 		return fmt.Errorf("validate source observation repository: %w", ErrInvalidRepository)
 	}
+
 	return nil
 }

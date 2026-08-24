@@ -5,14 +5,13 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io/fs"
 	"sort"
 	"strings"
 	"sync"
 	"text/template"
-
-	jsonv2 "encoding/json/v2"
 )
 
 //go:embed graduated_members.json prompts/*.tmpl
@@ -41,8 +40,10 @@ type graduatedData struct {
 	} `json:"dissolved_branches"`
 }
 
-var parsedGraduatedData graduatedData
-var promptVersion = mustPromptAssetVersion()
+var (
+	parsedGraduatedData graduatedData
+	promptVersion       = mustPromptAssetVersion()
+)
 
 type SummaryType string
 
@@ -72,6 +73,7 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 		r.err = fmt.Errorf("read graduated_members.json: %w", err)
 		return r
 	}
+
 	if unmarshalErr := jsonv2.Unmarshal(graduatedMembersJSON, &parsedGraduatedData); unmarshalErr != nil {
 		r.err = fmt.Errorf("parse graduated_members.json: %w", unmarshalErr)
 		return r
@@ -84,11 +86,13 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 	}
 
 	domainContext := templates.domainContextPart1 + buildMemberFilterSection() + "\n\n" + templates.domainContextPart2
+
 	r.weekly, err = renderPromptTemplate(templates.weekly, domainContext)
 	if err != nil {
 		r.err = err
 		return r
 	}
+
 	r.monthly, err = renderPromptTemplate(templates.monthly, domainContext)
 	if err != nil {
 		r.err = err
@@ -101,25 +105,29 @@ var initPrompts = sync.OnceValue(func() promptsResult {
 func loadPromptTemplates() (promptTemplates, error) {
 	domainContextPart1, err := readPromptAssetString("prompts/domain_context_part1.tmpl")
 	if err != nil {
-		return promptTemplates{}, err
+		return promptTemplates{}, fmt.Errorf("read prompt asset string: %w", err)
 	}
+
 	domainContextPart2, err := readPromptAssetString("prompts/domain_context_part2.tmpl")
 	if err != nil {
-		return promptTemplates{}, err
+		return promptTemplates{}, fmt.Errorf("read prompt asset string: %w", err)
 	}
+
 	weeklyText, err := readPromptAssetString("prompts/weekly_system_prompt.tmpl")
 	if err != nil {
-		return promptTemplates{}, err
+		return promptTemplates{}, fmt.Errorf("read prompt asset string: %w", err)
 	}
+
 	monthlyText, err := readPromptAssetString("prompts/monthly_system_prompt.tmpl")
 	if err != nil {
-		return promptTemplates{}, err
+		return promptTemplates{}, fmt.Errorf("read prompt asset string: %w", err)
 	}
 
 	weekly, err := template.New("weekly_system_prompt.tmpl").Parse(weeklyText)
 	if err != nil {
 		return promptTemplates{}, fmt.Errorf("parse weekly_system_prompt.tmpl: %w", err)
 	}
+
 	monthly, err := template.New("monthly_system_prompt.tmpl").Parse(monthlyText)
 	if err != nil {
 		return promptTemplates{}, fmt.Errorf("parse monthly_system_prompt.tmpl: %w", err)
@@ -138,16 +146,19 @@ func readPromptAssetString(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}
+
 	return string(content), nil
 }
 
 func renderPromptTemplate(tmpl *template.Template, domainContext string) (string, error) {
 	var buf bytes.Buffer
+
 	if err := tmpl.Execute(&buf, struct {
 		DomainContext string
 	}{DomainContext: domainContext}); err != nil {
 		return "", fmt.Errorf("render %s: %w", tmpl.Name(), err)
 	}
+
 	return buf.String(), nil
 }
 
@@ -158,8 +169,10 @@ func mustPromptAssetVersion() string {
 		if err != nil {
 			panic(fmt.Errorf("read %s for prompt version: %w", path, err))
 		}
+
 		assets[path] = content
 	}
+
 	return buildPromptAssetVersion(assets)
 }
 
@@ -168,9 +181,11 @@ func buildPromptAssetVersion(assets map[string][]byte) string {
 	for path := range assets {
 		paths = append(paths, path)
 	}
+
 	sort.Strings(paths)
 
 	hasher := sha256.New()
+
 	for _, path := range paths {
 		hasher.Write([]byte(path))
 		hasher.Write([]byte{0})
@@ -179,11 +194,13 @@ func buildPromptAssetVersion(assets map[string][]byte) string {
 	}
 
 	checksum := hasher.Sum(nil)
+
 	return hex.EncodeToString(checksum[:8])
 }
 
 func buildMemberFilterSection() string {
 	var sb strings.Builder
+
 	sb.WriteString(`<member_filter>
   Remove graduated or retired members from the "members" output field.
   Known graduated/retired members (reverse-chronological):
@@ -198,6 +215,7 @@ func buildMemberFilterSection() string {
     Exception: unit events (holoX, ReGLOSS, FLOW GLOW, etc.) — always list all unit members.
   </large_group>
 </member_filter>`)
+
 	return sb.String()
 }
 
@@ -208,6 +226,7 @@ func writeGraduatedBranches(sb *strings.Builder) {
 		if len(members) == 0 {
 			continue
 		}
+
 		sb.WriteString("    ")
 		sb.WriteString(branch)
 		sb.WriteString(": ")
@@ -220,6 +239,7 @@ func writeAffiliateInactiveMembers(sb *strings.Builder) {
 	if len(parsedGraduatedData.AffiliateInactive) == 0 {
 		return
 	}
+
 	sb.WriteString("  Affiliate (inactive — remove from regular event listings):\n    ")
 	writeDatedMembers(sb, parsedGraduatedData.AffiliateInactive)
 	sb.WriteByte('\n')
@@ -230,6 +250,7 @@ func writeDatedMembers(sb *strings.Builder, members []graduatedMember) {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
+
 		sb.WriteString(m.Name)
 		sb.WriteString(" (")
 		sb.WriteString(m.Date)
@@ -253,10 +274,12 @@ func getDomainContext() string {
 	if r := initPrompts(); r.err != nil {
 		return ""
 	}
+
 	templates, err := loadPromptTemplates()
 	if err != nil {
 		return ""
 	}
+
 	return templates.domainContextPart1 + buildMemberFilterSection() + "\n\n" + templates.domainContextPart2
 }
 
@@ -265,6 +288,7 @@ func getSystemPrompt(summaryType SummaryType) (string, error) {
 	if r.err != nil {
 		return "", fmt.Errorf("system prompt init: %w", r.err)
 	}
+
 	switch summaryType {
 	case SummaryTypeMonthly:
 		return r.monthly, nil

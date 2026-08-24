@@ -3,13 +3,14 @@ package scraping
 import (
 	"context"
 	"errors"
-	admission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	admission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
+	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 type FailureReason string
@@ -55,7 +56,9 @@ func ClassifyFailure(err error, source FailureSource) FailureDetail {
 	if err == nil {
 		return FailureDetail{Reason: FailureReasonNone, Source: source}
 	}
+
 	detail := FailureDetail{Reason: FailureReasonUnknown, Source: source, Message: err.Error()}
+
 	for _, classify := range []func(error, *FailureDetail) bool{
 		classifyAdmissionDeferredFailure,
 		classifyContextFailure,
@@ -68,6 +71,7 @@ func ClassifyFailure(err error, source FailureSource) FailureDetail {
 			return detail
 		}
 	}
+
 	return detail
 }
 
@@ -75,11 +79,15 @@ func classifyAdmissionDeferredFailure(err error, detail *FailureDetail) bool {
 	if !admission.IsDeferred(err) {
 		return false
 	}
+
 	detail.Reason = FailureReasonAdmissionDeferred
+
 	var deferred *admission.DeferredError
+
 	if errors.As(err, &deferred) && deferred != nil {
 		detail.RetryAfter = deferred.RetryDelay()
 	}
+
 	return true
 }
 
@@ -87,7 +95,9 @@ func classifyContextFailure(err error, detail *FailureDetail) bool {
 	if !errors.Is(err, context.Canceled) {
 		return false
 	}
+
 	detail.Reason = FailureReasonContextCanceled
+
 	return true
 }
 
@@ -96,39 +106,50 @@ func classifyYouTubeSentinelFailure(err error, detail *FailureDetail) bool {
 		detail.Reason = FailureReasonRateLimited
 		detail.StatusCode = http.StatusTooManyRequests
 		detail.RetryAfter = extractHTTPRetryAfter(err)
+
 		return true
 	}
+
 	if errors.Is(err, ErrForbidden) {
 		detail.Reason = FailureReasonForbidden
 		detail.StatusCode = http.StatusForbidden
 		detail.RetryAfter = extractHTTPRetryAfter(err)
+
 		return true
 	}
+
 	if errors.Is(err, ErrBlockedResponse) {
 		detail.Reason = FailureReasonBlockedResponse
 		return true
 	}
+
 	if errors.Is(err, ErrBlockedBodySignature) {
 		detail.Reason = FailureReasonBlockedBody
 		return true
 	}
+
 	if errors.Is(err, ErrResponseTooLarge) {
 		detail.Reason = FailureReasonResponseTooLarge
 		return true
 	}
+
 	if errors.Is(err, ErrEmptyResponse) {
 		detail.Reason = FailureReasonEmptyResponse
 		return true
 	}
+
 	if parser.IsParserDriftError(err) {
 		detail.Reason = FailureReasonParserDrift
 		return true
 	}
+
 	if cooldown, ok := errors.AsType[*CooldownError](err); ok {
 		detail.Reason = FailureReasonCooldown
 		detail.RetryAfter = cooldown.RetryDelay()
+
 		return true
 	}
+
 	return classifyChannelFailure(err, detail)
 }
 
@@ -141,17 +162,21 @@ func classifyChannelFailure(err error, detail *FailureDetail) bool {
 	default:
 		return false
 	}
+
 	return true
 }
 
 func classifyHTTPFailure(err error, detail *FailureDetail) bool {
 	var statusErr *httpStatusError
+
 	if !errors.As(err, &statusErr) {
 		return false
 	}
+
 	detail.Reason = FailureReasonHTTPStatus
 	detail.StatusCode = statusErr.code
 	detail.RetryAfter = statusErr.retryAfter
+
 	return true
 }
 
@@ -160,10 +185,12 @@ func classifyNetworkFailure(err error, detail *FailureDetail) bool {
 		detail.Reason = FailureReasonTimeout
 		return true
 	}
+
 	if isRetryableTransportError(err) {
 		detail.Reason = FailureReasonTransport
 		return true
 	}
+
 	return false
 }
 
@@ -172,10 +199,12 @@ func classifyParserFailure(err error, detail *FailureDetail) bool {
 		detail.Reason = FailureReasonParserDrift
 		return true
 	}
+
 	if strings.Contains(strings.ToLower(err.Error()), "empty response") {
 		detail.Reason = FailureReasonEmptyResponse
 		return true
 	}
+
 	return false
 }
 
@@ -183,28 +212,36 @@ func isTimeoutFailure(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
+
 	return isTimeoutURLFailure(err) || isTimeoutNetFailure(err)
 }
 
 func isTimeoutURLFailure(err error) bool {
 	var urlErr *url.Error
+
 	if !errors.As(err, &urlErr) || isNilInterfaceValue(urlErr) || isNilInterfaceValue(urlErr.Err) {
 		return false
 	}
+
 	return errors.Is(urlErr.Err, context.DeadlineExceeded) || isTimeoutNetError(urlErr.Err)
 }
 
 func isTimeoutNetFailure(err error) bool {
 	var urlErr *url.Error
+
 	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
 		return false
 	}
+
 	var netErr net.Error
+
 	if !errors.As(err, &netErr) || isNilInterfaceValue(netErr) {
 		return false
 	}
+
 	return netErr.Timeout()
 }

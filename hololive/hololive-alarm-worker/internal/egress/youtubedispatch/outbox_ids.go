@@ -28,9 +28,11 @@ func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {
 	if len(items) == 0 {
 		return nil
 	}
+
 	ids := make([]int64, 0, len(items))
 	for i := range items {
 		ids = append(ids, items[i].ID)
 	}
+
 	return ids
 }

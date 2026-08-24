@@ -1,16 +1,16 @@
 package dbtest
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
@@ -26,7 +26,9 @@ func TestAlarmDispatchSendUnitFirstInsertIsAtomic(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InsertedDeliveries)
+
 	var deliveryCount, unitCount int
+
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount))
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_send_units").Scan(&unitCount))
 	require.Equal(t, 1, deliveryCount)
@@ -52,39 +54,53 @@ func TestAlarmDispatchSendUnitConcurrentClaimKeepsGroupAtomic(t *testing.T) {
 	claimed := make([][]*dispatchoutbox.Record, len(workers))
 	errs := make([]error, len(workers))
 	start := make(chan struct{})
+
 	var ready, done sync.WaitGroup
+
 	ready.Add(len(workers))
 	done.Add(len(workers))
+
 	for i := range workers {
 		go func(index int) {
 			defer done.Done()
+
 			ready.Done()
 			<-start
-			claimed[index], errs[index] = repository.ClaimDue(context.Background(), workers[index], 10, time.Minute)
+
+			claimed[index], errs[index] = repository.ClaimDue(t.Context(), workers[index], 10, time.Minute)
 		}(i)
 	}
+
 	ready.Wait()
 	close(start)
 	done.Wait()
 
 	claimingWorkers := 0
+
 	for i := range workers {
 		require.NoError(t, errs[i])
+
 		if len(claimed[i]) == 0 {
 			continue
 		}
+
 		claimingWorkers++
+
 		require.Len(t, claimed[i], len(envelopes))
+
 		unitID := claimed[i][0].SendUnitID
 		clientRequestID := claimed[i][0].ClientRequestID
+
 		require.Positive(t, unitID)
 		require.NotEmpty(t, clientRequestID)
+
 		for _, record := range claimed[i] {
 			require.Equal(t, unitID, record.SendUnitID)
 			require.Equal(t, clientRequestID, record.ClientRequestID)
 			require.Equal(t, workers[i], record.LockedBy)
 		}
 	}
+
 	require.Equal(t, 1, claimingWorkers)
 }
 
@@ -92,9 +108,11 @@ func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 	pool := NewPool(t)
 	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, 7)
+
 	for i := range 7 {
 		envelopes = append(envelopes, sendUnitTestEnvelope(fmt.Sprintf("room-budget-%d", i), fmt.Sprintf("stream-budget-%d", i)))
 	}
+
 	result, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
 		Status:    dispatchoutbox.StatusPending,
@@ -118,12 +136,15 @@ func TestAlarmDispatchClaimDrainsLegacyBeforeSendUnits(t *testing.T) {
 	require.NoError(t, err)
 
 	var eventID int64
+
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		INSERT INTO alarm_dispatch_events (
 			event_key, payload_hash, alarm_type, channel_id, stream_id, category, payload
 		) VALUES ($1, repeat('a', 64), 'LIVE', 'legacy-channel', 'legacy-stream', 'legacy', '{}'::jsonb)
 		RETURNING id`, "legacy-event-"+fmt.Sprint(time.Now().UnixNano())).Scan(&eventID))
+
 	var legacyID int64
+
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		INSERT INTO alarm_dispatch_deliveries (event_id, room_id, dedupe_key, status, next_attempt_at)
 		VALUES ($1, 'room-legacy', $2, 'pending', NOW() - INTERVAL '1 minute')
@@ -147,8 +168,11 @@ func TestAlarmDispatchShadowDoesNotAllocateSendUnit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InsertedDeliveries)
 
-	var unitCount int
-	var groupKey, sendUnitID any
+	var (
+		unitCount            int
+		groupKey, sendUnitID any
+	)
+
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_send_units").Scan(&unitCount))
 	require.NoError(t, pool.QueryRow(t.Context(), "SELECT dispatch_group_key, send_unit_id FROM alarm_dispatch_deliveries").Scan(&groupKey, &sendUnitID))
 	require.Zero(t, unitCount)
@@ -175,9 +199,12 @@ func TestAlarmDispatchShadowPromotesToPendingOnCutover(t *testing.T) {
 	require.Equal(t, 1, cutover.InsertedDeliveries)
 	require.Equal(t, 1, cutover.DuplicateDeliveries)
 
-	var status string
-	var sendUnitID int64
-	var clientRequestID string
+	var (
+		status          string
+		sendUnitID      int64
+		clientRequestID string
+	)
+
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		SELECT d.status, d.send_unit_id, u.client_request_id
 		FROM alarm_dispatch_deliveries d
@@ -195,7 +222,8 @@ func TestAlarmDispatchShadowPromotesToPendingOnCutover(t *testing.T) {
 }
 
 func sendUnitTestEnvelope(roomID, streamID string) domain.AlarmQueueEnvelope {
-	start := time.Date(2026, 8, 10, 12, 30, 0, 0, time.UTC)
+	start := time.Date(2026, time.August, 10, 12, 30, 0, 0, time.UTC)
+
 	return domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType:    domain.AlarmTypeLive,

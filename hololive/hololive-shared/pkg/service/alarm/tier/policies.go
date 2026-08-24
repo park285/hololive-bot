@@ -35,6 +35,7 @@ func ComputeNextCheckAt(nearestStart, lastNotifiedAt *time.Time) time.Time {
 	}
 
 	timeToStart := nearestStart.Sub(now)
+
 	return nextCheckAtForTimeToStart(now, timeToStart)
 }
 
@@ -42,6 +43,7 @@ func nextCheckAtWithoutUpcoming(now time.Time, lastNotifiedAt *time.Time) time.T
 	if isRecentlyNotified(now, lastNotifiedAt) {
 		return now.Add(constants.Tier2Interval)
 	}
+
 	return now.Add(constants.NoUpcomingInterval)
 }
 

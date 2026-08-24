@@ -44,15 +44,19 @@ func (e *Error) Error() string {
 	if e == nil {
 		return "<nil>"
 	}
+
 	if e.Err == nil && e.Message == "" {
 		return fmt.Sprintf("auth error code=%s", e.Code)
 	}
+
 	if e.Err == nil {
 		return fmt.Sprintf("auth error code=%s: %s", e.Code, e.Message)
 	}
+
 	if e.Message == "" {
 		return fmt.Sprintf("auth error code=%s: %v", e.Code, e.Err)
 	}
+
 	return fmt.Sprintf("auth error code=%s: %s: %v", e.Code, e.Message, e.Err)
 }
 

@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -34,6 +34,7 @@ func TestReloadingTLSCertificateGetCertificateUsesCachedCertWithoutReadingFiles(
 		if err != nil {
 			t.Fatalf("GetCertificate() error = %v", err)
 		}
+
 		if cert == nil {
 			t.Fatal("GetCertificate() certificate = nil")
 		}
@@ -71,6 +72,7 @@ func TestReloadingTLSCertificateReloadOnceSkipsParseWhenFingerprintUnchanged(t *
 	if got := readCount.Load(); got != 10 {
 		t.Fatalf("reader calls after unchanged reloads = %d, want 10", got)
 	}
+
 	if got := parseCount.Load(); got != 0 {
 		t.Fatalf("parser calls after unchanged reloads = %d, want 0", got)
 	}
@@ -86,6 +88,7 @@ func TestReloadingTLSCertificateReloadLoopAppliesChangedCertificate(t *testing.T
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+
 	reloader.Start(ctx)
 
 	overwriteLocalhostCertificate(t, certFile, keyFile)
@@ -108,6 +111,7 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+
 	reloader.Start(ctx)
 
 	if err := os.WriteFile(keyFile, []byte("not a private key"), 0o600); err != nil {
@@ -117,7 +121,9 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 	time.Sleep(50 * time.Millisecond)
 
 	errs := make(chan string, 16)
+
 	var wg sync.WaitGroup
+
 	for range 16 {
 		wg.Go(func() {
 			for range 100 {
@@ -126,6 +132,7 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 					errs <- "GetCertificate returned error"
 					return
 				}
+
 				if cert != first {
 					errs <- "GetCertificate returned replacement certificate after reload failure"
 					return
@@ -133,6 +140,7 @@ func TestReloadingTLSCertificateReloadFailureKeepsPreviousCertificateConcurrentl
 			}
 		})
 	}
+
 	wg.Wait()
 	close(errs)
 
@@ -147,7 +155,9 @@ func TestReloadingTLSCertificateReloadLoopSurvivesReloadPanic(t *testing.T) {
 	certFile, keyFile := writeLocalhostCertificate(t)
 
 	safe := countingTLSCertificateFileReader(&atomic.Int64{})
+
 	var reads atomic.Int64
+
 	reloader := newTestReloadingTLSCertificateWithOptions(
 		t,
 		certFile,
@@ -158,6 +168,7 @@ func TestReloadingTLSCertificateReloadLoopSurvivesReloadPanic(t *testing.T) {
 				if reads.Add(1) > 2 {
 					panic("certificate read exploded")
 				}
+
 				return safe(name)
 			},
 		},
@@ -170,6 +181,7 @@ func TestReloadingTLSCertificateReloadLoopSurvivesReloadPanic(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+
 	reloader.Start(ctx)
 
 	deadline := time.Now().Add(time.Second)
@@ -185,6 +197,7 @@ func TestReloadingTLSCertificateReloadLoopSurvivesReloadPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCertificate() after reload panic error = %v", err)
 	}
+
 	if cert != original {
 		t.Fatal("expected previous certificate to be preserved after reload panic")
 	}
@@ -218,6 +231,7 @@ func newTestReloadingTLSCertificateWithOptions(
 	t.Helper()
 
 	options.reloadInterval = reloadInterval
+
 	reloader, err := newReloadingTLSCertificateWithOptions(
 		certFile,
 		keyFile,
@@ -233,15 +247,19 @@ func newTestReloadingTLSCertificateWithOptions(
 
 func countingTLSCertificateFileReader(readCount *atomic.Int64) tlsCertificateFileReader {
 	root := ""
+
 	return func(name string) ([]byte, error) {
 		if root == "" {
 			root = filepath.Dir(name)
 		}
+
 		rel, err := filepath.Rel(root, name)
 		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-			return nil, fmt.Errorf("read certificate fixture outside temp dir")
+			return nil, errors.New("read certificate fixture outside temp dir")
 		}
+
 		readCount.Add(1)
+
 		return fs.ReadFile(os.DirFS(root), filepath.ToSlash(rel))
 	}
 }
@@ -249,6 +267,7 @@ func countingTLSCertificateFileReader(readCount *atomic.Int64) tlsCertificateFil
 func countingTLSCertificatePairParser(parseCount *atomic.Int64) tlsCertificatePairParser {
 	return func(certPEM, keyPEM []byte) (tls.Certificate, error) {
 		parseCount.Add(1)
+
 		return tls.X509KeyPair(certPEM, keyPEM)
 	}
 }
@@ -266,6 +285,7 @@ func waitForCachedCertificateSerial(
 		if accept(serial) {
 			return
 		}
+
 		time.Sleep(5 * time.Millisecond)
 	}
 

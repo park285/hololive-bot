@@ -8,11 +8,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type calendarResponse struct {
@@ -42,6 +43,7 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 			slog.Any("error", err),
 		)
 		sharedserver.RespondError(c, http.StatusInternalServerError, "Failed to get calendar", nil)
+
 		return
 	}
 
@@ -49,6 +51,7 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 	if entries == nil {
 		entries = []domain.CalendarEntry{}
 	}
+
 	ginjson.Respond(c, http.StatusOK, calendarResponse{
 		Status:  "ok",
 		Month:   month,
@@ -59,21 +62,26 @@ func (h *MemberHandler) GetCalendar(c *gin.Context) {
 
 func parseCalendarParams(c *gin.Context) (month, year int, ok bool) {
 	now := util.NowKST()
+
 	month = int(now.Month())
 	year = now.Year()
 
 	if m, err := parseIntQuery(c, "month", 1, 12); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "Invalid month parameter (1-12)", nil)
+
 		return 0, 0, false
 	} else if m > 0 {
 		month = m
 	}
+
 	if y, err := parseIntQuery(c, "year", 2000, 2100); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "Invalid year parameter", nil)
+
 		return 0, 0, false
 	} else if y > 0 {
 		year = y
 	}
+
 	return month, year, true
 }
 
@@ -82,9 +90,11 @@ func parseIntQuery(c *gin.Context, key string, minValue, maxValue int) (int, err
 	if s == "" {
 		return 0, nil
 	}
+
 	v, err := strconv.Atoi(s)
 	if err != nil || v < minValue || v > maxValue {
 		return 0, fmt.Errorf("invalid %s", key)
 	}
+
 	return v, nil
 }

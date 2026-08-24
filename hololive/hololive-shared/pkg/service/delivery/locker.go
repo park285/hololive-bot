@@ -22,17 +22,16 @@ package delivery
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"time"
 	"uuid"
 
-	jsonv2 "encoding/json/v2"
-
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
-// lockCache: *cache.Service가 만족하는 최소 인터페이스
+// lockCache: *cache.Service가 만족하는 최소 인터페이스.
 type lockCache interface {
 	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error)
@@ -50,10 +49,11 @@ func NewLocker(cache lockCache, logger *slog.Logger) NotificationLocker {
 	if cache == nil {
 		return noopNotificationLocker{}
 	}
+
 	return &valkeyNotificationLocker{cache: cache, logger: logger}
 }
 
-// valkeyNotificationLocker: Valkey 기반 NotificationLocker 구현
+// valkeyNotificationLocker: Valkey 기반 NotificationLocker 구현.
 type valkeyNotificationLocker struct {
 	cache  lockCache
 	logger *slog.Logger
@@ -66,6 +66,7 @@ func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey strin
 	if err != nil {
 		return "", false, fmt.Errorf("marshal lock token: %w", err)
 	}
+
 	value := string(tokenJSON)
 
 	acquired, err := l.cache.SetNX(ctx, lockKey, value, ttl)
@@ -74,8 +75,10 @@ func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey strin
 		l.logger.Warn("Lock SetNX failed, proceeding without lock",
 			privacylog.CacheKeyAttr(lockKey),
 			slog.String("error", err.Error()))
+
 		return token, true, nil
 	}
+
 	return token, acquired, nil
 }
 
@@ -85,6 +88,7 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 	if err != nil {
 		return fmt.Errorf("marshal lock token: %w", err)
 	}
+
 	value := string(tokenJSON)
 
 	deleted, err := l.cache.CompareAndDelete(ctx, lockKey, value)
@@ -92,12 +96,15 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 		l.logger.Warn("Lock CompareAndDelete failed during release",
 			privacylog.CacheKeyAttr(lockKey),
 			slog.String("error", err.Error()))
+
 		return nil
 	}
+
 	if !deleted {
 		l.logger.Debug("Lock owned by another instance, skipping release",
 			privacylog.CacheKeyAttr(lockKey))
 	}
+
 	return nil
 }
 
@@ -108,8 +115,10 @@ func (l *valkeyNotificationLocker) ClaimRoom(ctx context.Context, claimKey strin
 		l.logger.Warn("Room claim SetNX failed, proceeding",
 			privacylog.CacheKeyAttr(claimKey),
 			slog.String("error", err.Error()))
+
 		return true, nil
 	}
+
 	return acquired, nil
 }
 
@@ -117,15 +126,17 @@ func (l *valkeyNotificationLocker) ReleaseRoomClaims(ctx context.Context, claimK
 	if len(claimKeys) == 0 {
 		return nil
 	}
+
 	if _, err := l.cache.DelMany(ctx, claimKeys); err != nil {
 		l.logger.Warn("ReleaseRoomClaims failed",
 			slog.Int("count", len(claimKeys)),
 			slog.String("error", err.Error()))
 	}
+
 	return nil
 }
 
-// noopNotificationLocker: cache nil 시 fallback (dedup 비활성화)
+// noopNotificationLocker: cache nil 시 fallback (dedup 비활성화).
 type noopNotificationLocker struct{}
 
 func (noopNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (value0 string, ok1 bool, err error) {

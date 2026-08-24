@@ -28,6 +28,7 @@ func newStatusUpdater(db any, logger *slog.Logger, config *dispatchstate.Config)
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &StatusUpdater{
 		db:     deliverysql.AsQuerier(db),
 		logger: logger,
@@ -42,8 +43,10 @@ func (u *StatusUpdater) markSent(ctx context.Context, id int64) {
 func (u *StatusUpdater) markSentIfLocked(ctx context.Context, id int64, lockedAt *time.Time) {
 	if lockedAt == nil {
 		u.markSent(ctx, id)
+
 		return
 	}
+
 	u.markSentBatchIfLocked(ctx, []outboxLockToken{{id: id, lockedAt: lockedAt}})
 }
 
@@ -56,13 +59,16 @@ func (u *StatusUpdater) markSentBatch(ctx context.Context, ids []int64) {
 	}
 
 	now := dispatchstate.CanonicalSentAtNow()
+
 	for start := 0; start < len(uniqueIDs); start += markSentBatchChunkSize {
 		end := min(start+markSentBatchChunkSize, len(uniqueIDs))
 		chunk := uniqueIDs[start:end]
 
 		args := []any{domain.OutboxStatusSent, now}
+
 		args = deliverysql.AppendDeliveryInt64Args(args, chunk)
 		args = append(args, domain.OutboxStatusPending)
+
 		_, err := deliverysql.ExecDeliverySQL(ctx, u.db, "mark outbox items sent", mustSQL("status_updater_0066_01.sql")+deliverysql.DeliveryInClause("id", len(chunk))+` AND status = ?
 		`, args...)
 		if err != nil {
@@ -88,10 +94,13 @@ func (u *StatusUpdater) markSentBatchIfLocked(ctx context.Context, tokens []outb
 	}
 
 	now := dispatchstate.CanonicalSentAtNow()
+
 	if batcher, ok := u.db.(batchQuerier); ok {
 		u.markSentTokensBatch(ctx, batcher, live, now)
+
 		return
 	}
+
 	u.markSentTokensSequential(ctx, live, now)
 }
 
@@ -101,8 +110,10 @@ func filterLiveLockTokens(tokens []outboxLockToken) []outboxLockToken {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
+
 		live = append(live, tokens[i])
 	}
+
 	return live
 }
 
@@ -116,11 +127,14 @@ var markSentIfLockedSQL = mustSQL("status_updater_0118_02.sql")
 
 func (u *StatusUpdater) markSentTokensBatch(ctx context.Context, batcher batchQuerier, tokens []outboxLockToken, now time.Time) {
 	batch := &pgx.Batch{}
+
 	for i := range tokens {
 		batch.Queue(markSentIfLockedSQL,
 			domain.OutboxStatusSent, now, tokens[i].id, domain.OutboxStatusPending, *tokens[i].lockedAt)
 	}
+
 	results := batcher.SendBatch(ctx, batch)
+
 	defer func() {
 		if err := results.Close(); err != nil {
 			u.logger.Error("Failed to close mark-sent batch",
@@ -128,6 +142,7 @@ func (u *StatusUpdater) markSentTokensBatch(ctx context.Context, batcher batchQu
 				slog.Any("error", err))
 		}
 	}()
+
 	for i := range tokens {
 		if _, err := results.Exec(); err != nil {
 			u.logger.Error("Failed to mark outbox item as sent",
@@ -149,15 +164,19 @@ func (u *StatusUpdater) markSentTokenIfLocked(ctx context.Context, token outboxL
 
 func (u *StatusUpdater) markFailed(ctx context.Context, id int64, errMsg string) {
 	var item domain.YouTubeNotificationOutbox
+
 	found, err := deliverysql.GetDeliverySQL(ctx, u.db, &item, "fetch outbox item for retry", mustSQL("status_updater_0159_03.sql"), id)
+
 	if err != nil || !found {
 		u.logger.Warn("Failed to fetch outbox item for retry", slog.Int64("id", id), slog.Any("error", err))
+
 		return
 	}
 
 	newAttemptCount := item.AttemptCount + 1
 	if newAttemptCount >= u.config.MaxRetries {
 		u.markFailedPermanently(ctx, id, newAttemptCount, errMsg)
+
 		return
 	}
 
@@ -167,19 +186,24 @@ func (u *StatusUpdater) markFailed(ctx context.Context, id int64, errMsg string)
 func (u *StatusUpdater) markFailedIfLocked(ctx context.Context, id int64, lockedAt *time.Time, errMsg string) {
 	if lockedAt == nil {
 		u.markFailed(ctx, id, errMsg)
+
 		return
 	}
 
 	var item domain.YouTubeNotificationOutbox
+
 	found, err := deliverysql.GetDeliverySQL(ctx, u.db, &item, "fetch locked outbox item for retry", mustSQL("status_updater_0185_04.sql"), id, domain.OutboxStatusPending, *lockedAt)
+
 	if err != nil || !found {
 		u.logger.Warn("Failed to fetch locked outbox item for retry", slog.Int64("id", id), slog.Any("error", err))
+
 		return
 	}
 
 	newAttemptCount := item.AttemptCount + 1
 	if newAttemptCount >= u.config.MaxRetries {
 		u.markFailedPermanentlyIfLocked(ctx, outboxLockToken{id: id, lockedAt: lockedAt}, newAttemptCount, errMsg)
+
 		return
 	}
 
@@ -193,6 +217,7 @@ func (u *StatusUpdater) markFailedPermanently(ctx context.Context, id int64, att
 			slog.Int64("id", id),
 			slog.Any("error", err))
 	}
+
 	u.logger.Warn("Outbox item permanently failed after max retries",
 		slog.Int64("id", id),
 		slog.Int("attempts", attemptCount))
@@ -201,6 +226,7 @@ func (u *StatusUpdater) markFailedPermanently(ctx context.Context, id int64, att
 func (u *StatusUpdater) markFailedPermanentlyIfLocked(ctx context.Context, token outboxLockToken, attemptCount int, errMsg string) {
 	if token.lockedAt == nil {
 		u.markFailedPermanently(ctx, token.id, attemptCount, errMsg)
+
 		return
 	}
 
@@ -210,6 +236,7 @@ func (u *StatusUpdater) markFailedPermanentlyIfLocked(ctx context.Context, token
 			slog.Int64("id", token.id),
 			slog.Any("error", err))
 	}
+
 	if tag.RowsAffected() > 0 {
 		u.logger.Warn("Outbox item permanently failed after max retries",
 			slog.Int64("id", token.id),
@@ -219,6 +246,7 @@ func (u *StatusUpdater) markFailedPermanentlyIfLocked(ctx context.Context, token
 
 func (u *StatusUpdater) scheduleFailedRetry(ctx context.Context, id int64, attemptCount int, errMsg string) {
 	nextAttempt := time.Now().Add(u.config.RetryBackoff * time.Duration(attemptCount))
+
 	_, err := u.db.Exec(ctx, mustSQL("status_updater_0245_07.sql"), attemptCount, nextAttempt, deliverysql.TruncateString(errMsg, 500), id)
 	if err != nil {
 		u.logger.Error("Failed to schedule outbox item for retry",
@@ -235,16 +263,19 @@ func (u *StatusUpdater) scheduleFailedRetry(ctx context.Context, id int64, attem
 func (u *StatusUpdater) scheduleFailedRetryIfLocked(ctx context.Context, token outboxLockToken, attemptCount int, errMsg string) {
 	if token.lockedAt == nil {
 		u.scheduleFailedRetry(ctx, token.id, attemptCount, errMsg)
+
 		return
 	}
 
 	nextAttempt := time.Now().Add(u.config.RetryBackoff * time.Duration(attemptCount))
+
 	tag, err := u.db.Exec(ctx, mustSQL("status_updater_0269_08.sql"), attemptCount, nextAttempt, deliverysql.TruncateString(errMsg, 500), token.id, domain.OutboxStatusPending, *token.lockedAt)
 	if err != nil {
 		u.logger.Error("Failed to schedule outbox item for retry",
 			slog.Int64("id", token.id),
 			slog.Any("error", err))
 	}
+
 	if tag.RowsAffected() > 0 {
 		u.logger.Info("Outbox item scheduled for retry",
 			slog.Int64("id", token.id),

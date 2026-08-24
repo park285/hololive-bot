@@ -15,9 +15,11 @@ func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptg
 	if len(candidates) == 0 {
 		return candidates, nil
 	}
+
 	if guard == nil {
 		return nil, promptguard.ErrGuardUnavailable
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -26,8 +28,10 @@ func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptg
 	for i := range candidates {
 		candidate := &candidates[i]
 		parts := make([]string, 0, 3+len(candidate.Candidate.Members))
+
 		parts = append(parts, candidate.Candidate.Title, candidate.Candidate.Description, candidate.SourceURL)
 		parts = append(parts, candidate.Candidate.Members...)
+
 		evaluation, err := guardrail.CheckExternalContent(guard, parts...)
 		if err == nil {
 			filtered = append(filtered, *candidate)
@@ -35,6 +39,7 @@ func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptg
 		}
 
 		var blocked *promptguard.BlockedError
+
 		if !errors.As(err, &blocked) {
 			return nil, fmt.Errorf("check member news candidate: %w", err)
 		}
@@ -46,5 +51,6 @@ func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptg
 			slog.Any("rules", blocked.Rules),
 		)
 	}
+
 	return filtered, nil
 }

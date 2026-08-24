@@ -24,14 +24,16 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 type AdminAPIRuntime struct {
+	lifecycle.Managed
+
 	Config *settings.Config
 	Logger *slog.Logger
 
@@ -39,6 +41,4 @@ type AdminAPIRuntime struct {
 	HTTPServers  *sharedserver.RuntimeHTTPServers
 	AlarmService interface{ Close(context.Context) error }
 	PhotoSync    *holodexprovider.PhotoSyncService
-
-	lifecycle.Managed
 }

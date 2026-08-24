@@ -9,23 +9,26 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const communityPageKind = "community_page"
+
 func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 
-	queueProtected := insertRetentionObservation(t, pool, "community_page", base, "queue-protected")
-	replayProtected := insertRetentionObservation(t, pool, "community_page", base.Add(time.Hour), "replay-protected")
+	queueProtected := insertRetentionObservation(t, pool, communityPageKind, base, "queue-protected")
+	replayProtected := insertRetentionObservation(t, pool, communityPageKind, base.Add(time.Hour), "replay-protected")
 	headProtected := insertRetentionObservation(t, pool, "live_snapshot", base.Add(2*time.Hour), "head-protected")
 	oldestEligible := insertRetentionObservation(t, pool, "live_snapshot", base.Add(3*time.Hour), "oldest-eligible")
-	nextEligible := insertRetentionObservation(t, pool, "community_page", base.Add(4*time.Hour), "next-eligible")
+	nextEligible := insertRetentionObservation(t, pool, communityPageKind, base.Add(4*time.Hour), "next-eligible")
 	recent := insertRetentionObservation(t, pool, "live_snapshot", base.Add(48*time.Hour), "recent")
 
-	if _, err := pool.Exec(context.Background(),
+	if _, err := pool.Exec(t.Context(),
 		`INSERT INTO public.source_observation_queue (observation_id) VALUES ($1)`, queueProtected,
 	); err != nil {
 		t.Fatalf("protect retention observation with queue row: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO public.source_observation_replay_requests (
 			observation_id, provider, observation_kind, subject_key, observation_key,
 			evidence_sha256, requested_by, reason, previous_attempt_count
@@ -36,18 +39,21 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 		WHERE id = $1`, replayProtected); err != nil {
 		t.Fatalf("protect retention observation with replay row: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO public.youtube_live_reconciliation_heads (
 			video_id, status, end_candidate_kind, end_candidate_observation_id, next_end_check_at
 		) VALUES ('retention-head', 'LIVE', 'EXPLICIT_END', $1, $2)`, headProtected, base); err != nil {
 		t.Fatalf("protect retention observation with reconciliation head: %v", err)
 	}
 
-	kinds := []string{"community_page", "live_snapshot"}
+	kinds := []string{communityPageKind, "live_snapshot"}
 	cutoffs := []time.Time{base.Add(24 * time.Hour), base.Add(24 * time.Hour)}
+
 	if got := deleteRetentionBatch(t, pool, kinds, cutoffs, 1); len(got) != 1 || got[0] != oldestEligible {
 		t.Fatalf("first retention batch deleted %v, want [%d]", got, oldestEligible)
 	}
+
 	if got := deleteRetentionBatch(t, pool, kinds, cutoffs, 1000); len(got) != 1 || got[0] != nextEligible {
 		t.Fatalf("second retention batch deleted %v, want [%d]", got, nextEligible)
 	}
@@ -58,7 +64,7 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	observationID := insertRetentionObservation(t, pool, "community_page", base, "guarded")
+	observationID := insertRetentionObservation(t, pool, communityPageKind, base, "guarded")
 	cutoff := base.Add(24 * time.Hour)
 
 	tests := []struct {
@@ -68,10 +74,10 @@ func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
 		limit   int
 	}{
 		{name: "empty policies", kinds: []string{}, cutoffs: []time.Time{}, limit: 1},
-		{name: "mismatched policies", kinds: []string{"community_page"}, cutoffs: []time.Time{}, limit: 1},
-		{name: "zero limit", kinds: []string{"community_page"}, cutoffs: []time.Time{cutoff}, limit: 0},
-		{name: "oversized limit", kinds: []string{"community_page"}, cutoffs: []time.Time{cutoff}, limit: 1001},
-		{name: "too many policies", kinds: repeatedStrings("community_page", 17), cutoffs: repeatedTimes(cutoff, 17), limit: 1},
+		{name: "mismatched policies", kinds: []string{communityPageKind}, cutoffs: []time.Time{}, limit: 1},
+		{name: "zero limit", kinds: []string{communityPageKind}, cutoffs: []time.Time{cutoff}, limit: 0},
+		{name: "oversized limit", kinds: []string{communityPageKind}, cutoffs: []time.Time{cutoff}, limit: 1001},
+		{name: "too many policies", kinds: repeatedStrings(communityPageKind, 17), cutoffs: repeatedTimes(cutoff, 17), limit: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -87,29 +93,33 @@ func TestSourceObservationRetentionBatchRejectsInvalidBudgets(t *testing.T) {
 func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
 	pool := NewPool(t)
 	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	lockedID := insertRetentionObservation(t, pool, "community_page", base, "locked")
-	nextID := insertRetentionObservation(t, pool, "community_page", base.Add(time.Hour), "next")
+	lockedID := insertRetentionObservation(t, pool, communityPageKind, base, "locked")
+	nextID := insertRetentionObservation(t, pool, communityPageKind, base.Add(time.Hour), "next")
 
-	tx, err := pool.Begin(context.Background())
+	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatalf("begin retention row lock: %v", err)
 	}
+
 	t.Cleanup(func() {
-		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(t.Context())); rollbackErr != nil {
 			t.Errorf("rollback retention row lock: %v", rollbackErr)
 		}
 	})
+
 	var selectedID int64
-	if err := tx.QueryRow(context.Background(),
+
+	if err := tx.QueryRow(t.Context(),
 		`SELECT id FROM public.source_observations WHERE id = $1 FOR UPDATE`, lockedID,
 	).Scan(&selectedID); err != nil {
 		t.Fatalf("lock retention observation: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	got := deleteRetentionBatchContext(t, ctx, pool,
-		[]string{"community_page"}, []time.Time{base.Add(24 * time.Hour)}, 1)
+
+	got := deleteRetentionBatchContext(ctx, t, pool,
+		[]string{communityPageKind}, []time.Time{base.Add(24 * time.Hour)}, 1)
 	if len(got) != 1 || got[0] != nextID {
 		t.Fatalf("retention with locked oldest row deleted %v, want [%d]", got, nextID)
 	}
@@ -117,10 +127,7 @@ func TestSourceObservationRetentionBatchSkipsLockedRows(t *testing.T) {
 	assertRetentionObservationsExist(t, pool, []int64{lockedID})
 }
 
-func TestSourceObservationRetentionCandidatePlanUsesKindReceivedIndex(t *testing.T) {
-	pool := NewPool(t)
-	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
-	if _, err := pool.Exec(context.Background(), `
+const retentionPlanSeedObservationsSQL = `
 		INSERT INTO public.source_observations (
 			provider, observation_kind, subject_key, observation_key,
 			schema_version, contract_generation, scheduled_for, observed_at, received_at,
@@ -142,27 +149,18 @@ func TestSourceObservationRetentionCandidatePlanUsesKindReceivedIndex(t *testing
 			       'plan-live-' || series::text,
 			       $1::timestamptz - interval '1 day'
 			FROM pg_catalog.generate_series(1, 20000) AS series
-		) AS seed`, base); err != nil {
-		t.Fatalf("seed retention plan observations: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), `
+		) AS seed`
+
+const retentionPlanSeedQueueSQL = `
 		INSERT INTO public.source_observation_queue (observation_id)
 		SELECT id
 		FROM public.source_observations
 		WHERE observation_kind = 'community_page'
 		  AND received_at < $1
 		ORDER BY received_at, id
-		LIMIT 1000`, base); err != nil {
-		t.Fatalf("seed retention plan queue protection: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(),
-		`ANALYZE public.source_observations; ANALYZE public.source_observation_queue`); err != nil {
-		t.Fatalf("analyze retention plan fixtures: %v", err)
-	}
+		LIMIT 1000`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	rows, err := pool.Query(ctx, `
+const retentionCandidateExplainSQL = `
 		EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
 		WITH policies AS (
 			SELECT ($1::text[])[policy.position] AS observation_kind,
@@ -197,48 +195,75 @@ func TestSourceObservationRetentionCandidatePlanUsesKindReceivedIndex(t *testing
 		SELECT candidate.id
 		FROM per_policy_candidates AS candidate
 		ORDER BY candidate.received_at, candidate.id
-		LIMIT $3`, []string{"community_page"}, []time.Time{base}, 1000)
-	if err != nil {
-		t.Fatalf("explain source observation retention candidates: %v", err)
-	}
-	defer rows.Close()
+		LIMIT $3`
 
-	var plan strings.Builder
-	indexConditionFound := false
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
-			t.Fatalf("scan source observation retention plan: %v", err)
-		}
-		plan.WriteString(line)
-		plan.WriteByte('\n')
-		if strings.Contains(line, "Index Cond:") &&
-			strings.Contains(line, "observation_kind") && strings.Contains(line, "received_at") {
-			indexConditionFound = true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate source observation retention plan: %v", err)
-	}
-	if !strings.Contains(plan.String(), "idx_source_observations_kind_received_id") || !indexConditionFound {
-		t.Fatalf("retention candidate plan did not constrain the kind/received index:\n%s", plan.String())
-	}
+func TestSourceObservationRetentionCandidatePlanUsesKindReceivedIndex(t *testing.T) {
+	pool := NewPool(t)
+	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 
-	deleted := deleteRetentionBatchContext(t, ctx, pool,
-		[]string{"community_page"}, []time.Time{base}, 1000)
+	seedRetentionCandidatePlanFixture(t, pool, base)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	plan := explainQueryPlan(ctx, t, pool, retentionCandidateExplainSQL,
+		[]string{communityPageKind}, []time.Time{base}, 1000)
+
+	assertRetentionCandidatePlanUsesKindReceivedIndex(t, plan)
+
+	deleted := deleteRetentionBatchContext(ctx, t, pool,
+		[]string{communityPageKind}, []time.Time{base}, 1000)
 	if len(deleted) != 1000 {
 		t.Fatalf("retention plan fixture deleted %d rows, want 1000", len(deleted))
 	}
+
 	var protected int
-	if err := pool.QueryRow(context.Background(), `
+
+	if err := pool.QueryRow(t.Context(), `
 		SELECT count(*)
 		FROM public.source_observations
 		WHERE observation_kind = 'community_page'
 		  AND received_at < $1`, base).Scan(&protected); err != nil {
 		t.Fatalf("count queue-protected retention plan observations: %v", err)
 	}
+
 	if protected != 1000 {
 		t.Fatalf("queue-protected retention plan observations = %d, want 1000", protected)
+	}
+}
+
+func seedRetentionCandidatePlanFixture(t *testing.T, pool *pgxpool.Pool, base time.Time) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), retentionPlanSeedObservationsSQL, base); err != nil {
+		t.Fatalf("seed retention plan observations: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), retentionPlanSeedQueueSQL, base); err != nil {
+		t.Fatalf("seed retention plan queue protection: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), `ANALYZE public.source_observations; ANALYZE public.source_observation_queue`); err != nil {
+		t.Fatalf("analyze retention plan fixtures: %v", err)
+	}
+}
+
+func assertRetentionCandidatePlanUsesKindReceivedIndex(t *testing.T, plan string) {
+	t.Helper()
+
+	indexConditionFound := false
+
+	for line := range strings.SplitSeq(plan, "\n") {
+		if strings.Contains(line, "Index Cond:") &&
+			strings.Contains(line, "observation_kind") && strings.Contains(line, "received_at") {
+			indexConditionFound = true
+
+			break
+		}
+	}
+
+	if !strings.Contains(plan, "idx_source_observations_kind_received_id") || !indexConditionFound {
+		t.Fatalf("retention candidate plan did not constrain the kind/received index:\n%s", plan)
 	}
 }
 
@@ -250,9 +275,12 @@ func insertRetentionObservation(
 	key string,
 ) int64 {
 	t.Helper()
+
 	const provider = "youtubejs"
+
 	var id int64
-	if err := pool.QueryRow(context.Background(), `
+
+	if err := pool.QueryRow(t.Context(), `
 		INSERT INTO public.source_observations (
 			provider, observation_kind, subject_key, observation_key,
 			schema_version, contract_generation, scheduled_for, observed_at, received_at,
@@ -267,6 +295,7 @@ func insertRetentionObservation(
 		RETURNING id`, provider, kind, key, receivedAt).Scan(&id); err != nil {
 		t.Fatalf("insert retention observation %q: %v", key, err)
 	}
+
 	return id
 }
 
@@ -278,18 +307,20 @@ func deleteRetentionBatch(
 	limit int,
 ) []int64 {
 	t.Helper()
-	return deleteRetentionBatchContext(t, context.Background(), pool, kinds, cutoffs, limit)
+
+	return deleteRetentionBatchContext(t.Context(), t, pool, kinds, cutoffs, limit)
 }
 
 func deleteRetentionBatchContext(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	pool *pgxpool.Pool,
 	kinds []string,
 	cutoffs []time.Time,
 	limit int,
 ) []int64 {
 	t.Helper()
+
 	rows, err := pool.Query(ctx, `
 		SELECT deleted_id
 		FROM public.delete_source_observation_retention_batch($1::text[], $2::timestamptz[], $3)`,
@@ -300,30 +331,89 @@ func deleteRetentionBatchContext(
 	defer rows.Close()
 
 	var deleted []int64
+
 	for rows.Next() {
 		var id int64
+
 		if err := rows.Scan(&id); err != nil {
 			t.Fatalf("scan source observation retention result: %v", err)
 		}
+
 		deleted = append(deleted, id)
 	}
+
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate source observation retention result: %v", err)
 	}
+
 	return deleted
 }
 
 func assertRetentionObservationsExist(t *testing.T, pool *pgxpool.Pool, ids []int64) {
 	t.Helper()
+
 	var count int
-	if err := pool.QueryRow(context.Background(),
+
+	if err := pool.QueryRow(t.Context(),
 		`SELECT count(*) FROM public.source_observations WHERE id = ANY($1::bigint[])`, ids,
 	).Scan(&count); err != nil {
 		t.Fatalf("count retained source observations: %v", err)
 	}
+
 	if count != len(ids) {
 		t.Fatalf("retained source observation count = %d, want %d for ids %v", count, len(ids), ids)
 	}
+}
+
+func explainQueryPlan(ctx context.Context, t *testing.T, pool *pgxpool.Pool, sql string, args ...any) string {
+	t.Helper()
+
+	rows, err := pool.Query(ctx, sql, args...)
+	if err != nil {
+		t.Fatalf("explain query plan: %v", err)
+	}
+	defer rows.Close()
+
+	var plan strings.Builder
+
+	for rows.Next() {
+		var line string
+
+		if scanErr := rows.Scan(&line); scanErr != nil {
+			t.Fatalf("scan query plan line: %v", scanErr)
+		}
+
+		plan.WriteString(line)
+		plan.WriteByte('\n')
+	}
+
+	if rowsErr := rows.Err(); rowsErr != nil {
+		t.Fatalf("iterate query plan: %v", rowsErr)
+	}
+
+	return plan.String()
+}
+
+func countReturnedRows(ctx context.Context, t *testing.T, pool *pgxpool.Pool, sql string, args ...any) int {
+	t.Helper()
+
+	rows, err := pool.Query(ctx, sql, args...)
+	if err != nil {
+		t.Fatalf("run retention batch: %v", err)
+	}
+	defer rows.Close()
+
+	count := 0
+
+	for rows.Next() {
+		count++
+	}
+
+	if rowsErr := rows.Err(); rowsErr != nil {
+		t.Fatalf("iterate retention batch rows: %v", rowsErr)
+	}
+
+	return count
 }
 
 func repeatedStrings(value string, count int) []string {
@@ -331,6 +421,7 @@ func repeatedStrings(value string, count int) []string {
 	for index := range values {
 		values[index] = value
 	}
+
 	return values
 }
 
@@ -339,5 +430,6 @@ func repeatedTimes(value time.Time, count int) []time.Time {
 	for index := range values {
 		values[index] = value
 	}
+
 	return values
 }

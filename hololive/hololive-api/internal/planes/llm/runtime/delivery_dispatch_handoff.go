@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -15,18 +16,28 @@ type deliveryDispatchPublisher struct {
 
 func (p deliveryDispatchPublisher) PublishPending(ctx context.Context, items []delivery.OutboxItem) error {
 	if p.publisher == nil {
-		return fmt.Errorf("publish delivery dispatch: publisher is nil")
+		return errors.New("publish delivery dispatch: publisher is nil")
 	}
+
 	_, err := p.publisher.PublishDispatchBatch(ctx, deliveryDispatchEnvelopes(items))
-	return err
+	if err != nil {
+		return fmt.Errorf("publish delivery dispatch: %w", err)
+	}
+
+	return nil
 }
 
 func (p deliveryDispatchPublisher) PublishShadow(ctx context.Context, items []delivery.OutboxItem) error {
 	if p.publisher == nil {
-		return fmt.Errorf("publish delivery dispatch shadow: publisher is nil")
+		return errors.New("publish delivery dispatch shadow: publisher is nil")
 	}
+
 	_, err := p.publisher.PublishShadowDispatchBatch(ctx, deliveryDispatchEnvelopes(items))
-	return err
+	if err != nil {
+		return fmt.Errorf("publish delivery dispatch shadow: %w", err)
+	}
+
+	return nil
 }
 
 func deliveryDispatchEnvelopes(items []delivery.OutboxItem) []domain.AlarmQueueEnvelope {
@@ -37,6 +48,7 @@ func deliveryDispatchEnvelopes(items []delivery.OutboxItem) []domain.AlarmQueueE
 			PeriodKey:          items[i].PeriodKey,
 			PreRenderedMessage: items[i].Message,
 		}
+
 		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeCommunity,
@@ -47,5 +59,6 @@ func deliveryDispatchEnvelopes(items []delivery.OutboxItem) []domain.AlarmQueueE
 			Version:        1,
 		})
 	}
+
 	return envelopes
 }

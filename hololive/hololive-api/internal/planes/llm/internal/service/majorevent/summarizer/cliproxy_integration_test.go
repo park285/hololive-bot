@@ -21,26 +21,30 @@
 package summarizer
 
 import (
-	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func skipIfNoCliproxy(t *testing.T) {
 	t.Helper()
+
 	if os.Getenv("INTEGRATION_TEST") != "true" {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
+
 	if err := loadEnv(); err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("load env: %v", err)
 	}
+
 	if os.Getenv("CLIPROXY_API_KEY") == "" {
 		t.Skip("Skipping: CLIPROXY_API_KEY not set")
 	}
@@ -54,33 +58,41 @@ func loadEnv() error {
 		"../../../../../../.env",
 	}
 
-	var data []byte
-	var err error
+	var (
+		data []byte
+		err  error
+	)
+
 	for _, path := range candidates {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
+
 		data, err = readFileWithinRoot(path)
 		if err == nil {
 			break
 		}
 	}
+
 	if err != nil {
-		return err
+		return fmt.Errorf("read file within root: %w", err)
 	}
+
 	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
 		if k, v, ok := strings.Cut(line, "="); ok {
 			if os.Getenv(k) == "" {
 				if err := os.Setenv(k, v); err != nil {
-					return err
+					return fmt.Errorf("setenv: %w", err)
 				}
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -88,15 +100,22 @@ func readFileWithinRoot(path string) ([]byte, error) {
 	cleanPath := filepath.Clean(path)
 	rootPath := filepath.Dir(cleanPath)
 	fileName := filepath.Base(cleanPath)
+
 	root, err := os.OpenRoot(rootPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open root: %w", err)
 	}
+
 	data, readErr := root.ReadFile(fileName)
 	if closeErr := root.Close(); closeErr != nil {
 		return data, errors.Join(readErr, closeErr)
 	}
-	return data, readErr
+
+	if readErr != nil {
+		return data, fmt.Errorf("read %q within root: %w", fileName, readErr)
+	}
+
+	return data, nil
 }
 
 func testCliproxyBaseURL() string {
@@ -104,6 +123,7 @@ func testCliproxyBaseURL() string {
 	if baseURL == "" {
 		baseURL = strings.TrimSpace(os.Getenv("CLIPROXY_BASE_URL"))
 	}
+
 	if baseURL == "" {
 		baseURL = "http://172.17.0.1:8787/v1"
 	}
@@ -114,8 +134,10 @@ func testCliproxyBaseURL() string {
 
 func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
 	t.Helper()
+
 	baseURL := testCliproxyBaseURL()
 	t.Logf("Model: %s, BaseURL: %s", model, baseURL)
+
 	client, err := llm.NewClient(
 		baseURL,
 		os.Getenv("CLIPROXY_API_KEY"),
@@ -126,98 +148,180 @@ func newTestClient(t *testing.T, model string) *llm.OpenAIClient {
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
+
 	return client
+}
+
+const integrationDefaultModel = "gpt-5.4"
+
+func testModel() string {
+	if model := os.Getenv("CLIPROXY_TEST_MODEL"); model != "" {
+		return model
+	}
+
+	return integrationDefaultModel
+}
+
+func generateSummaryResponse(
+	t *testing.T,
+	client *llm.OpenAIClient,
+	events []domain.MajorEvent,
+	summaryType SummaryType,
+	periodKey string,
+	searchContext ...string,
+) (string, *summaryResponse) {
+	t.Helper()
+
+	sysPrompt, err := getSystemPrompt(summaryType)
+	if err != nil {
+		t.Fatalf("getSystemPrompt 실패: %v", err)
+	}
+
+	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext...)
+	t.Logf("\n=== User Prompt ===\n%s\n=== END ===", userPrompt)
+
+	rawJSON, err := client.GenerateJSON(t.Context(), sysPrompt, userPrompt, summaryResponseSchema())
+	if err != nil {
+		t.Fatalf("GenerateJSON 실패: %v", err)
+	}
+
+	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
+
+	var resp summaryResponse
+
+	if unmarshalErr := jsonv2.Unmarshal([]byte(rawJSON), &resp); unmarshalErr != nil {
+		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", unmarshalErr, rawJSON)
+	}
+
+	return rawJSON, &resp
+}
+
+func assertHighlightsNotEmpty(t *testing.T, highlights []eventHighlight) {
+	t.Helper()
+
+	if len(highlights) == 0 {
+		t.Fatal("highlights가 비어있음")
+	}
+}
+
+func logHighlights(t *testing.T, highlights []eventHighlight) {
+	t.Helper()
+
+	for i, h := range highlights {
+		t.Logf("highlight[%d]: name=%q date=%q members=%q note=%q link=%q", i, h.Name, h.Date, h.Members, h.Note, h.Link)
+	}
+}
+
+func assertHighlightRequiredFields(t *testing.T, highlights []eventHighlight) {
+	t.Helper()
+
+	for i, h := range highlights {
+		if h.Name == "" {
+			t.Errorf("highlight[%d].name이 비어있음", i)
+		}
+
+		if h.Date == "" {
+			t.Errorf("highlight[%d].date가 비어있음", i)
+		}
+	}
+}
+
+func assertNoGraduatedMembers(t *testing.T, highlights []eventHighlight) {
+	t.Helper()
+
+	for i, h := range highlights {
+		if strings.Contains(h.Members, "沙花叉クロヱ") {
+			t.Errorf("highlight[%d].members에 졸업 멤버 沙花叉クロヱ 포함", i)
+		}
+	}
+}
+
+func logOngoingEvents(t *testing.T, events []ongoingEvent) {
+	t.Helper()
+
+	t.Logf("ongoing_events 수: %d", len(events))
+
+	for i, o := range events {
+		t.Logf("ongoing[%d]: name=%q date=%q note=%q link=%q", i, o.Name, o.Date, o.Note, o.Link)
+	}
+}
+
+func logDiscoveredEvents(t *testing.T, events []discoveredEvent) {
+	t.Helper()
+
+	t.Logf("discovered_events 수: %d", len(events))
+
+	for i, d := range events {
+		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
+	}
+}
+
+func assertDiscoveredSourcesFilled(t *testing.T, events []discoveredEvent) {
+	t.Helper()
+
+	for i, d := range events {
+		if d.Source == "" {
+			t.Errorf("discovered[%d].source가 비어있음 (출처 필수)", i)
+		}
+	}
+}
+
+func assertContainsFesKeyword(t *testing.T, text, failMsg string) {
+	t.Helper()
+
+	for _, kw := range []string{"EXPO", "fes", "7th"} {
+		if strings.Contains(text, kw) {
+			return
+		}
+	}
+
+	t.Error(failMsg)
+}
+
+func logAssembledText(t *testing.T, resp *summaryResponse) string {
+	t.Helper()
+
+	text := assembleSummaryText(resp)
+	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
+
+	return text
+}
+
+func assertAssembledTextNotEmpty(t *testing.T, text string) {
+	t.Helper()
+
+	if text == "" {
+		t.Fatal("assembleSummaryText 결과가 비어있음")
+	}
 }
 
 func TestIntegration_Summarize_RawJSON_GPT(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
-	events := feb2026Events()
-
-	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
-	if err != nil {
-		t.Fatalf("getSystemPrompt 실패: %v", err)
-	}
-	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
-	schema := summaryResponseSchema()
-
 	t.Logf("Model: %s", model)
-	t.Logf("\n=== User Prompt ===\n%s\n=== END ===", userPrompt)
 
-	rawJSON, err := client.GenerateJSON(context.Background(), sysPrompt, userPrompt, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON 실패: %v", err)
-	}
+	_, resp := generateSummaryResponse(t, client, feb2026Events(), SummaryTypeWeekly, "2026-02-21")
 
-	t.Logf("\n=== Raw JSON (%s) ===\n%s\n=== END ===", model, rawJSON)
-
-	// JSON 파싱 검증
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
-	}
-
-	if len(resp.Highlights) == 0 {
-		t.Fatal("highlights가 비어있음")
-	}
-
-	for i, h := range resp.Highlights {
-		t.Logf("highlight[%d]: name=%q date=%q members=%q note=%q link=%q", i, h.Name, h.Date, h.Members, h.Note, h.Link)
-		if h.Name == "" {
-			t.Errorf("highlight[%d].name이 비어있음", i)
-		}
-		if h.Date == "" {
-			t.Errorf("highlight[%d].date가 비어있음", i)
-		}
-	}
-
-	// ongoing_events 검증
-	t.Logf("ongoing_events 수: %d", len(resp.OngoingEvents))
-	for i, o := range resp.OngoingEvents {
-		t.Logf("ongoing[%d]: name=%q date=%q note=%q link=%q", i, o.Name, o.Date, o.Note, o.Link)
-	}
-
-	// 졸업 멤버 필터링 검증
-	for i, h := range resp.Highlights {
-		if strings.Contains(h.Members, "沙花叉クロヱ") {
-			t.Errorf("highlight[%d].members에 졸업 멤버 沙花叉クロヱ 포함", i)
-		}
-	}
-
-	// discovered_events 검증
-	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
-	for i, d := range resp.DiscoveredEvents {
-		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
-	}
-
-	// 텍스트 조립 검증
-	text := assembleSummaryText(&resp)
-	if text == "" {
-		t.Fatal("assembleSummaryText 결과가 비어있음")
-	}
-
-	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
+	assertHighlightsNotEmpty(t, resp.Highlights)
+	logHighlights(t, resp.Highlights)
+	assertHighlightRequiredFields(t, resp.Highlights)
+	logOngoingEvents(t, resp.OngoingEvents)
+	assertNoGraduatedMembers(t, resp.Highlights)
+	logDiscoveredEvents(t, resp.DiscoveredEvents)
+	assertAssembledTextNotEmpty(t, logAssembledText(t, resp))
 }
 
 func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
 	summarizer := NewEventSummarizer(client, nil, nil, testLogger())
 	events := mar2026Events()
 
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeMonthly, "2026-03")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03")
 
 	t.Logf("Model: %s", model)
 	t.Logf("\n=== 월간 요약 결과 (%s) ===\n%s\n=== END ===", model, result)
@@ -226,23 +330,13 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 		t.Fatal("월간 요약 결과가 비어있음")
 	}
 
-	// SUPER EXPO/fes 포함 확인
-	fesKeywords := []string{"EXPO", "fes", "7th"}
-	foundFes := false
-	for _, kw := range fesKeywords {
-		if strings.Contains(result, kw) {
-			foundFes = true
-			break
-		}
-	}
-	if !foundFes {
-		t.Error("월간 요약에 hololive fes/EXPO 관련 키워드가 없음")
-	}
+	assertContainsFesKeyword(t, result, "월간 요약에 hololive fes/EXPO 관련 키워드가 없음")
 
 	// 졸업 멤버 필터링 검증
 	if strings.Contains(result, "天音かなた") {
 		t.Error("월간 요약에 졸업 멤버 天音かなた 포함")
 	}
+
 	if strings.Contains(result, "沙花叉クロヱ") {
 		t.Error("월간 요약에 졸업 멤버 沙花叉クロヱ 포함")
 	}
@@ -251,98 +345,38 @@ func TestIntegration_Summarize_Monthly_GPT(t *testing.T) {
 func TestIntegration_Summarize_RawJSON_GPT_WebSearch(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
-	events := feb2026Events()
-
-	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
-	if err != nil {
-		t.Fatalf("getSystemPrompt 실패: %v", err)
-	}
-	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
-	schema := summaryResponseSchema()
-
 	t.Logf("Model: %s (Responses API + web_search)", model)
 
-	rawJSON, err := client.GenerateJSON(context.Background(), sysPrompt, userPrompt, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON 실패: %v", err)
-	}
+	_, resp := generateSummaryResponse(t, client, feb2026Events(), SummaryTypeWeekly, "2026-02-21")
 
-	t.Logf("\n=== Raw JSON (%s + web_search) ===\n%s\n=== END ===", model, rawJSON)
+	assertHighlightsNotEmpty(t, resp.Highlights)
+	logHighlights(t, resp.Highlights)
+	assertHighlightRequiredFields(t, resp.Highlights)
+	logOngoingEvents(t, resp.OngoingEvents)
+	assertNoGraduatedMembers(t, resp.Highlights)
+	logDiscoveredEvents(t, resp.DiscoveredEvents)
+	assertDiscoveredSourcesFilled(t, resp.DiscoveredEvents)
 
-	// JSON 파싱 검증
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
-	}
-
-	if len(resp.Highlights) == 0 {
-		t.Fatal("highlights가 비어있음")
-	}
-
-	for i, h := range resp.Highlights {
-		t.Logf("highlight[%d]: name=%q date=%q members=%q note=%q link=%q", i, h.Name, h.Date, h.Members, h.Note, h.Link)
-		if h.Name == "" {
-			t.Errorf("highlight[%d].name이 비어있음", i)
-		}
-		if h.Date == "" {
-			t.Errorf("highlight[%d].date가 비어있음", i)
-		}
-	}
-
-	// ongoing_events 검증
-	t.Logf("ongoing_events 수: %d", len(resp.OngoingEvents))
-	for i, o := range resp.OngoingEvents {
-		t.Logf("ongoing[%d]: name=%q date=%q note=%q link=%q", i, o.Name, o.Date, o.Note, o.Link)
-	}
-
-	// 졸업 멤버 필터링 검증
-	for i, h := range resp.Highlights {
-		if strings.Contains(h.Members, "沙花叉クロヱ") {
-			t.Errorf("highlight[%d].members에 졸업 멤버 沙花叉クロヱ 포함", i)
-		}
-	}
-
-	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
-	for i, d := range resp.DiscoveredEvents {
-		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
-		if d.Source == "" {
-			t.Errorf("discovered[%d].source가 비어있음 (출처 필수)", i)
-		}
-	}
 	if len(resp.DiscoveredEvents) == 0 {
 		t.Log("WARN: web_search 활성화했지만 discovered_events가 비어있음 — 모델/검색 결과에 따라 발생 가능")
 	}
 
-	// 텍스트 조립 검증
-	text := assembleSummaryText(&resp)
-	if text == "" {
-		t.Fatal("assembleSummaryText 결과가 비어있음")
-	}
-
-	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
+	assertAssembledTextNotEmpty(t, logAssembledText(t, resp))
 }
 
 func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
 	summarizer := NewEventSummarizer(client, nil, nil, testLogger())
 	events := mar2026Events()
 
 	t.Logf("Model: %s (Responses API + web_search)", model)
 
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeMonthly, "2026-03")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03")
 
 	t.Logf("\n=== 월간 요약 결과 (%s + web_search) ===\n%s\n=== END ===", model, result)
 
@@ -350,23 +384,13 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 		t.Fatal("월간 요약 결과가 비어있음")
 	}
 
-	// SUPER EXPO/fes 포함 확인
-	fesKeywords := []string{"EXPO", "fes", "7th"}
-	foundFes := false
-	for _, kw := range fesKeywords {
-		if strings.Contains(result, kw) {
-			foundFes = true
-			break
-		}
-	}
-	if !foundFes {
-		t.Error("월간 요약에 hololive fes/EXPO 관련 키워드가 없음")
-	}
+	assertContainsFesKeyword(t, result, "월간 요약에 hololive fes/EXPO 관련 키워드가 없음")
 
 	// 졸업 멤버 필터링 검증
 	if strings.Contains(result, "天音かなた") {
 		t.Error("월간 요약에 졸업 멤버 天音かなた 포함")
 	}
+
 	if strings.Contains(result, "沙花叉クロヱ") {
 		t.Error("월간 요약에 졸업 멤버 沙花叉クロヱ 포함")
 	}
@@ -380,7 +404,7 @@ func TestIntegration_Summarize_Monthly_GPT_WebSearch(t *testing.T) {
 }
 
 // exaSearchContext: Exa MCP 검색 결과를 시뮬레이션한 참고 자료
-// 실제 운영에서는 Exa MCP 또는 REST API를 통해 동적으로 수집
+// 실제 운영에서는 Exa MCP 또는 REST API를 통해 동적으로 수집한다.
 const exaFeb2026Context = `[1] Tokyo Station x Narita Airport 포스트카드 캠페인
 출처: https://hololive.hololivepro.com/en/news/20260206-02-79/
 기간: 2026-02-13 ~ 2026-03-09
@@ -429,153 +453,57 @@ const exaMar2026Context = `[1] hololive SUPER EXPO 2026 & 7th fes. Ridin' on Dre
 func TestIntegration_Summarize_Weekly_ExaPlusWebSearch(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
-	events := feb2026Events()
-
-	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
-	if err != nil {
-		t.Fatalf("getSystemPrompt 실패: %v", err)
-	}
-	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21", exaFeb2026Context)
-	schema := summaryResponseSchema()
-
 	t.Logf("Model: %s (Exa pre-search + Responses API web_search)", model)
-	t.Logf("\n=== User Prompt (with Exa context) ===\n%s\n=== END ===", userPrompt)
 
-	rawJSON, err := client.GenerateJSON(context.Background(), sysPrompt, userPrompt, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON 실패: %v", err)
-	}
+	_, resp := generateSummaryResponse(t, client, feb2026Events(), SummaryTypeWeekly, "2026-02-21", exaFeb2026Context)
 
-	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
+	assertHighlightsNotEmpty(t, resp.Highlights)
+	logHighlights(t, resp.Highlights)
+	logOngoingEvents(t, resp.OngoingEvents)
+	logDiscoveredEvents(t, resp.DiscoveredEvents)
+	assertDiscoveredSourcesFilled(t, resp.DiscoveredEvents)
 
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
-	}
-
-	if len(resp.Highlights) == 0 {
-		t.Fatal("highlights가 비어있음")
-	}
-
-	for i, h := range resp.Highlights {
-		t.Logf("highlight[%d]: name=%q date=%q members=%q note=%q link=%q", i, h.Name, h.Date, h.Members, h.Note, h.Link)
-	}
-
-	// ongoing_events 검증
-	t.Logf("ongoing_events 수: %d", len(resp.OngoingEvents))
-	for i, o := range resp.OngoingEvents {
-		t.Logf("ongoing[%d]: name=%q date=%q note=%q link=%q", i, o.Name, o.Date, o.Note, o.Link)
-	}
-
-	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
-	for i, d := range resp.DiscoveredEvents {
-		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
-		if d.Source == "" {
-			t.Errorf("discovered[%d].source가 비어있음", i)
-		}
-	}
 	if len(resp.DiscoveredEvents) == 0 {
 		t.Fatal("Exa 컨텍스트 주입했지만 discovered_events 비어있음")
 	}
 
-	// 졸업 멤버 필터링
-	for i, h := range resp.Highlights {
-		if strings.Contains(h.Members, "沙花叉クロヱ") {
-			t.Errorf("highlight[%d].members에 졸업 멤버 沙花叉クロヱ 포함", i)
-		}
-	}
-
-	text := assembleSummaryText(&resp)
-	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
+	assertNoGraduatedMembers(t, resp.Highlights)
+	logAssembledText(t, resp)
 }
 
 func TestIntegration_Summarize_Monthly_ExaPlusWebSearch(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
-	events := mar2026Events()
-
-	sysPrompt, err := getSystemPrompt(SummaryTypeMonthly)
-	if err != nil {
-		t.Fatalf("getSystemPrompt 실패: %v", err)
-	}
-	userPrompt := buildUserPrompt(events, SummaryTypeMonthly, "2026-03", exaMar2026Context)
-	schema := summaryResponseSchema()
-
 	t.Logf("Model: %s (Exa pre-search + Responses API web_search)", model)
 
-	rawJSON, err := client.GenerateJSON(context.Background(), sysPrompt, userPrompt, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON 실패: %v", err)
-	}
+	rawJSON, resp := generateSummaryResponse(t, client, mar2026Events(), SummaryTypeMonthly, "2026-03", exaMar2026Context)
 
-	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
+	assertHighlightsNotEmpty(t, resp.Highlights)
+	logHighlights(t, resp.Highlights)
+	logOngoingEvents(t, resp.OngoingEvents)
+	logDiscoveredEvents(t, resp.DiscoveredEvents)
 
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
-	}
-
-	if len(resp.Highlights) == 0 {
-		t.Fatal("highlights가 비어있음")
-	}
-
-	for i, h := range resp.Highlights {
-		t.Logf("highlight[%d]: name=%q date=%q members=%q note=%q link=%q", i, h.Name, h.Date, h.Members, h.Note, h.Link)
-	}
-
-	// ongoing_events 검증
-	t.Logf("ongoing_events 수: %d", len(resp.OngoingEvents))
-	for i, o := range resp.OngoingEvents {
-		t.Logf("ongoing[%d]: name=%q date=%q note=%q link=%q", i, o.Name, o.Date, o.Note, o.Link)
-	}
-
-	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
-	for i, d := range resp.DiscoveredEvents {
-		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
-	}
 	if len(resp.DiscoveredEvents) == 0 {
 		t.Fatal("Exa 컨텍스트 주입했지만 discovered_events 비어있음")
 	}
 
-	// SUPER EXPO 포함 확인
-	fesKeywords := []string{"EXPO", "fes", "7th"}
-	foundFes := false
-	for _, kw := range fesKeywords {
-		if strings.Contains(rawJSON, kw) {
-			foundFes = true
-			break
-		}
-	}
-	if !foundFes {
-		t.Error("SUPER EXPO/fes 관련 키워드가 없음")
-	}
+	assertContainsFesKeyword(t, rawJSON, "SUPER EXPO/fes 관련 키워드가 없음")
 
 	// 졸업 멤버 필터링
 	if strings.Contains(rawJSON, "天音かなた") {
 		t.Error("졸업 멤버 天音かなた 포함")
 	}
 
-	text := assembleSummaryText(&resp)
-	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
-
-	if strings.Contains(text, "[추가 발견]") {
-		t.Logf("OK: Exa+web_search 병행으로 추가 이벤트 발견")
+	if text := logAssembledText(t, resp); strings.Contains(text, "[추가 발견]") {
+		t.Log("OK: Exa+web_search 병행으로 추가 이벤트 발견")
 	}
 }
 
-// exaFeb2026WithANIPLUS: 기존 exaFeb2026Context + ANIPLUS 한국 파트너 이벤트 추가
+// exaFeb2026WithANIPLUS: 기존 exaFeb2026Context + ANIPLUS 한국 파트너 이벤트 추가.
 const exaFeb2026WithANIPLUS = exaFeb2026Context + `
 
 [6] ANIPLUS x hololive 라이브 뷰잉 — Hoshimachi Suisei Live "SuperNova: REBOOT"
@@ -591,50 +519,28 @@ const exaFeb2026WithANIPLUS = exaFeb2026Context + `
 func TestIntegration_Summarize_DateAccuracy(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
-	events := feb2026Events()
-
-	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
-	if err != nil {
-		t.Fatalf("getSystemPrompt 실패: %v", err)
-	}
-	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21")
-	schema := summaryResponseSchema()
-
 	t.Logf("Model: %s (날짜 정확도 검증 — example 오염 제거 후)", model)
 
-	rawJSON, err := client.GenerateJSON(context.Background(), sysPrompt, userPrompt, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON 실패: %v", err)
-	}
+	_, resp := generateSummaryResponse(t, client, feb2026Events(), SummaryTypeWeekly, "2026-02-21")
 
-	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
-
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
-	}
-
-	if len(resp.Highlights) == 0 {
-		t.Fatal("highlights가 비어있음")
-	}
+	assertHighlightsNotEmpty(t, resp.Highlights)
 
 	// 날짜 정확도 검증: SuperNova → 2/21 (입력 데이터 기준), NOT 2/20 (이전 example 오염)
 	for _, h := range resp.Highlights {
 		t.Logf("highlight: name=%q date=%q", h.Name, h.Date)
+
 		if strings.Contains(h.Name, "SuperNova") {
 			if !strings.Contains(h.Date, "2/21") {
 				t.Errorf("SuperNova 날짜 오류: got %q, want 2/21 포함", h.Date)
 			}
+
 			if strings.Contains(h.Date, "2/20") {
 				t.Errorf("SuperNova 날짜가 example 오염됨: got %q (2/20은 이전 example의 잘못된 날짜)", h.Date)
 			}
 		}
+
 		// First MISSION → 2/25 시작 (입력 데이터 기준)
 		if strings.Contains(h.Name, "First MISSION") || strings.Contains(h.Name, "holoX") {
 			if !strings.Contains(h.Date, "2/25") {
@@ -643,63 +549,21 @@ func TestIntegration_Summarize_DateAccuracy(t *testing.T) {
 		}
 	}
 
-	text := assembleSummaryText(&resp)
-	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
+	logAssembledText(t, resp)
 }
 
 func TestIntegration_Summarize_ANIPLUSDiscovery(t *testing.T) {
 	skipIfNoCliproxy(t)
 
-	model := os.Getenv("CLIPROXY_TEST_MODEL")
-	if model == "" {
-		model = "gpt-5.4"
-	}
-
+	model := testModel()
 	client := newTestClient(t, model)
-	events := feb2026Events()
-
-	sysPrompt, err := getSystemPrompt(SummaryTypeWeekly)
-	if err != nil {
-		t.Fatalf("getSystemPrompt 실패: %v", err)
-	}
-	userPrompt := buildUserPrompt(events, SummaryTypeWeekly, "2026-02-21", exaFeb2026WithANIPLUS)
-	schema := summaryResponseSchema()
-
 	t.Logf("Model: %s (ANIPLUS 이벤트 발견 검증 — Exa 컨텍스트 포함)", model)
 
-	rawJSON, err := client.GenerateJSON(context.Background(), sysPrompt, userPrompt, schema)
-	if err != nil {
-		t.Fatalf("GenerateJSON 실패: %v", err)
-	}
+	_, resp := generateSummaryResponse(t, client, feb2026Events(), SummaryTypeWeekly, "2026-02-21", exaFeb2026WithANIPLUS)
 
-	t.Logf("\n=== Raw JSON ===\n%s\n=== END ===", rawJSON)
-
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		t.Fatalf("JSON 파싱 실패: %v\nraw: %s", err, rawJSON)
-	}
-
-	// discovered_events에 ANIPLUS 관련 이벤트 존재 검증
-	t.Logf("discovered_events 수: %d", len(resp.DiscoveredEvents))
-	foundANIPLUS := false
-	for i, d := range resp.DiscoveredEvents {
-		t.Logf("discovered[%d]: name=%q date=%q note=%q source=%q", i, d.Name, d.Date, d.Note, d.Source)
-		if strings.Contains(d.Name, "ANIPLUS") || strings.Contains(d.Name, "라이브 뷰잉") ||
-			strings.Contains(d.Source, "aniplus") {
-			foundANIPLUS = true
-		}
-	}
-
-	if !foundANIPLUS {
-		t.Error("discovered_events에 ANIPLUS/라이브 뷰잉 관련 이벤트 미발견 — KR 파트너 힌트가 효과 없음")
-	}
-
-	// trusted source 필터 검증: aniplus.co.kr은 trusted
-	for i, d := range resp.DiscoveredEvents {
-		if d.Source != "" && !isTrustedDiscoveredSource(d.Source) {
-			t.Errorf("discovered[%d].source %q is not trusted — should be filtered", i, d.Source)
-		}
-	}
+	logDiscoveredEvents(t, resp.DiscoveredEvents)
+	assertANIPLUSDiscovered(t, resp.DiscoveredEvents)
+	assertDiscoveredSourcesTrusted(t, resp.DiscoveredEvents)
 
 	// 날짜 정확도도 함께 검증
 	for _, h := range resp.Highlights {
@@ -708,10 +572,30 @@ func TestIntegration_Summarize_ANIPLUSDiscovery(t *testing.T) {
 		}
 	}
 
-	text := assembleSummaryText(&resp)
-	t.Logf("\n=== Assembled Text ===\n%s\n=== END ===", text)
-
-	if strings.Contains(text, "[추가 발견]") {
+	if text := logAssembledText(t, resp); strings.Contains(text, "[추가 발견]") {
 		t.Log("OK: ANIPLUS 이벤트가 추가 발견 섹션에 포함됨")
+	}
+}
+
+func assertANIPLUSDiscovered(t *testing.T, events []discoveredEvent) {
+	t.Helper()
+
+	for _, d := range events {
+		if strings.Contains(d.Name, "ANIPLUS") || strings.Contains(d.Name, "라이브 뷰잉") ||
+			strings.Contains(d.Source, "aniplus") {
+			return
+		}
+	}
+
+	t.Error("discovered_events에 ANIPLUS/라이브 뷰잉 관련 이벤트 미발견 — KR 파트너 힌트가 효과 없음")
+}
+
+func assertDiscoveredSourcesTrusted(t *testing.T, events []discoveredEvent) {
+	t.Helper()
+
+	for i, d := range events {
+		if d.Source != "" && !isTrustedDiscoveredSource(d.Source) {
+			t.Errorf("discovered[%d].source %q is not trusted — should be filtered", i, d.Source)
+		}
 	}
 }

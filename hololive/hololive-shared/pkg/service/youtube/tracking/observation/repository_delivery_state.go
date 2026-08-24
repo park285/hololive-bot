@@ -2,6 +2,7 @@ package observation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,8 +14,9 @@ func (r *deliveryStateRepository) MarkAlarmSentBatch(ctx context.Context, marks 
 	if len(marks) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("mark alarm sent batch: db is nil")
+		return errors.New("mark alarm sent batch: db is nil")
 	}
 
 	normalized, err := normalizeAlarmSentMarks(marks)
@@ -39,15 +41,19 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 
 	inputs, err := newBulkAlarmSentMarkInputs(marks)
 	if err != nil {
-		return err
+		return fmt.Errorf("bulk alarm sent mark inputs: %w", err)
 	}
 
 	updatedAt := yttimestamp.Normalize(time.Now())
-	var trackingUpdated int64
-	var claimedStateFinalized int64
-	var authorizationMismatches int64
-	var existingStateUpdated int64
-	var missingStateInserted int64
+
+	var (
+		trackingUpdated         int64
+		claimedStateFinalized   int64
+		authorizationMismatches int64
+		existingStateUpdated    int64
+		missingStateInserted    int64
+	)
+
 	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, inputs.kinds, inputs.contentIDs, inputs.canonicalContentIDs, inputs.rawContentIDs, inputs.alarmSentAts, inputs.authorizedAts, updatedAt).Scan(
 		&trackingUpdated,
 		&claimedStateFinalized,
@@ -57,6 +63,7 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 	); err != nil {
 		return fmt.Errorf("bulk mark alarm sent: %w", err)
 	}
+
 	if authorizationMismatches > 0 {
 		return fmt.Errorf("bulk mark alarm sent: claim authorization mismatch count=%d", authorizationMismatches)
 	}
@@ -71,12 +78,14 @@ func normalizeAlarmSentMarks(marks []AlarmSentMark) ([]AlarmSentMark, error) {
 	for i, mark := range marks {
 		normalizedMark, identity, err := normalizeAlarmSentMark(i, mark)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("normalize alarm sent mark: %w", err)
 		}
+
 		if existingIndex, ok := indexByIdentity[identity]; ok {
 			if err := mergeAlarmSentMark(&normalized[existingIndex], normalizedMark, identity, i); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("merge alarm sent mark: %w", err)
 			}
+
 			continue
 		}
 
@@ -92,31 +101,37 @@ func normalizeAlarmSentMark(index int, mark AlarmSentMark) (AlarmSentMark, strin
 	if err != nil {
 		return AlarmSentMark{}, "", fmt.Errorf("normalize mark at index %d: %w", index, err)
 	}
+
 	if mark.AlarmSentAt.IsZero() {
 		return AlarmSentMark{}, "", fmt.Errorf("normalize mark at index %d: alarm sent at is empty", index)
 	}
 
-	normalizedAuthorizedAt, err := normalizeAlarmSentAuthorizedAt(index, mark.AuthorizedAt)
-	if err != nil {
-		return AlarmSentMark{}, "", err
+	var normalizedAuthorizedAt *time.Time
+
+	if mark.AuthorizedAt != nil {
+		normalizedAuthorizedAt, err = normalizeAlarmSentAuthorizedAt(index, *mark.AuthorizedAt)
+		if err != nil {
+			return AlarmSentMark{}, "", fmt.Errorf("normalize alarm sent authorized at: %w", err)
+		}
 	}
+
 	normalizedMark := AlarmSentMark{
 		Kind:         normalizedKind,
 		ContentID:    normalizedContentID,
 		AlarmSentAt:  yttimestamp.Normalize(mark.AlarmSentAt),
 		AuthorizedAt: normalizedAuthorizedAt,
 	}
+
 	return normalizedMark, alarmSentMarkIdentity(normalizedKind, normalizedContentID), nil
 }
 
-func normalizeAlarmSentAuthorizedAt(index int, authorizedAt *time.Time) (*time.Time, error) {
-	if authorizedAt == nil {
-		return nil, nil
-	}
+func normalizeAlarmSentAuthorizedAt(index int, authorizedAt time.Time) (*time.Time, error) {
 	if authorizedAt.IsZero() {
 		return nil, fmt.Errorf("normalize mark at index %d: authorized at is empty", index)
 	}
-	normalized := yttimestamp.Normalize(*authorizedAt)
+
+	normalized := yttimestamp.Normalize(authorizedAt)
+
 	return &normalized, nil
 }
 
@@ -128,15 +143,19 @@ func mergeAlarmSentMark(existing *AlarmSentMark, next AlarmSentMark, identity st
 	if next.AlarmSentAt.Before(existing.AlarmSentAt) {
 		existing.AlarmSentAt = next.AlarmSentAt
 	}
+
 	if existing.AuthorizedAt == nil {
 		existing.AuthorizedAt = next.AuthorizedAt
 		return nil
 	}
+
 	if next.AuthorizedAt == nil {
 		return nil
 	}
+
 	if !existing.AuthorizedAt.Equal(*next.AuthorizedAt) {
 		return fmt.Errorf("normalize mark at index %d: conflicting authorized_at for %s", index, identity)
 	}
+
 	return nil
 }

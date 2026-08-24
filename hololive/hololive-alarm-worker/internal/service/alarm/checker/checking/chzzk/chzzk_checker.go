@@ -30,13 +30,13 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
@@ -89,7 +89,12 @@ func (c *ChzzkChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, 
 		return nil, fmt.Errorf("check chzzk streams: load member names: %w", err)
 	}
 
-	return c.collectChzzkNotifications(ctx, channelMappings, subscriberMap, memberNames, time.Now().UTC())
+	out, err := c.collectChzzkNotifications(ctx, channelMappings, subscriberMap, memberNames, time.Now().UTC())
+	if err != nil {
+		return out, fmt.Errorf("collect chzzk notifications: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *ChzzkChecker) collectChzzkNotifications(
@@ -102,6 +107,7 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 	notifications := make([]*domain.AlarmNotification, 0)
 
 	var mu sync.Mutex
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(checking.DefaultLookupConcurrency)
 
@@ -118,6 +124,7 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 			}
 
 			mu.Lock()
+
 			notifications = append(notifications, channelNotifications...)
 			mu.Unlock()
 
@@ -140,6 +147,7 @@ func (c *ChzzkChecker) lookupChzzkNotifications(ctx context.Context, job chzzkLo
 			slog.String("chzzk_channel_id", job.chzzkChannelID),
 			slog.Any("error", liveErr),
 		)
+
 		return nil
 	}
 
@@ -164,7 +172,7 @@ func isChzzkLive(status *chzzk.LiveStatusContent) bool {
 }
 
 // 이 Stream.ID는 Notifier의 Valkey dedup claim 키 재료(notified:claim:*)라 방송당 값이
-// 고정돼야 한다. streamfeed 쪽 시간 bucket ID와 통일 금지 — 흔들리면 중복 알림이 나간다.
+// 고정돼야 한다. 이 값을 streamfeed 쪽 시간 bucket ID와 통일하면 안 된다 — 흔들리면 중복 알림이 나간다.
 func buildChzzkLiveStream(
 	youtubeChannelID string,
 	chzzkChannelID string,
@@ -174,11 +182,13 @@ func buildChzzkLiveStream(
 ) *domain.Stream {
 	youtubeChannelID = strings.TrimSpace(youtubeChannelID)
 	chzzkChannelID = strings.TrimSpace(chzzkChannelID)
+
 	if youtubeChannelID == "" || chzzkChannelID == "" {
 		return nil
 	}
 
 	title := "치지직 라이브"
+
 	if status != nil && strings.TrimSpace(status.LiveTitle) != "" {
 		title = strings.TrimSpace(status.LiveTitle)
 	}
@@ -211,6 +221,7 @@ func buildChzzkLiveStream(
 
 	if status != nil {
 		viewerCount := status.ConcurrentUserCount
+
 		stream.ViewerCount = &viewerCount
 	}
 

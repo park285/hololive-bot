@@ -37,8 +37,9 @@ type scheduleVideoRow struct {
 func parseScheduleSnapshot(body []byte) (contract.ScheduleSnapshotV1, error) {
 	items, err := parseScheduleItems(body)
 	if err != nil {
-		return contract.ScheduleSnapshotV1{}, err
+		return contract.ScheduleSnapshotV1{}, fmt.Errorf("parse schedule items: %w", err)
 	}
+
 	return contract.ScheduleSnapshotV1{
 		GroupKey: officialScheduleSubject,
 		Items:    items,
@@ -49,44 +50,59 @@ func parseScheduleSnapshot(body []byte) (contract.ScheduleSnapshotV1, error) {
 func parseScheduleItems(body []byte) ([]contract.ScheduleItemV1, error) {
 	groups, err := decodeScheduleGroups(body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode schedule groups: %w", err)
 	}
+
 	items := make([]contract.ScheduleItemV1, 0)
 	seen := make(map[string]struct{})
 	totalRows := 0
 	validRows := 0
+
 	for index, rawGroup := range groups {
 		groupItems, rowCount, validCount, err := parseScheduleGroup(rawGroup, index, seen)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse schedule group: %w", err)
 		}
+
 		totalRows += rowCount
 		validRows += validCount
+
 		items = append(items, groupItems...)
 	}
+
 	if totalRows > 0 && validRows == 0 {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule has no valid rows")
 	}
+
 	return items, nil
 }
 
 func decodeScheduleGroups(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !jsontext.Value(trimmed).IsValid() || len(trimmed) == 0 || trimmed[0] != '{' {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule response is not a JSON object")
 	}
+
 	var root map[string]jsontext.Value
+
 	if err := jsonv2.Unmarshal(trimmed, &root); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule: %w", err))
 	}
+
 	rawGroups, ok := root["dateGroupList"]
 	if !ok || bytes.Equal(bytes.TrimSpace(rawGroups), []byte("null")) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule dateGroupList is missing")
 	}
+
 	var groups []jsontext.Value
+
 	if err := jsonv2.Unmarshal(rawGroups, &groups); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule dateGroupList: %w", err))
 	}
+
 	return groups, nil
 }
 
@@ -97,67 +113,87 @@ func parseScheduleGroup(
 ) (items []contract.ScheduleItemV1, rowCount, validCount int, err error) {
 	rows, err := decodeScheduleRows(rawGroup, index)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, fmt.Errorf("decode schedule rows: %w", err)
 	}
+
 	items = make([]contract.ScheduleItemV1, 0, len(rows))
 	for _, rawRow := range rows {
 		item, err := parseScheduleRow(rawRow)
 		if err != nil {
 			continue
 		}
+
 		validCount++
+
 		if _, exists := seen[item.ExternalID]; exists {
 			continue
 		}
+
 		seen[item.ExternalID] = struct{}{}
 		items = append(items, item)
 	}
+
 	return items, len(rows), validCount, nil
 }
 
 func decodeScheduleRows(rawGroup jsontext.Value, index int) ([]jsontext.Value, error) {
 	var group map[string]jsontext.Value
+
 	if err := jsonv2.Unmarshal(rawGroup, &group); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule group %d: %w", index, err))
 	}
+
 	rawRows, ok := group["videoList"]
 	if !ok || bytes.Equal(bytes.TrimSpace(rawRows), []byte("null")) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule videoList is missing")
 	}
+
 	var rows []jsontext.Value
+
 	if err := jsonv2.Unmarshal(rawRows, &rows); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule videoList: %w", err))
 	}
+
 	return rows, nil
 }
 
 func parseScheduleRow(rawRow jsontext.Value) (contract.ScheduleItemV1, error) {
 	var row scheduleVideoRow
+
 	if err := jsonv2.Unmarshal(rawRow, &row); err != nil {
 		return contract.ScheduleItemV1{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule row: %w", err))
 	}
+
 	videoID, err := parseScheduleVideoID(row.URL)
 	if err != nil {
-		return contract.ScheduleItemV1{}, err
+		return contract.ScheduleItemV1{}, fmt.Errorf("parse schedule video ID: %w", err)
 	}
+
 	scheduledAt, err := time.ParseInLocation(officialDatetimeLayout, strings.TrimSpace(row.Datetime), officialScheduleJST)
 	if err != nil {
 		return contract.ScheduleItemV1{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("parse official schedule datetime: %w", err))
 	}
+
 	title := strings.TrimSpace(row.Title)
 	if title == "" {
 		title = strings.TrimSpace(row.Name)
 	}
+
 	if title == "" {
 		title = strings.TrimSpace(row.Talent.Name)
 	}
+
 	if title == "" {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return contract.ScheduleItemV1{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule row title is empty")
 	}
+
 	collaboTalentNames, err := parseCollaboTalentNames(row.CollaboTalents, row.Name, row.Talent.Name)
 	if err != nil {
-		return contract.ScheduleItemV1{}, err
+		return contract.ScheduleItemV1{}, fmt.Errorf("parse collabo talent names: %w", err)
 	}
+
 	return contract.ScheduleItemV1{
 		ExternalID:         videoID,
 		VideoID:            videoID,
@@ -171,9 +207,15 @@ func parseScheduleRow(rawRow jsontext.Value) (contract.ScheduleItemV1, error) {
 func parseCollaboTalentNames(raw jsontext.Value, hostNames ...string) ([]string, error) {
 	names, err := decodeCollaboTalentNames(raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode collabo talent names: %w", err)
 	}
-	return collectCollaboTalentNames(names, collaboHostSkipSet(hostNames))
+
+	out, err := collectCollaboTalentNames(names, collaboHostSkipSet(hostNames))
+	if err != nil {
+		return out, fmt.Errorf("collect collabo talent names: %w", err)
+	}
+
+	return out, nil
 }
 
 func decodeCollaboTalentNames(raw jsontext.Value) ([]string, error) {
@@ -181,16 +223,20 @@ func decodeCollaboTalentNames(raw jsontext.Value) ([]string, error) {
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, nil
 	}
+
 	var talents []struct {
 		Name string `json:"name"`
 	}
+
 	if err := jsonv2.Unmarshal(trimmed, &talents); err != nil {
 		return nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode official schedule collaboTalents: %w", err))
 	}
+
 	names := make([]string, 0, len(talents))
 	for _, talent := range talents {
 		names = append(names, talent.Name)
 	}
+
 	return names, nil
 }
 
@@ -201,25 +247,31 @@ func collaboHostSkipSet(hostNames []string) map[string]struct{} {
 			skipped[key] = struct{}{}
 		}
 	}
+
 	return skipped
 }
 
 func collectCollaboTalentNames(names []string, skipped map[string]struct{}) ([]string, error) {
 	out := make([]string, 0, len(names))
 	seen := make(map[string]struct{}, len(names))
+
 	for _, name := range names {
 		collected, ok, err := collectCollaboTalentName(name, skipped, seen)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("collect collabo talent name: %w", err)
 		}
+
 		if !ok {
 			continue
 		}
+
 		out = append(out, collected)
 		if len(out) > contract.MaxScheduleCollaboTalentNames {
+			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule collaboTalents exceeds contract limit")
 		}
 	}
+
 	return out, nil
 }
 
@@ -228,17 +280,23 @@ func collectCollaboTalentName(name string, skipped, seen map[string]struct{}) (c
 	if trimmed == "" {
 		return "", false, nil
 	}
+
 	if len(trimmed) > contract.MaxScheduleCollaboTalentNameBytes {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", false, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule collabo talent name exceeds contract limit")
 	}
+
 	key := stringutil.Normalize(trimmed)
 	if _, skip := skipped[key]; skip {
 		return "", false, nil
 	}
+
 	if _, exists := seen[key]; exists {
 		return "", false, nil
 	}
+
 	seen[key] = struct{}{}
+
 	return trimmed, true, nil
 }
 
@@ -247,14 +305,19 @@ func parseScheduleVideoID(rawURL string) (string, error) {
 	if err != nil {
 		return "", collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("parse official schedule url: %w", err))
 	}
+
 	host := strings.ToLower(parsed.Hostname())
 	if parsed.Scheme != "https" || (host != "youtube.com" && host != "www.youtube.com") || parsed.Path != "/watch" {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule url is not a YouTube watch URL")
 	}
+
 	videoID := strings.TrimSpace(parsed.Query().Get("v"))
 	if !validVideoID(videoID) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "official schedule video id is invalid")
 	}
+
 	return videoID, nil
 }
 
@@ -262,11 +325,13 @@ func validVideoID(videoID string) bool {
 	if videoID == "" || len(videoID) > 128 {
 		return false
 	}
+
 	for _, char := range videoID {
 		if !validVideoIDChar(char) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -274,11 +339,14 @@ func validVideoIDChar(char rune) bool {
 	if char >= 'a' && char <= 'z' {
 		return true
 	}
+
 	if char >= 'A' && char <= 'Z' {
 		return true
 	}
+
 	if char >= '0' && char <= '9' {
 		return true
 	}
+
 	return char == '-' || char == '_'
 }

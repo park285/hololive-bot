@@ -73,7 +73,7 @@ func WithReasoningEffort(effort string) Option {
 	}
 }
 
-// WithCostTracker는 토큰 사용량 관측기를 주입한다. nil이면 관측 비활성(no-op).
+// WithCostTracker는 토큰 사용량 관측기를 주입한다. 인자가 nil이면 관측이 비활성화된다(no-op).
 func WithCostTracker(tracker CostTracker) Option {
 	return func(o *Options) {
 		if tracker != nil {

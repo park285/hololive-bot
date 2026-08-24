@@ -21,12 +21,16 @@
 package member
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
+
+// 조회 실패와 구분하기 위해, 일치하는 행이 없을 때만 이 오류가 반환된다.
+var ErrMemberNotFound = errors.New("member not found")
 
 type Repository struct {
 	pool   *pgxpool.Pool

@@ -22,6 +22,7 @@ package membernews
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -33,7 +34,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/filter"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	newssummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -66,6 +66,7 @@ func NewService(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	service := &Service{
 		repository:      repository,
 		summarizer:      summarizer,
@@ -74,9 +75,11 @@ func NewService(
 		logger:          logger,
 		now:             time.Now,
 	}
+
 	for _, opt := range opts {
 		opt(service)
 	}
+
 	return service
 }
 
@@ -84,19 +87,22 @@ func (s *Service) SetClock(clockFn func() time.Time) {
 	if s == nil || clockFn == nil {
 		return
 	}
+
 	s.now = clockFn
 }
 
 func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period model.Period) (*model.Digest, error) {
 	if err := s.validateGenerateRoomDigestRequest(roomID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate generate room digest request: %w", err)
 	}
 
 	normalizedPeriod := model.NormalizePeriod(period)
+
 	members, err := s.repository.GetRoomMembers(ctx, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("get room members: %w", err)
 	}
+
 	if len(members) == 0 {
 		return nil, model.ErrNoSubscribedMembers
 	}
@@ -112,29 +118,35 @@ func (s *Service) GenerateRoomDigest(ctx context.Context, roomID string, period 
 	}
 
 	filtered := filter.FilterCandidates(candidates, normalizedPeriod, s.now(), members, memberProvider, s.sourceValidator)
+
 	filtered, err = filterPromptCandidates(filtered, s.promptGuard, s.logger)
 	if err != nil {
 		return nil, fmt.Errorf("guard member news candidates: %w", err)
 	}
+
 	if len(filtered) == 0 {
 		return emptyDigest(normalizedPeriod), nil
 	}
 
 	digest := s.summarizeRoomDigest(ctx, roomID, normalizedPeriod, members, filtered)
 	normalizeDigest(digest, normalizedPeriod, len(filtered))
+
 	return digest, nil
 }
 
 func (s *Service) validateGenerateRoomDigestRequest(roomID string) error {
 	if s == nil {
-		return fmt.Errorf("membernews service is nil")
+		return errors.New("membernews service is nil")
 	}
+
 	if s.repository == nil {
-		return fmt.Errorf("membernews repository is nil")
+		return errors.New("membernews repository is nil")
 	}
+
 	if stringutil.TrimSpace(roomID) == "" {
-		return fmt.Errorf("room id is required")
+		return errors.New("room id is required")
 	}
+
 	return nil
 }
 
@@ -153,7 +165,9 @@ func emptyDigest(period model.Period) *model.Digest {
 func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period model.Period, members []string, filtered []model.FilteredCandidate) *model.Digest {
 	if s.summarizer == nil {
 		digest := newssummarizer.BuildDeterministicFallback(period, filtered)
+
 		digest.TotalCount = len(filtered)
+
 		return digest
 	}
 
@@ -170,6 +184,7 @@ func (s *Service) summarizeRoomDigest(ctx context.Context, roomID string, period
 			slog.String("period", string(period)),
 			slog.String("error", err.Error()),
 		)
+
 		digest = newssummarizer.BuildDeterministicFallback(period, filtered)
 	}
 
@@ -185,60 +200,72 @@ func normalizeDigest(digest *model.Digest, period model.Period, totalCount int) 
 	if digest.Headline == "" {
 		digest.Headline = model.DefaultHeadline(period)
 	}
+
 	if digest.OmittedCount < 0 {
 		digest.OmittedCount = 0
 	}
+
 	digest.TotalCount = totalCount
 }
 
 func (s *Service) SubscribeRoom(ctx context.Context, roomID, roomName string) error {
 	if s == nil || s.repository == nil {
-		return fmt.Errorf("membernews repository is nil")
+		return errors.New("membernews repository is nil")
 	}
+
 	if err := s.repository.Subscribe(ctx, roomID, roomName); err != nil {
 		return fmt.Errorf("subscribe room: %w", err)
 	}
+
 	return nil
 }
 
 func (s *Service) UnsubscribeRoom(ctx context.Context, roomID string) error {
 	if s == nil || s.repository == nil {
-		return fmt.Errorf("membernews repository is nil")
+		return errors.New("membernews repository is nil")
 	}
+
 	if err := s.repository.Unsubscribe(ctx, roomID); err != nil {
 		return fmt.Errorf("unsubscribe room: %w", err)
 	}
+
 	return nil
 }
 
 func (s *Service) IsRoomSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if s == nil || s.repository == nil {
-		return false, fmt.Errorf("membernews repository is nil")
+		return false, errors.New("membernews repository is nil")
 	}
+
 	subscribed, err := s.repository.IsSubscribed(ctx, roomID)
 	if err != nil {
 		return false, fmt.Errorf("check room subscription: %w", err)
 	}
+
 	return subscribed, nil
 }
 
 func (s *Service) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
 	if s == nil || s.repository == nil {
-		return nil, fmt.Errorf("membernews repository is nil")
+		return nil, errors.New("membernews repository is nil")
 	}
+
 	rooms, err := s.repository.ListSubscribedRooms(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list subscribed rooms: %w", err)
 	}
+
 	return rooms, nil
 }
 
 func (s *Service) WarmupSubscriptionCache(ctx context.Context) error {
 	if s == nil || s.repository == nil {
-		return fmt.Errorf("membernews repository is nil")
+		return errors.New("membernews repository is nil")
 	}
+
 	if err := s.repository.WarmupCacheFromDB(ctx); err != nil {
 		return fmt.Errorf("warmup subscription cache: %w", err)
 	}
+
 	return nil
 }

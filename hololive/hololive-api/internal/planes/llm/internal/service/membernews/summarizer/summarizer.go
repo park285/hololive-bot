@@ -22,11 +22,11 @@ package summarizer
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
@@ -35,9 +35,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-var (
-	kst = util.KSTZone
-)
+var kst = util.KSTZone
 
 var categoryLabels = map[model.Category]string{
 	model.CategoryBirthdayLive: "생일 라이브",
@@ -85,15 +83,18 @@ func NewSummarizer(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	summarizer := &SummarizerImpl{
 		llm:       llm,
 		searcher:  searcher,
 		validator: validator,
 		logger:    logger,
 	}
+
 	for _, opt := range opts {
 		opt(summarizer)
 	}
+
 	return summarizer
 }
 
@@ -101,6 +102,7 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 	if input == nil {
 		return newEmptyDigest(model.PeriodWeekly, 0), nil
 	}
+
 	if len(input.Candidates) == 0 {
 		return newEmptyDigest(input.Period, 0), nil
 	}
@@ -112,24 +114,29 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 	searchContext, err := s.searchContext(ctx, input)
 	if err != nil {
 		s.logger.Error("MemberNews external content guard unavailable", slog.String("error", err.Error()))
+
 		return newEmptyDigest(input.Period, len(input.Candidates)), nil
 	}
 
 	raw, err := s.llm.GenerateJSON(ctx, memberNewsSystemPrompt(), buildMemberNewsUserPrompt(input, searchContext), memberNewsSummarySchema())
 	if err != nil {
 		s.logger.Warn("MemberNews LLM failed, using fallback", slog.String("error", err.Error()))
+
 		return BuildDeterministicFallback(input.Period, input.Candidates), nil
 	}
 
 	var response summaryResponse
+
 	if err := jsonv2.Unmarshal([]byte(raw), &response); err != nil {
 		s.logger.Warn("MemberNews schema parse failed, using fallback", slog.String("error", err.Error()))
+
 		return BuildDeterministicFallback(input.Period, input.Candidates), nil
 	}
 
 	digest := s.validateAndBuildDigest(input, &response)
 	if len(digest.TopItems) == 0 {
 		s.logger.Warn("MemberNews validator dropped all items, using fallback")
+
 		return BuildDeterministicFallback(input.Period, input.Candidates), nil
 	}
 
@@ -142,15 +149,19 @@ func (s *SummarizerImpl) searchContext(ctx context.Context, input *model.Summari
 	}
 
 	query := buildSearchQuery(input.Period, input.RoomMembers, input.Now)
+
 	results, err := s.searcher.Search(ctx, query)
 	if err != nil {
 		s.logger.Warn("MemberNews Exa search failed (graceful)", slog.Any("error", err))
+
 		return "", nil
 	}
+
 	results, err = guardrail.FilterSearchResults(results, s.promptGuard, s.logger, "membernews_search")
 	if err != nil {
 		return "", fmt.Errorf("guard member news search results: %w", err)
 	}
+
 	return formatSearchContext(results), nil
 }
 
@@ -246,6 +257,7 @@ func summaryResponseItemHasRequiredFields(item *summaryResponseItem) bool {
 
 func validateSummaryResponseItemSource(item *summaryResponseItem, validator model.SourceURLValidator) (string, bool) {
 	normalizedURL := strings.TrimSpace(item.SourceURL)
+
 	if validator == nil {
 		return normalizedURL, true
 	}
@@ -254,9 +266,11 @@ func validateSummaryResponseItemSource(item *summaryResponseItem, validator mode
 	if err != nil {
 		return "", false
 	}
+
 	if tier == model.SourceTierCommunity && !validator.HasCorroboration(item.Summary) {
 		return "", false
 	}
+
 	return sourceURL, true
 }
 
@@ -265,6 +279,7 @@ func categoryLabel(cat model.Category) string {
 	if label, ok := categoryLabels[cat]; ok {
 		return label
 	}
+
 	return "기타"
 }
 
@@ -274,11 +289,13 @@ func BuildDeterministicFallback(period model.Period, candidates []model.Filtered
 		if idx >= 5 {
 			break
 		}
+
 		candidate := &candidates[idx]
 
 		localTime := candidate.EffectiveDate.In(kst)
 		dateText := fmt.Sprintf("%d/%d(%s)", localTime.Month(), localTime.Day(), sharedmodel.WeekdayKR[localTime.Weekday()])
 		summary := fmt.Sprintf("%s %s - %s", dateText, categoryLabel(candidate.Category), candidate.Candidate.Title)
+
 		items = append(items, model.SummaryItem{
 			Member:    candidate.MemberText,
 			Category:  string(candidate.Category),
@@ -290,11 +307,13 @@ func BuildDeterministicFallback(period model.Period, candidates []model.Filtered
 	}
 
 	omitted := 0
+
 	if len(candidates) > len(items) {
 		omitted = len(candidates) - len(items)
 	}
 
 	moreSummary := ""
+
 	if omitted > 0 {
 		moreSummary = fmt.Sprintf("외 %d건", omitted)
 	}
@@ -315,5 +334,6 @@ func normalizeCategory(raw string) model.Category {
 	if category, ok := normalizedCategories[normalized]; ok {
 		return category
 	}
+
 	return model.CategoryOther
 }

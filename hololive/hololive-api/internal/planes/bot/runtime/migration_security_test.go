@@ -58,9 +58,11 @@ func readMigrationSQL(t *testing.T, relativePath string) string {
 	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", ".."))
 	root := filepath.Join(moduleRoot, "scripts", "migrations")
 	rel, err := filepath.Rel(root, filepath.Join(moduleRoot, relativePath))
+
 	if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) || !fs.ValidPath(filepath.ToSlash(rel)) {
 		t.Fatalf("invalid migration path %s: %v", relativePath, err)
 	}
+
 	content, err := fs.ReadFile(os.DirFS(root), filepath.ToSlash(rel))
 	if err != nil {
 		t.Fatalf("read migration %s: %v", relativePath, err)

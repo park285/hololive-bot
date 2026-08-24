@@ -1,8 +1,9 @@
 package apiservice
 
 import (
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 func TestRecentScraperVideoIDs(t *testing.T) {
@@ -50,9 +51,11 @@ func TestRecentScraperVideoIDs(t *testing.T) {
 			if got == nil {
 				t.Fatalf("recentScraperVideoIDs(%v) = nil, want non-nil slice", tt.videos)
 			}
+
 			if len(got) != len(tt.want) {
 				t.Fatalf("recentScraperVideoIDs(%v) len = %d, want %d (got %v)", tt.videos, len(got), len(tt.want), got)
 			}
+
 			for i := range tt.want {
 				if got[i] != tt.want[i] {
 					t.Fatalf("recentScraperVideoIDs(%v)[%d] = %q, want %q", tt.videos, i, got[i], tt.want[i])

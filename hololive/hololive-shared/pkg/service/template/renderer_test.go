@@ -32,6 +32,7 @@ func TestTemplateFuncs_Add(t *testing.T) {
 	if !ok {
 		t.Fatalf("template func add has type %T", templateFuncs["add"])
 	}
+
 	tests := []struct {
 		a, b     int
 		expected int
@@ -61,9 +62,11 @@ func TestTemplateFuncs_Dict(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+
 		if result["key1"] != "value1" {
 			t.Errorf("expected key1=value1, got %v", result["key1"])
 		}
+
 		if result["key2"] != 42 {
 			t.Errorf("expected key2=42, got %v", result["key2"])
 		}
@@ -89,6 +92,7 @@ func TestTemplateFuncs_Truncate(t *testing.T) {
 	if !ok {
 		t.Fatalf("template func truncate has type %T", templateFuncs["truncate"])
 	}
+
 	tests := []struct {
 		maxLen   int
 		input    string
@@ -164,12 +168,14 @@ func TestTemplateFuncs_FormatNumberFuncs_AcceptInt(t *testing.T) {
 	}
 
 	var buf strings.Builder
+
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("failed to execute template: %v", err)
 	}
 
 	result := buf.String()
 	expected := "15,000 1.5만"
+
 	if result != expected {
 		t.Errorf("template output = %q, expected %q", result, expected)
 	}

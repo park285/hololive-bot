@@ -24,30 +24,38 @@ import "fmt"
 
 type jobHeap []*Job
 
-func (h jobHeap) Len() int { return len(h) }
+func (h *jobHeap) Len() int { return len(*h) }
 
-func (h jobHeap) Less(i, j int) bool {
-	if !h[i].NextRunAt.Equal(h[j].NextRunAt) {
-		return h[i].NextRunAt.Before(h[j].NextRunAt)
+func (h *jobHeap) Less(i, j int) bool {
+	jobs := *h
+
+	if !jobs[i].NextRunAt.Equal(jobs[j].NextRunAt) {
+		return jobs[i].NextRunAt.Before(jobs[j].NextRunAt)
 	}
-	return h[i].Priority > h[j].Priority
+
+	return jobs[i].Priority > jobs[j].Priority
 }
 
-func (h jobHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
+func (h *jobHeap) Swap(i, j int) {
+	jobs := *h
+
+	jobs[i], jobs[j] = jobs[j], jobs[i]
+	jobs[i].index = i
+	jobs[j].index = j
 }
 
 func (h *jobHeap) Push(x any) {
 	n := len(*h)
 	job, ok := x.(*Job)
+
 	if !ok {
 		panic(fmt.Sprintf("jobHeap.Push got %T, want *Job", x))
 	}
+
 	if job == nil {
 		panic("jobHeap.Push got nil *Job")
 	}
+
 	job.index = n
 	*h = append(*h, job)
 }
@@ -56,7 +64,9 @@ func (h *jobHeap) Pop() any {
 	old := *h
 	n := len(old)
 	job := old[n-1]
+
 	job.index = -1
 	*h = old[0 : n-1]
+
 	return job
 }

@@ -1,6 +1,7 @@
 package sourceobservation
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -43,35 +44,47 @@ type Thumbnail struct {
 
 func (p *CommunityPayloadV1) normalizeAndValidate(subjectKey string) error {
 	if err := validateCommunityPayloadIdentity(p, subjectKey); err != nil {
-		return err
+		return fmt.Errorf("validate community payload identity: %w", err)
 	}
+
 	if err := prepareCommunityPosts(p); err != nil {
-		return err
+		return fmt.Errorf("prepare community posts: %w", err)
 	}
+
 	if err := validateCommunityPosts(p); err != nil {
-		return err
+		return fmt.Errorf("validate community posts: %w", err)
 	}
+
 	sort.Slice(p.Posts, func(i, j int) bool { return p.Posts[i].PostID < p.Posts[j].PostID })
+
 	return nil
 }
 
 func validateCommunityPayloadIdentity(p *CommunityPayloadV1, subjectKey string) error {
 	if err := validateIdentifier("channel id", p.ChannelID, 256); err != nil {
-		return err
+		return fmt.Errorf("validate identifier: %w", err)
 	}
+
 	if p.ChannelID != subjectKey {
-		return fmt.Errorf("validate community payload: channel id does not match subject key")
+		return errors.New("validate community payload: channel id does not match subject key")
 	}
-	return p.Coverage.normalizeAndValidate(subjectKey)
+
+	if err := p.Coverage.normalizeAndValidate(subjectKey); err != nil {
+		return fmt.Errorf("normalize and validate: %w", err)
+	}
+
+	return nil
 }
 
 func prepareCommunityPosts(p *CommunityPayloadV1) error {
 	if len(p.Posts) > MaxCommunityPosts {
 		return fmt.Errorf("validate community payload: post count exceeds %d", MaxCommunityPosts)
 	}
+
 	if p.Posts == nil {
 		p.Posts = []CommunityPostV1{}
 	}
+
 	return nil
 }
 
@@ -81,44 +94,62 @@ func validateCommunityPosts(p *CommunityPayloadV1) error {
 		if err := p.Posts[i].validate(p.ChannelID); err != nil {
 			return fmt.Errorf("validate community payload: post %d: %w", i, err)
 		}
+
 		if _, exists := seen[p.Posts[i].PostID]; exists {
 			return fmt.Errorf("validate community payload: duplicate post id %q", p.Posts[i].PostID)
 		}
+
 		seen[p.Posts[i].PostID] = struct{}{}
 	}
+
 	return nil
 }
 
 func (p *CommunityPayloadV1) Validate(subjectKey string) error {
-	return p.normalizeAndValidate(subjectKey)
+	if err := p.normalizeAndValidate(subjectKey); err != nil {
+		return fmt.Errorf("normalize and validate: %w", err)
+	}
+
+	return nil
 }
 
 func (p *CommunityPostV1) validate(channelID string) error {
 	if err := validateCommunityPostIdentity(p, channelID); err != nil {
-		return err
+		return fmt.Errorf("validate community post identity: %w", err)
 	}
+
 	if err := validateCommunityPostText(p); err != nil {
-		return err
+		return fmt.Errorf("validate community post text: %w", err)
 	}
+
 	if err := validateCommunityPostTimesAndCounts(p); err != nil {
-		return err
+		return fmt.Errorf("validate community post times and counts: %w", err)
 	}
+
 	if err := validateThumbnails("author photo", p.AuthorPhoto); err != nil {
-		return err
+		return fmt.Errorf("validate thumbnails: %w", err)
 	}
-	return validateThumbnails("images", p.Images)
+
+	if err := validateThumbnails("images", p.Images); err != nil {
+		return fmt.Errorf("validate thumbnails: %w", err)
+	}
+
+	return nil
 }
 
 func validateCommunityPostIdentity(p *CommunityPostV1, channelID string) error {
 	if err := validateIdentifier("post id", p.PostID, 256); err != nil {
-		return err
+		return fmt.Errorf("validate identifier: %w", err)
 	}
+
 	if err := validateOptionalIdentifier("upstream post id", p.UpstreamPostID, 256); err != nil {
-		return err
+		return fmt.Errorf("validate optional identifier: %w", err)
 	}
+
 	if p.ChannelID != channelID {
-		return fmt.Errorf("post channel id does not match payload channel id")
+		return errors.New("post channel id does not match payload channel id")
 	}
+
 	return nil
 }
 
@@ -128,9 +159,10 @@ func validateCommunityPostText(p *CommunityPostV1) error {
 		"published text": p.PublishedText, "video id": p.VideoID,
 	} {
 		if err := validateOptionalText(name, value, communityTextLimit(name)); err != nil {
-			return err
+			return fmt.Errorf("validate optional text: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -138,22 +170,27 @@ func communityTextLimit(name string) int {
 	if name == "content text" {
 		return 100000
 	}
+
 	if name == "video id" {
 		return 128
 	}
+
 	return 512
 }
 
 func validateCommunityPostTimesAndCounts(p *CommunityPostV1) error {
 	if p.PublishedAt != nil && p.PublishedAt.IsZero() {
-		return fmt.Errorf("published at must not point to the zero time")
+		return errors.New("published at must not point to the zero time")
 	}
+
 	if err := normalizeOptionalTime(&p.PublishedAt); err != nil {
 		return fmt.Errorf("published at: %w", err)
 	}
+
 	if p.LikeCount < 0 || p.CommentCount < 0 {
-		return fmt.Errorf("like and comment counts must be non-negative")
+		return errors.New("like and comment counts must be non-negative")
 	}
+
 	return nil
 }
 
@@ -161,12 +198,15 @@ func validateThumbnails(name string, thumbnails []Thumbnail) error {
 	if len(thumbnails) > maxCommunityThumbnails {
 		return fmt.Errorf("%s count exceeds %d", name, maxCommunityThumbnails)
 	}
+
 	for i := range thumbnails {
 		if err := validateThumbnail(name, i, thumbnails[i]); err != nil {
-			return err
+			return fmt.Errorf("validate thumbnail: %w", err)
 		}
 	}
+
 	sort.Slice(thumbnails, lessThumbnail(thumbnails))
+
 	return nil
 }
 
@@ -174,9 +214,11 @@ func validateThumbnail(name string, index int, thumbnail Thumbnail) error {
 	if err := validateHTTPSURL(name+" url", thumbnail.URL); err != nil {
 		return fmt.Errorf("%s %d: %w", name, index, err)
 	}
+
 	if thumbnail.Width < 0 || thumbnail.Width > 10000 || thumbnail.Height < 0 || thumbnail.Height > 10000 {
 		return fmt.Errorf("%s %d: dimensions are outside the accepted range", name, index)
 	}
+
 	return nil
 }
 
@@ -185,24 +227,29 @@ func lessThumbnail(thumbnails []Thumbnail) func(int, int) bool {
 		if thumbnails[i].URL != thumbnails[j].URL {
 			return thumbnails[i].URL < thumbnails[j].URL
 		}
+
 		if thumbnails[i].Width != thumbnails[j].Width {
 			return thumbnails[i].Width < thumbnails[j].Width
 		}
+
 		return thumbnails[i].Height < thumbnails[j].Height
 	}
 }
 
 func validateHTTPSURL(name, value string) error {
 	if err := validateIdentifier(name, value, 2048); err != nil {
-		return err
+		return fmt.Errorf("validate identifier: %w", err)
 	}
+
 	parsed, err := url.Parse(value)
 	if err != nil {
 		return fmt.Errorf("%s is invalid: %w", name, err)
 	}
+
 	if parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
 		return fmt.Errorf("%s must be an absolute HTTPS URL without user information", name)
 	}
+
 	return nil
 }
 
@@ -211,12 +258,15 @@ func validateIdentifier(name, value string, maxLength int) error {
 	if trimmed == "" {
 		return fmt.Errorf("%s is empty", name)
 	}
+
 	if trimmed != value {
 		return fmt.Errorf("%s must not contain surrounding whitespace", name)
 	}
+
 	if len(value) > maxLength {
 		return fmt.Errorf("%s exceeds %d bytes", name, maxLength)
 	}
+
 	return nil
 }
 
@@ -224,11 +274,14 @@ func validateOptionalText(name, value string, maxLength int) error {
 	if value == "" {
 		return nil
 	}
+
 	if len(value) > maxLength {
 		return fmt.Errorf("%s exceeds %d bytes", name, maxLength)
 	}
+
 	if !strings.ContainsAny(value, "\n\r\t") && strings.TrimSpace(value) != value {
 		return fmt.Errorf("%s must not contain surrounding whitespace", name)
 	}
+
 	return nil
 }

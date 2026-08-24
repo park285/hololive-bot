@@ -22,16 +22,15 @@ package botruntime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
+	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
+	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
-	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -47,8 +46,9 @@ func initAlarmDependencies(
 ) (*appbootstrap.AlarmDependencies, error) {
 	deps, err := appbootstrap.InitAlarmDependencies(chzzkConfig, twitchConfig, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init alarm dependencies: %w", err)
 	}
+
 	return deps, nil
 }
 
@@ -62,7 +62,8 @@ func initAlarmModeComponents(
 ) (*appbootstrap.AlarmModeComponents, error) {
 	components, err := appbootstrap.InitAlarmModeComponents(ctx, appConfig, infra, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init alarm mode components: %w", err)
 	}
+
 	return components, nil
 }

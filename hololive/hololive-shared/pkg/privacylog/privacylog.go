@@ -73,6 +73,7 @@ func Pseudonym(value string) string {
 	}
 
 	mac := hmac.New(sha256.New, pseudonymKey)
+
 	_, _ = mac.Write([]byte(trimmed))
 
 	return PseudonymPrefix + hex.EncodeToString(mac.Sum(nil)[:pseudonymBytes])

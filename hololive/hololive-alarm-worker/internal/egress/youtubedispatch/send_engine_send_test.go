@@ -6,7 +6,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -17,7 +16,7 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -30,7 +29,8 @@ import (
 
 func newSendTestRenderer(t *testing.T) *template.Renderer {
 	t.Helper()
-	return template.NewRenderer(dbtest.NewPool(t), slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	return template.NewRenderer(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 }
 
 func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
@@ -38,7 +38,7 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 
 	cache := cachemocks.NewLenientClient()
 
-	return NewDispatcher(nil, cache, sender, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	return NewDispatcher(nil, cache, sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -56,16 +56,19 @@ type groupedPermanentFailureSender struct {
 func (s *groupedPermanentFailureSender) SendMessage(_ context.Context, roomID, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.messages = append(s.messages, roomID+":"+message)
 	if strings.Contains(message, "쇼츠1") && strings.Contains(message, "쇼츠2") {
 		return fmt.Errorf("grouped send rejected: %w", iris.ErrPermanent)
 	}
+
 	return nil
 }
 
 func (s *groupedPermanentFailureSender) messageCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return len(s.messages)
 }
 
@@ -73,51 +76,91 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 	t.Parallel()
 
 	lookedUpKeys := make([]string, 0, 2)
+
 	var lookedUpKeysMu sync.Mutex
+
 	cache := cachemocks.NewStrictClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		lookedUpKeysMu.Lock()
+
 		lookedUpKeys = append(lookedUpKeys, key)
 		lookedUpKeysMu.Unlock()
+
 		switch key {
-		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeShorts):
-			return []string{"room-shorts"}, nil
-		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeCommunity):
-			return []string{"room-community"}, nil
+		case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
+			return []string{testRoomShorts}, nil
+		case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
+			return []string{testRoomCommunity}, nil
 		default:
 			return nil, nil
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{})
-	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
-		{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
-		{ChannelID: "UCtarget", Kind: domain.OutboxKindCommunityPost},
-		{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
+		{ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort},
+		{ChannelID: testChannelTarget, Kind: domain.OutboxKindCommunityPost},
+		{ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort},
 	})
 
 	lookedUpKeysMu.Lock()
+
 	recordedKeys := append([]string(nil), lookedUpKeys...)
 	lookedUpKeysMu.Unlock()
 
 	if len(recordedKeys) != 2 {
 		t.Fatalf("lookup count = %d, want 2", len(recordedKeys))
 	}
+
 	if !sameStrings(recordedKeys, []string{
-		sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeShorts),
-		sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeCommunity),
+		sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts),
+		sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity),
 	}) {
 		t.Fatalf("lookedUpKeys = %#v", recordedKeys)
 	}
 
-	targets, ok := roomsByChannel["UCtarget"]
-	if !ok {
-		t.Fatalf("roomsByChannel missing UCtarget")
+	assertChannelTargetRooms(t, roomsByChannel)
+}
+
+type subscriberLookupGate struct {
+	firstStarted  chan struct{}
+	releaseFirst  chan struct{}
+	secondStarted chan struct{}
+	callCount     atomic.Int32
+}
+
+func (g *subscriberLookupGate) lookup(_ context.Context, key string) ([]string, error) {
+	if g.callCount.Add(1) == 1 {
+		close(g.firstStarted)
+		<-g.releaseFirst
+	} else {
+		g.secondStarted <- struct{}{}
 	}
-	if len(targets[domain.AlarmTypeShorts]) != 1 || !targets[domain.AlarmTypeShorts]["room-shorts"] {
+
+	switch key {
+	case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeShorts):
+		return []string{testRoomShorts}, nil
+	case sharedalarmkeys.BuildChannelSubscriberKey(testChannelTarget, domain.AlarmTypeCommunity):
+		return []string{testRoomCommunity}, nil
+	default:
+		return nil, nil
+	}
+}
+
+func assertChannelTargetRooms(t *testing.T, roomsByChannel map[string]channelAlarmRoomTargets) {
+	t.Helper()
+
+	targets, ok := roomsByChannel[testChannelTarget]
+	if !ok {
+		t.Fatal("roomsByChannel missing UCtarget")
+	}
+
+	if len(targets[domain.AlarmTypeShorts]) != 1 || !targets[domain.AlarmTypeShorts][testRoomShorts] {
 		t.Fatalf("shorts rooms = %#v", targets[domain.AlarmTypeShorts])
 	}
-	if len(targets[domain.AlarmTypeCommunity]) != 1 || !targets[domain.AlarmTypeCommunity]["room-community"] {
+
+	if len(targets[domain.AlarmTypeCommunity]) != 1 || !targets[domain.AlarmTypeCommunity][testRoomCommunity] {
 		t.Fatalf("community rooms = %#v", targets[domain.AlarmTypeCommunity])
 	}
 }
@@ -125,78 +168,55 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) {
 	t.Parallel()
 
-	firstStarted := make(chan struct{})
-	releaseFirst := make(chan struct{})
-	secondStarted := make(chan struct{}, 1)
-	var callCount atomic.Int32
-
-	cache := cachemocks.NewStrictClient()
-	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		callNumber := callCount.Add(1)
-		if callNumber == 1 {
-			close(firstStarted)
-			<-releaseFirst
-		} else {
-			secondStarted <- struct{}{}
-		}
-
-		switch key {
-		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeShorts):
-			return []string{"room-shorts"}, nil
-		case sharedalarmkeys.BuildChannelSubscriberKey("UCtarget", domain.AlarmTypeCommunity):
-			return []string{"room-community"}, nil
-		default:
-			return nil, nil
-		}
+	gate := &subscriberLookupGate{
+		firstStarted:  make(chan struct{}),
+		releaseFirst:  make(chan struct{}),
+		secondStarted: make(chan struct{}, 1),
 	}
+	cache := cachemocks.NewStrictClient()
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	cache.SMembersFunc = gate.lookup
+
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		SubscriberLookupParallelism: 1,
 	})
 
 	done := make(chan map[string]channelAlarmRoomTargets, 1)
+
 	go func() {
-		done <- dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
-			{ChannelID: "UCtarget", Kind: domain.OutboxKindNewShort},
-			{ChannelID: "UCtarget", Kind: domain.OutboxKindCommunityPost},
+		done <- dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
+			{ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort},
+			{ChannelID: testChannelTarget, Kind: domain.OutboxKindCommunityPost},
 		})
 	}()
 
 	select {
-	case <-firstStarted:
+	case <-gate.firstStarted:
 	case <-time.After(time.Second):
 		t.Fatal("first subscriber lookup did not start")
 	}
 
 	select {
-	case <-secondStarted:
+	case <-gate.secondStarted:
 		t.Fatal("second subscriber lookup started before first finished")
 	case <-time.After(20 * time.Millisecond):
 	}
 
-	close(releaseFirst)
+	close(gate.releaseFirst)
 
 	var roomsByChannel map[string]channelAlarmRoomTargets
+
 	select {
 	case roomsByChannel = <-done:
 	case <-time.After(time.Second):
 		t.Fatal("collectRoomsByChannel() did not complete")
 	}
 
-	if callCount.Load() != 2 {
-		t.Fatalf("lookup count = %d, want 2", callCount.Load())
+	if gate.callCount.Load() != 2 {
+		t.Fatalf("lookup count = %d, want 2", gate.callCount.Load())
 	}
 
-	targets, ok := roomsByChannel["UCtarget"]
-	if !ok {
-		t.Fatalf("roomsByChannel missing UCtarget")
-	}
-	if len(targets[domain.AlarmTypeShorts]) != 1 || !targets[domain.AlarmTypeShorts]["room-shorts"] {
-		t.Fatalf("shorts rooms = %#v", targets[domain.AlarmTypeShorts])
-	}
-	if len(targets[domain.AlarmTypeCommunity]) != 1 || !targets[domain.AlarmTypeCommunity]["room-community"] {
-		t.Fatalf("community rooms = %#v", targets[domain.AlarmTypeCommunity])
-	}
+	assertChannelTargetRooms(t, roomsByChannel)
 }
 
 func sameStrings(left, right []string) bool {
@@ -208,17 +228,20 @@ func sameStrings(left, right []string) bool {
 	for _, item := range left {
 		counts[item]++
 	}
+
 	for _, item := range right {
 		counts[item]--
 		if counts[item] < 0 {
 			return false
 		}
 	}
+
 	for _, count := range counts {
 		if count != 0 {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -226,23 +249,23 @@ func TestGroupDeliveryRows(t *testing.T) {
 	t.Parallel()
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
-		3: {ID: 3, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
+		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 		4: {ID: 4, ChannelID: "UCch2", Kind: domain.OutboxKindNewShort, Payload: `{"video_id":"s3","title":"쇼츠3"}`},
-		5: {ID: 5, ChannelID: "UCch1", Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"100만"}`},
-		6: {ID: 6, ChannelID: "UCch1", Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"200만"}`},
+		5: {ID: 5, ChannelID: testChannelCh1, Kind: domain.OutboxKindMilestone, Payload: testPayloadMilestone},
+		6: {ID: 6, ChannelID: testChannelCh1, Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"200만"}`},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
-		{ID: 103, OutboxID: 3, RoomID: "room1"},
-		{ID: 104, OutboxID: 4, RoomID: "room1"},
-		{ID: 105, OutboxID: 1, RoomID: "room2"},
-		{ID: 106, OutboxID: 99, RoomID: "room1"},
-		{ID: 107, OutboxID: 5, RoomID: "room1"},
-		{ID: 108, OutboxID: 6, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
+		{ID: 103, OutboxID: 3, RoomID: testRoom1},
+		{ID: 104, OutboxID: 4, RoomID: testRoom1},
+		{ID: 105, OutboxID: 1, RoomID: testRoom2},
+		{ID: 106, OutboxID: 99, RoomID: testRoom1},
+		{ID: 107, OutboxID: 5, RoomID: testRoom1},
+		{ID: 108, OutboxID: 6, RoomID: testRoom1},
 	}
 
 	groups, orphans := groupDeliveryRows(rows, outboxByID)
@@ -255,32 +278,52 @@ func TestGroupDeliveryRows(t *testing.T) {
 		t.Fatalf("group count = %d, want 6", len(groups))
 	}
 
+	assertShortsDeliveryGroup(t, groups)
+	assertMilestoneDeliveryGroups(t, groups)
+}
+
+func assertShortsDeliveryGroup(t *testing.T, groups []deliveryGroup) {
+	t.Helper()
+
 	var shortsGroup *deliveryGroup
+
 	for i := range groups {
-		if groups[i].roomID == "room1" && groups[i].channelID == "UCch1" && groups[i].kind == domain.OutboxKindNewShort {
+		if groups[i].roomID == testRoom1 && groups[i].channelID == testChannelCh1 && groups[i].kind == domain.OutboxKindNewShort {
 			shortsGroup = &groups[i]
 			break
 		}
 	}
+
 	if shortsGroup == nil {
-		t.Fatalf("shorts group for room1+UCch1 not found")
+		t.Fatal("shorts group for room1+UCch1 not found")
 	}
+
 	if len(shortsGroup.rows) != 2 {
 		t.Fatalf("shorts group row count = %d, want 2", len(shortsGroup.rows))
 	}
+
 	if len(shortsGroup.outboxes) != 2 {
 		t.Fatalf("shorts group outbox count = %d, want 2", len(shortsGroup.outboxes))
 	}
+}
+
+func assertMilestoneDeliveryGroups(t *testing.T, groups []deliveryGroup) {
+	t.Helper()
 
 	milestoneCount := 0
-	for _, g := range groups {
-		if g.kind == domain.OutboxKindMilestone {
-			milestoneCount++
-			if len(g.rows) != 1 {
-				t.Fatalf("milestone group should be single-item, got %d rows", len(g.rows))
-			}
+
+	for i := range groups {
+		if groups[i].kind != domain.OutboxKindMilestone {
+			continue
+		}
+
+		milestoneCount++
+
+		if len(groups[i].rows) != 1 {
+			t.Fatalf("milestone group should be single-item, got %d rows", len(groups[i].rows))
 		}
 	}
+
 	if milestoneCount != 2 {
 		t.Fatalf("milestone group count = %d, want 2", milestoneCount)
 	}
@@ -316,7 +359,7 @@ func TestValidateOutboxPayload(t *testing.T) {
 		},
 		{
 			name:   "milestone always valid",
-			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindMilestone, Payload: `{"milestone":"100만"}`},
+			item:   domain.YouTubeNotificationOutbox{Kind: domain.OutboxKindMilestone, Payload: testPayloadMilestone},
 			wantOK: true,
 		},
 		{
@@ -329,6 +372,7 @@ func TestValidateOutboxPayload(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := validateOutboxPayload(&tt.item); got != tt.wantOK {
 				t.Fatalf("validateOutboxPayload() = %v, want %v", got, tt.wantOK)
 			}
@@ -339,22 +383,26 @@ func TestValidateOutboxPayload(t *testing.T) {
 func TestBuildDeliverySendRequest(t *testing.T) {
 	t.Parallel()
 
-	req, err := buildDeliverySendRequest("room1", "message", []domain.YouTubeNotificationOutbox{
-		{Kind: domain.OutboxKindNewShort, ContentID: "short-1"},
-		{Kind: domain.OutboxKindCommunityPost, ContentID: "post-1"},
+	req, err := buildDeliverySendRequest(testRoom1, "message", []domain.YouTubeNotificationOutbox{
+		{Kind: domain.OutboxKindNewShort, ContentID: testShortOne},
+		{Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne},
 	})
 	if err != nil {
 		t.Fatalf("buildDeliverySendRequest() error = %v", err)
 	}
-	if req.roomID != "room1" {
+
+	if req.roomID != testRoom1 {
 		t.Fatalf("roomID = %q, want room1", req.roomID)
 	}
+
 	if len(req.dedupeKeys) != 2 {
 		t.Fatalf("dedupeKeys count = %d, want 2", len(req.dedupeKeys))
 	}
-	if req.dedupeKeys[0] != "youtube-notification:NEW_SHORT:short-1" {
+
+	if req.dedupeKeys[0] != testDedupeKeyShortOne {
 		t.Fatalf("first dedupe key = %q", req.dedupeKeys[0])
 	}
+
 	if req.dedupeKeys[1] != "youtube-notification:COMMUNITY_POST:post-1" {
 		t.Fatalf("second dedupe key = %q", req.dedupeKeys[1])
 	}
@@ -363,12 +411,13 @@ func TestBuildDeliverySendRequest(t *testing.T) {
 func TestBuildDeliverySendRequestRejectsEmptyDedupeKey(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildDeliverySendRequest("room1", "message", []domain.YouTubeNotificationOutbox{
+	_, err := buildDeliverySendRequest(testRoom1, "message", []domain.YouTubeNotificationOutbox{
 		{Kind: domain.OutboxKindNewShort, ContentID: "   "},
 	})
 	if err == nil {
-		t.Fatalf("buildDeliverySendRequest() error = nil, want error")
+		t.Fatal("buildDeliverySendRequest() error = nil, want error")
 	}
+
 	if !errors.Is(err, ErrDeliveryDedupeKeyRequired) {
 		t.Fatalf("buildDeliverySendRequest() error = %v, want ErrDeliveryDedupeKeyRequired", err)
 	}
@@ -380,16 +429,18 @@ func TestSendDeliveryMessageRejectsMissingDedupeKeysWithoutSending(t *testing.T)
 	sender := &testSender{failRoom: map[string]bool{}}
 	d := newTestDispatcherForSend(t, sender)
 
-	err := d.send.sendDeliveryMessage(context.Background(), deliverySendRequest{roomID: "room1", message: "message"})
+	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{roomID: testRoom1, message: "message"})
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want error")
 	}
+
 	if !errors.Is(err, ErrDeliveryDedupeKeyRequired) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want ErrDeliveryDedupeKeyRequired", err)
 	}
 
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
+
 	if len(sender.messages) != 0 {
 		t.Fatalf("sender message count = %d, want 0", len(sender.messages))
 	}
@@ -401,20 +452,22 @@ func TestSendDeliveryMessageRejectsBlankDedupeKeyWithoutSending(t *testing.T) {
 	sender := &testSender{failRoom: map[string]bool{}}
 	d := newTestDispatcherForSend(t, sender)
 
-	err := d.send.sendDeliveryMessage(context.Background(), deliverySendRequest{
-		roomID:     "room1",
+	err := d.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
+		roomID:     testRoom1,
 		message:    "message",
-		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-1", "   "},
+		dedupeKeys: []string{testDedupeKeyShortOne, "   "},
 	})
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want error")
 	}
+
 	if !errors.Is(err, ErrDeliveryDedupeKeyRequired) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want ErrDeliveryDedupeKeyRequired", err)
 	}
 
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
+
 	if len(sender.messages) != 0 {
 		t.Fatalf("sender message count = %d, want 0", len(sender.messages))
 	}
@@ -426,34 +479,42 @@ func TestSendDeliveryMessagePassesStableClientRequestID(t *testing.T) {
 	sender := &testSender{failRoom: map[string]bool{}}
 	dispatcher := newTestDispatcherForSend(t, sender)
 	req := deliverySendRequest{
-		roomID:     "room1",
+		roomID:     testRoom1,
 		message:    "message",
-		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-1"},
+		dedupeKeys: []string{testDedupeKeyShortOne},
 	}
 
-	if err := dispatcher.send.sendDeliveryMessage(context.Background(), req); err != nil {
+	if err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
 		t.Fatalf("sendDeliveryMessage() error = %v", err)
 	}
-	if err := dispatcher.send.sendDeliveryMessage(context.Background(), req); err != nil {
+
+	if err := dispatcher.send.sendDeliveryMessage(t.Context(), req); err != nil {
 		t.Fatalf("sendDeliveryMessage() repeat error = %v", err)
 	}
+
 	otherRoomReq := req
-	otherRoomReq.roomID = "room2"
-	if err := dispatcher.send.sendDeliveryMessage(context.Background(), otherRoomReq); err != nil {
+
+	otherRoomReq.roomID = testRoom2
+
+	if err := dispatcher.send.sendDeliveryMessage(t.Context(), otherRoomReq); err != nil {
 		t.Fatalf("sendDeliveryMessage() other room error = %v", err)
 	}
 
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
+
 	if len(sender.clientRequestIDs) != 3 {
 		t.Fatalf("clientRequestIDs count = %d, want 3", len(sender.clientRequestIDs))
 	}
+
 	if sender.clientRequestIDs[0] == "" || !strings.HasPrefix(sender.clientRequestIDs[0], "hololive-outbox:") {
 		t.Fatalf("clientRequestID = %q, want hololive-outbox prefix", sender.clientRequestIDs[0])
 	}
+
 	if sender.clientRequestIDs[0] != sender.clientRequestIDs[1] {
 		t.Fatalf("clientRequestID repeat = %q, want %q", sender.clientRequestIDs[1], sender.clientRequestIDs[0])
 	}
+
 	if sender.clientRequestIDs[2] == sender.clientRequestIDs[0] {
 		t.Fatalf("clientRequestID for different room reused %q", sender.clientRequestIDs[2])
 	}
@@ -464,7 +525,7 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShorts, "{{.Title}}\n{{.URL}}")
-	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -474,24 +535,26 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 	})
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 
 	sender.mu.Lock()
+
 	msgCount := len(sender.messages)
 	sender.mu.Unlock()
+
 	if msgCount != 2 {
 		t.Fatalf("sender message count = %d, want 2 (fallback)", msgCount)
 	}
@@ -502,7 +565,7 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}")
 	sender := &failFirstSendTestSender{}
-	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -512,22 +575,24 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 	})
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 2 {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
+
 	if len(result.SuccessDeliveryIDs) != 0 {
 		t.Fatalf("successDeliveryIDs = %#v, want none", result.SuccessDeliveryIDs)
 	}
+
 	if got := sender.messageCount(); got != 1 {
 		t.Fatalf("sender message count = %d, want 1 grouped attempt without per-room fallback", got)
 	}
@@ -538,7 +603,7 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 
 	renderer := newShortsGroupAndSingleTemplateRenderer(t)
 	sender := &groupedPermanentFailureSender{}
-	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -548,22 +613,24 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 	})
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 0 {
 		t.Fatalf("failedDeliveries = %d, want 0", result.FailedDeliveries)
 	}
+
 	if len(result.SuccessDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs = %#v, want 2 successes", result.SuccessDeliveryIDs)
 	}
+
 	if got := sender.messageCount(); got != 3 {
 		t.Fatalf("sender message count = %d, want grouped attempt plus 2 individual fallbacks", got)
 	}
@@ -576,14 +643,15 @@ func TestDispatchDeliveryRows_OrphanRows(t *testing.T) {
 	d := newTestDispatcherForSend(t, sender)
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 99, RoomID: "room1"},
+		{ID: 101, OutboxID: 99, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, map[int64]domain.YouTubeNotificationOutbox{})
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, map[int64]domain.YouTubeNotificationOutbox{})
 
 	if result.FailedDeliveries != 1 {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
+
 	if ids, ok := result.FailureBuckets["outbox row not found"]; !ok || len(ids) != 1 || ids[0] != 101 {
 		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
 	}
@@ -596,26 +664,28 @@ func TestDispatchDeliveryRows_PayloadValidationEjection(t *testing.T) {
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"ok"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{broken json`},
-		3: {ID: 3, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-3", Payload: `{"video_id":"s3","title":"ok"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: `{"video_id":"s1","title":"ok"}`},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: `{broken json`},
+		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: "short-3", Payload: `{"video_id":"s3","title":"ok"}`},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
-		{ID: 103, OutboxID: 3, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
+		{ID: 103, OutboxID: 3, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	totalProcessed := len(result.SuccessDeliveryIDs) + result.FailedDeliveries
 	if totalProcessed != 3 {
 		t.Fatalf("total processed = %d, want 3", totalProcessed)
 	}
+
 	if result.FailedDeliveries != 1 {
 		t.Fatalf("failedDeliveries = %d, want 1 (broken payload)", result.FailedDeliveries)
 	}
+
 	if len(result.SuccessDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs count = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
@@ -628,24 +698,25 @@ func TestDispatchDeliveryRows_MixedBatch(t *testing.T) {
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
-		3: {ID: 3, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
-		4: {ID: 4, ChannelID: "UCch1", Kind: domain.OutboxKindMilestone, ContentID: "milestone-1", Payload: `{"milestone":"100만"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
+		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
+		4: {ID: 4, ChannelID: testChannelCh1, Kind: domain.OutboxKindMilestone, ContentID: "milestone-1", Payload: testPayloadMilestone},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
-		{ID: 103, OutboxID: 3, RoomID: "room1"},
-		{ID: 104, OutboxID: 4, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
+		{ID: 103, OutboxID: 3, RoomID: testRoom1},
+		{ID: 104, OutboxID: 4, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 4 {
 		t.Fatalf("successDeliveryIDs = %d, want 4", len(result.SuccessDeliveryIDs))
 	}
+
 	if len(result.TouchedOutboxIDs) != 4 {
 		t.Fatalf("touchedOutboxIDs = %d, want 4", len(result.TouchedOutboxIDs))
 	}
@@ -654,24 +725,25 @@ func TestDispatchDeliveryRows_MixedBatch(t *testing.T) {
 func TestDispatchDeliveryRows_SendFailure(t *testing.T) {
 	t.Parallel()
 
-	sender := &testSender{failRoom: map[string]bool{"room1": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom1: true}}
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 2 {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
+
 	if len(result.SuccessDeliveryIDs) != 0 {
 		t.Fatalf("successDeliveryIDs = %d, want 0", len(result.SuccessDeliveryIDs))
 	}
@@ -681,44 +753,49 @@ func messagesForRoom(t *testing.T, sender *testSender, roomID string) []string {
 	t.Helper()
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
+
 	prefix := roomID + ":"
 	matched := make([]string, 0, len(sender.messages))
+
 	for i := range sender.messages {
 		if strings.HasPrefix(sender.messages[i], prefix) {
 			matched = append(matched, sender.messages[i])
 		}
 	}
+
 	return matched
 }
 
 func TestDispatchDeliveryRows_MultiRoomPartialFailureIsolatesHealthyRoom(t *testing.T) {
 	t.Parallel()
 
-	sender := &testSender{failRoom: map[string]bool{"room2": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom2: true}}
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 1, RoomID: "room2"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 1, RoomID: testRoom2},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if got := result.SuccessDeliveryIDs; len(got) != 1 || got[0] != 101 {
 		t.Fatalf("successDeliveryIDs = %#v, want [101] (healthy room only)", got)
 	}
+
 	if result.FailedDeliveries != 1 {
 		t.Fatalf("failedDeliveries = %d, want 1 (failing room only)", result.FailedDeliveries)
 	}
-	failedIDs := result.FailureBuckets["send message"]
+
+	failedIDs := result.FailureBuckets[deliveryReasonSendMessage]
 	if len(failedIDs) != 1 || failedIDs[0] != 102 {
 		t.Fatalf("failure bucket = %#v, want [102] (failing room only)", result.FailureBuckets)
 	}
 
-	if healthy := messagesForRoom(t, sender, "room1"); len(healthy) != 1 {
+	if healthy := messagesForRoom(t, sender, testRoom1); len(healthy) != 1 {
 		t.Fatalf("healthy room message count = %d, want exactly 1", len(healthy))
 	}
 }
@@ -726,22 +803,23 @@ func TestDispatchDeliveryRows_MultiRoomPartialFailureIsolatesHealthyRoom(t *test
 func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testing.T) {
 	t.Parallel()
 
-	sender := &testSender{failRoom: map[string]bool{"room2": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom2: true}}
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 1, RoomID: "room2"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 1, RoomID: testRoom2},
 	}
 
-	first := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	first := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 	if got := first.SuccessDeliveryIDs; len(got) != 1 || got[0] != 101 {
 		t.Fatalf("first pass successDeliveryIDs = %#v, want [101]", got)
 	}
-	failedIDs := first.FailureBuckets["send message"]
+
+	failedIDs := first.FailureBuckets[deliveryReasonSendMessage]
 	if len(failedIDs) != 1 || failedIDs[0] != 102 {
 		t.Fatalf("first pass failure bucket = %#v, want [102]", first.FailureBuckets)
 	}
@@ -750,6 +828,7 @@ func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testi
 	for _, id := range first.SuccessDeliveryIDs {
 		successByID[id] = true
 	}
+
 	retryRows := make([]domain.YouTubeNotificationDelivery, 0, len(rows))
 	for i := range rows {
 		if !successByID[rows[i].ID] {
@@ -757,20 +836,23 @@ func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testi
 		}
 	}
 
-	delete(sender.failRoom, "room2")
-	second := d.send.dispatchDeliveryRows(context.Background(), retryRows, outboxByID)
+	delete(sender.failRoom, testRoom2)
+
+	second := d.send.dispatchDeliveryRows(t.Context(), retryRows, outboxByID)
 
 	if got := second.SuccessDeliveryIDs; len(got) != 1 || got[0] != 102 {
 		t.Fatalf("retry successDeliveryIDs = %#v, want [102] (previously failed row only)", got)
 	}
+
 	if second.FailedDeliveries != 0 {
 		t.Fatalf("retry failedDeliveries = %d, want 0", second.FailedDeliveries)
 	}
 
-	if healthy := messagesForRoom(t, sender, "room1"); len(healthy) != 1 {
+	if healthy := messagesForRoom(t, sender, testRoom1); len(healthy) != 1 {
 		t.Fatalf("healthy room message count after retry = %d, want exactly 1 (no resend)", len(healthy))
 	}
-	if recovered := messagesForRoom(t, sender, "room2"); len(recovered) != 1 {
+
+	if recovered := messagesForRoom(t, sender, testRoom2); len(recovered) != 1 {
 		t.Fatalf("recovered room message count = %d, want exactly 1 (retried once)", len(recovered))
 	}
 }
@@ -782,24 +864,26 @@ func TestDispatchDeliveryRows_EmptyDedupeKeyFailsWithoutSending(t *testing.T) {
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "   ", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: "   ", Payload: testPayloadShortOne},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 1 {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
+
 	if ids, ok := result.FailureBuckets["dedupe key"]; !ok || len(ids) != 1 || ids[0] != 101 {
 		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
 	}
 
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
+
 	if len(sender.messages) != 0 {
 		t.Fatalf("sender message count = %d, want 0", len(sender.messages))
 	}
@@ -812,18 +896,18 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsDedupeKey(t *testing.T) {
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, "Sent per-room delivery")
-	assertLogDedupeKeys(t, entry, []string{"youtube-notification:NEW_SHORT:short-1"})
+	assertLogDedupeKeys(t, entry, []string{testDedupeKeyShortOne})
 }
 
 func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
@@ -834,15 +918,15 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, renderer)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
@@ -850,7 +934,7 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsDedupeKey(t *testing.T) {
 
 	entry := findLogEntryByMessage(t, logBuffer, "Sent grouped delivery")
 	assertLogDedupeKeys(t, entry, []string{
-		"youtube-notification:NEW_SHORT:short-1",
+		testDedupeKeyShortOne,
 		"youtube-notification:NEW_SHORT:short-2",
 	})
 }
@@ -859,19 +943,19 @@ func TestDispatchDeliveryRows_GroupedSendFailureLogsDedupeKey(t *testing.T) {
 	t.Parallel()
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}")
-	sender := &testSender{failRoom: map[string]bool{"room1": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom1: true}}
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, renderer)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 2 {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
@@ -879,7 +963,7 @@ func TestDispatchDeliveryRows_GroupedSendFailureLogsDedupeKey(t *testing.T) {
 
 	entry := findLogEntryByMessage(t, logBuffer, "Failed to send grouped delivery")
 	assertLogDedupeKeys(t, entry, []string{
-		"youtube-notification:NEW_SHORT:short-1",
+		testDedupeKeyShortOne,
 		"youtube-notification:NEW_SHORT:short-2",
 	})
 }
@@ -891,11 +975,11 @@ func TestDispatchDeliveryRows_PerRoomBuildFailureLogsDedupeKey(t *testing.T) {
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "   ", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: "   ", Payload: testPayloadShortOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 1 {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
@@ -913,24 +997,24 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t 
 
 	lockedAt := time.Date(2026, time.April, 10, 1, 0, 0, 0, time.UTC)
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1", AttemptCount: 2, LockedAt: &lockedAt}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1, AttemptCount: 2, LockedAt: &lockedAt}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
-	assertSendLogStringField(t, entry, deliveryAuditContentIDLogField, "short-1")
-	assertSendLogStringField(t, entry, deliveryAuditPostIDLogField, "short-1")
+	assertSendLogStringField(t, entry, deliveryAuditContentIDLogField, testShortOne)
+	assertSendLogStringField(t, entry, deliveryAuditPostIDLogField, testShortOne)
 	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entry, deliveryAuditModeLogField, "per_room")
-	assertSendLogStringField(t, entry, deliveryDedupeKeyLogField, "youtube-notification:NEW_SHORT:short-1")
-	assertSendLogStringField(t, entry, logschema.FieldRoomID, "room1")
+	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
+	assertSendLogStringField(t, entry, deliveryDedupeKeyLogField, testDedupeKeyShortOne)
+	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
 	assertSendLogIntField(t, entry, logschema.FieldAttemptOrdinal, 3)
 
 	startedAt := readSendLogTimeField(t, entry, deliveryAttemptStartedAtLogField)
@@ -943,20 +1027,20 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 	t.Parallel()
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxCommunityGroup, "{{range .Items}}{{.ContentText}} {{.URL}}\n{{end}}")
-	sender := &testSender{failRoom: map[string]bool{"room1": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom1: true}}
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, renderer)
 
 	lockedAt := time.Date(2026, time.April, 10, 2, 0, 0, 0, time.UTC)
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindCommunityPost, ContentID: "post-1", Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindCommunityPost, ContentID: "post-2", Payload: `{"post_id":"post-2","content_text":"커뮤니티2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostTwo, Payload: `{"post_id":"post-2","content_text":"커뮤니티2"}`},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1", AttemptCount: 1, LockedAt: &lockedAt},
-		{ID: 102, OutboxID: 2, RoomID: "room1", AttemptCount: 1, LockedAt: &lockedAt},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1, AttemptCount: 1, LockedAt: &lockedAt},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1, AttemptCount: 1, LockedAt: &lockedAt},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 2 {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
@@ -967,14 +1051,21 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 		t.Fatalf("attempt start entry count = %d, want 2", len(entries))
 	}
 
+	assertGroupedAttemptStartedEntries(t, entries, lockedAt)
+}
+
+func assertGroupedAttemptStartedEntries(t *testing.T, entries []map[string]any, lockedAt time.Time) {
+	t.Helper()
+
 	contentIDs := make([]string, 0, len(entries))
 	postIDs := make([]string, 0, len(entries))
 	dedupeKeys := make([]string, 0, len(entries))
 	modes := make([]string, 0, len(entries))
+
 	for i := range entries {
 		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-		assertSendLogStringField(t, entries[i], logschema.FieldRoomID, "room1")
+		assertSendLogStringField(t, entries[i], logschema.FieldRoomID, testRoom1)
 		assertSendLogIntField(t, entries[i], logschema.FieldAttemptOrdinal, 2)
 
 		startedAt := readSendLogTimeField(t, entries[i], deliveryAttemptStartedAtLogField)
@@ -988,19 +1079,22 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 		modes = append(modes, readSendLogStringField(t, entries[i], deliveryAuditModeLogField))
 	}
 
-	if !sameStrings(contentIDs, []string{"post-1", "post-2"}) {
+	if !sameStrings(contentIDs, []string{testPostOne, testPostTwo}) {
 		t.Fatalf("attempt start content IDs = %#v", contentIDs)
 	}
-	if !sameStrings(postIDs, []string{"post-1", "post-2"}) {
+
+	if !sameStrings(postIDs, []string{testPostOne, testPostTwo}) {
 		t.Fatalf("attempt start post IDs = %#v", postIDs)
 	}
+
 	if !sameStrings(dedupeKeys, []string{
 		"youtube-notification:COMMUNITY_POST:post-1",
 		"youtube-notification:COMMUNITY_POST:post-2",
 	}) {
 		t.Fatalf("attempt start dedupe keys = %#v", dedupeKeys)
 	}
-	if !sameStrings(modes, []string{"grouped", "grouped"}) {
+
+	if !sameStrings(modes, []string{deliveryModeGrouped, deliveryModeGrouped}) {
 		t.Fatalf("attempt start delivery modes = %#v", modes)
 	}
 }
@@ -1012,11 +1106,11 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAttemptStarted(t *te
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
@@ -1036,27 +1130,27 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsCommunityShortsResult(t *testing
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, renderer)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 2 {
 		t.Fatalf("successDeliveryIDs = %d, want 2", len(result.SuccessDeliveryIDs))
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryResultLogMessage)
-	assertSendLogStringField(t, entry, logschema.FieldChannelID, "UCch1")
+	assertSendLogStringField(t, entry, logschema.FieldChannelID, testChannelCh1)
 	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, "success")
+	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entry, deliveryAuditModeLogField, "grouped")
-	assertSendLogStringField(t, entry, logschema.FieldRoomID, "room1")
+	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModeGrouped)
+	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
 	assertSendLogIntField(t, entry, logschema.FieldTargetAlarmCount, 2)
 	assertSendLogIntField(t, entry, logschema.FieldSuccessfulAlarmCount, 2)
 	assertSendLogIntField(t, entry, logschema.FieldFailedAlarmCount, 0)
@@ -1069,28 +1163,28 @@ func TestDispatchDeliveryRows_GroupedSuccessLogsCommunityShortsResult(t *testing
 func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing.T) {
 	t.Parallel()
 
-	sender := &testSender{failRoom: map[string]bool{"room1": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom1: true}}
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindCommunityPost, ContentID: "post-1", Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 1 {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryResultLogMessage)
-	assertSendLogStringField(t, entry, logschema.FieldChannelID, "UCch1")
+	assertSendLogStringField(t, entry, logschema.FieldChannelID, testChannelCh1)
 	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, "failure")
-	assertSendLogStringField(t, entry, deliveryAuditFailureReasonLogField, "send message")
+	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
+	assertSendLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entry, deliveryAuditModeLogField, "per_room")
-	assertSendLogStringField(t, entry, logschema.FieldRoomID, "room1")
+	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
+	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
 	assertSendLogIntField(t, entry, logschema.FieldTargetAlarmCount, 1)
 	assertSendLogIntField(t, entry, logschema.FieldSuccessfulAlarmCount, 0)
 	assertSendLogIntField(t, entry, logschema.FieldFailedAlarmCount, 1)
@@ -1107,11 +1201,11 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsResult(t *testing.T)
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
@@ -1130,11 +1224,11 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
@@ -1145,14 +1239,14 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.
 		t.Fatalf("audit entry count = %d, want 1", len(entries))
 	}
 
-	assertSendLogStringField(t, entries[0], deliveryAuditContentIDLogField, "short-1")
-	assertSendLogStringField(t, entries[0], deliveryAuditPostIDLogField, "short-1")
+	assertSendLogStringField(t, entries[0], deliveryAuditContentIDLogField, testShortOne)
+	assertSendLogStringField(t, entries[0], deliveryAuditPostIDLogField, testShortOne)
 	assertSendLogStringField(t, entries[0], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertSendLogStringField(t, entries[0], deliveryAuditSendResultLogField, "success")
+	assertSendLogStringField(t, entries[0], deliveryAuditSendResultLogField, sendResultSuccess)
 	assertSendLogStringField(t, entries[0], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-	assertSendLogStringField(t, entries[0], deliveryAuditModeLogField, "per_room")
-	assertSendLogStringField(t, entries[0], deliveryDedupeKeyLogField, "youtube-notification:NEW_SHORT:short-1")
-	assertSendLogStringField(t, entries[0], logschema.FieldRoomID, "room1")
+	assertSendLogStringField(t, entries[0], deliveryAuditModeLogField, deliveryModePerRoom)
+	assertSendLogStringField(t, entries[0], deliveryDedupeKeyLogField, testDedupeKeyShortOne)
+	assertSendLogStringField(t, entries[0], logschema.FieldRoomID, testRoom1)
 	assertSendLogSentAtField(t, entries[0])
 }
 
@@ -1165,15 +1259,15 @@ func TestDispatchDeliveryRows_AuditUsesDetectionPostIDFieldSchema(t *testing.T) 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 		1: {
 			ID:        1,
-			ChannelID: "UCch1",
+			ChannelID: testChannelCh1,
 			Kind:      domain.OutboxKindCommunityPost,
 			ContentID: "post-canonical",
 			Payload:   `{"canonical_post_id":"post-canonical","post_id":"post-resource","content_text":"커뮤니티"}`,
 		},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
@@ -1183,6 +1277,7 @@ func TestDispatchDeliveryRows_AuditUsesDetectionPostIDFieldSchema(t *testing.T) 
 	if _, exists := entry[logschema.FieldPostID]; !exists {
 		t.Fatalf("audit log missing %q field: %#v", logschema.FieldPostID, entry)
 	}
+
 	if got := entry[logschema.FieldPostID]; got != "post-canonical" {
 		t.Fatalf("audit post_id = %#v, want %q", got, "post-canonical")
 	}
@@ -1192,19 +1287,19 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 	t.Parallel()
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxCommunityGroup, "{{range .Items}}{{.ContentText}} {{.URL}}\n{{end}}")
-	sender := &testSender{failRoom: map[string]bool{"room1": true}}
+	sender := &testSender{failRoom: map[string]bool{testRoom1: true}}
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, renderer)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindCommunityPost, ContentID: "post-1", Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
-		2: {ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindCommunityPost, ContentID: "post-2", Payload: `{"post_id":"post-2","content_text":"커뮤니티2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostTwo, Payload: `{"post_id":"post-2","content_text":"커뮤니티2"}`},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if result.FailedDeliveries != 2 {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
@@ -1217,23 +1312,26 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 
 	contentIDs := make([]string, 0, len(entries))
 	postIDs := make([]string, 0, len(entries))
+
 	for i := range entries {
 		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-		assertSendLogStringField(t, entries[i], deliveryAuditSendResultLogField, "failure")
-		assertSendLogStringField(t, entries[i], deliveryAuditFailureReasonLogField, "send message")
+		assertSendLogStringField(t, entries[i], deliveryAuditSendResultLogField, sendResultFailure)
+		assertSendLogStringField(t, entries[i], deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)
 		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
-		assertSendLogStringField(t, entries[i], deliveryAuditModeLogField, "grouped")
+		assertSendLogStringField(t, entries[i], deliveryAuditModeLogField, deliveryModeGrouped)
 		assertSendLogSentAtField(t, entries[i])
 
 		contentID := readSendLogStringField(t, entries[i], deliveryAuditContentIDLogField)
+
 		contentIDs = append(contentIDs, contentID)
 		postIDs = append(postIDs, readSendLogStringField(t, entries[i], deliveryAuditPostIDLogField))
 	}
 
-	if !sameStrings(contentIDs, []string{"post-1", "post-2"}) {
+	if !sameStrings(contentIDs, []string{testPostOne, testPostTwo}) {
 		t.Fatalf("audit content IDs = %#v", contentIDs)
 	}
-	if !sameStrings(postIDs, []string{"post-1", "post-2"}) {
+
+	if !sameStrings(postIDs, []string{testPostOne, testPostTwo}) {
 		t.Fatalf("audit post IDs = %#v", postIDs)
 	}
 }
@@ -1245,11 +1343,11 @@ func TestDispatchDeliveryRows_VideoDoesNotLogCommunityShortsAudit(t *testing.T) 
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewVideo, ContentID: "video-1", Payload: `{"video_id":"v1","title":"영상1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo, ContentID: testVideoOne, Payload: testPayloadVideoOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := d.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if len(result.SuccessDeliveryIDs) != 1 {
 		t.Fatalf("successDeliveryIDs = %d, want 1", len(result.SuccessDeliveryIDs))
@@ -1269,20 +1367,29 @@ type safeBuffer struct {
 func (b *safeBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+
+	out, err := b.buf.Write(p)
+	if err != nil {
+		return out, fmt.Errorf("write: %w", err)
+	}
+
+	return out, nil
 }
 
 func (b *safeBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	cloned := make([]byte, b.buf.Len())
 	copy(cloned, b.buf.Bytes())
+
 	return cloned
 }
 
 func (b *safeBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return b.buf.String()
 }
 
@@ -1314,6 +1421,7 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
 		t.Fatalf("clear templates: %v", err)
 	}
+
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO notification_templates(template_key, channel_id, body)
 		VALUES ($1, NULL, $2)
@@ -1323,7 +1431,7 @@ func newGroupedTemplateRenderer(t *testing.T, key domain.TemplateKey, body strin
 		t.Fatalf("seed grouped template: %v", err)
 	}
 
-	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return template.NewRenderer(pool, slog.New(slog.DiscardHandler))
 }
 
 func newShortsGroupAndSingleTemplateRenderer(t *testing.T) *template.Renderer {
@@ -1333,6 +1441,7 @@ func newShortsGroupAndSingleTemplateRenderer(t *testing.T) *template.Renderer {
 	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
 		t.Fatalf("clear templates: %v", err)
 	}
+
 	templates := []struct {
 		key  domain.TemplateKey
 		body string
@@ -1351,7 +1460,7 @@ func newShortsGroupAndSingleTemplateRenderer(t *testing.T) *template.Renderer {
 		}
 	}
 
-	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return template.NewRenderer(pool, slog.New(slog.DiscardHandler))
 }
 
 func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) map[string]any {
@@ -1361,16 +1470,19 @@ func findLogEntryByMessage(t *testing.T, logBuffer *safeBuffer, message string) 
 		if len(line) == 0 {
 			continue
 		}
+
 		entry := make(map[string]any)
 		if err := jsonv2.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("unmarshal log entry: %v", err)
 		}
+
 		if entry["msg"] == message {
 			return entry
 		}
 	}
 
 	t.Fatalf("log message %q not found in %s", message, logBuffer.String())
+
 	return nil
 }
 
@@ -1378,14 +1490,17 @@ func findAllSendLogEntriesByMessage(t *testing.T, logBuffer *safeBuffer, message
 	t.Helper()
 
 	entries := make([]map[string]any, 0)
+
 	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
+
 		entry := make(map[string]any)
 		if err := jsonv2.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("unmarshal log entry: %v", err)
 		}
+
 		if entry["msg"] == message {
 			entries = append(entries, entry)
 		}
@@ -1401,10 +1516,12 @@ func readSendLogStringField(t *testing.T, entry map[string]any, field string) st
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)
 	}
+
 	value, ok := raw.(string)
 	if !ok {
 		t.Fatalf("log field %q type = %T, want string", field, raw)
 	}
+
 	return value
 }
 
@@ -1412,10 +1529,12 @@ func readSendLogTimeField(t *testing.T, entry map[string]any, field string) time
 	t.Helper()
 
 	value := readSendLogStringField(t, entry, field)
+
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {
 		t.Fatalf("log field %q = %q, want RFC3339Nano time: %v", field, value, err)
 	}
+
 	return parsed.UTC()
 }
 
@@ -1426,6 +1545,7 @@ func readSendLogIntField(t *testing.T, entry map[string]any, field string) int {
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)
 	}
+
 	switch value := raw.(type) {
 	case float64:
 		return int(value)
@@ -1434,6 +1554,7 @@ func readSendLogIntField(t *testing.T, entry map[string]any, field string) int {
 	default:
 		t.Fatalf("log field %q type = %T, want number", field, raw)
 	}
+
 	return 0
 }
 
@@ -1466,6 +1587,7 @@ func assertLogDedupeKeys(t *testing.T, entry map[string]any, want []string) {
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", deliveryDedupeKeyLogField, entry)
 	}
+
 	values, ok := raw.([]any)
 	if !ok {
 		t.Fatalf("dedupe_key type = %T, want []any", raw)
@@ -1477,6 +1599,7 @@ func assertLogDedupeKeys(t *testing.T, entry map[string]any, want []string) {
 		if !ok {
 			t.Fatalf("dedupe_key[%d] type = %T, want string", i, values[i])
 		}
+
 		got = append(got, value)
 	}
 
@@ -1489,23 +1612,35 @@ type blockingSender struct{}
 
 func (s *blockingSender) SendMessage(ctx context.Context, _, _ string) error {
 	<-ctx.Done()
-	return ctx.Err()
+
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("blocked send: %w", err)
+	}
+
+	return nil
 }
 
 type parentDeadlineBeforeReturnSender struct {
-	parentCtx             context.Context
+	parentDone            <-chan struct{}
 	parentDoneBeforeChild atomic.Bool
 }
 
 func (s *parentDeadlineBeforeReturnSender) SendMessage(ctx context.Context, _, _ string) error {
 	<-ctx.Done()
+
 	select {
-	case <-s.parentCtx.Done():
+	case <-s.parentDone:
 		s.parentDoneBeforeChild.Store(true)
 	default:
 	}
-	<-s.parentCtx.Done()
-	return ctx.Err()
+
+	<-s.parentDone
+
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("send after parent deadline: %w", err)
+	}
+
+	return nil
 }
 
 func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
@@ -1515,21 +1650,22 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
+		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
-	err := dispatcher.send.sendDeliveryMessage(context.Background(), deliverySendRequest{
+	err := dispatcher.send.sendDeliveryMessage(t.Context(), deliverySendRequest{
 		roomID:     "room-timeout",
-		message:    "hello",
+		message:    testMessageHello,
 		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-timeout"},
 	})
-
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want timeout")
 	}
+
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
 	}
+
 	if !strings.Contains(err.Error(), "timed out after 5ms") {
 		t.Fatalf("sendDeliveryMessage() error = %q, want configured-timeout-specific message", err)
 	}
@@ -1542,24 +1678,25 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{DeliverySendTimeout: 100 * time.Millisecond},
+		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 100 * time.Millisecond},
 	)
 
-	parentCtx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	parentCtx, cancel := context.WithTimeout(t.Context(), 5*time.Millisecond)
 	defer cancel()
 
 	err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
 		roomID:     "room-parent-timeout",
-		message:    "hello",
+		message:    testMessageHello,
 		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-parent-timeout"},
 	})
-
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want parent deadline error")
 	}
+
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
 	}
+
 	if strings.Contains(err.Error(), "timed out after 100ms") {
 		t.Fatalf("sendDeliveryMessage() error = %q, want parent deadline path without child timeout message", err)
 	}
@@ -1568,32 +1705,35 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t *testing.T) {
 	t.Parallel()
 
-	parentCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	parentCtx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
 	defer cancel()
-	sender := &parentDeadlineBeforeReturnSender{parentCtx: parentCtx}
+
+	sender := &parentDeadlineBeforeReturnSender{parentDone: parentCtx.Done()}
 
 	dispatcher := NewDispatcher(nil,
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
+		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
 	err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
 		roomID:     "room-child-timeout-first",
-		message:    "hello",
+		message:    testMessageHello,
 		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
 	})
-
 	if err == nil {
 		t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
 	}
+
 	if sender.parentDoneBeforeChild.Load() {
 		t.Fatal("parent deadline expired before configured delivery timeout")
 	}
+
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
 	}
+
 	if !strings.Contains(err.Error(), "timed out after 5ms") {
 		t.Fatalf("sendDeliveryMessage() error = %q, want configured-timeout-specific message", err)
 	}
@@ -1606,16 +1746,18 @@ func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
 		cachemocks.NewLenientClient(),
 		&testSender{failRoom: map[string]bool{}},
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{},
+		slog.New(slog.DiscardHandler), &dispatchstate.Config{},
 	)
 
 	defaults := dispatchstate.DefaultConfig()
 	if dispatcher.config.DeliveryParallelism != defaults.DeliveryParallelism {
 		t.Fatalf("DeliveryParallelism = %d, want %d", dispatcher.config.DeliveryParallelism, defaults.DeliveryParallelism)
 	}
+
 	if dispatcher.config.DeliverySendTimeout != defaults.DeliverySendTimeout {
 		t.Fatalf("DeliverySendTimeout = %s, want %s", dispatcher.config.DeliverySendTimeout, defaults.DeliverySendTimeout)
 	}
+
 	if dispatcher.config.SubscriberLookupParallelism != defaults.SubscriberLookupParallelism {
 		t.Fatalf("SubscriberLookupParallelism = %d, want %d", dispatcher.config.SubscriberLookupParallelism, defaults.SubscriberLookupParallelism)
 	}
@@ -1634,9 +1776,11 @@ func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows
 	}
 	for i := range rows {
 		token := outcomeUnknownClaimToken(&outboxes[i])
+
 		selection.claimTokens = append(selection.claimTokens, token)
 		selection.rowClaimTokens = append(selection.rowClaimTokens, []dispatchstate.ClaimToken{token})
 	}
+
 	return selection
 }
 
@@ -1656,26 +1800,31 @@ func outcomeUnknownClaimToken(outbox *domain.YouTubeNotificationOutbox) dispatch
 }
 
 func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer *template.Renderer, timeout time.Duration) (*SendEngine, *outcomeUnknownClaimSpy) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	cfg := &dispatchstate.Config{DeliverySendTimeout: timeout, DeliveryParallelism: 2}
 	spy := &outcomeUnknownClaimSpy{}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg, nil)
 	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil)
 	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy))
+
 	return engine, spy
 }
 
 func assertOutcomeUnknownHold(t *testing.T, result *dispatchstate.DispatchResult, spy *outcomeUnknownClaimSpy) {
 	t.Helper()
+
 	if result.FailedDeliveries != 0 || len(result.FailureBuckets) != 0 {
 		t.Fatalf("failedDeliveries = %d, failureBuckets = %#v, want none (row must stay SENDING for stale quarantine)", result.FailedDeliveries, result.FailureBuckets)
 	}
+
 	if len(result.SuccessDeliveryIDs) != 0 || len(result.SuccessClaimTokens) != 0 {
 		t.Fatalf("successDeliveryIDs = %#v, successClaimTokens = %#v, want none", result.SuccessDeliveryIDs, result.SuccessClaimTokens)
 	}
+
 	if len(result.TouchedOutboxIDs) != 0 {
 		t.Fatalf("touchedOutboxIDs = %#v, want none", result.TouchedOutboxIDs)
 	}
+
 	if got := spy.releaseCalls.Load(); got != 0 {
 		t.Fatalf("claim release calls = %d, want 0 (claim must be held)", got)
 	}
@@ -1687,15 +1836,16 @@ func TestDispatchDeliveryRows_PerRoomOutcomeUnknownHoldsClaim(t *testing.T) {
 	sender := &flowTestSender{}
 	engine, spy := newOutcomeUnknownTestEngine(sender, newSendTestRenderer(t), 5*time.Millisecond)
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
-	result := engine.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+	result := engine.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 	if got := sender.calls.Load(); got != 1 {
 		t.Fatalf("sender calls = %d, want 1", got)
 	}
+
 	assertOutcomeUnknownHold(t, &result, spy)
 }
 
@@ -1704,28 +1854,33 @@ func TestDispatchClaimedDeliveryRow_PreSendCancelReleasesClaimAndBucketsRetry(t 
 
 	sender := &flowTestSender{}
 	engine, spy := newOutcomeUnknownTestEngine(sender, nil, time.Second)
-	row := domain.YouTubeNotificationDelivery{ID: 101, OutboxID: 1, RoomID: "room1"}
-	outbox := domain.YouTubeNotificationOutbox{ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`}
+	row := domain.YouTubeNotificationDelivery{ID: 101, OutboxID: 1, RoomID: testRoom1}
+	outbox := domain.YouTubeNotificationOutbox{ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne}
 	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&outbox)}
 	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+
 	var mu sync.Mutex
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	engine.dispatchClaimedDeliveryRow(ctx, &row, &outbox, map[int64]string{1: "hello"}, map[int64]bool{}, claimTokens, &result, &mu)
+	engine.dispatchClaimedDeliveryRow(ctx, &row, &outbox, map[int64]string{1: testMessageHello}, map[int64]bool{}, claimTokens, &result, &mu)
 
 	if got := sender.calls.Load(); got != 0 {
 		t.Fatalf("sender calls = %d, want 0 (request must not leave the client)", got)
 	}
+
 	if got := result.FailureBuckets[deliveryReasonSendMessage]; len(got) != 1 || got[0] != 101 {
 		t.Fatalf("FailureBuckets[%q] = %#v, want [101]", deliveryReasonSendMessage, got)
 	}
+
 	if result.FailedDeliveries != 1 || len(result.SuccessDeliveryIDs) != 0 {
 		t.Fatalf("failedDeliveries = %d, successDeliveryIDs = %#v, want 1 failure and no success", result.FailedDeliveries, result.SuccessDeliveryIDs)
 	}
+
 	if got := result.TouchedOutboxIDs; len(got) != 1 || got[0] != 1 {
 		t.Fatalf("touchedOutboxIDs = %#v, want [1]", got)
 	}
+
 	if got := spy.releaseCalls.Load(); got != 1 {
 		t.Fatalf("claim release calls = %d, want 1", got)
 	}
@@ -1736,25 +1891,27 @@ func TestDispatchGroupedClaimedRows_OutcomeUnknownHoldsWithoutFallback(t *testin
 
 	sender := &flowTestSender{}
 	engine, spy := newOutcomeUnknownTestEngine(sender, nil, 5*time.Millisecond)
-	group := &deliveryGroup{roomID: "room1", channelID: "UCch1", kind: domain.OutboxKindNewShort}
+	group := &deliveryGroup{roomID: testRoom1, channelID: testChannelCh1, kind: domain.OutboxKindNewShort}
 	validOutboxes := []domain.YouTubeNotificationOutbox{
-		{ID: 1, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-1", Payload: `{"video_id":"s1","title":"쇼츠1"}`},
-		{ID: 2, ChannelID: "UCch1", Kind: domain.OutboxKindNewShort, ContentID: "short-2", Payload: `{"video_id":"s2","title":"쇼츠2"}`},
+		{ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: testPayloadShortOne},
+		{ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: testPayloadShortTwo},
 	}
 	validRows := []domain.YouTubeNotificationDelivery{
-		{ID: 101, OutboxID: 1, RoomID: "room1"},
-		{ID: 102, OutboxID: 2, RoomID: "room1"},
+		{ID: 101, OutboxID: 1, RoomID: testRoom1},
+		{ID: 102, OutboxID: 2, RoomID: testRoom1},
 	}
 	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&validOutboxes[0]), outcomeUnknownClaimToken(&validOutboxes[1])}
 	rowClaimTokens := [][]dispatchstate.ClaimToken{{claimTokens[0]}, {claimTokens[1]}}
 	formatted := map[int64]string{1: "쇼츠1", 2: "쇼츠2"}
 	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+
 	var mu sync.Mutex
 
-	engine.dispatchGroupedClaimedRows(context.Background(), group, validRows, validOutboxes, "쇼츠1\n쇼츠2", formatted, map[int64]bool{}, claimTokens, rowClaimTokens, &result, &mu)
+	engine.dispatchGroupedClaimedRows(t.Context(), group, validRows, validOutboxes, "쇼츠1\n쇼츠2", formatted, map[int64]bool{}, claimTokens, rowClaimTokens, &result, &mu)
 
 	if got := sender.calls.Load(); got != 1 {
 		t.Fatalf("sender calls = %d, want 1 grouped attempt without per-room fallback", got)
 	}
+
 	assertOutcomeUnknownHold(t, &result, spy)
 }

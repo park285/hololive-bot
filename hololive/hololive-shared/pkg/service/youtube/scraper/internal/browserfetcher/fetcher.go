@@ -53,6 +53,7 @@ func New(endpoint string, timeout time.Duration) *Fetcher {
 	if timeout <= 0 {
 		timeout = 20 * time.Second
 	}
+
 	return &Fetcher{
 		client:   httputil.NewClient(timeout),
 		endpoint: strings.TrimSpace(endpoint),
@@ -62,27 +63,35 @@ func New(endpoint string, timeout time.Duration) *Fetcher {
 
 func (f *Fetcher) FetchPage(ctx context.Context, req Request) (response Response, err error) {
 	if f == nil || f.endpoint == "" {
-		return Response{}, fmt.Errorf("browser snapshot endpoint is not configured")
+		return Response{}, errors.New("browser snapshot endpoint is not configured")
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
+
 	defer cancel()
 
 	httpReq, err := f.newSnapshotRequest(ctx, req)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("snapshot request: %w", err)
 	}
 
 	resp, err := f.doSnapshotRequest(httpReq)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("do snapshot request: %w", err)
 	}
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close browser snapshot response: %w", closeErr))
 		}
 	}()
 
-	return readSnapshotResponse(resp)
+	out, err := readSnapshotResponse(resp)
+	if err != nil {
+		return out, fmt.Errorf("read snapshot response: %w", err)
+	}
+
+	return out, nil
 }
 
 func (f *Fetcher) doSnapshotRequest(req *http.Request) (*http.Response, error) {
@@ -91,14 +100,18 @@ func (f *Fetcher) doSnapshotRequest(req *http.Request) (*http.Response, error) {
 		if isNilHTTPResponseError(err) {
 			return nil, fmt.Errorf("browser snapshot request returned nil response: %w", err)
 		}
+
 		return nil, fmt.Errorf("browser snapshot request failed: %w", err)
 	}
+
 	if resp == nil {
-		return nil, fmt.Errorf("browser snapshot request returned nil response")
+		return nil, errors.New("browser snapshot request returned nil response")
 	}
+
 	if resp.Body == nil {
-		return nil, fmt.Errorf("browser snapshot response body is nil")
+		return nil, errors.New("browser snapshot response body is nil")
 	}
+
 	return resp, nil
 }
 
@@ -111,11 +124,14 @@ func (f *Fetcher) newSnapshotRequest(ctx context.Context, req Request) (*http.Re
 	if err != nil {
 		return nil, fmt.Errorf("marshal browser snapshot request: %w", err)
 	}
+
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("create browser snapshot request: %w", err)
 	}
+
 	httpReq.Header.Set("Content-Type", "application/json")
+
 	return httpReq, nil
 }
 
@@ -124,12 +140,16 @@ func readSnapshotResponse(resp *http.Response) (Response, error) {
 	if err != nil {
 		return Response{}, fmt.Errorf("read browser snapshot response: %w", err)
 	}
+
 	if resp.StatusCode != http.StatusOK {
 		return Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone()}, fmt.Errorf("browser snapshot unexpected status: %d", resp.StatusCode)
 	}
+
 	var parsed browserSnapshotResponse
+
 	if err := jsonv2.Unmarshal(body, &parsed); err != nil {
 		return Response{}, fmt.Errorf("decode browser snapshot response: %w", err)
 	}
+
 	return Response{StatusCode: parsed.StatusCode, Header: parsed.Header, Body: []byte(parsed.HTML)}, nil
 }

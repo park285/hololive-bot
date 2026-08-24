@@ -44,6 +44,7 @@ func partitionGroupedDeliveries(
 		if validateOutboxPayload(&group.outboxes[i]) {
 			validOutboxes = append(validOutboxes, group.outboxes[i])
 			validRows = append(validRows, group.rows[i])
+
 			continue
 		}
 
@@ -77,6 +78,7 @@ func (d *SendEngine) formatGroupedMessage(
 	if group == nil {
 		d.logger.Warn("Grouped format skipped because delivery group is missing",
 			slog.Int("count", len(validRows)))
+
 		return "", false
 	}
 
@@ -93,6 +95,7 @@ func (d *SendEngine) formatGroupedMessage(
 			slog.String("kind", string(group.kind)),
 			slog.Int("count", len(validRows)),
 			slog.Any("error", err))
+
 		return "", false
 	}
 
@@ -111,9 +114,11 @@ func (d *SendEngine) dispatchClaimedRowsIndividually(
 ) {
 	for i := range rows {
 		var claims []dispatchstate.ClaimToken
+
 		if i < len(rowClaimTokens) {
 			claims = rowClaimTokens[i]
 		}
+
 		d.dispatchClaimedDeliveryRow(ctx, &rows[i], &outboxes[i], formattedMessages, formatFailures, claims, result, mu)
 	}
 }
@@ -125,47 +130,59 @@ func singleDeliveryBatch(
 	return []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{*outbox}
 }
 
-// preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱
+// preFormatMessages: outbox_id별로 메시지를 1회 포맷하여 캐싱.
 func (d *SendEngine) preFormatMessages(ctx context.Context, outboxByID map[int64]domain.YouTubeNotificationOutbox) (messages map[int64]string, failures map[int64]bool) {
 	messages = make(map[int64]string, len(outboxByID))
 	failures = make(map[int64]bool)
+
 	for id := range outboxByID {
 		item := outboxByID[id]
+
 		msg, err := d.formatter.formatMessage(ctx, &item)
 		if err != nil {
 			d.logger.Warn("Failed to pre-format outbox message",
 				slog.Int64("outbox_id", id),
 				slog.Any("error", err))
+
 			failures[id] = true
+
 			continue
 		}
+
 		messages[id] = msg
 	}
+
 	return
 }
 
 func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRequest) error {
 	if err := validateDeliverySendRequest(req); err != nil {
-		return err
+		return fmt.Errorf("validate delivery send request: %w", err)
 	}
+
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("send delivery message before request: %w", err)
 	}
 
 	sendCtx := ctx
 	cancel := func() {}
+
 	if d.config.DeliverySendTimeout > 0 {
 		sendCtx, cancel = context.WithTimeoutCause(ctx, d.config.DeliverySendTimeout, errDeliverySendTimeout)
 	}
+
 	defer cancel()
 
 	var err error
+
 	if sender, ok := d.sender.(messagedelivery.ClientRequestMessageSender); ok {
 		err = sender.SendMessageWithClientRequestID(sendCtx, req.roomID, req.message, deliveryClientRequestID(req.roomID, req.dedupeKeys))
 	} else {
 		err = d.sender.SendMessage(sendCtx, req.roomID, req.message)
 	}
+
 	if err != nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return d.wrapDeliverySendError(sendCtx, err)
 	}
 
@@ -176,9 +193,11 @@ func (d *SendEngine) wrapDeliverySendError(sendCtx context.Context, err error) e
 	if errors.Is(context.Cause(sendCtx), errDeliverySendTimeout) {
 		return fmt.Errorf("send delivery message timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendOutcomeUnknown, errDeliverySendTimeout, err))
 	}
+
 	if deliverySendOutcomeUnknown(err) {
 		return fmt.Errorf("send delivery message: %w", errors.Join(errDeliverySendOutcomeUnknown, err))
 	}
+
 	return fmt.Errorf("send delivery message: %w", err)
 }
 
@@ -220,5 +239,6 @@ func (d *SendEngine) deliveryParallelism() int {
 	if d.config.DeliveryParallelism > 0 {
 		return d.config.DeliveryParallelism
 	}
+
 	return dispatchstate.DefaultConfig().DeliveryParallelism
 }

@@ -30,16 +30,17 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 		return 0, nil
 	}
 
-	if err := as.deleteRoomAlarmsBeforeCacheClear(ctx, roomID); err != nil {
-		opErr = err
-		return 0, err
+	if deleteErr := as.deleteRoomAlarmsBeforeCacheClear(ctx, roomID); deleteErr != nil {
+		opErr = deleteErr
+		return 0, fmt.Errorf("delete room alarms before cache clear: %w", deleteErr)
 	}
 
 	channelIDs := uniqueAlarmChannelIDs(alarmRecords)
+
 	removed, err := as.clearRoomAlarmsCacheMutation(ctx, roomID, channelIDs)
 	if err != nil {
 		opErr = err
-		return 0, err
+		return 0, fmt.Errorf("clear room alarms cache mutation: %w", err)
 	}
 
 	as.afterClearRoomAlarms(ctx, roomID, channelIDs)
@@ -53,8 +54,13 @@ func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int
 
 func (as *AlarmService) deleteRoomAlarmsBeforeCacheClear(ctx context.Context, roomID string) error {
 	if err := as.deleteRoomAlarms(ctx, roomID); err != nil {
-		return sharedlogging.LogAndWrapError(ctx, as.logger, "delete room alarms before cache clear", err)
+		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "delete room alarms before cache clear", err); logErr != nil {
+			return fmt.Errorf("log and wrap error: %w", logErr)
+		}
+
+		return nil
 	}
+
 	return nil
 }
 
@@ -62,12 +68,22 @@ func (as *AlarmService) clearRoomAlarmsCacheMutation(ctx context.Context, roomID
 	removed, err := as.clearRoomAlarmsFromCache(ctx, roomID, channelIDs)
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear", fmt.Errorf("clear room alarms: %w", err))
-		return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr)
+		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild clear cache from repository", opErr); err != nil {
+			return 0, fmt.Errorf("log and wrap error: %w", err)
+		}
+
+		return 0, nil
 	}
+
 	if err := as.markAlarmCacheChanged(ctx); err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "clear_mark_changed", fmt.Errorf("mark alarm cache changed: %w", err))
-		return 0, sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr)
+		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "mark room alarms changed in cache", opErr); err != nil {
+			return 0, fmt.Errorf("log and wrap error: %w", err)
+		}
+
+		return 0, nil
 	}
+
 	return removed, nil
 }
 
@@ -75,6 +91,7 @@ func (as *AlarmService) afterClearRoomAlarms(ctx context.Context, roomID string,
 	for _, channelID := range channelIDs {
 		as.cleanupClearedRoomAlarmChannel(ctx, roomID, channelID)
 	}
+
 	if as.logger != nil {
 		as.logger.Info("All alarms cleared",
 			privacylog.RoomIDAttr(roomID),

@@ -62,6 +62,7 @@ func (s *AdminService) List(ctx context.Context, key *domain.TemplateKey, channe
 	if err != nil {
 		return nil, fmt.Errorf("list templates: %w", err)
 	}
+
 	return templates, nil
 }
 
@@ -88,7 +89,7 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 	}
 
 	if err := s.validateTemplate(key, body); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate template: %w", err)
 	}
 
 	result, _, err := s.repo.UpsertWithRevision(ctx, key, channelID, body, maxRevisions)
@@ -104,8 +105,10 @@ func (s *AdminService) Save(ctx context.Context, key domain.TemplateKey, channel
 func (s *AdminService) invalidateRendererCache(key domain.TemplateKey, channelID *string) {
 	if channelID != nil {
 		s.renderer.InvalidateCache(key, *channelID)
+
 		return
 	}
+
 	s.renderer.InvalidateKey(key)
 }
 
@@ -119,10 +122,11 @@ func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKe
 	}
 
 	s.renderer.InvalidateCache(key, channelID)
+
 	return nil
 }
 
-func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body string) (value0 string, result1 any, err error) {
+func (s *AdminService) Preview(_ context.Context, key domain.TemplateKey, body string) (value0 string, result1 any, err error) {
 	if !sampledata.IsValidTemplateKey(key) {
 		return "", nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
@@ -138,6 +142,7 @@ func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body
 	}
 
 	var buf bytes.Buffer
+
 	if err := tmpl.Execute(&buf, sampleData); err != nil {
 		return "", nil, errors.Join(ErrTemplateRenderError, fmt.Errorf("render failed: %w", err))
 	}
@@ -146,11 +151,12 @@ func (s *AdminService) Preview(ctx context.Context, key domain.TemplateKey, body
 }
 
 func (s *AdminService) GetRevisions(ctx context.Context, key domain.TemplateKey, channelID *string) ([]*domain.NotificationTemplateRevision, error) {
-	tmpl, err := s.repo.FindByKeyAndChannel(ctx, key, channelID)
+	tmpl, found, err := s.repo.FindByKeyAndChannel(ctx, key, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("find template: %w", err)
 	}
-	if tmpl == nil {
+
+	if !found {
 		return nil, nil
 	}
 
@@ -158,18 +164,21 @@ func (s *AdminService) GetRevisions(ctx context.Context, key domain.TemplateKey,
 	if err != nil {
 		return nil, fmt.Errorf("get revisions: %w", err)
 	}
+
 	return revisions, nil
 }
 
 func (s *AdminService) GetRevisionByID(ctx context.Context, id int64) (*domain.NotificationTemplateRevision, error) {
-	rev, err := s.repo.GetRevisionByID(ctx, id)
+	rev, found, err := s.repo.GetRevisionByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get revision %d: %w", id, err)
 	}
-	if rev == nil {
+
+	if !found {
 		return nil, ErrRevisionNotFound
 	}
-	return rev, nil
+
+	return &rev, nil
 }
 
 func (s *AdminService) validateTemplate(key domain.TemplateKey, body string) error {
@@ -184,6 +193,7 @@ func (s *AdminService) validateTemplate(key domain.TemplateKey, body string) err
 	}
 
 	var buf bytes.Buffer
+
 	if err := tmpl.Execute(&buf, sampleData); err != nil {
 		return errors.Join(ErrTemplateRenderError, fmt.Errorf("render failed: %w", err))
 	}

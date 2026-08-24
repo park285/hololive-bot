@@ -20,15 +20,19 @@ func (r *Repository) EnsureClaimBudget(
 	transactionTimeout time.Duration,
 ) error {
 	if err := r.validate(); err != nil {
-		return err
+		return fmt.Errorf("validate: %w", err)
 	}
+
 	if err := validateClaim(claim); err != nil {
-		return err
+		return fmt.Errorf("validate claim: %w", err)
 	}
+
 	if transactionTimeout < time.Second || transactionTimeout > time.Minute {
-		return fmt.Errorf("ensure source observation claim budget: transaction timeout is outside the accepted range")
+		return errors.New("ensure source observation claim budget: transaction timeout is outside the accepted range")
 	}
+
 	var expiresAt time.Time
+
 	err := r.pool.QueryRow(
 		ctx,
 		mustSQL("repository_claim_budget_0019_19.sql"),
@@ -36,12 +40,15 @@ func (r *Repository) EnsureClaimBudget(
 		claim.LeaseToken,
 		(2 * transactionTimeout).Milliseconds(),
 	).Scan(&expiresAt)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrClaimLost
 	}
+
 	if err != nil {
 		return fmt.Errorf("ensure source observation claim budget: %w", err)
 	}
+
 	return nil
 }
 
@@ -51,17 +58,25 @@ func (r *Repository) Finalize(
 	reconcile ReconcileWrite,
 ) (ReconcileResult, error) {
 	if err := r.validate(); err != nil {
-		return ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("validate: %w", err)
 	}
+
 	if err := validateClaim(claim); err != nil {
-		return ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("validate claim: %w", err)
 	}
+
 	if reconcile == nil {
-		return ReconcileResult{}, fmt.Errorf("finalize source observation: reconcile writer is nil")
+		return ReconcileResult{}, errors.New("finalize source observation: reconcile writer is nil")
 	}
-	return dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (ReconcileResult, error) {
+
+	out, err := dbx.InPgxTxWithResult(ctx, r.pool, func(tx dbx.Tx) (ReconcileResult, error) {
 		return r.finalizeTx(ctx, tx, claim, reconcile)
 	})
+	if err != nil {
+		return out, fmt.Errorf("in pgx tx with result: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) finalizeTx(
@@ -72,24 +87,36 @@ func (r *Repository) finalizeTx(
 ) (ReconcileResult, error) {
 	observation, err := lockClaim(ctx, tx, claim)
 	if err != nil {
-		return ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("lock claim: %w", err)
 	}
-	if rejected, result, err := rejectFinalizeObservation(ctx, tx, r.supported, &observation); rejected {
-		return result, err
+
+	rejected, rejection, rejectErr := rejectFinalizeObservation(ctx, tx, r.supported, &observation)
+	if rejected {
+		if rejectErr != nil {
+			return rejection, fmt.Errorf("reject finalize observation: %w", rejectErr)
+		}
+
+		return rejection, nil
 	}
+
 	callbackObservation := observation
+
 	result, err := reconcile(ctx, tx, &callbackObservation)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("finalize source observation: apply canonical domain write: %w", err)
 	}
+
 	if err := writeFinalizeApplications(ctx, tx, &observation, result.Applications); err != nil {
-		return ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("write finalize applications: %w", err)
 	}
+
 	if err := completeFinalizeObservation(ctx, tx, claim, &observation); err != nil {
-		return ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("complete finalize observation: %w", err)
 	}
+
 	result.EffectiveAt = observation.EffectiveAt
 	result.SourceEventFallback = observation.SourceEventFallback
+
 	return result, nil
 }
 
@@ -101,10 +128,12 @@ func rejectFinalizeObservation(
 ) (bool, ReconcileResult, error) {
 	if !supported.Supports(observation.ContractVersion()) {
 		if err := deadLetterUnsupported(ctx, tx, observation); err != nil {
-			return true, ReconcileResult{}, err
+			return true, ReconcileResult{}, fmt.Errorf("dead letter unsupported: %w", err)
 		}
+
 		return true, unsupportedFinalizeResult(observation), nil
 	}
+
 	envelope := observation.Envelope()
 	if _, err := envelope.ValidateAndCanonicalPayload(); err != nil {
 		if dlErr := deadLetterTx(ctx, tx, DeadLetterInput{
@@ -113,15 +142,17 @@ func rejectFinalizeObservation(
 			ErrorCode:     "invalid_payload",
 			ErrorDetail:   boundedErrorDetail(err.Error()),
 		}); dlErr != nil {
-			return true, ReconcileResult{}, dlErr
+			return true, ReconcileResult{}, fmt.Errorf("dead letter tx: %w", dlErr)
 		}
+
 		return true, ReconcileResult{EffectiveAt: observation.EffectiveAt, SourceEventFallback: observation.SourceEventFallback}, nil
 	}
+
 	return false, ReconcileResult{}, nil
 }
 
 func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation *Observation) error {
-	return deadLetterTx(ctx, tx, DeadLetterInput{
+	if err := deadLetterTx(ctx, tx, DeadLetterInput{
 		ObservationID: observation.ID,
 		LeaseToken:    observation.LeaseToken,
 		ErrorCode:     "unsupported_contract",
@@ -132,7 +163,11 @@ func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation *Observat
 			observation.SchemaVersion,
 			observation.ContractGeneration,
 		)),
-	})
+	}); err != nil {
+		return fmt.Errorf("dead letter tx: %w", err)
+	}
+
+	return nil
 }
 
 func unsupportedFinalizeResult(observation *Observation) ReconcileResult {
@@ -145,13 +180,15 @@ func unsupportedFinalizeResult(observation *Observation) ReconcileResult {
 
 func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Observation, applications []Application) error {
 	if len(applications) > 1000 {
-		return fmt.Errorf("finalize source observation: application count exceeds 1000")
+		return errors.New("finalize source observation: application count exceeds 1000")
 	}
+
 	for i := range applications {
 		if err := writeFinalizeApplication(ctx, tx, observation, i, applications[i]); err != nil {
-			return err
+			return fmt.Errorf("write finalize application: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -159,12 +196,15 @@ func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation *Obser
 	if err := validateText("application entity kind", application.EntityKind, 64); err != nil {
 		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
 	}
+
 	if err := validateText("application entity key", application.EntityKey, 256); err != nil {
 		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
 	}
+
 	if err := validateText("application decision", application.Decision, 128); err != nil {
 		return fmt.Errorf("finalize source observation: application %d: %w", index, err)
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_application_insert_0014_14.sql"),
@@ -180,23 +220,28 @@ func writeFinalizeApplication(ctx context.Context, tx dbx.Tx, observation *Obser
 	); err != nil {
 		return fmt.Errorf("finalize source observation: insert application audit: %w", err)
 	}
+
 	return nil
 }
 
 func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, observation *Observation) error {
 	var observationID int64
+
 	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_complete_0015_15.sql"),
 		observation.ID,
 		observation.LeaseToken,
 	).Scan(&observationID)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrClaimLost
 	}
+
 	if err != nil {
 		return fmt.Errorf("finalize source observation: complete queue item: %w", err)
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_offset_upsert_0016_16.sql"),
@@ -207,6 +252,7 @@ func completeFinalizeObservation(ctx context.Context, tx dbx.Tx, claim Claim, ob
 	); err != nil {
 		return fmt.Errorf("finalize source observation: update consumer offset: %w", err)
 	}
+
 	return nil
 }
 
@@ -218,21 +264,27 @@ func lockClaim(ctx context.Context, tx dbx.Tx, claim Claim) (Observation, error)
 		claim.LeaseToken,
 	)
 	observation, err := scanLockedObservation(row)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Observation{}, ErrClaimLost
 	}
+
 	if err != nil {
 		return Observation{}, fmt.Errorf("finalize source observation: lock claim: %w", err)
 	}
+
 	return observation, nil
 }
 
 func scanLockedObservation(row pgx.Row) (Observation, error) {
-	var observation Observation
-	var provider string
-	var kind string
-	var completeness string
-	var continuity string
+	var (
+		observation  Observation
+		provider     string
+		kind         string
+		completeness string
+		continuity   string
+	)
+
 	if err := row.Scan(
 		&observation.ID,
 		&provider,
@@ -263,6 +315,7 @@ func scanLockedObservation(row pgx.Row) (Observation, error) {
 	); err != nil {
 		return Observation{}, fmt.Errorf("claim source observations: scan row: %w", err)
 	}
+
 	observation.Provider = contract.Provider(provider)
 	observation.ObservationKind = contract.ObservationKind(kind)
 	observation.Completeness = contract.Completeness(completeness)
@@ -273,6 +326,7 @@ func scanLockedObservation(row pgx.Row) (Observation, error) {
 		SourceEventAt:   observation.SourceEventAt,
 		ReceivedAt:      observation.ReceivedAt,
 	}, contract.DefaultMaxSourceEventFutureSkew)
+
 	return observation, nil
 }
 
@@ -280,11 +334,14 @@ func validateClaim(claim Claim) error {
 	if err := validateText("consumer name", claim.ConsumerName, 128); err != nil {
 		return fmt.Errorf("validate source observation claim: %w", err)
 	}
+
 	if claim.ObservationID <= 0 {
-		return fmt.Errorf("validate source observation claim: observation id must be positive")
+		return errors.New("validate source observation claim: observation id must be positive")
 	}
+
 	if !lowercaseHexToken(claim.LeaseToken) {
-		return fmt.Errorf("validate source observation claim: lease token must be 64 lowercase hexadecimal characters")
+		return errors.New("validate source observation claim: lease token must be 64 lowercase hexadecimal characters")
 	}
+
 	return nil
 }

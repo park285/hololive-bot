@@ -66,7 +66,7 @@ func TestCompareAndDelete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			if tt.setup != nil {
 				tt.setup(service, ctx)
@@ -76,6 +76,7 @@ func TestCompareAndDelete(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CompareAndDelete() error = %v", err)
 			}
+
 			if got != tt.wantResult {
 				t.Errorf("CompareAndDelete() = %v, want %v", got, tt.wantResult)
 			}

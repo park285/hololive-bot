@@ -3,6 +3,7 @@ package providers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,17 +15,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/stretchr/testify/assert"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
-
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/stretchr/testify/assert"
+)
+
+const (
+	testChannelIDA   = "UC_A"
+	testVideosPoller = "videos"
 )
 
 type noopPoller struct{}
@@ -50,19 +55,25 @@ func (s providerBudgetLimiterStub) TryReserve(
 	ttl time.Duration,
 ) (result0 polling.BudgetReservation, result1 polling.BudgetDecision, err error) {
 	_ = ttl
+
 	if s.observations != nil {
 		observation := providerBudgetObservation{profile: profile}
+
 		if job != nil {
 			observation.job = *job
 		}
+
 		if deadline, ok := ctx.Deadline(); ok {
 			observation.deadline = time.Until(deadline)
 		}
+
 		select {
 		case s.observations <- observation:
 		default:
 		}
 	}
+
+	//nolint:nilnil // reservation == nil + Allowed 는 GlobalBudgetLimiter 계약상 "예약 객체 없이 허용"을 뜻하며, scheduler_worker.go reserveJobBudget 이 이 분기를 실제로 다룬다. 비-nil 스텁으로 바꾸면 그 분기가 테스트에서 사라진다.
 	return nil, polling.BudgetDecision{Allowed: true}, nil
 }
 
@@ -75,7 +86,12 @@ type providerBudgetObservation struct {
 type providerRoundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f providerRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 type testMemberDataProvider struct {
@@ -86,15 +102,19 @@ func (p testMemberDataProvider) GetAllMembers() []*domain.Member {
 	return p.members
 }
 
-func (p testMemberDataProvider) FindMemberByChannelID(channelID string) *domain.Member { return nil }
-func (p testMemberDataProvider) FindMemberByName(name string) *domain.Member           { return nil }
-func (p testMemberDataProvider) FindMemberByAlias(alias string) *domain.Member         { return nil }
-func (p testMemberDataProvider) GetChannelIDs() []string                               { return nil }
+func (p testMemberDataProvider) FindMemberByChannelID(_ string) *domain.Member { return nil }
+
+func (p testMemberDataProvider) FindMemberByName(_ string) *domain.Member { return nil }
+
+func (p testMemberDataProvider) FindMemberByAlias(_ string) *domain.Member { return nil }
+
+func (p testMemberDataProvider) GetChannelIDs() []string { return nil }
+
 func (p testMemberDataProvider) WithContext(context.Context) domain.MemberDataProvider {
 	return p
 }
-func (p testMemberDataProvider) FindMembersByName(name string) []*domain.Member   { return nil }
-func (p testMemberDataProvider) FindMembersByAlias(alias string) []*domain.Member { return nil }
+func (p testMemberDataProvider) FindMembersByName(_ string) []*domain.Member  { return nil }
+func (p testMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member { return nil }
 
 func TestProvideHolodexServiceWithConfigPassesLiveStatusFallbackConfig(t *testing.T) {
 	t.Parallel()
@@ -102,18 +122,22 @@ func TestProvideHolodexServiceWithConfigPassesLiveStatusFallbackConfig(t *testin
 	holodexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/users/live" {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(holodexServer.Close)
 
 	var youtubeRequests atomic.Int32
+
 	youtubeClient := scraper.NewClient(
 		scraper.WithRateLimiter(ratelimiter.New(0)),
 		scraper.WithHTTPClient(&http.Client{
 			Transport: providerRoundTripFunc(func(*http.Request) (*http.Response, error) {
 				youtubeRequests.Add(1)
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -122,8 +146,9 @@ func TestProvideHolodexServiceWithConfigPassesLiveStatusFallbackConfig(t *testin
 			}),
 		}),
 	)
-	scraperService := ProvideScraperServiceWithYouTubeClient(cachemocks.NewLenientClient(), nil, youtubeClient, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	scraperService := ProvideScraperServiceWithYouTubeClient(cachemocks.NewLenientClient(), nil, youtubeClient, slog.New(slog.DiscardHandler))
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
+
 	holodexCfg.BaseURL = holodexServer.URL
 	holodexCfg.APIKey = "test-key"
 	holodexCfg.DistributedRateLimit.Enabled = false
@@ -133,18 +158,20 @@ func TestProvideHolodexServiceWithConfigPassesLiveStatusFallbackConfig(t *testin
 		DeadlineMargin:  0,
 	}
 
-	service, err := ProvideHolodexServiceWithConfig(&holodexCfg, cachemocks.NewLenientClient(), scraperService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	service, err := ProvideHolodexServiceWithConfig(&holodexCfg, cachemocks.NewLenientClient(), scraperService, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("ProvideHolodexServiceWithConfig() error = %v", err)
 	}
 
-	_, failed, err := service.GetChannelsLiveStatusWithFailures(context.Background(), []string{"c1", "c2"})
+	_, failed, err := service.GetChannelsLiveStatusWithFailures(t.Context(), []string{"c1", "c2"})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 	}
+
 	if got := youtubeRequests.Load(); got != 1 {
 		t.Fatalf("youtube requests = %d, want 1 from configured MaxPerCycle", got)
 	}
+
 	if got := livestatus.ReasonOf(failed["c2"]); got != livestatus.DeferredReasonPerCycleCap {
 		t.Fatalf("failed[c2] reason = %q, want %q", got, livestatus.DeferredReasonPerCycleCap)
 	}
@@ -161,6 +188,7 @@ func TestEstimatedRequestsPerMinute(t *testing.T) {
 
 	got := estimatedRequestsPerMinute(registrations)
 	want := (60.0 / (15 * time.Minute).Seconds()) + (60.0 / (30 * time.Minute).Seconds())
+
 	if got != want {
 		t.Fatalf("estimatedRequestsPerMinute() = %f, want %f", got, want)
 	}
@@ -171,11 +199,11 @@ func TestProvideScraperScheduler_UsesExplicitChannelIDs(t *testing.T) {
 
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
 			NewChannelPollerRegistration(noopPoller{}, 0, 15*time.Minute),
 		}),
-		WithSchedulerChannelIDs([]string{"UC_A", "UC_B"}),
+		WithSchedulerChannelIDs([]string{testChannelIDA, "UC_B"}),
 	)
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
@@ -183,6 +211,7 @@ func TestProvideScraperScheduler_UsesExplicitChannelIDs(t *testing.T) {
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{"UC_A:noop", "UC_B:noop"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
@@ -193,10 +222,10 @@ func TestProvideScraperScheduler_UsesPerRegistrationChannelIDs(t *testing.T) {
 
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
-			NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, 0, 15*time.Minute).WithChannelIDs([]string{"UC_A"}),
-			NewChannelPollerRegistration(namedNoopPoller{name: "stats"}, 0, time.Hour).WithChannelIDs([]string{"UC_A", "UC_B"}),
+			NewChannelPollerRegistration(namedNoopPoller{name: testVideosPoller}, 0, 15*time.Minute).WithChannelIDs([]string{testChannelIDA}),
+			NewChannelPollerRegistration(namedNoopPoller{name: "stats"}, 0, time.Hour).WithChannelIDs([]string{testChannelIDA, "UC_B"}),
 		}),
 		WithSchedulerChannelIDs([]string{"UC_X", "UC_Y"}),
 	)
@@ -206,6 +235,7 @@ func TestProvideScraperScheduler_UsesPerRegistrationChannelIDs(t *testing.T) {
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{"UC_A:stats", "UC_A:videos", "UC_B:stats"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
@@ -216,9 +246,9 @@ func TestProvideScraperScheduler_ExplicitRegistrationsWorkWithoutDefaultChannelI
 
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
-			NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, 0, 15*time.Minute).WithChannelIDs([]string{"UC_A"}),
+			NewChannelPollerRegistration(namedNoopPoller{name: testVideosPoller}, 0, 15*time.Minute).WithChannelIDs([]string{testChannelIDA}),
 			NewChannelPollerRegistration(namedNoopPoller{name: "stats"}, 0, time.Hour).WithChannelIDs([]string{"UC_B"}),
 		}),
 	)
@@ -228,6 +258,7 @@ func TestProvideScraperScheduler_ExplicitRegistrationsWorkWithoutDefaultChannelI
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{"UC_A:videos", "UC_B:stats"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
@@ -236,9 +267,9 @@ func TestProvideScraperScheduler_ExplicitRegistrationsWorkWithoutDefaultChannelI
 func TestProvideScraperScheduler_NonExplicitRegistrationsRequireDefaultsOrMembers(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	registrations := []ChannelPollerRegistration{
-		NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, 0, 15*time.Minute),
+		NewChannelPollerRegistration(namedNoopPoller{name: testVideosPoller}, 0, 15*time.Minute),
 	}
 
 	t.Run("without defaults or members no jobs are created", func(t *testing.T) {
@@ -274,6 +305,7 @@ func TestProvideScraperScheduler_NonExplicitRegistrationsRequireDefaultsOrMember
 
 		got := providerJobKeys(t, scheduler)
 		want := []string{"UC_DEFAULT:videos"}
+
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 		}
@@ -298,6 +330,7 @@ func TestProvideScraperScheduler_NonExplicitRegistrationsRequireDefaultsOrMember
 
 		got := providerJobKeys(t, scheduler)
 		want := []string{"UC_MEMBER:videos"}
+
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 		}
@@ -309,9 +342,9 @@ func TestProvideScraperScheduler_MixedRegistrationsKeepExplicitJobsWithoutDefaul
 
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
-			NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, 0, 15*time.Minute).WithChannelIDs([]string{"UC_EXPLICIT"}),
+			NewChannelPollerRegistration(namedNoopPoller{name: testVideosPoller}, 0, 15*time.Minute).WithChannelIDs([]string{"UC_EXPLICIT"}),
 			NewChannelPollerRegistration(namedNoopPoller{name: "community"}, 0, 10*time.Minute),
 		}),
 	)
@@ -321,6 +354,7 @@ func TestProvideScraperScheduler_MixedRegistrationsKeepExplicitJobsWithoutDefaul
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{"UC_EXPLICIT:videos"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
@@ -331,10 +365,10 @@ func TestProvideScraperScheduler_RespectsExplicitEmptyChannelIDs(t *testing.T) {
 
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
-			NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, 0, 15*time.Minute).WithChannelIDs(nil),
-			NewChannelPollerRegistration(namedNoopPoller{name: "stats"}, 0, time.Hour).WithChannelIDs([]string{"UC_A"}),
+			NewChannelPollerRegistration(namedNoopPoller{name: testVideosPoller}, 0, 15*time.Minute).WithChannelIDs(nil),
+			NewChannelPollerRegistration(namedNoopPoller{name: "stats"}, 0, time.Hour).WithChannelIDs([]string{testChannelIDA}),
 		}),
 		WithSchedulerChannelIDs([]string{"UC_DEFAULT"}),
 	)
@@ -344,6 +378,7 @@ func TestProvideScraperScheduler_RespectsExplicitEmptyChannelIDs(t *testing.T) {
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{"UC_A:stats"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
@@ -366,7 +401,7 @@ func TestProvideScraperScheduler_RegistersSyntheticGlobalPollerWithoutDefaults(t
 
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
 			NewGlobalPollerRegistration(namedNoopPoller{name: "resolver"}, pollscheduler.PriorityLow, 15*time.Second),
 		}),
@@ -377,6 +412,7 @@ func TestProvideScraperScheduler_RegistersSyntheticGlobalPollerWithoutDefaults(t
 
 	got := providerJobKeys(t, scheduler)
 	want := []string{SyntheticGlobalPollerChannelID + ":resolver"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("providerJobKeys() = %v, want %v", got, want)
 	}
@@ -395,20 +431,23 @@ func TestNewScraperSchedulerMapsBudgetOptions(t *testing.T) {
 	)
 	pollScheduler := newScraperScheduler(
 		&resolvedOptions,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 	)
 	requireBudgetProfile := polling.BudgetProfile{
 		SourceUnits: map[polling.BudgetSource]float64{polling.BudgetSourceYouTubeScraper: 1},
 		BurstClass:  polling.BudgetBurstPrimary,
 		Priority:    polling.BudgetPriorityNormal,
 	}
-	if err := pollScheduler.RegisterCheckedWithBudgetProfile("UC_A", namedNoopPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Nanosecond, requireBudgetProfile); err != nil {
+
+	if err := pollScheduler.RegisterCheckedWithBudgetProfile(testChannelIDA, namedNoopPoller{name: testVideosPoller}, pollscheduler.PriorityNormal, time.Nanosecond, requireBudgetProfile); err != nil {
 		t.Fatalf("register budget profile: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
+
 	pollScheduler.Start(ctx)
+
 	defer pollScheduler.Stop()
 
 	select {
@@ -416,6 +455,7 @@ func TestNewScraperSchedulerMapsBudgetOptions(t *testing.T) {
 		assert.Equal(t, budgetContext.Namespace, got.job.Namespace)
 		assert.Equal(t, budgetContext.InstanceID, got.job.InstanceID)
 		assert.Equal(t, "UC_A:videos", got.job.JobKey)
+
 		if got.deadline <= 0 || got.deadline > 250*time.Millisecond {
 			t.Fatalf("budget acquire deadline = %s, want within 250ms", got.deadline)
 		}
@@ -438,19 +478,21 @@ func TestProvideScraperSchedulerRegistersBudgetProfiles(t *testing.T) {
 	}
 	scheduler := ProvideScraperScheduler(
 		nil,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 		WithChannelPollerRegistrations([]ChannelPollerRegistration{
-			NewChannelPollerRegistration(namedNoopPoller{name: "videos"}, pollscheduler.PriorityNormal, time.Nanosecond).
-				WithChannelIDs([]string{"UC_A"}).
+			NewChannelPollerRegistration(namedNoopPoller{name: testVideosPoller}, pollscheduler.PriorityNormal, time.Nanosecond).
+				WithChannelIDs([]string{testChannelIDA}).
 				WithBudgetProfile(profile),
 		}),
 		WithSchedulerBudgetLimiter(providerBudgetLimiterStub{observations: observations}),
 		WithSchedulerBudgetContext(polling.BudgetContext{Namespace: "test", InstanceID: "unit", Enabled: true}),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
+
 	scheduler.Start(ctx)
+
 	defer scheduler.Stop()
 
 	select {
@@ -465,6 +507,7 @@ func TestProvideScraperScheduler_SeparatesExpectedRPMFromFaultEnvelope(t *testin
 	t.Parallel()
 
 	var logBuf bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
 	scheduler := ProvideScraperScheduler(
 		nil,
@@ -476,6 +519,7 @@ func TestProvideScraperScheduler_SeparatesExpectedRPMFromFaultEnvelope(t *testin
 				WithWorstCaseRequestUnitsPerRun(4),
 		}),
 	)
+
 	if scheduler == nil {
 		t.Fatal("scheduler is nil")
 	}
@@ -492,12 +536,12 @@ func TestEstimatedRegistrationRPMUsesRequestsPerRunNotWorstCaseUnits(t *testing.
 	t.Parallel()
 
 	registration := NewChannelPollerRegistration(namedNoopPoller{name: "shorts"}, pollscheduler.PriorityLow, 2*time.Minute).
-		WithChannelIDs([]string{"UC_A", "UC_B"}).
+		WithChannelIDs([]string{testChannelIDA, "UC_B"}).
 		WithRequestsPerRun(1).
 		WithWorstCaseRequestUnitsPerRun(4)
 
-	assert.Equal(t, 1.0, estimatedRegistrationRPM(&registration, 2))
-	assert.Equal(t, 4.0, estimatedRegistrationWorstCaseRPM(&registration, 2))
+	assert.InDelta(t, 1.0, estimatedRegistrationRPM(&registration, 2), 1e-9)
+	assert.InDelta(t, 4.0, estimatedRegistrationWorstCaseRPM(&registration, 2), 1e-9)
 }
 
 func providerJobKeys(t *testing.T, scheduler *pollscheduler.Scheduler) []string {
@@ -506,10 +550,13 @@ func providerJobKeys(t *testing.T, scheduler *pollscheduler.Scheduler) []string 
 	field := providerSchedulerField(t, scheduler, "jobMap")
 	keys := make([]string, 0, field.Len())
 	iterator := field.MapRange()
+
 	for iterator.Next() {
 		keys = append(keys, iterator.Key().String())
 	}
+
 	slices.Sort(keys)
+
 	return keys
 }
 
@@ -529,5 +576,6 @@ func repeatProviderChannelIDs(prefix string, count int) []string {
 	for i := range count {
 		out = append(out, prefix+strings.Repeat("A", i+1))
 	}
+
 	return out
 }

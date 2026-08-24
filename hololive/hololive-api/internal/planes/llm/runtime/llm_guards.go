@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -17,6 +18,7 @@ func buildLLMGuards(logger *slog.Logger) (*llmGuards, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	prompt, err := promptguard.NewGuard(promptguard.Config{
 		Enabled:             true,
 		UseEmbeddedDefaults: true,
@@ -24,13 +26,15 @@ func buildLLMGuards(logger *slog.Logger) (*llmGuards, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create llm prompt guard: %w", err)
 	}
+
 	if prompt.PolicyDigest() == "" {
-		return nil, fmt.Errorf("create llm prompt guard: empty effective policy digest")
+		return nil, errors.New("create llm prompt guard: empty effective policy digest")
 	}
 
 	logger.Info("LLM guards configured",
 		slog.String("prompt_policy_digest", prompt.PolicyDigest()),
 		slog.String("rulepack_source", "embedded"),
 	)
+
 	return &llmGuards{prompt: prompt, output: outputguard.NewGuard()}, nil
 }

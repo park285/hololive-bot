@@ -21,11 +21,10 @@
 package chzzk
 
 import (
+	jsonv2 "encoding/json/v2"
 	"os"
 	"testing"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 )
 
 func TestLiveStatusResponse_Unmarshal(t *testing.T) {
@@ -69,6 +68,7 @@ func TestLiveStatusResponse_Unmarshal(t *testing.T) {
 			}
 
 			var resp LiveStatusResponse
+
 			if err := jsonv2.Unmarshal(data, &resp); err != nil {
 				t.Fatalf("Failed to unmarshal: %v", err)
 			}
@@ -95,6 +95,7 @@ func TestLiveStatusContent_Fields(t *testing.T) {
 	}
 
 	var resp LiveStatusResponse
+
 	if err := jsonv2.Unmarshal(data, &resp); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
@@ -104,7 +105,7 @@ func TestLiveStatusContent_Fields(t *testing.T) {
 	}
 
 	content := resp.Content
-	if content.Status != "OPEN" {
+	if content.Status != statusOpen {
 		t.Errorf("Status = %s, want OPEN", content.Status)
 	}
 
@@ -116,8 +117,8 @@ func TestLiveStatusContent_Fields(t *testing.T) {
 		t.Error("ConcurrentUserCount should be positive for OPEN status")
 	}
 
-	if content.ChatChannelId == "" {
-		t.Error("ChatChannelId should not be empty")
+	if content.ChatChannelID == "" {
+		t.Error("ChatChannelID should not be empty")
 	}
 }
 
@@ -150,6 +151,7 @@ func TestScheduledLivesResponse_Unmarshal(t *testing.T) {
 			}
 
 			var resp ScheduledLivesResponse
+
 			if err := jsonv2.Unmarshal(data, &resp); err != nil {
 				t.Fatalf("Failed to unmarshal: %v", err)
 			}
@@ -176,6 +178,7 @@ func TestScheduledLive_Fields(t *testing.T) {
 	}
 
 	var resp ScheduledLivesResponse
+
 	if err := jsonv2.Unmarshal(data, &resp); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
@@ -185,8 +188,8 @@ func TestScheduledLive_Fields(t *testing.T) {
 	}
 
 	first := resp.Content.ScheduledLives[0]
-	if first.LiveId <= 0 {
-		t.Error("LiveId should be positive")
+	if first.LiveID <= 0 {
+		t.Error("LiveID should be positive")
 	}
 
 	if first.LiveTitle == "" {
@@ -251,6 +254,7 @@ func TestParseScheduledStartAt(t *testing.T) {
 			got, err := ParseScheduledStartAt(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseScheduledStartAt() error = %v, wantErr %v", err, tt.wantErr)
+
 				return
 			}
 
@@ -269,18 +273,23 @@ func assertScheduledStartAt(t *testing.T, got time.Time, wantYear int, wantMonth
 	if got.Location().String() != "Asia/Seoul" {
 		t.Errorf("Location = %s, want Asia/Seoul", got.Location())
 	}
+
 	if got.Year() != wantYear {
 		t.Errorf("Year = %d, want %d", got.Year(), wantYear)
 	}
+
 	if got.Month() != wantMonth {
 		t.Errorf("Month = %v, want %v", got.Month(), wantMonth)
 	}
+
 	if got.Day() != wantDay {
 		t.Errorf("Day = %d, want %d", got.Day(), wantDay)
 	}
+
 	if got.Hour() != wantHour {
 		t.Errorf("Hour = %d, want %d", got.Hour(), wantHour)
 	}
+
 	if got.Minute() != wantMin {
 		t.Errorf("Minute = %d, want %d", got.Minute(), wantMin)
 	}

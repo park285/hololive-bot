@@ -29,9 +29,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
 type unusedLowLevelCache struct{}
@@ -64,8 +65,10 @@ func TestAPIRateLimitMiddlewareFailOpenNoCacheCountsWithoutPanic(t *testing.T) {
 	}
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+
 	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/members", http.NoBody)
 	first(c)
+
 	if c.IsAborted() {
 		t.Fatal("no-cache fail-open middleware must not abort the request")
 	}
@@ -90,6 +93,7 @@ func TestAPIRateLimitHandlerFailOpenOnCheckError(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
+
 	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/members", http.NoBody)
 	c.Request.RemoteAddr = "203.0.113.7:1234"
 
@@ -98,9 +102,11 @@ func TestAPIRateLimitHandlerFailOpenOnCheckError(t *testing.T) {
 	if got := testutil.ToFloat64(apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonCheckFailed)); got-before != 1 {
 		t.Fatalf("check_failed fail-open delta = %v, want 1", got-before)
 	}
+
 	if c.IsAborted() {
 		t.Fatal("check-failed fail-open must not abort the request")
 	}
+
 	if rec.Code == http.StatusTooManyRequests {
 		t.Fatalf("check-failed fail-open must not return 429, got %d", rec.Code)
 	}

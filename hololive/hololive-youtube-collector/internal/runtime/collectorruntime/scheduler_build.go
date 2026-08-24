@@ -3,10 +3,13 @@ package collectorruntime
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -16,7 +19,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/officialcollector"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
-	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, error) {
@@ -29,8 +31,9 @@ func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, err
 		QueueCapacity: cfg.QueueCapacity, PollCadence: cfg.AcquisitionCadence,
 	}
 	if err := lease.Validate(); err != nil {
-		return joblease.Config{}, err
+		return joblease.Config{}, fmt.Errorf("validate: %w", err)
 	}
+
 	return lease, nil
 }
 
@@ -40,26 +43,36 @@ func buildScheduler(
 	logger *slog.Logger,
 ) (*leaseScheduler, error) {
 	if err := requireSchedulerDeps(appConfig, infra); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("require scheduler deps: %w", err)
 	}
+
 	collector := appConfig.Collector
 	if err := collector.Validate(appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout); err != nil {
 		return nil, fmt.Errorf("build youtube collector: %w", err)
 	}
+
 	leaseConfig, err := leaseConfigFrom(&collector)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: lease config: %w", err)
 	}
-	return newLeaseScheduler(infra, logger, &collector, &leaseConfig, appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout)
+
+	out, err := newLeaseScheduler(infra, logger, &collector, &leaseConfig, appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout)
+	if err != nil {
+		return nil, fmt.Errorf("lease scheduler: %w", err)
+	}
+
+	return out, nil
 }
 
 func requireSchedulerDeps(appConfig *settings.YouTubeCollectorRuntimeConfig, infra *collectorInfrastructure) error {
 	if appConfig == nil || infra == nil || infra.postgres == nil || infra.postgres.GetPool() == nil {
-		return fmt.Errorf("build youtube collector: postgres pool is required")
+		return errors.New("build youtube collector: postgres pool is required")
 	}
+
 	if infra.youtubejs == nil || infra.youtubejsRPC == nil || infra.holodex == nil || infra.official == nil {
-		return fmt.Errorf("build youtube collector: provider clients are required")
+		return errors.New("build youtube collector: provider clients are required")
 	}
+
 	return nil
 }
 
@@ -75,15 +88,19 @@ func newLeaseScheduler(
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: collection lease repository: %w", err)
 	}
+
 	registry, err := newCollectorRegistry(infra, collector, holodexTimeout, officialTimeout)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collector registry: %w", err)
 	}
+
 	owner, err := newCollectorOwner(collector.InstanceID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collector owner: %w", err)
 	}
+
 	tracker := &readinessTracker{}
+
 	return &leaseScheduler{
 		repository:    repository,
 		candidates:    repository,
@@ -131,19 +148,23 @@ func newCollectorRegistry(
 	officialTimeout time.Duration,
 ) (*Registry, error) {
 	runners := collectorRunners(infra)
+
 	profiles, err := collectorExecutionProfiles(runners, cfg, holodexTimeout, officialTimeout)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collector execution profiles: %w", err)
 	}
+
 	registry, err := NewRegistryWithProfiles(profiles, runners...)
 	if err != nil {
 		return nil, fmt.Errorf("build youtube collector: job registry: %w", err)
 	}
+
 	return registry, nil
 }
 
 func collectorRunners(infra *collectorInfrastructure) []JobRunner {
 	maxResults := collectutil.DefaultMaxResults()
+
 	return []JobRunner{
 		youtubejscollector.NewCommunityRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
@@ -167,12 +188,15 @@ func collectorExecutionProfiles(
 	for _, runner := range runners {
 		id := runner.JobID()
 		maxCalls, requestTimeout, rateInterval, inflight := executionProfileInputs(id, cfg, holodexTimeout, officialTimeout)
+
 		profile, profileErr := NewExecutionProfile(maxCalls, requestTimeout, rateInterval, inflight, cfg.CollectionOverhead, 0)
 		if profileErr != nil {
 			return nil, fmt.Errorf("build youtube collector: execution profile %s: %w", id, profileErr)
 		}
+
 		profiles[id] = profile
 	}
+
 	return profiles, nil
 }
 
@@ -188,18 +212,23 @@ func executionProfileInputs(
 	inflight int,
 ) {
 	maxCalls = 1
+
 	if string(id.Kind) == "youtubejs_content" {
 		maxCalls = 2
 	}
+
 	requestTimeout = cfg.YouTubeJSRequestTimeout
 	rateInterval = cfg.RequestInterval
 	inflight = cfg.YouTubeJSMaxInflight
+
 	if id.Provider == contract.ProviderHolodex {
 		requestTimeout, rateInterval, inflight = holodexTimeout, 0, cfg.HolodexMaxInflight
 	}
+
 	if id.Provider == contract.ProviderHololiveOfficial {
 		requestTimeout, rateInterval, inflight = officialTimeout, 0, cfg.OfficialMaxInflight
 	}
+
 	return maxCalls, requestTimeout, rateInterval, inflight
 }
 
@@ -216,9 +245,12 @@ func newCollectorOwner(instanceID string) (string, error) {
 	if _, err := rand.Read(token); err != nil {
 		return "", fmt.Errorf("build youtube collector: generate lease owner: %w", err)
 	}
+
 	prefix := runtimeName
+
 	if id := strings.TrimSpace(instanceID); id != "" {
 		prefix = id
 	}
+
 	return prefix + ":" + hex.EncodeToString(token), nil
 }

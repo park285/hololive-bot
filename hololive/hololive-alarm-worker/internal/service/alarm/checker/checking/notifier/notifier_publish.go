@@ -33,24 +33,32 @@ func (n *Notifier) publishBatchAndMark(ctx context.Context, items []claimedSend)
 	if items == nil {
 		items = []claimedSend{}
 	}
+
 	notifications := make([]*domain.AlarmNotification, 0, len(items))
 	claimKeys := make([][]string, 0, len(items))
+
 	for _, item := range items {
 		notifications = append(notifications, item.payload.notification)
 		claimKeys = append(claimKeys, item.claimKeys)
 	}
+
 	result, err := n.queuePublisher.PublishBatch(ctx, notifications, claimKeys)
 	processed := clampProcessedDeliveries(result.ProcessedDeliveries, len(items))
+
 	if err != nil {
 		n.releaseClaimsBestEffort(ctx, claimKeysFromItems(items[processed:]), "failed to release claims after queue batch publish error")
+
 		for _, item := range items[:processed] {
 			n.markPublishedBestEffort(ctx, item.payload)
 		}
+
 		return processed, fmt.Errorf("publish queue batch: %w", err)
 	}
+
 	for _, item := range items {
 		n.markPublishedBestEffort(ctx, item.payload)
 	}
+
 	return len(items), nil
 }
 
@@ -58,9 +66,11 @@ func clampProcessedDeliveries(processed, total int) int {
 	if processed < 0 {
 		return 0
 	}
+
 	if processed > total {
 		return total
 	}
+
 	return processed
 }
 
@@ -69,6 +79,7 @@ func claimKeysFromItems(items []claimedSend) []string {
 	for _, item := range items {
 		keys = append(keys, item.claimKeys...)
 	}
+
 	return keys
 }
 

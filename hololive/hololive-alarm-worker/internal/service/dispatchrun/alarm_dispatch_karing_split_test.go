@@ -11,10 +11,12 @@ import (
 
 func karingGroupsFor(t *testing.T, count int) []alarmDispatchGroup {
 	t.Helper()
+
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, count)
 	for id := int64(1); id <= int64(count); id++ {
-		envelopes = append(envelopes, alarmDispatchKaringIdentityTestEnvelope("room-1", id))
+		envelopes = append(envelopes, alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id))
 	}
+
 	return groupAlarmDispatchEnvelopesForKaring(envelopes, true)
 }
 
@@ -23,14 +25,18 @@ func TestKaringGroupNeverExceedsOneChunk(t *testing.T) {
 		groups := karingGroupsFor(t, count)
 
 		total := 0
+
 		for g := range groups {
 			require.LessOrEqual(t, len(groups[g].envelopes), alarmDispatchKaringMaxItemsPerRequest,
 				"a group larger than one chunk can be half-sent, and a 502 on the later chunk retries the whole group under new ClientRequestIDs")
+
 			requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[g])
 			require.NoError(t, err)
 			require.Len(t, requests, 1)
+
 			total += len(groups[g].envelopes)
 		}
+
 		require.Equal(t, count, total, "splitting must not drop or duplicate envelopes")
 	}
 }
@@ -39,15 +45,18 @@ func TestKaringSplitKeepsEveryEnvelopeExactlyOnce(t *testing.T) {
 	groups := karingGroupsFor(t, 9)
 
 	seen := map[int64]int{}
+
 	for g := range groups {
 		for i := range groups[g].envelopes {
 			seen[groups[g].envelopes[i].DispatchOutboxID]++
 		}
+
 		require.Len(t, groups[g].notifications, len(groups[g].envelopes),
 			"notifications must stay index-aligned with envelopes; karing item identity pairs them by index")
 	}
 
 	require.Len(t, seen, 9)
+
 	for id, count := range seen {
 		assert.Equal(t, 1, count, "envelope %d appeared %d times across groups", id, count)
 	}
@@ -55,19 +64,21 @@ func TestKaringSplitKeepsEveryEnvelopeExactlyOnce(t *testing.T) {
 
 func TestKaringSplitIsIndependentOfDrainOrder(t *testing.T) {
 	ordered := make([]domain.AlarmQueueEnvelope, 0, 9)
+
 	for id := int64(1); id <= 9; id++ {
-		ordered = append(ordered, alarmDispatchKaringIdentityTestEnvelope("room-1", id))
+		ordered = append(ordered, alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id))
 	}
+
 	shuffled := []domain.AlarmQueueEnvelope{
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 7),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 2),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 9),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 1),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 5),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 3),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 8),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 6),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 4),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 7),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 2),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 9),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 1),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 5),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 3),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 8),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 6),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 4),
 	}
 
 	assert.Equal(t, karingRequestIDs(t, ordered), karingRequestIDs(t, shuffled),
@@ -75,11 +86,14 @@ func TestKaringSplitIsIndependentOfDrainOrder(t *testing.T) {
 }
 
 func TestKaringSplitLeavesOutboxGroupsIntact(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
 	envelope.DispatchOutboxID = 42
 	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+
 	items := make([]domain.YouTubeOutboxItem, 0, 6)
+
 	for i := range 6 {
 		items = append(items, domain.YouTubeOutboxItem{
 			OutboxID:  int64(100 + i),
@@ -87,11 +101,12 @@ func TestKaringSplitLeavesOutboxGroupsIntact(t *testing.T) {
 			Payload:   `{"post_id":"p","content_text":"본문"}`,
 		})
 	}
+
 	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 		Kind:       domain.OutboxKindCommunityPost,
 		AlarmType:  domain.AlarmTypeCommunity,
-		ChannelID:  "UCtest",
-		MemberName: "Member",
+		ChannelID:  testAlarmChannelID,
+		MemberName: testAlarmMemberName,
 		Items:      items,
 	}
 

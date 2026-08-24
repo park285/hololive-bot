@@ -18,7 +18,7 @@ import (
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
-var errFinalResultSendFailed = errors.New("send failed")
+var errFinalResultSendFailed = errors.New(testSendFailedMessage)
 
 type finalResultTestSender struct {
 	failRoom map[string]bool
@@ -28,6 +28,7 @@ func (s *finalResultTestSender) SendMessage(_ context.Context, roomID, _ string)
 	if s.failRoom[roomID] {
 		return errFinalResultSendFailed
 	}
+
 	return nil
 }
 
@@ -47,7 +48,7 @@ type finalResultOutboxModel struct {
 }
 
 func (finalResultOutboxModel) TableName() string {
-	return "youtube_notification_outbox"
+	return testTableOutbox
 }
 
 type finalResultDeliveryModel struct {
@@ -64,7 +65,7 @@ type finalResultDeliveryModel struct {
 }
 
 func (finalResultDeliveryModel) TableName() string {
-	return "youtube_notification_delivery"
+	return testTableDelivery
 }
 
 type finalResultTrackingModel struct {
@@ -86,13 +87,13 @@ type finalResultTrackingModel struct {
 }
 
 func (finalResultTrackingModel) TableName() string {
-	return "youtube_content_alarm_tracking"
+	return testTableContentAlarmTracking
 }
 
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -136,7 +137,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "short-final-success")
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "short-final-success")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
-	assertLogStringField(t, entry, deliveryAuditSendResultLogField, "success")
+	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
 	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
 	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
 	assertLogStringField(t, entry, deliveryDedupeKeyLogField, "youtube-notification:NEW_SHORT:short-final-success")
@@ -147,6 +148,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
 	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
+
 	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
 	assertLogObjectIntField(t, classification, "threshold_millis", int(timeline.PostLatencyExceededThresholdMillis))
@@ -158,7 +160,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -202,7 +204,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-community-success")
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "post-final-community-success")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-	assertLogStringField(t, entry, deliveryAuditSendResultLogField, "success")
+	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
 	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
 	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
 	assertLogStringField(t, entry, deliveryDedupeKeyLogField, "youtube-notification:COMMUNITY_POST:post-final-community-success")
@@ -212,6 +214,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 1)
 	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 0)
 	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
+
 	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
 	assertLogObjectIntField(t, classification, "threshold_millis", int(timeline.PostLatencyExceededThresholdMillis))
@@ -223,7 +226,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCode(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -274,7 +277,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -318,14 +321,15 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-failure")
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "post-final-failure")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
-	assertLogStringField(t, entry, deliveryAuditSendResultLogField, "failure")
-	assertLogStringField(t, entry, deliveryAuditFailureReasonLogField, "send message")
+	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
+	assertLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)
 	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
 	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
 	assertLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)
 	assertLogIntField(t, entry, logschema.FieldSuccessfulRoomCount, 0)
 	assertLogIntField(t, entry, logschema.FieldFailedRoomCount, 1)
 	assertLogTimeField(t, entry, deliveryAuditSentAtLogField)
+
 	classification := readLatencyClassificationField(t, entry)
 	assertLogObjectStringField(t, classification, "status", string(timeline.PostLatencyClassificationStatusExceeded))
 	assertLogObjectIntField(t, classification, "threshold_millis", int(timeline.PostLatencyExceededThresholdMillis))
@@ -340,6 +344,7 @@ func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestD
 	logBuffer := &bytes.Buffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cache := cachemocks.NewLenientClient()
+
 	return NewDispatcher(db, cache, sender, nil, logger, config), logBuffer
 }
 
@@ -352,16 +357,19 @@ func findOutboxFinalResultAuditLogEntry(t *testing.T, logBuffer *bytes.Buffer) m
 		if !ok {
 			continue
 		}
+
 		value, ok := raw.(string)
 		if !ok {
 			t.Fatalf("telemetry_source type = %T, want string", raw)
 		}
+
 		if value == logschema.TelemetrySourceOutboxFinalResult {
 			return entries[i]
 		}
 	}
 
 	t.Fatalf("audit log with telemetry_source=%q not found in %s", logschema.TelemetrySourceOutboxFinalResult, logBuffer.String())
+
 	return nil
 }
 
@@ -369,14 +377,17 @@ func findAllLogEntriesByMessage(t *testing.T, logBuffer *bytes.Buffer, message s
 	t.Helper()
 
 	entries := make([]map[string]any, 0)
+
 	for line := range bytes.SplitSeq(bytes.TrimSpace(logBuffer.Bytes()), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
+
 		entry := make(map[string]any)
 		if err := jsonv2.Unmarshal(line, &entry); err != nil {
 			t.Fatalf("unmarshal log entry: %v", err)
 		}
+
 		if entry["msg"] == message {
 			entries = append(entries, entry)
 		}
@@ -392,10 +403,12 @@ func readLogStringField(t *testing.T, entry map[string]any, field string) string
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)
 	}
+
 	value, ok := raw.(string)
 	if !ok {
 		t.Fatalf("log field %q type = %T, want string", field, raw)
 	}
+
 	return value
 }
 
@@ -404,13 +417,16 @@ func readLatencyClassificationField(t *testing.T, entry map[string]any) map[stri
 
 	field := logschema.FieldLatencyClassification
 	raw, ok := entry[field]
+
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)
 	}
+
 	value, ok := raw.(map[string]any)
 	if !ok {
 		t.Fatalf("log field %q type = %T, want object", field, raw)
 	}
+
 	return value
 }
 
@@ -421,10 +437,12 @@ func readLogObjectStringField(t *testing.T, entry map[string]any, field string) 
 	if !ok {
 		t.Fatalf("log object missing %q: %#v", field, entry)
 	}
+
 	value, ok := raw.(string)
 	if !ok {
 		t.Fatalf("log object field %q type = %T, want string", field, raw)
 	}
+
 	return value
 }
 
@@ -435,6 +453,7 @@ func readLogObjectIntField(t *testing.T, entry map[string]any, field string) int
 	if !ok {
 		t.Fatalf("log object missing %q: %#v", field, entry)
 	}
+
 	switch value := raw.(type) {
 	case float64:
 		return int(value)
@@ -443,6 +462,7 @@ func readLogObjectIntField(t *testing.T, entry map[string]any, field string) int
 	default:
 		t.Fatalf("log object field %q type = %T, want number", field, raw)
 	}
+
 	return 0
 }
 
@@ -450,10 +470,12 @@ func readLogTimeField(t *testing.T, entry map[string]any, field string) time.Tim
 	t.Helper()
 
 	value := readLogStringField(t, entry, field)
+
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {
 		t.Fatalf("log field %q = %q, want RFC3339Nano time: %v", field, value, err)
 	}
+
 	return parsed.UTC()
 }
 
@@ -464,10 +486,12 @@ func readLogBoolField(t *testing.T, entry map[string]any, field string) bool {
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)
 	}
+
 	value, ok := raw.(bool)
 	if !ok {
 		t.Fatalf("log field %q type = %T, want bool", field, raw)
 	}
+
 	return value
 }
 
@@ -478,6 +502,7 @@ func readLogIntField(t *testing.T, entry map[string]any, field string) int {
 	if !ok {
 		t.Fatalf("log entry missing %q: %#v", field, entry)
 	}
+
 	switch value := raw.(type) {
 	case float64:
 		return int(value)
@@ -486,6 +511,7 @@ func readLogIntField(t *testing.T, entry map[string]any, field string) int {
 	default:
 		t.Fatalf("log field %q type = %T, want number", field, raw)
 	}
+
 	return 0
 }
 

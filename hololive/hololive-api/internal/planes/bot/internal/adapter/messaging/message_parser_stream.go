@@ -24,8 +24,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -38,7 +39,7 @@ func (ma *MessageAdapter) tryLiveCommand(command string, args []string, raw stri
 	if len(args) > 0 {
 		member := stringutil.TrimSpace(strings.Join(args, " "))
 		if member != "" {
-			params["member"] = member
+			params[paramMember] = member
 		}
 	}
 
@@ -90,6 +91,7 @@ func (ma *MessageAdapter) parseUpcomingArgs(args []string) map[string]any {
 
 	applyUpcomingAll(params, all)
 	applyUpcomingMember(params, memberTokens)
+
 	return params
 }
 
@@ -98,7 +100,7 @@ func isAllUpcomingToken(token string) bool {
 }
 
 func applyUpcomingLimit(params map[string]any, token string) bool {
-	if _, exists := params["limit"]; exists {
+	if _, exists := params[paramLimit]; exists {
 		return false
 	}
 
@@ -107,7 +109,8 @@ func applyUpcomingLimit(params map[string]any, token string) bool {
 		return false
 	}
 
-	params["limit"] = n
+	params[paramLimit] = n
+
 	return true
 }
 
@@ -117,13 +120,13 @@ func applyUpcomingAll(params map[string]any, all bool) {
 	}
 
 	params["all"] = true
-	delete(params, "limit")
+	delete(params, paramLimit)
 }
 
 func applyUpcomingMember(params map[string]any, memberTokens []string) {
 	member := stringutil.TrimSpace(strings.Join(memberTokens, " "))
 	if member != "" {
-		params["member"] = member
+		params[paramMember] = member
 	}
 }
 
@@ -166,7 +169,7 @@ func (ma *MessageAdapter) parseScheduleArgs(args []string) map[string]any {
 	}
 
 	return map[string]any{
-		"member": member,
-		"days":   days,
+		paramMember: member,
+		paramDays:   days,
 	}
 }

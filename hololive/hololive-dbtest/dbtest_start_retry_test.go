@@ -24,19 +24,22 @@ func TestIsTransientContainerStartError(t *testing.T) {
 
 func TestProvisionPostgresContainerRetriesMarkedForRemoval(t *testing.T) {
 	prevInterval := containerStartRetryInterval
+
 	containerStartRetryInterval = 0
+
 	t.Cleanup(func() { containerStartRetryInterval = prevInterval })
 
 	starts := 0
 	holds := 0
 	container, err := provisionPostgresContainer(
-		context.Background(),
+		t.Context(),
 		"postgres:test",
 		func(context.Context, string) (*postgres.PostgresContainer, error) {
 			starts++
 			if starts < 3 {
 				return nil, errors.New("container start: Error response from daemon: container is marked for removal and cannot be started")
 			}
+
 			return &postgres.PostgresContainer{}, nil
 		},
 		func(context.Context) error {
@@ -56,7 +59,7 @@ func TestProvisionPostgresContainerDoesNotRetryPermanentStartError(t *testing.T)
 	wantErr := errors.New("pull access denied for postgres:test")
 	starts := 0
 	_, err := provisionPostgresContainer(
-		context.Background(),
+		t.Context(),
 		"postgres:test",
 		func(context.Context, string) (*postgres.PostgresContainer, error) {
 			starts++
@@ -65,6 +68,7 @@ func TestProvisionPostgresContainerDoesNotRetryPermanentStartError(t *testing.T)
 		func(context.Context) error { return nil },
 		func(context.Context) error {
 			t.Fatal("verify must not run after a permanent start failure")
+
 			return nil
 		},
 	)
@@ -75,12 +79,14 @@ func TestProvisionPostgresContainerDoesNotRetryPermanentStartError(t *testing.T)
 
 func TestProvisionPostgresContainerExhaustsTransientStartRetries(t *testing.T) {
 	prevInterval := containerStartRetryInterval
+
 	containerStartRetryInterval = 0
+
 	t.Cleanup(func() { containerStartRetryInterval = prevInterval })
 
 	starts := 0
 	_, err := provisionPostgresContainer(
-		context.Background(),
+		t.Context(),
 		"postgres:test",
 		func(context.Context, string) (*postgres.PostgresContainer, error) {
 			starts++
@@ -99,7 +105,7 @@ func TestProvisionPostgresContainerDoesNotRetryHoldError(t *testing.T) {
 	wantErr := errors.New("docker daemon unavailable")
 	starts := 0
 	_, err := provisionPostgresContainer(
-		context.Background(),
+		t.Context(),
 		"postgres:test",
 		func(context.Context, string) (*postgres.PostgresContainer, error) {
 			starts++
@@ -108,6 +114,7 @@ func TestProvisionPostgresContainerDoesNotRetryHoldError(t *testing.T) {
 		func(context.Context) error { return wantErr },
 		func(context.Context) error {
 			t.Fatal("verify must not run after hold failure")
+
 			return nil
 		},
 	)
@@ -120,7 +127,7 @@ func TestProvisionPostgresContainerStartsAfterTransientHoldError(t *testing.T) {
 	holds := 0
 	starts := 0
 	container, err := provisionPostgresContainer(
-		context.Background(),
+		t.Context(),
 		"postgres:test",
 		func(context.Context, string) (*postgres.PostgresContainer, error) {
 			starts++
@@ -151,14 +158,16 @@ func TestShouldFailClosedOnHold(t *testing.T) {
 
 func TestProvisionPostgresContainerRejectsNilStartedContainer(t *testing.T) {
 	_, err := provisionPostgresContainer(
-		context.Background(),
+		t.Context(),
 		"postgres:test",
 		func(context.Context, string) (*postgres.PostgresContainer, error) {
+			//nolint:nilnil // 컨테이너와 오류를 모두 nil로 돌려주는 start 구현을 거부하는지가 이 테스트의 검증 대상이다.
 			return nil, nil
 		},
 		func(context.Context) error { return nil },
 		func(context.Context) error {
 			t.Fatal("verify must not run after nil start")
+
 			return nil
 		},
 	)
@@ -168,7 +177,7 @@ func TestProvisionPostgresContainerRejectsNilStartedContainer(t *testing.T) {
 }
 
 func TestPreparePostgresRetryRejectsNilContainer(t *testing.T) {
-	err := preparePostgresRetry(context.Background(), nil, errors.New("reaper gone"))
+	err := preparePostgresRetry(t.Context(), nil, errors.New("reaper gone"))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unverified postgres container is missing")
 }

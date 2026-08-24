@@ -2,6 +2,7 @@ package workspace
 
 import (
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -23,6 +24,7 @@ func TestCommandEntrypointsStayAnchoredToOwningHelpers(t *testing.T) {
 
 	root := repoRootFromHelper(t)
 	contracts := loadEntrypointContracts(t, root)
+
 	if len(contracts) == 0 {
 		t.Fatal("entrypoint contract manifest 가 비어 있습니다")
 	}
@@ -48,31 +50,40 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 	root := repoRootFromHelper(t)
 	contracts := loadEntrypointContracts(t, root)
 	manifestPaths := make([]string, 0, len(contracts))
+
 	for _, contract := range contracts {
 		manifestPaths = append(manifestPaths, filepath.ToSlash(contract.Path))
 	}
+
 	sort.Strings(manifestPaths)
 
 	discoveredPaths := make([]string, 0, len(manifestPaths))
+
 	if err := fs.WalkDir(os.DirFS(filepath.Join(root, "hololive")), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() {
 			return nil
 		}
+
 		if filepath.Base(path) != "main.go" {
 			return nil
 		}
+
 		slashed := filepath.ToSlash(filepath.Join("hololive", path))
 		if !strings.Contains(slashed, "/cmd/") {
 			return nil
 		}
+
 		discoveredPaths = append(discoveredPaths, slashed)
+
 		return nil
 	}); err != nil {
 		t.Fatalf("command entrypoint scan 실패: %v", err)
 	}
+
 	sort.Strings(discoveredPaths)
 
 	if len(manifestPaths) != len(discoveredPaths) {
@@ -102,19 +113,22 @@ func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() || filepath.Ext(path) != ".md" {
 			return nil
 		}
 
 		content, err := fs.ReadFile(docsFS, path)
 		if err != nil {
-			return err
+			return fmt.Errorf("read current documentation %s: %w", path, err)
 		}
+
 		for _, legacyPath := range legacyCommandPaths {
 			if strings.Contains(string(content), legacyPath) {
 				t.Fatalf("%s contains legacy command path %q", filepath.ToSlash(filepath.Join("docs", "current", path)), legacyPath)
 			}
 		}
+
 		return nil
 	}); err != nil {
 		t.Fatalf("docs/current scan 실패: %v", err)
@@ -127,9 +141,11 @@ func loadEntrypointContracts(t *testing.T, root string) []entrypointContract {
 	data := []byte(readRepoFile(t, root, "internal/workspace/testdata/entrypoint_contracts.json"))
 
 	var contracts []entrypointContract
+
 	if err := jsonv2.Unmarshal(data, &contracts); err != nil {
 		t.Fatalf("entrypoint contract manifest 파싱 실패: %v", err)
 	}
+
 	return contracts
 }
 
@@ -143,17 +159,21 @@ func fileContainsCallPath(t *testing.T, path string, content []byte, want string
 
 	normalizedWant := normalizeCallPath(want)
 	found := false
+
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
+
 		if normalizeCallPath(renderCallPath(call.Fun)) == normalizedWant {
 			found = true
 			return false
 		}
+
 		return true
 	})
+
 	return found
 }
 
@@ -170,7 +190,14 @@ func renderCallPath(expr ast.Expr) string {
 		if left == "" {
 			return node.Sel.Name
 		}
+
 		return left + "." + node.Sel.Name
+	case *ast.CompositeLit:
+		return renderCallPath(node.Type)
+	case *ast.IndexExpr:
+		return renderCallPath(node.X)
+	case *ast.IndexListExpr:
+		return renderCallPath(node.X)
 	default:
 		return ""
 	}

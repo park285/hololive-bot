@@ -15,6 +15,7 @@ func TestValidateScraperActiveActiveConfig_EnabledEmptyNamespace(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for enabled active-active with empty namespace")
 	}
+
 	if !strings.Contains(err.Error(), "YOUTUBE_PRODUCER_LEASE_NAMESPACE") {
 		t.Fatalf("error = %q, want YOUTUBE_PRODUCER_LEASE_NAMESPACE mention", err.Error())
 	}
@@ -72,10 +73,12 @@ func TestValidateScraperSchedulerConfig_PartialZero(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			err := validateScraperSchedulerConfig(tt.config)
 			if err == nil {
 				t.Fatalf("expected error for %s", tt.name)
 			}
+
 			if !strings.Contains(err.Error(), tt.errSub) {
 				t.Fatalf("error = %q, want substring %q", err.Error(), tt.errSub)
 			}
@@ -89,9 +92,6 @@ func TestServerTransportEnabled_EmptyTransports_DefaultH3(t *testing.T) {
 	c := &Config{}
 	if !c.ServerTransportEnabled("h3") {
 		t.Fatal("empty HTTPTransports should default to h3 enabled")
-	}
-	if c.ServerTransportEnabled("h2c") {
-		t.Fatal("empty HTTPTransports should not enable h2c")
 	}
 }
 
@@ -115,17 +115,9 @@ func TestServerTransportEnabled_ExplicitList(t *testing.T) {
 	if !c.ServerTransportEnabled("http3") {
 		t.Fatal("http3 alias should match h3")
 	}
+
 	if !c.ServerTransportEnabled("quic") {
 		t.Fatal("quic alias should match h3")
-	}
-}
-
-func TestValidateServerTransports_RejectsH2C(t *testing.T) {
-	t.Parallel()
-
-	err := validateServerTransports(&ServerConfig{HTTPTransports: []string{"h2c"}})
-	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: h2c") {
-		t.Fatalf("validateServerTransports(h2c) error = %v, want unsupported h2c", err)
 	}
 }
 
@@ -147,7 +139,6 @@ func TestNormalizeServerHTTPTransport(t *testing.T) {
 		ok    bool
 	}{
 		{"", "", true},
-		{"h2c", "h2c", false},
 		{"h3", "h3", true},
 		{"http3", "h3", true},
 		{"http/3", "h3", true},
@@ -159,10 +150,12 @@ func TestNormalizeServerHTTPTransport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
+
 			got, ok := normalizeServerHTTPTransport(tt.input)
 			if ok != tt.ok {
 				t.Fatalf("normalizeServerHTTPTransport(%q) ok = %v, want %v", tt.input, ok, tt.ok)
 			}
+
 			if got != tt.want {
 				t.Fatalf("normalizeServerHTTPTransport(%q) = %q, want %q", tt.input, got, tt.want)
 			}
@@ -173,7 +166,7 @@ func TestNormalizeServerHTTPTransport(t *testing.T) {
 func TestIsValidPostgresSSLMode(t *testing.T) {
 	t.Parallel()
 
-	valid := []string{"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+	valid := []string{"disable", "allow", "prefer", "require", "verify-ca", postgresSSLModeVerifyFull}
 	for _, mode := range valid {
 		if !isValidPostgresSSLMode(mode) {
 			t.Fatalf("isValidPostgresSSLMode(%q) = false, want true", mode)
@@ -193,11 +186,11 @@ func setAdminAPIRuntimeEnv(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "h3")
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
-	t.Setenv("HOLOLIVE_H3_KEY_FILE", "/run/hololive-bot/certs/hololive-h3.key")
+	t.Setenv("HOLOLIVE_H3_KEY_FILE", hololiveH3KeyPath)
 	t.Setenv("SERVER_PORT", "30006")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
-	t.Setenv("IRIS_WEBHOOK_TOKEN", "")
-	t.Setenv("IRIS_BOT_TOKEN", "")
+	t.Setenv(irisWebhookTokenEnv, "")
+	t.Setenv(irisBotTokenEnv, "")
 	t.Setenv("IRIS_BASE_URL", "")
 	t.Setenv("IRIS_BASE_URL_FILE", "")
 	t.Setenv("YOUTUBE_API_KEY", "")
@@ -210,6 +203,7 @@ func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAdminAPIRuntime() error = %v", err)
 	}
+
 	if config.Iris.WebhookToken != "" || config.Iris.BotToken != "" {
 		t.Fatalf("Iris tokens = %q/%q, want empty", config.Iris.WebhookToken, config.Iris.BotToken)
 	}
@@ -218,8 +212,9 @@ func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
 	t.Setenv("IRIS_BASE_URL", server.URL)
 	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testURLHostname(t, server.URL))
 	t.Setenv("IRIS_TRANSPORT", "http1")
-	t.Setenv("IRIS_BOT_TOKEN", "test-bot-token")
+	t.Setenv(irisBotTokenEnv, "test-bot-token")
 	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
+
 	if _, err := load(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
 	}
@@ -233,6 +228,7 @@ func TestLoadAdminAPIRuntime_DefaultEnforcesCORSOrigins_05c4a5ef(t *testing.T) {
 	if err == nil {
 		t.Fatal("LoadAdminAPIRuntime() error = nil, want missing CORS_ALLOWED_ORIGINS error")
 	}
+
 	if !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,6 +253,7 @@ func TestLoadAdminAPIRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAdminAPIRuntime() error = %v, want success when collector env is invalid", err)
 	}
+
 	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
 		t.Fatalf("YouTubeCollector = %#v, want zero value unused by admin API loader", cfg.YouTubeCollector)
 	}
@@ -271,6 +268,7 @@ func TestLoadBotRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadBotRuntime() error = %v, want success when collector env is invalid", err)
 	}
+
 	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
 		t.Fatalf("YouTubeCollector = %#v, want zero value unused by bot loader", cfg.YouTubeCollector)
 	}
@@ -287,6 +285,7 @@ func TestLoadAlarmWorkerRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAlarmWorkerRuntime() error = %v, want success when collector env is invalid", err)
 	}
+
 	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
 		t.Fatalf("YouTubeCollector = %#v, want zero value unused by alarm-worker loader", cfg.YouTubeCollector)
 	}

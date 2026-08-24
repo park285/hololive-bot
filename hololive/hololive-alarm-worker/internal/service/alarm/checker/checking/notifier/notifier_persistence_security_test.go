@@ -1,7 +1,6 @@
 package notifier
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -23,11 +22,12 @@ func TestPrepareOneRejectsPersistenceInvalidIdentityBeforeDedup(t *testing.T) {
 		},
 	}
 
-	_, _, outcome, err := (&Notifier{}).prepareOne(context.Background(), notification)
+	prepared, err := (&Notifier{}).prepareOne(t.Context(), notification)
 	if err == nil {
 		t.Fatal("prepareOne() error = nil")
 	}
-	if outcome != sendOutcomeFailed {
-		t.Fatalf("prepareOne() outcome = %v, want failed", outcome)
+
+	if prepared.outcome != sendOutcomeFailed {
+		t.Fatalf("prepareOne() outcome = %v, want failed", prepared.outcome)
 	}
 }

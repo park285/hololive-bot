@@ -49,6 +49,7 @@ func newClaimManager(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &ClaimManager{
 		db:          db,
 		config:      *config,
@@ -61,44 +62,44 @@ func newClaimManager(
 	}
 }
 
-func (c *ClaimManager) setExecutor(executor DeliveryExecutor) {
-	if c != nil {
-		c.executor = executor
+func (d *ClaimManager) setExecutor(executor DeliveryExecutor) {
+	if d != nil {
+		d.executor = executor
 	}
 }
 
-func (c *ClaimManager) setMetricsRecorder(metrics *MetricsRecorder) {
-	if c != nil {
-		c.metrics = metrics
+func (d *ClaimManager) setMetricsRecorder(metrics *MetricsRecorder) {
+	if d != nil {
+		d.metrics = metrics
 	}
 }
 
-func (c *ClaimManager) markSent(ctx context.Context, id int64, lockedAt *time.Time) {
-	c.status.markSentIfLocked(ctx, id, lockedAt)
+func (d *ClaimManager) markSent(ctx context.Context, id int64, lockedAt *time.Time) {
+	d.status.markSentIfLocked(ctx, id, lockedAt)
 }
 
-func (c *ClaimManager) markFailed(ctx context.Context, id int64, lockedAt *time.Time, errMsg string) {
-	c.status.markFailedIfLocked(ctx, id, lockedAt, errMsg)
+func (d *ClaimManager) markFailed(ctx context.Context, id int64, lockedAt *time.Time, errMsg string) {
+	d.status.markFailedIfLocked(ctx, id, lockedAt, errMsg)
 }
 
-func (c *ClaimManager) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
-	return c.grouper.collectRoomsByChannel(ctx, items)
+func (d *ClaimManager) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
+	return d.grouper.collectRoomsByChannel(ctx, items)
 }
 
-func (c *ClaimManager) filterLiveCatchupSuppressedRooms(
+func (d *ClaimManager) filterLiveCatchupSuppressedRooms(
 	ctx context.Context,
 	item *domain.YouTubeNotificationOutbox,
 	rooms map[string]bool,
 ) map[string]bool {
-	return c.grouper.filterLiveCatchupSuppressedRooms(ctx, item, rooms)
+	return d.grouper.filterLiveCatchupSuppressedRooms(ctx, item, rooms)
 }
 
-func (c *ClaimManager) dispatchDeliveryRows(
+func (d *ClaimManager) dispatchDeliveryRows(
 	ctx context.Context,
 	rows []domain.YouTubeNotificationDelivery,
 	outboxByID map[int64]domain.YouTubeNotificationOutbox,
 ) dispatchstate.DispatchResult {
-	if c == nil || c.executor == nil {
+	if d == nil || d.executor == nil {
 		return dispatchstate.DispatchResult{
 			SuccessDeliveryIDs: make([]int64, 0, len(rows)),
 			TouchedOutboxIDs:   make([]int64, 0, len(rows)),
@@ -106,21 +107,26 @@ func (c *ClaimManager) dispatchDeliveryRows(
 			FailureBuckets:     make(map[string][]int64),
 		}
 	}
-	return c.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
+
+	return d.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
 }
 
-func (c *ClaimManager) recordDeliveryFailure(
+func (d *ClaimManager) recordDeliveryFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 	reason string,
 	deliveryID, outboxID int64,
 ) {
-	if c != nil && c.metrics != nil {
-		c.metrics.recordDeliveryFailure(result, mu, reason, deliveryID, outboxID)
+	if d != nil && d.metrics != nil {
+		d.metrics.recordDeliveryFailure(result, mu, reason, deliveryID, outboxID)
+
 		return
 	}
+
 	mu.Lock()
+
 	result.FailedDeliveries++
+
 	result.FailureBuckets[reason] = append(result.FailureBuckets[reason], deliveryID)
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
 	mu.Unlock()

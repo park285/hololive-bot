@@ -30,12 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -106,6 +105,7 @@ func TestClient_RefreshToken_Success(t *testing.T) {
 	if !ok {
 		t.Fatal("token expiry has unexpected type")
 	}
+
 	if time.Until(expiry) < 59*time.Minute {
 		t.Fatalf("expiry should be around 1 hour, got %s", expiry)
 	}
@@ -130,7 +130,9 @@ func TestClient_RefreshToken_FailureStatus(t *testing.T) {
 
 func TestClient_RefreshTokenNilResponse(t *testing.T) {
 	c := newTestClient("id", "secret")
+
 	c.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		//nolint:nilnil // RoundTripper 계약을 어기고 응답과 오류를 모두 nil로 돌려주는 전송 계층을 재현하는 것이 이 테스트의 대상이므로, 반환값을 고치면 검증 대상이 사라진다.
 		return nil, nil
 	})
 
@@ -138,6 +140,7 @@ func TestClient_RefreshTokenNilResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nil HTTP response")
 	}
+
 	if !strings.Contains(err.Error(), "nil response") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,6 +179,7 @@ func TestClient_GetStreams_CoreBranches(t *testing.T) {
 		_, err := circuitClient.GetStreams(t.Context(), []string{"user1"})
 
 		var apiErr *appErrors.APIError
+
 		if !errors.As(err, &apiErr) {
 			t.Fatalf("expected APIError, got %v", err)
 		}
@@ -190,7 +194,9 @@ func TestClient_GetStreamsNilResponse(t *testing.T) {
 	c := newTestClient("client-id", "secret")
 	c.token.Store("valid-token")
 	c.tokenExpiry.Store(time.Now().Add(time.Hour))
+
 	c.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		//nolint:nilnil // RoundTripper 계약을 어기고 응답과 오류를 모두 nil로 돌려주는 전송 계층을 재현하는 것이 이 테스트의 대상이므로, 반환값을 고치면 검증 대상이 사라진다.
 		return nil, nil
 	})
 
@@ -198,6 +204,7 @@ func TestClient_GetStreamsNilResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nil HTTP response")
 	}
+
 	if !strings.Contains(err.Error(), "nil response") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -245,78 +252,100 @@ func TestClient_GetStreams_SuccessAndHeaders(t *testing.T) {
 	}
 }
 
+type streamChunkRecorder struct {
+	mu              sync.Mutex
+	streamCalls     int
+	chunkSizes      []int
+	seenFirstLogins []string
+}
+
+func (r *streamChunkRecorder) roundTrip(req *http.Request) (*http.Response, error) {
+	if !strings.Contains(req.URL.String(), settings.DefaultTwitchOperationalConfig().BaseURL+"/streams") {
+		return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
+	}
+
+	logins := req.URL.Query()["user_login"]
+	if len(logins) == 0 {
+		return nil, errors.New("stream request has no user_login values")
+	}
+
+	r.mu.Lock()
+
+	r.streamCalls++
+
+	r.chunkSizes = append(r.chunkSizes, len(logins))
+
+	r.seenFirstLogins = append(r.seenFirstLogins, logins[0])
+
+	r.mu.Unlock()
+
+	body := fmt.Sprintf(`{"data":[{"id":%q,"user_login":%q,"type":"live","title":"Live now"}],"pagination":{}}`, logins[0], logins[0])
+
+	return httpResponse(http.StatusOK, body), nil
+}
+
+func (r *streamChunkRecorder) assertChunking(t *testing.T, wantChunkSizes []int) {
+	t.Helper()
+
+	if r.streamCalls != len(wantChunkSizes) {
+		t.Fatalf("streamCalls=%d want=%d", r.streamCalls, len(wantChunkSizes))
+	}
+
+	if len(r.chunkSizes) != len(wantChunkSizes) {
+		t.Fatalf("chunkSizes=%v want=%v", r.chunkSizes, wantChunkSizes)
+	}
+
+	for i := range wantChunkSizes {
+		if r.chunkSizes[i] != wantChunkSizes[i] {
+			t.Fatalf("chunkSizes[%d]=%d want=%d (all=%v)", i, r.chunkSizes[i], wantChunkSizes[i], r.chunkSizes)
+		}
+	}
+}
+
+func (r *streamChunkRecorder) assertFirstLogins(t *testing.T, res *StreamsResponse, wantFirstLogins []string) {
+	t.Helper()
+
+	if len(res.Data) != len(wantFirstLogins) {
+		t.Fatalf("response data len=%d want=%d", len(res.Data), len(wantFirstLogins))
+	}
+
+	if len(r.seenFirstLogins) != len(wantFirstLogins) {
+		t.Fatalf("seenFirstLogins=%v want %v", r.seenFirstLogins, wantFirstLogins)
+	}
+
+	for i := range wantFirstLogins {
+		if r.seenFirstLogins[i] != wantFirstLogins[i] {
+			t.Fatalf("seenFirstLogins[%d]=%q want=%q (all=%v)", i, r.seenFirstLogins[i], wantFirstLogins[i], r.seenFirstLogins)
+		}
+
+		if res.Data[i].UserLogin != wantFirstLogins[i] {
+			t.Fatalf("res.Data[%d].UserLogin=%q want=%q", i, res.Data[i].UserLogin, wantFirstLogins[i])
+		}
+	}
+}
+
 func TestClient_GetStreams_ChunksLargeUserLoginSets(t *testing.T) {
 	c := newTestClient("client-id", "secret")
 	c.token.Store("valid-token")
 	c.tokenExpiry.Store(time.Now().Add(1 * time.Hour))
 
 	userLogins := make([]string, 0, 205)
+
 	for i := range 205 {
 		userLogins = append(userLogins, fmt.Sprintf("user-%03d", i))
 	}
 
-	var (
-		mu              sync.Mutex
-		streamCalls     int
-		chunkSizes      []int
-		seenFirstLogins []string
-	)
+	recorder := &streamChunkRecorder{}
 
-	c.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if !strings.Contains(req.URL.String(), settings.DefaultTwitchOperationalConfig().BaseURL+"/streams") {
-			return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
-		}
-
-		logins := req.URL.Query()["user_login"]
-
-		mu.Lock()
-		streamCalls++
-		chunkSizes = append(chunkSizes, len(logins))
-		if len(logins) > 0 {
-			seenFirstLogins = append(seenFirstLogins, logins[0])
-		}
-		mu.Unlock()
-
-		body := fmt.Sprintf(`{"data":[{"id":%q,"user_login":%q,"type":"live","title":"Live now"}],"pagination":{}}`, logins[0], logins[0])
-		return httpResponse(http.StatusOK, body), nil
-	})
+	c.httpClient.Transport = roundTripFunc(recorder.roundTrip)
 
 	res, err := c.GetStreams(t.Context(), userLogins)
 	if err != nil {
 		t.Fatalf("GetStreams error: %v", err)
 	}
 
-	if streamCalls != 3 {
-		t.Fatalf("streamCalls=%d want=3", streamCalls)
-	}
-
-	wantChunkSizes := []int{100, 100, 5}
-	if len(chunkSizes) != len(wantChunkSizes) {
-		t.Fatalf("chunkSizes=%v want=%v", chunkSizes, wantChunkSizes)
-	}
-
-	for i := range wantChunkSizes {
-		if chunkSizes[i] != wantChunkSizes[i] {
-			t.Fatalf("chunkSizes[%d]=%d want=%d (all=%v)", i, chunkSizes[i], wantChunkSizes[i], chunkSizes)
-		}
-	}
-
-	if len(res.Data) != 3 {
-		t.Fatalf("response data len=%d want=3", len(res.Data))
-	}
-
-	wantFirstLogins := []string{"user-000", "user-100", "user-200"}
-	if len(seenFirstLogins) != len(wantFirstLogins) {
-		t.Fatalf("seenFirstLogins=%v want %v", seenFirstLogins, wantFirstLogins)
-	}
-	for i := range wantFirstLogins {
-		if seenFirstLogins[i] != wantFirstLogins[i] {
-			t.Fatalf("seenFirstLogins[%d]=%q want=%q (all=%v)", i, seenFirstLogins[i], wantFirstLogins[i], seenFirstLogins)
-		}
-		if res.Data[i].UserLogin != wantFirstLogins[i] {
-			t.Fatalf("res.Data[%d].UserLogin=%q want=%q", i, res.Data[i].UserLogin, wantFirstLogins[i])
-		}
-	}
+	recorder.assertChunking(t, []int{100, 100, 5})
+	recorder.assertFirstLogins(t, res, []string{"user-000", "user-100", "user-200"})
 }
 
 func TestClient_GetStreams_401RefreshAndRetry(t *testing.T) {
@@ -375,6 +404,7 @@ func twitchRefreshTokenResponse(tokenCalls *int) *http.Response {
 	if *tokenCalls == 1 {
 		return httpResponse(http.StatusOK, `{"access_token":"tok-1","expires_in":3600,"token_type":"bearer"}`)
 	}
+
 	return httpResponse(http.StatusOK, `{"access_token":"tok-2","expires_in":3600,"token_type":"bearer"}`)
 }
 
@@ -382,16 +412,21 @@ func twitchRefreshStreamResponse(t *testing.T, req *http.Request, streamCalls *i
 	t.Helper()
 
 	(*streamCalls)++
+
 	auth := req.Header.Get("Authorization")
+
 	if *streamCalls == 1 {
 		if auth != "Bearer tok-1" {
 			t.Fatalf("first stream auth=%q want Bearer tok-1", auth)
 		}
+
 		return httpResponse(http.StatusUnauthorized, `{"error":"unauthorized"}`)
 	}
+
 	if auth != "Bearer tok-2" {
 		t.Fatalf("second stream auth=%q want Bearer tok-2", auth)
 	}
+
 	return httpResponse(http.StatusOK, `{"data":[],"pagination":{}}`)
 }
 
@@ -425,6 +460,7 @@ func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
 	}
 
 	var apiErr *appErrors.APIError
+
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T %v", err, err)
 	}
@@ -513,6 +549,7 @@ func TestClient_GetStreams_ErrorStatusBranches(t *testing.T) {
 			}
 
 			var apiErr *appErrors.APIError
+
 			if !errors.As(err, &apiErr) {
 				t.Fatalf("expected APIError, got %T %v", err, err)
 			}
@@ -542,12 +579,15 @@ func TestClient_GetStreams_RequestError(t *testing.T) {
 	for range constants.CircuitBreakerConfig.FailureThreshold - 2 {
 		c.recordFailure()
 	}
+
 	if c.IsCircuitOpen() {
 		t.Fatalf("circuit should not be open after %d total failures (threshold=%d)",
 			constants.CircuitBreakerConfig.FailureThreshold-1,
 			constants.CircuitBreakerConfig.FailureThreshold)
 	}
+
 	c.recordFailure()
+
 	if !c.IsCircuitOpen() {
 		t.Fatalf("circuit should be open after %d total failures (threshold=%d)",
 			constants.CircuitBreakerConfig.FailureThreshold,

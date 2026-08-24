@@ -39,11 +39,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/time/rate"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -91,12 +90,16 @@ func NewHolodexAPIClient(
 ) *APIClient {
 	if holodexCfg == nil {
 		cfg := settings.DefaultHolodexOperationalConfig()
+
 		holodexCfg = &cfg
 	}
+
 	if httpClient == nil {
 		httpClient = httputil.NewExternalAPIClient(holodexCfg.Timeout)
 	}
+
 	maxBody := settings.DefaultMaxResponseBodyBytes
+
 	return &APIClient{
 		httpClient: httpClient,
 		baseURL:    baseURL,

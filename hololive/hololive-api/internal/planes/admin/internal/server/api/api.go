@@ -25,21 +25,20 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
+
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-
-	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/park285/iris-client-go/v2/iris"
 )
 
 // Admin Dashboard와 Tauri 앱 모두에서 사용됩니다.

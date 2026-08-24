@@ -26,9 +26,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type statusResponse struct {
@@ -45,10 +46,13 @@ type MajorEventMonthlyScheduler interface {
 
 func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
 	ready := h != nil && h.Handler != nil && h.majorEventScheduler != nil
+
 	var send func(context.Context) error
+
 	if ready {
 		send = h.majorEventScheduler.SendWeeklyNotification
 	}
+
 	h.triggerNotification(c, ready, send,
 		"major event scheduler not initialized",
 		"failed to send weekly major event notification",
@@ -57,10 +61,13 @@ func (h *MajorEventHandler) TriggerMajorEventNotification(c *gin.Context) {
 
 func (h *MajorEventHandler) TriggerMajorEventMonthlyNotification(c *gin.Context) {
 	ready := h != nil && h.Handler != nil && h.majorEventMonthlyScheduler != nil
+
 	var send func(context.Context) error
+
 	if ready {
 		send = h.majorEventMonthlyScheduler.SendMonthlyNotification
 	}
+
 	h.triggerNotification(c, ready, send,
 		"major event monthly scheduler not initialized",
 		"failed to send monthly major event notification",
@@ -77,12 +84,14 @@ func (h *MajorEventHandler) triggerNotification(
 ) {
 	if !ready {
 		sharedserver.RespondError(c, http.StatusServiceUnavailable, notInitMessage, nil)
+
 		return
 	}
 
 	if err := send(c.Request.Context()); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
 			sharedserver.RespondError(c, http.StatusConflict, "notification already in progress", nil)
+
 			return
 		}
 

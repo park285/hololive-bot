@@ -46,10 +46,12 @@ func TestRSSParserParse(t *testing.T) {
 	t.Parallel()
 
 	parser := NewRSSParser()
+
 	events, err := parser.Parse([]byte(sampleRSS), domain.MajorEventTypeEvent)
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
+
 	if len(events) != 1 {
 		t.Fatalf("Parse() len = %d, want 1", len(events))
 	}
@@ -58,17 +60,21 @@ func TestRSSParserParse(t *testing.T) {
 	if got.Type != domain.MajorEventTypeEvent {
 		t.Fatalf("event type = %s, want %s", got.Type, domain.MajorEventTypeEvent)
 	}
+
 	if got.Title != "hololive SUPER EXPO 2026" {
 		t.Fatalf("title = %q", got.Title)
 	}
+
 	if got.ExternalID == "" || got.Link == "" {
-		t.Fatalf("external id/link should not be empty")
+		t.Fatal("external id/link should not be empty")
 	}
+
 	if len(got.Members) != 2 {
 		t.Fatalf("members len = %d, want 2", len(got.Members))
 	}
+
 	if got.PubDate == nil {
-		t.Fatalf("pub date should be parsed")
+		t.Fatal("pub date should be parsed")
 	}
 }
 
@@ -78,9 +84,11 @@ func TestParseRSSDate(t *testing.T) {
 	if _, ok := parseRSSDate("Fri, 12 Dec 2025 02:50:11 +0000"); !ok {
 		t.Fatal("expected RFC1123Z date to parse")
 	}
+
 	if _, ok := parseRSSDate("Fri, 12 Dec 2025 02:50:11 GMT"); !ok {
 		t.Fatal("expected RFC1123 date to parse")
 	}
+
 	if _, ok := parseRSSDate("2025-01-09"); ok {
 		t.Fatal("unexpected parse success for invalid date format")
 	}

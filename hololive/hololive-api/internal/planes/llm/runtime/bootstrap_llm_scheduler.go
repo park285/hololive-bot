@@ -25,32 +25,31 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent"
 	mescheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scheduler"
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
-
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-
-	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/park285/shared-go/v2/pkg/httputil"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
+//nolint:gosec // 이 값은 자격 증명이 아니라 고정된 구성 오류 메시지다.
+const llmSchedulerAPISecretRequired = "build llm scheduler router: API_SECRET_KEY required"
+
 type LLMSchedulerRuntime struct {
+	lifecycle.Managed
+
 	Config *settings.LLMSchedulerConfig
 	Logger *slog.Logger
 
@@ -61,11 +60,10 @@ type LLMSchedulerRuntime struct {
 	MemberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler
 
 	httpServers *sharedserver.RuntimeHTTPServers
-	lifecycle.Managed
 }
 
 func (r *LLMSchedulerRuntime) Run() {
-	if err := lifecycle.Run(lifecycle.Options{
+	if err := lifecycle.Run(context.Background(), lifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start: func(ctx context.Context, errCh chan<- error) {
 			r.startSchedulers(ctx)
@@ -92,6 +90,7 @@ func (r *LLMSchedulerRuntime) startHTTPServer(errCh chan<- error) {
 	if r.httpServers == nil {
 		return
 	}
+
 	r.httpServers.Start(r.Logger, errCh)
 	r.Logger.Info("LLM scheduler HTTP server started",
 		slog.String("addr", r.httpServers.Addr()))
@@ -140,18 +139,22 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 		r.MajorEventScheduler.Stop()
 		r.Logger.Info("Major event scheduler stopped")
 	}
+
 	if r.MajorEventMonthlyScheduler != nil {
 		r.MajorEventMonthlyScheduler.Stop()
 		r.Logger.Info("Major event monthly scheduler stopped")
 	}
+
 	if r.MajorEventScraperScheduler != nil {
 		r.MajorEventScraperScheduler.Stop()
 		r.Logger.Info("Major event scraper runtime scheduler stopped")
 	}
+
 	if r.MemberNewsScheduler != nil {
 		r.MemberNewsScheduler.Stop()
 		r.Logger.Info("Member news scheduler stopped")
 	}
+
 	if r.MemberNewsMonthlyScheduler != nil {
 		r.MemberNewsMonthlyScheduler.Stop()
 		r.Logger.Info("Member news monthly scheduler stopped")
@@ -160,38 +163,46 @@ func (r *LLMSchedulerRuntime) stopSchedulers() {
 
 func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	var errs []error
+
 	r.stopSchedulers()
+
 	shutdownHTTPServer := func(ctx context.Context) error {
 		return r.httpServers.Shutdown(ctx)
 	}
 	if err := shutdownHTTPServer(ctx); err != nil {
 		r.Logger.Error("HTTP server shutdown error", slog.Any("error", err))
+
 		errs = append(errs, err)
 	} else {
 		r.Logger.Info("HTTP server stopped")
 	}
+
 	return errors.Join(errs...)
 }
 
 func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *settings.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
 	if schedulerConfig == nil {
-		return nil, fmt.Errorf("llm scheduler config must not be nil")
+		return nil, errors.New("llm scheduler config must not be nil")
 	}
+
 	if logger == nil {
-		return nil, fmt.Errorf("logger must not be nil")
+		return nil, errors.New("logger must not be nil")
 	}
 
 	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, schedulerConfig.Valkey, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init cache: %w", err)
 	}
+
 	cacheService := cacheResources.Service
 
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &schedulerConfig.Postgres, logger)
 	if err != nil {
 		cleanupCache()
+
 		return nil, fmt.Errorf("init database: %w", err)
 	}
+
 	postgresService := databaseResources.Service
 
 	cleanup := func() {
@@ -202,9 +213,12 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *settings.LLM
 	runtime, err := buildLLMSchedulerComponents(ctx, schedulerConfig, logger, cacheService, postgresService)
 	if err != nil {
 		cleanup()
-		return nil, err
+
+		return nil, fmt.Errorf("build LLM scheduler components: %w", err)
 	}
+
 	runtime.Managed = lifecycle.NewManaged(cleanup)
+
 	return runtime, nil
 }
 
@@ -217,20 +231,24 @@ func buildLLMSchedulerComponents(
 ) (*LLMSchedulerRuntime, error) {
 	guards, err := buildLLMGuards(logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build LLM guards: %w", err)
 	}
 
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
+
 	memberCache, err := providers.ProvideMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init member cache: %w", err)
 	}
+
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, memberCache, logger)
 	memberDataProvider := memberServiceAdapter
 
 	templateRenderer := template.NewRenderer(postgresService.GetPool(), logger)
 	formatter := newLLMSchedulerFormatter(schedulerConfig.Bot.Prefix, templateRenderer, logger, schedulerConfig.Bot.SeeMoreFold)
+
 	formatter.store = messagestrings.NewStore(postgresService.GetPool(), logger)
+
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
 	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
 
@@ -239,7 +257,7 @@ func buildLLMSchedulerComponents(
 		return nil, fmt.Errorf("build delivery module: %w", err)
 	}
 
-	return buildLLMSchedulerRuntimeComponents(
+	out, err := buildLLMSchedulerRuntimeComponents(
 		ctx,
 		schedulerConfig,
 		logger,
@@ -251,6 +269,11 @@ func buildLLMSchedulerComponents(
 		deliveryModule,
 		guards,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("build LLM scheduler runtime components: %w", err)
+	}
+
+	return out, nil
 }
 
 func buildLLMSchedulerRuntimeComponents(
@@ -279,10 +302,12 @@ func buildLLMSchedulerRuntimeComponents(
 
 	triggerHandler := sharedserver.NewTriggerHandler(majorEventScheduler, majorEventMonthlyScheduler, memberNewsScheduler, logger)
 	readyProbe := buildLLMSchedulerReadyProbe(postgresService, cacheService)
+
 	httpServers, err := buildLLMSchedulerHTTPServers(ctx, &schedulerConfig.Server, logger, triggerHandler, schedulerConfig.Server.APIKey, majorEventRepository, memberNewsService, readyProbe)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build LLM scheduler HTTP servers: %w", err)
 	}
+
 	return newLLMSchedulerRuntime(
 		schedulerConfig,
 		logger,
@@ -293,106 +318,4 @@ func buildLLMSchedulerRuntimeComponents(
 		memberNewsMonthlyScheduler,
 		httpServers,
 	), nil
-}
-
-func buildLLMSchedulerReadyProbe(postgresService database.Client, cacheService cache.Client) *sharedreadiness.Probe {
-	return sharedreadiness.NewProbe("llm",
-		sharedreadiness.PostgresCheck(postgresService),
-		sharedreadiness.ValkeyCheck(cacheService),
-	)
-}
-
-func newLLMSchedulerRuntime(
-	schedulerConfig *settings.LLMSchedulerConfig,
-	logger *slog.Logger,
-	majorEventScheduler *mescheduler.Scheduler,
-	majorEventMonthlyScheduler *mescheduler.MonthlyScheduler,
-	majorEventScraperScheduler *mescraper.RuntimeScheduler,
-	memberNewsScheduler *mnscheduler.Scheduler,
-	memberNewsMonthlyScheduler *mnscheduler.MonthlyScheduler,
-	httpServers *sharedserver.RuntimeHTTPServers,
-) *LLMSchedulerRuntime {
-	return &LLMSchedulerRuntime{
-		Config:                     schedulerConfig,
-		Logger:                     logger,
-		MajorEventScheduler:        majorEventScheduler,
-		MajorEventMonthlyScheduler: majorEventMonthlyScheduler,
-		MajorEventScraperScheduler: majorEventScraperScheduler,
-		MemberNewsScheduler:        memberNewsScheduler,
-		MemberNewsMonthlyScheduler: memberNewsMonthlyScheduler,
-		httpServers:                httpServers,
-	}
-}
-
-func buildMajorEventRepository(
-	postgresService database.Client,
-	logger *slog.Logger,
-) *majorevent.Repository {
-	return majorevent.NewRepository(postgresService, logger)
-}
-
-func buildLLMSchedulerDeliveryModule(
-	cacheService cache.Client,
-	postgresService database.Client,
-	logger *slog.Logger,
-) (*DeliveryModule, error) {
-	return BuildDeliveryModule(cacheService, postgresService, logger)
-}
-
-func buildLLMSchedulerHTTPServer(
-	ctx context.Context,
-	port int,
-	logger *slog.Logger,
-	triggerHandler *sharedserver.TriggerHandler,
-	apiKey string,
-	majorEventRepository *majorevent.Repository,
-	memberNewsService *membernews.Service,
-) (*http.Server, error) {
-	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
-		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
-	}
-
-	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey)
-	if err != nil {
-		return nil, fmt.Errorf("build llm scheduler router: %w", err)
-	}
-
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMajorEventInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, majorEventRepository)
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
-
-	addr := fmt.Sprintf(":%d", port)
-	return sharedserver.NewH2CServer(addr, router, "hololive-llm-sched.http", sharedserver.LocalPlaneTraceFilter), nil
-}
-
-func buildLLMSchedulerHTTPServers(
-	ctx context.Context,
-	serverConfig *settings.ServerConfig,
-	logger *slog.Logger,
-	triggerHandler *sharedserver.TriggerHandler,
-	apiKey string,
-	majorEventRepository *majorevent.Repository,
-	memberNewsService *membernews.Service,
-	readyProbe *sharedreadiness.Probe,
-) (*sharedserver.RuntimeHTTPServers, error) {
-	if serverConfig == nil {
-		serverConfig = &settings.ServerConfig{}
-	}
-	if strings.TrimSpace(apiKey) == "" && (triggerHandler != nil || majorEventRepository != nil || memberNewsService != nil) {
-		return nil, fmt.Errorf("build llm scheduler router: API_SECRET_KEY required")
-	}
-
-	router, err := buildTriggerRouter(ctx, logger, triggerHandler, apiKey, readyProbe)
-	if err != nil {
-		return nil, fmt.Errorf("build llm scheduler router: %w", err)
-	}
-
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMajorEventInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, majorEventRepository)
-	//nolint:contextcheck // gin handlers use per-request context via c.Request.Context()
-	registerMemberNewsInternalRoutes(router, httputil.AdminAuthConfig{APIKey: apiKey}, memberNewsService)
-
-	return sharedserver.NewRuntimeHTTPServers(ctx, serverConfig, router, "hololive-llm-sched.http",
-		nil, sharedserver.LocalPlaneTraceFilter)
 }

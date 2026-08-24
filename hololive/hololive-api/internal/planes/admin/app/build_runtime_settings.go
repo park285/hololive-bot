@@ -4,13 +4,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 )
 
 func buildAdminAPISettingsApplier(
@@ -30,10 +28,12 @@ func buildAdminAPISettingsApplier(
 
 	if strings.TrimSpace(appConfig.LLMSchedulerURL) == "" {
 		logger.Warn("LLM scheduler URL not configured; trigger routes and membernews run-now are disabled", slog.String("env", "LLM_SCHEDULER_INTERNAL_URL"))
+
 		return settingsApplier, nil
 	}
 
 	majorEventTriggerClient := triggerclient.NewClient(appConfig.LLMSchedulerURL, appConfig.Server.APIKey, logger)
+
 	return newBotSettingsApplier(localSettingsApplier, majorEventTriggerClient, logger), majorEventTriggerClient
 }
 

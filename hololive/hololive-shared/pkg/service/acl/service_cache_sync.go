@@ -38,9 +38,11 @@ var aclRoomsTempKeySeq atomic.Uint64
 
 func aclRoomsTempKey(key string) string {
 	sequence := aclRoomsTempKeySeq.Add(1)
+
 	if hasValkeyHashTag(key) {
 		return fmt.Sprintf("%s%s%d", key, aclRoomsTempKeySeparator, sequence)
 	}
+
 	return fmt.Sprintf("{%s}%s%d", key, aclRoomsTempKeySeparator, sequence)
 }
 
@@ -49,7 +51,9 @@ func hasValkeyHashTag(key string) bool {
 	if !ok {
 		return false
 	}
+
 	end := strings.IndexByte(after, '}')
+
 	return end > 0
 }
 
@@ -85,15 +89,27 @@ func (s *Service) syncRoomsToValkeyAtomic(ctx context.Context, key string, rooms
 
 func (s *Service) renameRoomsKey(ctx context.Context, tempKey, key string, rooms []string) error {
 	if s.renameRoomsKeyFunc != nil {
-		return s.renameRoomsKeyCustom(ctx, tempKey, key, rooms)
+		if err := s.renameRoomsKeyCustom(ctx, tempKey, key, rooms); err != nil {
+			return fmt.Errorf("rename rooms key custom: %w", err)
+		}
+
+		return nil
 	}
 
 	client, builder, ok := s.rawCacheEvalClient()
 	if !ok {
-		return s.renameRoomsKeyFallback(ctx, tempKey, key, rooms)
+		if err := s.renameRoomsKeyFallback(ctx, tempKey, key, rooms); err != nil {
+			return fmt.Errorf("rename rooms key fallback: %w", err)
+		}
+
+		return nil
 	}
 
-	return s.renameRoomsKeyNative(ctx, client, builder, tempKey, key)
+	if err := s.renameRoomsKeyNative(ctx, client, builder, tempKey, key); err != nil {
+		return fmt.Errorf("rename rooms key native: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) renameRoomsKeyCustom(ctx context.Context, tempKey, key string, rooms []string) error {
@@ -145,6 +161,7 @@ func (s *Service) rawCacheEvalClient() (_ valkey.Client, _ valkey.Builder, ok bo
 	defer func() {
 		if r := recover(); r != nil {
 			ok = false
+
 			if s.logger != nil {
 				s.logger.Warn("raw valkey eval client unavailable", slog.Any("panic", r))
 			}

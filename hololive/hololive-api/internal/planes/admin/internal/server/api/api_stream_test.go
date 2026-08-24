@@ -179,6 +179,7 @@ func assertChannelResponse(t *testing.T, got, expected *sharedserver.ChannelResp
 
 	if got == nil {
 		t.Errorf("memberToChannelResponse() = nil, want %+v", expected)
+
 		return
 	}
 
@@ -200,13 +201,16 @@ func assertChannelResponsePhoto(t *testing.T, got, expected *string) {
 		if got != nil {
 			t.Errorf("Photo = %v, want nil", *got)
 		}
+
 		return
 	}
 
 	if got == nil {
 		t.Errorf("Photo = nil, want %q", *expected)
+
 		return
 	}
+
 	if *got != *expected {
 		t.Errorf("Photo = %q, want %q", *got, *expected)
 	}

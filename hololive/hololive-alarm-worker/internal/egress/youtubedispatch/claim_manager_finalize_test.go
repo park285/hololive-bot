@@ -9,7 +9,7 @@ import (
 )
 
 func TestResolvePayloadPublishedAtParsesPointer(t *testing.T) {
-	want := time.Date(2026, 6, 24, 10, 0, 0, 0, time.UTC)
+	want := time.Date(2026, time.June, 24, 10, 0, 0, 0, time.UTC)
 
 	t.Run("video payload published_at", func(t *testing.T) {
 		got := resolveVideoPayloadPublishedAt(`{"published_at":"2026-06-24T10:00:00Z"}`)

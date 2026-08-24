@@ -24,6 +24,7 @@ func TestCollectNewVideoContentIDs(t *testing.T) {
 
 	got := collectNewVideoContentIDs(notifications)
 	want := []string{"vid1", "vid2"}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("collectNewVideoContentIDs = %v, want %v", got, want)
 	}
@@ -43,9 +44,11 @@ func TestFilterOutKnownNewVideoNotifications(t *testing.T) {
 
 	wantKind := []domain.OutboxKind{domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
 	wantContent := []string{"new1", "old1", "old2"}
+
 	if len(got) != len(wantKind) {
 		t.Fatalf("filtered length = %d, want %d: %+v", len(got), len(wantKind), got)
 	}
+
 	for i := range got {
 		if got[i].Kind != wantKind[i] || got[i].ContentID != wantContent[i] {
 			t.Fatalf("got[%d] = {%s,%q}, want {%s,%q}", i, got[i].Kind, got[i].ContentID, wantKind[i], wantContent[i])

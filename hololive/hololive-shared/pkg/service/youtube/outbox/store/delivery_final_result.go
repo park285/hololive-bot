@@ -56,7 +56,9 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 
 	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
 	terminalStatuses := []domain.OutboxStatus{domain.OutboxStatusSent, domain.OutboxStatusFailed}
+
 	var outboxes []domain.YouTubeNotificationOutbox
+
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxes, "load terminal community/shorts outboxes", mustSQL("delivery_final_result_0060_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 		  AND `+deliverysql.DeliveryInClause("kind", len(postKinds))+`
 		  AND `+deliverysql.DeliveryInClause("status", len(terminalStatuses))+`
@@ -70,12 +72,15 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 	)...); err != nil {
 		return nil, fmt.Errorf("load terminal community/shorts outboxes: %w", err)
 	}
+
 	if len(outboxes) == 0 {
 		return nil, nil
 	}
 
 	outboxResultIDs := collectOutboxIDs(outboxes)
+
 	var deliveries []domain.YouTubeNotificationDelivery
+
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &deliveries, "load terminal community/shorts deliveries", mustSQL("delivery_final_result_0082_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(outboxResultIDs))+`
 		ORDER BY outbox_id ASC, id ASC
 	`, deliverysql.AppendDeliveryInt64Args(nil, outboxResultIDs)...); err != nil {
@@ -83,8 +88,10 @@ func (r *DeliveryRepository) LoadTerminalCommunityShortsOutboxResults(ctx contex
 	}
 
 	deliveriesByOutbox := make(map[int64][]domain.YouTubeNotificationDelivery, len(outboxResultIDs))
+
 	for i := range deliveries {
 		row := deliveries[i]
+
 		deliveriesByOutbox[row.OutboxID] = append(deliveriesByOutbox[row.OutboxID], row)
 	}
 
@@ -129,6 +136,7 @@ func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotif
 	for i := range deliveries {
 		row := deliveries[i]
 		successIncrement, failureIncrement := terminalCommunityShortsDeliveryStatusCounts(row.Status)
+
 		successfulRoomCount += successIncrement
 		failedRoomCount += failureIncrement
 
@@ -137,6 +145,7 @@ func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotif
 
 	if len(reasons) > 0 {
 		sort.Strings(reasons)
+
 		return successfulRoomCount, failedRoomCount, strings.Join(reasons, " | ")
 	}
 
@@ -161,10 +170,13 @@ func appendUniqueTerminalCommunityShortsDeliveryReason(reasons []string, seenRea
 	if reason == "" {
 		return reasons
 	}
+
 	if _, exists := seenReasons[reason]; exists {
 		return reasons
 	}
+
 	seenReasons[reason] = struct{}{}
+
 	return append(reasons, reason)
 }
 
@@ -172,9 +184,11 @@ func collectOutboxIDs(items []domain.YouTubeNotificationOutbox) []int64 {
 	if len(items) == 0 {
 		return nil
 	}
+
 	ids := make([]int64, 0, len(items))
 	for i := range items {
 		ids = append(ids, items[i].ID)
 	}
+
 	return ids
 }

@@ -41,12 +41,14 @@ func (e *CacheError) Error() string {
 		if e.Key == "" {
 			return fmt.Sprintf("cache: %s", e.Operation)
 		}
+
 		return fmt.Sprintf("cache: %s: key=%s", e.Operation, loggableKey)
 	}
 
 	if e.Key == "" {
 		return fmt.Sprintf("cache: %s: %v", e.Operation, e.Err)
 	}
+
 	return fmt.Sprintf("cache: %s: key=%s: %v", e.Operation, loggableKey, e.Err)
 }
 

@@ -41,12 +41,13 @@ func (r *Repository) UpdatePhoto(ctx context.Context, channelID, photoURL string
 
 func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) (string, error) {
 	var photo *string
-	err := r.pool.QueryRow(ctx, mustSQL("repository_photo_0048_02.sql"), channelID).Scan(&photo)
 
+	err := r.pool.QueryRow(ctx, mustSQL("repository_photo_0048_02.sql"), channelID).Scan(&photo)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
+
 		return "", fmt.Errorf("failed to get photo: %w", err)
 	}
 
@@ -57,7 +58,7 @@ func (r *Repository) GetPhotoByChannelID(ctx context.Context, channelID string) 
 	return *photo, nil
 }
 
-// staleThreshold: 이 기간보다 오래된 photo는 재동기화 대상
+// staleThreshold: 이 기간보다 오래된 photo는 재동기화 대상.
 func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThreshold time.Duration) ([]string, error) {
 	staleTime := time.Now().Add(-staleThreshold)
 
@@ -68,13 +69,17 @@ func (r *Repository) GetMembersNeedingPhotoSync(ctx context.Context, staleThresh
 	defer rows.Close()
 
 	var channelIDs []string
+
 	for rows.Next() {
 		var channelID string
+
 		if err := rows.Scan(&channelID); err != nil {
 			return nil, fmt.Errorf("failed to scan channel id needing photo sync: %w", err)
 		}
+
 		channelIDs = append(channelIDs, channelID)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("photo sync rows iteration error: %w", err)
 	}

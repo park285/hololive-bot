@@ -35,9 +35,11 @@ var templateSampleData = mergeTemplateSampleData(
 
 func mergeTemplateSampleData(groups ...map[domain.TemplateKey]any) map[domain.TemplateKey]any {
 	merged := make(map[domain.TemplateKey]any)
+
 	for _, group := range groups {
 		maps.Copy(merged, group)
 	}
+
 	return merged
 }
 
@@ -52,6 +54,7 @@ func buildTemplateKeySet(keys []domain.TemplateKey) map[domain.TemplateKey]struc
 	for _, key := range keys {
 		set[key] = struct{}{}
 	}
+
 	return set
 }
 

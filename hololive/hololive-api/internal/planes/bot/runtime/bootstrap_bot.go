@@ -22,18 +22,18 @@ package botruntime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func InitializeBotDependencies(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (dependencies *orchestration.Dependencies, cleanup func(), err error) {
 	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("init bot infrastructure: %w", err)
 	}
 
 	cleanup = func() {
@@ -46,13 +46,14 @@ func InitializeBotDependencies(ctx context.Context, appConfig *settings.Config, 
 func InitializeBotRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*BotRuntime, func(), error) {
 	infra, err := appbootstrap.InitBotInfrastructure(ctx, appConfig, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("init bot infrastructure: %w", err)
 	}
 
 	runtime, err := buildBotRuntime(ctx, appConfig, logger, infra)
 	if err != nil {
 		infra.Cleanup()
-		return nil, nil, err
+
+		return nil, nil, fmt.Errorf("build bot runtime: %w", err)
 	}
 
 	cleanup := func() {

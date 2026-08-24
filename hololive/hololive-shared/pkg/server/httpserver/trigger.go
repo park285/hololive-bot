@@ -28,10 +28,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const TriggerExecutionTimeout = 5 * time.Minute
@@ -93,7 +93,8 @@ func (h *TriggerHandler) registerInternalRoutes(rg *gin.RouterGroup, authConfig 
 
 func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 	if h.majorEvent == nil {
-		RespondError(c, http.StatusServiceUnavailable, "major_event_scheduler_unavailable", gin.H{"message": "major event scheduler not initialized"})
+		RespondError(c, http.StatusServiceUnavailable, "major_event_scheduler_unavailable", gin.H{responseKeyMessage: "major event scheduler not initialized"})
+
 		return
 	}
 
@@ -102,9 +103,11 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 
 	if err := h.majorEvent.SendWeeklyNotification(ctx); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{"message": "notification already in progress"})
+			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{responseKeyMessage: "notification already in progress"})
+
 			return
 		}
+
 		RespondInternalError(
 			h.logger,
 			c,
@@ -112,15 +115,17 @@ func (h *TriggerHandler) TriggerWeeklyNotification(c *gin.Context) {
 			"Failed to trigger weekly notification",
 			err,
 		)
+
 		return
 	}
 
-	respondJSON(c, http.StatusOK, gin.H{"status": "weekly notification sent"})
+	respondJSON(c, http.StatusOK, gin.H{responseKeyStatus: "weekly notification sent"})
 }
 
 func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 	if h.majorEventMonthly == nil {
-		RespondError(c, http.StatusServiceUnavailable, "major_event_monthly_scheduler_unavailable", gin.H{"message": "major event monthly scheduler not initialized"})
+		RespondError(c, http.StatusServiceUnavailable, "major_event_monthly_scheduler_unavailable", gin.H{responseKeyMessage: "major event monthly scheduler not initialized"})
+
 		return
 	}
 
@@ -129,9 +134,11 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 
 	if err := h.majorEventMonthly.SendMonthlyNotification(ctx); err != nil {
 		if errors.Is(err, triggercontracts.ErrNotificationInProgress) {
-			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{"message": "notification already in progress"})
+			RespondError(c, http.StatusConflict, "notification_in_progress", gin.H{responseKeyMessage: "notification already in progress"})
+
 			return
 		}
+
 		RespondInternalError(
 			h.logger,
 			c,
@@ -139,15 +146,17 @@ func (h *TriggerHandler) TriggerMonthlyNotification(c *gin.Context) {
 			"Failed to trigger monthly notification",
 			err,
 		)
+
 		return
 	}
 
-	respondJSON(c, http.StatusOK, gin.H{"status": "monthly notification sent"})
+	respondJSON(c, http.StatusOK, gin.H{responseKeyStatus: "monthly notification sent"})
 }
 
 func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 	if h.memberNewsWeekly == nil {
-		RespondError(c, http.StatusServiceUnavailable, "member_news_weekly_scheduler_unavailable", gin.H{"message": "member news weekly scheduler not initialized"})
+		RespondError(c, http.StatusServiceUnavailable, "member_news_weekly_scheduler_unavailable", gin.H{responseKeyMessage: "member news weekly scheduler not initialized"})
+
 		return
 	}
 
@@ -162,8 +171,9 @@ func (h *TriggerHandler) TriggerMemberNewsWeekly(c *gin.Context) {
 			"Failed to trigger member news weekly",
 			err,
 		)
+
 		return
 	}
 
-	respondJSON(c, http.StatusOK, gin.H{"status": "member news weekly digest sent"})
+	respondJSON(c, http.StatusOK, gin.H{responseKeyStatus: "member news weekly digest sent"})
 }

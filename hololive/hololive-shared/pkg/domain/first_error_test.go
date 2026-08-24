@@ -13,6 +13,7 @@ func TestFirstErrorReturnsFirstNonNilAndIgnoresRest(t *testing.T) {
 	if !errors.Is(got, first) {
 		t.Fatalf("firstError returned %v, want first error %v", got, first)
 	}
+
 	if errors.Is(got, second) {
 		t.Fatalf("firstError must not join subsequent errors; got %v also matches second", got)
 	}

@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
-	"github.com/park285/shared-go/v2/pkg/logging"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type MemberDataFunc func() domain.MemberDataProvider
@@ -36,6 +36,7 @@ func (m *Mapper) memberData() domain.MemberDataProvider {
 	if m.memberDataFn == nil {
 		return nil
 	}
+
 	return m.memberDataFn()
 }
 
@@ -89,6 +90,7 @@ func (m *Mapper) SyncForChannel(ctx context.Context, channelID string) error {
 	}
 
 	if err := m.validateDependencies(); err != nil {
+		//nolint:wrapcheck // caller telemetry pins this configuration error's concrete type and exact text.
 		return err
 	}
 
@@ -101,10 +103,18 @@ func (m *Mapper) SyncForChannel(ctx context.Context, channelID string) error {
 	}
 
 	if !registered {
-		return m.removeStaleMappingsForChannel(ctx, channelID)
+		if err := m.removeStaleMappingsForChannel(ctx, channelID); err != nil {
+			return fmt.Errorf("remove stale mappings for channel: %w", err)
+		}
+
+		return nil
 	}
 
-	return m.syncRegisteredMappingForChannel(ctx, channelID)
+	if err := m.syncRegisteredMappingForChannel(ctx, channelID); err != nil {
+		return fmt.Errorf("sync registered mapping for channel: %w", err)
+	}
+
+	return nil
 }
 
 func (m *Mapper) collectPlatformMappings(memberData domain.MemberDataProvider, channelIDs []string) (chzzk, twitch, twitchChannels map[string]string) {
@@ -129,6 +139,7 @@ func (m *Mapper) collectMappingForChannel(
 	member := memberData.FindMemberByChannelID(channelID)
 	if member == nil {
 		m.logUnknownChannel(channelID)
+
 		return
 	}
 
@@ -143,6 +154,7 @@ func (m *Mapper) collectMappingForChannel(
 
 	if existingChannelID, exists := twitchMappings[twitchLogin]; exists && existingChannelID != channelID {
 		m.logDuplicateTwitchMapping(twitchLogin, existingChannelID, channelID)
+
 		return
 	}
 
@@ -176,9 +188,11 @@ func (m *Mapper) validateDependencies() error {
 	if m.cache == nil {
 		return errors.New("cache service not configured")
 	}
+
 	if m.memberData() == nil {
 		return errors.New("member data provider not configured")
 	}
+
 	return nil
 }
 
@@ -186,6 +200,7 @@ func (m *Mapper) removeStaleMappingsForChannel(ctx context.Context, channelID st
 	if err := m.removeMappingsForChannel(ctx, channelID); err != nil {
 		return fmt.Errorf("remove stale platform mappings: %w", err)
 	}
+
 	return nil
 }
 
@@ -194,13 +209,18 @@ func (m *Mapper) syncRegisteredMappingForChannel(ctx context.Context, channelID 
 	if memberData == nil {
 		return errors.New("member data provider not configured")
 	}
+
 	member := memberData.FindMemberByChannelID(channelID)
 	if member == nil {
-		return m.removeUnknownMappingsForChannel(ctx, channelID)
+		if err := m.removeUnknownMappingsForChannel(ctx, channelID); err != nil {
+			return fmt.Errorf("remove unknown mappings for channel: %w", err)
+		}
+
+		return nil
 	}
 
 	if err := m.syncChzzkMappingForChannel(ctx, channelID, member.ChzzkChannelID); err != nil {
-		return err
+		return fmt.Errorf("sync chzzk mapping for channel: %w", err)
 	}
 
 	twitchLogin := stringutil.Normalize(member.TwitchUserID)
@@ -219,6 +239,7 @@ func (m *Mapper) removeUnknownMappingsForChannel(ctx context.Context, channelID 
 	if err := m.removeMappingsForChannel(ctx, channelID); err != nil {
 		return fmt.Errorf("remove unknown channel platform mappings: %w", err)
 	}
+
 	return nil
 }
 
@@ -228,15 +249,18 @@ func (m *Mapper) syncChzzkMappingForChannel(ctx context.Context, channelID, rawC
 		if err := m.cache.HDel(ctx, sharedalarmkeys.ChzzkChannelMapKey, channelID); err != nil {
 			return fmt.Errorf("delete missing chzzk mapping: %w", err)
 		}
+
 		return nil
 	}
 
 	if err := m.cache.HSet(ctx, sharedalarmkeys.ChzzkChannelMapKey, channelID, chzzkChannelID); err != nil {
 		return fmt.Errorf("upsert chzzk mapping: %w", err)
 	}
+
 	if err := m.cache.Del(ctx, sharedalarmkeys.ChzzkChannelMapEmptyKey); err != nil {
 		return fmt.Errorf("clear chzzk empty marker: %w", err)
 	}
+
 	return nil
 }
 
@@ -255,6 +279,7 @@ func (m *Mapper) removeMappingsForChannel(ctx context.Context, channelID string)
 func (m *Mapper) removeStaleTwitchLoginMappingIfOwned(ctx context.Context, login, channelID string) error {
 	login = stringutil.Normalize(login)
 	channelID = stringutil.TrimSpace(channelID)
+
 	if login == "" || channelID == "" {
 		return nil
 	}
@@ -263,6 +288,7 @@ func (m *Mapper) removeStaleTwitchLoginMappingIfOwned(ctx context.Context, login
 	if err != nil {
 		return fmt.Errorf("get stale twitch login owner: %w", err)
 	}
+
 	if owner != "" && owner != channelID {
 		return nil
 	}
@@ -280,100 +306,23 @@ func (m *Mapper) reconcileTwitchMappingsForChannel(ctx context.Context, channelI
 
 	currentLogin, err := m.currentTwitchChannelLogin(ctx, channelID)
 	if err != nil {
-		return err
+		return fmt.Errorf("current twitch channel login: %w", err)
 	}
 
 	if err := m.removeChangedTwitchLoginMapping(ctx, currentLogin, channelID, desiredLogin); err != nil {
-		return err
+		return fmt.Errorf("remove changed twitch login mapping: %w", err)
 	}
 
 	if err := m.removeOwnedTwitchLoginMappingsExcept(ctx, channelID, desiredLogin); err != nil {
-		return err
+		return fmt.Errorf("remove owned twitch login mappings except: %w", err)
 	}
 
 	if desiredLogin == "" {
 		return nil
 	}
 
-	return m.reconcileDesiredTwitchLoginMapping(ctx, channelID, desiredLogin)
-}
-
-func (m *Mapper) reconcileDesiredTwitchLoginMapping(ctx context.Context, channelID, desiredLogin string) error {
-	existingChannelID, err := m.cache.HGet(ctx, sharedalarmkeys.TwitchLoginMapKey, desiredLogin)
-	if err != nil {
-		return fmt.Errorf("get desired twitch login mapping: %w", err)
-	}
-
-	if existingChannelID != "" && existingChannelID != channelID {
-		return m.clearConflictingTwitchChannelLoginMapping(ctx, desiredLogin, existingChannelID, channelID)
-	}
-
-	return m.upsertTwitchMappingsForChannel(ctx, channelID, desiredLogin)
-}
-
-func (m *Mapper) currentTwitchChannelLogin(ctx context.Context, channelID string) (string, error) {
-	currentLogin, err := m.cache.HGet(ctx, sharedalarmkeys.TwitchChannelLoginMapKey, channelID)
-	if err != nil {
-		return "", fmt.Errorf("get current twitch channel login: %w", err)
-	}
-	return stringutil.Normalize(currentLogin), nil
-}
-
-func (m *Mapper) removeChangedTwitchLoginMapping(
-	ctx context.Context,
-	currentLogin string,
-	channelID string,
-	desiredLogin string,
-) error {
-	if currentLogin != "" && currentLogin != desiredLogin {
-		if err := m.removeStaleTwitchLoginMappingIfOwned(ctx, currentLogin, channelID); err != nil {
-			return fmt.Errorf("delete stale twitch login mapping: %w", err)
-		}
-	}
-	if desiredLogin == "" {
-		return m.deleteTwitchChannelLoginMapping(ctx, channelID)
-	}
-	return nil
-}
-
-func (m *Mapper) deleteTwitchChannelLoginMapping(ctx context.Context, channelID string) error {
-	if err := m.cache.HDel(ctx, sharedalarmkeys.TwitchChannelLoginMapKey, channelID); err != nil {
-		return fmt.Errorf("delete twitch channel login mapping: %w", err)
-	}
-	return nil
-}
-
-func (m *Mapper) clearConflictingTwitchChannelLoginMapping(
-	ctx context.Context,
-	desiredLogin string,
-	existingChannelID string,
-	channelID string,
-) error {
-	if err := m.cache.HDel(ctx, sharedalarmkeys.TwitchChannelLoginMapKey, existingChannelID); err != nil {
-		return fmt.Errorf("prune stale twitch channel login mapping: %w", err)
-	}
-
-	logging.Warn(ctx, m.logger, "platform_mapping.duplicate_twitch_login", "Duplicate Twitch login detected while incrementally syncing platform mappings",
-		slog.String("twitch_login", desiredLogin),
-		slog.String("pruned_channel_id", existingChannelID),
-		slog.String("owner_channel_id", channelID),
-	)
-	return m.upsertTwitchMappingsForChannel(ctx, channelID, desiredLogin)
-}
-
-func (m *Mapper) upsertTwitchMappingsForChannel(ctx context.Context, channelID, desiredLogin string) error {
-	if err := m.cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, desiredLogin, channelID); err != nil {
-		return fmt.Errorf("upsert twitch mapping: %w", err)
-	}
-	if err := m.cache.Del(ctx, sharedalarmkeys.TwitchLoginMapEmptyKey); err != nil {
-		return fmt.Errorf("clear twitch empty marker: %w", err)
-	}
-
-	if err := m.cache.HSet(ctx, sharedalarmkeys.TwitchChannelLoginMapKey, channelID, desiredLogin); err != nil {
-		return fmt.Errorf("upsert twitch channel login mapping: %w", err)
-	}
-	if err := m.cache.Del(ctx, sharedalarmkeys.TwitchChannelLoginMapEmptyKey); err != nil {
-		return fmt.Errorf("clear twitch channel empty marker: %w", err)
+	if err := m.reconcileDesiredTwitchLoginMapping(ctx, channelID, desiredLogin); err != nil {
+		return fmt.Errorf("reconcile desired twitch login mapping: %w", err)
 	}
 
 	return nil

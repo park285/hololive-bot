@@ -79,33 +79,42 @@ type Decision struct {
 
 func (s *State) clone() State {
 	cloned := *s
+
 	cloned.Head = s.Head.clone()
 	cloned.Window = make([]WindowEvidence, len(s.Window))
+
 	for i := range s.Window {
 		cloned.Window[i] = s.Window[i].clone()
 	}
+
 	return cloned
 }
 
 func (h *Head) clone() Head {
 	cloned := *h
+
 	cloned.LastResolvedWindowStart = copyTimePointer(h.LastResolvedWindowStart)
 	cloned.LastResolvedCount = copyCount(h.LastResolvedCount)
 	cloned.PriorResolvedWindowStart = copyTimePointer(h.PriorResolvedWindowStart)
 	cloned.PriorResolvedCount = copyCount(h.PriorResolvedCount)
 	cloned.UnresolvedWindowStart = copyTimePointer(h.UnresolvedWindowStart)
+
 	return cloned
 }
 
 func (w *WindowEvidence) clone() WindowEvidence {
 	cloned := *w
+
 	cloned.ViewerCount = copyCount(w.ViewerCount)
+
 	return cloned
 }
 
 func (e *Evidence) clone() Evidence {
 	cloned := *e
+
 	cloned.Sample.ViewerCount = copyCount(e.Sample.ViewerCount)
+
 	return cloned
 }
 
@@ -113,5 +122,6 @@ func copyTimePointer(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
+
 	return copyTime(*value)
 }

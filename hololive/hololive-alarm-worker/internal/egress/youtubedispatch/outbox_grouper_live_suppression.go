@@ -2,10 +2,9 @@ package youtubedispatch
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -25,6 +24,7 @@ func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 	if !shouldFilterLiveCatchupSuppression(g, item, rooms) {
 		return rooms
 	}
+
 	payload, ok := liveStreamPayloadForSuppression(item)
 	if !ok {
 		return rooms
@@ -35,11 +35,13 @@ func (g *OutboxGrouper) filterLiveCatchupSuppressedRooms(
 		if !selected {
 			continue
 		}
+
 		suppressed := g.wasLiveCatchupRecentlyCoveredByUpcoming(ctx, roomID, item.ChannelID, &payload)
 		if !suppressed {
 			filtered[roomID] = true
 		}
 	}
+
 	return filtered
 }
 
@@ -52,10 +54,13 @@ func shouldFilterLiveCatchupSuppression(g *OutboxGrouper, item *domain.YouTubeNo
 
 func liveStreamPayloadForSuppression(item *domain.YouTubeNotificationOutbox) (format.VideoPayload, bool) {
 	var payload format.VideoPayload
+
 	if err := jsonv2.Unmarshal([]byte(item.Payload), &payload); err != nil {
 		return format.VideoPayload{}, false
 	}
+
 	scheduledAt := liveSuppressionScheduledAt(&payload)
+
 	return payload, payload.VideoID != "" && payload.Title != "" && scheduledAt != nil && !scheduledAt.IsZero()
 }
 
@@ -69,8 +74,11 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 	if scheduledAt == nil || scheduledAt.IsZero() {
 		return false
 	}
+
 	key := keys.BuildUpcomingEventKey(roomID, channelID, payload.VideoID, payload.Title, scheduledAt.UTC())
+
 	var data liveUpcomingSuppressionData
+
 	if err := g.cache.Get(ctx, key, &data); err != nil {
 		g.logger.Warn("Failed to read live catchup upcoming suppression marker",
 			slog.String("room_id", roomID),
@@ -78,11 +86,14 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 			slog.String("video_id", payload.VideoID),
 			slog.Any("error", err))
 		observeLiveCatchupSuppression(liveCatchupSuppressionResultCacheError)
+
 		return false
 	}
+
 	if data.NotifiedAt == "" {
 		return false
 	}
+
 	notifiedAt, err := time.Parse(time.RFC3339, data.NotifiedAt)
 	if err != nil {
 		g.logger.Warn("Invalid live catchup upcoming suppression marker",
@@ -92,12 +103,16 @@ func (g *OutboxGrouper) wasLiveCatchupRecentlyCoveredByUpcoming(
 			slog.String("notified_at", data.NotifiedAt),
 			slog.Any("error", err))
 		observeLiveCatchupSuppression(liveCatchupSuppressionResultInvalidMarker)
+
 		return false
 	}
+
 	if time.Since(notifiedAt) > constants.LiveCatchupSuppressWindow {
 		return false
 	}
+
 	observeLiveCatchupSuppression(liveCatchupSuppressionResultSuppressed)
+
 	return true
 }
 
@@ -105,5 +120,6 @@ func liveSuppressionScheduledAt(payload *format.VideoPayload) *time.Time {
 	if payload.ScheduledStartAt != nil && !payload.ScheduledStartAt.IsZero() {
 		return payload.ScheduledStartAt
 	}
+
 	return payload.PublishedAt
 }

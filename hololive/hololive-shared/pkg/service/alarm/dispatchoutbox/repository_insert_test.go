@@ -45,6 +45,7 @@ func TestTruncateHash(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := truncateHash(tt.in)
 			assert.Equal(t, tt.want, got)
 		})
@@ -55,14 +56,15 @@ func TestAddPreparedEvent_DetectsSameBatchHashConflict(t *testing.T) {
 	t.Parallel()
 
 	events := make(map[string]eventInsert)
-	first := eventInsert{EventKey: "key1", PayloadHash: "hash1"}
+	first := eventInsert{EventKey: testEventKey, PayloadHash: "hash1"}
 	result := PublishBatchResult{}
 
 	collision := addPreparedEvent(events, &first, &result)
 	require.Nil(t, collision)
 	require.Equal(t, 1, result.RequestedEvents)
 
-	conflict := eventInsert{EventKey: "key1", PayloadHash: "hash2"}
+	conflict := eventInsert{EventKey: testEventKey, PayloadHash: "hash2"}
+
 	collision = addPreparedEvent(events, &conflict, &result)
 	require.NotNil(t, collision)
 	require.Equal(t, conflict, collision.Event)
@@ -71,11 +73,13 @@ func TestAddPreparedEvent_DetectsSameBatchHashConflict(t *testing.T) {
 
 	events2 := make(map[string]eventInsert)
 	result2 := PublishBatchResult{}
-	orig := eventInsert{EventKey: "key1", PayloadHash: "hash1"}
+	orig := eventInsert{EventKey: testEventKey, PayloadHash: "hash1"}
+
 	collision = addPreparedEvent(events2, &orig, &result2)
 	require.Nil(t, collision)
 
-	duplicate := eventInsert{EventKey: "key1", PayloadHash: "hash1"}
+	duplicate := eventInsert{EventKey: testEventKey, PayloadHash: "hash1"}
+
 	collision = addPreparedEvent(events2, &duplicate, &result2)
 	require.Nil(t, collision)
 	require.Equal(t, 1, result2.RequestedEvents)
@@ -86,12 +90,12 @@ func TestBuildEventBatchRows_ReturnsExpectedHashes(t *testing.T) {
 	t.Parallel()
 
 	events := []eventInsert{
-		{EventKey: "key1", PayloadHash: "hash1", AlarmType: "LIVE", Payload: []byte(`{}`)},
+		{EventKey: testEventKey, PayloadHash: "hash1", AlarmType: "LIVE", Payload: []byte(`{}`)},
 		{EventKey: "key2", PayloadHash: "hash2", AlarmType: "LIVE", Payload: []byte(`{}`)},
 	}
 	rows, hashes := buildEventBatchRows(events)
 	require.Len(t, rows, 2)
-	require.Equal(t, "hash1", hashes["key1"])
+	require.Equal(t, "hash1", hashes[testEventKey])
 	require.Equal(t, "hash2", hashes["key2"])
 }
 
@@ -104,8 +108,8 @@ func TestClassifyEventPreflight_SplitsNewDuplicateAndConflict(t *testing.T) {
 		EventKey:    "conflict",
 		PayloadHash: "incoming-hash",
 		AlarmType:   "LIVE",
-		ChannelID:   "channel-1",
-		StreamID:    "stream-1",
+		ChannelID:   testChannelID,
+		StreamID:    testStreamID,
 		Category:    "10",
 		Payload:     []byte(`{"version":1}`),
 	}

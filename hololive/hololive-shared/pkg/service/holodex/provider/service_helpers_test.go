@@ -27,14 +27,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
+const (
+	testOpChannelsLiveStatus = "channels_live_status"
+	testVideoID              = "video-1"
+	testChannelID            = "channel-1"
+)
+
 func TestBuildSearchChannelsCacheKey_NormalizesEquivalentQueries(t *testing.T) {
 	t.Parallel()
 
 	first := buildSearchChannelsCacheKey("  Aqua ")
 	second := buildSearchChannelsCacheKey("aqua")
+
 	if first != second {
 		t.Fatalf("buildSearchChannelsCacheKey equivalent queries mismatch: %q vs %q", first, second)
 	}
+
 	if first == searchChannelsCacheKeyPrefix+"empty" {
 		t.Fatalf("buildSearchChannelsCacheKey(%q) returned empty key", "Aqua")
 	}
@@ -52,14 +60,18 @@ func TestSearchQueryAttrPseudonymizesRawQuery(t *testing.T) {
 	t.Parallel()
 
 	const query = "private room search"
+
 	attr := searchQueryAttr(query)
+
 	if attr.Key != "query_token" {
 		t.Fatalf("searchQueryAttr key = %q, want query_token", attr.Key)
 	}
+
 	value := attr.Value.String()
 	if value != privacylog.Pseudonym(query) {
 		t.Fatalf("searchQueryAttr value = %q, want privacylog pseudonym", value)
 	}
+
 	if strings.Contains(value, query) {
 		t.Fatalf("searchQueryAttr value contains raw query %q", query)
 	}

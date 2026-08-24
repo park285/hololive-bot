@@ -30,6 +30,7 @@ func MarkdownNeutralize(s string) string {
 	if inserts == 0 && !hasZeroWidth {
 		return s
 	}
+
 	if hasZeroWidth {
 		s = strings.ReplaceAll(s, KakaoZeroWidthSpace, "")
 	}
@@ -43,16 +44,20 @@ func insertZeroWidthAfterMarkers(s string, inserts int) string {
 	}
 
 	var b strings.Builder
+
 	b.Grow(len(s) + inserts*len(KakaoZeroWidthSpace))
 
 	start := 0
-	for i := 0; i < len(s); i++ {
+
+	for i := range len(s) {
 		if isMarkdownMarker(s[i]) {
 			b.WriteString(s[start : i+1])
 			b.WriteString(KakaoZeroWidthSpace)
+
 			start = i + 1
 		}
 	}
+
 	b.WriteString(s[start:])
 
 	return b.String()
@@ -62,14 +67,19 @@ func markdownScan(s string) (inserts int, hasZeroWidth bool) {
 	for i := 0; i < len(s); {
 		if strings.HasPrefix(s[i:], KakaoZeroWidthSpace) {
 			hasZeroWidth = true
+
 			i += len(KakaoZeroWidthSpace)
+
 			continue
 		}
+
 		if isMarkdownMarker(s[i]) {
 			inserts++
 		}
+
 		i++
 	}
+
 	return inserts, hasZeroWidth
 }
 

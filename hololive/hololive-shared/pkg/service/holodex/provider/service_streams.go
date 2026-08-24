@@ -22,12 +22,13 @@ package holodexprovider
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -46,17 +47,22 @@ func SupportedStreamOrgParams() []string {
 }
 
 func (h *Service) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
-	return h.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgHololive)
+	out, err := h.GetLiveStreamsByOrg(ctx, constants.HolodexAPIParams.OrgHololive)
+	if err != nil {
+		return out, fmt.Errorf("get live streams by org: %w", err)
+	}
+
+	return out, nil
 }
 
 // org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve stream org: %w", err)
 	}
 
-	return h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
+	out, err := h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
 		resolvedOrg: resolvedOrg,
 		status:      constants.HolodexAPIParams.StatusLive,
 		operation:   "live_streams",
@@ -71,25 +77,35 @@ func (h *Service) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domai
 		},
 		retryKey: fmt.Sprintf("live_streams_%s", strings.ToLower(resolvedOrg)),
 		retry: func(retryCtx context.Context, org string, _ int) {
-			if _, err := h.GetLiveStreamsByOrg(retryCtx, org); err != nil && h.logger != nil {
-				h.logger.Warn("holodex live streams retry failed", slog.String("org", org), slog.Any("error", err))
+			if _, getErr := h.GetLiveStreamsByOrg(retryCtx, org); getErr != nil && h.logger != nil {
+				h.logger.Warn("holodex live streams retry failed", slog.String("org", org), slog.Any("error", getErr))
 			}
 		},
 	})
+	if err != nil {
+		return out, fmt.Errorf("get streams by org with fallback: %w", err)
+	}
+
+	return out, nil
 }
 
 func (h *Service) GetUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, error) {
-	return h.GetUpcomingStreamsByOrg(ctx, hours, constants.HolodexAPIParams.OrgHololive)
+	out, err := h.GetUpcomingStreamsByOrg(ctx, hours, constants.HolodexAPIParams.OrgHololive)
+	if err != nil {
+		return out, fmt.Errorf("get upcoming streams by org: %w", err)
+	}
+
+	return out, nil
 }
 
 // org 미지정 시 Hololive를 기본값으로 사용합니다.
 func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org string) ([]*domain.Stream, error) {
 	resolvedOrg, err := resolveStreamOrg(org)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve stream org: %w", err)
 	}
 
-	return h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
+	out, err := h.getStreamsByOrgWithFallback(ctx, &streamFetchPlan{
 		resolvedOrg: resolvedOrg,
 		status:      constants.HolodexAPIParams.StatusUpcoming,
 		hours:       hours,
@@ -108,12 +124,17 @@ func (h *Service) GetUpcomingStreamsByOrg(ctx context.Context, hours int, org st
 		},
 		retryKey: fmt.Sprintf("upcoming_%s_%d", strings.ToLower(resolvedOrg), hours),
 		retry: func(retryCtx context.Context, org string, hours int) {
-			if _, err := h.GetUpcomingStreamsByOrg(retryCtx, hours, org); err != nil && h.logger != nil {
-				h.logger.Warn("holodex upcoming streams retry failed", slog.String("org", org), slog.Int("hours", hours), slog.Any("error", err))
+			if _, getUpcomingErr := h.GetUpcomingStreamsByOrg(retryCtx, hours, org); getUpcomingErr != nil && h.logger != nil {
+				h.logger.Warn("holodex upcoming streams retry failed", slog.String("org", org), slog.Int("hours", hours), slog.Any("error", getUpcomingErr))
 			}
 		},
 		fallbackLogMessage: "Holodex upcoming stream source failed; using official schedule API",
 	})
+	if err != nil {
+		return out, fmt.Errorf("get streams by org with fallback: %w", err)
+	}
+
+	return out, nil
 }
 
 type streamFetchPlan struct {
@@ -136,6 +157,7 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 		if err != nil {
 			return nil, fmt.Errorf("fetch indie streams: %w", err)
 		}
+
 		return streams, nil
 	}
 
@@ -144,18 +166,20 @@ func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hou
 	params.Set("status", status)
 	params.Set("type", constants.HolodexAPIParams.TypeStream)
 	params.Set("limit", fmt.Sprintf("%d", constants.HolodexAPIParams.StreamListLimit))
+
 	if status == constants.HolodexAPIParams.StatusUpcoming {
 		params.Set("max_upcoming_hours", fmt.Sprintf("%d", min(hours, constants.HolodexAPIParams.MaxUpcomingHours)))
 		params.Set("order", "asc")
 		params.Set("sort", "start_scheduled")
 	}
 
-	body, err := h.requester.DoRequest(ctx, "GET", "/live", params)
+	body, err := h.requester.DoRequest(ctx, http.MethodGet, "/live", params)
 	if err != nil {
 		return nil, fmt.Errorf("get streams by org (%s): %w", org, err)
 	}
 
 	var rawStreams []streammapping.StreamRaw
+
 	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("unmarshal streams by org (%s): %w", org, err)
 	}
@@ -167,6 +191,7 @@ func resolveStreamOrg(org string) (string, error) {
 	if resolvedOrg, ok := streamOrgAliases()[normalizeStreamOrg(org)]; ok {
 		return resolvedOrg, nil
 	}
+
 	return "", fmt.Errorf("%w: %s", ErrInvalidStreamOrg, stringutil.TrimSpace(org))
 }
 
@@ -188,8 +213,10 @@ func streamTargetOrgs(org string) []string {
 	}
 
 	targets := make([]string, 0, len(constants.HolodexAPIParams.SyncTargetOrgs)+1)
+
 	targets = append(targets, constants.HolodexAPIParams.SyncTargetOrgs...)
 	targets = append(targets, constants.HolodexAPIParams.OrgIndie)
+
 	return targets
 }
 
@@ -197,9 +224,11 @@ func holodexOrgFetchParallelism(org string, orgAllParallelism int) int {
 	if org != constants.HolodexAPIParams.OrgAll {
 		return 1
 	}
+
 	if orgAllParallelism > 1 {
 		return orgAllParallelism
 	}
+
 	return 1
 }
 
@@ -210,14 +239,17 @@ func filterStreamsByRequestedOrg(streams []*domain.Stream, org string) []*domain
 
 	target := normalizeStreamOrg(org)
 	filtered := make([]*domain.Stream, 0, len(streams))
+
 	for _, stream := range streams {
 		if stream.Channel == nil || stream.Channel.Org == nil {
 			continue
 		}
+
 		if normalizeStreamOrg(*stream.Channel.Org) == target {
 			filtered = append(filtered, stream)
 		}
 	}
+
 	return filtered
 }
 
@@ -228,6 +260,7 @@ func filterStreamsByStatus(streams []*domain.Stream, status domain.StreamStatus)
 			filtered = append(filtered, stream)
 		}
 	}
+
 	return filtered
 }
 
@@ -236,6 +269,7 @@ func limitStreamList(streams []*domain.Stream) []*domain.Stream {
 	if limit < 1 || len(streams) <= limit {
 		return streams
 	}
+
 	return streams[:limit]
 }
 
@@ -254,12 +288,13 @@ func (h *Service) fetchIndieStreams(ctx context.Context) ([]*domain.Stream, erro
 	params := url.Values{}
 	params.Set("channels", strings.Join(constants.IndieChannelIDs, ","))
 
-	body, err := h.requester.DoRequest(ctx, "GET", "/users/live", params)
+	body, err := h.requester.DoRequest(ctx, http.MethodGet, usersLivePath, params)
 	if err != nil {
 		return nil, fmt.Errorf("fetch indie streams: %w", err)
 	}
 
 	var rawStreams []streammapping.StreamRaw
+
 	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("unmarshal indie streams: %w", err)
 	}

@@ -16,7 +16,7 @@ import (
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Run(bootstrap.Options[*config.Config, *app.Runtime]{
+	os.Exit(bootstrap.Options[*config.Config, *app.Runtime]{
 		Version: Version,
 		Initialize: func(string) {
 			automaxprocs.Init(nil)
@@ -42,5 +42,5 @@ func main() {
 		BuildTimeout:      30 * time.Second,
 		BuildRuntime:      app.New,
 		BuildErrorMessage: "Failed to assemble admin dashboard runtime",
-	}))
+	}.Run())
 }

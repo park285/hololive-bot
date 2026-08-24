@@ -22,7 +22,7 @@ package apiclient
 
 import (
 	"context"
-	stdErrors "errors"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -34,18 +34,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/time/rate"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
+const testAPIKey = "test-key"
+
 func writeAPIResponse(t *testing.T, w http.ResponseWriter, body string) {
 	t.Helper()
+
 	if _, err := w.Write([]byte(body)); err != nil {
 		t.Fatalf("write api response: %v", err)
 	}
@@ -55,7 +57,8 @@ func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing
 	t.Parallel()
 
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
-	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", "test-key", slog.Default(), nil, &holodexCfg)
+	client := NewHolodexAPIClient(nil, "https://holodex.net/api/v2", testAPIKey, slog.Default(), nil, &holodexCfg)
+
 	if client == nil {
 		t.Fatal("NewHolodexAPIClient() returned nil")
 	}
@@ -69,16 +72,20 @@ func TestNewHolodexAPIClient_UsesExternalAPITransportProfileByDefault(t *testing
 	if !ok {
 		t.Fatalf("Transport type = %T, want *http.Transport", client.httpClient.Transport)
 	}
+
 	wantTransport, ok := expected.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("expected transport type = %T, want *http.Transport", expected.Transport)
 	}
+
 	if gotTransport.MaxConnsPerHost != wantTransport.MaxConnsPerHost {
 		t.Fatalf("MaxConnsPerHost = %d, want %d", gotTransport.MaxConnsPerHost, wantTransport.MaxConnsPerHost)
 	}
+
 	if gotTransport.MaxIdleConnsPerHost != wantTransport.MaxIdleConnsPerHost {
 		t.Fatalf("MaxIdleConnsPerHost = %d, want %d", gotTransport.MaxIdleConnsPerHost, wantTransport.MaxIdleConnsPerHost)
 	}
+
 	if gotTransport.ResponseHeaderTimeout != wantTransport.ResponseHeaderTimeout {
 		t.Fatalf("ResponseHeaderTimeout = %s, want %s", gotTransport.ResponseHeaderTimeout, wantTransport.ResponseHeaderTimeout)
 	}
@@ -126,11 +133,12 @@ func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
 		semaphore:   make(chan struct{}, 2),
 	}
 
-	_, err := client.DoRequest(context.Background(), http.MethodGet, "/live", nil)
+	_, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil)
 	if err == nil {
-		t.Fatalf("expected error when no API keys configured")
+		t.Fatal("expected error when no API keys configured")
 	}
-	if !stdErrors.Is(err, errNoAPIKeys) {
+
+	if !errors.Is(err, errNoAPIKeys) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -138,6 +146,8 @@ func TestHolodexAPIClientDoRequestNoKeys(t *testing.T) {
 type nilResponseTransport struct{}
 
 func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	// nil 응답과 nil 오류를 함께 돌려주는 비정상 RoundTripper를 재현하는 것이 이 테스트의 목적이다.
+	//nolint:nilnil // 재현 대상 자체가 (nil, nil) 반환이라 sentinel 오류로 바꾸면 테스트가 무의미해진다.
 	return nil, nil
 }
 
@@ -145,7 +155,7 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 	client := &APIClient{
 		httpClient:        &http.Client{Transport: nilResponseTransport{}},
 		baseURL:           "https://holodex.example/api/v2",
-		apiKey:            "test-key",
+		apiKey:            testAPIKey,
 		logger:            slog.Default(),
 		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
 		semaphore:         make(chan struct{}, 5),
@@ -156,10 +166,11 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 		),
 	}
 
-	_, err := client.DoRequest(context.Background(), http.MethodGet, "/live", nil)
+	_, err := client.DoRequest(t.Context(), http.MethodGet, "/live", nil)
 	if err == nil {
 		t.Fatal("expected error for nil HTTP response")
 	}
+
 	if got := err.Error(); !strings.Contains(got, "nil response") {
 		t.Fatalf("error = %q, want nil response context", got)
 	}
@@ -167,7 +178,7 @@ func TestHolodexAPIClientDoRequestNilResponse(t *testing.T) {
 
 // newTestClient: Mock 서버 테스트용 APIClient 생성
 // baseURL 오버라이드가 불가하므로, buildRequestURL을 우회하는 대신
-// 실제 요청 URL을 인터셉트하는 RoundTripper를 사용
+// 실제 요청 URL을 인터셉트하는 RoundTripper를 사용.
 func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClient, *httptest.Server) {
 	server := httptest.NewServer(handler)
 	client := &APIClient{
@@ -178,6 +189,7 @@ func newTestClientWithHandler(handler http.HandlerFunc, apiKey string) (*APIClie
 		rateLimiter: rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:   make(chan struct{}, 5),
 	}
+
 	return client, server
 }
 
@@ -188,6 +200,7 @@ func TestAPIClientWithMockServer_Success(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		writeAPIResponse(t, w, expectedBody)
 	}, "test-key-1")
+
 	defer server.Close()
 
 	// Mock 서버 URL로 요청 (constants.APIConfig.HolodexBaseURL 대신)
@@ -232,6 +245,7 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 	// threshold 횟수(3회) 미만에서는 circuit이 열리지 않아야 함
 	for i := 1; i < constants.CircuitBreakerConfig.FailureThreshold; i++ {
 		client.openCircuit()
+
 		if client.IsCircuitOpen() {
 			t.Errorf("circuit opened after %d failures (threshold=%d)", i, constants.CircuitBreakerConfig.FailureThreshold)
 		}
@@ -239,6 +253,7 @@ func TestAPIClient_FailureCountIncrement(t *testing.T) {
 
 	// threshold 도달 시 circuit이 열려야 함
 	client.openCircuit()
+
 	if !client.IsCircuitOpen() {
 		t.Errorf("circuit should be open after %d failures", constants.CircuitBreakerConfig.FailureThreshold)
 	}
@@ -249,14 +264,16 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requestCount++
+
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
+
 	defer server.Close()
 
 	client := &APIClient{
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
-		apiKey:            "test-key",
+		apiKey:            testAPIKey,
 		logger:            slog.Default(),
 		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
 		semaphore:         make(chan struct{}, 5),
@@ -267,7 +284,7 @@ func TestHandleServerError_CircuitOpenStopsRetry(t *testing.T) {
 		),
 	}
 
-	_, err := client.DoRequest(context.Background(), http.MethodGet, "/test", nil)
+	_, err := client.DoRequest(t.Context(), http.MethodGet, "/test", nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -295,7 +312,7 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 	client := &APIClient{
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
-		apiKey:            "test-key",
+		apiKey:            testAPIKey,
 		logger:            slog.Default(),
 		rateLimiter:       rate.NewLimiter(rate.Inf, 1),
 		semaphore:         make(chan struct{}, 5),
@@ -310,16 +327,19 @@ func TestHandleServerError_AfterResetRequiresThresholdAgain(t *testing.T) {
 	for range constants.CircuitBreakerConfig.FailureThreshold {
 		client.openCircuit()
 	}
+
 	if !client.IsCircuitOpen() {
 		t.Fatal("should be open after threshold")
 	}
 
 	client.forceOpenedAtForTest(time.Now().Add(-constants.CircuitBreakerConfig.ResetTimeout - time.Second))
+
 	if !client.breaker.Allow() {
 		t.Fatal("should allow after timeout")
 	}
 
 	client.openCircuit()
+
 	if client.IsCircuitOpen() {
 		t.Fatalf("single failure after reset must not re-open (threshold=%d)", constants.CircuitBreakerConfig.FailureThreshold)
 	}
@@ -332,12 +352,13 @@ func TestPerAttemptTimeout(t *testing.T) {
 	defer server.Close()
 
 	holodexCfg := settings.DefaultHolodexOperationalConfig()
+
 	holodexCfg.PerAttemptTimeout = 200 * time.Millisecond
 
 	client := &APIClient{
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
-		apiKey:            "test-key",
+		apiKey:            testAPIKey,
 		logger:            slog.Default(),
 		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:         make(chan struct{}, 5),
@@ -345,7 +366,7 @@ func TestPerAttemptTimeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, err := client.DoRequest(context.Background(), http.MethodGet, "/test", nil)
+	_, err := client.DoRequest(t.Context(), http.MethodGet, "/test", nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -371,7 +392,7 @@ func TestTimeoutMaxRetries(t *testing.T) {
 	client := &APIClient{
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
-		apiKey:            "test-key",
+		apiKey:            testAPIKey,
 		logger:            slog.Default(),
 		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:         make(chan struct{}, 5),
@@ -379,7 +400,7 @@ func TestTimeoutMaxRetries(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, err := client.DoRequest(context.Background(), http.MethodGet, "/test", nil)
+	_, err := client.DoRequest(t.Context(), http.MethodGet, "/test", nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -406,17 +427,21 @@ type stubDistributedLimiter struct {
 func (s *stubDistributedLimiter) Allow(_ context.Context, _ string, _ int, _ time.Duration) (ratelimit.Decision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.calls++
 
 	if len(s.decisions) == 0 {
 		return ratelimit.Decision{Allowed: true}, nil
 	}
+
 	if len(s.decisions) == 1 {
 		return s.decisions[0], nil
 	}
 
 	d := s.decisions[0]
+
 	s.decisions = s.decisions[1:]
+
 	return d, nil
 }
 
@@ -435,7 +460,7 @@ func TestWaitForRateLimiter_DistributedDeniedThenAllowed(t *testing.T) {
 		},
 	}
 
-	err := client.waitForRateLimiter(context.Background(), "/videos")
+	err := client.waitForRateLimiter(t.Context(), "/videos")
 	if err != nil {
 		t.Fatalf("waitForRateLimiter() error = %v", err)
 	}
@@ -455,9 +480,9 @@ func TestWaitForRateLimiter_DistributedDeniedWithoutRetryAfter(t *testing.T) {
 		},
 	}
 
-	err := client.waitForRateLimiter(context.Background(), "/videos")
+	err := client.waitForRateLimiter(t.Context(), "/videos")
 	if err == nil {
-		t.Fatalf("expected error but got nil")
+		t.Fatal("expected error but got nil")
 	}
 }
 
@@ -467,7 +492,7 @@ func TestProcessHolodexResponse_ForbiddenDoesNotRetry(t *testing.T) {
 	}
 
 	_, done, err := client.processHolodexResponse(
-		context.Background(),
+		t.Context(),
 		http.StatusForbidden,
 		[]byte(`{"error":"invalid api key"}`),
 		"https://holodex.example/api/v2/live",
@@ -477,14 +502,17 @@ func TestProcessHolodexResponse_ForbiddenDoesNotRetry(t *testing.T) {
 	if !done {
 		t.Fatal("expected 403 response to stop retry loop")
 	}
+
 	if err == nil {
 		t.Fatal("expected 403 response to return error")
 	}
 
 	var apiErr *APIError
-	if !stdErrors.As(err, &apiErr) {
+
+	if !errors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T", err)
 	}
+
 	if apiErr.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", apiErr.StatusCode, http.StatusForbidden)
 	}
@@ -496,7 +524,7 @@ func TestProcessHolodexResponse_RateLimitedRetriesBeforeExhaustion(t *testing.T)
 	}
 
 	_, done, err := client.processHolodexResponse(
-		context.Background(),
+		t.Context(),
 		http.StatusTooManyRequests,
 		nil,
 		"https://holodex.example/api/v2/live",
@@ -506,6 +534,7 @@ func TestProcessHolodexResponse_RateLimitedRetriesBeforeExhaustion(t *testing.T)
 	if done {
 		t.Fatal("expected 429 response to keep retry loop running")
 	}
+
 	if err != nil {
 		t.Fatalf("expected nil error before retries are exhausted, got %v", err)
 	}
@@ -517,7 +546,7 @@ func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *
 	}
 
 	_, done, err := client.processHolodexResponse(
-		context.Background(),
+		t.Context(),
 		http.StatusTooManyRequests,
 		nil,
 		"https://holodex.example/api/v2/live",
@@ -527,14 +556,17 @@ func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *
 	if !done {
 		t.Fatal("expected final 429 response to stop retry loop")
 	}
+
 	if err == nil {
 		t.Fatal("expected final 429 response to return error")
 	}
 
 	var rotationErr *KeyRotationError
-	if !stdErrors.As(err, &rotationErr) {
+
+	if !errors.As(err, &rotationErr) {
 		t.Fatalf("expected KeyRotationError, got %T", err)
 	}
+
 	if rotationErr.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want %d", rotationErr.StatusCode, http.StatusTooManyRequests)
 	}
@@ -547,6 +579,7 @@ func TestDistributedRateLimitBucket(t *testing.T) {
 	}
 	got := client.distributedRateLimitBucket("/users/live")
 	want := holodexCfg.DistributedRateLimit.BucketBase + ":users:live"
+
 	if got != want {
 		t.Fatalf("bucket mismatch: got %q want %q", got, want)
 	}
@@ -561,14 +594,14 @@ func TestParentContextCancel(t *testing.T) {
 	client := &APIClient{
 		httpClient:        server.Client(),
 		baseURL:           server.URL,
-		apiKey:            "test-key",
+		apiKey:            testAPIKey,
 		logger:            slog.Default(),
 		rateLimiter:       rate.NewLimiter(rate.Every(10*time.Millisecond), 1),
 		semaphore:         make(chan struct{}, 5),
 		perAttemptTimeout: 5 * time.Second,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
@@ -585,7 +618,7 @@ func TestParentContextCancel(t *testing.T) {
 	}
 }
 
-// mockTimeoutError: net.Error 인터페이스를 구현하는 mock timeout 에러
+// mockTimeoutError: net.Error 인터페이스를 구현하는 mock timeout 에러.
 type mockTimeoutError struct {
 	msg     string
 	timeout bool
@@ -629,7 +662,7 @@ func TestIsTimeoutError(t *testing.T) {
 		},
 		{
 			name:     "일반 에러",
-			err:      fmt.Errorf("some error"),
+			err:      errors.New("some error"),
 			expected: false,
 		},
 		{

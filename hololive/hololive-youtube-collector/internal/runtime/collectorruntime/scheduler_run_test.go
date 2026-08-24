@@ -13,15 +13,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
-	"github.com/park285/shared-go/v2/pkg/workercontract"
-	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
 )
 
 type supersededLease struct {
@@ -37,23 +38,31 @@ func (l *supersededLease) CompleteCurrent(context.Context) error { return nil }
 func (l *supersededLease) Defer(context.Context, time.Time, string, string, string) error {
 	return nil
 }
+
 func (l *supersededLease) Release(ctx context.Context, reason joblease.ReleaseReason) error {
 	l.releaseCall++
+
 	l.reason = reason
 	l.contextErr = ctx.Err()
+
 	return l.releaseErr
 }
 
 func TestSupersededReleaseUsesDetachedCleanupContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	lease := &supersededLease{}
 	collector := settings.DefaultYouTubeCollectorConfig()
+
 	collector.CleanupTimeout = time.Second
+
 	scheduler := &leaseScheduler{collector: collector}
+
 	if err := scheduler.releaseSuperseded(ctx, lease); err != nil {
 		t.Fatal(err)
 	}
+
 	if lease.releaseCall != 1 || lease.reason != joblease.ReleaseSuperseded || lease.contextErr != nil {
 		t.Fatalf("release = calls:%d reason:%q context:%v", lease.releaseCall, lease.reason, lease.contextErr)
 	}
@@ -61,26 +70,30 @@ func TestSupersededReleaseUsesDetachedCleanupContext(t *testing.T) {
 
 func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testing.T) {
 	t.Parallel()
+
 	for name, sourceErr := range map[string]error{
 		"projection stale": sourceobservation.ErrProjectionStale,
 		"target disabled":  sourceobservation.ErrTargetDisabled,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			err := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", sourceErr))
 			if got := attemptResult(err); got != resultSuperseded {
 				t.Fatalf("attemptResult() = %q, want %q", got, resultSuperseded)
 			}
+
 			if !ignoreRunError(err) {
 				t.Fatal("expected projection churn to remain ignored by run completion")
 			}
 
 			registerer := prometheus.NewPedanticRegistry()
 			metrics := NewMetrics(registerer)
-			metrics.ObserveAttempt(contract.ProviderYouTubeJS, "community_collect", attemptResult(err), time.Second)
+			metrics.ObserveAttempt(contract.ProviderYouTubeJS, testCommunityJobKind, attemptResult(err), time.Second)
+
 			scheduler := &leaseScheduler{metrics: metrics}
 			scheduler.observePublishError(
-				&joblease.JobSpec{Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect"},
+				&joblease.JobSpec{Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind},
 				testRunOutput(t, []contract.Envelope{{
 					Provider:        contract.ProviderYouTubeJS,
 					ObservationKind: contract.KindCommunityPage,
@@ -89,22 +102,25 @@ func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testin
 			)
 
 			if got := metricValue(t, registerer, "youtube_collection_attempts_total", map[string]string{
-				"provider": string(contract.ProviderYouTubeJS), "kind": "community_collect", "result": resultSuperseded,
+				labelProvider: string(contract.ProviderYouTubeJS), labelKind: testCommunityJobKind, "result": resultSuperseded,
 			}); got != 1 {
 				t.Fatalf("superseded attempt count = %v, want 1", got)
 			}
+
 			if got := histogramCount(t, registerer, "youtube_collection_duration_seconds", map[string]string{
-				"provider": string(contract.ProviderYouTubeJS), "kind": "community_collect",
+				labelProvider: string(contract.ProviderYouTubeJS), labelKind: testCommunityJobKind,
 			}); got != 1 {
 				t.Fatalf("attempt duration count = %d, want 1", got)
 			}
+
 			if got := metricValue(t, registerer, "youtube_observation_publish_total", map[string]string{
-				"provider": string(contract.ProviderYouTubeJS), "kind": string(contract.KindCommunityPage), "outcome": outcomeSuperseded,
+				labelProvider: string(contract.ProviderYouTubeJS), labelKind: string(contract.KindCommunityPage), "outcome": outcomeSuperseded,
 			}); got != 1 {
 				t.Fatalf("superseded publish count = %v, want 1", got)
 			}
+
 			if got := metricValue(t, registerer, "youtube_observation_publish_total", map[string]string{
-				"provider": string(contract.ProviderYouTubeJS), "kind": string(contract.KindCommunityPage), "outcome": outcomeRejected,
+				labelProvider: string(contract.ProviderYouTubeJS), labelKind: string(contract.KindCommunityPage), "outcome": outcomeRejected,
 			}); got != 0 {
 				t.Fatalf("rejected publish count = %v, want 0", got)
 			}
@@ -114,20 +130,23 @@ func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testin
 
 func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 	t.Parallel()
+
 	err := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, errors.New("database unavailable"))
 	if got := attemptResult(err); got != resultFailed {
 		t.Fatalf("attemptResult() = %q, want %q", got, resultFailed)
 	}
+
 	if ignoreRunError(err) {
 		t.Fatal("unexpected publish error was ignored")
 	}
 
 	registerer := prometheus.NewPedanticRegistry()
 	metrics := NewMetrics(registerer)
-	metrics.ObserveAttempt(contract.ProviderYouTubeJS, "community_collect", attemptResult(err), time.Second)
+	metrics.ObserveAttempt(contract.ProviderYouTubeJS, testCommunityJobKind, attemptResult(err), time.Second)
+
 	scheduler := &leaseScheduler{metrics: metrics}
 	scheduler.observePublishError(
-		&joblease.JobSpec{Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect"},
+		&joblease.JobSpec{Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind},
 		testRunOutput(t, []contract.Envelope{{
 			Provider:        contract.ProviderYouTubeJS,
 			ObservationKind: contract.KindCommunityPage,
@@ -136,12 +155,13 @@ func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 	)
 
 	if got := metricValue(t, registerer, "youtube_collection_attempts_total", map[string]string{
-		"provider": string(contract.ProviderYouTubeJS), "kind": "community_collect", "result": resultFailed,
+		labelProvider: string(contract.ProviderYouTubeJS), labelKind: testCommunityJobKind, "result": resultFailed,
 	}); got != 1 {
 		t.Fatalf("failed attempt count = %v, want 1", got)
 	}
+
 	if got := metricValue(t, registerer, "youtube_observation_publish_total", map[string]string{
-		"provider": string(contract.ProviderYouTubeJS), "kind": string(contract.KindCommunityPage), "outcome": outcomeRejected,
+		labelProvider: string(contract.ProviderYouTubeJS), labelKind: string(contract.KindCommunityPage), "outcome": outcomeRejected,
 	}); got != 1 {
 		t.Fatalf("rejected publish count = %v, want 1", got)
 	}
@@ -149,15 +169,18 @@ func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 
 func testRunOutput(t *testing.T, envelopes []contract.Envelope) collectutil.RunOutput {
 	t.Helper()
+
 	output, err := collectutil.OutputFromEnvelopes(envelopes, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return output
 }
 
 func TestPublishedOutcomeMapsExactOrdinals(t *testing.T) {
 	t.Parallel()
+
 	result := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
 		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishInserted, 0),
 		sourceobservation.NewPublishedObservation(12, sourceobservation.PublishDuplicate, 1),
@@ -166,9 +189,11 @@ func TestPublishedOutcomeMapsExactOrdinals(t *testing.T) {
 	if got, ok := publishedOutcome(result, 0); !ok || got != outcomeInserted {
 		t.Fatalf("inserted = %q ok=%v", got, ok)
 	}
+
 	if got, ok := publishedOutcome(result, 1); !ok || got != outcomeDuplicate {
 		t.Fatalf("duplicate = %q ok=%v", got, ok)
 	}
+
 	if got, ok := publishedOutcome(result, 2); !ok || got != outcomeCollision {
 		t.Fatalf("collision = %q ok=%v", got, ok)
 	}
@@ -176,12 +201,14 @@ func TestPublishedOutcomeMapsExactOrdinals(t *testing.T) {
 
 func TestPublishedOutcomeRejectsMissingRowAndUnknownOutcome(t *testing.T) {
 	t.Parallel()
+
 	result := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
 		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishInserted, 0),
 	}}
 	if got, ok := publishedOutcome(result, 1); ok || got != "" {
 		t.Fatalf("missing row = %q ok=%v", got, ok)
 	}
+
 	result.Results[0].Outcome = "WEIRD"
 	if got, ok := publishedOutcome(result, 0); ok || got != "" {
 		t.Fatalf("unknown outcome = %q ok=%v", got, ok)
@@ -190,6 +217,7 @@ func TestPublishedOutcomeRejectsMissingRowAndUnknownOutcome(t *testing.T) {
 
 func TestAttemptFailureResultMapsCanonicalCodes(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name string
 		err  error
@@ -203,6 +231,7 @@ func TestAttemptFailureResultMapsCanonicalCodes(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := attemptFailureResult(test.err); got != test.want {
 				t.Fatalf("attemptFailureResult() = %q, want %q", got, test.want)
 			}
@@ -212,13 +241,17 @@ func TestAttemptFailureResultMapsCanonicalCodes(t *testing.T) {
 
 func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 	t.Parallel()
+
 	var output bytes.Buffer
+
 	scheduler := &leaseScheduler{logger: slog.New(slog.NewJSONHandler(&output, nil))}
-	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect", SubjectKey: "UC_TEST"}
+	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 	scheduler.logFailure("collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
+
 	if strings.Contains(output.String(), "secret-value") {
 		t.Fatalf("structured log leaked diagnostic credential: %s", output.String())
 	}
+
 	if !strings.Contains(output.String(), `"error_class":"HelperError"`) || !strings.Contains(output.String(), `"error_detail"`) {
 		t.Fatalf("structured log omitted diagnostics: %s", output.String())
 	}
@@ -226,41 +259,51 @@ func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 
 func metricValue(t *testing.T, registerer prometheus.Gatherer, name string, labels map[string]string) float64 {
 	t.Helper()
+
 	families, err := registerer.Gather()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, family := range families {
 		if family.GetName() != name {
 			continue
 		}
+
 		for _, metric := range family.Metric {
 			if !metricLabelsMatch(metric.GetLabel(), labels) {
 				continue
 			}
+
 			return metric.GetCounter().GetValue()
 		}
 	}
+
 	return 0
 }
 
 func histogramCount(t *testing.T, registerer prometheus.Gatherer, name string, labels map[string]string) uint64 {
 	t.Helper()
+
 	families, err := registerer.Gather()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, family := range families {
 		if family.GetName() != name {
 			continue
 		}
+
 		for _, metric := range family.Metric {
 			if !metricLabelsMatch(metric.GetLabel(), labels) {
 				continue
 			}
+
 			return metric.GetHistogram().GetSampleCount()
 		}
 	}
+
 	return 0
 }
 
@@ -268,17 +311,21 @@ func metricLabelsMatch(labels []*dto.LabelPair, want map[string]string) bool {
 	if len(labels) != len(want) {
 		return false
 	}
+
 	for _, label := range labels {
 		if want[label.GetName()] != label.GetValue() {
 			return false
 		}
 	}
+
 	return true
 }
 
 func TestNewCollectionExecutorMapsEverySchedulerField(t *testing.T) {
 	t.Parallel()
+
 	scheduler := newLifecycleScheduler(t)
+
 	scheduler.publisher = NewPublisher(nil)
 	scheduler.owner = "owner-test"
 	scheduler.gates = newProviderGates(&scheduler.collector)
@@ -289,20 +336,25 @@ func TestNewCollectionExecutorMapsEverySchedulerField(t *testing.T) {
 
 	executorValue := reflect.ValueOf(executor).Elem()
 	schedulerValue := reflect.ValueOf(scheduler).Elem()
+
 	for i := range executorValue.NumField() {
 		field := executorValue.Type().Field(i)
 		got := executorValue.Field(i)
+
 		if got.IsZero() {
 			t.Fatalf("executor.%s = zero, want mapped from scheduler", field.Name)
 		}
+
 		if field.Type.Kind() == reflect.Func {
 			continue
 		}
+
 		assertExecutorFieldMirrorsScheduler(t, &field, got, schedulerValue.FieldByName(field.Name))
 	}
 
 	boom := errors.New("boom")
 	executor.reportFatal(boom)
+
 	select {
 	case err := <-scheduler.Fatal():
 		if !errors.Is(err, boom) {
@@ -315,12 +367,15 @@ func TestNewCollectionExecutorMapsEverySchedulerField(t *testing.T) {
 
 func assertExecutorFieldMirrorsScheduler(t *testing.T, field *reflect.StructField, got, want reflect.Value) {
 	t.Helper()
+
 	if !want.IsValid() {
 		t.Fatalf("executor.%s has no scheduler field of the same name", field.Name)
 	}
+
 	if want.IsZero() {
 		t.Fatalf("scheduler.%s = zero, test fixture must populate every mapped field", field.Name)
 	}
+
 	switch {
 	case field.Type.Kind() == reflect.Pointer || field.Type.Kind() == reflect.Map:
 		if got.Pointer() != want.Pointer() {
@@ -348,14 +403,18 @@ func (l *recordingLease) Release(context.Context, joblease.ReleaseReason) error 
 
 func (l *recordingLease) Defer(_ context.Context, _ time.Time, code, class, _ string) error {
 	l.deferCalls++
+
 	l.deferCode = code
 	l.deferClass = class
+
 	return nil
 }
 
 func newRunErrorExecutor(fatal *[]error) *collectionExecutor {
 	collector := settings.DefaultYouTubeCollectorConfig()
+
 	collector.CleanupTimeout = time.Second
+
 	return &collectionExecutor{
 		logger:    slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		metrics:   NewMetrics(prometheus.NewPedanticRegistry()),
@@ -386,11 +445,11 @@ func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
 	spec := &joblease.JobSpec{
 		JobKey:            "job",
 		Provider:          contract.ProviderYouTubeJS,
-		CollectionJobKind: "community_collect",
-		SubjectKey:        "UC_TEST",
+		CollectionJobKind: testCommunityJobKind,
+		SubjectKey:        testSubjectKey,
 	}
 
-	executor.handleRunError(context.Background(), lease, spec, &contract.LeaseProof{}, test.err)
+	executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, test.err)
 
 	if lease.deferCalls != 1 {
 		t.Fatalf("lease.Defer calls = %d, want 1", lease.deferCalls)
@@ -414,6 +473,7 @@ func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
 	}
 
 	var runtimeErr *FatalRuntimeError
+
 	if !errors.As(fatal[0], &runtimeErr) || runtimeErr.Phase != "collection" {
 		t.Fatalf("fatal report = %#v, want collection phase FatalRuntimeError", fatal[0])
 	}
@@ -501,6 +561,7 @@ func TestHandleRunErrorPromotesOnlyClassifiedFatalErrors(t *testing.T) {
 
 func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name          string
 		outcome       joblease.LeaseRunOutcome
@@ -536,22 +597,28 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			var fatal []error
+
 			executor := newRunErrorExecutor(&fatal)
 			registerer := prometheus.NewPedanticRegistry()
+
 			executor.metrics = NewMetrics(registerer)
-			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect", SubjectKey: "UC_TEST"}
+
+			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 
 			handled := executor.handleLeaseRunOutcome(joblease.LeaseRunResult{Outcome: test.outcome, Err: test.err}, spec, &contract.LeaseProof{})
 
 			if !handled {
 				t.Fatal("supervision failure must be handled without falling through to handleRunError")
 			}
+
 			if got := metricValue(t, registerer, "youtube_collection_lease_lost_total", map[string]string{
-				"provider": string(contract.ProviderYouTubeJS), "kind": "community_collect", "phase": phaseRenew,
+				labelProvider: string(contract.ProviderYouTubeJS), labelKind: testCommunityJobKind, "phase": phaseRenew,
 			}); got != test.wantRenewLost {
 				t.Fatalf("renew lease lost count = %v, want %v", got, test.wantRenewLost)
 			}
+
 			assertSupervisionFatal(t, fatal, test.err, test.wantFatal)
 		})
 	}
@@ -559,6 +626,7 @@ func TestSupervisionFailureOutcomesStayTransientUnlessClassifiedFatal(t *testing
 
 func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name       string
 		releaseErr error
@@ -572,17 +640,20 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			var fatal []error
+
 			executor := newRunErrorExecutor(&fatal)
 			lease := &supersededLease{releaseErr: test.releaseErr}
-			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: "community_collect", SubjectKey: "UC_TEST"}
+			spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
 			runErr := collecterr.Wrap(collecterr.PublishRejected, collecterr.ClassTransient, fmt.Errorf("publish fence: %w", sourceobservation.ErrProjectionStale))
 
-			executor.handleRunError(context.Background(), lease, spec, &contract.LeaseProof{}, runErr)
+			executor.handleRunError(t.Context(), lease, spec, &contract.LeaseProof{}, runErr)
 
 			if lease.releaseCall != 1 || lease.reason != joblease.ReleaseSuperseded {
 				t.Fatalf("release = calls:%d reason:%q, want one superseded release", lease.releaseCall, lease.reason)
 			}
+
 			assertSupervisionFatal(t, fatal, test.releaseErr, test.wantFatal)
 		})
 	}
@@ -590,19 +661,25 @@ func TestSupersededReleaseFailureStaysTransientUnlessClassifiedFatal(t *testing.
 
 func assertSupervisionFatal(t *testing.T, fatal []error, cause error, wantFatal bool) {
 	t.Helper()
+
 	if !wantFatal {
 		if len(fatal) != 0 {
 			t.Fatalf("transient supervision failure was promoted to fatal: %v", fatal)
 		}
+
 		return
 	}
+
 	if len(fatal) != 1 {
 		t.Fatalf("fatal reports = %d, want 1", len(fatal))
 	}
+
 	var runtimeErr *FatalRuntimeError
+
 	if !errors.As(fatal[0], &runtimeErr) || runtimeErr.Phase != "lease_supervision" {
 		t.Fatalf("fatal report = %#v, want lease_supervision FatalRuntimeError", fatal[0])
 	}
+
 	if !errors.Is(fatal[0], cause) {
 		t.Fatalf("fatal report does not wrap the original error: %v", fatal[0])
 	}

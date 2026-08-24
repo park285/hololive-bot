@@ -3,10 +3,11 @@ package dispatchrun
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
 )
 
 func TestBuildAlarmDispatchGroupViewUsesShortLinksForYouTube(t *testing.T) {
@@ -14,6 +15,7 @@ func TestBuildAlarmDispatchGroupViewUsesShortLinksForYouTube(t *testing.T) {
 
 	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
 	require.NoError(t, err)
+
 	group := alarmDispatchGroup{
 		minutesUntil: 5,
 		notifications: []domain.AlarmNotification{
@@ -34,7 +36,9 @@ func TestBuildAlarmDispatchGroupViewPreservesDirectPlatformLinks(t *testing.T) {
 
 	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
 	require.NoError(t, err)
+
 	twitch := alarmShortLinkNotification("abcdefghijk", "Twitch")
+
 	twitch.Stream.IsTwitchOnly = true
 	twitch.Stream.TwitchLiveURL = "https://twitch.tv/member"
 
@@ -52,6 +56,7 @@ func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
 
 	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
 	require.NoError(t, err)
+
 	notification := alarmShortLinkNotification("invalid", "Fallback")
 
 	view := buildAlarmDispatchGroupViewWithShortLinks(t.Context(), nil, nil, alarmDispatchGroup{
@@ -68,7 +73,9 @@ func TestBuildAlarmDispatchGroupViewPreservesIntegratedSecondaryLink(t *testing.
 
 	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
 	require.NoError(t, err)
+
 	integrated := alarmShortLinkNotification("dQw4w9WgXcQ", "Integrated")
+
 	integrated.Stream.IsIntegrated = true
 	integrated.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/channel"
 
@@ -97,6 +104,7 @@ func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 
 func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing.T) {
 	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin)
+
 	renderer, store := newAlarmDispatchTestRendering(t)
 	group := alarmDispatchGroup{
 		minutesUntil: 5,
@@ -116,6 +124,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 
 func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *testing.T) {
 	t.Setenv(alarmShortLinkBaseURLEnv, "http://go.example.com")
+
 	renderer, store := newAlarmDispatchTestRendering(t)
 	group := alarmDispatchGroup{
 		minutesUntil: 5,
@@ -134,7 +143,7 @@ func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *te
 
 func alarmShortLinkNotification(videoID, title string) domain.AlarmNotification {
 	return domain.AlarmNotification{
-		Channel:      &domain.Channel{Name: "Member"},
+		Channel:      &domain.Channel{Name: testAlarmMemberName},
 		Stream:       &domain.Stream{ID: videoID, Title: title},
 		MinutesUntil: 5,
 	}

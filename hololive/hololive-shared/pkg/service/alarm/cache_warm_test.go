@@ -9,25 +9,21 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/valkey-io/valkey-go"
 )
 
-func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	cacheClient := newMemoryCacheClient(t)
-
-	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, []*domain.Alarm{
+func typeSpecificWarmAlarms() []*domain.Alarm {
+	return []*domain.Alarm{
 		{
-			RoomID:     "room-community",
+			RoomID:     testCommunityRoomID,
 			UserID:     "user-community",
 			ChannelID:  "UC_A",
 			MemberName: "Member A",
@@ -45,24 +41,33 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 			AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 		},
 		{
-			RoomID:     "room-default",
+			RoomID:     testDefaultRoomID,
 			UserID:     "user-default",
 			ChannelID:  "UC_B",
 			MemberName: "Member B",
 			RoomName:   "Default Room",
 			UserName:   "Default User",
 		},
-	})
+	}
+}
+
+func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheClient := newMemoryCacheClient(t)
+
+	summary, err := WarmSubscriberCacheFromAlarms(ctx, cacheClient, typeSpecificWarmAlarms())
 	require.NoError(t, err)
 	assert.Equal(t, CacheWarmSummary{AlarmCount: 3, RoomCount: 3, ChannelCount: 2}, summary)
 
-	roomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-community"))
+	roomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey(testCommunityRoomID))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"UC_A"}, roomChannels)
 
 	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"room-community", "room-shorts", "room-default"}, registryRooms)
+	assert.ElementsMatch(t, []string{testCommunityRoomID, "room-shorts", testDefaultRoomID}, registryRooms)
 
 	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
@@ -70,7 +75,7 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 
 	communitySubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-community"}, communitySubs)
+	assert.Equal(t, []string{testCommunityRoomID}, communitySubs)
 
 	shortsSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_A", domain.AlarmTypeShorts))
 	require.NoError(t, err)
@@ -82,15 +87,15 @@ func TestWarmSubscriberCacheFromAlarms_WritesTypeSpecificSubscriptions(t *testin
 
 	defaultLiveSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeLive))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-default"}, defaultLiveSubs)
+	assert.Equal(t, []string{testDefaultRoomID}, defaultLiveSubs)
 
 	defaultCommunitySubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeCommunity))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-default"}, defaultCommunitySubs)
+	assert.Equal(t, []string{testDefaultRoomID}, defaultCommunitySubs)
 
 	defaultShortsSubs, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_B", domain.AlarmTypeShorts))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-default"}, defaultShortsSubs)
+	assert.Equal(t, []string{testDefaultRoomID}, defaultShortsSubs)
 
 	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_A")
 	require.NoError(t, err)
@@ -161,6 +166,7 @@ func TestWarmSubscriberCacheFromAlarms_UsesBatchedWrites(t *testing.T) {
 	countingCache := &countingWarmCacheClient{Client: baseCache}
 
 	alarms := make([]*domain.Alarm, 0, 48)
+
 	for i := range 48 {
 		roomID := "room-" + strconv.Itoa(i)
 		userID := "user-" + strconv.Itoa(i)
@@ -192,13 +198,14 @@ func TestWarmSubscriberCacheFromRepository_RemainsAdditiveByContract(t *testing.
 	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
+
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
 			{
-				RoomID:     "room-fresh",
+				RoomID:     testFreshRoomID,
 				UserID:     "user-fresh",
-				ChannelID:  "UC_FRESH",
-				MemberName: "Fresh Member",
+				ChannelID:  testFreshChannelID,
+				MemberName: testFreshMemberName,
 				RoomName:   "Fresh Room",
 				UserName:   "Fresh User",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
@@ -206,20 +213,24 @@ func TestWarmSubscriberCacheFromRepository_RemainsAdditiveByContract(t *testing.
 		}, nil
 	}
 	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
-		return map[string]string{"UC_FRESH": "라덴"}, nil
+		return map[string]string{testFreshChannelID: "라덴"}, nil
 	}
+
 	t.Cleanup(func() {
 		loadAllAlarmsFromRepository = originalLoader
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-existing"})
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{testExistingRoomID})
 	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"), []string{"UC_EXISTING"})
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey(testExistingRoomID), []string{testExistingChannel})
 	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_EXISTING"})
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{testExistingChannel})
 	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive), []string{"room-existing"})
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey(testExistingChannel, domain.AlarmTypeLive), []string{testExistingRoomID})
 	require.NoError(t, err)
 
 	summary, err := WarmSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
@@ -228,21 +239,21 @@ func TestWarmSubscriberCacheFromRepository_RemainsAdditiveByContract(t *testing.
 
 	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"room-existing", "room-fresh"}, registryRooms)
+	assert.ElementsMatch(t, []string{testExistingRoomID, testFreshRoomID}, registryRooms)
 
 	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"UC_EXISTING", "UC_FRESH"}, channelRegistry)
+	assert.ElementsMatch(t, []string{testExistingChannel, testFreshChannelID}, channelRegistry)
 
-	existingLiveSubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive))
+	existingLiveSubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey(testExistingChannel, domain.AlarmTypeLive))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-existing"}, existingLiveSubscribers)
+	assert.Equal(t, []string{testExistingRoomID}, existingLiveSubscribers)
 
-	freshCommunitySubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
+	freshCommunitySubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey(testFreshChannelID, domain.AlarmTypeCommunity))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
+	assert.Equal(t, []string{testFreshRoomID}, freshCommunitySubscribers)
 
-	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, "UC_FRESH")
+	memberName, err := cacheClient.HGet(ctx, sharedalarmkeys.MemberNameKey, testFreshChannelID)
 	require.NoError(t, err)
 	assert.Equal(t, "라덴", memberName)
 }
@@ -252,6 +263,7 @@ func TestWarmSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *testi
 	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
+
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
 			{
@@ -268,6 +280,7 @@ func TestWarmSubscriberCacheFromRepository_UsesAuthoritativeMemberNames(t *testi
 	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
 		return map[string]string{"UC_RADEN": "라덴"}, nil
 	}
+
 	t.Cleanup(func() {
 		loadAllAlarmsFromRepository = originalLoader
 		loadMemberNamesFromRepository = originalMemberNameLoader
@@ -285,12 +298,16 @@ func TestWarmSubscriberCacheFromRepository_LoadError(t *testing.T) {
 	ctx := t.Context()
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
+
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return nil, errors.New("load failed")
 	}
 	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
-		return nil, nil
+		var missing map[string]string
+
+		return missing, nil
 	}
+
 	t.Cleanup(func() {
 		loadAllAlarmsFromRepository = originalLoader
 		loadMemberNamesFromRepository = originalMemberNameLoader
@@ -298,7 +315,8 @@ func TestWarmSubscriberCacheFromRepository_LoadError(t *testing.T) {
 
 	_, err := WarmSubscriberCacheFromRepository(ctx, newMemoryCacheClient(t), &Repository{})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "warm subscriber cache from repository: load alarms")
+	require.ErrorContains(t, err, "warm subscriber cache from repository: load alarms")
+
 	assert.ErrorContains(t, err, "load failed")
 }
 
@@ -307,13 +325,14 @@ func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorLeavesCacheClea
 	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
+
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
 			{
-				RoomID:     "room-fresh",
+				RoomID:     testFreshRoomID,
 				UserID:     "user-fresh",
-				ChannelID:  "UC_FRESH",
-				MemberName: "Fresh Member",
+				ChannelID:  testFreshChannelID,
+				MemberName: testFreshMemberName,
 				RoomName:   "Fresh Room",
 				UserName:   "Fresh User",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
@@ -323,30 +342,34 @@ func TestRebuildSubscriberCacheFromRepository_MemberNameLoadErrorLeavesCacheClea
 	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
 		return nil, errors.New("member names unavailable")
 	}
+
 	t.Cleanup(func() {
 		loadAllAlarmsFromRepository = originalLoader
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-existing"})
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{testExistingRoomID})
 	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"), []string{"UC_EXISTING"})
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey(testExistingRoomID), []string{testExistingChannel})
 	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_EXISTING"})
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{testExistingChannel})
 	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_EXISTING", domain.AlarmTypeLive), []string{"room-existing"})
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey(testExistingChannel, domain.AlarmTypeLive), []string{testExistingRoomID})
 	require.NoError(t, err)
-	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_EXISTING", "Existing Member"))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, testExistingChannel, "Existing Member"))
 
 	_, err = RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "rebuild subscriber cache from repository: load member names")
+	require.ErrorContains(t, err, "rebuild subscriber cache from repository: load member names")
 
 	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
 	assert.Empty(t, registryRooms)
 
-	existingRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-existing"))
+	existingRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey(testExistingRoomID))
 	require.NoError(t, err)
 	assert.Empty(t, existingRoomChannels)
 
@@ -363,18 +386,41 @@ func TestCompactUniqueStrings_TrimsDedupesAndPreservesOrder(t *testing.T) {
 	assert.Equal(t, []string{"room-1", "room-2", "room-3", "room-4"}, compactUniqueStrings(values))
 }
 
+func seedStaleSubscriberCache(t *testing.T, cacheClient cache.Client) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-stale"})
+	require.NoError(t, err)
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"), []string{"UC_STALE"})
+	require.NoError(t, err)
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_STALE"})
+	require.NoError(t, err)
+
+	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive), []string{"room-stale"})
+	require.NoError(t, err)
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE", "Stale Member"))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-stale", "Stale Room"))
+	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-stale", "Stale User"))
+	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive), "1", time.Minute))
+}
+
 func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing.T) {
 	ctx := t.Context()
 	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
+
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
 			{
-				RoomID:     "room-fresh",
+				RoomID:     testFreshRoomID,
 				UserID:     "user-fresh",
-				ChannelID:  "UC_FRESH",
-				MemberName: "Fresh Member",
+				ChannelID:  testFreshChannelID,
+				MemberName: testFreshMemberName,
 				RoomName:   "Fresh Room",
 				UserName:   "Fresh User",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
@@ -382,25 +428,15 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 		}, nil
 	}
 	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
-		return map[string]string{"UC_FRESH": "Fresh Member"}, nil
+		return map[string]string{testFreshChannelID: testFreshMemberName}, nil
 	}
+
 	t.Cleanup(func() {
 		loadAllAlarmsFromRepository = originalLoader
 		loadMemberNamesFromRepository = originalMemberNameLoader
 	})
 
-	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-stale"})
-	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"), []string{"UC_STALE"})
-	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_STALE"})
-	require.NoError(t, err)
-	_, err = cacheClient.SAdd(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_STALE", domain.AlarmTypeLive), []string{"room-stale"})
-	require.NoError(t, err)
-	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_STALE", "Stale Member"))
-	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-stale", "Stale Room"))
-	require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-stale", "Stale User"))
-	require.NoError(t, cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey("UC_STALE", domain.AlarmTypeLive), "1", time.Minute))
+	seedStaleSubscriberCache(t, cacheClient)
 
 	summary, err := RebuildSubscriberCacheFromRepository(ctx, cacheClient, &Repository{})
 	require.NoError(t, err)
@@ -408,11 +444,11 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 
 	registryRooms, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-fresh"}, registryRooms)
+	assert.Equal(t, []string{testFreshRoomID}, registryRooms)
 
 	channelRegistry, err := cacheClient.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"UC_FRESH"}, channelRegistry)
+	assert.Equal(t, []string{testFreshChannelID}, channelRegistry)
 
 	staleRoomChannels, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildRoomAlarmKey("room-stale"))
 	require.NoError(t, err)
@@ -430,9 +466,9 @@ func TestRebuildSubscriberCacheFromRepository_ReplacesStaleCacheState(t *testing
 	require.NoError(t, err)
 	assert.Empty(t, staleMemberName)
 
-	freshCommunitySubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey("UC_FRESH", domain.AlarmTypeCommunity))
+	freshCommunitySubscribers, err := cacheClient.SMembers(ctx, sharedalarmkeys.BuildChannelSubscriberKey(testFreshChannelID, domain.AlarmTypeCommunity))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-fresh"}, freshCommunitySubscribers)
+	assert.Equal(t, []string{testFreshRoomID}, freshCommunitySubscribers)
 }
 
 func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesDispatchQueue(t *testing.T) {
@@ -440,13 +476,14 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 	cacheClient := newMemoryCacheClient(t)
 	originalLoader := loadAllAlarmsFromRepository
 	originalMemberNameLoader := loadMemberNamesFromRepository
+
 	loadAllAlarmsFromRepository = func(context.Context, *Repository) ([]*domain.Alarm, error) {
 		return []*domain.Alarm{
 			{
-				RoomID:     "room-fresh",
+				RoomID:     testFreshRoomID,
 				UserID:     "user-fresh",
-				ChannelID:  "UC_FRESH",
-				MemberName: "Fresh Member",
+				ChannelID:  testFreshChannelID,
+				MemberName: testFreshMemberName,
 				RoomName:   "Fresh Room",
 				UserName:   "Fresh User",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
@@ -454,8 +491,9 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 		}, nil
 	}
 	loadMemberNamesFromRepository = func(context.Context, *Repository) (map[string]string, error) {
-		return map[string]string{"UC_FRESH": "Fresh Member"}, nil
+		return map[string]string{testFreshChannelID: testFreshMemberName}, nil
 	}
+
 	t.Cleanup(func() {
 		loadAllAlarmsFromRepository = originalLoader
 		loadMemberNamesFromRepository = originalMemberNameLoader
@@ -490,6 +528,7 @@ func TestRebuildSubscriberCacheFromRepository_RemovesOrphanRoomKeysAndPreservesD
 
 type countingWarmCacheClient struct {
 	cache.Client
+
 	sAddCalls  int
 	hSetCalls  int
 	hmSetCalls int
@@ -497,17 +536,31 @@ type countingWarmCacheClient struct {
 
 func (c *countingWarmCacheClient) SAdd(ctx context.Context, key string, members []string) (int64, error) {
 	c.sAddCalls++
-	return c.Client.SAdd(ctx, key, members)
+
+	out, err := c.Client.SAdd(ctx, key, members)
+	if err != nil {
+		return out, fmt.Errorf("s add: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *countingWarmCacheClient) HSet(ctx context.Context, key, field, value string) error {
 	c.hSetCalls++
-	return c.Client.HSet(ctx, key, field, value)
+	if err := c.Client.HSet(ctx, key, field, value); err != nil {
+		return fmt.Errorf("h set: %w", err)
+	}
+
+	return nil
 }
 
 func (c *countingWarmCacheClient) HMSet(ctx context.Context, key string, fields map[string]any) error {
 	c.hmSetCalls++
-	return c.Client.HMSet(ctx, key, fields)
+	if err := c.Client.HMSet(ctx, key, fields); err != nil {
+		return fmt.Errorf("HM set: %w", err)
+	}
+
+	return nil
 }
 
 func newMemoryCacheClient(t *testing.T) cache.Client {
@@ -525,6 +578,7 @@ func newMemoryCacheClient(t *testing.T) cache.Client {
 		if err := client.Close(); err != nil {
 			t.Errorf("close cache client: %v", err)
 		}
+
 		mini.Close()
 	})
 
@@ -535,6 +589,7 @@ func newMemoryValkeyClient(t *testing.T) (*miniredis.Miniredis, valkey.Client) {
 	t.Helper()
 
 	mini := miniredis.RunT(t)
+
 	rawClient, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{mini.Addr()},
 		DisableCache:      true,
@@ -559,6 +614,7 @@ func newMemoryValkeyClient(t *testing.T) (*miniredis.Miniredis, valkey.Client) {
 func configureMemoryCacheCore(client *cachemocks.Client, rawClient valkey.Client) {
 	client.CloseFunc = func() error {
 		rawClient.Close()
+
 		return nil
 	}
 	client.GetClientFunc = func() valkey.Client { return rawClient }
@@ -602,6 +658,7 @@ func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Clie
 		}
 
 		builder := rawClient.B().Hset().Key(key).FieldValue()
+
 		for field, value := range fields {
 			builder = builder.FieldValue(field, fmt.Sprintf("%v", value))
 		}
@@ -613,6 +670,7 @@ func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Clie
 		if util.IsValkeyNil(resp.Error()) {
 			return "", nil
 		}
+
 		if resp.Error() != nil {
 			return "", resp.Error()
 		}
@@ -624,6 +682,7 @@ func configureMemoryCacheHashes(client *cachemocks.Client, rawClient valkey.Clie
 func configureMemoryCacheStrings(client *cachemocks.Client, rawClient valkey.Client) {
 	client.SetFunc = func(ctx context.Context, key string, value any, ttl time.Duration) error {
 		builder := rawClient.B().Set().Key(key).Value(fmt.Sprintf("%v", value))
+
 		if ttl > 0 {
 			return rawClient.Do(ctx, builder.ExSeconds(int64(ttl.Seconds())).Build()).Error()
 		}
@@ -638,7 +697,7 @@ func configureMemoryCacheStrings(client *cachemocks.Client, rawClient valkey.Cli
 
 		count, err := resp.AsInt64()
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("as int64: %w", err)
 		}
 
 		return count > 0, nil
@@ -652,6 +711,7 @@ func configureMemoryCacheKeys(client *cachemocks.Client, rawClient valkey.Client
 		}
 
 		var keys []string
+
 		cursor := uint64(0)
 
 		for {
@@ -662,11 +722,12 @@ func configureMemoryCacheKeys(client *cachemocks.Client, rawClient valkey.Client
 
 			entry, err := resp.AsScanEntry()
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("as scan entry: %w", err)
 			}
 
 			keys = append(keys, entry.Elements...)
 			cursor = entry.Cursor
+
 			if cursor == 0 {
 				return keys, nil
 			}

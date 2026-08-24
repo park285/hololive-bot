@@ -48,12 +48,13 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 	t.Run("setnx outage path", func(t *testing.T) {
 		sink, logger := debugSink()
 		client := cachemocks.NewStrictClient()
+
 		client.SetNXFunc = func(context.Context, string, string, time.Duration) (bool, error) {
 			return false, errors.New("valkey unreachable")
 		}
 
 		service := NewService(client, []int{10}, logger)
-		_, acquired, err := service.TryClaimNotification(context.Background(), nonCanonicalRoomID, "stream-1", scheduled, 10)
+		_, acquired, err := service.TryClaimNotification(t.Context(), nonCanonicalRoomID, "stream-1", scheduled, 10)
 		require.NoError(t, err)
 		require.False(t, acquired)
 
@@ -66,12 +67,13 @@ func TestTryClaimKeyRecordsNeverCarryRoomPlaintext(t *testing.T) {
 	t.Run("setnx success path", func(t *testing.T) {
 		sink, logger := debugSink()
 		client := cachemocks.NewStrictClient()
+
 		client.SetNXFunc = func(context.Context, string, string, time.Duration) (bool, error) {
 			return true, nil
 		}
 
 		service := NewService(client, []int{10}, logger)
-		_, acquired, err := service.TryClaimNotification(context.Background(), nonCanonicalRoomID, "stream-1", scheduled, 10)
+		_, acquired, err := service.TryClaimNotification(t.Context(), nonCanonicalRoomID, "stream-1", scheduled, 10)
 		require.NoError(t, err)
 		require.True(t, acquired)
 

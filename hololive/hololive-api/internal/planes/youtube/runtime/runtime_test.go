@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -20,10 +22,13 @@ import (
 
 func TestRuntimeClaimsLiveViewerAndScheduleKinds(t *testing.T) {
 	t.Parallel()
+
 	got := make(map[contract.ObservationKind]bool, 9)
+
 	for _, kind := range youtubePlaneClaimKinds() {
 		got[kind] = true
 	}
+
 	for _, kind := range []contract.ObservationKind{
 		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
 		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule,
@@ -37,9 +42,13 @@ func TestRuntimeClaimsLiveViewerAndScheduleKinds(t *testing.T) {
 
 func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 	t.Parallel()
+
 	cfg := settings.DefaultYouTubePlaneConfig()
+
 	cfg.DBOperationConcurrency = cfg.PostgresPoolMaxConns
-	_, err := Build(context.Background(), &cfg, &settings.PostgresConfig{User: "hololive_runtime"}, slog.Default())
+
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "hololive_runtime"}, slog.Default())
+
 	if err == nil || !strings.Contains(err.Error(), "leave one pool connection reserved") {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -47,8 +56,10 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 
 func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 	t.Parallel()
+
 	cfg := settings.DefaultYouTubePlaneConfig()
-	_, err := Build(context.Background(), &cfg, &settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
+
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -56,8 +67,10 @@ func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 
 func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 	t.Parallel()
+
 	cfg := settings.DefaultYouTubePlaneConfig()
-	_, err := Build(context.Background(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
+	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
+
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
 		t.Fatalf("Build() = %v", err)
 	}
@@ -66,10 +79,13 @@ func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
+
 	var claims atomic.Int64
+
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			claims.Add(1)
+
 			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
 				ObservationID:   7,
 				LeaseToken:      strings.Repeat("ab", 32),
@@ -84,34 +100,36 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 			default:
 				close(entered)
 			}
+
 			<-release
+
 			return nil
 		},
 	})
 
 	ctx := t.Context()
 	runtime.Start(ctx, make(chan error, 1))
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("worker did not start consume")
-	}
 
-	done := make(chan error, 1)
-	go func() {
-		done <- runtime.Shutdown(context.Background())
-	}()
+	awaitSignal(t, entered, "worker did not start consume")
+
+	done := shutdownAsync(t, runtime)
+
 	select {
 	case err := <-done:
 		t.Fatalf("shutdown returned before worker joined: %v", err)
 	case <-time.After(50 * time.Millisecond):
 	}
+
 	held := claims.Load()
+
 	time.Sleep(30 * time.Millisecond)
+
 	if claims.Load() != held {
 		t.Fatalf("claim continued after shutdown: before=%d after=%d", held, claims.Load())
 	}
+
 	close(release)
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -120,6 +138,7 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("shutdown did not join workers")
 	}
+
 	if runtime.Ready() {
 		t.Fatal("runtime stayed ready after shutdown")
 	}
@@ -127,27 +146,32 @@ func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
 
 func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
 	var attempts atomic.Int64
+
 	errCh := make(chan error, 1)
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			if attempts.Add(1) == 1 {
 				return sourceobservation.ClaimedBatch{}, &pgconn.PgError{Code: "40001", Message: "serialization failure"}
 			}
+
 			return sourceobservation.ClaimedBatch{}, nil
 		},
 	}, fakeConsumer{})
 	ctx := t.Context()
 	runtime.Start(ctx, errCh)
 	time.Sleep(80 * time.Millisecond)
+
 	select {
 	case err := <-errCh:
 		t.Fatalf("transient first claim killed the process: %v", err)
 	default:
 	}
+
 	if attempts.Load() < 2 {
 		t.Fatalf("claim loop stopped after transient error: attempts=%d", attempts.Load())
 	}
-	if err := runtime.Shutdown(context.Background()); err != nil {
+
+	if err := runtime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
 }
@@ -159,7 +183,7 @@ func TestUnknownClaimErrorFailsSupervisor(t *testing.T) {
 			return sourceobservation.ClaimedBatch{}, errors.New("unexpected claim failure")
 		},
 	}, fakeConsumer{})
-	runtime.Start(context.Background(), errCh)
+	runtime.Start(t.Context(), errCh)
 
 	select {
 	case err := <-errCh:
@@ -169,17 +193,22 @@ func TestUnknownClaimErrorFailsSupervisor(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("unknown claim error did not fail the supervisor")
 	}
+
 	if runtime.Ready() {
 		t.Fatal("runtime stayed ready after supervisor failure")
 	}
-	if err := runtime.Shutdown(context.Background()); err != nil {
+
+	if err := runtime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
 }
 
 func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
-	var claimed atomic.Bool
-	var retried atomic.Int64
+	var (
+		claimed atomic.Bool
+		retried atomic.Int64
+	)
+
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	claimer := fakeClaimer{
@@ -187,6 +216,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 			if claimed.Swap(true) {
 				return sourceobservation.ClaimedBatch{}, nil
 			}
+
 			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
 				{ObservationID: 1, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
 				{ObservationID: 2, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
@@ -194,9 +224,11 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 		},
 		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
 			retried.Add(1)
+
 			if input.ObservationID != 2 {
 				t.Fatalf("retry id = %d, want unsent 2", input.ObservationID)
 			}
+
 			return contract.StatusPending, nil
 		},
 	}
@@ -207,25 +239,26 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 			default:
 				close(entered)
 			}
+
 			<-release
+
 			return nil
 		},
 	})
+
 	runtime.Config.ConsumerWorkers = 1
 	runtime.workCh = make(chan sourceobservation.ClaimWork)
+
 	ctx := t.Context()
 	runtime.Start(ctx, make(chan error, 1))
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("worker did not start")
-	}
-	done := make(chan error, 1)
-	go func() {
-		done <- runtime.Shutdown(context.Background())
-	}()
+
+	awaitSignal(t, entered, "worker did not start")
+
+	done := shutdownAsync(t, runtime)
+
 	time.Sleep(20 * time.Millisecond)
 	close(release)
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -234,6 +267,7 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("shutdown did not finish")
 	}
+
 	if retried.Load() < 1 {
 		t.Fatal("unsent claim was not retried after canceled shutdown context")
 	}
@@ -242,7 +276,9 @@ func TestShutdownReleasesUnsentClaimsAfterCanceledContext(t *testing.T) {
 func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
+
 	var retried atomic.Int64
+
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
@@ -254,40 +290,40 @@ func TestShutdownReleasesInFlightWhenWorkerDoesNotJoin(t *testing.T) {
 		},
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retried.Add(1)
+
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
 		consume: func(context.Context, sourceobservation.Claim) error {
 			close(entered)
 			<-release
+
 			return nil
 		},
 	})
-	runtime.Config.ShutdownTimeout = 30 * time.Millisecond
-	runtime.Start(context.Background(), make(chan error, 1))
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("worker did not start")
-	}
 
-	err := runtime.Shutdown(context.Background())
+	runtime.Config.ShutdownTimeout = 30 * time.Millisecond
+	runtime.Start(t.Context(), make(chan error, 1))
+
+	awaitSignal(t, entered, "worker did not start")
+
+	err := runtime.Shutdown(t.Context())
 	if err == nil || !strings.Contains(err.Error(), "worker") {
 		t.Fatalf("Shutdown() error = %v, want worker join timeout", err)
 	}
+
 	if retried.Load() != 1 {
 		t.Fatalf("active observation release attempts = %d, want 1", retried.Load())
 	}
+
 	close(release)
-	select {
-	case <-runtime.workerDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("worker did not exit after test release")
-	}
+
+	awaitSignal(t, runtime.workerDone, "worker did not exit after test release")
 }
 
 func TestShutdownReturnsReleaseFailure(t *testing.T) {
 	var claimed atomic.Bool
+
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	runtime := newTestRuntime(fakeClaimer{
@@ -295,6 +331,7 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 			if claimed.Swap(true) {
 				return sourceobservation.ClaimedBatch{}, nil
 			}
+
 			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{
 				{ObservationID: 10, LeaseToken: strings.Repeat("ab", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_A"},
 				{ObservationID: 11, LeaseToken: strings.Repeat("cd", 32), ObservationKind: contract.KindCommunityPage, SubjectKey: "UC_B"},
@@ -304,27 +341,29 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 			if input.ObservationID != 11 {
 				t.Fatalf("retry id = %d, want unsent 11", input.ObservationID)
 			}
+
 			return "", errors.New("release failed")
 		},
 	}, fakeConsumer{
 		consume: func(context.Context, sourceobservation.Claim) error {
 			close(entered)
 			<-release
+
 			return nil
 		},
 	})
+
 	runtime.Config.ConsumerWorkers = 1
 	runtime.workCh = make(chan sourceobservation.ClaimWork)
-	runtime.Start(context.Background(), make(chan error, 1))
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("worker did not start")
-	}
-	done := make(chan error, 1)
-	go func() { done <- runtime.Shutdown(context.Background()) }()
+	runtime.Start(t.Context(), make(chan error, 1))
+
+	awaitSignal(t, entered, "worker did not start")
+
+	done := shutdownAsync(t, runtime)
+
 	time.Sleep(20 * time.Millisecond)
 	close(release)
+
 	select {
 	case err := <-done:
 		if err == nil || !strings.Contains(err.Error(), "release failed") {
@@ -337,15 +376,19 @@ func TestShutdownReturnsReleaseFailure(t *testing.T) {
 
 func TestEmptyViewerRosterDoesNotFailProjectionRefresh(t *testing.T) {
 	t.Parallel()
+
 	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
+
 	runtime.builder = targetprojection.PolicyBuilder{
 		Reader:    emptyRosterReader{},
 		Schedules: targetprojection.DefaultPolicySchedules(),
 	}
 	runtime.refresher = fakeRefresher{}
-	if err := runtime.refreshProjection(context.Background()); err != nil {
+
+	if err := runtime.refreshProjection(t.Context()); err != nil {
 		t.Fatalf("empty viewer roster refresh: %v", err)
 	}
+
 	if runtime.Degraded() {
 		t.Fatal("empty viewer roster must not degrade the plane")
 	}
@@ -353,6 +396,7 @@ func TestEmptyViewerRosterDoesNotFailProjectionRefresh(t *testing.T) {
 
 func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
 	var retryInput sourceobservation.RetryInput
+
 	runtime := newTestRuntime(fakeClaimer{
 		retry: func(_ context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
 			retryInput = input
@@ -370,39 +414,48 @@ func TestTransientConsumeErrorUsesBoundedQueueRetry(t *testing.T) {
 		SubjectKey:      "UC_RETRY",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); err != nil {
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v", err)
 	}
+
 	if retryInput.ObservationID != observation.ObservationID || retryInput.Delay != runtime.Config.ClaimInterval {
 		t.Fatalf("Retry input = %#v", retryInput)
 	}
 }
 
 func TestClaimLoopImmediatelyDrainsFullBatch(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
+
 	secondClaim := make(chan struct{})
+
 	var calls atomic.Int64
+
 	runtime := newTestRuntime(fakeClaimer{
 		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
 			if calls.Add(1) == 2 {
 				close(secondClaim)
 				cancel()
+
 				return sourceobservation.ClaimedBatch{}, nil
 			}
+
 			claims := make([]sourceobservation.ClaimWork, runtimeClaimBatchSizeForTest)
 			for i := range claims {
 				claims[i] = sourceobservation.ClaimWork{ObservationID: int64(i + 1)}
 			}
+
 			return sourceobservation.ClaimedBatch{Claims: claims}, nil
 		},
 	}, fakeConsumer{})
+
 	runtime.Config.ClaimInterval = time.Hour
 	runtime.claim.Limit = runtimeClaimBatchSizeForTest
 	runtime.workCh = make(chan sourceobservation.ClaimWork, runtimeClaimBatchSizeForTest)
 	runtime.claiming.Store(true)
 
 	go runtime.runClaimLoop(ctx, make(chan error, 1))
+
 	select {
 	case <-secondClaim:
 	case <-time.After(time.Second):
@@ -414,9 +467,11 @@ const runtimeClaimBatchSizeForTest = 4
 
 func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
+
 	runtime := newTestRuntime(fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
+
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
@@ -431,10 +486,11 @@ func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 		SubjectKey:      "UC_FATAL",
 	}
 
-	err := runtime.processClaim(context.Background(), observation)
+	err := runtime.processClaim(t.Context(), observation)
 	if err == nil || !strings.Contains(err.Error(), "unexpected canonical write failure") {
 		t.Fatalf("processClaim() error = %v", err)
 	}
+
 	if retries.Load() != 0 {
 		t.Fatalf("unknown error retried %d time(s)", retries.Load())
 	}
@@ -442,9 +498,11 @@ func TestUnknownConsumeErrorDoesNotRetry(t *testing.T) {
 
 func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 	var retries atomic.Int64
+
 	runtime := newTestRuntime(fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
+
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
@@ -459,9 +517,10 @@ func TestCanceledConsumeWithoutLifecycleCancellationFailsClosed(t *testing.T) {
 		SubjectKey:      "UC_CANCELED",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); !errors.Is(err, context.Canceled) {
+	if err := runtime.processClaim(t.Context(), observation); !errors.Is(err, context.Canceled) {
 		t.Fatalf("processClaim() error = %v, want context.Canceled", err)
 	}
+
 	if retries.Load() != 0 {
 		t.Fatalf("unowned cancellation retried %d time(s)", retries.Load())
 	}
@@ -484,9 +543,10 @@ func TestRetryDeadLetterDegradesPlane(t *testing.T) {
 		SubjectKey:      "UC_DLQ",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); err != nil {
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v", err)
 	}
+
 	if !runtime.Degraded() {
 		t.Fatal("DEAD_LETTER retry outcome did not degrade the plane")
 	}
@@ -494,9 +554,11 @@ func TestRetryDeadLetterDegradesPlane(t *testing.T) {
 
 func TestClaimLostDoesNotRetry(t *testing.T) {
 	var retries atomic.Int64
+
 	runtime := newTestRuntime(fakeClaimer{
 		retry: func(context.Context, sourceobservation.RetryInput) (contract.Status, error) {
 			retries.Add(1)
+
 			return contract.StatusPending, nil
 		},
 	}, fakeConsumer{
@@ -511,9 +573,10 @@ func TestClaimLostDoesNotRetry(t *testing.T) {
 		SubjectKey:      "UC_LOST",
 	}
 
-	if err := runtime.processClaim(context.Background(), observation); err != nil {
+	if err := runtime.processClaim(t.Context(), observation); err != nil {
 		t.Fatalf("processClaim() error = %v", err)
 	}
+
 	if retries.Load() != 0 {
 		t.Fatalf("lost claim retried %d time(s)", retries.Load())
 	}
@@ -521,16 +584,20 @@ func TestClaimLostDoesNotRetry(t *testing.T) {
 
 func TestForgetStaleClaimDoesNotDeleteNewToken(t *testing.T) {
 	t.Parallel()
+
 	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
 	oldWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("ab", 32)}
 	newWork := sourceobservation.ClaimWork{ObservationID: 21, LeaseToken: strings.Repeat("cd", 32)}
+
 	runtime.remember(oldWork)
 	runtime.remember(newWork)
 
 	runtime.forget(oldWork)
+
 	if _, ok := runtime.inFlight.Load(oldWork.Key()); ok {
 		t.Fatal("stale claim remained in flight after exact forget")
 	}
+
 	if got, ok := runtime.inFlight.Load(newWork.Key()); !ok || got != newWork {
 		t.Fatalf("new claim = %#v, present=%t", got, ok)
 	}
@@ -539,28 +606,55 @@ func TestForgetStaleClaimDoesNotDeleteNewToken(t *testing.T) {
 func TestRuntimePublishesProcessReadiness(t *testing.T) {
 	health.RemoveComponent(youtubeHealthComponent)
 	t.Cleanup(func() { health.RemoveComponent(youtubeHealthComponent) })
+
 	runtime := newTestRuntime(fakeClaimer{}, fakeConsumer{})
 	runtime.degraded.Store(true)
-	runtime.Start(context.Background(), make(chan error, 1))
+	runtime.Start(t.Context(), make(chan error, 1))
 
 	response, ready := health.GetReadiness()
 	component := response.Components[youtubeHealthComponent]
+
 	if !ready || !component.Ready || !component.Degraded {
 		t.Fatalf("started readiness = (%#v, %v)", response, ready)
 	}
-	if err := runtime.Shutdown(context.Background()); err != nil {
+
+	if err := runtime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
+
 	response, ready = health.GetReadiness()
 	if ready || response.Components[youtubeHealthComponent].Ready {
 		t.Fatalf("shutdown readiness = (%#v, %v)", response, ready)
 	}
 }
 
+func shutdownAsync(t *testing.T, runtime *Runtime) <-chan error {
+	t.Helper()
+
+	ctx := t.Context()
+	done := make(chan error, 1)
+
+	go func() { done <- runtime.Shutdown(ctx) }()
+
+	return done
+}
+
+func awaitSignal(t *testing.T, signal <-chan struct{}, message string) {
+	t.Helper()
+
+	select {
+	case <-signal:
+	case <-time.After(2 * time.Second):
+		t.Fatal(message)
+	}
+}
+
 func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *Runtime {
 	cfg := settings.DefaultYouTubePlaneConfig()
+
 	cfg.ClaimInterval = 20 * time.Millisecond
 	cfg.TargetProjection.Interval = time.Hour
+
 	return &Runtime{
 		Config:     cfg,
 		Logger:     slog.Default(),
@@ -568,7 +662,7 @@ func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *R
 		consumer:   consumer,
 		refresher:  fakeRefresher{},
 		builder:    targetprojection.PolicyBuilder{Reader: emptyRosterReader{}, Schedules: targetprojection.DefaultPolicySchedules()},
-		now:        func() time.Time { return time.Date(2026, 8, 14, 3, 0, 0, 0, time.UTC) },
+		now:        func() time.Time { return time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC) },
 		dbSem:      make(chan struct{}, cfg.DBOperationConcurrency),
 		workCh:     make(chan sourceobservation.ClaimWork, cfg.ConsumerWorkers),
 		loopDone:   make(chan struct{}, youtubeSupervisorLoopCapacity),
@@ -592,7 +686,13 @@ func (f fakeClaimer) ClaimBatch(ctx context.Context, options sourceobservation.C
 	if f.claim == nil {
 		return sourceobservation.ClaimedBatch{}, nil
 	}
-	return f.claim(ctx, options)
+
+	out, err := f.claim(ctx, options)
+	if err != nil {
+		return out, fmt.Errorf("claim: %w", err)
+	}
+
+	return out, nil
 }
 
 func (fakeClaimer) ProbeClaim(context.Context, sourceobservation.ClaimOptions) error {
@@ -605,8 +705,14 @@ func (fakeClaimer) EnsureClaimBudget(context.Context, sourceobservation.Claim, t
 
 func (f fakeClaimer) Retry(ctx context.Context, input sourceobservation.RetryInput) (contract.Status, error) {
 	if f.retry != nil {
-		return f.retry(ctx, input)
+		out, err := f.retry(ctx, input)
+		if err != nil {
+			return out, fmt.Errorf("retry: %w", err)
+		}
+
+		return out, nil
 	}
+
 	return contract.StatusPending, nil
 }
 
@@ -618,7 +724,12 @@ func (f fakeConsumer) ConsumeClaim(ctx context.Context, claim sourceobservation.
 	if f.consume == nil {
 		return nil
 	}
-	return f.consume(ctx, claim)
+
+	if err := f.consume(ctx, claim); err != nil {
+		return fmt.Errorf("consume: %w", err)
+	}
+
+	return nil
 }
 
 type fakeRefresher struct{}

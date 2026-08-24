@@ -26,12 +26,31 @@ import (
 	"testing"
 )
 
+type segmentCase struct {
+	name string
+	in   string
+	want []Segment
+}
+
+func runSegmentCases(t *testing.T, tests []segmentCase) {
+	t.Helper()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Segments(tt.in)
+			if err != nil {
+				t.Fatalf("Segments() error = %v", err)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("Segments mismatch\n in:   %q\n got:  %#v\n want: %#v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSegments(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want []Segment
-	}{
+	runSegmentCases(t, []segmentCase{
 		{
 			name: "plain statements form one autocommit segment",
 			in:   "CREATE TABLE a(id int);\nCREATE TABLE b(id int);",
@@ -55,31 +74,10 @@ func TestSegments(t *testing.T) {
 			},
 		},
 		{
-			name: "leading comments before BEGIN do not hide the token",
-			in:   "-- header\n/* block /* nested */ note */\nBEGIN;\nSELECT 1;\nCOMMIT;",
-			want: []Segment{
-				{Transactional: true, Statements: []string{"SELECT 1"}},
-			},
-		},
-		{
-			name: "lowercase and keyword-tail forms are recognized",
-			in:   "begin transaction;\nSELECT 1;\ncommit work;",
-			want: []Segment{
-				{Transactional: true, Statements: []string{"SELECT 1"}},
-			},
-		},
-		{
-			name: "START TRANSACTION and END are synonyms",
-			in:   "START TRANSACTION;\nSELECT 1;\nEND;",
-			want: []Segment{
-				{Transactional: true, Statements: []string{"SELECT 1"}},
-			},
-		},
-		{
 			name: "empty transaction block yields no segment",
 			in:   "BEGIN;\nCOMMIT;\nSELECT 1;",
 			want: []Segment{
-				{Transactional: false, Statements: []string{"SELECT 1"}},
+				{Transactional: false, Statements: []string{stmtSelect1}},
 			},
 		},
 		{
@@ -87,8 +85,34 @@ func TestSegments(t *testing.T) {
 			in:   "SELECT 0;\nBEGIN;\nSELECT 1;\nCOMMIT;\nBEGIN;\nSELECT 2;\nCOMMIT;",
 			want: []Segment{
 				{Transactional: false, Statements: []string{"SELECT 0"}},
-				{Transactional: true, Statements: []string{"SELECT 1"}},
-				{Transactional: true, Statements: []string{"SELECT 2"}},
+				{Transactional: true, Statements: []string{stmtSelect1}},
+				{Transactional: true, Statements: []string{stmtSelect2}},
+			},
+		},
+	})
+}
+
+func TestSegmentsKeywordForms(t *testing.T) {
+	runSegmentCases(t, []segmentCase{
+		{
+			name: "leading comments before BEGIN do not hide the token",
+			in:   "-- header\n/* block /* nested */ note */\nBEGIN;\nSELECT 1;\nCOMMIT;",
+			want: []Segment{
+				{Transactional: true, Statements: []string{stmtSelect1}},
+			},
+		},
+		{
+			name: "lowercase and keyword-tail forms are recognized",
+			in:   "begin transaction;\nSELECT 1;\ncommit work;",
+			want: []Segment{
+				{Transactional: true, Statements: []string{stmtSelect1}},
+			},
+		},
+		{
+			name: "START TRANSACTION and END are synonyms",
+			in:   "START TRANSACTION;\nSELECT 1;\nEND;",
+			want: []Segment{
+				{Transactional: true, Statements: []string{stmtSelect1}},
 			},
 		},
 		{
@@ -109,19 +133,7 @@ func TestSegments(t *testing.T) {
 				}},
 			},
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := Segments(tt.in)
-			if err != nil {
-				t.Fatalf("Segments() error = %v", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("Segments mismatch\n in:   %q\n got:  %#v\n want: %#v", tt.in, got, tt.want)
-			}
-		})
-	}
+	})
 }
 
 func TestSegmentsErrors(t *testing.T) {
@@ -173,6 +185,7 @@ func TestSegmentsErrors(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Segments(%q) error = nil, want %q", tt.in, tt.wantErr)
 			}
+
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("Segments(%q) error = %v, want substring %q", tt.in, err, tt.wantErr)
 			}

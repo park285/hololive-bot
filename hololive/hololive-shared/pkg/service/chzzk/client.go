@@ -21,18 +21,18 @@
 package chzzk
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const (
@@ -76,6 +76,7 @@ type ClientConfig struct {
 func NewClient(httpClient *http.Client, baseURL string, logger *slog.Logger) *Client {
 	d := settings.DefaultChzzkOperationalConfig()
 	l := defaultClientLogger(logger)
+
 	return &Client{
 		httpClient:                defaultHTTPClient(httpClient),
 		baseURL:                   defaultBaseURL(baseURL),
@@ -96,24 +97,31 @@ func NewClientWithConfig(cfg *ClientConfig) *Client {
 	if cfg == nil {
 		cfg = &ClientConfig{}
 	}
+
 	d := settings.DefaultChzzkOperationalConfig()
 	mlps := cfg.MaxLivesPageSize
+
 	if mlps == 0 {
 		mlps = d.MaxLivesPageSize
 	}
+
 	blt := cfg.BatchLookupThreshold
 	if blt == 0 {
 		blt = d.BatchLookupThreshold
 	}
+
 	mcsc := cfg.MaxConcurrentStatusChecks
 	if mcsc == 0 {
 		mcsc = d.MaxConcurrentStatusChecks
 	}
+
 	maxBody := cfg.MaxResponseBodyBytes
 	if maxBody == 0 {
 		maxBody = settings.DefaultMaxResponseBodyBytes
 	}
+
 	l := defaultClientLogger(cfg.Logger)
+
 	return &Client{
 		httpClient:                defaultHTTPClient(cfg.HTTPClient),
 		baseURL:                   defaultBaseURL(cfg.BaseURL),
@@ -163,7 +171,7 @@ func (c *Client) HasOpenAPICredentials() bool {
 func escapedChannelPath(channelID string) (string, error) {
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
-		return "", fmt.Errorf("channel id is empty")
+		return "", errors.New("channel id is empty")
 	}
 
 	return url.PathEscape(channelID), nil

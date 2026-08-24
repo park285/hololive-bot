@@ -45,13 +45,23 @@ type LLMSchedulerConfig struct {
 }
 
 func LoadLLMScheduler() (*LLMSchedulerConfig, error) {
-	return loadLLMSchedulerValidated((*LLMSchedulerConfig).validate)
+	out, err := loadLLMSchedulerValidated((*LLMSchedulerConfig).validate)
+	if err != nil {
+		return nil, fmt.Errorf("load LLM scheduler validated: %w", err)
+	}
+
+	return out, nil
 }
 
 // LoadLLMSchedulerRuntime: llm-scheduler는 compose 보안 계약상 nonEgress라
 // Iris egress 토큰을 받을 수 없으므로 Iris 입력 필수 검증을 면제합니다.
 func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
-	return loadLLMSchedulerValidated((*LLMSchedulerConfig).validateRuntime)
+	out, err := loadLLMSchedulerValidated((*LLMSchedulerConfig).validateRuntime)
+	if err != nil {
+		return nil, fmt.Errorf("load LLM scheduler validated: %w", err)
+	}
+
+	return out, nil
 }
 
 func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSchedulerConfig, error) {
@@ -63,6 +73,7 @@ func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSc
 	if err := validate(config); err != nil {
 		return nil, fmt.Errorf("llm scheduler config validation failed: %w", err)
 	}
+
 	return config, nil
 }
 
@@ -103,36 +114,56 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 
 func (c *LLMSchedulerConfig) validate() error {
 	if err := c.validateServerBasics(); err != nil {
-		return err
+		return fmt.Errorf("validate server basics: %w", err)
 	}
+
 	if strings.TrimSpace(c.Iris.WebhookToken) == "" {
-		return fmt.Errorf("IRIS_WEBHOOK_TOKEN is required")
+		return errors.New("IRIS_WEBHOOK_TOKEN is required")
 	}
+
 	if strings.TrimSpace(c.Iris.BotToken) == "" {
-		return fmt.Errorf("IRIS_BOT_TOKEN is required")
+		return errors.New("IRIS_BOT_TOKEN is required")
 	}
+
 	if strings.TrimSpace(c.Iris.BaseURL) == "" && strings.TrimSpace(c.Iris.BaseURLFile) == "" {
-		return fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
+		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
-	return validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode)
+
+	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+		return fmt.Errorf("validate postgres SSL mode: %w", err)
+	}
+
+	return nil
 }
 
 func (c *LLMSchedulerConfig) validateRuntime() error {
 	if err := c.validateServerBasics(); err != nil {
-		return err
+		return fmt.Errorf("validate server basics: %w", err)
 	}
+
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
-		return err
+		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
-	return validateNoNotificationEgressOwnership(runtimeLLMScheduler)
+
+	if err := validateNoNotificationEgressOwnership(runtimeLLMScheduler); err != nil {
+		return fmt.Errorf("validate no notification egress ownership: %w", err)
+	}
+
+	return nil
 }
 
 func (c *LLMSchedulerConfig) validateServerBasics() error {
 	if c.Server.Port == 0 {
-		return fmt.Errorf("LLM_SCHEDULER_PORT is required")
+		return errors.New("LLM_SCHEDULER_PORT is required")
 	}
+
 	if err := validateServerTransports(&c.Server); err != nil {
-		return err
+		return fmt.Errorf("validate server transports: %w", err)
 	}
-	return validateAPISecretKey(c.Environment, c.Server.APIKey)
+
+	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
+		return fmt.Errorf("validate API secret key: %w", err)
+	}
+
+	return nil
 }

@@ -9,6 +9,7 @@ import (
 
 func TestBuildRequiresOneDistinctChannel(t *testing.T) {
 	t.Parallel()
+
 	index := Build(testMembers{members: []*domain.Member{
 		{Name: "Shared", ChannelID: "channel-1", Aliases: &domain.Aliases{Ko: []string{"공유"}}},
 		{Name: "Shared", ChannelID: "channel-2"},
@@ -18,9 +19,11 @@ func TestBuildRequiresOneDistinctChannel(t *testing.T) {
 	if got := index.Resolve("Shared"); got != "" {
 		t.Fatalf("ambiguous identity resolved to %q", got)
 	}
+
 	if got := index.Resolve("同じ"); got != "channel-3" {
 		t.Fatalf("same-channel duplicate resolved to %q", got)
 	}
+
 	if got := index.Resolve("unknown"); got != "" {
 		t.Fatalf("unknown identity resolved to %q", got)
 	}
@@ -28,14 +31,17 @@ func TestBuildRequiresOneDistinctChannel(t *testing.T) {
 
 func TestDisplayNamesMapsKoreanAndKeepsUnmapped(t *testing.T) {
 	t.Parallel()
+
 	members := testMembers{members: []*domain.Member{
 		{Name: "Sakura Miko", NameJa: "さくらみこ", ShortKoreanName: "미코", ChannelID: "ch-miko"},
 		{Name: "Hoshimachi Suisei", NameJa: "星街すいせい", ShortKoreanName: "스이세이", ChannelID: "ch-sui"},
 	}}
 	got := DisplayNames(members, []string{"さくらみこ", "星街すいせい", "Gawr Gura"}, "ch-miko")
+
 	if len(got) != 2 || got[0] != "스이세이" || got[1] != "Gawr Gura" {
 		t.Fatalf("DisplayNames = %#v", got)
 	}
+
 	if Format(got) != "스이세이, Gawr Gura" {
 		t.Fatalf("Format = %q", Format(got))
 	}
@@ -52,6 +58,7 @@ func (m testMembers) FindMemberByChannelID(channelID string) *domain.Member {
 			return member
 		}
 	}
+
 	return nil
 }
 func (testMembers) FindMemberByName(string) *domain.Member                  { return nil }

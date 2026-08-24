@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -56,10 +57,12 @@ func TestEpoch2CutoffGoldens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serialize epoch-2 schema: %v", err)
 	}
+
 	data, err := serializeEpoch2Data(t.Context(), pool)
 	if err != nil {
 		t.Fatalf("serialize epoch-2 data: %v", err)
 	}
+
 	acl, err := serializeEpoch2ACL(t.Context(), pool, roles)
 	if err != nil {
 		t.Fatalf("serialize epoch-2 ACL: %v", err)
@@ -73,6 +76,7 @@ func TestEpoch2CutoffGoldens(t *testing.T) {
 
 func createEpoch2Roles(t *testing.T, pool *pgxpool.Pool) epoch2Roles {
 	t.Helper()
+
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 	roles := epoch2Roles{
 		scraper: "epoch2_scraper_" + suffix,
@@ -80,21 +84,26 @@ func createEpoch2Roles(t *testing.T, pool *pgxpool.Pool) epoch2Roles {
 	}
 
 	ctx := t.Context()
+
 	for _, role := range []string{roles.scraper, roles.runtime} {
 		quoted := pgx.Identifier{role}.Sanitize()
 		if _, err := pool.Exec(ctx, "CREATE ROLE "+quoted+" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"); err != nil {
 			t.Fatalf("create epoch-2 role %s: %v", role, err)
 		}
 	}
+
 	t.Cleanup(func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 30*time.Second)
 		defer cancel()
+
 		for _, role := range []string{roles.scraper, roles.runtime} {
 			quoted := pgx.Identifier{role}.Sanitize()
 			if _, err := pool.Exec(cleanupCtx, "DROP OWNED BY "+quoted); err != nil {
 				t.Errorf("drop epoch-2 role ownership %s: %v", role, err)
+
 				continue
 			}
+
 			if _, err := pool.Exec(cleanupCtx, "DROP ROLE "+quoted); err != nil {
 				t.Errorf("drop epoch-2 role %s: %v", role, err)
 			}
@@ -113,24 +122,30 @@ func createEpoch2Roles(t *testing.T, pool *pgxpool.Pool) epoch2Roles {
 		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO " + runtime,
 		"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO " + runtime,
 	}
+
 	for _, statement := range statements {
 		if _, err := pool.Exec(ctx, statement); err != nil {
 			t.Fatalf("configure epoch-2 ACL fixture: %v", err)
 		}
 	}
+
 	return roles
 }
 
 func applyEpoch2Cutoff(t *testing.T, pool *pgxpool.Pool, roles epoch2Roles) {
 	t.Helper()
+
 	dir := strings.TrimSpace(os.Getenv(epoch2GoldenSourceEnv))
 	if dir == "" {
 		var err error
+
 		dir, err = resolveMigrationsDir()
 		if err != nil {
 			t.Fatalf("resolve epoch-2 migrations: %v", err)
 		}
+
 		applyEpoch2Migration(t, pool, filepath.Join(dir, epoch2BaselineFile), roles)
+
 		return
 	}
 
@@ -138,14 +153,18 @@ func applyEpoch2Cutoff(t *testing.T, pool *pgxpool.Pool, roles epoch2Roles) {
 	if err != nil {
 		t.Fatalf("read epoch-2 source manifest: %v", err)
 	}
+
 	foundCutoff := false
+
 	for _, name := range entries {
 		applyEpoch2Migration(t, pool, filepath.Join(dir, name), roles)
+
 		if name == epoch2CutoffFile {
 			foundCutoff = true
 			break
 		}
 	}
+
 	if !foundCutoff {
 		t.Fatalf("epoch-2 source manifest does not contain cutoff %s", epoch2CutoffFile)
 	}
@@ -153,18 +172,22 @@ func applyEpoch2Cutoff(t *testing.T, pool *pgxpool.Pool, roles epoch2Roles) {
 
 func applyEpoch2Migration(t *testing.T, pool *pgxpool.Pool, path string, roles epoch2Roles) {
 	t.Helper()
+
 	raw, err := fs.ReadFile(os.DirFS(filepath.Dir(path)), filepath.Base(path))
 	if err != nil {
 		t.Fatalf("read epoch-2 migration %s: %v", filepath.Base(path), err)
 	}
+
 	content := strings.NewReplacer(
 		"hololive_scraper", roles.scraper,
 		"hololive_runtime", roles.runtime,
 	).Replace(string(raw))
+
 	segments, err := sqlsplit.Segments(content)
 	if err != nil {
 		t.Fatalf("split epoch-2 migration %s: %v", filepath.Base(path), err)
 	}
+
 	for _, segment := range segments {
 		if err := applyMigrationSegment(t.Context(), pool, filepath.Base(path), segment); err != nil {
 			t.Fatalf("apply epoch-2 migration %s: %v", filepath.Base(path), err)
@@ -175,54 +198,65 @@ func applyEpoch2Migration(t *testing.T, pool *pgxpool.Pool, path string, roles e
 func serializeEpoch2Schema(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	snapshot, err := querySchema(ctx, pool)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("query schema: %w", err)
 	}
+
 	body := snapshot.serialize()
 	separator := strings.Index(body, "\n\n")
+
 	if separator < 0 {
-		return "", fmt.Errorf("schema serialization header is malformed")
+		return "", errors.New("schema serialization header is malformed")
 	}
+
 	return "-- holobot epoch-2 cutoff schema\n-- source: legacy migrations through 139_trust_alarm_short_links.sql\n" + body[separator:], nil
 }
 
 func serializeEpoch2Data(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	tables, volatileColumns, err := snapshotEpoch2Tables(ctx, pool)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("snapshot epoch2 tables: %w", err)
 	}
+
 	sequences, err := snapshotEpoch2Sequences(ctx, pool)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("snapshot epoch2 sequences: %w", err)
 	}
+
 	snapshot := epoch2DataSnapshot{
 		Tables:                   tables,
 		Sequences:                sequences,
 		VolatileTimestampColumns: volatileColumns,
 	}
+
 	raw, err := jsonv2.Marshal(snapshot, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return "", fmt.Errorf("marshal epoch-2 data: %w", err)
 	}
+
 	return string(raw) + "\n", nil
 }
 
 func snapshotEpoch2Tables(ctx context.Context, pool *pgxpool.Pool) (tables map[string][]jsontext.Value, volatileColumns map[string][]string, resultErr error) {
 	tableNames, err := queryTables(ctx, pool)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("query tables: %w", err)
 	}
+
 	volatileColumns, err = queryEpoch2VolatileTimestampColumns(ctx, pool)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("query epoch2 volatile timestamp columns: %w", err)
 	}
+
 	tables = make(map[string][]jsontext.Value, len(tableNames))
 	for _, table := range tableNames {
 		values, err := queryEpoch2TableRows(ctx, pool, table, volatileColumns[table])
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("query epoch2 table rows: %w", err)
 		}
+
 		tables[table] = values
 	}
+
 	return tables, volatileColumns, nil
 }
 
@@ -232,38 +266,50 @@ func queryEpoch2TableRows(ctx context.Context, pool *pgxpool.Pool, table string,
 		return nil, fmt.Errorf("query data table %s: %w", table, err)
 	}
 	defer rows.Close()
+
 	values := make([]jsontext.Value, 0)
+
 	for rows.Next() {
 		var value string
+
 		if err := rows.Scan(&value); err != nil {
 			return nil, fmt.Errorf("scan data table %s: %w", table, err)
 		}
+
 		normalized, err := normalizeEpoch2DataRow(value, volatileColumns)
 		if err != nil {
 			return nil, fmt.Errorf("normalize data table %s: %w", table, err)
 		}
+
 		values = append(values, normalized)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate data table %s: %w", table, err)
 	}
+
 	sort.Slice(values, func(i, j int) bool { return string(values[i]) < string(values[j]) })
+
 	return values, nil
 }
 
 func snapshotEpoch2Sequences(ctx context.Context, pool *pgxpool.Pool) (map[string]epoch2Sequence, error) {
 	names, err := queryEpoch2SequenceNames(ctx, pool)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query epoch2 sequence names: %w", err)
 	}
+
 	sequences := make(map[string]epoch2Sequence, len(names))
 	for _, name := range names {
 		var state epoch2Sequence
+
 		if err := pool.QueryRow(ctx, "SELECT last_value::text, is_called FROM "+pgx.Identifier{"public", name}.Sanitize()).Scan(&state.LastValue, &state.IsCalled); err != nil {
 			return nil, fmt.Errorf("query data sequence %s: %w", name, err)
 		}
+
 		sequences[name] = state
 	}
+
 	return sequences, nil
 }
 
@@ -278,17 +324,23 @@ func queryEpoch2SequenceNames(ctx context.Context, pool *pgxpool.Pool) ([]string
 		return nil, fmt.Errorf("query data sequences: %w", err)
 	}
 	defer rows.Close()
+
 	var names []string
+
 	for rows.Next() {
 		var name string
+
 		if err := rows.Scan(&name); err != nil {
 			return nil, fmt.Errorf("scan data sequence: %w", err)
 		}
+
 		names = append(names, name)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate data sequences: %w", err)
 	}
+
 	return names, nil
 }
 
@@ -308,34 +360,43 @@ func queryEpoch2VolatileTimestampColumns(ctx context.Context, pool *pgxpool.Pool
 		return nil, fmt.Errorf("query volatile timestamp columns: %w", err)
 	}
 	defer rows.Close()
+
 	out := make(map[string][]string)
+
 	for rows.Next() {
 		var table, column string
+
 		if err := rows.Scan(&table, &column); err != nil {
 			return nil, fmt.Errorf("scan volatile timestamp column: %w", err)
 		}
+
 		out[table] = append(out[table], column)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate volatile timestamp columns: %w", err)
 	}
+
 	return out, nil
 }
 
 func normalizeEpoch2DataRow(value string, volatileColumns []string) (jsontext.Value, error) {
 	row := make(map[string]jsontext.Value)
 	if err := jsonv2.Unmarshal([]byte(value), &row); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
+
 	for _, column := range volatileColumns {
 		if raw, exists := row[column]; exists && string(raw) != "null" {
 			row[column] = jsontext.Value(`"<migration-time>"`)
 		}
 	}
+
 	normalized, err := jsonv2.Marshal(row, jsonv2.Deterministic(true))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal: %w", err)
 	}
+
 	return jsontext.Value(normalized), nil
 }
 
@@ -380,41 +441,54 @@ func serializeEpoch2ACL(ctx context.Context, pool *pgxpool.Pool, roles epoch2Rol
 	defer rows.Close()
 
 	var lines []string
+
 	for rows.Next() {
-		var objectType, objectName, grantee, privilege string
-		var grantable bool
+		var (
+			objectType, objectName, grantee, privilege string
+			grantable                                  bool
+		)
+
 		if err := rows.Scan(&objectType, &objectName, &grantee, &privilege, &grantable); err != nil {
 			return "", fmt.Errorf("scan epoch-2 ACL: %w", err)
 		}
+
 		switch grantee {
 		case roles.scraper:
 			grantee = "hololive_scraper"
 		case roles.runtime:
 			grantee = "hololive_runtime"
 		}
+
 		lines = append(lines, fmt.Sprintf("%s %s GRANTEE %s PRIVILEGE %s GRANTABLE %t", objectType, objectName, grantee, privilege, grantable))
 	}
+
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("iterate epoch-2 ACL: %w", err)
 	}
+
 	sort.Strings(lines)
+
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
 func assertEpoch2Deterministic(t *testing.T, pool *pgxpool.Pool, roles epoch2Roles, schema, data, acl string) {
 	t.Helper()
+
 	againSchema, err := serializeEpoch2Schema(t.Context(), pool)
 	if err != nil {
 		t.Fatalf("serialize epoch-2 schema again: %v", err)
 	}
+
 	againData, err := serializeEpoch2Data(t.Context(), pool)
 	if err != nil {
 		t.Fatalf("serialize epoch-2 data again: %v", err)
 	}
+
 	againACL, err := serializeEpoch2ACL(t.Context(), pool, roles)
 	if err != nil {
 		t.Fatalf("serialize epoch-2 ACL again: %v", err)
 	}
+
 	if schema != againSchema || data != againData || acl != againACL {
 		t.Fatal("epoch-2 cutoff serialization is non-deterministic")
 	}
@@ -422,21 +496,28 @@ func assertEpoch2Deterministic(t *testing.T, pool *pgxpool.Pool, roles epoch2Rol
 
 func assertOrUpdateEpoch2Golden(t *testing.T, name, got string) {
 	t.Helper()
+
 	path := filepath.Join(schemaGoldenDir, name)
+
 	if os.Getenv(epoch2GoldenUpdateEnv) == "1" {
 		if err := os.WriteFile(path, []byte(got), 0o600); err != nil {
 			t.Fatalf("write epoch-2 golden %s: %v", path, err)
 		}
+
 		t.Logf("updated epoch-2 golden %s (%d bytes)", path, len(got))
+
 		return
 	}
+
 	want, err := fs.ReadFile(os.DirFS(schemaGoldenDir), name)
 	if err != nil {
 		t.Fatalf("read epoch-2 golden %s: %v", path, err)
 	}
+
 	if string(want) == got {
 		return
 	}
+
 	diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A: difflib.SplitLines(string(want)), B: difflib.SplitLines(got),
 		FromFile: name, ToFile: "current", Context: 3,
@@ -444,5 +525,6 @@ func assertOrUpdateEpoch2Golden(t *testing.T, name, got string) {
 	if diffErr != nil {
 		t.Fatalf("epoch-2 golden %s differs (render diff: %v)", name, diffErr)
 	}
+
 	t.Fatalf("epoch-2 golden %s differs:\n%s", name, diff)
 }

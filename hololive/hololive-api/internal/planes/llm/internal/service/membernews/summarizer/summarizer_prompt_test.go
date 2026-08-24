@@ -31,27 +31,27 @@ import (
 func promptFixtureInput() *model.SummarizeInput {
 	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
-		RoomMembers: []string{"호시마치 스이세이", "사쿠라 미코"},
+		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		RoomMembers: []string{testMemberSuisei, testMemberMiko},
 		Candidates: []model.FilteredCandidate{
 			{
 				Candidate: model.Candidate{
 					Title:       "EXPO",
 					Description: "official news",
 				},
-				EffectiveDate: time.Date(2026, 2, 20, 12, 0, 0, 0, util.KSTZone),
-				MemberText:    "사쿠라 미코",
+				EffectiveDate: time.Date(2026, time.February, 20, 12, 0, 0, 0, util.KSTZone),
+				MemberText:    testMemberMiko,
 				Category:      model.CategoryEvent,
 				SourceTier:    model.SourceTierOfficial,
-				SourceURL:     "https://hololive.hololivepro.com/news/1",
+				SourceURL:     testSourceURLNews1,
 			},
 			{
 				Candidate: model.Candidate{
 					Title:       "SUISEI LIVE",
 					Description: "official event",
 				},
-				EffectiveDate: time.Date(2026, 2, 21, 12, 0, 0, 0, util.KSTZone),
-				MemberText:    "호시마치 스이세이",
+				EffectiveDate: time.Date(2026, time.February, 21, 12, 0, 0, 0, util.KSTZone),
+				MemberText:    testMemberSuisei,
 				Category:      model.CategorySoloLive,
 				SourceTier:    model.SourceTierOfficial,
 				SourceURL:     "https://hololive.hololivepro.com/news/2",
@@ -90,16 +90,19 @@ Return only schema JSON.`
 func TestBuildMemberNewsUserPrompt_CandidatesMatchBuildPromptCandidates(t *testing.T) {
 	input := promptFixtureInput()
 	candidates := buildPromptCandidates(input)
+
 	if len(candidates) != len(input.Candidates) {
 		t.Fatalf("expected %d candidates, got %d", len(input.Candidates), len(candidates))
 	}
+
 	for i := range input.Candidates {
 		src := &input.Candidates[i]
 		got := candidates[i]
+
 		if got.Member != src.MemberText ||
 			got.Category != string(src.Category) ||
 			got.Title != src.Candidate.Title ||
-			got.Date != src.EffectiveDate.In(kst).Format("2006-01-02") ||
+			got.Date != src.EffectiveDate.In(kst).Format(time.DateOnly) ||
 			got.SourceURL != src.SourceURL ||
 			got.SourceTier != string(src.SourceTier) ||
 			got.Summary != src.Candidate.Description {

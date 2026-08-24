@@ -23,14 +23,12 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +39,10 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	bottransport "github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+	dbtest "github.com/kapu/hololive-dbtest"
 	appErrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type testCommand struct {
@@ -56,6 +57,7 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		return nil
 	}
 
+	//nolint:wrapcheck // test double은 production router가 붙이는 command context 검증을 위해 주입된 원인을 그대로 전달한다.
 	return c.execute(ctx, cmdCtx, params)
 }
 
@@ -95,8 +97,9 @@ type acceptedImageTestIrisClient struct {
 	multipleImagesAcceptedCalls int
 }
 
-func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, opts ...iris.SendOption) error {
+func (c *testIrisClient) SendMessage(_ context.Context, room, message string, _ ...iris.SendOption) error {
 	c.mu.Lock()
+
 	c.lastMessageRoom = room
 	c.lastMessage = message
 
@@ -115,13 +118,15 @@ func (c *testIrisClient) SendMessage(ctx context.Context, room, message string, 
 
 func (c *testIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	if err := c.SendMessage(ctx, room, message, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send message: %w", err)
 	}
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-test", Delivery: "queued", Room: room, Type: "text"}, nil
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-test", Delivery: testDeliveryQueued, Room: room, Type: "text"}, nil
 }
 
-func (c *testIrisClient) SendImage(ctx context.Context, room string, imageData []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+func (c *testIrisClient) SendImage(_ context.Context, room string, imageData []byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
+
 	c.lastImageRoom = room
 	c.lastImage = imageData
 	c.mu.Unlock()
@@ -130,11 +135,12 @@ func (c *testIrisClient) SendImage(ctx context.Context, room string, imageData [
 		return nil, c.sendImageErr
 	}
 
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-test", Delivery: "queued", Room: room, Type: "image"}, nil
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-test", Delivery: testDeliveryQueued, Room: room, Type: "image"}, nil
 }
 
 func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, images [][]byte, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
+
 	c.lastMultiImages = images
 	c.mu.Unlock()
 
@@ -142,19 +148,20 @@ func (c *testIrisClient) SendMultipleImages(_ context.Context, room string, imag
 		return nil, c.sendMultipleImagesErr
 	}
 
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-test", Delivery: "queued", Room: room, Type: "image_multiple"}, nil
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-test", Delivery: testDeliveryQueued, Room: room, Type: "image_multiple"}, nil
 }
 
 func (c *testIrisClient) SendMarkdown(ctx context.Context, room, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.mu.Lock()
+
 	c.markdownCalls++
 	c.mu.Unlock()
 
 	if err := c.SendMessage(ctx, room, markdown, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send message: %w", err)
 	}
 
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-markdown", Delivery: "queued", Room: room, Type: "markdown"}, nil
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-markdown", Delivery: testDeliveryQueued, Room: room, Type: "markdown"}, nil
 }
 
 func (c *testIrisClient) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
@@ -164,43 +171,49 @@ func (c *testIrisClient) GetReplyStatus(_ context.Context, requestID string) (*i
 func (c *acceptedTestIrisClient) SendMessageAccepted(ctx context.Context, room, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.acceptedCalls++
 	if err := c.SendMessage(ctx, room, message, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send message: %w", err)
 	}
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-1", Delivery: "queued", Room: room, Type: "text"}, nil
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-1", Delivery: testDeliveryQueued, Room: room, Type: "text"}, nil
 }
 
 func (c *acceptedTestIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
 	if len(c.statuses) == 0 {
 		return &iris.ReplyStatusSnapshot{State: "handoff_completed"}, nil
 	}
+
 	status := c.statuses[0]
+
 	c.statuses = c.statuses[1:]
+
 	return status, nil
 }
 
 func (c *acceptedImageTestIrisClient) SendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.imageAcceptedCalls++
 	if _, err := c.testIrisClient.SendImage(ctx, room, imageData, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send image: %w", err)
 	}
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-1", Delivery: "queued", Room: room, Type: "image"}, nil
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-image-1", Delivery: testDeliveryQueued, Room: room, Type: "image"}, nil
 }
 
 func (c *acceptedImageTestIrisClient) SendMultipleImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.multipleImagesAcceptedCalls++
 	if _, err := c.testIrisClient.SendMultipleImages(ctx, room, images, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("send multiple images: %w", err)
 	}
-	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-1", Delivery: "queued", Room: room, Type: "image_multiple"}, nil
+
+	return &iris.ReplyAcceptedResponse{RequestID: "reply-images-1", Delivery: testDeliveryQueued, Room: room, Type: "image_multiple"}, nil
 }
 
-func (c *testIrisClient) Ping(ctx context.Context) bool { return true }
+func (c *testIrisClient) Ping(context.Context) bool { return true }
 
-func (c *testIrisClient) GetConfig(ctx context.Context) (*iris.ConfigResponse, error) {
+func (c *testIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
 	return &iris.ConfigResponse{}, nil
 }
 
-func (c *testIrisClient) Decrypt(ctx context.Context, data string) (string, error) {
+func (c *testIrisClient) Decrypt(_ context.Context, data string) (string, error) {
 	return data, nil
 }
 
@@ -212,9 +225,11 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	cmdCtx := domain.NewCommandContext("room-1", "room", "user-1", "user", "!help", false)
+	cmdCtx := domain.NewCommandContext(testRoomID, "room", testUserID, testSenderName, "!help", false)
 
 	t.Run("nil registry", func(t *testing.T) {
+		t.Parallel()
+
 		router := orchcmd.NewCommandRouter(nil, newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.Error(t, err)
@@ -222,6 +237,8 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 
 	t.Run("unknown command sends fallback", func(t *testing.T) {
+		t.Parallel()
+
 		var gotRoom, gotMessage string
 
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(_ context.Context, room, message string) error {
@@ -233,11 +250,13 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 
 		err := router.Execute(ctx, cmdCtx, domain.CommandHelp, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "room-1", gotRoom)
+		assert.Equal(t, testRoomID, gotRoom)
 		assert.Equal(t, messagestrings.FallbackSentinel, gotMessage)
 	})
 
 	t.Run("unknown command fallback send failure", func(t *testing.T) {
+		t.Parallel()
+
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error {
 			return errors.New("send failed")
 		}, nil, nil)
@@ -248,9 +267,11 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 
 	t.Run("command execution failure", func(t *testing.T) {
+		t.Parallel()
+
 		registry := command.NewRegistry()
 		registry.Register(&testCommand{
-			name: "help",
+			name: testHelpCommandName,
 			execute: func(context.Context, *domain.CommandContext, map[string]any) error {
 				return errors.New("handler failed")
 			},
@@ -264,6 +285,8 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 
 	t.Run("normalize alarm add command", func(t *testing.T) {
+		t.Parallel()
+
 		router := orchcmd.NewCommandRouter(command.NewRegistry(), newBotTestLogger(), func(context.Context, string, string) error { return nil }, nil, nil)
 		key, params := router.NormalizeCommand(domain.CommandAlarmAdd, map[string]any{"member": "miko"})
 		assert.Equal(t, orchcmd.CommandKeyAlarm, key)
@@ -272,18 +295,22 @@ func TestCommandRouterExecuteBranches(t *testing.T) {
 	})
 }
 
-func TestCommandTransportSendMethods(t *testing.T) {
+func TestCommandTransportSendMessageMethods(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 
 	t.Run("constructor", func(t *testing.T) {
+		t.Parallel()
+
 		client := &testIrisClient{}
 		transport := bottransport.NewCommandTransport(client, nil)
 		require.NotNil(t, transport)
 	})
 
 	t.Run("send message with nil client", func(t *testing.T) {
+		t.Parallel()
+
 		var transport *bottransport.CommandTransport
 
 		err := transport.SendMessage(ctx, "room", "hello")
@@ -292,6 +319,8 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	})
 
 	t.Run("send message wraps iris error", func(t *testing.T) {
+		t.Parallel()
+
 		client := &testIrisClient{sendMessageErr: errors.New("iris unavailable")}
 		transport := bottransport.NewCommandTransport(client, nil)
 
@@ -301,6 +330,8 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	})
 
 	t.Run("markdown replies option routes through SendMarkdown", func(t *testing.T) {
+		t.Parallel()
+
 		client := &acceptedTestIrisClient{}
 		transport := bottransport.NewCommandTransport(client, nil, bottransport.WithMarkdownReplies(true))
 
@@ -311,6 +342,8 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	})
 
 	t.Run("send message treats a failed accepted reply as terminal", func(t *testing.T) {
+		t.Parallel()
+
 		failedDetail := "callback failed"
 		client := &acceptedTestIrisClient{
 			statuses: []*iris.ReplyStatusSnapshot{
@@ -326,8 +359,16 @@ func TestCommandTransportSendMethods(t *testing.T) {
 		assert.Equal(t, 1, client.acceptedCalls, "explicit iris failure must not be re-posted")
 		assert.Equal(t, "hello", client.lastMessage)
 	})
+}
+
+func TestCommandTransportSendImageMethods(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("send image wraps iris error", func(t *testing.T) {
+		t.Parallel()
+
 		client := &testIrisClient{sendImageErr: errors.New("image failed")}
 		transport := bottransport.NewCommandTransport(client, nil)
 
@@ -337,6 +378,8 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	})
 
 	t.Run("send image returns failed reply status", func(t *testing.T) {
+		t.Parallel()
+
 		failedDetail := "image bridge send failed: image lease last modified mismatch"
 		client := &acceptedImageTestIrisClient{
 			statuses: []*iris.ReplyStatusSnapshot{{State: "failed", Detail: &failedDetail}},
@@ -351,38 +394,55 @@ func TestCommandTransportSendMethods(t *testing.T) {
 	})
 
 	t.Run("send image forwards byte data to client", func(t *testing.T) {
+		t.Parallel()
+
 		client := &testIrisClient{}
 		transport := bottransport.NewCommandTransport(client, nil)
 
 		imageData := []byte{0x89, 0x50, 0x4E, 0x47} // PNG 매직 바이트
-		err := transport.SendImage(ctx, "room-1", imageData)
+		err := transport.SendImage(ctx, testRoomID, imageData)
 		require.NoError(t, err)
-		assert.Equal(t, "room-1", client.lastImageRoom)
+		assert.Equal(t, testRoomID, client.lastImageRoom)
 		assert.Equal(t, imageData, client.lastImage)
 	})
 
 	t.Run("send image with nil client returns error", func(t *testing.T) {
+		t.Parallel()
+
 		var transport *bottransport.CommandTransport
+
 		err := transport.SendImage(ctx, "room", []byte("data"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "iris client is not configured")
 	})
+}
+
+func TestCommandTransportSendErrorMethods(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
 
 	t.Run("send error resolves key via formatter", func(t *testing.T) {
+		t.Parallel()
+
 		client := &testIrisClient{}
 		store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler)) //nolint:contextcheck,nolintlint // dbtest 전용 pool 생성자라 t.Cleanup으로 자체 lifecycle을 관리하며 prod ctx 경로와 무관(호출처 69곳). 멀티모듈 게이트 스코프에서만 발화하는 call-graph 아티팩트라 발화가 환경 의존적이고, 미발화 환경의 nolintlint 미사용 오탐도 함께 억제한다.
 		require.NoError(t, store.Load(ctx))
+
 		formatter := messageformatter.NewResponseFormatter("!", nil, messageformatter.WithMessageStrings(store))
 		transport := bottransport.NewCommandTransport(client, formatter)
 
 		require.NoError(t, transport.SendError(ctx, "room", messaging.ErrAlarmAddFailed))
 		assert.Equal(t, "room", client.lastMessageRoom)
+
 		want := store.GetContext(ctx, messagestrings.NamespaceError, "alarm_add_failed")
 		require.NotEmpty(t, want)
 		assert.Equal(t, want, client.lastMessage)
 	})
 
 	t.Run("send error fails closed to sentinel on unknown key", func(t *testing.T) {
+		t.Parallel()
+
 		client := &testIrisClient{}
 		formatter := messageformatter.NewResponseFormatter("!", nil)
 		transport := bottransport.NewCommandTransport(client, formatter)
@@ -398,6 +458,8 @@ func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("enabled flag reaches the markdown lane", func(t *testing.T) {
+		t.Parallel()
+
 		client := &acceptedTestIrisClient{}
 		b := &Bot{
 			logger:          newBotTestLogger(),
@@ -412,6 +474,8 @@ func TestEnsureTransportFollowsMarkdownRepliesFlag(t *testing.T) {
 	})
 
 	t.Run("disabled flag keeps the accepted lane", func(t *testing.T) {
+		t.Parallel()
+
 		client := &acceptedTestIrisClient{}
 		b := &Bot{
 			logger:     newBotTestLogger(),
@@ -452,21 +516,21 @@ func TestBotEnsureComponentsAndProcessMessage(t *testing.T) {
 	assert.Same(t, transport, b.ensureTransport())
 
 	// 알 수 없는 command 경로: fallback 메시지가 전송돼야 한다
-	sender := "user"
+	sender := testSenderName
 	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID:    "user-1",
-			ChatID:    "room-1",
+			UserID:    testUserID,
+			ChatID:    testRoomID,
 			MessageID: "m-1",
 		},
 	}))
 
 	select {
 	case msg := <-msgCh:
-		assert.Equal(t, "room-1", msg.room)
+		assert.Equal(t, testRoomID, msg.room)
 		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
@@ -482,7 +546,7 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 
 	registry := command.NewRegistry()
 	registry.Register(&testCommand{
-		name: "help",
+		name: testHelpCommandName,
 		execute: func(context.Context, *domain.CommandContext, map[string]any) error {
 			return errors.New("boom")
 		},
@@ -496,14 +560,14 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 		formatter:       messageformatter.NewResponseFormatter("!", nil),
 	}
 
-	sender := "user"
+	sender := testSenderName
 	err := b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID:    "user-1",
-			ChatID:    "room-1",
+			UserID:    testUserID,
+			ChatID:    testRoomID,
 			MessageID: "m-1",
 		},
 	})
@@ -511,13 +575,15 @@ func TestBotProcessMessage_ErrorBranchAndErrorMessageMapping(t *testing.T) {
 
 	select {
 	case msg := <-msgCh:
-		assert.Equal(t, "room-1", msg.room)
+		assert.Equal(t, testRoomID, msg.room)
 		assert.Equal(t, messagestrings.FallbackSentinel, msg.message)
 	case <-time.After(1 * time.Second):
 		t.Fatal("did not receive message in time")
 	}
 
 	t.Run("getErrorMessage mappings", func(t *testing.T) {
+		t.Parallel()
+
 		assert.Empty(t, b.getErrorMessage(nil))
 
 		irisServiceErr := appErrors.NewServiceError("msg", serviceNameIris, "send_message", errors.New("down"))

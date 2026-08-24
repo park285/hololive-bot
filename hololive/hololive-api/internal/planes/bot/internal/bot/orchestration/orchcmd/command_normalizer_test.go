@@ -36,10 +36,8 @@ type normalizeCommandKeyTestCase struct {
 	wantParamsKept bool // 기존 파라미터가 그대로 유지되어야 하는 경우
 }
 
-func TestNormalizeCommandKey(t *testing.T) {
-	t.Parallel()
-
-	tests := []normalizeCommandKeyTestCase{
+func normalizeCommandKeyTestCases() []normalizeCommandKeyTestCase {
+	return []normalizeCommandKeyTestCase{
 		{
 			name:       "alarm_list → alarm 키 + action=list",
 			cmdType:    domain.CommandAlarmList,
@@ -117,6 +115,12 @@ func TestNormalizeCommandKey(t *testing.T) {
 			wantKey: "help",
 		},
 	}
+}
+
+func TestNormalizeCommandKey(t *testing.T) {
+	t.Parallel()
+
+	tests := normalizeCommandKeyTestCases()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -136,6 +140,7 @@ func assertNormalizeCommandKey(t *testing.T, tc *normalizeCommandKeyTestCase) {
 	if gotKey != tc.wantKey {
 		t.Errorf("NormalizeCommandKey(%q) key = %q, want %q", tc.cmdType, gotKey, tc.wantKey)
 	}
+
 	assertNormalizeCommandAction(t, gotParams, tc.wantAction)
 	assertNormalizeCommandKeptParams(t, gotParams, origParams, tc.wantParamsKept)
 	assertOriginalParamsUnchanged(t, tc.params, origParams)
@@ -147,10 +152,12 @@ func assertNormalizeCommandAction(t *testing.T, gotParams map[string]any, wantAc
 	if wantAction == "" {
 		return
 	}
+
 	gotAction, ok := gotParams["action"]
 	if !ok {
 		t.Fatal("gotParams에 action 키가 없음")
 	}
+
 	if gotAction != wantAction {
 		t.Errorf("gotParams[action] = %q, want %q", gotAction, wantAction)
 	}
@@ -162,6 +169,7 @@ func assertNormalizeCommandKeptParams(t *testing.T, gotParams, origParams map[st
 	if !wantParamsKept {
 		return
 	}
+
 	for k, origV := range origParams {
 		if gotV := gotParams[k]; gotV != origV {
 			t.Errorf("gotParams[%q] = %v, want %v (원본 파라미터 변경됨)", k, gotV, origV)
@@ -227,19 +235,24 @@ func assertCloneParamsWithAction(t *testing.T, tc *cloneParamsWithActionTestCase
 
 	origLen := len(tc.params)
 	got := cloneParamsWithAction(tc.params, tc.action)
+
 	if got["action"] != tc.wantAction {
 		t.Errorf("got[action] = %v, want %q", got["action"], tc.wantAction)
 	}
+
 	for _, key := range tc.wantKeys {
 		if _, ok := got[key]; !ok {
 			t.Errorf("반환된 맵에 키 %q가 없음", key)
 		}
 	}
+
 	if tc.params != nil && len(tc.params) != origLen {
 		t.Errorf("원본 params 길이가 변경됨: got %d, want %d", len(tc.params), origLen)
 	}
+
 	if len(tc.params) > 0 {
 		got["__test_isolation__"] = true
+
 		if _, leaked := tc.params["__test_isolation__"]; leaked {
 			t.Error("cloneParamsWithAction이 원본 맵을 반환함 (복제 아님)")
 		}

@@ -30,6 +30,7 @@ func youtubeIdentityPayload(contentIDs ...string) *YouTubeOutboxDispatchPayload 
 	for _, contentID := range contentIDs {
 		items = append(items, YouTubeOutboxItem{ContentID: contentID, Payload: `{}`})
 	}
+
 	return &YouTubeOutboxDispatchPayload{
 		Kind:      OutboxKindNewVideo,
 		AlarmType: AlarmTypeLive,
@@ -40,16 +41,19 @@ func youtubeIdentityPayload(contentIDs ...string) *YouTubeOutboxDispatchPayload 
 
 func mustYouTubeIdentity(t *testing.T, payload *YouTubeOutboxDispatchPayload) string {
 	t.Helper()
+
 	identity, err := payload.CanonicalIdentity()
 	if err != nil {
 		t.Fatalf("CanonicalIdentity() error = %v", err)
 	}
+
 	return identity
 }
 
 func TestYouTubeOutboxIdentityIsUnambiguous(t *testing.T) {
 	first := mustYouTubeIdentity(t, youtubeIdentityPayload("a,b", "c"))
 	second := mustYouTubeIdentity(t, youtubeIdentityPayload("a", "b,c"))
+
 	if first == second {
 		t.Fatalf("ambiguous item sets share identity %q", first)
 	}
@@ -66,6 +70,7 @@ func TestYouTubeOutboxIdentityDeduplicatesSortsAndTrims(t *testing.T) {
 			t.Fatalf("CanonicalIdentity() = %q, want %q", got, canonical)
 		}
 	}
+
 	if !strings.HasPrefix(canonical, "sha256:") || len(canonical) != len("sha256:")+64 {
 		t.Fatalf("CanonicalIdentity() = %q, want fixed SHA-256 identity", canonical)
 	}
@@ -76,6 +81,7 @@ func TestYouTubeOutboxIdentityRejectsItemCountBeforeCanonicalAllocation(t *testi
 	if err := payload.Validate(); err == nil || !strings.Contains(err.Error(), "too many items") {
 		t.Fatalf("Validate() error = %v, want item-count bound", err)
 	}
+
 	if identity, err := payload.CanonicalIdentity(); err == nil || identity != "" {
 		t.Fatalf("CanonicalIdentity() = %q, %v, want bounded rejection", identity, err)
 	}
@@ -96,6 +102,7 @@ func TestYouTubeOutboxIdentityRejectsOversizedOrEmptyContentID(t *testing.T) {
 			if err := payload.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("Validate() error = %v, want %q", err, tt.want)
 			}
+
 			if got := payload.Identity(); got != "" {
 				t.Fatalf("Identity() = %q, want empty on invalid payload", got)
 			}

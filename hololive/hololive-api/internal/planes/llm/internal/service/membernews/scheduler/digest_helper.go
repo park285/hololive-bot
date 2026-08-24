@@ -33,7 +33,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -74,13 +73,16 @@ func processDigestForRoom(
 	if result, blocked := blockedMemberNewsMessage(outputGuard, logger, roomID, period, message); blocked {
 		return result
 	}
+
 	if err := outbox.Enqueue(ctx, kind, periodKey, roomID, message); err != nil {
 		logger.Error("Failed to enqueue member news",
 			slog.String("room_id", roomID),
 			slog.String("period", string(period)),
 			slog.String("error", err.Error()))
+
 		return failedRoomResult(roomID)
 	}
+
 	return delivery.SendResult{Attempted: 1, Sent: 1}
 }
 
@@ -90,6 +92,7 @@ func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Pe
 			slog.String("room_id", roomID),
 			slog.String("period", string(period)),
 		)
+
 		return delivery.SendResult{Skipped: 1}
 	}
 
@@ -97,6 +100,7 @@ func digestGenerationFailure(logger *slog.Logger, roomID string, period model.Pe
 		slog.String("room_id", roomID),
 		slog.String("period", string(period)),
 		slog.String("error", err.Error()))
+
 	return failedRoomResult(roomID)
 }
 
@@ -114,6 +118,7 @@ func blockedMemberNewsMessage(outputGuard *outputguard.Guard, logger *slog.Logge
 		slog.Any("reasons", evaluation.ReasonCodes),
 		slog.Any("rules", evaluation.RuleIDs),
 	)
+
 	return failedRoomResult(roomID), true
 }
 
@@ -141,26 +146,33 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 	for i := range rooms {
 		if !acquireDigestSlot(ctx, sem) {
 			wg.Wait()
+
 			return result
 		}
+
 		wg.Add(1)
+
 		roomID := rooms[i].RoomID
+
 		panicguard.Go(nil, "member-news-digest-room", func() {
 			defer wg.Done()
 			defer func() { <-sem }()
 
 			var roomResult delivery.SendResult
+
 			if err := panicguard.RunE(nil, "member-news-digest-room", func() error {
 				roomResult = config.processRoom(ctx, config.periodKey, roomID)
 				return nil
 			}); err != nil {
 				roomResult = delivery.SendResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
 			}
+
 			mu.Lock()
 			result.Merge(roomResult)
 			mu.Unlock()
 		})
 	}
+
 	wg.Wait()
 
 	return result
@@ -174,7 +186,11 @@ func runMemberNewsDigest(
 	config *digestDispatchConfig,
 ) error {
 	config.processRoom = processRoom
-	return schedulerkit.RunDigest(ctx, digest, buildDigestOp(digest, service, config))
+	if err := digest.RunDigest(ctx, buildDigestOp(digest, service, config)); err != nil {
+		return fmt.Errorf("run digest: %w", err)
+	}
+
+	return nil
 }
 
 func buildDigestOp(
@@ -186,6 +202,7 @@ func buildDigestOp(
 		LockKey: config.lockKey,
 		OnLockNotAcquired: func() error {
 			digest.Logger.Info(config.lockSkipMessage, slog.String(config.periodFieldName, config.periodKey))
+
 			return nil
 		},
 		Collect: collectSubscribedRooms(service, digest.Logger, config.skipMessage),
@@ -199,10 +216,13 @@ func collectSubscribedRooms(service model.DigestService, logger *slog.Logger, sk
 		if err != nil {
 			return nil, false, fmt.Errorf("list subscribed rooms: %w", err)
 		}
+
 		if len(rooms) == 0 {
 			logger.Info(skipMsg)
+
 			return nil, false, nil
 		}
+
 		return rooms, true, nil
 	}
 }
@@ -211,9 +231,11 @@ func executeDigestDispatch(logger *slog.Logger, config *digestDispatchConfig) fu
 	return func(ctx context.Context, rooms []model.SubscribedRoom) error {
 		result := dispatchDigestRooms(ctx, rooms, config)
 		logDigestResult(logger, config, result)
+
 		if result.Sent == 0 && result.Failed > 0 {
 			return fmt.Errorf(config.allFailedMessage, result.Failed)
 		}
+
 		return nil
 	}
 }
@@ -246,12 +268,16 @@ func renderDigestMessage(ctx context.Context, fmtr model.DigestFormatter, digest
 	}
 
 	lines := make([]string, 0, 2+len(digest.TopItems))
+
 	lines = append(lines, digest.Headline)
+
 	for _, item := range digest.TopItems {
 		lines = append(lines, item.Summary)
 	}
+
 	if digest.MoreSummary != "" {
 		lines = append(lines, digest.MoreSummary)
 	}
+
 	return strings.Join(lines, "\n")
 }

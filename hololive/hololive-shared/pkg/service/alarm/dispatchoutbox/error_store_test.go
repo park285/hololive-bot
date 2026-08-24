@@ -36,6 +36,7 @@ func TestClassifyErrorCode(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := ClassifyErrorCode(tc.cause); got != tc.want {
 				t.Fatalf("ClassifyErrorCode() = %q, want %q", got, tc.want)
 			}
@@ -105,13 +106,16 @@ func TestSanitizeStoredError_RedactsSensitiveSpans(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := sanitizeStoredError(tc.input)
 			if got != tc.want {
 				t.Fatalf("sanitizeStoredError(%q) = %q, want %q", tc.input, got, tc.want)
 			}
+
 			if again := sanitizeStoredError(got); again != got {
 				t.Fatalf("sanitize is not idempotent: first %q, second %q", got, again)
 			}
+
 			if !utf8.ValidString(got) {
 				t.Fatalf("sanitizeStoredError(%q) produced invalid UTF-8", tc.input)
 			}
@@ -135,16 +139,20 @@ func TestTruncateStoredError_PreservesUTF8Boundary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := truncateStoredError(tc.input)
 			if len(got) != tc.wantLen {
 				t.Fatalf("len = %d, want %d", len(got), tc.wantLen)
 			}
+
 			if len(got) > maxStoredErrorBytes {
 				t.Fatalf("len = %d exceeds %d", len(got), maxStoredErrorBytes)
 			}
+
 			if !utf8.ValidString(got) {
 				t.Fatalf("truncated string is not valid UTF-8: %q", got[len(got)-8:])
 			}
+
 			if !strings.HasPrefix(tc.input, got) {
 				t.Fatal("truncated string is not a prefix of the input")
 			}
@@ -157,12 +165,15 @@ func TestSanitizeStoredError_EnforcesByteBudgetAfterRedaction(t *testing.T) {
 
 	input := "Bearer " + strings.Repeat("t", 100) + " " + strings.Repeat("한", 900)
 	got := sanitizeStoredError(input)
+
 	if len(got) > maxStoredErrorBytes {
 		t.Fatalf("len = %d exceeds %d", len(got), maxStoredErrorBytes)
 	}
+
 	if !utf8.ValidString(got) {
 		t.Fatal("sanitized string is not valid UTF-8")
 	}
+
 	if strings.Contains(got, strings.Repeat("t", 100)) {
 		t.Fatal("bearer token leaked through sanitization")
 	}

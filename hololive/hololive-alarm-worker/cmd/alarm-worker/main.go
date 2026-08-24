@@ -27,17 +27,17 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
-	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
-	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/observability"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
+
+	"github.com/kapu/hololive-alarm-worker/internal/app/workerapp"
+	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/observability"
 )
 
 var Version = "dev"
@@ -45,11 +45,14 @@ var Version = "dev"
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
 		_, err := settings.LoadAlarmWorkerProfile()
+
+		//nolint:wrapcheck // runWorkerProfileCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
 		return err
 	}); handled {
 		os.Exit(exitCode)
 	}
-	os.Exit(bootstrap.Run(bootstrap.Options[*settings.Config, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
+
+	os.Exit(bootstrap.Options[*settings.Config, *observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -78,6 +81,7 @@ func main() {
 			logger *slog.Logger,
 		) (*observability.ManagedRuntime[*workerruntime.AlarmWorkerRuntime], error) {
 			traceConfig := alarmWorkerTelemetryConfig(appConfig, Version)
+
 			return observability.BuildRuntime(
 				ctx,
 				&traceConfig,
@@ -88,22 +92,26 @@ func main() {
 			)
 		},
 		BuildErrorMessage: "Failed to assemble alarm worker runtime",
-	}))
+	}.Run())
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
 	if len(args) != 1 || args[0] != "--check-worker-profile" {
 		return false, 0
 	}
+
 	if err := load(); err != nil {
 		if _, writeErr := fmt.Fprintf(stderr, "Failed to load alarm-worker worker profile: %v\n", err); writeErr != nil {
 			return true, 1
 		}
+
 		return true, 1
 	}
+
 	if _, err := fmt.Fprintln(stderr, "alarm-worker worker profile valid"); err != nil {
 		return true, 1
 	}
+
 	return true, 0
 }
 

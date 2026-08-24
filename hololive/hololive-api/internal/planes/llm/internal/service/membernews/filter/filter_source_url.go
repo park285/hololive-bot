@@ -34,6 +34,7 @@ func resolveSource(
 	if sourceURL == "" {
 		return model.SourceTierCommunity, "", false
 	}
+
 	if sourceValidator == nil {
 		return model.SourceTierCommunity, sourceURL, true
 	}
@@ -42,8 +43,10 @@ func resolveSource(
 	if validateErr != nil {
 		return model.SourceTierCommunity, "", false
 	}
+
 	if tier == model.SourceTierCommunity && !sourceValidator.HasCorroboration(candidate.Description) {
 		return model.SourceTierCommunity, "", false
 	}
+
 	return tier, normalizedURL, true
 }

@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"encoding/json/jsontext"
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -117,19 +118,23 @@ var lowercaseSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func DecodeEnvelopeStrict(raw []byte) (Envelope, error) {
 	if len(raw) == 0 || len(raw) > MaxPayloadBytes+8192 {
-		return Envelope{}, fmt.Errorf("decode source observation envelope: size is outside the accepted range")
+		return Envelope{}, errors.New("decode source observation envelope: size is outside the accepted range")
 	}
+
 	var envelope Envelope
+
 	if err := decodeStrictJSON(raw, &envelope); err != nil {
 		return Envelope{}, fmt.Errorf("decode source observation envelope: %w", err)
 	}
+
 	if err := envelope.Validate(); err != nil {
-		return Envelope{}, err
+		return Envelope{}, fmt.Errorf("validate: %w", err)
 	}
+
 	return envelope, nil
 }
 
-func PrepareEnvelope(envelope Envelope) (Envelope, error) { //nolint:gocritic // public copy-transform boundary preserves caller isolation
+func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(
 		envelope.ObservationKind,
 		envelope.SubjectKey,
@@ -139,98 +144,134 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) { //nolint:gocritic //
 	if err != nil {
 		return Envelope{}, fmt.Errorf("prepare source observation envelope: %w", err)
 	}
+
 	envelope.ScheduledFor = envelope.ScheduledFor.UTC()
 	envelope.ObservedAt = envelope.ObservedAt.UTC()
+
 	if envelope.SourceEventAt != nil {
 		sourceEventAt := envelope.SourceEventAt.UTC()
+
 		envelope.SourceEventAt = &sourceEventAt
 	}
+
 	envelope.Lease.ScheduledFor = envelope.Lease.ScheduledFor.UTC()
 	envelope.Payload = canonicalPayload
 	envelope.ScopeSHA256 = SHA256Hex(canonicalScope)
 	envelope.PayloadSHA256 = SHA256Hex(canonicalPayload)
+
 	envelope.ObservationKey, err = ObservationKeyForEnvelope(&envelope, canonicalScope)
 	if err != nil {
 		return Envelope{}, fmt.Errorf("prepare source observation envelope: %w", err)
 	}
+
 	evidenceSHA256, err := envelope.expectedEvidenceSHA256()
 	if err != nil {
 		return Envelope{}, fmt.Errorf("prepare source observation envelope: %w", err)
 	}
+
 	envelope.EvidenceSHA256 = evidenceSHA256
 	if err := envelope.Validate(); err != nil {
-		return Envelope{}, err
+		return Envelope{}, fmt.Errorf("validate: %w", err)
 	}
+
 	return envelope, nil
 }
 
 func (e *Envelope) Validate() error {
-	_, err := e.ValidateAndCanonicalPayload()
-	return err
+	if _, err := e.ValidateAndCanonicalPayload(); err != nil {
+		return fmt.Errorf("validate envelope: %w", err)
+	}
+
+	return nil
 }
 
 func (e *Envelope) ValidateAndCanonicalPayload() ([]byte, error) {
 	if err := e.validateEnvelopeIdentity(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate envelope identity: %w", err)
 	}
+
 	if err := e.validateEnvelopeClock(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate envelope clock: %w", err)
 	}
+
 	if err := e.validateEnvelopeLeaseAndHashes(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate envelope lease and hashes: %w", err)
 	}
-	return e.verifyCanonicalPayload()
+
+	out, err := e.verifyCanonicalPayload()
+	if err != nil {
+		return out, fmt.Errorf("verify canonical payload: %w", err)
+	}
+
+	return out, nil
 }
 
 func (e *Envelope) validateEnvelopeIdentity() error {
 	if !e.Provider.Valid() {
 		return fmt.Errorf("validate source observation envelope: unsupported provider %q", e.Provider)
 	}
+
 	if !e.ObservationKind.Valid() {
 		return fmt.Errorf("validate source observation envelope: unsupported observation kind %q", e.ObservationKind)
 	}
+
 	if err := validateBoundedText("subject key", e.SubjectKey, 256); err != nil {
-		return err
+		return fmt.Errorf("validate bounded text: %w", err)
 	}
+
 	if err := validateBoundedText("observation key", e.ObservationKey, 512); err != nil {
-		return err
+		return fmt.Errorf("validate bounded text: %w", err)
 	}
+
 	if e.SchemaVersion != SchemaVersionV1 {
 		return fmt.Errorf("validate source observation envelope: unsupported schema version %d", e.SchemaVersion)
 	}
+
 	if e.ContractGeneration <= 0 {
-		return fmt.Errorf("validate source observation envelope: contract generation must be positive")
+		return errors.New("validate source observation envelope: contract generation must be positive")
 	}
+
 	return nil
 }
 
 func (e *Envelope) validateEnvelopeClock() error {
 	if e.ScheduledFor.IsZero() || e.ObservedAt.IsZero() {
-		return fmt.Errorf("validate source observation envelope: scheduled for and observed at must be non-zero")
+		return errors.New("validate source observation envelope: scheduled for and observed at must be non-zero")
 	}
+
 	if e.SourceEventAt != nil && e.SourceEventAt.IsZero() {
-		return fmt.Errorf("validate source observation envelope: source event at must not point to zero time")
+		return errors.New("validate source observation envelope: source event at must not point to zero time")
 	}
+
 	if e.SourceEventAt != nil && !KindAllowsSourceEventTime(e.ObservationKind) {
-		return fmt.Errorf("validate source observation envelope: observation kind does not allow source event time")
+		return errors.New("validate source observation envelope: observation kind does not allow source event time")
 	}
+
 	if !e.Completeness.Valid() {
 		return fmt.Errorf("validate source observation envelope: invalid completeness %q", e.Completeness)
 	}
+
 	if !e.Continuity.Valid() {
 		return fmt.Errorf("validate source observation envelope: invalid continuity %q", e.Continuity)
 	}
+
 	return nil
 }
 
 func (e *Envelope) validateEnvelopeLeaseAndHashes() error {
 	if err := e.Lease.validate(e.ScheduledFor); err != nil {
-		return err
+		return fmt.Errorf("validate: %w", err)
 	}
+
 	if err := validateBoundedText("collector instance", e.CollectorInstance, 128); err != nil {
-		return err
+		return fmt.Errorf("validate bounded text: %w", err)
 	}
-	return validateEnvelopeSHA256s(e)
+
+	if err := validateEnvelopeSHA256s(e); err != nil {
+		return fmt.Errorf("validate envelope sha256s: %w", err)
+	}
+
+	return nil
 }
 
 func validateEnvelopeSHA256s(e *Envelope) error {
@@ -243,6 +284,7 @@ func validateEnvelopeSHA256s(e *Envelope) error {
 			return fmt.Errorf("validate source observation envelope: %s must be 64 lowercase hexadecimal characters", name)
 		}
 	}
+
 	return nil
 }
 
@@ -251,33 +293,41 @@ func (e *Envelope) verifyCanonicalPayload() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("validate source observation envelope: %w", err)
 	}
+
 	if err := e.matchCanonicalDigests(canonicalPayload, canonicalScope); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("match canonical digests: %w", err)
 	}
+
 	return canonicalPayload, nil
 }
 
 func (e *Envelope) matchCanonicalDigests(canonicalPayload, canonicalScope []byte) error {
 	if actual := SHA256Hex(canonicalScope); actual != e.ScopeSHA256 {
-		return fmt.Errorf("validate source observation envelope: scope sha256 mismatch")
+		return errors.New("validate source observation envelope: scope sha256 mismatch")
 	}
+
 	if actual := SHA256Hex(canonicalPayload); actual != e.PayloadSHA256 {
-		return fmt.Errorf("validate source observation envelope: payload sha256 mismatch")
+		return errors.New("validate source observation envelope: payload sha256 mismatch")
 	}
+
 	expected, err := ObservationKeyForEnvelope(e, canonicalScope)
 	if err != nil {
 		return fmt.Errorf("validate source observation envelope: %w", err)
 	}
+
 	if expected != e.ObservationKey {
-		return fmt.Errorf("validate source observation envelope: observation key mismatch")
+		return errors.New("validate source observation envelope: observation key mismatch")
 	}
+
 	expectedEvidenceSHA256, err := e.expectedEvidenceSHA256()
 	if err != nil {
 		return fmt.Errorf("validate source observation envelope: %w", err)
 	}
+
 	if expectedEvidenceSHA256 != e.EvidenceSHA256 {
-		return fmt.Errorf("validate source observation envelope: evidence sha256 mismatch")
+		return errors.New("validate source observation envelope: evidence sha256 mismatch")
 	}
+
 	return nil
 }
 
@@ -298,11 +348,14 @@ func (e *Envelope) expectedEvidenceSHA256() (string, error) {
 	}
 	if digest.SourceEventAt != nil {
 		sourceEventAt := digest.SourceEventAt.UTC()
+
 		digest.SourceEventAt = &sourceEventAt
 	}
+
 	canonical, err := canonicalJSON(digest)
 	if err != nil {
 		return "", fmt.Errorf("canonicalize evidence digest: %w", err)
 	}
+
 	return SHA256Hex(canonical), nil
 }

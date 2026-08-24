@@ -23,6 +23,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -35,18 +36,31 @@ import (
 )
 
 func (b *Bot) sendMessage(ctx context.Context, room, message string) error {
-	return b.ensureTransport().SendMessage(ctx, room, message)
+	if err := b.ensureTransport().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
-	return b.ensureTransport().SendImage(ctx, room, imageData, opts...)
+	if err := b.ensureTransport().SendImage(ctx, room, imageData, opts...); err != nil {
+		return fmt.Errorf("send image: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
-	return b.ensureTransport().SendImages(ctx, room, images, opts...)
+	if err := b.ensureTransport().SendImages(ctx, room, images, opts...); err != nil {
+		return fmt.Errorf("send images: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
+	//nolint:wrapcheck // transport가 send error message context를 소유하므로 이 위임 계층은 원인을 그대로 전달한다.
 	return b.ensureTransport().SendError(ctx, room, errorMsg)
 }
 
@@ -58,6 +72,7 @@ func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, com
 
 	errorAttrs := sharedlog.ErrorAttrs(err)
 	attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
+
 	attrs = append(attrs,
 		privacylog.ChatIDAttr(chatID),
 		slog.String("command", commandType),
@@ -74,6 +89,7 @@ func (b *Bot) getErrorMessage(err error) string {
 	}
 
 	var serviceErr *appErrors.ServiceError
+
 	if errors.As(err, &serviceErr) && serviceErr.Service == serviceNameIris {
 		return messaging.ErrIrisConnectionFailed
 	}

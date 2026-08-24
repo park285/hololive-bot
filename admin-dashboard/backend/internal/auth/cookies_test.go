@@ -53,6 +53,7 @@ func TestAuthCookiesHonorInsecureDevelopmentMode(t *testing.T) {
 
 	cookies := rec.Result().Cookies()
 	require.Len(t, cookies, 4)
+
 	for _, cookie := range cookies {
 		require.False(t, cookie.Secure, "cookie %s Secure", cookie.Name)
 	}

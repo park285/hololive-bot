@@ -21,7 +21,6 @@
 package membernews
 
 import (
-	"context"
 	"strings"
 	"testing"
 )
@@ -29,23 +28,26 @@ import (
 func TestNewService_SetsDefaultDependencies(t *testing.T) {
 	service := NewService(nil, nil, nil, nil, nil)
 	if service == nil {
-		t.Fatalf("NewService() returned nil")
+		t.Fatal("NewService() returned nil")
 	}
+
 	if service.logger == nil {
-		t.Fatalf("NewService() logger is nil")
+		t.Fatal("NewService() logger is nil")
 	}
+
 	if service.now == nil {
-		t.Fatalf("NewService() now clock is nil")
+		t.Fatal("NewService() now clock is nil")
 	}
 }
 
 func TestService_SubscriptionMethodGuards(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	service := &Service{}
 
 	if err := service.SubscribeRoom(ctx, "room-1", "alpha"); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 		t.Fatalf("SubscribeRoom guard mismatch: %v", err)
 	}
+
 	if err := service.UnsubscribeRoom(ctx, "room-1"); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 		t.Fatalf("UnsubscribeRoom guard mismatch: %v", err)
 	}
@@ -53,9 +55,11 @@ func TestService_SubscriptionMethodGuards(t *testing.T) {
 	if _, err := service.IsRoomSubscribed(ctx, "room-1"); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 		t.Fatalf("IsRoomSubscribed guard mismatch: %v", err)
 	}
+
 	if _, err := service.ListSubscribedRooms(ctx); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 		t.Fatalf("ListSubscribedRooms guard mismatch: %v", err)
 	}
+
 	if err := service.WarmupSubscriptionCache(ctx); err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 		t.Fatalf("WarmupSubscriptionCache guard mismatch: %v", err)
 	}

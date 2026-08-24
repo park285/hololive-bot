@@ -1,6 +1,7 @@
 package collectutil
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -40,13 +41,15 @@ func Envelope(
 	payload any,
 ) (contract.Envelope, error) {
 	if lease == nil {
-		return contract.Envelope{}, fmt.Errorf("build collection envelope: lease is not configured")
+		return contract.Envelope{}, errors.New("build collection envelope: lease is not configured")
 	}
+
 	raw, err := contract.MarshalPayloadV1(payload)
 	if err != nil {
-		return contract.Envelope{}, err
+		return contract.Envelope{}, fmt.Errorf("marshal payload V1: %w", err)
 	}
-	return contract.PrepareEnvelope(contract.Envelope{
+
+	out, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider:           provider,
 		ObservationKind:    kind,
 		SubjectKey:         subject,
@@ -60,22 +63,32 @@ func Envelope(
 		CollectorInstance:  lease.OwnerInstance,
 		Lease:              *lease,
 	})
+	if err != nil {
+		return out, fmt.Errorf("prepare envelope: %w", err)
+	}
+
+	return out, nil
 }
 
 func UniqueSorted(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
+
 	for _, value := range values {
 		trimmed := strings.TrimSpace(value)
 		if trimmed == "" {
 			continue
 		}
+
 		if _, ok := seen[trimmed]; ok {
 			continue
 		}
+
 		seen[trimmed] = struct{}{}
 		result = append(result, trimmed)
 	}
+
 	sort.Strings(result)
+
 	return result
 }

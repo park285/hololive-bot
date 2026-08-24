@@ -25,7 +25,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 	"testing"
 	"time"
 
@@ -40,7 +39,9 @@ const nonCanonicalRoomID = "상대방닉네임 님과의 대화"
 
 func TestMarkUpcomingEventNotifiedRecordNeverCarriesRoomPlaintext(t *testing.T) {
 	var sink bytes.Buffer
+
 	client := cachemocks.NewStrictClient()
+
 	client.SetFunc = func(context.Context, string, any, time.Duration) error {
 		return errors.New("valkey unreachable")
 	}
@@ -51,7 +52,7 @@ func TestMarkUpcomingEventNotifiedRecordNeverCarriesRoomPlaintext(t *testing.T) 
 		Logger: slog.New(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 
-	err := state.MarkUpcomingEventNotified(context.Background(), nonCanonicalRoomID, "UC-chan", &domain.Stream{
+	err := state.MarkUpcomingEventNotified(t.Context(), nonCanonicalRoomID, "UC-chan", &domain.Stream{
 		ID:             "stream-1",
 		Title:          "테스트 방송",
 		StartScheduled: &scheduled,
@@ -62,5 +63,5 @@ func TestMarkUpcomingEventNotifiedRecordNeverCarriesRoomPlaintext(t *testing.T) 
 	require.NotEmpty(t, record, "실패 경로가 아무것도 남기지 않으면 이 테스트는 회귀를 못 잡는다")
 	assert.NotContains(t, record, nonCanonicalRoomID,
 		"익명화한 room_id와 같은 레코드에 평문이 있으면 그 한 줄이 de-anonymization 오라클이 된다")
-	assert.True(t, strings.Contains(record, "anon:"), "room 식별자는 privacylog token으로 남아야 한다")
+	assert.Contains(t, record, "anon:", "room 식별자는 privacylog token으로 남아야 한다")
 }

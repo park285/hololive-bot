@@ -2,6 +2,8 @@ package holodexprovider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -19,11 +21,15 @@ func newScraperServiceForTest(
 	members ...*domain.Member,
 ) *htmlscraper.Service {
 	config := settings.DefaultOfficialScheduleConfig()
+
 	config.BaseURL = baseURL
+
 	var youtubeClient htmlscraper.YouTubeClient
+
 	if fetchUpcoming != nil {
 		youtubeClient = testScraperYouTubeClient{fetchUpcoming: fetchUpcoming}
 	}
+
 	return htmlscraper.NewServiceWithDependencies(
 		nil,
 		testScraperMembers(members),
@@ -41,22 +47,39 @@ type testScraperYouTubeClient struct {
 }
 
 func (client testScraperYouTubeClient) GetUpcomingEvents(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
-	return client.fetchUpcoming(ctx, channelID)
+	out, err := client.fetchUpcoming(ctx, channelID)
+	if err != nil {
+		return out, fmt.Errorf("fetch upcoming: %w", err)
+	}
+
+	return out, nil
 }
+
 func (client testScraperYouTubeClient) GetUpcomingEventsWaitAdmission(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
-	return client.fetchUpcoming(ctx, channelID)
+	out, err := client.fetchUpcoming(ctx, channelID)
+	if err != nil {
+		return out, fmt.Errorf("fetch upcoming: %w", err)
+	}
+
+	return out, nil
 }
+
 func (testScraperYouTubeClient) GetRecentVideos(context.Context, string, int) ([]*parser.Video, error) {
 	return nil, nil
 }
+
 func (testScraperYouTubeClient) GetPopularVideos(context.Context, string, int) ([]*parser.Video, error) {
 	return nil, nil
 }
+
+var errScraperStubUnsupported = errors.New("scraper test stub does not implement this call")
+
 func (testScraperYouTubeClient) GetChannelStats(context.Context, string) (*parser.ChannelStats, error) {
-	return nil, nil
+	return nil, errScraperStubUnsupported
 }
+
 func (testScraperYouTubeClient) GetChannelSnippet(context.Context, string) (*parser.ChannelSnippet, error) {
-	return nil, nil
+	return nil, errScraperStubUnsupported
 }
 func (testScraperYouTubeClient) SetProxyEnabled(bool) bool { return false }
 func (testScraperYouTubeClient) ProxyEnabled() bool        { return false }

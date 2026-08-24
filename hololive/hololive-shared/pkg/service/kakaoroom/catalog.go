@@ -2,6 +2,7 @@ package kakaoroom
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -59,6 +60,7 @@ func (c *Catalog) OpenChat(ctx context.Context, roomID string) bool {
 	}
 
 	facts, ok := c.lookup(ctx, roomID)
+
 	return ok && facts.OpenChat()
 }
 
@@ -67,13 +69,16 @@ func (c *Catalog) lookup(ctx context.Context, roomID string) (Facts, bool) {
 	if roomID == "" {
 		return Facts{}, false
 	}
+
 	if facts, ok := c.cached(roomID); ok {
 		return facts, true
 	}
+
 	facts, ok, err := c.loadStored(ctx, roomID)
 	if err != nil || ok {
 		return facts, ok
 	}
+
 	return c.loadAfterRefresh(ctx, roomID)
 }
 
@@ -81,12 +86,16 @@ func (c *Catalog) loadStored(ctx context.Context, roomID string) (Facts, bool, e
 	facts, ok, err := c.store.get(ctx, roomID)
 	if err != nil {
 		c.warn(ctx, "load kakao room failed", err)
-		return Facts{}, false, err
+
+		return Facts{}, false, fmt.Errorf("get: %w", err)
 	}
+
 	if !ok {
 		return Facts{}, false, nil
 	}
+
 	c.remember(facts)
+
 	return facts, true, nil
 }
 
@@ -94,6 +103,7 @@ func (c *Catalog) loadAfterRefresh(ctx context.Context, roomID string) (Facts, b
 	if !c.refresh(ctx) {
 		return Facts{}, false
 	}
+
 	return c.cached(roomID)
 }
 
@@ -101,12 +111,16 @@ func (c *Catalog) refresh(ctx context.Context) bool {
 	if c.lister == nil {
 		return false
 	}
+
 	rooms, err := c.lister.GetRooms(ctx)
 	if err != nil {
 		c.warn(ctx, "list kakao rooms failed", err)
+
 		return false
 	}
+
 	c.storeListed(ctx, rooms)
+
 	return true
 }
 
@@ -115,6 +129,7 @@ func (c *Catalog) storeListed(ctx context.Context, rooms []Facts) {
 		if !usableListedFacts(facts) {
 			continue
 		}
+
 		c.remember(facts)
 		c.warn(ctx, "store kakao room failed", c.store.upsert(ctx, facts))
 	}
@@ -128,17 +143,20 @@ func (c *Catalog) warn(ctx context.Context, msg string, err error) {
 	if c.logger == nil || err == nil {
 		return
 	}
+
 	c.logger.LogAttrs(ctx, slog.LevelWarn, msg, slog.String("error", err.Error()))
 }
 
 func (c *Catalog) remember(facts Facts) {
 	c.mu.Lock()
+
 	c.cache[facts.RoomID] = facts
 	c.mu.Unlock()
 }
 
 func (c *Catalog) cached(roomID string) (Facts, bool) {
 	c.mu.RLock()
+
 	facts, ok := c.cache[roomID]
 	c.mu.RUnlock()
 

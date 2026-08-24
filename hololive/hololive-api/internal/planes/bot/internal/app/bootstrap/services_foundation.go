@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
@@ -63,7 +62,7 @@ func InitScraperHolodexProfileFoundation(
 ) (*ScraperHolodexProfileFoundation, error) {
 	foundation, err := InitScraperHolodexFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init scraper holodex foundation: %w", err)
 	}
 
 	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, foundation.MemberServiceAdapter, logger)

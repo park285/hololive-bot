@@ -2,27 +2,27 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/gin-gonic/gin"
-	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/repository"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/app/http"
 	botroomsclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/botrooms"
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	"github.com/kapu/hololive-shared/pkg/repository"
+	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 func buildAdminHandler(
@@ -82,26 +82,33 @@ func buildAdminAPIBotRoomLister(appConfig *settings.Config, logger *slog.Logger)
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	if appConfig == nil {
 		logger.Warn("admin api bot room client unavailable; config is nil")
+
 		return nil
 	}
+
 	botURL := strings.TrimSpace(appConfig.BotInternalURL)
 	if botURL == "" {
 		logger.Warn("admin api bot room client unavailable; joined-rooms endpoint disabled")
+
 		return nil
 	}
 
 	client, err := botroomsclient.NewClient(botURL, appConfig.Server.APIKey, logger)
 	if err != nil {
 		logger.Warn("admin api bot room client unavailable; invalid bot internal url", slog.Any("error", err))
+
 		return nil
 	}
+
 	return client
 }
 
 func buildAdminAPITemplateAdmin(infra *sharedmodules.InfraModule, logger *slog.Logger) *template.AdminService {
 	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
+
 	return template.NewAdminService(
 		repository.NewTemplateRepository(infra.Postgres.GetPool(), logger),
 		templateRenderer,
@@ -121,7 +128,8 @@ func buildAdminAPIRouter(
 		sharedreadiness.PostgresCheck(infra.Postgres),
 		sharedreadiness.ValkeyCheck(infra.Cache),
 	)
-	return apphttp.ProvideAPIRouter(
+
+	router, err := apphttp.ProvideAPIRouter(
 		ctx,
 		appConfig,
 		logger,
@@ -130,4 +138,9 @@ func buildAdminAPIRouter(
 		infra.Cache,
 		readyProbe,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("provide API router: %w", err)
+	}
+
+	return router, nil
 }

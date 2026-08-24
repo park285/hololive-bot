@@ -28,12 +28,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func newDiscardAlarmLogger() *slog.Logger {
@@ -44,9 +45,9 @@ func TestAlarmKeyHelpers(t *testing.T) {
 	t.Parallel()
 
 	as := newTestAlarmService(t)
-	assert.Equal(t, sharedalarmkeys.AlarmKeyPrefix+"room-1", as.getAlarmKey("room-1"))
-	assert.Equal(t, "room-1", as.getRegistryKey("room-1"))
-	assert.Equal(t, sharedalarmkeys.ChannelSubscribersKeyPrefix+"ch-1", as.channelSubscribersKey("ch-1"))
+	assert.Equal(t, sharedalarmkeys.AlarmKeyPrefix+testRoomID, as.getAlarmKey(testRoomID))
+	assert.Equal(t, testRoomID, as.getRegistryKey(testRoomID))
+	assert.Equal(t, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChannelID, as.channelSubscribersKey(testChannelID))
 }
 
 func TestAlarmCacheNameAndSubscriberHelpers(t *testing.T) {
@@ -55,43 +56,43 @@ func TestAlarmCacheNameAndSubscriberHelpers(t *testing.T) {
 	as := newTestAlarmService(t)
 	ctx := t.Context()
 
-	require.NoError(t, as.CacheMemberName(ctx, "ch-1", "Miko"))
+	require.NoError(t, as.CacheMemberName(ctx, testChannelID, testMemberName))
 
-	name, err := as.GetMemberName(ctx, "ch-1")
+	name, err := as.GetMemberName(ctx, testChannelID)
 	require.NoError(t, err)
-	assert.Equal(t, "Miko", name)
+	assert.Equal(t, testMemberName, name)
 
-	require.NoError(t, as.SetRoomName(ctx, "room-1", "메인방"))
-	require.NoError(t, as.SetUserName(ctx, "user-1", "관리자"))
+	require.NoError(t, as.SetRoomName(ctx, testRoomID, "메인방"))
+	require.NoError(t, as.SetUserName(ctx, testUserID, "관리자"))
 
-	roomName, err := as.cache.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-1")
+	roomName, err := as.cache.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, "메인방", roomName)
 
-	userName, err := as.cache.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-1")
+	userName, err := as.cache.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, "관리자", userName)
 
-	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType("ch-1", domain.AlarmTypeLive), []string{"room-1"})
+	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType(testChannelID, domain.AlarmTypeLive), []string{testRoomID})
 	require.NoError(t, err)
 
-	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType("ch-1", domain.AlarmTypeCommunity), []string{"room-1"})
+	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType(testChannelID, domain.AlarmTypeCommunity), []string{testRoomID})
 	require.NoError(t, err)
 
-	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType("ch-1", domain.AlarmTypeShorts), []string{"room-1"})
+	_, err = as.cache.SAdd(ctx, as.channelSubscribersKeyByType(testChannelID, domain.AlarmTypeShorts), []string{testRoomID})
 	require.NoError(t, err)
 
-	liveSubs, err := as.GetChannelSubscribersByType(ctx, "ch-1", domain.AlarmTypeLive)
+	liveSubs, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeLive)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-1"}, liveSubs)
+	assert.Equal(t, []string{testRoomID}, liveSubs)
 
-	communitySubs, err := as.GetChannelSubscribersByType(ctx, "ch-1", domain.AlarmTypeCommunity)
+	communitySubs, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeCommunity)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-1"}, communitySubs)
+	assert.Equal(t, []string{testRoomID}, communitySubs)
 
-	shortsSubs, err := as.GetChannelSubscribersByType(ctx, "ch-1", domain.AlarmTypeShorts)
+	shortsSubs, err := as.GetChannelSubscribersByType(ctx, testChannelID, domain.AlarmTypeShorts)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"room-1"}, shortsSubs)
+	assert.Equal(t, []string{testRoomID}, shortsSubs)
 }
 
 func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
@@ -100,24 +101,24 @@ func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
 	as := newTestAlarmService(t)
 	ctx := t.Context()
 
-	_, err := as.cache.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{"room-1", "room-2", ""})
+	_, err := as.cache.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{testRoomID, "room-2", ""})
 	require.NoError(t, err)
 
-	_, err = as.cache.SAdd(ctx, as.getAlarmKey("room-1"), []string{"ch-1", "ch-2"})
+	_, err = as.cache.SAdd(ctx, as.getAlarmKey(testRoomID), []string{testChannelID, testOtherChannelID})
 	require.NoError(t, err)
 
 	_, err = as.cache.SAdd(ctx, as.getAlarmKey("room-2"), []string{"ch-3"})
 	require.NoError(t, err)
 
-	require.NoError(t, as.CacheMemberName(ctx, "ch-1", "Miko"))
-	require.NoError(t, as.CacheMemberName(ctx, "ch-2", "Suisei"))
+	require.NoError(t, as.CacheMemberName(ctx, testChannelID, testMemberName))
+	require.NoError(t, as.CacheMemberName(ctx, testOtherChannelID, "Suisei"))
 	require.NoError(t, as.CacheMemberName(ctx, "ch-3", "Aqua"))
-	require.NoError(t, as.SetRoomName(ctx, "room-1", "메인방"))
+	require.NoError(t, as.SetRoomName(ctx, testRoomID, "메인방"))
 
 	rooms, err := as.GetDistinctRooms(ctx)
 	require.NoError(t, err)
 	sort.Strings(rooms)
-	assert.Equal(t, []string{"room-1", "room-2"}, rooms)
+	assert.Equal(t, []string{testRoomID, "room-2"}, rooms)
 
 	alarms, err := as.GetAllAlarmKeys(ctx)
 	require.NoError(t, err)
@@ -129,9 +130,9 @@ func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
 		byRoom[entry.RoomID] = append(byRoom[entry.RoomID], entry)
 	}
 
-	require.Len(t, byRoom["room-1"], 2)
+	require.Len(t, byRoom[testRoomID], 2)
 
-	for _, entry := range byRoom["room-1"] {
+	for _, entry := range byRoom[testRoomID] {
 		assert.Equal(t, "메인방", entry.RoomName)
 	}
 
@@ -195,6 +196,7 @@ func TestMarkAsNotified_SetFailure(t *testing.T) {
 		cache:  mockCache,
 		logger: discardLogger,
 	}
+
 	as.cacheState = alarmcache.NewState(mockCache, func() domain.MemberDataProvider { return as.memberData }, discardLogger)
 
 	err := as.MarkAsNotified(t.Context(), "stream-1", time.Now().UTC(), 5)
@@ -217,6 +219,7 @@ func TestTargetMinutesAndCloseHelpers(t *testing.T) {
 	assert.Equal(t, []int{1}, as.GetTargetMinutes())
 
 	var nilService *AlarmService
+
 	require.NoError(t, nilService.Close(t.Context()))
 	require.NoError(t, as.Close(t.Context()))
 }

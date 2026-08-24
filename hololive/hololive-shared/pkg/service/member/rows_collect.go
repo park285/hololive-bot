@@ -19,6 +19,7 @@ func collectJoinedRows[T any](rows pgx.Rows, iterLabel string, scan func(pgx.Row
 			rowErrs = append(rowErrs, err)
 			continue
 		}
+
 		collected = append(collected, item)
 	}
 

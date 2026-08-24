@@ -22,6 +22,7 @@ func TestFormatDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := formatDuration(tt.d)
 			if got != tt.want {
 				t.Errorf("formatDuration(%v) = %q, want %q", tt.d, got, tt.want)
@@ -32,6 +33,7 @@ func TestFormatDuration(t *testing.T) {
 
 func TestGetVersion_ReturnsNonEmpty(t *testing.T) {
 	t.Parallel()
+
 	got := GetVersion()
 	if got == "" {
 		t.Fatal("GetVersion() returned empty string")
@@ -40,6 +42,7 @@ func TestGetVersion_ReturnsNonEmpty(t *testing.T) {
 
 func TestGet_StatusOK(t *testing.T) {
 	t.Parallel()
+
 	resp := Get()
 	if resp.Status != "ok" {
 		t.Errorf("Get().Status = %q, want %q", resp.Status, "ok")

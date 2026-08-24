@@ -2,7 +2,6 @@ package schedulerkit
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -10,12 +9,12 @@ import (
 )
 
 func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestRuntimeSetClockIgnoresNil(t *testing.T) {
 	rt := NewRuntime()
-	want := time.Date(2026, 4, 9, 9, 0, 0, 0, time.UTC)
+	want := time.Date(2026, time.April, 9, 9, 0, 0, 0, time.UTC)
 
 	rt.SetClock(func() time.Time { return want })
 	rt.SetClock(nil)
@@ -31,13 +30,14 @@ func TestRuntimeStartIsGuarded(t *testing.T) {
 
 	release := make(chan struct{})
 	secondRun := make(chan struct{}, 1)
+
 	var calls atomic.Int32
 
 	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(-time.Millisecond)
 		},
@@ -48,14 +48,15 @@ func TestRuntimeStartIsGuarded(t *testing.T) {
 				default:
 				}
 			}
+
 			<-release
 		},
 	})
 	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(-time.Millisecond)
 		},
@@ -66,6 +67,7 @@ func TestRuntimeStartIsGuarded(t *testing.T) {
 				default:
 				}
 			}
+
 			<-release
 		},
 	})
@@ -84,15 +86,15 @@ func TestRuntimeStartIsGuarded(t *testing.T) {
 
 func TestRuntimeStopsOnContextCancellation(t *testing.T) {
 	rt := NewRuntime()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	stopped := make(chan struct{}, 1)
 	tickCalled := make(chan struct{}, 1)
 
 	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(time.Hour)
 		},
@@ -126,13 +128,14 @@ func TestRuntimeContinuesAfterTickPanic(t *testing.T) {
 	ctx := t.Context()
 
 	var calls atomic.Int32
+
 	secondTick := make(chan struct{}, 1)
 
 	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(-time.Millisecond)
 		},
@@ -140,6 +143,7 @@ func TestRuntimeContinuesAfterTickPanic(t *testing.T) {
 			if calls.Add(1) == 1 {
 				panic("tick exploded")
 			}
+
 			select {
 			case secondTick <- struct{}{}:
 			default:
@@ -160,11 +164,11 @@ func TestRuntimeCanRestartAfterStop(t *testing.T) {
 	rt := NewRuntime()
 	stopped := make(chan StopReason, 1)
 
-	rt.Start(context.Background(), &Config{
+	rt.Start(t.Context(), &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(time.Hour)
 		},
@@ -187,14 +191,14 @@ func TestRuntimeCanRestartAfterStop(t *testing.T) {
 		t.Fatal("expected first runtime to stop")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	tickCalled := make(chan struct{}, 1)
 
 	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(-time.Millisecond)
 		},
@@ -203,6 +207,7 @@ func TestRuntimeCanRestartAfterStop(t *testing.T) {
 			case tickCalled <- struct{}{}:
 			default:
 			}
+
 			cancel()
 		},
 	})
@@ -218,14 +223,14 @@ func TestRuntimeCanRestartAfterStop(t *testing.T) {
 
 func TestRuntimeCanRestartAfterContextCancellation(t *testing.T) {
 	rt := NewRuntime()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	stopped := make(chan StopReason, 1)
 
 	rt.Start(ctx, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(time.Hour)
 		},
@@ -248,14 +253,14 @@ func TestRuntimeCanRestartAfterContextCancellation(t *testing.T) {
 		t.Fatal("expected runtime to stop after context cancellation")
 	}
 
-	ctx2, cancel2 := context.WithCancel(context.Background())
+	ctx2, cancel2 := context.WithCancel(t.Context())
 	tickCalled := make(chan struct{}, 1)
 
 	rt.Start(ctx2, &Config{
 		Logger:         testLogger(),
-		WaitingLog:     "waiting",
-		ContextStopLog: "context stop",
-		StopLog:        "stop",
+		WaitingLog:     testWaitingLog,
+		ContextStopLog: testContextStopLog,
+		StopLog:        testStopLog,
 		CalculateNextRun: func(time.Time) time.Time {
 			return time.Now().Add(-time.Millisecond)
 		},
@@ -264,6 +269,7 @@ func TestRuntimeCanRestartAfterContextCancellation(t *testing.T) {
 			case tickCalled <- struct{}{}:
 			default:
 			}
+
 			cancel2()
 		},
 	})

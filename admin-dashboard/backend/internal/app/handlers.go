@@ -2,11 +2,12 @@ package app
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
@@ -29,22 +30,28 @@ func (r *Runtime) handleHealth(c *gin.Context) {
 
 func (r *Runtime) handleDockerHealth(c *gin.Context) {
 	available := false
+
 	if r.docker != nil {
 		available = r.docker.Available(c.Request.Context())
 	}
+
 	ginjson.Respond(c, http.StatusOK, dockerHealthResponse{Status: "ok", Available: available})
 }
 
 func (r *Runtime) handleDockerContainers(c *gin.Context) {
 	if r.docker == nil {
 		httpx.Abort(c, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available"))
+
 		return
 	}
+
 	containers, err := r.docker.ListContainers(c.Request.Context())
 	if err != nil {
 		httpx.Abort(c, err)
+
 		return
 	}
+
 	ginjson.Respond(c, http.StatusOK, dockerContainersResponse{Status: "ok", Containers: containers})
 }
 
@@ -55,27 +62,39 @@ func (r *Runtime) handleDockerStart(c *gin.Context)   { r.dockerAction(c, "start
 func (r *Runtime) dockerAction(c *gin.Context, action string) {
 	if r.docker == nil {
 		httpx.Abort(c, httpx.NewError(http.StatusServiceUnavailable, "Docker service not available"))
+
 		return
 	}
+
 	name := c.Param("name")
 	if err := r.dockerExec(c.Request.Context(), action, name); err != nil {
 		httpx.Abort(c, err)
+
 		return
 	}
+
 	r.logger.Info("docker container action", slog.String("action", action), slog.String("container", name))
+
 	message := map[string]string{"restart": "restarted", "stop": "stopped", "start": "started"}[action]
 	ginjson.Respond(c, http.StatusOK, dockerActionResponse{Status: "ok", Message: "Container " + name + " " + message})
 }
 
 func (r *Runtime) dockerExec(ctx context.Context, action, name string) error {
-	switch action {
-	case "restart":
-		return r.docker.RestartContainer(ctx, name)
-	case "stop":
-		return r.docker.StopContainer(ctx, name)
-	case "start":
-		return r.docker.StartContainer(ctx, name)
+	operations := map[string]func(context.Context, string) error{
+		"restart": r.docker.RestartContainer,
+		"stop":    r.docker.StopContainer,
+		"start":   r.docker.StartContainer,
 	}
+	operation, ok := operations[action]
+
+	if !ok {
+		return nil
+	}
+
+	if err := operation(ctx, name); err != nil {
+		return fmt.Errorf("%s container: %w", action, err)
+	}
+
 	return nil
 }
 
@@ -87,31 +106,41 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 	origin := c.Request.Header.Get("Origin")
 	if err := r.verifyWSOrigin(origin); err != nil {
 		httpx.Abort(c, err)
+
 		return
 	}
+
 	sess, ok := sessionFrom(c)
 	if !ok {
 		httpx.Abort(c, httpx.Unauthorized())
+
 		return
 	}
+
 	familyID := sessionStreamFamilyID(sess)
 	if familyID == "" || !r.acquireSessionStream(familyID) {
 		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams for this session family", Details: map[string]int{"limit": maxStreamsPerSession}}})
+
 		return
 	}
+
 	defer r.releaseSessionStream(familyID)
+
 	select {
 	case r.wsStreams <- struct{}{}:
 		defer func() { <-r.wsStreams }()
 	default:
 		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many active system stats streams", Details: map[string]int{"limit": maxSystemStatsStreams}}})
+
 		return
 	}
+
 	conn, err := newSystemStatsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
 	defer closeConn(conn)
+
 	r.streamSystemStats(conn, familyID)
 }
 
@@ -119,6 +148,7 @@ func sessionStreamFamilyID(sess *session.Session) string {
 	if sess.FamilyID != "" {
 		return sess.FamilyID
 	}
+
 	return sess.ID
 }
 
@@ -139,6 +169,7 @@ func (r *Runtime) streamSystemStats(conn *websocket.Conn, familyID string) {
 
 	peerGone := watchPeer(conn, r.wsPongWait)
 	stopRevocationWatch := r.watchSessionFamilyRevocation(conn, familyID)
+
 	defer stopRevocationWatch()
 
 	for _, stats := range history {
@@ -155,10 +186,13 @@ func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID st
 	if !ok {
 		return func() {}
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
+
 	panicguard.Go(r.logger, "admin-dashboard-websocket-session-revocation", func() {
 		r.pollSessionFamilyRevocation(ctx, conn, checker, familyID)
 	})
+
 	return cancel
 }
 
@@ -203,11 +237,13 @@ func (r *Runtime) sessionFamilyStillActive(
 
 		return false
 	}
+
 	if !active {
 		r.closeWebSocketForRevocation(conn, "session revoked")
 
 		return false
 	}
+
 	return true
 }
 
@@ -216,6 +252,7 @@ func (r *Runtime) closeWebSocketForRevocation(conn *websocket.Conn, reason strin
 	if err := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, reason), deadline); err != nil {
 		r.logger.Debug("write websocket revocation close frame", slog.Any("error", err))
 	}
+
 	if err := conn.Close(); err != nil {
 		r.logger.Debug("close revoked websocket", slog.Any("error", err))
 	}
@@ -245,22 +282,28 @@ func pumpSystemStatsOnce(conn *websocket.Conn, updates <-chan status.SystemStats
 
 func watchPeer(conn *websocket.Conn, pongWait time.Duration) <-chan struct{} {
 	gone := make(chan struct{})
+
 	conn.SetReadLimit(512)
+
 	if err := conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 		close(gone)
+
 		return gone
 	}
+
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 	panicguard.Go(nil, "admin-dashboard-websocket-peer", func() {
 		defer close(gone)
+
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				return
 			}
 		}
 	})
+
 	return gone
 }
 
@@ -268,6 +311,7 @@ func writePing(conn *websocket.Conn) bool {
 	if err := conn.SetWriteDeadline(time.Now().Add(wsWriteWait)); err != nil {
 		return false
 	}
+
 	return conn.WriteMessage(websocket.PingMessage, nil) == nil
 }
 
@@ -275,10 +319,12 @@ func writeSystemStatsFrame(conn *websocket.Conn, stats any) bool {
 	if err := setWriteDeadline(conn); err != nil {
 		return false
 	}
+
 	payload, err := jsonv2.Marshal(stats)
 	if err != nil {
 		return false
 	}
+
 	return conn.WriteMessage(websocket.TextMessage, payload) == nil
 }
 
@@ -289,21 +335,29 @@ func closeConn(conn *websocket.Conn) {
 }
 
 func setWriteDeadline(conn *websocket.Conn) error {
-	return conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+	if err := conn.SetWriteDeadline(time.Now().Add(wsWriteWait)); err != nil {
+		return fmt.Errorf("set write deadline: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Runtime) handleOpenAPI(c *gin.Context) {
 	if !r.cfg.EnableOpenAPI && !r.cfg.EnableSwaggerUI {
 		ginjson.Respond(c, http.StatusNotFound, httpx.ErrorResponse{Error: "Not found"})
+
 		return
 	}
+
 	c.Data(http.StatusOK, "application/json; charset=utf-8", r.openapiJSON)
 }
 
 func (r *Runtime) handleDocs(c *gin.Context) {
 	if !r.cfg.EnableSwaggerUI {
 		ginjson.Respond(c, http.StatusNotFound, httpx.ErrorResponse{Error: "Not found"})
+
 		return
 	}
+
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<!doctype html><title>Admin API</title><h1>Admin Dashboard API</h1><p>OpenAPI JSON: <a href="/admin/api/openapi.json">/admin/api/openapi.json</a></p>`))
 }

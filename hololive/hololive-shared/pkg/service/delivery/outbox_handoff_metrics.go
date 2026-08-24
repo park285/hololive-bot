@@ -3,9 +3,10 @@ package delivery
 import (
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 )
 
 var (
@@ -17,6 +18,7 @@ func observeDispatchHandoff(mode handoff.Mode, result string, rows int) {
 	if rows <= 0 {
 		return
 	}
+
 	dispatchHandoffMetricsOnce.Do(func() {
 		dispatchHandoffTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{

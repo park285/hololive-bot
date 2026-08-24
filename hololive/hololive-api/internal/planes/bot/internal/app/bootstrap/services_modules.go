@@ -3,26 +3,22 @@ package bootstrap
 import (
 	"log/slog"
 
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
-
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 func BuildBotDependencyModules(

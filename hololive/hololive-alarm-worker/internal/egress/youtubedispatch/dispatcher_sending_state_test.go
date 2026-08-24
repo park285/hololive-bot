@@ -1,8 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -17,7 +15,7 @@ import (
 func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	lockedAt := now.Add(-10 * time.Minute)
@@ -45,7 +43,7 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
 		PollInterval:   time.Hour,
@@ -54,11 +52,13 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 		CleanupAfter:   time.Hour,
 		CleanupEnabled: false,
 	})
+
 	dispatcher.telemetry = nil
 
 	dispatcher.aggregateSyncOnce(ctx)
 
 	var gotDelivery deliveryTestDeliveryModel
+
 	require.NoError(t, firstDeliveryTestRow(db, &gotDelivery, delivery.ID).Error)
 	require.Equal(t, string(store.DeliveryStatusQuarantined), gotDelivery.Status)
 	require.Equal(t, 1, gotDelivery.AttemptCount)
@@ -66,6 +66,7 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 	require.Equal(t, "stale sending; external send outcome unknown", gotDelivery.Error)
 
 	var gotOutbox deliveryTestOutboxModel
+
 	require.NoError(t, firstDeliveryTestRow(db, &gotOutbox, outbox.ID).Error)
 	require.Equal(t, string(domain.OutboxStatusFailed), gotOutbox.Status)
 }

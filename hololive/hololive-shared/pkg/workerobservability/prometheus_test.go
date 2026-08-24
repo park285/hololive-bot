@@ -15,18 +15,23 @@ func TestGathererExposesCommonWorkerFamilies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	profilePath, err := filepath.Abs(filepath.Join("..", "config", "settings", "testdata", "stack-worker-profile-youtube-collector.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	loaded, err := workercontract.LoadProfileFile(profilePath, identity)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	tracker := workercontract.NewExecutorTracker()
 	tracker.StartWorkers(4)
+
 	counters := &workercontract.Counters{}
 	counters.RecordAdmission(workercontract.AdmissionRejected)
+
 	registry := workercontract.NewRegistry(loaded, workercontract.NewProfileFileChecker(loaded, time.Now()))
 	if err := registry.Register(workercontract.Registration{
 		WorkerID:                "collection",
@@ -43,6 +48,7 @@ func TestGathererExposesCommonWorkerFamilies(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := registry.Seal(); err != nil {
 		t.Fatal(err)
 	}

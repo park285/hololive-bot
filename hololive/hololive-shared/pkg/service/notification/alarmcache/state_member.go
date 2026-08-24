@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 func (s *State) CacheMemberName(ctx context.Context, channelID, memberName string) error {
@@ -32,6 +32,7 @@ func (s *State) ResolveCacheMemberName(ctx context.Context, channelID, fallback 
 	if name := s.ResolveMemberDataName(ctx, channelID); name != "" {
 		return name
 	}
+
 	return stringutil.TrimSpace(fallback)
 }
 
@@ -40,13 +41,16 @@ func (s *State) ResolveMemberDataName(ctx context.Context, channelID string) str
 	if provider == nil {
 		return ""
 	}
+
 	if scoped := provider.WithContext(ctx); scoped != nil {
 		provider = scoped
 	}
+
 	member := provider.FindMemberByChannelID(channelID)
 	if member == nil {
 		return ""
 	}
+
 	return FirstMemberName(member.ShortKoreanName, member.NameKo, member.Name)
 }
 
@@ -56,6 +60,7 @@ func FirstMemberName(candidates ...string) string {
 			return name
 		}
 	}
+
 	return ""
 }
 
@@ -89,5 +94,10 @@ func (s *State) GetMemberNamesBatch(ctx context.Context, channelIDs []string) (m
 		return map[string]string{}, nil
 	}
 
-	return s.Cache.BatchHGet(ctx, sharedalarmkeys.MemberNameKey, channelIDs)
+	out, err := s.Cache.BatchHGet(ctx, sharedalarmkeys.MemberNameKey, channelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch h get: %w", err)
+	}
+
+	return out, nil
 }

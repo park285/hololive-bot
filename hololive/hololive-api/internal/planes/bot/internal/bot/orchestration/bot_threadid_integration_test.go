@@ -21,13 +21,12 @@
 package orchestration
 
 import (
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/stretchr/testify/require"
@@ -42,6 +41,7 @@ func TestBotProcessMessage_PreservesThreadIDForReply(t *testing.T) {
 
 	b, reqCh := newReplyCaptureBot(t, 1)
 	threadID := "12345"
+
 	handleHelpMessage(t, b, "stable-message-1")
 
 	select {
@@ -60,6 +60,7 @@ func TestBotProcessMessage_UsesInboundIDForThreadedReplyIdentity(t *testing.T) {
 
 	b, reqCh := newReplyCaptureBot(t, 2)
 	threadID := "12345"
+
 	handleHelpMessage(t, b, "stable-message-1")
 	handleHelpMessage(t, b, "stable-message-2")
 
@@ -81,6 +82,7 @@ func TestBotProcessMessage_UsesStableInboundIDForThreadedReplyRetry(t *testing.T
 
 	b, reqCh := newReplyCaptureBot(t, 2)
 	threadID := "12345"
+
 	for range 2 {
 		handleHelpMessage(t, b, "stable-message-1")
 	}
@@ -106,16 +108,19 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reply", func(w http.ResponseWriter, r *http.Request) {
 		var req iris.ReplyRequest
+
 		if err := jsonv2.UnmarshalRead(r.Body, &req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+
 			return
 		}
 
 		reqCh <- req
+
 		if err := jsonv2.MarshalWrite(w, iris.ReplyAcceptedResponse{
 			RequestID: "reply-capture",
 			Success:   true,
-			Delivery:  "queued",
+			Delivery:  testDeliveryQueued,
 			Room:      req.Room,
 			Type:      req.Type,
 		}); err != nil {
@@ -132,11 +137,10 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 	})
 
 	srv := httptest.NewUnstartedServer(mux)
-	sharedserver.EnableH2C(srv.Config)
 	srv.Start()
 	t.Cleanup(srv.Close)
 
-	irisClient := iris.NewH2CClient(srv.URL, "bot-token", iris.WithTransport("h2c"))
+	irisClient := iris.NewAPIClient(srv.URL, "bot-token", iris.WithTransport("http1"))
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
@@ -152,14 +156,14 @@ func handleHelpMessage(t *testing.T, b *Bot, messageID string) {
 	t.Helper()
 
 	threadID := "12345"
-	sender := "user"
+	sender := testSenderName
 	require.NoError(t, b.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "room-name",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID:    "user-1",
-			ChatID:    "room-1",
+			UserID:    testUserID,
+			ChatID:    testRoomID,
 			MessageID: messageID,
 			ThreadID:  &threadID,
 		},

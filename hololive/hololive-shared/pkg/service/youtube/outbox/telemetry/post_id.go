@@ -1,9 +1,8 @@
 package telemetry
 
 import (
-	"strings"
-
 	jsonv2 "encoding/json/v2"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
@@ -28,6 +27,7 @@ func ResolveTelemetryPostID(kind domain.OutboxKind, contentID, payload string) s
 
 func resolveVideoTelemetryPostID(contentID, payload string) string {
 	var parsed format.VideoPayload
+
 	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return normalizeTelemetryPostID(contentID)
 	}
@@ -37,6 +37,7 @@ func resolveVideoTelemetryPostID(contentID, payload string) string {
 
 func resolveCommunityTelemetryPostID(contentID, payload string) string {
 	var parsed format.CommunityPayload
+
 	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return normalizeTelemetryPostID(contentID)
 	}
@@ -61,6 +62,7 @@ func ApplyTelemetryPostID(row *domain.YouTubeNotificationDeliveryTelemetry) {
 
 	row.ContentID = normalizeTelemetryPostID(row.ContentID)
 	row.PostID = normalizeTelemetryPostID(row.PostID)
+
 	if row.PostID == "" {
 		row.PostID = row.ContentID
 	}

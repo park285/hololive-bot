@@ -2,6 +2,7 @@ package collectorruntime
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 func TestNewRegistryRejectsDuplicateJob(t *testing.T) {
 	t.Parallel()
+
 	_, err := NewRegistry(
 		stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage),
 		stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage),
@@ -24,6 +26,7 @@ func TestNewRegistryRejectsDuplicateJob(t *testing.T) {
 
 func TestNewRegistryRejectsUnknownJob(t *testing.T) {
 	t.Parallel()
+
 	_, err := NewRegistry(stubJob(contract.ProviderYouTubeJS, "unknown_job", contract.KindVideoList))
 	if err == nil {
 		t.Fatal("unknown job must fail closed")
@@ -32,6 +35,7 @@ func TestNewRegistryRejectsUnknownJob(t *testing.T) {
 
 func TestNewRegistryRequiresInitialJobCoverage(t *testing.T) {
 	t.Parallel()
+
 	_, err := NewRegistry(stubJob(contract.ProviderYouTubeJS, "community_collect", contract.KindCommunityPage))
 	if err == nil {
 		t.Fatal("incomplete InitialJobContracts coverage must fail closed")
@@ -40,10 +44,12 @@ func TestNewRegistryRequiresInitialJobCoverage(t *testing.T) {
 
 func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 	t.Parallel()
+
 	registry, err := NewRegistry(completeStubRunners()...)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(registry.Runners()) != 9 {
 		t.Fatalf("runners = %d", len(registry.Runners()))
 	}
@@ -51,13 +57,16 @@ func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 
 func TestExecutionProfileMinimumIncludesReservations(t *testing.T) {
 	t.Parallel()
+
 	profile, err := NewExecutionProfile(2, 3*time.Second, time.Second, 4, 2*time.Second, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := profile.MinimumCollectTimeout(), 15*time.Second; got != want {
 		t.Fatalf("minimum collect timeout = %s, want %s", got, want)
 	}
+
 	if profile.CollectTimeout() != profile.MinimumCollectTimeout() {
 		t.Fatal("zero configured timeout did not select exact minimum")
 	}
@@ -65,9 +74,11 @@ func TestExecutionProfileMinimumIncludesReservations(t *testing.T) {
 
 func TestExecutionProfileRejectsDurationOverflowAndUndersizedTimeout(t *testing.T) {
 	t.Parallel()
+
 	if _, err := NewExecutionProfile(math.MaxInt, time.Duration(math.MaxInt64), 0, 2, time.Second, 0); err == nil {
 		t.Fatal("overflowing execution profile was accepted")
 	}
+
 	if _, err := NewExecutionProfile(2, time.Second, time.Second, 2, time.Second, 2*time.Second); err == nil {
 		t.Fatal("undersized collect timeout was accepted")
 	}
@@ -101,9 +112,21 @@ func stubJob(provider contract.Provider, jobKind string, _ ...contract.Observati
 func (s *stubRunner) JobID() sourceobservation.JobID {
 	return sourceobservation.JobID{Provider: s.provider, Kind: sourceobservation.JobKind(s.jobKind)}
 }
+
 func (s *stubRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if s.collect != nil {
-		return s.collect(ctx, input)
+		out, err := s.collect(ctx, input)
+		if err != nil {
+			return out, fmt.Errorf("collect: %w", err)
+		}
+
+		return out, nil
 	}
-	return collectutil.NewCompleteResult(collectutil.RunOutput{})
+
+	out, err := collectutil.NewCompleteResult(collectutil.RunOutput{})
+	if err != nil {
+		return out, fmt.Errorf("complete result: %w", err)
+	}
+
+	return out, nil
 }

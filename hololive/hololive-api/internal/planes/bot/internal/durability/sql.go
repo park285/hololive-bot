@@ -92,8 +92,9 @@ func requireIdentity(name, value string) (string, error) {
 func requireBoundedIdentity(name, value string, runeLimit int) (string, error) {
 	trimmed, err := requireIdentity(name, value)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("require identity: %w", err)
 	}
+
 	if utf8.RuneCountInString(trimmed) > runeLimit {
 		return "", errors.Join(ErrInvalidArgument,
 			fmt.Errorf("%s must be at most %d runes", name, runeLimit))
@@ -107,6 +108,7 @@ func requireMessageIdentity(value string) (string, error) {
 	if identity == "" {
 		return "", errors.Join(ErrInvalidArgument, errors.New("message id must not be empty"))
 	}
+
 	if utf8.RuneCountInString(identity) > messageIDRuneLimit {
 		return "", errors.Join(ErrInvalidArgument,
 			fmt.Errorf("message id must be at most %d runes", messageIDRuneLimit))
@@ -116,7 +118,12 @@ func requireMessageIdentity(value string) (string, error) {
 }
 
 func requireRoomID(value string) (string, error) {
-	return requireBoundedIdentity("room id", value, roomIDRuneLimit)
+	out, err := requireBoundedIdentity("room id", value, roomIDRuneLimit)
+	if err != nil {
+		return out, fmt.Errorf("require bounded identity: %w", err)
+	}
+
+	return out, nil
 }
 
 func requireBoundedCommandKind(value string) (string, error) {
@@ -132,8 +139,9 @@ func requireBoundedCommandKind(value string) (string, error) {
 func requireClientRequestID(value string) (string, error) {
 	trimmed, err := requireIdentity("client request id", value)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("require identity: %w", err)
 	}
+
 	if !clientRequestIDPattern.MatchString(trimmed) {
 		return "", errors.Join(ErrInvalidArgument,
 			fmt.Errorf("client request id %q must match %s", trimmed, clientRequestIDPattern))
@@ -145,30 +153,35 @@ func requireClientRequestID(value string) (string, error) {
 func requireOperatorActor(value string) (string, error) {
 	actor, err := requireBoundedIdentity("operator actor", value, operatorActorRuneLimit)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("require bounded identity: %w", err)
 	}
+
 	if !operatorActorPattern.MatchString(actor) {
 		return "", errors.Join(ErrInvalidArgument,
 			errors.New("operator actor contains unsupported characters"))
 	}
+
 	return actor, nil
 }
 
 func requireOperatorReason(value string) (string, error) {
 	reason, err := requireIdentity("operator reason", value)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("require identity: %w", err)
 	}
+
 	if len(reason) > operatorReasonByteLimit {
 		return "", errors.Join(ErrInvalidArgument,
 			fmt.Errorf("operator reason must be at most %d bytes", operatorReasonByteLimit))
 	}
+
 	for _, r := range reason {
 		if unicode.IsControl(r) {
 			return "", errors.Join(ErrInvalidArgument,
 				errors.New("operator reason must not contain control characters"))
 		}
 	}
+
 	return reason, nil
 }
 
@@ -199,6 +212,7 @@ func clampColumnText(value string, limitBytes int) string {
 		if r != utf8.RuneError || size != 1 {
 			break
 		}
+
 		head = head[:len(head)-1]
 	}
 

@@ -21,7 +21,6 @@
 package scheduler
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -32,7 +31,7 @@ import (
 
 func TestScheduler_ZeroRequestInterval_NoopRL(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0})
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 첫 호출은 초기화 역할을 하고, 두 번째 호출이 실제 무대기 경로를 검증한다.
 	require.NoError(t, scheduler.rateLimiter.Wait(ctx))
@@ -49,12 +48,13 @@ func TestDispatchDueJobs_WorkerChannelFullKeepsAnchoredNextRunAt(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	scheduledAt := time.Now().Add(-time.Second).UTC().Truncate(time.Second)
 	job := &Job{
-		ChannelID: "channel-1",
-		Poller:    &togglePollerStub{name: "videos"},
+		ChannelID: testChannelID,
+		Poller:    &togglePollerStub{name: testPollerVideos},
 		Priority:  PriorityNormal,
 		NextRunAt: scheduledAt,
 		Interval:  5 * time.Minute,
 	}
+
 	job.index = 0
 	scheduler.jobs = jobHeap{job}
 

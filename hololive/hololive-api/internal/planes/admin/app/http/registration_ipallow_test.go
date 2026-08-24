@@ -16,6 +16,7 @@ func adminAllowlistRouter(t *testing.T, allowedIPs []string) *gin.Engine {
 	t.Helper()
 
 	cfg := testRouterConfig()
+
 	cfg.Server.AdminAllowedIPs = allowedIPs
 
 	router, err := ProvideAPIRouter(
@@ -29,6 +30,7 @@ func adminAllowlistRouter(t *testing.T, allowedIPs []string) *gin.Engine {
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)
 	}
+
 	return router
 }
 
@@ -38,12 +40,16 @@ func loginStatus(t *testing.T, router *gin.Engine, remoteAddr string, headers ma
 	// 빈 본문이므로 allowlist를 통과하면 핸들러의 ShouldBindJSON이 400을 반환한다.
 	// allowlist에서 차단되면 핸들러에 도달하지 못하고 403이 된다.
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/login", http.NoBody)
+
 	req.RemoteAddr = remoteAddr
+
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
+
 	return rec.Code
 }
 
@@ -51,12 +57,16 @@ func registerStatus(t *testing.T, router *gin.Engine, remoteAddr string, headers
 	t.Helper()
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/register", http.NoBody)
+
 	req.RemoteAddr = remoteAddr
+
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
+
 	return rec.Code
 }
 

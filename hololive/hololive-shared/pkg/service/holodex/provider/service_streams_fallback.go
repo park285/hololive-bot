@@ -32,14 +32,22 @@ func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamF
 
 	if streams := state.streams(); len(streams) > 0 {
 		cacheStreamsByOrg(ctx, plan, streams)
+
 		return streams, nil
 	}
+
 	if !primary.HasFailures() {
 		cacheStreamsByOrg(ctx, plan, nil)
+
 		return nil, nil
 	}
 
-	return h.resolveEmptyPrimary(ctx, plan, primary, state)
+	out, err := h.resolveEmptyPrimary(ctx, plan, primary, state)
+	if err != nil {
+		return out, fmt.Errorf("resolve empty primary: %w", err)
+	}
+
+	return out, nil
 }
 
 func (h *Service) resolveEmptyPrimary(
@@ -52,9 +60,12 @@ func (h *Service) resolveEmptyPrimary(
 	if err != nil {
 		return nil, errors.Join(state.primaryError(plan), fmt.Errorf("official schedule fallback: %w", err))
 	}
+
 	if secondary.Outcome != "skipped" && secondary.Outcome != "blocked" {
 		return state.streams(), nil
 	}
+
+	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return nil, state.primaryError(plan)
 }
 
@@ -66,6 +77,7 @@ func getCachedStreamsByOrg(ctx context.Context, plan *streamFetchPlan) ([]*domai
 	if plan == nil || plan.cacheGet == nil {
 		return nil, false
 	}
+
 	return plan.cacheGet(ctx, plan.resolvedOrg, plan.hours)
 }
 
@@ -75,9 +87,9 @@ func (h *Service) runStreamPrimaryFetches(
 	targetOrgs []string,
 	state *streamFetchState,
 ) fallback.PrimaryResult[string] {
-	return fallback.RunPrimary(ctx, targetOrgs, fallback.FetchPlan[string, struct{}]{
+	return fallback.FetchPlan[string, struct{}]{
 		Parallelism: holodexOrgFetchParallelism(plan.resolvedOrg, h.concurrency.OrgAllParallelism),
-	}, func(fetchCtx context.Context, targetOrg string) error {
+	}.RunPrimary(ctx, targetOrgs, func(fetchCtx context.Context, targetOrg string) error {
 		return h.fetchAndStoreStreamsForOrg(fetchCtx, targetOrg, plan, state)
 	})
 }
@@ -95,25 +107,32 @@ func (h *Service) fetchAndStoreStreamsForOrg(
 			slog.String("org", targetOrg),
 			slog.String("status", plan.status),
 			slog.Any("error", err))
-		return err
+
+		return fmt.Errorf("fetch streams by org: %w", err)
 	}
 
 	filtered := h.filter.FilterHololiveStreams(streams)
+
 	filtered = filterStreamsByRequestedOrg(filtered, plan.resolvedOrg)
+
 	if plan.primaryFilter != nil {
 		filtered = plan.primaryFilter(filtered)
 	}
+
 	state.addStreams(filtered)
+
 	return nil
 }
 
 func (state *streamFetchState) addStreams(streams []*domain.Stream) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
+
 	for _, stream := range streams {
 		if stream == nil || state.seen[stream.ID] {
 			continue
 		}
+
 		state.seen[stream.ID] = true
 		state.allStreams = append(state.allStreams, stream)
 	}
@@ -123,36 +142,45 @@ func (state *streamFetchState) addError(err error) {
 	if err == nil {
 		return
 	}
+
 	state.mu.Lock()
+
 	state.fetchErrors = append(state.fetchErrors, err)
 	state.mu.Unlock()
 }
 
 func (state *streamFetchState) replaceStreams(streams []*domain.Stream) {
 	state.mu.Lock()
+
 	state.allStreams = append(state.allStreams[:0], streams...)
 	state.seen = make(map[string]bool, len(streams))
+
 	for _, stream := range streams {
 		if stream != nil {
 			state.seen[stream.ID] = true
 		}
 	}
+
 	state.mu.Unlock()
 }
 
 func (state *streamFetchState) streams() []*domain.Stream {
 	state.mu.Lock()
 	defer state.mu.Unlock()
+
 	return append([]*domain.Stream(nil), state.allStreams...)
 }
 
 func (state *streamFetchState) primaryError(plan *streamFetchPlan) error {
 	state.mu.Lock()
+
 	joined := errors.Join(state.fetchErrors...)
 	state.mu.Unlock()
+
 	if joined != nil {
 		return fmt.Errorf("holodex %s primary failed: %w", plan.operation, joined)
 	}
+
 	return fmt.Errorf("holodex %s primary failed", plan.operation)
 }
 
@@ -164,6 +192,7 @@ func (h *Service) scheduleStreamRetryIfNeeded(
 	if !primary.HasFailures() || plan.retry == nil {
 		return
 	}
+
 	h.scheduleRetryIfNeeded(ctx, plan.retryKey, func(retryCtx context.Context) {
 		plan.retry(retryCtx, plan.resolvedOrg, plan.hours)
 	})
@@ -176,7 +205,8 @@ func (h *Service) runOfficialScheduleFallback(
 	state *streamFetchState,
 ) (fallback.SecondaryExecution, error) {
 	policy := fallback.Policy{Trigger: fallback.TriggerOnEmptyPrimaryWithError}
-	return fallback.RunSecondary(ctx, fallback.SecondaryPlan{
+
+	out, err := fallback.RunSecondary(ctx, fallback.SecondaryPlan{
 		Service:   "holodex",
 		Operation: plan.operation,
 		Trigger:   policy.Trigger,
@@ -185,6 +215,11 @@ func (h *Service) runOfficialScheduleFallback(
 			return h.runOfficialScheduleFallbackFetch(runCtx, plan, primary, state)
 		},
 	})
+	if err != nil {
+		return out, fmt.Errorf("run secondary: %w", err)
+	}
+
+	return out, nil
 }
 
 func (h *Service) shouldRunOfficialScheduleFallback(
@@ -210,16 +245,20 @@ func (h *Service) runOfficialScheduleFallbackFetch(
 	state *streamFetchState,
 ) (fallback.SecondaryResult, error) {
 	h.logger.Warn(plan.fallbackLogMessage, slog.Int("failed_orgs", len(primary.Failed)))
+
 	streams, err := h.scraper.FetchUpcomingStreams(ctx, plan.hours)
 	if err != nil {
-		return fallback.SecondaryResult{}, err
+		return fallback.SecondaryResult{}, fmt.Errorf("fetch upcoming streams: %w", err)
 	}
+
 	if plan.fallbackFilter != nil {
 		streams = plan.fallbackFilter(streams)
 	}
+
 	streams = limitStreamList(streams)
 	cacheStreamsByOrg(ctx, plan, streams)
 	state.replaceStreams(streams)
+
 	return fallback.SecondaryResult{Items: len(streams), Successes: 1}, nil
 }
 

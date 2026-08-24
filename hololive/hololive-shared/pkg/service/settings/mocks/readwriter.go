@@ -21,6 +21,7 @@
 package mocks
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/service/settings"
@@ -37,12 +38,18 @@ func (m *ReadWriter) Get() settings.Settings {
 	if m.GetFunc != nil {
 		return m.GetFunc()
 	}
+
 	return settings.Settings{}
 }
 
 func (m *ReadWriter) Update(newSettings settings.Settings) error {
 	if m.UpdateFunc != nil {
-		return m.UpdateFunc(newSettings)
+		if err := m.UpdateFunc(newSettings); err != nil {
+			return fmt.Errorf("update func: %w", err)
+		}
+
+		return nil
 	}
-	return fmt.Errorf("settings mock: UpdateFunc not set")
+
+	return errors.New("settings mock: UpdateFunc not set")
 }

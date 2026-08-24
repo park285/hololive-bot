@@ -77,7 +77,7 @@ func pickPreferredSnapshotCandidate(entries []*snapshotEntry) *matchCandidate {
 	}
 
 	for _, entry := range entries {
-		if entry != nil && entry.candidate != nil && entry.candidate.org == "Hololive" {
+		if entry != nil && entry.candidate != nil && entry.candidate.org == orgHololive {
 			return entry.candidate
 		}
 	}

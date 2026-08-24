@@ -23,35 +23,38 @@ package runtime
 import (
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
-
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-// ProvideLLMCostTracker는 6개 provider가 공유할 월 토큰 cost tracker를 만든다. ceiling<=0 또는 cache
+// ProvideLLMCostTracker는 6개 provider가 공유할 월 토큰 cost tracker를 만든다. 다만 ceiling이 0 이하이거나 cache
 // 미가용이면 true-nil interface를 반환해 관측을 비활성한다(typed-nil interface 함정 회피).
 func ProvideLLMCostTracker(cacheClient cache.Client, monthlyCeiling int64, logger *slog.Logger) llm.CostTracker {
 	if tracker := llm.NewValkeyCostCeiling(cacheClient, monthlyCeiling, logger); tracker != nil {
 		return tracker
 	}
+
 	return nil
 }
 
-// ProvideMajorEventLLMClient - MajorEvent 전용 LLM 클라이언트 생성 (비활성 시 nil)
+// ProvideMajorEventLLMClient - MajorEvent 전용 LLM 클라이언트 생성 (비활성 시 nil).
 func ProvideMajorEventLLMClient(cliproxy settings.CliproxyConfig, tracker llm.CostTracker, logger *slog.Logger) llm.Client {
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Cliproxy LLM disabled; event summaries will use template fallback")
+
 		return nil
 	}
+
 	if cliproxy.BaseURL == "" || cliproxy.Model == "" {
 		logger.Error("Cliproxy LLM configuration incomplete",
 			slog.Bool("baseURL_set", cliproxy.BaseURL != ""),
 			slog.Bool("model_set", cliproxy.Model != ""),
 		)
+
 		return nil
 	}
+
 	client, err := llm.NewClient(cliproxy.BaseURL, cliproxy.APIKey, cliproxy.Model, logger,
 		llm.WithWebSearch(true),
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
@@ -59,11 +62,14 @@ func ProvideMajorEventLLMClient(cliproxy settings.CliproxyConfig, tracker llm.Co
 	)
 	if err != nil {
 		logger.Error("Cliproxy LLM initialization failed", slog.Any("error", err))
+
 		return nil
 	}
+
 	logger.Info("Cliproxy LLM enabled for event summaries (responses + web_search)",
 		slog.String("model", cliproxy.Model),
 		slog.String("reasoning_effort", cliproxy.ReasoningEffort))
+
 	return client
 }
 
@@ -71,8 +77,10 @@ func ProvideMemberNewsLLMClient(cliproxy settings.CliproxyConfig, llmConfig *set
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
+
 	if !cliproxy.Enabled || cliproxy.APIKey == "" {
 		logger.Info("Member news LLM disabled")
+
 		return nil
 	}
 
@@ -86,6 +94,7 @@ func ProvideMemberNewsLLMClient(cliproxy settings.CliproxyConfig, llmConfig *set
 			slog.Bool("baseURL_set", cliproxy.BaseURL != ""),
 			slog.Bool("model_set", model != ""),
 		)
+
 		return nil
 	}
 
@@ -96,6 +105,7 @@ func ProvideMemberNewsLLMClient(cliproxy settings.CliproxyConfig, llmConfig *set
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
 		llm.WithCostTracker(tracker),
 	}
+
 	if llmConfig.MemberNewsTemperature > 0 {
 		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
 	}
@@ -103,14 +113,17 @@ func ProvideMemberNewsLLMClient(cliproxy settings.CliproxyConfig, llmConfig *set
 	client, err := llm.NewPresetClient(cliproxy.BaseURL, cliproxy.APIKey, model, logger, opts...)
 	if err != nil {
 		logger.Error("Member news LLM initialization failed", slog.Any("error", err))
+
 		return nil
 	}
+
 	tempApplied := llmConfig.MemberNewsTemperature > 0
 	logger.Info("Member news LLM enabled",
 		slog.String("model", model),
 		slog.Bool("temperature_applied", tempApplied),
 		slog.Float64("temperature", llmConfig.MemberNewsTemperature),
 	)
+
 	return client
 }
 
@@ -126,19 +139,24 @@ func buildConsensusLLMClient(cliproxy settings.CliproxyConfig, logger *slog.Logg
 	if !spec.enabled || !cliproxy.Enabled || cliproxy.APIKey == "" {
 		return nil
 	}
+
 	if cliproxy.BaseURL == "" || spec.model == "" {
 		logger.Warn(spec.incompleteWarn)
+
 		return nil
 	}
 
 	client, err := spec.newClient(cliproxy.BaseURL, cliproxy.APIKey, spec.model, logger)
 	if err != nil {
 		logger.Error(spec.incompleteWarn, slog.Any("error", err))
+
 		return nil
 	}
+
 	if spec.onSuccess != nil {
 		spec.onSuccess(spec.model)
 	}
+
 	return client
 }
 
@@ -147,10 +165,12 @@ func ProvideMemberNewsReviewerClient(cliproxy settings.CliproxyConfig, llmConfig
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
+
 	model := llmConfig.MemberNews.ReviewerModel
 	if model == "" {
 		model = llmConfig.MemberNewsModel
 	}
+
 	if model == "" {
 		model = cliproxy.Model
 	}
@@ -179,6 +199,7 @@ func ProvideMajorEventReviewerClient(cliproxy settings.CliproxyConfig, llmConfig
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
+
 	model := llmConfig.MajorEvent.ReviewerModel
 	if model == "" {
 		model = cliproxy.Model
@@ -203,6 +224,7 @@ func ProvideMajorEventAdjudicatorClient(cliproxy settings.CliproxyConfig, llmCon
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
+
 	model := llmConfig.MajorEvent.AdjudicatorModel
 	if model == "" {
 		model = cliproxy.Model
@@ -228,10 +250,12 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy settings.CliproxyConfig, llmCon
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
+
 	model := llmConfig.MemberNews.AdjudicatorModel
 	if model == "" {
 		model = llmConfig.MemberNewsModel
 	}
+
 	if model == "" {
 		model = cliproxy.Model
 	}
@@ -243,6 +267,7 @@ func ProvideMemberNewsAdjudicatorClient(cliproxy settings.CliproxyConfig, llmCon
 		llm.WithReasoningEffort(cliproxy.ReasoningEffort),
 		llm.WithCostTracker(tracker),
 	}
+
 	if llmConfig.MemberNewsTemperature > 0 {
 		opts = append(opts, llm.WithTemperature(llmConfig.MemberNewsTemperature))
 	}

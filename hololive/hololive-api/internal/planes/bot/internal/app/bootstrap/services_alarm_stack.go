@@ -2,18 +2,18 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-
-	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
 type AlarmYouTubeStackComponents struct {
@@ -29,8 +29,8 @@ func InitAlarmYouTubeStack(
 	appConfig *configsettings.Config,
 	infra *sharedmodules.InfraModule,
 	foundation *ScraperHolodexProfileFoundation,
-	irisClient iris.Sender,
-	formatter *messageformatter.ResponseFormatter,
+	_ iris.Sender,
+	_ *messageformatter.ResponseFormatter,
 	logger *slog.Logger,
 ) (*AlarmYouTubeStackComponents, error) {
 	alarmRepository := ProvideAlarmRepository(infra.Postgres, logger)
@@ -45,7 +45,7 @@ func InitAlarmYouTubeStack(
 		logger,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init alarm mode components: %w", err)
 	}
 
 	memberMatcher := ProvideMatcher(

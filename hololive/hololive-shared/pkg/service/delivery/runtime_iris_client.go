@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"strings"
@@ -13,18 +14,19 @@ import (
 const (
 	runtimeIrisReplyRetryMax          = 3
 	runtimeIrisBaseURLResolveInterval = time.Second
-	// runtimeIrisReplyAttemptTimeout은 SDK 기본 per-attempt timeout(http.Client.Timeout)이며,
+	// 상수 runtimeIrisReplyAttemptTimeout은 SDK 기본 per-attempt timeout(http.Client.Timeout)이며,
 	// hololive는 reply 경로에서 이를 override하지 않으므로 grace 산정의 기준값이다.
 	runtimeIrisReplyAttemptTimeout = 10 * time.Second
 	staleClientCloseGraceMargin    = 10 * time.Second
-	// defaultStaleClientCloseGrace는 rotate-out된 client에서 최악의 경우 in-flight reply보다
-	// 오래 살아 있어야 한다(per-attempt timeout × retry + margin). reply retry는 캡처된 옛
+	// 상수 defaultStaleClientCloseGrace는 rotate-out된 client에서 최악의 경우 in-flight reply보다
+	// 오래 살아 있어야 한다(per-attempt timeout × retry + margin). 이때 reply retry는 캡처된 옛
 	// client에 고정되므로, grace가 더 짧으면 rotation 시 in-flight reply가 끊긴다.
 	defaultStaleClientCloseGrace = runtimeIrisReplyAttemptTimeout*runtimeIrisReplyRetryMax + staleClientCloseGraceMargin
 )
 
 type RuntimeIrisClient struct {
 	*iris.RebindingClient
+
 	resolver    *runtimeIrisBaseURLResolver
 	h3DialGuard *runtimeIrisH3DialGuard
 }
@@ -50,6 +52,7 @@ func NewRuntimeIrisClient(
 
 	h3DialGuard := newRuntimeIrisH3DialGuard(resolver.resolve, logger)
 	clientOpts := make([]iris.ClientOption, 0, len(opts)+3)
+
 	clientOpts = append(clientOpts,
 		iris.WithLogger(logger),
 		iris.WithReplyRetry(runtimeIrisReplyRetryMax),
@@ -70,14 +73,25 @@ func NewRuntimeIrisClient(
 }
 
 func (c *RuntimeIrisClient) ValidateBaseURL() error {
-	_, err := c.resolver.resolve()
-	return err
+	if _, err := c.resolver.resolve(); err != nil {
+		return fmt.Errorf("resolve base URL: %w", err)
+	}
+
+	return nil
 }
 
 func (c *RuntimeIrisClient) allowH3Dial(ctx context.Context, ip net.IP) error {
-	return c.h3DialGuard.allow(ctx, ip)
+	if err := c.h3DialGuard.allow(ctx, ip); err != nil {
+		return fmt.Errorf("allow: %w", err)
+	}
+
+	return nil
 }
 
 func (c *RuntimeIrisClient) SendMessageWithClientRequestID(ctx context.Context, room, message, clientRequestID string) error {
-	return c.SendMessage(ctx, room, message, iris.WithClientRequestID(clientRequestID))
+	if err := c.SendMessage(ctx, room, message, iris.WithClientRequestID(clientRequestID)); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }

@@ -30,9 +30,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/valkey-io/valkey-go"
 )
 
 const (
@@ -115,8 +116,9 @@ func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *domain.Comma
 	if !isExpensiveHistoryCommand(commandKey) {
 		return nil
 	}
+
 	if err := p.validateExpensiveHistoryAdmission(cmdCtx); err != nil {
-		return err
+		return fmt.Errorf("validate expensive history admission: %w", err)
 	}
 
 	member, err := commandAdmissionMember(cmdCtx.MessageID)
@@ -128,13 +130,16 @@ func (p *commandAdmissionPolicy) Admit(ctx context.Context, cmdCtx *domain.Comma
 		{bucket: commandAdmissionBucket("history:room", cmdCtx.Room), limit: expensiveHistoryRoomLimit},
 		{bucket: commandAdmissionBucket("history:user", cmdCtx.UserID), limit: expensiveHistoryUserLimit},
 	}
+
 	decision, err := p.limiter.Admit(ctx, member, checks)
 	if err != nil {
 		return fmt.Errorf("%w: evaluate command rate limit: %w", errCommandAdmissionUnavailable, err)
 	}
+
 	if !decision.Allowed {
 		return fmt.Errorf("%w: retry after %s", errCommandRateLimited, decision.RetryAfter)
 	}
+
 	return nil
 }
 
@@ -142,9 +147,11 @@ func (p *commandAdmissionPolicy) validateExpensiveHistoryAdmission(cmdCtx *domai
 	if p == nil || p.initErr != nil || p.limiter == nil {
 		return fmt.Errorf("%w: limiter is not configured", errCommandAdmissionUnavailable)
 	}
+
 	if cmdCtx == nil || !isStableAdmissionUserID(cmdCtx.UserID) || strings.TrimSpace(cmdCtx.Room) == "" {
 		return fmt.Errorf("%w: stable user and room identities are required", errCommandAdmissionUnavailable)
 	}
+
 	return nil
 }
 
@@ -157,13 +164,15 @@ func newAtomicCommandAdmissionLimiter(cacheClient cache.LowLevelCache) (*atomicC
 	if cacheClient == nil {
 		return nil, errors.New("cache service must not be nil")
 	}
+
 	return &atomicCommandAdmissionLimiter{cacheClient: cacheClient, now: time.Now}, nil
 }
 
 func (l *atomicCommandAdmissionLimiter) Admit(ctx context.Context, member string, checks []commandAdmissionCheck) (commandAdmissionDecision, error) {
 	if err := l.validateChecks(checks); err != nil {
-		return commandAdmissionDecision{}, err
+		return commandAdmissionDecision{}, fmt.Errorf("validate checks: %w", err)
 	}
+
 	if strings.TrimSpace(member) == "" {
 		return commandAdmissionDecision{}, errors.New("admission member must not be empty")
 	}
@@ -183,27 +192,38 @@ func (l *atomicCommandAdmissionLimiter) Admit(ctx context.Context, member string
 		).
 		Build()
 	results := l.cacheClient.DoMulti(ctx, cmd)
+
 	if len(results) != 1 {
 		return commandAdmissionDecision{}, fmt.Errorf("evaluate admission script: unexpected result count: %d", len(results))
 	}
+
 	if err := results[0].Error(); err != nil {
 		return commandAdmissionDecision{}, fmt.Errorf("evaluate admission script: %w", err)
 	}
-	return parseCommandAdmissionResult(results[0])
+
+	out, err := parseCommandAdmissionResult(results[0])
+	if err != nil {
+		return out, fmt.Errorf("parse command admission result: %w", err)
+	}
+
+	return out, nil
 }
 
 func (l *atomicCommandAdmissionLimiter) validateChecks(checks []commandAdmissionCheck) error {
 	if l == nil || l.cacheClient == nil {
 		return errors.New("cache service must not be nil")
 	}
+
 	if len(checks) != 2 {
 		return fmt.Errorf("expected two admission checks, got %d", len(checks))
 	}
+
 	for _, check := range checks {
 		if check.bucket == "" || check.limit <= 0 {
 			return errors.New("admission bucket and limit must be configured")
 		}
 	}
+
 	return nil
 }
 
@@ -211,6 +231,7 @@ func (l *atomicCommandAdmissionLimiter) nowFunc() func() time.Time {
 	if l.now == nil {
 		return time.Now
 	}
+
 	return l.now
 }
 
@@ -240,20 +261,25 @@ func parseCommandAdmissionResult(result valkey.ValkeyResult) (commandAdmissionDe
 	if err != nil {
 		return commandAdmissionDecision{}, fmt.Errorf("parse admission script result: %w", err)
 	}
+
 	if len(values) != 2 {
 		return commandAdmissionDecision{}, fmt.Errorf("invalid admission script result length: %d", len(values))
 	}
+
 	allowed, err := values[0].AsInt64()
 	if err != nil {
 		return commandAdmissionDecision{}, fmt.Errorf("parse admission result: %w", err)
 	}
+
 	retryAfterMS, err := values[1].AsInt64()
 	if err != nil {
 		return commandAdmissionDecision{}, fmt.Errorf("parse admission retry after: %w", err)
 	}
+
 	if retryAfterMS < 0 {
 		return commandAdmissionDecision{}, fmt.Errorf("invalid admission retry after: %d", retryAfterMS)
 	}
+
 	return commandAdmissionDecision{Allowed: allowed == 1, RetryAfter: time.Duration(retryAfterMS) * time.Millisecond}, nil
 }
 

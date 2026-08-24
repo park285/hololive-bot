@@ -15,8 +15,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-const emptyChannelSubscriberCacheTTL = 30 * time.Second
-const channelSubscriberLoadTimeout = 5 * time.Second
+const (
+	emptyChannelSubscriberCacheTTL = 30 * time.Second
+	channelSubscriberLoadTimeout   = 5 * time.Second
+)
 
 var channelSubscriberLoadGroup singleflight.Group
 
@@ -27,7 +29,7 @@ func LookupChannelSubscribersByType(
 	alarmType domain.AlarmType,
 ) ([]string, error) {
 	if cacheClient == nil {
-		return nil, fmt.Errorf("lookup channel subscribers by type: cache service is nil")
+		return nil, errors.New("lookup channel subscribers by type: cache service is nil")
 	}
 
 	normalizedChannelID := strings.TrimSpace(channelID)
@@ -36,6 +38,7 @@ func LookupChannelSubscribersByType(
 	}
 
 	key := sharedalarmkeys.BuildChannelSubscriberKey(normalizedChannelID, alarmType)
+
 	subscribers, err := cacheClient.SMembers(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -63,12 +66,21 @@ func ResolveChannelSubscribersByType(
 
 	if cacheClient != nil {
 		subscribers, resolved, err := resolveChannelSubscribersFromCache(ctx, cacheClient, normalizedChannelID, alarmType, db == nil)
-		if resolved || err != nil {
-			return subscribers, err
+		if err != nil {
+			return subscribers, fmt.Errorf("resolve channel subscribers from cache: %w", err)
+		}
+
+		if resolved {
+			return subscribers, nil
 		}
 	}
 
-	return resolveChannelSubscribersFromDB(ctx, cacheClient, db, normalizedChannelID, alarmType)
+	out, err := resolveChannelSubscribersFromDB(ctx, cacheClient, db, normalizedChannelID, alarmType)
+	if err != nil {
+		return out, fmt.Errorf("resolve channel subscribers from DB: %w", err)
+	}
+
+	return out, nil
 }
 
 func resolveChannelSubscribersFromCache(
@@ -81,9 +93,11 @@ func resolveChannelSubscribersFromCache(
 	subscribers, err := LookupChannelSubscribersByType(ctx, cacheClient, channelID, alarmType)
 	if err != nil {
 		observeAlarmSubscriberCacheError("lookup")
+
 		if requireCacheSuccess {
 			return nil, true, fmt.Errorf("resolve channel subscribers by type: %w", err)
 		}
+
 		return nil, false, nil
 	}
 
@@ -93,7 +107,11 @@ func resolveChannelSubscribersFromCache(
 	}
 
 	resolved, err := resolveKnownEmptySubscriberCache(ctx, cacheClient, channelID, alarmType, requireCacheSuccess)
-	return nil, resolved, err
+	if err != nil {
+		return nil, resolved, fmt.Errorf("resolve known empty subscriber cache: %w", err)
+	}
+
+	return nil, resolved, nil
 }
 
 func resolveKnownEmptySubscriberCache(
@@ -109,9 +127,11 @@ func resolveKnownEmptySubscriberCache(
 	}
 
 	observeAlarmSubscriberCacheError("check_empty")
+
 	if requireCacheSuccess {
 		return true, fmt.Errorf("resolve channel subscribers by type: check empty subscriber cache: %w", err)
 	}
+
 	return false, nil
 }
 
@@ -125,6 +145,7 @@ func resolveChannelSubscribersFromDB(
 	alarms, err := loadChannelSubscriberAlarms(ctx, db, channelID, alarmType)
 	if err != nil {
 		observeAlarmSubscriberDBFallback("error")
+
 		return nil, fmt.Errorf("resolve channel subscribers by type: %w", err)
 	}
 
@@ -132,8 +153,10 @@ func resolveChannelSubscribersFromDB(
 	if len(subscribers) == 0 {
 		observeAlarmSubscriberDBFallback("miss")
 		markEmptyChannelSubscriberCache(ctx, cacheClient, channelID, alarmType)
+
 		return nil, nil
 	}
+
 	observeAlarmSubscriberDBFallback("hit")
 
 	warmChannelSubscriberCache(ctx, cacheClient, alarms, channelID, alarmType)
@@ -145,6 +168,7 @@ func markEmptyChannelSubscriberCache(ctx context.Context, cacheClient cache.Clie
 	if cacheClient == nil {
 		return
 	}
+
 	if err := cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType), "1", emptyChannelSubscriberCacheTTL); err != nil {
 		observeAlarmSubscriberCacheError("mark_empty")
 	}
@@ -157,9 +181,11 @@ func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, a
 
 	subscribers := extractSubscriberIDsByType(alarms, alarmType)
 	key := sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
+
 	if err := writeWarmSet(ctx, cacheClient, key, subscribers, "channel subscribers"); err != nil {
 		observeAlarmSubscriberCacheError("warm")
 	}
+
 	if err := cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
 		observeAlarmSubscriberCacheError("clear_empty")
 	}
@@ -169,6 +195,7 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 	if db == nil {
 		return nil, errors.New("load channel subscriber alarms: database is nil")
 	}
+
 	if !domain.AlarmTypes(domain.AllAlarmTypes).Contains(alarmType) {
 		return nil, nil
 	}
@@ -179,7 +206,12 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 		return queryChannelSubscriberAlarms(ctx, db, normalizedChannelID, alarmType)
 	})
 
-	return waitForChannelSubscriberAlarms(ctx, resultCh)
+	out, err := waitForChannelSubscriberAlarms(ctx, resultCh)
+	if err != nil {
+		return out, fmt.Errorf("wait for channel subscriber alarms: %w", err)
+	}
+
+	return out, nil
 }
 
 func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
@@ -196,13 +228,16 @@ func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID
 	defer rows.Close()
 
 	alarms := make([]*domain.Alarm, 0)
+
 	for rows.Next() {
 		alarmRecord, err := scanAlarmRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
 		}
+
 		alarms = append(alarms, alarmRecord)
 	}
+
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("load channel subscriber alarms: %w", rowsErr)
 	}
@@ -217,7 +252,12 @@ func waitForChannelSubscriberAlarms(ctx context.Context, resultCh <-chan singlef
 	case <-waitCtx.Done():
 		return nil, fmt.Errorf("load channel subscriber alarms: wait for shared query: %w", waitCtx.Err())
 	case result := <-resultCh:
-		return resolveChannelSubscriberLoadResult(result)
+		out, err := resolveChannelSubscriberLoadResult(result)
+		if err != nil {
+			return out, fmt.Errorf("resolve channel subscriber load result: %w", err)
+		}
+
+		return out, nil
 	}
 }
 
@@ -225,6 +265,7 @@ func channelSubscriberWaitContext(ctx context.Context) context.Context {
 	if ctx != nil {
 		return ctx
 	}
+
 	return context.Background()
 }
 
@@ -232,6 +273,7 @@ func resolveChannelSubscriberLoadResult(result singleflight.Result) ([]*domain.A
 	if result.Err != nil {
 		return nil, result.Err
 	}
+
 	if result.Shared {
 		observeAlarmSubscriberDBSingleflightShared()
 	}
@@ -260,6 +302,7 @@ func cloneAlarmRecords(alarms []*domain.Alarm) []*domain.Alarm {
 		if len(alarmRecord.AlarmTypes) > 0 {
 			recordCopy.AlarmTypes = append(domain.AlarmTypes(nil), alarmRecord.AlarmTypes...)
 		}
+
 		cloned = append(cloned, &recordCopy)
 	}
 
@@ -291,11 +334,13 @@ func appendSubscriberIDByType(
 	if subscriberID == "" {
 		return subscribers
 	}
+
 	if _, exists := seen[subscriberID]; exists {
 		return subscribers
 	}
 
 	seen[subscriberID] = struct{}{}
+
 	return append(subscribers, subscriberID)
 }
 
@@ -303,10 +348,12 @@ func alarmRecordMatchesType(alarmRecord *domain.Alarm, alarmType domain.AlarmTyp
 	if alarmRecord == nil {
 		return false
 	}
+
 	alarmTypes := alarmRecord.AlarmTypes
 	if len(alarmTypes) == 0 {
 		alarmTypes = domain.DefaultAlarmTypes
 	}
+
 	return alarmTypes.Contains(alarmType)
 }
 
@@ -319,6 +366,7 @@ func normalizeSubscriberIDs(subscribers []string) []string {
 		if trimmedSubscriberID == "" {
 			continue
 		}
+
 		if _, exists := seen[trimmedSubscriberID]; exists {
 			continue
 		}

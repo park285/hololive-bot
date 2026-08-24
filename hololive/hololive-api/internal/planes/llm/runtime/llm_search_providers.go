@@ -25,14 +25,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
-
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -43,12 +41,14 @@ func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) share
 
 	if !exaConfig.Enabled || strings.TrimSpace(exaConfig.APIKey) == "" {
 		logger.Info("Exa search disabled")
+
 		return nil
 	}
 
 	httpClient := httputil.NewExternalAPIClient(15 * time.Second)
 	client := mesummarizer.NewExaMCPClient(exaConfig.Endpoint, exaConfig.APIKey, httpClient, logger)
 	logger.Info("Exa search enabled", slog.String("endpoint", exaConfig.Endpoint))
+
 	return client
 }
 
@@ -58,6 +58,7 @@ func buildMajorEventSummarizer(exaConfig *settings.LLMSchedulerConfig, cacheClie
 	majorEventReviewer := guardLLMClient(ProvideMajorEventReviewerClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger), guards)
 	majorEventAdjudicator := guardLLMClient(ProvideMajorEventAdjudicatorClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger), guards)
 	exaSearcher := provideExaSearcher(exaConfig.Exa, logger)
+
 	return provideEventSummarizer(exaConfig.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, guards, logger)
 }
 
@@ -76,6 +77,7 @@ func provideEventSummarizer(
 	}
 
 	opts := make([]mesummarizer.SummarizerOption, 0, 1)
+
 	if majorEventConfig.Enabled && reviewerClient != nil {
 		opts = append(opts, mesummarizer.WithSummarizerConsensus(
 			reviewerClient,
@@ -95,9 +97,12 @@ func provideEventSummarizer(
 	}
 
 	var promptGuard *promptguard.Guard
+
 	if guards != nil {
 		promptGuard = guards.prompt
 	}
+
 	opts = append(opts, mesummarizer.WithPromptGuard(promptGuard))
+
 	return mesummarizer.NewEventSummarizer(llmClient, cacheClient, searcher, logger, opts...)
 }

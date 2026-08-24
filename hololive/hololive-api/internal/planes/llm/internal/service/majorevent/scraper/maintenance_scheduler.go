@@ -22,7 +22,7 @@ package scraper
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -67,20 +67,24 @@ func NewMaintenanceScheduler(
 	logger *slog.Logger,
 ) (*MaintenanceScheduler, error) {
 	if repository == nil {
-		return nil, fmt.Errorf("new maintenance scheduler: repository is nil")
+		return nil, errors.New("new maintenance scheduler: repository is nil")
 	}
+
 	if linkChecker == nil {
-		return nil, fmt.Errorf("new maintenance scheduler: link checker is nil")
+		return nil, errors.New("new maintenance scheduler: link checker is nil")
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	normalized := config
 	defaults := DefaultMaintenanceConfig()
+
 	if normalized.RunTimeout <= 0 {
 		normalized.RunTimeout = defaults.RunTimeout
 	}
+
 	if normalized.LinkCheckInterval <= 0 {
 		normalized.LinkCheckInterval = defaults.LinkCheckInterval
 	}
@@ -100,6 +104,7 @@ func (s *MaintenanceScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
+
 	s.wg.Add(1)
 	panicguard.Go(s.logger, "major-event-maintenance-scheduler", func() {
 		s.run(ctx)
@@ -111,6 +116,7 @@ func (s *MaintenanceScheduler) Stop() {
 	if s == nil {
 		return
 	}
+
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 	})
@@ -142,23 +148,30 @@ func (s *MaintenanceScheduler) runMaintenanceCycle(ctx context.Context, linkTick
 
 	expiredTimer := time.NewTimer(waitDuration)
 	trigger := waitMaintenanceTrigger(ctx, s.stopCh, expiredTimer.C, linkTicker)
+
 	if trigger == maintenanceTriggerContextDone {
 		expiredTimer.Stop()
 		s.logger.Info("Major event maintenance scheduler stopped by context")
+
 		return false
 	}
+
 	if trigger == maintenanceTriggerStop {
 		expiredTimer.Stop()
 		s.logger.Info("Major event maintenance scheduler stopped")
+
 		return false
 	}
+
 	if trigger == maintenanceTriggerExpired {
 		s.runExpiredUpdate(ctx)
 	}
+
 	if trigger == maintenanceTriggerLinkCheck {
 		expiredTimer.Stop()
 		s.runLinkCheck(ctx)
 	}
+
 	return true
 }
 
@@ -187,8 +200,10 @@ func (s *MaintenanceScheduler) runExpiredUpdate(ctx context.Context) {
 	updated, err := s.repository.UpdateExpiredEvents(runCtx)
 	if err != nil {
 		s.logger.Warn("Major event expired update failed", slog.String("error", err.Error()))
+
 		return
 	}
+
 	if updated > 0 {
 		s.logger.Info("Major event expired rows updated", slog.Int64("updated_rows", updated))
 	}
@@ -201,8 +216,10 @@ func (s *MaintenanceScheduler) runLinkCheck(ctx context.Context) {
 	events, err := s.repository.GetAllActiveEvents(runCtx)
 	if err != nil {
 		s.logger.Warn("Major event active event load failed for link check", slog.String("error", err.Error()))
+
 		return
 	}
+
 	if len(events) == 0 {
 		return
 	}
@@ -210,6 +227,7 @@ func (s *MaintenanceScheduler) runLinkCheck(ctx context.Context) {
 	result, err := s.linkChecker.CheckEvents(runCtx, events)
 	if err != nil {
 		s.logger.Warn("Major event link check failed", slog.String("error", err.Error()))
+
 		return
 	}
 
@@ -232,5 +250,6 @@ func (s *MaintenanceScheduler) now() time.Time {
 	if s.nowFn != nil {
 		return s.nowFn().UTC()
 	}
+
 	return time.Now().UTC()
 }

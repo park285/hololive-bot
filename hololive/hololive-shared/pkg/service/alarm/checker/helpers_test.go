@@ -26,7 +26,7 @@ import (
 )
 
 func TestMinutesUntilFloorZeroClamped(t *testing.T) {
-	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.February, 23, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name  string
@@ -86,7 +86,7 @@ func TestMinutesUntilFloorZeroClamped(t *testing.T) {
 }
 
 func TestFormatScheduleChangeMessage(t *testing.T) {
-	base := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.February, 23, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name    string
@@ -153,6 +153,7 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 			if len(got) != len(tt.want) {
 				t.Fatalf("NormalizeTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.want), got)
 			}
+
 			for i := range got {
 				if got[i] != tt.want[i] {
 					t.Fatalf("NormalizeTargetMinutes() = %v, want %v", got, tt.want)
@@ -201,6 +202,7 @@ func TestBuildRuntimeTargetMinutes(t *testing.T) {
 			if len(got) != len(tt.expect) {
 				t.Fatalf("BuildRuntimeTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.expect), got)
 			}
+
 			for i := range got {
 				if got[i] != tt.expect[i] {
 					t.Fatalf("BuildRuntimeTargetMinutes() = %v, want %v", got, tt.expect)
@@ -254,6 +256,7 @@ func TestResolveConfiguredTargetMinutes(t *testing.T) {
 			if len(got) != len(tt.expect) {
 				t.Fatalf("ResolveConfiguredTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.expect), got)
 			}
+
 			for i := range got {
 				if got[i] != tt.expect[i] {
 					t.Fatalf("ResolveConfiguredTargetMinutes() = %v, want %v", got, tt.expect)
@@ -296,6 +299,7 @@ func TestResolvePersistedTargetMinutes(t *testing.T) {
 			if len(got) != len(tt.expect) {
 				t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(tt.expect), got)
 			}
+
 			for i := range got {
 				if got[i] != tt.expect[i] {
 					t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, tt.expect)
@@ -349,7 +353,7 @@ func TestIsTargetMinute(t *testing.T) {
 }
 
 func TestResolveEvaluationWindow(t *testing.T) {
-	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.February, 23, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name        string
@@ -404,9 +408,11 @@ func TestResolveEvaluationWindow(t *testing.T) {
 			if !got.Start.Equal(tt.wantStart) {
 				t.Fatalf("ResolveEvaluationWindow() start = %s, want %s", got.Start, tt.wantStart)
 			}
+
 			if !got.End.Equal(tt.wantEnd) {
 				t.Fatalf("ResolveEvaluationWindow() end = %s, want %s", got.End, tt.wantEnd)
 			}
+
 			if got.Capped != tt.wantCapped {
 				t.Fatalf("ResolveEvaluationWindow() capped = %t, want %t", got.Capped, tt.wantCapped)
 			}
@@ -414,17 +420,17 @@ func TestResolveEvaluationWindow(t *testing.T) {
 	}
 }
 
-func TestHighestCrossedTarget(t *testing.T) {
-	base := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+type highestCrossedTargetCase struct {
+	name    string
+	targets []int
+	start   time.Time
+	window  EvaluationWindow
+	want    int
+	wantOK  bool
+}
 
-	tests := []struct {
-		name    string
-		targets []int
-		start   time.Time
-		window  EvaluationWindow
-		want    int
-		wantOK  bool
-	}{
+func highestCrossedTargetCases(base time.Time) []highestCrossedTargetCase {
+	return []highestCrossedTargetCase{
 		{
 			name:    "returns highest target crossed within bounded window",
 			targets: []int{5, 3, 1},
@@ -506,13 +512,18 @@ func TestHighestCrossedTarget(t *testing.T) {
 			wantOK: false,
 		},
 	}
+}
 
-	for _, tt := range tests {
+func TestHighestCrossedTarget(t *testing.T) {
+	base := time.Date(2026, time.February, 23, 12, 0, 0, 0, time.UTC)
+
+	for _, tt := range highestCrossedTargetCases(base) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := HighestCrossedTarget(tt.targets, tt.start, tt.window)
 			if ok != tt.wantOK {
 				t.Fatalf("HighestCrossedTarget() ok = %t, want %t", ok, tt.wantOK)
 			}
+
 			if got != tt.want {
 				t.Fatalf("HighestCrossedTarget() minute = %d, want %d", got, tt.want)
 			}

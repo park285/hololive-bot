@@ -34,10 +34,11 @@ var (
 
 var _ webhook.Metrics = (*webhookMetrics)(nil)
 
-func NewWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
+func newWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 	if registerer == nil {
 		registerer = prometheus.DefaultRegisterer
 	}
+
 	metrics := &webhookMetrics{
 		requests:        prometheus.NewCounter(prometheus.CounterOpts{Name: webhookMetricPrefix + "requests_total", Help: "Total inbound bot webhook requests."}),
 		unauthorized:    prometheus.NewCounter(prometheus.CounterOpts{Name: webhookMetricPrefix + "unauthorized_total", Help: "Total unauthorized bot webhook requests."}),
@@ -66,13 +67,15 @@ func NewWebhookMetrics(registerer prometheus.Registerer) *webhookMetrics {
 		metrics.enqueueWait, metrics.queueDepth, metrics.handlerDuration,
 		signatureV3Validated, signatureUnknownRejected, signatureMalformedRejected,
 	)
+
 	return metrics
 }
 
 func defaultWebhookMetrics() *webhookMetrics {
 	defaultWebhookMetricsOnce.Do(func() {
-		defaultWebhookMetricsValue = NewWebhookMetrics(prometheus.DefaultRegisterer)
+		defaultWebhookMetricsValue = newWebhookMetrics(prometheus.DefaultRegisterer)
 	})
+
 	return defaultWebhookMetricsValue
 }
 
@@ -90,9 +93,11 @@ func (m *webhookMetrics) signatureVersionDiagnostics() webhook.SignatureVersionD
 	if m == nil {
 		return webhook.SignatureVersionDiagnostics{}
 	}
+
 	if source, ok := m.signatureDiagnostics.Load().(signatureDiagnosticsSource); ok {
 		return source.SignatureVersionDiagnostics()
 	}
+
 	return webhook.SignatureVersionDiagnostics{}
 }
 
@@ -103,9 +108,11 @@ func (m *webhookMetrics) ObserveDuplicate()                    { m.duplicates.In
 func (m *webhookMetrics) ObserveEnqueueFailure()               { m.enqueueFailures.Inc() }
 func (m *webhookMetrics) ObserveAccepted()                     { m.accepted.Inc() }
 func (m *webhookMetrics) ObserveDecodeLatency(d time.Duration) { m.decodeLatency.Observe(d.Seconds()) }
-func (m *webhookMetrics) ObserveDedupLatency(d time.Duration)  { m.dedupLatency.Observe(d.Seconds()) }
-func (m *webhookMetrics) ObserveEnqueueWait(d time.Duration)   { m.enqueueWait.Observe(d.Seconds()) }
-func (m *webhookMetrics) ObserveQueueDepth(depth int)          { m.queueDepth.Set(float64(depth)) }
+
+func (m *webhookMetrics) ObserveDedupLatency(d time.Duration) { m.dedupLatency.Observe(d.Seconds()) }
+
+func (m *webhookMetrics) ObserveEnqueueWait(d time.Duration) { m.enqueueWait.Observe(d.Seconds()) }
+func (m *webhookMetrics) ObserveQueueDepth(depth int)        { m.queueDepth.Set(float64(depth)) }
 func (m *webhookMetrics) ObserveHandlerDuration(d time.Duration) {
 	m.handlerDuration.Observe(d.Seconds())
 }

@@ -20,6 +20,7 @@ func BuildMajorEventViews(events []domain.MajorEvent) []MajorEventView {
 	views := make([]MajorEventView, 0, len(events))
 	for i := range events {
 		event := &events[i]
+
 		views = append(views, MajorEventView{
 			Title:    event.Title,
 			DateStr:  FormatMajorEventDatesFromDB(event.EventStartDate, event.EventEndDate),
@@ -28,6 +29,7 @@ func BuildMajorEventViews(events []domain.MajorEvent) []MajorEventView {
 			HasDates: event.EventStartDate != nil,
 		})
 	}
+
 	return views
 }
 

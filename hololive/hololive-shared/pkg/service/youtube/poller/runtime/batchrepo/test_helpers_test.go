@@ -1,13 +1,31 @@
 package batchrepo
 
 import (
+	jsonv2 "encoding/json/v2"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/prometheus/client_golang/prometheus"
 
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+const (
+	testChannelID  = "channel-1"
+	testPostID     = "post-1"
+	testVideoID    = "video-1"
+	testShortID    = "short-1"
+	testShortTitle = "title-short-1"
+
+	testCanonicalShortFromShortID = "short:" + testShortID
+	testCanonicalShortFromVideoID = "short:" + testVideoID
+
+	testDuplicatePostID  = "post-duplicate"
+	testDuplicateVideoID = "video-duplicate"
+
+	testAuthorName    = "author"
+	testContentText   = "hello"
+	testPublishedText = "1 hour ago"
 )
 
 var outboxInsertTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -17,11 +35,13 @@ var outboxInsertTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 
 type shortNotificationPayload struct {
 	domain.YouTubeVideo
+
 	CanonicalPostID string `json:"canonical_post_id"`
 }
 
 type communityNotificationPayload struct {
 	domain.YouTubeCommunityPost
+
 	CanonicalPostID string `json:"canonical_post_id"`
 }
 
@@ -37,6 +57,7 @@ func buildShortNotificationPayload(video *domain.YouTubeVideo, canonicalPostID s
 	if video == nil {
 		return "{}"
 	}
+
 	return mustMarshalJSON(shortNotificationPayload{
 		YouTubeVideo:    *video,
 		CanonicalPostID: normalizeNotificationCanonicalPostID(domain.OutboxKindNewShort, canonicalPostID),
@@ -47,8 +68,11 @@ func buildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canoni
 	if post == nil {
 		return "{}"
 	}
+
 	payloadPost := *post
+
 	payloadPost.PostID = normalizeCommunityResourceID(payloadPost.PostID)
+
 	return mustMarshalJSON(communityNotificationPayload{
 		YouTubeCommunityPost: payloadPost,
 		CanonicalPostID:      normalizeNotificationCanonicalPostID(domain.OutboxKindCommunityPost, canonicalPostID),
@@ -60,6 +84,7 @@ func normalizeNotificationCanonicalPostID(kind domain.OutboxKind, id string) str
 	if err != nil {
 		return strings.TrimSpace(id)
 	}
+
 	return canonicalID
 }
 
@@ -68,6 +93,7 @@ func normalizeCommunityResourceID(id string) string {
 	if err != nil {
 		return strings.TrimSpace(id)
 	}
+
 	return normalized
 }
 
@@ -76,5 +102,6 @@ func mustMarshalJSON(v any) string {
 	if err != nil {
 		return "{}"
 	}
+
 	return string(data)
 }

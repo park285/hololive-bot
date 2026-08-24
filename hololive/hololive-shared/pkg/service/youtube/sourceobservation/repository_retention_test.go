@@ -8,18 +8,20 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-dbtest"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 func TestRetentionTickDeletesAtMostBatchSize(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	ids := publishProcessedObservations(t, ctx, pool, repo, 3)
+	ids := publishProcessedObservations(ctx, t, pool, repo, 3)
 	ageObservations(t, pool, ids, 48*time.Hour)
 	ageQueueTerminal(t, pool, ids, 48*time.Hour)
+
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
 		QueueProcessedAge: 24 * time.Hour,
 		BatchSize:         1,
@@ -27,17 +29,22 @@ func TestRetentionTickDeletesAtMostBatchSize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
+
 	if result.Table != "source_observation_queue" || result.Deleted != 1 {
 		t.Fatalf("result = %#v, want one queue row", result)
 	}
+
 	assertTableCount(t, pool, "source_observation_queue", 2)
 	assertTableCount(t, pool, "source_observations", 3)
 }
 
 func TestDeleteFirstRetentionBatchRunsEveryTable(t *testing.T) {
 	t.Parallel()
+
 	var ran []string
+
 	repo := &Repository{}
+
 	result, err := repo.deleteFirstRetentionBatch(10, []retentionStep{
 		{table: "source_observation_queue", run: func() (int64, error) {
 			ran = append(ran, "queue")
@@ -51,32 +58,37 @@ func TestDeleteFirstRetentionBatchRunsEveryTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if result.Deleted != 3 || len(result.ByTable) != 2 || len(ran) != 2 || ran[0] != "queue" || ran[1] != "collisions" {
 		t.Fatalf("result=%#v ran=%v", result, ran)
 	}
 }
 
 func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, ctx, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	pendingID := publishOne(t, ctx, repo, &proof, "post-pending")
-	finalizeObservation(t, ctx, repo, pendingID)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	pendingID := publishOne(ctx, t, repo, &proof, "post-pending")
+	finalizeObservation(ctx, t, repo, pendingID)
 	insertPendingReplay(t, pool, pendingID)
 
-	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
-	activeID := publishOne(t, ctx, repo, &proof, "post-active")
+	proof = advanceLease(t.Context(), t, pool, &proof, time.Minute)
+
+	activeID := publishOne(ctx, t, repo, &proof, "post-active")
+
 	if _, err := repo.ClaimBatch(ctx, claimOptions()); err != nil {
 		t.Fatalf("claim active: %v", err)
 	}
 
-	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
-	candidateID := publishOne(t, ctx, repo, &proof, "post-candidate")
-	finalizeObservation(t, ctx, repo, candidateID)
+	proof = advanceLease(t.Context(), t, pool, &proof, time.Minute)
+
+	candidateID := publishOne(ctx, t, repo, &proof, "post-candidate")
+	finalizeObservation(ctx, t, repo, candidateID)
 	insertLiveEndCandidate(t, pool, candidateID)
 
 	ageObservations(t, pool, []int64{pendingID, activeID, candidateID}, 48*time.Hour)
+
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
 		BatchSize: 10,
 		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{
@@ -86,18 +98,21 @@ func TestRetentionTickDoesNotDeleteActiveOrPendingReplayEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
+
 	if result.Deleted != 0 {
 		t.Fatalf("protected evidence deleted: %#v", result)
 	}
+
 	assertTableCount(t, pool, "source_observations", 3)
 }
 
 func TestRetentionTickDoesNotDeleteEvidenceWhileQueueRemains(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	ids := publishProcessedObservations(t, ctx, pool, repo, 1)
+	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
 	ageObservations(t, pool, ids, 48*time.Hour)
+
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
 		BatchSize: 10,
 		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{
@@ -107,36 +122,42 @@ func TestRetentionTickDoesNotDeleteEvidenceWhileQueueRemains(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
+
 	if result.Deleted != 0 {
 		t.Fatalf("evidence deleted while queue remained: %#v", result)
 	}
+
 	assertTableCount(t, pool, "source_observations", 1)
 	assertTableCount(t, pool, "source_observation_queue", 1)
 }
 
 func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
+
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	ids := publishProcessedObservations(t, ctx, pool, repo, 1)
+	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
 	ageQueueTerminal(t, pool, ids, 48*time.Hour)
 
 	holder, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cleanupCancel()
+
 		if rollbackErr := holder.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			t.Errorf("rollback retention lock: %v", rollbackErr)
 		}
 	})
-	if _, err := holder.Exec(ctx, `
+
+	if _, execErr := holder.Exec(ctx, `
 		SELECT status FROM source_observation_queue WHERE observation_id = $1 FOR UPDATE
-	`, ids[0]); err != nil {
-		t.Fatal(err)
+	`, ids[0]); execErr != nil {
+		t.Fatal(execErr)
 	}
 
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
@@ -146,40 +167,45 @@ func TestRetentionTickSkipsLockedTerminalQueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
+
 	if result.Deleted != 0 {
 		t.Fatalf("locked terminal queue deleted: %#v", result)
 	}
+
 	assertQueueStatus(t, pool, ids[0], string(contract.StatusProcessed))
 
-	if _, err := holder.Exec(ctx, `
+	if _, execErr2 := holder.Exec(ctx, `
 		UPDATE source_observation_queue
 		SET status = 'PENDING', processed_at = NULL, updated_at = NOW()
 		WHERE observation_id = $1
-	`, ids[0]); err != nil {
-		t.Fatal(err)
-	}
-	if err := holder.Commit(ctx); err != nil {
-		t.Fatal(err)
+	`, ids[0]); execErr2 != nil {
+		t.Fatal(execErr2)
 	}
 
-	result, err = repo.RunRetentionTick(context.Background(), RetentionConfig{
+	if commitErr := holder.Commit(ctx); commitErr != nil {
+		t.Fatal(commitErr)
+	}
+
+	result, err = repo.RunRetentionTick(t.Context(), RetentionConfig{
 		QueueProcessedAge: 24 * time.Hour,
 		BatchSize:         10,
 	}, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("retention tick after replay: %v", err)
 	}
+
 	if result.Deleted != 0 {
 		t.Fatalf("replayed queue deleted: %#v", result)
 	}
+
 	assertQueueStatus(t, pool, ids[0], string(contract.StatusPending))
 }
 
 func TestRetentionTickDoesNotDeleteReplayAuditWhileEvidenceRemains(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	ids := publishProcessedObservations(t, ctx, pool, repo, 1)
+	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
 	insertAppliedReplay(t, pool, ids[0])
 	ageReplayAudits(t, pool, ids, 48*time.Hour)
 
@@ -190,22 +216,26 @@ func TestRetentionTickDoesNotDeleteReplayAuditWhileEvidenceRemains(t *testing.T)
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
+
 	if result.Deleted != 0 {
 		t.Fatalf("replay audit deleted while evidence remained: %#v", result)
 	}
+
 	assertTableCount(t, pool, "source_observation_replay_requests", 1)
 }
 
 func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	repo := NewRepository(pool)
-	proof := seedPublishLease(t, ctx, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
-	processedID := publishOne(t, ctx, repo, &proof, "post-processed")
-	finalizeObservation(t, ctx, repo, processedID)
-	proof = advanceLease(t, context.Background(), pool, &proof, time.Minute)
-	dlqID := publishOne(t, ctx, repo, &proof, "post-dlq")
-	deadLetterObservation(t, ctx, repo, dlqID)
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
+	processedID := publishOne(ctx, t, repo, &proof, "post-processed")
+	finalizeObservation(ctx, t, repo, processedID)
+
+	proof = advanceLease(t.Context(), t, pool, &proof, time.Minute)
+
+	dlqID := publishOne(ctx, t, repo, &proof, "post-dlq")
+	deadLetterObservation(ctx, t, repo, dlqID)
 	ageQueueTerminal(t, pool, []int64{processedID, dlqID}, 36*time.Hour)
 
 	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
@@ -216,55 +246,122 @@ func TestRetentionTickProcessedAndDLQDurationsDiffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retention tick: %v", err)
 	}
+
 	if result.Deleted != 1 {
 		t.Fatalf("result = %#v, want only processed queue row", result)
 	}
+
 	assertQueueStatus(t, pool, processedID, "")
 	assertQueueStatus(t, pool, dlqID, string(contract.StatusDeadLetter))
 }
 
+func TestRetentionTickDeletesOnlyOrphanedApplicationsAfterAuditGrace(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	ids := publishProcessedObservations(ctx, t, pool, repo, 1)
+	insertRetentionApplication(t, pool, nil, "eligible-orphan", 91*24*time.Hour)
+	insertRetentionApplication(t, pool, nil, "recent-orphan", 89*24*time.Hour)
+	insertRetentionApplication(t, pool, ids[0], "referenced", 120*24*time.Hour)
+
+	result, err := repo.RunRetentionTick(ctx, RetentionConfig{
+		ApplicationAuditGrace: 60 * 24 * time.Hour,
+		EvidenceAgeByKind: map[contract.ObservationKind]time.Duration{
+			contract.KindCommunityPage: 30 * 24 * time.Hour,
+		},
+		BatchSize: 10,
+	}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("retention tick: %v", err)
+	}
+
+	if result.Table != "source_observation_applications" || result.Deleted != 1 {
+		t.Fatalf("result = %#v, want one application", result)
+	}
+
+	assertRetentionApplication(t, pool, "eligible-orphan", false)
+	assertRetentionApplication(t, pool, "recent-orphan", true)
+	assertRetentionApplication(t, pool, "referenced", true)
+}
+
+func TestRetentionTickKeepsLatestCheckpointPerLogicalIdentity(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	insertRetentionCheckpoint(t, pool, "video-history", "a", 10*24*time.Hour)
+	insertRetentionCheckpoint(t, pool, "video-history", "b", 9*24*time.Hour)
+	insertRetentionCheckpoint(t, pool, "video-history", "c", time.Hour)
+	insertRetentionCheckpoint(t, pool, "video-inactive", "d", 30*24*time.Hour)
+
+	for _, wantDeleted := range []int64{1, 1, 0} {
+		result, err := repo.RunRetentionTick(ctx, RetentionConfig{
+			CheckpointHistoryAge: 7 * 24 * time.Hour,
+			BatchSize:            1,
+		}, time.Now().UTC())
+		if err != nil {
+			t.Fatalf("retention tick: %v", err)
+		}
+
+		if result.Deleted != wantDeleted {
+			t.Fatalf("deleted = %d, want %d: %#v", result.Deleted, wantDeleted, result)
+		}
+	}
+
+	assertRetentionCheckpointCount(t, pool, "video-history", 1)
+	assertRetentionCheckpointCount(t, pool, "video-inactive", 1)
+}
+
 func publishProcessedObservations(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	pool *pgxpool.Pool,
 	repo *Repository,
 	count int,
 ) []int64 {
 	t.Helper()
-	proof := seedPublishLease(t, ctx, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, "UC_TEST", "community_collect")
+
+	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 	ids := make([]int64, 0, count)
+
 	for i := range count {
 		if i > 0 {
-			proof = advanceLease(t, ctx, pool, &proof, time.Minute)
+			proof = advanceLease(ctx, t, pool, &proof, time.Minute)
 		}
-		id := publishOne(t, ctx, repo, &proof, "post-batch")
-		finalizeObservation(t, ctx, repo, id)
+
+		id := publishOne(ctx, t, repo, &proof, "post-batch")
+		finalizeObservation(ctx, t, repo, id)
+
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
 func publishOne(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	repo *Repository,
 	proof *contract.LeaseProof,
 	postID string,
 ) int64 {
 	t.Helper()
+
 	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, proof, postID)))
 	if err != nil || len(published.Results) != 1 {
 		t.Fatalf("publish %s: %#v err=%v", postID, published, err)
 	}
+
 	return published.Results[0].ObservationID
 }
 
-func finalizeObservation(t *testing.T, ctx context.Context, repo *Repository, observationID int64) {
+func finalizeObservation(ctx context.Context, t *testing.T, repo *Repository, observationID int64) {
 	t.Helper()
+
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
 	if err != nil || len(batch.Claims) != 1 || batch.Claims[0].ObservationID != observationID {
 		t.Fatalf("claim %d: %#v err=%v", observationID, batch, err)
 	}
+
 	if _, err := repo.Finalize(ctx, Claim{
 		ConsumerName:  batch.ConsumerName,
 		ObservationID: observationID,
@@ -276,12 +373,14 @@ func finalizeObservation(t *testing.T, ctx context.Context, repo *Repository, ob
 	}
 }
 
-func deadLetterObservation(t *testing.T, ctx context.Context, repo *Repository, observationID int64) {
+func deadLetterObservation(ctx context.Context, t *testing.T, repo *Repository, observationID int64) {
 	t.Helper()
+
 	batch, err := repo.ClaimBatch(ctx, claimOptions())
 	if err != nil || len(batch.Claims) != 1 || batch.Claims[0].ObservationID != observationID {
 		t.Fatalf("claim dead letter %d: %#v err=%v", observationID, batch, err)
 	}
+
 	if err := repo.DeadLetter(ctx, DeadLetterInput{
 		ObservationID: observationID,
 		LeaseToken:    batch.Claims[0].LeaseToken,
@@ -294,7 +393,8 @@ func deadLetterObservation(t *testing.T, ctx context.Context, repo *Repository, 
 
 func ageObservations(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Duration) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		UPDATE source_observations
 		SET received_at = NOW() - ($2 * INTERVAL '1 millisecond')
 		WHERE id = ANY($1)
@@ -305,7 +405,8 @@ func ageObservations(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Dur
 
 func ageQueueTerminal(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Duration) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		UPDATE source_observation_queue
 		SET processed_at = CASE WHEN status = 'PROCESSED' THEN NOW() - ($2 * INTERVAL '1 millisecond') ELSE processed_at END,
 		    dead_lettered_at = CASE WHEN status = 'DEAD_LETTER' THEN NOW() - ($2 * INTERVAL '1 millisecond') ELSE dead_lettered_at END,
@@ -318,7 +419,8 @@ func ageQueueTerminal(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Du
 
 func insertAppliedReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO source_observation_replay_requests (
 			observation_id, provider, observation_kind, subject_key, observation_key,
 			evidence_sha256, requested_by, reason, previous_attempt_count, status, applied_at
@@ -334,7 +436,8 @@ func insertAppliedReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) 
 
 func ageReplayAudits(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Duration) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		UPDATE source_observation_replay_requests
 		SET requested_at = NOW() - ($2 * INTERVAL '1 millisecond'),
 		    applied_at = NOW() - ($2 * INTERVAL '1 millisecond')
@@ -346,7 +449,8 @@ func ageReplayAudits(t *testing.T, pool *pgxpool.Pool, ids []int64, age time.Dur
 
 func insertPendingReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO source_observation_replay_requests (
 			observation_id, provider, observation_kind, subject_key, observation_key,
 			evidence_sha256, requested_by, reason, previous_attempt_count
@@ -360,9 +464,91 @@ func insertPendingReplay(t *testing.T, pool *pgxpool.Pool, observationID int64) 
 	}
 }
 
+func insertRetentionApplication(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	observationID any,
+	entityKey string,
+	age time.Duration,
+) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO source_observation_applications (
+			observation_id, provider, observation_kind, subject_key, evidence_sha256,
+			entity_kind, entity_key, decision, effective_at, applied_at
+		) VALUES (
+			$1, 'youtubejs', 'community_page', 'UC_RETENTION', repeat('a', 64),
+			'retention_test', $2, 'APPLIED', NOW(), NOW() - ($3 * INTERVAL '1 millisecond')
+		)
+	`, observationID, entityKey, age.Milliseconds()); err != nil {
+		t.Fatalf("insert retention application %q: %v", entityKey, err)
+	}
+}
+
+func assertRetentionApplication(t *testing.T, pool *pgxpool.Pool, entityKey string, want bool) {
+	t.Helper()
+
+	var exists bool
+
+	if err := pool.QueryRow(t.Context(), `
+		SELECT EXISTS (
+			SELECT 1 FROM source_observation_applications WHERE entity_key = $1
+		)
+	`, entityKey).Scan(&exists); err != nil {
+		t.Fatalf("load retention application %q: %v", entityKey, err)
+	}
+
+	if exists != want {
+		t.Fatalf("application %q exists = %t, want %t", entityKey, exists, want)
+	}
+}
+
+func insertRetentionCheckpoint(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	subjectKey string,
+	hashSeed string,
+	age time.Duration,
+) {
+	t.Helper()
+
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO source_collection_checkpoints (
+			provider, observation_kind, subject_key, scope_sha256, contract_generation,
+			last_observation_key, last_evidence_sha256, last_scheduled_for, last_success_at,
+			collection_latency_ms, continuity, created_at, updated_at
+		) VALUES (
+			'youtubejs', 'viewer_sample', $1, repeat($2, 64), 1,
+			$1 || ':' || $2, repeat('b', 64), NOW(), NOW(), 1, 'NOT_APPLICABLE',
+			NOW() - ($3 * INTERVAL '1 millisecond'),
+			NOW() - ($3 * INTERVAL '1 millisecond')
+		)
+	`, subjectKey, hashSeed, age.Milliseconds()); err != nil {
+		t.Fatalf("insert retention checkpoint %q/%q: %v", subjectKey, hashSeed, err)
+	}
+}
+
+func assertRetentionCheckpointCount(t *testing.T, pool *pgxpool.Pool, subjectKey string, want int) {
+	t.Helper()
+
+	var count int
+
+	if err := pool.QueryRow(t.Context(), `
+		SELECT count(*) FROM source_collection_checkpoints WHERE subject_key = $1
+	`, subjectKey).Scan(&count); err != nil {
+		t.Fatalf("count retention checkpoints for %q: %v", subjectKey, err)
+	}
+
+	if count != want {
+		t.Fatalf("checkpoint count for %q = %d, want %d", subjectKey, count, want)
+	}
+}
+
 func insertLiveEndCandidate(t *testing.T, pool *pgxpool.Pool, observationID int64) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
+
+	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_live_reconciliation_heads (
 			video_id, status, end_candidate_kind, end_candidate_observation_id, next_end_check_at
 		) VALUES ('video-end-candidate', 'LIVE', 'SCOPED_ABSENCE', $1, NOW() + INTERVAL '1 minute')
@@ -373,16 +559,21 @@ func insertLiveEndCandidate(t *testing.T, pool *pgxpool.Pool, observationID int6
 
 func assertQueueStatus(t *testing.T, pool *pgxpool.Pool, observationID int64, want string) {
 	t.Helper()
+
 	var status *string
-	if err := pool.QueryRow(context.Background(), `
+
+	if err := pool.QueryRow(t.Context(), `
 		SELECT status FROM source_observation_queue WHERE observation_id = $1
 	`, observationID).Scan(&status); err != nil && want != "" {
 		t.Fatalf("load queue %d: %v", observationID, err)
 	}
+
 	got := ""
+
 	if status != nil {
 		got = *status
 	}
+
 	if got != want {
 		t.Fatalf("queue %d status = %q, want %q", observationID, got, want)
 	}

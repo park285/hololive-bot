@@ -22,10 +22,13 @@ func admissionRetryAfterFromError(err error, fallback time.Duration) time.Durati
 	if retryAfter, ok := admission.RetryAfter(err); ok && retryAfter > 0 {
 		return retryAfter
 	}
+
 	var delayed retryDelayError
+
 	if errors.As(err, &delayed) && delayed.RetryDelay() > 0 {
 		return delayed.RetryDelay()
 	}
+
 	return fallback
 }
 
@@ -55,6 +58,7 @@ func (s *Scheduler) deferJobClaim(ctx context.Context, job *Job, claim polling.J
 	deferrer, ok := claim.(jobClaimDeferrer)
 	if !ok {
 		s.releaseJobClaim(ctx, job, claim)
+
 		return pollErr
 	}
 
@@ -66,11 +70,14 @@ func (s *Scheduler) deferJobClaim(ctx context.Context, job *Job, claim polling.J
 		"channel_id", job.ChannelID,
 		"result", result,
 		"retry_after", retryAfter)
+
 	if err != nil {
 		return fmt.Errorf("defer poll job claim: %w", err)
 	}
+
 	if !deferred {
-		return fmt.Errorf("defer poll job claim: ownership lost")
+		return errors.New("defer poll job claim: ownership lost")
 	}
+
 	return pollErr
 }

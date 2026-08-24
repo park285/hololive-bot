@@ -28,14 +28,17 @@ func TestOutboxRepositoryCutoverUsesDispatchPublisherWithoutLegacyPool(t *testin
 
 	publisher := &handoffTestPublisher{}
 	repository := NewOutboxRepositoryFromPool(nil, nil, WithDispatchHandoff(handoff.ModeCutover, publisher))
-	err := repository.Enqueue(t.Context(), domain.DeliveryKindMemberNewsWeekly, "2026-W32", "room-1", "주간 뉴스")
+
+	err := repository.Enqueue(t.Context(), domain.DeliveryKindMemberNewsWeekly, "2026-W32", testRoomID, "주간 뉴스")
 	if err != nil {
 		t.Fatalf("Enqueue() error = %v", err)
 	}
+
 	if len(publisher.pending) != 1 || len(publisher.shadow) != 0 {
 		t.Fatalf("publisher calls pending=%d shadow=%d", len(publisher.pending), len(publisher.shadow))
 	}
-	if publisher.pending[0].RoomID != "room-1" || publisher.pending[0].Message != "주간 뉴스" {
+
+	if publisher.pending[0].RoomID != testRoomID || publisher.pending[0].Message != "주간 뉴스" {
 		t.Fatalf("pending item = %#v", publisher.pending[0])
 	}
 }

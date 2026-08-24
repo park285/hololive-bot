@@ -19,6 +19,7 @@ func buildCommunityShortsAlarmStates(trackingRows []*domain.YouTubeContentAlarmT
 		if !ok {
 			continue
 		}
+
 		upsertCommunityShortsAlarmState(rowsByKey, state)
 	}
 
@@ -29,6 +30,7 @@ func buildCommunityShortsAlarmState(row *domain.YouTubeContentAlarmTracking) (*d
 	if row == nil || !isCommunityShortsOutboxKind(row.Kind) {
 		return nil, false
 	}
+
 	postID := normalizeContentID(row.Kind, row.ContentID)
 	if postID == "" {
 		return nil, false
@@ -49,8 +51,10 @@ func upsertCommunityShortsAlarmState(rowsByKey map[string]*domain.YouTubeCommuni
 	key := communityShortsAlarmStateKey(state)
 	if existing, ok := rowsByKey[key]; ok {
 		mergeCommunityShortsAlarmState(existing, state)
+
 		return
 	}
+
 	rowsByKey[key] = state
 }
 
@@ -62,15 +66,19 @@ func mergeCommunityShortsAlarmState(existing, state *domain.YouTubeCommunityShor
 	if strings.TrimSpace(state.ContentID) != "" {
 		existing.ContentID = state.ContentID
 	}
+
 	if strings.TrimSpace(state.ChannelID) != "" {
 		existing.ChannelID = state.ChannelID
 	}
+
 	if state.ActualPublishedAt != nil {
 		existing.ActualPublishedAt = state.ActualPublishedAt
 	}
+
 	if state.DetectedAt.Before(existing.DetectedAt) {
 		existing.DetectedAt = state.DetectedAt
 	}
+
 	mergeCommunityShortsAlarmSentAt(existing, state)
 }
 
@@ -86,14 +94,17 @@ func mergeCommunityShortsAlarmSentAt(existing, state *domain.YouTubeCommunitySho
 func sortedCommunityShortsAlarmStates(rowsByKey map[string]*domain.YouTubeCommunityShortsAlarmState) []*domain.YouTubeCommunityShortsAlarmState {
 	keys := sortedCommunityShortsAlarmStateKeys(rowsByKey)
 	rows := make([]*domain.YouTubeCommunityShortsAlarmState, 0, len(keys))
+
 	for _, key := range keys {
 		row := rowsByKey[key]
 		if row == nil {
 			continue
 		}
+
 		row.DeliveryStatus = domain.ResolveYouTubeCommunityShortsAlarmStateStatus(row.AuthorizedAt, row.AlarmSentAt)
 		rows = append(rows, row)
 	}
+
 	return rows
 }
 
@@ -102,6 +113,8 @@ func sortedCommunityShortsAlarmStateKeys(rowsByKey map[string]*domain.YouTubeCom
 	for key := range rowsByKey {
 		keys = append(keys, key)
 	}
+
 	sort.Strings(keys)
+
 	return keys
 }

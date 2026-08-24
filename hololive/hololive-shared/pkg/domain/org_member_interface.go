@@ -25,21 +25,30 @@ import (
 	"fmt"
 )
 
-// 정적 파일 데이터 또는 Redis/DB 기반 동적 데이터 소스 추상화
+// 정적 파일 데이터 또는 Redis/DB 기반 동적 데이터 소스 추상화.
 type MemberDataProvider interface {
-	FindMemberByChannelID(channelID string) *Member
-	FindMemberByName(name string) *Member
-	FindMemberByAlias(alias string) *Member
+	MemberFinder
+	MemberMultiFinder
+
 	GetChannelIDs() []string
 	GetAllMembers() []*Member // 전체 멤버 순회 계약
 	WithContext(ctx context.Context) MemberDataProvider
+}
+
+type MemberFinder interface {
+	FindMemberByChannelID(channelID string) *Member
+	FindMemberByName(name string) *Member
+	FindMemberByAlias(alias string) *Member
+}
+
+type MemberMultiFinder interface {
 	// Multi-result methods (동명이인/공유 별명 처리용)
 	FindMembersByName(name string) []*Member
 	FindMembersByAlias(alias string) []*Member
 }
 
 // MemberDataLoader는 error-aware 전체 멤버 로드를 지원하는 선택적 확장 계약이다.
-// critical path는 이 seam을 통해 repository/cache 실패를 빈 결과로 오해하지 않고 처리할 수 있다.
+// 이 계약을 구현하면 critical path가 repository/cache 실패를 빈 결과로 오해하지 않고 처리할 수 있다.
 type MemberDataLoader interface {
 	LoadAllMembers() ([]*Member, error)
 }
@@ -56,6 +65,7 @@ func LoadAllMembers(provider MemberDataProvider) ([]*Member, error) {
 		if err != nil {
 			return nil, fmt.Errorf("load all members: %w", err)
 		}
+
 		return members, nil
 	}
 

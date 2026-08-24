@@ -29,6 +29,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	testChannelID1  = "ch1"
+	testMemberAqua  = "Aqua"
+	testChannelHolo = "ch-holo"
+)
+
 type stubMemberProvider struct {
 	members   []*domain.Member
 	byChannel map[string]*domain.Member
@@ -94,15 +100,15 @@ func (p *stubMemberProvider) GetAllMembers() []*domain.Member {
 	return p.members
 }
 
-func (p *stubMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+func (p *stubMemberProvider) WithContext(_ context.Context) domain.MemberDataProvider {
 	return p
 }
 
-func (p *stubMemberProvider) FindMembersByName(name string) []*domain.Member {
+func (p *stubMemberProvider) FindMembersByName(_ string) []*domain.Member {
 	return nil
 }
 
-func (p *stubMemberProvider) FindMembersByAlias(alias string) []*domain.Member {
+func (p *stubMemberProvider) FindMembersByAlias(_ string) []*domain.Member {
 	return nil
 }
 
@@ -110,14 +116,14 @@ func TestCandidateFromMember(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	mm := &Matcher{logger: logger}
 
-	member := &domain.Member{ChannelID: "ch1", NameJa: "jp-name"}
+	member := &domain.Member{ChannelID: testChannelID1, NameJa: "jp-name"}
 
 	candidate := mm.candidateFromMember(member, "source")
 	if candidate == nil {
 		t.Fatal("expected candidate")
 	}
 
-	if candidate.channelID != "ch1" || candidate.memberName != "jp-name" {
+	if candidate.channelID != testChannelID1 || candidate.memberName != "jp-name" {
 		t.Fatalf("unexpected candidate: %+v", candidate)
 	}
 
@@ -132,12 +138,12 @@ func TestCandidateFromMember(t *testing.T) {
 func TestCandidateFromDynamic(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: "ch1", Name: "member"},
+		{ChannelID: testChannelID1, Name: "member"},
 	})
 
 	mm := &Matcher{logger: logger}
 
-	candidate := mm.candidateFromDynamic(provider, "display", "ch1", "source")
+	candidate := mm.candidateFromDynamic(provider, "display", testChannelID1, "source")
 	if candidate == nil || candidate.memberName != "member" {
 		t.Fatalf("expected provider member, got: %+v", candidate)
 	}
@@ -151,12 +157,12 @@ func TestCandidateFromDynamic(t *testing.T) {
 func TestTryPartialStaticMatch(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	provider := newStubMemberProvider([]*domain.Member{
-		{ChannelID: "ch1", Name: "Test Name"},
+		{ChannelID: testChannelID1, Name: "Test Name"},
 	})
 	mm := &Matcher{logger: logger}
 
 	candidate := mm.tryPartialStaticMatch(provider, "test")
-	if candidate == nil || candidate.channelID != "ch1" {
+	if candidate == nil || candidate.channelID != testChannelID1 {
 		t.Fatalf("expected partial match, got: %+v", candidate)
 	}
 }
@@ -188,12 +194,12 @@ func TestFinalizeCandidateFallback(t *testing.T) {
 	mm := &Matcher{logger: logger}
 
 	channel := mm.finalizeCandidate(t.Context(), &matchCandidate{
-		channelID:  "ch1",
+		channelID:  testChannelID1,
 		memberName: "name",
 		source:     "source",
 	})
 
-	if channel == nil || channel.ID != "ch1" {
+	if channel == nil || channel.ID != testChannelID1 {
 		t.Fatalf("unexpected channel: %+v", channel)
 	}
 

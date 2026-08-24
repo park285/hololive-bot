@@ -4,10 +4,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/shared-go/v2/pkg/backoff"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 )
 
 func replyOutboxRetryAfter(status string, attempts int32) time.Duration {
@@ -18,6 +19,7 @@ func replyOutboxRetryAfterWithBase(status string, attempts int32, base time.Dura
 	if status != durability.ReplyOutboxRetryablePreDispatch && status != durability.ReplyOutboxOutcomeUnknown {
 		return 0
 	}
+
 	return backoff.ComputeExponentialBackoff(max(int(attempts)-1, 0), base, time.Minute, base/2)
 }
 
@@ -29,21 +31,27 @@ func replyOutboxSettlementStatusWithMaxAttempts(accepted bool, attempts, maxAtte
 	if err == nil {
 		return durability.ReplyOutboxHandoffCompleted
 	}
+
 	if transport.IsReplyStatusFailed(err) {
 		return durability.ReplyOutboxDead
 	}
+
 	if status, ok := replyUncertainSettlementStatusWithMaxAttempts(accepted, attempts, maxAttempts, err); ok {
 		return status
 	}
+
 	if errors.Is(err, transport.ErrStoredReplyInvalid) {
 		return durability.ReplyOutboxManualReview
 	}
+
 	if errors.Is(err, iris.ErrPermanent) {
 		return durability.ReplyOutboxPermanentConflict
 	}
+
 	if !errors.Is(err, iris.ErrRetryable) || attempts >= maxAttempts {
 		return durability.ReplyOutboxDead
 	}
+
 	return durability.ReplyOutboxRetryablePreDispatch
 }
 
@@ -51,8 +59,10 @@ func replyUncertainSettlementStatusWithMaxAttempts(accepted bool, attempts, maxA
 	if !accepted && !errors.Is(err, transport.ErrReplyOutcomeUnknown) {
 		return "", false
 	}
+
 	if attempts >= maxAttempts {
 		return durability.ReplyOutboxManualReview, true
 	}
+
 	return durability.ReplyOutboxOutcomeUnknown, true
 }

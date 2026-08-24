@@ -21,41 +21,60 @@
 package runtime
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/stretchr/testify/require"
+	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func TestBuildTriggerRouter_Integration(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := buildTriggerRouter(context.Background(), logger, triggerHandler, "")
+	router, err := buildTriggerRouter(t.Context(), logger, triggerHandler, "")
 	if err == nil {
 		t.Fatal("buildTriggerRouter() error = nil, want non-nil")
 	}
+
 	if router != nil {
 		t.Fatal("buildTriggerRouter() router = non-nil, want nil")
 	}
-	if err.Error() != "API_SECRET_KEY required" {
-		t.Fatalf("buildTriggerRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
+
+	if err.Error() != "runtime router: register routes: API_SECRET_KEY required" {
+		t.Fatalf("buildTriggerRouter() error = %q, want %q", err.Error(), "runtime router: register routes: API_SECRET_KEY required")
 	}
 }
 
+const routerIntegrationAPIKey = "test-key"
+
+func requireTriggerRouterStatus(t *testing.T, method, url, apiKey string, wantStatus int) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), method, url, http.NoBody)
+	require.NoError(t, err)
+
+	if apiKey != "" {
+		req.Header.Set(common.APIKeyHeader, apiKey)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, wantStatus, resp.StatusCode)
+}
+
 func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
-	router, err := buildTriggerRouter(context.Background(), logger, triggerHandler, "test-key")
+	router, err := buildTriggerRouter(t.Context(), logger, triggerHandler, routerIntegrationAPIKey)
 	if err != nil {
 		t.Fatalf("buildTriggerRouter() error = %v", err)
 	}
@@ -63,62 +82,11 @@ func TestBuildTriggerRouter_Integration_WithAPIKey(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	if err != nil {
-		t.Fatalf("new request error = %v", err)
-	}
-	// 인증 헤더 미포함 -> 401
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("POST without API key error = %v", err)
-	}
-	require.NotNil(t, resp)
-	require.NoError(t, resp.Body.Close())
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status without API key = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
+	triggerURL := server.URL + triggercontracts.MemberNewsWeeklyPath
+	metricsURL := server.URL + "/metrics"
 
-	reqWithKey, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+triggercontracts.MemberNewsWeeklyPath, http.NoBody)
-	if err != nil {
-		t.Fatalf("new request with key error = %v", err)
-	}
-	reqWithKey.Header.Set(common.APIKeyHeader, "test-key")
-	respWithKey, err := http.DefaultClient.Do(reqWithKey)
-	if err != nil {
-		t.Fatalf("POST with API key error = %v", err)
-	}
-	require.NotNil(t, respWithKey)
-	require.NoError(t, respWithKey.Body.Close())
-	if respWithKey.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("status with API key = %d, want %d", respWithKey.StatusCode, http.StatusServiceUnavailable)
-	}
-
-	metricsReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/metrics", http.NoBody)
-	if err != nil {
-		t.Fatalf("new metrics request error = %v", err)
-	}
-	metricsResp, err := http.DefaultClient.Do(metricsReq)
-	if err != nil {
-		t.Fatalf("GET /metrics without API key error = %v", err)
-	}
-	require.NotNil(t, metricsResp)
-	require.NoError(t, metricsResp.Body.Close())
-	if metricsResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("/metrics status without API key = %d, want %d", metricsResp.StatusCode, http.StatusUnauthorized)
-	}
-
-	metricsReqWithKey, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/metrics", http.NoBody)
-	if err != nil {
-		t.Fatalf("new metrics request with key error = %v", err)
-	}
-	metricsReqWithKey.Header.Set(common.APIKeyHeader, "test-key")
-	metricsRespWithKey, err := http.DefaultClient.Do(metricsReqWithKey)
-	if err != nil {
-		t.Fatalf("GET /metrics with API key error = %v", err)
-	}
-	require.NotNil(t, metricsRespWithKey)
-	require.NoError(t, metricsRespWithKey.Body.Close())
-	if metricsRespWithKey.StatusCode != http.StatusOK {
-		t.Fatalf("/metrics status with API key = %d, want %d", metricsRespWithKey.StatusCode, http.StatusOK)
-	}
+	requireTriggerRouterStatus(t, http.MethodPost, triggerURL, "", http.StatusUnauthorized)
+	requireTriggerRouterStatus(t, http.MethodPost, triggerURL, routerIntegrationAPIKey, http.StatusServiceUnavailable)
+	requireTriggerRouterStatus(t, http.MethodGet, metricsURL, "", http.StatusUnauthorized)
+	requireTriggerRouterStatus(t, http.MethodGet, metricsURL, routerIntegrationAPIKey, http.StatusOK)
 }

@@ -17,9 +17,11 @@ var outboxRenderFuncs = template.FuncMap{
 		if len(runes) <= maxLen {
 			return s
 		}
+
 		if maxLen <= 3 {
 			return string(runes[:maxLen])
 		}
+
 		return string(runes[:maxLen-3]) + "..."
 	},
 	"add":    func(a, b int) int { return a + b },
@@ -100,26 +102,34 @@ const (
 
 func renderOutboxBody(t *testing.T, body string, data any) string {
 	t.Helper()
+
 	tmpl, err := template.New("outbox").Funcs(outboxRenderFuncs).Option("missingkey=error").Parse(body)
 	if err != nil {
 		t.Fatalf("parse template: %v", err)
 	}
+
 	var buf bytes.Buffer
+
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("execute template: %v", err)
 	}
+
 	return buf.String()
 }
 
 func sampleWithKind(t *testing.T, key domain.TemplateKey, kind string) map[string]any {
 	t.Helper()
+
 	src, ok := sampledata.GetTemplateSampleData(key).(map[string]any)
 	if !ok {
 		t.Fatalf("sample data for %s is not map[string]any", key)
 	}
+
 	out := make(map[string]any, len(src))
 	maps.Copy(out, src)
+
 	out["Kind"] = kind
+
 	return out
 }
 
@@ -147,6 +157,7 @@ func TestOutboxVideoGroupBodySkipsEmptyItems(t *testing.T) {
 		},
 	})
 	wantMixed := "## 🔔 사쿠라 미코 새 영상 (3)\n1. [제목1](https://youtu.be/v1)\n2. [제목2](https://youtu.be/v2)"
+
 	if mixed != wantMixed {
 		t.Fatalf("mixed render mismatch\n got=%q\nwant=%q", mixed, wantMixed)
 	}
@@ -166,6 +177,7 @@ func TestOutboxGroupBodiesNumberRenderedItemsConsecutively(t *testing.T) {
 		},
 	})
 	wantShorts := "## 🔔 사쿠라 미코 새 쇼츠 (3)\n1. [쇼츠1](https://www.youtube.com/shorts/s1)\n2. [쇼츠2](https://www.youtube.com/shorts/s2)"
+
 	if shorts != wantShorts {
 		t.Fatalf("shorts group render mismatch\n got=%q\nwant=%q", shorts, wantShorts)
 	}
@@ -181,6 +193,7 @@ func TestOutboxGroupBodiesNumberRenderedItemsConsecutively(t *testing.T) {
 		},
 	})
 	wantCommunity := "## 🔔 사쿠라 미코 커뮤니티 글 (3)\n1. 공지1\n   [커뮤니티 글 보기](https://www.youtube.com/post/p1)\n2. 공지2\n   [커뮤니티 글 보기](https://www.youtube.com/post/p2)"
+
 	if community != wantCommunity {
 		t.Fatalf("community group render mismatch\n got=%q\nwant=%q", community, wantCommunity)
 	}
@@ -260,6 +273,7 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := renderOutboxBody(t, c.body, c.data); got != c.want {
 				t.Fatalf("render mismatch\n got=%q\nwant=%q", got, c.want)
 			}

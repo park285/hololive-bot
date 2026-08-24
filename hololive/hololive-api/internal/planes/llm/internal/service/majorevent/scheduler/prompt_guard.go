@@ -15,9 +15,11 @@ func filterPromptEvents(events []*domain.MajorEvent, guard *promptguard.Guard, l
 	if len(events) == 0 {
 		return events, nil
 	}
+
 	if guard == nil {
 		return nil, promptguard.ErrGuardUnavailable
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -25,14 +27,17 @@ func filterPromptEvents(events []*domain.MajorEvent, guard *promptguard.Guard, l
 	filtered := make([]*domain.MajorEvent, 0, len(events))
 	for i := range events {
 		event := events[i]
+
 		allowed, err := majorEventPromptAllowed(event, guard, logger)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("major event prompt allowed: %w", err)
 		}
+
 		if allowed {
 			filtered = append(filtered, event)
 		}
 	}
+
 	return filtered, nil
 }
 
@@ -42,14 +47,17 @@ func majorEventPromptAllowed(event *domain.MajorEvent, guard *promptguard.Guard,
 	}
 
 	parts := make([]string, 0, 3+len(event.Members))
+
 	parts = append(parts, event.Title, event.Description, event.Link)
 	parts = append(parts, event.Members...)
+
 	evaluation, err := guardrail.CheckExternalContent(guard, parts...)
 	if err == nil {
 		return true, nil
 	}
 
 	var blocked *promptguard.BlockedError
+
 	if !errors.As(err, &blocked) {
 		return false, fmt.Errorf("check major event: %w", err)
 	}
@@ -60,5 +68,6 @@ func majorEventPromptAllowed(event *domain.MajorEvent, guard *promptguard.Guard,
 		slog.String("decision", string(evaluation.Decision)),
 		slog.Any("rules", blocked.Rules),
 	)
+
 	return false, nil
 }

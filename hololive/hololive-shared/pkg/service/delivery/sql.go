@@ -14,9 +14,11 @@ func mustSQL(name string) string {
 	if err != nil {
 		panic(err)
 	}
+
 	text := strings.TrimSpace(string(query))
 	if text == "" {
 		panic(fmt.Sprintf("empty SQL asset %s", name))
 	}
+
 	return text
 }

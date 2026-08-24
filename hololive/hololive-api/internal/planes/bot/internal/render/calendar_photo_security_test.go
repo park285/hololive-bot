@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"io"
 	"net"
@@ -19,11 +20,16 @@ import (
 type calendarPhotoRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn calendarPhotoRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return fn(req)
+	out, err := fn(req)
+	if err != nil {
+		return nil, fmt.Errorf("fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func TestFetchMemberPhotoBlocksHTTPLoopback(t *testing.T) {
-	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: "image/png"}
+	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: calendarPhotoContentTypePNG}
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	photoURL := "http://127.0.0.1/avatar=s88-c"
@@ -35,6 +41,7 @@ func TestFetchMemberPhotoBlocksHTTPLoopback(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("blocked photo URL was stored")
 	}
+
 	if got := recorder.requests.Load(); got != 0 {
 		t.Fatalf("photo URL was fetched %d times, want 0", got)
 	}
@@ -42,14 +49,16 @@ func TestFetchMemberPhotoBlocksHTTPLoopback(t *testing.T) {
 
 func TestFetchImageRejectsNilHTTPResponse(t *testing.T) {
 	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		//nolint:nilnil // http.RoundTripper 계약을 어긴 (nil, nil) 응답을 재현하는 것이 이 테스트의 대상이라 수정할 수 없다.
 		return nil, nil
 	}))
 	withCalendarPhotoClient(t, client)
 
-	img, err := fetchImageWithContext(context.Background(), "https://yt3.googleusercontent.com/avatar=s88-c")
+	img, err := fetchImageWithContext(t.Context(), testAvatarURL)
 	if err == nil {
 		t.Fatal("fetchImageWithContext() error = nil, want nil response error")
 	}
+
 	if img != nil {
 		t.Fatalf("fetchImageWithContext() image = %#v, want nil", img)
 	}
@@ -77,7 +86,7 @@ func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			recorder := &calledRoundTripper{body: pngData, contentType: "image/png"}
+			recorder := &calledRoundTripper{body: pngData, contentType: calendarPhotoContentTypePNG}
 			withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 			photos := make(map[string]image.Image)
@@ -88,6 +97,7 @@ func TestFetchMemberPhotoBlocksUnsafeURLsBeforeRoundTrip(t *testing.T) {
 			if _, ok := photos[tt.photoURL]; ok {
 				t.Fatal("blocked photo URL was stored")
 			}
+
 			if got := recorder.requests.Load(); got != 0 {
 				t.Fatalf("photo URL was fetched %d times, want 0", got)
 			}
@@ -102,7 +112,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 		{
 			Kind: domain.CelebrationKindBirthday,
 			Member: &domain.Member{
-				ShortKoreanName: "페코라",
+				ShortKoreanName: testShortKoreanName,
 				Photo:           blockedPhotoURL,
 			},
 			Day: 15,
@@ -111,19 +121,22 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	fallbackEntries := []domain.CalendarEntry{
 		{
 			Kind:   domain.CelebrationKindBirthday,
-			Member: &domain.Member{ShortKoreanName: "페코라"},
+			Member: &domain.Member{ShortKoreanName: testShortKoreanName},
 			Day:    15,
 		},
 	}
-	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: "image/png"}
+	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: calendarPhotoContentTypePNG}
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
 	r := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+
 	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
 		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
+
 	assertValidPNG(t, data)
+
 	if got := recorder.requests.Load(); got != 0 {
 		t.Fatalf("blocked photo URL was fetched %d times, want 0", got)
 	}
@@ -132,6 +145,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	if err != nil {
 		t.Fatalf("fallback RenderCalendarImageContext() error = %v", err)
 	}
+
 	if !bytes.Equal(data, fallbackData) {
 		t.Fatal("blocked photo render should match default-avatar fallback")
 	}
@@ -140,6 +154,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	if _, ok := r.diskCachedImage(cacheKey); ok {
 		t.Fatal("blocked photo fallback was stored in disk cache")
 	}
+
 	if entries, readErr := os.ReadDir(filepath.Join(dir, calendarDiskCacheVersion)); readErr != nil {
 		if !errors.Is(readErr, os.ErrNotExist) {
 			t.Fatalf("read disk cache dir: %v", readErr)
@@ -147,6 +162,7 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 	} else if len(entries) != 0 {
 		t.Fatalf("disk cache entries = %d, want 0", len(entries))
 	}
+
 	if _, ok := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir)).diskCachedImage(cacheKey); ok {
 		t.Fatal("blocked photo fallback was served from disk cache")
 	}
@@ -154,9 +170,12 @@ func TestCalendarCardRendererRenderCalendarImageDoesNotDiskCacheBlockedPhotoFall
 
 func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 	pngData := tinyPNG(t)
+
 	var requests atomic.Int32
+
 	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
+
 		if req.URL.Hostname() == "yt3.googleusercontent.com" {
 			return &http.Response{
 				StatusCode: http.StatusFound,
@@ -165,11 +184,12 @@ func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 				Request:    req,
 			}, nil
 		}
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	}))
 	withCalendarPhotoClient(t, client)
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -178,6 +198,7 @@ func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("redirected private photo URL was stored")
 	}
+
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("redirect target requests = %d, want only the initial request", got)
 	}
@@ -185,17 +206,21 @@ func TestFetchMemberPhotoBlocksRedirectToPrivateHost(t *testing.T) {
 
 func TestFetchMemberPhotoBlocksRedirectWithUserinfo(t *testing.T) {
 	pngData := tinyPNG(t)
+
 	var requests atomic.Int32
+
 	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
+
 		if req.URL.User == nil {
 			return calendarPhotoRedirectResponse(req, "https://user:pass@yt3.googleusercontent.com/private=s88-c"), nil
 		}
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	}))
 	withCalendarPhotoClient(t, client)
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -204,6 +229,7 @@ func TestFetchMemberPhotoBlocksRedirectWithUserinfo(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("redirect to userinfo url was stored")
 	}
+
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("redirect target requests = %d, want only the initial request", got)
 	}
@@ -211,17 +237,21 @@ func TestFetchMemberPhotoBlocksRedirectWithUserinfo(t *testing.T) {
 
 func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 	pngData := tinyPNG(t)
+
 	var requests atomic.Int32
+
 	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
+
 		if req.URL.Hostname() == "yt3.googleusercontent.com" && req.URL.Port() == "" {
 			return calendarPhotoRedirectResponse(req, "https://yt3.googleusercontent.com:444/private=s88-c"), nil
 		}
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	}))
 	withCalendarPhotoClient(t, client)
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -230,6 +260,7 @@ func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("redirected non-443 photo URL was stored")
 	}
+
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("redirect target requests = %d, want only the initial request", got)
 	}
@@ -237,12 +268,16 @@ func TestFetchMemberPhotoBlocksRedirectToNon443Port(t *testing.T) {
 
 func TestFetchMemberPhotoBlocksThirdRedirect(t *testing.T) {
 	pngData := tinyPNG(t)
+
 	var requests atomic.Int32
+
 	withCalendarPhotoResolver(t, &fakeCalendarPhotoResolver{
 		addrs: []net.IP{net.ParseIP("93.184.216.34")},
 	})
+
 	client := newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
+
 		switch req.URL.Path {
 		case "/avatar=s1024-c-k-c0x00ffffff-no-rj":
 			return calendarPhotoRedirectResponse(req, "/one"), nil
@@ -251,12 +286,12 @@ func TestFetchMemberPhotoBlocksThirdRedirect(t *testing.T) {
 		case "/two":
 			return calendarPhotoRedirectResponse(req, "/three"), nil
 		default:
-			return calendarPhotoTestResponse(req, "image/png", pngData), nil
+			return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 		}
 	}))
 	withCalendarPhotoClient(t, client)
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -265,6 +300,7 @@ func TestFetchMemberPhotoBlocksThirdRedirect(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("photo behind third redirect was stored")
 	}
+
 	if got := requests.Load(); got != 3 {
 		t.Fatalf("redirect requests = %d, want 3", got)
 	}
@@ -290,11 +326,12 @@ func TestFetchMemberPhotoBlocksAllowlistedHostResolvingToBlockedIPs(t *testing.T
 				addrs: []net.IP{net.ParseIP(tt.addr)},
 			}
 			dialer := &recordingCalendarPhotoDialer{}
+
 			withCalendarPhotoResolver(t, resolver)
 			withCalendarPhotoDialer(t, dialer)
 			withCalendarPhotoClient(t, newCalendarPhotoHTTPClient())
 
-			photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+			photoURL := testAvatarURL
 			photos := make(map[string]image.Image)
 			fetchMemberPhoto(domain.CalendarEntry{
 				Member: &domain.Member{Photo: photoURL},
@@ -303,9 +340,11 @@ func TestFetchMemberPhotoBlocksAllowlistedHostResolvingToBlockedIPs(t *testing.T
 			if _, ok := photos[photoURL]; ok {
 				t.Fatal("allowlisted host resolving to blocked IP was stored")
 			}
+
 			if got := resolver.requests.Load(); got != 1 {
 				t.Fatalf("resolver requests = %d, want 1", got)
 			}
+
 			if got := dialer.requests.Load(); got != 0 {
 				t.Fatalf("dialer requests = %d, want 0", got)
 			}
@@ -317,7 +356,7 @@ func TestFetchMemberPhotoBlocksWrongContentType(t *testing.T) {
 	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: "text/plain"}
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -326,6 +365,7 @@ func TestFetchMemberPhotoBlocksWrongContentType(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("wrong content type photo was stored")
 	}
+
 	if got := recorder.requests.Load(); got != 1 {
 		t.Fatalf("photo requests = %d, want 1", got)
 	}
@@ -333,10 +373,10 @@ func TestFetchMemberPhotoBlocksWrongContentType(t *testing.T) {
 
 func TestFetchMemberPhotoBlocksOversizedBody(t *testing.T) {
 	body := bytes.Repeat([]byte{'x'}, calendarPhotoMaxBytes+1)
-	recorder := &calledRoundTripper{body: body, contentType: "image/png"}
+	recorder := &calledRoundTripper{body: body, contentType: calendarPhotoContentTypePNG}
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -345,16 +385,17 @@ func TestFetchMemberPhotoBlocksOversizedBody(t *testing.T) {
 	if _, ok := photos[photoURL]; ok {
 		t.Fatal("oversized photo body was stored")
 	}
+
 	if got := recorder.requests.Load(); got != 1 {
 		t.Fatalf("photo requests = %d, want 1", got)
 	}
 }
 
 func TestFetchMemberPhotoAcceptsAllowlistedHTTPSPNG(t *testing.T) {
-	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: "image/png"}
+	recorder := &calledRoundTripper{body: tinyPNG(t), contentType: calendarPhotoContentTypePNG}
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(recorder))
 
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	photos := make(map[string]image.Image)
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
@@ -363,6 +404,7 @@ func TestFetchMemberPhotoAcceptsAllowlistedHTTPSPNG(t *testing.T) {
 	if _, ok := photos[photoURL]; !ok {
 		t.Fatal("allowlisted HTTPS PNG photo was not stored")
 	}
+
 	if got := recorder.requests.Load(); got != 1 {
 		t.Fatalf("photo requests = %d, want 1", got)
 	}
@@ -376,6 +418,7 @@ type calledRoundTripper struct {
 
 func (rt *calledRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt.requests.Add(1)
+
 	return calendarPhotoTestResponse(req, rt.contentType, rt.body), nil
 }
 
@@ -399,7 +442,9 @@ func calendarPhotoRedirectResponse(req *http.Request, location string) *http.Res
 
 func newCalendarPhotoTestClient(rt http.RoundTripper) *http.Client {
 	client := *photoClient
+
 	client.Transport = rt
+
 	return &client
 }
 
@@ -407,7 +452,9 @@ func withCalendarPhotoClient(t *testing.T, client *http.Client) {
 	t.Helper()
 
 	previous := photoClient
+
 	photoClient = client
+
 	t.Cleanup(func() {
 		photoClient = previous
 	})
@@ -421,9 +468,11 @@ type fakeCalendarPhotoResolver struct {
 
 func (r *fakeCalendarPhotoResolver) LookupIP(context.Context, string, string) ([]net.IP, error) {
 	r.requests.Add(1)
+
 	if r.err != nil {
 		return nil, r.err
 	}
+
 	return r.addrs, nil
 }
 
@@ -433,6 +482,7 @@ type recordingCalendarPhotoDialer struct {
 
 func (d *recordingCalendarPhotoDialer) DialContext(context.Context, string, string) (net.Conn, error) {
 	d.requests.Add(1)
+
 	return nil, errors.New("unexpected calendar photo dial")
 }
 
@@ -440,7 +490,9 @@ func withCalendarPhotoResolver(t *testing.T, resolver calendarPhotoResolver) {
 	t.Helper()
 
 	previous := calendarPhotoDNSResolver
+
 	calendarPhotoDNSResolver = resolver
+
 	t.Cleanup(func() {
 		calendarPhotoDNSResolver = previous
 	})
@@ -450,7 +502,9 @@ func withCalendarPhotoDialer(t *testing.T, dialer calendarPhotoDialer) {
 	t.Helper()
 
 	previous := calendarPhotoNetworkDialer
+
 	calendarPhotoNetworkDialer = dialer
+
 	t.Cleanup(func() {
 		calendarPhotoNetworkDialer = previous
 	})

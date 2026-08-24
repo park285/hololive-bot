@@ -27,26 +27,30 @@ import (
 	"strings"
 )
 
-func (s *Service) readNotifiedData(ctx context.Context, key string) (*NotifiedData, error) {
-	data, err := s.loadNotifiedData(ctx, key)
+func (s *Service) readNotifiedData(ctx context.Context, key string) (NotifiedData, bool, error) {
+	data, ok, err := s.loadNotifiedData(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("read notified data: load notified data: %w", err)
+		return NotifiedData{}, false, fmt.Errorf("read notified data: load notified data: %w", err)
 	}
-	return data, nil
+
+	return data, ok, nil
 }
 
-func (s *Service) loadNotifiedData(ctx context.Context, key string) (*NotifiedData, error) {
+func (s *Service) loadNotifiedData(ctx context.Context, key string) (NotifiedData, bool, error) {
 	fields, err := s.readNotifiedHashFields(ctx, key)
-	if err == nil {
-		if len(fields) == 0 {
-			return nil, nil
+	if err != nil {
+		if isWrongTypeError(err) {
+			return NotifiedData{}, false, fmt.Errorf("notified data has non-hash type: %w", err)
 		}
-		return parseNotifiedHash(fields), nil
+
+		return NotifiedData{}, false, fmt.Errorf("load notified data: %w", err)
 	}
-	if isWrongTypeError(err) {
-		return nil, fmt.Errorf("notified data has non-hash type: %w", err)
+
+	if len(fields) == 0 {
+		return NotifiedData{}, false, nil
 	}
-	return nil, err
+
+	return parseNotifiedHash(fields), true, nil
 }
 
 func (s *Service) readNotifiedHashFields(ctx context.Context, key string) (map[string]string, error) {
@@ -54,22 +58,25 @@ func (s *Service) readNotifiedHashFields(ctx context.Context, key string) (map[s
 	if err != nil {
 		return nil, fmt.Errorf("read notified hash fields: %w", err)
 	}
+
 	return fields, nil
 }
 
-func parseNotifiedHash(fields map[string]string) *NotifiedData {
+func parseNotifiedHash(fields map[string]string) NotifiedData {
 	startScheduled := fields["start_scheduled"]
 	sentAt := make(map[int]bool)
+
 	for k := range fields {
 		if k == "start_scheduled" {
 			continue
 		}
+
 		if m, err := strconv.Atoi(k); err == nil {
 			sentAt[m] = true
 		}
 	}
 
-	return &NotifiedData{
+	return NotifiedData{
 		StartScheduled: startScheduled,
 		SentAt:         sentAt,
 	}

@@ -8,23 +8,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func newAlarmDispatchTestRenderer(t *testing.T) *template.Renderer {
 	t.Helper()
+
 	return template.NewRenderer(dbtest.NewPool(t), slog.Default())
 }
 
 func newAlarmDispatchTestRendering(t *testing.T) (*template.Renderer, *messagestrings.Store) {
 	t.Helper()
+
 	pool := dbtest.NewPool(t)
+
 	return template.NewRenderer(pool, slog.Default()), messagestrings.NewStore(pool, slog.Default())
 }
 
@@ -32,9 +36,11 @@ func goldenAlarmDispatchMember(n *domain.AlarmNotification) string {
 	if n.Channel != nil && strings.TrimSpace(n.Channel.Name) != "" {
 		return strings.TrimSpace(n.Channel.Name)
 	}
+
 	if n.Stream != nil && strings.TrimSpace(n.Stream.ChannelName) != "" {
 		return strings.TrimSpace(n.Stream.ChannelName)
 	}
+
 	return "알 수 없는 멤버"
 }
 
@@ -42,9 +48,11 @@ func goldenAlarmDispatchTitle(n *domain.AlarmNotification) string {
 	if n.Stream == nil {
 		return "방송 정보 없음"
 	}
+
 	if title := strings.TrimSpace(n.Stream.Title); title != "" {
 		return title
 	}
+
 	return "제목 없음"
 }
 
@@ -52,12 +60,15 @@ func goldenAlarmDispatchNotificationIsStarting(n *domain.AlarmNotification) bool
 	if n == nil {
 		return false
 	}
+
 	if n.MinutesUntil <= 0 {
 		return true
 	}
+
 	if n.Stream == nil {
 		return false
 	}
+
 	return n.Stream.Status == domain.StreamStatusLive || n.Stream.StartActual != nil
 }
 
@@ -66,13 +77,17 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	title := util.MarkdownNeutralize(goldenAlarmDispatchTitle(n))
 	url := resolveAlarmDispatchURL(n)
 	label := "방송"
+
 	if n.Stream != nil && n.Stream.IsPremiere {
 		label = "선행공개"
 	}
+
 	var b strings.Builder
+
 	if groupMinutesUntil < 0 {
 		b.WriteString("## ")
 	}
+
 	switch {
 	case goldenAlarmDispatchNotificationIsStarting(n):
 		fmt.Fprintf(&b, "🔴 **%s** %s 시작", member, label)
@@ -81,21 +96,26 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 	default:
 		fmt.Fprintf(&b, "⏰ **%s** %s %d분 전", member, label, n.MinutesUntil)
 	}
+
 	linkable := title != "" && url != "" && !strings.Contains(url, " | ")
 	if linkable {
 		fmt.Fprintf(&b, "\n[%s](%s)", title, url)
 	} else if title != "" {
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
 	}
+
 	if collabMembers := formatAlarmDispatchCollabMembers(nil, n.Stream); collabMembers != "" {
 		fmt.Fprintf(&b, "\n콜라보: %s", util.MarkdownNeutralize(collabMembers))
 	}
+
 	if scheduleMessage := strings.TrimSpace(n.ScheduleChangeMessage); scheduleMessage != "" {
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(scheduleMessage))
 	}
+
 	if url != "" && !linkable {
 		fmt.Fprintf(&b, "\n%s", url)
 	}
+
 	return b.String()
 }
 
@@ -103,11 +123,13 @@ func goldenAlarmDispatchGroupAllStarting(group alarmDispatchGroup) bool {
 	if len(group.notifications) == 0 {
 		return group.minutesUntil <= 0
 	}
+
 	for i := range group.notifications {
 		if !goldenAlarmDispatchNotificationIsStarting(&group.notifications[i]) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -115,29 +137,36 @@ func goldenAlarmDispatchGroupAllPremiere(group alarmDispatchGroup) bool {
 	if len(group.notifications) == 0 {
 		return false
 	}
+
 	for i := range group.notifications {
 		if group.notifications[i].Stream == nil || !group.notifications[i].Stream.IsPremiere {
 			return false
 		}
 	}
+
 	return true
 }
 
 func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	label := "방송"
+
 	if goldenAlarmDispatchGroupAllPremiere(group) {
 		label = "선행공개"
 	}
+
 	var b strings.Builder
+
 	if goldenAlarmDispatchGroupAllStarting(group) {
 		fmt.Fprintf(&b, "## 🔴 %s 시작", label)
 	} else {
 		fmt.Fprintf(&b, "## ⏰ %s %d분 전", label, group.minutesUntil)
 	}
+
 	for i := range group.notifications {
 		b.WriteString("\n\n")
 		b.WriteString(goldenAlarmDispatchItem(&group.notifications[i], group.minutesUntil))
 	}
+
 	return b.String()
 }
 
@@ -147,12 +176,14 @@ func alarmGoldenStream(id, title string) *domain.Stream {
 
 func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Stream) domain.AlarmNotification {
 	var channel *domain.Channel
+
 	if name != "" {
 		channel = &domain.Channel{Name: name}
 	}
+
 	return domain.AlarmNotification{
 		AlarmType:    domain.AlarmTypeLive,
-		RoomID:       "room-golden",
+		RoomID:       testAlarmGoldenRoomID,
 		Channel:      channel,
 		Stream:       stream,
 		MinutesUntil: minutesUntil,
@@ -161,7 +192,9 @@ func alarmGoldenNotification(name string, minutesUntil int, stream *domain.Strea
 
 func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 	premiere := alarmGoldenNotification("Premiere", 5, alarmGoldenStream("premiere", "Premiere Title"))
+
 	premiere.Stream.IsPremiere = true
+
 	regular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("regular", "Regular Title"))
 
 	item := buildAlarmDispatchItemView(t.Context(), nil, nil, &premiere, 5)
@@ -188,30 +221,37 @@ func TestBuildAlarmDispatchPremiereViews(t *testing.T) {
 
 func TestRenderAlarmDispatchNotificationMatchesCanonicalRendering(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
-	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 
 	twitch := alarmGoldenStream("tw-1", "Twitch 방송")
+
 	twitch.IsTwitchOnly = true
 	twitch.TwitchLiveURL = "https://twitch.tv/holomember"
 
 	chzzk := alarmGoldenStream("cz-1", "치지직 방송")
+
 	chzzk.IsChzzkOnly = true
 	chzzk.ChzzkLiveURL = "https://chzzk.naver.com/live/abcdef"
 
 	integrated := alarmGoldenStream("yt-int", "동시송출 방송")
+
 	integrated.IsIntegrated = true
 	integrated.ChzzkLiveURL = "https://chzzk.naver.com/live/zzz"
 
 	liveStatus := alarmGoldenStream("yt-live-status", "LIVE 상태 방송")
+
 	liveStatus.Status = domain.StreamStatusLive
 
 	startActual := alarmGoldenStream("yt-start-actual", "실제 시작 방송")
+
 	startActual.StartActual = &start
 
 	upcomingStatus := alarmGoldenStream("yt-upcoming", "예정 방송")
+
 	upcomingStatus.Status = domain.StreamStatusUpcoming
 
 	premiere := alarmGoldenStream("yt-premiere", "선행공개 제목")
+
 	premiere.Status = domain.StreamStatusUpcoming
 	premiere.IsPremiere = true
 
@@ -250,9 +290,11 @@ func TestRenderAlarmDispatchNotificationPreservesScheduleMessageFormatting(t *te
 	renderer, store := newAlarmDispatchTestRendering(t)
 
 	with := alarmGoldenNotification("멤버", 5, alarmGoldenStream("yt-4", "방송 제목"))
+
 	with.ScheduleChangeMessage = "  방송 시간이 21:00으로 변경되었습니다  "
 
 	without := alarmGoldenNotification("멤버", 5, alarmGoldenStream("yt-4", "방송 제목"))
+
 	without.ScheduleChangeMessage = "   "
 
 	for _, tc := range []struct {
@@ -274,41 +316,36 @@ func TestRenderAlarmDispatchNotificationPreservesScheduleMessageFormatting(t *te
 	}
 }
 
-func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testing.T) {
-	renderer, store := newAlarmDispatchTestRendering(t)
+type alarmGoldenGroupCase struct {
+	name  string
+	group alarmDispatchGroup
+}
 
-	scheduled := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+func alarmGoldenGroupCases() []alarmGoldenGroupCase {
+	cases := alarmGoldenStartingGroupCases()
+
+	return append(cases, alarmGoldenScheduledGroupCases()...)
+}
+
+func alarmGoldenStartingGroupCases() []alarmGoldenGroupCase {
+	scheduled := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 
 	startingA := alarmGoldenNotification("Member1", 0, alarmGoldenStream("s-a", "Title A"))
 	startingB := alarmGoldenNotification("Member2", 0, alarmGoldenStream("s-b", "Title B"))
 
 	catchupA := alarmGoldenNotification("Member1", 5, alarmGoldenStream("c-a", "Title A"))
+
 	catchupA.Stream.StartActual = &scheduled
+
 	catchupB := alarmGoldenNotification("Member2", 5, alarmGoldenStream("c-b", "Title B"))
+
 	catchupB.Stream.StartActual = &scheduled
 
-	mixedA := alarmGoldenNotification("Member1", 3, alarmGoldenStream("m-a", "Title1"))
-	mixedA.Stream.StartScheduled = &scheduled
-	mixedB := alarmGoldenNotification("Member2", 1, alarmGoldenStream("m-b", "Title2"))
-	mixedB.Stream.StartScheduled = &scheduled
-	mixedB.ScheduleChangeMessage = "변경 안내"
-
-	premiereA := alarmGoldenNotification("Premiere1", 5, alarmGoldenStream("p-a", "Premiere A"))
-	premiereA.Stream.IsPremiere = true
-	premiereB := alarmGoldenNotification("Premiere2", 5, alarmGoldenStream("p-b", "Premiere B"))
-	premiereB.Stream.IsPremiere = true
-
-	mixedPremiere := premiereA
-	mixedRegular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("p-regular", "Regular"))
-
-	cases := []struct {
-		name  string
-		group alarmDispatchGroup
-	}{
+	return []alarmGoldenGroupCase{
 		{
 			name: "group-start",
 			group: alarmDispatchGroup{
-				roomID:        "room-golden",
+				roomID:        testAlarmGoldenRoomID,
 				minutesUntil:  0,
 				notifications: []domain.AlarmNotification{startingA, startingB},
 			},
@@ -316,15 +353,42 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 		{
 			name: "group-all-live-catchup",
 			group: alarmDispatchGroup{
-				roomID:        "room-golden",
+				roomID:        testAlarmGoldenRoomID,
 				minutesUntil:  5,
 				notifications: []domain.AlarmNotification{catchupA, catchupB},
 			},
 		},
+	}
+}
+
+func alarmGoldenScheduledGroupCases() []alarmGoldenGroupCase {
+	scheduled := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
+
+	mixedA := alarmGoldenNotification("Member1", 3, alarmGoldenStream("m-a", "Title1"))
+
+	mixedA.Stream.StartScheduled = &scheduled
+
+	mixedB := alarmGoldenNotification("Member2", 1, alarmGoldenStream("m-b", "Title2"))
+
+	mixedB.Stream.StartScheduled = &scheduled
+	mixedB.ScheduleChangeMessage = "변경 안내"
+
+	premiereA := alarmGoldenNotification("Premiere1", 5, alarmGoldenStream("p-a", "Premiere A"))
+
+	premiereA.Stream.IsPremiere = true
+
+	premiereB := alarmGoldenNotification("Premiere2", 5, alarmGoldenStream("p-b", "Premiere B"))
+
+	premiereB.Stream.IsPremiere = true
+
+	mixedPremiere := premiereA
+	mixedRegular := alarmGoldenNotification("Regular", 5, alarmGoldenStream("p-regular", "Regular"))
+
+	return []alarmGoldenGroupCase{
 		{
 			name: "group-nbefore-scheduled-and-countdown",
 			group: alarmDispatchGroup{
-				roomID:        "room-golden",
+				roomID:        testAlarmGoldenRoomID,
 				minutesUntil:  1,
 				notifications: []domain.AlarmNotification{mixedA, mixedB},
 			},
@@ -332,7 +396,7 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 		{
 			name: "group-all-premiere",
 			group: alarmDispatchGroup{
-				roomID:        "room-golden",
+				roomID:        testAlarmGoldenRoomID,
 				minutesUntil:  5,
 				notifications: []domain.AlarmNotification{premiereA, premiereB},
 			},
@@ -340,14 +404,18 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 		{
 			name: "group-mixed-premiere",
 			group: alarmDispatchGroup{
-				roomID:        "room-golden",
+				roomID:        testAlarmGoldenRoomID,
 				minutesUntil:  5,
 				notifications: []domain.AlarmNotification{mixedPremiere, mixedRegular},
 			},
 		},
 	}
+}
 
-	for _, tc := range cases {
+func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testing.T) {
+	renderer, store := newAlarmDispatchTestRendering(t)
+
+	for _, tc := range alarmGoldenGroupCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			want := goldenAlarmDispatchGroup(tc.group)
 
@@ -371,6 +439,7 @@ func TestRenderAlarmDispatchPlaceholderResolvesFromMessageStrings(t *testing.T) 
 func TestRenderAlarmDispatchNotificationIncludesCollabMembers(t *testing.T) {
 	renderer, store := newAlarmDispatchTestRendering(t)
 	notification := alarmGoldenNotification("미코", 5, alarmGoldenStream("collab-1", "콜라보 방송"))
+
 	notification.Stream.ChannelID = "ch-miko"
 	notification.Stream.CollaboTalentNames = []string{"星街すいせい", "Gawr Gura"}
 
@@ -398,6 +467,7 @@ func (m collabTestMembers) FindMemberByChannelID(channelID string) *domain.Membe
 			return member
 		}
 	}
+
 	return nil
 }
 

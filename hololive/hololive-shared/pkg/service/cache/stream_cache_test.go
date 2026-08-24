@@ -21,7 +21,6 @@
 package cache
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -64,8 +63,9 @@ func TestSetStreamsAndGetStreams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			service.SetStreams(ctx, tt.key, tt.streams, tt.ttl)
 
@@ -73,6 +73,7 @@ func TestSetStreamsAndGetStreams(t *testing.T) {
 			if found != tt.wantFound {
 				t.Errorf("GetStreams() found = %v, want %v", found, tt.wantFound)
 			}
+
 			if found && len(got) != tt.wantCount {
 				t.Errorf("GetStreams() count = %d, want %d", len(got), tt.wantCount)
 			}
@@ -84,12 +85,13 @@ func TestGetStreams_NonExistentKey(t *testing.T) {
 	t.Parallel()
 
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	got, found := service.GetStreams(ctx, "streams:nonexistent")
 	if found {
-		t.Errorf("GetStreams() found = true, want false for non-existent key")
+		t.Error("GetStreams() found = true, want false for non-existent key")
 	}
+
 	if got != nil {
 		t.Errorf("GetStreams() = %v, want nil for non-existent key", got)
 	}
@@ -99,7 +101,7 @@ func TestSetStreams_TTLIsApplied(t *testing.T) {
 	t.Parallel()
 
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	streams := []*domain.Stream{
 		{ID: "vid-ttl", Title: "TTL 테스트 방송"},
@@ -126,7 +128,7 @@ func TestSetStreams_ContentMatch(t *testing.T) {
 	t.Parallel()
 
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	channelName := "테스트 채널"
 	streams := []*domain.Stream{
@@ -144,6 +146,7 @@ func TestSetStreams_ContentMatch(t *testing.T) {
 	if !found {
 		t.Fatal("GetStreams() found = false, want true")
 	}
+
 	if len(got) != 1 {
 		t.Fatalf("GetStreams() count = %d, want 1", len(got))
 	}
@@ -152,9 +155,11 @@ func TestSetStreams_ContentMatch(t *testing.T) {
 	if s.ID != "vid-match" {
 		t.Errorf("ID = %q, want %q", s.ID, "vid-match")
 	}
+
 	if s.ChannelName != channelName {
 		t.Errorf("ChannelName = %q, want %q", s.ChannelName, channelName)
 	}
+
 	if s.Status != domain.StreamStatusLive {
 		t.Errorf("Status = %v, want %v", s.Status, domain.StreamStatusLive)
 	}

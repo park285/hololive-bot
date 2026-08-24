@@ -22,6 +22,8 @@ package holodexprovider
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -33,8 +35,14 @@ type MockRequester struct {
 
 func (m *MockRequester) DoRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
 	if m.DoRequestFunc != nil {
-		return m.DoRequestFunc(ctx, method, path, params)
+		out, err := m.DoRequestFunc(ctx, method, path, params)
+		if err != nil {
+			return out, fmt.Errorf("do request func: %w", err)
+		}
+
+		return out, nil
 	}
+
 	return nil, nil
 }
 
@@ -44,12 +52,13 @@ func (m *MockRequester) IsCircuitOpen() bool {
 
 func TestRequester_BatchParamVerification(t *testing.T) {
 	mockReq := &MockRequester{}
-	mockReq.DoRequestFunc = func(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
-		if path != "/users/live" {
+
+	mockReq.DoRequestFunc = func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
+		if path != usersLivePath {
 			t.Errorf("Expected path /users/live, got %s", path)
 		}
 
-		if method != "GET" {
+		if method != http.MethodGet {
 			t.Errorf("Expected method GET, got %s", method)
 		}
 
@@ -61,13 +70,13 @@ func TestRequester_BatchParamVerification(t *testing.T) {
 		return []byte(`[]`), nil
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	channelIDs := []string{"ch1", "ch2"}
 
 	params := url.Values{}
 	params.Set("channels", strings.Join(channelIDs, ","))
 
-	_, err := mockReq.DoRequest(ctx, "GET", "/users/live", params)
+	_, err := mockReq.DoRequest(ctx, http.MethodGet, usersLivePath, params)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}

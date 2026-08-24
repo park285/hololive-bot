@@ -67,12 +67,13 @@ func ParseClientHints(c *gin.Context) ClientHints {
 }
 
 // unquote: Sec-CH-UA 헤더 값에서 따옴표를 제거합니다.
-// 예: `"Android"` → `Android`
+// 예: `"Android"` → `Android`.
 func unquote(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
 		return s[1 : len(s)-1]
 	}
+
 	return s
 }
 
@@ -80,6 +81,7 @@ func (ch *ClientHints) HasClientHints() bool {
 	if ch == nil {
 		return false
 	}
+
 	return ch.Platform != "" || ch.Model != "" || ch.PlatformVersion != ""
 }
 
@@ -128,6 +130,7 @@ func (ch *ClientHints) platformSummary() string {
 	if strings.EqualFold(ch.Platform, "Windows") {
 		return "Windows " + translateWindowsVersion(majorVersion)
 	}
+
 	return ch.Platform + " " + majorVersion
 }
 
@@ -135,9 +138,11 @@ func (ch *ClientHints) deviceSummary() string {
 	if ch.Model != "" {
 		return "(" + ch.Model + ")"
 	}
+
 	if ch.Architecture == "" {
 		return ""
 	}
+
 	return formatArchitecture(ch.Architecture, ch.Bitness)
 }
 
@@ -145,6 +150,7 @@ func clientHintMajorVersion(version string) string {
 	if idx := strings.Index(version, "."); idx > 0 {
 		return version[:idx]
 	}
+
 	return version
 }
 
@@ -173,12 +179,15 @@ func translateWindowsVersion(majorVersion string) string {
 
 func parseLeadingInt(value string) int {
 	var parsed int
+
 	for _, ch := range value {
 		if ch < '0' || ch > '9' {
 			break
 		}
+
 		parsed = parsed*10 + int(ch-'0')
 	}
+
 	return parsed
 }
 

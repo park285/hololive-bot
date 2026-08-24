@@ -22,8 +22,7 @@ package member
 
 import (
 	"context"
-	"fmt"
-	"io"
+	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -31,6 +30,11 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+const (
+	testMemberNameOld = "Old"
+	testMemberNameNew = "New"
 )
 
 func testMembers() []*domain.Member {
@@ -45,19 +49,22 @@ func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
+
 	c := &Cache{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.DiscardHandler),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
+
 			return testMembers(), nil
 		},
 	}
 
 	for i := range 5 {
-		got, err := c.AllMembers(context.Background())
+		got, err := c.AllMembers(t.Context())
 		if err != nil {
 			t.Fatalf("AllMembers() call %d error = %v", i, err)
 		}
+
 		if len(got) != 3 {
 			t.Fatalf("AllMembers() call %d len = %d, want 3", i, len(got))
 		}
@@ -70,6 +77,7 @@ func TestCacheAllMembers_ReusesSnapshotAcrossCalls(t *testing.T) {
 	if _, ok := c.byChannelID.Load("UC_pekora"); !ok {
 		t.Fatal("snapshot load must backfill byChannelID map")
 	}
+
 	if _, ok := c.byName.Load("Miko"); !ok {
 		t.Fatal("snapshot load must backfill byName map")
 	}
@@ -79,21 +87,25 @@ func TestCacheAllMembers_ReloadsAfterInvalidateAll(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
+
 	c := &Cache{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.DiscardHandler),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
+
 			return testMembers(), nil
 		},
 	}
 
-	if _, err := c.AllMembers(context.Background()); err != nil {
+	if _, err := c.AllMembers(t.Context()); err != nil {
 		t.Fatalf("first AllMembers() error = %v", err)
 	}
-	if err := c.InvalidateAll(context.Background()); err != nil {
+
+	if err := c.InvalidateAll(t.Context()); err != nil {
 		t.Fatalf("InvalidateAll() error = %v", err)
 	}
-	if _, err := c.AllMembers(context.Background()); err != nil {
+
+	if _, err := c.AllMembers(t.Context()); err != nil {
 		t.Fatalf("second AllMembers() error = %v", err)
 	}
 
@@ -106,11 +118,13 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
+
 	c := &Cache{
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:      slog.New(slog.DiscardHandler),
 		snapshotTTL: time.Minute,
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
+
 			return testMembers(), nil
 		},
 	}
@@ -120,16 +134,18 @@ func TestCacheAllMembers_ReloadsAfterTTLExpiry(t *testing.T) {
 		loadedAt: time.Now().Add(-2 * time.Minute),
 	})
 
-	if _, err := c.AllMembers(context.Background()); err != nil {
+	if _, err := c.AllMembers(t.Context()); err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
+
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (expired snapshot must reload)", n)
 	}
 
-	if _, err := c.AllMembers(context.Background()); err != nil {
+	if _, err := c.AllMembers(t.Context()); err != nil {
 		t.Fatalf("second AllMembers() error = %v", err)
 	}
+
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (fresh snapshot must be reused)", n)
 	}
@@ -139,29 +155,33 @@ func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
+
 	release := make(chan struct{})
 	c := &Cache{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.DiscardHandler),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
 			<-release
+
 			return testMembers(), nil
 		},
 	}
 
 	const goroutines = 50
+
 	start := make(chan struct{})
+
 	var wg sync.WaitGroup
+
 	results := make([][]*domain.Member, goroutines)
 	errs := make([]error, goroutines)
 
 	for i := range goroutines {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
-			results[idx], errs[idx] = c.AllMembers(context.Background())
-		}(i)
+
+			results[i], errs[i] = c.AllMembers(t.Context())
+		})
 	}
 
 	close(start)
@@ -172,10 +192,12 @@ func TestCacheAllMembers_ConcurrentCallsConvergeToSingleLoad(t *testing.T) {
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times under concurrent stampede, want 1", n)
 	}
+
 	for i := range goroutines {
 		if errs[i] != nil {
 			t.Fatalf("goroutine %d error = %v", i, errs[i])
 		}
+
 		if len(results[i]) != 3 {
 			t.Fatalf("goroutine %d len = %d, want 3", i, len(results[i]))
 		}
@@ -186,13 +208,16 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 	t.Parallel()
 
 	stale := testMembers()
+
 	var calls atomic.Int64
+
 	c := &Cache{
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:      slog.New(slog.DiscardHandler),
 		snapshotTTL: time.Minute,
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			calls.Add(1)
-			return nil, fmt.Errorf("db outage")
+
+			return nil, errors.New("db outage")
 		},
 	}
 	c.allMembersSnapshot.Store(&allMembersState{
@@ -200,16 +225,19 @@ func TestCacheAllMembers_ExpiredSnapshotFallsBackOnLoaderFailure(t *testing.T) {
 		loadedAt: time.Now().Add(-2 * time.Minute),
 	})
 
-	got, err := c.AllMembers(context.Background())
+	got, err := c.AllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v, want nil (must serve stale snapshot on reload failure)", err)
 	}
+
 	if len(got) != len(stale) {
 		t.Fatalf("AllMembers() len = %d, want %d (expired snapshot must be returned, not empty)", len(got), len(stale))
 	}
+
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("loader called %d times, want 1 (reload attempted once before fallback)", n)
 	}
+
 	if snap := c.allMembersSnapshot.Load(); snap == nil {
 		t.Fatal("stale snapshot must be retained after failed reload, not cleared")
 	}
@@ -219,24 +247,27 @@ func TestCacheAllMembers_LoadSurvivesCallerCancellation(t *testing.T) {
 	t.Parallel()
 
 	var loaderCtxErr error
+
 	c := &Cache{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.DiscardHandler),
 		loadAllMembers: func(ctx context.Context) ([]*domain.Member, error) {
 			loaderCtxErr = ctx.Err()
 			return testMembers(), nil
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	got, err := c.AllMembers(ctx)
 	if err != nil {
-		t.Fatalf("AllMembers() error = %v, want nil despite cancelled caller ctx", err)
+		t.Fatalf("AllMembers() error = %v, want nil despite canceled caller ctx", err)
 	}
+
 	if len(got) != 3 {
 		t.Fatalf("AllMembers() len = %d, want 3", len(got))
 	}
+
 	if loaderCtxErr != nil {
 		t.Fatalf("loader received ctx err = %v, want nil (caller cancellation must not enter the shared load)", loaderCtxErr)
 	}
@@ -245,12 +276,13 @@ func TestCacheAllMembers_LoadSurvivesCallerCancellation(t *testing.T) {
 func TestCacheAllMembers_NilRepositoryReturnsError(t *testing.T) {
 	t.Parallel()
 
-	c := &Cache{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c := &Cache{logger: slog.New(slog.DiscardHandler)}
 
-	_, err := c.AllMembers(context.Background())
+	_, err := c.AllMembers(t.Context())
 	if err == nil {
 		t.Fatal("AllMembers() error = nil, want non-nil")
 	}
+
 	if got := err.Error(); got != "member repository is nil" {
 		t.Fatalf("AllMembers() error = %q, want %q", got, "member repository is nil")
 	}
@@ -260,22 +292,24 @@ func TestCacheAllMembers_ReturnsClonedSlice(t *testing.T) {
 	t.Parallel()
 
 	c := &Cache{
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.DiscardHandler),
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			return testMembers(), nil
 		},
 	}
 
-	first, err := c.AllMembers(context.Background())
+	first, err := c.AllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
+
 	first[0] = nil
 
-	second, err := c.AllMembers(context.Background())
+	second, err := c.AllMembers(t.Context())
 	if err != nil {
 		t.Fatalf("AllMembers() error = %v", err)
 	}
+
 	if second[0] == nil {
 		t.Fatal("AllMembers() must return an independent slice; caller mutation leaked into snapshot")
 	}
@@ -285,7 +319,7 @@ func TestCacheInvalidateAllRacesWithSnapshotReload(t *testing.T) {
 	t.Parallel()
 
 	c := &Cache{
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:      slog.New(slog.DiscardHandler),
 		snapshotTTL: time.Nanosecond,
 		loadAllMembers: func(context.Context) ([]*domain.Member, error) {
 			return testMembers(), nil
@@ -293,35 +327,39 @@ func TestCacheInvalidateAllRacesWithSnapshotReload(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+
 	stop := make(chan struct{})
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
+
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
 				return
 			default:
 			}
-			if _, err := c.AllMembers(context.Background()); err != nil {
+
+			if _, err := c.AllMembers(t.Context()); err != nil {
 				t.Errorf("AllMembers() error = %v", err)
+
 				return
 			}
 		}
-	}()
-	go func() {
-		defer wg.Done()
+	})
+
+	wg.Go(func() {
 		for range 200 {
-			if err := c.InvalidateAll(context.Background()); err != nil {
+			if err := c.InvalidateAll(t.Context()); err != nil {
 				t.Errorf("InvalidateAll() error = %v", err)
+
 				return
 			}
 		}
-	}()
+	})
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		close(stop)
 	}()
+
 	wg.Wait()
 }

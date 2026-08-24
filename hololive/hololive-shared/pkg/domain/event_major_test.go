@@ -35,21 +35,27 @@ func TestNewMajorEvent(t *testing.T) {
 	if event.Title != title {
 		t.Errorf("expected title %q, got %q", title, event.Title)
 	}
+
 	if event.Link != link {
 		t.Errorf("expected link %q, got %q", link, event.Link)
 	}
+
 	if event.ExternalID != link {
 		t.Errorf("expected externalID %q, got %q", link, event.ExternalID)
 	}
+
 	if event.PubDate == nil || !event.PubDate.Equal(pubDate) {
 		t.Errorf("expected pubDate %v, got %v", pubDate, event.PubDate)
 	}
+
 	if event.Status != MajorEventStatusActive {
 		t.Errorf("expected status %q, got %q", MajorEventStatusActive, event.Status)
 	}
+
 	if event.Type != MajorEventTypeEvent {
 		t.Errorf("expected type %q, got %q", MajorEventTypeEvent, event.Type)
 	}
+
 	if event.LinkStatus != MajorEventLinkStatusUnchecked {
 		t.Errorf("expected link status %q, got %q", MajorEventLinkStatusUnchecked, event.LinkStatus)
 	}
@@ -65,21 +71,27 @@ func TestNewMajorNews(t *testing.T) {
 	if news.Title != title {
 		t.Errorf("expected title %q, got %q", title, news.Title)
 	}
+
 	if news.Link != link {
 		t.Errorf("expected link %q, got %q", link, news.Link)
 	}
+
 	if news.ExternalID != link {
 		t.Errorf("expected externalID %q, got %q", link, news.ExternalID)
 	}
+
 	if news.PubDate == nil || !news.PubDate.Equal(pubDate) {
 		t.Errorf("expected pubDate %v, got %v", pubDate, news.PubDate)
 	}
+
 	if news.Status != MajorEventStatusActive {
 		t.Errorf("expected status %q, got %q", MajorEventStatusActive, news.Status)
 	}
+
 	if news.Type != MajorEventTypeNews {
 		t.Errorf("expected type %q, got %q", MajorEventTypeNews, news.Type)
 	}
+
 	if news.LinkStatus != MajorEventLinkStatusUnchecked {
 		t.Errorf("expected link status %q, got %q", MajorEventLinkStatusUnchecked, news.LinkStatus)
 	}
@@ -182,6 +194,7 @@ func TestMajorEvent_SetEventDatesFromParsed(t *testing.T) {
 
 func assertMajorEventDate(t *testing.T, name string, got, want *time.Time) {
 	t.Helper()
+
 	switch {
 	case want == nil && got != nil:
 		t.Errorf("expected nil %s date, got %v", name, got)
@@ -198,6 +211,7 @@ func TestMajorEvent_IsNotified(t *testing.T) {
 	if !event.IsNotified("2026-04") {
 		t.Error("expected IsNotified to return true for matching week")
 	}
+
 	if event.IsNotified("2026-05") {
 		t.Error("expected IsNotified to return false for non-matching week")
 	}
@@ -212,6 +226,7 @@ func TestMajorEvent_MarkAsNotified(t *testing.T) {
 	if event.NotifiedWeek != "2026-04" {
 		t.Errorf("expected NotifiedWeek %q, got %q", "2026-04", event.NotifiedWeek)
 	}
+
 	if event.NotifiedAt == nil || !event.NotifiedAt.Equal(now) {
 		t.Errorf("expected NotifiedAt %v, got %v", now, event.NotifiedAt)
 	}
@@ -220,6 +235,7 @@ func TestMajorEvent_MarkAsNotified(t *testing.T) {
 func TestMajorEvent_TableName(t *testing.T) {
 	event := MajorEvent{}
 	expected := "major_events"
+
 	if got := event.TableName(); got != expected {
 		t.Errorf("expected table name %q, got %q", expected, got)
 	}
@@ -234,9 +250,11 @@ func TestNewEventRoomSubscription(t *testing.T) {
 	if sub.RoomID != roomID {
 		t.Errorf("expected roomID %q, got %q", roomID, sub.RoomID)
 	}
+
 	if sub.RoomName != roomName {
 		t.Errorf("expected roomName %q, got %q", roomName, sub.RoomName)
 	}
+
 	if sub.CreatedAt.IsZero() {
 		t.Error("expected CreatedAt to be set")
 	}
@@ -245,6 +263,7 @@ func TestNewEventRoomSubscription(t *testing.T) {
 func TestEventRoomSubscription_TableName(t *testing.T) {
 	sub := EventRoomSubscription{}
 	expected := "major_event_subscriptions"
+
 	if got := sub.TableName(); got != expected {
 		t.Errorf("expected table name %q, got %q", expected, got)
 	}

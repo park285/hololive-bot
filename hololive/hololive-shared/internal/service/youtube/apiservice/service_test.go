@@ -1,16 +1,20 @@
 package apiservice
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
+const (
+	testChannelID1    = "UC1"
+	testChannelID2    = "UC2"
+	testFallbackTitle = "@fallback"
+)
+
 func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestMemberNameFromCacheKey(t *testing.T) {
@@ -72,9 +76,11 @@ func TestStoreChannelNameMap(t *testing.T) {
 	if _, ok := ys.channelToName["empty:meta"]; ok {
 		t.Fatal("blank channelID must not be stored under any key")
 	}
+
 	if got := ys.getChannelName(""); got != "" {
 		t.Fatalf("empty channelID lookup = %q, want empty (blank values are skipped)", got)
 	}
+
 	if len(ys.channelToName) != 3 {
 		t.Fatalf("channelToName has %d entries, want 3 (blank value skipped)", len(ys.channelToName))
 	}
@@ -89,6 +95,7 @@ func TestStoreChannelNameMap_LastWriteWinsOnChannelCollision(t *testing.T) {
 	}
 
 	ys.storeChannelNameMap(map[string]string{"OnlyKey:meta": "UC_shared"})
+
 	if got := ys.getChannelName("UC_shared"); got != "OnlyKey" {
 		t.Fatalf("getChannelName = %q, want %q", got, "OnlyKey")
 	}
@@ -97,18 +104,20 @@ func TestStoreChannelNameMap_LastWriteWinsOnChannelCollision(t *testing.T) {
 func TestNew_ReturnsUsableServiceWithNilCache(t *testing.T) {
 	t.Parallel()
 
-	svc, err := New(context.Background(), nil, scraper.ProxyConfig{}, nil, discardLogger())
+	svc, err := New(t.Context(), nil, scraper.ProxyConfig{}, nil, discardLogger())
 	if err != nil {
 		t.Fatalf("New() unexpected error: %v", err)
 	}
+
 	if svc == nil {
 		t.Fatal("New() returned nil service")
 	}
 
-	got, err := svc.GetChannelStatistics(context.Background(), nil)
+	got, err := svc.GetChannelStatistics(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("GetChannelStatistics(nil) unexpected error: %v", err)
 	}
+
 	if len(got) != 0 {
 		t.Fatalf("GetChannelStatistics(nil) len = %d, want 0", len(got))
 	}
@@ -130,6 +139,7 @@ func TestScraperProxyToggle_DefaultClientHasNoProxy(t *testing.T) {
 	if ys.SetScraperProxyEnabled(true) {
 		t.Fatal("SetScraperProxyEnabled(true) = true without a configured proxy client, want false")
 	}
+
 	if ys.ScraperProxyEnabled() {
 		t.Fatal("ProxyEnabled() = true after failed enable, want false")
 	}
@@ -137,6 +147,7 @@ func TestScraperProxyToggle_DefaultClientHasNoProxy(t *testing.T) {
 	if !ys.SetScraperProxyEnabled(false) {
 		t.Fatal("SetScraperProxyEnabled(false) = false, want true (direct client available)")
 	}
+
 	if ys.ScraperProxyEnabled() {
 		t.Fatal("ProxyEnabled() = true after disabling, want false")
 	}
@@ -146,9 +157,11 @@ func TestScraperProxyToggle_NilReceiverSafe(t *testing.T) {
 	t.Parallel()
 
 	var nilSvc *serviceImpl
+
 	if nilSvc.SetScraperProxyEnabled(true) {
 		t.Fatal("SetScraperProxyEnabled on nil receiver = true, want false")
 	}
+
 	if nilSvc.ScraperProxyEnabled() {
 		t.Fatal("ScraperProxyEnabled on nil receiver = true, want false")
 	}
@@ -157,6 +170,7 @@ func TestScraperProxyToggle_NilReceiverSafe(t *testing.T) {
 	if noScraper.SetScraperProxyEnabled(true) {
 		t.Fatal("SetScraperProxyEnabled with nil scraper = true, want false")
 	}
+
 	if noScraper.ScraperProxyEnabled() {
 		t.Fatal("ScraperProxyEnabled with nil scraper = true, want false")
 	}

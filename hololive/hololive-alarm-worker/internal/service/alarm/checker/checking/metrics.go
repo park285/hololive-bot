@@ -4,9 +4,10 @@ import (
 	"strconv"
 	"sync"
 
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
 var (
@@ -85,6 +86,7 @@ func observeYouTubePersistedLiveSessions(result, status string, count int) {
 	if count <= 0 {
 		return
 	}
+
 	initCheckerMetrics()
 	youtubePersistedLiveTotal.WithLabelValues(result, status).Add(float64(count))
 }
@@ -98,9 +100,11 @@ func alarmMinuteLabel(minute int) string {
 	if minute < 0 {
 		return "negative"
 	}
+
 	if minute <= 60 {
 		return strconv.Itoa(minute)
 	}
+
 	return alarmMinuteBucket(minute)
 }
 
@@ -119,11 +123,14 @@ func youtubeUpcomingSelectionLabel(selected, current int, crossed bool) string {
 	if !crossed {
 		return "schedule_change_only"
 	}
+
 	if selected > current {
 		return "recovered_crossing"
 	}
+
 	if selected == current {
 		return "current_bucket"
 	}
+
 	return "lower_than_current"
 }

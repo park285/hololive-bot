@@ -48,34 +48,34 @@ func TestTwitchHelperFunctions(t *testing.T) {
 	t.Parallel()
 
 	spacedLogin := " " + "Aqua" + " "
-	spacedChannelID := " " + "ch1" + " "
+	spacedChannelID := " " + testTwitchChannelID + " "
 	mappings, channelIDs := normalizeTwitchLoginMappings(map[string]string{
 		spacedLogin: spacedChannelID,
 		"":          "ch2",
 		"SuI":       "",
 	})
 	require.Len(t, mappings, 1)
-	assert.Equal(t, "ch1", mappings["aqua"])
-	assert.Equal(t, []string{"ch1"}, channelIDs)
+	assert.Equal(t, testTwitchChannelID, mappings[testTwitchLogin])
+	assert.Equal(t, []string{testTwitchChannelID}, channelIDs)
 
 	lookup := buildTwitchLookupLogins(
-		map[string]string{"aqua": "ch1", "sui": "ch2"},
-		map[string][]string{"ch1": {"room1"}, "ch2": {}},
+		map[string]string{testTwitchLogin: testTwitchChannelID, "sui": "ch2"},
+		map[string][]string{testTwitchChannelID: {"room1"}, "ch2": {}},
 	)
-	assert.Equal(t, []string{"aqua"}, lookup)
+	assert.Equal(t, []string{testTwitchLogin}, lookup)
 
 	assert.Nil(t, buildTwitchLiveStream("yt", "", nil))
 
 	startedAt := time.Date(2026, time.March, 5, 3, 0, 0, 0, time.UTC)
 	stream := buildTwitchLiveStream("yt1", "아쿠아", &twitch.StreamData{
-		ID:          "stream-1",
-		UserID:      "user-1",
+		ID:          testTwitchStreamID,
+		UserID:      testTwitchUserID,
 		UserLogin:   " Aqua ",
 		UserName:    "AquaName",
 		Title:       "  Twitch Live  ",
 		ViewerCount: 321,
 		StartedAt:   startedAt,
-		Type:        "live",
+		Type:        testTwitchStreamType,
 	})
 	require.NotNil(t, stream)
 	assert.Equal(t, domain.StreamStatusLive, stream.Status)
@@ -85,9 +85,9 @@ func TestTwitchHelperFunctions(t *testing.T) {
 	assert.Equal(t, "twitch:user-1:stream-1", stream.ID)
 	require.NotNil(t, stream.ViewerCount)
 	assert.Equal(t, 321, *stream.ViewerCount)
-	assert.Equal(t, "user-1", stream.TwitchUserID)
-	assert.Equal(t, "aqua", stream.TwitchUserLogin)
-	assert.Equal(t, "stream-1", stream.TwitchStreamID)
+	assert.Equal(t, testTwitchUserID, stream.TwitchUserID)
+	assert.Equal(t, testTwitchLogin, stream.TwitchUserLogin)
+	assert.Equal(t, testTwitchStreamID, stream.TwitchStreamID)
 	assert.Equal(t, "https://twitch.tv/aqua", stream.TwitchLiveURL)
 	assert.True(t, stream.IsTwitchOnly)
 
@@ -95,7 +95,7 @@ func TestTwitchHelperFunctions(t *testing.T) {
 		ID:        "stream-2",
 		UserLogin: "NoID",
 		StartedAt: startedAt,
-		Type:      "live",
+		Type:      testTwitchStreamType,
 	})
 	require.NotNil(t, fallback)
 	assert.Equal(t, "twitch:noid:stream-2", fallback.ID)
@@ -111,12 +111,12 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 	liveResponse := &twitch.StreamsResponse{
 		Data: []twitch.StreamData{
 			{
-				ID:        "stream-1",
-				UserID:    "user-1",
+				ID:        testTwitchStreamID,
+				UserID:    testTwitchUserID,
 				UserLogin: "AQUA",
 				UserName:  "Aqua",
 				Title:     "live now",
-				Type:      "live",
+				Type:      testTwitchStreamType,
 				StartedAt: startedAt,
 			},
 			{
@@ -130,6 +130,8 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 	}
 
 	t.Run("success without checker-level dedup preclaim", func(t *testing.T) {
+		t.Parallel()
+
 		setNXCalls := 0
 		checker := &TwitchChecker{
 			cacheClient: &cachemocks.Client{
@@ -142,18 +144,18 @@ func TestTwitchBuildLiveNotifications(t *testing.T) {
 		}
 
 		notifications := checker.buildLiveNotifications(
-			map[string]string{"aqua": "ch1"},
-			map[string][]string{"ch1": {"room1", "room2"}},
-			map[string]string{"ch1": "아쿠아"},
+			map[string]string{testTwitchLogin: testTwitchChannelID},
+			map[string][]string{testTwitchChannelID: {"room1", "room2"}},
+			map[string]string{testTwitchChannelID: "아쿠아"},
 			liveResponse,
 		)
 		require.Len(t, notifications, 2)
 		assert.ElementsMatch(t, []string{"room1", "room2"}, []string{notifications[0].RoomID, notifications[1].RoomID})
 
 		notifications = checker.buildLiveNotifications(
-			map[string]string{"aqua": "ch1"},
-			map[string][]string{"ch1": {"room1", "room2"}},
-			map[string]string{"ch1": "아쿠아"},
+			map[string]string{testTwitchLogin: testTwitchChannelID},
+			map[string][]string{testTwitchChannelID: {"room1", "room2"}},
+			map[string]string{testTwitchChannelID: "아쿠아"},
 			liveResponse,
 		)
 		require.Len(t, notifications, 2)

@@ -76,7 +76,7 @@ type MajorEvent struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-func (MajorEvent) TableName() string {
+func (*MajorEvent) TableName() string {
 	return "major_events"
 }
 
@@ -119,6 +119,7 @@ func (e *MajorEvent) SetEventDatesFromParsed() {
 
 	startDate := e.EventDates[0]
 	endDate := e.EventDates[len(e.EventDates)-1]
+
 	e.EventStartDate = &startDate
 	e.EventEndDate = &endDate
 }

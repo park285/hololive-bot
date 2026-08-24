@@ -25,18 +25,19 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNewAlarmServiceAndClose(t *testing.T) {
 	ctx := t.Context()
-	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 
 	service, err := NewAlarmService(
 		cacheClient,
@@ -62,8 +63,8 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
 			{
-				ChannelID:      "ch-1",
-				Name:           "Miko",
+				ChannelID:      testChannelID,
+				Name:           testMemberName,
 				ChzzkChannelID: "chzzk-1",
 				TwitchUserID:   "miko_live",
 			},
@@ -71,54 +72,54 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	}
 
 	added, err := as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     "room-1",
-		UserID:     "user-1",
-		ChannelID:  "ch-1",
-		MemberName: "Miko",
+		RoomID:     testRoomID,
+		UserID:     testUserID,
+		ChannelID:  testChannelID,
+		MemberName: testMemberName,
 		RoomName:   "메인방",
 		UserName:   "관리자",
 	})
 	require.NoError(t, err)
 	assert.True(t, added)
-	assertPlatformMappings(ctx, t, as, "ch-1", "chzzk-1", "miko_live")
+	assertPlatformMappings(ctx, t, as, testChannelID, "chzzk-1", "miko_live")
 
 	// 중복 등록은 false여야 한다.
 	added, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     "room-1",
-		UserID:     "user-1",
-		ChannelID:  "ch-1",
-		MemberName: "Miko",
+		RoomID:     testRoomID,
+		UserID:     testUserID,
+		ChannelID:  testChannelID,
+		MemberName: testMemberName,
 	})
 	require.NoError(t, err)
 	assert.False(t, added)
 
-	roomAlarms, err := as.GetRoomAlarms(ctx, "room-1")
+	roomAlarms, err := as.GetRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"ch-1"}, roomAlarms)
+	assert.Equal(t, []string{testChannelID}, roomAlarms)
 
-	roomName, err := as.cache.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, "room-1")
+	roomName, err := as.cache.HGet(ctx, sharedalarmkeys.RoomNamesCacheKey, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, "메인방", roomName)
 
-	userName, err := as.cache.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, "user-1")
+	userName, err := as.cache.HGet(ctx, sharedalarmkeys.UserNamesCacheKey, testUserID)
 	require.NoError(t, err)
 	assert.Equal(t, "관리자", userName)
 
 	// repo가 없는 상태에서 타입 포함 조회는 오류여야 한다.
-	_, err = as.GetRoomAlarmsWithTypes(ctx, "room-1")
+	_, err = as.GetRoomAlarmsWithTypes(ctx, testRoomID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "alarm repository not configured")
 
-	removed, err := as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
+	removed, err := as.RemoveAlarm(ctx, testRoomID, testChannelID, nil)
 	require.NoError(t, err)
 	assert.True(t, removed)
-	assertPlatformMappings(ctx, t, as, "ch-1", "", "")
+	assertPlatformMappings(ctx, t, as, testChannelID, "", "")
 
-	removed, err = as.RemoveAlarm(ctx, "room-1", "ch-1", nil)
+	removed, err = as.RemoveAlarm(ctx, testRoomID, testChannelID, nil)
 	require.NoError(t, err)
 	assert.False(t, removed)
 
-	roomAlarms, err = as.GetRoomAlarms(ctx, "room-1")
+	roomAlarms, err = as.GetRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, roomAlarms)
 }
@@ -129,45 +130,45 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
-			{ChannelID: "ch-1", Name: "A", ChzzkChannelID: "chzzk-1", TwitchUserID: "a_live"},
-			{ChannelID: "ch-2", Name: "B", ChzzkChannelID: "chzzk-2", TwitchUserID: "b_live"},
+			{ChannelID: testChannelID, Name: "A", ChzzkChannelID: "chzzk-1", TwitchUserID: "a_live"},
+			{ChannelID: testOtherChannelID, Name: "B", ChzzkChannelID: "chzzk-2", TwitchUserID: "b_live"},
 		},
 	}
 
 	// 빈 방은 no-op
-	count, err := as.ClearRoomAlarms(ctx, "room-1")
+	count, err := as.ClearRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 
 	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     "room-1",
-		UserID:     "user-1",
-		ChannelID:  "ch-1",
+		RoomID:     testRoomID,
+		UserID:     testUserID,
+		ChannelID:  testChannelID,
 		MemberName: "A",
 	})
 	require.NoError(t, err)
 
 	_, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
-		RoomID:     "room-1",
-		UserID:     "user-1",
-		ChannelID:  "ch-2",
+		RoomID:     testRoomID,
+		UserID:     testUserID,
+		ChannelID:  testOtherChannelID,
 		MemberName: "B",
 	})
 	require.NoError(t, err)
 
-	count, err = as.ClearRoomAlarms(ctx, "room-1")
+	count, err = as.ClearRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
-	assertPlatformMappings(ctx, t, as, "ch-1", "", "")
-	assertPlatformMappings(ctx, t, as, "ch-2", "", "")
+	assertPlatformMappings(ctx, t, as, testChannelID, "", "")
+	assertPlatformMappings(ctx, t, as, testOtherChannelID, "", "")
 
-	alarms, err := as.GetRoomAlarms(ctx, "room-1")
+	alarms, err := as.GetRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	assert.Empty(t, alarms)
 
 	registryRooms, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
 	require.NoError(t, err)
-	assert.NotContains(t, registryRooms, "room-1")
+	assert.NotContains(t, registryRooms, testRoomID)
 
 	channelRegistry, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
@@ -236,15 +237,15 @@ func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {
 	})
 
 	before := counterValueForLabels(t, map[string]string{
-		"operation": "warm",
-		"result":    "error",
+		testMetricLabelOperation: testWarmOperation,
+		testMetricLabelResult:    "error",
 	})
 
 	err := as.WarmCacheFromDB(t.Context())
 	require.Error(t, err)
 	assert.InDelta(t, before+1, counterValueForLabels(t, map[string]string{
-		"operation": "warm",
-		"result":    "error",
+		testMetricLabelOperation: testWarmOperation,
+		testMetricLabelResult:    "error",
 	}), 0.000001)
 }
 
@@ -268,26 +269,26 @@ func TestWarmCacheFromDB_SuccessRecordsDurationAndSummaryMetrics(t *testing.T) {
 	})
 
 	beforeDurationCount := histogramCountForLabels(t, map[string]string{
-		"operation": "warm",
-		"result":    "ok",
+		testMetricLabelOperation: testWarmOperation,
+		testMetricLabelResult:    "ok",
 	})
 
 	require.NoError(t, as.WarmCacheFromDB(t.Context()))
 	assert.Equal(t, beforeDurationCount+1, histogramCountForLabels(t, map[string]string{
-		"operation": "warm",
-		"result":    "ok",
+		testMetricLabelOperation: testWarmOperation,
+		testMetricLabelResult:    "ok",
 	}))
 	assert.InDelta(t, 5.0, gaugeValueForLabels(t, map[string]string{
-		"operation": "warm",
-		"resource":  "alarms",
+		testMetricLabelOperation: testWarmOperation,
+		"resource":               "alarms",
 	}), 0.000001)
 	assert.InDelta(t, 3.0, gaugeValueForLabels(t, map[string]string{
-		"operation": "warm",
-		"resource":  "rooms",
+		testMetricLabelOperation: testWarmOperation,
+		"resource":               "rooms",
 	}), 0.000001)
 	assert.InDelta(t, 2.0, gaugeValueForLabels(t, map[string]string{
-		"operation": "warm",
-		"resource":  "channels",
+		testMetricLabelOperation: testWarmOperation,
+		"resource":               "channels",
 	}), 0.000001)
 }
 
@@ -314,6 +315,7 @@ func TestAlarmService_AddAlarmMergesTypesForExistingChannel(t *testing.T) {
 	registryKey := as.getRegistryKey("room-type-1")
 	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-1", domain.AlarmTypeLive), registryKey)
 	require.NoError(t, err)
+
 	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-1", domain.AlarmTypeCommunity), registryKey)
 	require.NoError(t, err)
 
@@ -342,8 +344,10 @@ func TestAlarmService_RemoveAlarmTypeKeepsRemainingTypes(t *testing.T) {
 	registryKey := as.getRegistryKey("room-type-2")
 	roomStillSubscribed, err := as.cache.SIsMember(ctx, as.getAlarmKey("room-type-2"), "ch-type-2")
 	require.NoError(t, err)
+
 	liveSubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeLive), registryKey)
 	require.NoError(t, err)
+
 	communitySubscribed, err := as.cache.SIsMember(ctx, as.channelSubscribersKeyByType("ch-type-2", domain.AlarmTypeCommunity), registryKey)
 	require.NoError(t, err)
 

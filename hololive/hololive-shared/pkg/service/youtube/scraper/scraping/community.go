@@ -29,11 +29,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/tidwall/gjson"
+
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/tidwall/gjson"
 )
 
 var (
@@ -41,7 +42,7 @@ var (
 	communityPostURLPattern    = regexp.MustCompile(`/post/([^"?#&/]+)`)
 )
 
-// 2025년 8월 YouTube URL 변경: /community → /posts
+// 2025년 8월 YouTube URL 변경: /community → /posts.
 func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxResults int) ([]*parser.CommunityPost, error) {
 	if c.isCommunityMissing(ctx, channelID) {
 		return []*parser.CommunityPost{}, nil
@@ -49,61 +50,88 @@ func (c *Client) GetCommunityPosts(ctx context.Context, channelID string, maxRes
 
 	html, missing, err := c.fetchCommunityPostsPage(ctx, channelID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch community posts page: %w", err)
 	}
+
 	if missing {
 		return []*parser.CommunityPost{}, nil
 	}
+
 	c.clearCommunityMissing(ctx, channelID)
 
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
 		logStructureWarning("community_posts", channelID, "ytInitialData extraction failed", "error", err)
+
 		url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-		return nil, c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+
+		if driftErr := c.recordParserDrift(ctx, "community_posts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
+			return nil, fmt.Errorf("record parser drift: %w", driftErr)
+		}
+
+		return nil, nil
 	}
 
 	data := gjson.Parse(jsonStr)
 	if err := c.checkCommunityPostAlerts(ctx, channelID, &data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check community post alerts: %w", err)
 	}
 
 	postsContent := extractCommunityPostsContent(&data)
 	if !postsContent.Exists() {
 		c.markCommunityMissing(ctx, channelID)
+
 		return nil, nil
 	}
 
 	posts := c.parseCommunityPosts(&postsContent, maxResults)
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+
 	return posts, nil
 }
 
 func (c *Client) fetchCommunityPostsPage(ctx context.Context, channelID string) (html string, missing bool, err error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/posts", channelID)
-	if err := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); err != nil {
-		return "", false, err
+	if admissionErr := c.ensureChannelSourceAllowed(ctx, channelID, FailureSourceHTML); admissionErr != nil {
+		return "", false, fmt.Errorf("ensure channel source allowed: %w", admissionErr)
 	}
+
 	html, err = c.fetchPage(ctx, url, HighFrequencyChannelFetchPolicy)
-	if statusCode, ok := extractHTTPStatusCode(err); ok && statusCode == http.StatusNotFound {
-		c.markCommunityMissing(ctx, channelID)
-		slog.Info("community posts endpoint missing; channel temporarily skipped",
-			"channel_id", channelID)
-		return "", true, nil
-	}
 	if err != nil {
-		if youtubeadmission.IsDeferred(err) {
-			return "", false, err
-		}
-		delay := c.recordChannelSourceFailure(ctx, channelID, ClassifyFailure(err, FailureSourceHTML))
-		return "", false, channelSourceCooldownError(FailureSourceHTML, delay, err)
+		missing, fetchErr := c.handleCommunityPageFetchError(ctx, channelID, err)
+
+		return "", missing, errors.Join(fetchErr)
 	}
+
 	if strings.TrimSpace(html) == "" {
 		err := fmt.Errorf("community_posts empty response from %s", url)
-		delay := c.recordChannelSourceFailure(ctx, channelID, ClassifyFailure(err, FailureSourceHTML))
-		return "", false, channelSourceCooldownError(FailureSourceHTML, delay, err)
+		if failureErr := c.channelSourceFailure(ctx, channelID, FailureSourceHTML, err); failureErr != nil {
+			return "", false, fmt.Errorf("%w", failureErr)
+		}
+
+		return "", false, nil
 	}
+
 	return html, false, nil
+}
+
+func (c *Client) handleCommunityPageFetchError(ctx context.Context, channelID string, cause error) (bool, error) {
+	if statusCode, ok := extractHTTPStatusCode(cause); ok && statusCode == http.StatusNotFound {
+		c.markCommunityMissing(ctx, channelID)
+		slog.Info("community posts endpoint missing; channel temporarily skipped", "channel_id", channelID)
+
+		return true, nil
+	}
+
+	if youtubeadmission.IsDeferred(cause) {
+		return false, fmt.Errorf("fetch page: %w", cause)
+	}
+
+	if err := c.channelSourceFailure(ctx, channelID, FailureSourceHTML, cause); err != nil {
+		return false, fmt.Errorf("%w", err)
+	}
+
+	return false, nil
 }
 
 func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string, data *gjson.Result) error {
@@ -111,8 +139,10 @@ func (c *Client) checkCommunityPostAlerts(ctx context.Context, channelID string,
 		if errors.Is(err, ErrChannelNotFound) {
 			c.markCommunityMissing(ctx, channelID)
 		}
-		return err
+
+		return fmt.Errorf("check alerts: %w", err)
 	}
+
 	return nil
 }
 
@@ -120,20 +150,25 @@ func extractCommunityPostsContent(data *gjson.Result) gjson.Result {
 	if postsContent := extractCommunityPostsContentByTabTitle(data); postsContent.Exists() {
 		return postsContent
 	}
+
 	return extractCommunityPostsContentByRenderer(data)
 }
 
 func extractCommunityPostsContentByTabTitle(data *gjson.Result) gjson.Result {
 	tabPath := "contents.twoColumnBrowseResultsRenderer.tabs"
+
 	var postsContent gjson.Result
+
 	data.Get(tabPath).ForEach(func(_, tab gjson.Result) bool {
 		tabTitle := tab.Get("tabRenderer.title").String()
 		if tabTitle == "Posts" || tabTitle == "Community" {
 			postsContent = tab.Get("tabRenderer.content.sectionListRenderer.contents.0.itemSectionRenderer.contents")
 			return false
 		}
+
 		return true
 	})
+
 	return postsContent
 }
 
@@ -143,7 +178,9 @@ func extractCommunityPostsContentByRenderer(data *gjson.Result) gjson.Result {
 	if data == nil {
 		return gjson.Result{}
 	}
+
 	remaining := communityPostsContentSearchLimit
+
 	return findCommunityPostsContentArray(data, &remaining)
 }
 
@@ -151,20 +188,24 @@ func findCommunityPostsContentArray(node *gjson.Result, remaining *int) gjson.Re
 	if node == nil || remaining == nil || *remaining <= 0 || !node.Exists() {
 		return gjson.Result{}
 	}
+
 	*remaining--
 
 	if node.IsArray() && communityPostsContentArrayContainsPost(node) {
 		return *node
 	}
+
 	if !node.IsArray() && !node.IsObject() {
 		return gjson.Result{}
 	}
 
 	var found gjson.Result
+
 	node.ForEach(func(_, child gjson.Result) bool {
 		found = findCommunityPostsContentArray(&child, remaining)
 		return !found.Exists()
 	})
+
 	return found
 }
 
@@ -172,20 +213,25 @@ func communityPostsContentArrayContainsPost(contents *gjson.Result) bool {
 	if contents == nil {
 		return false
 	}
+
 	contains := false
+
 	contents.ForEach(func(_, content gjson.Result) bool {
 		contains = content.Get("backstagePostThreadRenderer.post.backstagePostRenderer").Exists()
 		return !contains
 	})
+
 	return contains
 }
 
 func (c *Client) parseCommunityPosts(postsContent *gjson.Result, maxResults int) []*parser.CommunityPost {
 	posts := make([]*parser.CommunityPost, 0, maxResults)
+
 	postsContent.ForEach(func(_, content gjson.Result) bool {
 		if len(posts) >= maxResults {
 			return false
 		}
+
 		postThread := content.Get("backstagePostThreadRenderer.post.backstagePostRenderer")
 		if !postThread.Exists() {
 			return true
@@ -195,12 +241,14 @@ func (c *Client) parseCommunityPosts(postsContent *gjson.Result, maxResults int)
 		if post != nil {
 			posts = append(posts, post)
 		}
+
 		return true
 	})
+
 	return posts
 }
 
-// parseBackstagePost: backstagePostRenderer JSON을 CommunityPost 구조체로 변환
+// parseBackstagePost: backstagePostRenderer JSON을 CommunityPost 구조체로 변환.
 func (c *Client) parseBackstagePost(post *gjson.Result) *parser.CommunityPost {
 	upstreamPostID := extractCommunityPostID(post)
 	if upstreamPostID == "" {
@@ -248,23 +296,29 @@ func (c *Client) parseBackstagePost(post *gjson.Result) *parser.CommunityPost {
 
 func extractThumbnails(thumbnails *gjson.Result) []parser.Thumbnail {
 	var extracted []parser.Thumbnail
+
 	thumbnails.ForEach(func(_, t gjson.Result) bool {
 		extracted = append(extracted, parser.Thumbnail{
 			URL:    t.Get("url").String(),
 			Width:  int(t.Get("width").Int()),
 			Height: int(t.Get("height").Int()),
 		})
+
 		return true
 	})
+
 	return extracted
 }
 
 func extractRunText(runs *gjson.Result) string {
 	var contentBuilder strings.Builder
+
 	runs.ForEach(func(_, run gjson.Result) bool {
 		contentBuilder.WriteString(run.Get("text").String())
+
 		return true
 	})
+
 	return contentBuilder.String()
 }
 

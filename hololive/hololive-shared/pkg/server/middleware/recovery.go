@@ -43,10 +43,13 @@ func RecoveryMiddleware(ctx context.Context, logger *slog.Logger) gin.HandlerFun
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				logRecoveredPanic(ctx, log, c, recovered)
+
 				if !c.Writer.Written() {
 					abortWithError(c, http.StatusInternalServerError, "internal_error", "internal server error")
+
 					return
 				}
+
 				c.Abort()
 			}
 		}()
@@ -78,8 +81,10 @@ func panicLogContext(ctx context.Context, c *gin.Context) context.Context {
 			return reqCtx
 		}
 	}
+
 	if ctx != nil {
 		return ctx
 	}
+
 	return context.Background()
 }

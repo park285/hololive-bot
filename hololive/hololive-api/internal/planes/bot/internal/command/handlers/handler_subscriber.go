@@ -26,10 +26,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type SubscriberCommand struct {
@@ -53,42 +54,73 @@ func (c *SubscriberCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	memberQuery := stringParam(params, "member")
+	memberQuery := stringParam(params, paramMember)
 
 	memberQuery = stringutil.TrimSpace(memberQuery)
 
 	// 멤버 이름 필수
 	if memberQuery == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrSubscriberNeedMemberName)
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrSubscriberNeedMemberName); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
-	matchedChannel, err := handlercore.FindMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberQuery, "구독자")
+	if err := c.executeSubscriberLookup(ctx, cmdCtx.Room, memberQuery); err != nil {
+		return fmt.Errorf("execute subscriber lookup: %w", err)
+	}
+
+	return nil
+}
+
+func (c *SubscriberCommand) executeSubscriberLookup(ctx context.Context, room, memberQuery string) error {
+	matchedChannel, err := handlercore.FindMemberWithCandidatesOrError(ctx, c.Deps(), room, memberQuery, "구독자")
 	if memberLookupHandled(err) {
 		return nil
 	}
+
 	if err != nil {
 		return fmt.Errorf("failed to find member: %w", err)
 	}
+
 	if matchedChannel == nil {
 		return nil
 	}
 
 	channel, err := c.getSubscriberChannel(ctx, matchedChannel.ID)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrSubscriberQueryFailed)
+		if err := c.Deps().SendError(ctx, room, messaging.ErrSubscriberQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
-	if !hasSubscriberCount(channel) {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.MsgNoSubscriberData)
+	if err := c.sendSubscriberCount(ctx, room, channel); err != nil {
+		return fmt.Errorf("send subscriber count: %w", err)
 	}
-	if *channel.SubscriberCount < 0 {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.MsgNoSubscriberData)
+
+	return nil
+}
+
+func (c *SubscriberCommand) sendSubscriberCount(ctx context.Context, room string, channel *domain.Channel) error {
+	if !hasSubscriberCount(channel) || *channel.SubscriberCount < 0 {
+		if err := c.Deps().SendError(ctx, room, messaging.MsgNoSubscriberData); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	memberName := c.subscriberMemberName(ctx, channel)
 	message := c.Deps().Formatter.FormatSubscriberCount(ctx, memberName, uint64(*channel.SubscriberCount))
 
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (c *SubscriberCommand) getSubscriberChannel(ctx context.Context, channelID string) (*domain.Channel, error) {
@@ -98,9 +130,11 @@ func (c *SubscriberCommand) getSubscriberChannel(ctx context.Context, channelID 
 			slog.String("channel_id", channelID),
 			slog.Any("error", err),
 		)
+
+		return nil, fmt.Errorf("get channel from holodex: %w", err)
 	}
 
-	return channel, err
+	return channel, nil
 }
 
 func hasSubscriberCount(channel *domain.Channel) bool {

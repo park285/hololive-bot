@@ -23,9 +23,10 @@ package sampledata_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestTemplateSampleData_AllKeysPresent(t *testing.T) {

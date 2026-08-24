@@ -31,10 +31,10 @@ import (
 )
 
 type FetchProfilesRuntime struct {
+	lifecycle.Managed
+
 	Logger     *slog.Logger
 	HTTPClient *http.Client
-
-	lifecycle.Managed
 }
 
 func BuildFetchProfilesRuntime(ctx context.Context) (*FetchProfilesRuntime, error) {

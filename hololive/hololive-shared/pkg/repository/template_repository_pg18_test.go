@@ -1,17 +1,17 @@
 package repository_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestTemplateRepository_UpsertWithPreviousBody(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("PG18_OLD_NEW_TEST")
 
 	created, previousBody, err := repo.UpsertWithPreviousBody(ctx, key, nil, "v1")

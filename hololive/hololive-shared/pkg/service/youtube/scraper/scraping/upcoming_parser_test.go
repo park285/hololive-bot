@@ -21,7 +21,6 @@
 package scraping
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,5 +118,5 @@ func TestParseUpcomingEventsFromInitialData_Alert(t *testing.T) {
 	events, err := parseUpcomingEventsFromInitialData(&data)
 	require.Error(t, err)
 	assert.Nil(t, events)
-	assert.True(t, errors.Is(err, ErrChannelNotFound))
+	assert.ErrorIs(t, err, ErrChannelNotFound)
 }

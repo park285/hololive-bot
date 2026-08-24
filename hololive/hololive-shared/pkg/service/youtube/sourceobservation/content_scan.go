@@ -22,6 +22,7 @@ func scanContentClock(rows pgx.Rows, kind contract.ObservationKind) (content.Ent
 		missing    *time.Time
 		withdrawn  *time.Time
 	)
+
 	err := rows.Scan(
 		&state.VideoID,
 		&state.FirstPositiveEffectiveAt,
@@ -42,10 +43,12 @@ func scanContentClock(rows pgx.Rows, kind contract.ObservationKind) (content.Ent
 	if err != nil {
 		return content.EntityState{}, fmt.Errorf("scan content clock: %w", err)
 	}
+
 	decoded, err := content.ParseCoverage(kind, coverage)
 	if err != nil {
-		return content.EntityState{}, err
+		return content.EntityState{}, fmt.Errorf("parse coverage: %w", err)
 	}
+
 	state.LastPositiveCoverage = decoded
 	state.Clock.LastNegativeEffectiveAt = lastNegAt
 	state.LastNegativeReceivedAt = lastNegRec
@@ -53,9 +56,11 @@ func scanContentClock(rows pgx.Rows, kind contract.ObservationKind) (content.Ent
 	state.SecondAbsenceScheduledFor = secondAbs
 	state.Clock.MissingSinceEffectiveAt = missing
 	state.WithdrawnAt = withdrawn
+
 	if lastAbsID != nil {
 		state.LastAbsenceObservationID = *lastAbsID
 	}
+
 	return state, nil
 }
 
@@ -65,6 +70,7 @@ func scanAbsenceSlot(rows pgx.Rows, kind contract.ObservationKind) (content.Abse
 		coverage      []byte
 		observationID *int64
 	)
+
 	if err := rows.Scan(
 		&slot.ScheduledFor,
 		&observationID,
@@ -76,13 +82,17 @@ func scanAbsenceSlot(rows pgx.Rows, kind contract.ObservationKind) (content.Abse
 	); err != nil {
 		return content.AbsenceSlot{}, fmt.Errorf("scan content absence slot: %w", err)
 	}
+
 	decoded, err := content.ParseCoverage(kind, coverage)
 	if err != nil {
-		return content.AbsenceSlot{}, err
+		return content.AbsenceSlot{}, fmt.Errorf("parse coverage: %w", err)
 	}
+
 	slot.Coverage = decoded
+
 	if observationID != nil {
 		slot.ObservationID = *observationID
 	}
+
 	return slot, nil
 }

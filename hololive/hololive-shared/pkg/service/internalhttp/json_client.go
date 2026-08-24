@@ -31,10 +31,13 @@ func NewClientForURL(rawURL string, timeout time.Duration, logger *slog.Logger) 
 	if err == nil {
 		return client
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	logger.Warn("Failed to configure internal H3 client; falling back to default client", slog.Any("error", err))
+
 	return httputil.NewInternalServiceClient(timeout)
 }
 
@@ -53,6 +56,7 @@ func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("configure internal H3 client for %s: %w", rawURL, err)
 	}
+
 	return client, nil
 }
 

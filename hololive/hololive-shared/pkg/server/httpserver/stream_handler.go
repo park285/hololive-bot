@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
@@ -100,28 +99,34 @@ func (h *StreamHandler) ensureState() *StreamState {
 	if h.State == nil {
 		h.State = NewStreamState(DefaultChannelStatsCacheWorkers, DefaultChannelStatsRefreshWorkers)
 	}
+
 	return h.State
 }
 
 func (h *StreamHandler) respondBadRequest(c *gin.Context, message string, extra gin.H) {
 	if h.RespondError != nil {
 		h.RespondError(c, 400, message, extra)
+
 		return
 	}
+
 	RespondError(c, 400, message, extra)
 }
 
 func (h *StreamHandler) respondInternalError(c *gin.Context, userMessage, logMessage string, err error, attrs ...slog.Attr) {
 	if h.RespondInternalError != nil {
 		h.RespondInternalError(c, userMessage, logMessage, err, attrs...)
+
 		return
 	}
+
 	RespondInternalError(h.Logger, c, userMessage, logMessage, err, attrs...)
 }
 
 func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 	ctx := c.Request.Context()
 	org := constants.HolodexAPIParams.OrgHololive
+
 	if rawOrg, hasOrg := c.GetQuery("org"); hasOrg {
 		org = strings.TrimSpace(rawOrg)
 		if org == "" {
@@ -129,6 +134,7 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
+
 			return
 		}
 	}
@@ -140,17 +146,22 @@ func (h *StreamHandler) GetLiveStreams(c *gin.Context) {
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
+
 			return
 		}
+
 		h.respondInternalError(c, "Failed to get live streams", "Failed to get live streams", err)
+
 		return
 	}
-	respondJSON(c, 200, gin.H{"status": "ok", "org": org, "streams": streams})
+
+	respondJSON(c, 200, gin.H{responseKeyStatus: "ok", "org": org, "streams": streams})
 }
 
 func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 	ctx := c.Request.Context()
 	org := constants.HolodexAPIParams.OrgHololive
+
 	if rawOrg, hasOrg := c.GetQuery("org"); hasOrg {
 		org = strings.TrimSpace(rawOrg)
 		if org == "" {
@@ -158,6 +169,7 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
+
 			return
 		}
 	}
@@ -169,10 +181,14 @@ func (h *StreamHandler) GetUpcomingStreams(c *gin.Context) {
 				"default_org":    strings.ToLower(constants.HolodexAPIParams.OrgHololive),
 				"supported_orgs": holodexprovider.SupportedStreamOrgParams(),
 			})
+
 			return
 		}
+
 		h.respondInternalError(c, "Failed to get upcoming streams", "Failed to get upcoming streams", err)
+
 		return
 	}
-	respondJSON(c, 200, gin.H{"status": "ok", "org": org, "streams": streams})
+
+	respondJSON(c, 200, gin.H{responseKeyStatus: "ok", "org": org, "streams": streams})
 }

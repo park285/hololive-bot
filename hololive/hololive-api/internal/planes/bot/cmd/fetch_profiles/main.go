@@ -23,6 +23,7 @@ package main
 import (
 	"context"
 	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -33,13 +34,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	jsonv2 "encoding/json/v2"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func main() {
@@ -57,6 +57,7 @@ func run(ctx context.Context) error {
 	defer runtime.Close()
 
 	logger := runtime.Logger
+
 	talents, err := domain.LoadTalents()
 	if err != nil {
 		return fmt.Errorf("failed to load official talents list: %w", err)
@@ -75,6 +76,7 @@ func run(ctx context.Context) error {
 		slog.Int("count", len(profiles)),
 		slog.String("output", settings.DefaultOfficialProfileConfig().OutputFile),
 	)
+
 	return nil
 }
 
@@ -90,9 +92,12 @@ func fetchProfiles(
 		if profile == nil {
 			continue
 		}
+
 		profiles[profile.Slug] = profile
+
 		time.Sleep(settings.DefaultOfficialProfileConfig().DelayBetween)
 	}
+
 	return profiles
 }
 
@@ -115,15 +120,17 @@ func fetchTalentProfile(
 	profile, err := fetchProfile(ctx, client, profileURL, english, slug)
 	if err != nil {
 		logger.Error("failed to fetch profile", slog.String("slug", slug), slog.Any("error", err))
+
 		return nil
 	}
+
 	return profile
 }
 
 func fetchProfile(ctx context.Context, client *http.Client, url, englishName, slug string) (*domain.TalentProfile, error) {
 	resp, err := fetchProfileResponse(ctx, client, url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch profile response: %w", err)
 	}
 	defer closeBody(resp.Body)
 
@@ -132,7 +139,12 @@ func fetchProfile(ctx context.Context, client *http.Client, url, englishName, sl
 		return nil, fmt.Errorf("failed to parse HTML: %w", err)
 	}
 
-	return buildTalentProfile(doc, url, englishName, slug)
+	out, err := buildTalentProfile(doc, url, englishName, slug)
+	if err != nil {
+		return nil, fmt.Errorf("build talent profile: %w", err)
+	}
+
+	return out, nil
 }
 
 func fetchProfileResponse(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
@@ -148,17 +160,21 @@ func fetchProfileResponse(ctx context.Context, client *http.Client, url string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch URL: %w", err)
 	}
+
 	if resp == nil {
 		return nil, errors.New("failed to fetch URL: empty response")
 	}
+
 	if resp.Body == nil {
 		return nil, errors.New("failed to fetch URL: empty response body")
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		closeBody(resp.Body)
+
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
+
 	return resp, nil
 }
 
@@ -166,6 +182,7 @@ func closeBody(body io.Closer) {
 	if body == nil {
 		return
 	}
+
 	if err := body.Close(); err != nil {
 		slog.Debug("failed to close response body", slog.Any("error", err))
 	}
@@ -183,6 +200,7 @@ func buildTalentProfile(doc *goquery.Document, url, englishName, slug string) (*
 	}
 
 	applyProfileHeader(profile, rightBox.Find("h1").First(), englishName)
+
 	profile.Catchphrase = normalizeText(rightBox.Find("p.catch").First().Text())
 	profile.Description = normalizeText(rightBox.Find("p.txt").First().Text())
 	profile.SocialLinks = extractSocialLinks(rightBox.Find(".t_sns a"))
@@ -193,17 +211,21 @@ func buildTalentProfile(doc *goquery.Document, url, englishName, slug string) (*
 
 func applyProfileHeader(profile *domain.TalentProfile, header *goquery.Selection, fallbackEnglish string) {
 	profile.EnglishName = fallbackEnglish
+
 	if header.Length() == 0 {
 		return
 	}
 
 	headerClone := header.Clone()
 	headerClone.Children().Remove()
+
 	japanese := stringutil.TrimSpace(headerClone.Text())
 	english := stringutil.TrimSpace(header.Find("span").First().Text())
+
 	if english != "" {
 		profile.EnglishName = english
 	}
+
 	if japanese != "" {
 		profile.JapaneseName = japanese
 	}
@@ -263,11 +285,16 @@ func normalizeText(input string) string {
 func writeProfiles(profiles map[string]*domain.TalentProfile) error {
 	outputFile := settings.DefaultOfficialProfileConfig().OutputFile
 	if err := writeJSONFile(outputFile, profiles); err != nil {
-		return err
+		return fmt.Errorf("write JSON file: %w", err)
 	}
+
 	splitDir := filepath.Join(filepath.Dir(outputFile), "official_profiles_raw")
 
-	return writeSplitProfiles(splitDir, profiles)
+	if err := writeSplitProfiles(splitDir, profiles); err != nil {
+		return fmt.Errorf("write split profiles: %w", err)
+	}
+
+	return nil
 }
 
 func writeSplitProfiles(splitDir string, profiles map[string]*domain.TalentProfile) error {
@@ -299,8 +326,10 @@ func writeJSONFile(path string, value any) error {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
+
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("failed to rename output file: %w", err)
 	}
+
 	return nil
 }

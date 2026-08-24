@@ -22,6 +22,7 @@ package scraping
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -39,15 +40,21 @@ import (
 type communityRoundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f communityRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 	var attempts atomic.Int32
 
 	httpClient := &http.Client{
-		Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: communityRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			attempts.Add(1)
+
 			return &http.Response{
 				StatusCode: http.StatusNotFound,
 				Header:     make(http.Header),
@@ -62,12 +69,12 @@ func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	posts, err := client.GetCommunityPosts(context.Background(), "UC_TEST", 5)
+	posts, err := client.GetCommunityPosts(t.Context(), "UC_TEST", 5)
 	require.NoError(t, err)
 	require.Empty(t, posts)
 	require.Equal(t, int32(1), attempts.Load())
 
-	posts, err = client.GetCommunityPosts(context.Background(), "UC_TEST", 5)
+	posts, err = client.GetCommunityPosts(t.Context(), "UC_TEST", 5)
 	require.NoError(t, err)
 	require.Empty(t, posts)
 	require.Equal(t, int32(1), attempts.Load(), "community missing cache should skip second network call")
@@ -75,7 +82,7 @@ func TestGetCommunityPosts_404TreatAsEmpty(t *testing.T) {
 
 func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
 	httpClient := &http.Client{
-		Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: communityRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusNotFound,
 				Header:     make(http.Header),
@@ -95,17 +102,17 @@ func TestGetCommunityPosts_404DoesNotRecordHTMLCooldown(t *testing.T) {
 		}),
 	)
 
-	posts, err := client.GetCommunityPosts(context.Background(), "UC_TEST", 5)
+	posts, err := client.GetCommunityPosts(t.Context(), "UC_TEST", 5)
 	require.NoError(t, err)
 	require.Empty(t, posts)
 
-	wait, skip := client.channelHealth.ShouldSkip(context.Background(), "UC_TEST", FailureSourceHTML, time.Now())
+	wait, skip := client.channelHealth.ShouldSkip(t.Context(), "UC_TEST", FailureSourceHTML, time.Now())
 	require.False(t, skip, "community /posts 404 should not cooldown the shared HTML source; wait=%s", wait)
 }
 
 func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *testing.T) {
 	httpClient := &http.Client{
-		Transport: communityRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		Transport: communityRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
@@ -126,18 +133,19 @@ func TestFetchCommunityPostsPage_AdmissionDeferredDoesNotRecordHTMLCooldown(t *t
 		}),
 	)
 
-	html, missing, err := client.fetchCommunityPostsPage(context.Background(), "UC_TEST")
+	html, missing, err := client.fetchCommunityPostsPage(t.Context(), "UC_TEST")
 	require.NoError(t, err)
 	require.False(t, missing)
 	require.NotEmpty(t, html)
 
-	errCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	errCtx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
+
 	_, _, err = client.fetchCommunityPostsPage(errCtx, "UC_TEST")
 	require.Error(t, err)
 	require.True(t, youtubeadmission.IsDeferred(err), "err = %v", err)
 
-	wait, skip := client.channelHealth.ShouldSkip(context.Background(), "UC_TEST", FailureSourceHTML, time.Now())
+	wait, skip := client.channelHealth.ShouldSkip(t.Context(), "UC_TEST", FailureSourceHTML, time.Now())
 	require.False(t, skip, "admission defer should not cooldown the shared HTML source; wait=%s", wait)
 }
 
@@ -177,6 +185,7 @@ func TestExtractCommunityPostsContentFallsBackToRendererType(t *testing.T) {
 
 	content := extractCommunityPostsContent(data)
 	require.True(t, content.Exists())
+
 	posts := (&Client{}).parseCommunityPosts(&content, 5)
 	require.Len(t, posts, 1)
 	require.Equal(t, "UgkxLocalized123", posts[0].PostID)

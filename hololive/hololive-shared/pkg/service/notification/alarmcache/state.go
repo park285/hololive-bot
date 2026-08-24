@@ -27,5 +27,6 @@ func (s *State) memberData() domain.MemberDataProvider {
 	if s.memberDataFn == nil {
 		return nil
 	}
+
 	return s.memberDataFn()
 }

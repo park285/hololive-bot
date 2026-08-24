@@ -26,10 +26,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type PhotoSyncService struct {
@@ -77,6 +78,7 @@ func (ps *PhotoSyncService) Start(ctx context.Context) {
 
 func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
 	ps.logger.Debug("Waiting 10 seconds before initial sync to avoid API contention")
+
 	select {
 	case <-ctx.Done():
 		return false
@@ -88,6 +90,7 @@ func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
 func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, ps.syncInterval, func(ctx context.Context) error {
 		ps.syncWithRetry(ctx, 3)
+
 		return nil
 	}); err != nil && ctx.Err() != nil {
 		ps.logger.Info("Photo sync service stopped")
@@ -120,7 +123,12 @@ func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, maxRetries int) {
 
 func (ps *PhotoSyncService) SyncAll(ctx context.Context) error {
 	ps.logger.Info("Starting full photo sync")
-	return ps.doSync(ctx, true)
+
+	if err := ps.doSync(ctx, true); err != nil {
+		return fmt.Errorf("do sync: %w", err)
+	}
+
+	return nil
 }
 
 func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
@@ -131,6 +139,7 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 
 	if len(channelIDs) == 0 {
 		ps.logger.Debug("No members need photo sync")
+
 		return nil
 	}
 
@@ -141,7 +150,7 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 
 	photoMap, err := ps.fetchPhotoMap(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch photo map: %w", err)
 	}
 
 	successCount, failCount := ps.updateMemberPhotos(ctx, channelIDs, photoMap)
@@ -156,9 +165,20 @@ func (ps *PhotoSyncService) doSync(ctx context.Context, forceAll bool) error {
 
 func (ps *PhotoSyncService) photoSyncChannelIDs(ctx context.Context, forceAll bool) ([]string, error) {
 	if forceAll {
-		return ps.memberRepository.GetAllChannelIDs(ctx)
+		out, err := ps.memberRepository.GetAllChannelIDs(ctx)
+		if err != nil {
+			return out, fmt.Errorf("get all channel IDs: %w", err)
+		}
+
+		return out, nil
 	}
-	return ps.memberRepository.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
+
+	out, err := ps.memberRepository.GetMembersNeedingPhotoSync(ctx, ps.staleThreshold)
+	if err != nil {
+		return out, fmt.Errorf("get members needing photo sync: %w", err)
+	}
+
+	return out, nil
 }
 
 func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]string, error) {
@@ -166,13 +186,16 @@ func (ps *PhotoSyncService) fetchPhotoMap(ctx context.Context) (map[string]strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Hololive channel list: %w", err)
 	}
+
 	photoMap := make(map[string]string, len(allChannels))
 	for _, ch := range allChannels {
 		if ch.Photo != nil && *ch.Photo != "" {
 			highResPhoto := member.UpgradePhotoResolution(*ch.Photo)
+
 			photoMap[ch.ID] = highResPhoto
 		}
 	}
+
 	return photoMap, nil
 }
 
@@ -191,7 +214,9 @@ func (ps *PhotoSyncService) updateMemberPhotos(ctx context.Context, channelIDs [
 				slog.String("channel_id", channelID),
 				slog.Any("error", err),
 			)
+
 			failCount++
+
 			continue
 		}
 
@@ -205,8 +230,10 @@ func (ps *PhotoSyncService) hasPhotoForChannel(channelID string, exists bool, ph
 	if exists && photo != "" {
 		return true
 	}
+
 	ps.logger.Debug("No photo found for channel",
 		slog.String("channel_id", channelID),
 	)
+
 	return false
 }

@@ -22,6 +22,7 @@ package alarmread
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -42,9 +43,19 @@ type restricted struct {
 }
 
 func (r restricted) GetAllChannelIDs(ctx context.Context) ([]string, error) {
-	return r.source.GetAllChannelIDs(ctx)
+	out, err := r.source.GetAllChannelIDs(ctx)
+	if err != nil {
+		return out, fmt.Errorf("get all channel IDs: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r restricted) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
-	return r.source.LoadAll(ctx)
+	out, err := r.source.LoadAll(ctx)
+	if err != nil {
+		return out, fmt.Errorf("load all: %w", err)
+	}
+
+	return out, nil
 }

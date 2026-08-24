@@ -14,37 +14,45 @@ func (c *Consumer) reconcileViewer(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-) (viewer.Decision, ReconcileResult, error) {
+) (ReconcileResult, error) {
 	evidence, err := viewerEvidenceFromObservation(claimed)
 	if err != nil {
-		return viewer.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("viewer evidence from observation: %w", err)
 	}
-	if err := lockViewerSubject(ctx, tx, evidence.Sample.VideoID); err != nil {
-		return viewer.Decision{}, ReconcileResult{}, err
+
+	if lockErr := lockViewerSubject(ctx, tx, evidence.Sample.VideoID); lockErr != nil {
+		return ReconcileResult{}, fmt.Errorf("lock viewer subject: %w", lockErr)
 	}
+
 	state, err := loadViewerState(ctx, tx, evidence.Sample.VideoID, evidence.Sample.WindowStart)
 	if err != nil {
-		return viewer.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("load viewer state: %w", err)
 	}
+
 	decision, err := viewer.Reduce(state, evidence)
 	if err != nil {
-		return viewer.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
+
 	channelID, err := loadViewerChannelID(ctx, tx, evidence.Sample.VideoID)
 	if err != nil {
-		return viewer.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("load viewer channel ID: %w", err)
 	}
-	if err := persistViewerDecision(ctx, tx, claimed, &decision, channelID); err != nil {
-		return viewer.Decision{}, ReconcileResult{}, err
+
+	if persistErr := persistViewerDecision(ctx, tx, claimed, &decision, channelID); persistErr != nil {
+		return ReconcileResult{}, fmt.Errorf("persist viewer decision: %w", persistErr)
 	}
-	return decision, ReconcileResult{Applications: mapViewerApplications(decision.Applications)}, nil
+
+	return ReconcileResult{Applications: mapViewerApplications(decision.Applications)}, nil
 }
 
 func viewerEvidenceFromObservation(observation *Observation) (viewer.Evidence, error) {
 	var payload contract.ViewerSampleV1
+
 	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return viewer.Evidence{}, fmt.Errorf("decode viewer sample payload: %w", err)
 	}
+
 	return viewer.Evidence{
 		ObservationID: observation.ID,
 		Provider:      observation.Provider,
@@ -72,5 +80,6 @@ func mapViewerApplications(items []viewer.Application) []Application {
 			Decision:   items[i].Decision,
 		}
 	}
+
 	return applications
 }

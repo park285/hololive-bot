@@ -23,25 +23,25 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/park285/shared-go/v2/pkg/httputil"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 type fakePostgresClient struct{}
@@ -60,15 +60,18 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 	t.Parallel()
 
 	var postgres database.Client = &fakePostgresClient{}
+
 	logger := sharedlogging.NewTestLogger()
 
 	module, err := BuildDeliveryModule(nil, postgres, logger)
 	require.NoError(t, err)
 	require.NotNil(t, module)
 	require.NotNil(t, module.Repository)
+
 	locker := module.Locker
 	require.NotNil(t, locker)
-	token, acquired, err := locker.TryAcquire(context.Background(), "test-lock", time.Second)
+
+	token, acquired, err := locker.TryAcquire(t.Context(), "test-lock", time.Second)
 	require.NoError(t, err)
 	assert.True(t, acquired)
 	assert.Empty(t, token)
@@ -124,8 +127,6 @@ func TestConvertMemberNewsDigest(t *testing.T) {
 }
 
 func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
-	t.Parallel()
-
 	registerMemberNewsInternalRoutes(nil, httputil.AdminAuthConfig{Disabled: true}, nil)
 
 	service := membernewssvc.NewService(nil, nil, nil, nil, sharedlogging.NewTestLogger())
@@ -133,15 +134,17 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	t.Run("auth middleware", func(t *testing.T) {
 		router := newMemberNewsRouter(t, httputil.AdminAuthConfig{APIKey: "secret"}, service)
 
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
 		req.Header.Set("Content-Type", "application/json")
+
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
+		req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"r1"}`))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(common.APIKeyHeader, "wrong")
+
 		rr = httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusForbidden, rr.Code)
@@ -150,96 +153,61 @@ func TestRegisterMemberNewsInternalRoutes(t *testing.T) {
 	t.Run("subscription and digest handlers", func(t *testing.T) {
 		router := newMemberNewsRouter(t, httputil.AdminAuthConfig{Disabled: true}, service)
 
-		// GET subscription - room_id required
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, membernewscontracts.SubscriptionsPath+"/%20", http.NoBody)
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assertErrorResponse(t, rr, "room_id_required")
-
-		// GET subscription - service error
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, membernewscontracts.SubscriptionsPath+"/room-1", http.NoBody)
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-		assertErrorResponse(t, rr, "subscription_check_failed")
-
-		// POST subscribe - invalid body
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.SubscriptionsPath, bytes.NewBufferString("not-json"))
-		req.Header.Set("Content-Type", "application/json")
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assertErrorResponse(t, rr, "invalid_request")
-
-		// POST subscribe - room_id required
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"  ","room_name":"room"}`))
-		req.Header.Set("Content-Type", "application/json")
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assertErrorResponse(t, rr, "room_id_required")
-
-		// POST subscribe - service error
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.SubscriptionsPath, bytes.NewBufferString(`{"room_id":"room-1","room_name":"room"}`))
-		req.Header.Set("Content-Type", "application/json")
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-		assertErrorResponse(t, rr, "subscribe_failed")
-
-		// DELETE subscribe - room_id required
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodDelete, membernewscontracts.SubscriptionsPath+"/%20", http.NoBody)
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assertErrorResponse(t, rr, "room_id_required")
-
-		// DELETE subscribe - service error
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodDelete, membernewscontracts.SubscriptionsPath+"/room-1", http.NoBody)
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-		assertErrorResponse(t, rr, "unsubscribe_failed")
-
-		// POST digest - invalid body
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString("not-json"))
-		req.Header.Set("Content-Type", "application/json")
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assertErrorResponse(t, rr, "invalid_request")
-
-		// POST digest - room_id required
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":" ","period":"weekly"}`))
-		req.Header.Set("Content-Type", "application/json")
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assertErrorResponse(t, rr, "room_id_required")
-
-		// POST digest - service error
-		req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, membernewscontracts.DigestPath, bytes.NewBufferString(`{"room_id":"room-1","period":"weekly"}`))
-		req.Header.Set("Content-Type", "application/json")
-		rr = httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-		assertErrorResponse(t, rr, "digest_generation_failed")
+		assertMemberNewsRoute(t, router, http.MethodGet, membernewscontracts.SubscriptionsPath+"/%20", "", http.StatusBadRequest, "room_id_required")
+		assertMemberNewsRoute(t, router, http.MethodGet, membernewscontracts.SubscriptionsPath+"/room-1", "", http.StatusInternalServerError, "subscription_check_failed")
+		assertMemberNewsRoute(t, router, http.MethodPost, membernewscontracts.SubscriptionsPath, "not-json", http.StatusBadRequest, "invalid_request")
+		assertMemberNewsRoute(t, router, http.MethodPost, membernewscontracts.SubscriptionsPath, `{"room_id":"  ","room_name":"room"}`, http.StatusBadRequest, "room_id_required")
+		assertMemberNewsRoute(t, router, http.MethodPost, membernewscontracts.SubscriptionsPath, `{"room_id":"room-1","room_name":"room"}`, http.StatusInternalServerError, "subscribe_failed")
+		assertMemberNewsRoute(t, router, http.MethodDelete, membernewscontracts.SubscriptionsPath+"/%20", "", http.StatusBadRequest, "room_id_required")
+		assertMemberNewsRoute(t, router, http.MethodDelete, membernewscontracts.SubscriptionsPath+"/room-1", "", http.StatusInternalServerError, "unsubscribe_failed")
+		assertMemberNewsRoute(t, router, http.MethodPost, membernewscontracts.DigestPath, "not-json", http.StatusBadRequest, "invalid_request")
+		assertMemberNewsRoute(t, router, http.MethodPost, membernewscontracts.DigestPath, `{"room_id":" ","period":"weekly"}`, http.StatusBadRequest, "room_id_required")
+		assertMemberNewsRoute(t, router, http.MethodPost, membernewscontracts.DigestPath, `{"room_id":"room-1","period":"weekly"}`, http.StatusInternalServerError, "digest_generation_failed")
 	})
+}
+
+func assertMemberNewsRoute(
+	t *testing.T,
+	router http.Handler,
+	method, path, body string,
+	wantStatus int,
+	wantError string,
+) {
+	t.Helper()
+
+	var reqBody io.Reader = http.NoBody
+
+	if body != "" {
+		reqBody = bytes.NewBufferString(body)
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), method, path, reqBody)
+
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	assert.Equal(t, wantStatus, rr.Code)
+	assertErrorResponse(t, rr, wantError)
 }
 
 func newMemberNewsRouter(t *testing.T, authConfig httputil.AdminAuthConfig, service *membernewssvc.Service) *http.ServeMux {
 	t.Helper()
 
 	// gin.Engine는 http.Handler를 구현하므로 테스트 편의를 위해 mux에 연결합니다.
-	engine, err := buildHealthOnlyRouter(context.Background(), sharedlogging.NewTestLogger(), httputil.AdminAuthConfig{Disabled: true})
+	engine, err := buildHealthOnlyRouter(t.Context(), sharedlogging.NewTestLogger(), httputil.AdminAuthConfig{Disabled: true})
 	require.NoError(t, err)
 	registerMemberNewsInternalRoutes(engine, authConfig, service)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", engine)
+
 	return mux
 }
 
-var _ database.Client = (*fakePostgresClient)(nil)
-var _ delivery.MessageSender = (*fakeSender)(nil)
+var (
+	_ database.Client        = (*fakePostgresClient)(nil)
+	_ delivery.MessageSender = (*fakeSender)(nil)
+)

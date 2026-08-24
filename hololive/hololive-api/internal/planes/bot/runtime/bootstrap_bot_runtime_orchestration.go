@@ -22,20 +22,20 @@ package botruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/quic-go/quic-go/http3"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 func newBotReadyProbe(infra *appbootstrap.BotInfrastructure) *sharedreadiness.Probe {
@@ -49,20 +49,25 @@ func buildBotOptionalServers(ctx context.Context, appConfig *settings.Config) (m
 	if metricsAddr := strings.TrimSpace(appConfig.Server.MetricsAddr); metricsAddr != "" {
 		metricsServer = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey)
 	}
+
 	if pprofAddr := strings.TrimSpace(appConfig.Server.PprofAddr); pprofAddr != "" {
 		pprofServer = sharedserver.NewPprofServer(ctx, pprofAddr, appConfig.Server.APIKey)
 	}
+
 	return metricsServer, pprofServer
 }
 
 func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger, infra *appbootstrap.BotInfrastructure) (*BotRuntime, error) {
 	if appConfig == nil {
-		return nil, fmt.Errorf("build bot runtime: app config is nil")
+		return nil, errors.New("build bot runtime: app config is nil")
 	}
+
 	if infra == nil {
-		return nil, fmt.Errorf("build bot runtime: infra is nil")
+		return nil, errors.New("build bot runtime: infra is nil")
 	}
+
 	runtimeViews := buildBotRuntimeDependencyViews(infra)
+
 	botBot, err := orchestration.NewBot(runtimeViews.botDeps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -70,8 +75,9 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 
 	durable, err := buildDurableRuntime(infra, botBot, appConfig.APIWorkerProfile, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build durable runtime: %w", err)
 	}
+
 	configureDurableReplyWriter(botBot, durable, logger)
 
 	webhookHandler, err := appbootstrap.BuildDurableBotWebhookHandler(appConfig, durableAdmitter{
@@ -88,17 +94,35 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 
 	readyProbe := newBotReadyProbe(infra)
 
-	var h3Server *http3.Server
-	var h3CertReloadStart func(context.Context)
+	var (
+		h3Server          *http3.Server
+		h3CertReloadStart func(context.Context)
+	)
+
 	if appConfig.ServerTransportEnabled("h3") {
 		h3Server, h3CertReloadStart, err = appbootstrap.BuildBotHTTP3Server(ctx, appConfig, webhookHandler, nil, infra.IrisRoomLister, logger, readyProbe)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("build bot HTTP3 server: %w", err)
 		}
 	}
 
 	metricsServer, pprofServer := buildBotOptionalServers(ctx, appConfig)
 
+	return assembleBotRuntime(appConfig, logger, infra, botBot, configSubscriber, h3Server, h3CertReloadStart, metricsServer, pprofServer, webhookHandler, durable), nil
+}
+
+func assembleBotRuntime(
+	appConfig *settings.Config,
+	logger *slog.Logger,
+	infra *appbootstrap.BotInfrastructure,
+	botBot *orchestration.Bot,
+	configSubscriber *configsub.Subscriber,
+	h3Server *http3.Server,
+	h3CertReloadStart func(context.Context),
+	metricsServer, pprofServer *http.Server,
+	webhookHandler interface{ CloseContext(context.Context) error },
+	durable *durableRuntime,
+) *BotRuntime {
 	return &BotRuntime{
 		Config:               appConfig,
 		Logger:               logger,
@@ -113,7 +137,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 		h3CertReloadStart:    h3CertReloadStart,
 		webhookHandlerCloser: webhookHandler,
 		durable:              durable,
-	}, nil
+	}
 }
 
 func configureDurableReplyWriter(bot *orchestration.Bot, durable *durableRuntime, logger *slog.Logger) {
@@ -127,7 +151,13 @@ func configureDurableReplyWriter(bot *orchestration.Bot, durable *durableRuntime
 
 func buildDurableRuntime(infra *appbootstrap.BotInfrastructure, bot *orchestration.Bot, profile *settings.APIWorkerProfile, logger *slog.Logger) (*durableRuntime, error) {
 	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
-		return nil, fmt.Errorf("build bot runtime: durable postgres pool is nil")
+		return nil, errors.New("build bot runtime: durable postgres pool is nil")
 	}
-	return newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), profile, logger)
+
+	out, err := newDurableRuntime(bot, infra.Deps.Client, infra.Postgres.GetPool(), profile, logger)
+	if err != nil {
+		return nil, fmt.Errorf("durable runtime: %w", err)
+	}
+
+	return out, nil
 }

@@ -1,6 +1,7 @@
 package sourceobservation
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -8,9 +9,11 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-type JobKind string
-type JobClass string
-type JobMembership string
+type (
+	JobKind       string
+	JobClass      string
+	JobMembership string
+)
 
 const (
 	JobClassSubject JobClass = "SUBJECT"
@@ -66,16 +69,19 @@ func NewJobContract(
 ) (JobContract, error) {
 	normalizedEmissions, err := normalizeObservationKinds("emission", emissions)
 	if err != nil {
-		return JobContract{}, err
+		return JobContract{}, fmt.Errorf("normalize observation kinds: %w", err)
 	}
+
 	normalizedCadence, err := normalizeObservationKinds("cadence", cadenceKinds)
 	if err != nil {
-		return JobContract{}, err
+		return JobContract{}, fmt.Errorf("normalize observation kinds: %w", err)
 	}
+
 	normalizedRoster, err := normalizeObservationKinds("roster", rosterKinds)
 	if err != nil {
-		return JobContract{}, err
+		return JobContract{}, fmt.Errorf("normalize observation kinds: %w", err)
 	}
+
 	job := JobContract{definition: &jobContractDefinition{
 		id:           id,
 		class:        class,
@@ -86,8 +92,9 @@ func NewJobContract(
 		rosterKinds:  normalizedRoster,
 	}}
 	if err := job.Validate(); err != nil {
-		return JobContract{}, err
+		return JobContract{}, fmt.Errorf("validate: %w", err)
 	}
+
 	return job, nil
 }
 
@@ -95,6 +102,7 @@ func (j JobContract) ID() JobID {
 	if j.definition == nil {
 		return JobID{}
 	}
+
 	return j.definition.id
 }
 
@@ -102,6 +110,7 @@ func (j JobContract) Class() JobClass {
 	if j.definition == nil {
 		return ""
 	}
+
 	return j.definition.class
 }
 
@@ -109,6 +118,7 @@ func (j JobContract) Membership() JobMembership {
 	if j.definition == nil {
 		return ""
 	}
+
 	return j.definition.membership
 }
 
@@ -116,6 +126,7 @@ func (j JobContract) LeaseSubject() string {
 	if j.definition == nil {
 		return ""
 	}
+
 	return j.definition.leaseSubject
 }
 
@@ -123,6 +134,7 @@ func (j JobContract) Emissions() []contract.ObservationKind {
 	if j.definition == nil {
 		return []contract.ObservationKind{}
 	}
+
 	return cloneObservationKinds(j.definition.emissions)
 }
 
@@ -130,6 +142,7 @@ func (j JobContract) CadenceKinds() []contract.ObservationKind {
 	if j.definition == nil {
 		return []contract.ObservationKind{}
 	}
+
 	return cloneObservationKinds(j.definition.cadenceKinds)
 }
 
@@ -137,6 +150,7 @@ func (j JobContract) RosterKinds() []contract.ObservationKind {
 	if j.definition == nil {
 		return []contract.ObservationKind{}
 	}
+
 	return cloneObservationKinds(j.definition.rosterKinds)
 }
 
@@ -144,6 +158,7 @@ func (j JobContract) RequestedKinds() []contract.ObservationKind {
 	if j.definition == nil {
 		return []contract.ObservationKind{}
 	}
+
 	return unionObservationKinds(j.definition.cadenceKinds, j.definition.rosterKinds)
 }
 
@@ -157,22 +172,26 @@ func (j JobContract) UsesRoster(kind contract.ObservationKind) bool {
 
 func (j JobContract) Validate() error {
 	if j.definition == nil || !j.definition.id.Valid() {
-		return fmt.Errorf("validate job contract: identity is invalid")
+		return errors.New("validate job contract: identity is invalid")
 	}
+
 	if !j.definition.class.Valid() || !j.definition.membership.Valid() {
-		return fmt.Errorf("validate job contract: class or membership is invalid")
+		return errors.New("validate job contract: class or membership is invalid")
 	}
+
 	if err := validateClassMembership(
 		j.definition.class,
 		j.definition.membership,
 		j.definition.leaseSubject,
 		j.definition.rosterKinds,
 	); err != nil {
-		return err
+		return fmt.Errorf("validate class membership: %w", err)
 	}
+
 	if err := validateKindSlices(j.definition.emissions, j.definition.cadenceKinds, j.definition.rosterKinds); err != nil {
-		return err
+		return fmt.Errorf("validate kind slices: %w", err)
 	}
+
 	return nil
 }
 
@@ -180,6 +199,7 @@ func (j JobContract) Clone() JobContract {
 	if j.definition == nil {
 		return JobContract{}
 	}
+
 	return JobContract{definition: &jobContractDefinition{
 		id:           j.definition.id,
 		class:        j.definition.class,
@@ -204,6 +224,7 @@ func (s StaticJobContracts) Definition(id JobID) (JobContract, bool) {
 	if !ok {
 		return JobContract{}, false
 	}
+
 	return definition.Clone(), true
 }
 
@@ -212,7 +233,9 @@ func (s StaticJobContracts) IDs() []JobID {
 	for id := range s {
 		ids = append(ids, id)
 	}
+
 	slices.SortFunc(ids, compareJobID)
+
 	return ids
 }
 
@@ -230,19 +253,25 @@ func normalizeObservationKinds(name string, kinds []contract.ObservationKind) ([
 	if len(kinds) == 0 {
 		return []contract.ObservationKind{}, nil
 	}
+
 	out := make([]contract.ObservationKind, 0, len(kinds))
 	seen := make(map[contract.ObservationKind]struct{}, len(kinds))
+
 	for _, kind := range kinds {
 		if !kind.Valid() {
 			return nil, fmt.Errorf("new job contract: invalid %s kind %q", name, kind)
 		}
+
 		if _, ok := seen[kind]; ok {
 			return nil, fmt.Errorf("new job contract: duplicate %s kind %q", name, kind)
 		}
+
 		seen[kind] = struct{}{}
 		out = append(out, kind)
 	}
+
 	slices.Sort(out)
+
 	return out, nil
 }
 
@@ -251,92 +280,45 @@ func cloneObservationKinds(kinds []contract.ObservationKind) []contract.Observat
 	if out == nil {
 		return []contract.ObservationKind{}
 	}
+
 	return out
 }
 
 func validateClassMembership(class JobClass, membership JobMembership, leaseSubject string, roster []contract.ObservationKind) error {
 	switch class {
 	case JobClassSubject:
-		return validateSubjectMembership(membership, leaseSubject)
+		return errors.Join(validateSubjectClassMembership(membership, leaseSubject))
 	case JobClassGlobal:
-		return validateGlobalMembership(membership, leaseSubject, roster)
+		return errors.Join(validateGlobalClassMembership(membership, leaseSubject, roster))
 	default:
-		return fmt.Errorf("validate job contract: class is invalid")
+		return errors.New("validate job contract: class is invalid")
 	}
+}
+
+func validateSubjectClassMembership(membership JobMembership, leaseSubject string) error {
+	if err := validateSubjectMembership(membership, leaseSubject); err != nil {
+		return fmt.Errorf("validate subject membership: %w", err)
+	}
+
+	return nil
+}
+
+func validateGlobalClassMembership(membership JobMembership, leaseSubject string, roster []contract.ObservationKind) error {
+	if err := validateGlobalMembership(membership, leaseSubject, roster); err != nil {
+		return fmt.Errorf("validate global membership: %w", err)
+	}
+
+	return nil
 }
 
 func validateSubjectMembership(membership JobMembership, leaseSubject string) error {
 	if membership != JobMembershipExactSubject {
-		return fmt.Errorf("validate job contract: SUBJECT requires EXACT_SUBJECT")
+		return errors.New("validate job contract: SUBJECT requires EXACT_SUBJECT")
 	}
+
 	if leaseSubject != "" {
-		return fmt.Errorf("validate job contract: SUBJECT lease subject must be empty")
+		return errors.New("validate job contract: SUBJECT lease subject must be empty")
 	}
+
 	return nil
-}
-
-func validateGlobalMembership(
-	membership JobMembership,
-	leaseSubject string,
-	roster []contract.ObservationKind,
-) error {
-	if leaseSubject == "" || strings.TrimSpace(leaseSubject) != leaseSubject || len(leaseSubject) > 256 {
-		return fmt.Errorf("validate job contract: GLOBAL lease subject is invalid")
-	}
-	if membership == JobMembershipCurrentProjection && len(roster) == 0 {
-		return fmt.Errorf("validate job contract: CURRENT_PROJECTION requires a roster kind")
-	}
-	return nil
-}
-
-func validateKindSlices(
-	emissions []contract.ObservationKind,
-	cadence []contract.ObservationKind,
-	roster []contract.ObservationKind,
-) error {
-	cadenceSet := make(map[contract.ObservationKind]struct{}, len(cadence))
-	for _, kind := range cadence {
-		cadenceSet[kind] = struct{}{}
-	}
-	for _, kind := range emissions {
-		if _, ok := cadenceSet[kind]; !ok {
-			return fmt.Errorf("validate job contract: emission %q is missing from cadence", kind)
-		}
-	}
-	_ = roster
-	return nil
-}
-
-func unionObservationKinds(left, right []contract.ObservationKind) []contract.ObservationKind {
-	seen := make(map[contract.ObservationKind]struct{}, len(left)+len(right))
-	out := make([]contract.ObservationKind, 0, len(left)+len(right))
-	for _, kind := range append(slices.Clone(left), right...) {
-		if _, ok := seen[kind]; ok {
-			continue
-		}
-		seen[kind] = struct{}{}
-		out = append(out, kind)
-	}
-	slices.Sort(out)
-	return out
-}
-
-func leaseSubjectMismatch(job JobContract, subject string) bool {
-	return job.Membership() == JobMembershipExactSubject && job.LeaseSubject() != "" && job.LeaseSubject() != subject
-}
-
-func compareJobID(a, b JobID) int {
-	if a.Provider != b.Provider {
-		if a.Provider < b.Provider {
-			return -1
-		}
-		return 1
-	}
-	if a.Kind == b.Kind {
-		return 0
-	}
-	if a.Kind < b.Kind {
-		return -1
-	}
-	return 1
 }

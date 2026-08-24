@@ -2,9 +2,11 @@ package sourceobservation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
@@ -25,7 +27,13 @@ func (r *PublishRepository) PublishBatch(ctx context.Context, input *PublishBatc
 	if r == nil || r.inner == nil {
 		return PublishBatchResult{}, ErrInvalidRepository
 	}
-	return r.inner.PublishBatch(ctx, input)
+
+	out, err := r.inner.PublishBatch(ctx, input)
+	if err != nil {
+		return out, fmt.Errorf("publish batch: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *PublishRepository) PublishBatchAndDefer(
@@ -36,7 +44,13 @@ func (r *PublishRepository) PublishBatchAndDefer(
 	if r == nil || r.inner == nil {
 		return PublishBatchResult{}, ErrInvalidRepository
 	}
-	return r.inner.PublishBatchAndDefer(ctx, input, deferInput)
+
+	out, err := r.inner.PublishBatchAndDefer(ctx, input, deferInput)
+	if err != nil {
+		return out, fmt.Errorf("publish batch and defer: %w", err)
+	}
+
+	return out, nil
 }
 
 type ConsumeRepository struct {
@@ -51,88 +65,148 @@ func (r *ConsumeRepository) store() (*Repository, error) {
 	if r == nil || r.inner == nil {
 		return nil, ErrInvalidRepository
 	}
+
 	return r.inner, nil
 }
 
 func (r *ConsumeRepository) ClaimBatch(ctx context.Context, options ClaimOptions) (ClaimedBatch, error) {
 	store, err := r.store()
 	if err != nil {
-		return ClaimedBatch{}, err
+		return ClaimedBatch{}, fmt.Errorf("store: %w", err)
 	}
-	return store.ClaimBatch(ctx, options)
+
+	out, err := store.ClaimBatch(ctx, options)
+	if err != nil {
+		return out, fmt.Errorf("claim batch: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ConsumeRepository) ProbeClaim(ctx context.Context, options ClaimOptions) error {
 	store, err := r.store()
 	if err != nil {
-		return err
+		return fmt.Errorf("store: %w", err)
 	}
-	return store.ProbeClaim(ctx, options)
+
+	if err := store.ProbeClaim(ctx, options); err != nil {
+		return fmt.Errorf("probe claim: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ConsumeRepository) EnsureClaimBudget(ctx context.Context, claim Claim, timeout time.Duration) error {
 	store, err := r.store()
 	if err != nil {
-		return err
+		return fmt.Errorf("store: %w", err)
 	}
-	return store.EnsureClaimBudget(ctx, claim, timeout)
+
+	if err := store.EnsureClaimBudget(ctx, claim, timeout); err != nil {
+		return fmt.Errorf("ensure claim budget: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ConsumeRepository) Retry(ctx context.Context, input RetryInput) (contract.Status, error) {
 	store, err := r.store()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("store: %w", err)
 	}
-	return store.Retry(ctx, input)
+
+	out, err := store.Retry(ctx, input)
+	if err != nil {
+		return out, fmt.Errorf("retry: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ConsumeRepository) DeadLetter(ctx context.Context, input DeadLetterInput) error {
 	store, err := r.store()
 	if err != nil {
-		return err
+		return fmt.Errorf("store: %w", err)
 	}
-	return store.DeadLetter(ctx, input)
+
+	if err := store.DeadLetter(ctx, input); err != nil {
+		return fmt.Errorf("dead letter: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ConsumeRepository) Finalize(ctx context.Context, claim Claim, reconcile ReconcileWrite) (ReconcileResult, error) {
 	store, err := r.store()
 	if err != nil {
-		return ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("store: %w", err)
 	}
-	return store.Finalize(ctx, claim, reconcile)
+
+	out, err := store.Finalize(ctx, claim, reconcile)
+	if err != nil {
+		return out, fmt.Errorf("finalize: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ConsumeRepository) ProcessNextReplay(ctx context.Context) (bool, error) {
 	store, err := r.store()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("store: %w", err)
 	}
-	return store.ProcessNextReplay(ctx)
+
+	out, err := store.ProcessNextReplay(ctx)
+	if err != nil {
+		return out, fmt.Errorf("process next replay: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ConsumeRepository) RequestReplay(ctx context.Context, input ReplayInput) (ReplayResult, error) {
 	store, err := r.store()
 	if err != nil {
-		return ReplayResult{}, err
+		return ReplayResult{}, fmt.Errorf("store: %w", err)
 	}
-	return store.RequestReplay(ctx, input)
+
+	out, err := store.RequestReplay(ctx, input)
+	if err != nil {
+		return out, fmt.Errorf("request replay: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ConsumeRepository) RunRetentionTick(ctx context.Context, cfg RetentionConfig, now time.Time) (RetentionResult, error) {
 	store, err := r.store()
 	if err != nil {
-		return RetentionResult{}, err
+		return RetentionResult{}, fmt.Errorf("store: %w", err)
 	}
-	return store.RunRetentionTick(ctx, cfg, now)
+
+	out, err := store.RunRetentionTick(ctx, cfg, now)
+	if err != nil {
+		return out, fmt.Errorf("run retention tick: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *ConsumeRepository) FinalizeNextDueLiveEnd(ctx context.Context, grace time.Duration) (bool, error) {
 	store, err := r.store()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("store: %w", err)
 	}
-	return store.FinalizeNextDueLiveEnd(ctx, grace)
+
+	out, err := store.FinalizeNextDueLiveEnd(ctx, grace)
+	if err != nil {
+		return out, fmt.Errorf("finalize next due live end: %w", err)
+	}
+
+	return out, nil
 }
 
-var _ observationClaimFinalizer = (*Repository)(nil)
-var _ observationClaimFinalizer = (*ConsumeRepository)(nil)
+var (
+	_ observationClaimFinalizer = (*Repository)(nil)
+	_ observationClaimFinalizer = (*ConsumeRepository)(nil)
+)

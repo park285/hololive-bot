@@ -63,11 +63,14 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 	}
 
 	var b strings.Builder
+
 	fmt.Fprintf(&b, "방송 이력 %d건\n", len(entries))
+
 	if line := broadcastHistoryFilterLine(filter); line != "" {
 		b.WriteString(line)
 		b.WriteByte('\n')
 	}
+
 	if filter.Truncated {
 		b.WriteString(broadcastHistoryTruncatedNotice)
 		b.WriteByte('\n')
@@ -77,6 +80,7 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 		if i > 0 {
 			b.WriteByte('\n')
 		}
+
 		f.writeBroadcastHistoryEntry(ctx, &b, i+1, &entries[i])
 	}
 
@@ -100,9 +104,11 @@ func writeBroadcastHistoryTitle(b *strings.Builder, broadcastType, title string)
 
 func broadcastHistoryDisplayTitle(broadcastType, title string) string {
 	title = strings.TrimSpace(title)
+
 	if broadcastType != "membership" {
 		return title
 	}
+
 	return trimBroadcastHistoryMembershipTitleTag(title)
 }
 
@@ -111,11 +117,15 @@ func trimBroadcastHistoryMembershipTitleTag(title string) string {
 	if !ok {
 		return title
 	}
+
 	cleanedTag := cleanBroadcastHistoryMembershipTag(tag)
+
 	rest = strings.TrimSpace(rest)
+
 	if cleanedTag == "" {
 		return rest
 	}
+
 	return strings.TrimSpace("【" + cleanedTag + "】" + rest)
 }
 
@@ -123,10 +133,12 @@ func splitLeadingBroadcastHistoryTitleTag(title string) (tag, rest string, ok bo
 	if !strings.HasPrefix(title, "【") {
 		return "", "", false
 	}
+
 	tagEnd := strings.Index(title, "】")
 	if tagEnd < 0 {
 		return "", "", false
 	}
+
 	return title[len("【"):tagEnd], title[tagEnd+len("】"):], true
 }
 
@@ -137,9 +149,11 @@ func cleanBroadcastHistoryMembershipTag(tag string) string {
 
 func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry *BroadcastHistoryEntry) {
 	fmt.Fprintf(b, "   %s", broadcastHistoryTime(ctx, f, entry.Time))
+
 	if entry.TopicID != "" {
 		fmt.Fprintf(b, " | topic: %s", entry.TopicID)
 	}
+
 	b.WriteByte('\n')
 }
 
@@ -155,42 +169,53 @@ func writeBroadcastHistoryThumbnail(b *strings.Builder, prefix string, entry *Br
 	}
 }
 
-func (f *ResponseFormatter) BroadcastHistoryEmpty(ctx context.Context, filter BroadcastHistoryFilter) string {
+func (f *ResponseFormatter) BroadcastHistoryEmpty(_ context.Context, filter BroadcastHistoryFilter) string {
 	var b strings.Builder
+
 	b.WriteString("조건에 맞는 종료된 방송 이력이 없습니다.")
+
 	if line := broadcastHistoryFilterLine(filter); line != "" {
 		b.WriteByte('\n')
 		b.WriteString(line)
 	}
+
 	if filter.Truncated {
 		b.WriteByte('\n')
 		b.WriteString(broadcastHistoryTruncatedNotice)
 	}
+
 	return f.foldSeeMore(b.String())
 }
 
 func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 	parts := make([]string, 0, 4)
+
 	if filter.MemberName != "" {
 		parts = append(parts, "멤버: "+filter.MemberName)
 	}
+
 	if filter.TypeLabel != "" {
 		parts = append(parts, "타입: "+filter.TypeLabel)
 	}
+
 	if filter.TopicID != "" {
 		parts = append(parts, "topic: "+filter.TopicID)
 	}
+
 	if filter.IncludeAll {
 		parts = append(parts, "기간: 전체")
 	} else if filter.Days > 0 {
 		parts = append(parts, fmt.Sprintf("기간: 최근 %d일", filter.Days))
 	}
+
 	if filter.Limit > 0 {
 		parts = append(parts, fmt.Sprintf("개수: 최대 %d건", filter.Limit))
 	}
+
 	if len(parts) == 0 {
 		return ""
 	}
+
 	return strings.Join(parts, " / ")
 }
 
@@ -198,5 +223,6 @@ func broadcastHistoryTime(ctx context.Context, f *ResponseFormatter, t time.Time
 	if t.IsZero() {
 		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceMisc, "time_unknown")
 	}
+
 	return util.FormatKST(t, "2006/01/02 15:04")
 }

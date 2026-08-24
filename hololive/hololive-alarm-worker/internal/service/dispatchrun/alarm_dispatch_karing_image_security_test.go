@@ -49,7 +49,7 @@ func TestBuildAlarmDispatchNotificationKaringContentItemSanitizesThumbnail(t *te
 		t.Run(tc.name, func(t *testing.T) {
 			notification := &domain.AlarmNotification{
 				Stream:  &domain.Stream{ID: "stream-1", Thumbnail: tc.streamThumb},
-				Channel: &domain.Channel{Name: "Member", Photo: tc.channelPhoto},
+				Channel: &domain.Channel{Name: testAlarmMemberName, Photo: tc.channelPhoto},
 			}
 			if got := buildAlarmDispatchNotificationKaringContentItem(t.Context(), nil, notification).ThumbnailURL; got != tc.want {
 				t.Fatalf("ThumbnailURL = %q, want %q", got, tc.want)

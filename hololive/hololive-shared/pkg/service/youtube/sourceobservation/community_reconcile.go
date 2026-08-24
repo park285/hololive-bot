@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
@@ -14,15 +15,18 @@ func (c *Consumer) reconcileCommunity(
 ) (community.Batch, ReconcileResult, bool, error) {
 	payload, err := decodeCommunityPayload(claimed)
 	if err != nil {
-		return community.Batch{}, ReconcileResult{}, false, err
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("decode community payload: %w", err)
 	}
-	if err := lockCommunitySubject(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID); err != nil {
-		return community.Batch{}, ReconcileResult{}, false, err
+
+	if lockErr := lockCommunitySubject(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID); lockErr != nil {
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("lock community subject: %w", lockErr)
 	}
+
 	head, err := loadCommunitySubjectHead(ctx, tx, claimed.Provider, claimed.ObservationKind, payload.ChannelID)
 	if err != nil {
-		return community.Batch{}, ReconcileResult{}, false, err
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("load community subject head: %w", err)
 	}
+
 	if head.supersedes(claimed) {
 		return community.Batch{}, ReconcileResult{Applications: []Application{{
 			EntityKind: "community_subject_head",
@@ -30,33 +34,39 @@ func (c *Consumer) reconcileCommunity(
 			Decision:   "STALE_SKIPPED",
 		}}}, false, nil
 	}
-	watermark, initialized, err := loadCommunityWatermark(ctx, tx, payload.ChannelID)
+
+	watermark, err := loadCommunityWatermark(ctx, tx, payload.ChannelID)
 	if err != nil {
-		return community.Batch{}, ReconcileResult{}, false, err
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("load community watermark: %w", err)
 	}
+
 	persisted := community.ArtifactsFromPayload(
 		&payload,
-		initialized,
-		watermark,
+		watermark.Initialized,
+		&watermark,
 		claimed.EffectiveAt,
 		c.keywords,
 	)
 	if err := c.writer.PersistTx(ctx, tx, &persisted); err != nil {
-		return community.Batch{}, ReconcileResult{}, false, err
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("persist tx: %w", err)
 	}
+
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return community.Batch{}, ReconcileResult{}, false, err
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("save community subject head: %w", err)
 	}
+
 	return persisted, ReconcileResult{Applications: communityApplications(payload.ChannelID, &persisted)}, true, nil
 }
 
 func communityApplications(channelID string, persisted *community.Batch) []Application {
 	applications := make([]Application, 0, len(persisted.Posts)+1)
+
 	applications = append(applications, Application{
 		EntityKind: "community_subject_head",
 		EntityKey:  channelID,
 		Decision:   "APPLIED",
 	})
+
 	for i := range persisted.Posts {
 		applications = append(applications, Application{
 			EntityKind: "community_post",
@@ -64,5 +74,6 @@ func communityApplications(channelID string, persisted *community.Batch) []Appli
 			Decision:   "APPLIED",
 		})
 	}
+
 	return applications
 }

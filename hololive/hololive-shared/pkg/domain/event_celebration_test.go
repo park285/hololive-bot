@@ -1,9 +1,9 @@
 package domain_test
 
 import (
+	jsonv2 "encoding/json/v2"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -12,10 +12,11 @@ func TestCelebrationDispatchPayload_Identity(t *testing.T) {
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthday,
-		ChannelID: "UC_test",
-		Date:      "2026-05-26",
+		ChannelID: testChannelID,
+		Date:      testCelebrationDate,
 	}
 	want := "birthday:UC_test:2026-05-26"
+
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
 	}
@@ -30,6 +31,7 @@ func TestCelebrationDispatchPayload_IdentityAnniversary(t *testing.T) {
 		Date:      "2026-09-01",
 	}
 	want := "anniversary:UC_ch:2026-09-01"
+
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
 	}
@@ -40,11 +42,12 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStream(t *testing.T) {
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
-		ChannelID: "UC_test",
+		ChannelID: testChannelID,
 		Date:      "2026-07-10",
 		VideoID:   "vid123",
 	}
 	want := "birthday_stream:UC_test:2026-07-10:vid123"
+
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
 	}
@@ -55,11 +58,12 @@ func TestCelebrationDispatchPayload_IdentityBirthdayIgnoresVideoID(t *testing.T)
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthday,
-		ChannelID: "UC_test",
-		Date:      "2026-05-26",
+		ChannelID: testChannelID,
+		Date:      testCelebrationDate,
 		VideoID:   "vid123",
 	}
 	want := "birthday:UC_test:2026-05-26"
+
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
 	}
@@ -70,11 +74,12 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStreamTrimsVideoID(t *testin
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
-		ChannelID: "UC_test",
+		ChannelID: testChannelID,
 		Date:      "2026-07-10",
 		VideoID:   " vid123 ",
 	}
 	want := "birthday_stream:UC_test:2026-07-10:vid123"
+
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
 	}
@@ -85,10 +90,11 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStreamEmptyVideoID(t *testin
 
 	p := &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
-		ChannelID: "UC_test",
+		ChannelID: testChannelID,
 		Date:      "2026-07-10",
 	}
 	want := "birthday_stream:UC_test:2026-07-10"
+
 	if got := p.Identity(); got != want {
 		t.Fatalf("Identity() = %q, want %q", got, want)
 	}
@@ -143,16 +149,16 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
 			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "UC_test", Name: "Test Member"},
+			Channel:   &domain.Channel{ID: testChannelID, Name: "Test Member"},
 		},
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
 			MemberName: "Test Member",
-			ChannelID:  "UC_test",
+			ChannelID:  testChannelID,
 			Photo:      "https://example.com/photo.jpg",
 			Ordinal:    2,
-			Date:       "2026-05-26",
+			Date:       testCelebrationDate,
 		},
 		ClaimKeys:  []string{},
 		EnqueuedAt: "2026-05-26T00:00:00Z",
@@ -165,35 +171,45 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 	}
 
 	var raw map[string]any
+
 	if err := jsonv2.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("raw Unmarshal: %v", err)
 	}
+
 	if raw["source_kind"] != string(domain.AlarmDispatchSourceKindCelebration) {
 		t.Fatalf("source_kind = %v, want %q", raw["source_kind"], domain.AlarmDispatchSourceKindCelebration)
 	}
+
 	if _, ok := raw["celebration"]; !ok {
 		t.Fatal("celebration field missing from JSON")
 	}
 
 	var decoded domain.AlarmQueueEnvelope
+
 	if err := jsonv2.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
+
 	if decoded.SourceKind != domain.AlarmDispatchSourceKindCelebration {
 		t.Fatalf("SourceKind = %q, want %q", decoded.SourceKind, domain.AlarmDispatchSourceKindCelebration)
 	}
+
 	if decoded.Celebration == nil {
 		t.Fatal("Celebration = nil")
 	}
+
 	if decoded.Celebration.Kind != domain.CelebrationKindBirthday {
 		t.Fatalf("Kind = %q, want %q", decoded.Celebration.Kind, domain.CelebrationKindBirthday)
 	}
-	if decoded.Celebration.Date != "2026-05-26" {
-		t.Fatalf("Date = %q, want %q", decoded.Celebration.Date, "2026-05-26")
+
+	if decoded.Celebration.Date != testCelebrationDate {
+		t.Fatalf("Date = %q, want %q", decoded.Celebration.Date, testCelebrationDate)
 	}
+
 	if decoded.Celebration.MemberName != "Test Member" {
 		t.Fatalf("MemberName = %q, want %q", decoded.Celebration.MemberName, "Test Member")
 	}
+
 	if decoded.Celebration.Ordinal != 2 {
 		t.Fatalf("Ordinal = %d, want 2", decoded.Celebration.Ordinal)
 	}
@@ -211,8 +227,8 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
 			MemberName: "Test",
-			ChannelID:  "UC_test",
-			Date:       "2026-05-26",
+			ChannelID:  testChannelID,
+			Date:       testCelebrationDate,
 		},
 	}
 	if err := valid.ValidateCanonicalDispatch(); err != nil {
@@ -220,28 +236,36 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_Celebration(t *testing.T) 
 	}
 
 	noRoom := valid
+
 	noRoom.Notification.RoomID = ""
+
 	if err := noRoom.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty room_id")
 	}
 
 	wrongType := valid
+
 	wrongType.Notification.AlarmType = domain.AlarmTypeLive
+
 	if err := wrongType.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for non-celebration alarm type")
 	}
 
 	nilPayload := valid
+
 	nilPayload.Celebration = nil
+
 	if err := nilPayload.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for nil celebration payload")
 	}
 
 	noDate := valid
+
 	noDate.Celebration = &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthday,
-		ChannelID: "UC_test",
+		ChannelID: testChannelID,
 	}
+
 	if err := noDate.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty date")
 	}
@@ -259,7 +283,7 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_BirthdayStream(t *testing.
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthdayStream,
 			MemberName: "Test",
-			ChannelID:  "UC_test",
+			ChannelID:  testChannelID,
 			Date:       "2026-07-10",
 			VideoID:    "vid123",
 		},
@@ -270,16 +294,20 @@ func TestAlarmQueueEnvelope_ValidateCanonicalDispatch_BirthdayStream(t *testing.
 
 	noVideoID := valid
 	payload := *valid.Celebration
+
 	payload.VideoID = ""
 	noVideoID.Celebration = &payload
+
 	if err := noVideoID.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for empty birthday stream video id")
 	}
 
 	blankVideoID := valid
 	blankPayload := *valid.Celebration
+
 	blankPayload.VideoID = "   "
 	blankVideoID.Celebration = &blankPayload
+
 	if err := blankVideoID.ValidateCanonicalDispatch(); err == nil {
 		t.Fatal("ValidateCanonicalDispatch() = nil, want error for whitespace birthday stream video id")
 	}

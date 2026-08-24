@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -28,15 +29,21 @@ func newRuntimeIrisH3DialGuard(resolveBaseURL func() (string, error), logger *sl
 func (g *runtimeIrisH3DialGuard) allow(ctx context.Context, ip net.IP) error {
 	guard, err := g.guardForCurrentBaseURL(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("guard for current base URL: %w", err)
 	}
-	return guard(ctx, ip)
+
+	if err := guard(ctx, ip); err != nil {
+		return fmt.Errorf("guard: %w", err)
+	}
+
+	return nil
 }
 
 func (g *runtimeIrisH3DialGuard) guardForCurrentBaseURL(ctx context.Context) (func(context.Context, net.IP) error, error) {
 	if g.resolveBaseURL == nil {
-		return nil, fmt.Errorf("iris h3 egress guard has no base URL resolver")
+		return nil, errors.New("iris h3 egress guard has no base URL resolver")
 	}
+
 	baseURL, err := g.resolveBaseURL()
 	if err != nil {
 		return nil, fmt.Errorf("resolve Iris base URL for H3 egress guard: %w", err)
@@ -44,9 +51,11 @@ func (g *runtimeIrisH3DialGuard) guardForCurrentBaseURL(ctx context.Context) (fu
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	if g.guard != nil && g.baseURL == baseURL {
 		return g.guard, nil
 	}
+
 	guard, err := iris.NewH3DialGuardForBaseURL(
 		ctx,
 		baseURL,
@@ -56,7 +65,9 @@ func (g *runtimeIrisH3DialGuard) guardForCurrentBaseURL(ctx context.Context) (fu
 	if err != nil {
 		return nil, fmt.Errorf("configure Iris H3 dial guard: %w", err)
 	}
+
 	g.baseURL = baseURL
 	g.guard = guard
+
 	return guard, nil
 }

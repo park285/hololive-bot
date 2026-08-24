@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 func TestAlarmDispatchMaintenanceSkipsRetentionWhenAdvisoryLockUnavailable(t *testing.T) {
@@ -160,7 +162,9 @@ func TestAlarmDispatchMaintenanceParentCancellationIsNotCountedAsFailure(t *test
 		cancelObservation: cancel,
 		waitForTimeout:    true,
 	}
+
 	var logs bytes.Buffer
+
 	runner := &alarmDispatchMaintenanceRunner{
 		store:            store,
 		observerStore:    store,
@@ -178,8 +182,8 @@ func TestAlarmDispatchMaintenanceParentCancellationIsNotCountedAsFailure(t *test
 	assert.Empty(t, store.deletedTerminal)
 	assert.Zero(t, store.deletedSendUnits)
 	assert.Zero(t, store.deletedEvents)
-	assert.Equal(t, beforeObservation, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total"))
-	assert.Equal(t, beforeRetention, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_retention_failed_total"))
+	assert.InDelta(t, beforeObservation, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_backlog_observation_failed_total"), 0)
+	assert.InDelta(t, beforeRetention, alarmDispatchCounterMetricValue(t, "alarm_dispatch_pg_retention_failed_total"), 0)
 	assert.Empty(t, logs.String())
 }
 
@@ -220,25 +224,41 @@ func (s *alarmDispatchMaintenanceTestStore) WithAdvisoryLock(
 	if !s.locked {
 		return nil
 	}
-	return fn(ctx, s)
+
+	if err := fn(ctx, s); err != nil {
+		return fmt.Errorf("fn: %w", err)
+	}
+
+	return nil
 }
 
 func (s *alarmDispatchMaintenanceTestStore) BacklogSnapshot(ctx context.Context) (alarmDispatchBacklogSnapshot, error) {
 	s.observationCalls++
+
 	s.observationDone = ctx.Done()
+
 	if s.expectDeadline {
 		_, s.sawDeadline = ctx.Deadline()
 	}
+
 	if s.cancelObservation != nil {
 		s.cancelObservation()
 	}
+
 	if s.waitForTimeout {
 		<-ctx.Done()
-		return alarmDispatchBacklogSnapshot{}, ctx.Err()
+
+		if err := ctx.Err(); err != nil {
+			return alarmDispatchBacklogSnapshot{}, fmt.Errorf("blocked backlog query: %w", err)
+		}
+
+		return alarmDispatchBacklogSnapshot{}, nil
 	}
+
 	if s.observationErr != nil {
 		return alarmDispatchBacklogSnapshot{}, s.observationErr
 	}
+
 	return alarmDispatchBacklogSnapshot{
 		RowsByStatus: map[dispatchoutbox.Status]int64{
 			dispatchoutbox.StatusPending: 1,
@@ -253,13 +273,17 @@ func (s *alarmDispatchMaintenanceTestStore) BacklogSnapshot(ctx context.Context)
 func (s *alarmDispatchMaintenanceTestStore) DeleteTerminal(ctx context.Context, status dispatchoutbox.Status, _, _ int) (int64, error) {
 	s.deletionDone = ctx.Done()
 	s.deletionCtxErr = ctx.Err()
+
 	if s.deleteErr != nil {
 		return 0, s.deleteErr
 	}
+
 	if !alarmDispatchMaintenanceStatusIsDeletable(status) {
 		return 0, errors.New("active status delete requested")
 	}
+
 	s.deletedTerminal = append(s.deletedTerminal, status)
+
 	return s.deleteTerminalRows[status], nil
 }
 

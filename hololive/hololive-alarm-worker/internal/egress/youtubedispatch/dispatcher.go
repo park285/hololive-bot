@@ -22,6 +22,7 @@ package youtubedispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -68,24 +69,29 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 	if d == nil {
 		return
 	}
+
 	d.workerTracker = tracker
 	d.workerTotals = totals
 }
 
 func (d *Dispatcher) ConfigureHandoff(mode handoff.Mode, publisher YouTubeOutboxHandoff) error {
 	if d == nil || d.send == nil {
-		return fmt.Errorf("configure youtube outbox handoff: dispatcher is nil")
+		return errors.New("configure youtube outbox handoff: dispatcher is nil")
 	}
+
 	if mode != handoff.ModeOff && publisher == nil {
 		return fmt.Errorf("configure youtube outbox handoff: publisher is required for mode %q", mode)
 	}
+
 	d.send.handoffMode = mode
 	d.send.handoff = publisher
+
 	return nil
 }
 
 func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config *dispatchstate.Config) *Dispatcher {
 	initOutboxMetrics()
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -98,12 +104,15 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 	if renderer == nil && hasPool && pool != nil {
 		renderer = template.NewRenderer(pool, logger)
 	}
+
 	var messageStrings *messagestrings.Store
+
 	if hasPool && pool != nil {
 		messageStrings = messagestrings.NewStore(pool, logger)
 	}
 
 	var telemetryRepository *telemetry.Repository
+
 	if querier != nil {
 		telemetryRepository = telemetry.NewRepository(querier)
 	}
@@ -132,6 +141,7 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 		logger:    logger,
 		config:    normalizedConfig,
 	}
+
 	return d
 }
 
@@ -139,13 +149,16 @@ func (d *Dispatcher) Start(ctx context.Context) {
 	if d == nil {
 		return
 	}
+
 	if !d.started.CompareAndSwap(false, true) {
 		d.logger.Warn("Outbox dispatcher already started")
+
 		return
 	}
 
 	panicguard.Go(d.logger, "youtube-outbox-dispatcher", func() {
 		defer d.started.Store(false)
+
 		d.runJoined(ctx)
 	})
 }
@@ -156,16 +169,19 @@ func (d *Dispatcher) startBackgroundLoopsWithWait(ctx context.Context, waitGroup
 			d.aggregateSyncLoop(ctx)
 		})
 	}
+
 	if d.telemetry != nil {
 		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-telemetry", func(ctx context.Context) {
 			d.telemetry.telemetryLoop(ctx)
 		})
 	}
+
 	if d.config.CleanupEnabled {
 		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-cleanup", func(ctx context.Context) {
 			d.cleanupLoop(ctx)
 		})
 	}
+
 	if d.config.ReviveEnabled && d.claim != nil && d.claim.db != nil {
 		d.startBackgroundLoop(ctx, waitGroup, "youtube-outbox-revive", func(ctx context.Context) {
 			d.reviveLoop(ctx)
@@ -182,29 +198,37 @@ func (d *Dispatcher) startBackgroundLoop(
 	if waitGroup != nil {
 		waitGroup.Add(1)
 	}
+
 	panicguard.Go(d.logger, name, func() {
 		if waitGroup != nil {
 			defer waitGroup.Done()
 		}
+
 		loop(ctx)
 	})
 }
 
 func (d *Dispatcher) runJoined(ctx context.Context) {
 	runCtx, cancel := context.WithCancel(ctx)
+
 	var waitGroup sync.WaitGroup
+
 	d.startBackgroundLoopsWithWait(runCtx, &waitGroup)
+
 	defer func() {
 		cancel()
 		waitGroup.Wait()
 	}()
+
 	d.run(runCtx)
 }
 
 func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 	d.aggregateSyncOnce(ctx)
+
 	if err := lifecycle.RunTickerLoop(ctx, d.config.AggregateSyncInterval, func(context.Context) error {
 		d.aggregateSyncOnce(ctx)
+
 		return nil
 	}); err != nil {
 		d.logger.Warn("Aggregate sync loop stopped with error", slog.Any("error", err))
@@ -227,16 +251,19 @@ func (d *Dispatcher) run(ctx context.Context) {
 		slog.Int("subscriber_lookup_parallelism", d.grouper.subscriberLookupParallelism()))
 
 	d.processOnce(ctx)
+
 	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(context.Context) error {
 		d.processOnce(ctx)
+
 		return nil
 	}); err != nil {
 		d.logger.Warn("Outbox dispatcher loop stopped with error", slog.Any("error", err))
 	}
+
 	d.logger.Info("Outbox dispatcher stopped")
 }
 
-// processOnce: 한 번의 폴링 사이클
+// processOnce: 한 번의 폴링 사이클.
 func (d *Dispatcher) processOnce(ctx context.Context) {
 	d.processAvailable(ctx, 4)
 	d.testHooks.fireProcessOnce()
@@ -259,28 +286,35 @@ func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (proc
 	outboxItems, err := d.claim.claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
+
 		return false, false
 	}
 
 	deliveryCount := d.processClaimedOrPendingDeliveries(ctx, outboxItems, round)
+
 	return len(outboxItems) > 0 || deliveryCount > 0, true
 }
 
 func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
 	attemptID := d.workerTracker.BeginAttempt(time.Now())
 	defer d.workerTracker.EndAttempt(attemptID)
-	processed := 0
+
+	var processed int
+
 	if len(outboxItems) == 0 {
 		processed = d.claim.processPendingDeliveries(ctx)
 	} else {
 		d.logger.Debug("Processing outbox batch",
 			slog.Int("count", len(outboxItems)),
 			slog.Int("round", round+1))
+
 		processed = d.claim.processPerRoomBatch(ctx, outboxItems)
 	}
+
 	if processed > 0 {
 		d.workerTotals.RecordAttempt(workercontract.AttemptSuccess)
 	}
+
 	return processed
 }
 
@@ -289,6 +323,7 @@ func (d *Dispatcher) reviveLoop(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, d.config.ReviveInterval, func(context.Context) error {
 		d.reviveOnce(ctx)
 		d.testHooks.fireRevive()
+
 		return nil
 	}); err != nil {
 		d.logger.Warn("Outbox revive loop stopped with error", slog.Any("error", err))
@@ -299,11 +334,14 @@ func (d *Dispatcher) reviveOnce(ctx context.Context) {
 	if d == nil || d.claim == nil {
 		return
 	}
+
 	revived, err := d.claim.reviveStaleFailedOutbox(ctx, d.config.ReviveFreshnessWindow, d.config.BatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to revive stale failed outbox items", slog.Any("error", err))
+
 		return
 	}
+
 	if revived > 0 {
 		d.logger.Info("Revived stale failed outbox items for redelivery",
 			slog.Int64("revived", revived),
@@ -311,11 +349,12 @@ func (d *Dispatcher) reviveOnce(ctx context.Context) {
 	}
 }
 
-// cleanupLoop: 오래된 완료 알림 정리 루프
+// cleanupLoop: 오래된 완료 알림 정리 루프.
 func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, outboxCleanupLoopInterval, func(context.Context) error {
 		d.cleanup(ctx)
 		d.testHooks.fireCleanup()
+
 		return nil
 	}); err != nil {
 		d.logger.Warn("Outbox cleanup loop stopped with error", slog.Any("error", err))
@@ -329,6 +368,7 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 	}
 
 	d.claim.cleanupOutbox(ctx)
+
 	if d.telemetry != nil {
 		d.telemetry.cleanup(ctx)
 	}

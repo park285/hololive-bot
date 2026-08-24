@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -32,11 +33,20 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+)
+
+const (
+	alarmsPath      = "/api/holo/alarms"
+	alarmPath       = "/api/holo/alarm"
+	alarmDeleteBody = `{"roomId":"room-1","channelId":"ch-1"}`
+
+	majorEventPath        = "/api/holo/trigger/major-event"
+	majorEventMonthlyPath = "/api/holo/trigger/major-event-monthly"
 )
 
 type stubAlarmCRUDForServer struct {
@@ -57,7 +67,12 @@ func (s *stubAlarmCRUDForServer) RemoveAlarm(
 		return false, nil
 	}
 
-	return s.removeAlarm(ctx, roomID, channelID, alarmTypes)
+	out, err := s.removeAlarm(ctx, roomID, channelID, alarmTypes)
+	if err != nil {
+		return out, fmt.Errorf("remove alarm: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *stubAlarmCRUDForServer) GetRoomAlarms(context.Context, string) ([]string, error) {
@@ -77,7 +92,7 @@ func (s *stubAlarmCRUDForServer) ClearRoomAlarms(context.Context, string) (int, 
 }
 
 func (s *stubAlarmCRUDForServer) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, nil
+	return &domain.NextStreamInfo{}, nil
 }
 
 func (s *stubAlarmCRUDForServer) UpdateAlarmAdvanceMinutes(context.Context, int) []int {
@@ -101,7 +116,12 @@ func (s *stubAlarmCRUDForServer) GetAllAlarmKeys(ctx context.Context) ([]*domain
 		return nil, nil
 	}
 
-	return s.getAllAlarmKeys(ctx)
+	out, err := s.getAllAlarmKeys(ctx)
+	if err != nil {
+		return out, fmt.Errorf("get all alarm keys: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *stubAlarmCRUDForServer) WarmCacheFromDB(context.Context) error {
@@ -128,199 +148,173 @@ func newDiscardLogger() *slog.Logger {
 
 func newActivityLoggerForTest(t *testing.T) *activity.Logger {
 	t.Helper()
+
 	return activity.NewActivityLogger(filepath.Join(t.TempDir(), "activity.log"), newDiscardLogger())
 }
 
 func TestAlarmHandler_GetAlarmsAndDeleteAlarm(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("get alarms success", func(t *testing.T) {
-		handler := &AlarmHandler{Handler: &Handler{
-			alarm: &stubAlarmCRUDForServer{
-				getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
-					return []*domain.AlarmEntry{{RoomID: "r1", ChannelID: "c1"}}, nil
-				},
+	t.Run("get alarms success", alarmGetAlarmsSuccess)
+	t.Run("get alarms error", alarmGetAlarmsError)
+	t.Run("delete alarm bad json", alarmDeleteBadJSON)
+	t.Run("delete alarm internal error", alarmDeleteInternalError)
+	t.Run("delete alarm success", alarmDeleteSuccess)
+}
+
+func alarmGetAlarmsSuccess(t *testing.T) {
+	handler := &AlarmHandler{Handler: &Handler{
+		alarm: &stubAlarmCRUDForServer{
+			getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
+				return []*domain.AlarmEntry{{RoomID: "r1", ChannelID: "c1"}}, nil
 			},
-			logger: newDiscardLogger(),
-		}}
+		},
+		logger: newDiscardLogger(),
+	}}
 
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/alarms", nil)
-		handler.GetAlarms(ctx)
+	ctx, rec := newAPITestContext(http.MethodGet, alarmsPath, nil)
+	handler.GetAlarms(ctx)
 
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
 
-		body := rec.Body.String()
-		if !strings.Contains(body, `"status":"ok"`) || !strings.Contains(body, `"roomId":"r1"`) {
-			t.Fatalf("unexpected body: %s", body)
-		}
-	})
+	body := rec.Body.String()
+	if !strings.Contains(body, `"status":"ok"`) || !strings.Contains(body, `"roomId":"r1"`) {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
 
-	t.Run("get alarms error", func(t *testing.T) {
-		handler := &AlarmHandler{Handler: &Handler{
-			alarm: &stubAlarmCRUDForServer{
-				getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
-					return nil, errors.New("boom")
-				},
+func alarmGetAlarmsError(t *testing.T) {
+	handler := &AlarmHandler{Handler: &Handler{
+		alarm: &stubAlarmCRUDForServer{
+			getAllAlarmKeys: func(context.Context) ([]*domain.AlarmEntry, error) {
+				return nil, errors.New("boom")
 			},
-			logger: newDiscardLogger(),
-		}}
+		},
+		logger: newDiscardLogger(),
+	}}
 
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/alarms", nil)
-		handler.GetAlarms(ctx)
+	ctx, rec := newAPITestContext(http.MethodGet, alarmsPath, nil)
+	handler.GetAlarms(ctx)
 
-		assertErrorResponse(t, rec, http.StatusInternalServerError, "Failed to get alarms")
-	})
+	assertErrorResponse(t, rec, http.StatusInternalServerError, "Failed to get alarms")
+}
 
-	t.Run("delete alarm bad json", func(t *testing.T) {
-		handler := &AlarmHandler{Handler: &Handler{
-			alarm:    &stubAlarmCRUDForServer{},
-			logger:   newDiscardLogger(),
-			activity: newActivityLoggerForTest(t),
-		}}
+func alarmDeleteBadJSON(t *testing.T) {
+	handler := &AlarmHandler{Handler: &Handler{
+		alarm:    &stubAlarmCRUDForServer{},
+		logger:   newDiscardLogger(),
+		activity: newActivityLoggerForTest(t),
+	}}
 
-		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte("{"))
-		handler.DeleteAlarm(ctx)
+	ctx, rec := newAPITestContext(http.MethodDelete, alarmPath, []byte("{"))
+	handler.DeleteAlarm(ctx)
 
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
-	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
 
-	t.Run("delete alarm internal error", func(t *testing.T) {
-		handler := &AlarmHandler{Handler: &Handler{
-			alarm: &stubAlarmCRUDForServer{
-				removeAlarm: func(context.Context, string, string, domain.AlarmTypes) (bool, error) {
-					return false, errors.New("remove failed")
-				},
+func alarmDeleteInternalError(t *testing.T) {
+	handler := &AlarmHandler{Handler: &Handler{
+		alarm: &stubAlarmCRUDForServer{
+			removeAlarm: func(context.Context, string, string, domain.AlarmTypes) (bool, error) {
+				return false, errors.New("remove failed")
 			},
-			logger:   newDiscardLogger(),
-			activity: newActivityLoggerForTest(t),
-		}}
+		},
+		logger:   newDiscardLogger(),
+		activity: newActivityLoggerForTest(t),
+	}}
 
-		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte(`{"roomId":"room-1","channelId":"ch-1"}`))
-		handler.DeleteAlarm(ctx)
+	ctx, rec := newAPITestContext(http.MethodDelete, alarmPath, []byte(alarmDeleteBody))
+	handler.DeleteAlarm(ctx)
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
-		}
-	})
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+}
 
-	t.Run("delete alarm success", func(t *testing.T) {
-		var gotRoomID, gotChannelID string
+func alarmDeleteSuccess(t *testing.T) {
+	var gotRoomID, gotChannelID string
 
-		handler := &AlarmHandler{Handler: &Handler{
-			alarm: &stubAlarmCRUDForServer{
-				removeAlarm: func(_ context.Context, roomID, channelID string, _ domain.AlarmTypes) (bool, error) {
-					gotRoomID, gotChannelID = roomID, channelID
-					return true, nil
-				},
+	handler := &AlarmHandler{Handler: &Handler{
+		alarm: &stubAlarmCRUDForServer{
+			removeAlarm: func(_ context.Context, roomID, channelID string, _ domain.AlarmTypes) (bool, error) {
+				gotRoomID, gotChannelID = roomID, channelID
+
+				return true, nil
 			},
-			logger:   newDiscardLogger(),
-			activity: newActivityLoggerForTest(t),
-		}}
+		},
+		logger:   newDiscardLogger(),
+		activity: newActivityLoggerForTest(t),
+	}}
 
-		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/alarm", []byte(`{"roomId":"room-1","channelId":"ch-1"}`))
-		handler.DeleteAlarm(ctx)
+	ctx, rec := newAPITestContext(http.MethodDelete, alarmPath, []byte(alarmDeleteBody))
+	handler.DeleteAlarm(ctx)
 
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
 
-		if gotRoomID != "room-1" || gotChannelID != "ch-1" {
-			t.Fatalf("remove args mismatch got room=%q channel=%q", gotRoomID, gotChannelID)
-		}
+	if gotRoomID != "room-1" || gotChannelID != "ch-1" {
+		t.Fatalf("remove args mismatch got room=%q channel=%q", gotRoomID, gotChannelID)
+	}
 
-		if !strings.Contains(rec.Body.String(), `"removed":true`) {
-			t.Fatalf("unexpected body: %s", rec.Body.String())
-		}
-	})
+	if !strings.Contains(rec.Body.String(), `"removed":true`) {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
 }
 
 func TestMajorEventHandler_TriggerEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("weekly scheduler not initialized", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger()}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
-		handler.TriggerMajorEventNotification(ctx)
+	weekly := func(sched MajorEventScheduler) gin.HandlerFunc {
+		h := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger(), majorEventScheduler: sched}}
 
-		assertErrorResponse(t, rec, http.StatusServiceUnavailable, "major event scheduler not initialized")
-	})
+		return h.TriggerMajorEventNotification
+	}
 
-	t.Run("weekly conflict in progress", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{
-			logger:              newDiscardLogger(),
-			majorEventScheduler: &stubMajorEventScheduler{err: triggercontracts.ErrNotificationInProgress},
-		}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
-		handler.TriggerMajorEventNotification(ctx)
+	monthly := func(sched MajorEventMonthlyScheduler) gin.HandlerFunc {
+		h := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger(), majorEventMonthlyScheduler: sched}}
 
-		assertErrorResponse(t, rec, http.StatusConflict, "notification already in progress")
-	})
+		return h.TriggerMajorEventMonthlyNotification
+	}
 
-	t.Run("weekly internal error", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{
-			logger:              newDiscardLogger(),
-			majorEventScheduler: &stubMajorEventScheduler{err: errors.New("boom")},
-		}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
-		handler.TriggerMajorEventNotification(ctx)
+	inProgress := triggercontracts.ErrNotificationInProgress
 
-		if rec.Code != http.StatusInternalServerError {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusInternalServerError, rec.Body.String())
-		}
-	})
+	tests := []struct {
+		name       string
+		path       string
+		invoke     gin.HandlerFunc
+		wantStatus int
+		wantError  string
+	}{
+		{"weekly scheduler not initialized", majorEventPath, weekly(nil), http.StatusServiceUnavailable, "major event scheduler not initialized"},
+		{"weekly conflict in progress", majorEventPath, weekly(&stubMajorEventScheduler{err: inProgress}), http.StatusConflict, "notification already in progress"},
+		{"weekly internal error", majorEventPath, weekly(&stubMajorEventScheduler{err: errors.New("boom")}), http.StatusInternalServerError, ""},
+		{"weekly success", majorEventPath, weekly(&stubMajorEventScheduler{}), http.StatusOK, ""},
+		{"monthly scheduler not initialized", majorEventMonthlyPath, monthly(nil), http.StatusServiceUnavailable, ""},
+		{"monthly conflict in progress", majorEventMonthlyPath, monthly(&stubMajorEventMonthlyScheduler{err: inProgress}), http.StatusConflict, ""},
+		{"monthly success", majorEventMonthlyPath, monthly(&stubMajorEventMonthlyScheduler{}), http.StatusOK, ""},
+	}
 
-	t.Run("weekly success", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{
-			logger:              newDiscardLogger(),
-			majorEventScheduler: &stubMajorEventScheduler{},
-		}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event", nil)
-		handler.TriggerMajorEventNotification(ctx)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, rec := newAPITestContext(http.MethodPost, tt.path, nil)
+			tt.invoke(ctx)
 
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
-	})
+			if tt.wantError != "" {
+				assertErrorResponse(t, rec, tt.wantStatus, tt.wantError)
 
-	t.Run("monthly scheduler not initialized", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{logger: newDiscardLogger()}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
-		handler.TriggerMajorEventMonthlyNotification(ctx)
+				return
+			}
 
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
-		}
-	})
-
-	t.Run("monthly conflict in progress", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{
-			logger:                     newDiscardLogger(),
-			majorEventMonthlyScheduler: &stubMajorEventMonthlyScheduler{err: triggercontracts.ErrNotificationInProgress},
-		}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
-		handler.TriggerMajorEventMonthlyNotification(ctx)
-
-		if rec.Code != http.StatusConflict {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusConflict, rec.Body.String())
-		}
-	})
-
-	t.Run("monthly success", func(t *testing.T) {
-		handler := &MajorEventHandler{Handler: &Handler{
-			logger:                     newDiscardLogger(),
-			majorEventMonthlyScheduler: &stubMajorEventMonthlyScheduler{},
-		}}
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/trigger/major-event-monthly", nil)
-		handler.TriggerMajorEventMonthlyNotification(ctx)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
-	})
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+		})
+	}
 }
 
 func TestProfileHandler_ValidationBranches(t *testing.T) {

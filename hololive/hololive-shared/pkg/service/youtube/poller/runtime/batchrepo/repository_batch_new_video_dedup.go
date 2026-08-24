@@ -44,11 +44,13 @@ func (r *PgxBatchRepository) dropAlreadyKnownVideoNotifications(
 	}
 
 	var rows []knownVideoIDRow
+
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query existing videos for new-video dedup",
 		mustSQL("repository_batch_new_video_dedup_0048_01.sql")+dbx.InPlaceholders(len(videoIDs))+`)`,
 		dbx.AnyArgs(videoIDs)...); err != nil {
 		return nil, fmt.Errorf("query existing videos for new-video dedup: %w", err)
 	}
+
 	if len(rows) == 0 {
 		return notifications, nil
 	}
@@ -57,26 +59,32 @@ func (r *PgxBatchRepository) dropAlreadyKnownVideoNotifications(
 	for i := range rows {
 		known[rows[i].VideoID] = struct{}{}
 	}
+
 	return filterOutKnownNewVideoNotifications(notifications, known), nil
 }
 
 func collectNewVideoContentIDs(notifications []*domain.YouTubeNotificationOutbox) []string {
 	ids := make([]string, 0, len(notifications))
 	seen := make(map[string]struct{}, len(notifications))
+
 	for _, notification := range notifications {
 		if notification == nil || notification.Kind != domain.OutboxKindNewVideo {
 			continue
 		}
+
 		id := strings.TrimSpace(notification.ContentID)
 		if id == "" {
 			continue
 		}
+
 		if _, ok := seen[id]; ok {
 			continue
 		}
+
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
@@ -91,7 +99,9 @@ func filterOutKnownNewVideoNotifications(
 				continue
 			}
 		}
+
 		filtered = append(filtered, notification)
 	}
+
 	return filtered
 }

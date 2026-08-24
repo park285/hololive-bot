@@ -94,5 +94,6 @@ func (pr *ParseResults) GetCommands() []*ParseResult {
 	if pr.IsSingle() {
 		return []*ParseResult{pr.Single}
 	}
+
 	return pr.Multiple
 }

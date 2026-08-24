@@ -26,7 +26,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/subscription"
-
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
@@ -65,10 +64,13 @@ func NewRepository(postgres database.Client, cacheClient cache.Client, logger *s
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	var pool memberNewsQuerier
+
 	if postgres != nil {
 		pool = newPGXMemberNewsQuerier(postgres.GetPool())
 	}
+
 	return &Repository{
 		pool:  pool,
 		cache: cacheClient,

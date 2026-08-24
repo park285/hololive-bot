@@ -47,8 +47,9 @@ type Tx interface {
 
 func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) error {
 	if pool == nil {
-		return fmt.Errorf("pgx pool is nil")
+		return errors.New("pgx pool is nil")
 	}
+
 	if fn == nil {
 		return nil
 	}
@@ -60,7 +61,11 @@ func InPgxTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) error) erro
 
 	defer rollbackPgxTxOnPanic(ctx, tx)
 
-	return finishPgxTx(ctx, tx, fn(tx))
+	if err := finishPgxTx(ctx, tx, fn(tx)); err != nil {
+		return fmt.Errorf("finish pgx tx: %w", err)
+	}
+
+	return nil
 }
 
 func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
@@ -69,6 +74,7 @@ func rollbackPgxTxOnPanic(ctx context.Context, tx Tx) {
 		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			slog.Default().Warn("pgx transaction rollback after panic failed", slog.Any("error", rollbackErr))
 		}
+
 		panic(p)
 	}
 }
@@ -79,31 +85,39 @@ func finishPgxTx(ctx context.Context, tx Tx, fnErr error) error {
 		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
+
 		return fmt.Errorf("pgx transaction failed: %w", fnErr)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit pgx transaction: %w", err)
 	}
+
 	return nil
 }
 
 func InPgxTxWithResult[T any](ctx context.Context, pool *pgxpool.Pool, fn func(tx Tx) (T, error)) (T, error) {
 	var result T
+
 	if pool == nil {
-		return result, fmt.Errorf("pgx pool is nil")
+		return result, errors.New("pgx pool is nil")
 	}
+
 	if fn == nil {
 		return result, nil
 	}
 
 	err := InPgxTx(ctx, pool, func(tx Tx) error {
 		var txErr error
+
 		result, txErr = fn(tx)
+
+		//nolint:wrapcheck // 여기서 감싸면 nil이 오류로 뒤바뀌어 성공한 트랜잭션까지 롤백된다.
 		return txErr
 	})
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("in pgx tx: %w", err)
 	}
+
 	return result, nil
 }

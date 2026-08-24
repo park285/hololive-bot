@@ -10,9 +10,10 @@ import (
 )
 
 type MetricsRecorder struct {
+	claimReleaser
+
 	logger      *slog.Logger
 	auditLogger *AuditLogger
-	claimReleaser
 }
 
 type claimReleaser interface {
@@ -44,19 +45,24 @@ func (mr *MetricsRecorder) recordDeliveryFailureWithRetryAfter(
 	retryAfter time.Duration,
 ) {
 	mu.Lock()
+
 	result.FailedDeliveries++
 	if result.FailureBuckets == nil {
 		result.FailureBuckets = make(map[string][]int64)
 	}
+
 	result.FailureBuckets[reason] = append(result.FailureBuckets[reason], deliveryID)
+
 	if retryAfter > 0 {
 		if result.FailureRetryAfter == nil {
 			result.FailureRetryAfter = make(map[string]time.Duration)
 		}
+
 		if retryAfter > result.FailureRetryAfter[reason] {
 			result.FailureRetryAfter[reason] = retryAfter
 		}
 	}
+
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
 	mu.Unlock()
 }

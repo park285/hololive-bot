@@ -40,7 +40,9 @@ func validateEmail(email string) bool {
 	if email == "" {
 		return false
 	}
+
 	_, err := mail.ParseAddress(email)
+
 	return err == nil
 }
 
@@ -49,12 +51,15 @@ func validatePassword(password string) bool {
 	if len(password) < 8 || len(password) > 72 {
 		return false
 	}
+
 	if !reHasLetter.MatchString(password) {
 		return false
 	}
+
 	if !reHasDigit.MatchString(password) {
 		return false
 	}
+
 	return true
 }
 
@@ -63,9 +68,11 @@ func validateDisplayName(name string) bool {
 	if name == "" {
 		return false
 	}
+
 	// 과도한 길이 제한 (UI/로그 안전)
 	if len([]rune(name)) > 64 {
 		return false
 	}
+
 	return true
 }

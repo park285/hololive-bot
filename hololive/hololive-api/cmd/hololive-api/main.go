@@ -7,16 +7,16 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-api/internal/app"
-	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/observability"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
+
+	"github.com/kapu/hololive-api/internal/app"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/kapu/hololive-shared/pkg/observability"
 )
 
 var Version = "dev"
@@ -24,19 +24,37 @@ var Version = "dev"
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
 		_, err := settings.LoadAPIWorkerProfile()
+
+		//nolint:wrapcheck // runWorkerProfileCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
 		return err
 	}); handled {
 		os.Exit(exitCode)
 	}
+
 	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
 		_, err := settings.LoadHololiveAPIRuntime()
+
+		//nolint:wrapcheck // runConfigCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
 		return err
 	}); handled {
 		os.Exit(exitCode)
 	}
 
 	var logCloser io.Closer
-	code := bootstrap.Run(bootstrap.Options[*settings.HololiveAPIConfig, *observability.ManagedRuntime[*app.Runtime]]{
+
+	code := runHololiveAPI(func(closer io.Closer) { logCloser = closer })
+
+	if logCloser != nil {
+		if err := logCloser.Close(); err != nil {
+			slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("log closer close failed", slog.Any("error", err))
+		}
+	}
+
+	os.Exit(code)
+}
+
+func runHololiveAPI(setLogCloser func(io.Closer)) int {
+	return bootstrap.Options[*settings.HololiveAPIConfig, *observability.ManagedRuntime[*app.Runtime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
@@ -53,11 +71,16 @@ func main() {
 				MaxAgeDays: appConfig.Logging.MaxAgeDays,
 				Compress:   appConfig.Logging.Compress,
 			}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true})
-			logCloser = closer
-			if err == nil {
-				slog.SetDefault(logger)
+
+			setLogCloser(closer)
+
+			if err != nil {
+				return nil, fmt.Errorf("enable file logging: %w", err)
 			}
-			return logger, err
+
+			slog.SetDefault(logger)
+
+			return logger, nil
 		},
 		LoggerLevel: func(appConfig *settings.HololiveAPIConfig) string {
 			return appConfig.Logging.Level
@@ -73,28 +96,26 @@ func main() {
 		BuildTimeout:      constants.AppTimeout.Build,
 		BuildRuntime:      buildHololiveAPIRuntime,
 		BuildErrorMessage: "Failed to assemble hololive-api runtime",
-	})
-	if logCloser != nil {
-		if err := logCloser.Close(); err != nil {
-			slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("log closer close failed", slog.Any("error", err))
-		}
-	}
-	os.Exit(code)
+	}.Run()
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
 	if len(args) != 1 || args[0] != "--check-worker-profile" {
 		return false, 0
 	}
+
 	if err := load(); err != nil {
 		if _, writeErr := fmt.Fprintf(stderr, "Failed to load hololive-api worker profile: %v\n", err); writeErr != nil {
 			return true, 1
 		}
+
 		return true, 1
 	}
+
 	if _, err := fmt.Fprintln(stderr, "hololive-api worker profile valid"); err != nil {
 		return true, 1
 	}
+
 	return true, 0
 }
 
@@ -102,15 +123,19 @@ func runConfigCheck(args []string, stderr io.Writer, load func() error) (handled
 	if len(args) != 1 || args[0] != "--check-config" {
 		return false, 0
 	}
+
 	if err := load(); err != nil {
 		if _, writeErr := fmt.Fprintf(stderr, "Failed to load hololive-api config: %v\n", err); writeErr != nil {
 			return true, 1
 		}
+
 		return true, 1
 	}
+
 	if _, err := fmt.Fprintln(stderr, "hololive-api config valid"); err != nil {
 		return true, 1
 	}
+
 	return true, 0
 }
 
@@ -120,9 +145,15 @@ func buildHololiveAPIRuntime(
 	logger *slog.Logger,
 ) (*observability.ManagedRuntime[*app.Runtime], error) {
 	traceConfig := hololiveAPITelemetryConfig(appConfig, Version)
-	return observability.BuildRuntime(ctx, &traceConfig, logger, func(ctx context.Context) (*app.Runtime, error) {
+
+	out, err := observability.BuildRuntime(ctx, &traceConfig, logger, func(ctx context.Context) (*app.Runtime, error) {
 		return app.BuildRuntime(ctx, appConfig, logger)
 	})
+	if err != nil {
+		return nil, fmt.Errorf("build runtime: %w", err)
+	}
+
+	return out, nil
 }
 
 func hololiveAPITelemetryConfig(appConfig *settings.HololiveAPIConfig, version string) telemetry.Config {

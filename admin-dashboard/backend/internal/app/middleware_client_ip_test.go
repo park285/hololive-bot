@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +15,8 @@ func TestClientIPXFFHostPortHopIgnored(t *testing.T) {
 		cfg.TrustedForwarders = true
 		cfg.TrustedProxyCIDRs = append(cfg.TrustedProxyCIDRs, mustCIDR(t))
 	})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+
 	req.RemoteAddr = "10.0.0.9:4321"
 	req.Header.Set("X-Forwarded-For", "198.51.100.7:1234, 203.0.113.8, 10.0.0.1")
 
@@ -28,7 +28,8 @@ func TestClientIPXRealIPHostPortIgnored(t *testing.T) {
 		cfg.TrustedForwarders = true
 		cfg.TrustedProxyCIDRs = append(cfg.TrustedProxyCIDRs, mustCIDR(t))
 	})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+
 	req.RemoteAddr = "10.0.0.9:4321"
 	req.Header.Set("X-Real-IP", "203.0.113.7:1234")
 

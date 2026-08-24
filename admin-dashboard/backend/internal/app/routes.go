@@ -13,6 +13,7 @@ import (
 
 func (r *Runtime) Handler() http.Handler {
 	engine := gin.New()
+
 	engine.HandleMethodNotAllowed = true
 	engine.Use(gin.Recovery(), r.securityHeaders(), r.hardenedCSP(), r.etag())
 
@@ -49,6 +50,7 @@ func (r *Runtime) Handler() http.Handler {
 		ginjson.Respond(c, http.StatusMethodNotAllowed, httpx.ErrorResponse{Error: "Method not allowed"})
 	})
 	engine.NoRoute(r.handleFallback)
+
 	return engine
 }
 
@@ -84,8 +86,10 @@ func registerHoloMutations(group *gin.RouterGroup, h holo.Handler) {
 func (r *Runtime) handleFallback(c *gin.Context) {
 	if strings.HasPrefix(c.Request.URL.Path, "/admin/api/") {
 		ginjson.Respond(c, http.StatusNotFound, httpx.ErrorResponse{Error: "Not found"})
+
 		return
 	}
+
 	// gin NoRoute는 핸들러 진입 전에 status를 404로 선설정하므로 SPA fallback은 200을 명시해야 한다.
 	c.Status(http.StatusOK)
 	r.static.ServeIndex(c.Writer, c.Request)

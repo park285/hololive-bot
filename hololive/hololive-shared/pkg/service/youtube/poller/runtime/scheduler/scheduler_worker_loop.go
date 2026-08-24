@@ -35,6 +35,7 @@ func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopC
 		if !ok {
 			return
 		}
+
 		s.executeJobGuarded(ctx, job, id)
 	}
 }
@@ -44,6 +45,7 @@ func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopC
 func (s *Scheduler) executeJobGuarded(ctx context.Context, job *Job, workerID int) {
 	if err := panicguard.RunE(s.logger, "youtube-poll-job", func() error {
 		s.executeJob(ctx, job, workerID)
+
 		return nil
 	}); err != nil {
 		s.rescheduleJobAfterPoll(job, err)
@@ -65,5 +67,6 @@ func validWorkerJob(job *Job, ok bool) (*Job, bool) {
 	if !ok || job == nil {
 		return nil, false
 	}
+
 	return job, true
 }

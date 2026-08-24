@@ -1,6 +1,8 @@
 package scraping
 
 import (
+	"fmt"
+
 	"github.com/tidwall/gjson"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -20,7 +22,13 @@ func parseVideosFromInitialData(
 	videoParser func(*gjson.Result, string) *parser.Video,
 ) ([]*parser.Video, error) {
 	if err := checkAlerts(data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check alerts: %w", err)
 	}
-	return parser.ParseVideosFromInitialData(data, channelID, maxResults, videoParser)
+
+	out, err := parser.ParseVideosFromInitialData(data, channelID, maxResults, videoParser)
+	if err != nil {
+		return out, fmt.Errorf("parse videos from initial data: %w", err)
+	}
+
+	return out, nil
 }

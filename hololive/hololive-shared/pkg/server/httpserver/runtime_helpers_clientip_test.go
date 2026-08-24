@@ -14,6 +14,7 @@ func echoClientIPRoute(router *gin.Engine) error {
 	router.GET("/whoami", func(c *gin.Context) {
 		c.String(http.StatusOK, c.ClientIP())
 	})
+
 	return nil
 }
 
@@ -21,6 +22,7 @@ func newClientIPProbeRouter(t *testing.T, trustRemoteAddrOnly bool) *gin.Engine 
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
+
 	router, err := NewRuntimeRouter(t.Context(), logger, &RuntimeRouterOptions{
 		APIKey:              "probe-key",
 		TrustRemoteAddrOnly: trustRemoteAddrOnly,
@@ -29,6 +31,7 @@ func newClientIPProbeRouter(t *testing.T, trustRemoteAddrOnly bool) *gin.Engine 
 	if err != nil {
 		t.Fatalf("NewRuntimeRouter() error = %v", err)
 	}
+
 	return router
 }
 
@@ -36,15 +39,20 @@ func probeClientIP(t *testing.T, router *gin.Engine, remoteAddr string, headers 
 	t.Helper()
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/whoami", http.NoBody)
+
 	req.RemoteAddr = remoteAddr
+
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
+
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
+
 	if res.Code != http.StatusOK {
 		t.Fatalf("/whoami status = %d, want %d", res.Code, http.StatusOK)
 	}
+
 	return res.Body.String()
 }
 
@@ -89,7 +97,7 @@ func TestNewRuntimeRouter_TrustRemoteAddrOnly_IgnoresSpoofedHeaders(t *testing.T
 }
 
 // 회귀 가드: 옵션 미설정(zero value=false)이면 기존 Cloudflare 동작을 유지해야 한다.
-// gin.PlatformCloudflare에서는 CF-Connecting-IP가 ClientIP로 신뢰된다.
+// 즉 gin.PlatformCloudflare에서는 CF-Connecting-IP가 ClientIP로 신뢰된다.
 func TestNewRuntimeRouter_DefaultTrustsCloudflareHeader(t *testing.T) {
 	t.Parallel()
 

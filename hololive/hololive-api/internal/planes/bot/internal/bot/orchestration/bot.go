@@ -22,32 +22,32 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	messagingadapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -95,6 +95,7 @@ type Bot struct {
 func NewBot(deps *Dependencies) (*Bot, error) {
 	holodexRuntime, err := validateBotDependencies(deps)
 	if err != nil {
+		//nolint:wrapcheck // 생성자 중간 계층은 leaf dependency 오류에 새 정보를 추가하지 않는다.
 		return nil, err
 	}
 
@@ -130,6 +131,7 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		selfSender:           stringutil.Normalize(core.botSelfUser),
 	}
 	bot.initImageRenderers(core.calendarImageCacheDir, messaging.messageStrings)
+
 	bot.rooms = newRoomCatalog(bot.postgres, bot.irisClient, bot.logger)
 
 	bot.transport = bot.newCommandTransport()
@@ -158,9 +160,11 @@ func newCelebrationCalendarFinder(data dataDependencies, core *coreDependencies)
 	if core == nil {
 		return nil
 	}
+
 	if data.memberRepository == nil {
 		return nil
 	}
+
 	return command.NewCachedCelebrationCalendarFinder(
 		data.memberRepository,
 		core.calendarImageCacheDir,
@@ -186,13 +190,25 @@ func (b *Bot) initializeCommands() {
 }
 
 func (b *Bot) Start(ctx context.Context) error {
-	return b.ensureLifecycle().Start(ctx)
+	if err := b.ensureLifecycle().Start(ctx); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) waitUntilIrisReady(ctx context.Context, timeout, retryInterval, pingTimeout time.Duration) error {
-	return b.ensureLifecycle().WaitUntilIrisReady(ctx, timeout, retryInterval, pingTimeout)
+	if err := b.ensureLifecycle().WaitUntilIrisReady(ctx, timeout, retryInterval, pingTimeout); err != nil {
+		return fmt.Errorf("wait until iris ready: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) Shutdown(ctx context.Context) error {
-	return b.ensureLifecycle().Shutdown(ctx)
+	if err := b.ensureLifecycle().Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }

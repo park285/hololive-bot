@@ -39,6 +39,7 @@ func lockCommunitySubject(
 	); err != nil {
 		return fmt.Errorf("lock community subject: %w", err)
 	}
+
 	return nil
 }
 
@@ -50,6 +51,7 @@ func loadCommunitySubjectHead(
 	subjectKey string,
 ) (communitySubjectHead, error) {
 	var head communitySubjectHead
+
 	err := q.QueryRow(
 		ctx,
 		mustSQL("repository_community_subject_head_0029_29.sql"),
@@ -57,12 +59,15 @@ func loadCommunitySubjectHead(
 		kind,
 		subjectKey,
 	).Scan(&head.observationID, &head.effectiveAt)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return communitySubjectHead{}, nil
 	}
+
 	if err != nil {
 		return communitySubjectHead{}, fmt.Errorf("load community subject head: %w", err)
 	}
+
 	return head, nil
 }
 
@@ -83,6 +88,7 @@ func saveCommunitySubjectHead(
 	); err != nil {
 		return fmt.Errorf("save community subject head: %w", err)
 	}
+
 	return nil
 }
 
@@ -90,8 +96,13 @@ func loadCommunityWatermark(
 	ctx context.Context,
 	q dbx.Querier,
 	channelID string,
-) (*domain.YouTubeContentWatermark, bool, error) {
-	return loadTypedWatermark(ctx, q, channelID, domain.WatermarkTypeCommunityPost)
+) (domain.YouTubeContentWatermark, error) {
+	watermark, err := loadTypedWatermark(ctx, q, channelID, domain.WatermarkTypeCommunityPost)
+	if err != nil {
+		return domain.YouTubeContentWatermark{}, fmt.Errorf("load typed watermark: %w", err)
+	}
+
+	return watermark, nil
 }
 
 func loadTypedWatermark(
@@ -99,9 +110,12 @@ func loadTypedWatermark(
 	q dbx.Querier,
 	channelID string,
 	watermarkType domain.WatermarkType,
-) (*domain.YouTubeContentWatermark, bool, error) {
-	var watermark domain.YouTubeContentWatermark
-	var lastContentID *string
+) (domain.YouTubeContentWatermark, error) {
+	var (
+		watermark     domain.YouTubeContentWatermark
+		lastContentID *string
+	)
+
 	err := q.QueryRow(
 		ctx,
 		mustSQL("repository_community_watermark_0014_14.sql"),
@@ -114,14 +128,18 @@ func loadTypedWatermark(
 		&lastContentID,
 		&watermark.UpdatedAt,
 	)
+
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, false, nil
+		return domain.YouTubeContentWatermark{}, nil
 	}
+
 	if err != nil {
-		return nil, false, fmt.Errorf("load community watermark: %w", err)
+		return domain.YouTubeContentWatermark{}, fmt.Errorf("load community watermark: %w", err)
 	}
+
 	if lastContentID != nil {
 		watermark.LastContentID = *lastContentID
 	}
-	return &watermark, watermark.Initialized, nil
+
+	return watermark, nil
 }

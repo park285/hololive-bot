@@ -38,6 +38,7 @@ func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...str
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	matcher := newSkipPathMatcher(skipPaths)
 
 	return func(c *gin.Context) {
@@ -46,11 +47,14 @@ func LoggerMiddleware(ctx context.Context, logger *slog.Logger, skipPaths ...str
 		// 스킵 경로 확인
 		if matcher.shouldSkip(path) {
 			c.Next()
+
 			return
 		}
 
 		start := time.Now()
+
 		c.Next()
+
 		latency := time.Since(start)
 
 		// WebSocket 업그레이드 등으로 연결이 hijacked 상태면 로깅 스킵
@@ -71,9 +75,11 @@ type skipPathMatcher struct {
 
 func newSkipPathMatcher(skipPaths []string) skipPathMatcher {
 	matcher := skipPathMatcher{exact: make(map[string]bool)}
+
 	for _, pattern := range skipPaths {
 		matcher.add(pattern)
 	}
+
 	return matcher
 }
 
@@ -92,6 +98,7 @@ func logHTTPRequest(ctx context.Context, logger *slog.Logger, c *gin.Context, pa
 	status := c.Writer.Status()
 	level := httpLogLevel(status)
 	reqCtx := requestLogContext(ctx, c)
+
 	if !logger.Enabled(reqCtx, level) {
 		return
 	}
@@ -106,9 +113,11 @@ func requestLogContext(ctx context.Context, c *gin.Context) context.Context {
 			return reqCtx
 		}
 	}
+
 	if ctx != nil {
 		return ctx
 	}
+
 	return context.Background()
 }
 
@@ -116,9 +125,11 @@ func httpLogLevel(status int) slog.Level {
 	if status >= 500 {
 		return slog.LevelError
 	}
+
 	if status >= 400 {
 		return slog.LevelWarn
 	}
+
 	return slog.LevelDebug
 }
 
@@ -132,8 +143,10 @@ func httpLogAttrs(c *gin.Context, path string, status int, latency time.Duration
 		slog.String("ua", requestDeviceInfo(c)),
 		sharedlog.DurationMS(latency),
 	}
+
 	attrs = appendOptionalHeaderAttr(attrs, "x_forwarded_for", c.GetHeader("X-Forwarded-For"))
 	attrs = appendOptionalHeaderAttr(attrs, "x_real_ip", c.GetHeader("X-Real-IP"))
+
 	return attrs
 }
 
@@ -142,6 +155,7 @@ func requestDeviceInfo(c *gin.Context) string {
 	if deviceInfo := clientHints.Summary(); deviceInfo != "" {
 		return deviceInfo
 	}
+
 	return truncateUA(c.Request.UserAgent())
 }
 
@@ -149,26 +163,32 @@ func appendOptionalHeaderAttr(attrs []slog.Attr, key, value string) []slog.Attr 
 	if trimmed := strings.TrimSpace(value); trimmed != "" {
 		return append(attrs, slog.String(key, truncateHeader(trimmed)))
 	}
+
 	return attrs
 }
 
 func truncateHeader(value string) string {
 	const maxLen = 128
+
 	if len(value) > maxLen {
 		return value[:maxLen] + "..."
 	}
+
 	return value
 }
 
 // shouldSkipPath: 경로가 스킵 대상인지 확인합니다.
 func shouldSkipPath(path string, exactSkip map[string]bool, prefixSkip, suffixSkip []string) bool {
-	return skipPathMatcher{exact: exactSkip, prefix: prefixSkip, suffix: suffixSkip}.shouldSkip(path)
+	matcher := skipPathMatcher{exact: exactSkip, prefix: prefixSkip, suffix: suffixSkip}
+
+	return matcher.shouldSkip(path)
 }
 
-func (m skipPathMatcher) shouldSkip(path string) bool {
+func (m *skipPathMatcher) shouldSkip(path string) bool {
 	if m.exact[path] {
 		return true
 	}
+
 	return hasAnyPrefix(path, m.prefix) || hasAnySuffix(path, m.suffix)
 }
 
@@ -178,6 +198,7 @@ func hasAnyPrefix(path string, prefixes []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -187,15 +208,18 @@ func hasAnySuffix(path string, suffixes []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
-// truncateUA: User-Agent를 적절한 길이로 자름 (로그 가독성)
+// truncateUA: User-Agent를 적절한 길이로 자름 (로그 가독성).
 func truncateUA(ua string) string {
 	const maxLen = 80
+
 	if len(ua) > maxLen {
 		return ua[:maxLen] + "..."
 	}
+
 	return ua
 }
 

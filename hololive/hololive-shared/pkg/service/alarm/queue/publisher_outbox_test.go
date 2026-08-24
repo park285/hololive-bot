@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 type fakeOutboxRepository struct {
@@ -27,37 +27,46 @@ type fakeOutboxRepository struct {
 	batchErr           error
 }
 
-func (r *fakeOutboxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
+func (r *fakeOutboxRepository) InsertPending(_ context.Context, _ *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
 	r.insertPendingCalls++
 	if r.pendingErr != nil {
 		return nil, "", r.pendingErr
 	}
+
 	result := r.pendingResult
 	if result == "" {
 		result = dispatchoutbox.Inserted
 	}
+
 	record := r.pendingRecord
 	if record == nil {
 		record = &dispatchoutbox.Record{ID: 12, Status: dispatchoutbox.StatusPending}
 	}
+
 	return record, result, nil
 }
 
-func (r *fakeOutboxRepository) InsertBatch(ctx context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
+func (r *fakeOutboxRepository) InsertBatch(_ context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
 	r.insertBatchCalls++
+
 	r.lastBatchInput = input
 	r.batchInputs = append(r.batchInputs, input)
+
 	callIndex := r.insertBatchCalls - 1
+
 	if callIndex < len(r.batchErrors) && r.batchErrors[callIndex] != nil {
 		return dispatchoutbox.PublishBatchResult{}, r.batchErrors[callIndex]
 	}
+
 	if r.batchErr != nil {
 		return dispatchoutbox.PublishBatchResult{}, r.batchErr
 	}
+
 	result := r.batchResult
 	if callIndex < len(r.batchResults) {
 		result = r.batchResults[callIndex]
 	}
+
 	if result.RequestedDeliveries == 0 {
 		result.RequestedDeliveries = len(input.Envelopes)
 		result.InsertedDeliveries = len(input.Envelopes)
@@ -65,9 +74,11 @@ func (r *fakeOutboxRepository) InsertBatch(ctx context.Context, input dispatchou
 		result.RequestedEvents = 1
 		result.InsertedEvents = 1
 	}
+
 	if result.ProcessedDeliveries == 0 {
 		result.ProcessedDeliveries = result.RequestedDeliveries
 	}
+
 	return result, nil
 }
 
@@ -79,7 +90,7 @@ func TestPublisherDoesNotPushLegacyQueue(t *testing.T) {
 		WithWakeupEnabled(false),
 	)
 
-	_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+	_, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-pg-first",
 	}, nil)
@@ -107,7 +118,7 @@ func TestPublisherPGFirstTreatsDuplicatesAsSuccess(t *testing.T) {
 		WithWakeupEnabled(false),
 	)
 
-	result, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+	result, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
 		AlarmType: domain.AlarmTypeLive,
 		RoomID:    "room-duplicate",
 	}, nil)
@@ -132,7 +143,7 @@ func TestPublisherPGFirstChunkFailureReportsProcessedPrefix(t *testing.T) {
 		WithMaxDeliveriesPerBatch(1),
 	)
 
-	result, err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
+	result, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-1"},
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-2"},
 	}, nil)
@@ -153,7 +164,7 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	channel := &domain.Channel{ID: "channel-1"}
 	stream := &domain.Stream{ID: "stream-1", ChannelID: "channel-1"}
 
-	_, err := publisher.PublishBatch(context.Background(), []*domain.AlarmNotification{
+	_, err := publisher.PublishBatch(t.Context(), []*domain.AlarmNotification{
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-1", Channel: channel, Stream: stream, MinutesUntil: 10},
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-2", Channel: channel, Stream: stream, MinutesUntil: 10},
 		{AlarmType: domain.AlarmTypeLive, RoomID: "room-3", Channel: channel, Stream: stream, MinutesUntil: 10},

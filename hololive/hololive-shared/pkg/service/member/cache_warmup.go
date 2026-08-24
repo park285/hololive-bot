@@ -22,6 +22,7 @@ package member
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -33,14 +34,16 @@ import (
 // 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
 func (c *Cache) WarmUpCache(ctx context.Context) error {
 	if c == nil {
-		return fmt.Errorf("member cache is nil")
+		return errors.New("member cache is nil")
 	}
 
 	snap, generation := c.allMembersView()
+
 	members, err := c.loadAllMembersSnapshot(ctx, snap, generation)
 	if err != nil {
 		return fmt.Errorf("failed to load all members: %w", err)
 	}
+
 	warmupGeneration, ok := c.snapshotGenerationForMembers(members)
 	if !ok {
 		return fmt.Errorf("failed to load all members: %w", errAllMembersGenerationChanged)
@@ -51,17 +54,22 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 
 	maxWorkers := max(1, c.warmUpMaxGoroutines)
 	semaphore := make(chan struct{}, maxWorkers)
+
 	var wg sync.WaitGroup
 
 	for _, chunk := range chunks {
 		wg.Add(1)
 		panicguard.Go(c.logger, "member-cache-warmup", func() {
 			defer wg.Done()
+
 			semaphore <- struct{}{}
+
 			defer func() { <-semaphore }()
+
 			c.cacheChunk(ctx, chunk, warmupGeneration)
 		})
 	}
+
 	wg.Wait()
 
 	if c.logger != nil {
@@ -78,6 +86,7 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 	if len(members) == 0 {
 		return
 	}
+
 	if !c.distributedCacheUsable() {
 		return
 	}
@@ -87,18 +96,22 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 	for _, member := range members {
 		if member.ChannelID != "" {
 			channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
+
 			pairs[channelKey] = member
 		}
 
 		nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
+
 		pairs[nameKey] = member
 	}
 
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
+
 	if c.snapshotGeneration.Load() != generation {
 		return
 	}
+
 	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to batch cache members",
 			slog.Int("count", len(members)),
@@ -109,23 +122,29 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 func (c *Cache) snapshotGenerationForMembers(members []*domain.Member) (uint64, bool) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
+
 	snap := c.allMembersSnapshot.Load()
 	if !snapshotSuccessful(snap) || len(snap.members) != len(members) {
 		return 0, false
 	}
+
 	for i := range members {
 		if snap.members[i] != members[i] {
 			return 0, false
 		}
 	}
+
 	return c.snapshotGeneration.Load(), true
 }
 
 func chunkMembers(members []*domain.Member, chunkSize int) [][]*domain.Member {
 	var chunks [][]*domain.Member
+
 	for i := 0; i < len(members); i += chunkSize {
 		end := min(i+chunkSize, len(members))
+
 		chunks = append(chunks, members[i:end])
 	}
+
 	return chunks
 }

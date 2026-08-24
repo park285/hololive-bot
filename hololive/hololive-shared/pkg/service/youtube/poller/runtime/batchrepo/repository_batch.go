@@ -22,6 +22,7 @@ package batchrepo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -62,9 +63,11 @@ func normalizeBatchDB(db any) batchTxBeginner {
 	if isNilBatchDB(db) {
 		return nil
 	}
+
 	if typed, ok := db.(batchTxBeginner); ok {
 		return typed
 	}
+
 	return normalizeBatchPoolAdapter(db)
 }
 
@@ -72,6 +75,7 @@ func isNilBatchDB(db any) bool {
 	if db == nil {
 		return true
 	}
+
 	value := reflect.ValueOf(db)
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
@@ -108,6 +112,7 @@ func requireBatchDB(db any) batchTxBeginner {
 	if normalized == nil {
 		panic("batch repository db is nil")
 	}
+
 	return normalized
 }
 
@@ -115,14 +120,17 @@ func normalizeBatchPoolAdapter(db any) batchTxBeginner {
 	if isNilBatchDB(db) {
 		return nil
 	}
+
 	typed, ok := db.(interface{ batchPool() batchTxBeginner })
 	if !ok {
 		return nil
 	}
+
 	pool := typed.batchPool()
 	if pool == nil {
 		return nil
 	}
+
 	return pool
 }
 
@@ -132,14 +140,22 @@ func (r *PgxBatchRepository) PersistVideos(ctx context.Context, videos []*domain
 	}
 
 	persistedTrackingRows := trackingRows
+
 	if err := inBatchTx(ctx, r.DB, func(tx batchDB) error {
 		var err error
+
 		persistedTrackingRows, err = r.persistVideosTx(ctx, tx, videos, notifications, trackingRows, watermark)
-		return err
+		if err != nil {
+			return fmt.Errorf("persist videos tx: %w", err)
+		}
+
+		return nil
 	}); err != nil {
 		return fmt.Errorf("persist videos transaction: %w", err)
 	}
+
 	r.persistLatencyClassificationsAfterCommit(ctx, persistedTrackingRows)
+
 	return nil
 }
 
@@ -153,7 +169,9 @@ func (r *PgxBatchRepository) PersistCommunityPosts(ctx context.Context, posts []
 	}); err != nil {
 		return fmt.Errorf("persist community posts transaction: %w", err)
 	}
+
 	r.persistLatencyClassificationsAfterCommit(ctx, trackingRows)
+
 	return nil
 }
 
@@ -166,13 +184,18 @@ func (r *PgxBatchRepository) PersistVideosTx(
 	watermark *domain.YouTubeContentWatermark,
 ) error {
 	if tx == nil {
-		return fmt.Errorf("persist videos: tx is nil")
+		return errors.New("persist videos: tx is nil")
 	}
+
 	if err := validateShortNotificationPublishedAt(videos, notifications); err != nil {
 		return fmt.Errorf("validate short notifications: %w", err)
 	}
-	_, err := r.persistReconciledVideosTx(ctx, tx, videos, notifications, trackingRows, watermark)
-	return err
+
+	if _, err := r.persistReconciledVideosTx(ctx, tx, videos, notifications, trackingRows, watermark); err != nil {
+		return fmt.Errorf("persist reconciled videos tx: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxBatchRepository) persistReconciledVideosTx(
@@ -186,16 +209,20 @@ func (r *PgxBatchRepository) persistReconciledVideosTx(
 	if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
 		return nil, fmt.Errorf("batch upsert videos: %w", err)
 	}
+
 	if err := r.resolveShortPersistedContentIDs(ctx, tx, notifications, trackingRows); err != nil {
 		return nil, fmt.Errorf("resolve short persisted content ids: %w", err)
 	}
+
 	sourcePosts := buildShortSourcePosts(videos, trackingRows)
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
 		return nil, fmt.Errorf("upsert short source posts: %w", err)
 	}
+
 	if err := r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "video", "short"); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("persist tracking and watermark: %w", err)
 	}
+
 	return trackingRows, nil
 }
 
@@ -208,12 +235,18 @@ func (r *PgxBatchRepository) PersistCommunityPostsTx(
 	watermark *domain.YouTubeContentWatermark,
 ) error {
 	if tx == nil {
-		return fmt.Errorf("persist community posts: tx is nil")
+		return errors.New("persist community posts: tx is nil")
 	}
+
 	if err := validateCommunityNotificationPublishedAt(posts, notifications); err != nil {
 		return fmt.Errorf("validate community notifications: %w", err)
 	}
-	return r.persistCommunityPostsTx(ctx, tx, posts, notifications, trackingRows, watermark)
+
+	if err := r.persistCommunityPostsTx(ctx, tx, posts, notifications, trackingRows, watermark); err != nil {
+		return fmt.Errorf("persist community posts tx: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxBatchRepository) RecordCommunityLatencyAfterCommit(
@@ -235,23 +268,29 @@ func (r *PgxBatchRepository) persistVideosTx(
 	if err != nil {
 		return nil, fmt.Errorf("drop already-known short artifacts: %w", err)
 	}
+
 	notifications, err = r.dropAlreadyKnownVideoNotifications(ctx, tx, notifications)
 	if err != nil {
 		return nil, fmt.Errorf("drop already-known video notifications: %w", err)
 	}
+
 	if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
 		return nil, fmt.Errorf("batch upsert videos: %w", err)
 	}
+
 	if err := r.resolveShortPersistedContentIDs(ctx, tx, notifications, trackingRows); err != nil {
 		return nil, fmt.Errorf("resolve short persisted content ids: %w", err)
 	}
+
 	sourcePosts := buildShortSourcePosts(videos, trackingRows)
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
 		return nil, fmt.Errorf("upsert short source posts: %w", err)
 	}
+
 	if err := r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "video", "short"); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("persist tracking and watermark: %w", err)
 	}
+
 	return trackingRows, nil
 }
 
@@ -266,11 +305,17 @@ func (r *PgxBatchRepository) persistCommunityPostsTx(
 	if err := r.batchUpsertCommunityPosts(ctx, tx, posts); err != nil {
 		return fmt.Errorf("batch upsert community posts: %w", err)
 	}
+
 	sourcePosts := buildCommunitySourcePosts(posts, trackingRows)
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
 		return fmt.Errorf("upsert community source posts: %w", err)
 	}
-	return r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "community", "community")
+
+	if err := r.persistTrackingAndWatermark(ctx, tx, notifications, trackingRows, watermark, "community", "community"); err != nil {
+		return fmt.Errorf("persist tracking and watermark: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxBatchRepository) persistTrackingAndWatermark(
@@ -285,19 +330,24 @@ func (r *PgxBatchRepository) persistTrackingAndWatermark(
 	if err := r.BatchInsertNotifications(ctx, tx, notifications); err != nil {
 		return fmt.Errorf("batch insert notifications: %w", err)
 	}
+
 	if err := reconcileTrackingRowsWithPersistedSendState(ctx, tx, trackingRows); err != nil {
 		return fmt.Errorf("reconcile tracking rows with persisted send state: %w", err)
 	}
+
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertBatch(ctx, trackingRows); err != nil {
 		return fmt.Errorf("upsert %s tracking: %w", trackingLabel, err)
 	}
+
 	alarmStates := buildCommunityShortsAlarmStates(trackingRows)
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertAlarmStateBatch(ctx, alarmStates); err != nil {
 		return fmt.Errorf("upsert %s alarm states: %w", alarmStateLabel, err)
 	}
+
 	if err := r.upsertWatermark(ctx, tx, watermark); err != nil {
 		return fmt.Errorf("upsert watermark: %w", err)
 	}
+
 	return nil
 }
 
@@ -330,6 +380,7 @@ func buildLatencyClassificationIdentities(
 		if trackingRows[i] == nil {
 			continue
 		}
+
 		identities = append(identities, LatencyClassificationIdentity{
 			Kind:      trackingRows[i].Kind,
 			ContentID: trackingRows[i].ContentID,

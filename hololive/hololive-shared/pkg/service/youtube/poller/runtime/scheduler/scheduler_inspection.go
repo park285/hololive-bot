@@ -29,6 +29,7 @@ func (s *Scheduler) JobKeys() []string {
 	if s == nil {
 		return nil
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -36,7 +37,9 @@ func (s *Scheduler) JobKeys() []string {
 	for key := range s.jobMap {
 		keys = append(keys, key)
 	}
+
 	slices.Sort(keys)
+
 	return keys
 }
 
@@ -44,6 +47,7 @@ func (s *Scheduler) JobInterval(key string) (time.Duration, bool) {
 	if s == nil {
 		return 0, false
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -51,6 +55,7 @@ func (s *Scheduler) JobInterval(key string) (time.Duration, bool) {
 	if !ok || job == nil {
 		return 0, false
 	}
+
 	return job.Interval, true
 }
 
@@ -58,7 +63,9 @@ func (s *Scheduler) DrainWakeSignal() bool {
 	if s == nil {
 		return false
 	}
+
 	drained := false
+
 	for {
 		select {
 		case <-s.wakeCh:

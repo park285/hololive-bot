@@ -26,19 +26,21 @@ import (
 	"testing"
 )
 
-func TestRunSecondary(t *testing.T) {
-	t.Parallel()
+const testFallbackService = "svc"
 
-	tests := []struct {
-		name        string
-		plan        SecondaryPlan
-		wantOutcome string
-		wantErr     bool
-	}{
+type secondaryCase struct {
+	name        string
+	plan        SecondaryPlan
+	wantOutcome string
+	wantErr     bool
+}
+
+func secondaryCases() []secondaryCase {
+	return []secondaryCase{
 		{
 			name: "skipped when policy says no",
 			plan: SecondaryPlan{
-				Service:   "svc",
+				Service:   testFallbackService,
 				Operation: "op",
 				Trigger:   TriggerOnFailures,
 				ShouldRun: false,
@@ -48,7 +50,7 @@ func TestRunSecondary(t *testing.T) {
 		{
 			name: "blocked before run",
 			plan: SecondaryPlan{
-				Service:   "svc",
+				Service:   testFallbackService,
 				Operation: "op",
 				Trigger:   TriggerOnFailures,
 				ShouldRun: true,
@@ -59,7 +61,7 @@ func TestRunSecondary(t *testing.T) {
 		{
 			name: "hit when successes and items exist",
 			plan: SecondaryPlan{
-				Service:   "svc",
+				Service:   testFallbackService,
 				Operation: "op",
 				Trigger:   TriggerOnFailures,
 				ShouldRun: true,
@@ -72,7 +74,7 @@ func TestRunSecondary(t *testing.T) {
 		{
 			name: "miss when successful but empty",
 			plan: SecondaryPlan{
-				Service:   "svc",
+				Service:   testFallbackService,
 				Operation: "op",
 				Trigger:   TriggerOnFailures,
 				ShouldRun: true,
@@ -85,7 +87,7 @@ func TestRunSecondary(t *testing.T) {
 		{
 			name: "noop when runner reports no successes without error",
 			plan: SecondaryPlan{
-				Service:   "svc",
+				Service:   testFallbackService,
 				Operation: "op",
 				Trigger:   TriggerOnFailures,
 				ShouldRun: true,
@@ -98,7 +100,7 @@ func TestRunSecondary(t *testing.T) {
 		{
 			name: "error when runner errors",
 			plan: SecondaryPlan{
-				Service:   "svc",
+				Service:   testFallbackService,
 				Operation: "op",
 				Trigger:   TriggerOnFailures,
 				ShouldRun: true,
@@ -110,15 +112,20 @@ func TestRunSecondary(t *testing.T) {
 			wantErr:     true,
 		},
 	}
+}
 
-	for _, tt := range tests {
+func TestRunSecondary(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range secondaryCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := RunSecondary(context.Background(), tt.plan)
+			got, err := RunSecondary(t.Context(), tt.plan)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("RunSecondary() error = %v, wantErr %v", err, tt.wantErr)
 			}
+
 			if got.Outcome != tt.wantOutcome {
 				t.Fatalf("RunSecondary() outcome = %q, want %q", got.Outcome, tt.wantOutcome)
 			}
@@ -143,6 +150,7 @@ func TestSecondaryOutcome(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := secondaryOutcome(tt.result); got != tt.want {
 				t.Fatalf("secondaryOutcome() = %q, want %q", got, tt.want)
 			}

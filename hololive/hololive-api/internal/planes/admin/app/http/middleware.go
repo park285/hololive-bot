@@ -25,10 +25,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
@@ -42,6 +42,7 @@ func normalizedOrigins(origins []string) []string {
 		if trimmed == "" {
 			continue
 		}
+
 		if _, ok := seen[trimmed]; ok {
 			continue
 		}
@@ -111,24 +112,31 @@ func corsOriginAllowedSet(origins []string) map[string]struct{} {
 			allowed[origin] = struct{}{}
 		}
 	}
+
 	return allowed
 }
 
 func (g corsOriginGuardState) handle(c *gin.Context, origin string) {
 	if origin == "" {
 		c.Next()
+
 		return
 	}
+
 	if !g.enforce {
 		g.warnMonitorOnly(origin)
 		c.Next()
+
 		return
 	}
+
 	if !g.allows(origin) {
 		sharedserver.RespondError(c, http.StatusForbidden, "forbidden", nil)
 		c.Abort()
+
 		return
 	}
+
 	c.Next()
 }
 
@@ -142,6 +150,8 @@ func (g corsOriginGuardState) allows(origin string) bool {
 	if g.allowAll {
 		return false
 	}
+
 	_, ok := g.allowed[origin]
+
 	return ok
 }

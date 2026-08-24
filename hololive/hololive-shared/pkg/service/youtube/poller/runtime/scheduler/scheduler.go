@@ -143,21 +143,27 @@ func applySchedulerWorkerDefaults(config, defaults *SchedulerConfig) *SchedulerC
 	if config == nil {
 		config = cloneSchedulerConfig(defaults)
 	}
+
 	if config.WorkerCount <= 0 {
 		config.WorkerCount = defaults.WorkerCount
 	}
+
 	if config.PollTimeout <= 0 {
 		config.PollTimeout = defaults.PollTimeout
 	}
+
 	if config.ErrorBackoffMin <= 0 {
 		config.ErrorBackoffMin = defaults.ErrorBackoffMin
 	}
+
 	if config.ErrorBackoffMax <= 0 {
 		config.ErrorBackoffMax = defaults.ErrorBackoffMax
 	}
+
 	if config.ErrorBackoffMax < config.ErrorBackoffMin {
 		config.ErrorBackoffMax = config.ErrorBackoffMin
 	}
+
 	return config
 }
 
@@ -165,15 +171,19 @@ func applySchedulerClaimBudgetDefaults(config, defaults *SchedulerConfig) *Sched
 	if config == nil {
 		config = cloneSchedulerConfig(defaults)
 	}
+
 	if config.BudgetAcquireTimeout <= 0 {
 		config.BudgetAcquireTimeout = defaults.BudgetAcquireTimeout
 	}
+
 	if config.ClaimLeaseSafetyMargin <= 0 {
 		config.ClaimLeaseSafetyMargin = defaults.ClaimLeaseSafetyMargin
 	}
+
 	if config.ClaimCompletionTimeout <= 0 {
 		config.ClaimCompletionTimeout = defaults.ClaimCompletionTimeout
 	}
+
 	return config
 }
 
@@ -181,12 +191,15 @@ func cloneSchedulerConfig(config *SchedulerConfig) *SchedulerConfig {
 	if config == nil {
 		return &SchedulerConfig{}
 	}
+
 	clone := *config
+
 	return &clone
 }
 
 func NewScheduler(config *SchedulerConfig) *Scheduler {
 	defaults := DefaultSchedulerConfig()
+
 	config = applySchedulerWorkerDefaults(config, &defaults)
 	config = applySchedulerClaimBudgetDefaults(config, &defaults)
 	// RequestInterval이 0이면 NewRateLimiter(0)이 생성되어 Wait()가 즉시 반환.

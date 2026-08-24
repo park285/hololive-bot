@@ -67,6 +67,7 @@ func primaryOutcome(attempted, succeeded, failed int) string {
 	if attempted == 0 {
 		return "skipped"
 	}
+
 	return attemptedPrimaryOutcome(succeeded, failed)
 }
 
@@ -74,12 +75,15 @@ func attemptedPrimaryOutcome(succeeded, failed int) string {
 	if succeeded > 0 && failed == 0 {
 		return "success"
 	}
+
 	if succeeded > 0 && failed > 0 {
 		return "partial"
 	}
+
 	if succeeded == 0 && failed == 0 {
 		return "empty"
 	}
+
 	return "failed"
 }
 
@@ -87,5 +91,6 @@ func normalizeTrigger(trigger Trigger) string {
 	if trigger == "" {
 		return string(TriggerOnFailures)
 	}
+
 	return string(trigger)
 }

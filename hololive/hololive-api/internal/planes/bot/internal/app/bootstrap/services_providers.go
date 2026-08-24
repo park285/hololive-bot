@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 func ProvideACLService(
@@ -47,7 +46,7 @@ func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Depend
 		return nil
 	}
 
-	var youTubeService = modules.Stream.YTStack.GetService()
+	youTubeService := modules.Stream.YTStack.GetService()
 
 	return &orchestration.Dependencies{
 		BotSelfUser:           modules.Core.BotSelfUser,

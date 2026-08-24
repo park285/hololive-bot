@@ -87,6 +87,7 @@ func asViewerSampleConnAcquirer(db any) viewerSampleConnAcquirer {
 	if !ok {
 		return nil
 	}
+
 	return acquirer
 }
 
@@ -95,6 +96,7 @@ func asViewerSampleSession(db any) *pgxpool.Conn {
 	if !ok {
 		return nil
 	}
+
 	return session
 }
 
@@ -106,17 +108,34 @@ func (c *ViewerSampleCleaner) Cleanup(ctx context.Context) (int64, error) {
 	if err == nil {
 		return deleted, nil
 	}
-	return deleted, viewerSampleCleanupCallError(ctx, runCtx, err)
+
+	if viewerErr := viewerSampleCleanupCallError(ctx, runCtx, err); viewerErr != nil {
+		return deleted, fmt.Errorf("viewer sample cleanup call error: %w", viewerErr)
+	}
+
+	return deleted, nil
 }
 
 func (c *ViewerSampleCleaner) cleanup(ctx context.Context) (int64, error) {
 	if c.acquirer != nil {
-		return c.cleanupWithDedicatedConn(ctx)
+		out, err := c.cleanupWithDedicatedConn(ctx)
+		if err != nil {
+			return out, fmt.Errorf("cleanup with dedicated conn: %w", err)
+		}
+
+		return out, nil
 	}
+
 	if c.session != nil {
-		return c.cleanupLocked(ctx, c.session)
+		out, err := c.cleanupLocked(ctx, c.session)
+		if err != nil {
+			return out, fmt.Errorf("cleanup locked: %w", err)
+		}
+
+		return out, nil
 	}
-	return 0, fmt.Errorf("viewer sample cleaner requires a session-affine pgxpool connection")
+
+	return 0, errors.New("viewer sample cleaner requires a session-affine pgxpool connection")
 }
 
 func (c *ViewerSampleCleaner) cleanupWithDedicatedConn(ctx context.Context) (int64, error) {
@@ -125,25 +144,39 @@ func (c *ViewerSampleCleaner) cleanupWithDedicatedConn(ctx context.Context) (int
 		return 0, fmt.Errorf("acquire viewer sample cleanup connection: %w", err)
 	}
 	defer conn.Release()
-	return c.cleanupLocked(ctx, conn)
+
+	out, err := c.cleanupLocked(ctx, conn)
+	if err != nil {
+		return out, fmt.Errorf("cleanup locked: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *ViewerSampleCleaner) cleanupLocked(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
 	var deleted int64
+
 	acquired, err := dbx.WithSessionAdvisoryLock(ctx, conn, viewerSampleCleanupLockKey, func(lockedCtx context.Context) error {
 		c.stateMu.Lock()
 		defer c.stateMu.Unlock()
 
 		var batchErr error
+
 		deleted, batchErr = c.cleanupBatches(lockedCtx, conn)
-		return batchErr
+		if batchErr != nil {
+			return fmt.Errorf("cleanup batches: %w", batchErr)
+		}
+
+		return nil
 	})
 	if err != nil {
-		return deleted, err
+		return deleted, fmt.Errorf("with session advisory lock: %w", err)
 	}
+
 	if !acquired {
 		slog.Debug("Skipped viewer sample cleanup because advisory lock is held")
 	}
+
 	return deleted, nil
 }
 
@@ -151,21 +184,27 @@ func (c *ViewerSampleCleaner) cleanupBatches(ctx context.Context, db dbx.Querier
 	startedAt := time.Now()
 	cutoff := time.Now().AddDate(0, 0, -c.config.RetentionDays)
 	c.ensureCleanupState()
+
 	maxBatches := c.effectiveMaxBatches()
+
 	var total int64
 
 	for batch := 1; batch <= maxBatches; batch++ {
 		deleted, passDone, err := c.runCleanupBatch(ctx, db, cutoff)
+
 		total += deleted
+
 		if err != nil {
-			return total, err
+			return total, fmt.Errorf("run cleanup batch: %w", err)
 		}
 
 		stop, budgetExhausted := viewerSampleCleanupStop(passDone, batch, maxBatches)
 		if stop {
 			c.logCleanup(total, batch, budgetExhausted, time.Since(startedAt))
+
 			return total, nil
 		}
+
 		if err := yieldViewerSampleCleanup(ctx); err != nil {
 			return total, fmt.Errorf("yield viewer sample cleanup: %w", err)
 		}
@@ -178,7 +217,9 @@ func viewerSampleCleanupStop(passDone bool, batch, maxBatches int) (stop, budget
 	if passDone {
 		return true, false
 	}
+
 	budgetExhausted = batch == maxBatches
+
 	return budgetExhausted, budgetExhausted
 }
 
@@ -193,18 +234,21 @@ func (c *ViewerSampleCleaner) runCleanupBatch(
 	}
 
 	c.state.passDeleted += step.deleted
+
 	passDone, err = c.advanceCleanupState(step)
 	if err != nil {
 		return step.deleted, false, fmt.Errorf("advance viewer sample cleanup cursor: %w", err)
 	}
+
 	return step.deleted, passDone, nil
 }
 
 func (c *ViewerSampleCleaner) advanceCleanupState(step viewerSampleCleanupStep) (bool, error) {
 	nextCursor, passDone, err := step.nextCursor()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("next cursor: %w", err)
 	}
+
 	if !passDone {
 		c.state.cursor = nextCursor
 		return false, nil
@@ -212,6 +256,7 @@ func (c *ViewerSampleCleaner) advanceCleanupState(step viewerSampleCleanupStep) 
 
 	passEmpty := c.state.passDeleted == 0
 	c.resetCleanupState()
+
 	return passEmpty, nil
 }
 
@@ -221,12 +266,60 @@ func (c *ViewerSampleCleaner) deleteNextBatch(
 	cutoff time.Time,
 	cursor viewerSampleCleanupCursor,
 ) (viewerSampleCleanupStep, error) {
+	scan, err := c.scanViewerCleanupStep(ctx, db, cutoff, cursor)
+	if err != nil {
+		return viewerSampleCleanupStep{}, fmt.Errorf("%w", err)
+	}
+
+	step := scan.step
+
+	target, hasTarget, err := viewerSampleCleanupCursorFromPG(scan.targetEndedAt, scan.targetVideoID)
+	if err != nil {
+		return viewerSampleCleanupStep{}, fmt.Errorf("decode viewer sample cleanup target: %w", err)
+	}
+
+	if hasTarget {
+		step.target = &target
+	}
+
+	pageEnd, hasPageEnd, err := viewerSampleCleanupCursorFromPG(scan.pageEndEndedAt, scan.pageEndVideoID)
+	if err != nil {
+		return viewerSampleCleanupStep{}, fmt.Errorf("decode viewer sample cleanup page end: %w", err)
+	}
+
+	if hasPageEnd {
+		step.pageEnd = &pageEnd
+	}
+
+	if err := step.validate(); err != nil {
+		return viewerSampleCleanupStep{}, fmt.Errorf("validate: %w", err)
+	}
+
+	return step, nil
+}
+
+type viewerSampleCleanupScan struct {
+	step           viewerSampleCleanupStep
+	targetEndedAt  pgtype.Timestamptz
+	targetVideoID  pgtype.Text
+	pageEndEndedAt pgtype.Timestamptz
+	pageEndVideoID pgtype.Text
+}
+
+func (c *ViewerSampleCleaner) scanViewerCleanupStep(
+	ctx context.Context,
+	db dbx.Querier,
+	cutoff time.Time,
+	cursor viewerSampleCleanupCursor,
+) (viewerSampleCleanupScan, error) {
 	statementCtx, cancel := context.WithTimeout(ctx, viewerSampleCleanupStatementTimeout)
 	defer cancel()
 
-	var step viewerSampleCleanupStep
-	var targetEndedAt, pageEndEndedAt pgtype.Timestamptz
-	var targetVideoID, pageEndVideoID pgtype.Text
+	var (
+		step                          viewerSampleCleanupStep
+		targetEndedAt, pageEndEndedAt pgtype.Timestamptz
+		targetVideoID, pageEndVideoID pgtype.Text
+	)
 
 	err := db.QueryRow(
 		statementCtx,
@@ -246,80 +339,17 @@ func (c *ViewerSampleCleaner) deleteNextBatch(
 	)
 	if err != nil {
 		if ctx.Err() == nil && errors.Is(statementCtx.Err(), context.DeadlineExceeded) {
-			return viewerSampleCleanupStep{}, fmt.Errorf(
+			return viewerSampleCleanupScan{}, fmt.Errorf(
 				"viewer sample cleanup statement time budget exceeded: %w",
 				errors.Join(context.DeadlineExceeded, err),
 			)
 		}
-		return viewerSampleCleanupStep{}, fmt.Errorf("delete viewer sample cleanup step: %w", err)
+
+		return viewerSampleCleanupScan{}, fmt.Errorf("delete viewer sample cleanup step: %w", err)
 	}
 
-	step.target, err = viewerSampleCleanupCursorFromPG(targetEndedAt, targetVideoID)
-	if err != nil {
-		return viewerSampleCleanupStep{}, fmt.Errorf("decode viewer sample cleanup target: %w", err)
-	}
-	step.pageEnd, err = viewerSampleCleanupCursorFromPG(pageEndEndedAt, pageEndVideoID)
-	if err != nil {
-		return viewerSampleCleanupStep{}, fmt.Errorf("decode viewer sample cleanup page end: %w", err)
-	}
-	if err := step.validate(); err != nil {
-		return viewerSampleCleanupStep{}, err
-	}
-	return step, nil
-}
-
-func viewerSampleCleanupCallError(parentCtx, runCtx context.Context, err error) error {
-	if parentCtx.Err() == nil && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("viewer sample cleanup time budget exceeded: %w", errors.Join(context.DeadlineExceeded, err))
-	}
-	return err
-}
-
-func yieldViewerSampleCleanup(ctx context.Context) error {
-	timer := time.NewTimer(viewerSampleCleanupYield)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func (c *ViewerSampleCleaner) logCleanup(deleted int64, batches int, budgetExhausted bool, duration time.Duration) {
-	if deleted == 0 && !budgetExhausted {
-		return
-	}
-	slog.Info("Viewer sample cleanup completed",
-		"deleted", deleted,
-		"retention_days", c.config.RetentionDays,
-		"batch_size", c.effectiveBatchSize(),
-		"candidate_page_size", viewerSampleCleanupSessionPageSize,
-		"batches", batches,
-		"max_batches", c.effectiveMaxBatches(),
-		"max_duration", c.effectiveMaxDuration(),
-		"statement_timeout", viewerSampleCleanupStatementTimeout,
-		"budget_exhausted", budgetExhausted,
-		"duration", duration)
-}
-
-func (c *ViewerSampleCleaner) effectiveBatchSize() int {
-	if c.config.BatchSize <= 0 {
-		return DefaultViewerSampleCleanerConfig().BatchSize
-	}
-	return min(c.config.BatchSize, viewerSampleCleanupMaxBatchSize)
-}
-
-func (c *ViewerSampleCleaner) effectiveMaxBatches() int {
-	if c.maxBatches <= 0 {
-		return viewerSampleCleanupMaxBatches
-	}
-	return min(c.maxBatches, viewerSampleCleanupMaxBatches)
-}
-
-func (c *ViewerSampleCleaner) effectiveMaxDuration() time.Duration {
-	if c.maxDuration <= 0 {
-		return viewerSampleCleanupMaxDuration
-	}
-	return min(c.maxDuration, viewerSampleCleanupMaxDuration)
+	return viewerSampleCleanupScan{
+		step: step, targetEndedAt: targetEndedAt, targetVideoID: targetVideoID,
+		pageEndEndedAt: pageEndEndedAt, pageEndVideoID: pageEndVideoID,
+	}, nil
 }

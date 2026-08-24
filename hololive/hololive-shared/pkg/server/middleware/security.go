@@ -30,7 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-// SecurityHeadersMiddleware 보안 헤더 추가 미들웨어
+// SecurityHeadersMiddleware 보안 헤더 추가 미들웨어.
 func SecurityHeadersMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -55,7 +55,9 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		if reqID == "" {
 			reqID = uuid.New().String()
 		}
+
 		c.Set("request_id", reqID)
+
 		c.Request = c.Request.WithContext(sharedlog.WithRequestID(c.Request.Context(), reqID))
 		c.Header(requestIDHeaderKey, reqID)
 		c.Next()
@@ -70,9 +72,11 @@ var requestIDByteAllowed = buildRequestIDByteSet()
 
 func buildRequestIDByteSet() [256]bool {
 	var allowed [256]bool
+
 	for i := range len(requestIDAllowedBytes) {
 		allowed[requestIDAllowedBytes[i]] = true
 	}
+
 	return allowed
 }
 
@@ -80,11 +84,13 @@ func sanitizedRequestID(raw string) string {
 	if raw == "" || len(raw) > maxRequestIDLength {
 		return ""
 	}
+
 	for i := range len(raw) {
 		if !requestIDByteAllowed[raw[i]] {
 			return ""
 		}
 	}
+
 	return raw
 }
 
@@ -94,10 +100,12 @@ func MaxBodySizeMiddleware(maxBytes int64) gin.HandlerFunc {
 	if maxBytes <= 0 {
 		maxBytes = constants.ServerConfig.MaxBodyBytes
 	}
+
 	return func(c *gin.Context) {
 		if c.Request.Body != nil {
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 		}
+
 		c.Next()
 	}
 }

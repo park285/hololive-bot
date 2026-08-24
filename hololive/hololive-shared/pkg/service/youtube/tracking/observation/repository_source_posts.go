@@ -2,6 +2,7 @@ package observation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,17 +15,23 @@ import (
 
 func (r *sourcePostRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
 	if record == nil {
-		return fmt.Errorf("upsert source post: record is nil")
+		return errors.New("upsert source post: record is nil")
 	}
-	return r.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{record})
+
+	if err := r.UpsertSourcePostsBatch(ctx, []*domain.YouTubeCommunityShortsSourcePost{record}); err != nil {
+		return fmt.Errorf("upsert source posts batch: %w", err)
+	}
+
+	return nil
 }
 
 func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
 	if len(records) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("upsert source posts batch: db is nil")
+		return errors.New("upsert source posts batch: db is nil")
 	}
 
 	normalized, err := normalizeSourcePostsBatch(records)
@@ -34,7 +41,7 @@ func (r *sourcePostRepository) UpsertSourcePostsBatch(ctx context.Context, recor
 
 	query, args := buildSourcePostsBatchUpsert(normalized, yttimestamp.Normalize(time.Now()))
 	if _, err := dbx.ExecSQL(ctx, r.db, "upsert source posts batch: exec query", query, args...); err != nil {
-		return err
+		return fmt.Errorf("exec SQL: %w", err)
 	}
 
 	return nil
@@ -49,8 +56,10 @@ func normalizeSourcePostsBatch(
 		if err != nil {
 			return nil, fmt.Errorf("normalize record at index %d: %w", i, err)
 		}
+
 		normalized = append(normalized, normalizedRecord)
 	}
+
 	return normalized, nil
 }
 
@@ -59,14 +68,18 @@ func buildSourcePostsBatchUpsert(
 	now time.Time,
 ) (result1 string, result2 []any) {
 	args := make([]any, 0, len(normalized)*7)
+
 	var sb strings.Builder
+
 	sb.WriteString(mustSQL("repository_source_posts_0063_01.sql"))
 
 	for i, record := range normalized {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
+
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?)")
+
 		args = append(args, record.Kind, record.PostID, record.ChannelID, record.ActualPublishedAt, record.DetectedAt, now, now)
 	}
 
@@ -77,20 +90,21 @@ func buildSourcePostsBatchUpsert(
 
 func normalizeSourcePost(record *domain.YouTubeCommunityShortsSourcePost) (*domain.YouTubeCommunityShortsSourcePost, error) {
 	if record == nil {
-		return nil, fmt.Errorf("record is nil")
+		return nil, errors.New("record is nil")
 	}
 
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(record.Kind, record.PostID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize source post identity: %w", err)
 	}
 
 	normalizedChannelID := strings.TrimSpace(record.ChannelID)
 	if normalizedChannelID == "" {
-		return nil, fmt.Errorf("channel id is empty")
+		return nil, errors.New("channel id is empty")
 	}
+
 	if record.DetectedAt.IsZero() {
-		return nil, fmt.Errorf("detected_at is empty")
+		return nil, errors.New("detected_at is empty")
 	}
 
 	return &domain.YouTubeCommunityShortsSourcePost{
@@ -105,12 +119,13 @@ func normalizeSourcePost(record *domain.YouTubeCommunityShortsSourcePost) (*doma
 func normalizeSourcePostIdentity(kind domain.OutboxKind, postID string) (domain.OutboxKind, string, error) {
 	normalizedKind, normalizedPostID, err := normalizeIdentity(kind, postID)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("normalize identity: %w", err)
 	}
 
 	canonicalPostID, err := ytcontentid.ForOutboxKind(normalizedKind, normalizedPostID)
 	if err == nil && strings.TrimSpace(canonicalPostID) != "" {
 		return normalizedKind, canonicalPostID, nil
 	}
+
 	return normalizedKind, strings.TrimSpace(normalizedPostID), nil
 }

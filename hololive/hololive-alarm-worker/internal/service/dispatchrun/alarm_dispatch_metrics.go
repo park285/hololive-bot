@@ -31,6 +31,7 @@ func initAlarmDispatchRunnerMetrics() {
 	alarmDispatchRunnerMetricsOnce.Do(func() {
 		initAlarmDispatchRunnerLoopMetrics()
 		initAlarmDispatchRetentionMetrics()
+
 		alarmDispatchPGBacklogRows = promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "alarm_dispatch_pg_backlog_rows",
@@ -118,18 +119,23 @@ func observeAlarmDispatchRunnerPostSendQuarantined(rows int) {
 	if rows <= 0 {
 		return
 	}
+
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchRunnerPostSendQuarantinedTotal == nil {
 		return
 	}
+
 	alarmDispatchRunnerPostSendQuarantinedTotal.Add(float64(rows))
 }
 
 func observeAlarmDispatchRetryAfterClamped() {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchRetryAfterClampedTotal == nil {
 		return
 	}
+
 	alarmDispatchRetryAfterClampedTotal.Inc()
 }
 
@@ -140,25 +146,31 @@ func observeAlarmDispatchRunnerIdleWait(consumerMode, waitMode string, duration 
 
 func observeAlarmDispatchRunnerWakeupConsumed() {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchRunnerWakeupConsumedTotal == nil {
 		return
 	}
+
 	alarmDispatchRunnerWakeupConsumedTotal.Inc()
 }
 
 func observeAlarmDispatchRunnerWakeupTimeout() {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchRunnerWakeupTimeoutTotal == nil {
 		return
 	}
+
 	alarmDispatchRunnerWakeupTimeoutTotal.Inc()
 }
 
 func observeAlarmDispatchRunnerWakeupError() {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchRunnerWakeupErrorTotal == nil {
 		return
 	}
+
 	alarmDispatchRunnerWakeupErrorTotal.Inc()
 }
 
@@ -166,23 +178,28 @@ func observeAlarmDispatchRetentionDeletedRows(status string, rows int64) {
 	if rows <= 0 {
 		return
 	}
+
 	initAlarmDispatchRunnerMetrics()
 	alarmDispatchPGRetentionDeletedRowsTotal.WithLabelValues(status).Add(float64(rows))
 }
 
 func observeAlarmDispatchRetentionFailure() {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchPGRetentionFailedTotal == nil {
 		return
 	}
+
 	alarmDispatchPGRetentionFailedTotal.Inc()
 }
 
 func observeAlarmDispatchBacklogObservationFailure() {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchPGBacklogObservationFailedTotal == nil {
 		return
 	}
+
 	alarmDispatchPGBacklogObservationFailedTotal.Inc()
 }
 
@@ -193,11 +210,13 @@ func observeAlarmDispatchBacklogStatus(status string, rows int64) {
 
 func observeAlarmDispatchOldestAges(pending, retry, sending float64) {
 	initAlarmDispatchRunnerMetrics()
+
 	if alarmDispatchPGOldestPendingAgeSeconds == nil ||
 		alarmDispatchPGOldestRetryAgeSeconds == nil ||
 		alarmDispatchPGOldestSendingAgeSeconds == nil {
 		return
 	}
+
 	alarmDispatchPGOldestPendingAgeSeconds.Set(pending)
 	alarmDispatchPGOldestRetryAgeSeconds.Set(retry)
 	alarmDispatchPGOldestSendingAgeSeconds.Set(sending)

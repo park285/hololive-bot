@@ -23,8 +23,9 @@ package messaging
 import (
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (ma *MessageAdapter) tryMemberInfoCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -52,9 +53,10 @@ func (ma *MessageAdapter) tryMemberNewsSubscriptionCommand(command string, args 
 	}
 
 	action := memberNewsSubscriptionAction(args)
+
 	return &ParsedCommand{
 		Type:       domain.CommandMemberNewsSubscription,
-		Params:     map[string]any{"action": action},
+		Params:     map[string]any{paramAction: action},
 		RawMessage: raw,
 	}, true
 }
@@ -96,21 +98,27 @@ func (ma *MessageAdapter) isMemberNewsCommand(cmd string) bool {
 	return stringutil.ContainsString([]string{"뉴스", "news"}, cmd)
 }
 
+const (
+	memberNewsPeriodWeekly  = "weekly"
+	memberNewsPeriodMonthly = "monthly"
+)
+
 func memberNewsPeriod(args []string) string {
 	if len(args) == 0 {
-		return "weekly"
+		return memberNewsPeriodWeekly
 	}
 
 	periods := map[string]string{
-		"이번주":     "weekly",
-		"주간":      "weekly",
-		"weekly":  "weekly",
-		"이번달":     "monthly",
-		"월간":      "monthly",
-		"monthly": "monthly",
+		"이번주":     memberNewsPeriodWeekly,
+		"주간":      memberNewsPeriodWeekly,
+		"weekly":  memberNewsPeriodWeekly,
+		"이번달":     memberNewsPeriodMonthly,
+		"월간":      memberNewsPeriodMonthly,
+		"monthly": memberNewsPeriodMonthly,
 	}
 	if period, ok := periods[stringutil.Normalize(strings.Join(args, ""))]; ok {
 		return period
 	}
-	return "weekly"
+
+	return memberNewsPeriodWeekly
 }

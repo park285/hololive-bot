@@ -21,11 +21,10 @@
 package system
 
 import (
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	jsonv2 "encoding/json/v2"
 )
 
 func TestCloneSystemStats(t *testing.T) {
@@ -89,6 +88,56 @@ func TestCloneSystemStats(t *testing.T) {
 	})
 }
 
+func goroutineCountDirectFieldHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := jsonv2.MarshalWrite(w, map[string]any{"goroutines": 42}); err != nil {
+			t.Fatalf("encode stats response: %v", err)
+		}
+	}
+}
+
+func goroutineCountNestedDetailHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		body := map[string]any{
+			"components": map[string]any{
+				"app": map[string]any{
+					"detail": map[string]any{
+						"goroutines": 30,
+					},
+				},
+			},
+		}
+
+		if err := jsonv2.MarshalWrite(w, body); err != nil {
+			t.Fatalf("encode stats response: %v", err)
+		}
+	}
+}
+
+func goroutineCountServerErrorHandler(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "internal error", http.StatusInternalServerError)
+}
+
+func goroutineCountInvalidJSONHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if _, err := w.Write([]byte("{invalid json")); err != nil {
+			t.Fatalf("write invalid json response: %v", err)
+		}
+	}
+}
+
 func TestCollector_FetchGoroutineCount(t *testing.T) {
 	t.Parallel()
 
@@ -98,61 +147,10 @@ func TestCollector_FetchGoroutineCount(t *testing.T) {
 		wantCount int
 		wantOK    bool
 	}{
-		{
-			name: "goroutines 직접 필드 형식 파싱 성공",
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-
-				if err := jsonv2.MarshalWrite(w, map[string]any{"goroutines": 42}); err != nil {
-					t.Fatalf("encode stats response: %v", err)
-				}
-			},
-			wantCount: 42,
-			wantOK:    true,
-		},
-		{
-			name: "components.app.detail.goroutines 형식 파싱 성공",
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-
-				body := map[string]any{
-					"components": map[string]any{
-						"app": map[string]any{
-							"detail": map[string]any{
-								"goroutines": 30,
-							},
-						},
-					},
-				}
-
-				if err := jsonv2.MarshalWrite(w, body); err != nil {
-					t.Fatalf("encode stats response: %v", err)
-				}
-			},
-			wantCount: 30,
-			wantOK:    true,
-		},
-		{
-			name: "비-200 응답은 (0, false) 반환",
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, "internal error", http.StatusInternalServerError)
-			},
-			wantCount: 0,
-			wantOK:    false,
-		},
-		{
-			name: "잘못된 JSON은 (0, false) 반환",
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-
-				_, err := w.Write([]byte("{invalid json"))
-				if err != nil {
-					t.Fatalf("write invalid json response: %v", err)
-				}
-			},
-			wantCount: 0,
-			wantOK:    false,
-		},
+		{"goroutines 직접 필드 형식 파싱 성공", goroutineCountDirectFieldHandler(t), 42, true},
+		{"components.app.detail.goroutines 형식 파싱 성공", goroutineCountNestedDetailHandler(t), 30, true},
+		{"비-200 응답은 (0, false) 반환", goroutineCountServerErrorHandler, 0, false},
+		{"잘못된 JSON은 (0, false) 반환", goroutineCountInvalidJSONHandler(t), 0, false},
 	}
 
 	for _, tc := range tests {

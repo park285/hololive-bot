@@ -31,5 +31,7 @@ type CacheProvider interface {
 	Refresh(ctx context.Context) error
 }
 
-var _ domain.MemberDataProvider = (*ServiceAdapter)(nil)
-var _ CacheProvider = (*Cache)(nil)
+var (
+	_ domain.MemberDataProvider = (*ServiceAdapter)(nil)
+	_ CacheProvider             = (*Cache)(nil)
+)

@@ -24,9 +24,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tidwall/gjson"
+
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/tidwall/gjson"
 )
 
 func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*parser.ChannelStats, error) {
@@ -40,12 +41,17 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*parser
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
 		logStructureWarning("channel_stats", channelID, "ytInitialData extraction failed", "error", err)
-		return nil, c.recordParserDrift(ctx, "channel_stats", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+
+		if driftErr := c.recordParserDrift(ctx, "channel_stats", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
+			return nil, fmt.Errorf("record parser drift: %w", driftErr)
+		}
+
+		return nil, fmt.Errorf("extract yt initial data: %w", err)
 	}
 
 	data := gjson.Parse(jsonStr)
 	if err := checkAlerts(&data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check alerts: %w", err)
 	}
 
 	stats := parseChannelStatsFromInitialData(&data, channelID)
@@ -54,6 +60,7 @@ func (c *Client) GetChannelStats(ctx context.Context, channelID string) (*parser
 	}
 
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+
 	return stats, nil
 }
 
@@ -68,13 +75,19 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*pars
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
 		logStructureWarning("channel_snippet", channelID, "ytInitialData extraction failed", "error", err)
-		return nil, c.recordParserDrift(ctx, "channel_snippet", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+
+		if driftErr := c.recordParserDrift(ctx, "channel_snippet", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
+			return nil, fmt.Errorf("record parser drift: %w", driftErr)
+		}
+
+		return nil, fmt.Errorf("extract yt initial data: %w", err)
 	}
 
 	data := gjson.Parse(jsonStr)
 	if err := checkAlerts(&data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check alerts: %w", err)
 	}
+
 	snippet := parseChannelSnippetFromInitialData(&data)
 
 	if len(snippet.Avatar) == 0 || len(snippet.Banner) == 0 {
@@ -84,5 +97,6 @@ func (c *Client) GetChannelSnippet(ctx context.Context, channelID string) (*pars
 	}
 
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+
 	return snippet, nil
 }

@@ -27,12 +27,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
 
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/park285/iris-client-go/v2/iris"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type setACLRequest struct {
@@ -92,6 +92,7 @@ func (h *RoomHandler) GetJoinedRooms(c *gin.Context) {
 
 		return
 	}
+
 	if resp == nil {
 		h.safeLogger().Error("Failed to list joined rooms from Iris", slog.String("error", "nil response"))
 		sharedserver.RespondError(c, 502, "Failed to list joined rooms", nil)
@@ -116,9 +117,11 @@ func joinedRoomFromIris(summary iris.RoomSummary) joinedRoom {
 	if summary.LinkName != nil {
 		room.Name = *summary.LinkName
 	}
+
 	if summary.Type != nil {
 		room.Type = *summary.Type
 	}
+
 	if summary.ActiveMembersCount != nil {
 		room.MemberCount = *summary.ActiveMembersCount
 	}
@@ -126,8 +129,6 @@ func joinedRoomFromIris(summary iris.RoomSummary) joinedRoom {
 	return room
 }
 
-//
-//nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomHandler) AddRoom(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
@@ -156,6 +157,7 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 
 	if !added {
 		sharedserver.RespondError(c, 409, "Room already exists", nil)
+
 		return
 	}
 
@@ -166,8 +168,6 @@ func (h *RoomHandler) AddRoom(c *gin.Context) {
 	h.logActivity("room_add", "Room added to ACL list: "+req.Room, map[string]any{"room": req.Room})
 }
 
-//
-//nolint:dupl // AddRoom/RemoveRoom은 구조적으로 유사하나 비즈니스 로직이 다름
 func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 	if !h.requireACL(c) {
 		return
@@ -196,6 +196,7 @@ func (h *RoomHandler) RemoveRoom(c *gin.Context) {
 
 	if !removed {
 		sharedserver.RespondError(c, 404, "Room not found", nil)
+
 		return
 	}
 
@@ -243,6 +244,7 @@ func (h *RoomHandler) publishACLChange(ctx context.Context, reason, room, mode s
 
 func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 	var req setACLRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
@@ -252,6 +254,7 @@ func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 
 	if req.Enabled == nil && req.Mode == nil {
 		sharedserver.RespondError(c, 400, "at least one of 'enabled' or 'mode' must be provided", nil)
+
 		return setACLRequest{}, false
 	}
 
@@ -261,14 +264,16 @@ func (h *RoomHandler) bindSetACLRequest(c *gin.Context) (setACLRequest, bool) {
 func (h *RoomHandler) applyACLSettings(c *gin.Context, req setACLRequest) bool {
 	ctx := c.Request.Context()
 	mode, ok := h.parseACLMode(c, req.Mode)
+
 	if !ok {
 		return false
 	}
 
-	if !h.setACLEnabled(c, ctx, req.Enabled) {
+	if !h.setACLEnabled(ctx, c, req.Enabled) {
 		return false
 	}
-	return h.setACLMode(c, ctx, req.Mode, mode)
+
+	return h.setACLMode(ctx, c, req.Mode, mode)
 }
 
 func (h *RoomHandler) parseACLMode(c *gin.Context, rawMode *string) (acl.ACLMode, bool) {
@@ -280,32 +285,40 @@ func (h *RoomHandler) parseACLMode(c *gin.Context, rawMode *string) (acl.ACLMode
 	if err != nil {
 		h.safeLogger().Warn("Invalid ACL mode", slog.String("mode", *rawMode), slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid ACL mode", nil)
+
 		return "", false
 	}
+
 	return mode, true
 }
 
-func (h *RoomHandler) setACLEnabled(c *gin.Context, ctx context.Context, enabled *bool) bool {
+func (h *RoomHandler) setACLEnabled(ctx context.Context, c *gin.Context, enabled *bool) bool {
 	if enabled == nil {
 		return true
 	}
+
 	if err := h.acl.SetEnabled(ctx, *enabled); err != nil {
 		h.safeLogger().Error("Failed to set ACL enabled", slog.Bool("enabled", *enabled), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to set ACL enabled", nil)
+
 		return false
 	}
+
 	return true
 }
 
-func (h *RoomHandler) setACLMode(c *gin.Context, ctx context.Context, rawMode *string, mode acl.ACLMode) bool {
+func (h *RoomHandler) setACLMode(ctx context.Context, c *gin.Context, rawMode *string, mode acl.ACLMode) bool {
 	if rawMode == nil {
 		return true
 	}
+
 	if err := h.acl.SetMode(ctx, mode); err != nil {
 		h.safeLogger().Error("Failed to set ACL mode", slog.String("mode", *rawMode), slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to set ACL mode", nil)
+
 		return false
 	}
+
 	return true
 }
 

@@ -44,6 +44,7 @@ func (mf *MessageFormatter) inner() *format.MessageFormatter {
 	if mf.f != nil {
 		return mf.f
 	}
+
 	return &format.MessageFormatter{}
 }
 
@@ -56,6 +57,7 @@ func (mf *MessageFormatter) formatMessage(ctx context.Context, item *domain.YouT
 	if err != nil {
 		return "", fmt.Errorf("format message: %w", err)
 	}
+
 	return msg, nil
 }
 
@@ -64,6 +66,7 @@ func (mf *MessageFormatter) buildTemplateData(memberName string, item *domain.Yo
 	if err != nil {
 		return format.TemplateData{}, fmt.Errorf("build template data: %w", err)
 	}
+
 	return data, nil
 }
 
@@ -72,6 +75,7 @@ func (mf *MessageFormatter) getMemberName(ctx context.Context, channelID string)
 	if err != nil {
 		return "", fmt.Errorf("get member name: %w", err)
 	}
+
 	return memberName, nil
 }
 
@@ -80,6 +84,7 @@ func (mf *MessageFormatter) formatGroupedMessage(ctx context.Context, memberName
 	if err != nil {
 		return "", fmt.Errorf("format grouped message: %w", err)
 	}
+
 	return msg, nil
 }
 
@@ -88,6 +93,7 @@ func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payl
 	if err != nil {
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}
+
 	return msg, nil
 }
 

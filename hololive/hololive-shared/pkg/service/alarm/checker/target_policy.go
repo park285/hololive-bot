@@ -14,6 +14,7 @@ func NewTargetMinutePolicy(targetMinutes []int) TargetMinutePolicy {
 	if len(normalized) == 0 {
 		return TargetMinutePolicy{targetMinutes: cloneDefaultTargetMinutes()}
 	}
+
 	return TargetMinutePolicy{targetMinutes: append([]int(nil), normalized...)}
 }
 
@@ -41,9 +42,11 @@ func NewTargetMinutePolicyFromConfigured(targetMinutes []int) TargetMinutePolicy
 	if len(normalized) == 0 {
 		return TargetMinutePolicy{targetMinutes: cloneDefaultTargetMinutes()}
 	}
+
 	if len(normalized) == 1 {
 		return NewTargetMinutePolicyFromRuntimeAdvance(normalized[0])
 	}
+
 	return TargetMinutePolicy{targetMinutes: append([]int(nil), normalized...)}
 }
 
@@ -52,6 +55,7 @@ func NewTargetMinutePolicyFromPersisted(alarmAdvanceMinutes int, targetMinutes [
 	if !shouldHealLegacyPersistedTargetMinutes(alarmAdvanceMinutes, resolved.targetMinutes) {
 		return resolved
 	}
+
 	return NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes)
 }
 
@@ -59,6 +63,7 @@ func (p TargetMinutePolicy) Clone() []int {
 	if len(p.targetMinutes) == 0 {
 		return cloneDefaultTargetMinutes()
 	}
+
 	return append([]int(nil), p.targetMinutes...)
 }
 
@@ -70,6 +75,7 @@ func (p TargetMinutePolicy) PrimaryAdvanceMinute() int {
 	if len(p.targetMinutes) == 0 {
 		return cloneDefaultTargetMinutes()[0]
 	}
+
 	return p.targetMinutes[0]
 }
 
@@ -81,6 +87,7 @@ func (p TargetMinutePolicy) HighestCrossed(startScheduled time.Time, window Eval
 	resolvedTargets := p.resolvedTargetMinutes()
 	current := minutesUntilFloorZeroClamped(startScheduled, window.End)
 	previous := minutesUntilFloorZeroClamped(startScheduled, window.Start)
+
 	if previous <= current {
 		return currentTargetIfConfigured(resolvedTargets, current)
 	}
@@ -92,6 +99,7 @@ func (p TargetMinutePolicy) resolvedTargetMinutes() []int {
 	if len(p.targetMinutes) == 0 {
 		return cloneDefaultTargetMinutes()
 	}
+
 	return p.targetMinutes
 }
 
@@ -99,6 +107,7 @@ func currentTargetIfConfigured(resolvedTargets []int, current int) (int, bool) {
 	if slices.Contains(resolvedTargets, current) {
 		return current, true
 	}
+
 	return 0, false
 }
 

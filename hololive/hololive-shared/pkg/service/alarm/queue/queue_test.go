@@ -21,12 +21,12 @@
 package queue
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,13 +37,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func newTestCacheClient(t *testing.T) (cache.Client, *miniredis.Miniredis) {
 	t.Helper()
 
-	return testutil.NewTestCacheServiceWithMini(t, context.Background())
+	return testutil.NewTestCacheServiceWithMini(t.Context(), t)
 }
 
 func queueItemsOrEmpty(t *testing.T, mini *miniredis.Miniredis) []string {
@@ -60,8 +59,10 @@ func queueItemsByKeyOrEmpty(t *testing.T, mini *miniredis.Miniredis, key string)
 		if strings.Contains(err.Error(), "no such key") {
 			return nil
 		}
+
 		require.NoError(t, err)
 	}
+
 	return items
 }
 
@@ -81,7 +82,7 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 	}
 	claimKeys := []string{"notified:claim:room-1"}
 
-	_, err := publisher.Publish(context.Background(), notification, claimKeys)
+	_, err := publisher.Publish(t.Context(), notification, claimKeys)
 	require.NoError(t, err)
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
@@ -93,6 +94,7 @@ func TestPublisherPublishWritesPendingOutboxEnvelopeWithVersion(t *testing.T) {
 	assert.Equal(t, "room-1", envelope.Notification.RoomID)
 	assert.Equal(t, contractsalarm.QueueEnvelopeVersionV1, envelope.Version)
 	assert.Equal(t, claimKeys, envelope.ClaimKeys)
+
 	_, err = time.Parse(time.RFC3339, envelope.EnqueuedAt)
 	require.NoError(t, err)
 }
@@ -104,7 +106,9 @@ func TestPublisherPublishRejectsContentAlarmTypes(t *testing.T) {
 
 	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
 		t.Run(string(alarmType), func(t *testing.T) {
-			_, err := publisher.Publish(context.Background(), &domain.AlarmNotification{
+			t.Parallel()
+
+			_, err := publisher.Publish(t.Context(), &domain.AlarmNotification{
 				AlarmType: alarmType,
 				RoomID:    "room-blocked",
 			}, nil)
@@ -141,7 +145,7 @@ func TestPublisherPublishDispatchBatchAcceptsYouTubeOutboxContentEnvelope(t *tes
 		Version:   contractsalarm.QueueEnvelopeVersionV1,
 	}
 
-	result, err := publisher.PublishDispatchBatch(context.Background(), []domain.AlarmQueueEnvelope{envelope})
+	result, err := publisher.PublishDispatchBatch(t.Context(), []domain.AlarmQueueEnvelope{envelope})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.RequestedDeliveries)
 }

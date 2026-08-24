@@ -3,9 +3,9 @@ package dispatchoutbox
 import (
 	"context"
 	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -31,29 +31,38 @@ func recordEventCollisions(ctx context.Context, tx pgx.Tx, collisions []eventCol
 	if len(collisions) == 0 {
 		return nil
 	}
+
 	rows := buildEventCollisionBatchRows(dedupeEventCollisions(collisions))
+
 	raw, err := jsonv2.Marshal(rows)
 	if err != nil {
 		return fmt.Errorf("record dispatch event collisions: marshal batch: %w", err)
 	}
+
 	if _, err := tx.Exec(ctx, mustSQL("repository_collision_0038_01.sql"), jsonbRecordsetParam(raw)); err != nil {
 		return fmt.Errorf("record dispatch event collisions: %w", err)
 	}
+
 	return nil
 }
 
 func dedupeEventCollisions(collisions []eventCollision) []eventCollision {
 	seen := make(map[string]struct{}, len(collisions))
 	deduped := make([]eventCollision, 0, len(collisions))
+
 	for i := range collisions {
 		collision := &collisions[i]
 		key := collision.Event.EventKey + "\x00" + collision.Event.PayloadHash
+
 		if _, ok := seen[key]; ok {
 			continue
 		}
+
 		seen[key] = struct{}{}
+
 		deduped = append(deduped, *collision)
 	}
+
 	return deduped
 }
 
@@ -61,11 +70,15 @@ func buildEventCollisionBatchRows(collisions []eventCollision) []eventCollisionB
 	rows := make([]eventCollisionBatchRow, 0, len(collisions))
 	for i := range collisions {
 		collision := &collisions[i]
+
 		var existingEventID *int64
+
 		if collision.ExistingEventID > 0 {
 			id := collision.ExistingEventID
+
 			existingEventID = &id
 		}
+
 		rows = append(rows, eventCollisionBatchRow{
 			ExistingEventID:     existingEventID,
 			EventKey:            collision.Event.EventKey,
@@ -78,5 +91,6 @@ func buildEventCollisionBatchRows(collisions []eventCollision) []eventCollisionB
 			Payload:             jsontext.Value(collision.Event.Payload).Clone(),
 		})
 	}
+
 	return rows
 }

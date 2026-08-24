@@ -28,14 +28,13 @@ import (
 	"testing"
 	"time"
 
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/settings"
+	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
@@ -107,7 +106,7 @@ func (s *trackingYouTubeService) isProxyEnabled() bool {
 }
 
 func (s *trackingYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return nil, nil
+	return map[string]*youtube.ChannelStats{}, nil
 }
 
 func (s *trackingYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
@@ -183,10 +182,7 @@ func TestBotSettingsApplier_DelegatesToBase(t *testing.T) {
 		alarmResult:   expectedAlarm,
 		runtimeResult: expectedRuntime,
 	}
-	applier := &botSettingsApplier{
-		SettingsApplier: base,
-		logger:          testAppLogger(),
-	}
+	applier := &botSettingsApplier{SettingsApplier: base}
 
 	assert.Equal(t, expectedScraper, applier.ApplyScraperProxy(t.Context(), true))
 	assert.True(t, base.lastScraperProxyEnabled)
@@ -201,6 +197,8 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil trigger", func(t *testing.T) {
+		t.Parallel()
+
 		applier := &botSettingsApplier{
 			SettingsApplier:  nil,
 			memberNewsRunNow: nil,
@@ -214,6 +212,8 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 	})
 
 	t.Run("trigger failure", func(t *testing.T) {
+		t.Parallel()
+
 		trigger := &trackingMemberNewsRunNowTrigger{err: errors.New("request failed")}
 		applier := &botSettingsApplier{
 			memberNewsRunNow: trigger,
@@ -229,6 +229,8 @@ func TestBotSettingsApplier_ApplyMemberNewsWeeklyRunNow(t *testing.T) {
 	})
 
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+
 		trigger := &trackingMemberNewsRunNowTrigger{}
 		applier := &botSettingsApplier{
 			memberNewsRunNow: trigger,

@@ -2,6 +2,7 @@ package alarmservice
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -9,11 +10,20 @@ import (
 )
 
 func (as *AlarmService) CacheMemberName(ctx context.Context, channelID, memberName string) error {
-	return as.cacheState.CacheMemberName(ctx, channelID, memberName)
+	if err := as.cacheState.CacheMemberName(ctx, channelID, memberName); err != nil {
+		return fmt.Errorf("cache member name: %w", err)
+	}
+
+	return nil
 }
 
 func (as *AlarmService) GetMemberName(ctx context.Context, channelID string) (string, error) {
-	return as.cacheState.GetMemberName(ctx, channelID)
+	out, err := as.cacheState.GetMemberName(ctx, channelID)
+	if err != nil {
+		return out, fmt.Errorf("get member name: %w", err)
+	}
+
+	return out, nil
 }
 
 func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID, fallback string) string {
@@ -21,15 +31,28 @@ func (as *AlarmService) resolveCacheMemberName(ctx context.Context, channelID, f
 }
 
 func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-	return as.cacheState.GetChannelSubscribersByType(ctx, channelID, alarmType)
+	out, err := as.cacheState.GetChannelSubscribersByType(ctx, channelID, alarmType)
+	if err != nil {
+		return out, fmt.Errorf("get channel subscribers by type: %w", err)
+	}
+
+	return out, nil
 }
 
 func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string) error {
-	return as.cacheState.SetRoomName(ctx, roomID, roomName)
+	if err := as.cacheState.SetRoomName(ctx, roomID, roomName); err != nil {
+		return fmt.Errorf("set room name: %w", err)
+	}
+
+	return nil
 }
 
 func (as *AlarmService) SetUserName(ctx context.Context, userID, userName string) error {
-	return as.cacheState.SetUserName(ctx, userID, userName)
+	if err := as.cacheState.SetUserName(ctx, userID, userName); err != nil {
+		return fmt.Errorf("set user name: %w", err)
+	}
+
+	return nil
 }
 
 func normalizeScheduledMinute(startScheduled time.Time) time.Time {

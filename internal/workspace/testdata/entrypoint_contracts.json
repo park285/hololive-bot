@@ -2,7 +2,7 @@
   {
     "path": "hololive/hololive-api/cmd/hololive-api/main.go",
     "must_contain": [
-      "bootstrap.Run("
+      "bootstrap.Options.Run("
     ]
   },
   {
@@ -14,7 +14,7 @@
   {
     "path": "hololive/hololive-alarm-worker/cmd/alarm-worker/main.go",
     "must_contain": [
-      "bootstrap.Run("
+      "bootstrap.Options.Run("
     ]
   },
   {
@@ -50,7 +50,7 @@
   {
     "path": "hololive/hololive-youtube-collector/cmd/runtime/youtube-collector/main.go",
     "must_contain": [
-      "bootstrap.Run("
+      "bootstrap.Options.Run("
     ]
   },
   {

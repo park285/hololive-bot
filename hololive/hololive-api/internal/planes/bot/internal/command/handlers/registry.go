@@ -26,9 +26,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 var ErrUnknownCommand = errors.New("unknown command")

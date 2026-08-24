@@ -35,21 +35,29 @@ func ClampToWidth(face font.Face, s string, maxPx int) string {
 	if maxPx <= 0 {
 		return ""
 	}
+
 	if MeasureText(face, s) <= maxPx {
 		return s
 	}
+
 	const ellipsis = "…"
+
 	runes := []rune(s)
+
 	for len(runes) > 0 {
 		runes = runes[:len(runes)-1]
+
 		trimmed := strings.TrimRight(string(runes), " ")
+
 		if trimmed == "" {
 			break
 		}
+
 		if MeasureText(face, trimmed+ellipsis) <= maxPx {
 			return trimmed + ellipsis
 		}
 	}
+
 	return ""
 }
 
@@ -57,12 +65,15 @@ func ClampToWidth(face font.Face, s string, maxPx int) string {
 // 그리기 전에 커버되지 않는 rune을 떨군다.
 func DropUncoveredRunes(face font.Face, s string) string {
 	var b strings.Builder
+
 	b.Grow(len(s))
+
 	for _, r := range s {
 		if _, ok := face.GlyphAdvance(r); ok {
 			b.WriteRune(r)
 		}
 	}
+
 	return strings.TrimSpace(b.String())
 }
 
@@ -74,6 +85,7 @@ func FillRoundedRect(img *image.RGBA, rect image.Rectangle, radius int, col colo
 	u := image.NewUniform(col)
 	stddraw.Draw(img, image.Rect(rect.Min.X+radius, rect.Min.Y, rect.Max.X-radius, rect.Max.Y), u, image.Point{}, stddraw.Src)
 	stddraw.Draw(img, image.Rect(rect.Min.X, rect.Min.Y+radius, rect.Max.X, rect.Max.Y-radius), u, image.Point{}, stddraw.Src)
+
 	for _, c := range [][2]int{
 		{rect.Min.X + radius, rect.Min.Y + radius},
 		{rect.Max.X - radius - 1, rect.Min.Y + radius},
@@ -89,6 +101,7 @@ func FillCircle(img *image.RGBA, cx, cy, r int, col color.Color) {
 	if !ok {
 		c = color.RGBA{}
 	}
+
 	fcx, fcy, fr := float64(cx)+0.5, float64(cy)+0.5, float64(r)
 	for y := cy - r - 1; y <= cy+r+1; y++ {
 		for x := cx - r - 1; x <= cx+r+1; x++ {
@@ -102,10 +115,13 @@ func blendCoveragePixel(img *image.RGBA, x, y int, c color.RGBA, cov float64) {
 	if cov <= 0 {
 		return
 	}
+
 	if cov >= 1 {
 		img.SetRGBA(x, y, c)
+
 		return
 	}
+
 	img.SetRGBA(x, y, blendRGBA(c, img.RGBAAt(x, y), cov))
 }
 
@@ -113,9 +129,11 @@ func blendRGBA(fg, bg color.RGBA, a float64) color.RGBA {
 	if a < 0 {
 		a = 0
 	}
+
 	if a > 1 {
 		a = 1
 	}
+
 	return color.RGBA{
 		R: clampChannel(float64(fg.R)*a + float64(bg.R)*(1-a)),
 		G: clampChannel(float64(fg.G)*a + float64(bg.G)*(1-a)),
@@ -128,8 +146,10 @@ func clampChannel(v float64) uint8 {
 	if v < 0 {
 		return 0
 	}
+
 	if v > 255 {
 		return 255
 	}
+
 	return uint8(v)
 }

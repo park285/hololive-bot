@@ -42,6 +42,7 @@ func TestProductionComposePinsTheTestPoolQueryExecMode(t *testing.T) {
 	if match == nil {
 		t.Fatal("production compose no longer declares a POSTGRES_QUERY_EXEC_MODE default; update the test pool contract together")
 	}
+
 	composeDefault := string(match[1])
 
 	if composeDefault != productionComposeQueryExecModeName {
@@ -57,9 +58,11 @@ func TestProductionComposePinsTheTestPoolQueryExecMode(t *testing.T) {
 		"simple_protocol": pgx.QueryExecModeSimpleProtocol,
 	}
 	want, ok := modesByName[productionComposeQueryExecModeName]
+
 	if !ok {
 		t.Fatalf("unknown query exec mode name %q", productionComposeQueryExecModeName)
 	}
+
 	if productionQueryExecMode != want {
 		t.Fatalf("test pool query exec mode = %v, production compose default resolves to %v", productionQueryExecMode, want)
 	}

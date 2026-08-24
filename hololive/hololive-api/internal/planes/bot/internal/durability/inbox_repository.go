@@ -105,102 +105,146 @@ func NewInboxRepository(pool *pgxpool.Pool) *InboxRepository {
 
 func (r *InboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReadyQueueSnapshot{}, err
+		return ReadyQueueSnapshot{}, fmt.Errorf("ensure pool: %w", err)
 	}
-	var snapshot ReadyQueueSnapshot
-	var oldestAgeSeconds float64
+
+	var (
+		snapshot         ReadyQueueSnapshot
+		oldestAgeSeconds float64
+	)
+
 	if err := r.pool.QueryRow(ctx, inboxReadySnapshotSQL).Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
 		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot webhook inbox ready queue: %w", err)
 	}
+
 	snapshot.OldestAge = time.Duration(oldestAgeSeconds * float64(time.Second))
+
 	return snapshot, nil
 }
 
 func (r *InboxRepository) Admit(ctx context.Context, msg InboxMessage) (admitted bool, err error) {
 	result, err := r.AdmitResult(ctx, msg)
-	return result == workercontract.AdmissionAccepted, err
+	if err != nil {
+		return result == workercontract.AdmissionAccepted, fmt.Errorf("admit result: %w", err)
+	}
+
+	return result == workercontract.AdmissionAccepted, nil
 }
 
 func (r *InboxRepository) AdmitResult(ctx context.Context, msg InboxMessage) (result workercontract.AdmissionResult, err error) {
-	if err := ensurePool(r.pool); err != nil {
-		return workercontract.AdmissionFailed, err
+	if poolErr := ensurePool(r.pool); poolErr != nil {
+		return workercontract.AdmissionFailed, fmt.Errorf("ensure pool: %w", poolErr)
 	}
+
 	normalized, err := normalizeInboxMessage(msg)
 	if err != nil {
-		return workercontract.AdmissionRejected, err
+		return workercontract.AdmissionRejected, fmt.Errorf("normalize inbox message: %w", err)
 	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return workercontract.AdmissionFailed, safeMessageRepositoryError("begin webhook admission", normalized.MessageID, err)
-	}
-	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
-	if err := lockInboxOrderingKey(ctx, tx, normalized.OrderingKey); err != nil {
-		return workercontract.AdmissionFailed, safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, err)
-	}
-	var admitted bool
-	err = tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
-	if err != nil {
-		return workercontract.AdmissionFailed, safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err)
+		return workercontract.AdmissionFailed, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("begin webhook admission", normalized.MessageID, err))
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		return workercontract.AdmissionOutcomeUnknown, safeMessageRepositoryError("commit webhook admission", normalized.MessageID, err)
+	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
+
+	result, err = admitInboxTx(ctx, tx, normalized)
+	if err != nil {
+		return result, fmt.Errorf("%w", err)
 	}
+
+	return result, nil
+}
+
+func admitInboxTx(ctx context.Context, tx pgx.Tx, normalized InboxMessage) (workercontract.AdmissionResult, error) {
+	if lockErr := lockInboxOrderingKey(ctx, tx, normalized.OrderingKey); lockErr != nil {
+		return workercontract.AdmissionFailed, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("lock webhook admission ordering", normalized.MessageID, lockErr))
+	}
+
+	var admitted bool
+
+	err := tx.QueryRow(ctx, inboxAdmitSQL, normalized.MessageID, normalized.RoomID, normalized.OrderingKey, jsonbParam(normalized.Payload)).Scan(&admitted)
+	if err != nil {
+		return workercontract.AdmissionFailed, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("admit webhook inbox row", normalized.MessageID, err))
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return workercontract.AdmissionOutcomeUnknown, fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("commit webhook admission", normalized.MessageID, err))
+	}
+
 	if !admitted {
 		return workercontract.AdmissionDuplicate, nil
 	}
+
 	return workercontract.AdmissionAccepted, nil
 }
 
 func normalizeInboxMessage(msg InboxMessage) (InboxMessage, error) {
 	messageID, err := requireMessageIdentity(msg.MessageID)
 	if err != nil {
-		return InboxMessage{}, err
+		return InboxMessage{}, fmt.Errorf("require message identity: %w", err)
 	}
+
 	roomID, err := requireRoomID(msg.RoomID)
 	if err != nil {
-		return InboxMessage{}, err
+		return InboxMessage{}, fmt.Errorf("require room ID: %w", err)
 	}
+
 	orderingKey, err := requireBoundedIdentity("ordering key", msg.OrderingKey, orderingKeyRuneLimit)
 	if err != nil {
-		return InboxMessage{}, err
+		return InboxMessage{}, fmt.Errorf("require bounded identity: %w", err)
 	}
+
 	if len(msg.Payload) == 0 {
 		return InboxMessage{}, errors.Join(ErrInvalidArgument, errors.New("payload must not be empty"))
 	}
+
 	return InboxMessage{MessageID: messageID, RoomID: roomID, OrderingKey: orderingKey, Payload: msg.Payload}, nil
 }
 
 func (r *InboxRepository) Claim(ctx context.Context, claimToken string, lease time.Duration) (*InboxClaim, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("require bounded identity: %w", err)
 	}
+
 	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lease milliseconds: %w", err)
 	}
 
 	var claim InboxClaim
+
 	row := r.pool.QueryRow(ctx, inboxClaimSQL, token, leaseMS)
+
 	err = row.Scan(&claim.MessageID, &claim.RoomID, &claim.OrderingKey, &claim.Payload, &claim.Attempts, &claim.LeaseUntil)
+
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // 행 없음(no row)을 알리는 계약값이다. runtime 폴링 루프가 nil 결과로 유휴를 판정하므로 sentinel 오류로 바꾸려면 이 패키지 밖 호출자를 함께 고쳐야 한다.
 	}
+
 	if err != nil {
-		return nil, safeRepositoryError("claim webhook inbox row", err)
+		if safeErr := safeRepositoryError("claim webhook inbox row", err); safeErr != nil {
+			return nil, fmt.Errorf("safe repository error: %w", safeErr)
+		}
+
+		return nil, nil //nolint:nilnil // safe*Error가 오류를 삼킨 경우도 위 ErrNoRows 분기와 같은 "행 없음"으로 접는다.
 	}
 
 	return &claim, nil
 }
 
 func (r *InboxRepository) Complete(ctx context.Context, messageID, claimToken string) (bool, error) {
-	return r.settle(ctx, inboxCompleteSQL, messageID, claimToken)
+	out, err := r.settle(ctx, inboxCompleteSQL, messageID, claimToken)
+	if err != nil {
+		return out, fmt.Errorf("settle: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *InboxRepository) Release(
@@ -211,44 +255,53 @@ func (r *InboxRepository) Release(
 	lastError string,
 ) (InboxReleaseOutcome, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return InboxReleaseNotOwned, err
+		return InboxReleaseNotOwned, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	id, token, err := r.fenceArgs(messageID, claimToken)
 	if err != nil {
-		return InboxReleaseNotOwned, err
+		return InboxReleaseNotOwned, fmt.Errorf("fence args: %w", err)
 	}
+
 	retryMS, err := validateInboxRelease(maxAttempts, retryAfter)
 	if err != nil {
-		return InboxReleaseNotOwned, err
+		return InboxReleaseNotOwned, fmt.Errorf("validate inbox release: %w", err)
 	}
+
 	status, err := r.releaseLocked(ctx, id, token, retryMS, maxAttempts, lastError)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return InboxReleaseNotOwned, nil
 	}
+
 	if err != nil {
-		return InboxReleaseNotOwned, err
+		return InboxReleaseNotOwned, fmt.Errorf("release locked: %w", err)
 	}
+
 	if status == inboxStatusDead {
 		return InboxReleaseAbandoned, nil
 	}
+
 	return InboxReleaseRetried, nil
 }
 
 func (r *InboxRepository) releaseLocked(ctx context.Context, id, token string, retryMS int64, maxAttempts int32, lastError string) (status string, err error) {
 	tx, err := r.beginLockedMessageTx(ctx, id)
 	if err != nil {
-		return "", safeMessageRepositoryError("begin webhook release", id, err)
+		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("begin webhook release", id, err))
 	}
+
 	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
+
 	err = tx.QueryRow(ctx, inboxReleaseSQL, id, token, retryMS,
 		normalizeInboxFailureReason(lastError), maxAttempts).Scan(&status)
 	if err != nil {
-		return "", safeMessageRepositoryError("release webhook inbox row", id, err)
+		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("release webhook inbox row", id, err))
 	}
+
 	if err = tx.Commit(ctx); err != nil {
-		return "", safeMessageRepositoryError("commit webhook release", id, err)
+		return "", fmt.Errorf("safe message repository error: %w", safeMessageRepositoryError("commit webhook release", id, err))
 	}
+
 	return status, nil
 }
 
@@ -262,68 +315,4 @@ func normalizeInboxFailureReason(reason string) string {
 	default:
 		return InboxFailureProcessingFailed
 	}
-}
-
-func validateInboxRelease(maxAttempts int32, retryAfter time.Duration) (int64, error) {
-	if maxAttempts <= 0 {
-		return 0, errors.Join(ErrInvalidArgument, errors.New("max attempts must be positive"))
-	}
-	return leaseMilliseconds(retryAfter)
-}
-
-func (r *InboxRepository) Abandon(ctx context.Context, messageID, claimToken, reason string) (applied bool, err error) {
-	if err := ensurePool(r.pool); err != nil {
-		return false, err
-	}
-
-	id, token, err := r.fenceArgs(messageID, claimToken)
-	if err != nil {
-		return false, safeMessageRepositoryError("begin webhook abandon", id, err)
-	}
-	terminalReason, err := requireIdentity("terminal reason", reason)
-	if err != nil {
-		return false, err
-	}
-
-	tx, err := r.beginLockedMessageTx(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	defer func() { err = errors.Join(err, rollbackInboxTx(ctx, tx)) }()
-	err = tx.QueryRow(ctx, inboxAbandonSQL, id, token,
-		clampColumnText(terminalReason, terminalReasonByteLimit)).Scan(&applied)
-	if err != nil {
-		return false, safeMessageRepositoryError("abandon webhook inbox row", id, err)
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return false, safeMessageRepositoryError("commit webhook abandon", id, err)
-	}
-	return applied, nil
-}
-
-func (r *InboxRepository) Heartbeat(ctx context.Context, messageID, claimToken string, lease time.Duration) (time.Time, bool, error) {
-	if err := ensurePool(r.pool); err != nil {
-		return time.Time{}, false, err
-	}
-	id, token, err := r.fenceArgs(messageID, claimToken)
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	leaseMS, err := leaseMilliseconds(lease)
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	var leaseUntil time.Time
-	err = r.pool.QueryRow(ctx, inboxHeartbeatSQL, id, token, leaseMS).Scan(&leaseUntil)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return time.Time{}, false, nil
-	}
-	if err != nil {
-		return time.Time{}, false, safeMessageRepositoryError("heartbeat webhook inbox row", id, err)
-	}
-	return leaseUntil, true, nil
 }

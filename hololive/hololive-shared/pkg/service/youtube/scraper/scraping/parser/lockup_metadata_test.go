@@ -54,7 +54,7 @@ func TestPickViewCountAndPublished(t *testing.T) {
 		{"view first then published", []string{"69万回視聴", "1 month ago"}, 690000, "1 month ago", true},
 		{"published first then view", []string{"1 month ago", "69万回視聴"}, 690000, "1 month ago", true},
 		{"no parsable view count", []string{"No views", "Streamed 2 hours ago"}, 0, "", false},
-		{"all garbage", []string{"garbage", "more garbage"}, 0, "", false},
+		{"all garbage", []string{garbageInput, "more garbage"}, 0, "", false},
 		{"empty slice", nil, 0, "", false},
 	}
 	for _, tt := range tests {

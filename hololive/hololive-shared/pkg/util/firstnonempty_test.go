@@ -26,6 +26,7 @@ func TestFirstNonEmptyString(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := FirstNonEmptyString(tc.values...); got != tc.want {
 				t.Fatalf("FirstNonEmptyString(%q) = %q, want %q", tc.values, got, tc.want)
 			}
@@ -36,8 +37,8 @@ func TestFirstNonEmptyString(t *testing.T) {
 func TestFirstNonNilTime(t *testing.T) {
 	t.Parallel()
 
-	t1 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	t2 := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	t1 := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, time.June, 11, 12, 0, 0, 0, time.UTC)
 
 	cases := []struct {
 		name   string
@@ -53,6 +54,7 @@ func TestFirstNonNilTime(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := FirstNonNilTime(tc.values...); got != tc.want {
 				t.Fatalf("FirstNonNilTime(%v) = %v, want %v", tc.values, got, tc.want)
 			}

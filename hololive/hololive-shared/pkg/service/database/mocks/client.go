@@ -22,6 +22,7 @@ package mocks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,19 +44,30 @@ func (c *Client) GetPool() *pgxpool.Pool {
 	if c.GetPoolFunc != nil {
 		return c.GetPoolFunc()
 	}
+
 	return nil
 }
 
 func (c *Client) Ping(ctx context.Context) error {
 	if c.PingFunc != nil {
-		return c.PingFunc(ctx)
+		if err := c.PingFunc(ctx); err != nil {
+			return fmt.Errorf("ping func: %w", err)
+		}
+
+		return nil
 	}
+
 	return nil
 }
 
 func (c *Client) Close() error {
 	if c.CloseFunc != nil {
-		return c.CloseFunc()
+		if err := c.CloseFunc(); err != nil {
+			return fmt.Errorf("close func: %w", err)
+		}
+
+		return nil
 	}
-	return fmt.Errorf("database mock: CloseFunc not set")
+
+	return errors.New("database mock: CloseFunc not set")
 }

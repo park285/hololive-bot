@@ -46,7 +46,9 @@ func (d *SendEngine) dispatchDeliveryRows(
 		SuccessClaimTokens: make([]dispatchstate.ClaimToken, 0, len(rows)),
 		FailureBuckets:     make(map[string][]int64),
 	}
+
 	var mu sync.Mutex
+
 	reuseCache := claim.NewMemoryDecisionCache()
 
 	formattedMessages, formatFailures := d.preFormatMessages(ctx, outboxByID)
@@ -63,11 +65,14 @@ func (d *SendEngine) dispatchDeliveryRows(
 
 	for i := range groups {
 		group := &groups[i]
+
 		panicguard.GoE(eg, d.logger, "youtube-outbox-delivery-group", func() error {
 			d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result, &mu)
+
 			return nil
 		})
 	}
+
 	if err := eg.Wait(); err != nil {
 		d.logger.Warn("Delivery dispatch worker failed", slog.Any("error", err))
 	}
@@ -92,6 +97,7 @@ func (d *SendEngine) dispatchGroup(
 	// 단건 그룹: 기존 개별 dispatch 경로
 	if len(group.rows) == 1 {
 		d.dispatchDeliveryRow(ctx, &group.rows[0], groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+
 		return
 	}
 
@@ -101,13 +107,16 @@ func (d *SendEngine) dispatchGroup(
 	// 검증 후 1건 이하 -> 개별 dispatch
 	if len(validRows) <= 1 {
 		d.dispatchRowsIndividually(ctx, validRows, groupOutboxByID, formattedMessages, formatFailures, reuseCache, result, mu)
+
 		return
 	}
 
 	claimSelection := d.claims.selectClaimedDeliveries(ctx, validRows, validOutboxes, reuseCache)
 	d.claims.applyClaimSelection(result, mu, &claimSelection)
+
 	validRows = claimSelection.sendRows
 	validOutboxes = claimSelection.sendOutboxes
+
 	if len(validRows) == 0 {
 		return
 	}
@@ -129,11 +138,14 @@ func (d *SendEngine) dispatchClaimedGroup(
 	if d.dispatchClaimedRowsWithHandoff(ctx, group.roomID, group.channelID, group.kind, validRows, validOutboxes, claimSelection.claimTokens, result, mu) {
 		return
 	}
+
 	if len(validRows) == 1 {
 		if d.dispatchClaimedRowsWithKaringIfSupported(ctx, group.roomID, group.channelID, group.kind, validRows, validOutboxes, claimSelection.claimTokens, "per_room", result, mu) {
 			return
 		}
+
 		d.dispatchClaimedDeliveryRow(ctx, &validRows[0], &validOutboxes[0], formattedMessages, formatFailures, claimSelection.claimTokens, result, mu)
+
 		return
 	}
 
@@ -144,6 +156,7 @@ func (d *SendEngine) dispatchClaimedGroup(
 	message, formatted := d.formatGroupedMessage(ctx, group, validRows, validOutboxes)
 	if !formatted {
 		d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, claimSelection.rowClaimTokens, result, mu)
+
 		return
 	}
 
@@ -163,17 +176,21 @@ func (d *SendEngine) dispatchDeliveryRow(
 	outbox, ok := outboxByID[row.OutboxID]
 	if !ok {
 		d.recordDeliveryFailure(result, mu, "outbox row not found", row.ID, row.OutboxID)
+
 		return
 	}
 
 	claimSelection := d.claims.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{*row}, []domain.YouTubeNotificationOutbox{outbox}, reuseCache)
 	d.claims.applyClaimSelection(result, mu, &claimSelection)
+
 	if len(claimSelection.sendRows) == 0 {
 		return
 	}
+
 	if d.dispatchClaimedRowsWithHandoff(ctx, row.RoomID, outbox.ChannelID, outbox.Kind, claimSelection.sendRows, claimSelection.sendOutboxes, claimSelection.claimTokens, result, mu) {
 		return
 	}
+
 	if d.dispatchClaimedRowsWithKaringIfSupported(ctx, row.RoomID, outbox.ChannelID, outbox.Kind, claimSelection.sendRows, claimSelection.sendOutboxes, claimSelection.claimTokens, "per_room", result, mu) {
 		return
 	}
@@ -194,29 +211,36 @@ func (d *SendEngine) dispatchClaimedDeliveryRow(
 	rows, outboxes := singleDeliveryBatch(row, outbox)
 	if formatFailures[row.OutboxID] {
 		d.recordPerRoomFormatFailure(ctx, row, rows, outboxes, claimTokens, result, mu)
+
 		return
 	}
 
 	message, ok := formattedMessages[row.OutboxID]
 	if !ok {
 		d.recordPerRoomMissingMessage(ctx, row, claimTokens, result, mu)
+
 		return
 	}
 
 	sendReq, err := buildDeliverySendRequest(row.RoomID, message, []domain.YouTubeNotificationOutbox{*outbox})
 	if err != nil {
 		d.recordPerRoomRequestBuildFailure(ctx, row, outbox, rows, outboxes, claimTokens, err, result, mu)
+
 		return
 	}
 
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, "per_room")
+
 	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
 		if errors.Is(sendErr, errDeliverySendOutcomeUnknown) {
 			d.recordPerRoomSendOutcomeUnknown(row, sendReq, sendErr)
+
 			return
 		}
+
 		d.recordPerRoomSendFailure(ctx, row, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
+
 		return
 	}
 
@@ -239,16 +263,20 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 	sendReq, err := buildDeliverySendRequest(group.roomID, message, validOutboxes)
 	if err != nil {
 		d.recordGroupedRequestBuildFailure(ctx, group, validRows, validOutboxes, claimTokens, err, result, mu)
+
 		return
 	}
 
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(validRows, validOutboxes, attemptStartedAt, "grouped")
+
 	if sendErr := d.sendDeliveryMessage(ctx, sendReq); sendErr != nil {
 		if errors.Is(sendErr, errDeliverySendOutcomeUnknown) {
 			d.recordGroupedSendOutcomeUnknown(group, validRows, sendReq, sendErr)
+
 			return
 		}
+
 		if shouldFallbackGroupedSend(sendErr) {
 			d.logger.Warn("Grouped delivery send failed, falling back to individual deliveries",
 				slog.String("room_id", group.roomID),
@@ -258,9 +286,12 @@ func (d *SendEngine) dispatchGroupedClaimedRows(
 				dedupeKeyLogAttr(sendReq.dedupeKeys),
 				slog.Any("error", sendErr))
 			d.dispatchClaimedRowsIndividually(ctx, validRows, validOutboxes, formattedMessages, formatFailures, rowClaimTokens, result, mu)
+
 			return
 		}
+
 		d.recordGroupedSendFailure(ctx, group, validRows, validOutboxes, sendReq, claimTokens, sendErr, result, mu)
+
 		return
 	}
 

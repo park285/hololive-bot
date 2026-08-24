@@ -24,11 +24,12 @@ import (
 	"context"
 	"slices"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification *domain.AlarmNotification) string {
@@ -61,9 +62,11 @@ func alarmNotificationURLText(stream *domain.Stream) string {
 	if stream.IsTwitchOnly {
 		return stream.GetTwitchLiveURL()
 	}
+
 	if isIntegratedYouTubeChzzkStream(stream) {
 		return stream.GetYouTubeURL() + "\n" + stream.GetChzzkLiveURL()
 	}
+
 	if isChzzkOnlyAlarmStream(stream) {
 		return stream.GetChzzkLiveURL()
 	}
@@ -156,6 +159,7 @@ func alarmGroupScheduledTimes(entries []alarmNotificationGroupEntry) []string {
 	}
 
 	slices.Sort(times)
+
 	return times
 }
 
@@ -206,14 +210,18 @@ func compareAlarmNotificationGroupEntry(a, b alarmNotificationGroupEntry) int {
 	if a.ChannelName < b.ChannelName {
 		return -1
 	}
+
 	if a.ChannelName > b.ChannelName {
 		return 1
 	}
+
 	if a.Title < b.Title {
 		return -1
 	}
+
 	if a.Title > b.Title {
 		return 1
 	}
+
 	return 0
 }

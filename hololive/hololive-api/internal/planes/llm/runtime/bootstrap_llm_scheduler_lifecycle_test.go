@@ -22,25 +22,23 @@ package runtime
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"github.com/quic-go/quic-go/http3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
-	"github.com/quic-go/quic-go/http3"
 )
 
 func testRuntimeLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestLLMSchedulerRuntimeClose(t *testing.T) {
@@ -87,8 +85,9 @@ func TestLLMSchedulerRuntimeShutdown_StopsHTTPServer(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
 	require.NoError(t, err)
+
 	response, err := server.Client().Do(request)
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -102,7 +101,7 @@ func TestLLMSchedulerRuntimeShutdown_StopsHTTPServer(t *testing.T) {
 		httpServers: nil,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	require.NoError(t, runtime.Shutdown(ctx))
@@ -115,6 +114,7 @@ func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
 	}
 
 	done := make(chan struct{})
+
 	go func() {
 		runtime.Run()
 		close(done)
@@ -129,7 +129,7 @@ func TestLLMSchedulerRuntimeRun_ReturnsOnServerError(t *testing.T) {
 
 func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	server, err := buildLLMSchedulerHTTPServer(
-		context.Background(),
+		t.Context(),
 		32077,
 		testRuntimeLogger(),
 		nil,
@@ -142,7 +142,7 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	assert.Equal(t, ":32077", server.Addr)
 
 	t.Run("health available", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 		rr := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rr, req)
 
@@ -150,7 +150,7 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 	})
 
 	t.Run("trigger route not registered", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 		rr := httptest.NewRecorder()
 		server.Handler.ServeHTTP(rr, req)
 
@@ -159,18 +159,18 @@ func TestBuildLLMSchedulerHTTPServer_WithoutTriggerHandler(t *testing.T) {
 }
 
 func TestBuildTriggerRouter_NoTriggerHandler(t *testing.T) {
-	router, err := buildTriggerRouter(context.Background(), testRuntimeLogger(), nil, "")
+	router, err := buildTriggerRouter(t.Context(), testRuntimeLogger(), nil, "")
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MemberNewsWeeklyPath, http.NoBody)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 
-	healthReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	healthReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 	healthRR := httptest.NewRecorder()
 	router.ServeHTTP(healthRR, healthReq)
 	assert.Equal(t, http.StatusOK, healthRR.Code)
-	assert.True(t, strings.Contains(healthRR.Body.String(), "status"))
+	assert.Contains(t, healthRR.Body.String(), "status")
 }

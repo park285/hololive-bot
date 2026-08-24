@@ -18,6 +18,7 @@ func TestParseMode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ParseMode(%q) error = %v", testCase.raw, err)
 		}
+
 		if mode != testCase.want {
 			t.Fatalf("ParseMode(%q) = %q, want %q", testCase.raw, mode, testCase.want)
 		}

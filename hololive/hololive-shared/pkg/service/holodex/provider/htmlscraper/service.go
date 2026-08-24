@@ -11,11 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/internal/service/fallback"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -38,6 +37,7 @@ type Service struct {
 const (
 	channelScheduleCacheKeyPrefix = "official_schedule:channel:"
 	officialScheduleCacheKey      = "official_schedule_api:list:2"
+	contentTypeJSON               = "application/json"
 )
 
 type officialSchedulePageCache struct {
@@ -51,16 +51,23 @@ func (s *Service) FetchChannel(ctx context.Context, channelID string, hours int,
 		return cached, nil
 	}
 
-	streams, sourceErr, resolved := s.fetchYouTubeChannelSchedule(ctx, channelID, hours, includeLive)
+	streams, resolved, sourceErr := s.fetchYouTubeChannelSchedule(ctx, channelID, hours, includeLive)
 	if resolved {
 		s.cacheChannelSchedule(ctx, cacheKey, streams)
+
 		return streams, nil
 	}
+
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("fetch channel schedule: %w", ctx.Err())
 	}
 
-	return s.fetchOfficialChannelSchedule(ctx, cacheKey, channelID, hours, includeLive, sourceErr)
+	out, err := s.fetchOfficialChannelSchedule(ctx, cacheKey, channelID, hours, includeLive, sourceErr)
+	if err != nil {
+		return out, fmt.Errorf("fetch official channel schedule: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *Service) fetchYouTubeChannelSchedule(
@@ -68,22 +75,25 @@ func (s *Service) fetchYouTubeChannelSchedule(
 	channelID string,
 	hours int,
 	includeLive bool,
-) ([]*domain.Stream, error, bool) {
+) ([]*domain.Stream, bool, error) {
 	if s.youtubeClient == nil {
-		return nil, nil, false
+		return nil, false, nil
 	}
 
 	streams, err := s.FetchYouTubeSchedule(ctx, channelID)
 	fallback.ObservePrimaryPhase("holodex", "channel_schedule", 1, boolToInt(len(streams) > 0), boolToInt(err != nil))
+
 	if err != nil {
 		s.logger.Debug("YouTube channel schedule failed; using official schedule API",
 			slog.String("channel", channelID),
 			slog.Any("error", err))
-		return nil, err, false
+
+		return nil, false, fmt.Errorf("fetch youtube channel schedule: %w", err)
 	}
 
 	fallback.ObserveExecution("holodex", "channel_schedule", fallback.TriggerOnFailures, "skipped")
-	return filterScheduleWindow(streams, hours, includeLive, s.now()), nil, true
+
+	return filterScheduleWindow(streams, hours, includeLive, s.now()), true, nil
 }
 
 func (s *Service) fetchOfficialChannelSchedule(
@@ -98,21 +108,26 @@ func (s *Service) fetchOfficialChannelSchedule(
 	if err != nil {
 		fallback.ObserveExecution("holodex", "channel_schedule", fallback.TriggerOnFailures, "error")
 		observeOfficialScheduleFallback("channel_schedule", "error", classifyOfficialScheduleReason(err, 0))
+
 		return nil, fmt.Errorf("channel schedule sources failed: %w", errors.Join(primaryErr, err))
 	}
 
 	channelStreams := filterChannelStreams(allStreams, channelID)
+
 	channelStreams = filterScheduleWindow(channelStreams, hours, includeLive, s.now())
 	s.cacheChannelSchedule(ctx, cacheKey, channelStreams)
 	observeChannelScheduleOutcome(channelStreams)
+
 	return channelStreams, nil
 }
 
 func observeChannelScheduleOutcome(streams []*domain.Stream) {
 	outcome := "miss"
+
 	if len(streams) > 0 {
 		outcome = "hit"
 	}
+
 	fallback.ObserveExecution("holodex", "channel_schedule", fallback.TriggerOnFailures, outcome)
 	observeOfficialScheduleFallback("channel_schedule", outcome, classifyOfficialScheduleReason(nil, len(streams)))
 }
@@ -124,11 +139,13 @@ func filterChannelStreams(streams []*domain.Stream, channelID string) []*domain.
 			filtered = append(filtered, stream)
 		}
 	}
+
 	return filtered
 }
 
 func filterScheduleWindow(streams []*domain.Stream, hours int, includeLive bool, now time.Time) []*domain.Stream {
 	upperBound := time.Time{}
+
 	if hours > 0 {
 		upperBound = now.Add(time.Duration(hours) * time.Hour)
 	}
@@ -139,7 +156,9 @@ func filterScheduleWindow(streams []*domain.Stream, hours int, includeLive bool,
 			filtered = append(filtered, stream)
 		}
 	}
+
 	slices.SortStableFunc(filtered, compareScheduledStreams)
+
 	return filtered
 }
 
@@ -147,18 +166,23 @@ func scheduleStreamAllowed(stream *domain.Stream, includeLive bool, now, upperBo
 	if stream == nil {
 		return false
 	}
+
 	if stream.Status == domain.StreamStatusLive {
 		return includeLive
 	}
+
 	if stream.Status != domain.StreamStatusUpcoming || stream.StartActual != nil {
 		return false
 	}
+
 	if stream.StartScheduled == nil {
 		return true
 	}
+
 	if stream.StartScheduled.Before(now) {
 		return false
 	}
+
 	return upperBound.IsZero() || !stream.StartScheduled.After(upperBound)
 }
 
@@ -166,12 +190,15 @@ func compareScheduledStreams(left, right *domain.Stream) int {
 	if left.StartScheduled == nil && right.StartScheduled == nil {
 		return 0
 	}
+
 	if left.StartScheduled == nil {
 		return 1
 	}
+
 	if right.StartScheduled == nil {
 		return -1
 	}
+
 	return cmp.Compare(left.StartScheduled.UnixNano(), right.StartScheduled.UnixNano())
 }
 
@@ -183,10 +210,12 @@ func (s *Service) getCachedChannelSchedule(ctx context.Context, key string) ([]*
 	if s.cache == nil {
 		return nil, false
 	}
+
 	cached, found := s.cache.GetStreams(ctx, key)
 	if found {
 		s.logger.Debug("Official schedule channel cache hit", slog.String("key", key))
 	}
+
 	return cached, found
 }
 
@@ -194,6 +223,7 @@ func (s *Service) cacheChannelSchedule(ctx context.Context, key string, streams 
 	if s.cache == nil {
 		return
 	}
+
 	s.cache.SetStreams(ctx, key, streams, s.officialSchedule.CacheExpiry)
 }
 
@@ -201,14 +231,16 @@ func boolToInt(v bool) int {
 	if v {
 		return 1
 	}
+
 	return 0
 }
 
 func (s *Service) FetchUpcomingStreams(ctx context.Context, hours int) ([]*domain.Stream, error) {
 	streams, err := s.fetchAllStreams(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch all streams: %w", err)
 	}
+
 	return filterScheduleWindow(streams, hours, false, s.now()), nil
 }
 
@@ -216,6 +248,7 @@ func (s *Service) SetYouTubeProxyEnabled(enabled bool) bool {
 	if s == nil || s.youtubeClient == nil {
 		return false
 	}
+
 	return s.youtubeClient.SetProxyEnabled(enabled)
 }
 
@@ -223,6 +256,7 @@ func (s *Service) YouTubeProxyEnabled() bool {
 	if s == nil || s.youtubeClient == nil {
 		return false
 	}
+
 	return s.youtubeClient.ProxyEnabled()
 }
 
@@ -231,6 +265,7 @@ func (s *Service) ValidateStructure(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("validate official schedule API: %w", err)
 	}
+
 	return nil
 }
 
@@ -250,54 +285,68 @@ func IsStructureError(err error) bool {
 
 func (s *Service) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {
 	if s.youtubeClient == nil {
-		return nil, fmt.Errorf("youtube producer not initialized")
+		return nil, errors.New("youtube producer not initialized")
 	}
+
 	videos, err := s.youtubeClient.GetRecentVideos(ctx, channelID, maxResults)
 	if err != nil {
 		return nil, fmt.Errorf("youtube recent videos scraper error: %w", err)
 	}
+
 	s.logger.Debug("Recent videos fetched via scraper", slog.String("channel", channelID), slog.Int("count", len(videos)))
+
 	return videos, nil
 }
 
 func (s *Service) GetChannelStats(ctx context.Context, channelID string) (*parser.ChannelStats, error) {
 	if s.youtubeClient == nil {
-		return nil, fmt.Errorf("youtube producer not initialized")
+		return nil, errors.New("youtube producer not initialized")
 	}
+
 	stats, err := s.youtubeClient.GetChannelStats(ctx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("youtube channel stats scraper error: %w", err)
 	}
+
 	if stats == nil {
-		return nil, fmt.Errorf("youtube channel stats scraper returned nil result")
+		return nil, errors.New("youtube channel stats scraper returned nil result")
 	}
+
 	s.logger.Debug("Channel stats fetched via scraper", slog.String("channel", channelID), slog.Int64("subscribers", stats.SubscriberCount))
+
 	return stats, nil
 }
 
 func (s *Service) GetChannelSnippet(ctx context.Context, channelID string) (*parser.ChannelSnippet, error) {
 	if s.youtubeClient == nil {
-		return nil, fmt.Errorf("youtube producer not initialized")
+		return nil, errors.New("youtube producer not initialized")
 	}
+
 	snippet, err := s.youtubeClient.GetChannelSnippet(ctx, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("youtube channel snippet scraper error: %w", err)
 	}
+
 	if snippet == nil {
-		return nil, fmt.Errorf("youtube channel snippet scraper returned nil result")
+		return nil, errors.New("youtube channel snippet scraper returned nil result")
 	}
+
 	s.logger.Debug("Channel snippet fetched via scraper", slog.String("channel", channelID), slog.Int("avatars", len(snippet.Avatar)), slog.Int("banners", len(snippet.Banner)))
+
 	return snippet, nil
 }
 
 func (s *Service) GetPopularVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {
 	if s.youtubeClient == nil {
-		return nil, fmt.Errorf("youtube producer not initialized")
+		return nil, errors.New("youtube producer not initialized")
 	}
+
 	videos, err := s.youtubeClient.GetPopularVideos(ctx, channelID, maxResults)
 	if err != nil {
 		return nil, fmt.Errorf("youtube popular videos scraper error: %w", err)
 	}
+
 	s.logger.Debug("Popular videos fetched via scraper", slog.String("channel", channelID), slog.Int("count", len(videos)))
+
 	return videos, nil
 }

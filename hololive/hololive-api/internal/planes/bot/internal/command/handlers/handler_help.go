@@ -49,31 +49,37 @@ func (c *HelpCommand) Description() string {
 	return "도움말을 표시합니다"
 }
 
-func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
+func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, _ map[string]any) error {
 	if c == nil {
 		return errors.New("help command dependencies not configured")
 	}
+
 	if cmdCtx == nil {
 		return errors.New("help command context is nil")
 	}
+
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
 	fallback := messagestrings.FallbackSentinel
 	content, contentErr := c.deps.Formatter.FormatHelpContent(ctx)
-	imageErr := error(nil)
+
+	var imageErr error
+
 	if contentErr != nil {
 		imageErr = fmt.Errorf("format help content: %w", contentErr)
 	} else {
 		fallback = content.TextFallback
 		imageErr = c.sendHelpImages(ctx, cmdCtx.Room)
 	}
+
 	if imageErr == nil {
 		return nil
 	}
 
 	c.logImageFallback(ctx, imageErr)
+
 	if handlercore.IsReplyOutcomeUnknown(imageErr) {
 		return nil
 	}
@@ -81,6 +87,7 @@ func (c *HelpCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 	if err := c.deps.SendMessage(ctx, cmdCtx.Room, fallback); err != nil {
 		return errors.Join(imageErr, fmt.Errorf("send help text fallback: %w", err))
 	}
+
 	return nil
 }
 
@@ -93,10 +100,16 @@ func (c *HelpCommand) sendHelpImages(ctx context.Context, room string) error {
 	if err != nil {
 		return fmt.Errorf("load help images: %w", err)
 	}
+
 	if len(images) == 0 {
 		return errors.New("load help images: empty result")
 	}
-	return c.sendHelpImagePayloads(ctx, room, images)
+
+	if err := c.sendHelpImagePayloads(ctx, room, images); err != nil {
+		return fmt.Errorf("send help image payloads: %w", err)
+	}
+
+	return nil
 }
 
 func (c *HelpCommand) sendHelpImagePayloads(ctx context.Context, room string, images [][]byte) error {
@@ -105,9 +118,11 @@ func (c *HelpCommand) sendHelpImagePayloads(ctx context.Context, room string, im
 			return fmt.Errorf("load help image %d/%d: empty payload", index+1, len(images))
 		}
 	}
+
 	if err := c.deps.SendImages(ctx, room, images); err != nil {
 		return fmt.Errorf("send help image album: %w", err)
 	}
+
 	return nil
 }
 
@@ -115,6 +130,7 @@ func (c *HelpCommand) logImageFallback(ctx context.Context, err error) {
 	if c.deps.Logger == nil {
 		return
 	}
+
 	c.deps.Logger.WarnContext(ctx, "help_image_fallback", slog.Any("error", err))
 }
 
@@ -122,11 +138,14 @@ func (c *HelpCommand) ensureDeps() error {
 	if c == nil || c.deps == nil {
 		return errors.New("help command dependencies not configured")
 	}
+
 	if c.deps.SendMessage == nil {
 		return errors.New("message callback not configured")
 	}
+
 	if c.deps.Formatter == nil {
 		return errors.New("formatter not configured")
 	}
+
 	return nil
 }

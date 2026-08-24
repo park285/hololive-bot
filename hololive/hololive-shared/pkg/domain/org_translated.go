@@ -20,7 +20,10 @@
 
 package domain
 
-import "embed"
+import (
+	"embed"
+	"fmt"
+)
 
 //go:embed internal/model/data/official_profiles_ko/*.json
 var officialProfilesKoFS embed.FS
@@ -28,8 +31,7 @@ var officialProfilesKoFS embed.FS
 var translatedProfilesCache profileCache[Translated]
 
 func LoadTranslated() (map[string]*Translated, error) {
-	return loadEmbeddedProfiles(
-		&translatedProfilesCache,
+	out, err := translatedProfilesCache.load(
 		officialProfilesKoFS,
 		"internal/model/data/official_profiles_ko",
 		"translated profiles",
@@ -37,4 +39,9 @@ func LoadTranslated() (map[string]*Translated, error) {
 		true,
 		nil,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("load: %w", err)
+	}
+
+	return out, nil
 }

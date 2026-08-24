@@ -61,43 +61,68 @@ func DispatchStoredReply(ctx context.Context, client iris.BotClient, room string
 	if client == nil {
 		return errors.New("dispatch stored reply: iris client is nil")
 	}
+
 	var reply StoredReply
+
 	if err := jsonv2.Unmarshal(payload, &reply); err != nil {
 		return fmt.Errorf("%w: decode: %w", ErrStoredReplyInvalid, err)
 	}
-	opts := make([]iris.SendOption, 0, 2)
-	if reply.ThreadID != "" {
-		opts = append(opts, iris.WithThreadID(reply.ThreadID))
-	}
-	if reply.ImageContentType != "" {
-		opts = append(opts, iris.WithImageContentType(reply.ImageContentType))
-	}
+
+	opts := storedReplyOptions(&reply)
+
 	accepted, err := postReplyWithReissue(ctx, clientRequestID, func(generationID string) (*iris.ReplyAcceptedResponse, error) {
 		return postStoredReply(ctx, client, room, &reply, appendReplyClientRequestID(opts, generationID))
 	})
 	if err != nil {
-		return classifyAdmissionError(err)
+		if classified := classifyAdmissionError(err); classified != nil {
+			return fmt.Errorf("classify admission error: %w", classified)
+		}
+
+		return nil
 	}
+
 	requestID, err := acceptStoredReply(ctx, accepted, acceptedHook)
 	if err != nil {
-		return err
+		return fmt.Errorf("accept stored reply: %w", err)
 	}
-	return waitForReplyHandoff(ctx, client, requestID)
+
+	if err := waitForReplyHandoff(ctx, client, requestID); err != nil {
+		return fmt.Errorf("wait for reply handoff: %w", err)
+	}
+
+	return nil
+}
+
+func storedReplyOptions(reply *StoredReply) []iris.SendOption {
+	opts := make([]iris.SendOption, 0, 2)
+
+	if reply.ThreadID != "" {
+		opts = append(opts, iris.WithThreadID(reply.ThreadID))
+	}
+
+	if reply.ImageContentType != "" {
+		opts = append(opts, iris.WithImageContentType(reply.ImageContentType))
+	}
+
+	return opts
 }
 
 func acceptStoredReply(ctx context.Context, accepted *iris.ReplyAcceptedResponse, acceptedHook ReplyAcceptedHook) (string, error) {
 	if accepted == nil {
 		return "", replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
 	}
+
 	requestID := strings.TrimSpace(accepted.RequestID)
 	if requestID == "" {
 		return "", replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
 	}
+
 	if acceptedHook != nil {
 		if err := acceptedHook(ctx, requestID); err != nil {
 			return "", fmt.Errorf("persist accepted reply: %w", err)
 		}
 	}
+
 	return requestID, nil
 }
 
@@ -105,6 +130,7 @@ func postStoredReply(ctx context.Context, client iris.BotClient, room string, re
 	if reply == nil {
 		return nil, fmt.Errorf("%w: reply is nil", ErrStoredReplyInvalid)
 	}
+
 	senders := map[StoredReplyKind]func() (*iris.ReplyAcceptedResponse, error){
 		StoredReplyKindMarkdown: func() (*iris.ReplyAcceptedResponse, error) {
 			return client.SendMarkdown(ctx, room, reply.Message, opts...)
@@ -114,18 +140,32 @@ func postStoredReply(ctx context.Context, client iris.BotClient, room string, re
 			return client.SendMultipleImages(ctx, room, reply.Images, opts...)
 		},
 	}
+
 	if reply.Kind == StoredReplyKindText {
 		sender, ok := client.(acceptedMessageSender)
 		if !ok {
 			return nil, fmt.Errorf("%w: iris client %T cannot report text admission", ErrStoredReplyInvalid, client)
 		}
-		return sender.SendMessageAccepted(ctx, room, reply.Message, opts...)
+
+		out, err := sender.SendMessageAccepted(ctx, room, reply.Message, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("send message accepted: %w", err)
+		}
+
+		return out, nil
 	}
+
 	send, ok := senders[reply.Kind]
 	if !ok {
 		return nil, fmt.Errorf("%w: unsupported kind %q", ErrStoredReplyInvalid, reply.Kind)
 	}
-	return send()
+
+	out, err := send()
+	if err != nil {
+		return nil, fmt.Errorf("send: %w", err)
+	}
+
+	return out, nil
 }
 
 type StoredReply struct {
@@ -162,8 +202,9 @@ func ReplyClientRequestID(identity string, ordinal uint64) string {
 func encodeStoredReply(reply *StoredReply) (string, error) {
 	payload, err := jsonv2.Marshal(reply)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal: %w", err)
 	}
+
 	return string(payload), nil
 }
 
@@ -172,18 +213,22 @@ func (t *CommandTransport) recordReply(ctx context.Context, room string, emissio
 	if writer == nil {
 		return errors.New("reply outbox writer is not configured")
 	}
+
 	if !emission.ok {
 		return errors.New("reply identity is not configured")
 	}
+
 	payload, err := encodeStoredReply(reply)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode stored reply: %w", err)
 	}
+
 	if err := writer.RecordReply(ctx, &ReplyOutboxEntry{
 		MessageID: emission.identity, Phase: ReplyPhase, Ordinal: emission.ordinal, Room: room,
 		Payload: payload, ClientRequestID: emission.clientRequestID,
 	}); err != nil {
 		return fmt.Errorf("%w: %w", ErrReplyStagingFailed, err)
 	}
+
 	return nil
 }

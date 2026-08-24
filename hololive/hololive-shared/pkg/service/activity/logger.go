@@ -22,6 +22,7 @@ package activity
 
 import (
 	"bytes"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -29,8 +30,6 @@ import (
 	"slices"
 	"sync"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 )
 
 type LogEntry struct {
@@ -89,13 +88,16 @@ func (l *Logger) Log(entryType, summary string, details map[string]any) {
 	file, err := l.activeFileLocked()
 	if err != nil {
 		l.logger.Error("Failed to open activity log file", slog.Any("error", err))
+
 		return
 	}
 
 	if err := jsonv2.MarshalWrite(file, entry); err != nil {
 		l.logger.Error("Failed to write activity log", slog.Any("error", err))
+
 		return
 	}
+
 	if _, err := file.WriteString("\n"); err != nil {
 		l.logger.Error("Failed to terminate activity log entry", slog.Any("error", err))
 	}
@@ -106,10 +108,13 @@ func (l *Logger) Close() error {
 	defer l.mu.Unlock()
 
 	file := l.file
+
 	l.file = nil
+
 	if file == nil {
 		return nil
 	}
+
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close activity log: %w", err)
 	}
@@ -121,6 +126,7 @@ func (l *Logger) activeFileLocked() (*os.File, error) {
 	if err := l.rotateIfNeededLocked(); err != nil {
 		l.logger.Error("Failed to rotate activity log", slog.Any("error", err))
 	}
+
 	if l.file != nil {
 		return l.file, nil
 	}
@@ -129,6 +135,7 @@ func (l *Logger) activeFileLocked() (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open activity log: %w", err)
 	}
+
 	l.file = file
 
 	return file, nil
@@ -138,9 +145,11 @@ func (l *Logger) closeFileLocked() {
 	if l.file == nil {
 		return
 	}
+
 	if err := l.file.Close(); err != nil {
 		l.logger.Error("Failed to close activity log file", slog.Any("error", err))
 	}
+
 	l.file = nil
 }
 
@@ -164,13 +173,19 @@ func (l *Logger) GetRecentLogs(limit int) ([]LogEntry, error) {
 
 		return nil, fmt.Errorf("failed to open activity log: %w", err)
 	}
+
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil {
 			l.logger.Error("Failed to close activity log file", slog.Any("error", closeErr))
 		}
 	}()
 
-	return tailRecentLogEntries(f, limit)
+	out, err := tailRecentLogEntries(f, limit)
+	if err != nil {
+		return out, fmt.Errorf("tail recent log entries: %w", err)
+	}
+
+	return out, nil
 }
 
 func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
@@ -181,6 +196,7 @@ func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
 
 	entries := make([]LogEntry, 0, limit)
 	offset := info.Size()
+
 	var (
 		carry []byte
 		read  int64
@@ -188,7 +204,9 @@ func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
 
 	for offset > 0 && len(entries) < limit && read < activityLogReadMaxLineBytes {
 		chunkSize := min(activityLogTailChunkBytes, offset)
+
 		offset -= chunkSize
+
 		read += chunkSize
 
 		chunk := make([]byte, chunkSize, chunkSize+int64(len(carry)))
@@ -197,6 +215,7 @@ func tailRecentLogEntries(f *os.File, limit int) ([]LogEntry, error) {
 		}
 
 		var lines [][]byte
+
 		lines, carry = splitTailChunk(append(chunk, carry...), offset > 0)
 		entries = appendNewestFirstEntries(entries, lines, limit)
 	}
@@ -227,9 +246,11 @@ func splitTailChunk(buf []byte, hasEarlierBytes bool) (lines [][]byte, carry []b
 func appendNewestFirstEntries(entries []LogEntry, lines [][]byte, limit int) []LogEntry {
 	for i := len(lines) - 1; i >= 0 && len(entries) < limit; i-- {
 		var entry LogEntry
+
 		if err := jsonv2.Unmarshal(lines[i], &entry); err != nil {
 			continue // 잘못된 형식의 줄은 건너뜀
 		}
+
 		entries = append(entries, entry)
 	}
 
@@ -241,6 +262,7 @@ func (l *Logger) rotateIfNeededLocked() error {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			l.closeFileLocked()
+
 			return nil
 		}
 

@@ -36,19 +36,24 @@ var errBlockedLink = errors.New("parse link: blocked host")
 
 func (c *LinkChecker) validateRequestTarget(ctx context.Context, rawURL string) error {
 	_, err := linkCheckerNetguardPolicy(c.resolver, c.config.Timeout).ValidateURL(ctx, rawURL)
-	return linkCheckerGuardError(err)
+	if linkErr := linkCheckerGuardError(err); linkErr != nil {
+		return fmt.Errorf("link checker guard error: %w", linkErr)
+	}
+
+	return nil
 }
 
 func parseAndValidateLink(rawURL string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
-		return nil, fmt.Errorf("parse link: empty url")
+		return nil, errors.New("parse link: empty url")
 	}
 
 	parsed, err := url.Parse(trimmed)
 	if err != nil {
 		return nil, fmt.Errorf("parse link: %w", err)
 	}
+
 	return parsed, nil
 }
 
@@ -56,9 +61,11 @@ func isBlockedLinkError(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	if errors.Is(err, errBlockedLink) {
 		return true
 	}
+
 	return errors.Is(err, netguard.ErrBlockedIP) ||
 		errors.Is(err, netguard.ErrHostNotAllowed) ||
 		errors.Is(err, netguard.ErrUnsupportedScheme) ||
@@ -76,7 +83,9 @@ func withValidatedDialPolicy(client *http.Client, resolver hostResolver, timeout
 	}
 
 	clonedClient := *client
+
 	clonedClient.Transport = netguard.GuardedTransport(clonedTransport, linkCheckerNetguardPolicy(resolver, timeout))
+
 	return &clonedClient
 }
 
@@ -89,6 +98,7 @@ func cloneHTTPTransport(transport http.RoundTripper) (*http.Transport, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	return baseTransport.Clone(), true
 }
 
@@ -98,12 +108,14 @@ func withBlockedRedirectPolicy(client *http.Client, resolver hostResolver, timeo
 	}
 
 	cloned := *client
+
 	cloned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return linkCheckerGuardError(netguard.RedirectPolicy(netguard.RedirectConfig{
 			Policy:        linkCheckerNetguardPolicy(resolver, timeout),
 			CheckRedirect: client.CheckRedirect,
 		})(req, via))
 	}
+
 	return &cloned
 }
 
@@ -119,9 +131,11 @@ func linkCheckerGuardError(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	if errors.Is(err, netguard.ErrBlockedIP) || errors.Is(err, netguard.ErrHostNotAllowed) {
 		return fmt.Errorf("%w: %w", errBlockedLink, err)
 	}
+
 	return err
 }
 
@@ -130,5 +144,6 @@ func redactLinkForLog(rawURL string) string {
 	if err != nil {
 		return ""
 	}
+
 	return parsed.Scheme + "://" + parsed.Host
 }

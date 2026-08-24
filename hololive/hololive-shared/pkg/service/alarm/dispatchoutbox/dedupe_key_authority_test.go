@@ -15,8 +15,9 @@ type authorityKeyCase struct {
 }
 
 func TestBuildEventKeyAuthorityHeadGoldens(t *testing.T) {
-	startScheduled := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	startScheduled := time.Date(2026, time.June, 12, 12, 0, 0, 0, time.UTC)
 	tests := append(youtubeAuthorityKeyCases(), nonYouTubeAuthorityKeyCases(startScheduled)...)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assertAuthorityKeyPair(t, &tt.input, tt.wantEvent)
@@ -30,6 +31,7 @@ func youtubeAuthorityKeyCases() []authorityKeyCase {
 
 func youtubeCanonicalAuthorityKeyCases() []authorityKeyCase {
 	canonical := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 	return []authorityKeyCase{
 		{
 			name:      "canonical youtube identity",
@@ -72,11 +74,11 @@ func overLengthAuthorityKeyCases() []authorityKeyCase {
 	return []authorityKeyCase{{
 		name: "over length live key",
 		input: DedupeInput{
-			RoomID:       "room-1",
+			RoomID:       testRoomID,
 			ChannelID:    strings.Repeat("c", 600),
 			AlarmType:    domain.AlarmTypeLive,
 			StreamID:     strings.Repeat("s", 600),
-			Category:     "claim:event",
+			Category:     testClaimEventCategory,
 			MinutesUntil: 10,
 		},
 		wantEvent: "event_sha:b9d7a14ee0e3277ce8304b4e84a77440cde6d6dc5bbb97e8e4d9975677c1f5d8",
@@ -88,10 +90,10 @@ func fixedFormatAuthorityKeyCases(startScheduled time.Time) []authorityKeyCase {
 		{
 			name: "live key",
 			input: DedupeInput{
-				RoomID:         "room-1",
-				ChannelID:      "channel-1",
+				RoomID:         testRoomID,
+				ChannelID:      testChannelID,
 				AlarmType:      domain.AlarmTypeLive,
-				StreamID:       "stream-1",
+				StreamID:       testStreamID,
 				StartScheduled: startScheduled,
 				Category:       "live",
 			},
@@ -100,10 +102,10 @@ func fixedFormatAuthorityKeyCases(startScheduled time.Time) []authorityKeyCase {
 		{
 			name: "schedule key",
 			input: DedupeInput{
-				RoomID:                      "room-1",
-				ChannelID:                   "channel-1",
+				RoomID:                      testRoomID,
+				ChannelID:                   testChannelID,
 				AlarmType:                   domain.AlarmTypeLive,
-				StreamID:                    "stream-1",
+				StreamID:                    testStreamID,
 				StartScheduled:              startScheduled,
 				ScheduleChangePreviousStart: "2026-06-12T11:00:00Z",
 				Category:                    "live",
@@ -113,7 +115,7 @@ func fixedFormatAuthorityKeyCases(startScheduled time.Time) []authorityKeyCase {
 		{
 			name: "celebration key",
 			input: DedupeInput{
-				RoomID:         "room-1",
+				RoomID:         testRoomID,
 				SourceKind:     domain.AlarmDispatchSourceKindCelebration,
 				SourceIdentity: "birthday:UC_test:2026-05-26",
 			},
@@ -124,7 +126,7 @@ func fixedFormatAuthorityKeyCases(startScheduled time.Time) []authorityKeyCase {
 
 func youtubeAuthorityInput(identity string) DedupeInput {
 	return DedupeInput{
-		RoomID:           "room-1",
+		RoomID:           testRoomID,
 		SourceKind:       domain.AlarmDispatchSourceKindYouTubeOutbox,
 		SourceIdentity:   identity,
 		SourceOutboxKind: domain.OutboxKindNewVideo,
@@ -133,9 +135,11 @@ func youtubeAuthorityInput(identity string) DedupeInput {
 
 func assertAuthorityKeyPair(t *testing.T, input *DedupeInput, wantEvent string) {
 	t.Helper()
+
 	if got := BuildEventKey(input); got != wantEvent {
 		t.Fatalf("BuildEventKey() = %q, want %q", got, wantEvent)
 	}
+
 	wantDedupe := "v2:room:" + input.RoomID + ":event:" + wantEvent
 	if got := BuildDedupeKey(input); got != wantDedupe {
 		t.Fatalf("BuildDedupeKey() = %q, want %q", got, wantDedupe)
@@ -151,6 +155,7 @@ func TestEnvelopePreparedYouTubeIdentityMatchesUntrustedFallback(t *testing.T) {
 	if got, want := preparedEventKey, BuildEventKey(&untrusted); got != want {
 		t.Fatalf("prepared event key = %q, untrusted event key = %q", got, want)
 	}
+
 	if got, want := buildDedupeKey(prepared.input.RoomID, preparedEventKey), BuildDedupeKey(&untrusted); got != want {
 		t.Fatalf("prepared dedupe key = %q, untrusted dedupe key = %q", got, want)
 	}
@@ -183,7 +188,9 @@ func TestEnvelopePreparedYouTubeIdentityMutationFallsBack(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			envelope := authorityYouTubeEnvelope()
 			prepared := prepareEnvelopeDedupeInput(&envelope)
+
 			prepared.input.SourceIdentity = tt.identity
+
 			wantEvent := "youtube-outbox:COMMUNITY_POST:" + tt.wantIdentity
 			assertPreparedAuthorityKeyPair(t, &prepared, wantEvent)
 		})
@@ -192,10 +199,12 @@ func TestEnvelopePreparedYouTubeIdentityMutationFallsBack(t *testing.T) {
 
 func assertPreparedAuthorityKeyPair(t *testing.T, input *preparedDedupeInput, wantEvent string) {
 	t.Helper()
+
 	eventKey := input.eventKey()
 	if eventKey != wantEvent {
 		t.Fatalf("prepared event key = %q, want %q", eventKey, wantEvent)
 	}
+
 	wantDedupe := "v2:room:" + input.input.RoomID + ":event:" + wantEvent
 	if got := buildDedupeKey(input.input.RoomID, eventKey); got != wantDedupe {
 		t.Fatalf("prepared dedupe key = %q, want %q", got, wantDedupe)
@@ -204,6 +213,7 @@ func assertPreparedAuthorityKeyPair(t *testing.T, input *preparedDedupeInput, wa
 
 func TestBuildLedgerRowsYouTubeOutboxPersistsLiteralKeys(t *testing.T) {
 	envelope := authorityYouTubeEnvelope()
+
 	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
@@ -211,15 +221,19 @@ func TestBuildLedgerRowsYouTubeOutboxPersistsLiteralKeys(t *testing.T) {
 
 	wantEvent := "youtube-outbox:COMMUNITY_POST:sha256:c7c82486b9edf207d201c85f712ac0eebe66f126ced5e6ed3e5abf5eefab8a92"
 	wantDedupe := "v2:room:room-1:event:youtube-outbox:COMMUNITY_POST:sha256:c7c82486b9edf207d201c85f712ac0eebe66f126ced5e6ed3e5abf5eefab8a92"
+
 	if event.EventKey != wantEvent {
 		t.Fatalf("event key = %q, want %q", event.EventKey, wantEvent)
 	}
+
 	if delivery.EventKey != wantEvent {
 		t.Fatalf("delivery event key = %q, want %q", delivery.EventKey, wantEvent)
 	}
+
 	if delivery.DedupeKey != wantDedupe {
 		t.Fatalf("delivery dedupe key = %q, want %q", delivery.DedupeKey, wantDedupe)
 	}
+
 	if got := BuildDedupeKeyFromEnvelope(&envelope); got != wantDedupe {
 		t.Fatalf("envelope dedupe key = %q, want %q", got, wantDedupe)
 	}
@@ -229,14 +243,14 @@ func authorityYouTubeEnvelope() domain.AlarmQueueEnvelope {
 	return domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeCommunity,
-			RoomID:    "room-1",
+			RoomID:    testRoomID,
 		},
 		SourceKind: domain.AlarmDispatchSourceKindYouTubeOutbox,
 		YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
 			OutboxIDs:         []int64{10, 11},
 			Kind:              domain.OutboxKindCommunityPost,
 			AlarmType:         domain.AlarmTypeCommunity,
-			ChannelID:         "UC_test",
+			ChannelID:         testYouTubeChannelID,
 			RenderTemplateKey: domain.TemplateKeyOutboxCommunityGroup,
 			Items: []domain.YouTubeOutboxItem{
 				{OutboxID: 11, ContentID: "post-b", Payload: `{"post_id":"post-b","content_text":"b"}`},

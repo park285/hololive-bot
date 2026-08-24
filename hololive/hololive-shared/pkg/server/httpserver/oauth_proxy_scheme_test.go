@@ -19,6 +19,7 @@ func TestBuildOAuthRedirectHTMLRejectsForeignScheme(t *testing.T) {
 		if strings.Contains(html, hostile) {
 			t.Fatalf("hostile deep link %q must not reach the rendered href", hostile)
 		}
+
 		if !strings.Contains(html, "hololive-app://callback") {
 			t.Fatalf("rejected deep link %q must fall back to the canonical link, got:\n%s", hostile, html)
 		}

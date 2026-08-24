@@ -22,13 +22,12 @@ package domain
 
 import (
 	"embed"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io/fs"
 	"path"
 	"strings"
 	"sync"
-
-	jsonv2 "encoding/json/v2"
 )
 
 //go:embed internal/model/data/official_profiles_raw/*.json
@@ -43,8 +42,7 @@ type profileCache[T any] struct {
 var rawProfilesCache profileCache[TalentProfile]
 
 func LoadProfiles() (map[string]*TalentProfile, error) {
-	return loadEmbeddedProfiles(
-		&rawProfilesCache,
+	out, err := rawProfilesCache.load(
 		officialProfilesRawFS,
 		"internal/model/data/official_profiles_raw",
 		"profiles",
@@ -56,10 +54,14 @@ func LoadProfiles() (map[string]*TalentProfile, error) {
 			}
 		},
 	)
+	if err != nil {
+		return nil, fmt.Errorf("load: %w", err)
+	}
+
+	return out, nil
 }
 
-func loadEmbeddedProfiles[T any](
-	cache *profileCache[T],
+func (c *profileCache[T]) load(
 	fsys fs.FS,
 	dir string,
 	collectionLabel string,
@@ -67,13 +69,15 @@ func loadEmbeddedProfiles[T any](
 	allowEmpty bool,
 	after func(slug string, profile *T),
 ) (map[string]*T, error) {
-	cache.once.Do(func() {
-		cache.data, cache.err = readEmbeddedProfiles(fsys, dir, collectionLabel, itemLabel, allowEmpty, after)
+	c.once.Do(func() {
+		c.data, c.err = readEmbeddedProfiles(fsys, dir, collectionLabel, itemLabel, allowEmpty, after)
 	})
-	if cache.err != nil {
-		return nil, cache.err
+
+	if c.err != nil {
+		return nil, c.err
 	}
-	return cache.data, nil
+
+	return c.data, nil
 }
 
 func readEmbeddedProfiles[T any](
@@ -86,7 +90,7 @@ func readEmbeddedProfiles[T any](
 ) (map[string]*T, error) {
 	files, err := readEmbeddedProfileEntries(fsys, dir, collectionLabel, allowEmpty)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read embedded profile entries: %w", err)
 	}
 
 	profiles := make(map[string]*T, len(files))
@@ -97,8 +101,9 @@ func readEmbeddedProfiles[T any](
 
 		slug, profile, err := readEmbeddedProfile(fsys, dir, itemLabel, file.Name(), after)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read embedded profile: %w", err)
 		}
+
 		profiles[slug] = &profile
 	}
 
@@ -110,9 +115,11 @@ func readEmbeddedProfileEntries(fsys fs.FS, dir, collectionLabel string, allowEm
 	if err != nil {
 		return nil, fmt.Errorf("failed to read embedded %s: %w", collectionLabel, err)
 	}
+
 	if len(files) == 0 && !allowEmpty {
 		return nil, fmt.Errorf("no embedded %s found", collectionLabel)
 	}
+
 	return files, nil
 }
 
@@ -124,9 +131,11 @@ func readEmbeddedProfile[T any](
 	after func(slug string, profile *T),
 ) (slug string, profile T, err error) {
 	slug = strings.TrimSuffix(filename, path.Ext(filename))
+
 	data, err := fs.ReadFile(fsys, path.Join(dir, filename))
 	if err != nil {
 		var zero T
+
 		return "", zero, fmt.Errorf("failed to read %s %s: %w", itemLabel, filename, err)
 	}
 
@@ -137,5 +146,6 @@ func readEmbeddedProfile[T any](
 	if after != nil {
 		after(slug, &profile)
 	}
+
 	return slug, profile, nil
 }

@@ -1,7 +1,6 @@
 package youtubedispatch
 
 import (
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -15,7 +14,7 @@ import (
 func TestDispatcherWiresClaimManagerAndSendEngine(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		DeliveryParallelism: 2,

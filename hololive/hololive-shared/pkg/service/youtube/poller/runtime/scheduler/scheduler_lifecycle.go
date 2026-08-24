@@ -31,17 +31,21 @@ import (
 func (s *Scheduler) Start(ctx context.Context) {
 	if ctx == nil {
 		s.logger.Error("Scheduler start skipped", "error", "context is nil")
+
 		return
 	}
 
 	s.mu.Lock()
+
 	if s.running {
 		s.mu.Unlock()
+
 		return
 	}
 
 	stopCh := make(chan struct{})
 	runCtx, cancel := context.WithCancel(ctx)
+
 	s.stopCh = stopCh
 	s.stopCancel = cancel
 	s.running = true
@@ -80,12 +84,16 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
+
 	if !s.running {
 		s.mu.Unlock()
+
 		return
 	}
+
 	stopCh := s.stopCh
 	stopCancel := s.stopCancel
+
 	s.running = false
 	s.stopCancel = nil
 	s.mu.Unlock()
@@ -93,29 +101,38 @@ func (s *Scheduler) Stop() {
 	if stopCancel != nil {
 		stopCancel()
 	}
+
 	if stopCh != nil {
 		close(stopCh)
 	}
+
 	s.wg.Wait()
 	s.logger.Info("Scheduler stopped")
 }
 
 func (s *Scheduler) NudgeAllJobs() {
 	s.mu.Lock()
+
 	now := time.Now()
 	changed := false
+
 	for _, job := range s.jobMap {
 		if job == nil || job.retired {
 			continue
 		}
+
 		job.consecutiveFailures = 0
 		job.NextRunAt = now
+
 		if job.index >= 0 {
 			heap.Fix(&s.jobs, job.index)
 		}
+
 		changed = true
 	}
+
 	s.mu.Unlock()
+
 	if changed {
 		s.notifyDispatcher()
 	}

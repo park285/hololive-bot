@@ -2,11 +2,11 @@ package modules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -23,21 +23,23 @@ type InfraModule struct {
 
 func BuildInfraModule(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *InfraModule, retErr error) {
 	if appConfig == nil {
-		return nil, fmt.Errorf("build infra module: config is nil")
+		return nil, errors.New("build infra module: config is nil")
 	}
 
 	cacheResources, cleanupCache, err := buildInfraCacheResources(ctx, appConfig, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build infra cache resources: %w", err)
 	}
+
 	defer func() {
 		cleanupInfraOnError(retErr, cleanupCache)
 	}()
 
 	databaseResources, cleanupDB, err := buildInfraDatabaseResources(ctx, appConfig, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build infra database resources: %w", err)
 	}
+
 	defer func() {
 		cleanupInfraOnError(retErr, cleanupDB)
 	}()
@@ -45,9 +47,10 @@ func BuildInfraModule(ctx context.Context, appConfig *settings.Config, logger *s
 	cacheService := cacheResources.Service
 	postgresService := databaseResources.Service
 	memberRepository := providers.ProvideMemberRepository(postgresService, logger)
+
 	memberCache, err := buildInfraMemberCache(ctx, memberRepository, cacheService, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build infra member cache: %w", err)
 	}
 
 	return newInfraModule(cacheService, postgresService, memberRepository, memberCache, cleanupDB, cleanupCache), nil
@@ -62,6 +65,7 @@ func buildInfraCacheResources(
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide cache resources: %w", err)
 	}
+
 	return cacheResources, cleanupCache, nil
 }
 
@@ -74,6 +78,7 @@ func buildInfraDatabaseResources(
 	if err != nil {
 		return nil, nil, fmt.Errorf("build infra module: provide database resources: %w", err)
 	}
+
 	return databaseResources, cleanupDB, nil
 }
 
@@ -87,6 +92,7 @@ func buildInfraMemberCache(
 	if err != nil {
 		return nil, fmt.Errorf("build infra module: provide member cache: %w", err)
 	}
+
 	return memberCache, nil
 }
 
@@ -113,6 +119,7 @@ func newInfraModule(
 			if cleanupDB != nil {
 				cleanupDB()
 			}
+
 			if cleanupCache != nil {
 				cleanupCache()
 			}

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"log/slog"
-	"strings"
 	"sync"
 	"testing"
 
@@ -25,7 +24,9 @@ func (g *testErrorGroup) Go(fn func() error) {
 
 func bufferLogger() (*slog.Logger, *bytes.Buffer) {
 	var buf bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError}))
+
 	return logger, &buf
 }
 
@@ -67,7 +68,7 @@ func TestRunE_ReturnsFnErrorUnchanged(t *testing.T) {
 
 	err := RunE(logger, "ok", func() error { return sentinel })
 
-	assert.ErrorIs(t, err, sentinel)
+	require.ErrorIs(t, err, sentinel)
 	assert.Empty(t, buf.String())
 }
 
@@ -77,6 +78,7 @@ func TestRunE_ConvertsStringPanicToError(t *testing.T) {
 	logger, buf := bufferLogger()
 
 	var err error
+
 	require.NotPanics(t, func() {
 		err = RunE(logger, "alarm-scheduler", func() error {
 			panic("kaboom")
@@ -118,7 +120,7 @@ func TestRun_StackIncludesGoroutineFrame(t *testing.T) {
 	logger, buf := bufferLogger()
 	Run(logger, "stack-check", func() { panic("trace me") })
 
-	assert.True(t, strings.Contains(buf.String(), "panicguard.Run"),
+	assert.Contains(t, buf.String(), "panicguard.Run",
 		"stack should reference the guard frame, got: %s", buf.String())
 }
 
@@ -127,6 +129,7 @@ func TestGo_StartsGuardedGoroutine(t *testing.T) {
 
 	logger, buf := bufferLogger()
 	done := make(chan struct{})
+
 	Go(logger, "async", func() {
 		close(done)
 	})

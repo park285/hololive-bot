@@ -21,12 +21,12 @@
 package runtime
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestRenderOrError_SeeMoreFoldToggle(t *testing.T) {
@@ -36,10 +36,10 @@ func TestRenderOrError_SeeMoreFoldToggle(t *testing.T) {
 	renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, longBody)
 
 	on := newLLMSchedulerFormatter("!", renderer, nil, true)
-	folded := on.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
+	folded := on.renderOrError(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
 	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\n"))
 	assert.Contains(t, folded, "\u200b")
 
 	off := newLLMSchedulerFormatter("!", renderer, nil, false)
-	assert.NotContains(t, off.renderOrError(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn"), "\u200b")
+	assert.NotContains(t, off.renderOrError(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn"), "\u200b")
 }

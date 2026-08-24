@@ -3,6 +3,7 @@ package collectorruntime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -21,6 +22,7 @@ func (s *leaseScheduler) recordTerminalSuccess(published *sourceobservation.Publ
 	if s == nil {
 		return
 	}
+
 	s.exec().recordTerminalSuccess(published)
 }
 
@@ -31,24 +33,33 @@ func (s *leaseScheduler) logFailure(phase, code, class, detail string, spec *job
 func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
 	if supersededError(err) {
 		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)
+
 		return
 	}
+
 	if errors.Is(err, joblease.ErrFenceLost) {
 		e.metrics.ObserveLeaseLost(spec.Provider, spec.CollectionJobKind, phasePublish)
 	}
+
 	e.observePublishOutcome(spec.Provider, output, outcomeRejected)
 }
 
 func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) error {
 	gate := e.gates[provider]
 	if gate == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider gate is not configured")
 	}
+
 	select {
 	case gate <- struct{}{}:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("await provider admission slot: %w", err)
+		}
+
+		return nil
 	}
 }
 
@@ -57,6 +68,7 @@ func (e *collectionExecutor) releaseProvider(provider contract.Provider) {
 	if gate == nil {
 		return
 	}
+
 	select {
 	case <-gate:
 	default:
@@ -68,9 +80,11 @@ func (e *collectionExecutor) observePublished(output collectutil.RunOutput, resu
 	for i := range observations {
 		envelope := &observations[i]
 		outcome, ok := publishedOutcome(result, i)
+
 		if !ok {
 			continue
 		}
+
 		e.metrics.ObservePublish(envelope.Provider, string(envelope.ObservationKind), outcome)
 		e.metrics.ObserveCompleteness(envelope.Provider, string(envelope.ObservationKind), envelope.Completeness, envelope.Continuity)
 	}
@@ -80,10 +94,13 @@ func (e *collectionExecutor) recordTerminalSuccess(published *sourceobservation.
 	if e == nil || e.readiness == nil {
 		return
 	}
+
 	e.readiness.ObserveCollectionSuccess()
+
 	if published == nil {
 		return
 	}
+
 	e.readiness.AddHandoffCandidates(handoffCandidateIDs(*published)...)
 }
 
@@ -94,12 +111,15 @@ func handoffCandidateIDs(result sourceobservation.PublishBatchResult) []int64 {
 		if !ok || outcome == outcomeCollision {
 			continue
 		}
+
 		id := result.Results[i].ObservationID
 		if id <= 0 {
 			continue
 		}
+
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
@@ -107,6 +127,7 @@ func publishedOutcome(result sourceobservation.PublishBatchResult, index int) (s
 	if index < 0 || index >= len(result.Results) {
 		return "", false
 	}
+
 	return publishOutcomeLabel(result.Results[index].Outcome)
 }
 
@@ -114,12 +135,15 @@ func publishOutcomeLabel(outcome sourceobservation.PublishOutcome) (string, bool
 	if outcome == sourceobservation.PublishInserted {
 		return outcomeInserted, true
 	}
+
 	if outcome == sourceobservation.PublishDuplicate {
 		return outcomeDuplicate, true
 	}
+
 	if outcome == sourceobservation.PublishCollision {
 		return outcomeCollision, true
 	}
+
 	return "", false
 }
 
@@ -135,9 +159,11 @@ func attemptResult(err error) string {
 	if err == nil {
 		return resultSuccess
 	}
+
 	if supersededError(err) {
 		return resultSuperseded
 	}
+
 	return attemptFailureResult(err)
 }
 
@@ -164,6 +190,7 @@ func (e *collectionExecutor) retryAt(err error) time.Time {
 	minAt := now.Add(e.config.MinRetryDelay)
 	maxAt := now.Add(e.config.MaxRetryDelay)
 	hint := collecterr.RetryOf(err)
+
 	switch hint.Kind() {
 	case collecterr.RetryAt:
 		return clampRetryAt(hint.At(), minAt, maxAt)
@@ -180,9 +207,11 @@ func clampRetryAt(retryAt, minAt, maxAt time.Time) time.Time {
 	if retryAt.Before(minAt) {
 		return minAt
 	}
+
 	if retryAt.After(maxAt) {
 		return maxAt
 	}
+
 	return retryAt.UTC()
 }
 
@@ -190,6 +219,7 @@ func (e *collectionExecutor) logFailure(phase, code, class, detail string, spec 
 	if e.logger == nil {
 		return
 	}
+
 	detail = collecterr.SanitizeDetail(detail)
 	e.logger.Warn("YouTube collection job failed",
 		slog.String("job_key", spec.JobKey),

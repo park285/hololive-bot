@@ -25,9 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmPersistence_MarkAsNotifiedRoundTrip(t *testing.T) {
@@ -72,6 +73,6 @@ func TestAlarmPersistence_UpcomingEventRoundTrip(t *testing.T) {
 		StartScheduled: &start,
 	}
 
-	require.NoError(t, as.MarkUpcomingEventNotified(ctx, "room-1", "channel-1", stream))
-	requireUpcomingEventMarker(t, as, ctx, "room-1", "channel-1", stream)
+	require.NoError(t, as.MarkUpcomingEventNotified(ctx, testRoomID, "channel-1", stream))
+	requireUpcomingEventMarker(ctx, t, as, testRoomID, "channel-1", stream)
 }

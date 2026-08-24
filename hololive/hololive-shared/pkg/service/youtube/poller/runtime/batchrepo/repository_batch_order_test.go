@@ -88,17 +88,17 @@ func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
 	notifications := []*domain.YouTubeNotificationOutbox{
 		{
 			Kind:      domain.OutboxKindNewVideo,
-			ContentID: "video-1",
+			ContentID: testVideoID,
 			Payload:   `{"kind":"first"}`,
 		},
 		{
 			Kind:      domain.OutboxKindNewShort,
-			ContentID: "video-1",
+			ContentID: testVideoID,
 			Payload:   `{"kind":"short"}`,
 		},
 		{
 			Kind:      domain.OutboxKindNewVideo,
-			ContentID: "video-1",
+			ContentID: testVideoID,
 			Payload:   `{"kind":"duplicate"}`,
 		},
 	}
@@ -108,7 +108,7 @@ func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
 	require.Len(t, chunks, 2)
 	require.Len(t, chunks[0], 1)
 	require.Equal(t, domain.OutboxKindNewVideo, chunks[0][0].Kind)
-	require.Equal(t, `{"kind":"first"}`, chunks[0][0].Payload)
+	require.JSONEq(t, `{"kind":"first"}`, chunks[0][0].Payload)
 	require.Len(t, chunks[1], 1)
 	require.Equal(t, domain.OutboxKindNewShort, chunks[1][0].Kind)
 }
@@ -116,5 +116,6 @@ func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
 func sortedCopy(values []string) []string {
 	cloned := append([]string(nil), values...)
 	sort.Strings(cloned)
+
 	return cloned
 }

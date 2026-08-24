@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/runtime/httpserver"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/kapu/admin-dashboard/internal/session"
 	"github.com/kapu/admin-dashboard/internal/static"
 	"github.com/kapu/admin-dashboard/internal/status"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const (
@@ -38,12 +38,17 @@ const (
 	sessionObjKey = "admin-session"
 )
 
-type sessionStore interface {
+type sessionRecords interface {
 	Create(ctx context.Context) (session.Session, error)
-	Get(ctx context.Context, id string) (*session.Session, error)
+	Get(ctx context.Context, id string) (session.Session, bool, error)
 	Delete(ctx context.Context, id string) error
+}
+
+type sessionStore interface {
+	sessionRecords
+
 	Refresh(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
-	Rotate(ctx context.Context, oldID string) (*session.Session, error)
+	Rotate(ctx context.Context, oldID string) (session.Session, bool, error)
 	Close()
 }
 
@@ -71,38 +76,66 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 	if msg := cfg.ForwardedTrustWarning(); msg != "" {
 		logger.Warn(msg)
 	}
+
 	store, err := session.NewStore(ctx, cfg.ValkeyURL, &cfg.Session)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("store: %w", err)
 	}
+
 	distributedLimiter, err := newDistributedLoginLimiter(ctx, cfg.ValkeyURL)
 	if err != nil {
 		store.Close()
-		return nil, err
+
+		return nil, fmt.Errorf("distributed login limiter: %w", err)
 	}
+
 	dockerClient, err := docker.NewClient(cfg.DockerHost)
 	if err != nil {
 		logger.Warn("docker service disabled", slog.Any("error", err))
+
 		dockerClient = nil
 	}
+
 	holoClient, err := holo.NewClient(cfg.HoloAdminAPIURL, cfg.HoloBotAPIKey)
 	if err != nil {
 		distributedLimiter.Close()
 		store.Close()
-		return nil, err
+
+		return nil, fmt.Errorf("client: %w", err)
 	}
+
 	endpoints := []status.ServiceEndpoint{{Name: "hololive-admin-api", URL: cfg.HoloAdminAPIURL, HealthPath: "/health"}}
+
 	openapiJSON, err := openapi.MarshalSpec(cfg.RuntimeVersion)
 	if err != nil {
 		distributedLimiter.Close()
 		store.Close()
+
 		return nil, fmt.Errorf("marshal openapi spec: %w", err)
 	}
+
+	runtime := newRuntime(cfg, logger, store, distributedLimiter, dockerClient, holoClient, endpoints, openapiJSON)
+	startStatsHub(runtime.statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
+
+	return runtime, nil
+}
+
+func newRuntime(
+	cfg *config.Config,
+	logger *slog.Logger,
+	store *session.Store,
+	distributedLimiter *distributedLoginLimiter,
+	dockerClient *docker.Client,
+	holoClient *holo.Client,
+	endpoints []status.ServiceEndpoint,
+	openapiJSON []byte,
+) *Runtime {
 	rateLimiter := httputil.NewDefaultLoginFailureRateLimiter()
 	rateLimiter.Start()
+
 	endpointSampler := status.NewSampler(endpoints)
 	statsHub := status.NewHubWithSampler(endpointSampler)
-	startStatsHub(statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
+
 	return &Runtime{
 		cfg:                     *cfg,
 		logger:                  logger,
@@ -120,7 +153,7 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		wsPongWait:              defaultWSPongWait,
 		wsPingPeriod:            defaultWSPingPeriod,
 		openapiJSON:             openapiJSON,
-	}, nil
+	}
 }
 
 func startStatsHub(hub *status.Hub) {
@@ -137,7 +170,8 @@ func (r *Runtime) Run() error {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
-	err := lifecycle.Run(lifecycle.Options{
+
+	err := lifecycle.Run(context.Background(), lifecycle.Options{
 		ShutdownTimeout: 20 * time.Second,
 		Start: func(_ context.Context, errCh chan<- error) {
 			r.logger.Info("admin-dashboard listening", slog.String("addr", server.Addr), slog.String("env", r.cfg.Env))
@@ -149,8 +183,11 @@ func (r *Runtime) Run() error {
 	})
 	if err != nil {
 		r.logger.Error("admin-dashboard terminated", slog.Any("error", err))
+
+		return fmt.Errorf("run admin-dashboard lifecycle: %w", err)
 	}
-	return err
+
+	return nil
 }
 
 func (r *Runtime) Close() {
@@ -158,9 +195,11 @@ func (r *Runtime) Close() {
 	// 닫힌 transport로 샘플링해 구독 중인 대시보드에 거짓 DOWN을 방송한다.
 	r.stopBackgroundServices()
 	r.closeRemoteClients()
+
 	if r.distributedLoginLimiter != nil {
 		r.distributedLoginLimiter.Close()
 	}
+
 	if r.sessions != nil {
 		r.sessions.Close()
 	}
@@ -170,6 +209,7 @@ func (r *Runtime) stopBackgroundServices() {
 	if r.rateLimiter != nil {
 		r.rateLimiter.Stop()
 	}
+
 	if r.statsHub != nil {
 		r.statsHub.Stop()
 	}
@@ -181,6 +221,7 @@ func (r *Runtime) closeRemoteClients() {
 			r.logger.Warn("close holo admin client", slog.Any("error", err))
 		}
 	}
+
 	if r.endpointSampler != nil {
 		if err := r.endpointSampler.Close(); err != nil {
 			r.logger.Warn("close status endpoint sampler", slog.Any("error", err))
@@ -198,29 +239,38 @@ func sessionFrom(c *gin.Context) (*session.Session, bool) {
 	if !exists {
 		return nil, false
 	}
+
 	sess, ok := value.(*session.Session)
+
 	return sess, ok && sess != nil
 }
 
 func (r *Runtime) acquireSessionStream(sessionID string) bool {
 	r.wsMu.Lock()
 	defer r.wsMu.Unlock()
+
 	if r.wsPerSession == nil {
 		r.wsPerSession = make(map[string]int)
 	}
+
 	if r.wsPerSession[sessionID] >= maxStreamsPerSession {
 		return false
 	}
+
 	r.wsPerSession[sessionID]++
+
 	return true
 }
 
 func (r *Runtime) releaseSessionStream(sessionID string) {
 	r.wsMu.Lock()
 	defer r.wsMu.Unlock()
+
 	if r.wsPerSession[sessionID] <= 1 {
 		delete(r.wsPerSession, sessionID)
+
 		return
 	}
+
 	r.wsPerSession[sessionID]--
 }

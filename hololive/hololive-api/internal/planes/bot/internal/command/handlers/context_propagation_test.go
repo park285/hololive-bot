@@ -27,7 +27,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +35,7 @@ import (
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
@@ -66,39 +66,27 @@ func (s *trackedContextState) record(ctx context.Context) {
 	s.seen = append(s.seen, ctx)
 }
 
-func (s *trackedContextState) assertAll(t *testing.T, want context.Context) {
-	t.Helper()
-
+func (s *trackedContextState) snapshot() []context.Context {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	require.NotEmpty(t, s.seen)
-
-	for _, got := range s.seen {
-		assert.True(t, got == want)
-	}
+	return slices.Clone(s.seen)
 }
 
-func (s *trackedContextState) assertContains(t *testing.T, want context.Context) {
-	t.Helper()
+func (s *trackedContextState) saw(want context.Context) bool {
+	return slices.Contains(s.snapshot(), want)
+}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *trackedContextState) sawOnly(want context.Context) bool {
+	seen := s.snapshot()
 
-	require.NotEmpty(t, s.seen)
-
-	if slices.Contains(s.seen, want) {
-		return
-	}
-
-	t.Fatalf("request context not observed in tracked contexts")
+	return len(seen) > 0 && !slices.ContainsFunc(seen, func(got context.Context) bool { return got != want })
 }
 
 type trackedMemberProvider struct {
-	state      *trackedContextState
-	currentCtx context.Context
-	members    []*domain.Member
-	byChannel  map[string]*domain.Member
+	state     *trackedContextState
+	members   []*domain.Member
+	byChannel map[string]*domain.Member
 }
 
 func newTrackedMemberProvider(members ...*domain.Member) *trackedMemberProvider {
@@ -119,7 +107,6 @@ func newTrackedMemberProvider(members ...*domain.Member) *trackedMemberProvider 
 }
 
 func (p *trackedMemberProvider) FindMemberByChannelID(channelID string) *domain.Member {
-	p.state.record(p.currentCtx)
 	return p.byChannel[channelID]
 }
 
@@ -141,16 +128,16 @@ func (p *trackedMemberProvider) GetChannelIDs() []string {
 }
 
 func (p *trackedMemberProvider) GetAllMembers() []*domain.Member {
-	p.state.record(p.currentCtx)
 	return p.members
 }
 
 func (p *trackedMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+	p.state.record(ctx)
+
 	return &trackedMemberProvider{
-		state:      p.state,
-		currentCtx: ctx,
-		members:    p.members,
-		byChannel:  p.byChannel,
+		state:     p.state,
+		members:   p.members,
+		byChannel: p.byChannel,
 	}
 }
 
@@ -163,12 +150,13 @@ func (p *trackedMemberProvider) FindMembersByAlias(string) []*domain.Member {
 }
 
 type trackedStreamProvider struct {
-	seenCtx context.Context
+	state   trackedContextState
 	streams []*domain.Stream
 }
 
 func (p *trackedStreamProvider) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
-	p.seenCtx = ctx
+	p.state.record(ctx)
+
 	return p.streams, nil
 }
 
@@ -181,7 +169,7 @@ func (p *trackedStreamProvider) GetChannelSchedule(context.Context, string, int,
 }
 
 func (p *trackedStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, nil
+	return nil, errTestStubNoChannel
 }
 
 func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
@@ -189,9 +177,10 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 
 	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
-		ChannelID: "ch-aqua",
-		Name:      "Aqua",
+		ChannelID: testChannelAqua,
+		Name:      testMemberAqua,
 	})
+
 	var baseCtx context.Context
 
 	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
@@ -201,15 +190,16 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendError call")
+
 			return nil
 		},
 	}
 
-	channel, err := handlercore.FindActiveMemberOrError(reqCtx, deps, "room-1", "Aqua")
+	channel, err := handlercore.FindActiveMemberOrError(reqCtx, deps, testRoomID, testMemberAqua)
 	require.NoError(t, err)
 	require.NotNil(t, channel)
-	assert.Equal(t, "ch-aqua", channel.ID)
-	provider.state.assertContains(t, reqCtx)
+	assert.Equal(t, testChannelAqua, channel.ID)
+	require.True(t, provider.state.saw(reqCtx), "matcher provider must observe the request context")
 }
 
 func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
@@ -217,16 +207,16 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 
 	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
-		ChannelID:   "ch-aqua",
-		Name:        "Aqua",
+		ChannelID:   testChannelAqua,
+		Name:        testMemberAqua,
 		IsGraduated: true,
 		Org:         "Hololive",
 	})
-	matcherService := matcher.NewMatcher(context.Background(), provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(t.Context(), provider, nil, nil, nil, newCommandTestLogger())
 
 	var (
-		sendErrorCtx context.Context
-		sendErrorMsg string
+		sendErrorState trackedContextState
+		sendErrorMsg   string
 	)
 
 	cmd := alarmcmd.NewAlarmCommand(&handlercore.Dependencies{
@@ -235,10 +225,12 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendMessage call")
+
 			return nil
 		},
 		SendError: func(ctx context.Context, _, message string) error {
-			sendErrorCtx = ctx
+			sendErrorState.record(ctx)
+
 			sendErrorMsg = message
 
 			return nil
@@ -246,14 +238,14 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"action": "add",
-		"member": "Aqua",
+	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{
+		testParamAction: "add",
+		paramMember:     testMemberAqua,
 	})
 	require.NoError(t, err)
-	assert.True(t, sendErrorCtx == reqCtx)
+	require.True(t, sendErrorState.saw(reqCtx), "SendError must receive the request context")
 	assert.Equal(t, messaging.ErrGraduatedMemberBlocked, sendErrorMsg)
-	provider.state.assertContains(t, reqCtx)
+	require.True(t, provider.state.saw(reqCtx), "matcher provider must observe the request context")
 }
 
 func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
@@ -261,17 +253,18 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 
 	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
-		ChannelID: "ch-aqua",
-		Name:      "Aqua",
+		ChannelID: testChannelAqua,
+		Name:      testMemberAqua,
 	})
+
 	var baseCtx context.Context
 
 	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 	streamProvider := &trackedStreamProvider{}
 
 	var (
-		sendMessageCtx context.Context
-		sendMessageMsg string
+		sendMessageState trackedContextState
+		sendMessageMsg   string
 	)
 
 	cmd := NewLiveCommand(&handlercore.Dependencies{
@@ -279,26 +272,28 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Matcher:   matcherService,
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, _, message string) error {
-			sendMessageCtx = ctx
+			sendMessageState.record(ctx)
+
 			sendMessageMsg = message
 
 			return nil
 		},
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendError call")
+
 			return nil
 		},
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Aqua",
+	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
-	assert.True(t, streamProvider.seenCtx == reqCtx)
-	assert.True(t, sendMessageCtx == reqCtx)
-	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive(reqCtx, "Aqua"), sendMessageMsg)
-	provider.state.assertAll(t, reqCtx)
+	require.True(t, streamProvider.state.saw(reqCtx), "stream provider must observe the request context")
+	require.True(t, sendMessageState.saw(reqCtx), "SendMessage must receive the request context")
+	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive(reqCtx, testMemberAqua), sendMessageMsg)
+	require.True(t, provider.state.sawOnly(reqCtx), "matcher provider must observe only the request context")
 }
 
 func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
@@ -306,8 +301,8 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 
 	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
 	provider := newTrackedMemberProvider(&domain.Member{
-		ChannelID: "ch-aqua",
-		Name:      "Aqua",
+		ChannelID: testChannelAqua,
+		Name:      testMemberAqua,
 	})
 	streamProvider := &trackedStreamProvider{}
 
@@ -326,12 +321,13 @@ func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
 		},
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected SendError call")
+
 			return nil
 		},
 		Logger: newCommandTestLogger(),
 	})
 
-	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: "room-1"}, map[string]any{})
+	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{})
 	require.NoError(t, err)
-	provider.state.assertAll(t, reqCtx)
+	require.True(t, provider.state.sawOnly(reqCtx), "matcher provider must observe only the request context")
 }

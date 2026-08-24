@@ -1,6 +1,7 @@
 package youtubejs
 
 import (
+	"errors"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -55,10 +56,12 @@ type ProtocolMeta struct {
 	ProtocolVersion int16 `json:"protocol_version"`
 }
 
-type RPCErrorCode string
-type RPCFailureClass string
-type RPCRetryKind string
-type TerminationReason string
+type (
+	RPCErrorCode      string
+	RPCFailureClass   string
+	RPCRetryKind      string
+	TerminationReason string
+)
 
 const (
 	TerminationExhausted               TerminationReason = "exhausted"
@@ -98,14 +101,20 @@ type Pagination struct {
 
 func (p Pagination) Validate() error {
 	if p.PageCount < 1 || p.PageCount > 100 {
-		return fmt.Errorf("validate pagination: page_count must be between 1 and 100")
+		return errors.New("validate pagination: page_count must be between 1 and 100")
 	}
+
+	//nolint:wrapcheck // validateCursor가 이미 validate pagination 접두사를 붙인 완결된 메시지를 만든다.
 	if err := validateCursor("cursor_start", p.CursorStart); err != nil {
 		return err
 	}
+
+	//nolint:wrapcheck // validateCursor가 이미 validate pagination 접두사를 붙인 완결된 메시지를 만든다.
 	if err := validateCursor("cursor_end", p.CursorEnd); err != nil {
 		return err
 	}
+
+	//nolint:wrapcheck // validatePaginationTermination이 이미 완결된 메시지를 만든다.
 	return validatePaginationTermination(p)
 }
 
@@ -121,46 +130,56 @@ var paginationValidators = map[TerminationReason]func(Pagination) error{
 func validatePaginationTermination(p Pagination) error {
 	validate, ok := paginationValidators[p.TerminationReason]
 	if !ok {
-		return fmt.Errorf("validate pagination: termination_reason is invalid")
+		return errors.New("validate pagination: termination_reason is invalid")
 	}
+
+	//nolint:wrapcheck // 각 검증 함수가 이미 validate pagination 접두사를 붙인 완결된 메시지를 만든다.
 	return validate(p)
 }
 
 func validateExhaustedPagination(p Pagination) error {
 	if !p.Exhausted {
-		return fmt.Errorf("validate pagination: exhausted reason requires exhausted=true")
+		return errors.New("validate pagination: exhausted reason requires exhausted=true")
 	}
+
 	if p.Continuity != string(contract.ContinuityContiguous) && p.Continuity != string(contract.ContinuityNotApplicable) {
-		return fmt.Errorf("validate pagination: exhausted reason has invalid continuity")
+		return errors.New("validate pagination: exhausted reason has invalid continuity")
 	}
+
 	return nil
 }
 
 func validatePartialPagination(p Pagination) error {
 	if p.Exhausted {
-		return fmt.Errorf("validate pagination: partial reason requires exhausted=false")
+		return errors.New("validate pagination: partial reason requires exhausted=false")
 	}
+
 	if p.Continuity != string(contract.ContinuityGapUnresolved) && p.Continuity != string(contract.ContinuityNotApplicable) {
-		return fmt.Errorf("validate pagination: partial reason has invalid continuity")
+		return errors.New("validate pagination: partial reason has invalid continuity")
 	}
+
 	return nil
 }
 
 func validateInterruptedPagination(p Pagination) error {
 	if p.Exhausted || p.Continuity != string(contract.ContinuityGapUnresolved) {
-		return fmt.Errorf("validate pagination: interrupted reason requires unresolved continuity")
+		return errors.New("validate pagination: interrupted reason requires unresolved continuity")
 	}
+
 	return nil
 }
 
 func (p Pagination) Quality() (contract.Completeness, contract.Continuity, error) {
 	if err := p.Validate(); err != nil {
+		//nolint:wrapcheck // Validate가 이미 어떤 필드가 잘못됐는지 담은 완결된 메시지를 만든다.
 		return "", "", err
 	}
+
 	continuity := contract.Continuity(p.Continuity)
 	if p.TerminationReason == TerminationExhausted {
 		return contract.CompletenessComplete, continuity, nil
 	}
+
 	return contract.CompletenessPartial, continuity, nil
 }
 
@@ -168,14 +187,17 @@ func validateCursor(field, cursor string) error {
 	if jsonStringBytes(cursor) > 8192 {
 		return fmt.Errorf("validate pagination: %s exceeds 8192 bytes", field)
 	}
+
 	return nil
 }
 
 func jsonStringBytes(value string) int {
 	size := 2
+
 	for _, r := range value {
 		size += jsonRuneBytes(r)
 	}
+
 	return size
 }
 
@@ -187,6 +209,7 @@ func jsonRuneBytes(r rune) int {
 		if r < 0x20 {
 			return 6
 		}
+
 		return utf8.RuneLen(r)
 	}
 }
@@ -201,9 +224,10 @@ type CommunityRequest struct {
 
 type CommunityResult struct {
 	ProtocolMeta
-	Posts []*parser.CommunityPost `json:"posts"`
 	Pagination
-	MissingTab bool `json:"missing_tab,omitempty"`
+
+	Posts      []*parser.CommunityPost `json:"posts"`
+	MissingTab bool                    `json:"missing_tab,omitempty"`
 }
 
 func (r *CommunityResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -228,9 +252,10 @@ type ContentItem struct {
 
 type ContentResult struct {
 	ProtocolMeta
-	Items []ContentItem `json:"items"`
 	Pagination
-	MissingTab bool `json:"missing_tab,omitempty"`
+
+	Items      []ContentItem `json:"items"`
+	MissingTab bool          `json:"missing_tab,omitempty"`
 }
 
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -274,12 +299,13 @@ type ChannelPhotoVariant struct {
 
 type ChannelResult struct {
 	ProtocolMeta
+	Pagination
+
 	LiveSessions []LiveSessionItem     `json:"live_sessions"`
 	Stats        ChannelStatsItem      `json:"stats"`
 	Profile      ChannelProfileItem    `json:"profile"`
 	Photo        []ChannelPhotoVariant `json:"photo"`
-	Pagination
-	MissingTab bool `json:"missing_tab,omitempty"`
+	MissingTab   bool                  `json:"missing_tab,omitempty"`
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -293,10 +319,11 @@ type ViewerRequest struct {
 
 type ViewerResult struct {
 	ProtocolMeta
+	Pagination
+
 	VideoID      string `json:"video_id"`
 	ViewerCount  *int64 `json:"viewer_count"`
 	Availability string `json:"availability"`
-	Pagination
 }
 
 func (r *ViewerResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }

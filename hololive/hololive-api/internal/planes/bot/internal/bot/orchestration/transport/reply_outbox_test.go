@@ -40,6 +40,7 @@ type recordingReplyOutbox struct {
 func (r *recordingReplyOutbox) snapshot() []*ReplyOutboxEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	return append([]*ReplyOutboxEntry(nil), r.entries...)
 }
 
@@ -47,6 +48,7 @@ type failingReplyOutbox struct{ err error }
 
 type storedReplyReissueClient struct {
 	stubBotClient
+
 	acceptErrors  []error
 	messages      []string
 	optsByAttempt [][]iris.SendOption
@@ -55,11 +57,14 @@ type storedReplyReissueClient struct {
 
 func (c *storedReplyReissueClient) SendMessageAccepted(_ context.Context, _, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	c.acceptedCalls++
+
 	c.messages = append(c.messages, message)
 	c.optsByAttempt = append(c.optsByAttempt, append([]iris.SendOption(nil), opts...))
+
 	if len(c.acceptErrors) >= c.acceptedCalls && c.acceptErrors[c.acceptedCalls-1] != nil {
 		return nil, c.acceptErrors[c.acceptedCalls-1]
 	}
+
 	return &iris.ReplyAcceptedResponse{RequestID: "iris-reissued"}, nil
 }
 
@@ -68,7 +73,9 @@ func (w failingReplyOutbox) RecordReply(context.Context, *ReplyOutboxEntry) erro
 func (r *recordingReplyOutbox) RecordReply(_ context.Context, entry *ReplyOutboxEntry) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.entries = append(r.entries, entry)
+
 	return nil
 }
 
@@ -76,10 +83,14 @@ func TestReplyOutboxWriterInjection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("no writer is configured by default", func(t *testing.T) {
+		t.Parallel()
+
 		assert.Nil(t, NewCommandTransport(&stubBotClient{}, nil).replyOutboxWriter())
 	})
 
 	t.Run("the option installs the writer", func(t *testing.T) {
+		t.Parallel()
+
 		writer := &recordingReplyOutbox{}
 		transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
 
@@ -87,9 +98,11 @@ func TestReplyOutboxWriterInjection(t *testing.T) {
 	})
 
 	t.Run("an installed writer owns the send path", func(t *testing.T) {
+		t.Parallel()
+
 		writer := &recordingReplyOutbox{}
 		transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
-		ctx := WithReplyIdentity(context.Background(), "message:m-1")
+		ctx := WithReplyIdentity(t.Context(), "message:m-1")
 
 		require.NoError(t, transport.SendMessage(ctx, "room-1", "hello"))
 		require.Len(t, writer.entries, 1)
@@ -98,9 +111,11 @@ func TestReplyOutboxWriterInjection(t *testing.T) {
 	})
 
 	t.Run("staging failures carry typed uncertainty", func(t *testing.T) {
+		t.Parallel()
+
 		transport := NewCommandTransport(&stubBotClient{}, nil,
 			WithReplyOutboxWriter(failingReplyOutbox{err: errors.New("postgres unavailable")}))
-		ctx := WithReplyIdentity(context.Background(), "message:m-stage-fail")
+		ctx := WithReplyIdentity(t.Context(), "message:m-stage-fail")
 
 		err := transport.SendMessage(ctx, "room-1", "hello")
 		require.ErrorIs(t, err, ErrReplyStagingFailed)
@@ -113,7 +128,7 @@ func TestExportedReplyClientRequestIDMatchesTheSentID(t *testing.T) {
 	const identity = "message:m-1"
 
 	client := &stubBotClient{}
-	ctx := WithReplyIdentity(context.Background(), identity)
+	ctx := WithReplyIdentity(t.Context(), identity)
 	require.NoError(t, NewCommandTransport(client, nil).SendMessage(ctx, "room-1", "hello"))
 
 	sentID, _ := capturedSendOptions(t, client.lastOpts)
@@ -126,7 +141,8 @@ func TestReplyOutboxPersistsImageContentType(t *testing.T) {
 
 	writer := &recordingReplyOutbox{}
 	transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
-	ctx := WithReplyIdentity(context.Background(), "message:m-image")
+	ctx := WithReplyIdentity(t.Context(), "message:m-image")
+
 	ctx = WithImageContentType(ctx, "video/mp4")
 
 	require.NoError(t, transport.SendImage(ctx, "room-1", []byte("media")))
@@ -156,6 +172,7 @@ func TestDispatchStoredReplyReissuesFailedConflictWithStoredPayload(t *testing.T
 	assert.Equal(t, originalPayload, payload)
 	assert.Equal(t, []string{"persisted payload", "persisted payload"}, client.messages)
 	require.Len(t, client.optsByAttempt, 2)
+
 	first, _ := capturedSendOptions(t, client.optsByAttempt[0])
 	second, _ := capturedSendOptions(t, client.optsByAttempt[1])
 	assert.Equal(t, "hololive:v1:message:m-1:reply:0", first)
@@ -173,6 +190,7 @@ func TestStoredReplyKindsStayDispatchable(t *testing.T) {
 	} {
 		t.Run(string(kind), func(t *testing.T) {
 			t.Parallel()
+
 			client := &stubBotClient{}
 			reply := StoredReply{
 				Kind: kind, Message: "message", Image: []byte("image"), Images: [][]byte{[]byte("image")},
@@ -190,7 +208,9 @@ func TestExportedReplyClientRequestIDIsDeterministic(t *testing.T) {
 	const identity = "message:m-1"
 
 	for ordinal := range uint64(4) {
-		assert.Equal(t, ReplyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal))
+		first, second := ReplyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal)
+
+		assert.Equal(t, first, second)
 		assert.Equal(t, replyClientRequestID(identity, ordinal), ReplyClientRequestID(identity, ordinal))
 	}
 }
@@ -199,32 +219,39 @@ func TestConcurrentSendsRecordDistinctOrdinalsMatchingClientRequestIDs(t *testin
 	t.Parallel()
 
 	const identity = "message:m-race"
+
 	writer := &recordingReplyOutbox{}
 	transport := NewCommandTransport(&stubBotClient{}, nil, WithReplyOutboxWriter(writer))
-	ctx := WithReplyIdentity(context.Background(), identity)
+	ctx := WithReplyIdentity(t.Context(), identity)
 
 	const sends = 8
+
 	var wg sync.WaitGroup
+
 	sendErrs := make([]error, sends)
+
 	for i := range sends {
-		wg.Add(1)
-		go func(slot int) {
-			defer wg.Done()
-			sendErrs[slot] = transport.SendMessage(ctx, "room-race", "hello")
-		}(i)
+		wg.Go(func() {
+			sendErrs[i] = transport.SendMessage(ctx, "room-race", "hello")
+		})
 	}
+
 	wg.Wait()
+
 	for i, err := range sendErrs {
 		require.NoErrorf(t, err, "send %d", i)
 	}
 
 	entries := writer.snapshot()
 	require.Len(t, entries, sends)
+
 	seen := make(map[uint64]struct{}, sends)
+
 	for _, entry := range entries {
 		if _, dup := seen[entry.Ordinal]; dup {
 			t.Fatalf("duplicate ordinal %d recorded across concurrent sends", entry.Ordinal)
 		}
+
 		seen[entry.Ordinal] = struct{}{}
 		require.Equal(t, ReplyClientRequestID(identity, entry.Ordinal), entry.ClientRequestID,
 			"recorded ordinal and clientRequestID must come from the same issuance")

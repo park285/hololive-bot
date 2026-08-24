@@ -15,6 +15,7 @@ func dedupeKeyLogAttrForOutboxes(outboxes []domain.YouTubeNotificationOutbox) sl
 	for i := range outboxes {
 		dedupeKeys = append(dedupeKeys, telemetry.DedupeKeyLogValue(&outboxes[i]))
 	}
+
 	return dedupeKeyLogAttr(dedupeKeys)
 }
 
@@ -23,6 +24,7 @@ func deliveryAttemptOrdinal(row *domain.YouTubeNotificationDelivery) int {
 	if attemptOrdinal <= 0 {
 		return 1
 	}
+
 	return attemptOrdinal
 }
 
@@ -32,6 +34,7 @@ func deliveryAttemptStartedAt(row *domain.YouTubeNotificationDelivery) *time.Tim
 	}
 
 	startedAt := row.LockedAt.UTC()
+
 	return &startedAt
 }
 
@@ -79,6 +82,7 @@ func collectCommunityShortsDeliveryResultSummary(
 	if summary.channelID == "" {
 		summary.channelID = strings.TrimSpace(outbox.ChannelID)
 	}
+
 	if summary.alarmType == "" {
 		summary.alarmType = outbox.Kind.ToAlarmType()
 	}
@@ -114,6 +118,7 @@ func buildCommunityShortsDeliveryAuditEvents(
 		if !telemetry.IsCommunityShortsDeliveryAuditKind(outboxes[i].Kind) {
 			continue
 		}
+
 		events = append(events, buildCommunityShortsDeliveryAuditEvent(&rows[i], &outboxes[i], sentAt,
 			deliveryPath,
 			deliveryMode,
@@ -121,6 +126,7 @@ func buildCommunityShortsDeliveryAuditEvents(
 			failureReason,
 		))
 	}
+
 	return events
 }
 
@@ -134,6 +140,7 @@ func buildCommunityShortsDeliveryAuditEvent(
 	failureReason string,
 ) domain.YouTubeNotificationDeliveryTelemetry {
 	attemptFinishedAt := sentAt.UTC()
+
 	return domain.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:        row.ID,
 		AttemptOrdinal:    deliveryAttemptOrdinal(row),

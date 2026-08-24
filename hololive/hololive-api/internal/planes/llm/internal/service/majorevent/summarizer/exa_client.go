@@ -23,6 +23,7 @@ package summarizer
 import (
 	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,12 +31,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/model"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 type ExaMCPClient struct {
@@ -80,17 +79,17 @@ func NewExaMCPClient(endpoint, apiKey string, httpClient *http.Client, logger *s
 func (c *ExaMCPClient) Search(ctx context.Context, query string) ([]model.SearchResult, error) {
 	req, err := c.newSearchRequest(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("search request: %w", err)
 	}
 
 	respBody, err := c.doSearchRequest(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("do search request: %w", err)
 	}
 
 	results, err := parseExaResponse(respBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse exa response: %w", err)
 	}
 
 	c.logSearchResults(query, len(results))
@@ -123,7 +122,9 @@ func (c *ExaMCPClient) newSearchRequest(ctx context.Context, query string) (*htt
 	if err != nil {
 		return nil, fmt.Errorf("create exa request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+
 	if apiKey := strings.TrimSpace(c.apiKey); apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		req.Header.Set("X-Exa-Api-Key", apiKey)
@@ -137,12 +138,15 @@ func (c *ExaMCPClient) doSearchRequest(req *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("exa request: %w", err)
 	}
+
 	if resp == nil {
-		return nil, fmt.Errorf("exa request: response is nil")
+		return nil, errors.New("exa request: response is nil")
 	}
+
 	if resp.Body == nil {
-		return nil, fmt.Errorf("exa request: response body is nil")
+		return nil, errors.New("exa request: response body is nil")
 	}
+
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil && c.logger != nil {
 			c.logger.Debug("close exa response body failed", slog.Any("error", closeErr))
@@ -172,21 +176,26 @@ func (c *ExaMCPClient) logSearchResults(query string, resultCount int) {
 // parseExaResponse: JSON-RPC 응답을 파싱하여 검색 결과를 추출합니다.
 func parseExaResponse(respBody []byte) ([]model.SearchResult, error) {
 	var rpcResp exaRPCResponse
+
 	if err := jsonv2.Unmarshal(respBody, &rpcResp); err != nil {
 		return nil, fmt.Errorf("unmarshal exa response: %w", err)
 	}
+
 	if rpcResp.Error != nil {
 		return nil, fmt.Errorf("exa mcp rpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
 	}
 
 	results := make([]model.SearchResult, 0)
+
 	var parseErr error
+
 	for i, content := range rpcResp.Result.Content {
 		items, err := parseExaContentItems(i, content.Text)
 		if err != nil {
 			parseErr = errors.Join(parseErr, err)
 			continue
 		}
+
 		results = append(results, exaItemsToSearchResults(items)...)
 	}
 
@@ -205,11 +214,13 @@ func parseExaContentItems(index int, text string) ([]exaSearchItem, error) {
 	var wrapped struct {
 		Results []exaSearchItem `json:"results"`
 	}
+
 	if err := jsonv2.Unmarshal([]byte(text), &wrapped); err != nil {
 		direct, directErr := parseDirectExaContentItems(text)
 		if directErr != nil {
 			return nil, fmt.Errorf("unmarshal exa content[%d]: %w", index, err)
 		}
+
 		return direct, nil
 	}
 
@@ -218,6 +229,7 @@ func parseExaContentItems(index int, text string) ([]exaSearchItem, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal exa direct content[%d]: %w", index, err)
 		}
+
 		return direct, nil
 	}
 
@@ -226,9 +238,11 @@ func parseExaContentItems(index int, text string) ([]exaSearchItem, error) {
 
 func parseDirectExaContentItems(text string) ([]exaSearchItem, error) {
 	var direct []exaSearchItem
+
 	if err := jsonv2.Unmarshal([]byte(text), &direct); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
+
 	return direct, nil
 }
 
@@ -242,5 +256,6 @@ func exaItemsToSearchResults(items []exaSearchItem) []model.SearchResult {
 			PublishedDate: item.PublishedDate,
 		})
 	}
+
 	return results
 }

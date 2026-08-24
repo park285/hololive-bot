@@ -139,7 +139,6 @@ pass "admin-dashboard-ingress config passes nginx -t with the pinned image"
 sed \
   -e 's/listen 443 ssl;/listen 127.0.0.1:30999;/' \
   -e '/listen 443 quic;/d' \
-  -e '/http2 on;/d' \
   -e '/include \/etc\/nginx\/tls.conf;/d' \
   -e "/if (\\\$blocked_request)/d" \
   -e '/include \/etc\/nginx\/proxy.conf;/d' \

@@ -22,6 +22,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,26 +64,33 @@ func NewFeedFetcher(client *http.Client, config FeedFetcherConfig) *FeedFetcher 
 // Fetch는 지정 URL의 RSS 원문을 조회한다.
 func (f *FeedFetcher) Fetch(ctx context.Context, feedURL string) ([]byte, error) {
 	if f == nil || f.client == nil {
-		return nil, fmt.Errorf("fetch feed: fetcher is nil")
+		return nil, errors.New("fetch feed: fetcher is nil")
 	}
 
 	resp, err := f.fetchResponse(ctx, feedURL) //nolint:bodyclose // readResponseBody가 모든 반환 경로에서 resp.Body를 닫고 close 오류도 보존한다.
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch response: %w", err)
 	}
 
 	body, err := f.readResponseBody(resp)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
+
 	return body, nil
 }
 
 func (f *FeedFetcher) readResponseBody(resp *http.Response) ([]byte, error) {
 	if err := f.validateResponseBody(resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate response body: %w", err)
 	}
-	return f.readAndCloseBody(resp.Body)
+
+	out, err := f.readAndCloseBody(resp.Body)
+	if err != nil {
+		return out, fmt.Errorf("read and close body: %w", err)
+	}
+
+	return out, nil
 }
 
 func (f *FeedFetcher) validateResponseBody(resp *http.Response) error {
@@ -90,11 +98,15 @@ func (f *FeedFetcher) validateResponseBody(resp *http.Response) error {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			return fmt.Errorf("fetch feed: close error response body: %w", closeErr)
 		}
+
 		return fmt.Errorf("fetch feed: unexpected status %d", resp.StatusCode)
 	}
+
 	if resp.ContentLength > f.maxBodyLen {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return f.closeOversizedBody(resp.Body)
 	}
+
 	return nil
 }
 
@@ -104,14 +116,19 @@ func (f *FeedFetcher) readAndCloseBody(responseBody io.ReadCloser) ([]byte, erro
 		if closeErr := responseBody.Close(); closeErr != nil {
 			err = fmt.Errorf("%w; close response body: %w", err, closeErr)
 		}
+
 		return nil, fmt.Errorf("fetch feed: read body: %w", err)
 	}
+
 	if int64(len(body)) > f.maxBodyLen {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, f.closeOversizedBody(responseBody)
 	}
+
 	if closeErr := responseBody.Close(); closeErr != nil {
 		return nil, fmt.Errorf("fetch feed: close response body: %w", closeErr)
 	}
+
 	return body, nil
 }
 
@@ -119,34 +136,44 @@ func (f *FeedFetcher) closeOversizedBody(responseBody io.ReadCloser) error {
 	if closeErr := responseBody.Close(); closeErr != nil {
 		return fmt.Errorf("fetch feed: body exceeds %d bytes; close response body: %w", f.maxBodyLen, closeErr)
 	}
+
 	return fmt.Errorf("fetch feed: body exceeds %d bytes", f.maxBodyLen)
 }
 
 func (f *FeedFetcher) fetchResponse(ctx context.Context, feedURL string) (*http.Response, error) {
 	trimmedURL := strings.TrimSpace(feedURL)
 	if trimmedURL == "" {
-		return nil, fmt.Errorf("fetch feed: feed url is empty")
+		return nil, errors.New("fetch feed: feed url is empty")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, trimmedURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed: build request: %w", err)
 	}
+
 	req.Header.Set("User-Agent", f.userAgent)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch feed: do request: %w", err)
 	}
-	return requireFeedResponse(resp)
+
+	out, err := requireFeedResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("require feed response: %w", err)
+	}
+
+	return out, nil
 }
 
 func requireFeedResponse(resp *http.Response) (*http.Response, error) {
 	if resp == nil {
-		return nil, fmt.Errorf("fetch feed: response is nil")
+		return nil, errors.New("fetch feed: response is nil")
 	}
+
 	if resp.Body == nil {
-		return nil, fmt.Errorf("fetch feed: response body is nil")
+		return nil, errors.New("fetch feed: response body is nil")
 	}
+
 	return resp, nil
 }

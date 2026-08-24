@@ -1,13 +1,14 @@
 package bootstrap
 
 import (
+	"fmt"
 	"log/slog"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/valkeydedup"
 	"github.com/park285/iris-client-go/v2/webhook"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func BuildDurableBotWebhookHandler(
@@ -18,6 +19,7 @@ func BuildDurableBotWebhookHandler(
 ) (*webhook.Handler, error) {
 	nonceStore := valkeydedup.NewNonceStore(deps.Cache.GetClient())
 	metrics := defaultWebhookMetrics()
+
 	handler, err := iris.NewDurableWebhookHandler(admitter,
 		webhook.WithWebhookToken(appConfig.Iris.WebhookToken),
 		webhook.WithWebhookLogger(logger),
@@ -28,8 +30,10 @@ func BuildDurableBotWebhookHandler(
 		webhook.WithDedupTimeout(appConfig.Webhook.DedupTimeout),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("durable webhook handler: %w", err)
 	}
+
 	metrics.BindSignatureDiagnostics(handler)
+
 	return handler, nil
 }

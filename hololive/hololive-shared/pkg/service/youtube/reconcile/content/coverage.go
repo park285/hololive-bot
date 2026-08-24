@@ -2,30 +2,36 @@ package content
 
 import (
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func (c coverageValue) covers(entity Entity) bool {
+func (c CoverageValue) covers(entity Entity) bool {
 	item := entity.item()
+
 	if c.Videos != nil {
 		return contract.ChannelListCoversVideo(c.Videos, &item)
 	}
+
 	if c.Shorts != nil {
 		return contract.ShortsListCoversVideo(*c.Shorts, item)
 	}
+
 	return false
 }
 
-func (c coverageValue) relationTo(evidence coverageValue) contract.CoverageRelation {
+func (c CoverageValue) relationTo(evidence CoverageValue) contract.CoverageRelation {
 	if c.Videos != nil && evidence.Videos != nil {
 		return contract.RelateChannelList(c.Videos, evidence.Videos)
 	}
+
 	if c.Shorts != nil && evidence.Shorts != nil {
 		return contract.RelateShortsList(*c.Shorts, *evidence.Shorts)
 	}
+
 	return contract.CoverageDisjoint
 }
 
@@ -48,11 +54,13 @@ func valueDigest(entity *Entity) string {
 	if err != nil {
 		return ""
 	}
+
 	return contract.SHA256Hex(payload)
 }
 
-func coverageBytes(value coverageValue) []byte {
+func coverageBytes(value CoverageValue) []byte {
 	var payload any
+
 	switch {
 	case value.Videos != nil:
 		payload = value.Videos
@@ -61,32 +69,40 @@ func coverageBytes(value coverageValue) []byte {
 	default:
 		return nil
 	}
+
 	raw, err := jsonv2.Marshal(payload)
 	if err != nil {
 		return nil
 	}
+
 	return raw
 }
 
-func ParseCoverage(kind contract.ObservationKind, raw []byte) (coverageValue, error) {
+func ParseCoverage(kind contract.ObservationKind, raw []byte) (CoverageValue, error) {
 	if kind == contract.KindShortsList {
 		var coverage contract.ShortsListCoverageV1
+
 		if err := jsonv2.Unmarshal(raw, &coverage); err != nil {
-			return coverageValue{}, fmt.Errorf("decode shorts coverage: %w", err)
+			return CoverageValue{}, fmt.Errorf("decode shorts coverage: %w", err)
 		}
+
 		return ShortsCoverage(&coverage), nil
 	}
+
 	var coverage contract.ChannelListCoverageV1
+
 	if err := jsonv2.Unmarshal(raw, &coverage); err != nil {
-		return coverageValue{}, fmt.Errorf("decode video coverage: %w", err)
+		return CoverageValue{}, fmt.Errorf("decode video coverage: %w", err)
 	}
+
 	return VideoCoverage(&coverage), nil
 }
 
-func MarshalCoverage(value coverageValue) ([]byte, error) {
+func MarshalCoverage(value CoverageValue) ([]byte, error) {
 	raw := coverageBytes(value)
 	if raw == nil {
-		return nil, fmt.Errorf("content coverage is empty")
+		return nil, errors.New("content coverage is empty")
 	}
+
 	return raw, nil
 }

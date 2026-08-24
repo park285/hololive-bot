@@ -35,5 +35,6 @@ func CalculateLatency(actualPublishedAt, alarmSentAt *time.Time) (result1 *int64
 
 	latencyMillis := alarmSentAt.UTC().Sub(actualPublishedAt.UTC()).Milliseconds()
 	exceeded := latencyMillis > LatencyExceededThresholdMillis
+
 	return &latencyMillis, &exceeded
 }

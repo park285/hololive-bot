@@ -20,6 +20,9 @@ import (
 const (
 	sendResultSuccess = "success"
 	sendResultFailure = "failure"
+
+	deliveryModeGrouped = "grouped"
+	deliveryModePerRoom = "per_room"
 )
 
 type AuditLogger struct {
@@ -58,6 +61,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAttemptStarted(
 	}
 
 	attemptStartedAt = attemptStartedAt.UTC()
+
 	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)
 	limitedRows := rows[:limit]
 	limitedOutboxes := outboxes[:limit]
@@ -103,8 +107,10 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 	}
 
 	sentAt = sentAt.UTC()
+
 	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)
 	summary := summarizeCommunityShortsDeliveryResult(rows[:limit], outboxes[:limit])
+
 	if summary.alarmCount == 0 {
 		return
 	}
@@ -132,6 +138,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 			break
 		}
 	}
+
 	if trimmedReason := strings.TrimSpace(failureReason); trimmedReason != "" {
 		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, deliverysql.TruncateString(trimmedReason, 100)))
 	}
@@ -155,6 +162,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAudit(
 	}
 
 	sentAt = sentAt.UTC()
+
 	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)
 	events := buildCommunityShortsDeliveryAuditEvents(
 		rows[:limit],
@@ -165,6 +173,7 @@ func (al *AuditLogger) logCommunityShortsDeliveryAudit(
 		sendResult,
 		failureReason,
 	)
+
 	if len(events) == 0 {
 		return
 	}
@@ -190,8 +199,10 @@ func (al *AuditLogger) prepareCommunityShortsDeliveryAuditEvents(
 		al.logger.Warn("Failed to enrich persistent delivery audit",
 			slog.Int("events", len(events)),
 			slog.Any("error", err))
+
 		return events, false
 	}
+
 	return prepared, true
 }
 
@@ -204,6 +215,7 @@ func (al *AuditLogger) enqueueCommunityShortsDeliveryAuditEvents(
 		al.logger.Warn("Failed to enqueue persistent delivery audit",
 			slog.Int("events", len(preparedEvents)),
 			slog.Any("error", enqueueErr))
+
 		return false
 	}
 
@@ -212,6 +224,7 @@ func (al *AuditLogger) enqueueCommunityShortsDeliveryAuditEvents(
 			slog.Int("events", len(preparedEvents)),
 			slog.Any("error", err))
 	}
+
 	return true
 }
 
@@ -230,7 +243,9 @@ func (al *AuditLogger) logCommunityShortsDeliveryAuditFallback(
 	for i := range preparedEvents {
 		classification := fallbackClassificationsByOutboxID[preparedEvents[i].OutboxID]
 		attrs := buildDeliveryAuditLogAttrsWithClassification(&preparedEvents[i], &classification)
+
 		attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, "direct_fallback"))
+
 		if sendErr != nil {
 			attrs = append(attrs, slog.String("error", sendErr.Error()))
 		}
@@ -248,16 +263,18 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Cont
 	if err != nil {
 		return fmt.Errorf("load terminal community shorts outbox results: %w", err)
 	}
+
 	if len(results) == 0 {
 		return nil
 	}
 
 	timelinesByOutboxID, err := al.loadFinalizedCommunityShortsTimelines(ctx, outboxIDs, len(results))
 	if err != nil {
-		return err
+		return fmt.Errorf("load finalized community shorts timelines: %w", err)
 	}
 
 	finalizedAt := time.Now().UTC()
+
 	for i := range results {
 		al.logFinalizedCommunityShortsOutboxResultWithTimeline(&results[i], timelinesByOutboxID, finalizedAt)
 	}
@@ -271,6 +288,7 @@ func (al *AuditLogger) loadFinalizedCommunityShortsTimelines(
 	resultCount int,
 ) (map[int64]deliverytimeline.PostDeliveryTimeline, error) {
 	timelinesByOutboxID := make(map[int64]deliverytimeline.PostDeliveryTimeline, resultCount)
+
 	if al.telemetry == nil {
 		return timelinesByOutboxID, nil
 	}
@@ -279,12 +297,15 @@ func (al *AuditLogger) loadFinalizedCommunityShortsTimelines(
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
 	}
+
 	for i := range timelines {
 		if timelines[i].OutboxID == 0 {
 			continue
 		}
+
 		timelinesByOutboxID[timelines[i].OutboxID] = timelines[i]
 	}
+
 	return timelinesByOutboxID, nil
 }
 
@@ -298,6 +319,7 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResultWithTimeline(
 		result.LatencyClassification = timeline.LatencyClassification
 		timing = communityShortsAlarmTimingForTimeline(&timeline)
 	}
+
 	al.logFinalizedCommunityShortsOutboxResult(result, finalizedAt, timing)
 }
 
@@ -308,8 +330,10 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 ) {
 	sendResult := sendResultFailure
 	eventAt := finalizedAt
+
 	if result.Status == domain.OutboxStatusSent {
 		sendResult = sendResultSuccess
+
 		if result.SentAt != nil && !result.SentAt.IsZero() {
 			eventAt = result.SentAt.UTC()
 		}
@@ -339,10 +363,13 @@ func (al *AuditLogger) logFinalizedCommunityShortsOutboxResult(
 		slog.Int(logschema.FieldSuccessfulRoomCount, result.SuccessfulRoomCount),
 		slog.Int(logschema.FieldFailedRoomCount, result.FailedRoomCount),
 	}
+
 	attrs = appendCommunityShortsAlarmTimingLogAttrs(attrs, timing)
+
 	if result.AggregatedFailReason != "" {
 		attrs = append(attrs, slog.String(deliveryAuditFailureReasonLogField, result.AggregatedFailReason))
 	}
+
 	attrs = appendLatencyClassificationLogAttr(attrs, &result.LatencyClassification)
 
 	al.logger.Info(deliveryAuditLogMessage, attrs...)

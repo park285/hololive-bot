@@ -31,13 +31,15 @@ import (
 )
 
 // NewTestCacheService는 외부 모듈 테스트에서 사용할 miniredis 기반 캐시 서비스를 생성합니다.
-func NewTestCacheService(t *testing.T, ctx context.Context) *cache.Service {
+func NewTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
 	t.Helper()
-	return internaltestutil.NewTestCacheService(t, ctx)
+
+	return internaltestutil.NewTestCacheService(ctx, t)
 }
 
 // NewTestCacheServiceWithMini는 캐시 서비스와 miniredis 핸들을 함께 반환합니다.
-func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Service, *miniredis.Miniredis) {
+func NewTestCacheServiceWithMini(ctx context.Context, t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
-	return internaltestutil.NewTestCacheServiceWithMini(t, ctx)
+
+	return internaltestutil.NewTestCacheServiceWithMini(ctx, t)
 }

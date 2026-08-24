@@ -42,12 +42,14 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 		},
 		StartHTTPServer: func(gotErrCh chan<- error) {
 			order = append(order, "http-server")
+
 			if gotErrCh != chan<- error(errCh) {
 				t.Fatal("StartHTTPServer received unexpected error channel")
 			}
 		},
 		SetAlarmSchedulerCancel: func(cancel context.CancelFunc) {
 			order = append(order, "set-alarm-cancel")
+
 			cancelCh <- cancel
 		},
 	})
@@ -64,6 +66,7 @@ func TestStart_RunsConfiguredHooks(t *testing.T) {
 	assert.Equal(t, "parent", botCtx.Value(lifecycleContextKey{}))
 
 	cancelAlarm()
+
 	select {
 	case <-alarmCtx.Done():
 	case <-time.After(time.Second):
@@ -93,7 +96,7 @@ func TestStart_HandlesNilHooksAndNilContext(t *testing.T) {
 	t.Parallel()
 
 	require.NotPanics(t, func() {
-		Start(context.TODO(), make(chan error, 1), StartHooks{})
+		Start(t.Context(), make(chan error, 1), StartHooks{})
 	})
 }
 
@@ -115,6 +118,7 @@ func TestStart_AlarmSchedulerErrorPropagatesToErrCh(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected scheduler error, got nil")
 		}
+
 		if !errors.Is(err, schedulerCrash) {
 			t.Fatalf("unexpected scheduler error: %v", err)
 		}
@@ -185,6 +189,7 @@ func TestStart_BotErrorPropagatesToErrCh(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected bot error, got nil")
 		}
+
 		if !errors.Is(err, botCrash) {
 			t.Fatalf("unexpected bot error: %v", err)
 		}
@@ -267,6 +272,7 @@ func TestStartRunsH3CertReloadHookWithRunContext(t *testing.T) {
 	defer cancel()
 
 	gotCh := make(chan context.Context, 1)
+
 	Start(ctx, nil, StartHooks{
 		StartH3CertReload: func(c context.Context) { gotCh <- c },
 	})
@@ -280,19 +286,24 @@ func TestStartRunsH3CertReloadHookWithRunContext(t *testing.T) {
 func TestRun_DelegatesStartAndShutdown(t *testing.T) {
 	t.Parallel()
 
-	var startCalled atomic.Bool
-	var shutdownCalled atomic.Bool
+	var (
+		startCalled    atomic.Bool
+		shutdownCalled atomic.Bool
+	)
+
 	runtimeErr := errors.New("stop runtime")
 
 	err := Run(nil, func(_ context.Context, errCh chan<- error) {
 		startCalled.Store(true)
+
 		errCh <- runtimeErr
 	}, func(context.Context) error {
 		shutdownCalled.Store(true)
+
 		return nil
 	})
 
-	assert.ErrorIs(t, err, runtimeErr)
+	require.ErrorIs(t, err, runtimeErr)
 	assert.True(t, startCalled.Load())
 	assert.True(t, shutdownCalled.Load())
 }
@@ -315,6 +326,7 @@ func TestRun_LogsRuntimeAndShutdownErrorsAtTheirOwners(t *testing.T) {
 			t.Parallel()
 
 			var output bytes.Buffer
+
 			logger := slog.New(slog.NewTextHandler(&output, nil))
 			err := Run(logger, func(_ context.Context, errCh chan<- error) {
 				errCh <- tc.runtimeErr
@@ -323,11 +335,13 @@ func TestRun_LogsRuntimeAndShutdownErrorsAtTheirOwners(t *testing.T) {
 			})
 
 			if tc.runtimeErr != nil {
-				assert.ErrorIs(t, err, tc.runtimeErr)
+				require.ErrorIs(t, err, tc.runtimeErr)
 			}
+
 			if tc.shutdownErr != nil {
-				assert.ErrorIs(t, err, tc.shutdownErr)
+				require.ErrorIs(t, err, tc.shutdownErr)
 			}
+
 			assert.True(t, bytes.Contains(output.Bytes(), []byte("Server error")))
 			assert.Equal(t, tc.wantShutdownLog, bytes.Contains(output.Bytes(), []byte("Shutdown error")))
 		})
@@ -338,14 +352,16 @@ func TestRuntimeOptions_LogsShutdownError(t *testing.T) {
 	t.Parallel()
 
 	shutdownErr := errors.New("shutdown failed")
+
 	var output bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&output, nil))
 	opts := runtimeOptions(logger, func(context.Context, chan<- error) {}, func(context.Context) error {
 		return shutdownErr
 	})
 
 	err := opts.Shutdown(t.Context())
-	assert.ErrorIs(t, err, shutdownErr)
+	require.ErrorIs(t, err, shutdownErr)
 	assert.True(t, bytes.Contains(output.Bytes(), []byte("Shutdown error")))
 }
 
@@ -367,9 +383,11 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 		},
 		ShutdownHTTPServer: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-http-server")
+
 			if gotCtx != ctx {
 				t.Fatal("ShutdownHTTPServer received unexpected context")
 			}
+
 			return httpErr
 		},
 		WebhookHandlerClose: func() error {
@@ -378,16 +396,20 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 		},
 		ShutdownAlarmServices: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-alarm-services")
+
 			if gotCtx != ctx {
 				t.Fatal("ShutdownAlarmServices received unexpected context")
 			}
+
 			return alarmErr
 		},
 		ShutdownBot: func(gotCtx context.Context) error {
 			calls = append(calls, "shutdown-bot")
+
 			if gotCtx != ctx {
 				t.Fatal("ShutdownBot received unexpected context")
 			}
+
 			return botErr
 		},
 	})
@@ -399,6 +421,7 @@ func TestShutdown_CallsHooksInOrderAndContinuesAfterErrors(t *testing.T) {
 		"shutdown-alarm-services",
 		"shutdown-bot",
 	}, calls)
+
 	for _, wantErr := range []error{httpErr, webhookErr, alarmErr, botErr} {
 		assert.ErrorIs(t, err, wantErr)
 	}
@@ -408,7 +431,7 @@ func TestShutdown_HandlesNilHooks(t *testing.T) {
 	t.Parallel()
 
 	require.NotPanics(t, func() {
-		require.NoError(t, Shutdown(context.TODO(), ShutdownHooks{}))
+		require.NoError(t, Shutdown(t.Context(), ShutdownHooks{}))
 	})
 }
 
@@ -432,5 +455,6 @@ func receiveLifecycleTestValue[T any](t *testing.T, ch <-chan T) T {
 	}
 
 	var zero T
+
 	return zero
 }

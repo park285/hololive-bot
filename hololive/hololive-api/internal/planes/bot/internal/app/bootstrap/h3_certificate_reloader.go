@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -66,10 +67,12 @@ func newReloadingTLSCertificateWithOptions(
 	if readFile == nil {
 		readFile = os.ReadFile
 	}
+
 	parseCertificatePair := options.parseCertificatePair
 	if parseCertificatePair == nil {
 		parseCertificatePair = tls.X509KeyPair
 	}
+
 	reloadInterval := options.reloadInterval
 	if reloadInterval <= 0 {
 		reloadInterval = defaultH3CertificateReloadInterval
@@ -138,18 +141,21 @@ func (r *reloadingTLSCertificate) reloadOnce() {
 	)
 	if err != nil {
 		r.recordReloadFailure(err)
+
 		return
 	}
 
 	snapshot := r.cachedSnapshot()
 	if snapshot != nil && pairPEM.fingerprint == snapshot.fingerprint {
 		r.clearReloadFailure()
+
 		return
 	}
 
 	cert, err := parseTLSCertificatePair(&pairPEM, r.parseCertificatePair)
 	if err != nil {
 		r.recordReloadFailure(err)
+
 		return
 	}
 
@@ -162,6 +168,7 @@ func (r *reloadingTLSCertificate) cachedSnapshot() *tlsCertificateSnapshot {
 	if !ok {
 		return nil
 	}
+
 	return snapshot
 }
 
@@ -200,12 +207,12 @@ func loadTLSCertificatePairWithReader(
 ) (*tls.Certificate, tlsCertificateFingerprint, error) {
 	pairPEM, err := readTLSCertificatePairPEM(certFile, keyFile, readFile)
 	if err != nil {
-		return nil, pairPEM.fingerprint, err
+		return nil, pairPEM.fingerprint, fmt.Errorf("read TLS certificate pair PEM: %w", err)
 	}
 
 	cert, err := parseTLSCertificatePair(&pairPEM, parseCertificatePair)
 	if err != nil {
-		return nil, pairPEM.fingerprint, err
+		return nil, pairPEM.fingerprint, fmt.Errorf("parse TLS certificate pair: %w", err)
 	}
 
 	return cert, pairPEM.fingerprint, nil
@@ -216,6 +223,7 @@ func readTLSCertificatePairPEM(
 	readFile tlsCertificateFileReader,
 ) (tlsCertificatePairPEM, error) {
 	var pairPEM tlsCertificatePairPEM
+
 	// #nosec G304 -- H3 인증서 경로는 운영자가 소유한 설정이며 사용자 입력이 아니다.
 	certPEM, err := readFile(certFile)
 	if err != nil {
@@ -242,8 +250,9 @@ func readTLSCertificatePairPEM(
 
 func parseTLSCertificatePair(pairPEM *tlsCertificatePairPEM, parseCertificatePair tlsCertificatePairParser) (*tls.Certificate, error) {
 	if pairPEM == nil {
-		return nil, fmt.Errorf("parse h3 certificate pair: nil certificate pair")
+		return nil, errors.New("parse h3 certificate pair: nil certificate pair")
 	}
+
 	cert, err := parseCertificatePair(pairPEM.certPEM, pairPEM.keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("parse h3 certificate pair: %w", err)
@@ -255,7 +264,7 @@ func parseTLSCertificatePair(pairPEM *tlsCertificatePairPEM, parseCertificatePai
 func (r *reloadingTLSCertificate) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	cert := r.cachedCertificate()
 	if cert == nil {
-		return nil, fmt.Errorf("load h3 certificate: no cached certificate")
+		return nil, errors.New("load h3 certificate: no cached certificate")
 	}
 
 	return cert, nil

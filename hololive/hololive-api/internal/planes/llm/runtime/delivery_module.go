@@ -21,6 +21,7 @@
 package runtime
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/envutil"
@@ -46,19 +47,24 @@ func BuildDeliveryModule(
 	logger *slog.Logger,
 ) (*DeliveryModule, error) {
 	locker := delivery.NewLocker(cacheClient, logger)
+
 	mode, err := handoff.ParseMode(envutil.String(deliveryOutboxV3HandoffModeEnv, "off"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse mode: %w", err)
 	}
+
 	var options []delivery.RepositoryOption
+
 	if mode != handoff.ModeOff {
 		publisher := queue.NewPublisher(
 			cacheClient,
 			logger,
 			queue.WithOutbox(dispatchoutbox.NewPgxRepository(postgres, logger)),
 		)
+
 		options = append(options, delivery.WithDispatchHandoff(mode, deliveryDispatchPublisher{publisher: publisher}))
 	}
+
 	repository := delivery.NewOutboxRepository(postgres, logger, options...)
 
 	return &DeliveryModule{

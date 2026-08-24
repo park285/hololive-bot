@@ -80,30 +80,32 @@ func Load() (*Config, error) {
 
 	adminHash, sessionSecret, err := loadCredentials()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load credentials: %w", err)
 	}
 
 	port, err := parsePort(envutil.Int("PORT", 30190))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse port: %w", err)
 	}
+
 	valkeyURL, err := validateValkeyURL(envutil.String("VALKEY_URL", "valkey-cache:6379"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate valkey URL: %w", err)
 	}
+
 	sessionCfg, err := LoadSessionConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load session config: %w", err)
 	}
 
 	trustedForwarders, trustedProxyCIDRs, err := loadTrustedProxyConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load trusted proxy config: %w", err)
 	}
 
 	securityCfg := LoadSecurityConfig(env, allowLocalhostInProd)
 	if err := validateAllowedOrigins(env, securityCfg.AllowedOrigins); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate allowed origins: %w", err)
 	}
 
 	return &Config{
@@ -129,13 +131,16 @@ func Load() (*Config, error) {
 
 func loadTrustedProxyConfig() (bool, []netip.Prefix, error) {
 	trustedForwarders := envutil.Bool("TRUST_FORWARDED_HEADERS", false)
+
 	trustedProxyCIDRs, err := parseTrustedProxyCIDRs(envutil.String("TRUSTED_PROXY_CIDRS", ""))
 	if err != nil {
-		return false, nil, err
+		return false, nil, fmt.Errorf("parse trusted proxy CID rs: %w", err)
 	}
+
 	if trustedForwarders && len(trustedProxyCIDRs) == 0 {
 		return false, nil, errors.New("config: TRUST_FORWARDED_HEADERS is enabled but TRUSTED_PROXY_CIDRS is empty")
 	}
+
 	return trustedForwarders, trustedProxyCIDRs, nil
 }
 
@@ -144,6 +149,7 @@ func parseTrustedProxyCIDRs(raw string) ([]netip.Prefix, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid TRUSTED_PROXY_CIDRS: %w", err)
 	}
+
 	return cidrs, nil
 }
 
@@ -162,25 +168,30 @@ func aliasOrDefault(def string, keys ...string) string {
 	if value := envutil.StringAny(keys...); value != "" {
 		return value
 	}
+
 	return def
 }
 
 func loadCredentials() (adminHash, sessionSecret string, err error) {
 	adminHash, err = requiredAlias("ADMIN_PASS_HASH", "ADMIN_PASS_BCRYPT")
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("required alias: %w", err)
 	}
+
 	adminHash = normalizeEscapedBcryptHash(adminHash)
-	if err := bcrypt.CompareHashAndPassword([]byte(adminHash), []byte("")); err != nil && !isBcryptPasswordMismatch(err) {
-		return "", "", fmt.Errorf("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash: %w", err)
+	if compareErr := bcrypt.CompareHashAndPassword([]byte(adminHash), []byte("")); compareErr != nil && !isBcryptPasswordMismatch(compareErr) {
+		return "", "", fmt.Errorf("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash: %w", compareErr)
 	}
+
 	sessionSecret, err = requiredAlias("SESSION_SECRET", "ADMIN_SECRET_KEY")
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("required alias: %w", err)
 	}
+
 	if len(sessionSecret) < 16 {
-		return "", "", fmt.Errorf("SESSION_SECRET or ADMIN_SECRET_KEY must be at least 16 bytes")
+		return "", "", errors.New("SESSION_SECRET or ADMIN_SECRET_KEY must be at least 16 bytes")
 	}
+
 	return adminHash, sessionSecret, nil
 }
 
@@ -206,50 +217,69 @@ func DefaultSessionConfig() SessionConfig {
 func LoadSessionConfig() (SessionConfig, error) {
 	defaults := DefaultSessionConfig()
 	cfg := defaults
+
 	cfg.TokenRotationEnabled = envutil.Bool("SESSION_TOKEN_ROTATION", true)
 	cfg.HeartbeatInterval = millisEnv("SESSION_HEARTBEAT_INTERVAL_MS", defaults.HeartbeatInterval)
 	cfg.AbsoluteWarningWindow = millisEnv("SESSION_ABSOLUTE_WARNING_WINDOW_MS", defaults.AbsoluteWarningWindow)
 	cfg.IdleTimeout = millisEnv("SESSION_IDLE_TIMEOUT_MS", defaults.IdleTimeout)
 	cfg.IdleWarningTimeout = millisEnv("SESSION_IDLE_WARNING_TIMEOUT_MS", defaults.IdleWarningTimeout)
-	err := (&cfg).Validate()
-	return cfg, err
+
+	if err := (&cfg).Validate(); err != nil {
+		return cfg, fmt.Errorf("validate session config: %w", err)
+	}
+
+	return cfg, nil
 }
 
 func (c *SessionConfig) Validate() error {
 	if c.HeartbeatInterval < time.Second {
-		return fmt.Errorf("SESSION_HEARTBEAT_INTERVAL_MS must be at least 1000")
+		return errors.New("SESSION_HEARTBEAT_INTERVAL_MS must be at least 1000")
 	}
+
 	if c.ExpiryDuration < time.Minute {
-		return fmt.Errorf("session expiry_duration must be at least 60 seconds")
+		return errors.New("session expiry_duration must be at least 60 seconds")
 	}
+
 	if c.AbsoluteTimeout <= c.ExpiryDuration {
-		return fmt.Errorf("session absolute_timeout must be greater than expiry_duration")
+		return errors.New("session absolute_timeout must be greater than expiry_duration")
 	}
+
 	if c.IdleTimeout < time.Minute {
-		return fmt.Errorf("SESSION_IDLE_TIMEOUT_MS must be at least 60000")
+		return errors.New("SESSION_IDLE_TIMEOUT_MS must be at least 60000")
 	}
+
 	if c.IdleWarningTimeout >= c.IdleTimeout {
-		return fmt.Errorf("SESSION_IDLE_WARNING_TIMEOUT_MS must be less than SESSION_IDLE_TIMEOUT_MS")
+		return errors.New("SESSION_IDLE_WARNING_TIMEOUT_MS must be less than SESSION_IDLE_TIMEOUT_MS")
 	}
-	return c.validateTTLWindows()
+
+	if err := c.validateTTLWindows(); err != nil {
+		return fmt.Errorf("validate TTL windows: %w", err)
+	}
+
+	return nil
 }
 
 func (c *SessionConfig) validateTTLWindows() error {
 	if c.IdleSessionTTL < time.Second {
-		return fmt.Errorf("idle_session_ttl must be at least 1 second")
+		return errors.New("idle_session_ttl must be at least 1 second")
 	}
+
 	if c.IdleSessionTTL >= c.IdleTimeout {
-		return fmt.Errorf("idle_session_ttl must be less than idle_timeout")
+		return errors.New("idle_session_ttl must be less than idle_timeout")
 	}
+
 	if c.AbsoluteWarningWindow >= c.AbsoluteTimeout {
-		return fmt.Errorf("SESSION_ABSOLUTE_WARNING_WINDOW_MS must be less than absolute_timeout")
+		return errors.New("SESSION_ABSOLUTE_WARNING_WINDOW_MS must be less than absolute_timeout")
 	}
+
 	if c.RotationInterval < c.GracePeriod {
-		return fmt.Errorf("rotation_interval must be greater than or equal to grace_period")
+		return errors.New("rotation_interval must be greater than or equal to grace_period")
 	}
+
 	if c.RotationInterval >= c.ExpiryDuration {
-		return fmt.Errorf("rotation_interval must be less than expiry_duration")
+		return errors.New("rotation_interval must be less than expiry_duration")
 	}
+
 	return nil
 }
 
@@ -267,6 +297,7 @@ func (c *Config) ForwardedTrustWarning() string {
 	if c.Security.ForceHTTPS && !c.TrustedForwarders {
 		return "FORCE_HTTPS is on but TRUST_FORWARDED_HEADERS is off: behind a reverse proxy every client resolves to the proxy IP, so the login rate limiter shares one bucket and a scanner can lock out real admins; set TRUST_FORWARDED_HEADERS and TRUSTED_PROXY_CIDRS"
 	}
+
 	return ""
 }
 
@@ -283,110 +314,10 @@ func parseSecurityMode(value string) SecurityMode {
 
 func parseAllowedOrigins(env string, allowLocalhostInProd bool) []string {
 	origins := configuredOrigins()
+
 	if strings.EqualFold(env, "production") && !allowLocalhostInProd {
 		return dropLocalhostOrigins(origins)
 	}
+
 	return origins
-}
-
-func validateAllowedOrigins(env string, origins []string) error {
-	if strings.EqualFold(env, "production") && len(origins) == 0 {
-		return errors.New("config: ALLOWED_ORIGINS must contain at least one permitted origin in production")
-	}
-	return nil
-}
-
-func configuredOrigins() []string {
-	raw := envutil.String("ALLOWED_ORIGINS", "")
-	if raw == "" {
-		return fallbackOrigins()
-	}
-	origins := make([]string, 0, 4)
-	for item := range strings.SplitSeq(raw, ",") {
-		origin := normalizeOrigin(item)
-		if origin != "" {
-			origins = append(origins, origin)
-		}
-	}
-	return origins
-}
-
-func dropLocalhostOrigins(origins []string) []string {
-	filtered := origins[:0]
-	for _, origin := range origins {
-		if !isLocalhostOrigin(origin) {
-			filtered = append(filtered, origin)
-		}
-	}
-	return filtered
-}
-
-func fallbackOrigins() []string {
-	return []string{
-		"http://localhost:5173",
-		"http://localhost:30190",
-		"http://127.0.0.1:5173",
-		"http://127.0.0.1:30190",
-	}
-}
-
-func normalizeOrigin(origin string) string {
-	return strings.TrimRight(strings.TrimSpace(origin), "/")
-}
-
-func isLocalhostOrigin(origin string) bool {
-	normalized := strings.ToLower(normalizeOrigin(origin))
-	authority := normalized
-	if parts := strings.SplitN(normalized, "://", 2); len(parts) == 2 {
-		authority = parts[1]
-	}
-	if strings.HasPrefix(authority, "[") {
-		end := strings.Index(authority, "]")
-		if end >= 0 {
-			return authority[:end+1] == "[::1]"
-		}
-	}
-	host, _, _ := strings.Cut(authority, ":")
-	return host == "localhost" || host == "127.0.0.1"
-}
-
-func millisEnv(key string, fallback time.Duration) time.Duration {
-	return time.Duration(envutil.Int(key, int(fallback.Milliseconds()))) * time.Millisecond
-}
-
-func requiredAlias(keys ...string) (string, error) {
-	if value := envutil.StringAny(keys...); value != "" {
-		return value, nil
-	}
-	return "", fmt.Errorf("required environment variable missing: %s", strings.Join(keys, " or "))
-}
-
-func parsePort(port int) (uint16, error) {
-	if port < 0 || port > 65535 {
-		return 0, fmt.Errorf("PORT=%d is out of u16 range", port)
-	}
-	return uint16(port), nil
-}
-
-func normalizeEscapedBcryptHash(hash string) string {
-	if strings.HasPrefix(hash, "$$2a$$") || strings.HasPrefix(hash, "$$2b$$") || strings.HasPrefix(hash, "$$2y$$") {
-		return strings.ReplaceAll(hash, "$$", "$")
-	}
-	return hash
-}
-
-func isBcryptPasswordMismatch(err error) bool {
-	return errors.Is(err, bcrypt.ErrMismatchedHashAndPassword)
-}
-
-func validateValkeyURL(value string) (string, error) {
-	if strings.Contains(value, "://") {
-		return "", fmt.Errorf("VALKEY_URL must not include a URL scheme; configure host:port or :urlencoded_password@host:port")
-	}
-	if userinfo, _, ok := strings.Cut(value, "@"); ok && userinfo != "" {
-		if strings.ContainsAny(userinfo, " #?/\\") {
-			return "", fmt.Errorf("VALKEY_URL userinfo contains unsafe characters; URL-encode the password or use a safe secret value")
-		}
-	}
-	return value, nil
 }

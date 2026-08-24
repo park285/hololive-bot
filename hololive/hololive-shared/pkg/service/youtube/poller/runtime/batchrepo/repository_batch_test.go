@@ -34,6 +34,64 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
+func buildPersistVideosBatch() ([]*domain.YouTubeVideo, []*domain.YouTubeNotificationOutbox) {
+	videos := make([]*domain.YouTubeVideo, 0, PollerBatchMaxSize+5)
+	notifications := make([]*domain.YouTubeNotificationOutbox, 0, PollerBatchMaxSize+5)
+
+	for i := range PollerBatchMaxSize + 5 {
+		videoID := fmt.Sprintf("video-%03d", i)
+
+		videos = append(videos, &domain.YouTubeVideo{
+			VideoID:   videoID,
+			ChannelID: testChannelID,
+			Title:     "title-" + videoID,
+			IsShort:   i%2 == 0,
+			ViewCount: int64(100 + i),
+		})
+		notifications = append(notifications, &domain.YouTubeNotificationOutbox{
+			Kind:      domain.OutboxKindNewVideo,
+			ChannelID: testChannelID,
+			ContentID: videoID,
+			Payload:   `{"video_id":"` + videoID + `"}`,
+			Status:    domain.OutboxStatusPending,
+		})
+	}
+
+	return videos, notifications
+}
+
+func requirePersistVideosUpdatesExistingVideo(t *testing.T, db *batchTestDB, repository BatchRepository) {
+	t.Helper()
+
+	require.NoError(t, persistVideos(t.Context(), repository, []*domain.YouTubeVideo{{
+		VideoID:   "video-000",
+		ChannelID: testChannelID,
+		Title:     "title-video-000",
+		ViewCount: 999,
+	}}, []*domain.YouTubeNotificationOutbox{{
+		Kind:      domain.OutboxKindNewVideo,
+		ChannelID: testChannelID,
+		ContentID: "video-000",
+		Payload:   `{"video_id":"video-000"}`,
+		Status:    domain.OutboxStatusPending,
+	}}, &domain.YouTubeContentWatermark{
+		ChannelID:     testChannelID,
+		WatermarkType: domain.WatermarkTypeVideo,
+		Initialized:   true,
+		LastContentID: "video-000",
+	}))
+
+	var updated domain.YouTubeVideo
+
+	require.NoError(t, db.First(&updated, "video_id = ?", "video-000").Error)
+	require.EqualValues(t, 999, updated.ViewCount)
+
+	var outboxCount int64
+
+	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
+	require.EqualValues(t, PollerBatchMaxSize+5, outboxCount)
+}
+
 func TestPgxBatchRepositoryPersistVideos(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeVideo{},
@@ -41,73 +99,33 @@ func TestPgxBatchRepositoryPersistVideos(t *testing.T) {
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	videos := make([]*domain.YouTubeVideo, 0, PollerBatchMaxSize+5)
-	notifications := make([]*domain.YouTubeNotificationOutbox, 0, PollerBatchMaxSize+5)
-	for i := range PollerBatchMaxSize + 5 {
-		videoID := fmt.Sprintf("video-%03d", i)
-		videos = append(videos, &domain.YouTubeVideo{
-			VideoID:   videoID,
-			ChannelID: "channel-1",
-			Title:     "title-" + videoID,
-			IsShort:   i%2 == 0,
-			ViewCount: int64(100 + i),
-		})
-		notifications = append(notifications, &domain.YouTubeNotificationOutbox{
-			Kind:      domain.OutboxKindNewVideo,
-			ChannelID: "channel-1",
-			ContentID: videoID,
-			Payload:   `{"video_id":"` + videoID + `"}`,
-			Status:    domain.OutboxStatusPending,
-		})
-	}
+	videos, notifications := buildPersistVideosBatch()
 
-	err := persistVideos(repository, ctx, videos, notifications, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+	require.NoError(t, persistVideos(ctx, repository, videos, notifications, &domain.YouTubeContentWatermark{
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeVideo,
 		Initialized:   true,
 		LastContentID: "video-054",
-	})
-	require.NoError(t, err)
+	}))
 
 	var videoCount int64
+
 	require.NoError(t, db.Model(&domain.YouTubeVideo{}).Count(&videoCount).Error)
 	require.EqualValues(t, PollerBatchMaxSize+5, videoCount)
 
 	var outboxCount int64
+
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	require.EqualValues(t, PollerBatchMaxSize+5, outboxCount)
 
 	var watermark domain.YouTubeContentWatermark
-	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", "channel-1", domain.WatermarkTypeVideo).First(&watermark).Error)
+
+	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", testChannelID, domain.WatermarkTypeVideo).First(&watermark).Error)
 	require.Equal(t, "video-054", watermark.LastContentID)
 
-	err = persistVideos(repository, ctx, []*domain.YouTubeVideo{{
-		VideoID:   "video-000",
-		ChannelID: "channel-1",
-		Title:     "title-video-000",
-		ViewCount: 999,
-	}}, []*domain.YouTubeNotificationOutbox{{
-		Kind:      domain.OutboxKindNewVideo,
-		ChannelID: "channel-1",
-		ContentID: "video-000",
-		Payload:   `{"video_id":"video-000"}`,
-		Status:    domain.OutboxStatusPending,
-	}}, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
-		WatermarkType: domain.WatermarkTypeVideo,
-		Initialized:   true,
-		LastContentID: "video-000",
-	})
-	require.NoError(t, err)
-
-	var updated domain.YouTubeVideo
-	require.NoError(t, db.First(&updated, "video_id = ?", "video-000").Error)
-	require.EqualValues(t, 999, updated.ViewCount)
-
-	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
-	require.EqualValues(t, PollerBatchMaxSize+5, outboxCount)
+	requirePersistVideosUpdatesExistingVideo(t, db, repository)
 }
 
 func TestPgxBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *testing.T) {
@@ -117,7 +135,7 @@ func TestPgxBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	videoSuccessBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success"))
 	videoConflictBefore := testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict"))
@@ -125,46 +143,47 @@ func TestPgxBatchRepositoryPersistVideosAllowsDifferentKindsForSameContentID(t *
 	notifications := []*domain.YouTubeNotificationOutbox{
 		{
 			Kind:      domain.OutboxKindNewVideo,
-			ChannelID: "channel-1",
-			ContentID: "video-1",
+			ChannelID: testChannelID,
+			ContentID: testVideoID,
 			Payload:   `{"video_id":"video-1","kind":"video"}`,
 			Status:    domain.OutboxStatusPending,
 		},
 		{
 			Kind:      domain.OutboxKindNewShort,
-			ChannelID: "channel-1",
-			ContentID: "video-1",
+			ChannelID: testChannelID,
+			ContentID: testVideoID,
 			Payload:   `{"canonical_post_id":"short:video-1","video_id":"video-1","kind":"short"}`,
 			Status:    domain.OutboxStatusPending,
 		},
 		{
 			Kind:      domain.OutboxKindNewVideo,
-			ChannelID: "channel-1",
-			ContentID: "video-1",
+			ChannelID: testChannelID,
+			ContentID: testVideoID,
 			Payload:   `{"video_id":"video-1","kind":"video-duplicate"}`,
 			Status:    domain.OutboxStatusPending,
 		},
 	}
 
-	err := persistVideos(repository, ctx, []*domain.YouTubeVideo{{
-		VideoID:   "video-1",
-		ChannelID: "channel-1",
+	err := persistVideos(ctx, repository, []*domain.YouTubeVideo{{
+		VideoID:   testVideoID,
+		ChannelID: testChannelID,
 		Title:     "title-video-1",
 		ViewCount: 1,
 	}}, notifications, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeVideo,
 		Initialized:   true,
-		LastContentID: "video-1",
+		LastContentID: testVideoID,
 	})
 	require.NoError(t, err)
 
 	var outboxCount int64
+
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).Count(&outboxCount).Error)
 	require.EqualValues(t, 2, outboxCount)
-	require.Equal(t, videoSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success")))
-	require.Equal(t, videoConflictBefore, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict")))
-	require.Equal(t, shortSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewShort), "success")))
+	require.InDelta(t, videoSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "success")), 0)
+	require.InDelta(t, videoConflictBefore, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewVideo), "conflict")), 0)
+	require.InDelta(t, shortSuccessBefore+1, testutil.ToFloat64(outboxInsertTotal.WithLabelValues(string(domain.OutboxKindNewShort), "success")), 0)
 }
 
 func TestPgxBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *testing.T) {
@@ -174,23 +193,25 @@ func TestPgxBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *te
 		&domain.YouTubeContentWatermark{},
 	)
 	require.NoError(t, db.Exec("PRAGMA busy_timeout = 5000").Error)
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	runPersist := func() error {
 		repository := NewBatchRepository(db)
-		return persistVideos(repository, ctx, []*domain.YouTubeVideo{{
+
+		return persistVideos(ctx, repository, []*domain.YouTubeVideo{{
 			VideoID:   "video-race",
-			ChannelID: "channel-1",
+			ChannelID: testChannelID,
 			Title:     "title-video-race",
 			ViewCount: 1,
 		}}, []*domain.YouTubeNotificationOutbox{{
 			Kind:      domain.OutboxKindNewVideo,
-			ChannelID: "channel-1",
+			ChannelID: testChannelID,
 			ContentID: "video-race",
 			Payload:   `{"video_id":"video-race"}`,
 			Status:    domain.OutboxStatusPending,
 		}}, &domain.YouTubeContentWatermark{
-			ChannelID:     "channel-1",
+			ChannelID:     testChannelID,
 			WatermarkType: domain.WatermarkTypeVideo,
 			Initialized:   true,
 			LastContentID: "video-race",
@@ -198,12 +219,15 @@ func TestPgxBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *te
 	}
 
 	var wg sync.WaitGroup
+
 	errs := make(chan error, 2)
+
 	for range 2 {
 		wg.Go(func() {
 			errs <- runPersist()
 		})
 	}
+
 	wg.Wait()
 	close(errs)
 
@@ -212,6 +236,7 @@ func TestPgxBatchRepositoryPersistVideosConcurrentOutboxInsertIsIdempotent(t *te
 	}
 
 	var outboxCount int64
+
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).
 		Where("kind = ? AND content_id = ?", domain.OutboxKindNewVideo, "video-race").
 		Count(&outboxCount).Error)
@@ -225,37 +250,38 @@ func TestPgxBatchRepositoryPersistVideosPrimaryAndBackfillSameContentLeaveOneOut
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
+	ctx := t.Context()
 	video := &domain.YouTubeVideo{
 		VideoID:   "short-backfill",
-		ChannelID: "channel-1",
+		ChannelID: testChannelID,
 		Title:     "title-short-backfill",
 		IsShort:   true,
 		ViewCount: 1,
 	}
 	watermark := &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
 		LastContentID: "short-backfill",
 	}
 
-	require.NoError(t, persistVideos(repository, ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
+	require.NoError(t, persistVideos(ctx, repository, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindNewShort,
-		ChannelID: "channel-1",
+		ChannelID: testChannelID,
 		ContentID: "short:short-backfill",
 		Payload:   buildShortNotificationPayload(video, "short:short-backfill"),
 		Status:    domain.OutboxStatusPending,
 	}}, watermark))
-	require.NoError(t, persistVideos(repository, ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
+	require.NoError(t, persistVideos(ctx, repository, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindNewShort,
-		ChannelID: "channel-1",
+		ChannelID: testChannelID,
 		ContentID: "short:short-backfill",
 		Payload:   buildShortNotificationPayload(video, "short:short-backfill"),
 		Status:    domain.OutboxStatusPending,
 	}}, watermark))
 
 	var outboxCount int64
+
 	require.NoError(t, db.Model(&domain.YouTubeNotificationOutbox{}).
 		Where("kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:short-backfill").
 		Count(&outboxCount).Error)
@@ -269,45 +295,48 @@ func TestPgxBatchRepositoryPersistVideosPersistsShortPublishedAt(t *testing.T) {
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
-	rawPublishedAt := time.Date(2026, 4, 10, 10, 11, 12, 123000000, time.FixedZone("KST", 9*60*60))
+	ctx := t.Context()
+	rawPublishedAt := time.Date(2026, time.April, 10, 10, 11, 12, 123000000, time.FixedZone("KST", 9*60*60))
 	canonicalPublishedAt := yttimestamp.Normalize(rawPublishedAt)
 	shortVideo := &domain.YouTubeVideo{
-		VideoID:     "short-1",
-		ChannelID:   "channel-1",
-		Title:       "title-short-1",
+		VideoID:     testShortID,
+		ChannelID:   testChannelID,
+		Title:       testShortTitle,
 		IsShort:     true,
 		PublishedAt: &canonicalPublishedAt,
 		ViewCount:   42,
 	}
 
-	err := persistVideos(repository, ctx, []*domain.YouTubeVideo{shortVideo}, []*domain.YouTubeNotificationOutbox{{
+	err := persistVideos(ctx, repository, []*domain.YouTubeVideo{shortVideo}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindNewShort,
-		ChannelID: "channel-1",
-		ContentID: "short-1",
+		ChannelID: testChannelID,
+		ContentID: testShortID,
 		Payload:   buildShortNotificationPayload(shortVideo, shortVideo.VideoID),
 		Status:    domain.OutboxStatusPending,
 	}}, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
-		LastContentID: "short:short-1",
+		LastContentID: testCanonicalShortFromShortID,
 	})
 	require.NoError(t, err)
 
 	var stored domain.YouTubeVideo
-	require.NoError(t, db.First(&stored, "video_id = ?", "short-1").Error)
+
+	require.NoError(t, db.First(&stored, "video_id = ?", testShortID).Error)
 	require.NotNil(t, stored.PublishedAt)
 	require.Equal(t, yttimestamp.Format(canonicalPublishedAt), stored.PublishedAt.UTC().Format(time.RFC3339Nano))
 
 	var outbox domain.YouTubeNotificationOutbox
-	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, "short:short-1").Error)
+
+	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, testCanonicalShortFromShortID).Error)
 	require.Contains(t, outbox.Payload, `"canonical_post_id": "short:short-1"`)
 	require.Contains(t, outbox.Payload, `"published_at": "`+yttimestamp.Format(canonicalPublishedAt)+`"`)
 
 	var watermark domain.YouTubeContentWatermark
-	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", "channel-1", domain.WatermarkTypeShort).First(&watermark).Error)
-	require.Equal(t, "short:short-1", watermark.LastContentID)
+
+	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", testChannelID, domain.WatermarkTypeShort).First(&watermark).Error)
+	require.Equal(t, testCanonicalShortFromShortID, watermark.LastContentID)
 }
 
 func TestPgxBatchRepositoryPersistVideosPreservesExistingPublishedAt(t *testing.T) {
@@ -317,38 +346,39 @@ func TestPgxBatchRepositoryPersistVideosPreservesExistingPublishedAt(t *testing.
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
-	firstPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	ctx := t.Context()
+	firstPublishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	laterPublishedAt := firstPublishedAt.Add(5 * time.Minute)
 
-	require.NoError(t, persistVideos(repository, ctx, []*domain.YouTubeVideo{{
+	require.NoError(t, persistVideos(ctx, repository, []*domain.YouTubeVideo{{
 		VideoID:     "short-stable",
-		ChannelID:   "channel-1",
+		ChannelID:   testChannelID,
 		Title:       "title-short-stable",
 		IsShort:     true,
 		PublishedAt: &firstPublishedAt,
 		ViewCount:   42,
 	}}, nil, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
 		LastContentID: "short:short-stable",
 	}))
-	require.NoError(t, persistVideos(repository, ctx, []*domain.YouTubeVideo{{
+	require.NoError(t, persistVideos(ctx, repository, []*domain.YouTubeVideo{{
 		VideoID:     "short-stable",
-		ChannelID:   "channel-1",
+		ChannelID:   testChannelID,
 		Title:       "title-short-stable",
 		IsShort:     true,
 		PublishedAt: &laterPublishedAt,
 		ViewCount:   43,
 	}}, nil, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeShort,
 		Initialized:   true,
 		LastContentID: "short:short-stable",
 	}))
 
 	var stored domain.YouTubeVideo
+
 	require.NoError(t, db.First(&stored, "video_id = ?", "short-stable").Error)
 	require.NotNil(t, stored.PublishedAt)
 	require.Equal(t, firstPublishedAt, stored.PublishedAt.UTC())
@@ -362,22 +392,22 @@ func TestPgxBatchRepositoryPersistVideosRejectsShortPublishedAtStorageRuleMismat
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
-	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 
-	err := persistVideos(repository, ctx, []*domain.YouTubeVideo{{
-		VideoID:     "short-1",
-		ChannelID:   "channel-1",
-		Title:       "title-short-1",
+	err := persistVideos(ctx, repository, []*domain.YouTubeVideo{{
+		VideoID:     testShortID,
+		ChannelID:   testChannelID,
+		Title:       testShortTitle,
 		IsShort:     true,
 		PublishedAt: &publishedAt,
 	}}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindNewShort,
-		ChannelID: "channel-1",
-		ContentID: "short-1",
+		ChannelID: testChannelID,
+		ContentID: testShortID,
 		Payload:   `{"canonical_post_id":"short:short-1","video_id":"short-1","published_at":"2026-04-10T10:11:12+09:00"}`,
 		Status:    domain.OutboxStatusPending,
-	}}, &domain.YouTubeContentWatermark{ChannelID: "channel-1", WatermarkType: domain.WatermarkTypeShort, Initialized: true, LastContentID: "short-1"})
+	}}, &domain.YouTubeContentWatermark{ChannelID: testChannelID, WatermarkType: domain.WatermarkTypeShort, Initialized: true, LastContentID: testShortID})
 	require.ErrorContains(t, err, "payload published_at mismatch")
 }
 
@@ -388,48 +418,51 @@ func TestPgxBatchRepositoryPersistCommunityPosts(t *testing.T) {
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
-	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	communityPost := &domain.YouTubeCommunityPost{
-		PostID:        "post-1",
-		ChannelID:     "channel-1",
-		AuthorName:    "author",
-		ContentText:   "hello",
-		PublishedText: "1 hour ago",
+		PostID:        testPostID,
+		ChannelID:     testChannelID,
+		AuthorName:    testAuthorName,
+		ContentText:   testContentText,
+		PublishedText: testPublishedText,
 		PublishedAt:   &publishedAt,
 		LikeCount:     10,
 		CommentCount:  2,
 	}
 
-	err := persistCommunityPosts(repository, ctx, []*domain.YouTubeCommunityPost{communityPost}, []*domain.YouTubeNotificationOutbox{{
+	err := persistCommunityPosts(ctx, repository, []*domain.YouTubeCommunityPost{communityPost}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindCommunityPost,
-		ChannelID: "channel-1",
-		ContentID: "post-1",
+		ChannelID: testChannelID,
+		ContentID: testPostID,
 		Payload:   buildCommunityNotificationPayload(communityPost, communityPost.PostID),
 		Status:    domain.OutboxStatusPending,
 	}}, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,
-		LastContentID: "post-1",
+		LastContentID: testPostID,
 	})
 	require.NoError(t, err)
 
 	var post domain.YouTubeCommunityPost
-	require.NoError(t, db.First(&post, "post_id = ?", "post-1").Error)
+
+	require.NoError(t, db.First(&post, "post_id = ?", testPostID).Error)
 	require.EqualValues(t, 10, post.LikeCount)
 	require.EqualValues(t, 2, post.CommentCount)
 	require.NotNil(t, post.PublishedAt)
 	require.Equal(t, publishedAt, post.PublishedAt.UTC())
 
 	var outbox domain.YouTubeNotificationOutbox
-	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, "post-1").Error)
+
+	require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", domain.OutboxKindCommunityPost, testPostID).Error)
 	require.Contains(t, outbox.Payload, `"canonical_post_id": "community:post-1"`)
 	require.Contains(t, outbox.Payload, `"published_at": "`+publishedAt.Format(time.RFC3339Nano)+`"`)
 
 	var watermark domain.YouTubeContentWatermark
-	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", "channel-1", domain.WatermarkTypeCommunityPost).First(&watermark).Error)
-	require.Equal(t, "post-1", watermark.LastContentID)
+
+	require.NoError(t, db.Where("channel_id = ? AND watermark_type = ?", testChannelID, domain.WatermarkTypeCommunityPost).First(&watermark).Error)
+	require.Equal(t, testPostID, watermark.LastContentID)
 }
 
 func TestPgxBatchRepositoryPersistCommunityPostsPreservesExistingPublishedAt(t *testing.T) {
@@ -439,42 +472,43 @@ func TestPgxBatchRepositoryPersistCommunityPostsPreservesExistingPublishedAt(t *
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
-	firstPublishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	ctx := t.Context()
+	firstPublishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	laterPublishedAt := firstPublishedAt.Add(5 * time.Minute)
 
-	require.NoError(t, persistCommunityPosts(repository, ctx, []*domain.YouTubeCommunityPost{{
+	require.NoError(t, persistCommunityPosts(ctx, repository, []*domain.YouTubeCommunityPost{{
 		PostID:        "post-stable",
-		ChannelID:     "channel-1",
-		AuthorName:    "author",
-		ContentText:   "hello",
-		PublishedText: "1 hour ago",
+		ChannelID:     testChannelID,
+		AuthorName:    testAuthorName,
+		ContentText:   testContentText,
+		PublishedText: testPublishedText,
 		PublishedAt:   &firstPublishedAt,
 		LikeCount:     10,
 		CommentCount:  2,
 	}}, nil, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,
 		LastContentID: "post-stable",
 	}))
-	require.NoError(t, persistCommunityPosts(repository, ctx, []*domain.YouTubeCommunityPost{{
+	require.NoError(t, persistCommunityPosts(ctx, repository, []*domain.YouTubeCommunityPost{{
 		PostID:        "post-stable",
-		ChannelID:     "channel-1",
-		AuthorName:    "author",
-		ContentText:   "hello",
-		PublishedText: "1 hour ago",
+		ChannelID:     testChannelID,
+		AuthorName:    testAuthorName,
+		ContentText:   testContentText,
+		PublishedText: testPublishedText,
 		PublishedAt:   &laterPublishedAt,
 		LikeCount:     11,
 		CommentCount:  3,
 	}}, nil, &domain.YouTubeContentWatermark{
-		ChannelID:     "channel-1",
+		ChannelID:     testChannelID,
 		WatermarkType: domain.WatermarkTypeCommunityPost,
 		Initialized:   true,
 		LastContentID: "post-stable",
 	}))
 
 	var post domain.YouTubeCommunityPost
+
 	require.NoError(t, db.First(&post, "post_id = ?", "post-stable").Error)
 	require.NotNil(t, post.PublishedAt)
 	require.Equal(t, firstPublishedAt, post.PublishedAt.UTC())
@@ -489,41 +523,42 @@ func TestPgxBatchRepositoryPersistCommunityPostsUpsertsAlarmState(t *testing.T) 
 		&domain.YouTubeContentWatermark{},
 	)
 	repository := NewBatchRepository(db)
-	ctx := context.Background()
-	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	detectedAt := publishedAt.Add(20 * time.Second)
 
 	post := &domain.YouTubeCommunityPost{
-		PostID:        "post-1",
-		ChannelID:     "channel-1",
-		AuthorName:    "author",
-		ContentText:   "hello",
-		PublishedText: "1 hour ago",
+		PostID:        testPostID,
+		ChannelID:     testChannelID,
+		AuthorName:    testAuthorName,
+		ContentText:   testContentText,
+		PublishedText: testPublishedText,
 		PublishedAt:   &publishedAt,
 		LikeCount:     10,
 		CommentCount:  2,
 	}
 	trackingRows := []*domain.YouTubeContentAlarmTracking{{
 		Kind:              domain.OutboxKindCommunityPost,
-		ContentID:         "post-1",
-		ChannelID:         "channel-1",
+		ContentID:         testPostID,
+		ChannelID:         testChannelID,
 		ActualPublishedAt: &publishedAt,
 		DetectedAt:        detectedAt,
 	}}
 
 	err := repository.PersistCommunityPosts(ctx, []*domain.YouTubeCommunityPost{post}, []*domain.YouTubeNotificationOutbox{{
 		Kind:      domain.OutboxKindCommunityPost,
-		ChannelID: "channel-1",
-		ContentID: "post-1",
+		ChannelID: testChannelID,
+		ContentID: testPostID,
 		Payload:   buildCommunityNotificationPayload(post, post.PostID),
 		Status:    domain.OutboxStatusPending,
 	}}, trackingRows, nil)
 	require.NoError(t, err)
 
 	var state domain.YouTubeCommunityShortsAlarmState
+
 	require.NoError(t, db.First(&state, "kind = ? AND post_id = ?", domain.OutboxKindCommunityPost, "community:post-1").Error)
-	require.Equal(t, "post-1", state.ContentID)
-	require.Equal(t, "channel-1", state.ChannelID)
+	require.Equal(t, testPostID, state.ContentID)
+	require.Equal(t, testChannelID, state.ChannelID)
 	require.NotNil(t, state.ActualPublishedAt)
 	require.Equal(t, publishedAt, state.ActualPublishedAt.UTC())
 	require.Equal(t, detectedAt, state.DetectedAt.UTC())
@@ -532,129 +567,147 @@ func TestPgxBatchRepositoryPersistCommunityPostsUpsertsAlarmState(t *testing.T) 
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusDetected, state.DeliveryStatus)
 }
 
+type duplicatePollClaimCase struct {
+	name      string
+	kind      domain.OutboxKind
+	postID    string
+	contentID string
+	seed      func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time)
+	persist   func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error
+}
+
+func duplicatePollCommunityPost(publishedAt time.Time) *domain.YouTubeCommunityPost {
+	return &domain.YouTubeCommunityPost{
+		PostID:        testDuplicatePostID,
+		ChannelID:     testChannelID,
+		AuthorName:    testAuthorName,
+		ContentText:   testContentText,
+		PublishedText: testPublishedText,
+		PublishedAt:   &publishedAt,
+		LikeCount:     10,
+		CommentCount:  2,
+	}
+}
+
+func duplicatePollShortVideo(publishedAt time.Time) *domain.YouTubeVideo {
+	return &domain.YouTubeVideo{
+		VideoID:     testDuplicateVideoID,
+		ChannelID:   testChannelID,
+		Title:       "title-short-duplicate",
+		IsShort:     true,
+		PublishedAt: &publishedAt,
+		ViewCount:   42,
+	}
+}
+
+func duplicatePollCommunityPostCase() duplicatePollClaimCase {
+	return duplicatePollClaimCase{
+		name:      "community post",
+		kind:      domain.OutboxKindCommunityPost,
+		postID:    "community:post-duplicate",
+		contentID: testDuplicatePostID,
+		seed: func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time) {
+			t.Helper()
+
+			post := duplicatePollCommunityPost(publishedAt)
+			require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
+				Kind:          domain.OutboxKindCommunityPost,
+				ChannelID:     testChannelID,
+				ContentID:     testDuplicatePostID,
+				Payload:       buildCommunityNotificationPayload(post, post.PostID),
+				Status:        domain.OutboxStatusPending,
+				NextAttemptAt: authorizedAt,
+				CreatedAt:     authorizedAt,
+			}).Error)
+			require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
+				Kind:              domain.OutboxKindCommunityPost,
+				PostID:            "community:post-duplicate",
+				ContentID:         testDuplicatePostID,
+				ChannelID:         testChannelID,
+				ActualPublishedAt: &publishedAt,
+				DetectedAt:        detectedAt,
+				AuthorizedAt:      &authorizedAt,
+				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+			}).Error)
+		},
+		persist: func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
+			t.Helper()
+
+			post := duplicatePollCommunityPost(publishedAt)
+
+			return repository.PersistCommunityPosts(ctx, []*domain.YouTubeCommunityPost{post}, []*domain.YouTubeNotificationOutbox{{
+				Kind:      domain.OutboxKindCommunityPost,
+				ChannelID: testChannelID,
+				ContentID: testDuplicatePostID,
+				Payload:   buildCommunityNotificationPayload(post, post.PostID),
+				Status:    domain.OutboxStatusPending,
+			}}, []*domain.YouTubeContentAlarmTracking{{
+				Kind:              domain.OutboxKindCommunityPost,
+				ContentID:         testDuplicatePostID,
+				ChannelID:         testChannelID,
+				ActualPublishedAt: &publishedAt,
+				DetectedAt:        detectedAt.Add(time.Minute),
+			}}, nil)
+		},
+	}
+}
+
+func duplicatePollShortCase() duplicatePollClaimCase {
+	return duplicatePollClaimCase{
+		name:      "short",
+		kind:      domain.OutboxKindNewShort,
+		postID:    "short:video-duplicate",
+		contentID: testDuplicateVideoID,
+		seed: func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time) {
+			t.Helper()
+
+			video := duplicatePollShortVideo(publishedAt)
+			require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
+				Kind:          domain.OutboxKindNewShort,
+				ChannelID:     testChannelID,
+				ContentID:     testDuplicateVideoID,
+				Payload:       buildShortNotificationPayload(video, testDuplicateVideoID),
+				Status:        domain.OutboxStatusPending,
+				NextAttemptAt: authorizedAt,
+				CreatedAt:     authorizedAt,
+			}).Error)
+			require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
+				Kind:              domain.OutboxKindNewShort,
+				PostID:            "short:video-duplicate",
+				ContentID:         testDuplicateVideoID,
+				ChannelID:         testChannelID,
+				ActualPublishedAt: &publishedAt,
+				DetectedAt:        detectedAt,
+				AuthorizedAt:      &authorizedAt,
+				DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
+			}).Error)
+		},
+		persist: func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
+			t.Helper()
+
+			video := duplicatePollShortVideo(publishedAt)
+
+			return repository.PersistVideos(ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
+				Kind:      domain.OutboxKindNewShort,
+				ChannelID: testChannelID,
+				ContentID: "short:video-duplicate",
+				Payload:   buildShortNotificationPayload(video, "short:video-duplicate"),
+				Status:    domain.OutboxStatusPending,
+			}}, []*domain.YouTubeContentAlarmTracking{{
+				Kind:              domain.OutboxKindNewShort,
+				ContentID:         "short:video-duplicate",
+				ChannelID:         testChannelID,
+				ActualPublishedAt: &publishedAt,
+				DetectedAt:        detectedAt.Add(time.Minute),
+			}}, nil)
+		},
+	}
+}
+
 func TestPgxBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClaimState(t *testing.T) {
-	testCases := []struct {
-		name      string
-		kind      domain.OutboxKind
-		postID    string
-		contentID string
-		seed      func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time)
-		persist   func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error
-	}{
-		{
-			name:      "community post",
-			kind:      domain.OutboxKindCommunityPost,
-			postID:    "community:post-duplicate",
-			contentID: "post-duplicate",
-			seed: func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time) {
-				t.Helper()
-
-				post := &domain.YouTubeCommunityPost{
-					PostID:        "post-duplicate",
-					ChannelID:     "channel-1",
-					AuthorName:    "author",
-					ContentText:   "hello",
-					PublishedText: "1 hour ago",
-					PublishedAt:   &publishedAt,
-					LikeCount:     10,
-					CommentCount:  2,
-				}
-				require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
-					Kind:          domain.OutboxKindCommunityPost,
-					ChannelID:     "channel-1",
-					ContentID:     "post-duplicate",
-					Payload:       buildCommunityNotificationPayload(post, post.PostID),
-					Status:        domain.OutboxStatusPending,
-					NextAttemptAt: authorizedAt,
-					CreatedAt:     authorizedAt,
-				}).Error)
-				require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
-					Kind:              domain.OutboxKindCommunityPost,
-					PostID:            "community:post-duplicate",
-					ContentID:         "post-duplicate",
-					ChannelID:         "channel-1",
-					ActualPublishedAt: &publishedAt,
-					DetectedAt:        detectedAt,
-					AuthorizedAt:      &authorizedAt,
-					DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
-				}).Error)
-			},
-			persist: func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
-				t.Helper()
-
-				post := &domain.YouTubeCommunityPost{
-					PostID:        "post-duplicate",
-					ChannelID:     "channel-1",
-					AuthorName:    "author",
-					ContentText:   "hello",
-					PublishedText: "1 hour ago",
-					PublishedAt:   &publishedAt,
-					LikeCount:     10,
-					CommentCount:  2,
-				}
-				return repository.PersistCommunityPosts(ctx, []*domain.YouTubeCommunityPost{post}, []*domain.YouTubeNotificationOutbox{{
-					Kind:      domain.OutboxKindCommunityPost,
-					ChannelID: "channel-1",
-					ContentID: "post-duplicate",
-					Payload:   buildCommunityNotificationPayload(post, post.PostID),
-					Status:    domain.OutboxStatusPending,
-				}}, []*domain.YouTubeContentAlarmTracking{{
-					Kind:              domain.OutboxKindCommunityPost,
-					ContentID:         "post-duplicate",
-					ChannelID:         "channel-1",
-					ActualPublishedAt: &publishedAt,
-					DetectedAt:        detectedAt.Add(time.Minute),
-				}}, nil)
-			},
-		},
-		{
-			name:      "short",
-			kind:      domain.OutboxKindNewShort,
-			postID:    "short:video-duplicate",
-			contentID: "video-duplicate",
-			seed: func(t *testing.T, db *batchTestDB, publishedAt, detectedAt, authorizedAt time.Time) {
-				t.Helper()
-
-				video := &domain.YouTubeVideo{VideoID: "video-duplicate", ChannelID: "channel-1", Title: "title-short-duplicate", IsShort: true, PublishedAt: &publishedAt, ViewCount: 42}
-				require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
-					Kind:          domain.OutboxKindNewShort,
-					ChannelID:     "channel-1",
-					ContentID:     "video-duplicate",
-					Payload:       buildShortNotificationPayload(video, "video-duplicate"),
-					Status:        domain.OutboxStatusPending,
-					NextAttemptAt: authorizedAt,
-					CreatedAt:     authorizedAt,
-				}).Error)
-				require.NoError(t, db.Create(&domain.YouTubeCommunityShortsAlarmState{
-					Kind:              domain.OutboxKindNewShort,
-					PostID:            "short:video-duplicate",
-					ContentID:         "video-duplicate",
-					ChannelID:         "channel-1",
-					ActualPublishedAt: &publishedAt,
-					DetectedAt:        detectedAt,
-					AuthorizedAt:      &authorizedAt,
-					DeliveryStatus:    domain.YouTubeCommunityShortsAlarmStateStatusEnqueued,
-				}).Error)
-			},
-			persist: func(t *testing.T, repository BatchRepository, ctx context.Context, publishedAt, detectedAt time.Time) error {
-				t.Helper()
-
-				video := &domain.YouTubeVideo{VideoID: "video-duplicate", ChannelID: "channel-1", Title: "title-short-duplicate", IsShort: true, PublishedAt: &publishedAt, ViewCount: 42}
-				return repository.PersistVideos(ctx, []*domain.YouTubeVideo{video}, []*domain.YouTubeNotificationOutbox{{
-					Kind:      domain.OutboxKindNewShort,
-					ChannelID: "channel-1",
-					ContentID: "short:video-duplicate",
-					Payload:   buildShortNotificationPayload(video, "short:video-duplicate"),
-					Status:    domain.OutboxStatusPending,
-				}}, []*domain.YouTubeContentAlarmTracking{{
-					Kind:              domain.OutboxKindNewShort,
-					ContentID:         "short:video-duplicate",
-					ChannelID:         "channel-1",
-					ActualPublishedAt: &publishedAt,
-					DetectedAt:        detectedAt.Add(time.Minute),
-				}}, nil)
-			},
-		},
+	testCases := []duplicatePollClaimCase{
+		duplicatePollCommunityPostCase(),
+		duplicatePollShortCase(),
 	}
 
 	for _, tc := range testCases {
@@ -666,8 +719,8 @@ func TestPgxBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClaim
 				&domain.YouTubeContentWatermark{},
 			)
 			repository := NewBatchRepository(db)
-			ctx := context.Background()
-			publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+			ctx := t.Context()
+			publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 			detectedAt := publishedAt.Add(20 * time.Second)
 			authorizedAt := detectedAt.Add(30 * time.Second)
 
@@ -675,13 +728,16 @@ func TestPgxBatchRepositoryPersistCommunityShortsDuplicatePollKeepsExistingClaim
 			require.NoError(t, tc.persist(t, repository, ctx, publishedAt, detectedAt))
 
 			var outbox domain.YouTubeNotificationOutbox
+
 			require.NoError(t, db.First(&outbox, "kind = ? AND content_id = ?", tc.kind, tc.contentID).Error)
 
 			var trackingRow domain.YouTubeContentAlarmTracking
+
 			require.NoError(t, db.First(&trackingRow, "kind = ? AND content_id = ?", tc.kind, tc.contentID).Error)
 			require.Equal(t, tc.postID, trackingRow.CanonicalContentID)
 
 			var stateRows []domain.YouTubeCommunityShortsAlarmState
+
 			require.NoError(t, db.Where("kind = ?", tc.kind).Find(&stateRows).Error)
 			require.Len(t, stateRows, 1)
 			require.Equal(t, tc.postID, stateRows[0].PostID)

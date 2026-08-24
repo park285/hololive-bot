@@ -24,14 +24,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -39,7 +35,11 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type commandInitView struct {
@@ -134,6 +134,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 	if v.memberRepository != nil {
 		commands = append(commands, handlers.NewCalendarCommand(deps, v.memberRepository, v.calendarImageRenderer))
 	}
+
 	if v.majorEventRepository != nil {
 		v.logInfo("MajorEvent command enabled")
 
@@ -150,6 +151,7 @@ func (v *commandInitView) buildCommands(deps *handlercore.Dependencies) []handle
 	}
 
 	commands = v.appendExternalCommands(commands, deps)
+
 	return compactCommands(commands)
 }
 
@@ -157,12 +159,15 @@ func (v *commandInitView) appendExternalCommands(commands []handlercore.Command,
 	if len(v.commandBuilders) == 0 {
 		return commands
 	}
+
 	v.logInfo("External command builders enabled", slog.Int("count", len(v.commandBuilders)))
+
 	for _, builder := range v.commandBuilders {
 		if builder != nil {
 			commands = append(commands, builder(deps))
 		}
 	}
+
 	return commands
 }
 

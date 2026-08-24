@@ -18,10 +18,13 @@ import (
 func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt *time.Time) {
 	query := mustSQL("dispatcher_claim_release_0019_01.sql")
 	args := []any{id, domain.OutboxStatusPending}
+
 	if lockedAt != nil {
 		query += " AND locked_at = ?"
+
 		args = append(args, *lockedAt)
 	}
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, d.db, "release outbox lock", query, args...); err != nil {
 		d.logger.Warn("Failed to release outbox lock",
 			slog.Int64("id", id),
@@ -37,9 +40,11 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 	}
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
+
 	deleted, err := d.deleteTerminalOutboxBatches(ctx, outboxCutoff, outboxCleanupBatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", err))
+
 		return
 	}
 
@@ -54,17 +59,20 @@ func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
 // 락 보유 시간이 길어진다 — picked LIMIT 배치 루프(retention.go 패턴)를 유지할 것.
 func (d *ClaimManager) deleteTerminalOutboxBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	var total int64
+
 	for {
 		deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", mustSQL("dispatcher_claim_release_0042_02.sql"), domain.OutboxStatusSent, domain.OutboxStatusFailed, cutoff, batchSize)
 		if err != nil {
-			return total, err
+			return total, fmt.Errorf("exec delivery SQL: %w", err)
 		}
+
 		total += deleted
 		if deleted < int64(batchSize) {
 			return total, nil
 		}
+
 		if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
-			return total, err
+			return total, fmt.Errorf("yield between delete batches: %w", err)
 		}
 	}
 }
@@ -86,6 +94,7 @@ func (d *ClaimManager) cleanupOrphanPendingOutbox(ctx context.Context) {
 	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup orphan pending outbox items", mustSQL("dispatcher_claim_release_0072_03.sql"), domain.OutboxStatusPending, pendingCutoff, lockExpiry)
 	if err != nil {
 		d.logger.Warn("Failed to cleanup orphan pending outbox items", slog.Any("error", err))
+
 		return
 	}
 
@@ -106,16 +115,20 @@ func (d *ClaimManager) quarantineStaleSendingDeliveries(ctx context.Context) {
 	outboxIDs, quarantined, err := d.delivery.QuarantineStaleSending(ctx, d.config.LockTimeout, d.config.BatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to quarantine stale sending delivery rows", slog.Any("error", err))
+
 		return
 	}
+
 	if quarantined == 0 {
 		return
 	}
 
 	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, outboxIDs); err != nil {
 		d.logger.Warn("Failed to update outbox statuses after stale sending quarantine", slog.Any("error", err))
+
 		return
 	}
+
 	if err := d.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs); err != nil {
 		d.logger.Warn("Failed to log finalized community/shorts outbox results after stale sending quarantine", slog.Any("error", err))
 	}
@@ -132,11 +145,13 @@ func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispa
 	}
 
 	repository := observation.NewRepositoryContext(ctx, d.db)
+
 	for i := range claims {
 		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].Kind, claims[i].PostID, claims[i].AuthorizedAt); err != nil {
 			return fmt.Errorf("release claim at index %d: %w", i, err)
 		}
 	}
+
 	return nil
 }
 
@@ -156,9 +171,11 @@ func (d *ClaimManager) deliveryClaimTimeout() time.Duration {
 	if d != nil && d.config.LockTimeout > 0 && d.config.LockTimeout < claimTimeout {
 		claimTimeout = d.config.LockTimeout
 	}
+
 	if claimTimeout <= 0 {
 		return maxCommunityShortsClaimHold
 	}
+
 	return claimTimeout
 }
 
@@ -183,6 +200,7 @@ func deliveryClaimLogAttrs(
 	attrs ...any,
 ) []any {
 	baseAttrs := make([]any, 0, 7+len(attrs))
+
 	baseAttrs = append(baseAttrs,
 		slog.Int64(logschema.FieldDeliveryID, row.ID),
 		slog.Int64(logschema.FieldOutboxID, outbox.ID),
@@ -192,6 +210,7 @@ func deliveryClaimLogAttrs(
 		slog.String(deliveryAuditContentIDLogField, strings.TrimSpace(outbox.ContentID)),
 		slog.String(deliveryAuditAlarmTypeLogField, string(outbox.Kind.ToAlarmType())),
 	)
+
 	return append(baseAttrs, attrs...)
 }
 

@@ -22,27 +22,25 @@ package botruntime
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
-
-	jsonv2 "encoding/json/v2"
-	"github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 type trackingSettingsReadWriter struct {
@@ -114,6 +112,7 @@ func newTestValkeyClient(t *testing.T) (client valkey.Client, address string) {
 	t.Helper()
 
 	client, mini := testutil.NewTestValkeyClient(t)
+
 	return client, mini.Addr()
 }
 
@@ -334,19 +333,52 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 	}
 }
 
-func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
-	t.Parallel()
+func newConfigPublisherClient(t *testing.T, addr string) valkey.Client {
+	t.Helper()
 
-	logger := slog.New(slog.DiscardHandler)
-	client, addr := newTestValkeyClient(t)
-	publisherClient, err := valkey.NewClient(valkey.ClientOption{
+	client, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		DisableCache:      true,
 		ForceSingleClient: true,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { publisherClient.Close() })
+	t.Cleanup(client.Close)
 
+	return client
+}
+
+func startConfigSubscriber(t *testing.T, subscriber *configsub.Subscriber) (context.CancelFunc, <-chan struct{}) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+
+	go func() {
+		subscriber.Run(ctx)
+		close(done)
+	}()
+
+	return cancel, done
+}
+
+func awaitConfigSubscriberStop(t *testing.T, cancel context.CancelFunc, done <-chan struct{}) {
+	t.Helper()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber did not stop after cancel")
+	}
+}
+
+func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.DiscardHandler)
+	client, addr := newTestValkeyClient(t)
+	publisherClient := newConfigPublisherClient(t, addr)
 	cache := &cachemocks.Client{
 		GetClientFunc: func() valkey.Client { return client },
 	}
@@ -376,15 +408,9 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	subscriber := appbootstrap.BuildBotConfigSubscriber(t.Context(), deps, runtimeDeps, pollScheduler, logger)
 	require.NotNil(t, subscriber)
 
-	ctx, cancel := context.WithCancel(t.Context())
+	cancel, done := startConfigSubscriber(t, subscriber)
+
 	defer cancel()
-
-	done := make(chan struct{})
-
-	go func() {
-		subscriber.Run(ctx)
-		close(done)
-	}()
 
 	configPublisher := configsub.NewPublisher(publisherClient)
 
@@ -409,14 +435,7 @@ func TestBuildBotConfigSubscriber_PublisherRoundTrip(t *testing.T) {
 	}, 2*time.Second, 50*time.Millisecond)
 
 	assert.GreaterOrEqual(t, settingsService.calls(), 2)
-
-	cancel()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("subscriber did not stop after cancel")
-	}
+	awaitConfigSubscriberStop(t, cancel, done)
 }
 
 var _ settings.ReadWriter = (*trackingSettingsReadWriter)(nil)

@@ -35,7 +35,11 @@ func (as *AlarmService) GetRoomAlarms(ctx context.Context, roomID string) ([]str
 
 	channelIDs, err := as.cache.SMembers(ctx, alarmKey)
 	if err != nil {
-		return []string{}, sharedlogging.LogAndWrapError(ctx, as.logger, "get room alarms", err)
+		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "get room alarms", err); logErr != nil {
+			return []string{}, fmt.Errorf("log and wrap error: %w", logErr)
+		}
+
+		return []string{}, nil
 	}
 
 	return channelIDs, nil

@@ -41,23 +41,23 @@ func TestParseUpcomingArgs(t *testing.T) {
 		},
 		{
 			name: "limit and member",
-			args: []string{"12", "페코라"},
-			want: map[string]any{"limit": 12, "member": "페코라"},
+			args: []string{"12", testMemberPekora},
+			want: map[string]any{testParamLimit: 12, testParamMember: testMemberPekora},
 		},
 		{
 			name: "all removes limit",
 			args: []string{"20", "all", "미코"},
-			want: map[string]any{"all": true, "member": "미코"},
+			want: map[string]any{testParamAll: true, testParamMember: "미코"},
 		},
 		{
 			name: "non positive numbers treated as member tokens",
 			args: []string{"0", "-3", "스이세이"},
-			want: map[string]any{"member": "0 -3 스이세이"},
+			want: map[string]any{testParamMember: "0 -3 스이세이"},
 		},
 		{
 			name: "second positive number goes to member",
 			args: []string{"5", "3", "카나타"},
-			want: map[string]any{"limit": 5, "member": "3 카나타"},
+			want: map[string]any{testParamLimit: 5, testParamMember: "3 카나타"},
 		},
 	}
 
@@ -89,23 +89,23 @@ func TestParseScheduleArgs(t *testing.T) {
 		},
 		{
 			name: "default days",
-			args: []string{"페코라"},
-			want: map[string]any{"member": "페코라", "days": 7},
+			args: []string{testMemberPekora},
+			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 7},
 		},
 		{
 			name: "invalid days keeps default",
-			args: []string{"페코라", "abc"},
-			want: map[string]any{"member": "페코라", "days": 7},
+			args: []string{testMemberPekora, "abc"},
+			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 7},
 		},
 		{
 			name: "clamps lower bound",
-			args: []string{"페코라", "0"},
-			want: map[string]any{"member": "페코라", "days": 1},
+			args: []string{testMemberPekora, "0"},
+			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 1},
 		},
 		{
 			name: "clamps upper bound",
-			args: []string{"페코라", "99"},
-			want: map[string]any{"member": "페코라", "days": 30},
+			args: []string{testMemberPekora, "99"},
+			want: map[string]any{testParamMember: testMemberPekora, testParamDays: 30},
 		},
 	}
 

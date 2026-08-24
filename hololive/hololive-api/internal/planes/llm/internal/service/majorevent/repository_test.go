@@ -41,10 +41,8 @@ func TestRepository_Interface(t *testing.T) {
 }
 
 func TestRepository_NilPoolGuards(t *testing.T) {
-	t.Parallel()
-
 	repository := &Repository{}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("subscribe", func(t *testing.T) {
 		err := repository.Subscribe(ctx, "room-1", "room")
@@ -69,13 +67,12 @@ func TestRepository_NilPoolGuards(t *testing.T) {
 }
 
 func TestNormalizeEventForUpsert(t *testing.T) {
-	t.Parallel()
-
 	t.Run("defaults empty fields", func(t *testing.T) {
 		eventType, linkStatus := normalizeEventForUpsert(&domain.MajorEvent{})
 		if eventType != domain.MajorEventTypeEvent {
 			t.Fatalf("eventType = %q, want %q", eventType, domain.MajorEventTypeEvent)
 		}
+
 		if linkStatus != domain.MajorEventLinkStatusUnchecked {
 			t.Fatalf("linkStatus = %q, want %q", linkStatus, domain.MajorEventLinkStatusUnchecked)
 		}
@@ -89,6 +86,7 @@ func TestNormalizeEventForUpsert(t *testing.T) {
 		if eventType != domain.MajorEventTypeNews {
 			t.Fatalf("eventType = %q, want %q", eventType, domain.MajorEventTypeNews)
 		}
+
 		if linkStatus != domain.MajorEventLinkStatusOK {
 			t.Fatalf("linkStatus = %q, want %q", linkStatus, domain.MajorEventLinkStatusOK)
 		}

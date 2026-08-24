@@ -25,22 +25,23 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 // NewTestCacheService는 miniredis 기반 테스트용 캐시 서비스를 생성합니다.
-func NewTestCacheService(t *testing.T, ctx context.Context) *cache.Service {
+func NewTestCacheService(ctx context.Context, t *testing.T) *cache.Service {
 	t.Helper()
 
-	service, _ := NewTestCacheServiceWithMini(t, ctx)
+	service, _ := NewTestCacheServiceWithMini(ctx, t)
+
 	return service
 }
 
 // NewTestCacheServiceWithMini는 테스트용 캐시 서비스와 miniredis 인스턴스를 함께 반환합니다.
-func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Service, *miniredis.Miniredis) {
+func NewTestCacheServiceWithMini(ctx context.Context, t *testing.T) (*cache.Service, *miniredis.Miniredis) {
 	t.Helper()
 
 	host, port, mini := testredis.StartMiniRedis(t)
@@ -61,6 +62,7 @@ func NewTestCacheServiceWithMini(t *testing.T, ctx context.Context) (*cache.Serv
 		if err := service.Close(); err != nil {
 			t.Errorf("close cache service: %v", err)
 		}
+
 		mini.Close()
 	})
 

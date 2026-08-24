@@ -14,7 +14,13 @@ import (
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	"github.com/kapu/hololive-api/scripts/migrations"
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
+)
+
+const (
+	firstSQL  = "first.sql"
+	secondSQL = "second.sql"
+	txSQL     = "tx.sql"
 )
 
 func TestFreshDBAppliesAllAndIgnoresBaselineWatermark(t *testing.T) {
@@ -22,15 +28,16 @@ func TestFreshDBAppliesAllAndIgnoresBaselineWatermark(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 first.sql\n002 second.sql\n")},
-		"first.sql":            {Data: []byte("CREATE TABLE baseline_first_ran(id integer)")},
-		"second.sql":           {Data: []byte("CREATE TABLE baseline_second_ran(id integer)")},
+		firstSQL:               {Data: []byte("CREATE TABLE baseline_first_ran(id integer)")},
+		secondSQL:              {Data: []byte("CREATE TABLE baseline_second_ran(id integer)")},
 	}
 
-	result := runMigrations(t, pool, fsys, "second.sql")
+	result := runMigrations(t, pool, fsys, secondSQL)
 	if result.Applied != 2 || result.Skipped != 0 || result.Total != 2 {
 		t.Fatalf("result = %+v, want applied=2 skipped=0 total=2", result)
 	}
-	assertLedger(t, pool, []string{"first.sql", "second.sql"})
+
+	assertLedger(t, pool, []string{firstSQL, secondSQL})
 	assertTablePresent(t, pool, "baseline_first_ran")
 	assertTablePresent(t, pool, "baseline_second_ran")
 }
@@ -41,17 +48,19 @@ func TestPopulatedDBEmptyLedgerNoBaselineRefuses(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 first.sql\n002 second.sql\n")},
-		"first.sql":            {Data: []byte("CREATE TABLE baseline_first_ran(id integer)")},
-		"second.sql":           {Data: []byte("CREATE TABLE baseline_second_ran(id integer)")},
+		firstSQL:               {Data: []byte("CREATE TABLE baseline_first_ran(id integer)")},
+		secondSQL:              {Data: []byte("CREATE TABLE baseline_second_ran(id integer)")},
 	}
 
 	_, err := Run(t.Context(), pool, fsys, Config{})
 	if err == nil {
 		t.Fatal("Run() error = nil, want refusal on populated DB with empty ledger and no baseline")
 	}
+
 	if !strings.Contains(err.Error(), "empty schema_migrations ledger") {
 		t.Fatalf("Run() error = %v, want empty-ledger refusal", err)
 	}
+
 	assertTableAbsent(t, pool, "baseline_first_ran")
 	assertTableAbsent(t, pool, "baseline_second_ran")
 }
@@ -62,24 +71,28 @@ func TestPopulatedDBEmptyLedgerBaselineStampsThenApplies(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 first.sql\n002 second.sql\n003 tail.sql\n")},
-		"first.sql":            {Data: []byte("CREATE TABLE baseline_first_ran(id integer)")},
-		"second.sql":           {Data: []byte("CREATE TABLE baseline_second_ran(id integer)")},
+		firstSQL:               {Data: []byte("CREATE TABLE baseline_first_ran(id integer)")},
+		secondSQL:              {Data: []byte("CREATE TABLE baseline_second_ran(id integer)")},
 		"tail.sql":             {Data: []byte("CREATE TABLE baseline_tail_ran(id integer)")},
 	}
 
-	result := runMigrations(t, pool, fsys, "second.sql")
+	result := runMigrations(t, pool, fsys, secondSQL)
 	if result.Applied != 1 || result.Skipped != 2 || result.Total != 3 {
 		t.Fatalf("result = %+v, want applied=1 skipped=2 total=3", result)
 	}
-	assertLedger(t, pool, []string{"first.sql", "second.sql", "tail.sql"})
+
+	assertLedger(t, pool, []string{firstSQL, secondSQL, "tail.sql"})
 	assertTableAbsent(t, pool, "baseline_first_ran")
 	assertTableAbsent(t, pool, "baseline_second_ran")
 	assertTablePresent(t, pool, "baseline_tail_ran")
-	for _, name := range []string{"first.sql", "second.sql"} {
+
+	for _, name := range []string{firstSQL, secondSQL} {
 		var checksum string
+
 		if err := pool.QueryRow(t.Context(), "SELECT checksum_sha256 FROM schema_migration_checksums WHERE filename = $1", name).Scan(&checksum); err != nil {
 			t.Fatalf("read baseline checksum %s: %v", name, err)
 		}
+
 		if want := migrationChecksum(mustMapFile(t, fsys, name).Data); checksum != want {
 			t.Fatalf("baseline checksum %s = %s, want %s", name, checksum, want)
 		}
@@ -91,18 +104,20 @@ func TestBeginWrappedFileFailureRollsBackWholeTxBlock(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
-		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_atomic_probe(id integer);\nSELECT 1/0;\nCOMMIT;\n")},
+		txSQL:                  {Data: []byte("BEGIN;\nCREATE TABLE tx_atomic_probe(id integer);\nSELECT 1/0;\nCOMMIT;\n")},
 	}
 
 	if _, err := Run(t.Context(), pool, fsys, Config{}); err == nil {
 		t.Fatal("Run() error = nil, want failure from statement inside BEGIN block")
 	}
+
 	assertTableAbsent(t, pool, "tx_atomic_probe")
 }
 
 func TestEpoch2BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	ctx := t.Context()
+
 	const runtimeRole = "pg_monitor"
 
 	for _, statement := range []string{
@@ -118,44 +133,58 @@ func TestEpoch2BaselineLateFailureRollsBackAllObjectsLedgerAndPrivileges(t *test
 	failureFS := realManifestThrough(t, epoch2Baseline)
 	baselineFile := mustMapFile(t, failureFS, epoch2Baseline)
 	baselineSQL := append([]byte(nil), baselineFile.Data...)
+
 	baselineFile.Data = injectBeforeFinalCommit(t, baselineSQL,
 		"SELECT public.epoch2_injected_late_failure();")
 
 	if _, err := Run(ctx, pool, failureFS, Config{}); err == nil {
 		t.Fatal("late-failure baseline Run() error = nil")
 	}
+
 	assertReplayAuditAbsent(t, pool, runtimeRole)
 	assertTableAbsent(t, pool, "members")
 	assertMigrationNotRecorded(t, pool, epoch2Baseline)
 
 	baselineFile.Data = baselineSQL
+
 	result, err := Run(ctx, pool, failureFS, Config{})
 	if err != nil {
 		t.Fatalf("rerun baseline after rollback: %v", err)
 	}
+
 	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
 		t.Fatalf("rerun result = %+v, want applied=1 skipped=0 total=1", result)
 	}
+
 	assertReplayAuditSealed(t, pool, runtimeRole)
 }
 
 func injectBeforeFinalCommit(t *testing.T, migrationSQL []byte, statement string) []byte {
 	t.Helper()
+
 	const finalCommit = "\nCOMMIT;"
+
 	index := strings.LastIndex(string(migrationSQL), finalCommit)
+
 	if index < 0 {
 		t.Fatal("migration is not wrapped by a final COMMIT")
 	}
+
 	injected := append([]byte(nil), migrationSQL[:index]...)
+
 	injected = append(injected, []byte("\n"+statement+"\nCOMMIT;")...)
 	injected = append(injected, migrationSQL[index+len(finalCommit):]...)
+
 	return injected
 }
 
 func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
 	t.Helper()
+
 	ctx := t.Context()
+
 	var tablePresent, grantFunctionPresent, claimFunctionPresent, mutationFunctionPresent bool
+
 	if err := pool.QueryRow(ctx, `SELECT
 		to_regclass('public.bot_reply_outbox_replay_audit') IS NOT NULL,
 		to_regprocedure('public.grant_bot_reply_outbox_manual_replay(bigint,text,text)') IS NOT NULL,
@@ -164,16 +193,19 @@ func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 		&tablePresent, &grantFunctionPresent, &claimFunctionPresent, &mutationFunctionPresent); err != nil {
 		t.Fatalf("inspect rolled-back migration 136 objects: %v", err)
 	}
+
 	if tablePresent || grantFunctionPresent || claimFunctionPresent || mutationFunctionPresent {
 		t.Fatalf("migration 136 left partial objects: table=%v grant=%v claim=%v mutation=%v",
 			tablePresent, grantFunctionPresent, claimFunctionPresent, mutationFunctionPresent)
 	}
 
 	var triggerCount, privilegeCount int
+
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
 		WHERE tgname IN ('bot_reply_outbox_replay_audit_immutable', 'bot_reply_outbox_replay_claim_audit')`).Scan(&triggerCount); err != nil {
 		t.Fatalf("count rolled-back migration 136 triggers: %v", err)
 	}
+
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM (
 		SELECT 1 FROM information_schema.role_table_grants
 		WHERE grantee = $1 AND table_schema = 'public' AND table_name = 'bot_reply_outbox_replay_audit'
@@ -191,6 +223,7 @@ func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 	) AS exposed`, runtimeRole).Scan(&privilegeCount); err != nil {
 		t.Fatalf("count rolled-back migration 136 privileges: %v", err)
 	}
+
 	if triggerCount != 0 || privilegeCount != 0 {
 		t.Fatalf("migration 136 left trigger/ACL exposure: triggers=%d privileges=%d", triggerCount, privilegeCount)
 	}
@@ -198,13 +231,16 @@ func assertReplayAuditAbsent(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 
 func assertMigrationNotRecorded(t *testing.T, pool *pgxpool.Pool, migrationName string) {
 	t.Helper()
+
 	var ledgered, checksummed bool
+
 	if err := pool.QueryRow(t.Context(), `SELECT
 		EXISTS (SELECT 1 FROM schema_migrations WHERE filename = $1),
 		EXISTS (SELECT 1 FROM schema_migration_checksums WHERE filename = $1)`, migrationName).Scan(
 		&ledgered, &checksummed); err != nil {
 		t.Fatalf("inspect failed migration ledger: %v", err)
 	}
+
 	if ledgered || checksummed {
 		t.Fatalf("failed migration recorded: ledger=%v checksum=%v", ledgered, checksummed)
 	}
@@ -212,45 +248,56 @@ func assertMigrationNotRecorded(t *testing.T, pool *pgxpool.Pool, migrationName 
 
 func assertReplayAuditSealed(t *testing.T, pool *pgxpool.Pool, runtimeRole string) {
 	t.Helper()
+
 	ctx := t.Context()
+
 	var tablePresent, grantFunctionPresent bool
+
 	if err := pool.QueryRow(ctx, `SELECT
 		to_regclass('public.bot_reply_outbox_replay_audit') IS NOT NULL,
 		to_regprocedure('public.grant_bot_reply_outbox_manual_replay(bigint,text,text)') IS NOT NULL`).Scan(
 		&tablePresent, &grantFunctionPresent); err != nil {
 		t.Fatalf("inspect migration 136 objects: %v", err)
 	}
+
 	if !tablePresent || !grantFunctionPresent {
 		t.Fatalf("migration 136 objects missing: table=%v grant_function=%v", tablePresent, grantFunctionPresent)
 	}
 
 	var triggerCount int
+
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_trigger
 		WHERE tgname IN ('bot_reply_outbox_replay_audit_immutable', 'bot_reply_outbox_replay_claim_audit')`).Scan(&triggerCount); err != nil {
 		t.Fatalf("count migration 136 triggers: %v", err)
 	}
+
 	if triggerCount != 2 {
 		t.Fatalf("migration 136 trigger count = %d, want 2", triggerCount)
 	}
 
 	for _, privilege := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"} {
 		var allowed bool
+
 		if err := pool.QueryRow(ctx,
 			`SELECT has_table_privilege($1, 'public.bot_reply_outbox_replay_audit', $2)`,
 			runtimeRole, privilege).Scan(&allowed); err != nil {
 			t.Fatalf("inspect runtime table privilege %s: %v", privilege, err)
 		}
+
 		if allowed {
 			t.Errorf("runtime-equivalent role retained audit table privilege %s", privilege)
 		}
 	}
+
 	var sequenceAllowed, functionAllowed bool
+
 	if err := pool.QueryRow(ctx, `SELECT
 		has_sequence_privilege($1, 'public.bot_reply_outbox_replay_audit_id_seq', 'USAGE'),
 		has_function_privilege($1, 'public.grant_bot_reply_outbox_manual_replay(bigint,text,text)', 'EXECUTE')`,
 		runtimeRole).Scan(&sequenceAllowed, &functionAllowed); err != nil {
 		t.Fatalf("inspect runtime sequence/function privileges: %v", err)
 	}
+
 	if sequenceAllowed || functionAllowed {
 		t.Errorf("runtime-equivalent role retained audit sequence/function privileges: sequence=%v function=%v",
 			sequenceAllowed, functionAllowed)
@@ -259,6 +306,7 @@ func assertReplayAuditSealed(t *testing.T, pool *pgxpool.Pool, runtimeRole strin
 
 func TestDropAndAddConstraintStatementIsAtomicOnAddFailure(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+
 	_, err := pool.Exec(t.Context(), `
 		CREATE TABLE constraint_atomic_probe(status text NOT NULL);
 		ALTER TABLE constraint_atomic_probe ADD CONSTRAINT old_status_check CHECK (status IN ('old'));
@@ -266,19 +314,23 @@ func TestDropAndAddConstraintStatementIsAtomicOnAddFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = pool.Exec(t.Context(), `ALTER TABLE constraint_atomic_probe
 		DROP CONSTRAINT old_status_check,
 		ADD CONSTRAINT new_status_check CHECK (status IN ('new'))`)
 	if err == nil {
 		t.Fatal("ALTER TABLE error = nil, want failed validation")
 	}
+
 	var oldExists, newExists bool
+
 	err = pool.QueryRow(t.Context(), `SELECT
 		EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'constraint_atomic_probe'::regclass AND conname = 'old_status_check'),
 		EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'constraint_atomic_probe'::regclass AND conname = 'new_status_check')`).Scan(&oldExists, &newExists)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !oldExists || newExists {
 		t.Fatalf("constraints after failure: old=%v new=%v", oldExists, newExists)
 	}
@@ -286,6 +338,7 @@ func TestDropAndAddConstraintStatementIsAtomicOnAddFailure(t *testing.T) {
 
 func TestMigration114PreflightIgnoresSameNamedObjectsOutsidePublic(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+
 	_, err := pool.Exec(t.Context(), `
 		CREATE TABLE public.members(slug text);
 		CREATE SCHEMA shadow;
@@ -294,7 +347,9 @@ func TestMigration114PreflightIgnoresSameNamedObjectsOutsidePublic(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var indexDefinition *string
+
 	err = pool.QueryRow(t.Context(), `SELECT pg_get_indexdef(c.oid)
 		FROM (SELECT 'idx_members_name_trgm'::text AS name) e
 		LEFT JOIN pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
@@ -302,15 +357,19 @@ func TestMigration114PreflightIgnoresSameNamedObjectsOutsidePublic(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if indexDefinition != nil {
 		t.Fatalf("shadow index satisfied public lookup: %q", *indexDefinition)
 	}
+
 	var publicConstraint bool
+
 	err = pool.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_constraint
 		WHERE conname = 'members_slug_key' AND conrelid = 'public.members'::regclass)`).Scan(&publicConstraint)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if publicConstraint {
 		t.Fatal("shadow constraint satisfied public lookup")
 	}
@@ -322,6 +381,7 @@ func TestAppliedMigrationChecksumMismatchFails(t *testing.T) {
 		dbmigrate.ManifestName: {Data: []byte("001 immutable.sql\n")},
 		"immutable.sql":        {Data: []byte("CREATE TABLE immutable_v1(id integer)")},
 	}
+
 	if _, err := Run(t.Context(), pool, first, Config{}); err != nil {
 		t.Fatalf("first Run() error = %v", err)
 	}
@@ -331,6 +391,7 @@ func TestAppliedMigrationChecksumMismatchFails(t *testing.T) {
 		"immutable.sql":        {Data: []byte("CREATE TABLE immutable_v2(id integer)")},
 	}
 	_, err := Run(t.Context(), pool, modified, Config{})
+
 	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("second Run() error = %v, want checksum mismatch", err)
 	}
@@ -342,6 +403,7 @@ func TestFailedMigrationDoesNotPinBadChecksum(t *testing.T) {
 		dbmigrate.ManifestName: {Data: []byte("001 repairable.sql\n")},
 		"repairable.sql":       {Data: []byte("SELECT 1/0")},
 	}
+
 	if _, err := Run(t.Context(), pool, broken, Config{}); err == nil {
 		t.Fatal("broken migration error = nil")
 	}
@@ -353,12 +415,14 @@ func TestFailedMigrationDoesNotPinBadChecksum(t *testing.T) {
 	if _, err := Run(t.Context(), pool, fixed, Config{}); err != nil {
 		t.Fatalf("fixed migration error = %v", err)
 	}
+
 	assertTablePresent(t, pool, "repaired_after_failure")
 }
 
 func TestAppliedLedgerEntryMissingChecksumFailsClosed(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	ctx := t.Context()
+
 	if _, err := pool.Exec(ctx, `
 		CREATE TABLE schema_migrations (
 			filename text PRIMARY KEY,
@@ -375,14 +439,17 @@ func TestAppliedLedgerEntryMissingChecksumFailsClosed(t *testing.T) {
 		"legacy.sql":           {Data: content},
 	}
 	_, err := Run(ctx, pool, fsys, Config{})
+
 	if err == nil || !strings.Contains(err.Error(), "checksum is missing") {
 		t.Fatalf("Run() error = %v, want missing-checksum refusal", err)
 	}
 
 	var checksumPresent bool
+
 	if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM schema_migration_checksums WHERE filename = 'legacy.sql')").Scan(&checksumPresent); err != nil {
 		t.Fatalf("inspect missing checksum: %v", err)
 	}
+
 	if checksumPresent {
 		t.Fatal("missing checksum was silently backfilled")
 	}
@@ -393,17 +460,19 @@ func TestBeginWrappedFileAppliesTxBlockAndTrailingAutocommit(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
-		"tx.sql":               {Data: []byte("-- header comment\nBEGIN;\nCREATE TABLE tx_inside_ran(id integer);\nCOMMIT;\nCREATE TABLE tx_after_ran(id integer);\n")},
+		txSQL:                  {Data: []byte("-- header comment\nBEGIN;\nCREATE TABLE tx_inside_ran(id integer);\nCOMMIT;\nCREATE TABLE tx_after_ran(id integer);\n")},
 	}
 
 	result, err := Run(t.Context(), pool, fsys, Config{})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+
 	if result.Applied != 1 {
 		t.Fatalf("result = %+v, want applied=1", result)
 	}
-	assertLedger(t, pool, []string{"tx.sql"})
+
+	assertLedger(t, pool, []string{txSQL})
 	assertTablePresent(t, pool, "tx_inside_ran")
 	assertTablePresent(t, pool, "tx_after_ran")
 }
@@ -413,27 +482,31 @@ func TestBeginWrappedFileTrailingAutocommitFailureCanBeRerun(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
-		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_committed_probe(id integer);\nCOMMIT;\nSELECT * FROM tx_missing_probe;\n")},
+		txSQL:                  {Data: []byte("BEGIN;\nCREATE TABLE tx_committed_probe(id integer);\nCOMMIT;\nSELECT 1 FROM tx_missing_probe;\n")},
 	}
 
 	if _, err := Run(t.Context(), pool, fsys, Config{}); err == nil {
 		t.Fatal("Run() error = nil, want trailing autocommit failure")
 	}
+
 	assertTablePresent(t, pool, "tx_committed_probe")
 	assertTableAbsent(t, pool, "tx_tail_ran")
 	assertLedger(t, pool, nil)
 
-	fsys["tx.sql"] = &fstest.MapFile{Data: []byte("BEGIN;\nCREATE TABLE IF NOT EXISTS tx_committed_probe(id integer);\nCOMMIT;\nCREATE TABLE tx_tail_ran(id integer);\n")}
+	fsys[txSQL] = &fstest.MapFile{Data: []byte("BEGIN;\nCREATE TABLE IF NOT EXISTS tx_committed_probe(id integer);\nCOMMIT;\nCREATE TABLE tx_tail_ran(id integer);\n")}
+
 	result, err := Run(t.Context(), pool, fsys, Config{})
 	if err != nil {
 		t.Fatalf("Run() rerun error = %v", err)
 	}
+
 	if result.Applied != 1 || result.Skipped != 0 || result.Total != 1 {
 		t.Fatalf("rerun result = %+v, want applied=1 skipped=0 total=1", result)
 	}
+
 	assertTablePresent(t, pool, "tx_committed_probe")
 	assertTablePresent(t, pool, "tx_tail_ran")
-	assertLedger(t, pool, []string{"tx.sql"})
+	assertLedger(t, pool, []string{txSQL})
 }
 
 func TestCurrentSchemaSupportsLegacyTerminalWriter(t *testing.T) {
@@ -450,16 +523,18 @@ func TestBeginWrappedFileWithConcurrentlyIsRejected(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
-		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_conc_probe(id integer);\nCREATE INDEX CONCURRENTLY tx_conc_idx ON tx_conc_probe(id);\nCOMMIT;\n")},
+		txSQL:                  {Data: []byte("BEGIN;\nCREATE TABLE tx_conc_probe(id integer);\nCREATE INDEX CONCURRENTLY tx_conc_idx ON tx_conc_probe(id);\nCOMMIT;\n")},
 	}
 
 	_, err := Run(t.Context(), pool, fsys, Config{})
 	if err == nil {
 		t.Fatal("Run() error = nil, want explicit CONCURRENTLY-inside-BEGIN rejection")
 	}
+
 	if !strings.Contains(err.Error(), "CONCURRENTLY") {
 		t.Fatalf("Run() error = %v, want CONCURRENTLY rejection", err)
 	}
+
 	assertTableAbsent(t, pool, "tx_conc_probe")
 }
 
@@ -468,13 +543,14 @@ func TestBeginWrappedFileMissingCommitIsRejected(t *testing.T) {
 
 	fsys := fstest.MapFS{
 		dbmigrate.ManifestName: {Data: []byte("001 tx.sql\n")},
-		"tx.sql":               {Data: []byte("BEGIN;\nCREATE TABLE tx_unclosed_probe(id integer);\n")},
+		txSQL:                  {Data: []byte("BEGIN;\nCREATE TABLE tx_unclosed_probe(id integer);\n")},
 	}
 
 	_, err := Run(t.Context(), pool, fsys, Config{})
 	if err == nil {
 		t.Fatal("Run() error = nil, want missing-COMMIT rejection")
 	}
+
 	assertTableAbsent(t, pool, "tx_unclosed_probe")
 }
 
@@ -499,20 +575,25 @@ SELECT
 	}
 
 	var lockMs, stmtMs int64
+
 	if err := pool.QueryRow(t.Context(), "SELECT lock_timeout_ms, statement_timeout_ms FROM session_probe").Scan(&lockMs, &stmtMs); err != nil {
 		t.Fatalf("read session probe: %v", err)
 	}
+
 	if lockMs != 10_000 {
 		t.Errorf("autocommit segment lock_timeout = %dms, want 10000ms", lockMs)
 	}
+
 	if stmtMs != 240_000 {
 		t.Errorf("autocommit segment statement_timeout = %dms, want 240000ms", stmtMs)
 	}
 
 	var txLockMs int64
+
 	if err := pool.QueryRow(t.Context(), "SELECT lock_timeout_ms FROM session_probe_tx").Scan(&txLockMs); err != nil {
 		t.Fatalf("read tx session probe: %v", err)
 	}
+
 	if txLockMs != 10_000 {
 		t.Errorf("tx segment lock_timeout = %dms, want 10000ms", txLockMs)
 	}
@@ -522,15 +603,18 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 
 	entries := manifestEntries(t)
+
 	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+
 	t.Logf("full replay result: %d applied / %d skipped (total %d)", result.Applied, result.Skipped, result.Total)
 
 	if result.Applied != len(entries) || result.Skipped != 0 || result.Total != len(entries) {
 		t.Fatalf("result = %+v, want applied=%d skipped=0 total=%d", result, len(entries), len(entries))
 	}
+
 	assertTablePresent(t, pool, "members")
 	assertTablePresent(t, pool, "alarms")
 	assertConstraintValidated(t, pool, "bot_webhook_inbox", "chk_bot_webhook_inbox_terminal_payload_scrubbed", true)
@@ -540,6 +624,7 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Run() error = %v", err)
 	}
+
 	if result.Applied != 0 || result.Skipped != len(entries) || result.Total != len(entries) {
 		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
 	}
@@ -549,37 +634,47 @@ func TestRealManifestCheckpointedAt140WithoutBaselineChecksumRefuses(t *testing.
 	pool := dbtest.NewBlankPool(t)
 	baselineFS := realManifestThrough(t, epoch2Baseline)
 	runMigrations(t, pool, baselineFS, "")
+
 	if _, err := pool.Exec(t.Context(), "DELETE FROM schema_migration_checksums WHERE filename = $1", epoch2Baseline); err != nil {
 		t.Fatalf("remove pre-R2 baseline checksum fixture: %v", err)
 	}
+
 	prefillEpoch2LegacyContract(t, pool)
 
 	_, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
 	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" is recorded in schema_migrations but its checksum is missing") {
 		t.Fatalf("Run() error = %v, want pre-R2 baseline without checksum to be refused now that backfill is retired", err)
 	}
+
 	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", false)
 }
 
 func TestRealManifestPartialAt160AppliesOnlyRemainingSuffix(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+
 	const partialTip = "160_youtube_live_reconciliation_candidate_fk_index.sql"
+
 	partialFS := realManifestThrough(t, partialTip)
+
 	partialEntries, err := dbmigrate.Manifest(partialFS)
 	if err != nil {
 		t.Fatalf("read partial manifest: %v", err)
 	}
+
 	runMigrations(t, pool, partialFS, "")
 	prefillEpoch2LegacyContract(t, pool)
 
 	entries := manifestEntries(t)
+
 	result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+
 	if result.Applied != len(entries)-len(partialEntries) || result.Skipped != len(partialEntries) || result.Total != len(entries) {
 		t.Fatalf("result = %+v, want applied=%d skipped=%d total=%d", result, len(entries)-len(partialEntries), len(partialEntries), len(entries))
 	}
+
 	assertMigrationRecorded(t, pool, "179_alarm_dispatch_collab_members.sql", true)
 	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, true)
 	assertLegacyLedgerCleared(t, pool)
@@ -589,9 +684,11 @@ func TestRealManifestCurrentBeforeCleanupRemovesLegacyResidue(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	entries := manifestEntries(t)
 	cleanupIndex := slices.Index(entries, epoch2LegacyLedgerCleanup)
+
 	if cleanupIndex < 1 {
 		t.Fatalf("manifest must list %s after at least one migration", epoch2LegacyLedgerCleanup)
 	}
+
 	runMigrations(t, pool, realManifestThrough(t, entries[cleanupIndex-1]), "")
 	prefillEpoch2LegacyContract(t, pool)
 
@@ -599,9 +696,11 @@ func TestRealManifestCurrentBeforeCleanupRemovesLegacyResidue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want pending cleanup to be tolerated and applied", err)
 	}
+
 	if result.Applied != len(entries)-cleanupIndex || result.Skipped != cleanupIndex || result.Total != len(entries) {
 		t.Fatalf("result = %+v, want applied=%d skipped=%d total=%d", result, len(entries)-cleanupIndex, cleanupIndex, len(entries))
 	}
+
 	assertMigrationRecorded(t, pool, epoch2LegacyLedgerCleanup, true)
 	assertLegacyLedgerCleared(t, pool)
 
@@ -625,9 +724,11 @@ func TestRealManifestLegacyResidueAfterCleanupRefuses(t *testing.T) {
 func TestRealManifestEditedBaselineFailsChecksum(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	runMigrations(t, pool, migrations.FS, "")
+
 	entries := manifestEntries(t)
 	editedFS := realManifestThrough(t, entries[len(entries)-1])
 	editedBaseline := mustMapFile(t, editedFS, epoch2Baseline)
+
 	editedBaseline.Data = append(editedBaseline.Data, []byte("\n-- edited after exposure\n")...)
 
 	_, err := Run(t.Context(), pool, editedFS, Config{})
@@ -645,9 +746,11 @@ func TestR1RollbackIgnoresR2LedgerResidue(t *testing.T) {
 	}
 	runMigrations(t, pool, legacyFS, "")
 	prefillLedger(t, pool, []string{epoch2Baseline, "141_suffix.sql"})
+
 	if _, err := pool.Exec(t.Context(), mustSQL("ensure_migration_checksums.sql")); err != nil {
 		t.Fatalf("ensure checksum ledger: %v", err)
 	}
+
 	for _, name := range []string{epoch2Baseline, "141_suffix.sql"} {
 		if _, err := pool.Exec(t.Context(), mustSQL("record_migration_checksum.sql"), name, strings.Repeat("a", 64)); err != nil {
 			t.Fatalf("record R2 residue checksum %s: %v", name, err)
@@ -658,9 +761,11 @@ func TestR1RollbackIgnoresR2LedgerResidue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("R1 rollback Run() error = %v", err)
 	}
+
 	if result.Applied != 0 || result.Skipped != 2 || result.Total != 2 {
 		t.Fatalf("rollback result = %+v, want applied=0 skipped=2 total=2", result)
 	}
+
 	assertTablePresent(t, pool, "rollback_legacy_state")
 }
 
@@ -674,6 +779,7 @@ func TestRealManifestPrefilledLedgerWithoutChecksumsRefuses(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "recorded without its checksum") {
 		t.Fatalf("Run() error = %v, want unproven epoch marker refusal", err)
 	}
+
 	assertTableAbsent(t, pool, "members")
 }
 
@@ -690,24 +796,29 @@ func TestLedgerResidueWithoutEpochBaselineRefuses(t *testing.T) {
 		dbmigrate.ManifestName:           {Data: []byte("001 001_schema_epoch2_baseline.sql\n")},
 		"001_schema_epoch2_baseline.sql": {Data: []byte("BEGIN;\nCREATE TABLE epoch2_baseline_ran(id integer);\nCOMMIT;\n")},
 	}
+
 	_, err := Run(t.Context(), pool, epochFS, Config{})
 	if err == nil {
 		t.Fatal("Run() error = nil, want refusal on ledger residue without recorded epoch baseline")
 	}
+
 	if !strings.Contains(err.Error(), "epoch baseline") {
 		t.Fatalf("Run() error = %v, want epoch-baseline refusal", err)
 	}
+
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 
 	_, err = Run(t.Context(), pool, epochFS, Config{BaselineThrough: "001_schema_epoch2_baseline.sql"})
 	if err == nil || !strings.Contains(err.Error(), "epoch baseline") {
 		t.Fatalf("Run() with BaselineThrough error = %v, want residue refusal to resist the watermark knob", err)
 	}
+
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
 func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
+
 	const testBaseline = "001_schema_test_baseline.sql"
 
 	legacyFS := fstest.MapFS{
@@ -721,9 +832,11 @@ func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 		dbmigrate.ManifestName: {Data: []byte("001 " + testBaseline + "\n")},
 		testBaseline:           {Data: []byte("CREATE TABLE epoch2_baseline_ran(id integer)")},
 	}
+
 	if _, err := pool.Exec(t.Context(), mustSQL("ensure_migration_checksums.sql")); err != nil {
 		t.Fatalf("ensure checksum ledger: %v", err)
 	}
+
 	if _, err := pool.Exec(
 		t.Context(),
 		mustSQL("record_migration_checksum.sql"),
@@ -732,13 +845,16 @@ func TestLedgerResidueWithChecksummedEpochBaselineSkipsBaseline(t *testing.T) {
 	); err != nil {
 		t.Fatalf("record epoch baseline checksum: %v", err)
 	}
+
 	result, err := Run(t.Context(), pool, epochFS, Config{})
 	if err != nil {
 		t.Fatalf("Run() error = %v, want checkpointed DB to proceed", err)
 	}
+
 	if result.Applied != 0 || result.Skipped != 1 || result.Total != 1 {
 		t.Fatalf("result = %+v, want applied=0 skipped=1 total=1", result)
 	}
+
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
@@ -751,6 +867,7 @@ func TestEpoch2LegacyResidueWithoutBaselineChecksumRefuses(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), epoch2Baseline+" is recorded in schema_migrations but its checksum is missing") {
 		t.Fatalf("Run() error = %v, want checkpointed ledger without baseline checksum to be refused", err)
 	}
+
 	assertTableAbsent(t, pool, "epoch2_baseline_ran")
 }
 
@@ -768,55 +885,70 @@ type legacyLedgerEntry struct {
 
 func legacyLedgerFixture(t *testing.T) []legacyLedgerEntry {
 	t.Helper()
+
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "architecture", "epoch2_legacy_contract.sha256"))
 	if err != nil {
 		t.Fatalf("read epoch-2 legacy ledger fixture: %v", err)
 	}
+
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	entries := make([]legacyLedgerEntry, 0, len(lines))
+
 	for number, line := range lines {
 		checksum, name, found := strings.Cut(line, "  ")
 		if !found {
 			t.Fatalf("epoch-2 legacy ledger fixture line %d is malformed", number+1)
 		}
+
 		entries = append(entries, legacyLedgerEntry{name: name, checksum: checksum})
 	}
+
 	if len(entries) != 136 {
 		t.Fatalf("epoch-2 legacy ledger fixture has %d entries, want 136", len(entries))
 	}
+
 	return entries
 }
 
 func prefillEpoch2LegacyContract(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
+
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx, mustSQL("ensure_migration_checksums.sql")); err != nil {
 		t.Fatalf("create checksum ledger fixture: %v", err)
 	}
+
 	fixture := legacyLedgerFixture(t)
 	names := make([]string, len(fixture))
+
 	for index, entry := range fixture {
 		names[index] = entry.name
 		if _, err := pool.Exec(ctx, mustSQL("record_migration_checksum.sql"), entry.name, entry.checksum); err != nil {
 			t.Fatalf("prefill legacy checksum %s: %v", entry.name, err)
 		}
 	}
+
 	prefillLedger(t, pool, names)
 }
 
 func assertLegacyLedgerCleared(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
+
 	fixture := legacyLedgerFixture(t)
 	names := make([]string, len(fixture))
+
 	for index, entry := range fixture {
 		names[index] = entry.name
 	}
+
 	var ledgered, checksummed int
+
 	if err := pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM schema_migrations WHERE filename = ANY($1)),
 		(SELECT count(*) FROM schema_migration_checksums WHERE filename = ANY($1))`, names).Scan(&ledgered, &checksummed); err != nil {
 		t.Fatalf("count legacy ledger residue: %v", err)
 	}
+
 	if ledgered != 0 || checksummed != 0 {
 		t.Fatalf("legacy ledger residue = %d ledger rows / %d checksum rows, want 0 / 0", ledgered, checksummed)
 	}
@@ -836,13 +968,16 @@ func TestEpochLedgerWithoutResidueProceeds(t *testing.T) {
 		"001_schema_epoch2_baseline.sql": {Data: []byte("BEGIN;\nCREATE TABLE epoch2_baseline_ran(id integer);\nCOMMIT;\n")},
 		"002_next.sql":                   {Data: []byte("CREATE TABLE epoch2_next_ran(id integer)")},
 	}
+
 	result, err := Run(t.Context(), pool, nextFS, Config{})
 	if err != nil {
 		t.Fatalf("Run() error = %v, want residue-free epoch DB to proceed", err)
 	}
+
 	if result.Applied != 1 || result.Skipped != 1 || result.Total != 2 {
 		t.Fatalf("result = %+v, want applied=1 skipped=1 total=2", result)
 	}
+
 	assertTablePresent(t, pool, "epoch2_next_ran")
 }
 
@@ -853,41 +988,54 @@ func manifestEntries(t *testing.T) []string {
 	if err != nil {
 		t.Fatalf("read embedded manifest: %v", err)
 	}
+
 	return entries
 }
 
 func realManifestThrough(t *testing.T, last string) fstest.MapFS {
 	t.Helper()
+
 	entries := manifestEntries(t)
 	fake := make(fstest.MapFS)
+
 	var manifest strings.Builder
+
 	found := false
+
 	for index, name := range entries {
 		raw, err := fs.ReadFile(migrations.FS, name)
 		if err != nil {
 			t.Fatalf("read real migration %s: %v", name, err)
 		}
+
 		fake[name] = &fstest.MapFile{Data: raw}
 		fmt.Fprintf(&manifest, "%03d %s\n", index+1, name)
+
 		if name == last {
 			found = true
 			break
 		}
 	}
+
 	if !found {
 		t.Fatalf("real migration %s not found", last)
 	}
+
 	fake[dbmigrate.ManifestName] = &fstest.MapFile{Data: []byte(manifest.String())}
+
 	return fake
 }
 
 func mustMapFile(t *testing.T, fsys fstest.MapFS, name string) *fstest.MapFile {
 	t.Helper()
+
 	file, ok := fsys[name]
 	if !ok || file == nil {
 		t.Fatalf("map file %s not found", name)
+
 		return &fstest.MapFile{}
 	}
+
 	return file
 }
 
@@ -898,6 +1046,7 @@ func prefillLedger(t *testing.T, pool *pgxpool.Pool, entries []string) {
 	if _, err := pool.Exec(ctx, "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())"); err != nil {
 		t.Fatalf("create ledger: %v", err)
 	}
+
 	for _, name := range entries {
 		if _, err := pool.Exec(ctx, "INSERT INTO schema_migrations(filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING", name); err != nil {
 			t.Fatalf("prefill ledger %s: %v", name, err)
@@ -925,6 +1074,7 @@ func runMigrations(t *testing.T, pool *pgxpool.Pool, fsys fs.FS, baselineThrough
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+
 	return result
 }
 
@@ -938,19 +1088,25 @@ func assertLedger(t *testing.T, pool *pgxpool.Pool, want []string) {
 	defer rows.Close()
 
 	var got []string
+
 	for rows.Next() {
 		var name string
+
 		if scanErr := rows.Scan(&name); scanErr != nil {
 			t.Fatalf("scan ledger: %v", scanErr)
 		}
+
 		got = append(got, name)
 	}
+
 	if err := rows.Err(); err != nil {
 		t.Fatalf("read ledger: %v", err)
 	}
+
 	if len(got) != len(want) {
 		t.Fatalf("ledger = %v, want %v", got, want)
 	}
+
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("ledger = %v, want %v", got, want)
@@ -962,6 +1118,7 @@ func assertConstraintValidated(t *testing.T, pool *pgxpool.Pool, table, constrai
 	t.Helper()
 
 	var got bool
+
 	err := pool.QueryRow(t.Context(), `
 		SELECT convalidated
 		FROM pg_constraint
@@ -970,6 +1127,7 @@ func assertConstraintValidated(t *testing.T, pool *pgxpool.Pool, table, constrai
 	if err != nil {
 		t.Fatalf("query constraint %s on %s: %v", constraint, table, err)
 	}
+
 	if got != want {
 		t.Fatalf("constraint %s on %s convalidated = %v, want %v", constraint, table, got, want)
 	}
@@ -979,6 +1137,7 @@ func assertTerminalPayloadScrubTrigger(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	var exists bool
+
 	err := pool.QueryRow(t.Context(), `
 		SELECT EXISTS (
 			SELECT 1
@@ -994,6 +1153,7 @@ func assertTerminalPayloadScrubTrigger(t *testing.T, pool *pgxpool.Pool) {
 	if err != nil {
 		t.Fatalf("query terminal payload scrub trigger: %v", err)
 	}
+
 	if !exists {
 		t.Fatal("terminal payload scrub trigger is not installed and enabled")
 	}
@@ -1003,9 +1163,11 @@ func assertInboxPayload(t *testing.T, pool *pgxpool.Pool, messageID, want string
 	t.Helper()
 
 	var got string
+
 	if err := pool.QueryRow(t.Context(), "SELECT payload::text FROM bot_webhook_inbox WHERE message_id = $1", messageID).Scan(&got); err != nil {
 		t.Fatalf("query inbox payload for %s: %v", messageID, err)
 	}
+
 	if got != want {
 		t.Fatalf("inbox payload for %s = %s, want %s", messageID, got, want)
 	}
@@ -1019,16 +1181,21 @@ func assertLegacyTerminalWriterCompatible(t *testing.T, pool *pgxpool.Pool, mess
 		VALUES ($1, 'room', 'room', '{"message":"retained"}'::jsonb)`, messageID); err != nil {
 		t.Fatalf("legacy writer insert for %s: %v", status, err)
 	}
+
 	assertInboxPayload(t, pool, messageID, `{"message": "retained"}`)
+
 	updateSQL := "UPDATE bot_webhook_inbox SET status = $1 WHERE message_id = $2"
+
 	if status == "dead" {
 		updateSQL = `UPDATE bot_webhook_inbox
 			SET status = $1, terminal_at = clock_timestamp(), terminal_reason = 'legacy terminal failure'
 			WHERE message_id = $2`
 	}
+
 	if _, err := pool.Exec(t.Context(), updateSQL, status, messageID); err != nil {
 		t.Fatalf("legacy writer %s update: %v", status, err)
 	}
+
 	assertInboxPayload(t, pool, messageID, "{}")
 }
 
@@ -1052,8 +1219,10 @@ func tableExists(t *testing.T, pool *pgxpool.Pool, name string) bool {
 	t.Helper()
 
 	var exists bool
+
 	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", name).Scan(&exists); err != nil {
 		t.Fatalf("check table %s: %v", name, err)
 	}
+
 	return exists
 }

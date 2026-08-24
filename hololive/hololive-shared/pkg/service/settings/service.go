@@ -21,6 +21,7 @@
 package settings
 
 import (
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -29,7 +30,6 @@ import (
 	"slices"
 	"sync"
 
-	jsonv2 "encoding/json/v2"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
@@ -69,6 +69,7 @@ func ensureParentDir(filePath string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create settings directory: %w", err)
 	}
+
 	return nil
 }
 
@@ -92,6 +93,7 @@ func NewSettingsService(filePath string, defaults Settings, logger *slog.Logger)
 	}
 
 	s.load()
+
 	return s
 }
 
@@ -100,6 +102,7 @@ func (s *Service) load() {
 	if err != nil {
 		return // 파일이 없으면 기본값 사용함
 	}
+
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && s.logger != nil {
 			s.logger.Warn("Failed to close settings file", slog.String("error", closeErr.Error()))
@@ -107,10 +110,12 @@ func (s *Service) load() {
 	}()
 
 	var disk settingsDisk
+
 	if err := jsonv2.UnmarshalRead(f, &disk); err != nil {
 		if s.logger != nil {
 			s.logger.Warn("Failed to decode settings file, using defaults", slog.String("error", err.Error()))
 		}
+
 		return
 	}
 
@@ -121,9 +126,11 @@ func (s *Service) applyDiskSettings(disk settingsDisk) {
 	if disk.AlarmAdvanceMinutes != nil && *disk.AlarmAdvanceMinutes > 0 {
 		s.cache.AlarmAdvanceMinutes = *disk.AlarmAdvanceMinutes
 	}
+
 	if disk.ScraperProxyEnabled != nil {
 		s.cache.ScraperProxyEnabled = *disk.ScraperProxyEnabled
 	}
+
 	s.applyDiskTargetMinutes(disk.TargetMinutes)
 }
 
@@ -131,11 +138,15 @@ func (s *Service) applyDiskTargetMinutes(targetMinutes []int) {
 	if len(targetMinutes) == 0 {
 		return
 	}
+
 	resolved := sharedchecker.NewTargetMinutePolicyFromPersisted(s.cache.AlarmAdvanceMinutes, targetMinutes).Clone()
+
 	s.cache.TargetMinutes = cloneTargetMinutes(resolved)
+
 	if slices.Equal(resolved, targetMinutes) {
 		return
 	}
+
 	s.logHealedTargetMinutes(targetMinutes, resolved)
 	s.persistHealedSettings()
 }
@@ -155,6 +166,7 @@ func (s *Service) persistHealedSettings() {
 func (s *Service) Get() Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	return Settings{
 		AlarmAdvanceMinutes: s.cache.AlarmAdvanceMinutes,
 		ScraperProxyEnabled: s.cache.ScraperProxyEnabled,
@@ -167,43 +179,51 @@ func (s *Service) Update(newSettings Settings) error {
 	defer s.mu.Unlock()
 
 	if newSettings.AlarmAdvanceMinutes <= 0 {
-		return fmt.Errorf("alarmAdvanceMinutes must be greater than 0")
+		return errors.New("alarmAdvanceMinutes must be greater than 0")
 	}
 
 	if err := ensureParentDir(s.filePath); err != nil {
-		return err
+		return fmt.Errorf("ensure parent dir: %w", err)
 	}
 
 	resolvedTargets := sharedchecker.NewTargetMinutePolicyFromConfigured(newSettings.TargetMinutes).Clone()
+
 	s.cache = &Settings{
 		AlarmAdvanceMinutes: newSettings.AlarmAdvanceMinutes,
 		ScraperProxyEnabled: newSettings.ScraperProxyEnabled,
 		TargetMinutes:       resolvedTargets,
 	}
 
-	return s.persistCache()
+	if err := s.persistCache(); err != nil {
+		return fmt.Errorf("persist cache: %w", err)
+	}
+
+	return nil
 }
 
 // 같은 디렉터리의 temp 파일에 전량 기록한 뒤 rename으로 교체한다. 제자리 truncate+write는
 // 중간에 실패하면 잘린 settings 파일을 남기고, 그 파일은 다음 기동에서 기본값으로 조용히 대체된다.
 func (s *Service) persistCache() (err error) {
 	tempPath, writeErr := s.writeSettingsTempFile()
+
 	defer func() {
 		if err == nil || tempPath == "" {
 			return
 		}
+
 		if removeErr := os.Remove(tempPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			err = errors.Join(err, fmt.Errorf("failed to remove temp settings file: %w", removeErr))
 		}
 	}()
 
 	if writeErr != nil {
-		return writeErr
+		return fmt.Errorf("write settings temp file: %w", writeErr)
 	}
 
 	if err = os.Rename(tempPath, s.filePath); err != nil {
 		return fmt.Errorf("failed to replace settings file: %w", err)
 	}
+
 	return nil
 }
 
@@ -212,6 +232,7 @@ func (s *Service) writeSettingsTempFile() (path string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp settings file: %w", err)
 	}
+
 	defer func() {
 		if closeErr := temp.Close(); closeErr != nil && err == nil {
 			err = fmt.Errorf("failed to close temp settings file: %w", closeErr)
@@ -221,6 +242,7 @@ func (s *Service) writeSettingsTempFile() (path string, err error) {
 	if encodeErr := jsonv2.MarshalWrite(temp, s.cache); encodeErr != nil {
 		return temp.Name(), fmt.Errorf("failed to write settings: %w", encodeErr)
 	}
+
 	if syncErr := temp.Sync(); syncErr != nil {
 		return temp.Name(), fmt.Errorf("failed to sync settings: %w", syncErr)
 	}

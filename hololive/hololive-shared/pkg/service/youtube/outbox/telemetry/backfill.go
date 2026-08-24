@@ -33,15 +33,18 @@ func (r *Repository) BackfillFromDelivery(ctx context.Context, limit int, since 
 
 	candidates, err := r.loadBackfillCandidates(ctx, limit, since)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("load backfill candidates: %w", err)
 	}
+
 	events := buildBackfillEvents(candidates)
 	if len(events) == 0 {
 		return 0, nil
 	}
+
 	if err := r.Enqueue(ctx, events); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("enqueue: %w", err)
 	}
+
 	if err := r.PersistPostLatencyClassificationsByOutboxIDs(ctx, CollectTelemetryOutboxIDs(events)); err != nil {
 		return 0, fmt.Errorf("persist backfilled post latency classifications: %w", err)
 	}
@@ -55,6 +58,7 @@ func (r *Repository) loadBackfillCandidates(
 	since time.Time,
 ) ([]deliveryTelemetryBackfillCandidate, error) {
 	var candidates []deliveryTelemetryBackfillCandidate
+
 	postKinds := []domain.OutboxKind{domain.OutboxKindNewShort, domain.OutboxKindCommunityPost}
 	retryStatuses := []domain.OutboxStatus{domain.OutboxStatusPending, domain.OutboxStatusFailed, domain.OutboxStatus("QUARANTINED")}
 	query := mustSQL("backfill_0060_01.sql") + strings.Join([]string{
@@ -81,14 +85,20 @@ func (r *Repository) loadBackfillCandidates(
 		  )
 	`
 	args := deliverysql.AppendDeliveryOutboxKindArgs(nil, postKinds...)
+
 	args = append(args, domain.OutboxStatusSent)
 	args = deliverysql.AppendDeliveryOutboxStatusArgs(args, retryStatuses...)
+
 	if !since.IsZero() {
 		query += " AND COALESCE(d.sent_at, d.locked_at, d.created_at) >= ?"
+
 		args = append(args, since.UTC())
 	}
+
 	query += " ORDER BY COALESCE(d.sent_at, d.locked_at, d.created_at) ASC LIMIT ?"
+
 	args = append(args, limit)
+
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &candidates, "backfill delivery telemetry candidates", query, args...); err != nil {
 		return nil, fmt.Errorf("backfill delivery telemetry candidates: %w", err)
 	}
@@ -103,6 +113,7 @@ func buildBackfillEvents(candidates []deliveryTelemetryBackfillCandidate) []doma
 		if !ok {
 			continue
 		}
+
 		events = append(events, *event)
 	}
 
@@ -116,10 +127,12 @@ func buildBackfillEvent(candidate *deliveryTelemetryBackfillCandidate) (*domain.
 	}
 
 	eventAt := backfillCandidateEventAt(candidate)
+
 	dedupeKey, dedupeErr := domain.BuildYouTubeNotificationDedupeKey(candidate.Kind, candidate.ContentID)
 	if dedupeErr != nil {
 		dedupeKey = DedupeKeyLogValue(&domain.YouTubeNotificationOutbox{Kind: candidate.Kind, ContentID: candidate.ContentID})
 	}
+
 	attemptStartedAt := deliverysql.CloneUTCTimePtr(candidate.DeliveryLockedAt)
 	attemptFinishedAt := eventAt
 
@@ -148,6 +161,7 @@ func backfillAttemptMetadata(candidate *deliveryTelemetryBackfillCandidate) (res
 	attemptOrdinal := candidate.AttemptCount
 	sendResult := "failure"
 	failureReason := strings.TrimSpace(candidate.DeliveryError)
+
 	if candidate.Status == domain.OutboxStatusSent {
 		attemptOrdinal = candidate.AttemptCount + 1
 		sendResult = "success"
@@ -162,8 +176,10 @@ func backfillCandidateEventAt(candidate *deliveryTelemetryBackfillCandidate) tim
 	if candidate.DeliverySentAt != nil {
 		return candidate.DeliverySentAt.UTC()
 	}
+
 	if candidate.DeliveryLockedAt != nil {
 		return candidate.DeliveryLockedAt.UTC()
 	}
+
 	return eventAt
 }

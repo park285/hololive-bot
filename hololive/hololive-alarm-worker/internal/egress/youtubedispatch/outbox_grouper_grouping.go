@@ -32,7 +32,7 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
-// outboxItemGroup: Outbox 알림 그룹 (동일 Room + Channel + Kind 묶음)
+// outboxItemGroup: Outbox 알림 그룹 (동일 Room + Channel + Kind 묶음).
 type outboxItemGroup struct {
 	roomID    string
 	channelID string
@@ -86,6 +86,7 @@ func appendOutboxItemGroup(groups []*outboxItemGroup, index map[string]int, room
 		items:     []domain.YouTubeNotificationOutbox{*item},
 	})
 	index[key] = len(groups) - 1
+
 	return groups
 }
 
@@ -100,6 +101,7 @@ func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbo
 	for i := range items {
 		item := &items[i]
 		rooms, ok := roomsForItem(roomsByChannel, item)
+
 		if !ok || len(rooms) == 0 {
 			continue
 		}
@@ -115,14 +117,18 @@ func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbo
 func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []channelAlarmEntry {
 	entries := make([]channelAlarmEntry, 0)
 	seen := make(map[string]bool)
+
 	for i := range items {
 		item := &items[i]
 		alarmType := item.Kind.ToAlarmType()
 		lookupKey := item.ChannelID + "|" + string(alarmType)
+
 		if seen[lookupKey] {
 			continue
 		}
+
 		seen[lookupKey] = true
+
 		entries = append(entries, channelAlarmEntry{channelID: item.ChannelID, alarmType: alarmType})
 	}
 
@@ -132,11 +138,13 @@ func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []cha
 func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
 	result := make(map[string]channelAlarmRoomTargets)
 	entries := channelAlarmEntriesForItems(items)
+
 	if len(entries) == 0 {
 		return result
 	}
 
 	mergeSubscriberLookupResults(result, g.lookupSubscriberRooms(ctx, entries))
+
 	return result
 }
 
@@ -144,22 +152,27 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 	results := make([]subscriberLookupResult, len(entries))
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(g.subscriberLookupParallelism())
+
 	for idx := range entries {
 		panicguard.GoE(eg, g.logger, "youtube-outbox-subscriber-lookup", func() error {
 			e := entries[idx]
 			rooms, ok := g.resolveSubscriberRooms(egCtx, e)
+
 			results[idx] = subscriberLookupResult{
 				channelID: e.channelID,
 				alarmType: e.alarmType,
 				rooms:     rooms,
 				ok:        ok,
 			}
+
 			return nil
 		})
 	}
+
 	if err := eg.Wait(); err != nil {
 		g.logger.Warn("Subscriber room lookup worker failed", slog.Any("error", err))
 	}
+
 	return results
 }
 
@@ -170,6 +183,7 @@ func (g *OutboxGrouper) resolveSubscriberRooms(ctx context.Context, entry channe
 			slog.String("channel_id", entry.channelID),
 			slog.String("alarm_type", string(entry.alarmType)),
 			slog.Any("error", err))
+
 		return nil, false
 	}
 
@@ -177,6 +191,7 @@ func (g *OutboxGrouper) resolveSubscriberRooms(ctx context.Context, entry channe
 	for _, roomID := range members {
 		roomSet[roomID] = true
 	}
+
 	return roomSet, true
 }
 
@@ -191,6 +206,7 @@ func mergeSubscriberLookupResults(result map[string]channelAlarmRoomTargets, res
 			alarmTargets = make(channelAlarmRoomTargets)
 			result[results[i].channelID] = alarmTargets
 		}
+
 		alarmTargets[results[i].alarmType] = results[i].rooms
 	}
 }

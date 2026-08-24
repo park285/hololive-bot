@@ -1,7 +1,6 @@
 package summarizer
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -14,11 +13,11 @@ func TestEventSummarizer_Summarize_WeeklyMatchesGolden(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"hololive fes","date":"2/15(토)","members":"","note":"최대 규모 페스티벌","link":"https://example.com/fes"}],"ongoing_events":[{"name":"카페","date":"2/1(토)~2/28(금)","note":"카페 운영 중","link":"https://example.com/cafe"}],"discovered_events":[{"name":"추가 발표","date":"2/21(토)","note":"검색으로 발견된 추가 일정","source":"hololivepro.com/news","link":"https://hololivepro.com/news/extra"}]}`
 
 	summarizer := NewEventSummarizer(&mockSummarizer{jsonResponse: llmJSON}, nil, nil, testLogger())
-	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: "https://example.com/fes"}}
+	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: testLinkFes}}
 
 	assertSummaryGolden(t,
 		"weekly_summary_result.golden.txt",
-		summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-02-15"),
+		summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15"),
 	)
 }
 
@@ -32,7 +31,7 @@ func TestEventSummarizer_Summarize_MonthlyMatchesGolden(t *testing.T) {
 
 	assertSummaryGolden(t,
 		"monthly_summary_result.golden.txt",
-		summarizer.Summarize(context.Background(), events, SummaryTypeMonthly, "2026-03"),
+		summarizer.Summarize(t.Context(), events, SummaryTypeMonthly, "2026-03"),
 	)
 }
 
@@ -43,6 +42,7 @@ func assertSummaryGolden(t *testing.T, name, text string) {
 	if err != nil {
 		t.Fatalf("golden 디렉터리 열기 실패: %v", err)
 	}
+
 	defer func() {
 		if closeErr := root.Close(); closeErr != nil {
 			t.Fatalf("golden 디렉터리 닫기 실패: %v", closeErr)
@@ -50,11 +50,12 @@ func assertSummaryGolden(t *testing.T, name, text string) {
 	}()
 
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.MkdirAll("testdata", 0o750); err != nil {
-			t.Fatalf("golden 디렉터리 생성 실패: %v", err)
+		if mkdirErr := os.MkdirAll("testdata", 0o750); mkdirErr != nil {
+			t.Fatalf("golden 디렉터리 생성 실패: %v", mkdirErr)
 		}
-		if err := root.WriteFile(name, []byte(text), 0o600); err != nil {
-			t.Fatalf("golden 파일 갱신 실패: %v", err)
+
+		if writeErr := root.WriteFile(name, []byte(text), 0o600); writeErr != nil {
+			t.Fatalf("golden 파일 갱신 실패: %v", writeErr)
 		}
 	}
 

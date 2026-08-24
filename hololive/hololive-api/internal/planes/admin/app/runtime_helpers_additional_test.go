@@ -12,20 +12,19 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
+
+	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-
-	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-
-	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 )
 
 type memberNewsRunNowStub struct {
@@ -41,10 +40,11 @@ func (s *memberNewsRunNowStub) SendMemberNewsWeekly(context.Context) error {
 func TestNormalizeRuntimeBuildInputsDefaultsTODOContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(context.TODO(), &settings.Config{}, slog.New(slog.DiscardHandler))
+	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(t.Context(), &settings.Config{}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NormalizeRuntimeBuildInputs() error = %v", err)
 	}
+
 	if ctx == nil {
 		t.Fatal("NormalizeRuntimeBuildInputs() returned nil context")
 	}
@@ -56,6 +56,7 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 	cleanupCalls := 0
 	logger := slog.New(slog.DiscardHandler)
 	certFile, keyFile := writeRuntimeTestCertificate(t)
+
 	runtime, err := newAdminAPIRuntime(t.Context(), &settings.Config{
 		Server: settings.ServerConfig{
 			HTTPTransports: []string{"h3"},
@@ -73,23 +74,29 @@ func TestNewAdminAPIRuntimeInitializesServerAndCleanup(t *testing.T) {
 	if runtime == nil {
 		t.Fatal("newAdminAPIRuntime() returned nil")
 	}
+
 	if runtime.Config == nil {
 		t.Fatal("runtime.Config is nil")
 	}
+
 	if runtime.Logger != logger {
 		t.Fatal("runtime.Logger did not preserve logger")
 	}
+
 	if runtime.ServerAddr != "127.0.0.1:0" {
 		t.Fatalf("runtime.ServerAddr = %q", runtime.ServerAddr)
 	}
+
 	if runtime.HTTPServers == nil || runtime.HTTPServers.H3 == nil {
 		t.Fatal("runtime.HTTPServers.H3 is nil")
 	}
+
 	if runtime.HTTPServers.H3.Addr != "127.0.0.1:0" {
 		t.Fatalf("runtime.HTTPServers.H3.Addr = %q", runtime.HTTPServers.H3.Addr)
 	}
 
 	runtime.Close()
+
 	if cleanupCalls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
 	}
@@ -102,6 +109,7 @@ func writeRuntimeTestCertificate(t *testing.T) (certFile, keyFile string) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
+
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		DNSNames:     []string{"localhost"},
@@ -110,44 +118,64 @@ func writeRuntimeTestCertificate(t *testing.T) (certFile, keyFile string) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
+
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
 	if err != nil {
 		t.Fatalf("create cert: %v", err)
 	}
+
 	keyDER, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
 		t.Fatalf("marshal key: %v", err)
 	}
 
 	dir := t.TempDir()
+
 	certFile = filepath.Join(dir, "cert.pem")
 	keyFile = filepath.Join(dir, "key.pem")
+
 	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)
 	}
+
 	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
+
 	return certFile, keyFile
 }
 
-func TestCleanupAdminAPIRuntimeBuildRunsInfraCleanupAndWrapsError(t *testing.T) {
-	t.Parallel()
+func TestBuildAdminAPIHTTPRuntimeCleansUpInfraOnRouterFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 
 	cleanupCalls := 0
-	cause := errors.New("boom")
-	runtime, err := cleanupAdminAPIRuntimeBuild(&sharedmodules.InfraModule{
+	infra := &sharedmodules.InfraModule{
+		Postgres: &databasemocks.Client{},
 		Cleanup: func() {
 			cleanupCalls++
 		},
-	}, "foundation", cause)
+	}
+
+	runtime, err := buildAdminAPIHTTPRuntime(
+		t.Context(),
+		&settings.Config{},
+		infra,
+		nil,
+		&server.Handler{},
+		slog.New(slog.DiscardHandler),
+	)
+	if err == nil {
+		t.Fatal("buildAdminAPIHTTPRuntime() expected error for blank API key")
+	}
 
 	if runtime != nil {
-		t.Fatal("cleanupAdminAPIRuntimeBuild() returned runtime")
+		t.Fatal("buildAdminAPIHTTPRuntime() returned runtime on error")
 	}
-	if !errors.Is(err, cause) {
-		t.Fatalf("cleanupAdminAPIRuntimeBuild() error = %v", err)
+
+	if !strings.Contains(err.Error(), "build admin api runtime: provide api router: ") {
+		t.Fatalf("buildAdminAPIHTTPRuntime() error = %q", err.Error())
 	}
+
 	if cleanupCalls != 1 {
 		t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
 	}
@@ -160,9 +188,11 @@ func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
 
 	unconfigured := newBotSettingsApplier(base, nil, nil)
 	unconfiguredResult := unconfigured.ApplyMemberNewsWeeklyRunNow(t.Context())
+
 	if unconfiguredResult.Applied {
 		t.Fatal("unconfigured member news trigger unexpectedly applied")
 	}
+
 	if unconfiguredResult.Reason != "member news trigger is not configured" {
 		t.Fatalf("unconfigured reason = %q", unconfiguredResult.Reason)
 	}
@@ -170,24 +200,31 @@ func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
 	trigger := &memberNewsRunNowStub{}
 	configured := newBotSettingsApplier(base, trigger, slog.New(slog.DiscardHandler))
 	successResult := configured.ApplyMemberNewsWeeklyRunNow(t.Context())
+
 	if !successResult.Applied {
 		t.Fatalf("configured result = %+v", successResult)
 	}
+
 	if successResult.Source != "member_news_trigger" {
 		t.Fatalf("configured source = %q", successResult.Source)
 	}
+
 	if trigger.calls != 1 {
 		t.Fatalf("trigger calls = %d, want 1", trigger.calls)
 	}
 
 	trigger.err = errors.New("trigger failed")
+
 	failedResult := configured.ApplyMemberNewsWeeklyRunNow(t.Context())
+
 	if failedResult.Applied {
 		t.Fatal("failed trigger unexpectedly applied")
 	}
+
 	if failedResult.Reason != "member news trigger failed" {
 		t.Fatalf("failed reason = %q", failedResult.Reason)
 	}
+
 	if failedResult.Error != "trigger failed" {
 		t.Fatalf("failed error = %q", failedResult.Error)
 	}
@@ -205,9 +242,11 @@ func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 	if applier == nil {
 		t.Fatal("buildAdminAPISettingsApplier() returned nil applier")
 	}
+
 	if triggerClient != nil {
 		t.Fatal("buildAdminAPISettingsApplier() returned trigger client for empty URL")
 	}
+
 	result := applier.ApplyMemberNewsWeeklyRunNow(t.Context())
 	if result.Applied {
 		t.Fatalf("empty URL member news result = %+v", result)
@@ -215,11 +254,12 @@ func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 
 	applier, triggerClient = buildAdminAPISettingsApplier(&settings.Config{
 		LLMSchedulerURL: "http://127.0.0.1:1",
-		Server:          settings.ServerConfig{APIKey: "test-key"},
+		Server:          settings.ServerConfig{APIKey: testAPIKey},
 	}, foundation, alarmMode, ytStack, logger)
 	if applier == nil {
 		t.Fatal("buildAdminAPISettingsApplier() returned nil applier with URL")
 	}
+
 	if triggerClient == nil {
 		t.Fatal("buildAdminAPISettingsApplier() returned nil trigger client with URL")
 	}
@@ -230,8 +270,8 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 
 	logger := slog.New(slog.DiscardHandler)
 	appConfig := &settings.Config{
-		Server: settings.ServerConfig{APIKey: "test-key"},
-		CORS:   settings.CORSConfig{AllowedOrigins: []string{"http://localhost:3000"}},
+		Server: settings.ServerConfig{APIKey: testAPIKey},
+		CORS:   settings.CORSConfig{AllowedOrigins: []string{testAllowedOrigin}},
 	}
 	infra := &sharedmodules.InfraModule{
 		Postgres: &databasemocks.Client{},
@@ -263,6 +303,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildAdminAPIRouter() error = %v", err)
 	}
+
 	if router == nil {
 		t.Fatal("buildAdminAPIRouter() returned nil router")
 	}
@@ -277,14 +318,18 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 	t.Parallel()
 
 	var nilRuntime *AdminAPIRuntime
+
 	if err := nilRuntime.Run(); err != nil {
 		t.Fatalf("nil Run() error = %v", err)
 	}
+
 	nilRuntime.Start(t.Context(), nil)
 	nilRuntime.StartHTTPServer(nil)
+
 	if err := nilRuntime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("nil Shutdown() error = %v", err)
 	}
+
 	if err := nilRuntime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("nil ShutdownHTTPServer() error = %v", err)
 	}
@@ -295,9 +340,11 @@ func TestAdminAPIRuntimeLifecycleMethodsHandleNilAndNilServer(t *testing.T) {
 	}
 	runtime.Start(t.Context(), make(chan error, 1))
 	runtime.StartHTTPServer(make(chan error, 1))
+
 	if err := runtime.Shutdown(t.Context()); err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
+
 	if err := runtime.ShutdownHTTPServer(t.Context()); err != nil {
 		t.Fatalf("ShutdownHTTPServer() error = %v", err)
 	}

@@ -21,7 +21,6 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -80,11 +79,14 @@ func TestNewIPAllowList(t *testing.T) {
 				if err == nil {
 					t.Fatal("에러 반환 예상이었으나 nil 반환됨")
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatalf("예상치 못한 에러: %v", err)
 			}
+
 			if len(nets) != tt.wantLen {
 				t.Fatalf("nets 길이 = %d, want %d", len(nets), tt.wantLen)
 			}
@@ -136,13 +138,16 @@ func TestAdminIPAllowMiddleware(t *testing.T) {
 			if err := router.SetTrustedProxies(nil); err != nil {
 				t.Fatalf("SetTrustedProxies 에러: %v", err)
 			}
+
 			router.Use(AdminIPAllowMiddleware(nets, slog.Default()))
 			router.GET("/admin", func(c *gin.Context) {
 				c.Status(http.StatusOK)
 			})
 
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin", http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin", http.NoBody)
+
 			req.RemoteAddr = tt.remoteAddr
+
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 

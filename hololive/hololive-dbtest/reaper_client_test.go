@@ -13,7 +13,7 @@ import (
 )
 
 func TestConnectSessionReaperRetriesReplacementWindow(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	lookupCalls := 0
@@ -23,6 +23,7 @@ func TestConnectSessionReaperRetriesReplacementWindow(t *testing.T) {
 		if lookupCalls == 1 {
 			return sessionReaper{}, false, nil
 		}
+
 		return sessionReaper{endpoint: "reaper:8080"}, true, nil
 	}
 	register := func(context.Context, sessionReaper) (net.Conn, error) {
@@ -32,10 +33,12 @@ func TestConnectSessionReaperRetriesReplacementWindow(t *testing.T) {
 		}
 
 		client, server := net.Pipe()
+
 		t.Cleanup(func() {
 			require.NoError(t, client.Close())
 			require.NoError(t, server.Close())
 		})
+
 		return client, nil
 	}
 
@@ -51,7 +54,7 @@ func TestConnectSessionReaperDoesNotRetryProtocolError(t *testing.T) {
 	registerCalls := 0
 
 	_, err := connectSessionReaper(
-		context.Background(),
+		t.Context(),
 		func(context.Context) (sessionReaper, bool, error) {
 			return sessionReaper{endpoint: "reaper:8080"}, true, nil
 		},
@@ -66,7 +69,7 @@ func TestConnectSessionReaperDoesNotRetryProtocolError(t *testing.T) {
 }
 
 func TestConnectSessionReaperTimesOutWhenReplacementNeverAppears(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
 
 	_, err := connectSessionReaper(
@@ -76,7 +79,8 @@ func TestConnectSessionReaperTimesOutWhenReplacementNeverAppears(t *testing.T) {
 		},
 		func(context.Context, sessionReaper) (net.Conn, error) {
 			t.Fatal("register must not run without a reaper")
-			return nil, nil
+
+			return nil, errors.New("register must not run without a reaper")
 		},
 	)
 

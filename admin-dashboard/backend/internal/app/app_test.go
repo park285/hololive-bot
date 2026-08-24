@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +15,6 @@ import (
 	"testing/fstest"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/park285/shared-go/v2/pkg/httputil"
@@ -37,48 +38,82 @@ type fakeSessions struct {
 	getFn     func(ctx context.Context, id string) (*session.Session, error)
 	deleteFn  func(ctx context.Context, id string) error
 	refreshFn func(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
-	rotateFn  func(ctx context.Context, oldID string) (*session.Session, error)
+	rotateFn  func(ctx context.Context, oldID string) (session.Session, bool, error)
 }
 
 func (f *fakeSessions) Create(ctx context.Context) (session.Session, error) {
 	if f.createFn == nil {
 		return session.Session{ID: "created-session"}, nil
 	}
-	return f.createFn(ctx)
+
+	out, err := f.createFn(ctx)
+	if err != nil {
+		return out, fmt.Errorf("create fn: %w", err)
+	}
+
+	return out, nil
 }
 
-func (f *fakeSessions) Get(ctx context.Context, id string) (*session.Session, error) {
+func (f *fakeSessions) Get(ctx context.Context, id string) (session.Session, bool, error) {
 	if f.getFn == nil {
-		return nil, nil
+		return session.Session{}, false, nil
 	}
-	return f.getFn(ctx, id)
+
+	out, err := f.getFn(ctx, id)
+	if err != nil {
+		return session.Session{}, false, fmt.Errorf("get fn: %w", err)
+	}
+
+	if out == nil {
+		return session.Session{}, false, nil
+	}
+
+	return *out, true, nil
 }
 
 func (f *fakeSessions) Delete(ctx context.Context, id string) error {
 	if f.deleteFn == nil {
 		return nil
 	}
-	return f.deleteFn(ctx, id)
+
+	if err := f.deleteFn(ctx, id); err != nil {
+		return fmt.Errorf("delete fn: %w", err)
+	}
+
+	return nil
 }
 
 func (f *fakeSessions) Refresh(ctx context.Context, id string, idle bool) (session.RefreshResult, error) {
 	if f.refreshFn == nil {
 		return session.RefreshResult{Kind: session.RefreshMissing}, nil
 	}
-	return f.refreshFn(ctx, id, idle)
+
+	out, err := f.refreshFn(ctx, id, idle)
+	if err != nil {
+		return out, fmt.Errorf("refresh fn: %w", err)
+	}
+
+	return out, nil
 }
 
-func (f *fakeSessions) Rotate(ctx context.Context, oldID string) (*session.Session, error) {
+func (f *fakeSessions) Rotate(ctx context.Context, oldID string) (session.Session, bool, error) {
 	if f.rotateFn == nil {
-		return nil, nil
+		return session.Session{}, false, nil
 	}
-	return f.rotateFn(ctx, oldID)
+
+	out, found, err := f.rotateFn(ctx, oldID)
+	if err != nil {
+		return session.Session{}, false, fmt.Errorf("rotate fn: %w", err)
+	}
+
+	return out, found, nil
 }
 
 func (f *fakeSessions) Close() {}
 
 func liveSession(id string) *session.Session {
 	now := time.Now().UTC()
+
 	return &session.Session{
 		ID:                id,
 		CreatedAt:         now,
@@ -94,6 +129,7 @@ func storeWith(sess *session.Session) *fakeSessions {
 			if sess != nil && sess.ID == id {
 				return sess, nil
 			}
+
 			return nil, nil
 		},
 	}
@@ -104,6 +140,7 @@ func storeWithSessions(sessions ...*session.Session) *fakeSessions {
 	for _, sess := range sessions {
 		byID[sess.ID] = sess
 	}
+
 	return &fakeSessions{
 		getFn: func(_ context.Context, id string) (*session.Session, error) {
 			return byID[id], nil
@@ -113,7 +150,9 @@ func storeWithSessions(sessions ...*session.Session) *fakeSessions {
 
 func rotatedMarker(id, rotatedTo string) *session.Session {
 	marker := liveSession(id)
+
 	marker.RotatedTo = &rotatedTo
+
 	return marker
 }
 
@@ -123,19 +162,23 @@ func clearsAuthCookies(rec *httptest.ResponseRecorder) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func testPasswordHash(t *testing.T, password string) string {
 	t.Helper()
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	require.NoError(t, err)
+
 	return string(hash)
 }
 
 func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config)) *Runtime {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+
 	cfg := config.Config{
 		Env:           "test",
 		AdminUser:     "admin",
@@ -151,11 +194,14 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 		EnableSwaggerUI: true,
 		RuntimeVersion:  "test",
 	}
+
 	if mutate != nil {
 		mutate(&cfg)
 	}
+
 	openapiJSON, err := openapi.MarshalSpec(cfg.RuntimeVersion)
 	require.NoError(t, err)
+
 	return &Runtime{
 		cfg:             cfg,
 		logger:          logging.NewTestLogger(),
@@ -178,13 +224,17 @@ func signedSessionCookie(id string) *http.Cookie {
 func doRequest(handler http.Handler, req *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
+
 	return rec
 }
 
 func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
+
 	var payload map[string]any
+
 	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &payload), "body: %s", rec.Body.String())
+
 	return payload
 }
 
@@ -192,12 +242,13 @@ func TestHealthAndSecurityHeaders(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, func(cfg *config.Config) {
 		cfg.Security.ForceHTTPS = true
 	})
-	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "ok", decodeBody(t, rec)["status"])
 	require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
 	require.Equal(t, "DENY", rec.Header().Get("X-Frame-Options"))
+
 	csp := rec.Header().Get("Content-Security-Policy")
 	require.NotEmpty(t, csp)
 	require.Contains(t, csp, "font-src 'self' data:")
@@ -208,17 +259,19 @@ func TestAuthMiddlewareRejections(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(nil), nil)
 	handler := rt.Handler()
 
-	rec := doRequest(handler, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody))
+	rec := doRequest(handler, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody))
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: "tampered.signature", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	require.Contains(t, rec.Header().Get("Set-Cookie"), auth.SessionCookieName+"=;")
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie("missing-session"))
+
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
@@ -230,8 +283,9 @@ func TestAuthMiddlewareStoreError(t *testing.T) {
 		},
 	}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie("any"))
+
 	rec := doRequest(rt.Handler(), req)
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
@@ -240,11 +294,13 @@ func TestSessionStatusAuthenticated(t *testing.T) {
 	sess := liveSession("active-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
+
 	rec := doRequest(rt.Handler(), req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+
 	payload := decodeBody(t, rec)
 	require.Equal(t, true, payload["authenticated"])
 	require.Equal(t, "admin", payload["username"])
@@ -254,31 +310,39 @@ func TestSessionStatusAuthenticated(t *testing.T) {
 func TestRotatedSessionFollowsReplacementDuringGrace(t *testing.T) {
 	marker := rotatedMarker("rotated-session", "next-session")
 	replacement := liveSession("next-session")
+
 	replacement.AbsoluteExpiresAt = marker.AbsoluteExpiresAt.Add(time.Hour)
+
 	store := storeWithSessions(marker, replacement)
+
 	store.refreshFn = func(context.Context, string, bool) (session.RefreshResult, error) {
 		return session.RefreshResult{Kind: session.RefreshRotated, Session: replacement}, nil
 	}
+
 	rt := newTestRuntime(t, store, func(cfg *config.Config) {
 		cfg.Security.CSRFMode = config.SecurityOff
 	})
 	handler := rt.Handler()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(marker.ID))
+
 	rec := doRequest(handler, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.False(t, clearsAuthCookies(rec), "grace 요청은 동시 heartbeat가 심은 새 쿠키를 지우면 안 된다")
+
 	payload := decodeBody(t, rec)
 	require.Equal(t, true, payload["authenticated"])
 	require.InDelta(t, float64(replacement.AbsoluteExpiresAt.Unix()), payload["absolute_expires_at"], 0)
+
 	csrfToken, ok := payload["csrf_token"].(string)
 	require.True(t, ok, "csrf_token: %v", payload["csrf_token"])
 	require.True(t, auth.ValidateCSRFToken(marker.ID, csrfToken, testSecret), "CSRF는 요청이 실제로 보낸 marker ID에 바인딩되어야 한다")
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", http.NoBody)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/heartbeat", http.NoBody)
 	req.AddCookie(signedSessionCookie(marker.ID))
+
 	rec = doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, decodeBody(t, rec), "csrf_token")
@@ -286,11 +350,13 @@ func TestRotatedSessionFollowsReplacementDuringGrace(t *testing.T) {
 
 func TestRotatedSessionDeniesWithoutClearingCookies(t *testing.T) {
 	const markerID = "rotated-session"
+
 	chained := rotatedMarker("chained-session", "third-session")
 	failingStore := &fakeSessions{getFn: func(_ context.Context, id string) (*session.Session, error) {
 		if id == markerID {
 			return rotatedMarker(markerID, "next-session"), nil
 		}
+
 		return nil, errors.New("valkey down")
 	}}
 
@@ -306,8 +372,9 @@ func TestRotatedSessionDeniesWithoutClearingCookies(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := newTestRuntime(t, tc.store, nil)
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 			req.AddCookie(signedSessionCookie(markerID))
+
 			rec := doRequest(rt.Handler(), req)
 
 			require.Equal(t, tc.wantStatus, rec.Code)
@@ -318,12 +385,15 @@ func TestRotatedSessionDeniesWithoutClearingCookies(t *testing.T) {
 
 func TestDockerActionNotModifiedSucceedsAndClearsCache(t *testing.T) {
 	const containerName = "hololive-api"
+
 	listCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
 		case "/containers/json":
 			listCalls++
+
 			w.Header().Set("Content-Type", "application/json")
+
 			if _, err := w.Write([]byte(`[{"Id":"1","Names":["/` + containerName + `"],"Image":"img","Status":"Up","State":"running","Created":1}]`)); err != nil {
 				t.Errorf("write docker list response: %v", err)
 			}
@@ -334,26 +404,31 @@ func TestDockerActionNotModifiedSucceedsAndClearsCache(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
+
 	dockerClient, err := docker.NewClient(server.URL)
 	require.NoError(t, err)
 
 	rt := newTestRuntime(t, storeWithSessions(liveSession("docker-session")), func(cfg *config.Config) {
 		cfg.Security.CSRFMode = config.SecurityOff
 	})
+
 	rt.docker = dockerClient
+
 	handler := rt.Handler()
 
 	listContainers := func() int {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/containers", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/docker/containers", http.NoBody)
 		req.AddCookie(signedSessionCookie("docker-session"))
+
 		return doRequest(handler, req).Code
 	}
 
 	require.Equal(t, http.StatusOK, listContainers())
 	require.Equal(t, 1, listCalls)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/docker/containers/"+containerName+"/start", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/docker/containers/"+containerName+"/start", http.NoBody)
 	req.AddCookie(signedSessionCookie("docker-session"))
+
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
 	require.Equal(t, "ok", decodeBody(t, rec)["status"])
@@ -366,11 +441,12 @@ func TestLoginValidation(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
 	handler := rt.Handler()
 
-	rec := doRequest(handler, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", strings.NewReader("not-json")))
+	rec := doRequest(handler, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/login", strings.NewReader("not-json")))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 
 	body := strings.NewReader(`{"username":"admin","password":"wrong"}`)
-	rec = doRequest(handler, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", body))
+
+	rec = doRequest(handler, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/login", body))
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
@@ -382,29 +458,36 @@ func TestLoginSuccessSetsCookies(t *testing.T) {
 	}, nil)
 
 	body := strings.NewReader(`{"username":"admin","password":"correct-password"}`)
-	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", body))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/login", body))
 
 	require.Equal(t, http.StatusOK, rec.Code)
+
 	payload := decodeBody(t, rec)
 	require.Equal(t, "Login successful", payload["message"])
 	require.NotEmpty(t, payload["csrf_token"])
+
 	cookies := rec.Result().Cookies()
 	names := make([]string, 0, len(cookies))
+
 	for _, cookie := range cookies {
 		names = append(names, cookie.Name)
 	}
+
 	require.Contains(t, names, auth.SessionCookieName)
 	require.Contains(t, names, auth.CSRFCookieName)
 }
 
 func TestLoginRateLimited(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
+
 	for range 5 {
 		rt.rateLimiter.RecordFailure("192.0.2.1")
 	}
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/login", strings.NewReader(`{"username":"admin","password":"correct-password"}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/login", strings.NewReader(`{"username":"admin","password":"correct-password"}`))
+
 	req.RemoteAddr = "192.0.2.1:50000"
+
 	rec := doRequest(rt.Handler(), req)
 
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
@@ -416,13 +499,14 @@ func TestCSRFEnforcement(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusForbidden, doRequest(handler, req).Code)
 
 	csrf, err := auth.NewCSRFToken(sess.ID, testSecret)
 	require.NoError(t, err)
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	req.Header.Set("X-CSRF-Token", csrf)
@@ -435,7 +519,7 @@ func TestCSRFMonitorModeAllows(t *testing.T) {
 		cfg.Security.CSRFMode = config.SecurityMonitor
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusOK, doRequest(rt.Handler(), req).Code)
 }
@@ -456,21 +540,29 @@ func TestHeartbeatResultContract(t *testing.T) {
 		{"absolute_expired", session.RefreshResult{Kind: session.RefreshAbsoluteExpired}, nil, http.StatusUnauthorized, "absolute_expired"},
 		{"missing", session.RefreshResult{Kind: session.RefreshMissing}, nil, http.StatusUnauthorized, "error"},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := storeWith(sess)
+
 			store.refreshFn = func(context.Context, string, bool) (session.RefreshResult, error) {
 				return tc.result, nil
 			}
-			store.rotateFn = func(context.Context, string) (*session.Session, error) {
-				return tc.rotated, nil
+			store.rotateFn = func(context.Context, string) (session.Session, bool, error) {
+				if tc.rotated == nil {
+					return session.Session{}, false, nil
+				}
+
+				return *tc.rotated, true, nil
 			}
+
 			rt := newTestRuntime(t, store, func(cfg *config.Config) {
 				cfg.Security.CSRFMode = config.SecurityOff
 			})
 
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
 			req.AddCookie(signedSessionCookie(sess.ID))
+
 			rec := doRequest(rt.Handler(), req)
 
 			require.Equal(t, tc.wantStatus, rec.Code)
@@ -491,31 +583,38 @@ func TestPlainHeartbeatReissuesSessionCookie(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := liveSession("hb-cookie-session")
 			store := storeWith(sess)
+
 			store.refreshFn = func(context.Context, string, bool) (session.RefreshResult, error) {
 				return session.RefreshResult{Kind: session.RefreshRefreshed, Session: sess}, nil
 			}
-			store.rotateFn = func(context.Context, string) (*session.Session, error) {
-				return nil, nil
+			store.rotateFn = func(context.Context, string) (session.Session, bool, error) {
+				return session.Session{}, false, nil
 			}
+
 			rt := newTestRuntime(t, store, func(cfg *config.Config) {
 				cfg.Security.CSRFMode = config.SecurityOff
 				cfg.Session.TokenRotationEnabled = tc.rotationEnabled
 			})
 
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader(`{"idle":false}`))
 			req.AddCookie(signedSessionCookie(sess.ID))
+
 			rec := doRequest(rt.Handler(), req)
 
 			require.Equal(t, http.StatusOK, rec.Code)
+
 			payload := decodeBody(t, rec)
 			require.Contains(t, payload, "absolute_expires_at")
 			require.NotContains(t, payload, "csrf_token")
+
 			var sessionCookie *http.Cookie
+
 			for _, cookie := range rec.Result().Cookies() {
 				if cookie.Name == auth.SessionCookieName {
 					sessionCookie = cookie
 				}
 			}
+
 			require.NotNil(t, sessionCookie, "plain heartbeat must re-issue the session cookie")
 			require.Positive(t, sessionCookie.MaxAge)
 		})
@@ -528,7 +627,7 @@ func TestHeartbeatInvalidPayload(t *testing.T) {
 		cfg.Security.CSRFMode = config.SecurityOff
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader("{broken"))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/heartbeat", strings.NewReader("{broken"))
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusBadRequest, doRequest(rt.Handler(), req).Code)
 }
@@ -540,17 +639,18 @@ func TestDockerHandlersWithoutDocker(t *testing.T) {
 	})
 	handler := rt.Handler()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
+
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, false, decodeBody(t, rec)["available"])
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/containers", http.NoBody)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/docker/containers", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusServiceUnavailable, doRequest(handler, req).Code)
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/docker/containers/bot/restart", http.NoBody)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/docker/containers/bot/restart", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusServiceUnavailable, doRequest(handler, req).Code)
 }
@@ -560,8 +660,9 @@ func TestAdminAPIDisablesCaching(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/docker/health", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
+
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "no-store, private", rec.Header().Get("Cache-Control"))
@@ -572,16 +673,19 @@ func TestAdminAPIDisablesCaching(t *testing.T) {
 
 func TestETagSkippedForLargeBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	writer := &etagWriter{ResponseWriter: c.Writer, limit: 8}
 
 	_, err := writer.WriteString("hello")
 	require.NoError(t, err)
+
 	large := strings.Repeat("x", 100)
+
 	_, err = writer.WriteString(large)
 	require.NoError(t, err)
-	writer.flush(httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/status", http.NoBody))
+	writer.flush(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/status", http.NoBody))
 
 	require.True(t, writer.overflow)
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -599,9 +703,11 @@ func TestSystemStatsWSPerSessionCap(t *testing.T) {
 	header := http.Header{}
 	header.Set("Origin", "https://ok.test")
 	header.Set("Cookie", signedSessionCookie(sess.ID).String())
+
 	dialURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/admin/api/ws/system-stats"
 
 	conns := make([]*websocket.Conn, 0, maxStreamsPerSession)
+
 	defer func() {
 		for _, conn := range conns {
 			if cerr := conn.Close(); cerr != nil {
@@ -609,12 +715,15 @@ func TestSystemStatsWSPerSessionCap(t *testing.T) {
 			}
 		}
 	}()
+
 	for range maxStreamsPerSession {
 		conn, resp, err := websocket.DefaultDialer.Dial(dialURL, header)
 		require.NoError(t, err)
+
 		if resp != nil {
 			require.NoError(t, resp.Body.Close())
 		}
+
 		conns = append(conns, conn)
 	}
 
@@ -630,8 +739,9 @@ func TestSessionStatusIssuesCSRFTokenForBootstrap(t *testing.T) {
 	rt := newTestRuntime(t, storeWith(sess), nil)
 	handler := rt.Handler()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
+
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -640,15 +750,17 @@ func TestSessionStatusIssuesCSRFTokenForBootstrap(t *testing.T) {
 	require.NotEmpty(t, token, "/auth/session must issue a CSRF token so the SPA recovers it after a page refresh")
 
 	var csrfCookie *http.Cookie
+
 	for _, ck := range rec.Result().Cookies() {
 		if ck.Name == auth.CSRFCookieName {
 			csrfCookie = ck
 		}
 	}
+
 	require.NotNil(t, csrfCookie, "/auth/session must re-set the CSRF cookie")
 	require.Equal(t, token, csrfCookie.Value, "double-submit cookie and body token must match")
 
-	post := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+	post := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	post.AddCookie(signedSessionCookie(sess.ID))
 	post.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: token, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	post.Header.Set("X-CSRF-Token", token)
@@ -663,9 +775,10 @@ func TestSessionStatusPreservesValidCSRFToken(t *testing.T) {
 	csrf, err := auth.NewCSRFToken(sess.ID, testSecret)
 	require.NoError(t, err)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/auth/session", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+
 	rec := doRequest(handler, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -682,11 +795,13 @@ func TestSessionStatusPreservesValidCSRFToken(t *testing.T) {
 
 func TestSPAFallbackServesIndexWith200(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
+
 	rt.static = static.NewHandlerFromFS(fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("<!doctype html><html lang=\"ko\"></html>")},
 	})
+
 	for _, path := range []string{"/", "/dashboard/stats", "/login"} {
-		rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, http.NoBody))
+		rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody))
 		require.Equal(t, http.StatusOK, rec.Code, "path %s", path)
 		require.Contains(t, rec.Header().Get("Content-Type"), "text/html", "path %s", path)
 		require.Contains(t, rec.Body.String(), "<!doctype html>", "path %s", path)
@@ -695,11 +810,13 @@ func TestSPAFallbackServesIndexWith200(t *testing.T) {
 
 func TestThemeInitServedAsScriptNotSPAFallback(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
+
 	rt.static = static.NewHandlerFromFS(fstest.MapFS{
 		"index.html":    &fstest.MapFile{Data: []byte("<!doctype html><html lang=\"ko\"></html>")},
 		"theme-init.js": &fstest.MapFile{Data: []byte("(function(){})()")},
 	})
-	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/theme-init.js", http.NoBody))
+
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/theme-init.js", http.NoBody))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
@@ -708,7 +825,7 @@ func TestThemeInitServedAsScriptNotSPAFallback(t *testing.T) {
 
 func TestUnknownAdminAPIRouteIs404JSON(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
-	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/does-not-exist", http.NoBody))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/does-not-exist", http.NoBody))
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
 	require.Equal(t, "Not found", decodeBody(t, rec)["error"])
@@ -716,7 +833,7 @@ func TestUnknownAdminAPIRouteIs404JSON(t *testing.T) {
 
 func TestMethodNotAllowedIsJSON(t *testing.T) {
 	rt := newTestRuntime(t, &fakeSessions{}, nil)
-	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/admin/api/auth/login", http.NoBody))
+	rec := doRequest(rt.Handler(), httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/admin/api/auth/login", http.NoBody))
 
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 	require.Equal(t, "Method not allowed", decodeBody(t, rec)["error"])
@@ -726,7 +843,7 @@ func TestWSOriginRejected(t *testing.T) {
 	sess := liveSession("ws-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/ws/system-stats", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/ws/system-stats", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	req.Header.Set("Origin", "https://evil.test")
 	require.Equal(t, http.StatusForbidden, doRequest(rt.Handler(), req).Code)
@@ -744,24 +861,30 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 	header := http.Header{}
 	header.Set("Origin", "https://ok.test")
 	header.Set("Cookie", signedSessionCookie(sess.ID).String())
+
 	conn, resp, err := websocket.DefaultDialer.Dial(
 		"ws"+strings.TrimPrefix(server.URL, "http")+"/admin/api/ws/system-stats", header)
 	require.NoError(t, err)
+
 	if resp != nil {
 		defer func() {
 			require.NoError(t, resp.Body.Close())
 		}()
 	}
+
 	defer func() {
 		require.NoError(t, conn.Close())
 	}()
 
 	for want := 1; want <= 2; want++ {
 		require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+
 		messageType, payload, err := conn.ReadMessage()
 		require.NoError(t, err)
 		require.Equal(t, websocket.TextMessage, messageType)
+
 		var frame status.SystemStats
+
 		require.NoError(t, jsonv2.Unmarshal(payload, &frame))
 		require.Equal(t, want, frame.ThreadCount)
 	}
@@ -770,6 +893,7 @@ func TestSystemStatsWSReplaysHistoryOnConnect(t *testing.T) {
 func TestStatsHubOutlivesBuildContext(t *testing.T) {
 	hub := status.NewHub(nil)
 	startStatsHub(hub)
+
 	defer hub.Stop()
 
 	_, updates, unsubscribe := hub.Subscribe()
@@ -785,6 +909,7 @@ func TestStatsHubOutlivesBuildContext(t *testing.T) {
 func TestSystemStatsWSReapsSilentPeer(t *testing.T) {
 	sess := liveSession("ws-reap-session")
 	rt := newTestRuntime(t, storeWith(sess), nil)
+
 	rt.wsPongWait = 200 * time.Millisecond
 	rt.wsPingPeriod = 60 * time.Millisecond
 
@@ -794,12 +919,15 @@ func TestSystemStatsWSReapsSilentPeer(t *testing.T) {
 	header := http.Header{}
 	header.Set("Origin", "https://ok.test")
 	header.Set("Cookie", signedSessionCookie(sess.ID).String())
+
 	conn, resp, err := websocket.DefaultDialer.Dial(
 		"ws"+strings.TrimPrefix(server.URL, "http")+"/admin/api/ws/system-stats", header)
 	require.NoError(t, err)
+
 	if resp != nil {
 		defer func() { require.NoError(t, resp.Body.Close()) }()
 	}
+
 	defer func() {
 		if cerr := conn.Close(); cerr != nil {
 			return
@@ -809,8 +937,10 @@ func TestSystemStatsWSReapsSilentPeer(t *testing.T) {
 	conn.SetPingHandler(func(string) error { return nil })
 
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+
 	_, _, readErr := conn.ReadMessage()
 	require.Error(t, readErr, "server must reap a peer that stops answering pings instead of leaking its stream slot")
+
 	if netErr, ok := errors.AsType[net.Error](readErr); ok {
 		require.False(t, netErr.Timeout(),
 			"client read timed out — server never reaped the silent peer (wsStreams slot leak regression)")
@@ -820,16 +950,19 @@ func TestSystemStatsWSReapsSilentPeer(t *testing.T) {
 func TestCloseConnClosesServerSideConnection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		up := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+
 		conn, err := up.Upgrade(w, req, nil)
 		if err != nil {
 			return
 		}
+
 		closeConn(conn)
 	}))
 	defer srv.Close()
 
 	conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
 	require.NoError(t, err)
+
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
 			return
@@ -842,8 +975,10 @@ func TestCloseConnClosesServerSideConnection(t *testing.T) {
 	}()
 
 	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+
 	_, _, readErr := conn.ReadMessage()
 	require.Error(t, readErr, "server must close the connection after the handler returns")
+
 	if netErr, ok := errors.AsType[net.Error](readErr); ok {
 		require.False(t, netErr.Timeout(),
 			"read timed out instead of seeing a server close — closeConn no longer closes the conn (FD leak regression)")
@@ -857,13 +992,14 @@ func TestOpenAPIToggle(t *testing.T) {
 		cfg.EnableSwaggerUI = false
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/openapi.json", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/openapi.json", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
 	require.Equal(t, http.StatusNotFound, doRequest(rt.Handler(), req).Code)
 
 	rt = newTestRuntime(t, storeWith(sess), nil)
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/api/openapi.json", http.NoBody)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/admin/api/openapi.json", http.NoBody)
 	req.AddCookie(signedSessionCookie(sess.ID))
+
 	rec := doRequest(rt.Handler(), req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, decodeBody(t, rec), "paths")
@@ -871,8 +1007,10 @@ func TestOpenAPIToggle(t *testing.T) {
 
 func mustCIDR(t *testing.T) netip.Prefix {
 	t.Helper()
+
 	prefix, err := netip.ParsePrefix("10.0.0.0/8")
 	require.NoError(t, err)
+
 	return prefix.Masked()
 }
 
@@ -881,7 +1019,8 @@ func TestHB04ForwardedHeaderIgnoredFromUntrustedPeer_e8fc8b7d(t *testing.T) {
 		cfg.TrustedForwarders = true
 		cfg.TrustedProxyCIDRs = []netip.Prefix{mustCIDR(t)}
 	})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+
 	req.RemoteAddr = "203.0.113.50:4321"
 	req.Header.Set("X-Forwarded-For", "198.51.100.7")
 	require.Equal(t, "203.0.113.50", rt.clientIP(req),
@@ -894,13 +1033,18 @@ func TestHB04ForwardedHeaderRotationDoesNotResetRateLimit_e8fc8b7d(t *testing.T)
 		cfg.TrustedProxyCIDRs = []netip.Prefix{mustCIDR(t)}
 	})
 	keys := make(map[string]struct{})
+
 	for i := range 8 {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+
 		req.RemoteAddr = "203.0.113.50:4321"
 		req.Header.Set("X-Forwarded-For", "198.51.100."+strconv.Itoa(i))
+
 		keys[rt.clientIP(req)] = struct{}{}
 	}
+
 	require.Len(t, keys, 1, "rotated forwarded headers from one untrusted peer must collapse to a single limiter key")
+
 	for key := range keys {
 		require.Equal(t, "203.0.113.50", key)
 	}
@@ -911,7 +1055,8 @@ func TestHB04TrustedProxyXFFAcceptedFromAllowlistedPeer_e8fc8b7d(t *testing.T) {
 		cfg.TrustedForwarders = true
 		cfg.TrustedProxyCIDRs = []netip.Prefix{mustCIDR(t)}
 	})
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
+
 	req.RemoteAddr = "10.0.0.9:4321"
 	req.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
 	require.Equal(t, "203.0.113.7", rt.clientIP(req),

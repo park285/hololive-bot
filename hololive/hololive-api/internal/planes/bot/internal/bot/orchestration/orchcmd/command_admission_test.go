@@ -23,7 +23,6 @@ package orchcmd
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -34,10 +33,15 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
+	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+)
 
-	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
+const (
+	testMessageIdentity = "message:m-1"
+	testRoomID          = "room-1"
+	testUserID          = "user-1"
 )
 
 type admissionLimiterCall struct {
@@ -55,17 +59,23 @@ type stubCommandRateLimiter struct {
 
 func (s *stubCommandRateLimiter) Admit(_ context.Context, member string, checks []commandAdmissionCheck) (commandAdmissionDecision, error) {
 	s.members = append(s.members, member)
+
 	for _, check := range checks {
 		s.calls = append(s.calls, admissionLimiterCall{bucket: check.bucket, limit: check.limit, window: expensiveHistoryWindow})
 	}
+
 	if s.err != nil {
 		return commandAdmissionDecision{}, s.err
 	}
+
 	if len(s.decisions) == 0 {
 		return commandAdmissionDecision{Allowed: true}, nil
 	}
+
 	decision := s.decisions[0]
+
 	s.decisions = s.decisions[1:]
+
 	return decision, nil
 }
 
@@ -85,28 +95,35 @@ func TestCommandRouterAppliesUserAndRoomAdmissionToExpensiveHistory(t *testing.T
 	registry := command.NewRegistry()
 	handler := &trackedRouterCommand{name: "broadcast_history"}
 	registry.Register(handler)
+
 	limiter := &stubCommandRateLimiter{}
 	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error { return nil }, nil, nil)
+
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, domain.CommandBroadcastHistory, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if handler.executed != 1 {
 		t.Fatalf("handler executions = %d, want 1", handler.executed)
 	}
+
 	if len(limiter.calls) != 2 {
 		t.Fatalf("limiter calls = %d, want 2", len(limiter.calls))
 	}
+
 	if limiter.calls[0].limit != expensiveHistoryRoomLimit || limiter.calls[1].limit != expensiveHistoryUserLimit {
 		t.Fatalf("limiter calls = %+v", limiter.calls)
 	}
+
 	for _, call := range limiter.calls {
 		if call.window != expensiveHistoryWindow {
 			t.Fatalf("window = %s, want %s", call.window, expensiveHistoryWindow)
 		}
-		if strings.Contains(call.bucket, "room-1") || strings.Contains(call.bucket, "user-1") {
+
+		if strings.Contains(call.bucket, testRoomID) || strings.Contains(call.bucket, testUserID) {
 			t.Fatalf("bucket exposes raw identity: %q", call.bucket)
 		}
 	}
@@ -116,21 +133,27 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 	registry := command.NewRegistry()
 	handler := &trackedRouterCommand{name: "broadcast_history"}
 	registry.Register(handler)
+
 	limiter := &stubCommandRateLimiter{decisions: []commandAdmissionDecision{{Allowed: false, RetryAfter: 10 * time.Second}}}
+
 	var sent string
-	router := NewCommandRouter(registry, nil, func(_ context.Context, _ string, message string) error {
+
+	router := NewCommandRouter(registry, nil, func(_ context.Context, _, message string) error {
 		sent = message
 		return nil
 	}, nil, nil)
+
 	router.admission = &commandAdmissionPolicy{limiter: limiter}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, domain.CommandBroadcastHistory, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if handler.executed != 0 {
 		t.Fatalf("handler executions = %d, want 0", handler.executed)
 	}
+
 	if sent != expensiveHistoryRateLimitMessage {
 		t.Fatalf("sent message = %q, want %q", sent, expensiveHistoryRateLimitMessage)
 	}
@@ -139,7 +162,7 @@ func TestCommandRouterRejectsRateLimitedHistoryWithoutExecutingHandler(t *testin
 func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	ctx := t.Context()
-	attacker := &domain.CommandContext{Room: "room-1", UserID: "attacker"}
+	attacker := &domain.CommandContext{Room: testRoomID, UserID: "attacker"}
 
 	for index := range expensiveHistoryUserLimit {
 		attacker.MessageID = messageIDForIndex(index)
@@ -147,9 +170,12 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 			t.Fatalf("attacker admission error = %v", err)
 		}
 	}
+
 	for index := range expensiveHistoryRoomLimit - expensiveHistoryUserLimit {
 		attacker.MessageID = messageIDForIndex(expensiveHistoryUserLimit + index)
+
 		err := policy.Admit(ctx, attacker, "broadcast_history")
+
 		if !errors.Is(err, errCommandRateLimited) {
 			t.Fatalf("attacker over-limit error = %v, want rate limit", err)
 		}
@@ -157,6 +183,7 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", attacker.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", attacker.UserID))
+
 	assertSortedSetSize(t, mini, roomKey, expensiveHistoryUserLimit)
 	assertSortedSetSize(t, mini, userKey, expensiveHistoryUserLimit)
 
@@ -169,7 +196,7 @@ func TestCommandAdmissionUserDenialsDoNotConsumeRoomQuota(t *testing.T) {
 func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	ctx := t.Context()
-	room := "room-1"
+	room := testRoomID
 
 	for i := range expensiveHistoryRoomLimit {
 		cmdCtx := &domain.CommandContext{Room: room, UserID: "user-" + strconv.Itoa(i), MessageID: "message:m-" + strconv.Itoa(i)}
@@ -180,9 +207,11 @@ func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 
 	denied := &domain.CommandContext{Room: room, UserID: "room-denied-user", MessageID: "message:room-denied"}
 	err := policy.Admit(ctx, denied, "broadcast_history")
+
 	if !errors.Is(err, errCommandRateLimited) {
 		t.Fatalf("room-full admission error = %v, want rate limit", err)
 	}
+
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", denied.UserID))
 	assertSortedSetSize(t, mini, userKey, 0)
 }
@@ -190,12 +219,16 @@ func TestCommandAdmissionRoomDenialDoesNotConsumeUserQuota(t *testing.T) {
 func TestCommandAdmissionUserDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	now := time.Unix(1_700_000_000, 0)
+
 	limiter.now = func() time.Time { return now }
-	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}
+
+	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", cmdCtx.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID))
+
 	seedAdmissionBucket(t, mini, roomKey, now, 1)
 	seedAdmissionBucket(t, mini, userKey, now, expensiveHistoryUserLimit)
+
 	roomBefore := sortedSetSnapshot(t, mini, roomKey)
 	userBefore := sortedSetSnapshot(t, mini, userKey)
 
@@ -203,6 +236,7 @@ func TestCommandAdmissionUserDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 	if !errors.Is(err, errCommandRateLimited) {
 		t.Fatalf("user-full admission error = %v, want rate limit", err)
 	}
+
 	assertSortedSetUnchanged(t, mini, roomKey, roomBefore)
 	assertSortedSetUnchanged(t, mini, userKey, userBefore)
 }
@@ -210,12 +244,16 @@ func TestCommandAdmissionUserDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 func TestCommandAdmissionRoomDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 	policy, limiter, mini := newTestCommandAdmissionPolicy(t)
 	now := time.Unix(1_700_000_000, 0)
+
 	limiter.now = func() time.Time { return now }
-	cmdCtx := &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}
+
+	cmdCtx := &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}
 	roomKey := limiter.cacheKey(commandAdmissionBucket("history:room", cmdCtx.Room))
 	userKey := limiter.cacheKey(commandAdmissionBucket("history:user", cmdCtx.UserID))
+
 	seedAdmissionBucket(t, mini, roomKey, now, expensiveHistoryRoomLimit)
 	seedAdmissionBucket(t, mini, userKey, now, 1)
+
 	roomBefore := sortedSetSnapshot(t, mini, roomKey)
 	userBefore := sortedSetSnapshot(t, mini, userKey)
 
@@ -223,6 +261,7 @@ func TestCommandAdmissionRoomDenialIsWriteFreeWithExpiredEntries(t *testing.T) {
 	if !errors.Is(err, errCommandRateLimited) {
 		t.Fatalf("room-full admission error = %v, want rate limit", err)
 	}
+
 	assertSortedSetUnchanged(t, mini, roomKey, roomBefore)
 	assertSortedSetUnchanged(t, mini, userKey, userBefore)
 }
@@ -233,10 +272,11 @@ func TestCommandAdmissionRejectsUnstableUserIdentityBeforeLimiter(t *testing.T) 
 			limiter := &stubCommandRateLimiter{}
 			policy := &commandAdmissionPolicy{limiter: limiter}
 
-			err := policy.Admit(t.Context(), &domain.CommandContext{Room: "room-1", UserID: userID, MessageID: "message:" + userID}, "broadcast_history")
+			err := policy.Admit(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: userID, MessageID: "message:" + userID}, "broadcast_history")
 			if !errors.Is(err, errCommandAdmissionUnavailable) {
 				t.Fatalf("Admit() error = %v, want admission unavailable", err)
 			}
+
 			if len(limiter.calls) != 0 {
 				t.Fatalf("limiter calls = %d, want 0", len(limiter.calls))
 			}
@@ -248,27 +288,31 @@ func newTestCommandAdmissionPolicy(t *testing.T) (*commandAdmissionPolicy, *atom
 	t.Helper()
 
 	mini := miniredis.RunT(t)
+
 	host, portString, err := net.SplitHostPort(mini.Addr())
 	if err != nil {
 		t.Fatalf("split miniredis address: %v", err)
 	}
+
 	port, err := strconv.Atoi(portString)
 	if err != nil {
 		t.Fatalf("parse miniredis port: %v", err)
 	}
+
 	cacheClient, err := cache.NewCacheService(t.Context(), cache.Config{
 		Host:              host,
 		Port:              port,
 		DB:                0,
 		DisableCache:      true,
 		ForceSingleClient: true,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("new cache service: %v", err)
 	}
+
 	t.Cleanup(func() {
-		if err := cacheClient.Close(); err != nil {
-			t.Errorf("close cache client: %v", err)
+		if closeErr := cacheClient.Close(); closeErr != nil {
+			t.Errorf("close cache client: %v", closeErr)
 		}
 	})
 
@@ -276,18 +320,22 @@ func newTestCommandAdmissionPolicy(t *testing.T) (*commandAdmissionPolicy, *atom
 	if err != nil {
 		t.Fatalf("new atomic admission limiter: %v", err)
 	}
+
 	return &commandAdmissionPolicy{limiter: limiter}, limiter, mini
 }
 
 func assertSortedSetSize(t *testing.T, mini *miniredis.Miniredis, key string, want int) {
 	t.Helper()
+
 	members, err := mini.ZMembers(key)
 	if err != nil {
 		if want == 0 && strings.Contains(err.Error(), "no such key") {
 			return
 		}
+
 		t.Fatalf("read sorted set %q: %v", key, err)
 	}
+
 	if len(members) != want {
 		t.Fatalf("sorted set %q size = %d, want %d", key, len(members), want)
 	}
@@ -295,10 +343,12 @@ func assertSortedSetSize(t *testing.T, mini *miniredis.Miniredis, key string, wa
 
 func seedAdmissionBucket(t *testing.T, mini *miniredis.Miniredis, key string, now time.Time, fresh int) {
 	t.Helper()
+
 	expiredScore := now.Add(-expensiveHistoryWindow - time.Second).UnixMilli()
 	if _, err := mini.ZAdd(key, float64(expiredScore), "expired"); err != nil {
 		t.Fatalf("seed expired member in %q: %v", key, err)
 	}
+
 	for i := range fresh {
 		score := now.Add(-time.Duration(i) * time.Millisecond).UnixMilli()
 		if _, err := mini.ZAdd(key, float64(score), "fresh-"+strconv.Itoa(i)); err != nil {
@@ -309,15 +359,18 @@ func seedAdmissionBucket(t *testing.T, mini *miniredis.Miniredis, key string, no
 
 func sortedSetSnapshot(t *testing.T, mini *miniredis.Miniredis, key string) map[string]float64 {
 	t.Helper()
+
 	members, err := mini.SortedSet(key)
 	if err != nil {
 		t.Fatalf("read sorted set %q: %v", key, err)
 	}
+
 	return members
 }
 
 func assertSortedSetUnchanged(t *testing.T, mini *miniredis.Miniredis, key string, before map[string]float64) {
 	t.Helper()
+
 	after := sortedSetSnapshot(t, mini, key)
 	if !maps.Equal(before, after) {
 		t.Fatalf("sorted set %q changed on denial: before=%v after=%v", key, before, after)
@@ -328,13 +381,16 @@ func TestCommandRouterFailsClosedWhenHistoryAdmissionIsUnavailable(t *testing.T)
 	registry := command.NewRegistry()
 	handler := &trackedRouterCommand{name: "broadcast_history"}
 	registry.Register(handler)
+
 	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error { return nil }, nil, nil)
+
 	router.admission = &commandAdmissionPolicy{limiter: &stubCommandRateLimiter{err: errors.New("cache down")}}
 
-	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1", MessageID: "message:m-1"}, domain.CommandBroadcastHistory, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: testRoomID, UserID: testUserID, MessageID: testMessageIdentity}, domain.CommandBroadcastHistory, nil)
 	if !errors.Is(err, errCommandAdmissionUnavailable) {
 		t.Fatalf("Execute() error = %v, want admission unavailable", err)
 	}
+
 	if handler.executed != 0 {
 		t.Fatalf("handler executions = %d, want 0", handler.executed)
 	}
@@ -344,12 +400,14 @@ func TestCommandRouterDoesNotRateLimitUnrelatedCommands(t *testing.T) {
 	registry := command.NewRegistry()
 	handler := &trackedRouterCommand{name: "help"}
 	registry.Register(handler)
+
 	router := NewCommandRouter(registry, nil, func(context.Context, string, string) error { return nil }, nil, nil)
 
 	err := router.Execute(t.Context(), &domain.CommandContext{}, domain.CommandHelp, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if handler.executed != 1 {
 		t.Fatalf("handler executions = %d, want 1", handler.executed)
 	}

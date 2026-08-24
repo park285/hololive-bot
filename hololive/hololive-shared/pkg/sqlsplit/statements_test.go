@@ -25,6 +25,11 @@ import (
 	"testing"
 )
 
+const (
+	stmtSelect1 = "SELECT 1"
+	stmtSelect2 = "SELECT 2"
+)
+
 func TestStatements(t *testing.T) {
 	tests := []struct {
 		name string
@@ -44,12 +49,12 @@ func TestStatements(t *testing.T) {
 		{
 			name: "semicolon inside single-quoted literal is not a separator",
 			in:   "INSERT INTO t(b) VALUES ('a; b; c'); SELECT 1;",
-			want: []string{"INSERT INTO t(b) VALUES ('a; b; c')", "SELECT 1"},
+			want: []string{"INSERT INTO t(b) VALUES ('a; b; c')", stmtSelect1},
 		},
 		{
 			name: "escaped single quote inside literal",
 			in:   "INSERT INTO t(b) VALUES ('it''s; fine'); SELECT 2;",
-			want: []string{"INSERT INTO t(b) VALUES ('it''s; fine')", "SELECT 2"},
+			want: []string{"INSERT INTO t(b) VALUES ('it''s; fine')", stmtSelect2},
 		},
 		{
 			name: "dollar-quoted DO block keeps inner semicolons",
@@ -68,17 +73,17 @@ SELECT 3;`,
 		{
 			name: "line comment with semicolon is preserved and ignored as separator",
 			in:   "SELECT 1; -- trailing; comment\nSELECT 2;",
-			want: []string{"SELECT 1", "-- trailing; comment\nSELECT 2"},
+			want: []string{stmtSelect1, "-- trailing; comment\nSELECT 2"},
 		},
 		{
 			name: "block comment with semicolon is preserved",
 			in:   "SELECT 1 /* a; b */ ; SELECT 2;",
-			want: []string{"SELECT 1 /* a; b */", "SELECT 2"},
+			want: []string{"SELECT 1 /* a; b */", stmtSelect2},
 		},
 		{
 			name: "nested block comment keeps semicolon after inner close",
 			in:   "SELECT 1 /* outer /* inner */ still; outer */; SELECT 2;",
-			want: []string{"SELECT 1 /* outer /* inner */ still; outer */", "SELECT 2"},
+			want: []string{"SELECT 1 /* outer /* inner */ still; outer */", stmtSelect2},
 		},
 		{
 			name: "escape string keeps escaped quote and semicolon",
@@ -88,7 +93,7 @@ SELECT 3;`,
 		{
 			name: "trailing whitespace and empty fragments dropped",
 			in:   "SELECT 1;;  \n ; SELECT 2; \n",
-			want: []string{"SELECT 1", "SELECT 2"},
+			want: []string{stmtSelect1, stmtSelect2},
 		},
 		{
 			name: "double-quoted identifier with semicolon",

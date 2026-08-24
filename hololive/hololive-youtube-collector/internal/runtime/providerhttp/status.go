@@ -44,43 +44,72 @@ func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagn
 	if status == http.StatusOK {
 		return nil
 	}
+
 	if status == http.StatusTooManyRequests {
-		return withRetryHint(collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, message), retryAfter)
+		if err := withRetryHint(collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, message), retryAfter); err != nil {
+			return fmt.Errorf("with retry hint: %w", err)
+		}
+
+		return nil
 	}
+
 	if status == http.StatusServiceUnavailable {
-		return mapServiceUnavailable(message, retryAfter)
+		if err := mapServiceUnavailable(message, retryAfter); err != nil {
+			return fmt.Errorf("map service unavailable: %w", err)
+		}
+
+		return nil
 	}
+
 	if classification, ok := fixedProviderStatuses[status]; ok {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(classification.code, classification.class, message)
 	}
-	return mapUnknownProviderStatus(status, message)
+
+	return fmt.Errorf("map unknown provider status: %w", mapUnknownProviderStatus(status, message))
 }
 
 func mapUnknownProviderStatus(status int, message string) error {
 	if status >= 500 && status < 600 {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassTransient, message)
 	}
+
+	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, message)
 }
 
 func mapServiceUnavailable(message, retryAfter string) error {
 	hint := collecterr.ParseRetryAfter(retryAfter, time.Time{})
 	if hint.Kind() == collecterr.RetryDefault {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassTransient, message)
 	}
-	return collecterr.WithRetry(collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, message), hint)
+
+	if err := collecterr.WithRetry(collecterr.New(collecterr.Cooldown, collecterr.ClassCooldown, message), hint); err != nil {
+		return fmt.Errorf("with retry: %w", err)
+	}
+
+	return nil
 }
 
 func withRetryHint(err error, retryAfter string) error {
-	return collecterr.WithRetry(err, collecterr.ParseRetryAfter(retryAfter, time.Time{}))
+	if withErr := collecterr.WithRetry(err, collecterr.ParseRetryAfter(retryAfter, time.Time{})); withErr != nil {
+		return fmt.Errorf("with retry: %w", withErr)
+	}
+
+	return nil
 }
 
 func statusMessage(provider contract.Provider, status int, diagnostic string) string {
 	message := fmt.Sprintf("%s status %d", provider, status)
+
 	diagnostic = collecterr.SanitizeDetail(diagnostic)
+
 	if diagnostic == "" {
 		return message
 	}
+
 	return message + ": " + diagnostic
 }
 
@@ -88,20 +117,27 @@ func MapRequestError(action string, err error, secrets ...string) error {
 	if err == nil {
 		return nil
 	}
+
 	cause := fmt.Errorf("%s: %s", action, redactRequestText(err.Error(), secrets...))
 	normalized := collecterr.FromContext(err)
+
 	if collecterr.CodeOf(normalized) == collecterr.Timeout {
 		return collecterr.Wrap(collecterr.Timeout, collecterr.ClassTimeout, cause)
 	}
+
 	if collecterr.CodeOf(normalized) == collecterr.Canceled {
 		return collecterr.Wrap(collecterr.Canceled, collecterr.ClassCanceled, cause)
 	}
+
 	if collecterr.CodeOf(normalized) == collecterr.Failed && collecterr.ClassOf(normalized) == collecterr.ClassTransient {
 		return collecterr.Wrap(collecterr.Failed, collecterr.ClassTransient, cause)
 	}
+
 	if collecterr.IsUnclassified(normalized) {
+		//nolint:wrapcheck // 미분류 오류의 전체 텍스트가 계약이라 접두어를 덧붙이면 안 된다.
 		return unclassifiedRedacted(cause)
 	}
+
 	return collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, cause)
 }
 
@@ -109,31 +145,43 @@ func RedactError(err error, secrets ...string) error {
 	if err == nil {
 		return nil
 	}
+
 	text := err.Error()
 	redacted := redactRequestText(text, secrets...)
+
 	if redacted == text {
 		return err
 	}
+
 	redactedErr := fmt.Errorf("%s", redacted)
 	base := collecterr.Wrap(collecterr.CodeOf(err), collecterr.ClassOf(err), redactedErr)
+
 	if collecterr.IsUnclassified(err) {
 		base = unclassifiedRedacted(redactedErr)
 	}
-	return collecterr.WithRetry(base, collecterr.RetryOf(err))
+
+	if withRetryErr := collecterr.WithRetry(base, collecterr.RetryOf(err)); withRetryErr != nil {
+		return fmt.Errorf("with retry: %w", withRetryErr)
+	}
+
+	return nil
 }
 
 // collecterr는 미분류 생성자를 노출하지 않는다. 평문 문자열 오류는 context/transient 판정에
 // 걸리지 않으므로 FromContext가 항상 기본 버킷(Internal, unclassified)으로 떨어뜨린다.
 func unclassifiedRedacted(redactedErr error) error {
+	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return collecterr.FromContext(redactedErr)
 }
 
 func redactRequestText(text string, secrets ...string) string {
 	text = stripURLQuery(text)
+
 	for _, secret := range secrets {
 		if secret != "" {
 			text = strings.ReplaceAll(text, secret, "[redacted]")
 		}
 	}
+
 	return collecterr.SanitizeDetail(text)
 }

@@ -43,6 +43,7 @@ func TestTemplateFuncs_MdSafe(t *testing.T) {
 	}
 
 	var buf strings.Builder
+
 	if err := tmpl.Execute(&buf, data); err != nil {
 		t.Fatalf("failed to execute template: %v", err)
 	}
@@ -51,9 +52,11 @@ func TestTemplateFuncs_MdSafe(t *testing.T) {
 	if strings.Contains(got, "**") || strings.Contains(got, "](") {
 		t.Errorf("markdown 마커가 무력화되지 않음: %q", got)
 	}
+
 	if want := "제목: " + util.MarkdownNeutralize(data.Title); got != want {
 		t.Errorf("mdsafe 출력 = %q, want %q", got, want)
 	}
+
 	if stripped := strings.ReplaceAll(got, util.KakaoZeroWidthSpace, ""); stripped != "제목: "+data.Title {
 		t.Errorf("가시 문자 변형됨: %q", stripped)
 	}

@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	"github.com/park285/shared-go/v2/pkg/healthprobe"
+
+	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
 func TestFetchBodyWithAPIKeyEnvSendsAPIKeyHeader(t *testing.T) {
@@ -17,8 +18,10 @@ func TestFetchBodyWithAPIKeyEnvSendsAPIKeyHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get(common.APIKeyHeader); got != "probe-secret" {
 			w.WriteHeader(http.StatusUnauthorized)
+
 			return
 		}
+
 		if _, err := w.Write([]byte(`metrics body`)); err != nil {
 			t.Errorf("write response: %v", err)
 		}
@@ -29,6 +32,7 @@ func TestFetchBodyWithAPIKeyEnvSendsAPIKeyHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchBodyWithAPIKeyEnv() error = %v", err)
 	}
+
 	if string(body) != "metrics body" {
 		t.Fatalf("body = %q, want metrics body", body)
 	}
@@ -41,6 +45,7 @@ func TestFetchBodyWithAPIKeyEnvRejectsMissingEnv(t *testing.T) {
 	if err == nil {
 		t.Fatal("fetchBodyWithAPIKeyEnv() error = nil, want missing env error")
 	}
+
 	if !strings.Contains(err.Error(), "PROBE_API_KEY") {
 		t.Fatalf("error = %q, want env name", err.Error())
 	}
@@ -53,12 +58,15 @@ func TestClearInternalTLSOverrides(t *testing.T) {
 	if err := clearInternalTLSOverrides(); err != nil {
 		t.Fatalf("clearInternalTLSOverrides() error = %v", err)
 	}
+
 	if value := os.Getenv(healthprobe.CACertFileEnv); value != "" {
 		t.Fatalf("%s = %q", healthprobe.CACertFileEnv, value)
 	}
+
 	if value := os.Getenv(healthprobe.ServerNameEnv); value != "" {
 		t.Fatalf("%s = %q", healthprobe.ServerNameEnv, value)
 	}
+
 	if externalSmokeURL != "https://www.google.com/generate_204" {
 		t.Fatalf("externalSmokeURL = %q", externalSmokeURL)
 	}

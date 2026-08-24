@@ -25,11 +25,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type AlarmListEntry struct {
@@ -203,6 +204,7 @@ func (f *ResponseFormatter) populateUpcomingNextStreamView(ctx context.Context, 
 	}
 
 	scheduled := *info.StartScheduled
+
 	view.ScheduledKST = util.FormatKST(scheduled, "01/02 15:04")
 
 	timeLeft := time.Until(scheduled)
@@ -212,6 +214,7 @@ func (f *ResponseFormatter) populateUpcomingNextStreamView(ctx context.Context, 
 	}
 
 	view.TimeDetail = f.formatUpcomingTimeDetail(ctx, timeLeft)
+
 	return true
 }
 

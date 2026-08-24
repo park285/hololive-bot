@@ -22,6 +22,7 @@ func NewHandler() Handler {
 	if err != nil {
 		return Handler{dist: embedded}
 	}
+
 	return Handler{dist: dist}
 }
 
@@ -55,20 +56,26 @@ func (h Handler) serveFile(w http.ResponseWriter, r *http.Request, path, cacheCo
 	data, err := fs.ReadFile(h.dist, path)
 	if err != nil {
 		http.NotFound(w, r)
+
 		return
 	}
+
 	contentType := mime.TypeByExtension(filepath.Ext(path))
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+
 	if strings.HasSuffix(path, ".html") {
 		contentType = "text/html; charset=utf-8"
 	}
+
 	info, err := fs.Stat(h.dist, path)
 	if err != nil {
 		http.NotFound(w, r)
+
 		return
 	}
+
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", cacheControl)
 	http.ServeContent(w, r, path, info.ModTime(), bytes.NewReader(data))

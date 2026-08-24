@@ -3,6 +3,7 @@ package readiness
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ func PostgresCheck(db database.Client) Check {
 			if db == nil {
 				return errors.New("postgres client not configured")
 			}
+
 			return db.Ping(ctx)
 		},
 	}
@@ -47,9 +49,11 @@ func ValkeyCheck(client cache.Client) Check {
 			if client == nil {
 				return errors.New("valkey client not configured")
 			}
+
 			if !client.IsConnected(ctx) {
 				return errors.New("valkey ping failed")
 			}
+
 			return nil
 		},
 	}
@@ -67,13 +71,16 @@ func NewProbe(name string, checks ...Check) *Probe {
 		if check.Probe == nil {
 			continue
 		}
+
 		check.Name = strings.TrimSpace(check.Name)
 		if check.Name == "" {
 			continue
 		}
+
 		check.Group = normalizeGroup(check.Group)
 		filtered = append(filtered, check)
 	}
+
 	return &Probe{
 		name:    strings.TrimSpace(name),
 		timeout: defaultProbeTimeout,
@@ -91,6 +98,7 @@ func (p *Probe) Name() string {
 func (p *Probe) Evaluate(ctx context.Context) (ready bool, groups map[string]map[string]bool) {
 	groups = map[string]map[string]bool{GroupDependencies: {}}
 	ready = true
+
 	for _, check := range p.checks {
 		ok := p.runCheck(ctx, check) == nil
 		// NewProbe의 normalizeGroup 때문에 nil bucket은 실제로 나오지 않지만,
@@ -100,21 +108,28 @@ func (p *Probe) Evaluate(ctx context.Context) (ready bool, groups map[string]map
 			groupChecks = map[string]bool{}
 			groups[check.Group] = groupChecks
 		}
+
 		groupChecks[check.Name] = ok
 		if !ok {
 			ready = false
 		}
 	}
+
 	return ready, groups
 }
 
 func (p *Probe) runCheck(ctx context.Context, check Check) error {
 	probeCtx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
-	return check.Probe(probeCtx)
+
+	if err := check.Probe(probeCtx); err != nil {
+		return fmt.Errorf("probe: %w", err)
+	}
+
+	return nil
 }
 
-func normalizeGroup(group string) string {
+func normalizeGroup(_ string) string {
 	return GroupDependencies
 }
 
@@ -122,6 +137,7 @@ func HTTPStatus(ready bool) (statusCode int, status string) {
 	if ready {
 		return http.StatusOK, "ready"
 	}
+
 	return http.StatusServiceUnavailable, "not_ready"
 }
 
@@ -138,8 +154,10 @@ func RequestContext(fallback context.Context, c *gin.Context) context.Context {
 	if c != nil && c.Request != nil && c.Request.Context() != nil {
 		return c.Request.Context()
 	}
+
 	if fallback != nil {
 		return fallback
 	}
+
 	return context.Background()
 }

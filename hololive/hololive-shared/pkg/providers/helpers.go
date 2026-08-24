@@ -43,5 +43,6 @@ func buildMemberCache(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create member cache: %w", err)
 	}
+
 	return memberCache, nil
 }

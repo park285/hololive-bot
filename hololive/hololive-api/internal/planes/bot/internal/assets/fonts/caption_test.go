@@ -54,6 +54,7 @@ func TestCaptionFaceSized_RoutesKanaToFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("primary GlyphIndex: %v", err)
 	}
+
 	if gi != 0 {
 		t.Skip("Pretendard가 가나를 직접 커버 — fallback 라우팅 검증 불필요")
 	}
@@ -62,6 +63,7 @@ func TestCaptionFaceSized_RoutesKanaToFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CaptionFaceSized: %v", err)
 	}
+
 	if _, ok := face.GlyphAdvance('ぶ'); !ok {
 		t.Error("가나가 primary에 없는데 fallback으로도 렌더되지 않음")
 	}
@@ -72,6 +74,7 @@ func TestCaptionBoldFaceSized_Loads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CaptionBoldFaceSized: %v", err)
 	}
+
 	if _, ok := face.GlyphAdvance('가'); !ok {
 		t.Error("SemiBold face에 한글 글리프 없음")
 	}
@@ -80,6 +83,7 @@ func TestCaptionBoldFaceSized_Loads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CaptionFaceSized: %v", err)
 	}
+
 	if regular == face {
 		t.Error("regular와 semibold가 동일 face 인스턴스")
 	}

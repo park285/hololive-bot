@@ -1,7 +1,6 @@
 package acl
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -9,15 +8,15 @@ import (
 )
 
 func TestRenameRoomsKeyMissingTempPreservesExistingRooms(t *testing.T) {
-	ctx := context.Background()
-	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	ctx := t.Context()
+	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 	service := &Service{cache: cacheClient}
 
 	if _, err := cacheClient.SAdd(ctx, aclWhitelistRoomsKey, []string{"legacy-room"}); err != nil {
 		t.Fatalf("seed target: %v", err)
 	}
 
-	err := service.renameRoomsKey(ctx, "missing-temp", aclWhitelistRoomsKey, []string{"room-a"})
+	err := service.renameRoomsKey(ctx, "missing-temp", aclWhitelistRoomsKey, []string{testRoomA})
 	if err == nil {
 		t.Fatal("expected missing temp rename to fail")
 	}
@@ -26,6 +25,7 @@ func TestRenameRoomsKeyMissingTempPreservesExistingRooms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read target: %v", err)
 	}
+
 	if len(got) != 1 || got[0] != "legacy-room" {
 		t.Fatalf("target rooms=%v want=[legacy-room]", got)
 	}
@@ -33,6 +33,7 @@ func TestRenameRoomsKeyMissingTempPreservesExistingRooms(t *testing.T) {
 
 func TestACLRoomsTempKeyUsesTargetKeyAsClusterHashTagWhenNeeded(t *testing.T) {
 	aclRoomsTempKeySeq.Store(0)
+
 	tempKey := aclRoomsTempKey("acl:rooms")
 	if !strings.HasPrefix(tempKey, "{acl:rooms}:tmp:") {
 		t.Fatalf("temp key = %q, want target key wrapped as hash tag", tempKey)
@@ -41,6 +42,7 @@ func TestACLRoomsTempKeyUsesTargetKeyAsClusterHashTagWhenNeeded(t *testing.T) {
 
 func TestACLRoomsTempKeyPreservesExistingHashTag(t *testing.T) {
 	aclRoomsTempKeySeq.Store(0)
+
 	tempKey := aclRoomsTempKey("acl:{rooms}")
 	if !strings.HasPrefix(tempKey, "acl:{rooms}:tmp:") {
 		t.Fatalf("temp key = %q, want existing hash tag preserved", tempKey)

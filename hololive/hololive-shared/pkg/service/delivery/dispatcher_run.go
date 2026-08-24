@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
@@ -12,8 +13,13 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		return nil
 	}
 
-	return panicguard.RunE(d.logger, "delivery-dispatcher", func() error {
+	if err := panicguard.RunE(d.logger, "delivery-dispatcher", func() error {
 		d.run(ctx)
+
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("run delivery dispatcher: %w", err)
+	}
+
+	return nil
 }

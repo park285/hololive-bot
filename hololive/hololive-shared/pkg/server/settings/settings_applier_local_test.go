@@ -32,6 +32,7 @@ func TestLocalSettingsApplier_ScraperProxyRuntimeState_NilScheduler(t *testing.T
 	if runtime.SchedulerEnabled != nil {
 		t.Fatalf("runtime.SchedulerEnabled = %#v, want nil", runtime.SchedulerEnabled)
 	}
+
 	if runtime.SchedulerKnown != nil {
 		t.Fatalf("runtime.SchedulerKnown = %#v, want nil", runtime.SchedulerKnown)
 	}

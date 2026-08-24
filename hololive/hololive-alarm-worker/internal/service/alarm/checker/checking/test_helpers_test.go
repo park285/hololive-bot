@@ -27,7 +27,28 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+
 	"github.com/kapu/hololive-shared/pkg/service/cache"
+)
+
+const (
+	testChannelID1         = "channel-1"
+	testChannelID2         = "channel-2"
+	testChannelName1       = "Channel 1"
+	testDBChannelName      = "DB Channel"
+	testChID1              = "ch-1"
+	testChIDLive           = "ch-live"
+	testChIDShort1         = "ch1"
+	testChIDShort2         = "ch2"
+	testRoomID1            = "room-1"
+	testRoomID2            = "room-2"
+	testRoomID3            = "room-3"
+	testRoomShort1         = "room1"
+	testRoomShort2         = "room2"
+	testStreamID1          = "stream-1"
+	testLiveIncludedID     = "live-included"
+	testUpcomingIncludedID = "upcoming-included"
+	testUsersLivePath      = "/users/live"
 )
 
 func newCheckerTestLogger() *slog.Logger {
@@ -67,6 +88,7 @@ func newCheckerTestCacheClient(t *testing.T) cache.Client {
 		if err := cacheClient.Close(); err != nil {
 			t.Errorf("cacheClient.Close() error = %v", err)
 		}
+
 		mini.Close()
 	})
 

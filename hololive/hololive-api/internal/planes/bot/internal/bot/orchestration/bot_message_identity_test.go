@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,15 +36,14 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/v2/webhook"
 )
 
 type replyIdentityProbeCommand struct {
 	calls atomic.Int64
 }
 
-func (c *replyIdentityProbeCommand) Name() string        { return "help" }
-func (c *replyIdentityProbeCommand) Description() string { return "help" }
+func (c *replyIdentityProbeCommand) Name() string        { return testHelpCommandName }
+func (c *replyIdentityProbeCommand) Description() string { return testHelpCommandName }
 
 func (c *replyIdentityProbeCommand) Execute(context.Context, *domain.CommandContext, map[string]any) error {
 	c.calls.Add(1)
@@ -78,6 +78,8 @@ func TestCanonicalReplyIdentityHasNoFallbackChain(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tc.want, canonicalReplyIdentity(tc.message))
 		})
 	}
@@ -91,6 +93,7 @@ func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 	registry.Register(executed)
 
 	var logs bytes.Buffer
+
 	bot := &Bot{
 		logger:          slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		commandRegistry: registry,
@@ -98,12 +101,12 @@ func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 		formatter:       formatter.NewResponseFormatter("!", nil),
 	}
 
-	sender := "user"
+	sender := testSenderName
 	require.NoError(t, bot.ProcessMessage(t.Context(), &webhook.Message{
 		Msg:    "!help",
 		Room:   "12345",
 		Sender: &sender,
-		JSON:   &webhook.MessageJSON{UserID: "user-1", ChatID: "12345", ChatLogID: "c-1"},
+		JSON:   &webhook.MessageJSON{UserID: testUserID, ChatID: "12345", ChatLogID: "c-1"},
 	}))
 
 	assert.Zero(t, executed.calls.Load(), "command must not run without a canonical message id")
@@ -113,8 +116,8 @@ func TestProcessMessageRefusesToProcessWithoutCanonicalMessageID(t *testing.T) {
 func TestCommandRequestContextUsesTheCommandContextMessageID(t *testing.T) {
 	t.Parallel()
 
-	cmdCtx := &domain.CommandContext{Room: "room-1", MessageID: "message:canonical"}
-	reqCtx := commandRequestContext(context.Background(), cmdCtx)
+	cmdCtx := &domain.CommandContext{Room: testRoomID, MessageID: "message:canonical"}
+	reqCtx := commandRequestContext(t.Context(), cmdCtx)
 
 	identity, ok := transport.ReplyIdentityFromContext(reqCtx)
 	require.True(t, ok)

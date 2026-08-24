@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestNewInternalRouteRegistrarRegistersCompleteAlarmRouteSet(t *testing.T) {
@@ -40,7 +41,7 @@ func TestNewInternalRouteRegistrarAppliesAPIKeyAuth(t *testing.T) {
 	registrar := NewInternalRouteRegistrar("secret", fakeAlarmCRUD{}, slog.New(slog.DiscardHandler))
 	require.NoError(t, registrar(router))
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, contractsalarm.BasePath+contractsalarm.KeysRoute, http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, contractsalarm.BasePath+contractsalarm.KeysRoute, http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -57,6 +58,7 @@ func routeKeys(routes gin.RoutesInfo) []string {
 	for _, route := range routes {
 		out = append(out, route.Method+" "+route.Path)
 	}
+
 	return out
 }
 
@@ -103,7 +105,9 @@ func (fakeAlarmCRUD) SetUserName(context.Context, string, string) error {
 }
 
 func (fakeAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, nil
+	var missing *domain.NextStreamInfo
+
+	return missing, nil
 }
 
 func (fakeAlarmCRUD) UpdateAlarmAdvanceMinutes(context.Context, int) []int {

@@ -31,18 +31,23 @@ type collectorInfrastructure struct {
 
 func initInfrastructure(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) (*collectorInfrastructure, error) {
 	if appConfig == nil {
-		return nil, fmt.Errorf("build collector infra: config is nil")
+		return nil, errors.New("build collector infra: config is nil")
 	}
+
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, &appConfig.Postgres, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build collector infra: %w", err)
 	}
+
 	collector := appConfig.Collector
+
 	helper, rpc, err := startYouTubeJSHelper(ctx, &appConfig.Proxy, &collector, ratelimiter.New(collector.RequestInterval))
 	if err != nil {
 		cleanupDB()
-		return nil, err
+
+		return nil, fmt.Errorf("start youtube JS helper: %w", err)
 	}
+
 	collectorInfra := &collectorInfrastructure{
 		postgres:     databaseResources.Service,
 		youtubejs:    helper,
@@ -52,6 +57,7 @@ func initInfrastructure(ctx context.Context, appConfig *settings.YouTubeCollecto
 	if err := collectorInfra.buildProviderClients(appConfig, &collector); err != nil {
 		return nil, errors.Join(err, collectorInfra.Close(ctx))
 	}
+
 	return collectorInfra, nil
 }
 
@@ -60,6 +66,7 @@ func (i *collectorInfrastructure) buildProviderClients(
 	collector *settings.YouTubeCollectorConfig,
 ) error {
 	maxBody := int64(collector.MaxSuccessResponseBytes)
+
 	holodexHTTP, err := providerhttp.NewProviderHTTPClient(providerTransportConfig(
 		appConfig.Holodex.Transport.Timeout,
 		collector.HolodexMaxInflight,
@@ -67,11 +74,14 @@ func (i *collectorInfrastructure) buildProviderClients(
 	if err != nil {
 		return fmt.Errorf("build holodex HTTP client: %w", err)
 	}
+
 	holodex, err := holodexcollector.NewClient(holodexHTTP, appConfig.Holodex.BaseURL, appConfig.Holodex.APIKey, maxBody)
 	if err != nil {
 		return errors.Join(fmt.Errorf("build holodex collector client: %w", err), holodexHTTP.Close())
 	}
+
 	i.holodex = holodex
+
 	officialHTTP, err := providerhttp.NewProviderHTTPClient(providerTransportConfig(
 		appConfig.OfficialSchedule.Transport.Timeout,
 		collector.OfficialMaxInflight,
@@ -79,20 +89,25 @@ func (i *collectorInfrastructure) buildProviderClients(
 	if err != nil {
 		return fmt.Errorf("build official HTTP client: %w", err)
 	}
+
 	official, err := officialcollector.NewClient(officialHTTP, appConfig.OfficialSchedule.BaseURL, maxBody)
 	if err != nil {
 		return errors.Join(fmt.Errorf("build official schedule collector client: %w", err), officialHTTP.Close())
 	}
+
 	i.official = official
+
 	return nil
 }
 
 func providerTransportConfig(requestTimeout time.Duration, maxConns int) providerhttp.ProviderTransportConfig {
 	idle := min(maxConns, 8)
 	headerTimeout := 10 * time.Second
+
 	if requestTimeout > 0 && requestTimeout < headerTimeout {
 		headerTimeout = requestTimeout
 	}
+
 	return providerhttp.ProviderTransportConfig{
 		RequestTimeout:        requestTimeout,
 		DialTimeout:           5 * time.Second,
@@ -108,26 +123,33 @@ func (i *collectorInfrastructure) Close(ctx context.Context) error {
 	if i == nil {
 		return nil
 	}
+
 	i.closeOnce.Do(func() {
 		i.closeErr = i.closeResources(ctx)
 	})
+
 	return i.closeErr
 }
 
 func (i *collectorInfrastructure) closeResources(ctx context.Context) error {
 	var errs []error
+
 	if i.official != nil {
 		errs = append(errs, i.official.Close())
 	}
+
 	if i.holodex != nil {
 		errs = append(errs, i.holodex.Close())
 	}
+
 	if i.youtubejs != nil {
 		errs = append(errs, i.youtubejs.Close(ctx))
 	}
+
 	if i.cleanupDB != nil {
 		i.cleanupDB()
 	}
+
 	return errors.Join(errs...)
 }
 
@@ -138,9 +160,11 @@ func startYouTubeJSHelper(
 	limiter *ratelimiter.RateLimiter,
 ) (*youtubejs.Helper, *youtubejs.RPC, error) {
 	proxyConfig := settings.CollectorProxyConfig{}
+
 	if proxy != nil {
 		proxyConfig = *proxy
 	}
+
 	helper, rpc, err := youtubejs.Start(ctx, &youtubejs.Config{
 		Proxy: youtubejs.ProxyConfig{
 			Enabled: proxyConfig.Enabled,
@@ -158,5 +182,6 @@ func startYouTubeJSHelper(
 	if err != nil {
 		return nil, nil, fmt.Errorf("start youtube.js helper: %w", err)
 	}
+
 	return helper, rpc, nil
 }

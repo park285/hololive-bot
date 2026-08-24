@@ -22,6 +22,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
@@ -32,7 +33,11 @@ func (r *AdminAPIRuntime) Run() error {
 		return nil
 	}
 
-	return applifecycle.Run(r.Logger, r.Start, r.Shutdown)
+	if err := applifecycle.Run(r.Logger, r.Start, r.Shutdown); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
+	return nil
 }
 
 func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -45,6 +50,7 @@ func (r *AdminAPIRuntime) Start(ctx context.Context, errCh chan<- error) {
 			r.PhotoSync.Start(ctx)
 		})
 	}
+
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:          r.Logger,
 		ServerAddr:      r.ServerAddr,

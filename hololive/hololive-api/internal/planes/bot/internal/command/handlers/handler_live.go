@@ -28,10 +28,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
@@ -57,12 +56,20 @@ func (c *LiveCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
 	}
 
-	memberName, hasMember := params["member"].(string)
+	memberName, hasMember := params[paramMember].(string)
 	if hasMember && memberName != "" {
-		return c.executeMemberLive(ctx, cmdCtx, memberName)
+		if err := c.executeMemberLive(ctx, cmdCtx, memberName); err != nil {
+			return fmt.Errorf("execute member live: %w", err)
+		}
+
+		return nil
 	}
 
-	return c.executeAllLive(ctx, cmdCtx)
+	if err := c.executeAllLive(ctx, cmdCtx); err != nil {
+		return fmt.Errorf("execute all live: %w", err)
+	}
+
+	return nil
 }
 
 func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.CommandContext, memberName string) error {
@@ -70,28 +77,52 @@ func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.Comm
 	if memberLookupHandled(err) {
 		return nil
 	}
+
 	if err != nil {
 		return fmt.Errorf("failed to find member: %w", err)
 	}
+
 	if channel == nil {
 		return nil
 	}
 
+	if err := c.sendMemberLiveStreams(ctx, cmdCtx.Room, channel); err != nil {
+		return fmt.Errorf("send member live streams: %w", err)
+	}
+
+	return nil
+}
+
+func (c *LiveCommand) sendMemberLiveStreams(ctx context.Context, room string, channel *domain.Channel) error {
 	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrLiveStreamQueryFailed)
+		if err := c.Deps().SendError(ctx, room, messaging.ErrLiveStreamQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	memberStreams := filterLiveStreamsByChannel(streams, channel.ID)
 	if len(memberStreams) == 0 {
 		memberStreams = c.memberChzzkLiveStreams(ctx, channel.ID)
 	}
+
 	if len(memberStreams) == 0 {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMemberNotLive(ctx, channel.Name))
+		if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.FormatMemberNotLive(ctx, channel.Name)); err != nil {
+			return fmt.Errorf("send message: %w", err)
+		}
+
+		return nil
 	}
 
 	message := c.Deps().Formatter.FormatLiveStreams(ctx, memberStreams)
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+
+	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func filterLiveStreamsByChannel(streams []*domain.Stream, channelID string) []*domain.Stream {
@@ -101,6 +132,7 @@ func filterLiveStreamsByChannel(streams []*domain.Stream, channelID string) []*d
 			memberStreams = append(memberStreams, stream)
 		}
 	}
+
 	return memberStreams
 }
 
@@ -109,17 +141,23 @@ func (c *LiveCommand) memberChzzkLiveStreams(ctx context.Context, channelID stri
 	if member == nil || member.ChzzkChannelID == "" || c.Deps().Chzzk == nil {
 		return nil
 	}
+
 	chzzkStream := c.checkChzzkLive(ctx, member)
 	if chzzkStream == nil {
 		return nil
 	}
+
 	return []*domain.Stream{chzzkStream}
 }
 
 func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.CommandContext) error {
 	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrLiveStreamQueryFailed)
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrLiveStreamQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	chzzkStreams := c.getAllChzzkLiveStreams(ctx)
@@ -128,7 +166,11 @@ func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.Command
 
 	message := c.Deps().Formatter.FormatLiveStreams(ctx, streams)
 
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 // checkChzzkLive: 특정 멤버의 Chzzk 방송 상태를 확인합니다.
@@ -176,6 +218,7 @@ func (c *LiveCommand) getAllChzzkLiveStreams(ctx context.Context) []*domain.Stre
 	if streams == nil {
 		return []*domain.Stream{}
 	}
+
 	return streams
 }
 
@@ -211,6 +254,7 @@ func buildLiveMemberByChzzkChannelID(members []*domain.Member) map[string]*domai
 			byChzzkChannelID[member.ChzzkChannelID] = member
 		}
 	}
+
 	return byChzzkChannelID
 }
 
@@ -289,14 +333,17 @@ func buildChzzkDisplayStreamID(chzzkChannelID, kind, seed string) string {
 	chzzkChannelID = strings.TrimSpace(chzzkChannelID)
 	kind = strings.TrimSpace(kind)
 	seed = strings.TrimSpace(seed)
+
 	if kind == "" {
 		kind = "unknown"
 	}
+
 	if seed == "" {
 		seed = kind
 	}
 
 	sum := sha256.Sum256([]byte(chzzkChannelID + "|" + kind + "|" + seed))
+
 	return fmt.Sprintf("chzzk:%s:%s:%x", chzzkChannelID, kind, sum[:8])
 }
 

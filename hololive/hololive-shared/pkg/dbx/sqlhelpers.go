@@ -33,16 +33,22 @@ import (
 // 이 helper를 타는 SQL에는 placeholder 용도가 아닌 '?'를 넣으면 안 된다.
 func PostgresPlaceholders(query string) string {
 	var out strings.Builder
+
 	index := 1
+
 	for i := range len(query) {
 		if query[i] != '?' {
 			out.WriteByte(query[i])
+
 			continue
 		}
+
 		out.WriteByte('$')
 		out.WriteString(strconv.Itoa(index))
+
 		index++
 	}
+
 	return out.String()
 }
 
@@ -50,10 +56,12 @@ func InPlaceholders(count int) string {
 	if count <= 0 {
 		return ""
 	}
+
 	parts := make([]string, count)
 	for i := range parts {
 		parts[i] = "?"
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -62,6 +70,7 @@ func AnyArgs[T any](values []T) []any {
 	for _, value := range values {
 		args = append(args, value)
 	}
+
 	return args
 }
 
@@ -70,6 +79,7 @@ func ExecSQL(ctx context.Context, db Querier, action, query string, args ...any)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", action, err)
 	}
+
 	return tag.RowsAffected(), nil
 }
 
@@ -77,6 +87,7 @@ func SelectSQL(ctx context.Context, db Querier, dest any, action, query string, 
 	if err := pgxscan.Select(ctx, db, dest, PostgresPlaceholders(query), args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
+
 	return nil
 }
 
@@ -85,8 +96,10 @@ func GetSQL(ctx context.Context, db Querier, dest any, action, query string, arg
 	if err == nil {
 		return true, nil
 	}
+
 	if pgxscan.NotFound(err) {
 		return false, nil
 	}
+
 	return false, fmt.Errorf("%s: %w", action, err)
 }

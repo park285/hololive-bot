@@ -23,21 +23,20 @@ package botruntime
 import (
 	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/stretchr/testify/require"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
-	"github.com/stretchr/testify/require"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
@@ -78,6 +77,7 @@ func TestProvideHealthOnlyRouter_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /metrics error = %v", err)
 	}
+
 	require.NotNil(t, metricsResp)
 
 	require.NoError(t, metricsResp.Body.Close())
@@ -117,6 +117,7 @@ func TestProvideBotRouter_Integration(t *testing.T) {
 
 func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	router, err := apphttp.ProvideBotRouter(t.Context(), &settings.Config{}, logger, nil, nil, nil)
@@ -126,17 +127,21 @@ func TestProvideBotRouter_SkipsScraperShortLinkWarnings(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/l/dQw4w9WgXcQ", http.NoBody)
 	req.Header.Set("User-Agent", "facebookexternalhit/1.1; kakaotalk-scrap/1.0")
+
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, req)
 
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("short-link scraper status = %d, want %d", response.Code, http.StatusForbidden)
 	}
+
 	if logs.Len() != 0 {
 		var entry map[string]any
+
 		if err := jsonv2.Unmarshal(bytes.TrimSpace(logs.Bytes()), &entry); err != nil {
 			t.Fatalf("unexpected short-link log = %q (JSON parse failed: %v)", logs.String(), err)
 		}
+
 		t.Fatalf("scraper short-link request emitted log entry: %v", entry)
 	}
 }
@@ -164,9 +169,11 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 
 	readyResp := getRouterTestResponse(t, server.URL+"/ready")
 	require.NoError(t, readyResp.Body.Close())
+
 	if readyResp.StatusCode != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", readyResp.StatusCode, http.StatusOK)
 	}
+
 	if probeCalls != 0 {
 		t.Fatalf("/ready invoked dependency probe %d time(s), want 0", probeCalls)
 	}
@@ -175,16 +182,21 @@ func TestProvideBotRouter_DependencyReadyProbeIsInternalOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build /internal/ready request: %v", err)
 	}
+
 	internalReq.Header.Set(common.APIKeyHeader, "test-key")
+
 	internalResp, err := http.DefaultClient.Do(internalReq)
 	if err != nil {
 		t.Fatalf("GET /internal/ready: %v", err)
 	}
+
 	require.NotNil(t, internalResp)
 	require.NoError(t, internalResp.Body.Close())
+
 	if internalResp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("/internal/ready status = %d, want %d", internalResp.StatusCode, http.StatusServiceUnavailable)
 	}
+
 	if probeCalls != 1 {
 		t.Fatalf("/internal/ready invoked dependency probe %d time(s), want 1", probeCalls)
 	}
@@ -203,8 +215,8 @@ func TestProvideBotRouter_FailsClosedWhenTriggerAPIKeyMissing(t *testing.T) {
 		t.Fatal("ProvideBotRouter() router = non-nil, want nil")
 	}
 
-	if err.Error() != "API_SECRET_KEY required" {
-		t.Fatalf("ProvideBotRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
+	if err.Error() != "runtime router: register routes: API_SECRET_KEY required" {
+		t.Fatalf("ProvideBotRouter() error = %q, want %q", err.Error(), "runtime router: register routes: API_SECRET_KEY required")
 	}
 }
 
@@ -215,10 +227,13 @@ func getRouterTestResponse(t *testing.T, url string) *http.Response {
 	if err != nil {
 		t.Fatalf("new GET request error = %v", err)
 	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s error = %v", url, err)
 	}
+
 	require.NotNil(t, resp)
+
 	return resp
 }

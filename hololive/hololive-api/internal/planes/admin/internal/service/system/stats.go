@@ -29,11 +29,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
+
+	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
 type ServiceGoroutines struct {
@@ -117,10 +118,11 @@ func (c *Collector) GetCurrentStats(ctx context.Context) (*SystemStats, error) {
 
 	stats, err := c.collectCurrentStats(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collect current stats: %w", err)
 	}
 
 	c.cacheMu.Lock()
+
 	c.cached = cloneSystemStats(stats)
 	c.cachedAt = time.Now()
 	c.cacheMu.Unlock()
@@ -225,13 +227,16 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 
 		panicguard.Go(nil, "system-stats-service-goroutines", func() {
 			defer wg.Done()
+
 			if err := panicguard.RunE(nil, "system-stats-service-goroutines", func() error {
 				goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
+
 				results[i] = ServiceGoroutines{
 					Name:       ep.Name,
 					Goroutines: goroutines,
 					Available:  ok,
 				}
+
 				return nil
 			}); err != nil {
 				results[i] = ServiceGoroutines{Name: ep.Name, Available: false}
@@ -286,9 +291,11 @@ func (c *Collector) fetchHealthResponse(ctx context.Context, url string) (*http.
 	if err != nil {
 		return nil, false
 	}
+
 	if resp == nil {
 		return nil, false
 	}
+
 	if resp.Body == nil {
 		return nil, false
 	}
@@ -301,16 +308,19 @@ func decodeHealthResponse(resp *http.Response) (healthResponse, bool) {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			return healthResponse{}, false
 		}
+
 		return healthResponse{}, false
 	}
 
-	var hr healthResponse
-	if err := httputil.DecodeJSON(resp, &hr); err != nil {
+	hr, err := httputil.DecodeJSON[healthResponse](resp)
+	if err != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			return healthResponse{}, false
 		}
+
 		return healthResponse{}, false
 	}
+
 	if closeErr := resp.Body.Close(); closeErr != nil {
 		return healthResponse{}, false
 	}
@@ -323,8 +333,10 @@ func (c *Collector) clientForURL(rawURL string) (*http.Client, bool) {
 		if c.h3ClientErr != nil || c.h3Client == nil {
 			return nil, false
 		}
+
 		return c.h3Client, true
 	}
+
 	return c.httpClient, c.httpClient != nil
 }
 
@@ -337,6 +349,7 @@ func goroutineCountFromHealthResponse(hr healthResponse) (int, bool) {
 	if !ok {
 		return 0, false
 	}
+
 	return goroutineCountFromDetail(app.Detail)
 }
 
@@ -345,6 +358,7 @@ func goroutineCountFromDetail(detail map[string]any) (int, bool) {
 	if !ok {
 		return 0, false
 	}
+
 	return goroutineCountValue(gr)
 }
 
@@ -355,5 +369,6 @@ func goroutineCountValue(value any) (int, bool) {
 	case int:
 		return v, true
 	}
+
 	return 0, false
 }

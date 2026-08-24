@@ -1,7 +1,7 @@
 package profile
 
 import (
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -11,29 +11,39 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
+const entityKindChannelProfile = "youtube_channel_profile"
+
+func Reduce(state State, evidence Evidence, policy Policy) (Decision, error) {
 	if evidence.Sample.ChannelID == "" {
-		return Decision{}, fmt.Errorf("channel profile reducer received empty channel id")
+		return Decision{}, errors.New("channel profile reducer received empty channel id")
 	}
+
 	workingState := state.clone()
 	workingEvidence := evidence
 	sample := &workingEvidence.Sample
+
 	sample.Provider = workingEvidence.Provider
 	sample.ObservationID = workingEvidence.ObservationID
+
 	head := workingState.Head
+
 	head.ChannelID = sample.ChannelID
+
 	apps := make([]Application, 0, 4)
 	conflicts := make([]Conflict, 0, 2)
 	changed := false
+
 	changed = reduceHandle(&head.Handle, sample, &apps, &conflicts) || changed
 	changed = reduceClearable(&head.Description, sample.Description, "description", sample, policy, &apps, &conflicts) || changed
 	changed = reduceClearable(&head.Country, sample.Country, "country", sample, policy, &apps, &conflicts) || changed
 	changed = reduceJoined(&head.JoinedDate, sample, &apps, &conflicts) || changed
+
 	if len(apps) == 0 {
 		apps = append(apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID, Decision: "RAW_RETAINED",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID, Decision: "RAW_RETAINED",
 		})
 	}
+
 	return Decision{
 		Sample:       sample,
 		Head:         head,
@@ -47,13 +57,16 @@ func reduceHandle(current *CanonicalField, sample *Sample, apps *[]Application, 
 	if !sample.Handle.Present {
 		return false
 	}
+
 	value, ok := normalizeHandle(sample.Handle.Value)
 	if !ok {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/handle", Decision: "INVALID_RETAINED",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/handle", Decision: "INVALID_RETAINED",
 		})
+
 		return false
 	}
+
 	return applyNewer(current, value, "handle", sample, apps, conflicts)
 }
 
@@ -69,29 +82,38 @@ func reduceClearable(
 	if !incoming.Present {
 		return false
 	}
+
 	value, ok := normalizeClearable(name, incoming.Value)
 	if !ok {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "INVALID_RETAINED",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "INVALID_RETAINED",
 		})
+
 		return false
 	}
+
 	if value != "" {
 		resetEmpty(current)
+
 		return applyNewer(current, value, name, sample, apps, conflicts)
 	}
+
 	if current.Set && current.Value == "" {
 		return trackEmpty(current, name, sample, policy, apps)
 	}
+
 	if !current.Set {
 		return trackEmpty(current, name, sample, policy, apps)
 	}
+
 	if !policy.ClearEnabled() {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_DISABLED",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_DISABLED",
 		})
+
 		return false
 	}
+
 	return trackEmpty(current, name, sample, policy, apps)
 }
 
@@ -99,30 +121,37 @@ func reduceJoined(current *CanonicalField, sample *Sample, apps *[]Application, 
 	if !sample.JoinedDate.Present {
 		return false
 	}
+
 	value, ok := parseJoinedDate(sample.JoinedDate.Value)
 	if !ok {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/joined_date", Decision: "INVALID_RETAINED",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/joined_date", Decision: "INVALID_RETAINED",
 		})
+
 		return false
 	}
+
 	if current.Set && current.Value != value {
 		if current.EffectiveAt != nil && sample.EffectiveAt.Before(*current.EffectiveAt) {
 			*apps = append(*apps, Application{
-				EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/joined_date", Decision: "OLDER_RETAINED",
+				EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/joined_date", Decision: "OLDER_RETAINED",
 			})
+
 			return false
 		}
+
 		*conflicts = append(*conflicts, Conflict{
 			FieldName:            "joined_date",
 			ExistingValueSHA256:  contract.SHA256Hex([]byte(current.Value)),
 			AttemptedValueSHA256: contract.SHA256Hex([]byte(value)),
 		})
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/joined_date", Decision: "CONFLICT",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/joined_date", Decision: "CONFLICT",
 		})
+
 		return false
 	}
+
 	return applyNewer(current, value, "joined_date", sample, apps, conflicts)
 }
 
@@ -135,8 +164,10 @@ func applyNewer(
 ) bool {
 	if retainOlderProfile(current, sample) {
 		appendProfileApp(apps, sample.ChannelID, name, "OLDER_RETAINED")
+
 		return false
 	}
+
 	if conflictEqualProfile(current, value, sample) {
 		*conflicts = append(*conflicts, Conflict{
 			FieldName:            name,
@@ -144,16 +175,21 @@ func applyNewer(
 			AttemptedValueSHA256: contract.SHA256Hex([]byte(value)),
 		})
 		appendProfileApp(apps, sample.ChannelID, name, "CONFLICT")
+
 		return false
 	}
+
 	if current.Set && current.Value == value {
 		appendProfileApp(apps, sample.ChannelID, name, "REPLAY")
+
 		return false
 	}
+
 	current.Set = true
 	current.Value = value
 	current.EffectiveAt = copyTime(sample.EffectiveAt)
 	appendProfileApp(apps, sample.ChannelID, name, "APPLIED")
+
 	return true
 }
 
@@ -167,23 +203,27 @@ func conflictEqualProfile(current *CanonicalField, value string, sample *Sample)
 
 func appendProfileApp(apps *[]Application, channelID, name, decision string) {
 	*apps = append(*apps, Application{
-		EntityKind: "youtube_channel_profile", EntityKey: channelID + "/" + name, Decision: decision,
+		EntityKind: entityKindChannelProfile, EntityKey: channelID + "/" + name, Decision: decision,
 	})
 }
 
 func trackEmpty(current *CanonicalField, name string, sample *Sample, policy Policy, apps *[]Application) bool {
 	if !sample.Complete {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_PENDING",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_PENDING",
 		})
+
 		return false
 	}
+
 	if current.EmptyLastAt != nil && current.EmptyLastAt.Equal(sample.ScheduledFor) {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "REPLAY",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "REPLAY",
 		})
+
 		return false
 	}
+
 	if current.EmptyFirstAt == nil {
 		current.EmptySlots = 1
 		current.EmptyFirstAt = copyTime(sample.ScheduledFor)
@@ -191,29 +231,37 @@ func trackEmpty(current *CanonicalField, name string, sample *Sample, policy Pol
 		current.EmptyFirstRx = copyTime(sample.ReceivedAt)
 	} else {
 		current.EmptySlots++
+
 		current.EmptyLastAt = copyTime(sample.ScheduledFor)
 	}
+
 	if !policy.ClearEnabled() {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_DISABLED",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_DISABLED",
 		})
+
 		return true
 	}
+
 	if current.EmptySlots < policy.ClearMinObservations ||
 		current.EmptyFirstRx == nil ||
 		sample.ReceivedAt.Before(current.EmptyFirstRx.Add(policy.ClearStability)) {
 		*apps = append(*apps, Application{
-			EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_PENDING",
+			EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "CLEAR_PENDING",
 		})
+
 		return true
 	}
+
 	current.Set = true
 	current.Value = ""
 	current.EffectiveAt = copyTime(sample.EffectiveAt)
 	resetEmpty(current)
+
 	*apps = append(*apps, Application{
-		EntityKind: "youtube_channel_profile", EntityKey: sample.ChannelID + "/" + name, Decision: "CLEARED",
+		EntityKind: entityKindChannelProfile, EntityKey: sample.ChannelID + "/" + name, Decision: "CLEARED",
 	})
+
 	return true
 }
 
@@ -229,22 +277,27 @@ func normalizeHandle(value string) (string, bool) {
 	if trimmed == "" || len(trimmed) > 256 || strings.ContainsAny(trimmed, " \t\r\n") {
 		return "", false
 	}
+
 	for _, r := range trimmed {
 		if unicode.IsControl(r) {
 			return "", false
 		}
 	}
+
 	return trimmed, true
 }
 
 func normalizeClearable(name, value string) (string, bool) {
 	trimmed := strings.TrimSpace(value)
+
 	if name == "country" {
 		return normalizeCountry(trimmed)
 	}
+
 	if !utf8.ValidString(trimmed) || len(trimmed) > 4096 {
 		return "", false
 	}
+
 	return trimmed, true
 }
 
@@ -252,15 +305,18 @@ func normalizeCountry(trimmed string) (string, bool) {
 	if trimmed == "" {
 		return "", true
 	}
+
 	upper := strings.ToUpper(trimmed)
 	if len(upper) < 2 || len(upper) > 50 {
 		return "", false
 	}
+
 	for _, r := range upper {
 		if unicode.IsControl(r) {
 			return "", false
 		}
 	}
+
 	return upper, true
 }
 
@@ -269,17 +325,21 @@ func parseJoinedDate(value string) (string, bool) {
 	if trimmed == "" {
 		return "", false
 	}
-	if parsed, err := time.Parse("2006-01-02", trimmed); err == nil {
-		return parsed.UTC().Format("2006-01-02"), true
+
+	if parsed, err := time.Parse(time.DateOnly, trimmed); err == nil {
+		return parsed.UTC().Format(time.DateOnly), true
 	}
+
 	if parsed, err := time.Parse(time.RFC3339, trimmed); err == nil {
-		return parsed.UTC().Format("2006-01-02"), true
+		return parsed.UTC().Format(time.DateOnly), true
 	}
+
 	unix, err := strconv.ParseInt(trimmed, 10, 64)
 	if err != nil || unix <= 0 {
 		return "", false
 	}
-	return time.Unix(unix, 0).UTC().Format("2006-01-02"), true
+
+	return time.Unix(unix, 0).UTC().Format(time.DateOnly), true
 }
 
 func copyTime(value time.Time) *time.Time {

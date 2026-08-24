@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,10 +18,11 @@ func (r *Repository) ListCommunityShortsDeliveryLogsSince(
 	limit int,
 ) ([]domain.YouTubeNotificationDeliveryTelemetry, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list community shorts delivery logs since: db is nil")
+		return nil, errors.New("list community shorts delivery logs since: db is nil")
 	}
+
 	if since.IsZero() {
-		return nil, fmt.Errorf("list community shorts delivery logs since: since is empty")
+		return nil, errors.New("list community shorts delivery logs since: since is empty")
 	}
 
 	normalizedLimit := normalizeCommunityShortsDeliveryLogLimit(limit)
@@ -32,9 +34,12 @@ func (r *Repository) ListCommunityShortsDeliveryLogsSince(
 		ORDER BY COALESCE(actual_published_at, detected_at, event_at) DESC, event_at ASC, id ASC
 	`
 	args := deliverysql.AppendDeliveryAlarmTypeArgs(nil, alarmTypes...)
+
 	args = append(args, since.UTC())
+
 	if normalizedLimit > 0 {
 		query += " LIMIT ?"
+
 		args = append(args, normalizedLimit)
 	}
 
@@ -50,8 +55,10 @@ func normalizeCommunityShortsDeliveryLogLimit(limit int) int {
 	if limit <= 0 {
 		return 0
 	}
+
 	if limit > communityShortsDeliveryLogMaxLimit {
 		return communityShortsDeliveryLogMaxLimit
 	}
+
 	return limit
 }

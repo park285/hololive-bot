@@ -38,6 +38,7 @@ func NewValkeyClientWithMini(t *testing.T) (valkey.Client, *miniredis.Miniredis)
 	t.Helper()
 
 	host, port, mini := testredis.StartMiniRedis(t)
+
 	client, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:  []string{net.JoinHostPort(host, strconv.Itoa(port))},
 		DisableCache: true,
@@ -49,8 +50,9 @@ func NewValkeyClientWithMini(t *testing.T) (valkey.Client, *miniredis.Miniredis)
 		t.Fatalf("failed to create valkey client: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
+
 	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
 		mini.Close()

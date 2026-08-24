@@ -8,7 +8,7 @@ import (
 )
 
 func TestFindByChannelAndScheduledMinute(t *testing.T) {
-	scheduled := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	scheduled := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	streams := []*domain.Stream{
 		{ChannelID: "channel-a", StartScheduled: &scheduled},
 	}

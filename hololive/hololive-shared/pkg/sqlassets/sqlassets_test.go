@@ -33,6 +33,7 @@ func TestMustReaderPreservesTrailingWhitespace(t *testing.T) {
 	)
 
 	const want = "\n\t\tSELECT id FROM t WHERE "
+
 	if got := read("prefix.sql"); got != want {
 		t.Fatalf("read(prefix.sql) = %q, want %q", got, want)
 	}
@@ -47,6 +48,7 @@ func TestMustReaderPanicsWithBlankAsset(t *testing.T) {
 		},
 		"queries",
 	)
+
 	assertPanicContains(t, func() { read("blank.sql") }, `empty embedded SQL "queries/blank.sql"`)
 }
 
@@ -54,6 +56,7 @@ func TestMustReaderPanicsWithMissingAssetPath(t *testing.T) {
 	t.Parallel()
 
 	read := MustReader(fstest.MapFS{}, "queries")
+
 	assertPanicContains(t, func() { read("missing.sql") }, `read embedded SQL "queries/missing.sql"`)
 }
 
@@ -66,6 +69,7 @@ func TestMustReaderRejectsTraversal(t *testing.T) {
 		},
 		"queries",
 	)
+
 	assertPanicContains(t, func() { read("../secret.sql") }, `invalid embedded SQL path "queries/../secret.sql"`)
 }
 
@@ -77,6 +81,7 @@ func assertPanicContains(t *testing.T, fn func(), want string) {
 		if recovered == nil {
 			t.Fatalf("expected panic containing %q", want)
 		}
+
 		if got := fmt.Sprint(recovered); !strings.Contains(got, want) {
 			t.Fatalf("panic = %q, want substring %q", got, want)
 		}

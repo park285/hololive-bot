@@ -41,18 +41,26 @@ func finalizeCompletedFailedNotificationRows(ctx context.Context, tx batchDB, ro
 	if len(inputs) == 0 {
 		return nil
 	}
+
 	if err := bulkUpdateCompletedFailedNotificationOutboxRows(ctx, tx, inputs); err != nil {
-		return err
+		return fmt.Errorf("bulk update completed failed notification outbox rows: %w", err)
 	}
-	return bulkUpdateCompletedFailedNotificationDeliveryRows(ctx, tx, inputs)
+
+	if err := bulkUpdateCompletedFailedNotificationDeliveryRows(ctx, tx, inputs); err != nil {
+		return fmt.Errorf("bulk update completed failed notification delivery rows: %w", err)
+	}
+
+	return nil
 }
 
 func completedSentAtForFailedNotification(row failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) (time.Time, bool) {
 	identityKey := notificationIdentityKey(row.Kind, row.ContentID)
 	sentAt, ok := completedSentAtByIdentity[identityKey]
+
 	if !ok || sentAt.IsZero() {
 		return time.Time{}, false
 	}
+
 	return yttimestamp.Normalize(sentAt), true
 }
 
@@ -62,17 +70,21 @@ func collectCompletedFailedNotificationFinalizeInputs(
 ) []completedFailedNotificationFinalizeInput {
 	inputs := make([]completedFailedNotificationFinalizeInput, 0, len(rows))
 	seen := make(map[int64]struct{}, len(rows))
+
 	for i := range rows {
 		if _, ok := seen[rows[i].ID]; ok {
 			continue
 		}
+
 		sentAt, ok := completedSentAtForFailedNotification(rows[i], completedSentAtByIdentity)
 		if !ok {
 			continue
 		}
+
 		seen[rows[i].ID] = struct{}{}
 		inputs = append(inputs, completedFailedNotificationFinalizeInput{ID: rows[i].ID, SentAt: sentAt})
 	}
+
 	return inputs
 }
 
@@ -82,12 +94,15 @@ func bulkUpdateCompletedFailedNotificationOutboxRows(
 	inputs []completedFailedNotificationFinalizeInput,
 ) error {
 	query, args := buildCompletedFailedNotificationFinalizeValues(inputs)
+
 	args = append(args, domain.OutboxStatusSent, domain.OutboxStatusFailed)
+
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("bulk update completed failed outbox rows (%d rows)", len(inputs)), `
 		WITH input(id, sent_at) AS (
 			VALUES `+query+mustSQL("repository_batch_completed_finalize_0088_01.sql"), args...); err != nil {
 		return fmt.Errorf("bulk update completed failed outbox rows: %w", err)
 	}
+
 	return nil
 }
 
@@ -97,24 +112,32 @@ func bulkUpdateCompletedFailedNotificationDeliveryRows(
 	inputs []completedFailedNotificationFinalizeInput,
 ) error {
 	query, args := buildCompletedFailedNotificationFinalizeValues(inputs)
+
 	args = append(args, domain.OutboxStatusSent, domain.OutboxStatusFailed)
+
 	if _, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("bulk update completed failed delivery rows (%d rows)", len(inputs)), `
 		WITH input(id, sent_at) AS (
 			VALUES `+query+mustSQL("repository_batch_completed_finalize_0111_02.sql"), args...); err != nil {
 		return fmt.Errorf("bulk update completed failed delivery rows: %w", err)
 	}
+
 	return nil
 }
 
 func buildCompletedFailedNotificationFinalizeValues(inputs []completedFailedNotificationFinalizeInput) (query string, args []any) {
 	args = make([]any, 0, len(inputs)*2)
+
 	var values strings.Builder
+
 	for i := range inputs {
 		if i > 0 {
 			values.WriteByte(',')
 		}
+
 		values.WriteString("(?::bigint, ?::timestamptz)")
+
 		args = append(args, inputs[i].ID, inputs[i].SentAt)
 	}
+
 	return values.String(), args
 }

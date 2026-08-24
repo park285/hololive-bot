@@ -21,6 +21,8 @@ const aboutChannelData = `{
 	"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"endpoint":{"browseEndpoint":{"canonicalBaseUrl":"/@pekora"}}}}]}}
 }`
 
+const garbageInput = "garbage"
+
 func TestParseChannelStatsFromInitialData_HappyPath(t *testing.T) {
 	stats := ParseChannelStatsFromInitialData(parseGJSONResultPtr(aboutChannelData), "UC_X")
 	require.NotNil(t, stats)
@@ -135,7 +137,7 @@ func TestParseShortNumber(t *testing.T) {
 		{"2.3", 2},
 		{"No", 0},
 		{"", 0},
-		{"garbage", 0},
+		{garbageInput, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.text, func(t *testing.T) {
@@ -152,7 +154,7 @@ func TestParseSubscriberCount(t *testing.T) {
 		{"2.76M subscribers", 2_760_000},
 		{"1 subscriber", 1},
 		{"100 subscribers", 100},
-		{"garbage", 0},
+		{garbageInput, 0},
 		{"", 0},
 	}
 	for _, tt := range tests {
@@ -178,7 +180,7 @@ func TestParseViewCount(t *testing.T) {
 		{"singular view", "10 view", 10},
 		{"no views", "No views", 0},
 		{"empty", "", 0},
-		{"garbage", "garbage", 0},
+		{garbageInput, garbageInput, 0},
 		{"korean eok", "3.4억", 340_000_000},
 		{"korean jo", "조회수 1.5조회", 1_500_000_000_000},
 		{"korean jo bare", "2조", 2_000_000_000_000},
@@ -198,7 +200,7 @@ func TestParseVideoCount(t *testing.T) {
 		{"2,429 videos", 2429},
 		{"1 video", 1},
 		{"42", 42},
-		{"garbage", 0},
+		{garbageInput, 0},
 		{"", 0},
 	}
 	for _, tt := range tests {
@@ -220,7 +222,7 @@ func TestParseJoinedDate(t *testing.T) {
 		{"iso date", "2022-03-04", time.Date(2022, time.March, 4, 0, 0, 0, 0, time.UTC).Unix()},
 		{"empty", "", 0},
 		{"joined garbage", "Joined garbage", 0},
-		{"plain garbage", "garbage", 0},
+		{"plain garbage", garbageInput, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

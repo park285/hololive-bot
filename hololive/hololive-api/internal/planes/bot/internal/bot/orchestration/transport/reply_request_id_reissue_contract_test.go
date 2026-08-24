@@ -14,13 +14,16 @@ func TestReissuedReplyClientRequestIDRejectsOutOfRangeAndNestedBases(t *testing.
 	if base == "" {
 		t.Fatal("replyClientRequestID() returned empty base")
 	}
+
 	if got := reissuedReplyClientRequestID(base, iris.ReplyReissueMaxGenerations+1); got != "" {
 		t.Fatalf("out-of-range reissue = %q, want empty fail-closed result", got)
 	}
+
 	first := reissuedReplyClientRequestID(base, 1)
 	if first == "" || !strings.HasSuffix(first, ":r1") {
 		t.Fatalf("first reissue = %q, want :r1 suffix", first)
 	}
+
 	if got := reissuedReplyClientRequestID(first, 2); got != "" {
 		t.Fatalf("nested reissue = %q, want empty fail-closed result", got)
 	}

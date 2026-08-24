@@ -23,8 +23,9 @@ package alarm
 import (
 	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
-	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -34,11 +35,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// mockAlarmCRUD: 테스트용 domain.AlarmCRUD mock
+// 테스트용 domain.AlarmCRUD mock.
 type mockAlarmCRUD struct {
 	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
 	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
@@ -56,31 +56,66 @@ type mockAlarmCRUD struct {
 }
 
 func (m *mockAlarmCRUD) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
-	return m.addAlarmFn(ctx, *req)
+	out, err := m.addAlarmFn(ctx, *req)
+	if err != nil {
+		return out, fmt.Errorf("add alarm fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
-	return m.removeAlarmFn(ctx, roomID, channelID, alarmTypes)
+	out, err := m.removeAlarmFn(ctx, roomID, channelID, alarmTypes)
+	if err != nil {
+		return out, fmt.Errorf("remove alarm fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
-	return m.getRoomAlarmsFn(ctx, roomID)
+	out, err := m.getRoomAlarmsFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("get room alarms fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	return m.getRoomAlarmsWithTypesFn(ctx, roomID)
+	out, err := m.getRoomAlarmsWithTypesFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("get room alarms with types fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
-	return m.listRoomAlarmsViewFn(ctx, roomID)
+	out, err := m.listRoomAlarmsViewFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("list room alarms view fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
-	return m.clearRoomAlarmsFn(ctx, roomID)
+	out, err := m.clearRoomAlarmsFn(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("clear room alarms fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	return m.getNextStreamInfoFn(ctx, channelID)
+	out, err := m.getNextStreamInfoFn(ctx, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("get next stream info fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
@@ -92,19 +127,36 @@ func (m *mockAlarmCRUD) GetTargetMinutes() []int {
 }
 
 func (m *mockAlarmCRUD) SetRoomName(ctx context.Context, roomID, roomName string) error {
-	return m.setRoomNameFn(ctx, roomID, roomName)
+	if err := m.setRoomNameFn(ctx, roomID, roomName); err != nil {
+		return fmt.Errorf("set room name fn: %w", err)
+	}
+
+	return nil
 }
 
 func (m *mockAlarmCRUD) SetUserName(ctx context.Context, userID, userName string) error {
-	return m.setUserNameFn(ctx, userID, userName)
+	if err := m.setUserNameFn(ctx, userID, userName); err != nil {
+		return fmt.Errorf("set user name fn: %w", err)
+	}
+
+	return nil
 }
 
 func (m *mockAlarmCRUD) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
-	return m.getAllAlarmKeysFn(ctx)
+	out, err := m.getAllAlarmKeysFn(ctx)
+	if err != nil {
+		return out, fmt.Errorf("get all alarm keys fn: %w", err)
+	}
+
+	return out, nil
 }
 
 func (m *mockAlarmCRUD) WarmCacheFromDB(ctx context.Context) error {
-	return m.warmCacheFromDBFn(ctx)
+	if err := m.warmCacheFromDBFn(ctx); err != nil {
+		return fmt.Errorf("warm cache from DB fn: %w", err)
+	}
+
+	return nil
 }
 
 // newTestHandler: 테스트용 핸들러와 gin.Engine을 생성합니다.
@@ -112,29 +164,35 @@ func newTestHandler(t *testing.T, mock *mockAlarmCRUD) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	h := NewHandler(mock, logger)
 
 	r := gin.New()
 	h.RegisterRoutes(&r.RouterGroup)
+
 	return r
 }
 
 // jsonBody: 구조체를 JSON 바이트 버퍼로 변환합니다.
 func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	t.Helper()
+
 	b, err := jsonv2.Marshal(v)
 	require.NoError(t, err)
+
 	return bytes.NewBuffer(b)
 }
 
 // decodeResponse: 응답 바디를 APIResponse로 디코딩합니다.
 func decodeResponse(t *testing.T, body *bytes.Buffer) APIResponse {
 	t.Helper()
+
 	var resp APIResponse
+
 	if err := jsonv2.UnmarshalRead(body, &resp); err != nil {
 		t.Fatalf("응답 디코딩 실패: %v", err)
 	}
+
 	return resp
 }
 
@@ -150,8 +208,8 @@ func TestAddAlarm(t *testing.T) {
 		{
 			name: "성공",
 			body: AddAlarmRequest{
-				RoomID:    "room1",
-				ChannelID: "ch1",
+				RoomID:    testRoomID,
+				ChannelID: testChannelID,
 			},
 			mockFn: func(_ context.Context, _ domain.AddAlarmRequest) (bool, error) {
 				return true, nil
@@ -161,7 +219,7 @@ func TestAddAlarm(t *testing.T) {
 		},
 		{
 			name:       "binding 실패: room_id 누락",
-			body:       AddAlarmRequest{ChannelID: "ch1"}, // room_id 없음
+			body:       AddAlarmRequest{ChannelID: testChannelID},
 			mockFn:     nil,
 			wantStatus: http.StatusBadRequest,
 			wantOK:     false,
@@ -170,8 +228,8 @@ func TestAddAlarm(t *testing.T) {
 		{
 			name: "서비스 에러",
 			body: AddAlarmRequest{
-				RoomID:    "room1",
-				ChannelID: "ch1",
+				RoomID:    testRoomID,
+				ChannelID: testChannelID,
 			},
 			mockFn: func(_ context.Context, _ domain.AddAlarmRequest) (bool, error) {
 				return false, errors.New("db error")
@@ -185,9 +243,11 @@ func TestAddAlarm(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{}
+
 			if tt.mockFn != nil {
 				mock.addAlarmFn = tt.mockFn
 			}
+
 			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
@@ -198,10 +258,12 @@ func TestAddAlarm(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
 			}
+
 			if resp.Error != tt.wantError {
 				t.Errorf("error = %q, want %q", resp.Error, tt.wantError)
 			}
@@ -219,7 +281,7 @@ func TestRemoveAlarm(t *testing.T) {
 	}{
 		{
 			name: "성공",
-			body: RemoveAlarmRequest{RoomID: "room1", ChannelID: "ch1"},
+			body: RemoveAlarmRequest{RoomID: testRoomID, ChannelID: testChannelID},
 			mockFn: func(_ context.Context, _, _ string, _ domain.AlarmTypes) (bool, error) {
 				return true, nil
 			},
@@ -228,7 +290,7 @@ func TestRemoveAlarm(t *testing.T) {
 		},
 		{
 			name:       "binding 실패: channel_id 누락",
-			body:       RemoveAlarmRequest{RoomID: "room1"},
+			body:       RemoveAlarmRequest{RoomID: testRoomID},
 			wantStatus: http.StatusBadRequest,
 			wantOK:     false,
 		},
@@ -237,9 +299,11 @@ func TestRemoveAlarm(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{}
+
 			if tt.mockFn != nil {
 				mock.removeAlarmFn = tt.mockFn
 			}
+
 			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
@@ -250,6 +314,7 @@ func TestRemoveAlarm(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
@@ -268,10 +333,10 @@ func TestGetRoomAlarmsWithTypes(t *testing.T) {
 	}{
 		{
 			name:   "성공",
-			roomID: "room1",
+			roomID: testRoomID,
 			mockFn: func(_ context.Context, _ string) ([]*domain.Alarm, error) {
 				return []*domain.Alarm{
-					{RoomID: "room1", ChannelID: "ch1"},
+					{RoomID: testRoomID, ChannelID: testChannelID},
 				}, nil
 			},
 			wantStatus: http.StatusOK,
@@ -300,6 +365,7 @@ func TestGetRoomAlarmsWithTypes(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
@@ -318,10 +384,10 @@ func TestGetRoomAlarmsView(t *testing.T) {
 	}{
 		{
 			name:   "성공",
-			roomID: "room1",
+			roomID: testRoomID,
 			mockFn: func(_ context.Context, _ string) ([]domain.AlarmListView, error) {
 				return []domain.AlarmListView{{
-					ChannelID:  "ch1",
+					ChannelID:  testChannelID,
 					MemberName: "Pekora",
 					AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 				}}, nil
@@ -352,6 +418,7 @@ func TestGetRoomAlarmsView(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
@@ -370,7 +437,7 @@ func TestClearRoomAlarms(t *testing.T) {
 	}{
 		{
 			name: "성공",
-			body: ClearAlarmsRequest{RoomID: "room1"},
+			body: ClearAlarmsRequest{RoomID: testRoomID},
 			mockFn: func(_ context.Context, _ string) (int, error) {
 				return 3, nil
 			},
@@ -392,6 +459,7 @@ func TestClearRoomAlarms(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
@@ -412,7 +480,7 @@ func TestGetNextStreamInfo(t *testing.T) {
 	}{
 		{
 			name:      "성공",
-			channelID: "ch1",
+			channelID: testChannelID,
 			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
 				return &domain.NextStreamInfo{
 					Status:         domain.NextStreamStatusUpcoming,
@@ -428,7 +496,9 @@ func TestGetNextStreamInfo(t *testing.T) {
 			name:      "예정 방송 없음 (nil 반환)",
 			channelID: "ch2",
 			mockFn: func(_ context.Context, _ string) (*domain.NextStreamInfo, error) {
-				return nil, nil
+				var missing *domain.NextStreamInfo
+
+				return missing, nil
 			},
 			wantStatus: http.StatusOK,
 			wantOK:     true,
@@ -456,6 +526,7 @@ func TestGetNextStreamInfo(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
@@ -475,7 +546,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 		{
 			name: "성공",
 			body: UpdateAdvanceMinutesRequest{Minutes: 10},
-			mockFn: func(minutes int) []int {
+			mockFn: func(_ int) []int {
 				return []int{5, 10}
 			},
 			wantStatus: http.StatusOK,
@@ -493,9 +564,11 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockAlarmCRUD{}
+
 			if tt.mockFn != nil {
 				mock.updateAlarmAdvanceMinutesFn = tt.mockFn
 			}
+
 			r := newTestHandler(t, mock)
 
 			rec := httptest.NewRecorder()
@@ -506,6 +579,7 @@ func TestUpdateAlarmAdvanceMinutes(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)
@@ -525,7 +599,7 @@ func TestGetAllAlarmKeys(t *testing.T) {
 			name: "성공",
 			mockFn: func(_ context.Context) ([]*domain.AlarmEntry, error) {
 				return []*domain.AlarmEntry{
-					{RoomID: "room1", ChannelID: "ch1", MemberName: "아쿠아"},
+					{RoomID: testRoomID, ChannelID: testChannelID, MemberName: "아쿠아"},
 				}, nil
 			},
 			wantStatus: http.StatusOK,
@@ -545,6 +619,7 @@ func TestGetAllAlarmKeys(t *testing.T) {
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
 			}
+
 			resp := decodeResponse(t, rec.Body)
 			if resp.Success != tt.wantOK {
 				t.Errorf("success = %v, want %v", resp.Success, tt.wantOK)

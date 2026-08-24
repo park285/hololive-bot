@@ -21,18 +21,15 @@
 package runtime
 
 import (
-	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
@@ -44,16 +41,9 @@ func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
 	t.Run("fallback empty when file missing", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_X_ALLOWLIST_PATH", "")
 
-		oldWD, err := os.Getwd()
-		require.NoError(t, err)
+		t.Chdir(t.TempDir())
 
-		tmpDir := t.TempDir()
-		require.NoError(t, os.Chdir(tmpDir))
-		t.Cleanup(func() {
-			require.NoError(t, os.Chdir(oldWD))
-		})
-
-		assert.Equal(t, "", resolveMemberNewsXAllowlistPath())
+		assert.Empty(t, resolveMemberNewsXAllowlistPath())
 	})
 
 	t.Run("env trim", func(t *testing.T) {
@@ -66,7 +56,7 @@ func TestResolveMemberNewsXAllowlistPath(t *testing.T) {
 func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	t.Run("basic config without consensus", func(t *testing.T) {
 		service := initMemberNewsService(
-			context.Background(),
+			t.Context(),
 			settings.CliproxyConfig{},
 			&settings.LLMConfig{},
 			settings.ExaConfig{},
@@ -101,7 +91,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 		}
 
 		service := initMemberNewsService(
-			context.Background(),
+			t.Context(),
 			cliproxyConfig,
 			llmConfig,
 			settings.ExaConfig{},

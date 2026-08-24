@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"hash/fnv"
 	"log/slog"
 	"net/http"
@@ -27,9 +28,12 @@ func (r *Runtime) auth() gin.HandlerFunc {
 			if clearCookies {
 				auth.ClearAuthCookies(c.Writer, r.cfg.Security.ForceHTTPS)
 			}
+
 			httpx.Abort(c, err)
+
 			return
 		}
+
 		c.Set(sessionIDKey, sessionID)
 		c.Set(sessionObjKey, sess)
 		c.Next()
@@ -41,54 +45,76 @@ func (r *Runtime) resolveSession(req *http.Request) (sessionID string, sess *ses
 	if err != nil {
 		return "", nil, false, httpx.Unauthorized()
 	}
+
 	sessionID, ok := auth.ValidateSessionSignature(cookie.Value, r.cfg.SessionSecret)
 	if !ok {
 		return "", nil, true, httpx.Unauthorized()
 	}
-	sess, err = r.sessions.Get(req.Context(), sessionID)
+
+	current, found, err := r.sessions.Get(req.Context(), sessionID)
 	if err != nil {
 		r.logger.Error("session lookup failed", slog.Any("error", err))
+
 		return "", nil, false, httpx.StoreUnavailable()
 	}
-	if sess == nil {
+
+	if !found {
 		return "", nil, true, httpx.Unauthorized()
 	}
+
+	sess = &current
+
 	if sess.RotatedTo != nil && req.URL.Path != heartbeatPath {
-		return r.resolveRotatedSession(req, sessionID, *sess.RotatedTo)
+		rotatedID, rotated, err := r.resolveRotatedSession(req, sessionID, *sess.RotatedTo)
+		if err != nil {
+			return "", nil, false, fmt.Errorf("resolve rotated session: %w", err)
+		}
+
+		return rotatedID, rotated, false, nil
 	}
+
 	return sessionID, sess, false, nil
 }
 
 // 회전 유예 중 옛 쿠키 요청은 교체 세션을 따라간다. 쿠키를 지우면 동시 heartbeat가 방금 심은 새 쿠키까지 삭제되므로,
 // 실패 경로에서도 ClearAuthCookies를 하지 않는다. CSRF 바인딩은 요청이 실제로 들고 온 marker ID를 유지해야 성립한다.
-func (r *Runtime) resolveRotatedSession(req *http.Request, markerID, rotatedTo string) (sessionID string, sess *session.Session, clearCookies bool, err error) {
-	replacement, err := r.sessions.Get(req.Context(), rotatedTo)
+func (r *Runtime) resolveRotatedSession(req *http.Request, markerID, rotatedTo string) (string, *session.Session, error) {
+	replacement, found, err := r.sessions.Get(req.Context(), rotatedTo)
 	if err != nil {
 		r.logger.Error("rotated session lookup failed", slog.Any("error", err))
-		return "", nil, false, httpx.StoreUnavailable()
+
+		return "", nil, httpx.StoreUnavailable()
 	}
-	if replacement == nil || replacement.RotatedTo != nil {
-		return "", nil, false, httpx.Unauthorized()
+
+	if !found || replacement.RotatedTo != nil {
+		return "", nil, httpx.Unauthorized()
 	}
-	return markerID, replacement, false, nil
+
+	return markerID, &replacement, nil
 }
 
 func (r *Runtime) csrf() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if csrfExempt(c.Request.Method, r.cfg.Security.CSRFMode) {
 			c.Next()
+
 			return
 		}
+
 		sessionID, _ := sessionIDFrom(c)
 		if r.csrfTokenValid(c.Request, sessionID) {
 			c.Next()
+
 			return
 		}
+
 		if r.cfg.Security.CSRFMode == config.SecurityMonitor {
 			r.logger.Warn("csrf violation monitor", slog.String("session_id", stringutil.TruncateString(sessionID, 8)))
 			c.Next()
+
 			return
 		}
+
 		httpx.Abort(c, httpx.Forbidden())
 	}
 }
@@ -102,10 +128,12 @@ func (r *Runtime) csrfTokenValid(req *http.Request, sessionID string) bool {
 	if headerToken == "" {
 		return false
 	}
+
 	cookie, err := req.Cookie(auth.CSRFCookieName)
 	if err != nil || cookie.Value != headerToken {
 		return false
 	}
+
 	return auth.ValidateCSRFToken(sessionID, headerToken, r.cfg.SessionSecret)
 }
 
@@ -117,14 +145,17 @@ func (r *Runtime) securityHeaders() gin.HandlerFunc {
 		header.Set("X-XSS-Protection", "1; mode=block")
 		header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https://*.ytimg.com https://*.ggpht.com; connect-src 'self' ws: wss:; frame-ancestors 'none'")
+
 		if strings.HasPrefix(c.Request.URL.Path, "/admin/api/") {
 			header.Set("Cache-Control", "no-store, private")
 			header.Set("Pragma", "no-cache")
 			header.Set("Expires", "0")
 		}
+
 		if r.cfg.Security.ForceHTTPS {
 			header.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
+
 		c.Next()
 	}
 }
@@ -133,6 +164,7 @@ const etagMaxBufferBytes = 64 << 10
 
 type etagWriter struct {
 	gin.ResponseWriter
+
 	body     strings.Builder
 	status   int
 	limit    int
@@ -142,8 +174,10 @@ type etagWriter struct {
 func (w *etagWriter) WriteHeader(status int) {
 	if w.overflow {
 		w.ResponseWriter.WriteHeader(status)
+
 		return
 	}
+
 	w.status = status
 }
 
@@ -153,26 +187,52 @@ func (w *etagWriter) Write(data []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+
 	if !w.overflow && w.body.Len()+len(data) > w.limit {
 		w.startOverflow()
 	}
+
 	if w.overflow {
-		return w.ResponseWriter.Write(data)
+		out, err := w.ResponseWriter.Write(data)
+		if err != nil {
+			return out, fmt.Errorf("write: %w", err)
+		}
+
+		return out, nil
 	}
-	return w.body.Write(data)
+
+	out, err := w.body.Write(data)
+	if err != nil {
+		return out, fmt.Errorf("write: %w", err)
+	}
+
+	return out, nil
 }
 
 func (w *etagWriter) WriteString(s string) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+
 	if !w.overflow && w.body.Len()+len(s) > w.limit {
 		w.startOverflow()
 	}
+
 	if w.overflow {
-		return w.ResponseWriter.WriteString(s)
+		out, err := w.ResponseWriter.WriteString(s)
+		if err != nil {
+			return out, fmt.Errorf("write string: %w", err)
+		}
+
+		return out, nil
 	}
-	return w.body.WriteString(s)
+
+	out, err := w.body.WriteString(s)
+	if err != nil {
+		return out, fmt.Errorf("write string: %w", err)
+	}
+
+	return out, nil
 }
 
 func (w *etagWriter) startOverflow() {
@@ -186,6 +246,7 @@ func (w *etagWriter) Status() int {
 	if w.status != 0 {
 		return w.status
 	}
+
 	return w.ResponseWriter.Status()
 }
 
@@ -193,6 +254,7 @@ func (w *etagWriter) Size() int {
 	if w.overflow {
 		return w.ResponseWriter.Size()
 	}
+
 	return w.body.Len()
 }
 
@@ -204,22 +266,30 @@ func (w *etagWriter) flush(req *http.Request) {
 	if w.overflow {
 		return
 	}
+
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
+
 	if w.status != http.StatusOK {
 		w.ResponseWriter.WriteHeader(w.status)
 		writeBufferedString(w.ResponseWriter, w.body.String())
+
 		return
 	}
+
 	h := fnv.New64a()
 	writeHash(h, w.body.String())
+
 	etag := `"` + strconv.FormatUint(h.Sum64(), 16) + `"`
 	w.ResponseWriter.Header().Set("ETag", etag)
+
 	if etagMatches(req.Header.Get("If-None-Match"), etag) {
 		w.ResponseWriter.WriteHeader(http.StatusNotModified)
+
 		return
 	}
+
 	w.ResponseWriter.WriteHeader(http.StatusOK)
 	writeBufferedString(w.ResponseWriter, w.body.String())
 }
@@ -240,9 +310,12 @@ func (r *Runtime) etag() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if etagSkipped(c.Request) {
 			c.Next()
+
 			return
 		}
+
 		writer := &etagWriter{ResponseWriter: c.Writer, limit: etagMaxBufferBytes}
+
 		c.Writer = writer
 		c.Next()
 		writer.flush(c.Request)
@@ -261,14 +334,18 @@ func (r *Runtime) verifyWSOrigin(origin string) error {
 	if r.cfg.Security.WSOriginMode == config.SecurityOff {
 		return nil
 	}
+
 	allowed := slices.Contains(r.cfg.Security.AllowedOrigins, origin)
 	if origin == "" || !allowed {
 		if r.cfg.Security.WSOriginMode == config.SecurityMonitor {
 			r.logger.Warn("ws origin rejected in monitor mode", slog.String("origin", origin))
+
 			return nil
 		}
+
 		return httpx.Forbidden()
 	}
+
 	return nil
 }
 

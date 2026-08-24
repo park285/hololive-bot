@@ -22,6 +22,7 @@ package dbx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -39,33 +40,41 @@ type BatchDeleteSpec struct {
 
 func DeleteInBatches(ctx context.Context, q Querier, spec BatchDeleteSpec) (int64, error) {
 	var total int64
+
 	for {
 		deleted, err := DeleteOneBatch(ctx, q, spec)
+
 		total += deleted
+
 		if err != nil {
-			return total, err
+			return total, fmt.Errorf("delete one batch: %w", err)
 		}
+
 		if deleted < int64(spec.BatchSize) {
 			return total, nil
 		}
+
 		if err := yieldBetweenBatches(ctx, spec.Yield); err != nil {
-			return total, err
+			return total, fmt.Errorf("yield between batches: %w", err)
 		}
 	}
 }
 
 func DeleteOneBatch(ctx context.Context, q Querier, spec BatchDeleteSpec) (int64, error) {
 	if q == nil {
-		return 0, fmt.Errorf("batch delete querier is nil")
+		return 0, errors.New("batch delete querier is nil")
 	}
+
 	if spec.BatchSize <= 0 {
 		return 0, fmt.Errorf("batch delete size must be positive: %d", spec.BatchSize)
 	}
+
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("delete one batch: %w", err)
 	}
 
 	args := make([]any, 0, len(spec.Args)+1)
+
 	args = append(args, spec.Args...)
 	args = append(args, spec.BatchSize)
 
@@ -73,6 +82,7 @@ func DeleteOneBatch(ctx context.Context, q Querier, spec BatchDeleteSpec) (int64
 	if err != nil {
 		return 0, fmt.Errorf("delete batch: %w", err)
 	}
+
 	return tag.RowsAffected(), nil
 }
 
@@ -80,11 +90,18 @@ func yieldBetweenBatches(ctx context.Context, yield time.Duration) error {
 	if yield <= 0 {
 		yield = DefaultBatchYield
 	}
+
 	timer := time.NewTimer(yield)
+
 	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("yield between batches: %w", err)
+		}
+
+		return nil
 	case <-timer.C:
 		return nil
 	}

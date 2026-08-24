@@ -38,24 +38,30 @@ func init() {
 
 func observeAlarmSubscriberDBFallback(result string) {
 	ensureAlarmMetrics()
+
 	if alarmSubscriberDBFallbackTotal == nil {
 		return
 	}
+
 	alarmSubscriberDBFallbackTotal.WithLabelValues(result).Inc()
 }
 
 func observeAlarmSubscriberDBSingleflightShared() {
 	ensureAlarmMetrics()
+
 	if alarmSubscriberDBSingleflightSharedTotal == nil {
 		return
 	}
+
 	alarmSubscriberDBSingleflightSharedTotal.Inc()
 }
 
 func observeAlarmSubscriberCacheError(operation string) {
 	ensureAlarmMetrics()
+
 	if alarmSubscriberCacheErrorTotal == nil {
 		return
 	}
+
 	alarmSubscriberCacheErrorTotal.WithLabelValues(operation).Inc()
 }

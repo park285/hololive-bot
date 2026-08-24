@@ -21,16 +21,14 @@
 package messaging_test
 
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 )
 
 var errorKeyConstants = []string{
@@ -78,7 +76,7 @@ var nonConstantErrorKeys = []string{
 
 func TestErrorKeyConstantsResolveInSeed(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -86,13 +84,16 @@ func TestErrorKeyConstantsResolveInSeed(t *testing.T) {
 		value := store.Get(messagestrings.NamespaceError, key)
 		if value == "" {
 			t.Errorf("error key %q has no seeded value (would degrade to sentinel at runtime)", key)
+
 			continue
 		}
 
 		wantGlyph := "❌"
+
 		if key == messaging.ErrGraduatedMemberBlocked {
 			wantGlyph = "⚠️"
 		}
+
 		if !strings.HasPrefix(value, wantGlyph) {
 			t.Errorf("error key %q = %q, want prefix %q", key, value, wantGlyph)
 		}
@@ -101,7 +102,7 @@ func TestErrorKeyConstantsResolveInSeed(t *testing.T) {
 
 func TestErrorSeedHasNoOrphanKeys(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -109,6 +110,7 @@ func TestErrorSeedHasNoOrphanKeys(t *testing.T) {
 	for _, key := range errorKeyConstants {
 		expected[key] = true
 	}
+
 	for _, key := range nonConstantErrorKeys {
 		expected[key] = true
 	}
@@ -131,7 +133,7 @@ var alarmTypeKeys = []string{
 
 func TestAlarmTypeKeysResolveInSeed(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -144,7 +146,7 @@ func TestAlarmTypeKeysResolveInSeed(t *testing.T) {
 
 func TestAlarmTypeSeedHasNoOrphanKeys(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -173,7 +175,7 @@ var notifyKeys = []string{
 
 func TestNotifyKeysResolveInSeed(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -186,7 +188,7 @@ func TestNotifyKeysResolveInSeed(t *testing.T) {
 
 func TestNotifySeedHasNoOrphanKeys(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 

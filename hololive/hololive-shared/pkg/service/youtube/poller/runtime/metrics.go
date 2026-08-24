@@ -31,6 +31,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
+const (
+	metricLabelPoller = "poller"
+	metricLabelResult = "result"
+	metricLabelSource = "source"
+)
+
 var (
 	defaultMetrics     *Metrics
 	defaultMetricsOnce sync.Once
@@ -65,6 +71,7 @@ func NewMetrics() *Metrics {
 		m.registerSchedulerMetrics()
 		m.registerJobClaimMetrics()
 		m.registerContentMetrics()
+
 		batchrepo.ObserveOutboxInsert = m.ObserveOutboxInsert
 		defaultMetrics = m
 	})
@@ -72,6 +79,7 @@ func NewMetrics() *Metrics {
 	if defaultMetrics == nil {
 		panic("youtube poller metrics initialization failed")
 	}
+
 	return defaultMetrics
 }
 
@@ -92,71 +100,71 @@ func (m *Metrics) registerSchedulerMetrics() {
 		Name:    "youtube_poller_poll_duration_seconds",
 		Help:    "poller별 channel poll 실행 시간",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"poller", "status"})
+	}, []string{metricLabelPoller, "status"})
 	m.PollerLastSuccessTimestamp = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_poller_last_success_timestamp_seconds",
 		Help: "poller별 마지막 성공 poll의 Unix timestamp",
-	}, []string{"poller"})
+	}, []string{metricLabelPoller})
 	m.BudgetReserveTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_budget_reserve_total",
 		Help: "source별 scheduler budget reservation 결과",
-	}, []string{"source", "result", "burst_class", "priority"})
+	}, []string{metricLabelSource, metricLabelResult, "burst_class", "priority"})
 	m.BudgetReserveWaitSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_poller_budget_reserve_wait_seconds",
 		Help:    "source별 scheduler budget reservation 대기 시간",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"source"})
+	}, []string{metricLabelSource})
 	m.BudgetRetryAfterSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_poller_budget_retry_after_seconds",
 		Help:    "source별 scheduler budget denial retry_after",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"source"})
+	}, []string{metricLabelSource})
 	m.BudgetInflight = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_poller_budget_inflight",
 		Help: "source별 scheduler budget reservation inflight 수",
-	}, []string{"source"})
+	}, []string{metricLabelSource})
 }
 
 func (m *Metrics) registerJobClaimMetrics() {
 	m.JobClaimTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_claim_total",
 		Help: "poller별 distributed job claim 결과",
-	}, []string{"poller", "result"})
+	}, []string{metricLabelPoller, metricLabelResult})
 	m.JobLeaseRenewTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_lease_renew_total",
 		Help: "poller별 distributed job lease renew 결과",
-	}, []string{"poller", "result"})
+	}, []string{metricLabelPoller, metricLabelResult})
 	m.JobLeaseTTLSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_poller_job_lease_ttl_seconds",
 		Help: "poller별 distributed job claim lease TTL",
-	}, []string{"poller"})
+	}, []string{metricLabelPoller})
 	m.JobLeaseElapsedRatio = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_poller_job_lease_elapsed_ratio",
 		Help: "poller별 distributed job claim lease elapsed ratio",
-	}, []string{"poller"})
+	}, []string{metricLabelPoller})
 	m.JobLeaseNearExpiryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_lease_near_expiry_total",
 		Help: "poller별 distributed job claim lease near-expiry 횟수",
-	}, []string{"poller"})
+	}, []string{metricLabelPoller})
 	m.JobMarkCompletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_mark_completed_total",
 		Help: "poller별 distributed job completion marker 결과",
-	}, []string{"poller", "result"})
+	}, []string{metricLabelPoller, metricLabelResult})
 	m.JobDeferTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_defer_total",
 		Help: "poller별 distributed job defer marker 결과",
-	}, []string{"poller", "result"})
+	}, []string{metricLabelPoller, metricLabelResult})
 	m.JobReleaseTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_job_release_total",
 		Help: "poller별 distributed job lease release 결과",
-	}, []string{"poller", "result"})
+	}, []string{metricLabelPoller, metricLabelResult})
 }
 
 func (m *Metrics) registerContentMetrics() {
 	m.OutboxInsertTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_outbox_insert_total",
 		Help: "YouTube notification outbox insert 결과",
-	}, []string{"kind", "result"})
+	}, []string{"kind", metricLabelResult})
 	m.CommunityShortsDetectedPostsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_community_shorts_detected_posts_total",
 		Help: "커뮤니티/쇼츠 감지 게시물 수",
@@ -164,7 +172,7 @@ func (m *Metrics) registerContentMetrics() {
 	m.MetadataResolveTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_metadata_resolve_total",
 		Help: "poller별 watch metadata resolve allowance 결과",
-	}, []string{"poller", "result"})
+	}, []string{metricLabelPoller, metricLabelResult})
 }
 
 func (m *Metrics) ObserveJobClaim(pollerName, result string) {
@@ -179,6 +187,7 @@ func (m *Metrics) ObservePollerSuccess(pollerName string, at time.Time) {
 	if m == nil || m.PollerLastSuccessTimestamp == nil {
 		return
 	}
+
 	m.PollerLastSuccessTimestamp.WithLabelValues(pollerName).Set(float64(at.Unix()))
 }
 
@@ -186,6 +195,7 @@ func (m *Metrics) EnsurePollerLastSuccessTimestamp(pollerName string) {
 	if m == nil || m.PollerLastSuccessTimestamp == nil {
 		return
 	}
+
 	m.PollerLastSuccessTimestamp.WithLabelValues(pollerName)
 }
 
@@ -250,6 +260,7 @@ func (m *Metrics) ObserveOutboxInsert(kind domain.OutboxKind, result string, cou
 	if count <= 0 {
 		return
 	}
+
 	m.OutboxInsertTotal.WithLabelValues(string(kind), result).Add(float64(count))
 }
 
@@ -257,6 +268,7 @@ func (m *Metrics) ObserveCommunityShortsDetectedPosts(alarmType domain.AlarmType
 	if count <= 0 {
 		return
 	}
+
 	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(alarmType)).Add(float64(count))
 }
 
@@ -264,6 +276,7 @@ func (m *Metrics) ObserveMetadataResolve(pollerName, result string) {
 	if m == nil || m.MetadataResolveTotal == nil {
 		return
 	}
+
 	m.MetadataResolveTotal.WithLabelValues(pollerName, result).Inc()
 }
 
@@ -271,9 +284,11 @@ func BoolResult(ok bool, err error) string {
 	if err != nil {
 		return "error"
 	}
+
 	if ok {
 		return "success"
 	}
+
 	return "lost"
 }
 

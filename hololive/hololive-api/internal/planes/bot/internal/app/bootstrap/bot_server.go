@@ -8,40 +8,23 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/park285/iris-client-go/v2/webhook"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/quic-go/quic-go/http3"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/bot/internal/app/http"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
-
-func BuildBotServer(
-	ctx context.Context,
-	appConfig *settings.Config,
-	webhookHandler *webhook.Handler,
-	triggerHandler *sharedserver.TriggerHandler,
-	irisRoomLister IrisRoomLister,
-	logger *slog.Logger,
-) (*http.Server, error) {
-	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, irisRoomLister)
-	if err != nil {
-		return nil, fmt.Errorf("build bot server: provide bot router: %w", err)
-	}
-
-	addr := fmt.Sprintf(":%d", appConfig.Server.Port)
-	return sharedserver.NewH2CServer(addr, botRouter, "hololive-bot.http", sharedserver.LocalPlaneTraceFilter), nil
-}
 
 func BuildShortLinkServer(addr string) *http.Server {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
 		return nil
 	}
-	return sharedserver.NewH2CServer(addr, apphttp.ProvideShortLinkHandler(), "hololive-bot.shortlink",
+
+	return sharedserver.NewHTTPServer(addr, apphttp.ProvideShortLinkHandler(), "hololive-bot.shortlink",
 		sharedserver.LocalPlaneTraceFilter)
 }
 
@@ -54,7 +37,12 @@ func BuildBotHTTP3Server(
 	logger *slog.Logger,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	return buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, irisRoomLister, logger, reloadingTLSCertificateOptions{}, readyProbe...)
+	server, startReloader, err := buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, irisRoomLister, logger, reloadingTLSCertificateOptions{}, readyProbe...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build bot HTTP3 server with reloader options: %w", err)
+	}
+
+	return server, startReloader, nil
 }
 
 func buildBotHTTP3ServerWithReloaderOptions(

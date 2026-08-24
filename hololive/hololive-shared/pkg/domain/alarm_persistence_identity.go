@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -15,33 +16,49 @@ const (
 // ledger fields before this notification joins a shared batch transaction.
 func (n *AlarmNotification) ValidateLiveDispatchPersistenceIdentity() error {
 	if n == nil {
-		return fmt.Errorf("live alarm persistence: notification is nil")
+		return errors.New("live alarm persistence: notification is nil")
 	}
+
 	if err := validateAlarmDispatchIdentifier("room id", n.RoomID, maxAlarmRoomIDBytes); err != nil {
-		return err
+		return fmt.Errorf("validate alarm dispatch identifier: %w", err)
 	}
+
 	if n.Stream == nil {
-		return fmt.Errorf("live alarm persistence: stream is nil")
+		return errors.New("live alarm persistence: stream is nil")
 	}
+
 	if err := validateAlarmDispatchIdentifier("stream id", n.Stream.ID, maxAlarmStreamIDBytes); err != nil {
-		return err
+		return fmt.Errorf("validate alarm dispatch identifier: %w", err)
 	}
+
 	channelID, err := n.liveDispatchChannelID()
 	if err != nil {
-		return err
+		return fmt.Errorf("live dispatch channel ID: %w", err)
 	}
-	return validateAlarmDispatchIdentifier("channel id", channelID, maxAlarmChannelIDBytes)
+
+	if err := validateAlarmDispatchIdentifier("channel id", channelID, maxAlarmChannelIDBytes); err != nil {
+		return fmt.Errorf("validate alarm dispatch identifier: %w", err)
+	}
+
+	return nil
 }
 
 func (n *AlarmNotification) liveDispatchChannelID() (string, error) {
-	return resolveLiveDispatchChannelID(n.liveDispatchChannelCandidates())
+	out, err := resolveLiveDispatchChannelID(n.liveDispatchChannelCandidates())
+	if err != nil {
+		return out, fmt.Errorf("resolve live dispatch channel ID: %w", err)
+	}
+
+	return out, nil
 }
 
 func (n *AlarmNotification) liveDispatchChannelCandidates() []string {
 	candidates := make([]string, 0, 3)
+
 	if n.Channel != nil {
 		candidates = append(candidates, n.Channel.ID)
 	}
+
 	if n.Stream != nil {
 		candidates = append(candidates, n.Stream.ChannelID)
 		if n.Stream.Channel != nil {
@@ -54,14 +71,17 @@ func (n *AlarmNotification) liveDispatchChannelCandidates() []string {
 
 func resolveLiveDispatchChannelID(candidates []string) (string, error) {
 	resolved := ""
+
 	for _, candidate := range candidates {
 		candidate = strings.TrimSpace(candidate)
 		if candidate == "" {
 			continue
 		}
+
 		if resolved != "" && candidate != resolved {
-			return "", fmt.Errorf("live alarm persistence: channel ids disagree")
+			return "", errors.New("live alarm persistence: channel ids disagree")
 		}
+
 		resolved = candidate
 	}
 
@@ -73,9 +93,11 @@ func validateAlarmDispatchIdentifier(name, value string, maxBytes int) error {
 	if trimmed == "" {
 		return fmt.Errorf("live alarm persistence: %s is empty", name)
 	}
+
 	if trimmed != value {
 		return fmt.Errorf("live alarm persistence: %s has surrounding whitespace", name)
 	}
+
 	if len(value) > maxBytes {
 		return fmt.Errorf(
 			"live alarm persistence: %s is too long: %d > %d bytes",
@@ -84,5 +106,6 @@ func validateAlarmDispatchIdentifier(name, value string, maxBytes int) error {
 			maxBytes,
 		)
 	}
+
 	return nil
 }

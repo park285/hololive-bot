@@ -45,6 +45,7 @@ func (r *Repository) WarmupCacheFromDB(ctx context.Context) error {
 	}
 
 	r.loadMemberNewsRoomsCache(ctx, rooms)
+
 	return nil
 }
 
@@ -55,6 +56,7 @@ func (r *Repository) clearMemberNewsRoomCache(ctx context.Context) {
 			slog.String("error", err.Error()),
 		)
 	}
+
 	if err := r.cache.Del(ctx, memberNewsRoomNamesKey); err != nil {
 		r.log.Warn("MemberNews warmup: failed to clear room names hash",
 			slog.String("key", memberNewsRoomNamesKey),
@@ -66,6 +68,7 @@ func (r *Repository) clearMemberNewsRoomCache(ctx context.Context) {
 func (r *Repository) loadMemberNewsRoomsCache(ctx context.Context, rooms []model.SubscribedRoom) {
 	roomIDs := make([]string, 0, len(rooms))
 	nameFields := make(map[string]any, len(rooms))
+
 	for _, room := range rooms {
 		roomIDs = append(roomIDs, room.RoomID)
 		nameFields[room.RoomID] = room.RoomName

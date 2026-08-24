@@ -37,12 +37,13 @@ var tracingEnabledEnvKeys = []string{
 
 func clearTracingEnv(t *testing.T) {
 	t.Helper()
+
 	for _, key := range append([]string{
 		otlpEndpointEnv,
 		otlpTracesEndpointEnv,
 		"HOLOLIVE_OTLP_GRPC_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_INSECURE",
-		"OTEL_SAMPLE_RATE",
+		otelSampleRateEnv,
 		"OTEL_ENABLED",
 		"OTEL_SERVICE_NAME",
 		"OTEL_SERVICE_VERSION",
@@ -57,6 +58,7 @@ func TestLoadTracingConfigRejectsRetiredStandardEndpoint(t *testing.T) {
 			clearTracingEnv(t)
 			t.Setenv(tracingHololiveAPIEnabledEnv, "true")
 			t.Setenv(retiredEnv, "otel-collector:4317")
+
 			if includeCanonical {
 				t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 			}
@@ -76,15 +78,19 @@ func TestLoadTracingConfigDefaultsDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadTracingConfig() error = %v", err)
 	}
+
 	if config.Enabled {
 		t.Fatal("TracingConfig.Enabled = true, want false")
 	}
+
 	if config.Endpoint != "" {
 		t.Fatalf("TracingConfig.Endpoint = %q, want empty", config.Endpoint)
 	}
+
 	if config.Insecure {
 		t.Fatal("TracingConfig.Insecure = true, want false")
 	}
+
 	if config.SampleRate != defaultOTELSampleRate {
 		t.Fatalf("TracingConfig.SampleRate = %v, want %v", config.SampleRate, defaultOTELSampleRate)
 	}
@@ -109,9 +115,11 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearTracingEnv(t)
+
 			for _, key := range tracingEnabledEnvKeys {
 				t.Setenv(key, "not-a-bool")
 			}
+
 			t.Setenv(tt.selectedEnv, "true")
 			t.Setenv("OTEL_ENABLED", "true")
 			t.Setenv(hololiveOTLPGRPCEndpointEnv, " otel-collector:4317 ")
@@ -120,9 +128,11 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 			if err != nil {
 				t.Fatalf("loadTracingConfig() error = %v", err)
 			}
+
 			if !config.Enabled {
 				t.Fatal("TracingConfig.Enabled = false, want true")
 			}
+
 			if config.Endpoint != "otel-collector:4317" {
 				t.Fatalf("TracingConfig.Endpoint = %q, want otel-collector:4317", config.Endpoint)
 			}
@@ -132,9 +142,11 @@ func TestLoadTracingConfigSelectsOnlyRuntimeToggle(t *testing.T) {
 
 func TestLoadTracingConfigRejectsUnknownCollectorInstance(t *testing.T) {
 	clearTracingEnv(t)
+
 	for _, key := range tracingEnabledEnvKeys {
 		t.Setenv(key, "true")
 	}
+
 	t.Setenv("OTEL_ENABLED", "true")
 
 	_, err := loadTracingConfig(tracingRuntimeYouTubeCollector, "unknown")
@@ -156,6 +168,7 @@ func TestLoadTracingConfigAllowsDisabledUnknownCollectorInstance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearTracingEnv(t)
+
 			if tt.setFlags {
 				for _, key := range tracingEnabledEnvKeys[2:] {
 					t.Setenv(key, "false")
@@ -166,6 +179,7 @@ func TestLoadTracingConfigAllowsDisabledUnknownCollectorInstance(t *testing.T) {
 			if err != nil {
 				t.Fatalf("loadTracingConfig() error = %v, want nil", err)
 			}
+
 			if config.Enabled {
 				t.Fatal("TracingConfig.Enabled = true, want false")
 			}
@@ -175,65 +189,59 @@ func TestLoadTracingConfigAllowsDisabledUnknownCollectorInstance(t *testing.T) {
 
 func TestLoadTracingConfigRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
-		name    string
-		setup   func(*testing.T)
-		wantErr string
+		name     string
+		envKey   string
+		envValue string
+		wantErr  string
 	}{
 		{
-			name: "selected enabled toggle",
-			setup: func(t *testing.T) {
-				t.Setenv(tracingHololiveAPIEnabledEnv, "not-a-bool")
-			},
-			wantErr: tracingHololiveAPIEnabledEnv,
+			name:     "selected enabled toggle",
+			envKey:   tracingHololiveAPIEnabledEnv,
+			envValue: "not-a-bool",
+			wantErr:  tracingHololiveAPIEnabledEnv,
 		},
 		{
-			name: "insecure toggle",
-			setup: func(t *testing.T) {
-				t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "not-a-bool")
-			},
-			wantErr: "OTEL_EXPORTER_OTLP_INSECURE",
+			name:     "insecure toggle",
+			envKey:   "OTEL_EXPORTER_OTLP_INSECURE",
+			envValue: "not-a-bool",
+			wantErr:  "OTEL_EXPORTER_OTLP_INSECURE",
 		},
 		{
-			name: "sample parse",
-			setup: func(t *testing.T) {
-				t.Setenv("OTEL_SAMPLE_RATE", "not-a-number")
-			},
-			wantErr: "OTEL_SAMPLE_RATE",
+			name:     "sample parse",
+			envKey:   otelSampleRateEnv,
+			envValue: "not-a-number",
+			wantErr:  otelSampleRateEnv,
 		},
 		{
-			name: "negative sample",
-			setup: func(t *testing.T) {
-				t.Setenv("OTEL_SAMPLE_RATE", "-0.1")
-			},
-			wantErr: "between 0 and 1",
+			name:     "negative sample",
+			envKey:   otelSampleRateEnv,
+			envValue: "-0.1",
+			wantErr:  "between 0 and 1",
 		},
 		{
-			name: "sample above one",
-			setup: func(t *testing.T) {
-				t.Setenv("OTEL_SAMPLE_RATE", "1.1")
-			},
-			wantErr: "between 0 and 1",
+			name:     "sample above one",
+			envKey:   otelSampleRateEnv,
+			envValue: "1.1",
+			wantErr:  "between 0 and 1",
 		},
 		{
-			name: "non finite sample",
-			setup: func(t *testing.T) {
-				t.Setenv("OTEL_SAMPLE_RATE", "NaN")
-			},
-			wantErr: "between 0 and 1",
+			name:     "non finite sample",
+			envKey:   otelSampleRateEnv,
+			envValue: "NaN",
+			wantErr:  "between 0 and 1",
 		},
 		{
-			name: "enabled without endpoint",
-			setup: func(t *testing.T) {
-				t.Setenv(tracingHololiveAPIEnabledEnv, "true")
-			},
-			wantErr: "HOLOLIVE_OTLP_GRPC_ENDPOINT is required",
+			name:     "enabled without endpoint",
+			envKey:   tracingHololiveAPIEnabledEnv,
+			envValue: "true",
+			wantErr:  "HOLOLIVE_OTLP_GRPC_ENDPOINT is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			clearTracingEnv(t)
-			tt.setup(t)
+			t.Setenv(tt.envKey, tt.envValue)
 
 			_, err := loadTracingConfig(tracingRuntimeHololiveAPI, "")
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -252,6 +260,7 @@ func TestLoadHololiveAPIRuntimeSelectsHololiveAPIToggle(t *testing.T) {
 	t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 	t.Setenv(tracingHololiveAPIEnabledEnv, "true")
 	t.Setenv(tracingAlarmWorkerEnabledEnv, "not-a-bool")
+
 	for _, key := range tracingEnabledEnvKeys[2:] {
 		t.Setenv(key, "not-a-bool")
 	}
@@ -260,6 +269,7 @@ func TestLoadHololiveAPIRuntimeSelectsHololiveAPIToggle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadHololiveAPIRuntime() error = %v", err)
 	}
+
 	if !config.Tracing.Enabled || config.Tracing != config.Bot.Tracing || config.Tracing != config.Admin.Tracing {
 		t.Fatalf("HololiveAPIConfig tracing = %#v, bot = %#v, admin = %#v", config.Tracing, config.Bot.Tracing, config.Admin.Tracing)
 	}
@@ -274,6 +284,7 @@ func TestLoadAlarmWorkerRuntimeSelectsAlarmWorkerToggle(t *testing.T) {
 	t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 	t.Setenv(tracingHololiveAPIEnabledEnv, "not-a-bool")
 	t.Setenv(tracingAlarmWorkerEnabledEnv, "true")
+
 	for _, key := range tracingEnabledEnvKeys[2:] {
 		t.Setenv(key, "not-a-bool")
 	}
@@ -282,6 +293,7 @@ func TestLoadAlarmWorkerRuntimeSelectsAlarmWorkerToggle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAlarmWorkerRuntime() error = %v", err)
 	}
+
 	if !config.Tracing.Enabled {
 		t.Fatal("TracingConfig.Enabled = false, want true")
 	}
@@ -294,7 +306,7 @@ func TestLoadYouTubeCollectorRuntimeSelectsInstanceToggle(t *testing.T) {
 	}{
 		{instanceID: "youtube-collector-a", selectedEnv: tracingYouTubeCollectorAEnabledEnv},
 		{instanceID: "youtube-collector-b", selectedEnv: tracingYouTubeCollectorBEnabledEnv},
-		{instanceID: "youtube-collector-c", selectedEnv: tracingYouTubeCollectorCEnabledEnv},
+		{instanceID: collectorInstanceC, selectedEnv: tracingYouTubeCollectorCEnabledEnv},
 		{instanceID: "youtube-collector-d", selectedEnv: tracingYouTubeCollectorDEnabledEnv},
 	}
 
@@ -314,15 +326,18 @@ func TestLoadYouTubeCollectorRuntimeSelectsInstanceToggle(t *testing.T) {
 			t.Setenv(hololiveOTLPGRPCEndpointEnv, "otel-collector:4317")
 			t.Setenv(tracingHololiveAPIEnabledEnv, "not-a-bool")
 			t.Setenv(tracingAlarmWorkerEnabledEnv, "not-a-bool")
+
 			for _, key := range tracingEnabledEnvKeys[2:] {
 				t.Setenv(key, "not-a-bool")
 			}
+
 			t.Setenv(tt.selectedEnv, "true")
 
 			config, err := LoadYouTubeCollectorRuntime()
 			if err != nil {
 				t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
 			}
+
 			if !config.Tracing.Enabled {
 				t.Fatal("TracingConfig.Enabled = false, want true")
 			}

@@ -25,10 +25,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type MajorEventCommand struct {
@@ -54,10 +53,14 @@ func (c *MajorEventCommand) Description() string {
 
 func (c *MajorEventCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureMajorEventReady(ctx, cmdCtx); err != nil {
-		return err
+		return fmt.Errorf("ensure major event ready: %w", err)
 	}
 
-	return c.dispatchMajorEventAction(ctx, cmdCtx, majorEventAction(params))
+	if err := c.dispatchMajorEventAction(ctx, cmdCtx, majorEventAction(params)); err != nil {
+		return fmt.Errorf("dispatch major event action: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *domain.CommandContext) error {
@@ -66,7 +69,11 @@ func (c *MajorEventCommand) ensureMajorEventReady(ctx context.Context, cmdCtx *d
 	}
 
 	if c.repository == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventServiceNotInitialized)
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventServiceNotInitialized); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	return nil
@@ -82,16 +89,37 @@ func majorEventAction(params map[string]any) string {
 }
 
 func (c *MajorEventCommand) dispatchMajorEventAction(ctx context.Context, cmdCtx *domain.CommandContext, action string) error {
-	switch action {
-	case "on", "켜기":
-		return c.handleSubscribe(ctx, cmdCtx)
-	case "off", "끄기":
-		return c.handleUnsubscribe(ctx, cmdCtx)
-	case "list", "목록", "status":
-		return c.handleStatus(ctx, cmdCtx)
-	default:
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventUsage(ctx))
+	handler := c.majorEventActionHandler(action)
+	if err := handler(ctx, cmdCtx); err != nil {
+		return fmt.Errorf("handle major event action: %w", err)
 	}
+
+	return nil
+}
+
+func (c *MajorEventCommand) majorEventActionHandler(action string) func(context.Context, *domain.CommandContext) error {
+	handlers := map[string]func(context.Context, *domain.CommandContext) error{
+		"on":     c.handleSubscribe,
+		"켜기":     c.handleSubscribe,
+		"off":    c.handleUnsubscribe,
+		"끄기":     c.handleUnsubscribe,
+		"list":   c.handleStatus,
+		"목록":     c.handleStatus,
+		"status": c.handleStatus,
+	}
+	if handler := handlers[action]; handler != nil {
+		return handler
+	}
+
+	return c.handleUsage
+}
+
+func (c *MajorEventCommand) handleUsage(ctx context.Context, cmdCtx *domain.CommandContext) error {
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, c.Deps().Formatter.FormatMajorEventUsage(ctx)); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
@@ -99,6 +127,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 		Port: c.repository,
 		OnCheckError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to check subscription", slog.String("error", err.Error()))
+
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventStatusCheckFailed)
 		},
 		OnAlreadySubscribed: func(ctx context.Context) error {
@@ -106,6 +135,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 		},
 		OnSubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to subscribe", slog.String("error", err.Error()))
+
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventSubscribeFailed)
 		},
 		OnSubscribed: func(ctx context.Context) error {
@@ -116,6 +146,7 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 		},
 		OnUnsubscribeError: func(ctx context.Context, err error) error {
 			c.Deps().Logger.Error("Failed to unsubscribe", slog.String("error", err.Error()))
+
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMajorEventUnsubscribeFailed)
 		},
 		OnUnsubscribed: func(ctx context.Context) error {
@@ -128,13 +159,25 @@ func (c *MajorEventCommand) subscriptionFlow(cmdCtx *domain.CommandContext) hand
 }
 
 func (c *MajorEventCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	return c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName)
+	if err := c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
+		return fmt.Errorf("subscribe: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MajorEventCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	return c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room)
+	if err := c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room); err != nil {
+		return fmt.Errorf("unsubscribe: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MajorEventCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	return c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room)
+	if err := c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room); err != nil {
+		return fmt.Errorf("status: %w", err)
+	}
+
+	return nil
 }

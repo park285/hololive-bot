@@ -1,8 +1,8 @@
 package testutil
 
 import (
-	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +15,7 @@ func TestNewJSONTestServer(t *testing.T) {
 	}
 
 	body := payload{Message: "hello"}
+
 	var receivedMethod string
 
 	srv := NewJSONTestServer(t, http.StatusOK, body, func(r *http.Request) {
@@ -30,9 +31,11 @@ func TestNewJSONTestServer(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status: got %d want %d", resp.StatusCode, http.StatusOK)
 	}
+
 	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		t.Fatalf("content-type: got %q want %q", ct, "application/json")
 	}
+
 	if receivedMethod != http.MethodGet {
 		t.Fatalf("method: got %q want %q", receivedMethod, http.MethodGet)
 	}
@@ -41,10 +44,13 @@ func TestNewJSONTestServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
+
 	var got payload
+
 	if err := jsonv2.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+
 	if got.Message != "hello" {
 		t.Fatalf("message: got %q want %q", got.Message, "hello")
 	}
@@ -67,6 +73,7 @@ func TestNewJSONTestServer_NilBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
+
 	if len(raw) != 0 {
 		t.Fatalf("expected empty body, got %q", string(raw))
 	}
@@ -75,17 +82,20 @@ func TestNewJSONTestServer_NilBody(t *testing.T) {
 func getTestServer(t *testing.T, url string) (*http.Response, error) {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request with context: %w", err)
 	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("do: %w", err)
 	}
+
 	if resp == nil {
-		return nil, fmt.Errorf("nil response")
+		return nil, errors.New("nil response")
 	}
+
 	return resp, nil
 }
 
@@ -95,6 +105,7 @@ func closeResponseBody(t *testing.T, resp *http.Response) {
 	if resp == nil || resp.Body == nil {
 		t.Fatal("response body is nil")
 	}
+
 	if err := resp.Body.Close(); err != nil {
 		t.Fatalf("close response body: %v", err)
 	}

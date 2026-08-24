@@ -12,6 +12,7 @@ func TestLoadRejectsMissingProductionOrigins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateFromPassword() error = %v", err)
 	}
+
 	t.Setenv("ENV", "production")
 	t.Setenv("ADMIN_PASS_HASH", string(adminHash))
 	t.Setenv("SESSION_SECRET", "0123456789abcdef")
@@ -31,6 +32,7 @@ func TestProductionOriginsRequireExplicitNonLocalhost(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 0 {
 		t.Fatalf("AllowedOrigins = %v, want empty after production localhost filtering", cfg.AllowedOrigins)
 	}
+
 	if err := validateAllowedOrigins("production", cfg.AllowedOrigins); err == nil {
 		t.Fatal("validateAllowedOrigins() error = nil, want production configuration error")
 	} else if !strings.Contains(err.Error(), "ALLOWED_ORIGINS") {
@@ -45,6 +47,7 @@ func TestProductionOriginsDropLocalhostAndNormalizeExternalOrigin(t *testing.T) 
 	if err := validateAllowedOrigins("production", cfg.AllowedOrigins); err != nil {
 		t.Fatalf("validateAllowedOrigins() error = %v", err)
 	}
+
 	if len(cfg.AllowedOrigins) != 1 || cfg.AllowedOrigins[0] != "https://admin.example.com" {
 		t.Fatalf("AllowedOrigins = %v, want [https://admin.example.com]", cfg.AllowedOrigins)
 	}
@@ -57,10 +60,12 @@ func TestDevelopmentOriginsUseLocalhostFallbackOnly(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 4 {
 		t.Fatalf("AllowedOrigins length = %d, want 4", len(cfg.AllowedOrigins))
 	}
+
 	for _, origin := range cfg.AllowedOrigins {
 		if !isLocalhostOrigin(origin) {
 			t.Fatalf("fallback origin = %q, want localhost", origin)
 		}
+
 		if strings.Contains(origin, "holoshi.com") {
 			t.Fatalf("fallback origin = %q, deployment domain must not be hardcoded", origin)
 		}
@@ -74,6 +79,7 @@ func TestProductionOriginsAllowExplicitLocalhostEscapeHatch(t *testing.T) {
 	if err := validateAllowedOrigins("production", cfg.AllowedOrigins); err != nil {
 		t.Fatalf("validateAllowedOrigins() error = %v", err)
 	}
+
 	if len(cfg.AllowedOrigins) == 0 {
 		t.Fatal("AllowedOrigins is empty, want localhost fallback with explicit escape hatch")
 	}

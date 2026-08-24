@@ -24,11 +24,11 @@ import (
 	"context"
 	"crypto/sha256"
 	stdErrors "errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
@@ -60,6 +60,7 @@ func (h *Service) getChannelsLiveStatusFromScraper(ctx context.Context, channelI
 	}
 
 	cfg := h.effectiveLiveStatusFallbackConfig()
+
 	fallbackCtx, cancel, err := h.liveStatusFallbackContext(ctx, cfg)
 	if err != nil {
 		result.deferred = deferAllChannels(channelIDs, livestatus.DeferredReasonContextDone, err)
@@ -83,15 +84,18 @@ func (h *Service) fetchLiveStatusFallbackSelection(
 ) map[string]struct{} {
 	selectedSet := make(map[string]struct{}, min(maxPerCycle, len(channelIDs)))
 	setKey := newLiveFallbackSetKey(channelIDs)
+
 	for attempts := 0; attempts < maxPerCycle && attempts < len(channelIDs); attempts++ {
 		if err := ctx.Err(); err != nil {
 			break
 		}
 
 		channelID := h.nextLiveStatusFallbackChannel(channelIDs, setKey)
+
 		selectedSet[channelID] = struct{}{}
 		h.fetchLiveStatusFallbackChannel(ctx, channelID, result)
 	}
+
 	return selectedSet
 }
 
@@ -99,8 +103,10 @@ func (h *Service) fetchLiveStatusFallbackChannel(ctx context.Context, channelID 
 	streams, err := h.scraper.FetchYouTubeScheduleWaitAdmission(ctx, channelID)
 	if err != nil {
 		recordLiveStatusFallbackChannelError(result, channelID, err)
+
 		return
 	}
+
 	result.streams = append(result.streams, streams...)
 }
 
@@ -110,6 +116,7 @@ func recordLiveStatusFallbackChannelError(result *channelsLiveStatusFallbackResu
 		result.deferred = putChannelError(result.deferred, channelID, livestatus.NewDeferred(reason, channelID, err))
 		return
 	}
+
 	result.failed = putChannelError(result.failed, channelID, err)
 }
 
@@ -117,21 +124,27 @@ func (h *Service) nextLiveStatusFallbackChannel(channelIDs []string, setKey live
 	if len(channelIDs) == 0 {
 		return ""
 	}
+
 	h.liveFallbackMu.Lock()
 	defer h.liveFallbackMu.Unlock()
 
 	if h.liveFallbackCursors == nil {
 		h.liveFallbackCursors = make(map[liveFallbackSetKey]liveFallbackCursorState)
 	}
+
 	state, exists := h.liveFallbackCursors[setKey]
 	if !exists && len(h.liveFallbackCursors) >= liveFallbackCursorSetLimit {
 		h.evictOldestLiveFallbackCursor()
 	}
+
 	h.liveFallbackClock++
+
 	index := state.next % len(channelIDs)
+
 	state.next = (index + 1) % len(channelIDs)
 	state.lastUsed = h.liveFallbackClock
 	h.liveFallbackCursors[setKey] = state
+
 	return channelIDs[index]
 }
 
@@ -141,32 +154,40 @@ func newLiveFallbackSetKey(channelIDs []string) liveFallbackSetKey {
 
 func (h *Service) evictOldestLiveFallbackCursor() {
 	var oldestKey liveFallbackSetKey
+
 	oldestUse := ^uint64(0)
+
 	for key, state := range h.liveFallbackCursors {
 		if state.lastUsed < oldestUse {
 			oldestKey = key
 			oldestUse = state.lastUsed
 		}
 	}
+
 	delete(h.liveFallbackCursors, oldestKey)
 }
 
 func (h *Service) liveStatusFallbackContext(ctx context.Context, cfg settings.HolodexLiveStatusFallbackConfig) (context.Context, context.CancelFunc, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("build live status fallback context: %w", err)
 	}
+
 	now := time.Now()
 	deadline := now.Add(cfg.WallClockBudget)
+
 	if parentDeadline, ok := ctx.Deadline(); ok {
 		parentBudgetDeadline := parentDeadline.Add(-cfg.DeadlineMargin)
 		if parentBudgetDeadline.Before(deadline) {
 			deadline = parentBudgetDeadline
 		}
 	}
+
 	if !deadline.After(now) {
 		return nil, nil, context.DeadlineExceeded
 	}
+
 	fallbackCtx, cancel := context.WithDeadline(ctx, deadline)
+
 	return fallbackCtx, cancel, nil
 }
 
@@ -174,10 +195,13 @@ func putChannelError(target map[string]error, channelID string, err error) map[s
 	if err == nil {
 		return target
 	}
+
 	if target == nil {
 		target = make(map[string]error, 1)
 	}
+
 	target[channelID] = err
+
 	return target
 }
 
@@ -186,6 +210,7 @@ func deferAllChannels(channelIDs []string, reason livestatus.DeferredReason, cau
 	for _, channelID := range channelIDs {
 		deferred[channelID] = livestatus.NewDeferred(reason, channelID, cause)
 	}
+
 	return deferred
 }
 
@@ -193,16 +218,21 @@ func deferUnselectedChannels(channelIDs []string, selected map[string]struct{}) 
 	if len(channelIDs) == 0 {
 		return nil
 	}
+
 	deferred := make(map[string]error)
+
 	for _, channelID := range channelIDs {
 		if _, ok := selected[channelID]; ok {
 			continue
 		}
+
 		deferred[channelID] = livestatus.NewDeferred(livestatus.DeferredReasonPerCycleCap, channelID, nil)
 	}
+
 	if len(deferred) == 0 {
 		return nil
 	}
+
 	return deferred
 }
 
@@ -224,6 +254,7 @@ func classifyLiveStatusFallbackDeferredError(err error) (livestatus.DeferredReas
 			return rule.reason, true
 		}
 	}
+
 	return "", false
 }
 

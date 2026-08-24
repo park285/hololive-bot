@@ -31,7 +31,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
-
 	"github.com/kapu/hololive-shared/pkg/constants"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -110,9 +109,11 @@ func NewScheduler(
 		formatter:        formatter,
 		summarizer:       summarizer,
 	}
+
 	for _, opt := range opts {
 		opt(scheduler)
 	}
+
 	return scheduler
 }
 
@@ -120,6 +121,7 @@ func (s *Scheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
 	}
+
 	s.digest.SetClock(clockFn)
 }
 
@@ -169,9 +171,9 @@ type weeklyCollected struct {
 
 func (s *Scheduler) SendWeeklyNotification(ctx context.Context) error {
 	weekStart, weekEnd := GetWeekRange(s.digest.Clock())
-	weekKey := weekStart.Format("2006-01-02")
+	weekKey := weekStart.Format(time.DateOnly)
 
-	return schedulerkit.RunDigest(ctx, s.digest, schedulerkit.DigestOp[weeklyCollected]{
+	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[weeklyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:weekly:%s", weekKey),
 		OnLockNotAcquired: func() error { return triggercontracts.ErrNotificationInProgress },
 		Collect: func(ctx context.Context) (weeklyCollected, bool, error) {
@@ -180,7 +182,11 @@ func (s *Scheduler) SendWeeklyNotification(ctx context.Context) error {
 		Execute: func(ctx context.Context, c weeklyCollected) error {
 			return s.executeWeeklyNotification(ctx, c, weekKey)
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("run digest: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Scheduler) weeklyNotificationInputs(
@@ -193,8 +199,10 @@ func (s *Scheduler) weeklyNotificationInputs(
 	if err != nil {
 		return weeklyCollected{}, false, fmt.Errorf("get subscribed rooms: %w", err)
 	}
+
 	if len(rooms) == 0 {
 		s.digest.Logger.Info("No subscribed rooms, skipping notification")
+
 		return weeklyCollected{}, false, nil
 	}
 
@@ -202,62 +210,72 @@ func (s *Scheduler) weeklyNotificationInputs(
 	if err != nil {
 		return weeklyCollected{}, false, fmt.Errorf("get events from db: %w", err)
 	}
+
 	events, err = filterPromptEvents(events, s.promptGuard, s.digest.Logger)
 	if err != nil {
 		return weeklyCollected{}, false, fmt.Errorf("guard major events: %w", err)
 	}
+
 	if len(events) == 0 {
 		s.digest.Logger.Info("No events for this week, skipping notification",
 			slog.Time("week_start", weekStart),
 			slog.Time("week_end", weekEnd))
+
 		return weeklyCollected{}, false, nil
 	}
+
 	return weeklyCollected{rooms: rooms, events: events}, true, nil
 }
 
 func (s *Scheduler) executeWeeklyNotification(ctx context.Context, c weeklyCollected, weekKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
-	message := s.weeklyNotificationMessage(ctx, domainEvents, weekKey)
-	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventWeekly, weekKey, message, s.outputGuard, s.digest.Logger)
 
-	s.digest.Logger.Info("Weekly notification enqueue result",
-		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
-		slog.Int("failed", result.Failed),
-		slog.Int("event_count", len(c.events)))
-
-	shouldMark, err := schedulerkit.ShouldMark(result)
+	shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
+		outboxRepository: s.outboxRepository,
+		outputGuard:      s.outputGuard,
+		logger:           s.digest.Logger,
+		rooms:            c.rooms,
+		kind:             domain.DeliveryKindMajorEventWeekly,
+		periodKey:        weekKey,
+		message:          s.weeklyNotificationMessage(ctx, domainEvents, weekKey),
+		eventCount:       len(c.events),
+		enqueueLogMsg:    "Weekly notification enqueue result",
+		deferLogMsg:      "Partial room enqueue failure, deferring event marking",
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("execute weekly notification: %w", err)
 	}
+
 	if !shouldMark {
-		s.digest.Logger.Warn("Partial room enqueue failure, deferring event marking",
-			slog.Int("sent", result.Sent),
-			slog.Int("failed", result.Failed),
-			slog.Any("failed_rooms", result.FailedRooms))
 		return nil
 	}
+
 	if err := s.repository.MarkEventsAsNotified(ctx, eventIDs, weekKey); err != nil {
 		s.digest.Logger.Error("Failed to mark events as notified", slog.String("error", err.Error()))
 	}
+
 	return nil
 }
 
 func toDomainEventsAndIDs(events []*domain.MajorEvent) (domainEvents []domain.MajorEvent, eventIDs []int) {
 	domainEvents = make([]domain.MajorEvent, len(events))
 	eventIDs = make([]int, len(events))
+
 	for i, e := range events {
 		domainEvents[i] = *e
 		eventIDs[i] = e.ID
 	}
+
 	return domainEvents, eventIDs
 }
 
 func (s *Scheduler) weeklyNotificationMessage(ctx context.Context, events []domain.MajorEvent, weekKey string) string {
 	var llmSummary string
+
 	if s.summarizer != nil {
 		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeWeekly, weekKey)
 	}
+
 	return s.formatter.FormatMajorEventWeeklySummary(ctx, events, llmSummary)
 }
 
@@ -266,5 +284,6 @@ func roomTargets(rooms []*domain.EventRoomSubscription) []roomTarget {
 	for i, room := range rooms {
 		targets[i] = roomTarget{roomID: room.RoomID}
 	}
+
 	return targets
 }

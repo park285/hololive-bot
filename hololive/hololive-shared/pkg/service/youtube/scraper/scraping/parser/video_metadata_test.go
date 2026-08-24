@@ -15,7 +15,7 @@ func TestExtractWatchLiveMetadata(t *testing.T) {
 	got := ExtractWatchLiveMetadata(premiereHTML)
 	assert.Equal(t, LiveContentFalse, got.LiveContent)
 	require.NotNil(t, got.StartTimestamp)
-	assert.Equal(t, time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC), got.StartTimestamp.UTC())
+	assert.Equal(t, time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC), got.StartTimestamp.UTC())
 
 	got = ExtractWatchLiveMetadata(liveHTML)
 	assert.Equal(t, LiveContentTrue, got.LiveContent)
@@ -54,7 +54,7 @@ func TestExtractVideoMetadataFromHTMLClassifiesReplayAndPublication(t *testing.T
 	metadata := ExtractVideoMetadataFromHTML(html)
 
 	require.NotNil(t, metadata.PublishedAt)
-	assert.Equal(t, time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC), *metadata.PublishedAt)
+	assert.Equal(t, time.Date(2026, time.July, 12, 10, 0, 0, 0, time.UTC), *metadata.PublishedAt)
 	assert.Equal(t, ReplayStatusReplay, metadata.Replay)
 }
 

@@ -66,7 +66,9 @@ func buildPostDeliveryTimelinesFromScanRows(scanned []postDeliveryTimelineScanRo
 			StoredInternalDelayCause:   scanned[i].StoredInternalDelayCause,
 		}
 		timeline.DeriveMetrics(&row)
+
 		rows = append(rows, row)
 	}
+
 	return rows
 }

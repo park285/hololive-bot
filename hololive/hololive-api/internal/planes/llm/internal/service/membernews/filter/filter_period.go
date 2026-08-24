@@ -34,9 +34,11 @@ func applyPeriodFilter(candidates []model.Candidate, period model.Period, now ti
 	for i := range candidates {
 		candidate := &candidates[i]
 		candidateDate, ok := resolveCandidateDate(candidate)
+
 		if !ok {
 			continue
 		}
+
 		candidateDate = candidateDate.In(kst)
 		if withinRange(candidateDate, rangeStart, rangeEnd) {
 			result = append(result, datedCandidate{candidate: *candidate, date: candidateDate})
@@ -48,6 +50,7 @@ func applyPeriodFilter(candidates []model.Candidate, period model.Period, now ti
 
 func periodRange(period model.Period, now time.Time) (rangeStart, rangeEnd time.Time) {
 	nowKST := now.In(kst)
+
 	if model.NormalizePeriod(period) == model.PeriodMonthly {
 		rangeStart := time.Date(nowKST.Year(), nowKST.Month(), 1, 0, 0, 0, 0, kst)
 		return rangeStart, rangeStart.AddDate(0, 1, 0).Add(-time.Nanosecond)
@@ -64,6 +67,7 @@ func resolveCandidateDate(candidate *model.Candidate) (time.Time, bool) {
 	if candidate.Type == domain.MajorEventTypeNews {
 		return firstAvailableDate(candidate.PubDate, candidate.EventStartDate)
 	}
+
 	return firstAvailableDate(candidate.EventStartDate, candidate.PubDate)
 }
 
@@ -73,6 +77,7 @@ func firstAvailableDate(dates ...*time.Time) (time.Time, bool) {
 			return *date, true
 		}
 	}
+
 	return time.Time{}, false
 }
 

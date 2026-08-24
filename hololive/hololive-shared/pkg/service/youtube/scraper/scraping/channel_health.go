@@ -56,9 +56,12 @@ type ChannelHealthStore struct {
 func NewChannelHealthStore(store stateStore, policy *ChannelHealthPolicy) *ChannelHealthStore {
 	if policy == nil {
 		defaults := DefaultChannelHealthPolicy()
+
 		policy = &defaults
 	}
+
 	normalizeChannelHealthPolicy(policy)
+
 	return &ChannelHealthStore{store: store, policy: *policy}
 }
 
@@ -73,6 +76,7 @@ func normalizeChannelHealthPolicy(policy *ChannelHealthPolicy) {
 	fillPolicyDuration(&policy.TimeoutMax, defaults.TimeoutMax)
 	fillPolicyDuration(&policy.HTTPStatusBase, defaults.HTTPStatusBase)
 	fillPolicyDuration(&policy.HTTPStatusMax, defaults.HTTPStatusMax)
+
 	if policy.SuccessDecaySteps <= 0 {
 		policy.SuccessDecaySteps = defaults.SuccessDecaySteps
 	}
@@ -88,14 +92,17 @@ func (s *ChannelHealthStore) ShouldSkip(ctx context.Context, channelID string, s
 	if s == nil || s.store == nil || !s.policy.Enforce {
 		return 0, false
 	}
+
 	health, ok := s.Get(ctx, channelID, source)
 	if !ok || health.NextAllowedAt.IsZero() {
 		return 0, false
 	}
+
 	remaining := health.NextAllowedAt.Sub(now)
 	if remaining <= 0 {
 		return 0, false
 	}
+
 	return remaining, true
 }
 
@@ -103,20 +110,25 @@ func (s *ChannelHealthStore) RecordSuccess(ctx context.Context, channelID string
 	if s == nil || s.store == nil {
 		return
 	}
+
 	health, _ := s.Get(ctx, channelID, source)
+
 	health.ChannelID = strings.TrimSpace(channelID)
 	health.Source = source
 	health.LastSuccessAt = now
 	health.NextAllowedAt = time.Time{}
+
 	if health.ConsecutiveFailures > 0 {
 		health.ConsecutiveFailures -= s.policy.SuccessDecaySteps
 		if health.ConsecutiveFailures < 0 {
 			health.ConsecutiveFailures = 0
 		}
 	}
+
 	if health.ConsecutiveFailures == 0 {
 		health.LastFailureReason = FailureReasonNone
 	}
+
 	s.persist(ctx, channelID, source, &health, "success")
 }
 
@@ -124,34 +136,43 @@ func (s *ChannelHealthStore) RecordFailure(ctx context.Context, channelID string
 	if s == nil || s.store == nil {
 		return 0
 	}
+
 	source := detail.Source
 	if source == "" {
 		source = FailureSourceHTML
 	}
+
 	delay := s.delayFor(detail.Reason, 1)
 	if delay <= 0 {
 		return 0
 	}
+
 	health, _ := s.Get(ctx, channelID, source)
+
 	health.ChannelID = strings.TrimSpace(channelID)
 	health.Source = source
 	health.ConsecutiveFailures++
+
 	health.LastFailureReason = detail.Reason
 	health.LastFailureAt = now
 	delay = max(detail.RetryAfter, s.delayFor(detail.Reason, health.ConsecutiveFailures))
 	health.NextAllowedAt = now.Add(delay)
 	s.persist(ctx, channelID, source, &health, "failure")
+
 	return delay
 }
 
 func (s *ChannelHealthStore) Get(ctx context.Context, channelID string, source FailureSource) (ChannelSourceHealth, bool) {
 	var health ChannelSourceHealth
+
 	if s == nil || s.store == nil {
 		return health, false
 	}
+
 	if err := s.store.Get(ctx, channelHealthStateKey(channelID, source), &health); err != nil {
 		return health, false
 	}
+
 	return health, strings.TrimSpace(health.ChannelID) != ""
 }
 
@@ -169,17 +190,21 @@ func (s *ChannelHealthStore) delayFor(reason FailureReason, failures int) time.D
 	if failures <= 0 {
 		return 0
 	}
+
 	base, maxDelay, ok := s.delayBounds(reason)
 	if !ok {
 		return 0
 	}
+
 	delay := base
+
 	for i := 1; i < failures; i++ {
 		delay *= 2
 		if delay >= maxDelay {
 			return maxDelay
 		}
 	}
+
 	return delay
 }
 
@@ -194,9 +219,11 @@ func (s *ChannelHealthStore) delayBounds(reason FailureReason) (base, maxDelay t
 		FailureReasonResponseTooLarge: {s.policy.HTTPStatusBase, s.policy.HTTPStatusMax},
 	}
 	selected, ok := bounds[reason]
+
 	if !ok {
 		return 0, 0, false
 	}
+
 	return selected[0], selected[1], true
 }
 

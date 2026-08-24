@@ -41,7 +41,9 @@ func buildDedupeKey(roomID, eventKey string) string {
 	if len(dedupeKey) <= 768 {
 		return dedupeKey
 	}
+
 	sum := sha256.Sum256([]byte(eventKey))
+
 	return fmt.Sprintf("v2:room:%s:event_sha:%s", roomID, hex.EncodeToString(sum[:]))
 }
 
@@ -56,7 +58,9 @@ func buildEventKey(input *DedupeInput, canonicalYouTubeIdentity string) string {
 	if len(raw) <= eventKeyMaxLength {
 		return raw
 	}
+
 	sum := sha256.Sum256([]byte(raw))
+
 	return fmt.Sprintf("event_sha:%s", hex.EncodeToString(sum[:]))
 }
 
@@ -64,25 +68,32 @@ func buildRawEventKey(input *DedupeInput, canonicalYouTubeIdentity string) strin
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return "celebration:" + input.SourceIdentity
 	}
+
 	if input.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox {
 		identity := resolveYouTubeSourceIdentity(input.SourceIdentity, canonicalYouTubeIdentity)
 		return "youtube-outbox:" + string(input.SourceOutboxKind) + ":" + identity
 	}
+
 	if input.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
 		return "delivery-digest:" + input.SourceIdentity
 	}
+
 	alarmType := input.AlarmType
 	if alarmType == "" {
 		alarmType = domain.AlarmTypeLive
 	}
+
 	category := strings.TrimSpace(input.Category)
 	if category == "" {
 		category = strconv.Itoa(input.MinutesUntil)
 	}
+
 	scheduledUnix := int64(0)
+
 	if !input.StartScheduled.IsZero() {
 		scheduledUnix = input.StartScheduled.UTC().Truncate(time.Minute).Unix()
 	}
+
 	oldStart := strings.TrimSpace(input.ScheduleChangePreviousStart)
 	if oldStart != "" {
 		return fmt.Sprintf("schedule:%s:%s:%s:%d:%s:%s",
@@ -94,6 +105,7 @@ func buildRawEventKey(input *DedupeInput, canonicalYouTubeIdentity string) strin
 			alarmType,
 		)
 	}
+
 	return fmt.Sprintf("live:%s:%s:%d:%s:%s",
 		input.ChannelID,
 		input.StreamID,
@@ -107,6 +119,7 @@ func resolveYouTubeSourceIdentity(identity, canonicalIdentity string) string {
 	if canonicalIdentity != "" && identity == canonicalIdentity {
 		return identity
 	}
+
 	return boundedYouTubeSourceIdentity(identity)
 }
 
@@ -115,21 +128,26 @@ func boundedYouTubeSourceIdentity(identity string) string {
 	if isCanonicalSHA256Identity(identity) {
 		return identity
 	}
+
 	sum := sha256.Sum256([]byte(identity))
+
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func isCanonicalSHA256Identity(identity string) bool {
 	const prefix = "sha256:"
+
 	if len(identity) != len(prefix)+sha256.Size*2 || identity[:len(prefix)] != prefix {
 		return false
 	}
+
 	for i := len(prefix); i < len(identity); i++ {
 		char := identity[i]
 		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -140,8 +158,10 @@ func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
 func prepareEnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) preparedDedupeInput {
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
 	applyCelebrationDedupeSource(&input, envelope)
+
 	canonicalYouTubeIdentity := applyYouTubeOutboxDedupeSource(&input, envelope)
 	applyDeliveryDigestDedupeSource(&input, envelope)
+
 	return preparedDedupeInput{input: input, canonicalYouTubeIdentity: canonicalYouTubeIdentity}
 }
 
@@ -149,6 +169,7 @@ func applyDeliveryDigestDedupeSource(input *DedupeInput, envelope *domain.AlarmQ
 	if envelope.SourceKind != domain.AlarmDispatchSourceKindDeliveryDigest || envelope.DeliveryDigest == nil {
 		return
 	}
+
 	input.SourceKind = envelope.SourceKind
 	input.SourceIdentity = envelope.DeliveryDigest.ContentIdentity()
 	input.AlarmType = envelope.Notification.AlarmType
@@ -163,25 +184,33 @@ func envelopeNotificationDedupeInput(notification *domain.AlarmNotification) Ded
 	channelID := ""
 	streamID := ""
 	title := ""
+
 	var scheduled time.Time
+
 	if notification.Channel != nil {
 		channelID = notification.Channel.ID
 	}
+
 	if notification.Stream != nil {
 		streamID = notification.Stream.ID
 		title = notification.Stream.Title
+
 		if channelID == "" {
 			channelID = notification.Stream.ChannelID
 		}
+
 		if notification.Stream.StartScheduled != nil {
 			scheduled = *notification.Stream.StartScheduled
 		}
 	}
+
 	category := ""
+
 	if notification.IsLiveCatchup() {
 		category = sharedalarmkeys.NotificationCategoryLiveCatchup
 		scheduled = time.Time{}
 	}
+
 	return DedupeInput{
 		RoomID:                      notification.RoomID,
 		ChannelID:                   channelID,
@@ -208,14 +237,17 @@ func applyCelebrationDedupeSource(input *DedupeInput, envelope *domain.AlarmQueu
 func applyYouTubeOutboxDedupeSource(input *DedupeInput, envelope *domain.AlarmQueueEnvelope) string {
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {
 		identity := envelope.YouTubeOutbox.Identity()
+
 		input.SourceKind = envelope.SourceKind
 		input.SourceIdentity = identity
 		input.SourceOutboxKind = envelope.YouTubeOutbox.Kind
 		input.ChannelID = strings.TrimSpace(envelope.YouTubeOutbox.ChannelID)
 		input.AlarmType = envelope.YouTubeOutbox.AlarmType
 		input.Category = string(envelope.SourceKind)
+
 		return identity
 	}
+
 	return ""
 }
 

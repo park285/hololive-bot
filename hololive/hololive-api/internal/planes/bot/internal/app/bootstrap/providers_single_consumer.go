@@ -7,11 +7,9 @@ import (
 	"net/http"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -29,6 +27,7 @@ func ProvideTwitchClient(twitchConfig *settings.TwitchConfig, logger *slog.Logge
 	if twitchConfig == nil {
 		return twitch.NewClient(&twitch.ClientConfig{}, logger)
 	}
+
 	return twitch.NewClient(&twitch.ClientConfig{
 		ClientID:     twitchConfig.ClientID,
 		ClientSecret: twitchConfig.ClientSecret,

@@ -16,7 +16,9 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 	defer s.mu.RUnlock()
 
 	activeRooms := s.activeRoomsMap()
+
 	rooms = make([]string, 0, len(activeRooms))
+
 	for room := range activeRooms {
 		rooms = append(rooms, room)
 	}
@@ -29,6 +31,7 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 // SetEnabled ACL 활성화/비활성화.
 func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	s.mu.RLock()
+
 	current := s.enabled
 	s.mu.RUnlock()
 
@@ -41,11 +44,13 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	}
 
 	s.mu.Lock()
+
 	s.enabled = enabled
 	s.mu.Unlock()
 
 	if err := s.syncSettingsToValkey(ctx); err != nil {
 		rollbackErr := s.rollbackEnabledState(ctx, current)
+
 		return stdErrors.Join(
 			fmt.Errorf("sync acl settings to cache: %w", err),
 			wrapACLRollbackError("rollback acl enabled", rollbackErr),
@@ -63,10 +68,11 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	normalizedMode, err := normalizeACLModeStrict(mode)
 	if err != nil {
-		return err
+		return fmt.Errorf("normalize ACL mode strict: %w", err)
 	}
 
 	s.mu.RLock()
+
 	current := s.mode
 	s.mu.RUnlock()
 
@@ -79,11 +85,13 @@ func (s *Service) SetMode(ctx context.Context, mode ACLMode) error {
 	}
 
 	s.mu.Lock()
+
 	s.mode = mode
 	s.mu.Unlock()
 
 	if err := s.syncModeToValkey(ctx); err != nil {
 		rollbackErr := s.rollbackModeState(ctx, current)
+
 		return stdErrors.Join(
 			fmt.Errorf("sync acl mode to cache: %w", err),
 			wrapACLRollbackError("rollback acl mode", rollbackErr),
@@ -105,12 +113,14 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 	}
 
 	s.mu.Lock()
+
 	mode := s.mode
 	targetRooms := s.roomsMapForMode(mode)
 	listType := string(mode)
 
 	if _, exists := targetRooms[room]; exists {
 		s.mu.Unlock()
+
 		return false, nil
 	}
 
@@ -127,6 +137,7 @@ func (s *Service) AddRoom(ctx context.Context, room string) (bool, error) {
 
 	if _, err := s.cache.SAdd(ctx, s.valkeyKeyForMode(mode), []string{room}); err != nil {
 		rollbackErr := s.rollbackAddedRoom(ctx, mode, room, listType)
+
 		return false, stdErrors.Join(
 			fmt.Errorf("sync acl room add to cache: %w", err),
 			wrapACLRollbackError("rollback acl room add", rollbackErr),
@@ -149,12 +160,14 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 	}
 
 	s.mu.Lock()
+
 	mode := s.mode
 	targetRooms := s.roomsMapForMode(mode)
 	listType := string(mode)
 
 	if _, exists := targetRooms[room]; !exists {
 		s.mu.Unlock()
+
 		return false, nil
 	}
 
@@ -163,6 +176,7 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 
 	if err := s.store.DeleteRoom(ctx, room, listType); err != nil {
 		s.mu.Lock()
+
 		s.roomsMapForMode(mode)[room] = struct{}{}
 		s.mu.Unlock()
 
@@ -171,6 +185,7 @@ func (s *Service) RemoveRoom(ctx context.Context, room string) (bool, error) {
 
 	if _, err := s.cache.SRem(ctx, s.valkeyKeyForMode(mode), []string{room}); err != nil {
 		rollbackErr := s.rollbackRemovedRoom(ctx, mode, room, listType)
+
 		return false, stdErrors.Join(
 			fmt.Errorf("sync acl room removal to cache: %w", err),
 			wrapACLRollbackError("rollback acl room removal", rollbackErr),
@@ -199,6 +214,7 @@ func (s *Service) rollbackEnabledState(ctx context.Context, enabled bool) error 
 	}
 
 	s.mu.Lock()
+
 	s.enabled = enabled
 	s.mu.Unlock()
 
@@ -211,6 +227,7 @@ func (s *Service) rollbackModeState(ctx context.Context, mode ACLMode) error {
 	}
 
 	s.mu.Lock()
+
 	s.mode = mode
 	s.mu.Unlock()
 
@@ -235,6 +252,7 @@ func (s *Service) rollbackRemovedRoom(ctx context.Context, mode ACLMode, room, l
 	}
 
 	s.mu.Lock()
+
 	s.roomsMapForMode(mode)[room] = struct{}{}
 	s.mu.Unlock()
 

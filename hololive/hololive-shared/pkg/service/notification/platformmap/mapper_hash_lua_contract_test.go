@@ -1,7 +1,6 @@
 package platformmap
 
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"testing"
@@ -12,8 +11,8 @@ import (
 )
 
 func TestRenameHashMappingMissingTempPreservesExistingHash(t *testing.T) {
-	ctx := context.Background()
-	cacheClient := sharedtestutil.NewTestCacheService(t, ctx)
+	ctx := t.Context()
+	cacheClient := sharedtestutil.NewTestCacheService(ctx, t)
 	mapper := NewMapper(cacheClient, func() domain.MemberDataProvider {
 		return &stubMemberDataProvider{}
 	}, slog.Default())
@@ -33,6 +32,7 @@ func TestRenameHashMappingMissingTempPreservesExistingHash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read target: %v", err)
 	}
+
 	want := map[string]string{"legacy-login": "UC_legacy"}
 	if len(got) != len(want) || got["legacy-login"] != want["legacy-login"] {
 		t.Fatalf("target hash=%v want=%v", got, want)
@@ -41,6 +41,7 @@ func TestRenameHashMappingMissingTempPreservesExistingHash(t *testing.T) {
 
 func TestPlatformMapTempKeyUsesTargetKeyAsClusterHashTagWhenNeeded(t *testing.T) {
 	platformMapTempKeySeq.Store(0)
+
 	tempKey := platformMapTempKey("alarm:chzzk_channels")
 	if !strings.HasPrefix(tempKey, "{alarm:chzzk_channels}:tmp:") {
 		t.Fatalf("temp key = %q, want target key wrapped as hash tag", tempKey)
@@ -49,6 +50,7 @@ func TestPlatformMapTempKeyUsesTargetKeyAsClusterHashTagWhenNeeded(t *testing.T)
 
 func TestPlatformMapTempKeyPreservesExistingHashTag(t *testing.T) {
 	platformMapTempKeySeq.Store(0)
+
 	tempKey := platformMapTempKey("alarm:{chzzk}:channels")
 	if !strings.HasPrefix(tempKey, "alarm:{chzzk}:channels:tmp:") {
 		t.Fatalf("temp key = %q, want existing hash tag preserved", tempKey)

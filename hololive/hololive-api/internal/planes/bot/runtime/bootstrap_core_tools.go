@@ -22,16 +22,16 @@ package botruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 // InitializeWarmMemberCache - cmd/tools/warm_member_cache 전용.
@@ -47,6 +47,7 @@ func InitializeWarmMemberCache(ctx context.Context, appConfig *settings.Config, 
 	cacheResources, cleanupCache, err := providers.ProvideCacheResources(ctx, appConfig.Valkey, logger)
 	if err != nil {
 		cleanupDB()
+
 		return nil, nil, fmt.Errorf("provide cache resources: %w", err)
 	}
 
@@ -71,8 +72,9 @@ func InitializeWarmMemberCache(ctx context.Context, appConfig *settings.Config, 
 // InitializeDBIntegrationRuntime - cmd/test_db_integration 전용.
 func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DBIntegrationRuntime, func(), error) {
 	if postgresConfig == nil {
-		return nil, nil, fmt.Errorf("postgres config is required")
+		return nil, nil, errors.New("postgres config is required")
 	}
+
 	databaseResources, cleanupDB, err := providers.ProvideDatabaseResources(ctx, postgresConfig, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provide database resources: %w", err)
@@ -84,6 +86,7 @@ func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig *setting
 	memberCache, err := appbootstrap.ProvideMemberCacheWithoutValkey(ctx, memberRepository, logger)
 	if err != nil {
 		cleanupDB()
+
 		return nil, nil, fmt.Errorf("provide member cache without valkey: %w", err)
 	}
 

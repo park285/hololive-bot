@@ -22,7 +22,7 @@ package member
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"strings"
 
@@ -31,7 +31,8 @@ import (
 
 // 이를 통해 도메인 로직에서 구체적인 캐시 구현에 의존하지 않고 멤버 정보를 조회할 수 있다.
 type ServiceAdapter struct {
-	cache  *Cache
+	cache *Cache
+	//nolint:containedctx // domain.MemberDataProvider의 조회 메서드가 ctx를 받지 않고 WithContext로만 컨텍스트를 넘기므로, 어댑터가 보관하는 수밖에 없다.
 	ctx    context.Context
 	logger *slog.Logger
 }
@@ -47,27 +48,39 @@ func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Log
 func (a *ServiceAdapter) FindMemberByChannelID(channelID string) *domain.Member {
 	member, err := a.cache.GetByChannelID(a.ctx, channelID)
 	if err != nil {
-		a.logger.Warn("cache lookup failed in FindMemberByChannelID", "channelID", channelID, "error", err)
+		if !errors.Is(err, ErrMemberNotFound) {
+			a.logger.Warn("cache lookup failed in FindMemberByChannelID", "channelID", channelID, "error", err)
+		}
+
 		return nil
 	}
+
 	return member
 }
 
 func (a *ServiceAdapter) FindMemberByName(name string) *domain.Member {
 	member, err := a.cache.GetByName(a.ctx, name)
 	if err != nil {
-		a.logger.Warn("cache lookup failed in FindMemberByName", "name", name, "error", err)
+		if !errors.Is(err, ErrMemberNotFound) {
+			a.logger.Warn("cache lookup failed in FindMemberByName", "name", name, "error", err)
+		}
+
 		return nil
 	}
+
 	return member
 }
 
 func (a *ServiceAdapter) FindMemberByAlias(alias string) *domain.Member {
 	member, err := a.cache.FindByAlias(a.ctx, alias)
 	if err != nil {
-		a.logger.Warn("cache lookup failed in FindMemberByAlias", "alias", alias, "error", err)
+		if !errors.Is(err, ErrMemberNotFound) {
+			a.logger.Warn("cache lookup failed in FindMemberByAlias", "alias", alias, "error", err)
+		}
+
 		return nil
 	}
+
 	return member
 }
 
@@ -75,8 +88,10 @@ func (a *ServiceAdapter) GetChannelIDs() []string {
 	channelIDs, err := a.cache.GetAllChannelIDs(a.ctx)
 	if err != nil {
 		a.logger.Warn("cache lookup failed in GetChannelIDs", "error", err)
+
 		return []string{}
 	}
+
 	return channelIDs
 }
 
@@ -84,21 +99,25 @@ func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
 	members, err := a.LoadAllMembers()
 	if err != nil {
 		a.logger.Warn("repository lookup failed in GetAllMembers", "error", err)
+
 		return nil
 	}
+
 	return members
 }
 
 func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 	if a == nil {
-		return nil, fmt.Errorf("member adapter is nil")
+		return nil, errors.New("member adapter is nil")
 	}
+
 	if a.cache == nil {
-		return nil, fmt.Errorf("member cache is nil")
+		return nil, errors.New("member cache is nil")
 	}
 
 	members, err := a.cache.AllMembers(memberAdapterContext(a.ctx))
 	if err != nil {
+		//nolint:wrapcheck // Cache.AllMembers가 이미 완결된 오류를 만든다. 여기서 감싸면 같은 말이 한 겹 더 붙는다.
 		return nil, err
 	}
 
@@ -109,6 +128,7 @@ func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvi
 	if ctx == nil {
 		return a
 	}
+
 	return &ServiceAdapter{
 		cache:  a.cache,
 		ctx:    memberAdapterContext(ctx),
@@ -124,14 +144,17 @@ func (a *ServiceAdapter) FindMembersByName(name string) []*domain.Member {
 
 	members := a.searchableMembers()
 	matched := make([]*domain.Member, 0, len(members))
+
 	for _, member := range members {
 		if member == nil {
 			continue
 		}
+
 		if equalFoldAny(needle, member.Name, member.NameJa, member.NameKo) {
 			matched = append(matched, member)
 		}
 	}
+
 	return cloneMemberSlice(matched)
 }
 
@@ -143,11 +166,13 @@ func (a *ServiceAdapter) FindMembersByAlias(alias string) []*domain.Member {
 
 	members := a.searchableMembers()
 	matched := make([]*domain.Member, 0, len(members))
+
 	for _, member := range members {
 		if memberHasAlias(member, needle) {
 			matched = append(matched, member)
 		}
 	}
+
 	return cloneMemberSlice(matched)
 }
 
@@ -155,6 +180,7 @@ func (a *ServiceAdapter) searchableMembers() []*domain.Member {
 	if a == nil || a.cache == nil {
 		return []*domain.Member{}
 	}
+
 	return a.GetAllMembers()
 }
 
@@ -162,11 +188,13 @@ func memberHasAlias(member *domain.Member, needle string) bool {
 	if member == nil {
 		return false
 	}
+
 	for _, candidate := range member.GetAllAliases() {
 		if strings.EqualFold(strings.TrimSpace(candidate), needle) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -176,6 +204,7 @@ func equalFoldAny(target string, values ...string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -186,6 +215,7 @@ func cloneMemberSlice(in []*domain.Member) []*domain.Member {
 
 	out := make([]*domain.Member, len(in))
 	copy(out, in)
+
 	return out
 }
 
@@ -193,6 +223,7 @@ func memberAdapterContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}
+
 	return ctx
 }
 
@@ -200,5 +231,6 @@ func memberAdapterLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
 		return slog.Default()
 	}
+
 	return logger
 }

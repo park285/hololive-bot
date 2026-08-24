@@ -32,7 +32,9 @@ func IsValkeyNil(err error) bool {
 		if valkey.IsValkeyNil(err) {
 			return true
 		}
+
 		err = errors.Unwrap(err)
 	}
+
 	return false
 }

@@ -20,23 +20,30 @@ func RelateChannelList(candidate, evidence *ChannelListCoverageV1) CoverageRelat
 	if candidate.ChannelID != evidence.ChannelID {
 		return CoverageDisjoint
 	}
+
 	if candidate.Filters.IncludeUpcoming != evidence.Filters.IncludeUpcoming {
 		return CoverageDisjoint
 	}
+
 	candidateRange := filterTimeRange(candidate.Filters)
 	evidenceRange := filterTimeRange(evidence.Filters)
+
 	if !timeRangesOverlap(candidateRange, evidenceRange) {
 		return CoverageDisjoint
 	}
+
 	if timeRangesEqual(candidateRange, evidenceRange) {
 		return CoverageEqual
 	}
+
 	if timeRangeContains(evidenceRange, candidateRange) && evidence.Exhausted {
 		return CoverageCovers
 	}
+
 	if timeRangeContains(candidateRange, evidenceRange) && candidate.Exhausted {
 		return CoverageCoveredBy
 	}
+
 	return CoverageDisjoint
 }
 
@@ -44,18 +51,23 @@ func RelateShortsList(candidate, evidence ShortsListCoverageV1) CoverageRelation
 	if candidate.ChannelID != evidence.ChannelID {
 		return CoverageDisjoint
 	}
+
 	if candidate.Exhausted && evidence.Exhausted {
 		return CoverageEqual
 	}
+
 	if evidence.Exhausted {
 		return CoverageCovers
 	}
+
 	if candidate.Exhausted {
 		return CoverageCoveredBy
 	}
+
 	if candidate.CursorStart == evidence.CursorStart && candidate.CursorEnd == evidence.CursorEnd {
 		return CoverageEqual
 	}
+
 	return CoverageDisjoint
 }
 
@@ -63,9 +75,11 @@ func ChannelListCoversVideo(coverage *ChannelListCoverageV1, video *VideoListIte
 	if coverage.ChannelID != video.ChannelID {
 		return false
 	}
+
 	if upcomingOnly(*video) && !coverage.Filters.IncludeUpcoming {
 		return false
 	}
+
 	return publishedAtInFilters(coverage.Filters, video.PublishedAt)
 }
 
@@ -73,12 +87,15 @@ func publishedAtInFilters(filters VideoListFiltersV1, publishedAt *time.Time) bo
 	if publishedAt == nil {
 		return filters.PublishedAfter == nil && filters.PublishedBefore == nil
 	}
+
 	if filters.PublishedAfter != nil && publishedAt.Before(*filters.PublishedAfter) {
 		return false
 	}
+
 	if filters.PublishedBefore != nil && publishedAt.After(*filters.PublishedBefore) {
 		return false
 	}
+
 	return true
 }
 
@@ -94,6 +111,7 @@ func LiveCoverageCoversChannel(coverage GlobalChannelCoverageV1, channelID strin
 	if channelID == "" {
 		return false
 	}
+
 	return slices.Contains(coverage.RequestedChannelIDs, channelID)
 }
 
@@ -101,9 +119,11 @@ func LiveCoverageCoversSession(coverage GlobalChannelCoverageV1, channelID, stat
 	if !LiveCoverageCoversChannel(coverage, channelID) {
 		return false
 	}
+
 	if len(coverage.Filters.Statuses) == 0 {
 		return true
 	}
+
 	return slices.Contains(coverage.Filters.Statuses, status)
 }
 

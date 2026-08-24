@@ -38,6 +38,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+var errUnexpectedOutboundRequest = errors.New("unexpected outbound request")
+
 func TestLinkCheckerCheckLink_OKWithHead(t *testing.T) {
 	t.Parallel()
 
@@ -45,6 +47,7 @@ func TestLinkCheckerCheckLink_OKWithHead(t *testing.T) {
 		if req.Method != http.MethodHead {
 			return nil, errors.New("unexpected method")
 		}
+
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 	})}
 
@@ -52,12 +55,14 @@ func TestLinkCheckerCheckLink_OKWithHead(t *testing.T) {
 		Timeout:     time.Second,
 		Concurrency: 2,
 	}, nil)
+
 	checker.resolver = staticResolver{"example.com": {net.ParseIP("93.184.216.34")}}
 
-	status, err := checker.CheckLink(context.Background(), "https://example.com")
+	status, err := checker.CheckLink(t.Context(), "https://example.com")
 	if err != nil {
 		t.Fatalf("CheckLink() error = %v", err)
 	}
+
 	if status != domain.MajorEventLinkStatusOK {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusOK)
 	}
@@ -78,12 +83,14 @@ func TestLinkCheckerCheckLink_FallbackToGet(t *testing.T) {
 	})}
 
 	checker := NewLinkChecker(client, DefaultLinkCheckerConfig(), nil)
+
 	checker.resolver = staticResolver{"example.com": {net.ParseIP("93.184.216.34")}}
 
-	status, err := checker.CheckLink(context.Background(), "https://example.com")
+	status, err := checker.CheckLink(t.Context(), "https://example.com")
 	if err != nil {
 		t.Fatalf("CheckLink() error = %v", err)
 	}
+
 	if status != domain.MajorEventLinkStatusOK {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusOK)
 	}
@@ -92,7 +99,12 @@ func TestLinkCheckerCheckLink_FallbackToGet(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 type staticResolver map[string][]net.IP
@@ -102,6 +114,7 @@ func (r staticResolver) LookupIP(_ context.Context, _, host string) ([]net.IP, e
 	if !ok {
 		return nil, errors.New("host not found")
 	}
+
 	return ips, nil
 }
 
@@ -114,23 +127,31 @@ type sequentialResolver struct {
 func (r *sequentialResolver) LookupIP(_ context.Context, _, host string) ([]net.IP, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if host == "" {
 		return nil, errors.New("host not found")
 	}
+
 	if len(r.responses) == 0 {
 		return nil, errors.New("host not found")
 	}
+
 	index := r.calls
 	if index >= len(r.responses) {
 		index = len(r.responses) - 1
 	}
+
 	r.calls++
+
 	ips := r.responses[index]
+
 	if len(ips) == 0 {
 		return nil, errors.New("host not found")
 	}
+
 	copied := make([]net.IP, len(ips))
 	copy(copied, ips)
+
 	return copied, nil
 }
 
@@ -139,10 +160,11 @@ func TestLinkCheckerCheckLink_BlockedScheme(t *testing.T) {
 
 	checker := NewLinkChecker(nil, DefaultLinkCheckerConfig(), nil)
 
-	status, err := checker.CheckLink(context.Background(), "ftp://example.com/file")
+	status, err := checker.CheckLink(t.Context(), "ftp://example.com/file")
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
 	}
+
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
 	}
@@ -153,10 +175,11 @@ func TestLinkCheckerCheckLink_BlockedInternalIPAddress(t *testing.T) {
 
 	checker := NewLinkChecker(nil, DefaultLinkCheckerConfig(), nil)
 
-	status, err := checker.CheckLink(context.Background(), "http://127.0.0.1/internal")
+	status, err := checker.CheckLink(t.Context(), "http://127.0.0.1/internal")
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
 	}
+
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
 	}
@@ -167,10 +190,11 @@ func TestLinkCheckerCheckLink_BlockedLocalhost(t *testing.T) {
 
 	checker := NewLinkChecker(nil, DefaultLinkCheckerConfig(), nil)
 
-	status, err := checker.CheckLink(context.Background(), "https://localhost/admin")
+	status, err := checker.CheckLink(t.Context(), "https://localhost/admin")
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
 	}
+
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
 	}
@@ -181,16 +205,19 @@ func TestLinkCheckerCheckLink_BlockedResolvedInternalIPAddress(t *testing.T) {
 
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		t.Fatalf("unexpected outbound request to %s", req.URL.String())
-		return nil, nil
+
+		return nil, errUnexpectedOutboundRequest
 	})}
 
 	checker := NewLinkChecker(client, DefaultLinkCheckerConfig(), nil)
+
 	checker.resolver = staticResolver{"internal.test": {net.ParseIP("127.0.0.1")}}
 
-	status, err := checker.CheckLink(context.Background(), "https://internal.test/resource")
+	status, err := checker.CheckLink(t.Context(), "https://internal.test/resource")
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
 	}
+
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
 	}
@@ -211,13 +238,15 @@ func TestLinkCheckerCheckLink_BlockedRedirectToInternalTarget(t *testing.T) {
 			}, nil
 		case "internal.test":
 			t.Fatalf("redirect target should have been blocked before request: %s", req.URL.String())
-			return nil, nil
+
+			return nil, errUnexpectedOutboundRequest
 		default:
 			return nil, errors.New("unexpected host")
 		}
 	})}
 
 	checker := NewLinkChecker(client, DefaultLinkCheckerConfig(), nil)
+
 	checker.resolver = staticResolver{
 		"example.com":   {net.ParseIP("93.184.216.34")},
 		"internal.test": {net.ParseIP("127.0.0.1")},
@@ -225,12 +254,37 @@ func TestLinkCheckerCheckLink_BlockedRedirectToInternalTarget(t *testing.T) {
 	checker.client = withBlockedRedirectPolicy(checker.client, checker.resolver, checker.config.Timeout)
 	checker.client = withValidatedDialPolicy(checker.client, checker.resolver, checker.config.Timeout)
 
-	status, err := checker.CheckLink(context.Background(), "https://example.com")
+	status, err := checker.CheckLink(t.Context(), "https://example.com")
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
 	}
+
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
+	}
+}
+
+func resolvedDialContext(resolver *sequentialResolver) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("split host port: %w", err)
+		}
+
+		ips, err := resolver.LookupIP(ctx, "ip", host)
+		if err != nil {
+			return nil, fmt.Errorf("lookup IP: %w", err)
+		}
+
+		if len(ips) == 0 {
+			return nil, errors.New("host not found")
+		}
+
+		if os.Getenv("INTEGRATION_TEST") != "true" {
+			return nil, errors.New("real network dial disabled outside integration tests")
+		}
+
+		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
 	}
 }
 
@@ -238,10 +292,12 @@ func TestLinkCheckerCheckLink_BlockedDNSRebindingBetweenValidationAndDial(t *tes
 	t.Parallel()
 
 	var internalHits atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		internalHits.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
+
 	defer server.Close()
 
 	serverAddr, err := net.ResolveTCPAddr("tcp", strings.TrimPrefix(server.URL, "http://"))
@@ -258,38 +314,28 @@ func TestLinkCheckerCheckLink_BlockedDNSRebindingBetweenValidationAndDial(t *tes
 	if !ok {
 		t.Fatalf("http.DefaultTransport type = %T, want *http.Transport", http.DefaultTransport)
 	}
+
 	transport := defaultTransport.Clone()
-	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		host, port, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-		ips, err := resolver.LookupIP(ctx, "ip", host)
-		if err != nil {
-			return nil, err
-		}
-		if len(ips) == 0 {
-			return nil, errors.New("host not found")
-		}
-		if os.Getenv("INTEGRATION_TEST") != "true" {
-			return nil, errors.New("real network dial disabled outside integration tests")
-		}
-		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
-	}
+
+	transport.DialContext = resolvedDialContext(resolver)
+
 	client := &http.Client{Transport: transport}
 
 	checker := NewLinkChecker(client, DefaultLinkCheckerConfig(), nil)
+
 	checker.resolver = resolver
 	checker.client = withBlockedRedirectPolicy(checker.client, checker.resolver, checker.config.Timeout)
 	checker.client = withValidatedDialPolicy(checker.client, checker.resolver, checker.config.Timeout)
 
-	status, err := checker.CheckLink(context.Background(), fmt.Sprintf("http://example.com:%d/secret", serverAddr.Port))
+	status, err := checker.CheckLink(t.Context(), fmt.Sprintf("http://example.com:%d/secret", serverAddr.Port))
 	if err == nil {
 		t.Fatal("CheckLink() error = nil, want error")
 	}
+
 	if status != domain.MajorEventLinkStatusBlocked {
 		t.Fatalf("CheckLink() status = %s, want %s", status, domain.MajorEventLinkStatusBlocked)
 	}
+
 	if got := internalHits.Load(); got != 0 {
 		t.Fatalf("internal server hits = %d, want 0", got)
 	}
@@ -302,6 +348,7 @@ func TestShouldFallbackToGETOnContextDeadline(t *testing.T) {
 	if !shouldFallbackToGET(0, wrapped) {
 		t.Fatal("HEAD ctx deadline must fall back to GET; its message lacks the 'timeout' substring")
 	}
+
 	if shouldFallbackToGET(0, fmt.Errorf("probe link: do request: %w", context.Canceled)) {
 		t.Fatal("context cancellation must not trigger a GET fallback")
 	}

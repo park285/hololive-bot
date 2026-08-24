@@ -52,7 +52,7 @@ func TestSafeLLMProviderError(t *testing.T) {
 	t.Run("nil returns nil", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Nil(t, safeLLMProviderError(nil))
+		assert.NoError(t, safeLLMProviderError(nil))
 	})
 
 	t.Run("empty output maps to empty output type", func(t *testing.T) {
@@ -187,5 +187,6 @@ func slogAttrsByKey(attrs []slog.Attr) map[string]any {
 			values[attr.Key] = attr.Value.Any()
 		}
 	}
+
 	return values
 }

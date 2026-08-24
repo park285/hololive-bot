@@ -32,9 +32,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 
 	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 func TestHandleAliasOperation_NormalizesAliasBeforeRepoCall(t *testing.T) {

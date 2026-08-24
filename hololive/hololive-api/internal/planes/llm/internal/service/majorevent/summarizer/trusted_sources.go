@@ -38,6 +38,7 @@ func isTrustedURLSource(source string) (trusted, handled bool) {
 	if isTrustedDomainHost(host) {
 		return true, true
 	}
+
 	if !isSocialHost(host) {
 		return false, true
 	}
@@ -50,11 +51,13 @@ func isTrustedURLSocialAccount(path string) bool {
 	if account == "" {
 		return false
 	}
+
 	for _, trustedAccount := range constants.MajorEventConfig.TrustedSocialAccounts {
 		if account == strings.ToLower(strings.TrimSpace(trustedAccount)) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -68,10 +71,12 @@ func isTrustedTextDomainSource(source string) bool {
 		if token == "" {
 			continue
 		}
+
 		if source == "https://"+token || source == "http://"+token {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -81,21 +86,35 @@ func isTrustedTextSocialSource(source string) bool {
 		if token == "" {
 			continue
 		}
+
 		if isTrustedTextSocialToken(source, token) {
 			return true
 		}
 	}
+
 	return false
 }
 
 func isTrustedTextSocialToken(source, token string) bool {
-	return source == "@"+token ||
-		source == "x.com/"+token ||
-		source == "twitter.com/"+token ||
-		source == "https://x.com/"+token ||
-		source == "https://twitter.com/"+token ||
-		source == "http://x.com/"+token ||
-		source == "http://twitter.com/"+token
+	if source == "@"+token {
+		return true
+	}
+
+	host := trimURLScheme(source)
+
+	return host == "x.com/"+token || host == "twitter.com/"+token
+}
+
+func trimURLScheme(raw string) string {
+	if trimmed, ok := strings.CutPrefix(raw, "https://"); ok {
+		return trimmed
+	}
+
+	if trimmed, ok := strings.CutPrefix(raw, "http://"); ok {
+		return trimmed
+	}
+
+	return raw
 }
 
 func parseSourceURL(raw string) (*url.URL, error) {
@@ -104,18 +123,23 @@ func parseSourceURL(raw string) (*url.URL, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse source url: %w", err)
 		}
+
 		return parsed, nil
 	}
+
 	parsed, err := url.Parse("https://" + raw)
 	if err != nil {
 		return nil, fmt.Errorf("parse source url with default scheme: %w", err)
 	}
+
 	return parsed, nil
 }
 
 func normalizeHost(host string) string {
 	normalized := strings.ToLower(strings.TrimSpace(host))
+
 	normalized = strings.TrimPrefix(normalized, "www.")
+
 	return normalized
 }
 
@@ -125,10 +149,12 @@ func isTrustedDomainHost(host string) bool {
 		if token == "" {
 			continue
 		}
+
 		if host == token || strings.HasSuffix(host, "."+token) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -141,10 +167,13 @@ func extractSocialAccount(path string) string {
 	if trimmed == "" {
 		return ""
 	}
+
 	parts := strings.Split(trimmed, "/")
 	if len(parts) == 0 {
 		return ""
 	}
+
 	account := strings.TrimPrefix(parts[0], "@")
+
 	return strings.ToLower(strings.TrimSpace(account))
 }

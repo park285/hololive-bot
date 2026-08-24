@@ -3,9 +3,10 @@ package adapter_test
 import (
 	"testing"
 
+	"github.com/park285/iris-client-go/v2/webhook"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/v2/webhook"
 )
 
 func TestMessageAdapterParsesHelpCommand(t *testing.T) {
@@ -25,12 +26,15 @@ func TestMessageAdapterParsesHelpCommand(t *testing.T) {
 			if parsed == nil {
 				t.Fatal("ParseMessage returned nil")
 			}
+
 			if parsed.Type != domain.CommandHelp {
 				t.Fatalf("Type = %q, want CommandHelp", parsed.Type)
 			}
+
 			if parsed.RawMessage != tc.wantRaw {
 				t.Fatalf("RawMessage = %q, want %q", parsed.RawMessage, tc.wantRaw)
 			}
+
 			if parsed.Params == nil {
 				t.Fatal("Params = nil, want non-nil map")
 			}
@@ -55,6 +59,7 @@ func TestMessageAdapterReturnsUnknownForNonCommandInput(t *testing.T) {
 			if parsed == nil {
 				t.Fatal("ParseMessage returned nil")
 			}
+
 			if parsed.Type != domain.CommandUnknown {
 				t.Fatalf("Type = %q, want CommandUnknown", parsed.Type)
 			}

@@ -20,6 +20,7 @@ func loadRepositoryAST(t *testing.T) *ast.File {
 	}
 
 	merged := &ast.File{}
+
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
@@ -29,6 +30,7 @@ func loadRepositoryAST(t *testing.T) *ast.File {
 		if err != nil {
 			t.Fatalf("parse repository source %s: %v", path, err)
 		}
+
 		merged.Decls = append(merged.Decls, file.Decls...)
 	}
 
@@ -46,6 +48,7 @@ func findRepositoryFunc(t *testing.T, file *ast.File, name string) *ast.FuncDecl
 	}
 
 	t.Fatalf("function %s not found", name)
+
 	return nil
 }
 
@@ -53,6 +56,7 @@ func queryTextFromFunc(t *testing.T, fn *ast.FuncDecl) string {
 	t.Helper()
 
 	var query string
+
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		assign, ok := n.(*ast.AssignStmt)
 		if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
@@ -74,12 +78,14 @@ func queryTextFromFunc(t *testing.T, fn *ast.FuncDecl) string {
 			if err != nil {
 				t.Fatalf("unquote query literal: %v", err)
 			}
+
 			query = strings.ToLower(unquoted)
 		case *ast.CallExpr:
 			query = strings.ToLower(queryTextFromMustSQLCall(t, rhs))
 		default:
 			return true
 		}
+
 		return false
 	})
 
@@ -107,6 +113,7 @@ func queryTextFromMustSQLCall(t *testing.T, call *ast.CallExpr) string {
 	if err != nil {
 		t.Fatalf("unquote query asset name: %v", err)
 	}
+
 	return mustSQL(name)
 }
 
@@ -129,6 +136,7 @@ func scanMemberForwardedArgs(t *testing.T, fn *ast.FuncDecl) []string {
 	t.Helper()
 
 	var args []string
+
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -148,6 +156,7 @@ func scanMemberForwardedArgs(t *testing.T, fn *ast.FuncDecl) []string {
 				args = append(args, "")
 			}
 		}
+
 		return false
 	})
 
@@ -168,6 +177,7 @@ func assignedMemberFields(fn *ast.FuncDecl) map[string]bool {
 		case *ast.AssignStmt:
 			recordMemberAssignmentFields(fields, node)
 		}
+
 		return true
 	})
 
@@ -179,15 +189,18 @@ func recordMemberCompositeFields(fields map[string]bool, node *ast.CompositeLit)
 	if !ok {
 		return
 	}
+
 	pkg, ok := sel.X.(*ast.Ident)
 	if !ok || pkg.Name != "domain" || sel.Sel.Name != "Member" {
 		return
 	}
+
 	for _, elt := range node.Elts {
 		kv, ok := elt.(*ast.KeyValueExpr)
 		if !ok {
 			continue
 		}
+
 		key, ok := kv.Key.(*ast.Ident)
 		if ok {
 			fields[key.Name] = true
@@ -201,6 +214,7 @@ func recordMemberAssignmentFields(fields map[string]bool, node *ast.AssignStmt) 
 		if !ok {
 			continue
 		}
+
 		target, ok := sel.X.(*ast.Ident)
 		if ok && target.Name == "member" {
 			fields[sel.Sel.Name] = true
@@ -223,6 +237,7 @@ func TestRepositorySource_MemberQueriesSelectShortKoreanName(t *testing.T) {
 	t.Parallel()
 
 	file := loadRepositoryAST(t)
+
 	for _, funcName := range []string{
 		"FindByChannelID",
 		"FindByName",
@@ -247,6 +262,7 @@ func TestRepositorySource_ScanMemberCarriesMetadataAndPhoto(t *testing.T) {
 	fn := findRepositoryFunc(t, file, "scanMember")
 
 	params := paramNames(fn)
+
 	for _, want := range []string{"org", "suborg", "syncSource", "photo", "shortKoreanName"} {
 		if !slices.Contains(params, want) {
 			t.Fatalf("scanMember must accept %s parameter, params=%v", want, params)
@@ -254,6 +270,7 @@ func TestRepositorySource_ScanMemberCarriesMetadataAndPhoto(t *testing.T) {
 	}
 
 	args := scanMemberForwardedArgs(t, fn)
+
 	for _, want := range []string{"photo", "org", "suborg", "syncSource", "shortKoreanName"} {
 		if !slices.Contains(args, want) {
 			t.Fatalf("scanMember must forward %s to scanMemberWithPhoto, args=%v", want, args)

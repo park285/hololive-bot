@@ -6,6 +6,7 @@ func estimatedRegistrationRequestUnitsPerRun(registration *ChannelPollerRegistra
 	if registration == nil {
 		return 0
 	}
+
 	requests := registration.RequestsPerRun
 	if requests <= 0 {
 		requests = 1
@@ -18,6 +19,7 @@ func estimatedRegistrationWorstCaseRequestUnitsPerRun(registration *ChannelPolle
 	if registration == nil {
 		return 0
 	}
+
 	if registration.WorstCaseRequestUnitsPerRun > 0 {
 		return registration.WorstCaseRequestUnitsPerRun
 	}
@@ -34,6 +36,7 @@ func estimatedRegistrationRPM(registration *ChannelPollerRegistration, targetCou
 	if registration == nil {
 		return 0
 	}
+
 	if registration.Interval <= 0 || targetCount <= 0 {
 		return 0
 	}
@@ -45,6 +48,7 @@ func estimatedRegistrationWorstCaseRPM(registration *ChannelPollerRegistration, 
 	if registration == nil {
 		return 0
 	}
+
 	if registration.Interval <= 0 || targetCount <= 0 {
 		return 0
 	}
@@ -54,15 +58,18 @@ func estimatedRegistrationWorstCaseRPM(registration *ChannelPollerRegistration, 
 
 func estimatedRequestsPerMinute(registrations []ChannelPollerRegistration) float64 {
 	var rpm float64
+
 	for i := range registrations {
 		registration := &registrations[i]
 		targetCount := 1
+
 		if registration.HasExplicitChannelIDs {
 			targetCount = len(uniqueChannelIDs(registration.ChannelIDs))
 		}
 
 		rpm += estimatedRegistrationRPM(registration, targetCount)
 	}
+
 	return rpm
 }
 
@@ -73,14 +80,17 @@ func uniqueChannelIDs(channelIDs []string) []string {
 
 	seen := make(map[string]struct{}, len(channelIDs))
 	unique := make([]string, 0, len(channelIDs))
+
 	for _, channelID := range channelIDs {
 		channelID = strings.TrimSpace(channelID)
 		if channelID == "" {
 			continue
 		}
+
 		if _, exists := seen[channelID]; exists {
 			continue
 		}
+
 		seen[channelID] = struct{}{}
 		unique = append(unique, channelID)
 	}

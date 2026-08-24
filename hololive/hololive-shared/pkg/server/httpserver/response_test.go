@@ -22,7 +22,7 @@ package httpserver
 
 import (
 	"bytes"
-	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -30,7 +30,6 @@ import (
 	"strings"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 )
 
@@ -45,7 +44,7 @@ func TestRespondError(t *testing.T) {
 		})
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/error", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/error", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -54,6 +53,7 @@ func TestRespondError(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
@@ -61,6 +61,7 @@ func TestRespondError(t *testing.T) {
 	if got := payload["error"]; got != "invalid input" {
 		t.Fatalf("error = %v, want %q", got, "invalid input")
 	}
+
 	if got := payload["code"]; got != "invalid_input" {
 		t.Fatalf("code = %v, want %q", got, "invalid_input")
 	}
@@ -71,6 +72,7 @@ func TestRespondInternalError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 
 	router := gin.New()
@@ -85,7 +87,7 @@ func TestRespondInternalError(t *testing.T) {
 		)
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/internal", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/internal", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -94,6 +96,7 @@ func TestRespondInternalError(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
@@ -106,6 +109,7 @@ func TestRespondInternalError(t *testing.T) {
 	if !strings.Contains(logOutput, "failed to query db") {
 		t.Fatalf("log does not contain message: %s", logOutput)
 	}
+
 	if !strings.Contains(logOutput, "db timeout") {
 		t.Fatalf("log does not contain error cause: %s", logOutput)
 	}

@@ -46,6 +46,7 @@ func NewBreaker(threshold int, resetTimeout time.Duration) *Breaker {
 		resetTimeout: resetTimeout,
 	}
 	b.openedAt.Store(time.Time{})
+
 	return b
 }
 
@@ -61,14 +62,15 @@ func normalizeBreakerThreshold(threshold int) int32 {
 }
 
 // Allow는 요청 허용 여부를 반환하며, timeout 경과 시 reset side-effect를 수행합니다.
-// open 상태이고 resetTimeout이 경과했으면 reset(open=false, failures=0) 후 true를 반환합니다.
-// open 상태이고 미경과면 false를 반환합니다.
-// closed 상태면 true를 반환합니다.
-// nil receiver는 항상 true(허용)를 반환합니다.
+// 회로가 open 상태이고 resetTimeout이 경과했으면 reset(open=false, failures=0) 후 true를 반환합니다.
+// 회로가 open 상태이고 아직 경과하지 않았으면 false를 반환합니다.
+// 회로가 closed 상태면 true를 반환합니다.
+// 수신자가 nil이면 항상 true(허용)를 반환합니다.
 func (b *Breaker) Allow() bool {
 	if b == nil {
 		return true
 	}
+
 	if !b.open.Load() {
 		return true
 	}
@@ -77,14 +79,18 @@ func (b *Breaker) Allow() bool {
 	if time.Since(openedAt) > b.resetTimeout {
 		b.transitionMu.Lock()
 		defer b.transitionMu.Unlock()
+
 		if !b.open.Load() {
 			return true
 		}
+
 		if time.Since(b.openedAtTime()) <= b.resetTimeout {
 			return false
 		}
+
 		b.failures.Store(0)
 		b.open.Store(false)
+
 		return true
 	}
 
@@ -92,76 +98,91 @@ func (b *Breaker) Allow() bool {
 }
 
 // RecordSuccess는 실패 카운터를 0으로 초기화합니다.
-// open 상태는 시간 기반 reset(Allow 호출)으로만 해제됩니다.
+// 회로가 open 상태일 때는 시간 기반 reset(Allow 호출)으로만 해제됩니다.
 func (b *Breaker) RecordSuccess() {
 	if b == nil {
 		return
 	}
+
 	b.failures.Store(0)
 }
 
 // RecordFailure는 실패를 기록합니다.
 // 이번 호출로 closed→open 전이가 발생했으면 true를 반환합니다.
 // 이미 open 상태거나 threshold 미달이면 false를 반환합니다.
-// open 전이 시에만 openedAt을 갱신하므로 연속 실패가 resetTimeout을 밀지 않습니다.
+// 회로가 open으로 전이할 때에만 openedAt을 갱신하므로 연속 실패가 resetTimeout을 밀지 않습니다.
 func (b *Breaker) RecordFailure() bool {
 	if b == nil {
 		return false
 	}
+
 	if b.open.Load() {
 		// 이미 open: openedAt 갱신 금지(타이머 밀림 방지)
 		return false
 	}
+
 	count := b.failures.Add(1)
 	if count >= b.threshold {
 		b.transitionMu.Lock()
 		defer b.transitionMu.Unlock()
+
 		if b.open.Load() {
 			return false
 		}
+
 		b.openedAt.Store(time.Now())
 		b.open.Store(true)
+
 		return true
 	}
+
 	return false
 }
 
 // IsOpen은 현재 circuit 상태를 반환합니다. Allow()와 달리 side-effect가 없습니다.
-// nil receiver는 false를 반환합니다.
+// 수신자가 nil이면 false를 반환합니다.
 func (b *Breaker) IsOpen() bool {
 	if b == nil {
 		return false
 	}
+
 	if !b.open.Load() {
 		return false
 	}
+
 	openedAt := b.openedAtTime()
+
 	return time.Since(openedAt) <= b.resetTimeout
 }
 
 // Failures는 현재 누적 실패 카운트를 반환합니다.
-// provider가 로그에 failure_count를 기록할 때 사용합니다.
+// 이 값은 provider가 로그에 failure_count를 기록할 때 사용합니다.
 func (b *Breaker) Failures() int32 {
 	if b == nil {
 		return 0
 	}
+
 	return b.failures.Load()
 }
 
 // RetryAfter는 circuit이 열린 경우 남은 대기 시간을 반환합니다.
-// closed 상태거나 resetTimeout이 이미 경과했으면 0을 반환합니다.
+// 회로가 closed 상태이거나 resetTimeout이 이미 경과했으면 0을 반환합니다.
 func (b *Breaker) RetryAfter() time.Duration {
 	if b == nil {
 		return 0
 	}
+
 	if !b.open.Load() {
 		return 0
 	}
+
 	openedAt := b.openedAtTime()
 	remaining := b.resetTimeout - time.Since(openedAt)
+
 	if remaining < 0 {
 		return 0
 	}
+
 	return remaining
 }
 
@@ -171,6 +192,7 @@ func (b *Breaker) SetOpenedAtForTest(t time.Time) {
 	if b == nil {
 		return
 	}
+
 	b.openedAt.Store(t)
 }
 
@@ -179,5 +201,6 @@ func (b *Breaker) openedAtTime() time.Time {
 	if !ok {
 		return time.Time{}
 	}
+
 	return openedAt
 }

@@ -19,6 +19,7 @@ func (e *repositoryError) Error() string {
 	if e.messageToken == "" {
 		return fmt.Sprintf("%s: reason=%s", e.operation, e.reason)
 	}
+
 	return fmt.Sprintf("%s: message_token=%s reason=%s", e.operation, e.messageToken, e.reason)
 }
 
@@ -38,6 +39,7 @@ func safeRepositoryError(operation string, err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return &repositoryError{operation: operation, reason: repositoryErrorReason(err), cause: err}
 }
 
@@ -45,6 +47,7 @@ func safeMessageRepositoryError(operation, messageID string, err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return &repositoryError{
 		operation: operation, messageToken: privacylog.Pseudonym(messageID),
 		reason: repositoryErrorReason(err), cause: err,

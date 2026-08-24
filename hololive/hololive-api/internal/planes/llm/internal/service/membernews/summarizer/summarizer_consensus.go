@@ -22,15 +22,21 @@ package summarizer
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	jsonv2 "encoding/json/v2"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+)
+
+// reviewer/adjudicator 응답이 JSON으로 파싱되지 않은 경우를 LLM 호출 실패와
+// 구분하기 위한 sentinel. 두 경우 모두 primary로 되돌아가지만 로그가 다르다.
+var (
+	errReviewVerdictParse       = errors.New("review verdict parse failed")
+	errAdjudicatorResponseParse = errors.New("adjudicator response parse failed")
 )
 
 type ConsensusSummarizer struct {
@@ -53,6 +59,7 @@ func NewConsensusSummarizer(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &ConsensusSummarizer{
 		primary:     primary,
 		reviewer:    reviewer,
@@ -67,6 +74,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 	if input == nil {
 		return nil, errors.New("consensus summarizer input is nil")
 	}
+
 	pipelineStart := time.Now()
 
 	// Stage 1: Primary
@@ -74,8 +82,10 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 	if err != nil {
 		return nil, fmt.Errorf("consensus primary: %w", err)
 	}
+
 	if primaryDigest == nil || len(primaryDigest.TopItems) == 0 {
 		c.logger.Info("Consensus stage 1: primary returned empty, skipping review")
+
 		return primaryDigest, nil
 	}
 
@@ -101,6 +111,7 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 			slog.Duration("total_latency", time.Since(pipelineStart)),
 			slog.Int("stages_used", 2),
 		)
+
 		return primaryDigest, nil
 	}
 
@@ -109,10 +120,11 @@ func (c *ConsensusSummarizer) Summarize(ctx context.Context, input *model.Summar
 	if adjDigest != nil {
 		return adjDigest, nil
 	}
+
 	return primaryDigest, nil
 }
 
-// runReview: Stage 2 reviewer 호출 및 결과 평가. nil 반환 시 primary 사용.
+// runReview: Stage 2 reviewer 호출 및 결과 평가. 반환값이 nil이면 primary를 사용한다.
 func (c *ConsensusSummarizer) runReview(
 	ctx context.Context,
 	input *model.SummarizeInput,
@@ -120,14 +132,26 @@ func (c *ConsensusSummarizer) runReview(
 ) *consensus.ReviewVerdict {
 	reviewStart := time.Now()
 	reviewCtx, reviewCancel, ok := consensus.StageContext(ctx, c.config.ReviewTimeout)
+
 	if !ok {
 		c.logger.Warn("Consensus stage 2: insufficient budget, returning primary")
+
 		return nil
 	}
+
 	defer reviewCancel()
 
 	verdict, err := c.review(reviewCtx, input, primaryDigest)
 	reviewLatency := time.Since(reviewStart)
+
+	// 결정표 우선순위 2: ReviewVerdict JSON 파싱 실패
+	if errors.Is(err, errReviewVerdictParse) {
+		c.logger.Warn("Consensus stage 2: verdict parse failed, returning primary",
+			slog.Duration("latency", reviewLatency),
+		)
+
+		return nil
+	}
 
 	// 결정표 우선순위 1: reviewer 호출 실패
 	if err != nil {
@@ -135,14 +159,7 @@ func (c *ConsensusSummarizer) runReview(
 			slog.String("error", err.Error()),
 			slog.Duration("latency", reviewLatency),
 		)
-		return nil
-	}
 
-	// 결정표 우선순위 2: ReviewVerdict JSON 파싱 실패
-	if verdict == nil {
-		c.logger.Warn("Consensus stage 2: verdict parse failed, returning primary",
-			slog.Duration("latency", reviewLatency),
-		)
 		return nil
 	}
 
@@ -152,45 +169,50 @@ func (c *ConsensusSummarizer) runReview(
 		slog.Float64("confidence", verdict.Confidence),
 		slog.Int("issues", len(verdict.Issues)),
 	)
+
 	return verdict
 }
 
-// runAdjudication: Stage 3 adjudicator 호출. nil 반환 시 primary 사용.
+// runAdjudication: Stage 3 adjudicator 호출. 반환값이 nil이면 primary를 사용한다.
 func (c *ConsensusSummarizer) runAdjudication(
 	ctx context.Context, input *model.SummarizeInput,
 	primaryDigest *model.Digest, verdict *consensus.ReviewVerdict,
 	pipelineStart time.Time,
 ) *model.Digest {
-	triggerReason := "low_confidence"
-	if consensus.HasCriticalIssues(verdict.Issues) {
-		triggerReason = "critical_issues"
-	}
+	triggerReason := adjudicationTriggerReason(verdict)
 	c.logger.Info("Consensus stage 3: adjudication triggered", slog.String("reason", triggerReason))
 
 	if c.adjudicator == nil {
 		c.logger.Info("Consensus stage 3: adjudicator not configured, returning primary")
+
 		return nil
 	}
 
 	adjStart := time.Now()
 	adjCtx, adjCancel, ok := consensus.StageContext(ctx, c.config.AdjudicateTimeout)
+
 	if !ok {
 		c.logger.Warn("Consensus stage 3: insufficient budget, returning primary")
+
 		return nil
 	}
+
 	defer adjCancel()
 
 	adjResponse, err := c.adjudicate(adjCtx, input, primaryDigest, verdict)
 	adjLatency := time.Since(adjStart)
 
+	if errors.Is(err, errAdjudicatorResponseParse) {
+		c.logger.Warn("Consensus stage 3: adjudicator parse failed, returning primary",
+			slog.Duration("latency", adjLatency))
+
+		return nil
+	}
+
 	if err != nil {
 		c.logger.Warn("Consensus stage 3: adjudicator failed, returning primary",
 			slog.String("error", err.Error()), slog.Duration("latency", adjLatency))
-		return nil
-	}
-	if adjResponse == nil {
-		c.logger.Warn("Consensus stage 3: adjudicator parse failed, returning primary",
-			slog.Duration("latency", adjLatency))
+
 		return nil
 	}
 
@@ -198,6 +220,7 @@ func (c *ConsensusSummarizer) runAdjudication(
 	if len(adjDigest.TopItems) == 0 {
 		c.logger.Warn("Consensus stage 3: adjudicator output validation dropped all items, returning primary",
 			slog.Duration("latency", adjLatency))
+
 		return nil
 	}
 
@@ -206,10 +229,19 @@ func (c *ConsensusSummarizer) runAdjudication(
 		slog.Int("stages_used", 3),
 		slog.Int("adjudicator_items", len(adjDigest.TopItems)),
 	)
+
 	return adjDigest
 }
 
-// review: reviewer LLM 호출. verdict 파싱 실패 시 nil, nil 반환.
+func adjudicationTriggerReason(verdict *consensus.ReviewVerdict) string {
+	if consensus.HasCriticalIssues(verdict.Issues) {
+		return "critical_issues"
+	}
+
+	return "low_confidence"
+}
+
+// review: reviewer LLM 호출. verdict 파싱 실패 시 errReviewVerdictParse 반환.
 func (c *ConsensusSummarizer) review(
 	ctx context.Context,
 	input *model.SummarizeInput,
@@ -226,11 +258,13 @@ func (c *ConsensusSummarizer) review(
 	}
 
 	var verdict consensus.ReviewVerdict
+
 	if err := jsonv2.Unmarshal([]byte(raw), &verdict); err != nil {
 		c.logger.Warn("Consensus review: JSON parse failed",
 			slog.String("error", err.Error()),
 		)
-		return nil, nil
+
+		return nil, fmt.Errorf("unmarshal review verdict: %w: %w", errReviewVerdictParse, err)
 	}
 
 	// severity 정규화
@@ -241,7 +275,7 @@ func (c *ConsensusSummarizer) review(
 	return &verdict, nil
 }
 
-// adjudicate: adjudicator LLM 호출. 파싱 실패 시 nil, nil 반환.
+// adjudicate: adjudicator LLM 호출. 파싱 실패 시 errAdjudicatorResponseParse 반환.
 func (c *ConsensusSummarizer) adjudicate(
 	ctx context.Context,
 	input *model.SummarizeInput,
@@ -259,11 +293,13 @@ func (c *ConsensusSummarizer) adjudicate(
 	}
 
 	var response summaryResponse
+
 	if err := jsonv2.Unmarshal([]byte(raw), &response); err != nil {
 		c.logger.Warn("Consensus adjudicator: JSON parse failed",
 			slog.String("error", err.Error()),
 		)
-		return nil, nil
+
+		return nil, fmt.Errorf("unmarshal adjudicator response: %w: %w", errAdjudicatorResponseParse, err)
 	}
 
 	return &response, nil

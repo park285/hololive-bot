@@ -21,7 +21,6 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,13 +39,14 @@ func TestSecurityHeadersMiddleware_RemovesXXSSProtection(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	if got := rec.Header().Get("X-XSS-Protection"); got != "" {
 		t.Fatalf("X-XSS-Protection = %q, want empty", got)
 	}
+
 	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Fatalf("X-Content-Type-Options = %q, want %q", got, "nosniff")
 	}
@@ -73,6 +73,7 @@ func TestSanitizedRequestID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := sanitizedRequestID(tt.raw); got != tt.want {
 				t.Fatalf("sanitizedRequestID(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
@@ -102,8 +103,11 @@ func TestRequestIDMiddleware_ReissuesInvalidClientRequestID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", http.NoBody)
+			t.Parallel()
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
 			req.Header.Set(requestIDHeaderKey, tt.header)
+
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 
@@ -111,12 +115,15 @@ func TestRequestIDMiddleware_ReissuesInvalidClientRequestID(t *testing.T) {
 			if got == "" {
 				t.Fatal("request_id must never be empty")
 			}
+
 			if tt.wantEcho && got != tt.header {
 				t.Fatalf("request_id = %q, want propagated %q", got, tt.header)
 			}
+
 			if !tt.wantEcho && got == tt.header {
 				t.Fatalf("request_id = %q, want a reissued value", got)
 			}
+
 			if header := rec.Header().Get(requestIDHeaderKey); header != got {
 				t.Fatalf("X-Request-ID header = %q, want %q", header, got)
 			}

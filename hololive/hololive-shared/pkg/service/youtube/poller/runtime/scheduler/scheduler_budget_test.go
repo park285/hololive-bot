@@ -22,13 +22,13 @@ package scheduler
 
 import (
 	"container/heap"
-	"context"
 	"testing"
 	"time"
 
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
 func TestSchedulerExecuteJobBudgetAllowedPollsAndCommits(t *testing.T) {
@@ -44,26 +44,27 @@ func TestSchedulerExecuteJobBudgetAllowedPollsAndCommits(t *testing.T) {
 		PollTimeout:            2 * time.Second,
 		JobClaimer:             &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},
 		BudgetLimiter:          limiter,
-		BudgetContext:          polling.BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetContext:          polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: testBudgetInstanceID, Enabled: true},
 		BudgetAcquireTimeout:   time.Second,
 		ClaimCompletionTimeout: time.Second,
 		ClaimLeaseSafetyMargin: time.Second,
 	})
 	profile := testBudgetProfile()
-	p := &countingPollerStub{name: "videos"}
+	p := &countingPollerStub{name: testPollerVideos}
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-budget", p, PriorityHigh, time.Hour, profile))
+
 	job := scheduler.jobMap["channel-budget:videos"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
-	scheduler.executeJob(context.Background(), job, 1)
+	scheduler.executeJob(t.Context(), job, 1)
 
 	require.Equal(t, 1, p.calls)
 	require.Equal(t, 1, limiter.callCount())
 	require.Equal(t, polling.BudgetJob{
-		Namespace:  "test",
-		InstanceID: "worker-a",
-		PollerName: "videos",
+		Namespace:  testBudgetNamespace,
+		InstanceID: testBudgetInstanceID,
+		PollerName: testPollerVideos,
 		ChannelID:  "channel-budget",
 		JobKey:     "channel-budget:videos",
 	}, limiter.job)
@@ -88,19 +89,22 @@ func TestSchedulerExecuteJobBudgetDeniedSkipsPollAndUsesRetryAfter(t *testing.T)
 		RequestInterval:      0,
 		JobClaimer:           &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},
 		BudgetLimiter:        limiter,
-		BudgetContext:        polling.BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetContext:        polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: testBudgetInstanceID, Enabled: true},
 		BudgetAcquireTimeout: time.Second,
 		ErrorBackoffMin:      5 * time.Second,
 		ErrorBackoffMax:      5 * time.Second,
 	})
-	p := &countingPollerStub{name: "videos"}
+	p := &countingPollerStub{name: testPollerVideos}
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-denied", p, PriorityHigh, time.Hour, testBudgetProfile()))
+
 	job := scheduler.jobMap["channel-denied:videos"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
 	before := time.Now()
-	scheduler.executeJob(context.Background(), job, 1)
+
+	scheduler.executeJob(t.Context(), job, 1)
+
 	after := time.Now()
 
 	require.Equal(t, 0, p.calls)
@@ -121,19 +125,22 @@ func TestSchedulerExecuteJobBudgetLimiterErrorReleasesClaimAndBacksOff(t *testin
 		RequestInterval:      0,
 		JobClaimer:           &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},
 		BudgetLimiter:        limiter,
-		BudgetContext:        polling.BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetContext:        polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: testBudgetInstanceID, Enabled: true},
 		BudgetAcquireTimeout: time.Second,
 		ErrorBackoffMin:      11 * time.Second,
 		ErrorBackoffMax:      11 * time.Second,
 	})
-	p := &countingPollerStub{name: "videos"}
+	p := &countingPollerStub{name: testPollerVideos}
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-budget-error", p, PriorityHigh, time.Hour, testBudgetProfile()))
+
 	job := scheduler.jobMap["channel-budget-error:videos"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
 	before := time.Now()
-	scheduler.executeJob(context.Background(), job, 1)
+
+	scheduler.executeJob(t.Context(), job, 1)
+
 	after := time.Now()
 
 	require.Equal(t, 0, p.calls)
@@ -156,12 +163,12 @@ func TestBudgetLimiterDisabledOrEmptyProfileSkipsReserve(t *testing.T) {
 		},
 		"disabled context": {
 			limiter:       &schedulerBudgetLimiterStub{decision: polling.BudgetDecision{Allowed: true}},
-			budgetContext: polling.BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: false},
+			budgetContext: polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: testBudgetInstanceID, Enabled: false},
 			profile:       testBudgetProfile(),
 		},
 		"empty source units": {
 			limiter:       &schedulerBudgetLimiterStub{decision: polling.BudgetDecision{Allowed: true}},
-			budgetContext: polling.BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+			budgetContext: polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: testBudgetInstanceID, Enabled: true},
 			profile:       polling.BudgetProfile{SourceUnits: map[polling.BudgetSource]float64{}, BurstClass: polling.BudgetBurstPrimary, Priority: polling.BudgetPriorityHigh},
 		},
 	}
@@ -174,16 +181,18 @@ func TestBudgetLimiterDisabledOrEmptyProfileSkipsReserve(t *testing.T) {
 				BudgetContext:        tc.budgetContext,
 				BudgetAcquireTimeout: time.Second,
 			})
-			p := &countingPollerStub{name: "videos"}
+			p := &countingPollerStub{name: testPollerVideos}
 			require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-disabled", p, PriorityHigh, time.Hour, tc.profile))
+
 			job := scheduler.jobMap["channel-disabled:videos"]
 			require.NotNil(t, job)
 			heap.Remove(&scheduler.jobs, job.index)
 
-			scheduler.executeJob(context.Background(), job, 1)
+			scheduler.executeJob(t.Context(), job, 1)
 
 			require.Equal(t, 1, p.calls)
 			require.Equal(t, 0, job.consecutiveFailures)
+
 			if tc.limiter != nil {
 				require.Equal(t, 0, tc.limiter.callCount())
 			}
@@ -199,18 +208,19 @@ func TestSchedulerExecuteJobPollFailureReleasesBudgetReservation(t *testing.T) {
 		RequestInterval:      0,
 		JobClaimer:           &schedulerClaimStub{status: polling.JobClaimStatus{Result: polling.JobClaimAcquired}, claim: claim},
 		BudgetLimiter:        &schedulerBudgetLimiterStub{decision: polling.BudgetDecision{Allowed: true}, reservation: reservation},
-		BudgetContext:        polling.BudgetContext{Namespace: "test", InstanceID: "worker-a", Enabled: true},
+		BudgetContext:        polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: testBudgetInstanceID, Enabled: true},
 		BudgetAcquireTimeout: time.Second,
 		ErrorBackoffMin:      7 * time.Second,
 		ErrorBackoffMax:      7 * time.Second,
 	})
-	p := &countingPollerStub{name: "videos", err: assert.AnError}
+	p := &countingPollerStub{name: testPollerVideos, err: assert.AnError}
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-poll-fail", p, PriorityHigh, time.Hour, testBudgetProfile()))
+
 	job := scheduler.jobMap["channel-poll-fail:videos"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
-	scheduler.executeJob(context.Background(), job, 1)
+	scheduler.executeJob(t.Context(), job, 1)
 
 	require.Equal(t, 1, p.calls)
 	require.Equal(t, 1, claim.releaseCalls)

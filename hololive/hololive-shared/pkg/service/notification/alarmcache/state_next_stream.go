@@ -2,13 +2,14 @@ package alarmcache
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/valkey-io/valkey-go"
 )
 
 func (s *State) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
@@ -16,7 +17,11 @@ func (s *State) GetNextStreamInfo(ctx context.Context, channelID string) (*domai
 
 	data, err := s.Cache.HGetAll(ctx, key)
 	if err != nil {
-		return nil, sharedlogging.LogAndWrapError(ctx, s.Logger, "get next stream info", err, slog.String("channel_id", channelID))
+		if logErr := sharedlogging.LogAndWrapError(ctx, s.Logger, "get next stream info", err, slog.String("channel_id", channelID)); logErr != nil {
+			return nil, fmt.Errorf("log and wrap error: %w", logErr)
+		}
+
+		data = nil
 	}
 
 	return s.ParseNextStreamInfo(channelID, data), nil

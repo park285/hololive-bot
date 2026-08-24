@@ -24,6 +24,7 @@ type cacheEntry struct {
 func (r *Renderer) storeTemplateAt(ck cacheKey, tmpl *template.Template, now time.Time) {
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
+
 	if _, exists := r.cache[ck]; !exists {
 		for len(r.cache) >= templateCacheMaxEntries {
 			if !r.evictOldestLocked() {
@@ -31,21 +32,29 @@ func (r *Renderer) storeTemplateAt(ck cacheKey, tmpl *template.Template, now tim
 			}
 		}
 	}
+
 	r.cache[ck] = cacheEntry{tmpl: tmpl, storedAt: now}
 }
 
 func (r *Renderer) evictOldestLocked() bool {
-	var oldestKey cacheKey
-	var oldestAt time.Time
+	var (
+		oldestKey cacheKey
+		oldestAt  time.Time
+	)
+
 	found := false
+
 	for ck, entry := range r.cache {
 		if !found || entry.storedAt.Before(oldestAt) {
 			oldestKey, oldestAt, found = ck, entry.storedAt, true
 		}
 	}
+
 	if !found {
 		return false
 	}
+
 	delete(r.cache, oldestKey)
+
 	return true
 }

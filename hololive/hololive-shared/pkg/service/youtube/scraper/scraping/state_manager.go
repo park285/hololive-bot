@@ -34,7 +34,7 @@ type stateStore interface {
 	Del(ctx context.Context, key string) error
 }
 
-// cacheState: 채널별 boolean 캐시 상태 (in-memory + stateStore 2계층)
+// cacheState: 채널별 boolean 캐시 상태 (in-memory + stateStore 2계층).
 type cacheState struct {
 	mu    sync.RWMutex
 	until map[string]time.Time
@@ -57,6 +57,7 @@ func (cs *cacheState) isSet(ctx context.Context, key, stateKey string) bool {
 	if cs.memoryStateIsSet(key, now) {
 		return true
 	}
+
 	cs.clearExpiredMemoryState(key, now)
 
 	if cs.store == nil {
@@ -68,45 +69,57 @@ func (cs *cacheState) isSet(ctx context.Context, key, stateKey string) bool {
 
 func (cs *cacheState) memoryStateIsSet(key string, now time.Time) bool {
 	cs.mu.RLock()
+
 	until, ok := cs.until[key]
 	cs.mu.RUnlock()
+
 	return ok && now.Before(until)
 }
 
 func (cs *cacheState) clearExpiredMemoryState(key string, now time.Time) {
 	cs.mu.Lock()
+
 	latest, exists := cs.until[key]
 	if exists && !now.Before(latest) {
 		delete(cs.until, key)
 	}
+
 	cs.mu.Unlock()
 }
 
 func (cs *cacheState) hydrateFromStore(ctx context.Context, key, stateKey string) bool {
 	var marker bool
+
 	if err := cs.store.Get(ctx, stateKey, &marker); err != nil {
 		slog.Warn("failed to read "+cs.label+" state",
 			"channel_id", key,
 			"error", err)
+
 		return false
 	}
+
 	if marker {
 		cs.mu.Lock()
+
 		cs.until[key] = time.Now().Add(cs.ttl)
 		cs.mu.Unlock()
+
 		return true
 	}
+
 	return false
 }
 
 func (cs *cacheState) mark(ctx context.Context, key, stateKey string) {
 	cs.mu.Lock()
+
 	cs.until[key] = time.Now().Add(cs.ttl)
 	cs.mu.Unlock()
 
 	if cs.store == nil {
 		return
 	}
+
 	if err := cs.store.Set(ctx, stateKey, true, cs.ttl); err != nil {
 		slog.Warn("failed to persist "+cs.label+" state",
 			"channel_id", key,
@@ -114,7 +127,7 @@ func (cs *cacheState) mark(ctx context.Context, key, stateKey string) {
 	}
 }
 
-func (cs *cacheState) clear(ctx context.Context, key, stateKey string) {
+func (cs *cacheState) unmark(ctx context.Context, key, stateKey string) {
 	cs.mu.Lock()
 	delete(cs.until, key)
 	cs.mu.Unlock()
@@ -122,6 +135,7 @@ func (cs *cacheState) clear(ctx context.Context, key, stateKey string) {
 	if cs.store == nil {
 		return
 	}
+
 	if err := cs.store.Del(ctx, stateKey); err != nil {
 		slog.Warn("failed to clear "+cs.label+" state",
 			"channel_id", key,
@@ -147,6 +161,7 @@ func (c *Client) isCommunityMissing(ctx context.Context, channelID string) bool 
 	if key == "" {
 		return false
 	}
+
 	return c.communityMissing.isSet(ctx, key, c.communityMissingStateKey(key))
 }
 
@@ -155,6 +170,7 @@ func (c *Client) markCommunityMissing(ctx context.Context, channelID string) {
 	if key == "" {
 		return
 	}
+
 	c.communityMissing.mark(ctx, key, c.communityMissingStateKey(key))
 }
 
@@ -163,7 +179,8 @@ func (c *Client) clearCommunityMissing(ctx context.Context, channelID string) {
 	if key == "" {
 		return
 	}
-	c.communityMissing.clear(ctx, key, c.communityMissingStateKey(key))
+
+	c.communityMissing.unmark(ctx, key, c.communityMissingStateKey(key))
 }
 
 func (c *Client) isVideoRSSBackoff(ctx context.Context, channelID string) bool {
@@ -171,6 +188,7 @@ func (c *Client) isVideoRSSBackoff(ctx context.Context, channelID string) bool {
 	if key == "" {
 		return false
 	}
+
 	return c.videoRSSBackoff.isSet(ctx, key, c.videoRSSBackoffStateKey(key))
 }
 
@@ -179,6 +197,7 @@ func (c *Client) markVideoRSSBackoff(ctx context.Context, channelID string) {
 	if key == "" {
 		return
 	}
+
 	c.videoRSSBackoff.mark(ctx, key, c.videoRSSBackoffStateKey(key))
 }
 
@@ -187,18 +206,22 @@ func (c *Client) clearVideoRSSBackoff(ctx context.Context, channelID string) {
 	if key == "" {
 		return
 	}
-	c.videoRSSBackoff.clear(ctx, key, c.videoRSSBackoffStateKey(key))
+
+	c.videoRSSBackoff.unmark(ctx, key, c.videoRSSBackoffStateKey(key))
 }
 
 func (c *Client) initStateManagers() {
 	if c == nil {
 		return
 	}
+
 	c.communityMissing = newCacheState(c.stateStore, ytDefaults.CommunityMissingTTL, "community missing")
 	c.videoRSSBackoff = newCacheState(c.stateStore, ytDefaults.VideoRSSBackoffTTL, "video rss backoff")
+
 	if c.channelHealthDisabled {
 		c.channelHealth = nil
 		return
 	}
+
 	c.channelHealth = NewChannelHealthStore(c.stateStore, &c.channelHealthPolicy)
 }

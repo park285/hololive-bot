@@ -45,18 +45,21 @@ func TestLocalPlaneTraceFilter(t *testing.T) {
 	}
 }
 
-func TestNewH2CServerAppliesTraceFilterOnlyWhenProvided(t *testing.T) {
+func TestNewHTTPServerAppliesTraceFilterOnlyWhenProvided(t *testing.T) {
 	t.Parallel()
 
-	if server := NewH2CServer(":0", http.NotFoundHandler(), "test.http"); server == nil {
-		t.Fatal("NewH2CServer without a filter returned nil")
+	if server := NewHTTPServer(":0", http.NotFoundHandler(), "test.http"); server == nil {
+		t.Fatal("NewHTTPServer without a filter returned nil")
 	}
-	if server := NewH2CServer(":0", http.NotFoundHandler(), "test.http", LocalPlaneTraceFilter); server == nil {
-		t.Fatal("NewH2CServer with a filter returned nil")
+
+	if server := NewHTTPServer(":0", http.NotFoundHandler(), "test.http", LocalPlaneTraceFilter); server == nil {
+		t.Fatal("NewHTTPServer with a filter returned nil")
 	}
+
 	if got := firstTraceFilter(nil); got != nil {
 		t.Fatal("firstTraceFilter(nil) must stay nil so the producer keeps healthcheck spans")
 	}
+
 	if got := firstTraceFilter([]func(*http.Request) bool{nil, LocalPlaneTraceFilter}); got == nil {
 		t.Fatal("firstTraceFilter must skip nil entries")
 	}

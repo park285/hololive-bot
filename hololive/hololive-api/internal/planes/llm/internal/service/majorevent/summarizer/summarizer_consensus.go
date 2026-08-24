@@ -22,14 +22,12 @@ package summarizer
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -62,20 +60,25 @@ func (s *EventSummarizer) reviewConsensusVerdict(
 	reviewCtx, cancel, ok := consensus.StageContext(ctx, s.consensus.ReviewTimeout)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for review")
+
 		return nil, false
 	}
+
 	defer cancel()
 
 	verdict, err := s.reviewSummary(reviewCtx, events, summaryType, periodKey, primary)
 	if err != nil {
 		s.logger.Warn("major event consensus review failed; keep primary",
 			slog.String("error", err.Error()))
+
 		return nil, false
 	}
+
 	if !consensus.NeedsAdjudication(verdict, s.consensus.ConfidenceThreshold) {
 		s.logger.Info("major event consensus review passed",
 			slog.Bool("approved", verdict.Approved),
 			slog.Float64("confidence", verdict.Confidence))
+
 		return nil, false
 	}
 
@@ -92,25 +95,31 @@ func (s *EventSummarizer) applyConsensusAdjudication(
 ) (*summaryResponse, bool) {
 	if s.adjudicator == nil {
 		s.logger.Info("major event consensus adjudicator not configured; keep primary")
+
 		return primary, false
 	}
 
 	adjCtx, adjCancel, ok := consensus.StageContext(ctx, s.consensus.AdjudicateTimeout)
 	if !ok {
 		s.logger.Warn("major event consensus skipped: insufficient budget for adjudication")
+
 		return primary, false
 	}
+
 	defer adjCancel()
 
 	adjusted, err := s.adjudicateSummary(adjCtx, events, summaryType, periodKey, searchContext, primary, verdict)
 	if err != nil {
 		s.logger.Warn("major event consensus adjudication failed; keep primary",
 			slog.String("error", err.Error()))
+
 		return primary, false
 	}
+
 	s.logger.Info("major event consensus adjudication applied",
 		slog.Float64("confidence", verdict.Confidence),
 		slog.Int("issues", len(verdict.Issues)))
+
 	return adjusted, true
 }
 
@@ -134,6 +143,7 @@ func (s *EventSummarizer) reviewSummary(
 	}
 
 	var verdict consensus.ReviewVerdict
+
 	if err := jsonv2.Unmarshal([]byte(raw), &verdict); err != nil {
 		return nil, fmt.Errorf("parse reviewer verdict: %w", err)
 	}
@@ -141,6 +151,7 @@ func (s *EventSummarizer) reviewSummary(
 	for i := range verdict.Issues {
 		verdict.Issues[i].Severity = consensus.NormalizeSeverity(verdict.Issues[i].Severity)
 	}
+
 	return &verdict, nil
 }
 
@@ -166,9 +177,11 @@ func (s *EventSummarizer) adjudicateSummary(
 	}
 
 	var resp summaryResponse
+
 	if err := jsonv2.Unmarshal([]byte(raw), &resp); err != nil {
 		return nil, fmt.Errorf("parse adjudicator summary: %w", err)
 	}
+
 	return &resp, nil
 }
 
@@ -186,8 +199,10 @@ func (s *EventSummarizer) runFinalOutputReview(
 	reviewCtx, cancel, ok := consensus.StageContext(ctx, s.consensus.ReviewTimeout)
 	if !ok {
 		s.logger.Warn("major event final output review skipped: insufficient budget")
+
 		return assembled, false
 	}
+
 	defer cancel()
 
 	raw, err := s.reviewer.GenerateJSON(
@@ -199,13 +214,16 @@ func (s *EventSummarizer) runFinalOutputReview(
 	if err != nil {
 		s.logger.Warn("major event final output review failed; keep assembled",
 			slog.String("error", err.Error()))
+
 		return assembled, false
 	}
 
 	var reviewed consensus.FinalOutputReviewResponse
+
 	if err := jsonv2.Unmarshal([]byte(raw), &reviewed); err != nil {
 		s.logger.Warn("major event final output review parse failed; keep assembled",
 			slog.String("error", err.Error()))
+
 		return assembled, false
 	}
 
@@ -217,6 +235,7 @@ func (s *EventSummarizer) runFinalOutputReview(
 	s.logger.Info("major event final output review applied",
 		slog.Int("before_length", len(trimmed)),
 		slog.Int("after_length", len(reviewedSummary)))
+
 	return reviewedSummary, true
 }
 
@@ -245,6 +264,7 @@ func buildReviewSummaryUserPrompt(
 	periodKey, primarySummaryJSON string,
 ) string {
 	eventBytes := marshalPromptJSON(events, "[]")
+
 	return fmt.Sprintf(`summary_type=%s
 period_key=%s
 
@@ -268,6 +288,7 @@ func buildAdjudicateSummaryUserPrompt(
 	periodKey, searchContext, primarySummaryJSON, verdictJSON string,
 ) string {
 	basePrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
+
 	return fmt.Sprintf(`primary_summary_json:
 %s
 
@@ -286,6 +307,7 @@ func buildFinalOutputReviewUserPrompt(
 	periodKey, assembled string,
 ) string {
 	eventBytes := marshalPromptJSON(events, "[]")
+
 	return fmt.Sprintf(`summary_type=%s
 period_key=%s
 

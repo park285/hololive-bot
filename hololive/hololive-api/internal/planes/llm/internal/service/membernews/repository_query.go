@@ -22,6 +22,7 @@ package membernews
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -31,23 +32,27 @@ import (
 
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if r.pool == nil {
-		return false, fmt.Errorf("membernews repository pool is nil")
+		return false, errors.New("membernews repository pool is nil")
 	}
 
 	query := mustSQL("repository_query_0037_01.sql")
+
 	var exists bool
+
 	if err := r.pool.QueryRow(ctx, query, roomID).Scan(&exists); err != nil {
 		return false, fmt.Errorf("is member news subscribed: %w", err)
 	}
+
 	return exists, nil
 }
 
 func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.SubscribedRoom, error) {
 	if r.pool == nil {
-		return nil, fmt.Errorf("membernews repository pool is nil")
+		return nil, errors.New("membernews repository pool is nil")
 	}
 
 	query := mustSQL("repository_query_0050_02.sql")
+
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("list member news rooms: %w", err)
@@ -55,22 +60,27 @@ func (r *Repository) ListSubscribedRooms(ctx context.Context) ([]model.Subscribe
 	defer rows.Close()
 
 	rooms := make([]model.SubscribedRoom, 0)
+
 	for rows.Next() {
 		var room model.SubscribedRoom
+
 		if scanErr := rows.Scan(&room.ID, &room.RoomID, &room.RoomName, &room.CreatedAt); scanErr != nil {
 			return nil, fmt.Errorf("scan member news room: %w", scanErr)
 		}
+
 		rooms = append(rooms, room)
 	}
+
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate member news rooms: %w", rowsErr)
 	}
+
 	return rooms, nil
 }
 
 func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]string, error) {
 	if r.pool == nil {
-		return nil, fmt.Errorf("membernews repository pool is nil")
+		return nil, errors.New("membernews repository pool is nil")
 	}
 
 	query := mustSQL("repository_query_0080_03.sql")
@@ -82,26 +92,31 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 	defer rows.Close()
 
 	members := make([]string, 0)
+
 	for rows.Next() {
 		var memberName string
+
 		if scanErr := rows.Scan(&memberName); scanErr != nil {
 			return nil, fmt.Errorf("scan room member: %w", scanErr)
 		}
+
 		if memberName != "" {
 			members = append(members, memberName)
 		}
 	}
+
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate room members: %w", rowsErr)
 	}
 
 	sort.Strings(members)
+
 	return members, nil
 }
 
 func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candidate, error) {
 	if r.pool == nil {
-		return nil, fmt.Errorf("membernews repository pool is nil")
+		return nil, errors.New("membernews repository pool is nil")
 	}
 
 	query := mustSQL("repository_query_0129_04.sql")
@@ -113,6 +128,7 @@ func (r *Repository) ListActiveMajorEvents(ctx context.Context) ([]model.Candida
 	defer rows.Close()
 
 	result := make([]model.Candidate, 0)
+
 	for rows.Next() {
 		var (
 			candidate model.Candidate

@@ -88,18 +88,23 @@ func TestBuildChannelContentAlarmTargetKeys(t *testing.T) {
 	if targets.ChannelID != "UCtarget" {
 		t.Fatalf("ChannelID = %q, want %q", targets.ChannelID, "UCtarget")
 	}
+
 	if targets.CommunitySubscribersKey != ChannelSubscribersCommunityPrefix+"UCtarget" {
 		t.Fatalf("CommunitySubscribersKey = %q", targets.CommunitySubscribersKey)
 	}
+
 	if targets.ShortsSubscribersKey != ChannelSubscribersShortsPrefix+"UCtarget" {
 		t.Fatalf("ShortsSubscribersKey = %q", targets.ShortsSubscribersKey)
 	}
+
 	if got := targets.KeyFor(domain.AlarmTypeCommunity); got != targets.CommunitySubscribersKey {
 		t.Fatalf("KeyFor(COMMUNITY) = %q, want %q", got, targets.CommunitySubscribersKey)
 	}
+
 	if got := targets.KeyFor(domain.AlarmTypeShorts); got != targets.ShortsSubscribersKey {
 		t.Fatalf("KeyFor(SHORTS) = %q, want %q", got, targets.ShortsSubscribersKey)
 	}
+
 	if got := targets.KeyFor(domain.AlarmTypeLive); got != "" {
 		t.Fatalf("KeyFor(LIVE) = %q, want empty", got)
 	}
@@ -129,9 +134,11 @@ func TestValidateChannelContentAlarmTargetDefinitions(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for missing channel id")
 		}
+
 		if !strings.Contains(err.Error(), "missing operating channel targets") {
 			t.Fatalf("error = %q, want missing operating channel targets", err)
 		}
+
 		if !strings.Contains(err.Error(), "Pekora") {
 			t.Fatalf("error = %q, want owner label", err)
 		}
@@ -147,12 +154,15 @@ func TestValidateChannelContentAlarmTargetDefinitions(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for duplicate channel targets")
 		}
+
 		if !strings.Contains(err.Error(), "duplicate deployment targets") {
 			t.Fatalf("error = %q, want duplicate deployment targets", err)
 		}
+
 		if !strings.Contains(err.Error(), "Miko:community duplicates Pekora:community") {
 			t.Fatalf("error = %q, want duplicate owner details", err)
 		}
+
 		if !strings.Contains(err.Error(), "Miko:shorts duplicates Pekora:shorts") {
 			t.Fatalf("error = %q, want duplicate shorts details", err)
 		}
@@ -195,6 +205,7 @@ func TestBuildTitleFingerprint_FullWidthPunctuationEquivalence(t *testing.T) {
 
 			fpA := BuildTitleFingerprint(tt.titleA, "stream-1")
 			fpB := BuildTitleFingerprint(tt.titleB, "stream-1")
+
 			if fpA != fpB {
 				t.Errorf("fingerprints differ: %q != %q (titleA=%q, titleB=%q)", fpA, fpB, tt.titleA, tt.titleB)
 			}
@@ -207,6 +218,7 @@ func TestBuildTitleFingerprint_DifferentTitles(t *testing.T) {
 
 	fpA := BuildTitleFingerprint("Minecraft配信", "s1")
 	fpB := BuildTitleFingerprint("Pokemon配信", "s1")
+
 	if fpA == fpB {
 		t.Error("different titles should produce different fingerprints")
 	}

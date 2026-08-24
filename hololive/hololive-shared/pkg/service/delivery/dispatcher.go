@@ -22,22 +22,16 @@ package delivery
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 type MessageSender interface {
@@ -48,14 +42,26 @@ type ClientRequestMessageSender interface {
 	SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error
 }
 
-type deliveryRepository interface {
+type deliveryOutboxClaimer interface {
 	FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+}
+
+type deliveryOutboxTransitioner interface {
 	MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
 	MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
 	MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+}
+
+type deliveryOutboxMaintainer interface {
 	QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int64, error)
 	CountByStatus(ctx context.Context, status domain.DeliveryOutboxStatus) (int64, error)
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
+}
+
+type deliveryRepository interface {
+	deliveryOutboxClaimer
+	deliveryOutboxTransitioner
+	deliveryOutboxMaintainer
 }
 
 const deliveryLease = 60 * time.Second
@@ -108,6 +114,7 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 	if d == nil {
 		return
 	}
+
 	d.workerTracker = tracker
 	d.workerTotals = totals
 }
@@ -116,16 +123,21 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	cfg := DispatcherConfig{}
+
 	if config != nil {
 		cfg = *config
 	}
+
 	cfg.applyDefaults()
+
 	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: util.InstanceID("delivery-dispatcher")}
 }
 
 func (c *DispatcherConfig) applyDefaults() {
 	defaults := DefaultDispatcherConfig()
+
 	c.BatchSize = positiveOr(c.BatchSize, defaults.BatchSize)
 	c.MaxConcurrent = positiveOr(c.MaxConcurrent, defaults.MaxConcurrent)
 	c.MaxRetries = positiveOr(c.MaxRetries, defaults.MaxRetries)
@@ -143,6 +155,7 @@ func positiveOr[T ~int | ~int64](value, fallback T) T {
 	if value <= 0 {
 		return fallback
 	}
+
 	return value
 }
 
@@ -157,10 +170,12 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 	if err := lifecycle.RunTickerLoop(ctx, d.config.PollInterval, func(ctx context.Context) error {
 		d.processOnce(ctx)
+
 		return nil
 	}); err != nil {
 		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.String("error", err.Error()))
 	}
+
 	d.logger.Info("Delivery dispatcher stopped")
 }
 
@@ -170,6 +185,7 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, d.config.LockTimeout, deliveryLease)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
+
 		return
 	}
 
@@ -186,8 +202,10 @@ func (d *Dispatcher) logAccumulatedFailures(ctx context.Context) {
 	cnt, err := d.repository.CountByStatus(ctx, domain.DeliveryStatusFailed)
 	if err != nil {
 		d.logger.Warn("Failed to count delivery outbox failures", slog.String("error", err.Error()))
+
 		return
 	}
+
 	if cnt > 5 {
 		d.logger.Error("delivery outbox accumulated failures", slog.Int64("count", cnt))
 	}
@@ -200,6 +218,7 @@ func (d *Dispatcher) cleanupIfDue(ctx context.Context) {
 		} else if cleaned > 0 {
 			d.logger.Info("Outbox cleanup completed", slog.Int64("removed", cleaned))
 		}
+
 		d.lastCleanupAt = time.Now()
 	}
 }
@@ -208,12 +227,14 @@ func (d *Dispatcher) quarantineStaleSendingIfDue(ctx context.Context) {
 	if !d.lastStaleSendingSweepAt.IsZero() && time.Since(d.lastStaleSendingSweepAt) < d.config.StaleSendingSweepInterval {
 		return
 	}
+
 	quarantined, err := d.repository.QuarantineStaleSending(ctx, d.config.StaleSendingAfter, d.config.StaleSendingSweepLimit)
 	if err != nil {
 		d.logger.Warn("Stale sending outbox sweep failed", slog.String("error", err.Error()))
 	} else if quarantined > 0 {
 		d.logger.Warn("Stale sending outbox rows quarantined", slog.Int64("count", quarantined))
 	}
+
 	d.lastStaleSendingSweepAt = time.Now()
 }
 
@@ -225,6 +246,7 @@ func (d *Dispatcher) processBatch(ctx context.Context, items []domain.Notificati
 	maxConcurrent := d.batchConcurrency(len(items))
 	if maxConcurrent <= 1 {
 		d.processBatchSequential(ctx, items)
+
 		return
 	}
 
@@ -235,9 +257,11 @@ func (d *Dispatcher) batchConcurrency(itemCount int) int {
 	if itemCount == 1 || d.config.MaxConcurrent <= 1 {
 		return 1
 	}
+
 	if d.config.MaxConcurrent > itemCount {
 		return itemCount
 	}
+
 	return d.config.MaxConcurrent
 }
 
@@ -249,6 +273,7 @@ func (d *Dispatcher) processBatchSequential(ctx context.Context, items []domain.
 
 func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.NotificationDeliveryOutbox, maxConcurrent int) {
 	var wg sync.WaitGroup
+
 	sem := make(chan struct{}, maxConcurrent)
 
 	for i := range items {
@@ -257,6 +282,7 @@ func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.
 		}
 
 		item := &items[i]
+
 		wg.Add(1)
 		d.processBatchItemAsync(ctx, item, sem, &wg)
 	}
@@ -268,12 +294,15 @@ func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, 
 	select {
 	case <-ctx.Done():
 		errText := "context canceled"
+
 		if err := ctx.Err(); err != nil {
 			errText = err.Error()
 		}
+
 		d.logger.Warn("Delivery batch canceled before completion",
 			slog.String("error", errText))
 		wg.Wait()
+
 		return false
 	case sem <- struct{}{}:
 		return true
@@ -284,114 +313,7 @@ func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.Not
 	panicguard.Go(d.logger, "delivery-dispatch-item", func() {
 		defer wg.Done()
 		defer func() { <-sem }()
+
 		d.processItem(ctx, item)
 	})
-}
-
-func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {
-	attemptID := d.workerTracker.BeginAttempt(time.Now())
-	outcome := workercontract.AttemptFailed
-	defer func() {
-		d.workerTracker.EndAttempt(attemptID)
-		d.workerTotals.RecordAttempt(outcome)
-	}()
-	var p outboxPayload
-	if err := jsonv2.Unmarshal([]byte(item.Payload), &p); err != nil {
-		d.logger.Error("Failed to unmarshal outbox payload",
-			slog.Int64("id", item.ID),
-			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, "payload unmarshal: "+err.Error())
-		return
-	}
-
-	if !d.markItemSending(ctx, item.ID) {
-		return
-	}
-
-	if err := d.sendMessage(ctx, item, p.Message); err != nil {
-		outcome = deliveryAttemptFailure(err)
-		d.logger.Error("Failed to send outbox message",
-			slog.Int64("id", item.ID),
-			privacylog.RoomIDAttr(item.RoomID),
-			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, err.Error())
-		return
-	}
-
-	if d.markItemSent(ctx, item.ID, item.LockedAt.Time) {
-		outcome = workercontract.AttemptSuccess
-	}
-}
-
-func deliveryAttemptFailure(err error) workercontract.AttemptOutcome {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return workercontract.AttemptTimeout
-	}
-	if errors.Is(err, context.Canceled) {
-		return workercontract.AttemptCanceled
-	}
-	return workercontract.AttemptFailed
-}
-
-func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
-	fenced, err := d.repository.MarkSending(ctx, id, d.workerID, deliveryLease)
-	if err != nil {
-		d.logger.Error("Failed to mark outbox item sending", slog.Int64("id", id), slog.String("error", err.Error()))
-		return false
-	}
-	if !fenced {
-		d.logger.Warn("Outbox item fence skipped sending transition", slog.Int64("id", id))
-		return false
-	}
-	return true
-}
-
-func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) bool {
-	fenced, err := d.repository.MarkSent(ctx, id, d.workerID, lockedAt)
-	if err != nil {
-		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.String("error", err.Error()))
-		return false
-	}
-	if !fenced {
-		d.logger.Warn("Outbox item re-claimed before mark sent; fence skipped transition", slog.Int64("id", id))
-		return false
-	}
-	return true
-}
-
-func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, lockedAt time.Time, reason string) {
-	fenced, err := d.repository.MarkFailed(ctx, id, d.workerID, lockedAt, d.config.MaxRetries, d.config.RetryBackoff, reason)
-	if err != nil {
-		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", id), slog.String("error", err.Error()))
-		return
-	}
-	if !fenced {
-		d.logger.Warn("Outbox item re-claimed before mark failed; fence skipped transition", slog.Int64("id", id))
-	}
-}
-
-func (d *Dispatcher) sendMessage(ctx context.Context, item *domain.NotificationDeliveryOutbox, message string) error {
-	if sender, ok := d.sender.(ClientRequestMessageSender); ok {
-		return sender.SendMessageWithClientRequestID(ctx, item.RoomID, message, notificationDeliveryClientRequestID(item))
-	}
-	return d.sender.SendMessage(ctx, item.RoomID, message)
-}
-
-// 이 결정적 ID는 Iris reply admission store의 멱등 키라, 재전송돼도 카톡 중복 송출이 막힌다.
-// 단 이 안전망은 Iris admission retention(168h) > outbox lease(lock_expires_at, 60s)일 때만 성립하며,
-// 대소가 뒤집히면 재전송분이 dedup window 밖이라 사용자에게 중복 알림이 간다.
-func notificationDeliveryClientRequestID(item *domain.NotificationDeliveryOutbox) string {
-	kind := ""
-	contentID := ""
-	roomID := ""
-	if item != nil {
-		kind = string(item.Kind)
-		contentID = item.ContentID
-		roomID = item.RoomID
-	}
-	if contentID == "" && item != nil {
-		contentID = strconv.FormatInt(item.ID, 10)
-	}
-	sum := sha256.Sum256([]byte(kind + "\x00" + contentID + "\x00" + roomID))
-	return "hololive-delivery:" + hex.EncodeToString(sum[:16])
 }

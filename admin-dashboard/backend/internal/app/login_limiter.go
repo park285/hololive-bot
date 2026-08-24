@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -27,8 +28,9 @@ type distributedLoginLimiter struct {
 func newDistributedLoginLimiter(ctx context.Context, valkeyURL string) (*distributedLoginLimiter, error) {
 	addr, password, err := parseLoginLimiterValkeyAddress(valkeyURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse login limiter valkey address: %w", err)
 	}
+
 	client, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:       []string{addr},
 		Password:          password,
@@ -42,12 +44,17 @@ func newDistributedLoginLimiter(ctx context.Context, valkeyURL string) (*distrib
 	if err != nil {
 		return nil, fmt.Errorf("create login limiter valkey client: %w", err)
 	}
+
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+
 	defer cancel()
+
 	if err := client.Do(pingCtx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
+
 		return nil, fmt.Errorf("login limiter valkey ping failed: %w", err)
 	}
+
 	return &distributedLoginLimiter{client: client}, nil
 }
 
@@ -63,18 +70,22 @@ func (l *distributedLoginLimiter) Check(ctx context.Context, ip, account string)
 	if l == nil || l.client == nil {
 		return 0, nil
 	}
+
 	keys := loginLimiterKeys(ip, account)
+
 	result, err := l.evalInt(ctx, loginLimiterCheckScript, keys, []string{
 		fmt.Sprint(loginIPFailureLimit),
 		fmt.Sprint(loginAccountFailureLimit),
 		fmt.Sprint(loginGlobalFailureLimit),
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval int: %w", err)
 	}
+
 	if result <= 0 {
 		return 0, nil
 	}
+
 	return time.Duration(result) * time.Second, nil
 }
 
@@ -82,12 +93,14 @@ func (l *distributedLoginLimiter) RecordFailure(ctx context.Context, ip, account
 	if l == nil || l.client == nil {
 		return 0, nil
 	}
+
 	result, err := l.evalInt(ctx, loginLimiterFailureScript, loginLimiterKeys(ip, account), []string{
 		fmt.Sprint(int(loginLimitWindow.Seconds())),
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eval int: %w", err)
 	}
+
 	return int(result), nil
 }
 
@@ -95,18 +108,29 @@ func (l *distributedLoginLimiter) RecordSuccess(ctx context.Context, ip, account
 	if l == nil || l.client == nil {
 		return nil
 	}
+
 	keys := loginLimiterKeys(ip, account)
-	_, err := l.evalInt(ctx, loginLimiterSuccessScript, keys[:2], nil)
-	return err
+	if _, err := l.evalInt(ctx, loginLimiterSuccessScript, keys[:2], nil); err != nil {
+		return fmt.Errorf("record login success: %w", err)
+	}
+
+	return nil
 }
 
 func (l *distributedLoginLimiter) evalInt(ctx context.Context, script string, keys, args []string) (int64, error) {
 	cmd := l.client.B().Eval().Script(script).Numkeys(int64(len(keys))).Key(keys...).Arg(args...).Build()
 	resp := l.client.Do(ctx, cmd)
+
 	if err := resp.Error(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("error: %w", err)
 	}
-	return resp.AsInt64()
+
+	out, err := resp.AsInt64()
+	if err != nil {
+		return out, fmt.Errorf("as int64: %w", err)
+	}
+
+	return out, nil
 }
 
 func loginLimiterKeys(ip, account string) []string {
@@ -127,13 +151,16 @@ func parseLoginLimiterValkeyAddress(value string) (addr, password string, err er
 	if !ok {
 		return value, "", nil
 	}
+
 	password = strings.TrimPrefix(userinfo, ":")
 	if decoded, decodeErr := url.QueryUnescape(password); decodeErr == nil {
 		password = decoded
 	}
+
 	if host == "" {
-		return "", "", fmt.Errorf("VALKEY_URL host is empty")
+		return "", "", errors.New("VALKEY_URL host is empty")
 	}
+
 	return host, password, nil
 }
 

@@ -28,13 +28,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-var (
-	ErrNoSubscribedMembers = errors.New("no subscribed members")
-)
+var ErrNoSubscribedMembers = errors.New("no subscribed members")
 
 type Period string
 

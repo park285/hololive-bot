@@ -42,9 +42,11 @@ func calculateNextRunAtHour(now time.Time, hourKST int) time.Time {
 		0,
 		kstLocation,
 	)
+
 	if !target.After(nowKST) {
 		target = target.AddDate(0, 0, 1)
 	}
+
 	return target.UTC()
 }
 

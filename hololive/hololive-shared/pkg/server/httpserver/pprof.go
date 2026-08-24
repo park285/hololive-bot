@@ -14,9 +14,10 @@ import (
 
 func NewPprofServer(ctx context.Context, addr, apiKey string) *http.Server {
 	router := newReleaseModeEngine()
-	ApplyBaseMiddleware(router, ctx, nil, BaseMiddlewareOptions{
+	ApplyBaseMiddleware(ctx, router, nil, BaseMiddlewareOptions{
 		SkipLogPaths: []string{"/debug/pprof*"},
 	})
+
 	group := router.Group("/debug/pprof")
 	group.Use(loopbackAwareAuthMiddleware(addr, apiKey))
 	group.GET("/", gin.WrapF(pprof.Index))
@@ -41,9 +42,11 @@ func loopbackAwareAuthMiddleware(addr, apiKey string) gin.HandlerFunc {
 	if apiKey != "" {
 		return middleware.APIKeyAuthMiddleware(apiKey)
 	}
+
 	if isLoopbackListenAddr(addr) {
 		return func(c *gin.Context) { c.Next() }
 	}
+
 	return func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) }
 }
 
@@ -52,9 +55,12 @@ func isLoopbackListenAddr(addr string) bool {
 	if err != nil {
 		host = addr
 	}
+
 	if host == "localhost" {
 		return true
 	}
+
 	ip := net.ParseIP(host)
+
 	return ip != nil && ip.IsLoopback()
 }

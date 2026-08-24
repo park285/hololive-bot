@@ -30,43 +30,51 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
+func serveTriggerRouterRequest(t *testing.T, router http.Handler, method, path, apiKey string) int {
+	t.Helper()
+
+	request := httptest.NewRequestWithContext(t.Context(), method, path, http.NoBody)
+
+	if apiKey != "" {
+		request.Header.Set("X-Api-Key", apiKey)
+	}
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	return recorder.Code
+}
+
 func TestProvideTriggerRouter_Branches(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil trigger handler keeps health only", func(t *testing.T) {
+		t.Parallel()
+
 		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, nil, "api-key")
 		if err != nil {
 			t.Fatalf("NewTriggerRuntimeRouter() error = %v", err)
 		}
 
-		healthReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", http.NoBody)
-		healthRes := httptest.NewRecorder()
-		router.ServeHTTP(healthRes, healthReq)
-
-		if healthRes.Code != http.StatusOK {
-			t.Fatalf("/health status = %d, want %d", healthRes.Code, http.StatusOK)
+		if code := serveTriggerRouterRequest(t, router, http.MethodGet, "/health", ""); code != http.StatusOK {
+			t.Fatalf("/health status = %d, want %d", code, http.StatusOK)
 		}
 
-		readyReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
-		readyRes := httptest.NewRecorder()
-		router.ServeHTTP(readyRes, readyReq)
-
-		if readyRes.Code != http.StatusOK {
-			t.Fatalf("/ready status = %d, want %d", readyRes.Code, http.StatusOK)
+		if code := serveTriggerRouterRequest(t, router, http.MethodGet, "/ready", ""); code != http.StatusOK {
+			t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
 		}
 
-		triggerReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
-		triggerRes := httptest.NewRecorder()
-		router.ServeHTTP(triggerRes, triggerReq)
-
-		if triggerRes.Code != http.StatusNotFound {
-			t.Fatalf("trigger status = %d, want %d", triggerRes.Code, http.StatusNotFound)
+		code := serveTriggerRouterRequest(t, router, http.MethodPost, triggercontracts.MajorEventWeeklyPath, "")
+		if code != http.StatusNotFound {
+			t.Fatalf("trigger status = %d, want %d", code, http.StatusNotFound)
 		}
 	})
 
 	t.Run("trigger routes require api key and are registered", func(t *testing.T) {
+		t.Parallel()
+
 		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
 		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "api-key")
@@ -74,26 +82,20 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 			t.Fatalf("NewTriggerRuntimeRouter() error = %v", err)
 		}
 
-		noAuthReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
-		noAuthRes := httptest.NewRecorder()
-		router.ServeHTTP(noAuthRes, noAuthReq)
-
-		if noAuthRes.Code != http.StatusUnauthorized {
-			t.Fatalf("trigger status without api key = %d, want %d", noAuthRes.Code, http.StatusUnauthorized)
+		noAuth := serveTriggerRouterRequest(t, router, http.MethodPost, triggercontracts.MajorEventWeeklyPath, "")
+		if noAuth != http.StatusUnauthorized {
+			t.Fatalf("trigger status without api key = %d, want %d", noAuth, http.StatusUnauthorized)
 		}
 
-		withAuthReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, triggercontracts.MajorEventWeeklyPath, http.NoBody)
-		withAuthReq.Header.Set("X-Api-Key", "api-key")
-
-		withAuthRes := httptest.NewRecorder()
-		router.ServeHTTP(withAuthRes, withAuthReq)
-
-		if withAuthRes.Code != http.StatusServiceUnavailable {
-			t.Fatalf("trigger status with api key = %d, want %d", withAuthRes.Code, http.StatusServiceUnavailable)
+		withAuth := serveTriggerRouterRequest(t, router, http.MethodPost, triggercontracts.MajorEventWeeklyPath, "api-key")
+		if withAuth != http.StatusServiceUnavailable {
+			t.Fatalf("trigger status with api key = %d, want %d", withAuth, http.StatusServiceUnavailable)
 		}
 	})
 
 	t.Run("trigger routes fail closed when api key missing", func(t *testing.T) {
+		t.Parallel()
+
 		triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 
 		router, err := sharedserver.NewTriggerRuntimeRouter(t.Context(), logger, triggerHandler, "")
@@ -105,8 +107,8 @@ func TestProvideTriggerRouter_Branches(t *testing.T) {
 			t.Fatal("NewTriggerRuntimeRouter() router = non-nil, want nil")
 		}
 
-		if err.Error() != "API_SECRET_KEY required" {
-			t.Fatalf("NewTriggerRuntimeRouter() error = %q, want %q", err.Error(), "API_SECRET_KEY required")
+		if err.Error() != "runtime router: register routes: API_SECRET_KEY required" {
+			t.Fatalf("NewTriggerRuntimeRouter() error = %q, want %q", err.Error(), "runtime router: register routes: API_SECRET_KEY required")
 		}
 	})
 }

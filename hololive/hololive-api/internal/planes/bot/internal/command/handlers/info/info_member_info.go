@@ -26,12 +26,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type MemberInfoCommand struct {
@@ -61,14 +61,47 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 	channelID := getStringParam(params, "channel_id")
 
 	if hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID) {
-		return c.renderMemberDirectory(ctx, cmdCtx)
+		if err := c.renderMemberDirectory(ctx, cmdCtx); err != nil {
+			return fmt.Errorf("render member directory: %w", err)
+		}
+
+		return nil
 	}
 
-	member := c.resolveMember(ctx, channelID, englishCandidate, rawQuery)
+	member, err := c.resolveRequestedMember(ctx, cmdCtx.Room, channelID, englishCandidate, rawQuery)
+	if errors.Is(err, handlercore.ErrMemberLookupHandled) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("resolve requested member: %w", err)
+	}
+
 	if member == nil {
-		return c.sendMemberNotFound(ctx, cmdCtx.Room, englishCandidate, rawQuery)
+		return nil
 	}
 
+	if err := c.sendMemberProfile(ctx, cmdCtx.Room, member); err != nil {
+		return fmt.Errorf("send member profile: %w", err)
+	}
+
+	return nil
+}
+
+func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, channelID, englishCandidate, rawQuery string) (*domain.Member, error) {
+	member := c.resolveMember(ctx, channelID, englishCandidate, rawQuery)
+	if member != nil {
+		return member, nil
+	}
+
+	if err := c.sendMemberNotFound(ctx, room, englishCandidate, rawQuery); err != nil {
+		return nil, fmt.Errorf("send member not found: %w", err)
+	}
+
+	return nil, handlercore.ErrMemberLookupHandled
+}
+
+func (c *MemberInfoCommand) sendMemberProfile(ctx context.Context, room string, member *domain.Member) error {
 	rawProfile, translated, err := c.Deps().OfficialProfiles.GetWithTranslation(ctx, member.Name)
 	if err != nil {
 		c.log().Error("Failed to load member profile",
@@ -76,19 +109,31 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 			slog.Any("error", err),
 		)
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberProfileLoadFailed)
+		if err := c.Deps().SendError(ctx, room, messaging.ErrMemberProfileLoadFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	message := c.Deps().Formatter.FormatTalentProfile(ctx, rawProfile, translated)
 	if message == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberProfileBuildFailed)
+		if err := c.Deps().SendError(ctx, room, messaging.ErrMemberProfileBuildFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	if member.IsGraduated {
 		message = c.Deps().Formatter.GraduatedMemberWarning(ctx) + message
 	}
 
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func hasNoMemberInfoQuery(rawQuery, englishCandidate, channelID string) bool {
@@ -103,7 +148,11 @@ func (c *MemberInfoCommand) sendMemberNotFound(ctx context.Context, room, englis
 		target = rawQuery
 	}
 
-	return c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, target))
+	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.MemberNotFound(ctx, target)); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MemberInfoCommand) ensureDeps() error {
@@ -135,7 +184,7 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 		return nil
 	}
 
-	channel, err := c.Deps().Matcher.FindBestMatch(ctx, trimmed)
+	channel, found, err := c.Deps().Matcher.FindBestMatch(ctx, trimmed)
 	if err != nil {
 		c.log().Warn("Member match failed",
 			slog.String("query_token", privacylog.Pseudonym(trimmed)),
@@ -145,7 +194,13 @@ func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englis
 		return nil
 	}
 
+	if !found {
+		return nil
+	}
+
 	if channel == nil {
+		c.log().Error("Member matcher returned found without channel")
+
 		return nil
 	}
 

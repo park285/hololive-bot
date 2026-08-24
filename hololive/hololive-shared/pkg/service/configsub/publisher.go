@@ -22,9 +22,10 @@ package configsub
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -46,29 +47,41 @@ func NewPublisher(client valkey.Client) *Publisher {
 
 // PublishScraperProxy는 scraper proxy 설정 변경을 발행합니다.
 func (p *Publisher) PublishScraperProxy(ctx context.Context, enabled bool) error {
-	return p.publish(ctx, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{
+	if err := p.publish(ctx, contractssettings.UpdateTypeScraperProxy, contractssettings.ScraperProxyPayloadV1{
 		Enabled: enabled,
-	})
+	}); err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+
+	return nil
 }
 
 // PublishAlarmAdvanceMinutes는 alarm advance minutes 변경을 발행합니다.
 func (p *Publisher) PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error {
-	return p.publish(ctx, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{
+	if err := p.publish(ctx, contractssettings.UpdateTypeAlarmAdvanceMinutes, contractssettings.AlarmAdvanceMinutesPayloadV1{
 		Minutes: minutes,
-	})
+	}); err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Publisher) PublishACL(ctx context.Context, reason, room, mode string) error {
-	return p.publish(ctx, contractssettings.UpdateTypeACL, contractssettings.ACLPayloadV1{
+	if err := p.publish(ctx, contractssettings.UpdateTypeACL, contractssettings.ACLPayloadV1{
 		Reason: reason,
 		Room:   room,
 		Mode:   mode,
-	})
+	}); err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Publisher) publish(ctx context.Context, updateType string, payload any) error {
 	if p == nil || p.client == nil {
-		return fmt.Errorf("publish config update: client is nil")
+		return errors.New("publish config update: client is nil")
 	}
 
 	rawPayload, err := jsonv2.Marshal(payload)
@@ -80,6 +93,7 @@ func (p *Publisher) publish(ctx context.Context, updateType string, payload any)
 		Type:    updateType,
 		Payload: rawPayload,
 	}
+
 	rawUpdate, err := jsonv2.Marshal(update)
 	if err != nil {
 		return fmt.Errorf("publish config update: marshal update: %w", err)
@@ -89,5 +103,6 @@ func (p *Publisher) publish(ctx context.Context, updateType string, payload any)
 	if err := p.client.Do(ctx, cmd).Error(); err != nil {
 		return fmt.Errorf("publish config update: publish %s: %w", updateType, err)
 	}
+
 	return nil
 }

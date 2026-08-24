@@ -27,6 +27,11 @@ import (
 
 const ChzzkTimeLayout = time.DateTime
 
+const (
+	statusOpen  = "OPEN"
+	statusClose = "CLOSE"
+)
+
 type LiveStatusResponse struct {
 	Code    int                `json:"code"`
 	Message string             `json:"message"`
@@ -38,7 +43,7 @@ type LiveStatusContent struct {
 	Status              string `json:"status"`
 	ConcurrentUserCount int    `json:"concurrentUserCount"`
 	LiveCategoryValue   string `json:"liveCategoryValue"`
-	ChatChannelId       string `json:"chatChannelId"`
+	ChatChannelID       string `json:"chatChannelId"`
 }
 
 type ScheduledLivesResponse struct {
@@ -52,7 +57,7 @@ type ScheduledLivesContent struct {
 }
 
 type ScheduledLive struct {
-	LiveId           int    `json:"liveId"`
+	LiveID           int    `json:"liveId"`
 	LiveTitle        string `json:"liveTitle"`
 	ScheduledStartAt string `json:"scheduledStartAt"`
 }

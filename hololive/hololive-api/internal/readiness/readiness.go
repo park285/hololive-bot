@@ -17,6 +17,7 @@ func Pick(probes ...*sharedreadiness.Probe) *sharedreadiness.Probe {
 			return p
 		}
 	}
+
 	return nil
 }
 
@@ -24,8 +25,10 @@ func GinHandler(ctx context.Context, p *sharedreadiness.Probe) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if p == nil {
 			ginjson.Respond(c, http.StatusOK, map[string]any{"status": "ready", "health": health.Get()})
+
 			return
 		}
+
 		statusCode, payload := evaluate(sharedreadiness.RequestContext(ctx, c), p)
 		ginjson.Respond(c, statusCode, payload)
 	}
@@ -36,8 +39,10 @@ func evaluate(ctx context.Context, p *sharedreadiness.Probe) (statusCode int, pa
 	ready, groups := p.Evaluate(ctx)
 	dependencies := groups[sharedreadiness.GroupDependencies]
 	statusCode, status := sharedreadiness.HTTPStatus(ready)
+
 	payload = sharedreadiness.BasePayload(base, status)
 	payload["plane"] = p.Name()
 	payload["dependencies"] = dependencies
+
 	return statusCode, payload
 }

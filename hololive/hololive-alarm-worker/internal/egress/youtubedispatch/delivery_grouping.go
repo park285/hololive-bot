@@ -19,11 +19,13 @@ func groupDeliveryRows(
 	}
 
 	index := make(map[string]int)
+
 	groups = make([]deliveryGroup, 0, len(rows))
 
 	for i := range rows {
 		row := rows[i]
 		outbox, ok := outboxByID[row.OutboxID]
+
 		if !ok {
 			orphanRows = append(orphanRows, row)
 			continue
@@ -37,6 +39,7 @@ func groupDeliveryRows(
 				rows:      []domain.YouTubeNotificationDelivery{row},
 				outboxes:  []domain.YouTubeNotificationOutbox{outbox},
 			})
+
 			continue
 		}
 
@@ -44,6 +47,7 @@ func groupDeliveryRows(
 		if idx, exists := index[key]; exists {
 			groups[idx].rows = append(groups[idx].rows, row)
 			groups[idx].outboxes = append(groups[idx].outboxes, outbox)
+
 			continue
 		}
 

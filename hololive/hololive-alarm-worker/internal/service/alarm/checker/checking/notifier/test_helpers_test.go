@@ -17,5 +17,6 @@ func newCheckerTestLogger() *slog.Logger {
 
 func newCheckerTestCacheClient(t *testing.T) cache.Client {
 	t.Helper()
-	return testutil.NewTestCacheService(t, t.Context())
+
+	return testutil.NewTestCacheService(t.Context(), t)
 }

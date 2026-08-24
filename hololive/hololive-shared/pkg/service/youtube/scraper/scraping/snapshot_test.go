@@ -50,7 +50,7 @@ func TestRecordParserDriftCapturesSnapshotWhenEnabled(t *testing.T) {
 		}),
 	)
 
-	err := client.recordParserDrift(context.Background(), "upcoming_events", "extract", "UC_TEST", "https://example.test", FailureSourceHTML, "abcdef", errors.New("marker missing"))
+	err := client.recordParserDrift(t.Context(), "upcoming_events", "extract", "UC_TEST", "https://example.test", FailureSourceHTML, "abcdef", errors.New("marker missing"))
 
 	require.Error(t, err)
 	require.Len(t, sink.snapshots, 1)

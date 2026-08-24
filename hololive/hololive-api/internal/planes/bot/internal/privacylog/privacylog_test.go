@@ -13,6 +13,7 @@ func TestRoomIDAttrKeepsCanonicalIdentifiers(t *testing.T) {
 		if attr.Key != KeyRoomID {
 			t.Fatalf("key = %q, want %q", attr.Key, KeyRoomID)
 		}
+
 		if got, want := attr.Value.String(), strings.TrimSpace(room); got != want {
 			t.Fatalf("RoomIDAttr(%q) = %q, want %q", room, got, want)
 		}
@@ -28,12 +29,15 @@ func TestRoomIDAttrPseudonymizesNonCanonicalIdentifiers(t *testing.T) {
 	if strings.Contains(got, title) {
 		t.Fatalf("room_id = %q, want the room title to be absent", got)
 	}
+
 	if !strings.HasPrefix(got, PseudonymPrefix) {
 		t.Fatalf("room_id = %q, want the %q prefix", got, PseudonymPrefix)
 	}
+
 	if got != RoomIDAttr(title).Value.String() {
 		t.Fatal("pseudonym must be stable for the same input")
 	}
+
 	if got == RoomIDAttr(title+"2").Value.String() {
 		t.Fatal("distinct rooms must not share a pseudonym")
 	}
@@ -48,6 +52,7 @@ func TestChatIDAttrSharesTheRoomIDTreatment(t *testing.T) {
 	if attr.Key != KeyChatID {
 		t.Fatalf("key = %q, want %q", attr.Key, KeyChatID)
 	}
+
 	if attr.Value.String() != RoomIDAttr(title).Value.String() {
 		t.Fatalf("chat_id token = %q, want the room_id token %q", attr.Value.String(), RoomIDAttr(title).Value.String())
 	}
@@ -60,6 +65,7 @@ func TestBlankIdentifiersBecomeUnknown(t *testing.T) {
 		if got := RoomIDAttr(value).Value.String(); got != UnknownToken {
 			t.Fatalf("RoomIDAttr(%q) = %q, want %q", value, got, UnknownToken)
 		}
+
 		if got := Pseudonym(value); got != UnknownToken {
 			t.Fatalf("Pseudonym(%q) = %q, want %q", value, got, UnknownToken)
 		}
@@ -76,6 +82,7 @@ func TestPseudonymNeverEchoesItsInput(t *testing.T) {
 		if strings.Contains(got, value) {
 			t.Fatalf("Pseudonym(%q) = %q, want the input to be absent", value, got)
 		}
+
 		if got != Pseudonym(value) {
 			t.Fatalf("Pseudonym(%q) is not deterministic", value)
 		}

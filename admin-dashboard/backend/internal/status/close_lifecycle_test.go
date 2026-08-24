@@ -26,7 +26,7 @@ func newCountingSampler(t *testing.T) (*Sampler, *countingTransport) {
 	transport := &countingTransport{}
 
 	return &Sampler{
-		endpoints: []ServiceEndpoint{{Name: "probe", URL: "https://probe.invalid", HealthPath: "/health"}},
+		endpoints: []ServiceEndpoint{{Name: "probe", URL: "https://probe.invalid", HealthPath: testHealthPath}},
 		clients: map[string]endpointClient{
 			"probe": {client: &http.Client{Transport: transport}},
 		},
@@ -74,9 +74,10 @@ func TestCollectorDoesNotCloseABorrowedSampler(t *testing.T) {
 func TestCollectorClosesTheSamplerItCreated(t *testing.T) {
 	t.Parallel()
 
-	collector := NewCollector([]ServiceEndpoint{{Name: "probe", URL: "https://probe.invalid", HealthPath: "/health"}}, "v-test")
+	collector := NewCollector([]ServiceEndpoint{{Name: "probe", URL: "https://probe.invalid", HealthPath: testHealthPath}}, "v-test")
 
 	transport := &countingTransport{}
+
 	collector.sampler.clients = map[string]endpointClient{"probe": {client: &http.Client{Transport: transport}}}
 
 	if err := collector.Close(); err != nil {

@@ -2,11 +2,10 @@ package youtubedispatch
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
@@ -22,22 +21,27 @@ func (d *ClaimManager) finalizeClaimSuccess(
 	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
 	claimAt time.Time,
-) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
+) (claimResult, error) {
 	state, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim success")
 	if err != nil {
-		return deliveryClaimDecisionRetryLater, nil, err
-	}
-	if alreadyCompleted {
-		return deliveryClaimDecisionAlreadySent, nil, nil
-	}
-	if state == nil || state.AuthorizedAt == nil || !state.AuthorizedAt.UTC().Equal(claimAt) {
-		return deliveryClaimDecisionRetryLater, nil, nil
+		return claimResult{decision: deliveryClaimDecisionRetryLater}, fmt.Errorf("reload alarm state claim status: %w", err)
 	}
 
-	return deliveryClaimDecisionProceed, &dispatchstate.ClaimToken{
-		Kind:         outbox.Kind,
-		PostID:       postID,
-		AuthorizedAt: claimAt,
+	if alreadyCompleted {
+		return claimResult{decision: deliveryClaimDecisionAlreadySent}, nil
+	}
+
+	if state == nil || state.AuthorizedAt == nil || !state.AuthorizedAt.UTC().Equal(claimAt) {
+		return claimResult{decision: deliveryClaimDecisionRetryLater}, nil
+	}
+
+	return claimResult{
+		decision: deliveryClaimDecisionProceed,
+		claimToken: &dispatchstate.ClaimToken{
+			Kind:         outbox.Kind,
+			PostID:       postID,
+			AuthorizedAt: claimAt,
+		},
 	}, nil
 }
 
@@ -46,16 +50,17 @@ func (d *ClaimManager) finalizeClaimMiss(
 	repository *observation.PgxRepository,
 	outbox *domain.YouTubeNotificationOutbox,
 	postID string,
-) (deliveryClaimDecision, *dispatchstate.ClaimToken, error) {
+) (claimResult, error) {
 	_, alreadyCompleted, err := d.reloadAlarmStateClaimStatus(ctx, repository, outbox, postID, "reload alarm state after claim miss")
 	if err != nil {
-		return deliveryClaimDecisionRetryLater, nil, err
-	}
-	if alreadyCompleted {
-		return deliveryClaimDecisionAlreadySent, nil, nil
+		return claimResult{decision: deliveryClaimDecisionRetryLater}, fmt.Errorf("reload alarm state claim status: %w", err)
 	}
 
-	return deliveryClaimDecisionRetryLater, nil, nil
+	if alreadyCompleted {
+		return claimResult{decision: deliveryClaimDecisionAlreadySent}, nil
+	}
+
+	return claimResult{decision: deliveryClaimDecisionRetryLater}, nil
 }
 
 func (d *ClaimManager) reloadAlarmStateClaimStatus(
@@ -72,7 +77,7 @@ func (d *ClaimManager) reloadAlarmStateClaimStatus(
 
 	alreadyCompleted, err := d.isCommunityShortsDeliveryAlreadyCompleted(ctx, repository, outbox, state)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("is community shorts delivery already completed: %w", err)
 	}
 
 	return state, alreadyCompleted, nil
@@ -82,12 +87,7 @@ func (d *ClaimManager) loadClaimTrackingRow(
 	ctx context.Context,
 	repository *observation.PgxRepository,
 	outbox *domain.YouTubeNotificationOutbox,
-	state *domain.YouTubeCommunityShortsAlarmState,
 ) (*domain.YouTubeContentAlarmTracking, error) {
-	if !claimNeedsTrackingRow(state) {
-		return nil, nil
-	}
-
 	trackingRow, err := repository.FindByIdentity(ctx, outbox.Kind, outbox.ContentID)
 	if err != nil {
 		return nil, fmt.Errorf("load tracking row: %w", err)
@@ -146,6 +146,7 @@ func resolveClaimDetectedAt(
 			return yttimestamp.Normalize(candidate)
 		}
 	}
+
 	return yttimestamp.Normalize(claimAt)
 }
 
@@ -157,18 +158,23 @@ func claimDetectedAtCandidates(
 	claimAt time.Time,
 ) []time.Time {
 	candidates := make([]time.Time, 0, 5)
+
 	if state != nil {
 		candidates = append(candidates, state.DetectedAt)
 	}
+
 	if trackingRow != nil {
 		candidates = append(candidates, trackingRow.DetectedAt)
 	}
+
 	if outbox != nil {
 		candidates = append(candidates, outbox.CreatedAt)
 	}
+
 	if row != nil {
 		candidates = append(candidates, row.CreatedAt)
 	}
+
 	return append(candidates, claimAt)
 }
 
@@ -191,6 +197,7 @@ func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Ti
 	if outbox == nil {
 		return nil
 	}
+
 	switch outbox.Kind {
 	case domain.OutboxKindNewShort, domain.OutboxKindNewVideo:
 		return resolveVideoPayloadPublishedAt(outbox.Payload)
@@ -199,21 +206,26 @@ func resolveOutboxPublishedAt(outbox *domain.YouTubeNotificationOutbox) *time.Ti
 	case domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
 		return nil
 	}
+
 	return nil
 }
 
 func resolveVideoPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload format.VideoPayload
+
 	if err := jsonv2.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
 	}
+
 	return yttimestamp.NormalizePtr(payload.PublishedAt)
 }
 
 func resolveCommunityPayloadPublishedAt(rawPayload string) *time.Time {
 	var payload format.CommunityPayload
+
 	if err := jsonv2.Unmarshal([]byte(rawPayload), &payload); err != nil {
 		return nil
 	}
+
 	return yttimestamp.NormalizePtr(payload.PublishedAt)
 }

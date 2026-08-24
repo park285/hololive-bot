@@ -5,103 +5,138 @@ import (
 	"testing"
 )
 
+func wantHighlightItemSchema() map[string]any {
+	return map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
+			wantFieldName: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "행사명 — 일본어 원제 유지, 번역 금지",
+			},
+			wantFieldDate: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
+			},
+			wantFieldMembers: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
+			},
+			wantFieldNote: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
+				wantKeyMaxLength:   30,
+			},
+			wantFieldLink: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "입력 행사 link 그대로 전달",
+			},
+		},
+		wantKeyRequired: []string{wantFieldName, wantFieldDate, wantFieldMembers, wantFieldNote, wantFieldLink},
+	}
+}
+
+func wantOngoingItemSchema() map[string]any {
+	return map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
+			wantFieldName: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "행사명",
+			},
+			wantFieldDate: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "날짜 — M/D(요일)~M/D(요일)",
+			},
+			wantFieldNote: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "행사 설명 — 30자 이내 한국어",
+				wantKeyMaxLength:   30,
+			},
+			wantFieldLink: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "입력 행사 link 그대로 전달",
+			},
+		},
+		wantKeyRequired: []string{wantFieldName, wantFieldDate, wantFieldNote, wantFieldLink},
+	}
+}
+
+func wantDiscoveredItemSchema() map[string]any {
+	return map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
+			wantFieldName: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "행사명 — 공식 명칭 사용",
+			},
+			wantFieldDate: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
+			},
+			wantFieldNote: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "행사 설명 — 30자 이내 한국어",
+				wantKeyMaxLength:   30,
+			},
+			wantFieldSource: map[string]any{
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
+			},
+		},
+		wantKeyRequired: []string{wantFieldName, wantFieldDate, wantFieldNote, wantFieldSource},
+	}
+}
+
+func wantReviewIssueSchema() map[string]any {
+	return map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
+			"field": map[string]any{
+				wantKeyType: wantTypeString,
+			},
+			"item_index": map[string]any{
+				wantKeyType: "integer",
+			},
+			"severity": map[string]any{
+				wantKeyType: wantTypeString,
+				"enum":      []string{severityCritical, severityWarning, severityInfo},
+			},
+			"description": map[string]any{
+				wantKeyType: wantTypeString,
+			},
+		},
+		wantKeyRequired: []string{"field", "item_index", "severity", "description"},
+	}
+}
+
 func TestSummaryResponseSchema_Golden(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
 			"highlights": map[string]any{
-				"type":        "array",
-				"description": "행사별 하이라이트 (날짜순 정렬)",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"name": map[string]any{
-							"type":        "string",
-							"description": "행사명 — 일본어 원제 유지, 번역 금지",
-						},
-						"date": map[string]any{
-							"type":        "string",
-							"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-						},
-						"members": map[string]any{
-							"type":        "string",
-							"description": "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
-						},
-						"note": map[string]any{
-							"type":        "string",
-							"description": "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
-							"maxLength":   30,
-						},
-						"link": map[string]any{
-							"type":        "string",
-							"description": "입력 행사 link 그대로 전달",
-						},
-					},
-					"required": []string{"name", "date", "members", "note", "link"},
-				},
+				wantKeyType:        wantTypeArray,
+				wantKeyDescription: "행사별 하이라이트 (날짜순 정렬)",
+				"items":            wantHighlightItemSchema(),
 			},
 			"ongoing_events": map[string]any{
-				"type":        "array",
-				"description": "기간 행사(팝업/카페/굿즈) 목록",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"name": map[string]any{
-							"type":        "string",
-							"description": "행사명",
-						},
-						"date": map[string]any{
-							"type":        "string",
-							"description": "날짜 — M/D(요일)~M/D(요일)",
-						},
-						"note": map[string]any{
-							"type":        "string",
-							"description": "행사 설명 — 30자 이내 한국어",
-							"maxLength":   30,
-						},
-						"link": map[string]any{
-							"type":        "string",
-							"description": "입력 행사 link 그대로 전달",
-						},
-					},
-					"required": []string{"name", "date", "note", "link"},
-				},
+				wantKeyType:        wantTypeArray,
+				wantKeyDescription: "기간 행사(팝업/카페/굿즈) 목록",
+				"items":            wantOngoingItemSchema(),
 			},
 			"discovered_events": map[string]any{
-				"type":        "array",
-				"description": "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"name": map[string]any{
-							"type":        "string",
-							"description": "행사명 — 공식 명칭 사용",
-						},
-						"date": map[string]any{
-							"type":        "string",
-							"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-						},
-						"note": map[string]any{
-							"type":        "string",
-							"description": "행사 설명 — 30자 이내 한국어",
-							"maxLength":   30,
-						},
-						"source": map[string]any{
-							"type":        "string",
-							"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
-						},
-					},
-					"required": []string{"name", "date", "note", "source"},
-				},
+				wantKeyType:        wantTypeArray,
+				wantKeyDescription: "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
+				"items":            wantDiscoveredItemSchema(),
 			},
 		},
-		"required": []string{"highlights", "ongoing_events", "discovered_events"},
+		wantKeyRequired: []string{"highlights", "ongoing_events", "discovered_events"},
 	}
 
 	if got := summaryResponseSchema(); !reflect.DeepEqual(got, want) {
@@ -112,103 +147,24 @@ func TestSummaryResponseSchema_Golden(t *testing.T) {
 func TestSummaryHighlightItemSchema_Golden(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명 — 일본어 원제 유지, 번역 금지",
-			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-			},
-			"members": map[string]any{
-				"type":        "string",
-				"description": "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
-			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
-				"maxLength":   30,
-			},
-			"link": map[string]any{
-				"type":        "string",
-				"description": "입력 행사 link 그대로 전달",
-			},
-		},
-		"required": []string{"name", "date", "members", "note", "link"},
-	}
-
-	if got := summaryHighlightItemSchema(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("summaryHighlightItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, want)
+	if got := summaryHighlightItemSchema(); !reflect.DeepEqual(got, wantHighlightItemSchema()) {
+		t.Fatalf("summaryHighlightItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, wantHighlightItemSchema())
 	}
 }
 
 func TestSummaryOngoingItemSchema_Golden(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명",
-			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일)~M/D(요일)",
-			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 설명 — 30자 이내 한국어",
-				"maxLength":   30,
-			},
-			"link": map[string]any{
-				"type":        "string",
-				"description": "입력 행사 link 그대로 전달",
-			},
-		},
-		"required": []string{"name", "date", "note", "link"},
-	}
-
-	if got := summaryOngoingItemSchema(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("summaryOngoingItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, want)
+	if got := summaryOngoingItemSchema(); !reflect.DeepEqual(got, wantOngoingItemSchema()) {
+		t.Fatalf("summaryOngoingItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, wantOngoingItemSchema())
 	}
 }
 
 func TestSummaryDiscoveredItemSchema_Golden(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명 — 공식 명칭 사용",
-			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
-			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 설명 — 30자 이내 한국어",
-				"maxLength":   30,
-			},
-			"source": map[string]any{
-				"type":        "string",
-				"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
-			},
-		},
-		"required": []string{"name", "date", "note", "source"},
-	}
-
-	if got := summaryDiscoveredItemSchema(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("summaryDiscoveredItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, want)
+	if got := summaryDiscoveredItemSchema(); !reflect.DeepEqual(got, wantDiscoveredItemSchema()) {
+		t.Fatalf("summaryDiscoveredItemSchema() golden mismatch\n got: %#v\nwant: %#v", got, wantDiscoveredItemSchema())
 	}
 }
 
@@ -216,42 +172,23 @@ func TestReviewSummarySchema_Golden(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
 			"approved": map[string]any{
-				"type": "boolean",
+				wantKeyType: "boolean",
 			},
 			"confidence": map[string]any{
-				"type":    "number",
-				"minimum": 0,
-				"maximum": 1,
+				wantKeyType: "number",
+				"minimum":   0,
+				"maximum":   1,
 			},
 			"issues": map[string]any{
-				"type": "array",
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"properties": map[string]any{
-						"field": map[string]any{
-							"type": "string",
-						},
-						"item_index": map[string]any{
-							"type": "integer",
-						},
-						"severity": map[string]any{
-							"type": "string",
-							"enum": []string{"critical", "warning", "info"},
-						},
-						"description": map[string]any{
-							"type": "string",
-						},
-					},
-					"required": []string{"field", "item_index", "severity", "description"},
-				},
+				wantKeyType: wantTypeArray,
+				"items":     wantReviewIssueSchema(),
 			},
 		},
-		"required": []string{"approved", "confidence", "issues"},
+		wantKeyRequired: []string{"approved", "confidence", "issues"},
 	}
 
 	if got := reviewSummarySchema(); !reflect.DeepEqual(got, want) {
@@ -262,29 +199,8 @@ func TestReviewSummarySchema_Golden(t *testing.T) {
 func TestReviewIssueSchema_Golden(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"field": map[string]any{
-				"type": "string",
-			},
-			"item_index": map[string]any{
-				"type": "integer",
-			},
-			"severity": map[string]any{
-				"type": "string",
-				"enum": []string{"critical", "warning", "info"},
-			},
-			"description": map[string]any{
-				"type": "string",
-			},
-		},
-		"required": []string{"field", "item_index", "severity", "description"},
-	}
-
-	if got := reviewIssueSchema(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("reviewIssueSchema() golden mismatch\n got: %#v\nwant: %#v", got, want)
+	if got := reviewIssueSchema(); !reflect.DeepEqual(got, wantReviewIssueSchema()) {
+		t.Fatalf("reviewIssueSchema() golden mismatch\n got: %#v\nwant: %#v", got, wantReviewIssueSchema())
 	}
 }
 
@@ -292,15 +208,15 @@ func TestFinalOutputReviewSchema_Golden(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
+		wantKeyType:                 wantTypeObject,
+		wantKeyAdditionalProperties: false,
+		wantKeyProperties: map[string]any{
 			"summary": map[string]any{
-				"type":        "string",
-				"description": "final deduplicated summary text",
+				wantKeyType:        wantTypeString,
+				wantKeyDescription: "final deduplicated summary text",
 			},
 		},
-		"required": []string{"summary"},
+		wantKeyRequired: []string{"summary"},
 	}
 
 	if got := finalOutputReviewSchema(); !reflect.DeepEqual(got, want) {

@@ -22,6 +22,22 @@ package summarizer
 
 import "github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 
+const (
+	schemaKeyType        = "type"
+	schemaKeyDescription = "description"
+	schemaKeyMaxLength   = "maxLength"
+
+	schemaTypeString = "string"
+	schemaTypeArray  = "array"
+
+	fieldName    = "name"
+	fieldDate    = "date"
+	fieldMembers = "members"
+	fieldNote    = "note"
+	fieldLink    = "link"
+	fieldSource  = "source"
+)
+
 type summaryResponse struct {
 	Highlights       []eventHighlight  `json:"highlights"`
 	OngoingEvents    []ongoingEvent    `json:"ongoing_events"`
@@ -54,19 +70,19 @@ func summaryResponseSchema() map[string]any {
 	return consensus.ObjectSchema(
 		map[string]any{
 			"highlights": map[string]any{
-				"type":        "array",
-				"description": "행사별 하이라이트 (날짜순 정렬)",
-				"items":       summaryHighlightItemSchema(),
+				schemaKeyType:        schemaTypeArray,
+				schemaKeyDescription: "행사별 하이라이트 (날짜순 정렬)",
+				"items":              summaryHighlightItemSchema(),
 			},
 			"ongoing_events": map[string]any{
-				"type":        "array",
-				"description": "기간 행사(팝업/카페/굿즈) 목록",
-				"items":       summaryOngoingItemSchema(),
+				schemaKeyType:        schemaTypeArray,
+				schemaKeyDescription: "기간 행사(팝업/카페/굿즈) 목록",
+				"items":              summaryOngoingItemSchema(),
 			},
 			"discovered_events": map[string]any{
-				"type":        "array",
-				"description": "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
-				"items":       summaryDiscoveredItemSchema(),
+				schemaKeyType:        schemaTypeArray,
+				schemaKeyDescription: "Google Search로 발견한 입력 목록에 없는 추가 이벤트 (최대 5건, 없으면 빈 배열)",
+				"items":              summaryDiscoveredItemSchema(),
 			},
 		},
 		[]string{"highlights", "ongoing_events", "discovered_events"},
@@ -76,78 +92,78 @@ func summaryResponseSchema() map[string]any {
 func summaryHighlightItemSchema() map[string]any {
 	return consensus.ObjectSchema(
 		map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명 — 일본어 원제 유지, 번역 금지",
+			fieldName: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "행사명 — 일본어 원제 유지, 번역 금지",
 			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
+			fieldDate: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
 			},
-			"members": map[string]any{
-				"type":        "string",
-				"description": "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
+			fieldMembers: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "참여 멤버 (졸업 멤버 제외, 8명 초과시 축약, 없으면 빈 문자열)",
 			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
-				"maxLength":   30,
+			fieldNote: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "행사 한줄 설명 — 30자 이내, 사실적 한국어, 멤버명 반복 금지",
+				schemaKeyMaxLength:   30,
 			},
-			"link": map[string]any{
-				"type":        "string",
-				"description": "입력 행사 link 그대로 전달",
+			fieldLink: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "입력 행사 link 그대로 전달",
 			},
 		},
-		[]string{"name", "date", "members", "note", "link"},
+		[]string{fieldName, fieldDate, fieldMembers, fieldNote, fieldLink},
 	)
 }
 
 func summaryOngoingItemSchema() map[string]any {
 	return consensus.ObjectSchema(
 		map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명",
+			fieldName: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "행사명",
 			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일)~M/D(요일)",
+			fieldDate: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "날짜 — M/D(요일)~M/D(요일)",
 			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 설명 — 30자 이내 한국어",
-				"maxLength":   30,
+			fieldNote: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "행사 설명 — 30자 이내 한국어",
+				schemaKeyMaxLength:   30,
 			},
-			"link": map[string]any{
-				"type":        "string",
-				"description": "입력 행사 link 그대로 전달",
+			fieldLink: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "입력 행사 link 그대로 전달",
 			},
 		},
-		[]string{"name", "date", "note", "link"},
+		[]string{fieldName, fieldDate, fieldNote, fieldLink},
 	)
 }
 
 func summaryDiscoveredItemSchema() map[string]any {
 	return consensus.ObjectSchema(
 		map[string]any{
-			"name": map[string]any{
-				"type":        "string",
-				"description": "행사명 — 공식 명칭 사용",
+			fieldName: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "행사명 — 공식 명칭 사용",
 			},
-			"date": map[string]any{
-				"type":        "string",
-				"description": "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
+			fieldDate: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "날짜 — M/D(요일) 또는 M/D(요일)~M/D(요일)",
 			},
-			"note": map[string]any{
-				"type":        "string",
-				"description": "행사 설명 — 30자 이내 한국어",
-				"maxLength":   30,
+			fieldNote: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "행사 설명 — 30자 이내 한국어",
+				schemaKeyMaxLength:   30,
 			},
-			"source": map[string]any{
-				"type":        "string",
-				"description": "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
+			fieldSource: map[string]any{
+				schemaKeyType:        schemaTypeString,
+				schemaKeyDescription: "출처 URL — 반드시 https:// 형식 전체 URL 또는 @계정명",
 			},
 		},
-		[]string{"name", "date", "note", "source"},
+		[]string{fieldName, fieldDate, fieldNote, fieldSource},
 	)
 }

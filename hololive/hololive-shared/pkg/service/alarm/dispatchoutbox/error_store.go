@@ -26,7 +26,7 @@ const (
 const maxStoredErrorBytes = 2048
 
 // bearer 패턴이 kv 패턴보다 먼저 돌아야 "Authorization: Bearer x"에서 값 잔여물이 남지 않는다.
-// kv 값 클래스의 `[` 제외는 치환 산출물 [redacted]의 재매칭을 막는 멱등성 조건이고,
+// 여기서 kv 값 클래스의 `[` 제외는 치환 산출물 [redacted]의 재매칭을 막는 멱등성 조건이고,
 // quoted 패턴의 opener 앞글자 제한은 닫는 quote를 여는 quote로 오인해
 // 두 인용구 사이 평문까지 지우는 것을 막는다.
 var (
@@ -42,6 +42,7 @@ func sanitizeStoredError(message string) string {
 	message = storedErrorKVPattern.ReplaceAllString(message, "${1}=[redacted]")
 	message = storedErrorQueryPattern.ReplaceAllString(message, "?[redacted]")
 	message = storedErrorQuotedPattern.ReplaceAllString(message, `${1}"[redacted]"`)
+
 	return truncateStoredError(message)
 }
 
@@ -49,10 +50,12 @@ func truncateStoredError(message string) string {
 	if len(message) <= maxStoredErrorBytes {
 		return message
 	}
+
 	cut := maxStoredErrorBytes
 	for cut > 0 && !utf8.RuneStart(message[cut]) {
 		cut--
 	}
+
 	return message[:cut]
 }
 
@@ -60,6 +63,7 @@ func storedErrorFromCause(cause error) (message, code string) {
 	if cause == nil {
 		return "", ""
 	}
+
 	return sanitizeStoredError(cause.Error()), ClassifyErrorCode(cause)
 }
 
@@ -67,15 +71,19 @@ func ClassifyErrorCode(cause error) string {
 	if cause == nil {
 		return ""
 	}
+
 	if errors.Is(cause, context.DeadlineExceeded) {
 		return ErrorCodeTimeout
 	}
+
 	if errors.Is(cause, context.Canceled) {
 		return ErrorCodeCanceled
 	}
+
 	if httpErr, ok := errors.AsType[*iris.HTTPError](cause); ok {
 		return classifyHTTPStatus(httpErr.StatusCode)
 	}
+
 	return classifyInfraErrorCode(cause)
 }
 
@@ -83,15 +91,19 @@ func classifyInfraErrorCode(cause error) string {
 	if _, ok := errors.AsType[*pgconn.PgError](cause); ok {
 		return ErrorCodePG
 	}
+
 	if _, ok := errors.AsType[*pgconn.ConnectError](cause); ok {
 		return ErrorCodePG
 	}
+
 	if _, ok := errors.AsType[net.Error](cause); ok {
 		return ErrorCodeNetwork
 	}
+
 	if errors.Is(cause, iris.ErrTransport) {
 		return ErrorCodeNetwork
 	}
+
 	return ErrorCodeUnknown
 }
 

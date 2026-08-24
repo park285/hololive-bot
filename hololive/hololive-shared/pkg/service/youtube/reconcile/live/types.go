@@ -27,7 +27,7 @@ type EndReason string
 
 const (
 	EndReasonExplicitEnd         EndReason = "EXPLICIT_END"
-	EndReasonCancelledBeforeLive EndReason = "CANCELLED_BEFORE_LIVE"
+	EndReasonCancelledBeforeLive EndReason = "CANCELLED_BEFORE_LIVE" //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 	EndReasonScopedAbsence       EndReason = "SCOPED_ABSENCE"
 )
 
@@ -143,22 +143,29 @@ type Decision struct {
 
 func (s *State) clone() State {
 	cloned := *s
+
 	cloned.Sessions = make(map[string]SessionState, len(s.Sessions))
+
 	for key := range s.Sessions {
 		value := s.Sessions[key]
+
 		cloned.Sessions[key] = value.clone()
 	}
+
 	if len(s.AbsenceSlots) > 0 {
 		cloned.AbsenceSlots = make([]AbsenceSlot, len(s.AbsenceSlots))
 		for i := range s.AbsenceSlots {
 			cloned.AbsenceSlots[i] = s.AbsenceSlots[i].clone()
 		}
 	}
+
 	cloned.PendingEnds = make(map[string]PendingEnd, len(s.PendingEnds))
 	for key := range s.PendingEnds {
 		value := s.PendingEnds[key]
+
 		cloned.PendingEnds[key] = value.clone()
 	}
+
 	return cloned
 }
 
@@ -170,20 +177,25 @@ func (e *Evidence) clone() Evidence {
 			cloned.Sessions[i] = e.Sessions[i].clone()
 		}
 	}
+
 	cloned.Coverage = cloneCoverage(&e.Coverage)
+
 	return cloned
 }
 
 func (s *SessionFact) clone() SessionFact {
 	cloned := *s
+
 	cloned.ScheduledAt = copyOptionalTime(s.ScheduledAt)
 	cloned.StartedAt = copyOptionalTime(s.StartedAt)
 	cloned.EndedAt = copyOptionalTime(s.EndedAt)
+
 	return cloned
 }
 
 func (s *SessionState) clone() SessionState {
 	cloned := *s
+
 	cloned.ScheduledStartTime = copyOptionalTime(s.ScheduledStartTime)
 	cloned.StartedAt = copyOptionalTime(s.StartedAt)
 	cloned.EndedAt = copyOptionalTime(s.EndedAt)
@@ -203,25 +215,32 @@ func (s *SessionState) clone() SessionState {
 	cloned.Clock.EndCandidateKind = cloneEndEvidenceKind(s.Clock.EndCandidateKind)
 	cloned.Clock.EndCandidateObservationID = cloneInt64(s.Clock.EndCandidateObservationID)
 	cloned.IgnoredAbsenceScheduledFor = append([]time.Time(nil), s.IgnoredAbsenceScheduledFor...)
+
 	return cloned
 }
 
 func (s *AbsenceSlot) clone() AbsenceSlot {
 	cloned := *s
+
 	cloned.Coverage = cloneCoverage(&s.Coverage)
+
 	return cloned
 }
 
 func (p *PendingEnd) clone() PendingEnd {
 	cloned := *p
+
 	cloned.EndedAt = copyOptionalTime(p.EndedAt)
+
 	return cloned
 }
 
 func cloneCoverage(value *contract.GlobalChannelCoverageV1) contract.GlobalChannelCoverageV1 {
 	cloned := *value
+
 	cloned.RequestedChannelIDs = append([]string(nil), value.RequestedChannelIDs...)
 	cloned.Filters.Statuses = append([]string(nil), value.Filters.Statuses...)
+
 	return cloned
 }
 
@@ -229,7 +248,9 @@ func cloneEndReason(value *EndReason) *EndReason {
 	if value == nil {
 		return nil
 	}
+
 	cloned := *value
+
 	return &cloned
 }
 
@@ -237,7 +258,9 @@ func cloneEndEvidenceKind(value *EndEvidenceKind) *EndEvidenceKind {
 	if value == nil {
 		return nil
 	}
+
 	cloned := *value
+
 	return &cloned
 }
 
@@ -245,6 +268,8 @@ func cloneInt64(value *int64) *int64 {
 	if value == nil {
 		return nil
 	}
+
 	cloned := *value
+
 	return &cloned
 }

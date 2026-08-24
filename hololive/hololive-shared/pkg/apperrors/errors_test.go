@@ -67,7 +67,6 @@ func TestKeyRotationError_ErrorAndFactory(t *testing.T) {
 	if err.Operation != "https://api.example.com" || err.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("unexpected NewKeyRotationError result: %+v", err)
 	}
-
 }
 
 func TestCacheError_ErrorAndFactory(t *testing.T) {

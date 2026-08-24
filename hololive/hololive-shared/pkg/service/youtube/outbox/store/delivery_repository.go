@@ -22,6 +22,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -59,9 +60,11 @@ func AsDeliveryDB(db any) deliverysql.DeliveryDB {
 	if deliverysql.IsNilDB(db) {
 		return nil
 	}
+
 	if typed, ok := db.(deliverysql.DeliveryDB); ok {
 		return typed
 	}
+
 	return nil
 }
 
@@ -73,6 +76,7 @@ func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, r
 
 	now := time.Now()
 	rows := make([]domain.YouTubeNotificationDelivery, 0, len(uniqueRoomIDs))
+
 	for _, roomID := range uniqueRoomIDs {
 		rows = append(rows, domain.YouTubeNotificationDelivery{
 			OutboxID:      outboxID,
@@ -85,8 +89,10 @@ func (r *DeliveryRepository) EnqueueBatch(ctx context.Context, outboxID int64, r
 
 	valueExprs := make([]string, 0, len(rows))
 	args := make([]any, 0, len(rows)*5)
+
 	for i := range rows {
 		base := i*5 + 1
+
 		valueExprs = append(valueExprs, fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", base, base+1, base+2, base+3, base+4))
 		args = append(args, rows[i].OutboxID, rows[i].RoomID, rows[i].Status, rows[i].AttemptCount, rows[i].NextAttemptAt)
 	}
@@ -111,10 +117,12 @@ func (r *DeliveryRepository) FetchAndLock(ctx context.Context, batchSize int, lo
 		return nil, fmt.Errorf("fetch and lock delivery rows: %w", err)
 	}
 	defer pgxRows.Close()
+
 	rows, err := pgx.CollectRows(pgxRows, deliverysql.ScanDeliveryRow)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock delivery rows: %w", err)
 	}
+
 	return rows, nil
 }
 
@@ -123,11 +131,13 @@ func (r *DeliveryRepository) MarkSentBatch(ctx context.Context, ids []int64, cla
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("mark delivery rows sent: db is nil")
+		return errors.New("mark delivery rows sent: db is nil")
 	}
 
 	sentAt := dispatchstate.CanonicalSentAtNow()
+
 	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
 		return markSentBatchTx(ctx, tx, uniqueIDs, sentAt, claimTokens)
 	}); err != nil {
@@ -148,20 +158,29 @@ func markSentBatchTx(
 	if err != nil {
 		return fmt.Errorf("load tracking marks: %w", err)
 	}
+
 	if err := updateSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
-		return err
+		return fmt.Errorf("update sent delivery rows: %w", err)
 	}
-	return persistSentDeliveryTracking(ctx, tx, trackingMarks)
+
+	if err := persistSentDeliveryTracking(ctx, tx, trackingMarks); err != nil {
+		return fmt.Errorf("persist sent delivery tracking: %w", err)
+	}
+
+	return nil
 }
 
 func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
 	args := []any{domain.OutboxStatusSent, sentAt}
+
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, domain.OutboxStatusPending)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "update delivery rows", mustSQL("delivery_repository_0188_04.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("update delivery rows: %w", err)
 	}
+
 	return nil
 }
 
@@ -173,7 +192,12 @@ func persistSentDeliveryTracking(
 	if err := observation.NewRepositoryContext(ctx, tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
 		return fmt.Errorf("update tracking rows: %w", err)
 	}
-	return persistSentDeliveryLatencyClassifications(ctx, tx, trackingMarks)
+
+	if err := persistSentDeliveryLatencyClassifications(ctx, tx, trackingMarks); err != nil {
+		return fmt.Errorf("persist sent delivery latency classifications: %w", err)
+	}
+
+	return nil
 }
 
 func persistSentDeliveryLatencyClassifications(
@@ -184,13 +208,16 @@ func persistSentDeliveryLatencyClassifications(
 	if len(trackingMarks) == 0 {
 		return nil
 	}
+
 	identities := make([]timeline.PostTrackingIdentity, 0, len(trackingMarks))
 	for i := range trackingMarks {
 		identities = append(identities, timeline.PostTrackingIdentity{Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID})
 	}
+
 	if err := telemetry.NewRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
 		return fmt.Errorf("persist tracking latency classifications: %w", err)
 	}
+
 	return nil
 }
 
@@ -216,7 +243,9 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 	nextAttempt := now.Add(backoff)
 
 	args := []any{deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt}
+
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows failed batch", mustSQL("delivery_repository_0258_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery rows failed batch: %w", err)
@@ -232,8 +261,10 @@ func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids 
 	}
 
 	args := []any{maxRetries, maxRetries, deliverysql.TruncateString(errMsg, 500), domain.OutboxStatusFailed}
+
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, domain.OutboxStatusPending)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows permanent failed batch", mustSQL("delivery_repository_0282_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery rows permanent failed batch: %w", err)
@@ -243,7 +274,11 @@ func (r *DeliveryRepository) MarkPermanentFailureBatch(ctx context.Context, ids 
 }
 
 func (r *DeliveryRepository) UpdateOutboxAggregateStatus(ctx context.Context, outboxID int64) error {
-	return r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID})
+	if err := r.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}); err != nil {
+		return fmt.Errorf("update outbox aggregate statuses: %w", err)
+	}
+
+	return nil
 }
 
 const outboxAggregateFailedErrorText = "per-room delivery failed"
@@ -278,6 +313,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 	}
 
 	var outboxIDs []int64
+
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), domain.OutboxStatusPending, domain.OutboxStatusPending, DeliveryStatusSending, batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}

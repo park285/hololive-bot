@@ -24,8 +24,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestFormatHelp_SeeMoreFoldToggle(t *testing.T) {

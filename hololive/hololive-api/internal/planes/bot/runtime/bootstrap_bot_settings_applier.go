@@ -33,6 +33,7 @@ type memberNewsWeeklyRunNowTrigger interface {
 
 type botSettingsApplier struct {
 	sharedsettings.SettingsApplier
+
 	memberNewsRunNow memberNewsWeeklyRunNowTrigger
 	logger           *slog.Logger
 }

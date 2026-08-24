@@ -4,15 +4,17 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 func newCelebrationTestRenderer(t *testing.T) *template.Renderer {
 	t.Helper()
+
 	return template.NewRenderer(dbtest.NewPool(t), slog.Default())
 }
 
@@ -149,12 +151,12 @@ func TestAlarmDispatchGroupKeyCelebration(t *testing.T) {
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
-			RoomID:    "room-1",
+			RoomID:    testAlarmRoomID,
 		},
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:      domain.CelebrationKindBirthday,
-			ChannelID: "UC_test",
+			ChannelID: testCelebrationChannelID,
 		},
 	}
 
@@ -166,12 +168,12 @@ func TestAlarmDispatchGroupKeyCelebrationPerMember(t *testing.T) {
 	t.Parallel()
 
 	member1 := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
 		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_a"},
 	}
 	member2 := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
 		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_b"},
 	}
@@ -184,11 +186,11 @@ func TestAlarmDispatchGroupKeyCelebrationBirthdayStreamVideoID(t *testing.T) {
 	t.Parallel()
 
 	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:      domain.CelebrationKindBirthdayStream,
-			ChannelID: "UC_test",
+			ChannelID: testCelebrationChannelID,
 			VideoID:   "video-1",
 		},
 	}
@@ -202,7 +204,7 @@ func TestAlarmDispatchGroupKeyCelebrationPerVideo(t *testing.T) {
 
 	frame := func(videoID string) domain.AlarmQueueEnvelope {
 		return domain.AlarmQueueEnvelope{
-			Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+			Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
 			Celebration: &domain.CelebrationDispatchPayload{
 				Kind:      domain.CelebrationKindBirthdayStream,
@@ -222,16 +224,16 @@ func TestAlarmDispatchKaringGroupKeyCelebrationDelegates(t *testing.T) {
 	t.Parallel()
 
 	envelope := domain.AlarmQueueEnvelope{
-		Notification: domain.AlarmNotification{RoomID: "room-1", AlarmType: domain.AlarmTypeBirthday},
+		Notification: domain.AlarmNotification{RoomID: testAlarmRoomID, AlarmType: domain.AlarmTypeBirthday},
 		SourceKind:   domain.AlarmDispatchSourceKindCelebration,
-		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_test"},
+		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: testCelebrationChannelID},
 	}
 
 	assert.Equal(t, alarmDispatchGroupKey(&envelope), alarmDispatchKaringGroupKey(&envelope))
 
 	envelope.Celebration = &domain.CelebrationDispatchPayload{
 		Kind:      domain.CelebrationKindBirthdayStream,
-		ChannelID: "UC_test",
+		ChannelID: testCelebrationChannelID,
 		VideoID:   "video-1",
 	}
 
@@ -242,14 +244,14 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "UC_test", Name: "Test"},
+			RoomID:    testAlarmRoomID,
+			Channel:   &domain.Channel{ID: testCelebrationChannelID, Name: "Test"},
 		},
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
 			MemberName: "Test Member",
-			ChannelID:  "UC_test",
+			ChannelID:  testCelebrationChannelID,
 			Date:       "2026-05-26",
 		},
 	}
@@ -282,7 +284,7 @@ func TestRenderAlarmDispatchGroupCelebration(t *testing.T) {
 		},
 	}
 	group := alarmDispatchGroup{
-		roomID:    "room-1",
+		roomID:    testAlarmRoomID,
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	}
 

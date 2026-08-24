@@ -28,7 +28,7 @@ import (
 
 func TestNewPGXMemberNewsQuerier_NilPool(t *testing.T) {
 	if got := newPGXMemberNewsQuerier(nil); got != nil {
-		t.Fatalf("expected nil querier for nil pool")
+		t.Fatal("expected nil querier for nil pool")
 	}
 }
 

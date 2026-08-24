@@ -64,7 +64,7 @@ var ytInitialDataDOMFallbackAnchors = []string{
 
 var ErrNotFound = errors.New("ytInitialData not found in HTML")
 
-// extractYtInitialData: YouTube HTML에서 ytInitialData JSON을 추출
+// extractYtInitialData: YouTube HTML에서 ytInitialData JSON을 추출.
 func Extract(html string) (string, error) {
 	candidates := collectYtInitialDataCandidates(html)
 	if best, ok := pickBestYtInitialDataCandidate(candidates); ok {
@@ -77,6 +77,7 @@ func Extract(html string) (string, error) {
 func ExtractPlayerResponseCandidates(html string, limit int) []string {
 	collector := newYtInitialDataCandidateCollector(limit)
 	scanAnchorCandidates(html, "ytInitialPlayerResponse", collector)
+
 	return collector.values
 }
 
@@ -84,9 +85,11 @@ func collectYtInitialDataCandidates(html string) []string {
 	collector := newYtInitialDataCandidateCollector(maxYtInitialDataCandidates)
 	collectAnchorCandidates(html, collector)
 	collectPatternCandidates(html, collector)
+
 	if len(collector.values) == 0 {
 		collectDOMScriptCandidates(html, collector)
 	}
+
 	return collector.values
 }
 
@@ -113,9 +116,11 @@ func (c *ytInitialDataCandidateCollector) add(candidate string) {
 	if candidate == "" {
 		return
 	}
+
 	if _, exists := c.seen[candidate]; exists {
 		return
 	}
+
 	c.seen[candidate] = struct{}{}
 	c.values = append(c.values, candidate)
 }
@@ -125,6 +130,7 @@ func collectAnchorCandidates(html string, collector *ytInitialDataCandidateColle
 		if collector.full() {
 			return
 		}
+
 		scanAnchorCandidates(html, anchor, collector)
 	}
 }
@@ -137,10 +143,14 @@ func scanAnchorCandidates(html, anchor string, collector *ytInitialDataCandidate
 			if nextSearch <= searchFrom {
 				return
 			}
+
 			searchFrom = nextSearch
+
 			continue
 		}
+
 		collector.add(candidate)
+
 		searchFrom = nextSearch
 	}
 }
@@ -150,13 +160,16 @@ func findNextAnchorCandidate(html, anchor string, searchFrom int) (result1 strin
 	if idx < 0 {
 		return "", len(html), false
 	}
+
 	idx += searchFrom
 
 	assignmentEnd := min(len(html), idx+maxYtInitialDataAssignmentScanBytes)
 	eqOffset := strings.Index(html[idx:assignmentEnd], "=")
+
 	if eqOffset < 0 {
 		return "", idx + len(anchor), false
 	}
+
 	eqIdx := idx + eqOffset
 	if eqIdx+1 >= len(html) {
 		return "", len(html), false
@@ -164,9 +177,11 @@ func findNextAnchorCandidate(html, anchor string, searchFrom int) (result1 strin
 
 	objectSearchEnd := min(len(html), eqIdx+1+maxYtInitialDataObjectStartScanBytes)
 	objOffset := strings.IndexByte(html[eqIdx+1:objectSearchEnd], ytJSONObjectOpen)
+
 	if objOffset < 0 {
 		return "", eqIdx + 1, false
 	}
+
 	objStart := eqIdx + 1 + objOffset
 
 	objEnd, ok := findJSONObjectEnd(html, objStart)
@@ -182,6 +197,7 @@ func collectPatternCandidates(html string, collector *ytInitialDataCandidateColl
 		if collector.full() {
 			return
 		}
+
 		appendPatternMatches(pattern.FindAllStringSubmatch(html, -1), collector)
 	}
 }
@@ -191,9 +207,11 @@ func appendPatternMatches(matches [][]string, collector *ytInitialDataCandidateC
 		if collector.full() {
 			return
 		}
+
 		if len(match) < 2 {
 			continue
 		}
+
 		collector.add(match[1])
 	}
 }
@@ -231,6 +249,7 @@ func collectGenericDOMAnchorCandidates(scriptBody string, collector *ytInitialDa
 		if collector.full() {
 			return
 		}
+
 		scanAnchorCandidates(scriptBody, anchor, collector)
 	}
 }
@@ -241,6 +260,7 @@ func findJSONObjectEnd(src string, start int) (int, bool) {
 	}
 
 	scanner := ytJSONObjectEndScanner{}
+
 	for i := start; i < len(src); i++ {
 		if scanner.consume(src[i]) {
 			return i, true
@@ -260,8 +280,10 @@ type ytJSONObjectEndScanner struct {
 func (s *ytJSONObjectEndScanner) consume(ch byte) bool {
 	if s.inString {
 		s.consumeStringByte(ch)
+
 		return false
 	}
+
 	return s.consumeStructuralByte(ch)
 }
 
@@ -270,10 +292,12 @@ func (s *ytJSONObjectEndScanner) consumeStringByte(ch byte) {
 		s.escaped = false
 		return
 	}
+
 	if ch == ytEscape {
 		s.escaped = true
 		return
 	}
+
 	if ch == s.quote {
 		s.inString = false
 	}
@@ -283,16 +307,20 @@ func (s *ytJSONObjectEndScanner) consumeStructuralByte(ch byte) bool {
 	if ch == ytDoubleQuote || ch == ytSingleQuote {
 		s.inString = true
 		s.quote = ch
+
 		return false
 	}
+
 	if ch == ytJSONObjectOpen {
 		s.depth++
 		return false
 	}
+
 	if ch != ytJSONObjectClose {
 		return false
 	}
 
 	s.depth--
+
 	return s.depth == 0
 }

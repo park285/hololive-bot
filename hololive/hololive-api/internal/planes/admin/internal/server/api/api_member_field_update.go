@@ -26,9 +26,10 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type updateChannelIDRequest struct {
@@ -53,7 +54,7 @@ type memberFieldUpdateSpec[T any] struct {
 	successMessage    string
 }
 
-func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberFieldUpdateSpec[T]) {
+func (h *MemberHandler) updateMemberField[T any](c *gin.Context, spec memberFieldUpdateSpec[T]) {
 	if !h.requireMemberDeps(c) {
 		return
 	}
@@ -64,6 +65,7 @@ func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberField
 	}
 
 	var req T
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
@@ -73,6 +75,7 @@ func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberField
 
 	value := spec.value(req)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
+
 	defer cancel()
 
 	if err := spec.update(ctx, h, memberID, req); err != nil {
@@ -110,7 +113,7 @@ func updateMemberField[T any](h *MemberHandler, c *gin.Context, spec memberField
 }
 
 func (h *MemberHandler) UpdateChannelID(c *gin.Context) {
-	updateMemberField(h, c, memberFieldUpdateSpec[updateChannelIDRequest]{
+	h.updateMemberField(c, memberFieldUpdateSpec[updateChannelIDRequest]{
 		value: func(req updateChannelIDRequest) string {
 			return req.ChannelID
 		},
@@ -132,7 +135,7 @@ func (h *MemberHandler) UpdateChannelID(c *gin.Context) {
 }
 
 func (h *MemberHandler) UpdateMemberName(c *gin.Context) {
-	updateMemberField(h, c, memberFieldUpdateSpec[updateMemberNameRequest]{
+	h.updateMemberField(c, memberFieldUpdateSpec[updateMemberNameRequest]{
 		value: func(req updateMemberNameRequest) string {
 			return req.Name
 		},

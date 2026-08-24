@@ -8,6 +8,7 @@ import (
 
 func TestProxyHealthTrackerDisabledNeverTriggers(t *testing.T) {
 	tracker := newProxyHealthTracker(ProxyFallbackPolicy{})
+
 	for range 10 {
 		assert.False(t, tracker.RecordTransportFailure())
 	}

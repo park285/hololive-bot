@@ -22,7 +22,7 @@ package alarmservice
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -30,12 +30,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/pkg/service/notification/platformmap"
-
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
+	"github.com/kapu/hololive-shared/pkg/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -60,7 +58,7 @@ func NewAlarmService(
 	advanceMinutes []int,
 ) (*AlarmService, error) {
 	if cacheClient == nil {
-		return nil, fmt.Errorf("new alarm service: cache client is nil")
+		return nil, errors.New("new alarm service: cache client is nil")
 	}
 
 	if logger == nil {
@@ -72,6 +70,7 @@ func NewAlarmService(
 	targetPolicy := sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(advanceMinutes))
 
 	var writer alarmWriter
+
 	if alarmRepository != nil {
 		writer = alarmRepository
 	}
@@ -88,6 +87,7 @@ func NewAlarmService(
 		targetPolicy:    targetPolicy,
 	}
 	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
+
 	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
 	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
 
@@ -109,6 +109,7 @@ func (as *AlarmService) UpdateAlarmAdvanceMinutes(_ context.Context, alarmAdvanc
 	normalized := sharedchecker.NewTargetMinutePolicyFromRuntimeAdvance(alarmAdvanceMinutes)
 
 	as.targetMinutesMu.Lock()
+
 	as.targetPolicy = normalized
 	as.targetMinutesMu.Unlock()
 
@@ -126,5 +127,6 @@ func (as *AlarmService) Close(_ context.Context) error {
 	if as == nil {
 		return nil
 	}
+
 	return nil
 }

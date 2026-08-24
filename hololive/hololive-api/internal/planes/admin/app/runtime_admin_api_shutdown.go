@@ -22,6 +22,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
@@ -31,16 +32,21 @@ func (r *AdminAPIRuntime) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
-	return applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
+	if err := applifecycle.Shutdown(ctx, applifecycle.ShutdownHooks{
 		Logger:             r.Logger,
 		ShutdownHTTPServer: r.ShutdownHTTPServer,
 		ShutdownAlarmServices: func(ctx context.Context) error {
 			if r.AlarmService == nil {
 				return nil
 			}
+
 			return r.AlarmService.Close(ctx)
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }
 
 func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
@@ -48,5 +54,9 @@ func (r *AdminAPIRuntime) ShutdownHTTPServer(ctx context.Context) error {
 		return nil
 	}
 
-	return r.HTTPServers.Shutdown(ctx)
+	if err := r.HTTPServers.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }

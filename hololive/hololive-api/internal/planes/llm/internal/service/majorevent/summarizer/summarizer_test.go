@@ -22,16 +22,18 @@ package summarizer
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
+
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/promptguard"
 )
 
 func TestAssembleSummaryText_WithHighlightsAndOngoing(t *testing.T) {
@@ -63,7 +65,7 @@ func TestAssembleSummaryText_WithHighlightsAndOngoing(t *testing.T) {
 func TestAssembleSummaryText_HighlightsOnly(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "3/1(토)", Note: "테스트 이벤트"},
+			{Name: testEventNameA, Date: testEventDateA, Note: "테스트 이벤트"},
 		},
 	}
 
@@ -112,11 +114,11 @@ func TestAssembleSummaryText_NoNote(t *testing.T) {
 func TestSummaryResponseSchema_Structure(t *testing.T) {
 	schema := summaryResponseSchema()
 
-	if schema["type"] != "object" {
-		t.Errorf("expected type=object, got %v", schema["type"])
+	if schema[wantKeyType] != wantTypeObject {
+		t.Errorf("expected type=object, got %v", schema[wantKeyType])
 	}
 
-	props, ok := schema["properties"].(map[string]any)
+	props, ok := schema[wantKeyProperties].(map[string]any)
 	if !ok {
 		t.Fatal("missing properties")
 	}
@@ -125,24 +127,28 @@ func TestSummaryResponseSchema_Structure(t *testing.T) {
 	if !ok {
 		t.Fatal("missing highlights property")
 	}
-	if highlights["type"] != "array" {
-		t.Errorf("highlights should be array, got %v", highlights["type"])
+
+	if highlights[wantKeyType] != wantTypeArray {
+		t.Errorf("highlights should be array, got %v", highlights[wantKeyType])
 	}
+
 	items, ok := highlights["items"].(map[string]any)
 	if !ok {
 		t.Fatal("highlights.items should not be nil")
 	}
 
-	itemProps, ok := items["properties"].(map[string]any)
+	itemProps, ok := items[wantKeyProperties].(map[string]any)
 	if !ok {
 		t.Fatal("missing item properties")
 	}
-	for _, required := range []string{"name", "date", "note"} {
-		if _, ok := itemProps[required]; !ok {
+
+	for _, required := range []string{wantFieldName, wantFieldDate, wantFieldNote} {
+		if _, exists := itemProps[required]; !exists {
 			t.Errorf("missing required item property: %s", required)
 		}
 	}
-	if _, ok := itemProps["link"]; !ok {
+
+	if _, hasLink := itemProps[wantFieldLink]; !hasLink {
 		t.Error("missing link property in highlight items")
 	}
 
@@ -150,19 +156,22 @@ func TestSummaryResponseSchema_Structure(t *testing.T) {
 	if !ok {
 		t.Error("missing ongoing_events property")
 	}
-	if ongoingEvents["type"] != "array" {
-		t.Errorf("ongoing_events should be array, got %v", ongoingEvents["type"])
+
+	if ongoingEvents[wantKeyType] != wantTypeArray {
+		t.Errorf("ongoing_events should be array, got %v", ongoingEvents[wantKeyType])
 	}
 
 	// OpenAI Responses API: properties의 모든 키가 required에 포함되어야 함
-	required, ok := schema["required"].([]string)
+	required, ok := schema[wantKeyRequired].([]string)
 	if !ok {
 		t.Fatal("missing required array")
 	}
+
 	requiredSet := make(map[string]struct{}, len(required))
 	for _, r := range required {
 		requiredSet[r] = struct{}{}
 	}
+
 	for key := range props {
 		if _, exists := requiredSet[key]; !exists {
 			t.Errorf("property %q is in properties but missing from required", key)
@@ -173,7 +182,7 @@ func TestSummaryResponseSchema_Structure(t *testing.T) {
 func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	original := summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "fes 2026", Date: "2/15(토)", Members: "전원", Note: "최대 규모", Link: "https://example.com/fes"},
+			{Name: "fes 2026", Date: "2/15(토)", Members: "전원", Note: "최대 규모", Link: testLinkFes},
 			{Name: "생일 라이브", Date: "2/18(화)", Members: "ノエル", Note: "솔로", Link: "https://example.com/noel"},
 		},
 		OngoingEvents: []ongoingEvent{
@@ -187,6 +196,7 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	}
 
 	var parsed summaryResponse
+
 	if err := jsonv2.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("unmarshal error: %v", err)
 	}
@@ -194,12 +204,15 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	if len(parsed.Highlights) != 2 {
 		t.Errorf("expected 2 highlights, got %d", len(parsed.Highlights))
 	}
-	if parsed.Highlights[0].Link != "https://example.com/fes" {
+
+	if parsed.Highlights[0].Link != testLinkFes {
 		t.Errorf("highlight link mismatch: %q", parsed.Highlights[0].Link)
 	}
+
 	if len(parsed.OngoingEvents) != 1 {
 		t.Errorf("expected 1 ongoing event, got %d", len(parsed.OngoingEvents))
 	}
+
 	if parsed.OngoingEvents[0].Link != "https://example.com/cafe" {
 		t.Errorf("ongoing event link mismatch: %q", parsed.OngoingEvents[0].Link)
 	}
@@ -208,7 +221,7 @@ func TestSummaryResponse_JSONRoundTrip(t *testing.T) {
 	text := assembleSummaryText(&parsed)
 	assertContains(t, text, "fes 2026")
 	assertContains(t, text, "(전원)")
-	assertContains(t, text, "https://example.com/fes")
+	assertContains(t, text, testLinkFes)
 	assertContains(t, text, "[기간 행사]")
 	assertContains(t, text, "https://example.com/cafe")
 }
@@ -230,15 +243,16 @@ func TestEventSummarizer_Summarize_StructuredOutput(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: "https://example.com/fes"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-02-15")
+	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: testLinkFes}}
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
 
 	if result == "" {
 		t.Fatal("expected non-empty result")
 	}
+
 	assertContains(t, result, "hololive fes")
 	assertContains(t, result, "- 최대 규모 페스티벌")
-	assertContains(t, result, "https://example.com/fes")
+	assertContains(t, result, testLinkFes)
 	assertContains(t, result, "[기간 행사]")
 }
 
@@ -248,12 +262,13 @@ func TestEventSummarizer_SummarizeResult_Primary(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: "https://example.com/fes"}}
-	result := summarizer.SummarizeResult(context.Background(), events, SummaryTypeWeekly, "2026-02-15")
+	events := []domain.MajorEvent{{ID: 1, Title: "hololive fes", Link: testLinkFes}}
+	result := summarizer.SummarizeResult(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
 
 	if result.ResultType != sharedmodel.SummaryResultPrimary {
 		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
 	}
+
 	if result.Text == "" {
 		t.Fatal("expected non-empty result text")
 	}
@@ -279,7 +294,7 @@ func TestEventSummarizer_Summarize_FinalOutputReviewApplied(t *testing.T) {
 	)
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Hoshimachi Suisei Live \"SuperNova: REBOOT\""}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-02-15")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
 
 	assertContains(t, result, "[리뷰 완료]")
 	assertContains(t, result, "Hoshimachi Suisei Live")
@@ -289,22 +304,25 @@ func TestEventSummarizer_Summarize_CacheHitSkipsSearchAndLLM(t *testing.T) {
 	cache := &mockCache{getData: "cached summary"}
 	llm := &mockSummarizer{jsonResponse: `{"highlights":[{"name":"unused","date":"3/1(토)","members":"","note":"unused","link":""}]}`}
 	searcher := &mockSearcher{
-		results:   []sharedmodel.SearchResult{{Title: "unused", URL: "https://example.com/1"}},
+		results:   []sharedmodel.SearchResult{{Title: "unused", URL: testLinkOne}},
 		krResults: []sharedmodel.SearchResult{{Title: "unused-kr", URL: "https://example.com/2"}},
 	}
 	summarizer := NewEventSummarizer(llm, cache, searcher, testLogger())
 
-	result := summarizer.SummarizeResult(context.Background(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
+	result := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "cached"}}, SummaryTypeWeekly, "2026-03-02")
 
 	if result.Text != "cached summary" {
 		t.Fatalf("Text = %q, want cached summary", result.Text)
 	}
+
 	if result.ResultType != sharedmodel.SummaryResultPrimary {
 		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultPrimary)
 	}
+
 	if llm.callCount != 0 {
 		t.Fatalf("llm callCount = %d, want 0", llm.callCount)
 	}
+
 	if searcher.callCount != 0 {
 		t.Fatalf("searcher callCount = %d, want 0", searcher.callCount)
 	}
@@ -328,10 +346,12 @@ func TestEventSummarizer_Summarize_SingleHighlightRunsFinalReview(t *testing.T) 
 		}),
 	)
 
-	result := summarizer.Summarize(context.Background(), []domain.MajorEvent{{ID: 1, Title: "Simple Event"}}, SummaryTypeWeekly, "2026-02-15")
+	result := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "Simple Event"}}, SummaryTypeWeekly, "2026-02-15")
+
 	if reviewer.callCount != 1 {
 		t.Fatalf("reviewer callCount = %d, want 1", reviewer.callCount)
 	}
+
 	assertContains(t, result, "[리뷰 완료]")
 	assertContains(t, result, "Simple Event")
 }
@@ -341,7 +361,7 @@ func TestEventSummarizer_Summarize_InvalidJSON_ReturnsEmpty(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1, Title: "test"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-02-15")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
 
 	if result != "" {
 		t.Errorf("expected empty on invalid JSON, got %q", result)
@@ -352,10 +372,11 @@ func TestEventSummarizer_SummarizeResult_InvalidJSON_IsEmpty(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "not json"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	result := summarizer.SummarizeResult(context.Background(), []domain.MajorEvent{{ID: 1, Title: "test"}}, SummaryTypeWeekly, "2026-02-15")
+	result := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1, Title: "test"}}, SummaryTypeWeekly, "2026-02-15")
 	if result.ResultType != sharedmodel.SummaryResultEmpty {
 		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
 	}
+
 	if result.Text != "" {
 		t.Fatalf("Text = %q, want empty", result.Text)
 	}
@@ -366,7 +387,7 @@ func TestEventSummarizer_Summarize_EmptyHighlights_ReturnsEmpty(t *testing.T) {
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1, Title: "test"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-02-15")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-02-15")
 
 	if result != "" {
 		t.Errorf("expected empty on empty highlights, got %q", result)
@@ -377,7 +398,7 @@ func TestEventSummarizer_Summarize_NilLLM_ReturnsEmpty(t *testing.T) {
 	summarizer := NewEventSummarizer(nil, nil, nil, testLogger())
 
 	events := []domain.MajorEvent{{ID: 1}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "key")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "key")
 
 	if result != "" {
 		t.Errorf("expected empty for nil LLM, got %q", result)
@@ -387,7 +408,7 @@ func TestEventSummarizer_Summarize_NilLLM_ReturnsEmpty(t *testing.T) {
 func TestEventSummarizer_SummarizeResult_NilLLM_IsEmpty(t *testing.T) {
 	summarizer := NewEventSummarizer(nil, nil, nil, testLogger())
 
-	result := summarizer.SummarizeResult(context.Background(), []domain.MajorEvent{{ID: 1}}, SummaryTypeWeekly, "key")
+	result := summarizer.SummarizeResult(t.Context(), []domain.MajorEvent{{ID: 1}}, SummaryTypeWeekly, "key")
 	if result.ResultType != sharedmodel.SummaryResultEmpty {
 		t.Fatalf("ResultType = %q, want %q", result.ResultType, sharedmodel.SummaryResultEmpty)
 	}
@@ -397,7 +418,7 @@ func TestEventSummarizer_Summarize_NoEvents_ReturnsEmpty(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: "should not be called"}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	result := summarizer.Summarize(context.Background(), nil, SummaryTypeWeekly, "key")
+	result := summarizer.Summarize(t.Context(), nil, SummaryTypeWeekly, "key")
 	if result != "" {
 		t.Errorf("expected empty for nil events, got %q", result)
 	}
@@ -417,7 +438,7 @@ func TestAssembleSummaryText_HighlightWithLink(t *testing.T) {
 func TestAssembleSummaryText_HighlightWithoutLink(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "3/1(토)", Note: "테스트", Link: ""},
+			{Name: testEventNameA, Date: testEventDateA, Note: testEventNote, Link: ""},
 		},
 	}
 	result := assembleSummaryText(resp)
@@ -428,7 +449,7 @@ func TestAssembleSummaryText_HighlightWithoutLink(t *testing.T) {
 func TestAssembleSummaryText_OngoingEventsWithLink(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "3/1(토)", Note: "테스트"},
+			{Name: testEventNameA, Date: testEventDateA, Note: testEventNote},
 		},
 		OngoingEvents: []ongoingEvent{
 			{Name: "도쿄역 포스트카드 이벤트", Date: "2/12(목)~3/8(일)", Note: "한정 포스트카드 증정", Link: "https://hololivepro.com/news/456"},
@@ -443,7 +464,7 @@ func TestAssembleSummaryText_OngoingEventsWithLink(t *testing.T) {
 func TestAssembleSummaryText_DiscoveredWithSource(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "3/1(토)", Note: "테스트"},
+			{Name: testEventNameA, Date: testEventDateA, Note: testEventNote},
 		},
 		DiscoveredEvents: []discoveredEvent{
 			{Name: "콜라보 카페", Date: "2/5(목)~3/22(일)", Note: "서울·부산 콜라보 카페 운영", Source: "https://hololive.hololivepro.com/en/news/20260123-01-188/"},
@@ -457,7 +478,7 @@ func TestAssembleSummaryText_DiscoveredWithSource(t *testing.T) {
 func TestAssembleSummaryText_NoOngoingSectionWhenEmpty(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "3/1(토)", Note: "테스트"},
+			{Name: testEventNameA, Date: testEventDateA, Note: testEventNote},
 		},
 		OngoingEvents: []ongoingEvent{},
 	}
@@ -472,13 +493,14 @@ func TestEventSummarizer_Summarize_OldOngoingNoteIgnored(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, nil, testLogger())
 
-	events := []domain.MajorEvent{{ID: 1, Title: "Event A"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+	events := []domain.MajorEvent{{ID: 1, Title: testEventNameA}}
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 	if result == "" {
 		t.Fatal("expected non-empty result")
 	}
-	assertContains(t, result, "Event A")
+
+	assertContains(t, result, testEventNameA)
 	assertNotContains(t, result, "카페 (~2/28) 진행 중")
 	assertNotContains(t, result, "[기간 행사]")
 }
@@ -487,7 +509,7 @@ func TestAssembleSummaryText_SyntheticOngoingEvent(t *testing.T) {
 	// 월간 10건 초과 시 생성되는 synthetic "기타 행사" 항목 (date 비어있음)
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "3/1(토)", Note: "테스트"},
+			{Name: testEventNameA, Date: testEventDateA, Note: testEventNote},
 		},
 		OngoingEvents: []ongoingEvent{
 			{Name: "카페", Date: "2/1(토)~2/28(금)", Note: "카페 운영 중", Link: "https://example.com/cafe"},
@@ -579,11 +601,12 @@ func TestIsTrustedDiscoveredSource(t *testing.T) {
 func TestAssembleSummaryText_HighlightsSeparatedByBlankLine(t *testing.T) {
 	resp := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "Event A", Date: "2/20(목)", Note: "노트A"},
+			{Name: testEventNameA, Date: "2/20(목)", Note: "노트A"},
 			{Name: "Event B", Date: "2/21(금)", Note: "노트B"},
 		},
 	}
 	result := assembleSummaryText(resp)
+
 	if !strings.Contains(result, "\n\n") {
 		t.Errorf("highlights should be separated by blank line, got: %q", result)
 	}
@@ -597,6 +620,7 @@ func TestWriteDiscoveredEvents_HasSourcePrefix(t *testing.T) {
 		},
 	}
 	result := assembleSummaryText(resp)
+
 	if !strings.Contains(result, "출처: ") {
 		t.Errorf("discovered events should have '출처: ' prefix, got: %q", result)
 	}
@@ -609,11 +633,13 @@ func newMajorEventPromptGuardForTest(t *testing.T) *promptguard.Guard {
 	if err != nil {
 		t.Fatalf("promptguard.NewGuard() error = %v", err)
 	}
+
 	return guard
 }
 
 func assertContains(t *testing.T, s, substr string) {
 	t.Helper()
+
 	if !containsStr(s, substr) {
 		t.Errorf("expected %q to contain %q", s, substr)
 	}
@@ -621,6 +647,7 @@ func assertContains(t *testing.T, s, substr string) {
 
 func assertNotContains(t *testing.T, s, substr string) {
 	t.Helper()
+
 	if containsStr(s, substr) {
 		t.Errorf("expected %q NOT to contain %q", s, substr)
 	}
@@ -636,10 +663,11 @@ func searchStr(s, substr string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
-// mockCache: 캐시 키 캡처용 mock (캐시 키 버전 포함 여부 검증)
+// mockCache: 캐시 키 캡처용 mock (캐시 키 버전 포함 여부 검증).
 type mockCache struct {
 	getKey  string
 	setKey  string
@@ -653,6 +681,7 @@ func (m *mockCache) Get(_ context.Context, key string, dest any) error {
 	if m.getErr != nil {
 		return m.getErr
 	}
+
 	if m.getData != nil {
 		// 캐시 히트 시뮬레이션
 		if s, ok := m.getData.(string); ok {
@@ -661,6 +690,7 @@ func (m *mockCache) Get(_ context.Context, key string, dest any) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -690,9 +720,11 @@ func TestSystemPrompt_NoRealEventNamesInExample(t *testing.T) {
 			// <example> 블록만 추출
 			exampleStart := strings.Index(prompt, "<example>")
 			exampleEnd := strings.Index(prompt, "</example>")
+
 			if exampleStart == -1 || exampleEnd == -1 {
 				t.Fatal("example block not found in prompt")
 			}
+
 			exampleBlock := prompt[exampleStart : exampleEnd+len("</example>")]
 
 			for _, name := range forbiddenNames {
@@ -705,7 +737,7 @@ func TestSystemPrompt_NoRealEventNamesInExample(t *testing.T) {
 }
 
 func TestBuildUserPrompt_EventDatePassthrough(t *testing.T) {
-	startDate := time.Date(2026, 2, 21, 0, 0, 0, 0, kst)
+	startDate := time.Date(2026, time.February, 21, 0, 0, 0, 0, kst)
 	events := []domain.MajorEvent{
 		{
 			ID:             1,
@@ -725,12 +757,12 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	t.Run("cache set key contains promptVersion", func(t *testing.T) {
-		cache := &mockCache{getErr: fmt.Errorf("cache miss")}
+		cache := &mockCache{getErr: errors.New("cache miss")}
 		mock := &mockSummarizer{jsonResponse: llmJSON}
 		summarizer := NewEventSummarizer(mock, cache, nil, testLogger())
 
-		events := []domain.MajorEvent{{ID: 1, Title: "Test"}}
-		summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+		events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
+		summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 		if !strings.Contains(cache.setKey, promptVersion) {
 			t.Errorf("cache set key %q should contain promptVersion %q", cache.setKey, promptVersion)
@@ -738,12 +770,12 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 	})
 
 	t.Run("cache get key contains promptVersion", func(t *testing.T) {
-		cache := &mockCache{getErr: fmt.Errorf("cache miss")}
+		cache := &mockCache{getErr: errors.New("cache miss")}
 		mock := &mockSummarizer{jsonResponse: llmJSON}
 		summarizer := NewEventSummarizer(mock, cache, nil, testLogger())
 
-		events := []domain.MajorEvent{{ID: 1, Title: "Test"}}
-		summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+		events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
+		summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 		if !strings.Contains(cache.getKey, promptVersion) {
 			t.Errorf("cache get key %q should contain promptVersion %q", cache.getKey, promptVersion)
@@ -752,17 +784,18 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 
 	t.Run("unversioned cache key does not hit", func(t *testing.T) {
 		// unversioned key로 pre-seed된 캐시가 hit되지 않는 것 확인
-		cache := &mockCache{getErr: fmt.Errorf("cache miss")}
+		cache := &mockCache{getErr: errors.New("cache miss")}
 		mock := &mockSummarizer{jsonResponse: llmJSON}
 		summarizer := NewEventSummarizer(mock, cache, nil, testLogger())
 
-		events := []domain.MajorEvent{{ID: 1, Title: "Test"}}
-		result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+		events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
+		result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 		// LLM이 호출되어야 함 (캐시 miss이므로)
 		if result == "" {
 			t.Error("expected non-empty result from LLM when cache misses")
 		}
+
 		// set key에 version 포함 확인
 		expectedPrefix := fmt.Sprintf("majorevent:summary:%s:", promptVersion)
 		if !strings.HasPrefix(cache.setKey, expectedPrefix) {
@@ -772,13 +805,13 @@ func TestSummarize_CacheKeyContainsPromptVersion(t *testing.T) {
 }
 
 func TestBuildSummaryCacheKey_ChangesWhenEventsChange(t *testing.T) {
-	start := time.Date(2026, 3, 1, 0, 0, 0, 0, kst)
-	changedStart := time.Date(2026, 3, 8, 0, 0, 0, 0, kst)
+	start := time.Date(2026, time.March, 1, 0, 0, 0, 0, kst)
+	changedStart := time.Date(2026, time.March, 8, 0, 0, 0, 0, kst)
 
 	baseEvents := []domain.MajorEvent{
 		{
 			ID:             1,
-			Title:          "Event A",
+			Title:          testEventNameA,
 			Link:           "https://example.com/a",
 			Type:           domain.MajorEventTypeEvent,
 			Members:        []string{"Member A"},
@@ -788,7 +821,7 @@ func TestBuildSummaryCacheKey_ChangesWhenEventsChange(t *testing.T) {
 	changedEvents := []domain.MajorEvent{
 		{
 			ID:             1,
-			Title:          "Event A",
+			Title:          testEventNameA,
 			Link:           "https://example.com/a",
 			Type:           domain.MajorEventTypeEvent,
 			Members:        []string{"Member A"},
@@ -805,13 +838,13 @@ func TestBuildSummaryCacheKey_ChangesWhenEventsChange(t *testing.T) {
 }
 
 func TestBuildSummaryCacheKey_IsOrderInsensitive(t *testing.T) {
-	firstStart := time.Date(2026, 3, 1, 0, 0, 0, 0, kst)
-	secondStart := time.Date(2026, 3, 8, 0, 0, 0, 0, kst)
+	firstStart := time.Date(2026, time.March, 1, 0, 0, 0, 0, kst)
+	secondStart := time.Date(2026, time.March, 8, 0, 0, 0, 0, kst)
 
 	firstOrder := []domain.MajorEvent{
 		{
 			ID:             1,
-			Title:          "Event A",
+			Title:          testEventNameA,
 			Link:           "https://example.com/a",
 			Type:           domain.MajorEventTypeEvent,
 			Members:        []string{"Member A"},
@@ -842,10 +875,11 @@ func TestBuildSummaryCacheKey_IsOrderInsensitive(t *testing.T) {
 func TestBuildSummaryCacheKey_ReturnsErrorInsteadOfSentinelOnMarshalFailure(t *testing.T) {
 	t.Parallel()
 
-	key, err := buildSummaryCacheKey([]domain.MajorEvent{{ID: 1, Title: "Test"}}, SummaryTypeWeekly, "2026-03-01")
+	key, err := buildSummaryCacheKey([]domain.MajorEvent{{ID: 1, Title: testEventTitle}}, SummaryTypeWeekly, "2026-03-01")
 	if err != nil {
 		t.Fatalf("buildSummaryCacheKey() error = %v", err)
 	}
+
 	if strings.Contains(key, "marshal-error") {
 		t.Fatalf("cache key = %q, must not contain marshal-error sentinel", key)
 	}
@@ -874,6 +908,7 @@ type mockSearcher struct {
 
 func (m *mockSearcher) Search(_ context.Context, query string) ([]sharedmodel.SearchResult, error) {
 	m.mu.Lock()
+
 	m.callCount++
 	m.mu.Unlock()
 
@@ -881,6 +916,7 @@ func (m *mockSearcher) Search(_ context.Context, query string) ([]sharedmodel.Se
 	if strings.Contains(query, "live viewing") && (m.krResults != nil || m.krErr != nil) {
 		return m.krResults, m.krErr
 	}
+
 	return m.results, m.err
 }
 
@@ -899,6 +935,7 @@ func TestSystemPrompt_ContainsKRPartnerHint(t *testing.T) {
 			if err != nil {
 				t.Fatalf("getSystemPrompt 실패: %v", err)
 			}
+
 			if !strings.Contains(prompt, "Korean partner events") && !strings.Contains(prompt, "ANIPLUS") {
 				t.Error("prompt should contain Korean partner hint (ANIPLUS or Korean partner events)")
 			}
@@ -910,18 +947,19 @@ func TestSummarize_KRSearchFailure_GracefulDegradation(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test Event","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	searcher := &mockSearcher{
-		results: []sharedmodel.SearchResult{{Title: "Primary Result", URL: "https://example.com/1"}},
-		krErr:   fmt.Errorf("KR search timeout"),
+		results: []sharedmodel.SearchResult{{Title: "Primary Result", URL: testLinkOne}},
+		krErr:   errors.New("KR search timeout"),
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test Event"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 	if result == "" {
 		t.Fatal("expected non-empty result when KR search fails but primary succeeds")
 	}
+
 	assertContains(t, result, "Test Event")
 }
 
@@ -929,18 +967,19 @@ func TestSummarize_PrimarySearchFailure_UsesKRResults(t *testing.T) {
 	llmJSON := `{"highlights":[{"name":"Test Event","date":"3/1(토)","members":"","note":"test","link":""}],"ongoing_events":[],"discovered_events":[]}`
 
 	searcher := &mockSearcher{
-		err:       fmt.Errorf("primary search timeout"),
+		err:       errors.New("primary search timeout"),
 		krResults: []sharedmodel.SearchResult{{Title: "KR Result", URL: "https://aniplus.co.kr/1"}},
 	}
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
 	events := []domain.MajorEvent{{ID: 1, Title: "Test Event"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 	if result == "" {
 		t.Fatal("expected non-empty result when primary search fails but KR succeeds")
 	}
+
 	assertContains(t, result, "Test Event")
 }
 
@@ -971,8 +1010,8 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 	mock := &mockSummarizer{jsonResponse: llmJSON}
 	summarizer := NewEventSummarizer(mock, nil, searcher, testLogger(), WithPromptGuard(newMajorEventPromptGuardForTest(t)))
 
-	events := []domain.MajorEvent{{ID: 1, Title: "Test"}}
-	result := summarizer.Summarize(context.Background(), events, SummaryTypeWeekly, "2026-03-01")
+	events := []domain.MajorEvent{{ID: 1, Title: testEventTitle}}
+	result := summarizer.Summarize(t.Context(), events, SummaryTypeWeekly, "2026-03-01")
 
 	if result == "" {
 		t.Fatal("expected non-empty result")
@@ -980,7 +1019,7 @@ func TestSummarize_DualSearch_MergeOrder(t *testing.T) {
 
 	// 검증: 병합 파이프라인 (5 + 8 - 2중복 = 11 → cap 10)
 	// 직접 검증은 어려우므로 요약 생성 성공만 확인
-	assertContains(t, result, "Test")
+	assertContains(t, result, testEventTitle)
 
 	// mock searcher callCount가 2여야 함 (1차 + 2차)
 	if searcher.callCount != 2 {
@@ -993,10 +1032,12 @@ func TestRunDualSearch_DirectVerification(t *testing.T) {
 
 	t.Run("nil searcher returns empty", func(t *testing.T) {
 		s := NewEventSummarizer(nil, nil, nil, testLogger())
-		result, err := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+
+		result, err := s.runDualSearch(t.Context(), SummaryTypeWeekly, "2026-03-01")
 		if err != nil {
 			t.Fatalf("runDualSearch() error = %v", err)
 		}
+
 		if result != "" {
 			t.Errorf("expected empty for nil searcher, got %q", result)
 		}
@@ -1004,14 +1045,16 @@ func TestRunDualSearch_DirectVerification(t *testing.T) {
 
 	t.Run("both searches fail returns empty", func(t *testing.T) {
 		searcher := &mockSearcher{
-			err:   fmt.Errorf("primary fail"),
-			krErr: fmt.Errorf("kr fail"),
+			err:   errors.New("primary fail"),
+			krErr: errors.New("kr fail"),
 		}
 		s := NewEventSummarizer(nil, nil, searcher, testLogger())
-		result, err := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+
+		result, err := s.runDualSearch(t.Context(), SummaryTypeWeekly, "2026-03-01")
 		if err != nil {
 			t.Fatalf("runDualSearch() error = %v", err)
 		}
+
 		if result != "" {
 			t.Errorf("expected empty when both searches fail, got %q", result)
 		}
@@ -1023,19 +1066,23 @@ func testRunDualSearchDeduplicationAndCap(t *testing.T) {
 	secondary := makeDualSearchSecondaryResults()
 
 	searcher := &mockSearcher{results: primary, krResults: secondary}
+
 	guard, err := promptguard.NewGuard(promptguard.Config{Enabled: true, UseEmbeddedDefaults: true}, nil)
 	if err != nil {
 		t.Fatalf("promptguard.NewGuard() error = %v", err)
 	}
+
 	s := NewEventSummarizer(nil, nil, searcher, testLogger(), WithPromptGuard(guard))
 
-	result, err := s.runDualSearch(context.Background(), SummaryTypeWeekly, "2026-03-01")
+	result, err := s.runDualSearch(t.Context(), SummaryTypeWeekly, "2026-03-01")
 	if err != nil {
 		t.Fatalf("runDualSearch() error = %v", err)
 	}
+
 	if result == "" {
 		t.Fatal("expected non-empty search context")
 	}
+
 	assertPrimarySearchPrecedesKR(t, result)
 	assertDualSearchResultCap(t, result)
 }
@@ -1045,6 +1092,7 @@ func makeSearchResults(prefix, baseURL string, count int) []sharedmodel.SearchRe
 	for i := range results {
 		results[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("%s%d", prefix, i), URL: fmt.Sprintf("%s/%d", baseURL, i)}
 	}
+
 	return results
 }
 
@@ -1055,8 +1103,10 @@ func makeDualSearchSecondaryResults() []sharedmodel.SearchResult {
 			secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("P%d", i), URL: fmt.Sprintf("https://p.com/%d", i)}
 			continue
 		}
+
 		secondary[i] = sharedmodel.SearchResult{Title: fmt.Sprintf("K%d", i), URL: fmt.Sprintf("https://k.com/%d", i)}
 	}
+
 	return secondary
 }
 
@@ -1065,9 +1115,11 @@ func assertPrimarySearchPrecedesKR(t *testing.T, result string) {
 
 	p0Pos := strings.Index(result, "P0")
 	k2Pos := strings.Index(result, "K2")
+
 	if p0Pos == -1 || k2Pos == -1 {
 		t.Fatalf("expected P0 and K2 in result, got: %s", result)
 	}
+
 	if p0Pos >= k2Pos {
 		t.Errorf("primary results should precede KR results: P0@%d >= K2@%d", p0Pos, k2Pos)
 	}
@@ -1079,6 +1131,7 @@ func assertDualSearchResultCap(t *testing.T, result string) {
 	if !strings.Contains(result, "[10]") {
 		t.Error("expected [10] marker (10th result)")
 	}
+
 	if strings.Contains(result, "[11]") {
 		t.Error("should not have [11] marker (cap at 10)")
 	}
@@ -1103,6 +1156,7 @@ func TestSystemPrompt_ContainsDateAuthority(t *testing.T) {
 			if !strings.Contains(prompt, "date_authority") {
 				t.Error("prompt should contain date_authority block")
 			}
+
 			if !strings.Contains(prompt, "NEVER copy dates from examples") {
 				t.Error("prompt should contain 'NEVER copy dates from examples' instruction")
 			}
@@ -1115,17 +1169,22 @@ func TestGraduatedMembersLoad(t *testing.T) {
 	if !strings.Contains(dc, "天音かなた") {
 		t.Error("domainContext should contain graduated member 天音かなた")
 	}
+
 	if !strings.Contains(dc, "Gawr Gura") {
 		t.Error("domainContext should contain graduated member Gawr Gura")
 	}
+
 	if !strings.Contains(dc, "hololive CN") {
 		t.Error("domainContext should mention dissolved hololive CN branch")
 	}
+
 	// 전체 졸업 멤버 수 > 0 확인
 	total := 0
+
 	for _, members := range parsedGraduatedData.Graduated {
 		total += len(members)
 	}
+
 	if total == 0 {
 		t.Error("expected at least one graduated member")
 	}
@@ -1146,9 +1205,11 @@ func TestSystemPrompt_IncludesGeneratedMemberFilter(t *testing.T) {
 			if err != nil {
 				t.Fatalf("getSystemPrompt 실패: %v", err)
 			}
+
 			if !strings.Contains(prompt, "<member_filter>") {
 				t.Fatal("prompt should contain generated member_filter block")
 			}
+
 			if !strings.Contains(prompt, "Gawr Gura") {
 				t.Error("prompt should include generated graduated member data")
 			}
@@ -1158,11 +1219,12 @@ func TestSystemPrompt_IncludesGeneratedMemberFilter(t *testing.T) {
 
 func TestNoteMaxLength(t *testing.T) {
 	schema := summaryResponseSchema()
-	props := mustMapValue(t, schema["properties"])
+	props := mustMapValue(t, schema[wantKeyProperties])
 	highlights := mustMapValue(t, props["highlights"])
 	items := mustMapValue(t, highlights["items"])
-	itemProps := mustMapValue(t, items["properties"])
-	note := mustMapValue(t, itemProps["note"])
+	itemProps := mustMapValue(t, items[wantKeyProperties])
+	note := mustMapValue(t, itemProps[wantFieldNote])
+
 	if note["maxLength"] != 30 {
 		t.Errorf("highlight note maxLength should be 30, got %v", note["maxLength"])
 	}
@@ -1175,6 +1237,7 @@ func mustMapValue(t *testing.T, value any) map[string]any {
 	if !ok {
 		t.Fatalf("expected map[string]any, got %T", value)
 	}
+
 	return result
 }
 
@@ -1187,9 +1250,11 @@ func TestNoteTruncation(t *testing.T) {
 	longInput := input + "X" // 31자
 	result := truncateNote(longInput)
 	runes := []rune(result)
+
 	if len(runes) != 31 { // 30 + "…" (1 rune)
 		t.Errorf("expected 31 runes (30+…), got %d", len(runes))
 	}
+
 	if !strings.HasSuffix(result, "…") {
 		t.Errorf("truncated result should end with …, got %q", result)
 	}

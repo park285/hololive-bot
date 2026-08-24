@@ -22,6 +22,7 @@ package fallback
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/panicguard"
@@ -76,38 +77,41 @@ func (s Summary[K]) AllFailed(totalTargets int) bool {
 }
 
 // 개별 key 실패는 전체 실행을 중단하지 않고 후속 fallback 후보로 남긴다.
-func Execute[K, V any](
-	ctx context.Context,
-	plan FetchPlan[K, V],
-) Summary[K] {
+func (plan FetchPlan[K, V]) Execute(ctx context.Context) Summary[K] {
 	if len(plan.Targets) == 0 {
 		return Summary[K]{FailedTargets: []K{}}
 	}
 
 	failed := make([]bool, len(plan.Targets))
-	successCount := 0
+
+	var successCount int
+
 	if plan.Parallelism <= 1 {
-		successCount = executeSequential(ctx, plan, failed)
+		successCount = plan.executeSequential(ctx, failed)
 	} else {
-		successCount = executeParallel(ctx, plan, failed)
+		successCount = plan.executeParallel(ctx, failed)
 	}
 
 	return summarizeFailures(plan.Targets, failed, successCount)
 }
 
-func executeSequential[K, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
+func (plan FetchPlan[K, V]) executeSequential(ctx context.Context, failed []bool) int {
 	successCount := 0
+
 	for i := range plan.Targets {
 		value, err := plan.Fetch(ctx, plan.Targets[i])
 		if err != nil {
 			failed[i] = true
 			continue
 		}
+
 		successCount++
+
 		if plan.OnSuccess != nil {
 			plan.OnSuccess(plan.Targets[i], value)
 		}
 	}
+
 	return successCount
 }
 
@@ -119,48 +123,57 @@ type parallelResult struct {
 
 func (r *parallelResult) markFailed(index int) {
 	r.mu.Lock()
+
 	r.failed[index] = true
 	r.mu.Unlock()
 }
 
 func (r *parallelResult) markSuccess() {
 	r.mu.Lock()
+
 	r.successCount++
 	r.mu.Unlock()
 }
 
-func fetchParallelTarget[K, V any](ctx context.Context, plan FetchPlan[K, V], key K, result *parallelResult) error {
+func (plan FetchPlan[K, V]) fetchParallelTarget(ctx context.Context, key K, result *parallelResult) error {
 	value, err := plan.Fetch(ctx, key)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch: %w", err)
 	}
+
 	if plan.OnSuccess != nil {
 		plan.OnSuccess(key, value)
 	}
+
 	result.markSuccess()
 
 	return nil
 }
 
-// 개별 key 실패를 goroutine 안에서 흡수한다. errgroup처럼 첫 실패로 ctx를 취소하면
+// 개별 key 실패를 goroutine 안에서 흡수한다. 만약 errgroup처럼 첫 실패로 ctx를 취소하면
 // 아직 실행 중인 다른 target까지 중단되어 fallback 후보 집계가 어긋난다.
-func executeParallel[K, V any](ctx context.Context, plan FetchPlan[K, V], failed []bool) int {
+func (plan FetchPlan[K, V]) executeParallel(ctx context.Context, failed []bool) int {
 	limiter := make(chan struct{}, plan.Parallelism)
 	result := parallelResult{failed: failed}
 
 	var wg sync.WaitGroup
+
 	for i := range plan.Targets {
 		key := plan.Targets[i]
+
 		limiter <- struct{}{}
+
 		wg.Go(func() {
 			defer func() { <-limiter }()
+
 			if err := panicguard.RunE(nil, "fallback-fetch", func() error {
-				return fetchParallelTarget(ctx, plan, key, &result)
+				return plan.fetchParallelTarget(ctx, key, &result)
 			}); err != nil {
 				result.markFailed(i)
 			}
 		})
 	}
+
 	wg.Wait()
 
 	return result.successCount
@@ -175,7 +188,9 @@ func summarizeFailures[K any](targets []K, failed []bool, successCount int) Summ
 		if !failed[i] {
 			continue
 		}
+
 		summary.FailedCount++
+
 		summary.FailedTargets = append(summary.FailedTargets, targets[i])
 	}
 
@@ -196,19 +211,18 @@ func (r PrimaryResult[K]) AllFailed() bool {
 	return r.Attempted > 0 && r.Succeeded == 0 && len(r.Failed) == r.Attempted
 }
 
-func RunPrimary[K any](
+func (plan FetchPlan[K, _]) RunPrimary(
 	ctx context.Context,
 	keys []K,
-	plan FetchPlan[K, struct{}],
 	run func(context.Context, K) error,
 ) PrimaryResult[K] {
-	summary := Execute(ctx, FetchPlan[K, struct{}]{
+	summary := FetchPlan[K, struct{}]{
 		Targets:     keys,
 		Parallelism: plan.Parallelism,
 		Fetch: func(fetchCtx context.Context, key K) (struct{}, error) {
 			return struct{}{}, run(fetchCtx, key)
 		},
-	})
+	}.Execute(ctx)
 
 	return PrimaryResult[K]{
 		Attempted: len(keys),

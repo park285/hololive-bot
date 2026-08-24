@@ -35,7 +35,12 @@ import (
 )
 
 func (d *ClaimManager) claimOutboxBatch(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
-	return d.fetchAndLockForPerRoom(ctx)
+	out, err := d.fetchAndLockForPerRoom(ctx)
+	if err != nil {
+		return out, fmt.Errorf("fetch and lock for per room: %w", err)
+	}
+
+	return out, nil
 }
 
 func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.YouTubeNotificationOutbox, error) {
@@ -52,6 +57,7 @@ func (d *ClaimManager) fetchAndLockForPerRoom(ctx context.Context) ([]domain.You
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
 	}
 	defer rows.Close()
+
 	items, err := pgx.CollectRows(rows, deliverysql.ScanOutboxRow)
 	if err != nil {
 		return nil, fmt.Errorf("fetch and lock outbox items for per-room mode: %w", err)
@@ -64,12 +70,14 @@ func outboxClaimFreshCutoff(window time.Duration, now time.Time) time.Time {
 	if window <= 0 {
 		return time.Time{}
 	}
+
 	return now.Add(-window)
 }
 
 func (d *ClaimManager) processPerRoomBatch(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox) int {
 	roomsByChannel := d.collectRoomsByChannel(ctx, outboxItems)
 	d.enqueueDeliveries(ctx, outboxItems, roomsByChannel)
+
 	return d.processPendingDeliveries(ctx)
 }
 
@@ -81,18 +89,23 @@ func (d *ClaimManager) reconcileTerminalOutboxStatuses(ctx context.Context) {
 	outboxIDs, err := d.delivery.FindPendingOutboxIDsForAggregateSync(ctx, d.config.BatchSize)
 	if err != nil {
 		d.logger.Warn("Failed to find terminal outbox rows for aggregate sync", slog.Any("error", err))
+
 		return
 	}
+
 	if len(outboxIDs) == 0 {
 		return
 	}
 
 	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, outboxIDs); err != nil {
 		d.logger.Warn("Failed to reconcile outbox aggregate statuses", slog.Any("error", err))
+
 		return
 	}
+
 	if err := d.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs); err != nil {
 		d.logger.Warn("Failed to log finalized community/shorts outbox results", slog.Any("error", err))
+
 		return
 	}
 
@@ -102,6 +115,7 @@ func (d *ClaimManager) reconcileTerminalOutboxStatuses(ctx context.Context) {
 
 func (d *ClaimManager) enqueueDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, roomsByChannel map[string]channelAlarmRoomTargets) {
 	startedAt := time.Now()
+
 	defer func() {
 		outboxEnqueueDuration.Observe(time.Since(startedAt).Seconds())
 	}()
@@ -139,17 +153,20 @@ func (d *ClaimManager) enqueueDelivery(
 	rooms, ok := roomsForItem(roomsByChannel, item)
 	if !ok {
 		d.markFailed(ctx, item.ID, item.LockedAt, "subscriber lookup failed")
+
 		return outboxEnqueueStats{subscriberLookupFailures: 1}
 	}
 
 	if len(rooms) == 0 {
 		d.markSent(ctx, item.ID, item.LockedAt)
+
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
 	}
 
 	rooms = d.filterLiveCatchupSuppressedRooms(ctx, item, rooms)
 	if len(rooms) == 0 {
 		d.markSent(ctx, item.ID, item.LockedAt)
+
 		return outboxEnqueueStats{noSubscriberOutboxes: 1}
 	}
 
@@ -159,10 +176,12 @@ func (d *ClaimManager) enqueueDelivery(
 			slog.Int64("outbox_id", item.ID),
 			slog.Any("error", err))
 		d.markFailed(ctx, item.ID, item.LockedAt, fmt.Sprintf("enqueue delivery rows: %v", err))
+
 		return outboxEnqueueStats{enqueueFailures: 1}
 	}
 
 	d.releaseOutboxLock(ctx, item.ID, item.LockedAt)
+
 	return outboxEnqueueStats{enqueuedOutboxes: 1, totalTargetRooms: len(roomIDs)}
 }
 
@@ -171,6 +190,7 @@ func deliveryRoomIDs(rooms map[string]bool) []string {
 	for roomID := range rooms {
 		roomIDs = append(roomIDs, roomID)
 	}
+
 	return roomIDs
 }
 
@@ -197,13 +217,16 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	rows, err := d.delivery.FetchAndLock(ctx, d.config.BatchSize, d.config.LockTimeout)
 	if err != nil {
 		d.logger.Error("Failed to fetch delivery rows", slog.Any("error", err))
+
 		return 0
 	}
+
 	if len(rows) == 0 {
 		return 0
 	}
 
 	startedAt := time.Now()
+
 	defer func() {
 		observeOutboxDispatchDuration(time.Since(startedAt))
 	}()
@@ -214,8 +237,10 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	sendRows, err := d.delivery.MarkSendingBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, collectDeliveryIDs(rows)))
 	if err != nil {
 		d.logger.Error("Failed to mark delivery rows sending", slog.Any("error", err))
+
 		return len(rows)
 	}
+
 	if len(sendRows) == 0 {
 		return len(rows)
 	}
@@ -223,6 +248,7 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 	outboxByID, err := d.loadOutboxItemsByIDs(ctx, collectDeliveryOutboxIDs(sendRows))
 	if err != nil {
 		d.failSendingRowsAfterOutboxLoadError(ctx, sendRows, err)
+
 		return len(sendRows)
 	}
 
@@ -239,6 +265,7 @@ func (d *ClaimManager) processPendingDeliveries(ctx context.Context) int {
 func (d *ClaimManager) failSendingRowsAfterOutboxLoadError(ctx context.Context, sendRows []domain.YouTubeNotificationDelivery, err error) {
 	d.logger.Error("Failed to load outbox rows for deliveries", slog.Any("error", err))
 	observeOutboxDeliveryProcessed("failed", len(sendRows))
+
 	if markErr := d.delivery.MarkFailedRetryBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(sendRows, collectDeliveryIDs(sendRows)), d.config.MaxRetries, d.config.RetryBackoff, "load outbox rows"); markErr != nil {
 		d.logger.Error("Failed to mark delivery rows failed after outbox load failure", slog.Any("error", markErr))
 	}
@@ -247,12 +274,14 @@ func (d *ClaimManager) failSendingRowsAfterOutboxLoadError(ctx context.Context, 
 func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult) {
 	if err := d.delivery.MarkSentBatchIfLocked(ctx, store.DeliveryLockTokensForIDs(rows, result.SuccessDeliveryIDs), result.SuccessClaimTokens...); err != nil {
 		d.logger.Error("Failed to mark delivery rows as sent", slog.Any("error", err))
+
 		if recoverErr := d.recoverSuccessfulCommunityShortsSentState(ctx, result.SuccessDeliveryIDs); recoverErr != nil {
 			d.logger.Warn("Failed to persist community/shorts sent-state recovery after mark-sent error",
 				slog.Any("error", recoverErr),
 				slog.Int("delivery_count", len(result.SuccessDeliveryIDs)))
 		}
 	}
+
 	for reason, ids := range result.FailureBuckets {
 		d.markFailedDispatchBucket(ctx, rows, result, reason, ids)
 	}
@@ -261,8 +290,10 @@ func (d *ClaimManager) markDispatchResult(ctx context.Context, rows []domain.You
 func (d *ClaimManager) markFailedDispatchBucket(ctx context.Context, rows []domain.YouTubeNotificationDelivery, result *dispatchstate.DispatchResult, reason string, ids []int64) {
 	if deliveryFailureReasonIsPermanent(reason) {
 		d.markPermanentDispatchFailureBucket(ctx, rows, reason, ids)
+
 		return
 	}
+
 	d.markRetryDispatchFailureBucket(ctx, rows, result, reason, ids)
 }
 
@@ -290,6 +321,7 @@ func (d *ClaimManager) markRetryDispatchFailureBucket(ctx context.Context, rows 
 func (d *ClaimManager) reconcileTouchedOutboxes(ctx context.Context, touchedOutboxIDs []int64) int {
 	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, touchedOutboxIDs); err != nil {
 		d.logger.Warn("Failed to update outbox aggregate statuses", slog.Any("error", err))
+
 		return 1
 	} else if err := d.logFinalizedCommunityShortsOutboxResults(ctx, touchedOutboxIDs); err != nil {
 		d.logger.Warn("Failed to log finalized community/shorts outbox results", slog.Any("error", err))
@@ -321,6 +353,7 @@ func collectDeliveryOutboxIDs(rows []domain.YouTubeNotificationDelivery) []int64
 	for i := range rows {
 		outboxIDs = append(outboxIDs, rows[i].OutboxID)
 	}
+
 	return outboxIDs
 }
 
@@ -329,6 +362,7 @@ func collectDeliveryIDs(rows []domain.YouTubeNotificationDelivery) []int64 {
 	for i := range rows {
 		deliveryIDs = append(deliveryIDs, rows[i].ID)
 	}
+
 	return deliveryIDs
 }
 
@@ -339,6 +373,7 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 	}
 
 	var rows []domain.YouTubeNotificationOutbox
+
 	if err := deliverysql.SelectDeliverySQL(ctx, d.db, &rows, "load outbox rows by ids", mustSQL("dispatcher_claim_0370_02.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)...); err != nil {
 		return nil, fmt.Errorf("load outbox rows by ids: %w", err)
@@ -348,5 +383,6 @@ func (d *ClaimManager) loadOutboxItemsByIDs(ctx context.Context, ids []int64) (m
 	for i := range rows {
 		result[rows[i].ID] = rows[i]
 	}
+
 	return result, nil
 }

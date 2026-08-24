@@ -21,7 +21,6 @@
 package youtubedispatch
 
 import (
-	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -31,19 +30,21 @@ import (
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
+type buildTemplateDataCase struct {
+	name      string
+	item      domain.YouTubeNotificationOutbox
+	wantURL   string
+	wantTitle string
+	wantPost  string
+	wantMil   string
+	wantErr   bool
+}
+
 func TestBuildTemplateData(t *testing.T) {
 	t.Parallel()
 
 	mf := &MessageFormatter{}
-	tests := []struct {
-		name      string
-		item      domain.YouTubeNotificationOutbox
-		wantURL   string
-		wantTitle string
-		wantPost  string
-		wantMil   string
-		wantErr   bool
-	}{
+	tests := []buildTemplateDataCase{
 		{
 			name: "video payload",
 			item: domain.YouTubeNotificationOutbox{
@@ -75,7 +76,7 @@ func TestBuildTemplateData(t *testing.T) {
 			name: "milestone payload",
 			item: domain.YouTubeNotificationOutbox{
 				Kind:    domain.OutboxKindMilestone,
-				Payload: `{"milestone":"100만"}`,
+				Payload: testPayloadMilestone,
 			},
 			wantMil: "100만",
 		},
@@ -92,20 +93,29 @@ func TestBuildTemplateData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := mf.buildTemplateData("멤버", &tt.item)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got.MemberName != "멤버" || got.Kind != string(tt.item.Kind) || got.URL != tt.wantURL || got.Title != tt.wantTitle || got.PostID != tt.wantPost || got.Milestone != tt.wantMil {
-				t.Fatalf("unexpected template data: %#v", got)
-			}
+			assertBuildTemplateData(t, mf, tt)
 		})
+	}
+}
+
+func assertBuildTemplateData(t *testing.T, mf *MessageFormatter, tt buildTemplateDataCase) {
+	t.Helper()
+
+	got, err := mf.buildTemplateData("멤버", &tt.item)
+	if tt.wantErr {
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got.MemberName != "멤버" || got.Kind != string(tt.item.Kind) || got.URL != tt.wantURL || got.Title != tt.wantTitle || got.PostID != tt.wantPost || got.Milestone != tt.wantMil {
+		t.Fatalf("unexpected template data: %#v", got)
 	}
 }
 
@@ -119,7 +129,7 @@ func TestTruncateString(t *testing.T) {
 		want   string
 	}{
 		{name: "short text unchanged", in: "abc", maxLen: 5, want: "abc"},
-		{name: "exact length unchanged", in: "hello", maxLen: 5, want: "hello"},
+		{name: "exact length unchanged", in: testMessageHello, maxLen: 5, want: testMessageHello},
 		{name: "ascii truncated", in: "hello world", maxLen: 8, want: "hello..."},
 		{name: "unicode truncated", in: "안녕하세요세계", maxLen: 6, want: "안녕하..."},
 		{name: "minimum ellipsis", in: "abcdef", maxLen: 3, want: "..."},
@@ -128,6 +138,7 @@ func TestTruncateString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := deliverysql.TruncateString(tt.in, tt.maxLen); got != tt.want {
 				t.Fatalf("deliverysql.TruncateString(%q, %d) = %q, want %q", tt.in, tt.maxLen, got, tt.want)
 			}
@@ -140,7 +151,7 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 
 	mf := &MessageFormatter{}
 	items := []domain.YouTubeNotificationOutbox{
-		{Kind: domain.OutboxKindNewVideo, Payload: `{"video_id":"v1","title":"영상1"}`},
+		{Kind: domain.OutboxKindNewVideo, Payload: testPayloadVideoOne},
 		{Kind: domain.OutboxKindNewShort, Payload: `{invalid}`},
 		{Kind: domain.OutboxKindCommunityPost, Payload: `{"post_id":"p1","content_text":"내용"}`},
 	}
@@ -153,9 +164,11 @@ func TestBuildGroupedTemplateData(t *testing.T) {
 	if got.Items[0].Title != "영상1" || got.Items[0].URL != "https://youtu.be/v1" {
 		t.Fatalf("unexpected first item: %#v", got.Items[0])
 	}
+
 	if got.Items[1].Title != "" || got.Items[1].URL != "" {
 		t.Fatalf("expected invalid payload item to stay empty: %#v", got.Items[1])
 	}
+
 	if got.Items[2].ContentText != "내용" || got.Items[2].URL != "https://www.youtube.com/post/p1" {
 		t.Fatalf("unexpected third item: %#v", got.Items[2])
 	}
@@ -173,8 +186,8 @@ func TestGroupOutboxItems(t *testing.T) {
 	}
 	roomsByChannel := map[string]channelAlarmRoomTargets{
 		"ch1": {
-			domain.AlarmTypeLive:   {"room1": true, "room2": true},
-			domain.AlarmTypeShorts: {"room1": true, "room2": true},
+			domain.AlarmTypeLive:   {testRoom1: true, testRoom2: true},
+			domain.AlarmTypeShorts: {testRoom1: true, testRoom2: true},
 		},
 	}
 
@@ -184,8 +197,10 @@ func TestGroupOutboxItems(t *testing.T) {
 	}
 
 	summary := make(map[string]int)
+
 	for _, g := range groups {
 		key := strings.Join([]string{g.roomID, g.channelID, string(g.kind)}, "|")
+
 		summary[key] = len(g.items)
 	}
 
@@ -211,6 +226,7 @@ func TestCollectOutboxIDs(t *testing.T) {
 
 	got := collectOutboxIDs(items)
 	want := []int64{10, 20, 30}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("collectOutboxIDs() = %#v, want %#v", got, want)
 	}
@@ -226,6 +242,7 @@ func TestUniqueInt64s(t *testing.T) {
 	in := []int64{1, 2, 1, 3, 2, 4, 4}
 	got := deliverysql.UniqueInt64s(in)
 	want := []int64{1, 2, 3, 4}
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("deliverysql.UniqueInt64s() = %#v, want %#v", got, want)
 	}
@@ -239,10 +256,11 @@ func TestFormatGroupedMessageErrors(t *testing.T) {
 	t.Parallel()
 
 	mf := &MessageFormatter{}
-	if _, err := mf.formatGroupedMessage(context.Background(), "멤버", "ch1", domain.OutboxKindNewVideo, nil); err == nil {
-		t.Fatalf("expected empty items error")
+	if _, err := mf.formatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, nil); err == nil {
+		t.Fatal("expected empty items error")
 	}
-	if _, err := mf.formatGroupedMessage(context.Background(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
-		t.Fatalf("expected nil renderer error")
+
+	if _, err := mf.formatGroupedMessage(t.Context(), "멤버", "ch1", domain.OutboxKindNewVideo, []domain.YouTubeNotificationOutbox{{}}); err == nil {
+		t.Fatal("expected nil renderer error")
 	}
 }

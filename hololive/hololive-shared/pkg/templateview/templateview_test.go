@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildMajorEventViews(t *testing.T) {
-	start := time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.March, 6, 0, 0, 0, 0, time.UTC)
 	events := []domain.MajorEvent{{
 		Title:          "3D Live",
 		EventStartDate: &start,
@@ -20,6 +20,7 @@ func TestBuildMajorEventViews(t *testing.T) {
 	if len(views) != 1 {
 		t.Fatalf("unexpected view count: %d", len(views))
 	}
+
 	if views[0].Members != "A, B" {
 		t.Fatalf("unexpected members: %q", views[0].Members)
 	}

@@ -21,16 +21,16 @@
 package dbtest
 
 import (
-	"context"
 	"testing"
 )
 
 func TestNewPool_AppliesProdMigrations(t *testing.T) {
 	pool := NewPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, table := range []string{"acl_settings", "acl_rooms", "major_events"} {
 		var exists bool
+
 		err := pool.QueryRow(ctx, `
 			SELECT EXISTS (
 				SELECT 1
@@ -51,7 +51,7 @@ func TestNewPool_AppliesProdMigrations(t *testing.T) {
 
 func TestApplyMigrations_IsIdempotent(t *testing.T) {
 	pool := NewPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("reapply migrations: %v", err)
@@ -63,14 +63,16 @@ func TestApplyMigrations_IsIdempotent(t *testing.T) {
 // 통과하면 base-schema gap이 없고 manifest 전체가 빈 DB에서 끝까지 적용됐음을 보장한다.
 func TestNewPool_RestoresBaseSchema(t *testing.T) {
 	pool := NewPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// base 테이블이 실제로 존재하는지 to_regclass로 확인한다.
 	for _, table := range []string{"members", "alarms", "youtube_milestones", "youtube_notification_outbox"} {
 		var oid *string
+
 		if err := pool.QueryRow(ctx, `SELECT to_regclass($1)::text`, table).Scan(&oid); err != nil {
 			t.Fatalf("to_regclass(%s): %v", table, err)
 		}
+
 		if oid == nil {
 			t.Fatalf("base table %s not present after full-chain migrations", table)
 		}
@@ -87,6 +89,7 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 	for table, columns := range wantColumns {
 		for _, column := range columns {
 			var exists bool
+
 			err := pool.QueryRow(ctx, `
 				SELECT EXISTS (
 					SELECT 1
@@ -99,6 +102,7 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 			if err != nil {
 				t.Fatalf("check column %s.%s: %v", table, column, err)
 			}
+
 			if !exists {
 				t.Fatalf("column %s.%s missing after full-chain migrations", table, column)
 			}
@@ -114,9 +118,11 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 	}
 
 	var count int
+
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM members WHERE slug = 'smoke-test'`).Scan(&count); err != nil {
 		t.Fatalf("count members: %v", err)
 	}
+
 	if count != 1 {
 		t.Fatalf("expected 1 smoke-test member, got %d", count)
 	}
@@ -124,12 +130,13 @@ func TestNewPool_RestoresBaseSchema(t *testing.T) {
 
 // TestNewPool_IsolatesPerCall은 호출마다 격리된 데이터베이스를 받는지 검증한다.
 func TestNewPool_IsolatesPerCall(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	poolA := NewPool(t)
 	poolB := NewPool(t)
 
 	var dbA, dbB string
+
 	if err := poolA.QueryRow(ctx, "SELECT current_database()").Scan(&dbA); err != nil {
 		t.Fatalf("current_database A: %v", err)
 	}
@@ -148,6 +155,7 @@ func TestNewPool_IsolatesPerCall(t *testing.T) {
 	}
 
 	var countB int
+
 	if err := poolB.QueryRow(ctx, "SELECT count(*) FROM acl_settings").Scan(&countB); err != nil {
 		t.Fatalf("count database B: %v", err)
 	}

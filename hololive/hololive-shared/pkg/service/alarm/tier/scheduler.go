@@ -29,7 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// channelScheduleState: 채널별 Tier 스케줄 상태
+// 채널별 Tier 스케줄 상태.
 type channelScheduleState struct {
 	nextCheckAt      time.Time
 	lastCheckedAt    time.Time
@@ -63,16 +63,20 @@ func (ts *TieredScheduler) SelectDueChannels(channelIDs []string) []string {
 	now := time.Now()
 
 	ts.mu.Lock()
+
 	forceAll := false
+
 	if !now.Before(ts.fullRefreshAt) {
 		ts.fullRefreshAt = now.Add(constants.FullRefreshInterval)
 		forceAll = true
 	}
+
 	ts.mu.Unlock()
 
 	if forceAll {
 		result := make([]string, len(channelIDs))
 		copy(result, channelIDs)
+
 		return result
 	}
 
@@ -104,6 +108,7 @@ func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domai
 
 	// 기존 lastNotifiedAt 보존
 	var lastNotifiedAt *time.Time
+
 	if existing, ok := ts.states[channelID]; ok {
 		lastNotifiedAt = existing.lastNotifiedAt
 	}
@@ -129,15 +134,19 @@ func (ts *TieredScheduler) UpdateChannelState(channelID string, streams []*domai
 
 func nearestUpcomingStart(streams []*domain.Stream, now time.Time) *time.Time {
 	var nearest *time.Time
+
 	for _, s := range streams {
 		if !streamStartsAfter(s, now) {
 			continue
 		}
+
 		if nearest == nil || s.StartScheduled.Before(*nearest) {
 			t := *s.StartScheduled
+
 			nearest = &t
 		}
 	}
+
 	return nearest
 }
 
@@ -205,5 +214,6 @@ func (ts *TieredScheduler) ForgetChannel(channelID string) {
 func (ts *TieredScheduler) ChannelCount() int {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
+
 	return len(ts.states)
 }

@@ -2,6 +2,7 @@ package htmlscraper
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"testing"
@@ -15,11 +16,21 @@ type testYouTubeClient struct {
 }
 
 func (c testYouTubeClient) GetUpcomingEvents(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
-	return c.fetchUpcoming(ctx, channelID)
+	out, err := c.fetchUpcoming(ctx, channelID)
+	if err != nil {
+		return out, fmt.Errorf("fetch upcoming: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c testYouTubeClient) GetUpcomingEventsWaitAdmission(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
-	return c.fetchUpcoming(ctx, channelID)
+	out, err := c.fetchUpcoming(ctx, channelID)
+	if err != nil {
+		return out, fmt.Errorf("fetch upcoming: %w", err)
+	}
+
+	return out, nil
 }
 
 func (testYouTubeClient) GetRecentVideos(context.Context, string, int) ([]*parser.Video, error) {
@@ -31,10 +42,12 @@ func (testYouTubeClient) GetPopularVideos(context.Context, string, int) ([]*pars
 }
 
 func (testYouTubeClient) GetChannelStats(context.Context, string) (*parser.ChannelStats, error) {
+	//nolint:nilnil // Service가 (nil 객체, nil 오류) 응답을 거부하는지 확인하는 test double이라 그대로 둔다.
 	return nil, nil
 }
 
 func (testYouTubeClient) GetChannelSnippet(context.Context, string) (*parser.ChannelSnippet, error) {
+	//nolint:nilnil // Service가 (nil 객체, nil 오류) 응답을 거부하는지 확인하는 test double이라 그대로 둔다.
 	return nil, nil
 }
 
@@ -50,12 +63,17 @@ func newTestServiceWithHTTPClient(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	config := settings.DefaultOfficialScheduleConfig()
+
 	config.BaseURL = baseURL
+
 	var youtubeClient YouTubeClient
+
 	if fetchUpcoming != nil {
 		youtubeClient = testYouTubeClient{fetchUpcoming: fetchUpcoming}
 	}
+
 	return NewServiceWithDependencies(
 		nil,
 		nil,
@@ -74,6 +92,7 @@ func TestServiceRejectsNilYouTubeObjectResults(t *testing.T) {
 	if stats, err := service.GetChannelStats(t.Context(), "channel"); stats != nil || err == nil {
 		t.Fatalf("GetChannelStats() = (%v, %v), want (nil, error)", stats, err)
 	}
+
 	if snippet, err := service.GetChannelSnippet(t.Context(), "channel"); snippet != nil || err == nil {
 		t.Fatalf("GetChannelSnippet() = (%v, %v), want (nil, error)", snippet, err)
 	}

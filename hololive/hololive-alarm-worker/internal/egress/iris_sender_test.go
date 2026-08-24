@@ -2,7 +2,7 @@ package egress
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -34,6 +34,7 @@ func (c *irisSenderTestClient) SendMarkdown(_ context.Context, roomID, markdown 
 	if c.markdownErr != nil {
 		return nil, c.markdownErr
 	}
+
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 
@@ -53,7 +54,7 @@ func TestIrisMessageSenderPreservesReceiverRoomID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, client.karingRequests, 1)
 	assert.Equal(t, int64(464252100463241), client.karingRequests[0].ReceiverRoomID)
-	assert.Zero(t, client.karingRequests[0].ReceiverName)
+	assert.Empty(t, client.karingRequests[0].ReceiverName)
 }
 
 func TestIrisMessageSenderFallsBackToReceiverName(t *testing.T) {
@@ -161,7 +162,7 @@ func TestIrisMessageSenderTextLanePropagatesClientRequestID(t *testing.T) {
 }
 
 func TestIrisMessageSenderMarkdownLaneWrapsError(t *testing.T) {
-	client := &irisSenderTestClient{markdownErr: fmt.Errorf("boom")}
+	client := &irisSenderTestClient{markdownErr: errors.New("boom")}
 	sender := NewIrisMessageSender(client, WithMarkdownReplies(true), WithRoomChat(staticRooms{"room-1": true}))
 
 	err := sender.SendMessageWithClientRequestID(t.Context(), "room-1", "**hello**", "req-1")

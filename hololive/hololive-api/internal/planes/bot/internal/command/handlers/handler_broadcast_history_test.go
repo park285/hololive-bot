@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubBroadcastHistoryRepository struct {
@@ -32,9 +32,11 @@ type stubBroadcastHistoryRepository struct {
 func (s *stubBroadcastHistoryRepository) ListEndedBroadcasts(_ context.Context, query *handlercore.BroadcastHistoryQuery) (handlercore.BroadcastHistoryResult, error) {
 	s.listQuery = *query
 	s.listCalls++
+
 	if s.listErr != nil {
 		return handlercore.BroadcastHistoryResult{}, s.listErr
 	}
+
 	return handlercore.BroadcastHistoryResult{Entries: s.entries, Truncated: s.truncated}, nil
 }
 
@@ -43,6 +45,7 @@ func (s *stubBroadcastHistoryRepository) GetEndedBroadcast(_ context.Context, qu
 	if s.getErr != nil {
 		return nil, s.getErr
 	}
+
 	return s.getEntry, nil
 }
 
@@ -55,19 +58,21 @@ func (s *stubBroadcastThumbnailDownloader) Download(_ context.Context, entry *ha
 	if entry == nil {
 		return nil, "", errors.New("broadcast history entry is required")
 	}
+
 	s.entry = *entry
 	if s.err != nil {
 		return nil, "", s.err
 	}
-	return []byte("jpeg"), "image/jpeg", nil
+
+	return []byte("jpeg"), testContentTypeJPEG, nil
 }
 
 func TestBroadcastHistoryCommandExecute(t *testing.T) {
-	endedAt := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	endedAt := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	repo := &stubBroadcastHistoryRepository{
 		entries: []handlercore.BroadcastHistoryEntry{
 			{
-				VideoID:       "AqxEw3kXcgU",
+				VideoID:       testVideoID,
 				MemberName:    "테스트",
 				Title:         "【Forza】test",
 				TopicID:       "Forza",
@@ -77,7 +82,9 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 			},
 		},
 	}
+
 	var sent string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
@@ -90,28 +97,35 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 
 	cmd := NewBroadcastHistoryCommand(deps)
 	before := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(-2 * time.Second)
-	err := cmd.Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
-		"type":  "게임",
-		"topic": "Forza",
-		"limit": 5,
-		"all":   true,
+
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{
+		"type":         "게임",
+		"topic":        "Forza",
+		testParamLimit: 5,
+		"all":          true,
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if repo.listCalls != 1 {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 1", repo.listCalls)
 	}
+
 	after := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).Add(2 * time.Second)
+
 	if repo.listQuery.Type != string(broadcasttype.Game) || repo.listQuery.TopicID != "Forza" || repo.listQuery.Limit != 5 || repo.listQuery.IncludeAll {
 		t.Fatalf("query = %+v", repo.listQuery)
 	}
+
 	if repo.listQuery.Since.Before(before) || repo.listQuery.Since.After(after) {
 		t.Fatalf("Since = %s, want capped all range between %s and %s", repo.listQuery.Since, before, after)
 	}
+
 	if sent == "" {
 		t.Fatal("expected message to be sent")
 	}
+
 	if !strings.Contains(sent, "기간: 최근 365일") || strings.Contains(sent, "기간: 전체") {
 		t.Fatalf("sent message = %q, want capped 365-day range", sent)
 	}
@@ -119,7 +133,9 @@ func TestBroadcastHistoryCommandExecute(t *testing.T) {
 
 func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{truncated: true}
+
 	var sent string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
@@ -130,9 +146,10 @@ func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
 		SendError: func(_ context.Context, _, _ string) error { return nil },
 	}
 
-	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room"}, nil); err != nil {
+	if err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, nil); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if !strings.Contains(sent, "조회 예산") {
 		t.Fatalf("sent message = %q, want truncation notice", sent)
 	}
@@ -140,7 +157,9 @@ func TestBroadcastHistoryCommandReportsTruncatedResult(t *testing.T) {
 
 func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{}
+
 	var sent string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
@@ -151,18 +170,21 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 		SendError: func(_ context.Context, _, _ string) error { return nil },
 	}
 
-	err := NewBroadcastHistoryCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{
 		"type": "not-a-type",
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if repo.listCalls != 0 {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 0", repo.listCalls)
 	}
+
 	if sent == "" {
 		t.Fatal("expected invalid type message")
 	}
+
 	want := "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류"
 	if sent != want {
 		t.Fatalf("invalid type message = %q, want %q", sent, want)
@@ -172,12 +194,14 @@ func TestBroadcastHistoryCommandInvalidType(t *testing.T) {
 func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{}
 	memberProvider := newTrackedMemberProvider(&domain.Member{
-		ChannelID: "ch-miko",
+		ChannelID: testChannelMiko,
 		Name:      "사쿠라 미코",
 		Org:       "Hololive",
 		Aliases:   &domain.Aliases{Ko: []string{"미코치"}},
 	})
+
 	var sent string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
@@ -189,22 +213,26 @@ func TestBroadcastHistoryCommandMemberAliasAndTypeQuery(t *testing.T) {
 		SendError: func(_ context.Context, _, _ string) error { return nil },
 	}
 
-	err := NewBroadcastHistoryCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
-		"member": "미코치",
-		"type":   "게임",
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{
+		paramMember: "미코치",
+		"type":      "게임",
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if repo.listCalls != 1 {
 		t.Fatalf("ListEndedBroadcasts calls = %d, want 1", repo.listCalls)
 	}
-	if repo.listQuery.ChannelID != "ch-miko" {
+
+	if repo.listQuery.ChannelID != testChannelMiko {
 		t.Fatalf("ChannelID = %q, want ch-miko", repo.listQuery.ChannelID)
 	}
+
 	if repo.listQuery.Type != string(broadcasttype.Game) {
 		t.Fatalf("Type = %q, want %q", repo.listQuery.Type, broadcasttype.Game)
 	}
+
 	if !strings.Contains(sent, "멤버: 사쿠라 미코") || !strings.Contains(sent, "타입: 게임") {
 		t.Fatalf("sent message = %q, want resolved member and type filters", sent)
 	}
@@ -220,15 +248,17 @@ func TestBroadcastHistoryCommandDefaultDaysIsOneWeek(t *testing.T) {
 	}
 	before := time.Now().AddDate(0, 0, -defaultBroadcastHistoryDays).Add(-2 * time.Second)
 
-	err := NewBroadcastHistoryCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{})
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	after := time.Now().AddDate(0, 0, -defaultBroadcastHistoryDays).Add(2 * time.Second)
 
 	if repo.listQuery.IncludeAll {
 		t.Fatal("IncludeAll = true, want false")
 	}
+
 	if repo.listQuery.Since.Before(before) || repo.listQuery.Since.After(after) {
 		t.Fatalf("Since = %s, want around one week ago between %s and %s", repo.listQuery.Since, before, after)
 	}
@@ -236,7 +266,9 @@ func TestBroadcastHistoryCommandDefaultDaysIsOneWeek(t *testing.T) {
 
 func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{listErr: errors.New("db down")}
+
 	var sent []string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory: repo,
 		Formatter:        formatter.NewResponseFormatter("!", nil),
@@ -246,15 +278,17 @@ func TestBroadcastHistoryCommandListErrorSendsOneUserMessage(t *testing.T) {
 		},
 		SendError: func(_ context.Context, _, message string) error {
 			t.Fatalf("unexpected generic error response: %s", message)
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewBroadcastHistoryCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{})
+	err := NewBroadcastHistoryCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if len(sent) != 1 {
 		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
 	}
@@ -268,7 +302,7 @@ func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T
 		t.Fatalf("clear live sessions: %v", err)
 	}
 
-	base := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
 		SELECT 'talk' || lpad(gs::text, 7, '0'), 'channel-a', 'ENDED', '【雑談】test',
@@ -288,6 +322,7 @@ func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
+
 	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
 		Type:  string(broadcasttype.Game),
 		Limit: 1,
@@ -296,9 +331,11 @@ func TestPgBroadcastHistoryRepositoryStopsAtScanBudgetForTypeFilter(t *testing.T
 	if err != nil {
 		t.Fatalf("ListEndedBroadcasts() error = %v", err)
 	}
+
 	if len(result.Entries) != 0 {
 		t.Fatalf("len(entries) = %d, want 0 within scan budget", len(result.Entries))
 	}
+
 	if !result.Truncated {
 		t.Fatal("Truncated = false, want true after scan budget")
 	}
@@ -311,7 +348,8 @@ func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T
 	if _, err := pool.Exec(ctx, `DELETE FROM youtube_live_sessions`); err != nil {
 		t.Fatalf("clear live sessions: %v", err)
 	}
-	base := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+
+	base := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, topic_id, ended_at, last_seen_at)
 		SELECT 'topic' || lpad(gs::text, 6, '0'), 'channel-a', 'ENDED', 'test', 'talking',
@@ -323,6 +361,7 @@ func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
+
 	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
 		TopicID: "missing-topic",
 		Limit:   1,
@@ -331,6 +370,7 @@ func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T
 	if err != nil {
 		t.Fatalf("ListEndedBroadcasts() error = %v", err)
 	}
+
 	if len(result.Entries) != 0 || result.Truncated {
 		t.Fatalf("result = %+v, want exhausted empty result without scan truncation", result)
 	}
@@ -339,20 +379,24 @@ func TestPgBroadcastHistoryRepositoryPushesStableTopicFilterIntoSQL(t *testing.T
 func TestPgBroadcastHistoryRepositoryElapsedBudgetReturnsTruncatedResult(t *testing.T) {
 	repo := &pgBroadcastHistoryRepository{
 		queryTimeout: 20 * time.Millisecond,
-		pageLoader: func(ctx context.Context, _ *handlercore.BroadcastHistoryQuery, _ *time.Time, _ *time.Time, _ string, _ int) ([]handlercore.BroadcastHistoryEntry, error) {
+		pageLoader: func(ctx context.Context, _ *handlercore.BroadcastHistoryQuery, _, _ *time.Time, _ string, _ int) ([]handlercore.BroadcastHistoryEntry, error) {
 			<-ctx.Done()
+
 			return nil, ctx.Err()
 		},
 	}
 
 	started := time.Now()
+
 	result, err := repo.ListEndedBroadcasts(t.Context(), &handlercore.BroadcastHistoryQuery{Limit: 1})
 	if err != nil {
 		t.Fatalf("ListEndedBroadcasts() error = %v", err)
 	}
+
 	if !result.Truncated {
 		t.Fatal("Truncated = false, want true after elapsed budget")
 	}
+
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("elapsed = %s, want bounded query time", elapsed)
 	}
@@ -365,13 +409,15 @@ func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T)
 	if _, err := pool.Exec(ctx, `DELETE FROM youtube_live_sessions WHERE video_id = 'fallback001'`); err != nil {
 		t.Fatalf("clear live session: %v", err)
 	}
-	endedAt := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+
+	endedAt := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
 		VALUES ($1, $2, 'ENDED', $3, $4, $4)
 	`, "fallback001", "channel-a", "test", endedAt); err != nil {
 		t.Fatalf("insert live session: %v", err)
 	}
+
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO alarm_dispatch_events(event_key, payload_hash, alarm_type, channel_id, stream_id, category, payload)
 		VALUES (
@@ -389,20 +435,25 @@ func TestPgBroadcastHistoryRepositoryUsesLiveEventMetadataFallback(t *testing.T)
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
+
 	entry, err := repo.GetEndedBroadcast(ctx, handlercore.BroadcastThumbnailQuery{VideoID: "fallback001"})
 	if err != nil {
 		t.Fatalf("GetEndedBroadcast() error = %v", err)
 	}
+
 	if entry == nil {
 		t.Fatal("entry = nil, want live session")
 	}
-	if entry.TopicID != "minecraft" {
+
+	if entry.TopicID != testTopicMinecraft {
 		t.Fatalf("TopicID = %q, want minecraft", entry.TopicID)
 	}
+
 	if entry.ThumbnailURL != "https://i.ytimg.com/vi/fallback001/maxresdefault.jpg" {
 		t.Fatalf("ThumbnailURL = %q, want maxres fallback URL", entry.ThumbnailURL)
 	}
-	if entry.BroadcastType != string(broadcasttype.Game) || entry.BroadcastTypeSource != "topic" {
+
+	if entry.BroadcastType != string(broadcasttype.Game) || entry.BroadcastTypeSource != testTypeSourceTopic {
 		t.Fatalf("classification = {%q %q}, want {game topic}", entry.BroadcastType, entry.BroadcastTypeSource)
 	}
 }
@@ -429,7 +480,7 @@ func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing
 		t.Fatalf("insert shared channel members: %v", err)
 	}
 
-	endedAt := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	endedAt := time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO youtube_live_sessions(video_id, channel_id, status, title, ended_at, last_seen_at)
 		VALUES ('shared001', $1, 'ENDED', '【雑談】test', $2, $2)
@@ -438,6 +489,7 @@ func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing
 	}
 
 	repo := &pgBroadcastHistoryRepository{pool: pool}
+
 	result, err := repo.ListEndedBroadcasts(ctx, &handlercore.BroadcastHistoryQuery{
 		ChannelID: channelID,
 		Limit:     10,
@@ -446,19 +498,23 @@ func TestPgBroadcastHistoryRepositoryDeduplicatesSharedChannelMembers(t *testing
 	if err != nil {
 		t.Fatalf("ListEndedBroadcasts() error = %v", err)
 	}
+
 	if len(result.Entries) != 1 {
 		t.Fatalf("entries = %d, want 1: %#v", len(result.Entries), result.Entries)
 	}
+
 	if result.Entries[0].MemberName != "후와와 / 모코코" {
 		t.Fatalf("MemberName = %q, want 후와와 / 모코코", result.Entries[0].MemberName)
 	}
 }
 
 func TestBroadcastThumbnailCommandExecute(t *testing.T) {
-	entry := handlercore.BroadcastHistoryEntry{VideoID: "AqxEw3kXcgU", Title: "test"}
+	entry := handlercore.BroadcastHistoryEntry{VideoID: testVideoID, Title: "test"}
 	repo := &stubBroadcastHistoryRepository{getEntry: &entry}
 	downloader := &stubBroadcastThumbnailDownloader{}
+
 	var sentImage []byte
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: downloader,
@@ -470,18 +526,21 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 		},
 	}
 
-	err := NewBroadcastThumbnailCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
-		"video_id": "AqxEw3kXcgU",
+	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{
+		"video_id": testVideoID,
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if repo.getQuery.VideoID != "AqxEw3kXcgU" {
+
+	if repo.getQuery.VideoID != testVideoID {
 		t.Fatalf("GetEndedBroadcast video_id = %q", repo.getQuery.VideoID)
 	}
-	if downloader.entry.VideoID != "AqxEw3kXcgU" {
+
+	if downloader.entry.VideoID != testVideoID {
 		t.Fatalf("downloader entry video_id = %q", downloader.entry.VideoID)
 	}
+
 	if string(sentImage) != "jpeg" {
 		t.Fatalf("sent image = %q, want jpeg", string(sentImage))
 	}
@@ -489,7 +548,9 @@ func TestBroadcastThumbnailCommandExecute(t *testing.T) {
 
 func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 	repo := &stubBroadcastHistoryRepository{getErr: errors.New("db down")}
+
 	var sent []string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: &stubBroadcastThumbnailDownloader{},
@@ -499,30 +560,35 @@ func TestBroadcastThumbnailCommandLookupErrorSendsOneUserMessage(t *testing.T) {
 		},
 		SendError: func(_ context.Context, _, message string) error {
 			t.Fatalf("unexpected generic error response: %s", message)
+
 			return nil
 		},
 		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
 			t.Fatal("unexpected image send")
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewBroadcastThumbnailCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
-		"video_id": "AqxEw3kXcgU",
+	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{
+		"video_id": testVideoID,
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if len(sent) != 1 {
 		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
 	}
 }
 
 func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T) {
-	entry := handlercore.BroadcastHistoryEntry{VideoID: "AqxEw3kXcgU", Title: "test"}
+	entry := handlercore.BroadcastHistoryEntry{VideoID: testVideoID, Title: "test"}
 	repo := &stubBroadcastHistoryRepository{getEntry: &entry}
+
 	var sent []string
+
 	deps := &handlercore.Dependencies{
 		BroadcastHistory:    repo,
 		ThumbnailDownloader: &stubBroadcastThumbnailDownloader{err: errors.New("thumbnail timeout")},
@@ -532,21 +598,24 @@ func TestBroadcastThumbnailCommandDownloadErrorSendsOneUserMessage(t *testing.T)
 		},
 		SendError: func(_ context.Context, _, message string) error {
 			t.Fatalf("unexpected generic error response: %s", message)
+
 			return nil
 		},
 		SendImage: func(_ context.Context, _ string, _ []byte, _ ...iris.SendOption) error {
 			t.Fatal("unexpected image send")
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err := NewBroadcastThumbnailCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room"}, map[string]any{
-		"video_id": "AqxEw3kXcgU",
+	err := NewBroadcastThumbnailCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testHistoryRoom}, map[string]any{
+		"video_id": testVideoID,
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if len(sent) != 1 {
 		t.Fatalf("sent messages = %d, want 1: %#v", len(sent), sent)
 	}

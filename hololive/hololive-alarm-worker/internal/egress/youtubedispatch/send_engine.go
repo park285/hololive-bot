@@ -28,6 +28,7 @@ type contextMutex chan struct{}
 func newContextMutex() contextMutex {
 	mu := make(contextMutex, 1)
 	mu <- struct{}{}
+
 	return mu
 }
 
@@ -64,6 +65,7 @@ func newSendEngine(
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &SendEngine{
 		sender:          sender,
 		formatter:       formatter,

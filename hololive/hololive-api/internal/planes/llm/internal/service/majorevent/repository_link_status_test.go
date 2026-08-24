@@ -4,15 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestEventLinkStatusArraysCarryCheckedLinkForGuard(t *testing.T) {
 	t.Parallel()
 
-	checkedAt := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	checkedAt := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	events := []*domain.MajorEvent{
 		nil,
 		{ID: 0, Link: "https://a", LinkStatus: domain.MajorEventLinkStatusOK, LinkCheckedAt: &checkedAt},

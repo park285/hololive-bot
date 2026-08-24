@@ -7,19 +7,17 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/kapu/hololive-dbtest"
-	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testing.T) {
-	t.Parallel()
+func seedRecentLiveSessionFixtures(t *testing.T, pool liveSessionPool, now time.Time) {
+	t.Helper()
 
-	pool := dbtest.NewPool(t)
-
-	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 	liveStart := now.Add(-30 * time.Minute)
 	liveFirstSeen := now.Add(-10 * time.Minute)
 	upcomingStart := now.Add(4 * time.Minute)
@@ -30,8 +28,8 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
 		{
-			VideoID:         "live-included",
-			ChannelID:       "ch-1",
+			VideoID:         testLiveIncludedID,
+			ChannelID:       testChID1,
 			Status:          domain.LiveStatusLive,
 			Title:           " live title ",
 			StartedAt:       &liveStart,
@@ -42,8 +40,8 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 			IsPremiere:      &isPremiere,
 		},
 		{
-			VideoID:            "upcoming-included",
-			ChannelID:          "ch-1",
+			VideoID:            testUpcomingIncludedID,
+			ChannelID:          testChID1,
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         recentSeen,
@@ -51,14 +49,14 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 		},
 		{
 			VideoID:            "upcoming-unknown",
-			ChannelID:          "ch-1",
+			ChannelID:          testChID1,
 			Status:             domain.LiveStatusUpcoming,
 			ScheduledStartTime: &upcomingStart,
 			LastSeenAt:         recentSeen,
 		},
 		{
 			VideoID:    "live-too-old",
-			ChannelID:  "ch-1",
+			ChannelID:  testChID1,
 			Status:     domain.LiveStatusLive,
 			StartedAt:  &liveStart,
 			LastSeenAt: oldSeen,
@@ -72,61 +70,90 @@ func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testin
 		},
 	})
 
-	insertOfficialScheduleCollaboTalents(t, pool, "live-included", []string{"Guest One", "Guest Two"})
+	insertOfficialScheduleCollaboTalents(t, pool, testLiveIncludedID, []string{"Guest One", "Guest Two"})
+}
 
-	source := &PgYouTubeLiveSessionSource{pool: pool}
-	sessions, err := source.LoadRecentSessions(t.Context(), []string{"ch-1"}, now)
-	require.NoError(t, err)
+func assertLoadedRecentSessions(t *testing.T, sessions []PersistedYouTubeLiveSession, now time.Time) {
+	t.Helper()
+
+	liveFirstSeen := now.Add(-10 * time.Minute)
 
 	gotIDs := make([]string, 0, len(sessions))
 	for _, session := range sessions {
 		gotIDs = append(gotIDs, session.Stream.ID)
 	}
-	assert.ElementsMatch(t, []string{"live-included", "upcoming-included", "upcoming-unknown"}, gotIDs)
-	assert.Equal(t, "live title", sessionsByID(sessions)["live-included"].Stream.Title)
-	assert.True(t, sessionsByID(sessions)["live-included"].Stream.IsPremiere)
-	assert.False(t, sessionsByID(sessions)["upcoming-included"].Stream.IsPremiere)
+
+	assert.ElementsMatch(t, []string{testLiveIncludedID, testUpcomingIncludedID, "upcoming-unknown"}, gotIDs)
+	assert.Equal(t, "live title", sessionsByID(sessions)[testLiveIncludedID].Stream.Title)
+	assert.True(t, sessionsByID(sessions)[testLiveIncludedID].Stream.IsPremiere)
+	assert.False(t, sessionsByID(sessions)[testUpcomingIncludedID].Stream.IsPremiere)
 	assert.False(t, sessionsByID(sessions)["upcoming-unknown"].Stream.IsPremiere)
-	assert.Equal(t, liveFirstSeen, sessionsByID(sessions)["live-included"].LiveFirstSeenAt)
-	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.TopicID)
-	assert.Equal(t, "Rhythm_Heaven", *sessionsByID(sessions)["live-included"].Stream.TopicID)
-	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Thumbnail)
-	assert.Equal(t, "https://i.ytimg.com/vi/live-included/maxresdefault.jpg", *sessionsByID(sessions)["live-included"].Stream.Thumbnail)
-	require.NotNil(t, sessionsByID(sessions)["live-included"].Stream.Link)
-	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)["live-included"].Stream.Link)
-	assert.Equal(t, []string{"Guest One", "Guest Two"}, sessionsByID(sessions)["live-included"].Stream.CollaboTalentNames)
-	assert.Empty(t, sessionsByID(sessions)["upcoming-included"].Stream.CollaboTalentNames)
+	assert.Equal(t, liveFirstSeen, sessionsByID(sessions)[testLiveIncludedID].LiveFirstSeenAt)
+	require.NotNil(t, sessionsByID(sessions)[testLiveIncludedID].Stream.TopicID)
+	assert.Equal(t, "Rhythm_Heaven", *sessionsByID(sessions)[testLiveIncludedID].Stream.TopicID)
+	require.NotNil(t, sessionsByID(sessions)[testLiveIncludedID].Stream.Thumbnail)
+	assert.Equal(t, "https://i.ytimg.com/vi/live-included/maxresdefault.jpg", *sessionsByID(sessions)[testLiveIncludedID].Stream.Thumbnail)
+	require.NotNil(t, sessionsByID(sessions)[testLiveIncludedID].Stream.Link)
+	assert.Equal(t, "https://youtube.com/watch?v=live-included", *sessionsByID(sessions)[testLiveIncludedID].Stream.Link)
+	assert.Equal(t, []string{"Guest One", "Guest Two"}, sessionsByID(sessions)[testLiveIncludedID].Stream.CollaboTalentNames)
+	assert.Empty(t, sessionsByID(sessions)[testUpcomingIncludedID].Stream.CollaboTalentNames)
+}
+
+func assertRecentlyDispatchedStreamIDs(t *testing.T, pool liveSessionPool, source *PgYouTubeLiveSessionSource, now time.Time) {
+	t.Helper()
 
 	insertAlarmDispatchEvents(t, pool, []testAlarmDispatchEvent{
-		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: "live-included", CreatedAt: now.Add(-time.Hour)},
-		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: "upcoming-included", CreatedAt: now.Add(-time.Hour)},
+		{ID: 1, AlarmType: string(domain.AlarmTypeLive), StreamID: testLiveIncludedID, CreatedAt: now.Add(-time.Hour)},
+		{ID: 2, AlarmType: string(domain.AlarmTypeCommunity), StreamID: testUpcomingIncludedID, CreatedAt: now.Add(-time.Hour)},
 		{ID: 3, AlarmType: string(domain.AlarmTypeLive), StreamID: "old-dispatch", CreatedAt: now.Add(-25 * time.Hour)},
 		{ID: 4, AlarmType: string(domain.AlarmTypeLive), StreamID: "pending-live", CreatedAt: now.Add(-time.Hour)},
 	})
 
-	dispatched, err := source.RecentlyDispatchedStreamIDs(t.Context(), []string{"live-included", "upcoming-included", "old-dispatch"}, now.Add(-24*time.Hour))
+	dispatched, err := source.RecentlyDispatchedStreamIDs(t.Context(), []string{testLiveIncludedID, testUpcomingIncludedID, "old-dispatch"}, now.Add(-24*time.Hour))
 	require.NoError(t, err)
-	assert.Contains(t, dispatched, "live-included")
-	assert.NotContains(t, dispatched, "upcoming-included")
+	assert.Contains(t, dispatched, testLiveIncludedID)
+	assert.NotContains(t, dispatched, testUpcomingIncludedID)
 	assert.NotContains(t, dispatched, "old-dispatch")
+}
+
+func assertRecentlySentLiveStreamRooms(t *testing.T, pool liveSessionPool, source *PgYouTubeLiveSessionSource, now time.Time) {
+	t.Helper()
 
 	sentAt := now.Add(-30 * time.Minute)
 	oldSentAt := now.Add(-25 * time.Hour)
 	insertAlarmDispatchDeliveries(t, pool, []testAlarmDispatchDelivery{
-		{EventID: 1, RoomID: "room-1", Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
-		{EventID: 1, RoomID: "room-2", Status: "retry", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
-		{EventID: 2, RoomID: "room-3", Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 1, RoomID: testRoomID1, Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 1, RoomID: testRoomID2, Status: "retry", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
+		{EventID: 2, RoomID: testRoomID3, Status: "sent", SentAt: &sentAt, CreatedAt: now.Add(-time.Hour)},
 		{EventID: 3, RoomID: "room-4", Status: "sent", SentAt: &oldSentAt, CreatedAt: now.Add(-25 * time.Hour)},
 		{EventID: 4, RoomID: "room-5", Status: "pending", SentAt: nil, CreatedAt: now.Add(-time.Hour)},
 	})
 
-	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), []string{"live-included", "upcoming-included", "old-dispatch", "pending-live"}, now.Add(-24*time.Hour))
+	sentRooms, err := source.RecentlySentLiveStreamRooms(t.Context(), []string{testLiveIncludedID, testUpcomingIncludedID, "old-dispatch", "pending-live"}, now.Add(-24*time.Hour))
 	require.NoError(t, err)
-	assert.Contains(t, sentRooms["live-included"], "room-1")
-	assert.NotContains(t, sentRooms["live-included"], "room-2")
-	assert.NotContains(t, sentRooms, "upcoming-included")
+	assert.Contains(t, sentRooms[testLiveIncludedID], testRoomID1)
+	assert.NotContains(t, sentRooms[testLiveIncludedID], testRoomID2)
+	assert.NotContains(t, sentRooms, testUpcomingIncludedID)
 	assert.NotContains(t, sentRooms, "old-dispatch")
 	assert.NotContains(t, sentRooms, "pending-live")
+}
+
+func TestPgYouTubeLiveSessionSourceLoadRecentSessionsAndDispatchLookup(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
+
+	seedRecentLiveSessionFixtures(t, pool, now)
+
+	source := &PgYouTubeLiveSessionSource{pool: pool}
+
+	sessions, err := source.LoadRecentSessions(t.Context(), []string{testChID1}, now)
+	require.NoError(t, err)
+	assertLoadedRecentSessions(t, sessions, now)
+
+	assertRecentlyDispatchedStreamIDs(t, pool, source, now)
+	assertRecentlySentLiveStreamRooms(t, pool, source, now)
 }
 
 func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
@@ -134,21 +161,21 @@ func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
 
 	pool := dbtest.NewPool(t)
 
-	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	recentSeen := now.Add(-time.Minute)
 	oldSeen := now.Add(-20 * time.Minute)
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
-		{VideoID: "live-recent", ChannelID: "ch-1", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
+		{VideoID: "live-recent", ChannelID: testChID1, Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
 		{VideoID: "live-old", ChannelID: "ch-2", Status: domain.LiveStatusLive, LastSeenAt: oldSeen},
 		{VideoID: "ended-recent", ChannelID: "ch-3", Status: domain.LiveStatusEnded, LastSeenAt: recentSeen},
 		{VideoID: "outside-request", ChannelID: "ch-4", Status: domain.LiveStatusLive, LastSeenAt: recentSeen},
 	})
 
 	source := &PgYouTubeLiveSessionSource{pool: pool}
-	channels, err := source.LoadRecentLiveChannelIDs(t.Context(), []string{"ch-1", "ch-2", "ch-3"}, now)
+	channels, err := source.LoadRecentLiveChannelIDs(t.Context(), []string{testChID1, "ch-2", "ch-3"}, now)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"ch-1"}, channels)
+	assert.Equal(t, []string{testChID1}, channels)
 }
 
 func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(t *testing.T) {
@@ -156,20 +183,20 @@ func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(
 
 	pool := dbtest.NewPool(t)
 
-	now := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	start := now.Add(-30 * time.Minute)
 	lastSeenOutsideCatchup := now.Add(-(sharedconstants.LiveCatchupWindow + time.Minute))
 
 	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{{
 		VideoID:    "live-window-indep",
-		ChannelID:  "ch-1",
+		ChannelID:  testChID1,
 		Status:     domain.LiveStatusLive,
 		StartedAt:  &start,
 		LastSeenAt: lastSeenOutsideCatchup,
 	}})
 
 	source := &PgYouTubeLiveSessionSource{pool: pool}
-	sessions, err := source.LoadRecentSessions(t.Context(), []string{"ch-1"}, now)
+	sessions, err := source.LoadRecentSessions(t.Context(), []string{testChID1}, now)
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
 	assert.Equal(t, "live-window-indep", sessions[0].Stream.ID)
@@ -226,6 +253,7 @@ func insertLiveSessions(t *testing.T, pool liveSessionPool, sessions []domain.Yo
 
 func insertOfficialScheduleCollaboTalents(t *testing.T, pool liveSessionPool, videoID string, names []string) {
 	t.Helper()
+
 	_, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_schedule_items(
 			group_key, provider, external_id, video_id, title, scheduled_at, collabo_talent_names
@@ -284,7 +312,9 @@ func sessionsByID(sessions []PersistedYouTubeLiveSession) map[string]PersistedYo
 		if session.Stream == nil {
 			continue
 		}
+
 		byID[session.Stream.ID] = session
 	}
+
 	return byID
 }

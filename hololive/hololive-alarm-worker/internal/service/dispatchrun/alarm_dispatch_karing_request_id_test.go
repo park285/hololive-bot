@@ -5,49 +5,58 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func alarmDispatchKaringIdentityTestEnvelope(roomID string, dispatchOutboxID int64) domain.AlarmQueueEnvelope {
 	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
+
 	envelope.DispatchOutboxID = dispatchOutboxID
 	envelope.Notification.Stream.ID = fmt.Sprintf("stream-%d", dispatchOutboxID)
 	envelope.Notification.Stream.Title = fmt.Sprintf("Stream %d", dispatchOutboxID)
+
 	return envelope
 }
 
 func karingRequestIDs(t *testing.T, envelopes []domain.AlarmQueueEnvelope) []string {
 	t.Helper()
+
 	groups := groupAlarmDispatchEnvelopesForKaring(envelopes, true)
 	ids := make([]string, 0, len(groups))
+
 	for g := range groups {
 		requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[g])
 		require.NoError(t, err)
 		require.Len(t, requests, 1,
 			"분할 후에는 그룹당 chunk가 정확히 하나여야 부분 성공 상태가 생기지 않는다")
 		require.NotNil(t, requests[0].ClientRequestID)
+
 		ids = append(ids, *requests[0].ClientRequestID)
 	}
+
 	return ids
 }
 
 func TestAlarmDispatchKaringChunkClientRequestIDStableAcrossGroupRecomposition(t *testing.T) {
 	first := make([]domain.AlarmQueueEnvelope, 0, 5)
+
 	for id := int64(1); id <= 5; id++ {
-		first = append(first, alarmDispatchKaringIdentityTestEnvelope("room-1", id))
+		first = append(first, alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id))
 	}
+
 	firstIDs := karingRequestIDs(t, first)
 	require.Len(t, firstIDs, 2)
 
 	recomposed := []domain.AlarmQueueEnvelope{
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 1),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 2),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 3),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 4),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 6),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 1),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 2),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 3),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 4),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 6),
 	}
 	recomposedIDs := karingRequestIDs(t, recomposed)
 	require.Len(t, recomposedIDs, 2)
@@ -60,15 +69,17 @@ func TestAlarmDispatchKaringChunkClientRequestIDStableAcrossGroupRecomposition(t
 
 func TestAlarmDispatchKaringChunkClientRequestIDIndependentOfEnvelopeOrder(t *testing.T) {
 	ordered := make([]domain.AlarmQueueEnvelope, 0, 5)
+
 	for id := int64(1); id <= 5; id++ {
-		ordered = append(ordered, alarmDispatchKaringIdentityTestEnvelope("room-1", id))
+		ordered = append(ordered, alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id))
 	}
+
 	shuffled := []domain.AlarmQueueEnvelope{
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 4),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 1),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 5),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 3),
-		alarmDispatchKaringIdentityTestEnvelope("room-1", 2),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 4),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 1),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 5),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 3),
+		alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 2),
 	}
 
 	assert.Equal(t, karingRequestIDs(t, ordered), karingRequestIDs(t, shuffled),
@@ -76,7 +87,7 @@ func TestAlarmDispatchKaringChunkClientRequestIDIndependentOfEnvelopeOrder(t *te
 }
 
 func TestAlarmDispatchKaringChunkClientRequestIDDiffersPerRoom(t *testing.T) {
-	room1 := []domain.AlarmQueueEnvelope{alarmDispatchKaringIdentityTestEnvelope("room-1", 1)}
+	room1 := []domain.AlarmQueueEnvelope{alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, 1)}
 	room2 := []domain.AlarmQueueEnvelope{alarmDispatchKaringIdentityTestEnvelope("room-2", 1)}
 
 	assert.NotEqual(t, karingRequestIDs(t, room1), karingRequestIDs(t, room2))
@@ -84,21 +95,23 @@ func TestAlarmDispatchKaringChunkClientRequestIDDiffersPerRoom(t *testing.T) {
 
 func TestAlarmDispatchKaringChunkClientRequestIDUsesOutboxItemIdentity(t *testing.T) {
 	buildOutboxEnvelope := func(dispatchOutboxID int64) domain.AlarmQueueEnvelope {
-		envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+		envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
 		envelope.DispatchOutboxID = dispatchOutboxID
 		envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 		envelope.Notification.AlarmType = domain.AlarmTypeCommunity
 		envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 			Kind:       domain.OutboxKindCommunityPost,
 			AlarmType:  domain.AlarmTypeCommunity,
-			ChannelID:  "UCtest",
-			MemberName: "Member",
+			ChannelID:  testAlarmChannelID,
+			MemberName: testAlarmMemberName,
 			Items: []domain.YouTubeOutboxItem{{
 				OutboxID:  77,
 				ContentID: "UgkxPost",
 				Payload:   `{"post_id":"UgkxPost","content_text":"본문"}`,
 			}},
 		}
+
 		return envelope
 	}
 
@@ -112,11 +125,13 @@ func TestAlarmDispatchPersistedSendUnitUsesDistinctStableKaringChunkIDs(t *testi
 	build := func(order []int64) []domain.AlarmQueueEnvelope {
 		envelopes := make([]domain.AlarmQueueEnvelope, 0, len(order))
 		for _, id := range order {
-			envelope := alarmDispatchKaringIdentityTestEnvelope("room-1", id)
+			envelope := alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id)
+
 			envelope.SendUnitID = 42
 			envelope.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
 			envelopes = append(envelopes, envelope)
 		}
+
 		return envelopes
 	}
 
@@ -129,13 +144,16 @@ func TestAlarmDispatchPersistedSendUnitUsesDistinctStableKaringChunkIDs(t *testi
 }
 
 func TestAlarmDispatchPersistedOutboxUsesDistinctKaringChunkIDs(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
 	envelope.DispatchOutboxID = 42
 	envelope.SendUnitID = 7
 	envelope.ClientRequestID = "hololive-alarm:fedcba9876543210fedcba9876543210"
 	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+
 	items := make([]domain.YouTubeOutboxItem, 0, 6)
+
 	for i := range 6 {
 		items = append(items, domain.YouTubeOutboxItem{
 			OutboxID:  int64(100 + i),
@@ -143,17 +161,20 @@ func TestAlarmDispatchPersistedOutboxUsesDistinctKaringChunkIDs(t *testing.T) {
 			Payload:   `{"post_id":"p","content_text":"본문"}`,
 		})
 	}
+
 	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 		Kind:       domain.OutboxKindCommunityPost,
 		AlarmType:  domain.AlarmTypeCommunity,
-		ChannelID:  "UCtest",
-		MemberName: "Member",
+		ChannelID:  testAlarmChannelID,
+		MemberName: testAlarmMemberName,
 		Items:      items,
 	}
+
 	group := newAlarmDispatchGroup(&envelope)
 
 	first, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, group)
 	require.NoError(t, err)
+
 	second, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, group)
 	require.NoError(t, err)
 	require.Len(t, first, 2)
@@ -167,13 +188,16 @@ func TestAlarmDispatchPersistedOutboxUsesDistinctKaringChunkIDs(t *testing.T) {
 
 func alarmDispatchPersistedSendUnitTestEnvelopes(t *testing.T, count int) []domain.AlarmQueueEnvelope {
 	t.Helper()
+
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, count)
 	for i := range count {
-		envelope := alarmDispatchKaringIdentityTestEnvelope("room-1", int64(11+i))
+		envelope := alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, int64(11+i))
+
 		envelope.SendUnitID = 7
 		envelope.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
 		envelopes = append(envelopes, envelope)
 	}
+
 	return envelopes
 }
 
@@ -182,7 +206,7 @@ func TestHasPersistedClientRequestIDMatchesPersistedIDActuallySent(t *testing.T)
 
 	for _, count := range []int{1, alarmDispatchKaringMaxItemsPerRequest, alarmDispatchKaringMaxItemsPerRequest + 1} {
 		envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, count)
-		group := alarmDispatchGroup{roomID: "room-1", envelopes: envelopes}
+		group := alarmDispatchGroup{roomID: testAlarmRoomID, envelopes: envelopes}
 		sentIsPersisted := alarmDispatchClientRequestID(group, 0, len(envelopes)) == envelopes[0].ClientRequestID
 
 		assert.Equal(t, sentIsPersisted, hasPersistedClientRequestID(envelopes),
@@ -191,7 +215,7 @@ func TestHasPersistedClientRequestIDMatchesPersistedIDActuallySent(t *testing.T)
 }
 
 func TestAlarmDispatchRunnerPersistedSendUnitOverMaxItemsQuarantinesAmbiguousFailure(t *testing.T) {
-	transportErr := &iris.TransportError{Op: "post", URL: "/reply", Err: errors.New("connection reset")}
+	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, alarmDispatchKaringMaxItemsPerRequest+1)
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
@@ -211,7 +235,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitOverMaxItemsQuarantinesAmbiguousFai
 }
 
 func TestAlarmDispatchRunnerPersistedSendUnitAtMaxItemsStillRetriesAmbiguousFailure(t *testing.T) {
-	transportErr := &iris.TransportError{Op: "post", URL: "/reply", Err: errors.New("connection reset")}
+	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, alarmDispatchKaringMaxItemsPerRequest)
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
@@ -231,12 +255,16 @@ func TestAlarmDispatchOutboxRetryReproducesEveryKaringChunkClientRequestID(t *te
 	t.Parallel()
 
 	const itemCount = alarmDispatchKaringMaxItemsPerRequest + 2
+
 	build := func(retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
-		envelope := alarmDispatchRunnerTestEnvelope("room-1", retry)
+		envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, retry)
+
 		envelope.DispatchOutboxID = 91
 		envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 		envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+
 		items := make([]domain.YouTubeOutboxItem, 0, itemCount)
+
 		for i := range itemCount {
 			items = append(items, domain.YouTubeOutboxItem{
 				OutboxID:  int64(200 + i),
@@ -244,27 +272,33 @@ func TestAlarmDispatchOutboxRetryReproducesEveryKaringChunkClientRequestID(t *te
 				Payload:   `{"post_id":"p","content_text":"본문"}`,
 			})
 		}
+
 		envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 			Kind:       domain.OutboxKindCommunityPost,
 			AlarmType:  domain.AlarmTypeCommunity,
-			ChannelID:  "UCtest",
-			MemberName: "Member",
+			ChannelID:  testAlarmChannelID,
+			MemberName: testAlarmMemberName,
 			Items:      items,
 		}
+
 		return envelope
 	}
 
 	chunkIDs := func(envelope domain.AlarmQueueEnvelope) []string {
 		groups := groupAlarmDispatchEnvelopesForKaring([]domain.AlarmQueueEnvelope{envelope}, true)
 		ids := make([]string, 0, itemCount)
+
 		for g := range groups {
 			requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, groups[g])
 			require.NoError(t, err)
+
 			for i := range requests {
 				require.NotNil(t, requests[i].ClientRequestID)
+
 				ids = append(ids, *requests[i].ClientRequestID)
 			}
 		}
+
 		return ids
 	}
 

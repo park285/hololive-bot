@@ -21,12 +21,11 @@
 package system
 
 import (
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 )
 
 func TestNewCollector_DefaultConfiguration(t *testing.T) {

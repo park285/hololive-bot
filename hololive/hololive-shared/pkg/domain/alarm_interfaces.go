@@ -49,14 +49,22 @@ type AlarmListView struct {
 	NextStream *NextStreamInfo
 }
 
-type AlarmRepository interface {
+type AlarmWriter interface {
 	AddAlarm(ctx context.Context, req *AddAlarmRequest) (bool, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
+	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
+}
+
+type AlarmReader interface {
 	GetRoomAlarms(ctx context.Context, roomID string) ([]string, error)
 	GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*Alarm, error)
 	ListRoomAlarmsView(ctx context.Context, roomID string) ([]AlarmListView, error)
-	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
 	GetAllAlarmKeys(ctx context.Context) ([]*AlarmEntry, error)
+}
+
+type AlarmRepository interface {
+	AlarmReader
+	AlarmWriter
 }
 
 type AlarmCache interface {

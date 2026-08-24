@@ -24,7 +24,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
-// YouTubeStack - YouTube 관련 서비스 묶음 (선택적 활성화)
+// YouTubeStack - YouTube 관련 서비스 묶음 (선택적 활성화).
 type YouTubeStack struct {
 	Service youtube.Service
 }
@@ -33,5 +33,6 @@ func (s *YouTubeStack) GetService() youtube.Service {
 	if s == nil {
 		return nil
 	}
+
 	return s.Service
 }

@@ -26,7 +26,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -41,26 +40,32 @@ import (
 
 func mustNewClient(t *testing.T, baseURL, apiKey, model string, logger *slog.Logger, opts ...Option) *OpenAIClient {
 	t.Helper()
+
 	client, err := NewClient(baseURL, apiKey, model, logger, opts...)
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
+
 	return client
 }
 
 func TestNewClientDoesNotFallbackToChatCompletionsOnUnsupportedResponses(t *testing.T) {
 	var paths []string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
+
 		http.Error(w, `{"error":{"message":"unsupported endpoint","type":"invalid_request_error","code":"unsupported_endpoint"}}`, http.StatusNotFound)
 	}))
 	t.Cleanup(server.Close)
 
 	client := mustNewClient(t, server.URL, "test-key", "gpt-test", slog.New(slog.DiscardHandler), WithWebSearch(false))
-	_, err := client.GenerateJSON(t.Context(), "system", "user", map[string]any{"type": "object"})
+
+	_, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema())
 	if err == nil {
 		t.Fatal("GenerateJSON() error = nil, want Responses failure without Chat Completions fallback")
 	}
+
 	if strings.Join(paths, ",") != "/responses" {
 		t.Fatalf("paths = %v, want /responses only", paths)
 	}
@@ -71,6 +76,7 @@ func TestNewClient_EmptyAPIKeyReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewClient() error = nil, want generator construction error")
 	}
+
 	if client != nil {
 		t.Fatalf("NewClient() client = %#v, want nil", client)
 	}
@@ -79,12 +85,14 @@ func TestNewClient_EmptyAPIKeyReturnsError(t *testing.T) {
 func TestNewClient_DefaultOptions(t *testing.T) {
 	client := mustNewClient(t, "https://example.com/v1", "test-key", "gpt-test", slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
-	if client.schemaName != "event_summary" {
-		t.Errorf("default schemaName = %q, want %q", client.schemaName, "event_summary")
+	if client.schemaName != testDefaultSchemaName {
+		t.Errorf("default schemaName = %q, want %q", client.schemaName, testDefaultSchemaName)
 	}
+
 	if client.temperature != nil {
 		t.Errorf("default temperature = %v, want nil", *client.temperature)
 	}
+
 	if client.model != "gpt-test" {
 		t.Errorf("model = %q, want %q", client.model, "gpt-test")
 	}
@@ -93,24 +101,30 @@ func TestNewClient_DefaultOptions(t *testing.T) {
 func TestLLMProviderErrorAttrs_RedactsOpenAIRawJSON(t *testing.T) {
 	apiErr := testOpenAIAPIError(t)
 	wrappedErr := fmt.Errorf("provider failed: %w", apiErr)
+
 	if !strings.Contains(wrappedErr.Error(), "private raw provider response") {
 		t.Fatalf("test setup expected raw provider response in wrapped error, got: %s", wrappedErr.Error())
 	}
 
 	var buf bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
-	logger.LogAttrs(context.Background(), slog.LevelError, "test", llmProviderErrorAttrs(wrappedErr)...)
+	logger.LogAttrs(t.Context(), slog.LevelError, "test", llmProviderErrorAttrs(wrappedErr)...)
+
 	output := buf.String()
 
 	if strings.Contains(output, "private raw provider response") {
 		t.Fatalf("llmProviderErrorAttrs leaked raw provider response: %s", output)
 	}
+
 	if !strings.Contains(output, "status_code=429") {
 		t.Fatalf("llmProviderErrorAttrs missing status_code, got: %s", output)
 	}
+
 	if !strings.Contains(output, "error_code=rate_limit") {
 		t.Fatalf("llmProviderErrorAttrs missing error_code, got: %s", output)
 	}
+
 	if !strings.Contains(output, "provider_error_type=rate_limit_error") {
 		t.Fatalf("llmProviderErrorAttrs missing provider error type, got: %s", output)
 	}
@@ -124,12 +138,15 @@ func TestSafeLLMProviderError_RedactsOpenAIRawJSON(t *testing.T) {
 	if safeErr == nil {
 		t.Fatal("safeLLMProviderError() = nil")
 	}
+
 	if strings.Contains(safeErr.Error(), "private raw provider response") {
 		t.Fatalf("safeLLMProviderError leaked raw provider response: %s", safeErr.Error())
 	}
+
 	if !strings.Contains(safeErr.Error(), "status_code=429") {
 		t.Fatalf("safeLLMProviderError missing status_code, got: %s", safeErr.Error())
 	}
+
 	if !strings.Contains(safeErr.Error(), "code=rate_limit") {
 		t.Fatalf("safeLLMProviderError missing code, got: %s", safeErr.Error())
 	}
@@ -142,12 +159,15 @@ func TestSafeLLMProviderError_RedactsGenericProviderError(t *testing.T) {
 	if safeErr == nil {
 		t.Fatal("safeLLMProviderError() = nil")
 	}
+
 	if strings.Contains(safeErr.Error(), "private raw provider response") {
 		t.Fatalf("safeLLMProviderError leaked generic provider response: %s", safeErr.Error())
 	}
+
 	if strings.Contains(safeErr.Error(), "token=secret") {
 		t.Fatalf("safeLLMProviderError leaked generic provider token: %s", safeErr.Error())
 	}
+
 	if !strings.Contains(safeErr.Error(), "error_type=errors.errorString") {
 		t.Fatalf("safeLLMProviderError missing generic error type, got: %s", safeErr.Error())
 	}
@@ -158,9 +178,11 @@ func testOpenAIAPIError(t *testing.T) *openai.Error {
 
 	apiErr := &openai.Error{}
 	raw := `{"code":"rate_limit","message":"private raw provider response","param":"messages","type":"rate_limit_error"}`
+
 	if err := jsonv2.Unmarshal([]byte(raw), apiErr); err != nil {
 		t.Fatalf("unmarshal openai error: %v", err)
 	}
+
 	apiErr.StatusCode = http.StatusTooManyRequests
 	apiErr.Request = &http.Request{
 		Method: http.MethodPost,
@@ -171,6 +193,7 @@ func testOpenAIAPIError(t *testing.T) *openai.Error {
 		},
 	}
 	apiErr.Response = &http.Response{StatusCode: http.StatusTooManyRequests}
+
 	return apiErr
 }
 
@@ -185,7 +208,7 @@ func TestNewClient_WithSchemaName(t *testing.T) {
 func TestNewClient_WithSchemaName_Empty(t *testing.T) {
 	client := mustNewClient(t, "https://example.com/v1", "key", "model", nil, WithSchemaName(""))
 
-	if client.schemaName != "event_summary" {
+	if client.schemaName != testDefaultSchemaName {
 		t.Errorf("empty WithSchemaName should keep default, got %q", client.schemaName)
 	}
 }
@@ -196,6 +219,7 @@ func TestNewClient_WithTemperature_Positive(t *testing.T) {
 	if client.temperature == nil {
 		t.Fatal("temperature should be set for positive value")
 	}
+
 	if *client.temperature != 0.7 {
 		t.Errorf("temperature = %v, want 0.7", *client.temperature)
 	}
@@ -226,8 +250,9 @@ func TestNewClient_MultipleOptions(t *testing.T) {
 	if client.schemaName != "member_news_summary" {
 		t.Errorf("schemaName = %q, want %q", client.schemaName, "member_news_summary")
 	}
+
 	if client.temperature == nil || *client.temperature != 0.3 {
-		t.Errorf("temperature should be 0.3")
+		t.Error("temperature should be 0.3")
 	}
 }
 
@@ -265,6 +290,7 @@ func TestNewClient_WithChatCompletions(t *testing.T) {
 	if !client.chatCompletions {
 		t.Fatal("chatCompletions should be enabled")
 	}
+
 	if client.webSearch {
 		t.Fatal("chatCompletions mode should disable webSearch")
 	}
@@ -311,21 +337,24 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 		reasoningEffort: "high",
 		webSearch:       false,
 		chatCompletions: true,
-		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:          slog.New(slog.DiscardHandler),
 		costTracker:     tracker,
 	}
-	schema := map[string]any{"type": "object"}
+	schema := testObjectSchema()
 
-	got, err := client.GenerateJSON(context.Background(), "system", "user", schema)
+	got, err := client.GenerateJSON(t.Context(), "system", "user", schema)
 	if err != nil {
 		t.Fatalf("GenerateJSON() error = %v", err)
 	}
+
 	if got != `{"ok":true}` {
 		t.Fatalf("GenerateJSON() = %q, want JSON text", got)
 	}
+
 	if !generator.called {
 		t.Fatal("shared generator was not called")
 	}
+
 	if len(tracker.tokens) == 0 || tracker.tokens[0] != 9 || tracker.models[0] != "gpt-returned" {
 		t.Fatalf("usage tracker = models:%v tokens:%v", tracker.models, tracker.tokens)
 	}
@@ -349,9 +378,11 @@ func TestSafeLLMProviderError_RedactsEmptyOutputDiagnostics(t *testing.T) {
 	if safeErr == nil {
 		t.Fatal("safeLLMProviderError() = nil")
 	}
+
 	if strings.Contains(safeErr.Error(), "private raw provider response") {
 		t.Fatalf("safeLLMProviderError leaked empty-output diagnostic: %s", safeErr.Error())
 	}
+
 	if !strings.Contains(safeErr.Error(), "error_type=openai_empty_output") {
 		t.Fatalf("safeLLMProviderError missing empty-output type, got: %s", safeErr.Error())
 	}

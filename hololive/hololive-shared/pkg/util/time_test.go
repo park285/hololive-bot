@@ -59,6 +59,7 @@ func TestMinutesUntilFloorPtr(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := MinutesUntilFloorPtr(tc.target, now); got != tc.expected {
 				t.Fatalf("MinutesUntilFloorPtr() = %d, expected %d", got, tc.expected)
 			}

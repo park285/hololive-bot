@@ -1,14 +1,13 @@
 package api
 
 import (
-	"context"
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/valkey-io/valkey-go"
@@ -27,11 +26,12 @@ func TestSettingsAPIHandler_UpdateSettings_UsesCacheBackedPublisher(t *testing.T
 	handler.UpdateSettings(ctx)
 
 	assertCacheBackedSettingsUpdateResponse(t, rec)
+
 	updates := collectPublishedConfigUpdates(t, receivedMessages, 2)
 	assertScraperProxyConfigUpdate(t, updates)
 	assertAlarmAdvanceConfigUpdate(t, updates)
 
-	if err := client.Do(context.Background(), client.B().Ping().Build()).Error(); err != nil {
+	if err := client.Do(t.Context(), client.B().Ping().Build()).Error(); err != nil {
 		t.Fatalf("valkey client unhealthy after publish path: %v", err)
 	}
 }
@@ -45,13 +45,16 @@ func newCacheBackedSettingsPublisherTest(
 	subscriber := mini.NewSubscriber()
 	subscriber.Subscribe(contractssettings.PubSubChannelV1)
 	t.Cleanup(subscriber.Close)
+
 	receivedMessages := make(chan miniredis.PubsubMessage, 2)
+
 	go func() {
 		for range 2 {
 			message, ok := <-subscriber.Messages()
 			if !ok {
 				return
 			}
+
 			receivedMessages <- message
 		}
 	}()
@@ -64,6 +67,7 @@ func newCacheBackedSettingsPublisherTest(
 	if err != nil {
 		t.Fatalf("create valkey client: %v", err)
 	}
+
 	t.Cleanup(func() {
 		client.Close()
 	})
@@ -96,6 +100,7 @@ func assertCacheBackedSettingsUpdateResponse(t *testing.T, rec *httptest.Respons
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -104,9 +109,11 @@ func assertCacheBackedSettingsUpdateResponse(t *testing.T, rec *httptest.Respons
 	if !ok {
 		t.Fatalf("runtime payload missing: %#v", payload["runtime"])
 	}
+
 	if got := runtime["config_publish_scraper_proxy"]; got != true {
 		t.Fatalf("config_publish_scraper_proxy=%v want=true", got)
 	}
+
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != true {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=true", got)
 	}
@@ -120,13 +127,16 @@ func collectPublishedConfigUpdates(
 	t.Helper()
 
 	updates := map[string]contractssettings.ConfigUpdateV1{}
+
 	for range want {
 		select {
 		case message := <-receivedMessages:
 			var update contractssettings.ConfigUpdateV1
+
 			if err := jsonv2.Unmarshal([]byte(message.Message), &update); err != nil {
 				t.Fatalf("decode published update: %v", err)
 			}
+
 			updates[update.Type] = update
 		case <-time.After(2 * time.Second):
 			t.Fatalf("timed out waiting for published config updates; got=%d", len(updates))
@@ -143,10 +153,13 @@ func assertScraperProxyConfigUpdate(t *testing.T, updates map[string]contractsse
 	if !ok {
 		t.Fatalf("missing scraper proxy update: %+v", updates)
 	}
+
 	var scraperPayload contractssettings.ScraperProxyPayloadV1
+
 	if err := jsonv2.Unmarshal(scraperUpdate.Payload, &scraperPayload); err != nil {
 		t.Fatalf("decode scraper proxy payload: %v", err)
 	}
+
 	if !scraperPayload.Enabled {
 		t.Fatalf("scraper proxy enabled=%v want=true", scraperPayload.Enabled)
 	}
@@ -159,10 +172,13 @@ func assertAlarmAdvanceConfigUpdate(t *testing.T, updates map[string]contractsse
 	if !ok {
 		t.Fatalf("missing alarm advance update: %+v", updates)
 	}
+
 	var alarmPayload contractssettings.AlarmAdvanceMinutesPayloadV1
+
 	if err := jsonv2.Unmarshal(alarmUpdate.Payload, &alarmPayload); err != nil {
 		t.Fatalf("decode alarm advance payload: %v", err)
 	}
+
 	if alarmPayload.Minutes != 7 {
 		t.Fatalf("alarm advance minutes=%d want=7", alarmPayload.Minutes)
 	}

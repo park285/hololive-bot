@@ -34,11 +34,13 @@ func ParseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 	if strings.TrimSpace(feedXML) == "" {
 		return []*Video{}, nil
 	}
+
 	if maxResults <= 0 {
 		return []*Video{}, nil
 	}
 
 	var feed rssFeed
+
 	if err := xml.Unmarshal([]byte(feedXML), &feed); err != nil {
 		return nil, fmt.Errorf("parse rss feed xml: %w", err)
 	}
@@ -50,10 +52,12 @@ func ParseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 		if len(videos) >= maxResults {
 			break
 		}
+
 		video, ok := parseVideoFromRSSEntry(&entry, channelID, seen)
 		if !ok {
 			continue
 		}
+
 		videos = append(videos, video)
 	}
 
@@ -63,12 +67,15 @@ func ParseVideosFromRSSFeed(feedXML, channelID string, maxResults int) ([]*Video
 func parseVideoFromRSSEntry(entry *rssEntry, channelID string, seen map[string]struct{}) (*Video, bool) {
 	videoID := strings.TrimSpace(entry.VideoID)
 	title := strings.TrimSpace(entry.Title)
+
 	if videoID == "" || title == "" {
 		return nil, false
 	}
+
 	if _, exists := seen[videoID]; exists {
 		return nil, false
 	}
+
 	seen[videoID] = struct{}{}
 
 	return &Video{
@@ -87,6 +94,7 @@ func formatRSSPublishedText(published string) string {
 	if parsed, err := time.Parse(time.RFC3339, publishedText); err == nil {
 		return parsed.UTC().Format(time.RFC3339)
 	}
+
 	return publishedText
 }
 
@@ -101,7 +109,9 @@ func rssEntryThumbnails(entry *rssEntry) []Thumbnail {
 		if strings.TrimSpace(thumb.URL) == "" {
 			continue
 		}
+
 		convertedThumbs = append(convertedThumbs, Thumbnail(thumb))
 	}
+
 	return convertedThumbs
 }

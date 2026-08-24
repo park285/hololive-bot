@@ -21,10 +21,10 @@
 package domain_test
 
 import (
+	jsonv2 "encoding/json/v2"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -55,6 +55,7 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	}
 
 	var decoded domain.AlarmQueueEnvelope
+
 	if err := jsonv2.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal 실패: %v", err)
 	}
@@ -62,27 +63,35 @@ func TestAlarmQueueEnvelope_JSONRoundtrip(t *testing.T) {
 	if decoded.Version != 1 {
 		t.Errorf("Version = %d, want 1", decoded.Version)
 	}
+
 	if decoded.DispatchOutboxID != 123 {
 		t.Errorf("DispatchOutboxID = %d, want 123", decoded.DispatchOutboxID)
 	}
+
 	if decoded.Notification.RoomID != "room1" {
 		t.Errorf("RoomID = %q, want %q", decoded.Notification.RoomID, "room1")
 	}
+
 	if len(decoded.ClaimKeys) != 1 {
 		t.Errorf("ClaimKeys len = %d, want 1", len(decoded.ClaimKeys))
 	}
+
 	if decoded.Retry == nil {
 		t.Fatal("Retry = nil, want metadata")
 	}
+
 	if decoded.Retry.Attempt != 2 {
 		t.Errorf("Retry.Attempt = %d, want 2", decoded.Retry.Attempt)
 	}
+
 	if decoded.Retry.RetryAfterMS != 1500 {
 		t.Errorf("Retry.RetryAfterMS = %d, want 1500", decoded.Retry.RetryAfterMS)
 	}
+
 	if decoded.Retry.NextVisibleAt != "2026-02-25T13:00:01.500Z" {
 		t.Errorf("Retry.NextVisibleAt = %q, want %q", decoded.Retry.NextVisibleAt, "2026-02-25T13:00:01.500Z")
 	}
+
 	if decoded.Retry.LastError != "temporary upstream timeout" {
 		t.Errorf("Retry.LastError = %q, want %q", decoded.Retry.LastError, "temporary upstream timeout")
 	}
@@ -101,7 +110,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 			OutboxIDs:         []int64{101},
 			Kind:              domain.OutboxKindNewShort,
 			AlarmType:         domain.AlarmTypeShorts,
-			ChannelID:         "UC_test",
+			ChannelID:         testChannelID,
 			RenderTemplateKey: domain.TemplateKeyOutboxShorts,
 			Items: []domain.YouTubeOutboxItem{{
 				OutboxID:  101,
@@ -120,26 +129,33 @@ func TestAlarmQueueEnvelope_JSONRoundtripYouTubeOutboxSource(t *testing.T) {
 	}
 
 	var raw map[string]any
+
 	if err := jsonv2.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("raw Unmarshal 실패: %v", err)
 	}
+
 	if raw["source_kind"] != string(domain.AlarmDispatchSourceKindYouTubeOutbox) {
 		t.Fatalf("source_kind = %v, want %q", raw["source_kind"], domain.AlarmDispatchSourceKindYouTubeOutbox)
 	}
+
 	if _, ok := raw["youtube_outbox"]; !ok {
 		t.Fatal("youtube_outbox 필드 없음")
 	}
 
 	var decoded domain.AlarmQueueEnvelope
+
 	if err := jsonv2.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal 실패: %v", err)
 	}
+
 	if decoded.SourceKind != domain.AlarmDispatchSourceKindYouTubeOutbox {
 		t.Fatalf("SourceKind = %q, want %q", decoded.SourceKind, domain.AlarmDispatchSourceKindYouTubeOutbox)
 	}
+
 	if decoded.YouTubeOutbox == nil {
 		t.Fatal("YouTubeOutbox = nil")
 	}
+
 	if decoded.YouTubeOutbox.Items[0].ContentID != "short:abc" {
 		t.Fatalf("ContentID = %q, want short:abc", decoded.YouTubeOutbox.Items[0].ContentID)
 	}
@@ -163,6 +179,7 @@ func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 	}`
 
 	var env domain.AlarmQueueEnvelope
+
 	if err := jsonv2.Unmarshal([]byte(rustJSON), &env); err != nil {
 		t.Fatalf("Rust JSON 역직렬화 실패: %v", err)
 	}
@@ -170,15 +187,19 @@ func TestAlarmQueueEnvelope_RustCompatibility(t *testing.T) {
 	if env.Notification.RoomID != "room42" {
 		t.Errorf("RoomID = %q, want %q", env.Notification.RoomID, "room42")
 	}
+
 	if env.Notification.MinutesUntil != 3 {
 		t.Errorf("MinutesUntil = %d, want 3", env.Notification.MinutesUntil)
 	}
+
 	if len(env.ClaimKeys) != 2 {
 		t.Errorf("ClaimKeys len = %d, want 2", len(env.ClaimKeys))
 	}
+
 	if env.Version != 1 {
 		t.Errorf("Version = %d, want 1", env.Version)
 	}
+
 	if env.EnqueuedAt != "2026-02-25T13:00:00+00:00" {
 		t.Errorf("EnqueuedAt = %q, want %q", env.EnqueuedAt, "2026-02-25T13:00:00+00:00")
 	}
@@ -205,6 +226,7 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 
 	// schedule_change_message는 빈 문자열이면 직렬화에 포함되지 않아야 함
 	var raw map[string]any
+
 	if err := jsonv2.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("raw Unmarshal 실패: %v", err)
 	}
@@ -213,12 +235,15 @@ func TestAlarmQueueEnvelope_OmitsScheduleChangeMessage(t *testing.T) {
 	if !ok {
 		t.Fatal("notification 필드 없음")
 	}
+
 	if _, exists := notif["schedule_change_message"]; exists {
 		t.Error("schedule_change_message는 빈 값일 때 직렬화에 포함되면 안 됨")
 	}
+
 	if _, exists := raw["retry"]; exists {
 		t.Error("retry는 nil일 때 직렬화에 포함되면 안 됨")
 	}
+
 	if _, exists := raw["source_payload"]; exists {
 		t.Error("source_payload는 기본 envelope 직렬화에 포함되면 안 됨")
 	}
@@ -231,6 +256,7 @@ func TestNewAlarmNotification_UsesExplicitLiveDispatchRoute(t *testing.T) {
 	if notification.AlarmType != domain.AlarmTypeLive {
 		t.Fatalf("AlarmType = %q, want %q", notification.AlarmType, domain.AlarmTypeLive)
 	}
+
 	if err := notification.ValidateLiveDispatchRoute(); err != nil {
 		t.Fatalf("ValidateLiveDispatchRoute() error = %v", err)
 	}
@@ -277,9 +303,11 @@ func TestAlarmNotificationStartingPhase(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := tc.notification.IsStarting(); got != tc.wantStarting {
 				t.Fatalf("IsStarting() = %t, want %t", got, tc.wantStarting)
 			}
+
 			if got := tc.notification.IsLiveCatchup(); got != tc.wantCatchup {
 				t.Fatalf("IsLiveCatchup() = %t, want %t", got, tc.wantCatchup)
 			}
@@ -298,6 +326,7 @@ func TestAlarmTypesValueStaysString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: Value() error = %v", name, err)
 		}
+
 		if _, ok := value.(string); !ok {
 			t.Fatalf("%s: Value() = %T, want string — exec 모드에서 []byte는 bytea(\\x hex)로 인코딩되어 alarm_type[] 파싱이 깨진다", name, value)
 		}

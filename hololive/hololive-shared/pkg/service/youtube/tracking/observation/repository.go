@@ -2,6 +2,7 @@ package observation
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -81,58 +82,108 @@ func NewRepositoryContext(_ context.Context, db trackingDB) *PgxRepository {
 		identity: &identityRepository{db: db},
 		source:   &sourcePostRepository{db: db},
 	}
+
 	repo.delivery = &deliveryStateRepository{db: db, owner: repo}
+
 	return repo
 }
 
 // --- 위임: AlarmState ---
 
 func (r *PgxRepository) FindAlarmStateByPostID(ctx context.Context, kind domain.OutboxKind, postID string) (*domain.YouTubeCommunityShortsAlarmState, error) {
-	return r.alarm.FindAlarmStateByPostID(ctx, kind, postID)
+	out, err := r.alarm.FindAlarmStateByPostID(ctx, kind, postID)
+	if err != nil {
+		return nil, fmt.Errorf("find alarm state by post ID: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *PgxRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
-	return r.alarm.UpsertAlarmState(ctx, record)
+	if err := r.alarm.UpsertAlarmState(ctx, record); err != nil {
+		return fmt.Errorf("upsert alarm state: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxRepository) UpsertAlarmStateBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsAlarmState) error {
-	return r.alarm.UpsertAlarmStateBatch(ctx, records)
+	if err := r.alarm.UpsertAlarmStateBatch(ctx, records); err != nil {
+		return fmt.Errorf("upsert alarm state batch: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxRepository) TryClaimAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) (bool, error) {
-	return r.alarm.TryClaimAlarmState(ctx, record)
+	out, err := r.alarm.TryClaimAlarmState(ctx, record)
+	if err != nil {
+		return out, fmt.Errorf("try claim alarm state: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *PgxRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
-	return r.alarm.ReleaseAlarmStateClaim(ctx, kind, postID, authorizedAt)
+	out, err := r.alarm.ReleaseAlarmStateClaim(ctx, kind, postID, authorizedAt)
+	if err != nil {
+		return out, fmt.Errorf("release alarm state claim: %w", err)
+	}
+
+	return out, nil
 }
 
 // --- 위임: DeliveryState ---
 
 func (r *PgxRepository) MarkAlarmSentBatch(ctx context.Context, marks []AlarmSentMark) error {
-	return r.delivery.MarkAlarmSentBatch(ctx, marks)
+	if err := r.delivery.MarkAlarmSentBatch(ctx, marks); err != nil {
+		return fmt.Errorf("mark alarm sent batch: %w", err)
+	}
+
+	return nil
 }
 
 // --- 위임: Identity ---
 
 func (r *PgxRepository) FindByIdentity(ctx context.Context, kind domain.OutboxKind, contentID string) (*domain.YouTubeContentAlarmTracking, error) {
-	return r.identity.FindByIdentity(ctx, kind, contentID)
+	out, err := r.identity.FindByIdentity(ctx, kind, contentID)
+	if err != nil {
+		return nil, fmt.Errorf("find by identity: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *PgxRepository) Upsert(ctx context.Context, record *domain.YouTubeContentAlarmTracking) error {
-	return r.identity.Upsert(ctx, record)
+	if err := r.identity.Upsert(ctx, record); err != nil {
+		return fmt.Errorf("upsert: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxRepository) UpsertBatch(ctx context.Context, records []*domain.YouTubeContentAlarmTracking) error {
-	return r.identity.UpsertBatch(ctx, records)
+	if err := r.identity.UpsertBatch(ctx, records); err != nil {
+		return fmt.Errorf("upsert batch: %w", err)
+	}
+
+	return nil
 }
 
 // --- 위임: SourcePost ---
 
 func (r *PgxRepository) UpsertSourcePost(ctx context.Context, record *domain.YouTubeCommunityShortsSourcePost) error {
-	return r.source.UpsertSourcePost(ctx, record)
+	if err := r.source.UpsertSourcePost(ctx, record); err != nil {
+		return fmt.Errorf("upsert source post: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PgxRepository) UpsertSourcePostsBatch(ctx context.Context, records []*domain.YouTubeCommunityShortsSourcePost) error {
-	return r.source.UpsertSourcePostsBatch(ctx, records)
+	if err := r.source.UpsertSourcePostsBatch(ctx, records); err != nil {
+		return fmt.Errorf("upsert source posts batch: %w", err)
+	}
+
+	return nil
 }

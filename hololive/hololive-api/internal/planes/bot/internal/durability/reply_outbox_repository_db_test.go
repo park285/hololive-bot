@@ -63,241 +63,376 @@ func replyOutboxRow(ctx context.Context, t *testing.T, pool *pgxpool.Pool, clien
 func TestReplyOutboxRepositoryInsert(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := NewReplyOutboxRepository(pool)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("payload is immutable for a message phase ordinal key", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		entry := newReplyOutboxEntry("message:m-1", 0, `{"body":"first"}`)
-
-		outcome, err := repo.Insert(ctx, entry)
-		require.NoError(t, err)
-		assert.Equal(t, ReplyOutboxInserted, outcome)
-
-		replayed := *entry
-		replayed.Payload = []byte(`{"body":"rewritten"}`)
-		outcome, err = repo.Insert(ctx, &replayed)
-		require.NoError(t, err)
-		assert.Equal(t, ReplyOutboxPayloadDiverged, outcome)
-
-		_, payload, hash, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-		assert.JSONEq(t, `{"body":"first"}`, string(payload))
-		digest := sha256.Sum256(entry.Payload)
-		assert.Equal(t, hex.EncodeToString(digest[:]), hash)
+		assertReplyOutboxPayloadIsImmutable(ctx, t, pool, repo)
 	})
 
 	t.Run("ordinal separates emissions of one inbound message", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-
-		for ordinal := range uint64(3) {
-			outcome, err := repo.Insert(ctx, newReplyOutboxEntry("message:m-1", ordinal, `{"body":"x"}`))
-			require.NoError(t, err)
-			assert.Equal(t, ReplyOutboxInserted, outcome)
-		}
-
-		var count int
-		require.NoError(t, pool.QueryRow(ctx,
-			"SELECT count(id) FROM bot_reply_outbox WHERE message_id = $1", "message:m-1",
-		).Scan(&count))
-		assert.Equal(t, 3, count)
+		assertReplyOutboxOrdinalSeparatesEmissions(ctx, t, pool, repo)
 	})
 
 	t.Run("a client request id is never reused for another row", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		entry := newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
-		outcome, err := repo.Insert(ctx, entry)
-		require.NoError(t, err)
-		require.Equal(t, ReplyOutboxInserted, outcome)
-
-		const rawID = "message:raw-private-outbox-id"
-		colliding := newReplyOutboxEntry(rawID, 0, `{"body":"y"}`)
-		colliding.ClientRequestID = entry.ClientRequestID
-		_, err = repo.Insert(ctx, colliding)
-		require.Error(t, err, "409 계약을 지키려면 같은 client_request_id가 다른 payload를 가리킬 수 없다")
-		assert.Contains(t, err.Error(), "insert reply outbox row")
-		assert.NotContains(t, err.Error(), rawID)
-		assert.NotContains(t, err.Error(), entry.ClientRequestID)
-		assert.Contains(t, err.Error(), "message_token=anon:")
-		assert.Contains(t, err.Error(), "reason=database_operation_failed")
-		var pgErr *pgconn.PgError
-		require.True(t, errors.As(err, &pgErr), "typed database cause must remain available to errors.As")
-		assert.Equal(t, "bot_reply_outbox_client_request_id_key", pgErr.ConstraintName)
+		assertReplyOutboxClientRequestIDIsNeverReused(ctx, t, pool, repo)
 	})
 
 	t.Run("insert trigger failures redact the message and request ids", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		const rawID = "message:raw-private-trigger-id"
-		entry := newReplyOutboxEntry(rawID, 0, `{"body":"x"}`)
-		_, err := pool.Exec(ctx, `
-			CREATE OR REPLACE FUNCTION fail_reply_insert_for_privacy_test() RETURNS trigger AS $$
-			BEGIN RAISE EXCEPTION 'database rejected % %', NEW.message_id, NEW.client_request_id; END
-			$$ LANGUAGE plpgsql;
-			DROP TRIGGER IF EXISTS fail_reply_insert_for_privacy_test ON bot_reply_outbox;
-			CREATE TRIGGER fail_reply_insert_for_privacy_test
-			BEFORE INSERT ON bot_reply_outbox
-			FOR EACH ROW EXECUTE FUNCTION fail_reply_insert_for_privacy_test()`)
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancelCleanup()
-			_, cleanupErr := pool.Exec(cleanupCtx, "DROP TRIGGER IF EXISTS fail_reply_insert_for_privacy_test ON bot_reply_outbox")
-			require.NoError(t, cleanupErr)
-		})
-
-		_, err = repo.Insert(ctx, entry)
-		require.Error(t, err)
-		assert.NotContains(t, err.Error(), rawID)
-		assert.NotContains(t, err.Error(), entry.ClientRequestID)
-		assert.Contains(t, err.Error(), "message_token=anon:")
-		assert.Contains(t, err.Error(), "reason=database_operation_failed")
-		var pgErr *pgconn.PgError
-		require.True(t, errors.As(err, &pgErr))
-		assert.Contains(t, pgErr.Error(), rawID)
-		assert.Contains(t, pgErr.Error(), entry.ClientRequestID)
+		assertReplyOutboxInsertFailureRedactsIdentity(ctx, t, pool, repo)
 	})
 
 	t.Run("conflict inspection preserves cancellation without exposing identity", func(t *testing.T) {
-		const rawID = "message:raw-private-conflict-id"
-		entry := newReplyOutboxEntry(rawID, 0, `{"body":"x"}`)
-		canceled, cancel := context.WithCancel(ctx)
-		cancel()
-
-		_, err := repo.classifyRecordedPayload(canceled, entry, "payload-hash")
-		require.ErrorIs(t, err, context.Canceled)
-		assert.NotContains(t, err.Error(), rawID)
-		assert.NotContains(t, err.Error(), entry.ClientRequestID)
-		assert.Contains(t, err.Error(), "message_token=anon:")
-		assert.Contains(t, err.Error(), "reason=context_canceled")
+		assertReplyOutboxConflictInspectionRedactsIdentity(ctx, t, repo)
 	})
 
 	t.Run("phase 1a client request ids satisfy the stored iris contract", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-
-		canonical := newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
-		require.Equal(t, "hololive:v1:message:m-1:reply:0", canonical.ClientRequestID)
-		outcome, err := repo.Insert(ctx, canonical)
-		require.NoError(t, err)
-		assert.Equal(t, ReplyOutboxInserted, outcome)
-
-		hashed := newReplyOutboxEntry("message:닉네임 with/slash", 7, `{"body":"x"}`)
-		require.NotContains(t, hashed.ClientRequestID, "/")
-		outcome, err = repo.Insert(ctx, hashed)
-		require.NoError(t, err, "해시 폴백 id도 CHECK 정규식을 통과해야 한다")
-		assert.Equal(t, ReplyOutboxInserted, outcome)
+		assertReplyOutboxClientRequestIDMatchesTheIrisContract(ctx, t, pool, repo)
 	})
 
 	t.Run("invalid entries are rejected before touching postgres", func(t *testing.T) {
-		entry := newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
-		entry.Payload = nil
-		_, err := repo.Insert(ctx, entry)
-		require.ErrorIs(t, err, ErrInvalidArgument)
-
-		entry = newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
-		entry.ClientRequestID = "   "
-		_, err = repo.Insert(ctx, entry)
-		require.ErrorIs(t, err, ErrInvalidArgument)
+		assertReplyOutboxRejectsInvalidEntries(ctx, t, repo)
 	})
+}
+
+func assertReplyOutboxPayloadIsImmutable(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	entry := newReplyOutboxEntry(testMessageID, 0, `{"body":"first"}`)
+
+	outcome, err := repo.Insert(ctx, entry)
+	require.NoError(t, err)
+	assert.Equal(t, ReplyOutboxInserted, outcome)
+
+	replayed := *entry
+
+	replayed.Payload = []byte(`{"body":"rewritten"}`)
+	outcome, err = repo.Insert(ctx, &replayed)
+	require.NoError(t, err)
+	assert.Equal(t, ReplyOutboxPayloadDiverged, outcome)
+
+	_, payload, hash, _ := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	assert.JSONEq(t, `{"body":"first"}`, string(payload))
+
+	digest := sha256.Sum256(entry.Payload)
+	assert.Equal(t, hex.EncodeToString(digest[:]), hash)
+}
+
+func assertReplyOutboxOrdinalSeparatesEmissions(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	for ordinal := range uint64(3) {
+		outcome, err := repo.Insert(ctx, newReplyOutboxEntry(testMessageID, ordinal, `{"body":"x"}`))
+		require.NoError(t, err)
+		assert.Equal(t, ReplyOutboxInserted, outcome)
+	}
+
+	var count int
+
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT count(id) FROM bot_reply_outbox WHERE message_id = $1", testMessageID,
+	).Scan(&count))
+	assert.Equal(t, 3, count)
+}
+
+func assertReplyOutboxClientRequestIDIsNeverReused(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	entry := newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
+	outcome, err := repo.Insert(ctx, entry)
+	require.NoError(t, err)
+	require.Equal(t, ReplyOutboxInserted, outcome)
+
+	const rawID = "message:raw-private-outbox-id"
+
+	colliding := newReplyOutboxEntry(rawID, 0, `{"body":"y"}`)
+
+	colliding.ClientRequestID = entry.ClientRequestID
+	_, err = repo.Insert(ctx, colliding)
+	require.Error(t, err, "409 계약을 지키려면 같은 client_request_id가 다른 payload를 가리킬 수 없다")
+	assert.Contains(t, err.Error(), "insert reply outbox row")
+	assert.NotContains(t, err.Error(), rawID)
+	assert.NotContains(t, err.Error(), entry.ClientRequestID)
+	assert.Contains(t, err.Error(), "message_token=anon:")
+	assert.Contains(t, err.Error(), "reason=database_operation_failed")
+
+	var pgErr *pgconn.PgError
+
+	if !errors.As(err, &pgErr) {
+		t.Fatalf("error type = %T, want *pgconn.PgError in chain", err)
+	}
+
+	assert.Equal(t, "bot_reply_outbox_client_request_id_key", pgErr.ConstraintName)
+}
+
+func assertReplyOutboxInsertFailureRedactsIdentity(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	const rawID = "message:raw-private-trigger-id"
+
+	entry := newReplyOutboxEntry(rawID, 0, `{"body":"x"}`)
+	_, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION fail_reply_insert_for_privacy_test() RETURNS trigger AS $$
+		BEGIN RAISE EXCEPTION 'database rejected % %', NEW.message_id, NEW.client_request_id; END
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS fail_reply_insert_for_privacy_test ON bot_reply_outbox;
+		CREATE TRIGGER fail_reply_insert_for_privacy_test
+		BEFORE INSERT ON bot_reply_outbox
+		FOR EACH ROW EXECUTE FUNCTION fail_reply_insert_for_privacy_test()`)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancelCleanup()
+
+		_, cleanupErr := pool.Exec(cleanupCtx, "DROP TRIGGER IF EXISTS fail_reply_insert_for_privacy_test ON bot_reply_outbox")
+		require.NoError(t, cleanupErr)
+	})
+
+	_, err = repo.Insert(ctx, entry)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), rawID)
+	assert.NotContains(t, err.Error(), entry.ClientRequestID)
+	assert.Contains(t, err.Error(), "message_token=anon:")
+	assert.Contains(t, err.Error(), "reason=database_operation_failed")
+
+	var pgErr *pgconn.PgError
+
+	require.ErrorAs(t, err, &pgErr)
+	assert.Contains(t, pgErr.Error(), rawID)
+	assert.Contains(t, pgErr.Error(), entry.ClientRequestID)
+}
+
+func assertReplyOutboxConflictInspectionRedactsIdentity(
+	ctx context.Context,
+	t *testing.T,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+
+	const rawID = "message:raw-private-conflict-id"
+
+	entry := newReplyOutboxEntry(rawID, 0, `{"body":"x"}`)
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+
+	_, err := repo.classifyRecordedPayload(canceled, entry, "payload-hash")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotContains(t, err.Error(), rawID)
+	assert.NotContains(t, err.Error(), entry.ClientRequestID)
+	assert.Contains(t, err.Error(), "message_token=anon:")
+	assert.Contains(t, err.Error(), "reason=context_canceled")
+}
+
+func assertReplyOutboxClientRequestIDMatchesTheIrisContract(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	canonical := newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
+	require.Equal(t, "hololive:v1:message:m-1:reply:0", canonical.ClientRequestID)
+
+	outcome, err := repo.Insert(ctx, canonical)
+	require.NoError(t, err)
+	assert.Equal(t, ReplyOutboxInserted, outcome)
+
+	hashed := newReplyOutboxEntry("message:닉네임 with/slash", 7, `{"body":"x"}`)
+	require.NotContains(t, hashed.ClientRequestID, "/")
+
+	outcome, err = repo.Insert(ctx, hashed)
+	require.NoError(t, err, "해시 폴백 id도 CHECK 정규식을 통과해야 한다")
+	assert.Equal(t, ReplyOutboxInserted, outcome)
+}
+
+func assertReplyOutboxRejectsInvalidEntries(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository) {
+	t.Helper()
+
+	entry := newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
+
+	entry.Payload = nil
+
+	_, err := repo.Insert(ctx, entry)
+	require.ErrorIs(t, err, ErrInvalidArgument)
+
+	entry = newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
+	entry.ClientRequestID = "   "
+	_, err = repo.Insert(ctx, entry)
+	require.ErrorIs(t, err, ErrInvalidArgument)
 }
 
 func TestReplyOutboxRepositoryTransitions(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := NewReplyOutboxRepository(pool)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	entry := newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`)
+	entry := newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`)
 
 	t.Run("accept is fenced by the claim token", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		claim := claimOne(ctx, t, repo, entry)
-
-		applied, err := repo.MarkAccepted(ctx, claim.ID, "token-stale", "iris-1")
-		require.NoError(t, err)
-		assert.False(t, applied, "stale token must transition zero rows")
-
-		applied, err = repo.MarkAccepted(ctx, claim.ID, "token-a", "iris-1")
-		require.NoError(t, err)
-		assert.True(t, applied)
-
-		status, _, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-		assert.Equal(t, "accepted", status)
-		require.NotNil(t, token)
+		assertReplyOutboxAcceptIsFenced(ctx, t, pool, repo, entry)
 	})
 
 	t.Run("conflict settles the row terminally and releases the lease", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		claim := claimOne(ctx, t, repo, entry)
-
-		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
-			ID:         claim.ID,
-			ClaimToken: "token-stale",
-			Status:     ReplyOutboxPermanentConflict,
-			LastError:  "409",
-		})
-		require.NoError(t, err)
-		assert.False(t, applied)
-
-		settlement := ReplyOutboxSettlement{
-			ID:         claim.ID,
-			ClaimToken: "token-a",
-			Status:     ReplyOutboxPermanentConflict,
-			LastError:  "409 client request id reused with a different payload",
-		}
-		applied, err = repo.Settle(ctx, settlement)
-		require.NoError(t, err)
-		assert.True(t, applied)
-
-		applied, err = repo.Settle(ctx, settlement)
-		require.NoError(t, err)
-		assert.False(t, applied, "terminal row must not settle twice")
-
-		status, _, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
-		assert.Equal(t, ReplyOutboxPermanentConflict, status)
-		assert.Nil(t, token)
+		assertReplyOutboxConflictSettlesTerminally(ctx, t, pool, repo, entry)
 	})
 
 	t.Run("retryable settlement returns the row to the claim queue", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		claim := claimOne(ctx, t, repo, entry)
-
-		applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
-			ID:         claim.ID,
-			ClaimToken: "token-a",
-			Status:     ReplyOutboxRetryablePreDispatch,
-			LastError:  "transport reset",
-			RetryAfter: time.Millisecond,
-		})
-		require.NoError(t, err)
-		require.True(t, applied)
-		time.Sleep(5 * time.Millisecond)
-
-		reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
-		require.NoError(t, err)
-		require.NotNil(t, reclaimed)
-		assert.Equal(t, int32(2), reclaimed.Attempts)
-		assert.Equal(t, entry.ClientRequestID, reclaimed.ClientRequestID)
+		assertReplyOutboxRetryableSettlementRequeues(ctx, t, pool, repo, entry)
 	})
 
 	t.Run("settle rejects statuses outside the ledger vocabulary", func(t *testing.T) {
-		_, err := repo.Settle(ctx, ReplyOutboxSettlement{ID: 1, ClaimToken: "token-a", Status: "submitting"})
+		_, err := repo.Settle(ctx, ReplyOutboxSettlement{ID: 1, ClaimToken: testClaimToken, Status: "submitting"})
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 
 	t.Run("claim returns no row on an empty outbox", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-
-		claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
-		require.NoError(t, err)
-		assert.Nil(t, claim)
+		assertReplyOutboxClaimReturnsNoRowOnEmptyOutbox(ctx, t, pool, repo)
 	})
+}
+
+func assertReplyOutboxAcceptIsFenced(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+	entry *ReplyOutboxEntry,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	claim := claimOne(ctx, t, repo, entry)
+
+	applied, err := repo.MarkAccepted(ctx, claim.ID, "token-stale", "iris-1")
+	require.NoError(t, err)
+	assert.False(t, applied, "stale token must transition zero rows")
+
+	applied, err = repo.MarkAccepted(ctx, claim.ID, testClaimToken, "iris-1")
+	require.NoError(t, err)
+	assert.True(t, applied)
+
+	status, _, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	assert.Equal(t, "accepted", status)
+	require.NotNil(t, token)
+}
+
+func assertReplyOutboxConflictSettlesTerminally(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+	entry *ReplyOutboxEntry,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	claim := claimOne(ctx, t, repo, entry)
+
+	applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
+		ID:         claim.ID,
+		ClaimToken: "token-stale",
+		Status:     ReplyOutboxPermanentConflict,
+		LastError:  "409",
+	})
+	require.NoError(t, err)
+	assert.False(t, applied)
+
+	settlement := ReplyOutboxSettlement{
+		ID:         claim.ID,
+		ClaimToken: testClaimToken,
+		Status:     ReplyOutboxPermanentConflict,
+		LastError:  "409 client request id reused with a different payload",
+	}
+
+	applied, err = repo.Settle(ctx, settlement)
+	require.NoError(t, err)
+	assert.True(t, applied)
+
+	applied, err = repo.Settle(ctx, settlement)
+	require.NoError(t, err)
+	assert.False(t, applied, "terminal row must not settle twice")
+
+	status, _, _, token := replyOutboxRow(ctx, t, pool, entry.ClientRequestID)
+	assert.Equal(t, ReplyOutboxPermanentConflict, status)
+	assert.Nil(t, token)
+}
+
+func assertReplyOutboxRetryableSettlementRequeues(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+	entry *ReplyOutboxEntry,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	claim := claimOne(ctx, t, repo, entry)
+
+	applied, err := repo.Settle(ctx, ReplyOutboxSettlement{
+		ID:         claim.ID,
+		ClaimToken: testClaimToken,
+		Status:     ReplyOutboxRetryablePreDispatch,
+		LastError:  "transport reset",
+		RetryAfter: time.Millisecond,
+	})
+	require.NoError(t, err)
+	require.True(t, applied)
+	time.Sleep(5 * time.Millisecond)
+
+	reclaimed, err := repo.Claim(ctx, "token-b", durabilityTestLease)
+	require.NoError(t, err)
+	require.NotNil(t, reclaimed)
+	assert.Equal(t, int32(2), reclaimed.Attempts)
+	assert.Equal(t, entry.ClientRequestID, reclaimed.ClientRequestID)
+}
+
+func assertReplyOutboxClaimReturnsNoRowOnEmptyOutbox(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *ReplyOutboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	claim, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+	assert.Nil(t, claim)
 }
 
 func TestReplyOutboxRepositoryWithoutPool(t *testing.T) {
 	repo := NewReplyOutboxRepository(nil)
 
-	_, err := repo.Insert(context.Background(), newReplyOutboxEntry("message:m-1", 0, `{"body":"x"}`))
+	_, err := repo.Insert(t.Context(), newReplyOutboxEntry(testMessageID, 0, `{"body":"x"}`))
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 
-	_, err = repo.ReplayManualReview(context.Background(), ReplyOutboxManualReplay{
-		OutboxID: 1, Actor: "operator@example.com", Reason: "ticket-1",
+	_, err = repo.ReplayManualReview(t.Context(), ReplyOutboxManualReplay{
+		OutboxID: 1, Actor: testOperatorEmail, Reason: "ticket-1",
 	})
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 }
@@ -305,7 +440,7 @@ func TestReplyOutboxRepositoryWithoutPool(t *testing.T) {
 func TestReplyOutboxClientRequestIDMatchesTransportDerivation(t *testing.T) {
 	t.Parallel()
 
-	const identity = "message:m-1"
+	const identity = testMessageID
 
 	for ordinal := range uint64(4) {
 		entry := newReplyOutboxEntry(identity, ordinal, `{"body":"x"}`)
@@ -321,7 +456,7 @@ func claimOne(ctx context.Context, t *testing.T, repo *ReplyOutboxRepository, en
 	require.NoError(t, err)
 	require.Equal(t, ReplyOutboxInserted, outcome)
 
-	claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
+	claim, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
 	require.NoError(t, err)
 	require.NotNil(t, claim)
 

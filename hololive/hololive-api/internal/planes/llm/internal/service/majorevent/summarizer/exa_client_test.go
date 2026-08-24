@@ -21,7 +21,6 @@
 package summarizer
 
 import (
-	"context"
 	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +39,9 @@ func TestExaMCPClientSearch_SendsAPIKeyViaHeaderNotQuery(t *testing.T) {
 		gotAuthorization = r.Header.Get("Authorization")
 		gotHeaderKey = r.Header.Get("X-Exa-Api-Key")
 		gotRawQuery = r.URL.RawQuery
+
 		w.Header().Set("Content-Type", "application/json")
+
 		if _, err := w.Write(buildExaRPCBody(t, []string{
 			mustJSONString(t, []map[string]any{
 				{
@@ -57,19 +58,24 @@ func TestExaMCPClientSearch_SendsAPIKeyViaHeaderNotQuery(t *testing.T) {
 	defer server.Close()
 
 	client := NewExaMCPClient(server.URL+"?existing=1", "secret-key", server.Client(), nil)
-	results, err := client.Search(context.Background(), "hololive")
+
+	results, err := client.Search(t.Context(), "hololive")
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
+
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))
 	}
+
 	if gotAuthorization != "Bearer secret-key" {
 		t.Fatalf("Authorization = %q, want %q", gotAuthorization, "Bearer secret-key")
 	}
+
 	if gotHeaderKey != "secret-key" {
 		t.Fatalf("X-Exa-Api-Key = %q, want %q", gotHeaderKey, "secret-key")
 	}
+
 	if strings.Contains(gotRawQuery, "exaApiKey=") {
 		t.Fatalf("query should not include exaApiKey, got: %q", gotRawQuery)
 	}
@@ -93,9 +99,11 @@ func TestParseExaResponse_WrappedResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseExaResponse() error = %v", err)
 	}
+
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))
 	}
+
 	if results[0].Title != "Hoshimachi Suisei Live" {
 		t.Errorf("title = %q", results[0].Title)
 	}
@@ -118,9 +126,11 @@ func TestParseExaResponse_PartialMalformedContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseExaResponse() error = %v", err)
 	}
+
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))
 	}
+
 	if results[0].URL != "https://x.com/ANIPLUS_SHOP/status/1" {
 		t.Errorf("url = %q", results[0].URL)
 	}
@@ -140,6 +150,7 @@ func TestParseExaResponse_AllMalformed(t *testing.T) {
 
 func buildExaRPCBody(t *testing.T, texts []string) []byte {
 	t.Helper()
+
 	content := make([]map[string]string, 0, len(texts))
 	for _, text := range texts {
 		content = append(content, map[string]string{"text": text})
@@ -155,14 +166,17 @@ func buildExaRPCBody(t *testing.T, texts []string) []byte {
 	if err != nil {
 		t.Fatalf("marshal rpc body: %v", err)
 	}
+
 	return raw
 }
 
 func mustJSONString(t *testing.T, v any) string {
 	t.Helper()
+
 	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		t.Fatalf("marshal json string: %v", err)
 	}
+
 	return string(b)
 }

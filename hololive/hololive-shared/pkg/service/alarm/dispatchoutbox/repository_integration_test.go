@@ -16,8 +16,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func setupDispatchOutboxIntegration(t *testing.T) (*PgxRepository, *pgxpool.Pool) {
@@ -106,8 +107,8 @@ func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    fmt.Sprintf("room-%04d", i),
-				Channel:   &domain.Channel{ID: "channel-1"},
-				Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+				Channel:   &domain.Channel{ID: testChannelID},
+				Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start},
 				Users:     []string{fmt.Sprintf("user-%04d", i)},
 			},
 			ClaimKeys: []string{fmt.Sprintf("claim-%04d", i)},
@@ -150,15 +151,15 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	first := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "first"},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "first"},
 		},
 		Version: 1,
 	}
 	second := first
-	second.Notification.RoomID = "room-2"
-	second.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
+	second.Notification.RoomID = testOtherRoomID
+	second.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 
 	result, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first, second}, Status: StatusPending})
 	if err != nil {
@@ -214,15 +215,15 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	first := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "first"},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "first"},
 		},
 		Version: 1,
 	}
 	second := first
-	second.Notification.RoomID = "room-2"
-	second.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
+	second.Notification.RoomID = testOtherRoomID
+	second.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 
 	if _, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{first}, Status: StatusPending}); err != nil {
 		t.Fatalf("first InsertBatch() error = %v", err)
@@ -302,9 +303,9 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversAll
 	eventA := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "original"},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "original"},
 		},
 		Version: 1,
 	}
@@ -314,8 +315,8 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversAll
 	}
 
 	conflictA := eventA
-	conflictA.Notification.RoomID = "room-2"
-	conflictA.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "changed"}
+	conflictA.Notification.RoomID = testOtherRoomID
+	conflictA.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "changed"}
 
 	eventB := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
@@ -406,9 +407,9 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 	original := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "original"},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "original"},
 		},
 		Version: 1,
 	}
@@ -416,12 +417,12 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 		t.Fatalf("seed InsertBatch() error = %v", err)
 	}
 
-	conflictRooms := []string{"room-2", "room-4", "room-5"}
+	conflictRooms := []string{testOtherRoomID, "room-4", "room-5"}
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(conflictRooms))
 	for _, roomID := range conflictRooms {
 		env := original
 		env.Notification.RoomID = roomID
-		env.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "changed"}
+		env.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "changed"}
 		envelopes = append(envelopes, env)
 	}
 
@@ -464,18 +465,18 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	winner := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "first"},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "first"},
 		},
 		Version: 1,
 	}
 	driftedRoom2 := winner
-	driftedRoom2.Notification.RoomID = "room-2"
-	driftedRoom2.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
+	driftedRoom2.Notification.RoomID = testOtherRoomID
+	driftedRoom2.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 	driftedRoom3 := winner
 	driftedRoom3.Notification.RoomID = "room-3"
-	driftedRoom3.Notification.Stream = &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start, Title: "second"}
+	driftedRoom3.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "second"}
 
 	result, err := repository.InsertBatch(ctx, PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{winner, driftedRoom2, driftedRoom3},
@@ -537,9 +538,9 @@ func TestPgxRepositoryInsertBatch_DoesNotCompareLegacyDedupeKey(t *testing.T) {
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start},
 		},
 		ClaimKeys: []string{"legacy-category"},
 		Version:   1,
@@ -567,8 +568,8 @@ func TestPgxRepositoryInsertBatch_DoesNotCompareLegacyDedupeKey(t *testing.T) {
 		eventID, delivery.RoomID,
 		fmt.Sprintf("legacy-live:%s:%s:%s:%d:%s:%s",
 			delivery.RoomID,
-			"channel-1",
-			"stream-1",
+			testChannelID,
+			testStreamID,
 			start.UTC().Truncate(time.Minute).Unix(),
 			"legacy-category",
 			domain.AlarmTypeLive,
@@ -602,9 +603,9 @@ func TestPgxRepositoryInsertBatch_DedupesDuplicateDedupeKeyWithinBatch(t *testin
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -654,9 +655,9 @@ func TestPgxRepositoryReleaseLeased_RequeuesRows(t *testing.T) {
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -698,8 +699,8 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    "room-retry",
-				Channel:   &domain.Channel{ID: "channel-1"},
-				Stream:    &domain.Stream{ID: "stream-retry", ChannelID: "channel-1", StartScheduled: &start},
+				Channel:   &domain.Channel{ID: testChannelID},
+				Stream:    &domain.Stream{ID: "stream-retry", ChannelID: testChannelID, StartScheduled: &start},
 			},
 			ClaimKeys: []string{"claim-retry"},
 			Version:   1,
@@ -708,8 +709,8 @@ func TestPgxRepositoryJSONBRecordsetParam_RetryAndTerminalBatchPaths(t *testing.
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    "room-dlq",
-				Channel:   &domain.Channel{ID: "channel-1"},
-				Stream:    &domain.Stream{ID: "stream-dlq", ChannelID: "channel-1", StartScheduled: &start},
+				Channel:   &domain.Channel{ID: testChannelID},
+				Stream:    &domain.Stream{ID: "stream-dlq", ChannelID: testChannelID, StartScheduled: &start},
 			},
 			ClaimKeys: []string{"claim-dlq"},
 			Version:   1,
@@ -798,8 +799,8 @@ func TestPgxRepositoryJSONBRecordsetParam_QuarantineSendingPath(t *testing.T) {
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-quarantine",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-quarantine", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-quarantine", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		ClaimKeys: []string{"claim-quarantine"},
 		Version:   1,
@@ -850,8 +851,8 @@ func TestPgxRepositoryRouteSendingFailures_TransitionsSendingToRetry(t *testing.
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-sending-retry",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-sr", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-sr", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		ClaimKeys: []string{"claim-sr"},
 		Version:   1,
@@ -910,8 +911,8 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-sent",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-sent", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-sent", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -919,8 +920,8 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-quarantined",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-quarantined", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-quarantined", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -975,8 +976,8 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testi
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-expired",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-expired", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-expired", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		ClaimKeys: []string{"claim-expired"},
 		Version:   1,
@@ -1037,8 +1038,8 @@ func TestPgxRepositoryMarkSent_ExpiredLeaseStillTransitions(t *testing.T) {
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-marksent-expired",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-mse", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-mse", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		ClaimKeys: []string{"claim-mse"},
 		Version:   1,
@@ -1082,8 +1083,8 @@ func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-marksent-owner",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-mso", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-mso", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -1118,8 +1119,8 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsPartialError(t 
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-quarantine-race",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-qr", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-qr", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -1163,9 +1164,9 @@ func TestPgxRepositoryReleaseLeased_RequiresOwner(t *testing.T) {
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
-			RoomID:    "room-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-1", ChannelID: "channel-1", StartScheduled: &start},
+			RoomID:    testRoomID,
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -1388,8 +1389,8 @@ func insertAndClaimRoutingRow(t *testing.T, repository *PgxRepository, workerID,
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    roomID,
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: streamID, ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: streamID, ChannelID: testChannelID, StartScheduled: &start},
 		},
 		ClaimKeys: []string{"claim-" + roomID},
 		Version:   1,

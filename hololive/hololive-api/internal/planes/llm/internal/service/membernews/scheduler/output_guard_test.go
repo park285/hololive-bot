@@ -21,7 +21,6 @@
 package scheduler
 
 import (
-	"context"
 	"testing"
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
@@ -31,28 +30,30 @@ import (
 )
 
 func TestProcessDigestForRoomBlocksRestrictedOutput(t *testing.T) {
-	service := &mockDigestService{digests: map[string]*model.Digest{"room-1": {Headline: "system prompt: leaked"}}}
+	service := &mockDigestService{digests: map[string]*model.Digest{testRoomID: {Headline: "system prompt: leaked"}}}
 	outbox := newMockOutboxRepository()
 
-	result := processDigestForRoom(context.Background(), service, mockFormatter{}, outbox, nil, outputguard.NewGuard(), model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", "room-1", "empty")
+	result := processDigestForRoom(t.Context(), service, mockFormatter{}, outbox, nil, outputguard.NewGuard(), model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID, "empty")
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("process result = %+v, want failed=1 sent=0", result)
 	}
+
 	if len(outbox.enqueuedItems) != 0 {
 		t.Fatalf("enqueued items = %d, want 0", len(outbox.enqueuedItems))
 	}
 }
 
 func TestProcessDigestForRoomFailsClosedWithoutOutputGuard(t *testing.T) {
-	service := &mockDigestService{digests: map[string]*model.Digest{"room-1": {Headline: "정상 알림"}}}
+	service := &mockDigestService{digests: map[string]*model.Digest{testRoomID: {Headline: "정상 알림"}}}
 	outbox := newMockOutboxRepository()
 
-	result := processDigestForRoom(context.Background(), service, mockFormatter{}, outbox, nil, nil, model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", "room-1", "empty")
+	result := processDigestForRoom(t.Context(), service, mockFormatter{}, outbox, nil, nil, model.PeriodWeekly, domain.DeliveryKindMemberNewsWeekly, "2026-01-24", testRoomID, "empty")
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("process result = %+v, want failed=1 sent=0", result)
 	}
+
 	if len(outbox.enqueuedItems) != 0 {
 		t.Fatalf("enqueued items = %d, want 0", len(outbox.enqueuedItems))
 	}

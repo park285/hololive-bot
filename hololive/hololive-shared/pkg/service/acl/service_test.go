@@ -129,7 +129,7 @@ func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 		},
 		{
 			name:     "양쪽 모두 화이트리스트에 없으면 거부",
-			roomName: "room-x",
+			roomName: testRoomX,
 			chatID:   "chat-y",
 			want:     false,
 		},
@@ -162,7 +162,7 @@ func TestIsRoomAllowed_WhitelistMode(t *testing.T) {
 func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 	t.Parallel()
 
-	service := newTestService(true, ACLModeBlacklist, nil, []string{"blocked-room", "blocked-chat"})
+	service := newTestService(true, ACLModeBlacklist, nil, []string{testBlockedRoom, "blocked-chat"})
 
 	tests := []struct {
 		name     string
@@ -178,7 +178,7 @@ func TestIsRoomAllowed_BlacklistMode(t *testing.T) {
 		},
 		{
 			name:     "블랙리스트에 있는 방은 차단 (roomName)",
-			roomName: "blocked-room",
+			roomName: testBlockedRoom,
 			chatID:   "",
 			want:     false,
 		},
@@ -255,6 +255,7 @@ func TestIsRoomAllowed_DualLists_Independent(t *testing.T) {
 
 	// 블랙리스트 모드로 전환 (메모리만 변경, DB/캐시 없음)
 	service.mu.Lock()
+
 	service.mode = ACLModeBlacklist
 	service.mu.Unlock()
 
@@ -294,7 +295,7 @@ func TestGetACLStatus(t *testing.T) {
 			name:         "블랙리스트 활성화 + 방 1개",
 			enabled:      true,
 			mode:         ACLModeBlacklist,
-			blRooms:      []string{"blocked-room"},
+			blRooms:      []string{testBlockedRoom},
 			wantEnabled:  true,
 			wantMode:     ACLModeBlacklist,
 			wantRoomsCnt: 1,
@@ -385,14 +386,14 @@ func TestGetACLStatus_ReturnsCopy(t *testing.T) {
 func TestGetACLStatus_ReturnsSortedRooms(t *testing.T) {
 	t.Parallel()
 
-	service := newTestService(true, ACLModeWhitelist, []string{"room-b", "room-a", "room-c"}, nil)
+	service := newTestService(true, ACLModeWhitelist, []string{testRoomB, testRoomA, "room-c"}, nil)
 
 	_, _, rooms := service.GetACLStatus()
 	if len(rooms) != 3 {
 		t.Fatalf("expected 3 rooms, got %d", len(rooms))
 	}
 
-	want := []string{"room-a", "room-b", "room-c"}
+	want := []string{testRoomA, testRoomB, "room-c"}
 	for i := range want {
 		if rooms[i] != want[i] {
 			t.Fatalf("rooms[%d] = %q, want %q (full=%v)", i, rooms[i], want[i], rooms)
@@ -409,6 +410,7 @@ func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 	const goroutines = 50
 
 	var wg sync.WaitGroup
+
 	wg.Add(goroutines)
 
 	for range goroutines {
@@ -426,11 +428,12 @@ func TestGetACLStatus_ConcurrentRead(t *testing.T) {
 	t.Parallel()
 
 	// 동시 읽기 시 race condition 없어야 한다
-	service := newTestService(true, ACLModeBlacklist, nil, []string{"room-a", "room-b"})
+	service := newTestService(true, ACLModeBlacklist, nil, []string{testRoomA, testRoomB})
 
 	const goroutines = 50
 
 	var wg sync.WaitGroup
+
 	wg.Add(goroutines)
 
 	for range goroutines {

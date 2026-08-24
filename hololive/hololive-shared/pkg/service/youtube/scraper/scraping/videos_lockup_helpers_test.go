@@ -6,6 +6,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const testPublishedTwoHoursAgo = "2 hours ago"
+
 func TestCollectLockupTexts_SkipsEmptyEntries(t *testing.T) {
 	t.Parallel()
 
@@ -17,10 +19,11 @@ func TestCollectLockupTexts_SkipsEmptyEntries(t *testing.T) {
 
 	got := collectLockupTexts(&parts)
 
-	want := []string{"3.2K views", "2 hours ago"}
+	want := []string{"3.2K views", testPublishedTwoHoursAgo}
 	if len(got) != len(want) {
 		t.Fatalf("len want %d, got %d (%v)", len(want), len(got), got)
 	}
+
 	for i, v := range want {
 		if got[i] != v {
 			t.Fatalf("[%d] want %q, got %q", i, v, got[i])
@@ -41,28 +44,30 @@ func TestCollectLockupTexts_HandlesEmptyArray(t *testing.T) {
 func TestPickViewCountAndPublished_FindsViewCountAtAnyIndex(t *testing.T) {
 	t.Parallel()
 
-	texts := []string{"2 hours ago", "3.2K views"}
+	texts := []string{testPublishedTwoHoursAgo, "3.2K views"}
 	viewCount, published, ok := pickViewCountAndPublished(texts)
 
 	if !ok {
-		t.Fatalf("ok want true, got false")
+		t.Fatal("ok want true, got false")
 	}
+
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
 	}
-	if published != "2 hours ago" {
-		t.Fatalf("published want %q, got %q", "2 hours ago", published)
+
+	if published != testPublishedTwoHoursAgo {
+		t.Fatalf("published want %q, got %q", testPublishedTwoHoursAgo, published)
 	}
 }
 
 func TestPickViewCountAndPublished_ReturnsFalseWhenNoViewCount(t *testing.T) {
 	t.Parallel()
 
-	texts := []string{"2 hours ago", "Premiered"}
+	texts := []string{testPublishedTwoHoursAgo, "Premiered"}
 	_, _, ok := pickViewCountAndPublished(texts)
 
 	if ok {
-		t.Fatalf("ok want false, got true")
+		t.Fatal("ok want false, got true")
 	}
 }
 
@@ -73,11 +78,13 @@ func TestPickViewCountAndPublished_EmptyPublishedWhenSingleEntry(t *testing.T) {
 	viewCount, published, ok := pickViewCountAndPublished(texts)
 
 	if !ok {
-		t.Fatalf("ok want true, got false")
+		t.Fatal("ok want true, got false")
 	}
+
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
 	}
+
 	if published != "" {
 		t.Fatalf("published want empty, got %q", published)
 	}
@@ -91,6 +98,7 @@ func TestFallbackPickMetadata_UsesFirstTwoTexts(t *testing.T) {
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
 	}
+
 	if published != "Premiered" {
 		t.Fatalf("published want %q, got %q", "Premiered", published)
 	}
@@ -104,6 +112,7 @@ func TestFallbackPickMetadata_HandlesEmpty(t *testing.T) {
 	if viewCount != 0 {
 		t.Fatalf("viewCount want 0, got %d", viewCount)
 	}
+
 	if published != "" {
 		t.Fatalf("published want empty, got %q", published)
 	}
@@ -122,8 +131,9 @@ func TestPickLockupMetadataTexts_PrefersViewCountFromAnyPosition(t *testing.T) {
 	if viewCount != 3200 {
 		t.Fatalf("viewCount want 3200, got %d", viewCount)
 	}
-	if published != "2 hours ago" {
-		t.Fatalf("published want %q, got %q", "2 hours ago", published)
+
+	if published != testPublishedTwoHoursAgo {
+		t.Fatalf("published want %q, got %q", testPublishedTwoHoursAgo, published)
 	}
 }
 
@@ -140,6 +150,7 @@ func TestPickLockupMetadataTexts_FallbackWhenNoViewCount(t *testing.T) {
 	if viewCount != 0 {
 		t.Fatalf("viewCount want 0, got %d", viewCount)
 	}
+
 	if published != "5 days ago" {
 		t.Fatalf("published want %q, got %q", "5 days ago", published)
 	}

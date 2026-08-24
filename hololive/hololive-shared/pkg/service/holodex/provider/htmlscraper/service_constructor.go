@@ -4,12 +4,13 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 func NewService(
@@ -50,9 +51,11 @@ func NewServiceWithOfficialSchedule(
 	runtimeConfig settings.OfficialScheduleRuntimeConfig,
 ) *Service {
 	var source YouTubeClient
+
 	if youtubeClient != nil {
 		source = youtubeClient
 	}
+
 	return NewServiceWithDependencies(
 		cacheClient,
 		membersData,
@@ -75,9 +78,11 @@ func NewServiceWithDependencies(
 	}
 
 	runtimeConfig = normalizeOfficialScheduleRuntimeConfig(runtimeConfig)
+
 	if dependencies.HTTP == nil {
 		dependencies.HTTP = httputil.NewExternalAPIClient(runtimeConfig.OfficialSchedule.Timeout)
 	}
+
 	identityIndex := buildOfficialScheduleIdentityIndex(membersData)
 	logger.Info("Official schedule API source initialized",
 		slog.String("path", officialScheduleAPIPath),
@@ -96,20 +101,26 @@ func NewServiceWithDependencies(
 
 func normalizeOfficialScheduleRuntimeConfig(config settings.OfficialScheduleRuntimeConfig) settings.OfficialScheduleRuntimeConfig {
 	defaults := settings.DefaultOfficialScheduleConfig()
+
 	if strings.TrimSpace(config.OfficialSchedule.BaseURL) == "" {
 		config.OfficialSchedule.BaseURL = defaults.BaseURL
 	}
+
 	if config.OfficialSchedule.Timeout <= 0 {
 		config.OfficialSchedule.Timeout = defaults.Timeout
 	}
+
 	if config.OfficialSchedule.CacheExpiry <= 0 {
 		config.OfficialSchedule.CacheExpiry = defaults.CacheExpiry
 	}
+
 	if config.OfficialSchedule.PageCacheTTL <= 0 {
 		config.OfficialSchedule.PageCacheTTL = defaults.PageCacheTTL
 	}
+
 	if config.MaxResponseBodyBytes <= 0 {
 		config.MaxResponseBodyBytes = settings.DefaultMaxResponseBodyBytes
 	}
+
 	return config
 }

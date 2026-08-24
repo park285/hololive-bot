@@ -22,6 +22,7 @@ const commandTimeout = 15 * time.Minute
 
 func main() {
 	log.SetFlags(0)
+
 	if err := run(); err != nil {
 		log.Printf("db-migrate failed: %v", err)
 		os.Exit(1)
@@ -31,14 +32,16 @@ func main() {
 func run() error {
 	allowBlockingIndexDropDefault, err := envBool("MIGRATION_ALLOW_BLOCKING_INDEX_DROP")
 	if err != nil {
-		return err
+		return fmt.Errorf("env bool: %w", err)
 	}
+
 	baselineThrough := flag.String("baseline-through", os.Getenv("MIGRATION_BASELINE_THROUGH"), "baseline watermark")
 	allowBlockingIndexDrop := flag.Bool(
 		"allow-blocking-index-drop",
 		allowBlockingIndexDropDefault,
 		"allow plain index drops on an existing database during a dedicated maintenance window",
 	)
+
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -47,8 +50,8 @@ func run() error {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 
-	if err := bootstrapScraperRole(ctx); err != nil {
-		return err
+	if bootstrapErr := bootstrapScraperRole(ctx); bootstrapErr != nil {
+		return fmt.Errorf("bootstrap scraper role: %w", bootstrapErr)
 	}
 
 	pool, err := pgxpool.New(ctx, postgresConnString())
@@ -57,23 +60,25 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(ctx); err != nil {
-		return fmt.Errorf("ping postgres: %w", err)
+	if pingErr := pool.Ping(ctx); pingErr != nil {
+		return fmt.Errorf("ping postgres: %w", pingErr)
 	}
 
 	stdout := log.New(os.Stdout, "", 0)
+
 	result, err := migrationrunner.Run(ctx, pool, migrations.FS, migrationrunner.Config{
 		BaselineThrough:        *baselineThrough,
 		AllowBlockingIndexDrop: *allowBlockingIndexDrop,
 		Logf:                   stdout.Printf,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("run: %w", err)
 	}
 
 	if _, err := fmt.Fprintf(os.Stdout, "==> hololive migrations applied (applied=%d skipped=%d total=%d)\n", result.Applied, result.Skipped, result.Total); err != nil {
 		log.Printf("db-migrate: final stdout write failed after successful migration: %v", err)
 	}
+
 	return nil
 }
 
@@ -88,18 +93,23 @@ func postgresConnString() string {
 	if password := os.Getenv("PGPASSWORD"); password != "" {
 		parts = append(parts, connPart("password", password))
 	}
+
 	parts = append(parts, sslConnParts()...)
+
 	return strings.Join(parts, " ")
 }
 
 func sslConnParts() []string {
 	var parts []string
+
 	if sslMode := envDefault("PGSSLMODE", "verify-full"); sslMode != "" {
 		parts = append(parts, connPart("sslmode", sslMode))
 	}
+
 	if rootCert := os.Getenv("PGSSLROOTCERT"); rootCert != "" {
 		parts = append(parts, connPart("sslrootcert", rootCert))
 	}
+
 	return parts
 }
 
@@ -109,7 +119,9 @@ func connPart(key, value string) string {
 
 func quoteConnValue(value string) string {
 	escaped := strings.ReplaceAll(value, `\`, `\\`)
+
 	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+
 	return "'" + escaped + "'"
 }
 
@@ -117,6 +129,7 @@ func envDefault(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
+
 	return fallback
 }
 
@@ -125,9 +138,11 @@ func envBool(key string) (bool, error) {
 	if raw == "" {
 		return false, nil
 	}
+
 	value, err := strconv.ParseBool(raw)
 	if err != nil {
 		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
 	}
+
 	return value, nil
 }

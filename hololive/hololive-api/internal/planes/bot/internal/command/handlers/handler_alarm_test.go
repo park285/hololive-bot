@@ -27,16 +27,15 @@ import (
 	"testing"
 	"time"
 
-	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 type alarmListViewerStub struct {
@@ -59,9 +58,11 @@ func (s *alarmListViewerStub) GetRoomAlarms(context.Context, string) ([]string, 
 func (s *alarmListViewerStub) GetRoomAlarmsWithTypes(context.Context, string) ([]*domain.Alarm, error) {
 	return nil, nil
 }
+
 func (s *alarmListViewerStub) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
+
 func (s *alarmListViewerStub) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, nil
+	return nil, errTestStubNoNextStream
 }
 func (s *alarmListViewerStub) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
 func (s *alarmListViewerStub) GetTargetMinutes() []int                              { return nil }
@@ -164,11 +165,12 @@ func (p *contextAwareMemberProvider) FindMembersByAlias(string) []*domain.Member
 }
 
 type alarmAddRecorder struct {
-	addCtx context.Context
+	addCtxs []context.Context
 }
 
 func (s *alarmAddRecorder) AddAlarm(ctx context.Context, _ *domain.AddAlarmRequest) (bool, error) {
-	s.addCtx = ctx
+	s.addCtxs = append(s.addCtxs, ctx)
+
 	return true, nil
 }
 
@@ -191,7 +193,7 @@ func (s *alarmAddRecorder) ListRoomAlarmsView(context.Context, string) ([]domain
 func (s *alarmAddRecorder) ClearRoomAlarms(context.Context, string) (int, error) { return 0, nil }
 
 func (s *alarmAddRecorder) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, nil
+	return nil, errTestStubNoNextStream
 }
 
 func (s *alarmAddRecorder) UpdateAlarmAdvanceMinutes(context.Context, int) []int { return nil }
@@ -215,11 +217,12 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 		Alarm:     &alarmservice.AlarmService{},
 		Matcher:   &matcher.Matcher{},
 		Formatter: formatter.NewResponseFormatter("!", nil),
-		SendMessage: func(ctx context.Context, room, message string) error {
+		SendMessage: func(context.Context, string, string) error {
 			return nil
 		},
-		SendError: func(ctx context.Context, room, message string) error {
+		SendError: func(_ context.Context, _, message string) error {
 			sentError = message
+
 			return nil
 		},
 		Logger: slog.Default(),
@@ -227,13 +230,13 @@ func TestAlarmCommand_InvalidAction(t *testing.T) {
 
 	cmd := alarmcmd.NewAlarmCommand(deps)
 	params := map[string]any{
-		"action":      "invalid",
-		"sub_command": "설정123",
-		"member":      "설정123",
+		testParamAction: "invalid",
+		"sub_command":   "설정123",
+		paramMember:     "설정123",
 	}
 
 	ctx := &domain.CommandContext{
-		Room:     "room-1",
+		Room:     testRoomID,
 		UserName: "user-1",
 	}
 
@@ -270,17 +273,18 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 		Alarm:     alarm,
 		Matcher:   &matcher.Matcher{},
 		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
-		SendMessage: func(ctx context.Context, room, message string) error {
+		SendMessage: func(_ context.Context, _, message string) error {
 			sentMessage = message
+
 			return nil
 		},
-		SendError: func(ctx context.Context, room, message string) error { return nil },
+		SendError: func(context.Context, string, string) error { return nil },
 		Logger:    slog.Default(),
 	}
 
 	cmd := alarmcmd.NewAlarmCommand(deps)
 
-	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{"action": "list"})
+	err := cmd.Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{testParamAction: "list"})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -296,8 +300,8 @@ func TestAlarmCommand_ListUsesBatchViewWhenAvailable(t *testing.T) {
 
 func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	memberProvider := newContextAwareMemberProvider([]*domain.Member{{
-		ChannelID: "ch-aqua",
-		Name:      "Aqua",
+		ChannelID: testChannelAqua,
+		Name:      testMemberAqua,
 	}})
 	alarm := &alarmAddRecorder{}
 	deps := &handlercore.Dependencies{
@@ -309,6 +313,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 		},
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected send error")
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -317,13 +322,13 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "alarm-propagation")
 
 	err := alarmcmd.NewAlarmCommand(deps).Execute(ctx, &domain.CommandContext{
-		Room:     "room-1",
+		Room:     testRoomID,
 		RoomName: "room-name",
 		UserID:   "user-1",
 		UserName: "tester",
 	}, map[string]any{
-		"action": "add",
-		"member": "Aqua",
+		testParamAction: "add",
+		paramMember:     testMemberAqua,
 	})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
@@ -333,7 +338,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 		t.Fatal("expected matcher provider to receive request context")
 	}
 
-	if alarm.addCtx != ctx {
+	if len(alarm.addCtxs) != 1 || alarm.addCtxs[0] != ctx {
 		t.Fatal("expected add alarm to receive original request context")
 	}
 }
@@ -357,13 +362,13 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	}
 
 	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{
-		Room:     "room-1",
+		Room:     testRoomID,
 		RoomName: "room-name",
 		UserID:   "user-1",
 		UserName: "tester",
 	}, map[string]any{
-		"action": "add",
-		"member": "NoSuchMember",
+		testParamAction: "add",
+		paramMember:     "NoSuchMember",
 	})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
@@ -372,7 +377,8 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 	if !sendMessageCalled {
 		t.Fatal("expected no-match member message")
 	}
-	if alarm.addCtx != nil {
+
+	if len(alarm.addCtxs) != 0 {
 		t.Fatal("expected AddAlarm not to be called after no-match member resolution")
 	}
 }
@@ -386,6 +392,7 @@ func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
 		t.Fatalf("clear templates: %v", err)
 	}
+
 	templates := map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdAlarmList:  "알람 목록\n{{range .Alarms}}{{.MemberName}}\n{{end}}",
 		domain.TemplateKeyCmdAlarmAdded: "알람 추가\n{{.MemberName}}",

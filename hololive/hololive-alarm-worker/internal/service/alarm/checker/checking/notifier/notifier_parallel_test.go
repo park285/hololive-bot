@@ -22,18 +22,18 @@ package notifier
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // 병렬 prepare 가 보수적 동시성 한도로 묶여 있어야 한다(Valkey 부하 제어).
@@ -43,6 +43,7 @@ func TestPrepareSendBatch_BoundedConcurrency(t *testing.T) {
 	if prepareBatchConcurrency <= 0 {
 		t.Fatalf("prepareBatchConcurrency must be positive, got %d", prepareBatchConcurrency)
 	}
+
 	if prepareBatchConcurrency > 16 {
 		t.Fatalf("prepareBatchConcurrency too aggressive for Valkey claim path: %d", prepareBatchConcurrency)
 	}
@@ -68,10 +69,13 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, 6, 11, 12, 10, 0, 0, time.UTC)
+	start := time.Date(2026, time.June, 11, 12, 10, 0, 0, time.UTC)
+
 	const total = 64
+
 	notifications := make([]*domain.AlarmNotification, 0, total)
 	wantRoomOrder := make([]string, 0, total)
+
 	for i := range total {
 		roomID := fmt.Sprintf("room-order-%03d", i)
 		stream := &domain.Stream{
@@ -82,6 +86,7 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 			StartScheduled: &start,
 			Channel:        &domain.Channel{ID: "UC_ORDER", Name: "Order Channel"},
 		}
+
 		notifications = append(notifications, domain.NewAlarmNotification(roomID, stream.Channel, stream, 10, []string{}, ""))
 		wantRoomOrder = append(wantRoomOrder, roomID)
 	}
@@ -96,9 +101,11 @@ func TestPrepareSendBatch_PreservesOrderAcrossManyItems(t *testing.T) {
 	require.Len(t, outbox.lastBatchInput.Envelopes, total)
 
 	gotRoomOrder := make([]string, 0, total)
+
 	for _, envelope := range outbox.lastBatchInput.Envelopes {
 		gotRoomOrder = append(gotRoomOrder, envelope.Notification.RoomID)
 	}
+
 	assert.Equal(t, wantRoomOrder, gotRoomOrder, "publish order must match input order")
 }
 
@@ -122,7 +129,7 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, 6, 11, 13, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.June, 11, 13, 0, 0, 0, time.UTC)
 	stream := &domain.Stream{
 		ID:             "stream-dup",
 		Title:          "Dup Test",
@@ -133,7 +140,9 @@ func TestPrepareSendBatch_DedupExactlyOnceUnderDuplicates(t *testing.T) {
 	}
 
 	const copies = 32
+
 	notifications := make([]*domain.AlarmNotification, 0, copies)
+
 	for range copies {
 		// 동일 room+stream+minute -> 동일 claim key. 정확히 1회만 통과해야 한다.
 		notifications = append(notifications, domain.NewAlarmNotification("room-dup", stream.Channel, stream, 10, []string{}, ""))
@@ -169,8 +178,9 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, 6, 11, 14, 0, 0, 0, time.UTC)
+	start := time.Date(2026, time.June, 11, 14, 0, 0, 0, time.UTC)
 	notifications := make([]*domain.AlarmNotification, 0, 4)
+
 	for i := range 4 {
 		roomID := fmt.Sprintf("room-cancel-%d", i)
 		stream := &domain.Stream{
@@ -181,6 +191,7 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 			StartScheduled: &start,
 			Channel:        &domain.Channel{ID: "UC_CANCEL", Name: "Cancel Channel"},
 		}
+
 		notifications = append(notifications, domain.NewAlarmNotification(roomID, stream.Channel, stream, 10, []string{}, ""))
 	}
 
@@ -190,7 +201,7 @@ func TestSend_CanceledContextReturnsErrorAndSendsNothing(t *testing.T) {
 	result, sendErr := notifier.Send(ctx, notifications)
 
 	require.Error(t, sendErr, "canceled context must surface a non-nil error to the caller")
-	assert.True(t, errors.Is(sendErr, context.Canceled), "error must wrap context.Canceled")
+	require.ErrorIs(t, sendErr, context.Canceled, "error must wrap context.Canceled")
 
 	assert.Equal(t, 0, result.Sent, "no notification may be sent under canceled context")
 	assert.Equal(t, 0, outbox.insertBatchCalls, "no publish batch may run under canceled context")

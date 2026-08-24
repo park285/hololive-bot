@@ -7,10 +7,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 // Start는 3개 플랫폼 루프를 병렬 실행하고 context 취소 시 종료한다.
@@ -18,6 +19,7 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	if s == nil {
 		return errors.New("runtime scheduler is nil")
 	}
+
 	if ctx == nil {
 		return errors.New("runtime scheduler context is nil")
 	}
@@ -29,7 +31,7 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	panicguard.GoE(eg, s.logger, "alarm-scheduler-chzzk", func() error {
 		return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
 	})
-	s.startTwitchLoop(eg, egCtx)
+	s.startTwitchLoop(egCtx, eg)
 	panicguard.GoE(eg, s.logger, "alarm-scheduler-cache-recovery", func() error {
 		return s.runAlarmCacheRecoveryLoop(egCtx)
 	})
@@ -60,8 +62,9 @@ func (s *RuntimeScheduler) runLoop(
 
 	for {
 		if err := s.waitForLoopTick(ctx, name, next); err != nil {
-			return err
+			return fmt.Errorf("wait for loop tick: %w", err)
 		}
+
 		s.runLoopIteration(ctx, name, timeout, run)
 		next.Reset(nextLoopDelay(time.Now(), interval))
 	}
@@ -71,7 +74,12 @@ func (s *RuntimeScheduler) waitForLoopTick(ctx context.Context, name string, nex
 	select {
 	case <-ctx.Done():
 		s.logger.Info("Alarm loop stopped", slog.String("loop", name))
-		return ctx.Err()
+
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait for loop tick: %w", err)
+		}
+
+		return nil
 	case <-next.C:
 		return nil
 	}
@@ -158,6 +166,7 @@ func youtubeEvaluationWindowCap(interval time.Duration) time.Duration {
 	if interval <= 0 {
 		interval = defaultYouTubeInterval
 	}
+
 	if interval < time.Minute {
 		return time.Minute + evaluationWindowSlack
 	}
@@ -173,10 +182,15 @@ func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 		if recoveryErr := s.recoverAlarmCacheAfterCheckFailure(ctx, err); recoveryErr != nil {
 			s.logger.Warn("Immediate alarm cache recovery failed after YouTube check error", slog.Any("error", recoveryErr))
 		}
+
 		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
 	}
 
-	return s.dispatchNotifications(ctx, "youtube", notifications)
+	if err := s.dispatchNotifications(ctx, "youtube", notifications); err != nil {
+		return fmt.Errorf("dispatch notifications: %w", err)
+	}
+
+	return nil
 }
 
 func (s *RuntimeScheduler) syncYouTubeTargetMinutes() {
@@ -188,6 +202,7 @@ func (s *RuntimeScheduler) syncYouTubeTargetMinutes() {
 	if s.youtubeTargetUpdater != nil {
 		s.youtubeTargetUpdater.UpdateTargetMinutes(targetMinutes)
 	}
+
 	if s.dedupTargetUpdater != nil {
 		s.dedupTargetUpdater.UpdateTargetMinutes(targetMinutes)
 	}
@@ -199,7 +214,11 @@ func (s *RuntimeScheduler) runChzzkIteration(ctx context.Context) error {
 		return fmt.Errorf("run chzzk iteration: check notifications: %w", err)
 	}
 
-	return s.dispatchNotifications(ctx, "chzzk", notifications)
+	if err := s.dispatchNotifications(ctx, "chzzk", notifications); err != nil {
+		return fmt.Errorf("dispatch notifications: %w", err)
+	}
+
+	return nil
 }
 
 func (s *RuntimeScheduler) runTwitchIteration(ctx context.Context) error {
@@ -208,7 +227,11 @@ func (s *RuntimeScheduler) runTwitchIteration(ctx context.Context) error {
 		return fmt.Errorf("run twitch iteration: check notifications: %w", err)
 	}
 
-	return s.dispatchNotifications(ctx, "twitch", notifications)
+	if err := s.dispatchNotifications(ctx, "twitch", notifications); err != nil {
+		return fmt.Errorf("dispatch notifications: %w", err)
+	}
+
+	return nil
 }
 
 func (s *RuntimeScheduler) dispatchNotifications(
@@ -221,9 +244,9 @@ func (s *RuntimeScheduler) dispatchNotifications(
 	}
 
 	sendResult, err := s.notifier.Send(ctx, notifications)
-
 	if err != nil {
 		attrs := make([]slog.Attr, 0, 5)
+
 		attrs = append(attrs,
 			slog.String("loop", loopName),
 			slog.Int("notifications", len(notifications)),
@@ -233,6 +256,7 @@ func (s *RuntimeScheduler) dispatchNotifications(
 		)
 		attrs = append(attrs, sharedlog.ErrorAttrs(err)...)
 		sharedlog.Warn(ctx, s.logger, EventAlarmNotificationDispatchFailed, "alarm notification dispatch failed", attrs...)
+
 		return fmt.Errorf("dispatch notifications: send notifications partially failed: %w", err)
 	}
 

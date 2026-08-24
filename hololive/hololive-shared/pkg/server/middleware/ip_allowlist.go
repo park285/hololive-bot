@@ -37,13 +37,17 @@ func NewIPAllowList(allowed []string) ([]*net.IPNet, error) {
 		if trimmed == "" {
 			continue
 		}
+
 		trimmed = normalizeIPAllowListCIDR(trimmed)
+
 		_, cidr, err := net.ParseCIDR(trimmed)
 		if err != nil {
 			return nil, fmt.Errorf("invalid CIDR %s: %w", trimmed, err)
 		}
+
 		nets = append(nets, cidr)
 	}
+
 	return nets, nil
 }
 
@@ -51,9 +55,11 @@ func normalizeIPAllowListCIDR(raw string) string {
 	if strings.Contains(raw, "/") {
 		return raw
 	}
+
 	if strings.Contains(raw, ":") {
 		return raw + "/128"
 	}
+
 	return raw + "/32"
 }
 
@@ -66,22 +72,28 @@ func AdminIPAllowMiddleware(allowed []*net.IPNet, logger *slog.Logger) gin.Handl
 
 	if len(allowed) == 0 {
 		log.Warn("Admin IP allowlist is empty; allowing all admin requests (configure ADMIN_ALLOWED_IPS for production)")
+
 		return func(c *gin.Context) {
 			c.Next()
 		}
 	}
+
 	return func(c *gin.Context) {
 		clientIP := net.ParseIP(c.ClientIP())
 		if clientIP == nil {
 			log.Warn("Invalid client IP", slog.String("ip", c.ClientIP()))
 			abortWithError(c, 403, "forbidden", "")
+
 			return
 		}
+
 		if !adminIPAllowed(clientIP, allowed) {
 			log.Warn("Admin IP blocked", slog.String("ip", clientIP.String()))
 			abortWithError(c, 403, "forbidden", "")
+
 			return
 		}
+
 		c.Next()
 	}
 }
@@ -90,10 +102,12 @@ func adminIPAllowed(clientIP net.IP, allowed []*net.IPNet) bool {
 	if clientIP == nil {
 		return false
 	}
+
 	for _, cidr := range allowed {
 		if cidr != nil && cidr.Contains(clientIP) {
 			return true
 		}
 	}
+
 	return false
 }

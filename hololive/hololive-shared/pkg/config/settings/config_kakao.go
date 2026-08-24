@@ -29,6 +29,11 @@ import (
 
 const aclModeBlacklist = "blacklist"
 
+const (
+	kakaoACLEnabledEnv = "KAKAO_ACL_ENABLED"
+	kakaoACLModeEnv    = "KAKAO_ACL_MODE"
+)
+
 type KakaoConfig struct {
 	Rooms      []string
 	ACLEnabled bool
@@ -43,6 +48,7 @@ func (c *KakaoConfig) SnapshotACL() (enabled bool, mode string, rooms []string) 
 	defer c.mu.RUnlock()
 
 	rooms = append([]string(nil), c.Rooms...)
+
 	return c.ACLEnabled, c.ACLMode, rooms
 }
 
@@ -67,6 +73,7 @@ func (c *KakaoConfig) AddRoom(room string) bool {
 	}
 
 	c.Rooms = append(c.Rooms, room)
+
 	return true
 }
 
@@ -81,20 +88,23 @@ func (c *KakaoConfig) RemoveRoom(room string) bool {
 
 	removed := false
 	rooms := make([]string, 0, len(c.Rooms))
+
 	for _, existing := range c.Rooms {
 		if existing == room {
 			removed = true
 			continue
 		}
+
 		rooms = append(rooms, existing)
 	}
 
 	c.Rooms = rooms
+
 	return removed
 }
 
 // ACL이 비활성화되어 있으면 모든 방을 허용한다.
-func (c *KakaoConfig) IsRoomAllowed(roomName, chatID string) bool {
+func (c *KakaoConfig) IsRoomAllowed(_, chatID string) bool {
 	chatID = stringutil.TrimSpace(chatID)
 
 	c.mu.RLock()

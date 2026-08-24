@@ -10,37 +10,37 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 )
 
-func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {
-	t.Parallel()
+type alarmDispatchRetryableCase struct {
+	name string
+	err  error
+	want bool
+}
 
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
+func alarmDispatchRetryableHTTPCases() []alarmDispatchRetryableCase {
+	return []alarmDispatchRetryableCase{
 		{
 			name: "typed 502 direct",
-			err:  &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 502, URL: testKaringContentListPath},
 			want: true,
 		},
 		{
 			name: "typed 503 direct",
-			err:  &iris.HTTPError{StatusCode: 503, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 503, URL: testKaringContentListPath},
 			want: true,
 		},
 		{
 			name: "typed 429 direct",
-			err:  &iris.HTTPError{StatusCode: 429, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 429, URL: testKaringContentListPath},
 			want: true,
 		},
 		{
 			name: "typed 502 wrapped through fmt.Errorf",
-			err:  fmt.Errorf("iris send karing content list: %w", fmt.Errorf("send iris karing content list: %w", &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"})),
+			err:  fmt.Errorf("iris send karing content list: %w", fmt.Errorf("send iris karing content list: %w", &iris.HTTPError{StatusCode: 502, URL: testKaringContentListPath})),
 			want: true,
 		},
 		{
 			name: "typed 503 wrapped through fmt.Errorf",
-			err:  fmt.Errorf("iris send karing content list: %w", &iris.HTTPError{StatusCode: 503, URL: "/karing/content-list"}),
+			err:  fmt.Errorf("iris send karing content list: %w", &iris.HTTPError{StatusCode: 503, URL: testKaringContentListPath}),
 			want: true,
 		},
 		{
@@ -55,42 +55,47 @@ func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {
 		},
 		{
 			name: "typed 500 not retryable",
-			err:  &iris.HTTPError{StatusCode: 500, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 500, URL: testKaringContentListPath},
 			want: false,
 		},
 		{
 			name: "typed 504 not retryable",
-			err:  &iris.HTTPError{StatusCode: 504, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 504, URL: testKaringContentListPath},
 			want: false,
 		},
 		{
 			name: "typed 401 not retryable",
-			err:  &iris.HTTPError{StatusCode: 401, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 401, URL: testKaringContentListPath},
 			want: false,
 		},
 		{
 			name: "typed 403 not retryable",
-			err:  &iris.HTTPError{StatusCode: 403, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 403, URL: testKaringContentListPath},
 			want: false,
 		},
 		{
 			name: "typed 400 not retryable",
-			err:  &iris.HTTPError{StatusCode: 400, URL: "/karing/content-list"},
+			err:  &iris.HTTPError{StatusCode: 400, URL: testKaringContentListPath},
 			want: false,
 		},
+	}
+}
+
+func alarmDispatchRetryableTransportCases() []alarmDispatchRetryableCase {
+	return []alarmDispatchRetryableCase{
 		{
 			name: "transport error direct",
-			err:  &iris.TransportError{Op: "post", URL: "/karing/content-list", Err: errors.New("connection refused")},
+			err:  &iris.TransportError{Op: testIrisPostOp, URL: testKaringContentListPath, Err: errors.New("connection refused")},
 			want: true,
 		},
 		{
 			name: "transport error wrapped through fmt.Errorf",
-			err:  fmt.Errorf("send iris karing content list: %w", &iris.TransportError{Op: "post", URL: "/karing/content-list", Err: errors.New("connection reset by peer")}),
+			err:  fmt.Errorf("send iris karing content list: %w", &iris.TransportError{Op: testIrisPostOp, URL: testKaringContentListPath, Err: errors.New("connection reset by peer")}),
 			want: true,
 		},
 		{
 			name: "transport error wrapping deadline exceeded",
-			err:  &iris.TransportError{Op: "post", URL: "/karing/content-list", Err: context.DeadlineExceeded},
+			err:  &iris.TransportError{Op: testIrisPostOp, URL: testKaringContentListPath, Err: context.DeadlineExceeded},
 			want: true,
 		},
 		{
@@ -119,10 +124,21 @@ func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {
 			want: false,
 		},
 	}
+}
 
-	for _, tc := range tests {
+func alarmDispatchRetryableCases() []alarmDispatchRetryableCase {
+	cases := alarmDispatchRetryableHTTPCases()
+
+	return append(cases, alarmDispatchRetryableTransportCases()...)
+}
+
+func TestIsAlarmDispatchRetryablePostSendFailure_TypedHTTPError(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range alarmDispatchRetryableCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := isAlarmDispatchRetryablePostSendFailure(tc.err)
 			if got != tc.want {
 				t.Errorf("isAlarmDispatchRetryablePostSendFailure(%v) = %v, want %v", tc.err, got, tc.want)
@@ -146,7 +162,7 @@ func TestAlarmDispatchMaxAttemptsForCause(t *testing.T) {
 		},
 		{
 			name: "transport error gets the extended budget",
-			err:  &iris.TransportError{Op: "post", URL: "/karing/content-list", Err: errors.New("connection refused")},
+			err:  &iris.TransportError{Op: testIrisPostOp, URL: testKaringContentListPath, Err: errors.New("connection refused")},
 			want: alarmDispatchRetryableMaxAttempts,
 		},
 		{
@@ -169,6 +185,7 @@ func TestAlarmDispatchMaxAttemptsForCause(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := alarmDispatchMaxAttemptsForCause(tc.err); got != tc.want {
 				t.Errorf("alarmDispatchMaxAttemptsForCause(%v) = %d, want %d", tc.err, got, tc.want)
 			}
@@ -185,9 +202,11 @@ func TestAlarmDispatchRetryableBudgetOutlivesIrisRestart(t *testing.T) {
 	}
 
 	horizon := time.Duration(0)
+
 	for attempt := 1; attempt < alarmDispatchRetryableMaxAttempts; attempt++ {
 		horizon += time.Duration(attempt) * 5 * time.Second
 	}
+
 	if horizon < 60*time.Second {
 		t.Errorf("retry horizon %s must outlast a 30-60s Iris restart", horizon)
 	}

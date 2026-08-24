@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const floatCompareDelta = 1e-9
+
 func TestHardCooldownForErrorCount_Thresholds(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +86,7 @@ func TestResolveCooldown_SuggestedInteraction(t *testing.T) {
 func TestLaterDeadline_ReturnsLaterOrCandidateOnTie(t *testing.T) {
 	t.Parallel()
 
-	base := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 	earlier := base.Add(-time.Hour)
 	later := base.Add(time.Hour)
 
@@ -97,7 +99,7 @@ func TestNewBackoffState_DefaultHasNoJitter(t *testing.T) {
 	t.Parallel()
 
 	bs := NewBackoffState()
-	require.Equal(t, 0.0, bs.jitterPortion)
+	require.InDelta(t, 0.0, bs.jitterPortion, floatCompareDelta)
 	require.Nil(t, bs.jitterRNG)
 	require.False(t, bs.IsInCooldown())
 }
@@ -107,29 +109,33 @@ func TestWithCooldownJitter_ClampsPortionAndAllocatesRNG(t *testing.T) {
 
 	t.Run("negative portion clamps to zero and leaves RNG nil", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState(WithCooldownJitter(-0.3))
-		require.Equal(t, 0.0, bs.jitterPortion)
+		require.InDelta(t, 0.0, bs.jitterPortion, floatCompareDelta)
 		require.Nil(t, bs.jitterRNG)
 	})
 
 	t.Run("zero portion leaves RNG nil", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState(WithCooldownJitter(0))
-		require.Equal(t, 0.0, bs.jitterPortion)
+		require.InDelta(t, 0.0, bs.jitterPortion, floatCompareDelta)
 		require.Nil(t, bs.jitterRNG)
 	})
 
 	t.Run("in-range portion allocates RNG", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState(WithCooldownJitter(0.3))
-		require.Equal(t, 0.3, bs.jitterPortion)
+		require.InDelta(t, 0.3, bs.jitterPortion, floatCompareDelta)
 		require.NotNil(t, bs.jitterRNG)
 	})
 
 	t.Run("portion above cap clamps to max and allocates RNG", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState(WithCooldownJitter(0.9))
-		require.Equal(t, maxCooldownJitterPortion, bs.jitterPortion)
+		require.InDelta(t, maxCooldownJitterPortion, bs.jitterPortion, floatCompareDelta)
 		require.NotNil(t, bs.jitterRNG)
 	})
 }
@@ -148,11 +154,13 @@ func TestApplyJitter_StaysWithinPortionBounds(t *testing.T) {
 	t.Parallel()
 
 	bs := NewBackoffState(WithCooldownJitter(0.5))
+
 	bs.jitterRNG = rand.New(rand.NewSource(1)) //nolint:gosec // G404: 고정 시드로 지터 범위를 결정적으로 검증하며, jitterRNG 필드 타입이 *math/rand.Rand
 
 	cooldown := 10 * time.Minute
 	lower := time.Duration(float64(cooldown) * 0.5)
 	upper := time.Duration(float64(cooldown) * 1.5)
+
 	for range 2000 {
 		got := bs.applyJitter(cooldown)
 		require.GreaterOrEqual(t, got, lower)
@@ -175,9 +183,11 @@ func TestRecordError_HardCooldownEscalatesWithErrorCount(t *testing.T) {
 	}
 	for _, tc := range cases {
 		bs := NewBackoffState()
-		for i := 0; i < tc.calls; i++ {
+
+		for range tc.calls {
 			bs.RecordError()
 		}
+
 		remaining := bs.HardCooldownRemaining()
 		require.LessOrEqual(t, remaining, tc.want, "calls=%d", tc.calls)
 		require.Greater(t, remaining, tc.want-2*time.Second, "calls=%d", tc.calls)
@@ -198,10 +208,13 @@ func TestRecordTransientError_EscalatesWithErrorCount(t *testing.T) {
 	}
 	for _, tc := range cases {
 		bs := NewBackoffState()
-		for i := 0; i < tc.calls; i++ {
+
+		for range tc.calls {
 			bs.RecordTransientError()
 		}
+
 		require.Equal(t, tc.calls, bs.TransientErrors())
+
 		remaining := bs.TransientCooldownRemaining()
 		require.LessOrEqual(t, remaining, tc.want, "calls=%d", tc.calls)
 		require.Greater(t, remaining, tc.want-2*time.Second, "calls=%d", tc.calls)
@@ -213,8 +226,10 @@ func TestRecordErrorWithSuggestedCooldown_TakesMaxOfBaseAndClampedSuggested(t *t
 
 	t.Run("large suggested is clamped to max and dominates base", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
 		bs.RecordErrorWithSuggestedCooldown(24 * time.Hour)
+
 		remaining := bs.HardCooldownRemaining()
 		require.LessOrEqual(t, remaining, 6*time.Hour)
 		require.Greater(t, remaining, 6*time.Hour-2*time.Second)
@@ -222,8 +237,10 @@ func TestRecordErrorWithSuggestedCooldown_TakesMaxOfBaseAndClampedSuggested(t *t
 
 	t.Run("small suggested is dominated by base cooldown", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
 		bs.RecordErrorWithSuggestedCooldown(time.Second)
+
 		remaining := bs.HardCooldownRemaining()
 		require.LessOrEqual(t, remaining, 30*time.Minute)
 		require.Greater(t, remaining, 30*time.Minute-2*time.Second)
@@ -235,6 +252,7 @@ func TestRecordTransientErrorWithSuggestedCooldown_ClampsToTransientRange(t *tes
 
 	bs := NewBackoffState()
 	bs.RecordTransientErrorWithSuggestedCooldown(time.Hour)
+
 	remaining := bs.TransientCooldownRemaining()
 	require.LessOrEqual(t, remaining, 10*time.Minute)
 	require.Greater(t, remaining, 10*time.Minute-2*time.Second)
@@ -245,9 +263,11 @@ func TestRecordError_DeadlineNeverShrinksAcrossCalls(t *testing.T) {
 
 	bs := NewBackoffState()
 	bs.RecordErrorWithSuggestedCooldown(24 * time.Hour)
+
 	first := bs.HardCooldownRemaining()
 
 	bs.RecordError()
+
 	second := bs.HardCooldownRemaining()
 
 	require.LessOrEqual(t, second, first)
@@ -278,13 +298,16 @@ func TestHardCooldownRemaining_ExpiredResetsCounters(t *testing.T) {
 
 	t.Run("zero deadline returns zero", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
 		require.Equal(t, time.Duration(0), bs.HardCooldownRemaining())
 	})
 
 	t.Run("past deadline resets deadline and error count", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
+
 		bs.hardErrors = 3
 		bs.hardCooldown = time.Now().Add(-time.Minute)
 		require.Equal(t, time.Duration(0), bs.HardCooldownRemaining())
@@ -298,8 +321,10 @@ func TestTransientCooldownRemaining_ExpiredResetsCounters(t *testing.T) {
 
 	t.Run("future deadline reports positive remaining", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
 		bs.SetTransientCooldownForTest(time.Now().Add(2 * time.Minute))
+
 		remaining := bs.TransientCooldownRemaining()
 		require.Greater(t, remaining, time.Duration(0))
 		require.LessOrEqual(t, remaining, 2*time.Minute)
@@ -307,7 +332,9 @@ func TestTransientCooldownRemaining_ExpiredResetsCounters(t *testing.T) {
 
 	t.Run("past deadline resets deadline and error count", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
+
 		bs.transientErrors = 2
 		bs.SetTransientCooldownForTest(time.Now().Add(-time.Minute))
 		require.Equal(t, time.Duration(0), bs.TransientCooldownRemaining())
@@ -320,9 +347,12 @@ func TestCooldownRemaining_ReturnsLargerOfHardAndTransient(t *testing.T) {
 
 	t.Run("hard dominates", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
+
 		bs.hardCooldown = time.Now().Add(10 * time.Minute)
 		bs.transientCooldown = time.Now().Add(5 * time.Minute)
+
 		remaining := bs.CooldownRemaining()
 		require.Greater(t, remaining, 5*time.Minute)
 		require.LessOrEqual(t, remaining, 10*time.Minute)
@@ -330,9 +360,12 @@ func TestCooldownRemaining_ReturnsLargerOfHardAndTransient(t *testing.T) {
 
 	t.Run("transient dominates", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
+
 		bs.hardCooldown = time.Now().Add(2 * time.Minute)
 		bs.transientCooldown = time.Now().Add(8 * time.Minute)
+
 		remaining := bs.CooldownRemaining()
 		require.Greater(t, remaining, 2*time.Minute)
 		require.LessOrEqual(t, remaining, 8*time.Minute)
@@ -340,10 +373,13 @@ func TestCooldownRemaining_ReturnsLargerOfHardAndTransient(t *testing.T) {
 
 	t.Run("expired hard falls back to live transient", func(t *testing.T) {
 		t.Parallel()
+
 		bs := NewBackoffState()
+
 		bs.hardErrors = 3
 		bs.hardCooldown = time.Now().Add(-time.Minute)
 		bs.transientCooldown = time.Now().Add(4 * time.Minute)
+
 		remaining := bs.CooldownRemaining()
 		require.Greater(t, remaining, time.Duration(0))
 		require.LessOrEqual(t, remaining, 4*time.Minute)

@@ -22,6 +22,7 @@ package scraper
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -46,7 +47,7 @@ func NewRSSParser() *RSSParser {
 // Parse는 raw feed 바이트를 MajorEvent 목록으로 파싱한다.
 func (p *RSSParser) Parse(data []byte, eventType domain.MajorEventType) ([]*domain.MajorEvent, error) {
 	if p == nil || p.parser == nil {
-		return nil, fmt.Errorf("parse rss: parser is nil")
+		return nil, errors.New("parse rss: parser is nil")
 	}
 
 	feed, err := p.parser.Parse(bytes.NewReader(data))
@@ -64,6 +65,7 @@ func (p *RSSParser) Parse(data []byte, eventType domain.MajorEventType) ([]*doma
 		if !ok {
 			continue
 		}
+
 		events = append(events, event)
 	}
 
@@ -73,12 +75,15 @@ func (p *RSSParser) Parse(data []byte, eventType domain.MajorEventType) ([]*doma
 func mapFeedItemToEvent(item *gofeed.Item, eventType domain.MajorEventType) (*domain.MajorEvent, bool) {
 	link := strings.TrimSpace(item.Link)
 	externalID := strings.TrimSpace(item.GUID)
+
 	if externalID == "" {
 		externalID = link
 	}
+
 	if externalID == "" {
 		return nil, false
 	}
+
 	if link == "" {
 		link = externalID
 	}
@@ -105,8 +110,10 @@ func mapFeedItemToEvent(item *gofeed.Item, eventType domain.MajorEventType) (*do
 		Status:      domain.MajorEventStatusActive,
 		LinkStatus:  domain.MajorEventLinkStatusUnchecked,
 	}
+
 	if pubDate != nil {
 		pubDateUTC := pubDate.UTC()
+
 		event.PubDate = &pubDateUTC
 	}
 
@@ -124,8 +131,10 @@ func normalizeMembers(categories []string) []string {
 		if trimmed == "" {
 			continue
 		}
+
 		members = append(members, trimmed)
 	}
+
 	return members
 }
 
@@ -133,20 +142,25 @@ func resolvePublishedAt(item *gofeed.Item) *time.Time {
 	if item == nil {
 		return nil
 	}
+
 	if item.PublishedParsed != nil {
 		published := item.PublishedParsed.UTC()
 		return &published
 	}
+
 	if item.UpdatedParsed != nil {
 		updated := item.UpdatedParsed.UTC()
 		return &updated
 	}
+
 	if parsed, ok := parseRSSDate(item.Published); ok {
 		return &parsed
 	}
+
 	if parsed, ok := parseRSSDate(item.Updated); ok {
 		return &parsed
 	}
+
 	return nil
 }
 
@@ -159,14 +173,15 @@ func parseRSSDate(raw string) (time.Time, bool) {
 	if parsed, err := time.Parse(time.RFC1123Z, trimmed); err == nil {
 		return parsed.UTC(), true
 	}
+
 	if parsed, err := time.Parse(time.RFC1123, trimmed); err == nil {
 		return parsed.UTC(), true
 	}
 
 	formats := []string{
-		"Mon, 02 Jan 2006 15:04:05 -0700",
+		time.RFC1123Z,
 		"Mon, 2 Jan 2006 15:04:05 -0700",
-		"Mon, 02 Jan 2006 15:04:05 MST",
+		time.RFC1123,
 		"Mon, 2 Jan 2006 15:04:05 MST",
 	}
 	for _, layout := range formats {
@@ -174,5 +189,6 @@ func parseRSSDate(raw string) (time.Time, bool) {
 			return parsed.UTC(), true
 		}
 	}
+
 	return time.Time{}, false
 }

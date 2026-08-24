@@ -24,12 +24,15 @@ func (r *PgxBatchRepository) dropAlreadyKnownShortArtifacts(
 	}
 
 	var rows []knownShortVideoIDRow
+
 	query := mustSQL("repository_batch_new_short_dedup_0048_01.sql") +
 		dbx.InPlaceholders(len(videoIDs)) +
 		mustSQL("repository_batch_new_short_dedup_0082_02.sql")
+
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query known shorts without outbox", query, dbx.AnyArgs(videoIDs)...); err != nil {
 		return nil, nil, fmt.Errorf("query known shorts without outbox: %w", err)
 	}
+
 	if len(rows) == 0 {
 		return notifications, trackingRows, nil
 	}
@@ -38,26 +41,32 @@ func (r *PgxBatchRepository) dropAlreadyKnownShortArtifacts(
 	for i := range rows {
 		known[rows[i].VideoID] = struct{}{}
 	}
+
 	return filterKnownShortNotifications(notifications, known), filterKnownShortTrackingRows(trackingRows, known), nil
 }
 
 func collectShortNotificationVideoIDs(notifications []*domain.YouTubeNotificationOutbox) []string {
 	ids := make([]string, 0, len(notifications))
 	seen := make(map[string]struct{}, len(notifications))
+
 	for _, notification := range notifications {
 		if notification == nil || notification.Kind != domain.OutboxKindNewShort {
 			continue
 		}
+
 		videoID := normalizeShortVideoResourceID(notification.ContentID)
 		if videoID == "" {
 			continue
 		}
+
 		if _, ok := seen[videoID]; ok {
 			continue
 		}
+
 		seen[videoID] = struct{}{}
 		ids = append(ids, videoID)
 	}
+
 	return ids
 }
 
@@ -72,8 +81,10 @@ func filterKnownShortNotifications(
 				continue
 			}
 		}
+
 		filtered = append(filtered, notification)
 	}
+
 	return filtered
 }
 
@@ -88,7 +99,9 @@ func filterKnownShortTrackingRows(
 				continue
 			}
 		}
+
 		filtered = append(filtered, trackingRow)
 	}
+
 	return filtered
 }

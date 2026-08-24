@@ -30,6 +30,7 @@ func (r *CalendarCardRenderer) cachedImage(key calendarCacheKey) ([]byte, bool) 
 	if !ok {
 		return nil, false
 	}
+
 	return bytes.Clone(data), true
 }
 
@@ -44,12 +45,15 @@ func (r *CalendarCardRenderer) storeCachedImage(key calendarCacheKey, data []byt
 	if r.cache == nil {
 		r.cache = make(map[calendarCacheKey][]byte)
 	}
+
 	if _, ok := r.cache[key]; !ok {
 		r.cacheOrder = append(r.cacheOrder, key)
 	}
+
 	r.cache[key] = bytes.Clone(data)
 	for len(r.cacheOrder) > calendarImageCacheLimit {
 		oldest := r.cacheOrder[0]
+
 		r.cacheOrder = r.cacheOrder[1:]
 		delete(r.cache, oldest)
 	}
@@ -60,12 +64,14 @@ func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calend
 	writeCacheInt(hash, year)
 	writeCacheInt(hash, month)
 	writeCacheInt(hash, len(entries))
+
 	for _, entry := range entries {
 		writeCacheInt(hash, entry.Day)
 		writeCacheString(hash, string(entry.Kind))
 		writeCacheInt(hash, entry.Ordinal)
 		writeMemberCacheHash(hash, entry.Member)
 	}
+
 	return calendarCacheKey{
 		month:       month,
 		year:        year,
@@ -76,8 +82,10 @@ func newCalendarCacheKey(month, year int, entries []domain.CalendarEntry) calend
 func writeMemberCacheHash(w io.Writer, member *domain.Member) {
 	if member == nil {
 		writeCacheString(w, "<nil>")
+
 		return
 	}
+
 	writeCacheInt(w, member.ID)
 	writeCacheString(w, member.ChannelID)
 	writeCacheString(w, member.Name)
@@ -88,7 +96,9 @@ func writeMemberCacheHash(w io.Writer, member *domain.Member) {
 
 func writeCacheInt(w io.Writer, value int) {
 	var buf [8]byte
+
 	binary.BigEndian.PutUint64(buf[:], cacheUint64(value))
+
 	if _, err := w.Write(buf[:]); err != nil {
 		return
 	}
@@ -96,6 +106,7 @@ func writeCacheInt(w io.Writer, value int) {
 
 func writeCacheString(w io.Writer, value string) {
 	writeCacheInt(w, len(value))
+
 	if _, err := io.WriteString(w, value); err != nil {
 		return
 	}
@@ -105,5 +116,6 @@ func cacheUint64(value int) uint64 {
 	if value < 0 {
 		return 0
 	}
+
 	return uint64(value)
 }

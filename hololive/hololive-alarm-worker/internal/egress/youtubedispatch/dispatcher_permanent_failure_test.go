@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
-	"github.com/park285/iris-client-go/v2/iris"
 )
 
 type sentinelFailureSender struct {
@@ -56,10 +56,10 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				}
 			}()
 
-			dispatcher := NewDispatcher(nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+			dispatcher := NewDispatcher(nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 				DeliveryParallelism: 1,
 			})
-			rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: "room1"}}
+			rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 			outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 				1: {
 					ID:            1,
@@ -73,11 +73,12 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				},
 			}
 
-			result := dispatcher.send.dispatchDeliveryRows(context.Background(), rows, outboxByID)
+			result := dispatcher.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 
 			if !deliveryFailureReasonIsPermanent(tt.reason) {
 				t.Fatalf("deliveryFailureReasonIsPermanent(%q) = false, want true", tt.reason)
 			}
+
 			if !reflect.DeepEqual(result.FailureBuckets[tt.reason], []int64{101}) {
 				t.Fatalf("failure bucket %q = %#v, want []int64{101}", tt.reason, result.FailureBuckets[tt.reason])
 			}
@@ -113,6 +114,7 @@ func TestDispatcherFlowKeepsRetryableSentinelsInRetryBucket(t *testing.T) {
 			if reason != tt.want {
 				t.Fatalf("deliveryFailureReason() = %q, want %q", reason, tt.want)
 			}
+
 			if deliveryFailureReasonIsPermanent(reason) {
 				t.Fatalf("deliveryFailureReasonIsPermanent(%q) = true, want false", reason)
 			}
@@ -123,7 +125,7 @@ func TestDispatcherFlowKeepsRetryableSentinelsInRetryBucket(t *testing.T) {
 func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now().Truncate(time.Microsecond)
@@ -138,31 +140,38 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 		CreatedAt:     now,
 		LockedAt:      &lockedAt,
 	}
+
 	if err := insertDeliveryTestRows(db, &row).Error; err != nil {
 		t.Fatalf("create delivery row: %v", err)
 	}
 
-	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
 	if err := repository.MarkPermanentFailureBatch(ctx, []int64{row.ID}, 3, "auth"); err != nil {
 		t.Fatalf("MarkPermanentFailureBatch() error = %v", err)
 	}
 
 	var updated deliveryTestDeliveryModel
+
 	if err := firstDeliveryTestRow(db, &updated, row.ID).Error; err != nil {
 		t.Fatalf("load updated delivery row: %v", err)
 	}
+
 	if updated.Status != string(domain.OutboxStatusFailed) {
 		t.Fatalf("status = %q, want %q", updated.Status, domain.OutboxStatusFailed)
 	}
+
 	if updated.AttemptCount != 3 {
 		t.Fatalf("attempt_count = %d, want 3", updated.AttemptCount)
 	}
+
 	if updated.LockedAt != nil {
 		t.Fatalf("locked_at = %v, want nil", updated.LockedAt)
 	}
+
 	if updated.Error != "auth" {
 		t.Fatalf("error = %q, want auth", updated.Error)
 	}
+
 	if !updated.NextAttemptAt.Equal(nextAttemptAt) {
 		t.Fatalf("next_attempt_at = %s, want unchanged %s", updated.NextAttemptAt, nextAttemptAt)
 	}
@@ -171,9 +180,10 @@ func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T
 func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 	cache, mini := newDispatcherTestCache(t)
+
 	defer mini.Close()
 	defer func() {
 		if err := cache.Close(); err != nil {
@@ -181,33 +191,8 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		}
 	}()
 
-	now := time.Now()
-	outbox := deliveryTestOutboxModel{
-		Kind:          string(domain.OutboxKindNewVideo),
-		ChannelID:     "UC_auth_failed",
-		ContentID:     "video-auth-failed",
-		Payload:       `{"video_id":"video-auth-failed","title":"auth failed test"}`,
-		Status:        string(domain.OutboxStatusPending),
-		AttemptCount:  0,
-		NextAttemptAt: now,
-		CreatedAt:     now,
-	}
-	if err := insertDeliveryTestRows(db, &outbox).Error; err != nil {
-		t.Fatalf("create outbox row: %v", err)
-	}
-	delivery := deliveryTestDeliveryModel{
-		OutboxID:      outbox.ID,
-		RoomID:        "room-auth-failed",
-		Status:        string(domain.OutboxStatusPending),
-		AttemptCount:  0,
-		NextAttemptAt: now,
-		CreatedAt:     now,
-	}
-	if err := insertDeliveryTestRows(db, &delivery).Error; err != nil {
-		t.Fatalf("create delivery row: %v", err)
-	}
-
-	dispatcher := NewDispatcher(db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	outbox, delivery := seedAuthSentinelFailureRows(t, db)
+	dispatcher := NewDispatcher(db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		MaxRetries:          3,
@@ -220,24 +205,70 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 		t.Fatalf("processed = %d, want 1", processed)
 	}
 
+	assertAuthSentinelRowsFailed(t, db, outbox.ID, delivery.ID)
+}
+
+func seedAuthSentinelFailureRows(t *testing.T, db *deliveryTestDB) (deliveryTestOutboxModel, deliveryTestDeliveryModel) {
+	t.Helper()
+
+	now := time.Now()
+	outbox := deliveryTestOutboxModel{
+		Kind:          string(domain.OutboxKindNewVideo),
+		ChannelID:     "UC_auth_failed",
+		ContentID:     "video-auth-failed",
+		Payload:       `{"video_id":"video-auth-failed","title":"auth failed test"}`,
+		Status:        string(domain.OutboxStatusPending),
+		AttemptCount:  0,
+		NextAttemptAt: now,
+		CreatedAt:     now,
+	}
+
+	if err := insertDeliveryTestRows(db, &outbox).Error; err != nil {
+		t.Fatalf("create outbox row: %v", err)
+	}
+
+	delivery := deliveryTestDeliveryModel{
+		OutboxID:      outbox.ID,
+		RoomID:        "room-auth-failed",
+		Status:        string(domain.OutboxStatusPending),
+		AttemptCount:  0,
+		NextAttemptAt: now,
+		CreatedAt:     now,
+	}
+	if err := insertDeliveryTestRows(db, &delivery).Error; err != nil {
+		t.Fatalf("create delivery row: %v", err)
+	}
+
+	return outbox, delivery
+}
+
+func assertAuthSentinelRowsFailed(t *testing.T, db *deliveryTestDB, outboxID, deliveryID int64) {
+	t.Helper()
+
 	var updatedDelivery deliveryTestDeliveryModel
-	if err := firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(db, &updatedDelivery, deliveryID).Error; err != nil {
 		t.Fatalf("load updated delivery row: %v", err)
 	}
+
 	if updatedDelivery.Status != string(domain.OutboxStatusFailed) {
 		t.Fatalf("delivery status = %q, want %q", updatedDelivery.Status, domain.OutboxStatusFailed)
 	}
+
 	if updatedDelivery.AttemptCount != 3 {
 		t.Fatalf("delivery attempt_count = %d, want 3", updatedDelivery.AttemptCount)
 	}
+
 	if updatedDelivery.LockedAt != nil {
 		t.Fatalf("delivery locked_at = %v, want nil", updatedDelivery.LockedAt)
 	}
 
 	var updatedOutbox deliveryTestOutboxModel
-	if err := firstDeliveryTestRow(db, &updatedOutbox, outbox.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(db, &updatedOutbox, outboxID).Error; err != nil {
 		t.Fatalf("load updated outbox row: %v", err)
 	}
+
 	if updatedOutbox.Status != string(domain.OutboxStatusFailed) {
 		t.Fatalf("outbox status = %q, want %q", updatedOutbox.Status, domain.OutboxStatusFailed)
 	}

@@ -34,10 +34,12 @@ func cloneDefaultTargetMinutes() []int {
 func normalizeExplicitTargetMinutes(targetMinutes []int) []int {
 	seen := make(map[int]struct{}, len(targetMinutes))
 	normalized := make([]int, 0, len(targetMinutes))
+
 	for _, minute := range targetMinutes {
 		if minute <= 0 {
 			continue
 		}
+
 		if _, ok := seen[minute]; ok {
 			continue
 		}
@@ -62,6 +64,7 @@ func MinutesUntilFloorZeroClamped(start, now time.Time) int {
 	if secs <= 0 {
 		return 0
 	}
+
 	return int(secs / 60)
 }
 
@@ -70,14 +73,16 @@ func minutesUntilFloorZeroClamped(start, now time.Time) int {
 }
 
 // FormatScheduleChangeMessage는 일정 변경 안내 문구를 반환한다.
-// oldTime < newTime: 늦춰짐, oldTime > newTime: 앞당겨짐, 같으면 빈 문자열.
+// 반환 규칙은 oldTime < newTime이면 늦춰짐, oldTime > newTime이면 앞당겨짐, 같으면 빈 문자열이다.
 func FormatScheduleChangeMessage(oldTime, newTime time.Time) string {
 	if oldTime.Before(newTime) {
 		return "일정이 늦춰졌습니다."
 	}
+
 	if oldTime.After(newTime) {
 		return "일정이 앞당겨졌습니다."
 	}
+
 	return ""
 }
 
@@ -111,6 +116,7 @@ func shouldHealLegacyPersistedTargetMinutes(alarmAdvanceMinutes int, targetMinut
 	if alarmAdvanceMinutes <= 3 {
 		return false
 	}
+
 	if len(targetMinutes) != 2 {
 		return false
 	}

@@ -16,16 +16,16 @@ const (
 	notifyCategory = "10m"
 )
 
-func TestRedactCacheKeyRemovesRoomAndKeepsDiagnosticTail(t *testing.T) {
-	t.Parallel()
+type redactCacheKeyCase struct {
+	name    string
+	key     string
+	prefix  string
+	tail    string
+	hasRoom string
+}
 
-	cases := []struct {
-		name    string
-		key     string
-		prefix  string
-		tail    string
-		hasRoom string
-	}{
+func redactCacheKeyCases() []redactCacheKeyCase {
+	return []redactCacheKeyCase{
 		{
 			name:    "room alarm key",
 			key:     "alarm:" + plainRoom,
@@ -82,6 +82,12 @@ func TestRedactCacheKeyRemovesRoomAndKeepsDiagnosticTail(t *testing.T) {
 			hasRoom: colonRoom,
 		},
 	}
+}
+
+func TestRedactCacheKeyRemovesRoomAndKeepsDiagnosticTail(t *testing.T) {
+	t.Parallel()
+
+	cases := redactCacheKeyCases()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,9 +97,11 @@ func TestRedactCacheKeyRemovesRoomAndKeepsDiagnosticTail(t *testing.T) {
 			if strings.Contains(got, tc.hasRoom) {
 				t.Fatalf("RedactCacheKey(%q) = %q, room plaintext survived", tc.key, got)
 			}
+
 			if !strings.HasPrefix(got, tc.prefix+PseudonymPrefix) {
 				t.Errorf("RedactCacheKey(%q) = %q, want prefix %q followed by a pseudonym", tc.key, got, tc.prefix)
 			}
+
 			if tc.tail != "" && !strings.HasSuffix(got, ":"+tc.tail) {
 				t.Errorf("RedactCacheKey(%q) = %q, want diagnostic tail %q preserved", tc.key, got, tc.tail)
 			}
@@ -179,9 +187,11 @@ func TestRedactCacheFieldOnlyTouchesIdentifierKeyedHashes(t *testing.T) {
 		if strings.Contains(got, plainRoom) {
 			t.Errorf("RedactCacheField(%q, room) = %q, plaintext survived", key, got)
 		}
+
 		if !strings.HasPrefix(got, PseudonymPrefix) {
 			t.Errorf("RedactCacheField(%q, room) = %q, want a pseudonym", key, got)
 		}
+
 		if got := RedactCacheField(key, canonicalRoom); got != canonicalRoom {
 			t.Errorf("RedactCacheField(%q, canonical) = %q, want %q", key, got, canonicalRoom)
 		}
@@ -213,6 +223,7 @@ func TestRedactedKeysCorrelateWithRoomIDAttr(t *testing.T) {
 
 	want := RoomIDAttr(plainRoom).Value.String()
 	got := strings.TrimPrefix(RedactCacheKey("alarm:"+plainRoom), "alarm:")
+
 	if got != want {
 		t.Errorf("cache key token = %q, room_id token = %q; the two must correlate within a process", got, want)
 	}

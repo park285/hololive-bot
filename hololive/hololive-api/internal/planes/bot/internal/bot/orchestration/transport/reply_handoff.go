@@ -39,7 +39,11 @@ func waitForAcceptedReplyHandoff(ctx context.Context, getter replyStatusGetter, 
 		return replyOutcomeUnknownError{reason: "iris admission response carried no request id"}
 	}
 
-	return waitForReplyHandoff(ctx, getter, requestID)
+	if err := waitForReplyHandoff(ctx, getter, requestID); err != nil {
+		return fmt.Errorf("wait for reply handoff: %w", err)
+	}
+
+	return nil
 }
 
 func waitForReplyHandoff(ctx context.Context, client replyStatusGetter, requestID string) error {
@@ -49,23 +53,58 @@ func waitForReplyHandoff(ctx context.Context, client replyStatusGetter, requestI
 	var lastQueryErr error
 
 	for {
-		outcome, err := checkReplyHandoffStatus(ctx, client, requestID)
-		if outcome != replyOutcomeInFlight {
-			return err
-		}
-		if err != nil {
-			lastQueryErr = err
+		result := pollReplyHandoff(ctx, client, requestID, ticker.C, lastQueryErr)
+		if result.err != nil {
+			return fmt.Errorf("poll reply handoff: %w", result.err)
 		}
 
-		if waitReplyStatusPoll(ctx, ticker.C) {
-			return replyOutcomeUnknownError{
+		if result.done {
+			return nil
+		}
+
+		lastQueryErr = result.lastQueryErr
+	}
+}
+
+type replyHandoffPollResult struct {
+	done         bool
+	lastQueryErr error
+	err          error
+}
+
+func pollReplyHandoff(
+	ctx context.Context,
+	client replyStatusGetter,
+	requestID string,
+	ticks <-chan time.Time,
+	lastQueryErr error,
+) replyHandoffPollResult {
+	outcome, err := checkReplyHandoffStatus(ctx, client, requestID)
+	if outcome != replyOutcomeInFlight {
+		if err != nil {
+			return replyHandoffPollResult{lastQueryErr: lastQueryErr, err: fmt.Errorf("check reply handoff status: %w", err)}
+		}
+
+		return replyHandoffPollResult{done: true, lastQueryErr: lastQueryErr}
+	}
+
+	if err != nil {
+		lastQueryErr = err
+	}
+
+	if waitReplyStatusPoll(ctx, ticks) {
+		return replyHandoffPollResult{
+			lastQueryErr: lastQueryErr,
+			err: replyOutcomeUnknownError{
 				requestID: requestID,
 				reason:    "reply status polling ended before handoff",
 				detail:    lastReplyQueryErrorDetail(lastQueryErr),
 				cause:     ctx.Err(),
-			}
+			},
 		}
 	}
+
+	return replyHandoffPollResult{lastQueryErr: lastQueryErr}
 }
 
 func lastReplyQueryErrorDetail(err error) string {
@@ -76,12 +115,13 @@ func lastReplyQueryErrorDetail(err error) string {
 	return "last status query error: " + err.Error()
 }
 
-// 조회 실패는 reply의 결과가 아니라 관측 실패다. deadline까지는 in-flight로 두고 폴링을 이어간다.
+// 조회 실패는 reply의 결과가 아니라 관측 실패다. 그래서 deadline까지는 in-flight로 두고 폴링을 이어간다.
 func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requestID string) (replyOutcome, error) {
 	status, err := client.GetReplyStatus(ctx, requestID)
 	if err != nil {
-		return replyOutcomeInFlight, err
+		return replyOutcomeInFlight, fmt.Errorf("get reply status: %w", err)
 	}
+
 	if status == nil {
 		return replyOutcomeUnknown, replyOutcomeUnknownError{
 			requestID: requestID,
@@ -89,7 +129,12 @@ func checkReplyHandoffStatus(ctx context.Context, client replyStatusGetter, requ
 		}
 	}
 
-	return replyHandoffStatusResult(requestID, status)
+	out, err := replyHandoffStatusResult(requestID, status)
+	if err != nil {
+		return out, fmt.Errorf("reply handoff status result: %w", err)
+	}
+
+	return out, nil
 }
 
 func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot) (replyOutcome, error) {
@@ -97,9 +142,11 @@ func replyHandoffStatusResult(requestID string, status *iris.ReplyStatusSnapshot
 	if outcome == replyOutcomeHandoffCompleted || outcome == replyOutcomeInFlight {
 		return outcome, nil
 	}
+
 	if outcome == replyOutcomeFailed {
 		return outcome, replyStatusFailedError{requestID: requestID, detail: replyStatusDetail(status)}
 	}
+
 	return replyOutcomeUnknown, replyOutcomeUnknownError{
 		requestID: requestID,
 		reason:    fmt.Sprintf("iris reported state %q", strings.TrimSpace(status.State)),

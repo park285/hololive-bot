@@ -31,9 +31,11 @@ func factsFromSummary(summary iris.RoomSummary) Facts {
 	if summary.Type != nil {
 		facts.RoomType = strings.TrimSpace(*summary.Type)
 	}
+
 	if summary.LinkID != nil && *summary.LinkID > 0 {
 		facts.RoomLinkID = strconv.FormatInt(*summary.LinkID, 10)
 	}
+
 	if facts.RoomLinkID == "" && summary.LinkURL != nil {
 		facts.RoomLinkID = strings.TrimSpace(*summary.LinkURL)
 	}

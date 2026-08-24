@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
@@ -141,7 +142,8 @@ func TestHandler_RespondHelpers(t *testing.T) {
 		}
 
 		body := rec.Body.String()
-		if !bytes.Contains([]byte(body), []byte(`"error":"bad request"`)) || !bytes.Contains([]byte(body), []byte(`"field":"email"`)) {
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"bad request"`)) ||
+			!bytes.Contains(rec.Body.Bytes(), []byte(`"field":"email"`)) {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})

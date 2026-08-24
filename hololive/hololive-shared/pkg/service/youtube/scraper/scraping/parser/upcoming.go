@@ -18,10 +18,13 @@ func ParseUpcomingEventsFromInitialData(data *gjson.Result) []*UpcomingEvent {
 		contents.ForEach(func(_, content gjson.Result) bool {
 			featuredItems := content.Get("channelFeaturedContentRenderer.items")
 			appendUpcomingEventsFromFeaturedItems(&events, seen, &featuredItems)
+
 			shelfItems := content.Get("shelfRenderer.content.horizontalListRenderer.items")
 			appendUpcomingEventsFromShelfItems(&events, seen, &shelfItems)
+
 			return true
 		})
+
 		return true
 	})
 
@@ -37,6 +40,7 @@ func appendUpcomingEventsFromFeaturedItems(events *[]*UpcomingEvent, seen map[st
 			lockup := item.Get("lockupViewModel")
 			appendUpcomingEventFromLockup(events, seen, &lockup)
 		}
+
 		return true
 	})
 }
@@ -47,12 +51,14 @@ func appendUpcomingEventsFromShelfItems(events *[]*UpcomingEvent, seen map[strin
 		if !video.Exists() {
 			video = item.Get("gridVideoRenderer")
 		}
+
 		if video.Exists() {
 			appendUpcomingEvent(events, seen, &video)
 		} else {
 			lockup := item.Get("lockupViewModel")
 			appendUpcomingEventFromLockup(events, seen, &lockup)
 		}
+
 		return true
 	})
 }
@@ -92,6 +98,7 @@ func appendParsedUpcomingEvent(events *[]*UpcomingEvent, seen map[string]bool, e
 	if event == nil || seen[event.VideoID] {
 		return
 	}
+
 	if event.Status != "LIVE" && event.Status != "UPCOMING" {
 		return
 	}
@@ -108,23 +115,31 @@ func lockupEventStatus(lockup *gjson.Result) string {
 			status = "LIVE"
 			return false
 		}
+
 		if badge.Get("text").String() == "Upcoming" {
 			status = "UPCOMING"
 			return false
 		}
+
 		return true
 	})
+
 	return status
 }
 
 func lockupMetadataTexts(lockup *gjson.Result) []string {
 	rows := lockup.Get("metadata.lockupMetadataViewModel.metadata.contentMetadataViewModel.metadataRows")
+
 	var texts []string
+
 	rows.ForEach(func(_, row gjson.Result) bool {
 		parts := row.Get("metadataParts")
+
 		texts = append(texts, CollectLockupTexts(&parts)...)
+
 		return true
 	})
+
 	return texts
 }
 
@@ -136,6 +151,7 @@ func firstLockupTextWithSuffix(texts []string, suffixes ...string) string {
 			}
 		}
 	}
+
 	return ""
 }
 
@@ -145,6 +161,7 @@ func firstNonNumericLockupText(texts []string, excluded ...string) string {
 			return text
 		}
 	}
+
 	return ""
 }
 
@@ -154,6 +171,7 @@ func containsText(texts []string, candidate string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -164,6 +182,7 @@ func parseVideoToEvent(video *gjson.Result) *UpcomingEvent {
 	}
 
 	thumbnails := video.Get("thumbnail.thumbnails")
+
 	return &UpcomingEvent{
 		VideoID:       videoID,
 		Title:         videoTitleText(video),
@@ -180,22 +199,27 @@ func videoEventStatus(video *gjson.Result) string {
 	if status != "DEFAULT" {
 		return status
 	}
+
 	if video.Get("upcomingEventData").Exists() {
 		return "UPCOMING"
 	}
+
 	return status
 }
 
 func thumbnailOverlayEventStatus(video *gjson.Result) string {
 	status := "DEFAULT"
+
 	video.Get("thumbnailOverlays").ForEach(func(_, overlay gjson.Result) bool {
 		style := overlay.Get("thumbnailOverlayTimeStatusRenderer.style").String()
 		if style == "LIVE" || style == "UPCOMING" {
 			status = style
 			return false
 		}
+
 		return true
 	})
+
 	return status
 }
 
@@ -204,6 +228,7 @@ func videoEventStartTime(video *gjson.Result) *int64 {
 	if st <= 0 {
 		return nil
 	}
+
 	return &st
 }
 
@@ -211,6 +236,7 @@ func videoTitleText(video *gjson.Result) string {
 	if title := video.Get("title.simpleText").String(); title != "" {
 		return title
 	}
+
 	return video.Get("title.runs.0.text").String()
 }
 
@@ -218,5 +244,6 @@ func videoViewCountText(video *gjson.Result) string {
 	if text := video.Get("viewCountText.simpleText").String(); text != "" {
 		return text
 	}
+
 	return video.Get("viewCountText.runs.0.text").String()
 }

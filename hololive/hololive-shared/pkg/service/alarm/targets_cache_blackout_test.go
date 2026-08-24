@@ -20,12 +20,13 @@ func cacheErrorCount(operation string) float64 {
 func TestSubscriberLookupCacheErrorIsCounted(t *testing.T) {
 	db := newAlarmTargetLookupTestDB(t)
 	requireAlarmRecord(t, db, &domain.Alarm{
-		RoomID:     "room-db",
+		RoomID:     testDBRoomID,
 		ChannelID:  "UC_blackout_lookup",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 	})
 
 	cacheClient := cachemocks.NewStrictClient()
+
 	cacheClient.SMembersFunc = func(context.Context, string) ([]string, error) {
 		return nil, errors.New("valkey unavailable")
 	}
@@ -40,7 +41,7 @@ func TestSubscriberLookupCacheErrorIsCounted(t *testing.T) {
 	got, err := ResolveChannelSubscribersByType(t.Context(), cacheClient, db, "UC_blackout_lookup", domain.AlarmTypeShorts)
 
 	require.NoError(t, err, "a cache blackout must still resolve through the database")
-	require.Equal(t, []string{"room-db"}, got)
+	require.Equal(t, []string{testDBRoomID}, got)
 	require.Greater(t, cacheErrorCount("lookup"), before,
 		"a swallowed subscriber-cache read failure must still raise the cache error counter, or a full Valkey blackout is invisible")
 }
@@ -48,12 +49,13 @@ func TestSubscriberLookupCacheErrorIsCounted(t *testing.T) {
 func TestSubscriberEmptyMarkerCheckErrorIsCounted(t *testing.T) {
 	db := newAlarmTargetLookupTestDB(t)
 	requireAlarmRecord(t, db, &domain.Alarm{
-		RoomID:     "room-db",
+		RoomID:     testDBRoomID,
 		ChannelID:  "UC_blackout_empty",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 	})
 
 	cacheClient := cachemocks.NewStrictClient()
+
 	cacheClient.SMembersFunc = func(context.Context, string) ([]string, error) { return nil, nil }
 	cacheClient.ExistsFunc = func(context.Context, string) (bool, error) {
 		return false, errors.New("valkey unavailable")
@@ -69,7 +71,7 @@ func TestSubscriberEmptyMarkerCheckErrorIsCounted(t *testing.T) {
 	got, err := ResolveChannelSubscribersByType(t.Context(), cacheClient, db, "UC_blackout_empty", domain.AlarmTypeShorts)
 
 	require.NoError(t, err)
-	require.Equal(t, []string{"room-db"}, got)
+	require.Equal(t, []string{testDBRoomID}, got)
 	require.Greater(t, cacheErrorCount("check_empty"), before,
 		"a swallowed empty-marker check failure must still raise the cache error counter")
 }

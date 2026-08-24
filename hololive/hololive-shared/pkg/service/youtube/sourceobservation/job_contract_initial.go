@@ -1,12 +1,15 @@
 package sourceobservation
 
-import "maps"
+import (
+	"maps"
 
-import contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
+)
 
 func InitialJobContracts() StaticJobContracts {
 	jobs := initialSubjectJobContracts()
 	maps.Copy(jobs, initialGlobalJobContracts())
+
 	return jobs
 }
 
@@ -100,5 +103,6 @@ func mustJobContract(
 	if err != nil {
 		panic(err)
 	}
+
 	return job
 }

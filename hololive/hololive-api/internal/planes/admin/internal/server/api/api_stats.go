@@ -22,21 +22,23 @@ package api
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 var systemStatsStreamInterval = 5 * time.Second
@@ -56,26 +58,48 @@ type statsResponse struct {
 
 func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Member, alarmKeys []*domain.AlarmEntry, memberErr, alarmErr error) {
 	var wg sync.WaitGroup
+
 	wg.Add(2)
 
 	panicguard.Go(h.safeLogger(), "admin-stats-members", func() {
 		defer wg.Done()
+
 		memberErr = panicguard.RunE(h.safeLogger(), "admin-stats-members", func() error {
 			var err error
+
 			members, err = h.repository.GetAllMembers(ctx)
-			return err
+			if err != nil {
+				return fmt.Errorf("get all members: %w", err)
+			}
+
+			return nil
 		})
 	})
 	panicguard.Go(h.safeLogger(), "admin-stats-alarms", func() {
 		defer wg.Done()
+
 		alarmErr = panicguard.RunE(h.safeLogger(), "admin-stats-alarms", func() error {
 			var err error
+
 			alarmKeys, err = h.alarm.GetAllAlarmKeys(ctx)
-			return err
+			if err != nil {
+				return fmt.Errorf("get all alarm keys: %w", err)
+			}
+
+			return nil
 		})
 	})
 
 	wg.Wait()
+
+	if memberErr != nil {
+		memberErr = fmt.Errorf("collect member stats: %w", memberErr)
+	}
+
+	if alarmErr != nil {
+		alarmErr = fmt.Errorf("collect alarm stats: %w", alarmErr)
+	}
+
 	return members, alarmKeys, memberErr, alarmErr
 }
 
@@ -151,6 +175,7 @@ func (h *StatsHandler) streamSystemStats(ctx context.Context, conn *websocket.Co
 		if !h.writeSystemStats(ctx, conn, "failed to collect system stats", "failed to write system stats") {
 			return errSystemStatsStreamStopped
 		}
+
 		return nil
 	}); err != nil && !errors.Is(err, errSystemStatsStreamStopped) {
 		h.safeLogger().Warn("system stats stream stopped", slog.Any("error", err))
@@ -170,20 +195,26 @@ func (h *StatsHandler) writeSystemStats(
 	stats, err := h.systemStats.GetCurrentStats(ctx)
 	if err != nil {
 		h.safeLogger().Error(collectMessage, slog.Any("error", err))
+
 		return false
 	}
 
-	if err := conn.SetWriteDeadline(time.Now().Add(systemStatsWriteTimeout)); err != nil {
-		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
+	if setErr := conn.SetWriteDeadline(time.Now().Add(systemStatsWriteTimeout)); setErr != nil {
+		h.safeLogger().Warn(writeMessage, slog.Any("error", setErr))
+
 		return false
 	}
+
 	payload, err := jsonv2.Marshal(stats)
 	if err != nil {
 		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
+
 		return false
 	}
+
 	if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 		h.safeLogger().Warn(writeMessage, slog.Any("error", err))
+
 		return false
 	}
 

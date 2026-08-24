@@ -2,13 +2,13 @@ package holodexprovider
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -23,7 +23,7 @@ func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Chann
 
 	allChannels, err := h.fetchHololiveChannelListPages(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch hololive channel list pages: %w", err)
 	}
 
 	h.logger.Debug("Fetched all Hololive channels", slog.Int("total", len(allChannels)))
@@ -34,15 +34,18 @@ func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Chann
 
 func (h *Service) fetchHololiveChannelListPages(ctx context.Context) ([]*domain.Channel, error) {
 	var allChannels []*domain.Channel
+
 	pageSize := constants.HolodexAPIParams.DefaultChannelLimit
 	offset := 0
+
 	for {
 		channels, rawCount, err := h.fetchHololiveChannelListPage(ctx, pageSize, offset)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("fetch hololive channel list page: %w", err)
 		}
 
 		allChannels = append(allChannels, channels...)
+
 		if rawCount < pageSize {
 			break
 		}
@@ -63,12 +66,13 @@ func (h *Service) fetchHololiveChannelListPage(ctx context.Context, pageSize, of
 	params.Set("limit", fmt.Sprintf("%d", pageSize))
 	params.Set("offset", fmt.Sprintf("%d", offset))
 
-	body, err := h.requester.DoRequest(ctx, "GET", "/channels", params)
+	body, err := h.requester.DoRequest(ctx, http.MethodGet, "/channels", params)
 	if err != nil {
 		return nil, 0, fmt.Errorf("fetch hololive channel list (offset=%d): %w", offset, err)
 	}
 
 	var rawChannels []streammapping.ChannelRaw
+
 	if err := jsonv2.Unmarshal(body, &rawChannels); err != nil {
 		return nil, 0, fmt.Errorf("failed to unmarshal channel list: %w", err)
 	}
@@ -80,12 +84,15 @@ func (h *Service) channelListPaginationLimitReached(offset int) bool {
 	if offset < constants.HolodexAPIParams.MaxPaginationOffset {
 		return false
 	}
+
 	h.logger.Warn("Pagination limit reached", slog.Int("offset", offset))
+
 	return true
 }
 
 func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []string, result map[string]*domain.Channel, missedIDs []string) (map[string]*domain.Channel, error) {
 	const maxConcurrent = 5
+
 	if len(missedIDs) == 0 {
 		return result, nil
 	}
@@ -104,27 +111,36 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 		close(resultChan)
 	})
 
-	return h.collectIndividualChannelFetchResults(ctx, channelIDs, result, resultChan)
+	collected, err := h.collectIndividualChannelFetchResults(ctx, channelIDs, result, resultChan)
+	if err != nil {
+		return nil, fmt.Errorf("collect individual channel fetch results: %w", err)
+	}
+
+	return collected, nil
 }
 
 func (h *Service) startChannelFetchWorkers(ctx context.Context, workerCount int, jobs <-chan string, resultChan chan<- channelFetchResult) *sync.WaitGroup {
 	workerWG := &sync.WaitGroup{}
 	workerWG.Add(workerCount)
+
 	for range workerCount {
 		panicguard.Go(h.logger, "holodex-channel-fetch-worker", func() {
 			h.runChannelFetchWorker(ctx, jobs, resultChan, workerWG)
 		})
 	}
+
 	return workerWG
 }
 
 func (h *Service) runChannelFetchWorker(ctx context.Context, jobs <-chan string, resultChan chan<- channelFetchResult, workerWG *sync.WaitGroup) {
 	defer workerWG.Done()
+
 	for channelID := range jobs {
 		if ctx.Err() != nil {
 			resultChan <- channelFetchResult{id: channelID}
 			continue
 		}
+
 		resultChan <- h.fetchIndividualChannel(ctx, channelID)
 	}
 }
@@ -136,13 +152,16 @@ func (h *Service) fetchIndividualChannel(ctx context.Context, channelID string) 
 			slog.String("channel_id", channelID),
 			slog.Any("error", err),
 		)
+
 		return channelFetchResult{id: channelID}
 	}
+
 	return channelFetchResult{id: channelID, channel: channel}
 }
 
 func enqueueChannelFetchJobs(ctx context.Context, jobs chan<- string, missedIDs []string) {
 	defer close(jobs)
+
 	for _, id := range missedIDs {
 		if !sendChannelFetchJob(ctx, jobs, id) {
 			return
@@ -163,15 +182,18 @@ func (h *Service) collectIndividualChannelFetchResults(ctx context.Context, chan
 	for {
 		r, ok, err := nextChannelFetchResult(ctx, resultChan)
 		if err != nil {
-			return result, err
+			return nil, fmt.Errorf("next channel fetch result: %w", err)
 		}
+
 		if !ok {
 			h.logger.Info("GetChannels batch complete (fallback)",
 				slog.Int("requested", len(channelIDs)),
 				slog.Int("returned", len(result)),
 			)
+
 			return result, nil
 		}
+
 		if r.channel != nil {
 			result[r.id] = r.channel
 		}

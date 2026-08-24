@@ -121,6 +121,7 @@ func TestCollectVideoRenderers_NestedDedup(t *testing.T) {
 	root := gjson.Parse(`{"a":{"videoRenderer":{"videoId":"x"}},"b":[{"videoRenderer":{"videoId":"x"}},{"videoRenderer":{"videoId":"y"}}]}`)
 	results := CollectVideoRenderers(&root, 5)
 	require.Len(t, results, 2)
+
 	ids := []string{results[0].Get("videoId").String(), results[1].Get("videoId").String()}
 	assert.ElementsMatch(t, []string{"x", "y"}, ids)
 }
