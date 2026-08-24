@@ -1,8 +1,6 @@
 package scraping
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,13 +18,14 @@ func TestFetchPagePreflight_RateLimitDenialReturnsAdmissionDeferred(t *testing.T
 	client := NewClient(WithRateLimiter(limiter))
 	pageURL := "https://www.youtube.com/channel/UC123/community"
 
-	require.NoError(t, client.fetchPagePreflight(context.Background(), pageURL))
+	require.NoError(t, client.fetchPagePreflight(t.Context(), pageURL))
 
-	err := client.fetchPagePreflight(context.Background(), pageURL)
+	err := client.fetchPagePreflight(t.Context(), pageURL)
 	require.Error(t, err)
 	require.True(t, youtubeadmission.IsDeferred(err), "err = %v", err)
 
 	var deferred *youtubeadmission.DeferredError
+
 	require.ErrorAs(t, err, &deferred)
 	require.NotNil(t, deferred)
 	require.Greater(t, deferred.RetryDelay(), time.Duration(0))
@@ -38,13 +37,16 @@ func TestFetchPagePreflightBlockingWaitsInsteadOfDeferring(t *testing.T) {
 	client := NewClient(WithRateLimiter(limiter))
 	pageURL := "https://www.youtube.com/channel/UC123"
 
-	require.NoError(t, client.fetchPagePreflight(context.Background(), pageURL, DefaultFetchPolicy))
-	err := client.fetchPagePreflight(context.Background(), pageURL, DefaultFetchPolicy)
+	require.NoError(t, client.fetchPagePreflight(t.Context(), pageURL, DefaultFetchPolicy))
+
+	err := client.fetchPagePreflight(t.Context(), pageURL, DefaultFetchPolicy)
 	require.Error(t, err)
 	require.True(t, youtubeadmission.IsDeferred(err), "err = %v", err)
 
 	started := time.Now()
-	require.NoError(t, client.fetchPagePreflight(context.Background(), pageURL, LiveStatusFallbackFetchPolicy))
+
+	require.NoError(t, client.fetchPagePreflight(t.Context(), pageURL, LiveStatusFallbackFetchPolicy))
+
 	if elapsed := time.Since(started); elapsed < 20*time.Millisecond {
 		t.Fatalf("blocking preflight returned too fast: %s", elapsed)
 	}
@@ -55,6 +57,7 @@ func TestResolveFetchPolicyPropagatesAdmissionBlocking(t *testing.T) {
 	if !resolved.AdmissionBlocking {
 		t.Fatal("AdmissionBlocking not propagated")
 	}
+
 	if resolved.MaxAttempts != 1 {
 		t.Fatalf("MaxAttempts = %d, want 1", resolved.MaxAttempts)
 	}
@@ -91,11 +94,11 @@ func TestFetchPageAdmissionDeferred_IsNotFetchAttemptTimeout(t *testing.T) {
 		WithRateLimiter(limiter),
 	)
 
-	_, err := client.fetchPage(context.Background(), server.URL, FetchPolicy{MaxAttempts: 1, PerAttemptTimeout: time.Second})
+	_, err := client.fetchPage(t.Context(), server.URL, FetchPolicy{MaxAttempts: 1, PerAttemptTimeout: time.Second})
 	require.NoError(t, err)
 
-	_, err = client.fetchPage(context.Background(), server.URL, FetchPolicy{MaxAttempts: 1, PerAttemptTimeout: time.Nanosecond})
+	_, err = client.fetchPage(t.Context(), server.URL, FetchPolicy{MaxAttempts: 1, PerAttemptTimeout: time.Nanosecond})
 	require.Error(t, err)
 	require.True(t, youtubeadmission.IsDeferred(err), "err = %v", err)
-	require.False(t, errors.Is(err, errFetchAttemptTimeout), "err = %v", err)
+	require.NotErrorIs(t, err, errFetchAttemptTimeout, "err = %v", err)
 }

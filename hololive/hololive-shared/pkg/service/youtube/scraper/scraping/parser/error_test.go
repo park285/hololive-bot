@@ -20,27 +20,34 @@ func TestParserDriftError_ErrorWithoutCause(t *testing.T) {
 
 func TestParserDriftError_NilReceiverError(t *testing.T) {
 	var err *ParserDriftError
+
 	assert.Equal(t, "youtube parser drift", err.Error())
 }
 
 func TestParserDriftError_NilReceiverUnwrap(t *testing.T) {
 	var err *ParserDriftError
-	assert.Nil(t, err.Unwrap())
+
+	assert.NoError(t, err.Unwrap())
 }
 
 func TestParserDriftError_IsParserDrift(t *testing.T) {
 	cause := errors.New("root cause")
 	err := NewParserDriftError("upcoming", "parse", cause)
 	assert.True(t, IsParserDriftError(err))
-	assert.True(t, errors.Is(err, ErrParserDrift))
-	assert.True(t, errors.Is(err, cause))
+	require.ErrorIs(t, err, ErrParserDrift)
+	assert.ErrorIs(t, err, cause)
 }
 
 func TestParserDriftError_UnwrapJoinsSentinelAndCause(t *testing.T) {
 	cause := errors.New("xml error")
 	err := NewParserDriftError("rss", "unmarshal", cause)
+
 	var drift *ParserDriftError
-	require.True(t, errors.As(err, &drift))
+
+	if !errors.As(err, &drift) {
+		t.Fatalf("error type = %T, want *ParserDriftError in chain", err)
+	}
+
 	assert.Equal(t, "rss", drift.Operation)
 	assert.Equal(t, "unmarshal", drift.Stage)
 	assert.Equal(t, cause, drift.Cause)
@@ -53,5 +60,5 @@ func TestIsParserDriftError_NonDriftError(t *testing.T) {
 
 func TestParserDriftError_UnwrapWithNilCause(t *testing.T) {
 	err := NewParserDriftError("op", "stage", nil)
-	assert.True(t, errors.Is(err, ErrParserDrift))
+	assert.ErrorIs(t, err, ErrParserDrift)
 }

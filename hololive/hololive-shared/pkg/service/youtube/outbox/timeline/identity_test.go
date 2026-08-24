@@ -3,8 +3,9 @@ package timeline
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestNormalizePostTrackingIdentities_EmptyInputReturnsNil(t *testing.T) {
@@ -41,7 +42,7 @@ func TestNormalizePostTrackingIdentities_BlankContentIDSkippedYieldsNonNilEmpty(
 	})
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Len(t, got, 0)
+	require.Empty(t, got)
 }
 
 func TestNormalizePostTrackingIdentities_DeduplicatesByTrimmedKindAndContentID(t *testing.T) {
@@ -94,7 +95,7 @@ func TestNormalizePostTrackingIdentities_UnsupportedKindWithBlankContentIDIsSkip
 	})
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Len(t, got, 0)
+	require.Empty(t, got)
 }
 
 func TestNormalizePostTrackingIdentities_ErrorAbortsWholeBatch(t *testing.T) {
@@ -111,8 +112,8 @@ func TestNormalizePostTrackingIdentities_ErrorAbortsWholeBatch(t *testing.T) {
 func TestPostTrackingIdentityKey_BlankContentIDReturnsEmpty(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "", PostTrackingIdentityKey(domain.OutboxKindCommunityPost, ""))
-	require.Equal(t, "", PostTrackingIdentityKey(domain.OutboxKindCommunityPost, "   "))
+	require.Empty(t, PostTrackingIdentityKey(domain.OutboxKindCommunityPost, ""))
+	require.Empty(t, PostTrackingIdentityKey(domain.OutboxKindCommunityPost, "   "))
 }
 
 func TestPostTrackingIdentityKey_JoinsKindAndTrimmedContentID(t *testing.T) {

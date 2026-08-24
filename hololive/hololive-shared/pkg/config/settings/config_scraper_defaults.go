@@ -69,21 +69,27 @@ func DefaultScraperBrowserDiagnosticConfig() ScraperBrowserDiagnosticConfig {
 
 func (p ScraperPoll) EstimatedRequestsPerMinute() float64 {
 	var rpm float64
+
 	if p.Videos > 0 {
 		rpm += 60.0 / p.Videos.Seconds()
 	}
+
 	if p.Shorts > 0 {
 		rpm += 60.0 / p.Shorts.Seconds()
 	}
+
 	if p.Community > 0 {
 		rpm += 60.0 / p.Community.Seconds()
 	}
+
 	if p.Stats > 0 {
 		rpm += 60.0 / p.Stats.Seconds()
 	}
+
 	if p.Live > 0 {
 		rpm += 60.0 / p.Live.Seconds()
 	}
+
 	return rpm
 }
 
@@ -93,15 +99,19 @@ func (c *ScraperConfig) PollOrDefault() ScraperPoll {
 	if c.Poll.Videos > 0 {
 		poll.Videos = c.Poll.Videos
 	}
+
 	if c.Poll.Shorts > 0 {
 		poll.Shorts = c.Poll.Shorts
 	}
+
 	if c.Poll.Community > 0 {
 		poll.Community = c.Poll.Community
 	}
+
 	if c.Poll.Stats > 0 {
 		poll.Stats = c.Poll.Stats
 	}
+
 	if c.Poll.Live > 0 {
 		poll.Live = c.Poll.Live
 	}
@@ -116,12 +126,15 @@ func (c *ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
 	if cfg.PollTimeout <= 0 {
 		cfg.PollTimeout = defaults.PollTimeout
 	}
+
 	if cfg.ErrorBackoffMin <= 0 {
 		cfg.ErrorBackoffMin = defaults.ErrorBackoffMin
 	}
+
 	if cfg.ErrorBackoffMax <= 0 {
 		cfg.ErrorBackoffMax = defaults.ErrorBackoffMax
 	}
+
 	if cfg.ErrorBackoffMax < cfg.ErrorBackoffMin {
 		cfg.ErrorBackoffMax = cfg.ErrorBackoffMin
 	}
@@ -132,15 +145,19 @@ func (c *ScraperConfig) SchedulerOrDefault() ScraperSchedulerConfig {
 func (c *ScraperConfig) SnapshotOrDefault() ScraperSnapshotConfig {
 	defaults := DefaultScraperSnapshotConfig()
 	cfg := c.Snapshot
+
 	if strings.TrimSpace(cfg.Dir) == "" {
 		cfg.Dir = defaults.Dir
 	}
+
 	if cfg.MaxBodyBytes <= 0 {
 		cfg.MaxBodyBytes = defaults.MaxBodyBytes
 	}
+
 	if cfg.MinInterval <= 0 {
 		cfg.MinInterval = defaults.MinInterval
 	}
+
 	return cfg
 }
 
@@ -156,9 +173,11 @@ func (c *ScraperConfig) ChannelHealthOrDefault() ScraperChannelHealthConfig {
 	fillDefaultDuration(&cfg.TimeoutMax, defaults.TimeoutMax)
 	fillDefaultDuration(&cfg.HTTPStatusBase, defaults.HTTPStatusBase)
 	fillDefaultDuration(&cfg.HTTPStatusMax, defaults.HTTPStatusMax)
+
 	if cfg.SuccessDecaySteps <= 0 {
 		cfg.SuccessDecaySteps = defaults.SuccessDecaySteps
 	}
+
 	return cfg
 }
 
@@ -171,9 +190,11 @@ func fillDefaultDuration(value *time.Duration, fallback time.Duration) {
 func (c *ScraperConfig) BrowserDiagnosticOrDefault() ScraperBrowserDiagnosticConfig {
 	defaults := DefaultScraperBrowserDiagnosticConfig()
 	cfg := c.BrowserDiagnostic
+
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = defaults.Timeout
 	}
+
 	return cfg
 }
 

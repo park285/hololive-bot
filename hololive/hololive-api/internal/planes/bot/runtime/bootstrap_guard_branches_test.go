@@ -25,32 +25,28 @@ import (
 	"log/slog"
 	"testing"
 
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
-
-	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/database"
-
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+	providers "github.com/kapu/hololive-shared/pkg/providers"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/database"
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -226,7 +222,7 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, deps)
-	t.Cleanup(func() { require.NoError(t, deps.AlarmService.Close(context.Background())) })
+	t.Cleanup(func() { require.NoError(t, deps.AlarmService.Close(context.WithoutCancel(t.Context()))) })
 	assert.Same(t, memberData, deps.MemberDataProvider)
 	assert.NotNil(t, deps.ChzzkClient)
 	assert.NotNil(t, deps.TwitchClient)
@@ -251,7 +247,7 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, components)
-	t.Cleanup(func() { require.NoError(t, components.AlarmService.Close(context.Background())) })
+	t.Cleanup(func() { require.NoError(t, components.AlarmService.Close(context.WithoutCancel(t.Context()))) })
 	assert.Same(t, memberData, components.MemberDataSource)
 	assert.NotNil(t, components.AlarmService)
 	assert.NotNil(t, components.ChzzkClient)

@@ -3,8 +3,9 @@ package messaging
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/webhook"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestParseMessage_BroadcastHistory(t *testing.T) {
@@ -15,22 +16,28 @@ func TestParseMessage_BroadcastHistory(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
+
 	if got := result.Params["limit"]; got != 20 {
 		t.Fatalf("limit = %v, want 20", got)
 	}
+
 	if got := result.Params["days"]; got != 30 {
 		t.Fatalf("days = %v, want 30", got)
 	}
+
 	if got := result.Params["topic"]; got != "Forza" {
 		t.Fatalf("topic = %v, want Forza", got)
 	}
-	if got := result.Params["member"]; got != "페코라" {
+
+	if got := result.Params["member"]; got != testMemberPekora {
 		t.Fatalf("member = %v, want 페코라", got)
 	}
 }
@@ -43,13 +50,16 @@ func TestParseMessage_BroadcastHistoryCategoryAlias(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "잡담" {
 		t.Fatalf("type = %v, want 잡담", got)
 	}
-	if got := result.Params["member"]; got != "페코라" {
+
+	if got := result.Params["member"]; got != testMemberPekora {
 		t.Fatalf("member = %v, want 페코라", got)
 	}
 }
@@ -62,12 +72,15 @@ func TestParseMessage_BroadcastHistoryMembershipTypeAlias(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "멤버십" {
 		t.Fatalf("type = %v, want 멤버십", got)
 	}
+
 	if got := result.Params["member"]; got != nil {
 		t.Fatalf("member = %v, want nil", got)
 	}
@@ -82,11 +95,11 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 		wantMember string
 		wantType   string
 	}{
-		{name: "member then type with command alias", msg: "!방송기록 사쿠라 미코 게임", wantMember: "사쿠라 미코", wantType: "게임"},
+		{name: "member then type with command alias", msg: "!방송기록 사쿠라 미코 게임", wantMember: testMemberSakuraMiko, wantType: "게임"},
 		{name: "member alias then type with command alias", msg: "!방송기록 미코치 게임", wantMember: "미코치", wantType: "게임"},
-		{name: "type then member with command alias", msg: "!방송기록 게임 사쿠라 미코", wantMember: "사쿠라 미코", wantType: "게임"},
-		{name: "member then broadcast type filter", msg: "!방송기록 페코라 방송타입:게임", wantMember: "페코라", wantType: "게임"},
-		{name: "member then membership type", msg: "!방송기록 사쿠라 미코 멤버십", wantMember: "사쿠라 미코", wantType: "멤버십"},
+		{name: "type then member with command alias", msg: "!방송기록 게임 사쿠라 미코", wantMember: testMemberSakuraMiko, wantType: "게임"},
+		{name: "member then broadcast type filter", msg: "!방송기록 페코라 방송타입:게임", wantMember: testMemberPekora, wantType: "게임"},
+		{name: "member then membership type", msg: "!방송기록 사쿠라 미코 멤버십", wantMember: testMemberSakuraMiko, wantType: "멤버십"},
 		{name: "bare korean member token is member filter", msg: "!방송기록 멤버", wantMember: "멤버", wantType: ""},
 	}
 
@@ -96,21 +109,27 @@ func TestParseMessage_BroadcastHistoryBareMemberNameAndType(t *testing.T) {
 
 			adapter := NewMessageAdapter("!", "")
 			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
+
 			if result == nil {
 				t.Fatal("expected parsed command, got nil")
 			}
+
 			if result.Type != domain.CommandBroadcastHistory {
 				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 			}
+
 			if got := result.Params["member"]; got != tt.wantMember {
 				t.Fatalf("member = %v, want %s", got, tt.wantMember)
 			}
+
 			if tt.wantType == "" {
 				if got := result.Params["type"]; got != nil {
 					t.Fatalf("type = %v, want nil", got)
 				}
+
 				return
 			}
+
 			if got := result.Params["type"]; got != tt.wantType {
 				t.Fatalf("type = %v, want %s", got, tt.wantType)
 			}
@@ -126,18 +145,23 @@ func TestParseMessage_BroadcastHistoryHorseRacingAlias(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "경마" {
 		t.Fatalf("type = %v, want 경마", got)
 	}
+
 	if got := result.Params["days"]; got != 20 {
 		t.Fatalf("days = %v, want 20", got)
 	}
+
 	if got := result.Params["limit"]; got != nil {
 		t.Fatalf("limit = %v, want nil", got)
 	}
+
 	if got := result.Params["member"]; got != nil {
 		t.Fatalf("member = %v, want nil", got)
 	}
@@ -151,12 +175,15 @@ func TestParseMessage_BroadcastHistoryExplicitLimitFilter(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "경마" {
 		t.Fatalf("type = %v, want 경마", got)
 	}
+
 	if got := result.Params["limit"]; got != 20 {
 		t.Fatalf("limit = %v, want 20", got)
 	}
@@ -170,15 +197,19 @@ func TestParseMessage_BroadcastHistoryLegacyLimitBeforeDays(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
+
 	if got := result.Params["limit"]; got != 20 {
 		t.Fatalf("limit = %v, want 20", got)
 	}
+
 	if got := result.Params["days"]; got != 30 {
 		t.Fatalf("days = %v, want 30", got)
 	}
@@ -205,15 +236,19 @@ func TestParseMessage_BroadcastHistoryAliasVariants(t *testing.T) {
 
 			adapter := NewMessageAdapter("!", "")
 			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
+
 			if result == nil {
 				t.Fatal("expected parsed command, got nil")
 			}
+
 			if result.Type != domain.CommandBroadcastHistory {
 				t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 			}
+
 			if got := result.Params["type"]; got != tt.want {
 				t.Fatalf("type = %v, want %s", got, tt.want)
 			}
+
 			if got := result.Params["member"]; got != nil {
 				t.Fatalf("member = %v, want nil", got)
 			}
@@ -229,18 +264,23 @@ func TestParseMessage_BroadcastHistorySeparatedFilters(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
+
 	if got := result.Params["type"]; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
-	if got := result.Params["member"]; got != "사쿠라 미코" {
+
+	if got := result.Params["member"]; got != testMemberSakuraMiko {
 		t.Fatalf("member = %v, want 사쿠라 미코", got)
 	}
+
 	if got := result.Params["days"]; got != 14 {
 		t.Fatalf("days = %v, want 14", got)
 	}
+
 	if got := result.Params["limit"]; got != 10 {
 		t.Fatalf("limit = %v, want 10", got)
 	}
@@ -255,12 +295,15 @@ func TestParseMessage_BroadcastHistoryAllIsCappedToOneYear(t *testing.T) {
 
 			adapter := NewMessageAdapter("!", "")
 			result := adapter.ParseMessage(&webhook.Message{Msg: "!방송이력 " + token})
+
 			if result == nil {
 				t.Fatal("expected parsed command, got nil")
 			}
+
 			if got := result.Params["days"]; got != 365 {
 				t.Fatalf("days = %v, want 365", got)
 			}
+
 			if got := result.Params["all"]; got != nil {
 				t.Fatalf("all = %v, want nil", got)
 			}
@@ -276,12 +319,15 @@ func TestParseMessage_BroadcastHistoryAttachedMemberFilterConsumesNameUntilType(
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
-	if got := result.Params["member"]; got != "사쿠라 미코" {
+
+	if got := result.Params["member"]; got != testMemberSakuraMiko {
 		t.Fatalf("member = %v, want 사쿠라 미코", got)
 	}
+
 	if got := result.Params["type"]; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
@@ -295,12 +341,15 @@ func TestParseMessage_BroadcastHistoryExplicitMemberFilterWinsOverTrailingBareTo
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastHistory {
 		t.Fatalf("expected CommandBroadcastHistory, got %s", result.Type)
 	}
-	if got := result.Params["member"]; got != "페코라" {
+
+	if got := result.Params["member"]; got != testMemberPekora {
 		t.Fatalf("member = %v, want 페코라", got)
 	}
+
 	if got := result.Params["type"]; got != "게임" {
 		t.Fatalf("type = %v, want 게임", got)
 	}
@@ -314,9 +363,11 @@ func TestParseMessage_BroadcastThumbnail(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastThumbnail {
 		t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 	}
+
 	if got := result.Params["video_id"]; got != "AqxEw3kXcgU" {
 		t.Fatalf("video_id = %v, want AqxEw3kXcgU", got)
 	}
@@ -330,9 +381,11 @@ func TestParseMessage_StandaloneBroadcastThumbnail(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected parsed command, got nil")
 	}
+
 	if result.Type != domain.CommandBroadcastThumbnail {
 		t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 	}
+
 	if got := result.Params["video_id"]; got != "AqxEw3kXcgU" {
 		t.Fatalf("video_id = %v, want AqxEw3kXcgU", got)
 	}
@@ -358,12 +411,15 @@ func TestParseMessage_StandaloneBroadcastThumbnailYouTubeURL(t *testing.T) {
 
 			adapter := NewMessageAdapter("!", "")
 			result := adapter.ParseMessage(&webhook.Message{Msg: tt.msg})
+
 			if result == nil {
 				t.Fatal("expected parsed command, got nil")
 			}
+
 			if result.Type != domain.CommandBroadcastThumbnail {
 				t.Fatalf("expected CommandBroadcastThumbnail, got %s", result.Type)
 			}
+
 			if got := result.Params["video_id"]; got != tt.want {
 				t.Fatalf("video_id = %v, want %s", got, tt.want)
 			}
@@ -377,6 +433,7 @@ func TestParseMessage_StandaloneBroadcastThumbnailRejectsLooseYouTubeID(t *testi
 	if got, ok := cleanYouTubeVideoID("short1"); ok || got != "" {
 		t.Fatalf("cleanYouTubeVideoID(short1) = %q, %v; want rejected", got, ok)
 	}
+
 	if got, ok := cleanYouTubeVideoID("tooLongYouTubeVideoIDCandidate"); ok || got != "" {
 		t.Fatalf("cleanYouTubeVideoID(long candidate) = %q, %v; want rejected", got, ok)
 	}

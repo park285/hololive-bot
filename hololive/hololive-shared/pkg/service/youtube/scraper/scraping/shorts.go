@@ -24,44 +24,55 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tidwall/gjson"
+
 	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"github.com/tidwall/gjson"
 )
 
 func (c *Client) GetShorts(ctx context.Context, channelID string, maxResults int) ([]*parser.Short, error) {
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/shorts", channelID)
+
 	html, err := c.fetchChannelSourcePage(ctx, "shorts", channelID, url, FailureSourceHTML, HighFrequencyChannelFetchPolicy)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch channel source page: %w", err)
 	}
 
 	jsonStr, err := initialdata.Extract(html)
 	if err != nil {
-		return nil, c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err)
+		if driftErr := c.recordParserDrift(ctx, "shorts", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
+			return nil, fmt.Errorf("record parser drift: %w", driftErr)
+		}
+
+		return nil, nil
 	}
 
 	data := gjson.Parse(jsonStr)
 	if err := checkAlerts(&data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check alerts: %w", err)
 	}
 
 	shortItems := extractShortsLockupViewModels(&data)
 	shorts := c.parseShortsLockupViewModels(shortItems, maxResults)
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
+
 	return shorts, nil
 }
 
 func extractShortsLockupViewModels(data *gjson.Result) []gjson.Result {
 	var shortItems []gjson.Result
+
 	data.Get("contents.twoColumnBrowseResultsRenderer.tabs").ForEach(func(_, tab gjson.Result) bool {
 		if tab.Get("tabRenderer.title").String() != "Shorts" {
 			return true
 		}
+
 		contents := tab.Get("tabRenderer.content.richGridRenderer.contents")
 		appendShortsLockupViewModels(&shortItems, &contents)
+
 		return false
 	})
+
 	return shortItems
 }
 
@@ -71,6 +82,7 @@ func appendShortsLockupViewModels(shortItems *[]gjson.Result, contents *gjson.Re
 		if shortsRenderer.Exists() {
 			*shortItems = append(*shortItems, shortsRenderer)
 		}
+
 		return true
 	})
 }
@@ -81,15 +93,17 @@ func (c *Client) parseShortsLockupViewModels(shortItems []gjson.Result, maxResul
 		if i >= maxResults {
 			break
 		}
+
 		short := c.parseShortsLockupViewModel(&item)
 		if short != nil {
 			shorts = append(shorts, short)
 		}
 	}
+
 	return shorts
 }
 
-// parseShortsLockupViewModel: shortsLockupViewModel JSON을 Short 구조체로 변환
+// parseShortsLockupViewModel: shortsLockupViewModel JSON을 Short 구조체로 변환.
 func (c *Client) parseShortsLockupViewModel(short *gjson.Result) *parser.Short {
 	videoID := short.Get("onTap.innertubeCommand.reelWatchEndpoint.videoId").String()
 	if videoID == "" {
@@ -97,12 +111,14 @@ func (c *Client) parseShortsLockupViewModel(short *gjson.Result) *parser.Short {
 	}
 
 	var thumbnails []parser.Thumbnail
+
 	short.Get("thumbnail.sources").ForEach(func(_, t gjson.Result) bool {
 		thumbnails = append(thumbnails, parser.Thumbnail{
 			URL:    t.Get("url").String(),
 			Width:  int(t.Get("width").Int()),
 			Height: int(t.Get("height").Int()),
 		})
+
 		return true
 	})
 

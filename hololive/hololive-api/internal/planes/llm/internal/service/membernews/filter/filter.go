@@ -29,9 +29,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
-var (
-	kst = util.KSTZone
-)
+var kst = util.KSTZone
 
 type datedCandidate struct {
 	candidate model.Candidate

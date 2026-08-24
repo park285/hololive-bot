@@ -81,6 +81,7 @@ type replyOutcomeUnknownError struct {
 
 func (e replyOutcomeUnknownError) Error() string {
 	target := "iris reply"
+
 	if id := strings.TrimSpace(e.requestID); id != "" {
 		target = "iris reply " + id
 	}
@@ -89,6 +90,7 @@ func (e replyOutcomeUnknownError) Error() string {
 	if detail := strings.TrimSpace(e.detail); detail != "" {
 		message += ": " + detail
 	}
+
 	if e.cause != nil {
 		message += ": " + e.cause.Error()
 	}
@@ -117,6 +119,7 @@ func (e replyStatusFailedError) Is(target error) bool { return target == ErrRepl
 
 func isReplyStatusFailed(err error) bool {
 	var failed replyStatusFailedError
+
 	return errors.As(err, &failed)
 }
 

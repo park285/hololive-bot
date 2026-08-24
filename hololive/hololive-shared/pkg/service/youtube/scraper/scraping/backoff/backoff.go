@@ -38,9 +38,11 @@ func WithCooldownJitter(portion float64) BackoffOption {
 		if portion < 0 {
 			portion = 0
 		}
+
 		if portion > maxCooldownJitterPortion {
 			portion = maxCooldownJitterPortion
 		}
+
 		b.jitterPortion = portion
 		if portion > 0 && b.jitterRNG == nil {
 			b.jitterRNG = newBackoffJitterRNG()
@@ -50,18 +52,22 @@ func WithCooldownJitter(portion float64) BackoffOption {
 
 func NewBackoffState(opts ...BackoffOption) *BackoffState {
 	bs := &BackoffState{}
+
 	for _, opt := range opts {
 		opt(bs)
 	}
+
 	return bs
 }
 
 func newBackoffJitterRNG() *rand.Rand {
 	var seed [8]byte
+
 	if _, err := crand.Read(seed[:]); err != nil {
 		//nolint:gosec // G404: fallback jitter only spreads retry timing when crypto seed generation fails.
 		return rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
+
 	//nolint:gosec // G404: crypto seed feeds deterministic PRNG for retry jitter, not cryptographic output.
 	return rand.New(rand.NewSource(int64(binary.LittleEndian.Uint64(seed[:]))))
 }
@@ -70,11 +76,14 @@ func (b *BackoffState) applyJitter(cooldown time.Duration) time.Duration {
 	if cooldown <= 0 || b.jitterPortion <= 0 || b.jitterRNG == nil {
 		return cooldown
 	}
+
 	delta := (b.jitterRNG.Float64()*2 - 1) * b.jitterPortion
 	scaled := float64(cooldown) * (1 + delta)
+
 	if scaled <= 0 {
 		return cooldown
 	}
+
 	return time.Duration(scaled)
 }
 
@@ -95,6 +104,7 @@ func (b *BackoffState) RecordErrorWithSuggestedCooldown(suggested time.Duration)
 		minSuggestedHardCooldown,
 		maxSuggestedHardCooldown,
 	)
+
 	cooldown = b.applyJitter(cooldown)
 	b.hardCooldown = laterDeadline(b.hardCooldown, now.Add(cooldown))
 	slog.Warn("Hard backoff activated",
@@ -120,6 +130,7 @@ func (b *BackoffState) RecordTransientErrorWithSuggestedCooldown(suggested time.
 		minSuggestedTransientCooldown,
 		maxSuggestedTransientCooldown,
 	)
+
 	cooldown = b.applyJitter(cooldown)
 	b.transientCooldown = laterDeadline(b.transientCooldown, now.Add(cooldown))
 	slog.Warn("Transient backoff activated",
@@ -144,6 +155,7 @@ func hardCooldownForErrorCount(errors int) time.Duration {
 			return threshold.cooldown
 		}
 	}
+
 	return 30 * time.Minute
 }
 
@@ -162,9 +174,11 @@ func clampCooldown(value, minValue, maxValue time.Duration) time.Duration {
 	if value < minValue {
 		return minValue
 	}
+
 	if value > maxValue {
 		return maxValue
 	}
+
 	return value
 }
 
@@ -180,6 +194,7 @@ func laterDeadline(current, candidate time.Time) time.Time {
 	if current.After(candidate) {
 		return current
 	}
+
 	return candidate
 }
 
@@ -211,6 +226,7 @@ func (b *BackoffState) HardCooldownRemaining() time.Duration {
 	if remaining <= 0 {
 		b.hardCooldown = time.Time{}
 		b.hardErrors = 0
+
 		return 0
 	}
 
@@ -229,6 +245,7 @@ func (b *BackoffState) TransientCooldownRemaining() time.Duration {
 	if remaining <= 0 {
 		b.transientCooldown = time.Time{}
 		b.transientErrors = 0
+
 		return 0
 	}
 
@@ -262,6 +279,7 @@ func (b *BackoffState) CooldownRemaining() time.Duration {
 	if hard > transient {
 		return hard
 	}
+
 	return transient
 }
 

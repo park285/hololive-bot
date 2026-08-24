@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-func seedLoggedTelemetryRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, count int, eventAt time.Time) {
+func seedLoggedTelemetryRows(ctx context.Context, t *testing.T, pool *pgxpool.Pool, count int, eventAt time.Time) {
 	t.Helper()
 
 	for i := range count {
@@ -25,12 +25,14 @@ func seedLoggedTelemetryRows(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	}
 }
 
-func countTelemetryRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int64 {
+func countTelemetryRows(ctx context.Context, t *testing.T, pool *pgxpool.Pool) int64 {
 	t.Helper()
 
 	var count int64
+
 	require.NoError(t, pool.QueryRow(ctx,
 		"SELECT count(*) FROM youtube_notification_delivery_telemetry").Scan(&count))
+
 	return count
 }
 
@@ -39,13 +41,13 @@ func TestDeleteLoggedBefore_DrainsAllEligibleRowsInBatches(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := NewRepository(pool)
 	oldEventAt := time.Now().UTC().Add(-100 * 24 * time.Hour)
-	seedLoggedTelemetryRows(t, ctx, pool, 3, oldEventAt)
+	seedLoggedTelemetryRows(ctx, t, pool, 3, oldEventAt)
 
 	deleted, err := repository.deleteLoggedBeforeInBatches(ctx, time.Now().UTC().Add(-90*24*time.Hour), 1)
 
 	require.NoError(t, err)
 	require.Equal(t, int64(3), deleted, "배치 크기보다 많은 대상도 루프로 전량 삭제해야 한다")
-	require.Zero(t, countTelemetryRows(t, ctx, pool))
+	require.Zero(t, countTelemetryRows(ctx, t, pool))
 }
 
 func TestDeleteLoggedBefore_KeepsUnloggedAndFreshRows(t *testing.T) {
@@ -53,8 +55,8 @@ func TestDeleteLoggedBefore_KeepsUnloggedAndFreshRows(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	repository := NewRepository(pool)
 	oldEventAt := time.Now().UTC().Add(-100 * 24 * time.Hour)
-	seedLoggedTelemetryRows(t, ctx, pool, 1, oldEventAt)
-	seedLoggedTelemetryRows(t, ctx, pool, 0, oldEventAt)
+	seedLoggedTelemetryRows(ctx, t, pool, 1, oldEventAt)
+	seedLoggedTelemetryRows(ctx, t, pool, 0, oldEventAt)
 
 	_, err := pool.Exec(ctx, `
 		INSERT INTO youtube_notification_delivery_telemetry
@@ -64,6 +66,7 @@ func TestDeleteLoggedBefore_KeepsUnloggedAndFreshRows(t *testing.T) {
 	require.NoError(t, err)
 
 	freshEventAt := time.Now().UTC().Add(-time.Hour)
+
 	_, err = pool.Exec(ctx, `
 		INSERT INTO youtube_notification_delivery_telemetry
 			(delivery_id, attempt_ordinal, outbox_id, channel_id, content_id, post_id, room_id, alarm_type, dedupe_key, delivery_mode, send_result, event_at, next_attempt_at, created_at, logged_at)
@@ -75,5 +78,5 @@ func TestDeleteLoggedBefore_KeepsUnloggedAndFreshRows(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, int64(1), deleted)
-	require.Equal(t, int64(2), countTelemetryRows(t, ctx, pool))
+	require.Equal(t, int64(2), countTelemetryRows(ctx, t, pool))
 }

@@ -22,35 +22,54 @@ package info
 
 import (
 	"context"
+	"fmt"
 	"slices"
+
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 func (c *MemberInfoCommand) renderMemberDirectory(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	provider := c.Deps().MembersData.WithContext(ctx)
+	message, errorMessage := c.memberDirectoryMessage(ctx)
+	if errorMessage != "" {
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, errorMessage); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
 
+		return nil
+	}
+
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *MemberInfoCommand) memberDirectoryMessage(ctx context.Context) (string, string) {
+	provider := c.Deps().MembersData.WithContext(ctx)
 	activeMembers := c.filterActiveMembers(provider.GetAllMembers())
+
 	if len(activeMembers) == 0 {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrNoMemberInfoFound)
+		return "", messaging.ErrNoMemberInfoFound
 	}
 
 	groupEntries := c.buildGroupEntries(ctx, activeMembers)
 	if len(groupEntries) == 0 {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrNoMemberInfoFound)
+		return "", messaging.ErrNoMemberInfoFound
 	}
 
 	ordered := c.sortGroupsByPreference(groupEntries)
-
 	message := c.Deps().Formatter.MemberDirectory(ctx, ordered, len(activeMembers))
+
 	if stringutil.TrimSpace(message) == "" {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrCannotDisplayMemberInfo)
+		return "", messaging.ErrCannotDisplayMemberInfo
 	}
 
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+	return message, ""
 }
 
 func (c *MemberInfoCommand) filterActiveMembers(members []*domain.Member) []*domain.Member {

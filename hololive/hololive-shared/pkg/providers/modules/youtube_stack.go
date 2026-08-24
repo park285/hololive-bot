@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
@@ -23,6 +22,7 @@ func BuildYouTubeStack(ctx context.Context, params *YouTubeStackParams) *provide
 	if params == nil {
 		return &providers.YouTubeStack{}
 	}
+
 	return BuildYouTubeAPIStack(ctx, &YouTubeAPIStackParams{
 		YouTubeConfig:   params.YouTubeConfig,
 		ScraperConfig:   params.ScraperConfig,

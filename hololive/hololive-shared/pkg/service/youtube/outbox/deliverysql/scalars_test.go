@@ -33,6 +33,7 @@ func TestTruncateStringGuardMatrix(t *testing.T) {
 		long      = "abcdef"
 		multibyte = "안녕하세요"
 	)
+
 	tests := []struct {
 		name   string
 		in     string
@@ -60,6 +61,7 @@ func TestTruncateStringGuardMatrix(t *testing.T) {
 		{name: "multibyte/3", in: multibyte, maxLen: 3, want: "..."},
 		{name: "multibyte/4", in: multibyte, maxLen: 4, want: "안..."},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := TruncateString(tt.in, tt.maxLen); got != tt.want {
@@ -80,22 +82,28 @@ func TestCloneUTCTimePtr(t *testing.T) {
 	}
 
 	loc := time.FixedZone("KST", 9*60*60)
-	local := time.Date(2026, 6, 10, 12, 0, 0, 0, loc)
+	local := time.Date(2026, time.June, 10, 12, 0, 0, 0, loc)
 	got := CloneUTCTimePtr(&local)
+
 	if got == nil {
 		t.Fatal("CloneUTCTimePtr(non-utc) = nil, want non-nil")
 	}
+
 	if got.Location() != time.UTC {
 		t.Errorf("CloneUTCTimePtr location = %v, want UTC", got.Location())
 	}
+
 	if !got.Equal(local) {
 		t.Errorf("CloneUTCTimePtr instant = %v, want equal to %v", got, local)
 	}
+
 	if got == &local {
 		t.Error("CloneUTCTimePtr returned the input pointer, want an independent copy")
 	}
+
 	*got = got.Add(time.Hour)
-	if !local.Equal(time.Date(2026, 6, 10, 12, 0, 0, 0, loc)) {
+
+	if !local.Equal(time.Date(2026, time.June, 10, 12, 0, 0, 0, loc)) {
 		t.Error("mutating clone affected the source")
 	}
 }

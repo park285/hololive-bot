@@ -24,9 +24,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type MemberDirectoryGroup struct {
@@ -88,6 +89,7 @@ func prepareMemberDirectoryGroups(groups []MemberDirectoryGroup) []memberDirecto
 		if !ok {
 			continue
 		}
+
 		views = append(views, view)
 	}
 
@@ -115,14 +117,17 @@ func prepareMemberDirectoryEntries(members []MemberDirectoryEntry) []memberDirec
 		if !ok {
 			continue
 		}
+
 		views = append(views, entry)
 	}
+
 	return views
 }
 
 func prepareMemberDirectoryEntry(member MemberDirectoryEntry) (memberDirectoryEntryView, bool) {
 	primary := stringutil.TrimSpace(member.PrimaryName)
 	secondary := stringutil.TrimSpace(member.SecondaryName)
+
 	if primary == "" && secondary == "" {
 		return memberDirectoryEntryView{}, false
 	}

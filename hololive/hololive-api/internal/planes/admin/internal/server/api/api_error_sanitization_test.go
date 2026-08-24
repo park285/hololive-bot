@@ -23,6 +23,7 @@ package api
 import (
 	"bytes"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,6 @@ import (
 	"strings"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 
 	"github.com/kapu/hololive-shared/pkg/service/acl"
@@ -82,53 +82,21 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 		acl:    &acl.Service{},
 	}
 
+	noticeParams := gin.Params{{Key: templateKeyParam, Value: "notice"}}
+
 	testCases := []struct {
 		name   string
 		path   string
 		params gin.Params
-		call   func(*gin.Context)
+		call   gin.HandlerFunc
 	}{
-		{
-			name: "alarm delete",
-			path: "/api/holo/alarm/delete",
-			call: (&AlarmHandler{Handler: base}).DeleteAlarm,
-		},
-		{
-			name: "room add",
-			path: "/api/holo/rooms/add",
-			call: (&RoomHandler{Handler: base}).AddRoom,
-		},
-		{
-			name: "room remove",
-			path: "/api/holo/rooms/remove",
-			call: (&RoomHandler{Handler: base}).RemoveRoom,
-		},
-		{
-			name: "room acl",
-			path: "/api/holo/rooms/acl",
-			call: (&RoomHandler{Handler: base}).SetACL,
-		},
-		{
-			name: "member add",
-			path: "/api/holo/members",
-			call: (&MemberHandler{Handler: base}).AddMember,
-		},
-		{
-			name: "template upsert",
-			path: "/api/holo/templates/notice",
-			params: gin.Params{
-				{Key: "key", Value: "notice"},
-			},
-			call: (&TemplateHandler{Handler: base}).UpsertTemplate,
-		},
-		{
-			name: "template preview",
-			path: "/api/holo/templates/notice/preview",
-			params: gin.Params{
-				{Key: "key", Value: "notice"},
-			},
-			call: (&TemplateHandler{Handler: base}).PreviewTemplate,
-		},
+		{"alarm delete", "/api/holo/alarm/delete", nil, (&AlarmHandler{Handler: base}).DeleteAlarm},
+		{"room add", "/api/holo/rooms/add", nil, (&RoomHandler{Handler: base}).AddRoom},
+		{"room remove", "/api/holo/rooms/remove", nil, (&RoomHandler{Handler: base}).RemoveRoom},
+		{"room acl", "/api/holo/rooms/acl", nil, (&RoomHandler{Handler: base}).SetACL},
+		{"member add", "/api/holo/members", nil, (&MemberHandler{Handler: base}).AddMember},
+		{"template upsert", "/api/holo/templates/notice", noticeParams, (&TemplateHandler{Handler: base}).UpsertTemplate},
+		{"template preview", "/api/holo/templates/notice/preview", noticeParams, (&TemplateHandler{Handler: base}).PreviewTemplate},
 	}
 
 	for _, tc := range testCases {
@@ -141,6 +109,7 @@ func TestServerHandlers_InvalidJSONResponseIsSanitized(t *testing.T) {
 			}
 
 			var payload map[string]any
+
 			if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 				t.Fatalf("failed to unmarshal response: %v", err)
 			}

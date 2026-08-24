@@ -51,9 +51,11 @@ func (p SnapshotPolicy) allows(reason FailureReason) bool {
 	if !p.Enabled {
 		return false
 	}
+
 	if len(p.AllowedReasons) == 0 {
 		return true
 	}
+
 	return p.AllowedReasons[reason]
 }
 
@@ -62,10 +64,12 @@ func trimSnapshotBody(body string, maxBytes int) []byte {
 	if body == "" {
 		return nil
 	}
+
 	raw := []byte(body)
 	if maxBytes > 0 && len(raw) > maxBytes {
 		raw = raw[:maxBytes]
 	}
+
 	return sanitizeSnapshotBody(raw)
 }
 
@@ -81,25 +85,33 @@ func sanitizeSnapshotBody(body []byte) []byte {
 	if len(body) == 0 {
 		return body
 	}
+
 	result := body
+
 	for _, pattern := range snapshotRedactionPatterns {
 		result = pattern.ReplaceAllFunc(result, func(match []byte) []byte {
 			groups := pattern.FindSubmatch(match)
 			if len(groups) < 3 {
 				return match
 			}
+
 			head := groups[1]
 			tail := []byte{}
+
 			if len(groups) >= 4 {
 				tail = groups[3]
 			}
+
 			redacted := make([]byte, 0, len(head)+len("[REDACTED]")+len(tail))
+
 			redacted = append(redacted, head...)
 			redacted = append(redacted, []byte("[REDACTED]")...)
 			redacted = append(redacted, tail...)
+
 			return redacted
 		})
 	}
+
 	return result
 }
 

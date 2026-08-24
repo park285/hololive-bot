@@ -2,6 +2,7 @@ package htmlscraper
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,7 +23,12 @@ import (
 type fallbackRoundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f fallbackRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 func TestFetchYouTubeScheduleKeepsInjectedFetcherBehavior(t *testing.T) {
@@ -32,7 +38,7 @@ func TestFetchYouTubeScheduleKeepsInjectedFetcherBehavior(t *testing.T) {
 		return []*parser.UpcomingEvent{{VideoID: "video", Title: "title", Status: "LIVE"}}, nil
 	})
 
-	streams, err := service.FetchYouTubeSchedule(context.Background(), "UCtest")
+	streams, err := service.FetchYouTubeSchedule(t.Context(), "UCtest")
 
 	require.NoError(t, err)
 	require.Len(t, streams, 1)
@@ -47,7 +53,7 @@ func TestFetchYouTubeScheduleWaitAdmissionUsesInjectedFetcherInTests(t *testing.
 		return nil, nil
 	})
 
-	_, err := service.FetchYouTubeScheduleWaitAdmission(context.Background(), "UCtest")
+	_, err := service.FetchYouTubeScheduleWaitAdmission(t.Context(), "UCtest")
 
 	require.NoError(t, err)
 	require.Equal(t, 1, called)
@@ -55,16 +61,18 @@ func TestFetchYouTubeScheduleWaitAdmissionUsesInjectedFetcherInTests(t *testing.
 
 func TestFetchYouTubeScheduleWaitAdmissionUsesScraperBlockingAdmission(t *testing.T) {
 	limiter := ratelimiter.New(25 * time.Millisecond)
-	decision, err := limiter.TryReserve(context.Background())
+	decision, err := limiter.TryReserve(t.Context())
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
 
 	var requests atomic.Int32
+
 	client := scraper.NewClient(
 		scraper.WithRateLimiter(limiter),
 		scraper.WithHTTPClient(&http.Client{
 			Transport: fallbackRoundTripFunc(func(*http.Request) (*http.Response, error) {
 				requests.Add(1)
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -75,9 +83,11 @@ func TestFetchYouTubeScheduleWaitAdmissionUsesScraperBlockingAdmission(t *testin
 	)
 	service := NewServiceWithYouTubeClient(nil, nil, client, slog.Default())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
+
 	started := time.Now()
+
 	_, err = service.FetchYouTubeScheduleWaitAdmission(ctx, "UCtest")
 
 	require.Error(t, err)

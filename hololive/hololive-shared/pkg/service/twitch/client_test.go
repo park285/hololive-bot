@@ -23,8 +23,9 @@ package twitch
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 // newTestLogger: 테스트용 무음 slog 로거를 반환합니다.

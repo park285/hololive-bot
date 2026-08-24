@@ -21,9 +21,8 @@
 package configsub
 
 import (
-	"log/slog"
-
 	jsonv2 "encoding/json/v2"
+	"log/slog"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
@@ -62,45 +61,55 @@ func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update co
 func applyScraperProxyUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.ScraperProxy == nil {
 		logConfigUpdateHandlerMissing(logger, update.Type)
+
 		return
 	}
 
 	var payload contractssettings.ScraperProxyPayloadV1
+
 	if !decodeConfigUpdatePayload(logger, update, &payload) {
 		return
 	}
+
 	handlers.ScraperProxy(payload)
 }
 
 func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.AlarmAdvanceMinutes == nil {
 		logConfigUpdateHandlerMissing(logger, update.Type)
+
 		return
 	}
 
 	var payload contractssettings.AlarmAdvanceMinutesPayloadV1
+
 	if !decodeConfigUpdatePayload(logger, update, &payload) {
 		return
 	}
+
 	handlers.AlarmAdvanceMinutes(payload)
 }
 
 func applyACLUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.ACL == nil {
 		logConfigUpdateHandlerMissing(logger, update.Type)
+
 		return
 	}
 
 	var payload contractssettings.ACLPayloadV1
+
 	if !decodeConfigUpdatePayload(logger, update, &payload) {
 		return
 	}
+
 	handlers.ACL(payload)
 }
 
 func applyUnknownConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	if handlers.Unknown != nil {
 		handlers.Unknown(update.Type)
+
 		return
 	}
 
@@ -113,8 +122,10 @@ func decodeConfigUpdatePayload(logger *slog.Logger, update contractssettings.Con
 			slog.String("type", update.Type),
 			slog.Any("error", err),
 		)
+
 		return false
 	}
+
 	return true
 }
 

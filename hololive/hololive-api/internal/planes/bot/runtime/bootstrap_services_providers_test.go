@@ -27,14 +27,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	dbtest "github.com/kapu/hololive-dbtest"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func TestProvideACLService_UsesDefaultsWhenDBIsEmpty(t *testing.T) {

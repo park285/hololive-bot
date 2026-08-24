@@ -12,6 +12,7 @@ func birthdayGreetingEventKey(channelID, dateStr string) string {
 		ChannelID: channelID,
 		Date:      dateStr,
 	}
+
 	return dispatchoutbox.BuildEventKey(&dispatchoutbox.DedupeInput{
 		SourceKind:     domain.AlarmDispatchSourceKindCelebration,
 		SourceIdentity: payload.Identity(),
@@ -25,6 +26,7 @@ func birthdayStreamEventKey(channelID, dateStr, videoID string) string {
 		Date:      dateStr,
 		VideoID:   videoID,
 	}
+
 	return dispatchoutbox.BuildEventKey(&dispatchoutbox.DedupeInput{
 		SourceKind:     domain.AlarmDispatchSourceKindCelebration,
 		SourceIdentity: payload.Identity(),
@@ -41,13 +43,16 @@ func buildBirthdayStreamEnvelopes(
 	dateStr string,
 ) []domain.AlarmQueueEnvelope {
 	var envelopes []domain.AlarmQueueEnvelope
+
 	for _, candidate := range candidates {
 		displayName := resolveCelebrationMemberName(candidate.member)
 		rooms := roomsByBirthdayEventKey[birthdayGreetingEventKey(candidate.member.ChannelID, dateStr)]
+
 		for _, roomID := range rooms {
 			envelopes = append(envelopes, birthdayStreamEnvelope(&candidate, displayName, roomID, dateStr))
 		}
 	}
+
 	return envelopes
 }
 
@@ -81,31 +86,37 @@ func birthdayStreamEnvelope(
 func birthdayGreetingEventKeys(candidates []birthdayStreamCandidate, dateStr string) []string {
 	eventKeys := make([]string, 0, len(candidates))
 	seen := make(map[string]struct{}, len(candidates))
+
 	for _, candidate := range candidates {
 		eventKey := birthdayGreetingEventKey(candidate.member.ChannelID, dateStr)
 		if _, ok := seen[eventKey]; ok {
 			continue
 		}
+
 		seen[eventKey] = struct{}{}
 		eventKeys = append(eventKeys, eventKey)
 	}
+
 	return eventKeys
 }
 
 func countBirthdayStreamAudienceRooms(roomsByEventKey map[string][]string) int {
 	seen := make(map[string]struct{})
+
 	for _, rooms := range roomsByEventKey {
 		for _, roomID := range rooms {
 			seen[roomID] = struct{}{}
 		}
 	}
+
 	return len(seen)
 }
 
-func birthdayStreamScheduledStartKST(session *birthdayStreamSession) string {
+func birthdayStreamScheduledStartKST(session *BirthdayStreamSession) string {
 	start := util.FirstNonNilTime(session.ScheduledStart, session.StartedAt)
 	if start == nil {
 		return ""
 	}
+
 	return util.FormatKST(*start, "15:04")
 }

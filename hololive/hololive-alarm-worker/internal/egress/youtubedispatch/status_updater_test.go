@@ -1,8 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -17,13 +15,13 @@ import (
 func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	pending := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_status",
+		ChannelID:     testChannelStatus,
 		ContentID:     "pending",
 		Payload:       `{"video_id":"pending","title":"pending"}`,
 		Status:        domain.OutboxStatusPending,
@@ -34,7 +32,7 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	}
 	failed := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_status",
+		ChannelID:     testChannelStatus,
 		ContentID:     "failed",
 		Payload:       `{"video_id":"failed","title":"failed"}`,
 		Status:        domain.OutboxStatusFailed,
@@ -46,10 +44,11 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	require.NoError(t, insertDeliveryTestRows(db, &pending).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &failed).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.DiscardHandler), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markSentBatch(ctx, []int64{pending.ID, pending.ID, failed.ID})
 
 	var gotPending domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &gotPending, pending.ID).Error)
 	require.Equal(t, domain.OutboxStatusSent, gotPending.Status)
 	require.NotNil(t, gotPending.SentAt)
@@ -57,6 +56,7 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 	require.Empty(t, gotPending.Error)
 
 	var gotFailed domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &gotFailed, failed.ID).Error)
 	require.Equal(t, domain.OutboxStatusFailed, gotFailed.Status)
 	require.Nil(t, gotFailed.SentAt)
@@ -67,13 +67,13 @@ func TestStatusUpdaterMarkSentBatchUpdatesPendingRowsOnly(t *testing.T) {
 func TestStatusUpdaterMarkFailedSchedulesRetryBeforeMaxRetries(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	item := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_status",
+		ChannelID:     testChannelStatus,
 		ContentID:     "retry",
 		Payload:       `{"video_id":"retry","title":"retry"}`,
 		Status:        domain.OutboxStatusPending,
@@ -83,11 +83,13 @@ func TestStatusUpdaterMarkFailedSchedulesRetryBeforeMaxRetries(t *testing.T) {
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.DiscardHandler), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	before := time.Now().UTC()
+
 	updater.markFailed(ctx, item.ID, "temporary failure")
 
 	var got domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, item.ID).Error)
 	require.Equal(t, domain.OutboxStatusPending, got.Status)
 	require.Equal(t, 1, got.AttemptCount)
@@ -100,13 +102,13 @@ func TestStatusUpdaterMarkFailedSchedulesRetryBeforeMaxRetries(t *testing.T) {
 func TestStatusUpdaterMarkFailedMarksPermanentAtMaxRetriesAndTruncatesReason(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	item := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_status",
+		ChannelID:     testChannelStatus,
 		ContentID:     "permanent",
 		Payload:       `{"video_id":"permanent","title":"permanent"}`,
 		Status:        domain.OutboxStatusPending,
@@ -116,10 +118,11 @@ func TestStatusUpdaterMarkFailedMarksPermanentAtMaxRetriesAndTruncatesReason(t *
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.DiscardHandler), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markFailed(ctx, item.ID, strings.Repeat("가", 600))
 
 	var got domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, item.ID).Error)
 	require.Equal(t, domain.OutboxStatusFailed, got.Status)
 	require.Equal(t, 3, got.AttemptCount)
@@ -131,14 +134,14 @@ func TestStatusUpdaterMarkFailedMarksPermanentAtMaxRetriesAndTruncatesReason(t *
 func TestStatusUpdaterMarkSentIfLockedSkipsRowsRelockedByAnotherWorker(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	currentLockedAt := staleLockedAt.Add(time.Minute)
 	item := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_status",
+		ChannelID:     testChannelStatus,
 		ContentID:     "relocked",
 		Payload:       `{"video_id":"relocked","title":"relocked"}`,
 		Status:        domain.OutboxStatusPending,
@@ -148,10 +151,11 @@ func TestStatusUpdaterMarkSentIfLockedSkipsRowsRelockedByAnotherWorker(t *testin
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.DiscardHandler), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markSentIfLocked(ctx, item.ID, &staleLockedAt)
 
 	var got domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, item.ID).Error)
 	require.Equal(t, domain.OutboxStatusPending, got.Status)
 	require.Nil(t, got.SentAt)
@@ -162,14 +166,14 @@ func TestStatusUpdaterMarkSentIfLockedSkipsRowsRelockedByAnotherWorker(t *testin
 func TestStatusUpdaterMarkFailedIfLockedSkipsRowsCompletedByAnotherWorker(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
 	sentAt := time.Now().UTC()
 	item := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
-		ChannelID:     "UC_status",
+		ChannelID:     testChannelStatus,
 		ContentID:     "sent",
 		Payload:       `{"video_id":"sent","title":"sent"}`,
 		Status:        domain.OutboxStatusSent,
@@ -179,10 +183,11 @@ func TestStatusUpdaterMarkFailedIfLockedSkipsRowsCompletedByAnotherWorker(t *tes
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	updater := newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
+	updater := newStatusUpdater(db, slog.New(slog.DiscardHandler), &dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Minute})
 	updater.markFailedIfLocked(ctx, item.ID, &staleLockedAt, "stale failure")
 
 	var got domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, item.ID).Error)
 	require.Equal(t, domain.OutboxStatusSent, got.Status)
 	require.Equal(t, 0, got.AttemptCount)

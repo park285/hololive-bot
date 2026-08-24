@@ -22,6 +22,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -52,7 +53,7 @@ type PostgresConfig struct {
 
 func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slog.Logger) (*PostgresService, error) {
 	if config == nil {
-		return nil, fmt.Errorf("postgres config is nil")
+		return nil, errors.New("postgres config is nil")
 	}
 
 	// pgxdb는 빈 sslmode를 거부(fail-closed)하므로, 예전 dbx가 DSN 생성 시 적용하던
@@ -66,6 +67,7 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 	if minConns <= 0 {
 		minConns = constants.DatabaseConfig.MaxIdleConns
 	}
+
 	maxConns := config.PoolMaxConns
 	if maxConns <= 0 {
 		maxConns = constants.DatabaseConfig.MaxOpenConns
@@ -108,17 +110,21 @@ func (ps *PostgresService) GetPool() *pgxpool.Pool {
 func (ps *PostgresService) Close() error {
 	if ps.pool != nil {
 		ps.pool.Close()
+
 		ps.pool = nil
 	}
+
 	return nil
 }
 
 func (ps *PostgresService) Ping(ctx context.Context) error {
 	if ps.pool == nil {
-		return fmt.Errorf("ping database: pool is nil")
+		return errors.New("ping database: pool is nil")
 	}
+
 	if err := ps.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
+
 	return nil
 }

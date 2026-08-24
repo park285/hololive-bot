@@ -31,7 +31,7 @@ import (
 )
 
 func loadAppEnvironment() string {
-	return sharedenv.String("APP_ENV", "production")
+	return sharedenv.String("APP_ENV", environmentProduction)
 }
 
 func loadValkeyConfig() ValkeyConfig {
@@ -57,7 +57,7 @@ func loadPostgresConfig() PostgresConfig {
 		User:          sharedenv.String("POSTGRES_USER", constants.DatabaseDefaults.User),
 		Password:      password,
 		Database:      sharedenv.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", "verify-full"),
+		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", postgresSSLModeVerifyFull),
 		SSLRootCert:   sharedenv.String("POSTGRES_SSLROOTCERT", ""),
 		QueryExecMode: sharedenv.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
 		PoolMinConns:  sharedenv.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
@@ -95,11 +95,12 @@ func loadScraperConfig() (ScraperConfig, error) {
 
 	workerCount, err := requiredPositiveIntEnv("SCRAPER_SCHEDULER_WORKER_COUNT", DefaultScraperWorkerCount())
 	if err != nil {
-		return ScraperConfig{}, err
+		return ScraperConfig{}, fmt.Errorf("required positive int env: %w", err)
 	}
+
 	poll, err := loadScraperPoll()
 	if err != nil {
-		return ScraperConfig{}, err
+		return ScraperConfig{}, fmt.Errorf("load scraper poll: %w", err)
 	}
 
 	return ScraperConfig{
@@ -129,6 +130,7 @@ func loadScraperConfig() (ScraperConfig, error) {
 
 func loadScraperChannelHealthConfig() ScraperChannelHealthConfig {
 	defaults := DefaultScraperChannelHealthConfig()
+
 	return ScraperChannelHealthConfig{
 		Enabled:           sharedenv.Bool("SCRAPER_CHANNEL_HEALTH_ENABLED", defaults.Enabled),
 		Enforce:           sharedenv.Bool("SCRAPER_CHANNEL_HEALTH_ENFORCE", defaults.Enforce),
@@ -147,6 +149,7 @@ func loadScraperChannelHealthConfig() ScraperChannelHealthConfig {
 
 func loadScraperBrowserDiagnosticConfig() ScraperBrowserDiagnosticConfig {
 	defaults := DefaultScraperBrowserDiagnosticConfig()
+
 	return ScraperBrowserDiagnosticConfig{
 		Enabled:  sharedenv.Bool("SCRAPER_BROWSER_DIAGNOSTIC_ENABLED", defaults.Enabled),
 		Endpoint: sharedenv.String("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", defaults.Endpoint),
@@ -156,6 +159,7 @@ func loadScraperBrowserDiagnosticConfig() ScraperBrowserDiagnosticConfig {
 
 func loadScraperPollTieringConfig() ScraperPollTieringConfig {
 	defaults := DefaultScraperPollTieringConfig()
+
 	return ScraperPollTieringConfig{
 		Enabled: sharedenv.Bool("SCRAPER_POLL_TIERING_ENABLED", defaults.Enabled),
 	}
@@ -163,6 +167,7 @@ func loadScraperPollTieringConfig() ScraperPollTieringConfig {
 
 func loadScraperBackfillConfig() ScraperBackfillConfig {
 	defaults := DefaultScraperBackfillConfig()
+
 	return ScraperBackfillConfig{
 		Enabled:        sharedenv.Bool("SCRAPER_BACKFILL_ENABLED", defaults.Enabled),
 		ShortsEnabled:  sharedenv.Bool("SCRAPER_BACKFILL_SHORTS_ENABLED", defaults.ShortsEnabled),
@@ -208,12 +213,12 @@ func loadCliproxyConfig() CliproxyConfig {
 }
 
 // loadConsensusLLMConfig: prefix 기반 환경변수에서 ConsensusLLMConfig를 로드한다.
-// prefix 예: "MEMBER_NEWS" -> MEMBER_NEWS_CONSENSUS_ENABLED, MEMBER_NEWS_CONSENSUS_CONFIDENCE, ...
 func loadConsensusLLMConfig(prefix string) ConsensusLLMConfig {
 	reviewTimeout := sharedenv.Int(prefix+"_REVIEW_TIMEOUT_SEC", 30)
 	if reviewTimeout < 5 {
 		reviewTimeout = 30
 	}
+
 	adjudicateTimeout := sharedenv.Int(prefix+"_ADJUDICATE_TIMEOUT_SEC", 45)
 	if adjudicateTimeout < 5 {
 		adjudicateTimeout = 45

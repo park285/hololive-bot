@@ -45,6 +45,7 @@ func (f *ResponseFormatter) memberNewsNotify(ctx context.Context, key string) st
 	if f == nil {
 		return messagestrings.FallbackSentinel
 	}
+
 	return f.messageStrings.GetContext(ctx, messagestrings.NamespaceNotify, key)
 }
 
@@ -180,5 +181,6 @@ func (f *ResponseFormatter) memberNewsCategoryLabel(ctx context.Context, raw str
 	if label := f.messageStrings.GetContext(ctx, messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); label != "" {
 		return label
 	}
+
 	return raw
 }

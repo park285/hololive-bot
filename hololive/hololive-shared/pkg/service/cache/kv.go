@@ -25,16 +25,28 @@ import (
 	"time"
 )
 
-type KeyValueCache interface {
+type KeyValueReader interface {
 	Get(ctx context.Context, key string, dest any) error
 	GetString(ctx context.Context, key string) (string, bool, error)
+	Exists(ctx context.Context, key string) (bool, error)
+	ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error)
+}
+
+type KeyValueWriter interface {
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
 	MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error
-	Del(ctx context.Context, key string) error
-	DelMany(ctx context.Context, keys []string) (int64, error)
-	ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error)
-	Expire(ctx context.Context, key string, ttl time.Duration) error
-	Exists(ctx context.Context, key string) (bool, error)
 	SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	SetNXMulti(ctx context.Context, entries []SetNXEntry) ([]SetNXResult, error)
+}
+
+type KeyValueLifecycle interface {
+	Del(ctx context.Context, key string) error
+	DelMany(ctx context.Context, keys []string) (int64, error)
+	Expire(ctx context.Context, key string, ttl time.Duration) error
+}
+
+type KeyValueCache interface {
+	KeyValueReader
+	KeyValueWriter
+	KeyValueLifecycle
 }

@@ -26,15 +26,14 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-shared/pkg/service/alarm"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/service/alarm"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {
@@ -71,7 +70,7 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 			logger,
 		)
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, service.Close(context.Background())) })
+		t.Cleanup(func() { require.NoError(t, service.Close(context.WithoutCancel(t.Context()))) })
 		require.NotNil(t, service)
 		assert.Equal(t, []int{10, 3, 1}, service.GetTargetMinutes())
 	})
@@ -80,5 +79,4 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		matcher := appbootstrap.ProvideMatcher(t.Context(), &stubMemberDataProvider{}, cachemocks.NewStrictClient(), nil, logger)
 		require.NotNil(t, matcher)
 	})
-
 }

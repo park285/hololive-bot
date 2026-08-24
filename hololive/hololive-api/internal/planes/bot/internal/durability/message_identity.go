@@ -32,6 +32,7 @@ func MessageIdentity(raw string) string {
 	if trimmed == "" {
 		return ""
 	}
+
 	if strings.HasPrefix(trimmed, MessageIdentityPrefix) {
 		return trimmed
 	}

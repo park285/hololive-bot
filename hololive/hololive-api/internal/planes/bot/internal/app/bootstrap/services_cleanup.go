@@ -11,9 +11,11 @@ type irisCleanupCloser interface {
 
 func composeBotInfrastructureCleanup(infraCleanup func(), irisClient any, logger *slog.Logger) func() {
 	var once sync.Once
+
 	return func() {
 		once.Do(func() {
 			closeIrisClientForCleanup(irisClient, logger)
+
 			if infraCleanup != nil {
 				infraCleanup()
 			}

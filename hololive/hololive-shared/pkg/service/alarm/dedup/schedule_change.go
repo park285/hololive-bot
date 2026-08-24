@@ -42,29 +42,58 @@ func (c *ScheduleChange) PreviousScheduledString() string {
 	if c == nil || c.PreviousScheduled.IsZero() {
 		return ""
 	}
+
 	return keys.FormatScheduled(c.PreviousScheduled)
 }
 
 func (s *Service) DetectScheduleChange(ctx context.Context, streamID string, currentScheduled time.Time) (string, error) {
-	change, err := s.detectStreamScheduleChange(ctx, streamID, currentScheduled)
-	if err != nil || change == nil {
-		return "", err
+	change, ok, err := s.detectStreamScheduleChange(ctx, streamID, currentScheduled)
+	if err != nil {
+		return "", fmt.Errorf("detect schedule change: %w", err)
 	}
+
+	if !ok {
+		return "", nil
+	}
+
 	return change.Message, nil
 }
 
 func (s *Service) DetectNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (*ScheduleChange, error) {
+	change, ok, err := s.detectNotificationScheduleChange(ctx, roomID, channelID, stream)
+	if err != nil {
+		return nil, fmt.Errorf("detect notification schedule change: %w", err)
+	}
+
+	var detected *ScheduleChange
+
+	if ok {
+		detected = &change
+	}
+
+	return detected, nil
+}
+
+func (s *Service) detectNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (ScheduleChange, bool, error) {
 	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
-		return nil, nil
+		return ScheduleChange{}, false, nil
 	}
 
-	if change, err := s.detectStreamScheduleChange(ctx, stream.ID, *stream.StartScheduled); err != nil {
-		return nil, err
-	} else if change != nil {
-		return change, nil
+	change, ok, err := s.detectStreamScheduleChange(ctx, stream.ID, *stream.StartScheduled)
+	if err != nil {
+		return ScheduleChange{}, false, fmt.Errorf("detect stream schedule change: %w", err)
 	}
 
-	return s.detectLogicalScheduleChange(ctx, roomID, channelID, stream)
+	if ok {
+		return change, true, nil
+	}
+
+	logical, logicalOK, err := s.detectLogicalScheduleChange(ctx, roomID, channelID, stream)
+	if err != nil {
+		return ScheduleChange{}, false, fmt.Errorf("detect logical schedule change: %w", err)
+	}
+
+	return logical, logicalOK, nil
 }
 
 func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream, previousScheduled string) (result0 []string, ok1 bool, err error) {
@@ -74,8 +103,9 @@ func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID
 
 	oldScheduled, ok, err := s.resolvePreviousNotificationSchedule(ctx, roomID, channelID, stream, previousScheduled)
 	if err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("resolve previous notification schedule: %w", err)
 	}
+
 	if !ok {
 		return nil, false, nil
 	}
@@ -85,7 +115,12 @@ func (s *Service) TryClaimNotificationScheduleChange(ctx context.Context, roomID
 		return nil, false, nil
 	}
 
-	return s.tryClaimNotificationScheduleTransitions(ctx, roomID, channelID, stream, oldScheduled, newScheduled)
+	out1, out2, err := s.tryClaimNotificationScheduleTransitions(ctx, roomID, channelID, stream, oldScheduled, newScheduled)
+	if err != nil {
+		return out1, out2, fmt.Errorf("try claim notification schedule transitions: %w", err)
+	}
+
+	return out1, out2, nil
 }
 
 func (s *Service) resolvePreviousNotificationSchedule(ctx context.Context, roomID, channelID string, stream *domain.Stream, previousScheduled string) (time.Time, bool, error) {
@@ -93,11 +128,12 @@ func (s *Service) resolvePreviousNotificationSchedule(ctx context.Context, roomI
 		return oldScheduled, true, nil
 	}
 
-	change, err := s.DetectNotificationScheduleChange(ctx, roomID, channelID, stream)
+	change, ok, err := s.detectNotificationScheduleChange(ctx, roomID, channelID, stream)
 	if err != nil {
-		return time.Time{}, false, err
+		return time.Time{}, false, fmt.Errorf("detect notification schedule change: %w", err)
 	}
-	if change == nil {
+
+	if !ok {
 		return time.Time{}, false, nil
 	}
 
@@ -106,22 +142,27 @@ func (s *Service) resolvePreviousNotificationSchedule(ctx context.Context, roomI
 
 func (s *Service) tryClaimNotificationScheduleTransitions(ctx context.Context, roomID, channelID string, stream *domain.Stream, oldScheduled, newScheduled time.Time) (result0 []string, ok1 bool, err error) {
 	claimKeys := make([]string, 0, 2)
+
 	streamKey, streamClaimed, err := s.TryClaimRoomScheduleTransition(ctx, roomID, stream.ID, oldScheduled, newScheduled)
 	if err != nil {
 		return claimKeys, false, fmt.Errorf("try claim notification schedule change: stream transition: %w", err)
 	}
+
 	if !streamClaimed {
 		return claimKeys, false, nil
 	}
+
 	claimKeys = append(claimKeys, streamKey)
 
 	logicalKey, logicalClaimed, err := s.TryClaimLogicalScheduleTransition(ctx, roomID, channelID, stream, oldScheduled, newScheduled)
 	if err != nil {
 		return claimKeys, false, fmt.Errorf("try claim notification schedule change: logical transition: %w", err)
 	}
+
 	if !logicalClaimed {
 		return claimKeys, false, nil
 	}
+
 	claimKeys = append(claimKeys, logicalKey)
 
 	return claimKeys, true, nil
@@ -142,71 +183,76 @@ func (s *Service) MarkLogicalScheduleObserved(ctx context.Context, roomID, chann
 		StartScheduled: keys.FormatScheduled(*stream.StartScheduled),
 		NotifiedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
+
 	if err := s.cache.Set(ctx, key, data, constants.CacheTTL.NotificationSent); err != nil {
 		return fmt.Errorf("mark logical schedule observed: set cache key: %w", err)
 	}
+
 	return nil
 }
 
-func (s *Service) detectStreamScheduleChange(ctx context.Context, streamID string, currentScheduled time.Time) (*ScheduleChange, error) {
+func (s *Service) detectStreamScheduleChange(ctx context.Context, streamID string, currentScheduled time.Time) (ScheduleChange, bool, error) {
 	if strings.TrimSpace(streamID) == "" || currentScheduled.IsZero() {
-		return nil, nil
+		return ScheduleChange{}, false, nil
 	}
 
-	data, err := s.readNotifiedData(ctx, keys.NotifiedKey(streamID))
+	data, ok, err := s.readNotifiedData(ctx, keys.NotifiedKey(streamID))
 	if err != nil {
-		return nil, fmt.Errorf("detect stream schedule change: read notified data: %w", err)
-	}
-	if data == nil {
-		return nil, nil
+		return ScheduleChange{}, false, fmt.Errorf("detect stream schedule change: read notified data: %w", err)
 	}
 
-	return newScheduleChange(data.StartScheduled, currentScheduled), nil
+	if !ok {
+		return ScheduleChange{}, false, nil
+	}
+
+	change, changed := newScheduleChange(data.StartScheduled, currentScheduled)
+
+	return change, changed, nil
 }
 
-func (s *Service) detectLogicalScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (*ScheduleChange, error) {
+func (s *Service) detectLogicalScheduleChange(ctx context.Context, roomID, channelID string, stream *domain.Stream) (ScheduleChange, bool, error) {
 	if stream == nil || stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
-		return nil, nil
+		return ScheduleChange{}, false, nil
 	}
 
 	if strings.TrimSpace(roomID) == "" || strings.TrimSpace(channelID) == "" {
-		return nil, nil
+		return ScheduleChange{}, false, nil
 	}
 
 	indexKey := keys.BuildLogicalScheduleIndexKey(roomID, channelID, stream.ID, stream.Title)
 
 	var data LogicalScheduleNotifiedData
+
 	if err := s.cache.Get(ctx, indexKey, &data); err != nil {
-		return nil, fmt.Errorf("detect logical schedule change: get schedule index: %w", err)
-	}
-	if change := newScheduleChange(data.StartScheduled, *stream.StartScheduled); change != nil {
-		return change, nil
+		return ScheduleChange{}, false, fmt.Errorf("detect logical schedule change: get schedule index: %w", err)
 	}
 
-	return nil, nil
+	change, ok := newScheduleChange(data.StartScheduled, *stream.StartScheduled)
+
+	return change, ok, nil
 }
 
-func newScheduleChange(previousScheduled string, currentScheduled time.Time) *ScheduleChange {
+func newScheduleChange(previousScheduled string, currentScheduled time.Time) (ScheduleChange, bool) {
 	oldScheduled, ok := parseScheduledString(previousScheduled)
 	if !ok || currentScheduled.IsZero() {
-		return nil
+		return ScheduleChange{}, false
 	}
 
 	newScheduled := keys.NormalizeScheduledMinute(currentScheduled.UTC())
 	if oldScheduled.Equal(newScheduled) {
-		return nil
+		return ScheduleChange{}, false
 	}
 
 	message := sharedchecker.FormatScheduleChangeMessage(oldScheduled, newScheduled)
 	if message == "" {
-		return nil
+		return ScheduleChange{}, false
 	}
 
-	return &ScheduleChange{
+	return ScheduleChange{
 		PreviousScheduled: oldScheduled,
 		CurrentScheduled:  newScheduled,
 		Message:           message,
-	}
+	}, true
 }
 
 func parseScheduledString(raw string) (time.Time, bool) {

@@ -35,12 +35,14 @@ func lessFilteredCandidate(left, right *model.FilteredCandidate) bool {
 
 	leftSource := sourceTierPriority[left.SourceTier]
 	rightSource := sourceTierPriority[right.SourceTier]
+
 	if leftSource != rightSource {
 		return leftSource < rightSource
 	}
 
 	leftCategory := categoryPriority[left.Category]
 	rightCategory := categoryPriority[right.Category]
+
 	if leftCategory != rightCategory {
 		return leftCategory < rightCategory
 	}

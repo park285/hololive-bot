@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -27,12 +28,19 @@ type lockedLogBuffer struct {
 func (b *lockedLogBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+
+	out, err := b.buf.Write(p)
+	if err != nil {
+		return out, fmt.Errorf("write: %w", err)
+	}
+
+	return out, nil
 }
 
 func (b *lockedLogBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return append([]byte(nil), b.buf.Bytes()...)
 }
 
@@ -45,23 +53,28 @@ func findRecord(buffer *lockedLogBuffer, message string) (capturedLogRecord, boo
 	if buffer == nil {
 		return capturedLogRecord{}, false
 	}
+
 	for line := range bytes.SplitSeq(bytes.TrimSpace(buffer.Bytes()), []byte{'\n'}) {
 		if len(line) == 0 {
 			continue
 		}
+
 		record, ok := decodeCapturedLogRecord(line)
 		if ok && record.message == message {
 			return record, true
 		}
 	}
+
 	return capturedLogRecord{}, false
 }
 
 func decodeCapturedLogRecord(line []byte) (capturedLogRecord, bool) {
 	var fields map[string]any
+
 	if err := jsonv2.Unmarshal(line, &fields); err != nil {
 		return capturedLogRecord{}, false
 	}
+
 	record := capturedLogRecord{attrs: make(map[string]any, len(fields))}
 	for key, value := range fields {
 		switch key {
@@ -70,12 +83,14 @@ func decodeCapturedLogRecord(line []byte) (capturedLogRecord, bool) {
 			if !ok {
 				return capturedLogRecord{}, false
 			}
+
 			record.level = level
 		case slog.MessageKey:
 			message, ok := value.(string)
 			if !ok {
 				return capturedLogRecord{}, false
 			}
+
 			record.message = message
 		case slog.TimeKey:
 			continue
@@ -83,6 +98,7 @@ func decodeCapturedLogRecord(line []byte) (capturedLogRecord, bool) {
 			record.attrs[key] = value
 		}
 	}
+
 	return record, true
 }
 
@@ -91,7 +107,7 @@ func TestScheduler_InjectedLogger_LifecycleLogs(t *testing.T) {
 	logger, records := newCaptureLogger()
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0, Logger: logger})
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	scheduler.Start(ctx)
 	cancel()
 	scheduler.Stop()
@@ -111,7 +127,7 @@ func TestScheduler_NilLogger_FallsBackToDefault(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	require.NotNil(t, scheduler.logger)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	scheduler.Start(ctx)
 	cancel()
 	scheduler.Stop()

@@ -3,6 +3,7 @@ package holo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -18,11 +19,17 @@ import (
 type holoRoundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f holoRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 type holoCloseErrorBody struct {
 	io.Reader
+
 	err error
 }
 
@@ -36,14 +43,17 @@ func TestProxyPreservesTransportCancellationCause(t *testing.T) {
 		})},
 	}
 
-	_, err := client.Proxy(context.Background(), http.MethodGet, "/status", nil, nil)
+	_, err := client.Proxy(t.Context(), http.MethodGet, "/status", nil, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Proxy() error = %v, want context.Canceled cause", err)
 	}
+
 	var appErr *httpx.AppError
+
 	if !errors.As(err, &appErr) || appErr.Status != http.StatusBadGateway {
 		t.Fatalf("Proxy() error = %v (%T), want 502 AppError", err, err)
 	}
+
 	if appErr.Body.Error != "Service unavailable" {
 		t.Fatalf("Proxy() response error = %q, want existing bad-gateway contract", appErr.Body.Error)
 	}
@@ -61,11 +71,13 @@ func TestProxyRejectsOversizedResponseAndPreservesCause(t *testing.T) {
 		})},
 	}
 
-	_, err := client.Proxy(context.Background(), http.MethodGet, "/status", nil, nil)
+	_, err := client.Proxy(t.Context(), http.MethodGet, "/status", nil, nil)
 	if !errors.Is(err, httpbody.ErrTooLarge) {
 		t.Fatalf("Proxy() error = %v, want httpbody.ErrTooLarge cause", err)
 	}
+
 	var appErr *httpx.AppError
+
 	if !errors.As(err, &appErr) || appErr.Status != http.StatusBadGateway {
 		t.Fatalf("Proxy() error = %v (%T), want 502 AppError", err, err)
 	}
@@ -84,7 +96,7 @@ func TestProxyPreservesResponseCloseFailure(t *testing.T) {
 		})},
 	}
 
-	_, err := client.Proxy(context.Background(), http.MethodGet, "/status", nil, nil)
+	_, err := client.Proxy(t.Context(), http.MethodGet, "/status", nil, nil)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Proxy() error = %v, want close failure cause", err)
 	}
@@ -92,12 +104,15 @@ func TestProxyPreservesResponseCloseFailure(t *testing.T) {
 
 func TestProxyDrains5xxBodyForKeepAliveReuse(t *testing.T) {
 	var newConnections atomic.Int32
+
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
+
 		if _, err := io.WriteString(w, "temporary upstream failure"); err != nil {
 			t.Errorf("write upstream failure response: %v", err)
 		}
 	}))
+
 	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
 		if state == http.StateNew {
 			newConnections.Add(1)
@@ -110,14 +125,19 @@ func TestProxyDrains5xxBodyForKeepAliveReuse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
+
 	for range 2 {
-		_, proxyErr := client.Proxy(context.Background(), http.MethodGet, "/status", nil, nil)
+		_, proxyErr := client.Proxy(t.Context(), http.MethodGet, "/status", nil, nil)
+
 		var appErr *httpx.AppError
+
 		if !errors.As(proxyErr, &appErr) || appErr.Status != http.StatusBadGateway {
 			t.Fatalf("Proxy() error = %v, want 502", proxyErr)
 		}
 	}
+
 	client.http.CloseIdleConnections()
+
 	if got := newConnections.Load(); got != 1 {
 		t.Fatalf("new connections = %d, want 1 after draining sequential 5xx responses", got)
 	}
@@ -129,5 +149,6 @@ func (infiniteByteReader) Read(p []byte) (int, error) {
 	for i := range p {
 		p[i] = 'x'
 	}
+
 	return len(p), nil
 }

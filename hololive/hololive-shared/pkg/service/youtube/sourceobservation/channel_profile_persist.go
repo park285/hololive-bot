@@ -24,26 +24,35 @@ func loadProfileState(ctx context.Context, tx dbx.Tx, channelID string) (profile
 		&state.Head.Country.EmptyLastAt, &state.Head.Country.EmptyFirstRx,
 		&state.Head.JoinedDate.Set, &state.Head.JoinedDate.Value, &state.Head.JoinedDate.EffectiveAt,
 	)
+
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return profile.State{}, fmt.Errorf("load channel profile head: %w", err)
 	}
+
 	return state, nil
 }
 
 func persistProfileDecision(ctx context.Context, tx dbx.Tx, observation *Observation, decision *profile.Decision) error {
 	if err := persistProfileEvidence(ctx, tx, observation, decision); err != nil {
-		return err
+		return fmt.Errorf("persist profile evidence: %w", err)
 	}
+
 	if err := persistProfileHead(ctx, tx, decision); err != nil {
-		return err
+		return fmt.Errorf("persist profile head: %w", err)
 	}
-	return persistProfileConflicts(ctx, tx, observation, decision)
+
+	if err := persistProfileConflicts(ctx, tx, observation, decision); err != nil {
+		return fmt.Errorf("persist profile conflicts: %w", err)
+	}
+
+	return nil
 }
 
 func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation *Observation, decision *profile.Decision) error {
 	if decision.Sample == nil {
 		return nil
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_profile_evidence_upsert_0069_69.sql"),
@@ -65,6 +74,7 @@ func persistProfileEvidence(ctx context.Context, tx dbx.Tx, observation *Observa
 	); err != nil {
 		return fmt.Errorf("upsert channel profile evidence: %w", err)
 	}
+
 	return nil
 }
 
@@ -72,6 +82,7 @@ func persistProfileHead(ctx context.Context, tx dbx.Tx, decision *profile.Decisi
 	if !decision.WriteHead {
 		return nil
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_profile_head_upsert_0071_71.sql"),
@@ -87,6 +98,7 @@ func persistProfileHead(ctx context.Context, tx dbx.Tx, decision *profile.Decisi
 	); err != nil {
 		return fmt.Errorf("upsert channel profile head: %w", err)
 	}
+
 	return nil
 }
 
@@ -97,5 +109,6 @@ func persistProfileConflicts(ctx context.Context, tx dbx.Tx, observation *Observ
 			return fmt.Errorf("insert channel profile reconciliation conflict: %w", err)
 		}
 	}
+
 	return nil
 }

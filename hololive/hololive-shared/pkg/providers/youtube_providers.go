@@ -24,10 +24,8 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
 	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
 	pollscheduler "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
@@ -42,7 +40,7 @@ func schedulerLogger(logger *slog.Logger) *slog.Logger {
 	return slog.Default()
 }
 
-// ProvideScraperService - 스크래퍼 서비스 생성
+// ProvideScraperService - 스크래퍼 서비스 생성.
 func ProvideScraperService(
 	cacheClient cache.Client,
 	members domain.MemberDataProvider,
@@ -113,13 +111,16 @@ func ProvideScraperScheduler(
 	resolvedOpts := resolveScraperSchedulerOptions(opts...)
 	scheduler := newScraperScheduler(&resolvedOpts, log)
 	channelPollerRegistrations := resolvedOpts.channelPollerRegistrations
+
 	if len(channelPollerRegistrations) == 0 {
 		log.Warn("Scraper scheduler initialized without poller registrations")
+
 		return scheduler
 	}
 
 	allExplicit := allRegistrationsExplicit(channelPollerRegistrations)
 	defaultChannelIDs, defaultTargetChannels := resolveDefaultScraperSchedulerChannels(membersData, log, &resolvedOpts, allExplicit)
+
 	if hasExplicitAndImplicitRegistrations(channelPollerRegistrations) {
 		log.Warn("scraper scheduler has mixed explicit and default-backed registrations",
 			slog.Int("poller_templates", len(channelPollerRegistrations)),
@@ -161,27 +162,36 @@ func newScraperScheduler(opts *scraperSchedulerOptions, logger *slog.Logger) *po
 	if opts == nil {
 		opts = &scraperSchedulerOptions{}
 	}
+
 	schedulerConfig := pollscheduler.DefaultSchedulerConfig()
+
 	schedulerConfig.RequestInterval = 0
 	schedulerConfig.Logger = logger
+
 	if opts.workerCount > 0 {
 		schedulerConfig.WorkerCount = opts.workerCount
 	}
+
 	if opts.pollTimeout > 0 {
 		schedulerConfig.PollTimeout = opts.pollTimeout
 	}
+
 	if opts.errorBackoffMin > 0 {
 		schedulerConfig.ErrorBackoffMin = opts.errorBackoffMin
 	}
+
 	if opts.errorBackoffMax > 0 {
 		schedulerConfig.ErrorBackoffMax = opts.errorBackoffMax
 	}
+
 	schedulerConfig.JobClaimer = opts.jobClaimer
 	schedulerConfig.BudgetLimiter = opts.budgetLimiter
 	schedulerConfig.BudgetContext = opts.budgetContext
+
 	if opts.budgetAcquireTimeout > 0 {
 		schedulerConfig.BudgetAcquireTimeout = opts.budgetAcquireTimeout
 	}
+
 	return pollscheduler.NewScheduler(&schedulerConfig)
 }
 
@@ -194,24 +204,30 @@ func resolveDefaultScraperSchedulerChannels(
 	if opts == nil {
 		opts = &scraperSchedulerOptions{}
 	}
+
 	defaultChannelIDs := uniqueChannelIDs(opts.channelIDs)
 	defaultTargetChannels := len(defaultChannelIDs)
+
 	if allExplicit || len(defaultChannelIDs) > 0 {
 		return defaultChannelIDs, defaultTargetChannels
 	}
 
 	if membersData == nil {
 		logger.Warn("Scraper scheduler initialized without members data")
+
 		return defaultChannelIDs, defaultTargetChannels
 	}
 
 	members := membersData.GetAllMembers()
+
 	defaultTargetChannels = len(members)
 	defaultChannelIDs = make([]string, 0, len(members))
+
 	for _, member := range members {
 		if member == nil || member.IsGraduated {
 			continue
 		}
+
 		defaultChannelIDs = append(defaultChannelIDs, member.ChannelID)
 	}
 
@@ -226,8 +242,11 @@ func registerScraperSchedulerPollers(
 	distinctTargets map[string]struct{},
 ) (result0 int, result1, result2 float64) {
 	totalJobs := 0
-	var totalRPM float64
-	var totalRetryAmplifiedRPM float64
+
+	var (
+		totalRPM               float64
+		totalRetryAmplifiedRPM float64
+	)
 
 	for i := range registrations {
 		registration := &registrations[i]
@@ -236,14 +255,17 @@ func registerScraperSchedulerPollers(
 		}
 
 		targetChannelIDs := defaultChannelIDs
+
 		if registration.HasExplicitChannelIDs {
 			targetChannelIDs = uniqueChannelIDs(registration.ChannelIDs)
 		}
+
 		if len(targetChannelIDs) == 0 {
 			continue
 		}
 
 		registeredTargets := 0
+
 		for _, channelID := range targetChannelIDs {
 			if err := scheduler.RegisterCheckedWithBudgetProfile(channelID, registration.Poller, registration.Priority, registration.Interval, registration.BudgetProfile); err != nil {
 				logger.Warn("Skip invalid scraper poller registration",
@@ -251,6 +273,7 @@ func registerScraperSchedulerPollers(
 					slog.String("poller", registration.Poller.Name()),
 					slog.Any("error", err),
 				)
+
 				continue
 			}
 
@@ -260,6 +283,7 @@ func registerScraperSchedulerPollers(
 
 		pollerRPM := estimatedRegistrationRPM(registration, registeredTargets)
 		pollerRetryAmplifiedRPM := estimatedRegistrationWorstCaseRPM(registration, registeredTargets)
+
 		totalJobs += registeredTargets
 		totalRPM += pollerRPM
 		totalRetryAmplifiedRPM += pollerRetryAmplifiedRPM
@@ -282,10 +306,12 @@ func allRegistrationsExplicit(registrations []ChannelPollerRegistration) bool {
 		if registration.Poller == nil || registration.Interval <= 0 {
 			continue
 		}
+
 		if !registration.HasExplicitChannelIDs {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -293,17 +319,21 @@ func hasExplicitAndImplicitRegistrations(registrations []ChannelPollerRegistrati
 	const explicitAndImplicitRegistrations = 3
 
 	observedRegistrations := 0
+
 	for i := range registrations {
 		registration := &registrations[i]
 		registrationMode := explicitImplicitRegistrationMode(registration)
+
 		if registrationMode == 0 {
 			continue
 		}
+
 		observedRegistrations |= registrationMode
 		if observedRegistrations == explicitAndImplicitRegistrations {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -311,11 +341,14 @@ func explicitImplicitRegistrationMode(registration *ChannelPollerRegistration) i
 	if registration == nil {
 		return 0
 	}
+
 	if registration.Poller == nil || registration.Interval <= 0 {
 		return 0
 	}
+
 	if registration.HasExplicitChannelIDs {
 		return 1
 	}
+
 	return 2
 }

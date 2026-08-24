@@ -2,11 +2,13 @@ package dispatchrun
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/park285/iris-client-go/v2/iris"
 )
 
 type YouTubeOutboxKaringInnerSender interface {
@@ -26,32 +28,48 @@ func NewYouTubeOutboxKaringSender(sender YouTubeOutboxKaringInnerSender, message
 
 func (s YouTubeOutboxKaringSender) requireSender() error {
 	if s.sender == nil {
-		return fmt.Errorf("youtube outbox karing sender: sender is nil")
+		return errors.New("youtube outbox karing sender: sender is nil")
 	}
+
 	return nil
 }
 
 func (s YouTubeOutboxKaringSender) SendMessage(ctx context.Context, roomID, message string) error {
 	if err := s.requireSender(); err != nil {
+		//nolint:wrapcheck // requireSender가 이미 패키지 이름을 붙인 완결된 오류를 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
-	return s.sender.SendMessage(ctx, roomID, message)
+
+	if err := s.sender.SendMessage(ctx, roomID, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (s YouTubeOutboxKaringSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
 	if err := s.requireSender(); err != nil {
+		//nolint:wrapcheck // requireSender가 이미 패키지 이름을 붙인 완결된 오류를 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
-	return s.sender.SendMessageWithClientRequestID(ctx, roomID, message, clientRequestID)
+
+	if err := s.sender.SendMessageWithClientRequestID(ctx, roomID, message, clientRequestID); err != nil {
+		return fmt.Errorf("send message with client request ID: %w", err)
+	}
+
+	return nil
 }
 
 func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error {
 	if err := s.requireSender(); err != nil {
+		//nolint:wrapcheck // requireSender가 이미 패키지 이름을 붙인 완결된 오류를 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
+
 	if payload == nil {
-		return fmt.Errorf("youtube outbox karing sender: payload is nil")
+		return errors.New("youtube outbox karing sender: payload is nil")
 	}
+
 	envelope := domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			RoomID:    roomID,
@@ -61,6 +79,7 @@ func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, 
 		YouTubeOutbox: payload,
 		Version:       1,
 	}
+
 	requests, err := buildAlarmDispatchKaringContentListRequests(ctx, s.messageStrings, alarmDispatchGroup{
 		roomID:    roomID,
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
@@ -68,10 +87,12 @@ func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, 
 	if err != nil {
 		return fmt.Errorf("build youtube outbox karing request: %w", err)
 	}
+
 	for i := range requests {
 		if err := s.sender.SendKaringContentList(ctx, roomID, &requests[i]); err != nil {
 			return fmt.Errorf("send youtube outbox karing request %d: %w", i, err)
 		}
 	}
+
 	return nil
 }

@@ -204,6 +204,7 @@ func monthlyPromptSnapshot() promptSnapshot {
 func assertPromptCriticalSections(t *testing.T, prompt string, snapshot promptSnapshot) {
 	t.Helper()
 	assertPromptContainsOrderedSnippets(t, prompt, snapshot.orderedSnippets)
+
 	for _, section := range snapshot.sections {
 		block := extractPromptSection(t, prompt, section.name, section.startTag, section.endTag)
 		for _, snippet := range section.snippets {
@@ -214,26 +215,33 @@ func assertPromptCriticalSections(t *testing.T, prompt string, snapshot promptSn
 
 func assertPromptContainsOrderedSnippets(t *testing.T, prompt string, snippets []string) {
 	t.Helper()
+
 	searchFrom := 0
+
 	for _, snippet := range snippets {
 		idx := strings.Index(prompt[searchFrom:], snippet)
 		if idx == -1 {
 			t.Fatalf("prompt missing ordered snippet %q", snippet)
 		}
+
 		searchFrom += idx + len(snippet)
 	}
 }
 
 func extractPromptSection(t *testing.T, prompt, name, startTag, endTag string) string {
 	t.Helper()
+
 	start := strings.Index(prompt, startTag)
 	if start == -1 {
 		t.Fatalf("prompt missing %s start tag %q", name, startTag)
 	}
+
 	end := strings.Index(prompt[start:], endTag)
 	if end == -1 {
 		t.Fatalf("prompt missing %s end tag %q", name, endTag)
 	}
+
 	end += start + len(endTag)
+
 	return prompt[start:end]
 }

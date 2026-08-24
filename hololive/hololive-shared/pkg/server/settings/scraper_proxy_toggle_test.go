@@ -18,6 +18,7 @@ type scraperProxyTestYouTubeService struct {
 func (s *scraperProxyTestYouTubeService) SetScraperProxyEnabled(enabled bool) bool {
 	s.proxyEnabled = enabled
 	s.setCalls++
+
 	return true
 }
 
@@ -39,6 +40,7 @@ func (p *scraperProxyTogglePoller) Name() string { return "scraper-proxy-toggle"
 func (p *scraperProxyTogglePoller) Poll(context.Context, string) error {
 	return nil
 }
+
 func (p *scraperProxyTogglePoller) SetProxyEnabled(enabled bool) bool {
 	p.enabled = enabled
 	return true
@@ -49,6 +51,8 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 	t.Parallel()
 
 	t.Run("applies to youtube service and scheduler", func(t *testing.T) {
+		t.Parallel()
+
 		youtubeService := &scraperProxyTestYouTubeService{}
 		pollScheduler := scheduler.NewScheduler(&scheduler.SchedulerConfig{
 			WorkerCount:     1,
@@ -58,9 +62,11 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 		pollScheduler.Register("channel-1", trackingPoller, scheduler.PriorityNormal, time.Minute)
 
 		ApplyScraperProxyToggle(true, youtubeService, nil, pollScheduler, slog.New(slog.DiscardHandler))
+
 		if youtubeService.setCalls != 1 {
 			t.Fatalf("SetScraperProxyEnabled calls = %d, want 1", youtubeService.setCalls)
 		}
+
 		if !youtubeService.ScraperProxyEnabled() {
 			t.Fatal("youtube proxy not enabled")
 		}
@@ -69,27 +75,34 @@ func TestApplyScraperProxyToggle(t *testing.T) {
 		if !known {
 			t.Fatal("scheduler proxy state unknown, want known")
 		}
+
 		if !enabled {
 			t.Fatal("scheduler proxy not enabled")
 		}
 
 		ApplyScraperProxyToggle(false, youtubeService, nil, pollScheduler, slog.New(slog.DiscardHandler))
+
 		if youtubeService.setCalls != 2 {
 			t.Fatalf("SetScraperProxyEnabled calls = %d, want 2", youtubeService.setCalls)
 		}
+
 		if youtubeService.ScraperProxyEnabled() {
 			t.Fatal("youtube proxy still enabled")
 		}
+
 		enabled, known = pollScheduler.ProxyEnabled()
 		if !known {
 			t.Fatal("scheduler proxy state unknown after disable")
 		}
+
 		if enabled {
 			t.Fatal("scheduler proxy still enabled")
 		}
 	})
 
 	t.Run("nil dependencies do not panic", func(t *testing.T) {
+		t.Parallel()
+
 		ApplyScraperProxyToggle(true, nil, nil, nil, slog.New(slog.DiscardHandler))
 	})
 }

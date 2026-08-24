@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"slices"
 	"testing"
+
+	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 )
 
 func TestBroadcastRuleOrderPinned(t *testing.T) {
@@ -11,18 +12,22 @@ func TestBroadcastRuleOrderPinned(t *testing.T) {
 
 	wantStrong := []broadcasttype.Type{broadcasttype.Membership, broadcasttype.Watchalong, broadcasttype.Singing, broadcasttype.News, broadcasttype.ASMR, broadcasttype.HorseRacing, broadcasttype.Event, broadcasttype.Event, broadcasttype.News}
 	gotStrong := make([]broadcasttype.Type, 0, len(broadcastRules.TitleRules))
+
 	for _, rule := range broadcastRules.TitleRules {
 		gotStrong = append(gotStrong, rule.Type)
 	}
+
 	if !slices.Equal(gotStrong, wantStrong) {
 		t.Fatalf("title_rules order = %v, want %v", gotStrong, wantStrong)
 	}
 
 	wantGeneric := []broadcasttype.Type{broadcasttype.Game, broadcasttype.Event, broadcasttype.Singing, broadcasttype.Talk, broadcasttype.Other, broadcasttype.News}
 	gotGeneric := make([]broadcasttype.Type, 0, len(broadcastRules.Generic))
+
 	for _, rule := range broadcastRules.Generic {
 		gotGeneric = append(gotGeneric, rule.Type)
 	}
+
 	if !slices.Equal(gotGeneric, wantGeneric) {
 		t.Fatalf("generic_title_rules order = %v, want %v", gotGeneric, wantGeneric)
 	}
@@ -61,14 +66,30 @@ func TestClassifyBroadcastObservedTopics(t *testing.T) {
 	}
 }
 
-func TestClassifyBroadcastTitleFallback(t *testing.T) {
+type broadcastTitleFallbackCase struct {
+	name  string
+	title string
+	want  broadcasttype.Type
+}
+
+func runBroadcastTitleFallbackCases(t *testing.T, cases []broadcastTitleFallbackCase) {
+	t.Helper()
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ClassifyBroadcast("", tt.title); got != tt.want {
+				t.Fatalf("ClassifyBroadcast(%q) = %q, want %q", tt.title, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyBroadcastTitleFallbackPriorities(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name  string
-		title string
-		want  broadcasttype.Type
-	}{
+	runBroadcastTitleFallbackCases(t, []broadcastTitleFallbackCase{
 		{name: "membership has access priority", title: "【Members Only】 yuru camp △ s1 ep.7-12 ゆるキャン", want: broadcasttype.Membership},
 		{name: "watchalong beats asmr", title: "【同時視聴】脳がとろける♡「ゼットンの甘々ASMR」みんなで観よ♩", want: broadcasttype.Watchalong},
 		{name: "3d karaoke is singing", title: "【 3Dカラオケ】お子様バッテリー1周年記念にカラオケき~たよ", want: broadcasttype.Singing},
@@ -93,6 +114,13 @@ func TestClassifyBroadcastTitleFallback(t *testing.T) {
 		{name: "full width street fighter tag is game", title: "【スト６】ランクマ潜る", want: broadcasttype.Game},
 		{name: "bare prediction wording is not horse racing", title: "【クイズ】全問的中させたい", want: broadcasttype.Unknown},
 		{name: "bare g1 wording is not horse racing", title: "【G1】ランク到達するまで終われない", want: broadcasttype.Unknown},
+	})
+}
+
+func TestClassifyBroadcastTitleFallbackGameMarkers(t *testing.T) {
+	t.Parallel()
+
+	runBroadcastTitleFallbackCases(t, []broadcastTitleFallbackCase{
 		{name: "nte substring in content does not overmatch", title: "NEXT CONTENT PLANNING", want: broadcasttype.Unknown},
 		{name: "nte substring in interviewed does not overmatch", title: "We interviewed the director of [Project Hail Mary]! Includes a discussion with Marin", want: broadcasttype.Unknown},
 		{name: "nte exact title tag is game", title: "【NTE】Neverness to Evernessを遊ぶ", want: broadcasttype.Game},
@@ -125,6 +153,13 @@ func TestClassifyBroadcastTitleFallback(t *testing.T) {
 		{name: "gta with digit keeps game keyword", title: "【GTA5│NEW TOWN】Day2 街ブラ散歩", want: broadcasttype.Game},
 		{name: "ascii keyword adjacent to kana matches", title: "【PUBGモバイル】PUBGモバイルに余が参戦・・・！？", want: broadcasttype.Game},
 		{name: "ascii keyword after kana matches", title: "おひさしR.E.P.O", want: broadcasttype.Game},
+	})
+}
+
+func TestClassifyBroadcastTitleFallbackFormatKeywords(t *testing.T) {
+	t.Parallel()
+
+	runBroadcastTitleFallbackCases(t, []broadcastTitleFallbackCase{
 		{name: "zatsudan suffix matches talk", title: "【zatsudan】good morning, おはよ", want: broadcasttype.Talk},
 		{name: "hollow bracket lead tag matches exact game tag", title: "〖 OW 〗低気圧なのでチル。の巻", want: broadcasttype.Game},
 		{name: "corner bracket watch party is watchalong", title: "◤ #VSPO_SHOWDOWN　ウォチパ ◢　Day1 LOL 先輩たちと見ます！", want: broadcasttype.Watchalong},
@@ -147,17 +182,7 @@ func TestClassifyBroadcastTitleFallback(t *testing.T) {
 		{name: "participation zatsudan stays talk", title: "【参加型雑談】みんなでお話", want: broadcasttype.Talk},
 		{name: "birthday radio episode stays talk", title: "『 #誕生日にもらってスゴかったもの  💕』 アキちょこナイトパレット第26回 ～ホロライブ深夜ラジオ～", want: broadcasttype.Talk},
 		{name: "news show about asmr unlock stays news", title: "【昇天】ダニィ！？ヴィヴィさんがASMR解禁だと！？【昼ホロ/井月みちる】", want: broadcasttype.News},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := ClassifyBroadcast("", tt.title); got != tt.want {
-				t.Fatalf("ClassifyBroadcast(%q) = %q, want %q", tt.title, got, tt.want)
-			}
-		})
-	}
+	})
 }
 
 func TestClassifyBroadcastSource(t *testing.T) {
@@ -170,19 +195,19 @@ func TestClassifyBroadcastSource(t *testing.T) {
 		wantType   broadcasttype.Type
 		wantSource string
 	}{
-		{name: "topic source", topic: "singing", title: "【雑談】", wantType: broadcasttype.Singing, wantSource: "topic"},
-		{name: "title source", topic: "endurance", title: "【雑談】", wantType: broadcasttype.Talk, wantSource: "title"},
-		{name: "membership title overrides game topic", topic: "minecraft", title: "【Members Only】 yuru camp △ s1 ep.7-12 ゆるキャン", wantType: broadcasttype.Membership, wantSource: "title"},
-		{name: "watchalong title overrides game topic", topic: "forza", title: "【同時視聴】映画をみんなで観よ", wantType: broadcasttype.Watchalong, wantSource: "title"},
-		{name: "horse racing title overrides game topic", topic: "minecraft", title: "【競馬/大阪杯】阪神 芝2000！！！今日こそ勝！！！！！！！！！", wantType: broadcasttype.HorseRacing, wantSource: "title"},
-		{name: "strong event title overrides game topic", topic: "pokemon", title: "【今夜19時】公認ポケモンチャンピオンズ大会!新たな歴史の一ページが生まれる…!?", wantType: broadcasttype.Event, wantSource: "title"},
-		{name: "personal event title overrides game topic despite uma musume", topic: "minecraft", title: "【生誕祭】ウマ娘やる！", wantType: broadcasttype.Event, wantSource: "title"},
-		{name: "game topic keeps priority over talk title", topic: "minecraft", title: "【Minecraft】雑談しながら整地", wantType: broadcasttype.Game, wantSource: "topic"},
-		{name: "game topic keeps priority over generic event title", topic: "minecraft", title: "【Minecraft】ウォーデン100体もたおした!!大会もみた!次はおまえだ", wantType: broadcasttype.Game, wantSource: "topic"},
-		{name: "non-game topic keeps priority over game title", topic: "singing", title: "【Minecraft】歌いながら整地", wantType: broadcasttype.Singing, wantSource: "topic"},
+		{name: "topic source", topic: "singing", title: "【雑談】", wantType: broadcasttype.Singing, wantSource: testTypeSourceTopic},
+		{name: "title source", topic: "endurance", title: "【雑談】", wantType: broadcasttype.Talk, wantSource: testTypeSourceTitle},
+		{name: "membership title overrides game topic", topic: testTopicMinecraft, title: "【Members Only】 yuru camp △ s1 ep.7-12 ゆるキャン", wantType: broadcasttype.Membership, wantSource: testTypeSourceTitle},
+		{name: "watchalong title overrides game topic", topic: "forza", title: "【同時視聴】映画をみんなで観よ", wantType: broadcasttype.Watchalong, wantSource: testTypeSourceTitle},
+		{name: "horse racing title overrides game topic", topic: testTopicMinecraft, title: "【競馬/大阪杯】阪神 芝2000！！！今日こそ勝！！！！！！！！！", wantType: broadcasttype.HorseRacing, wantSource: testTypeSourceTitle},
+		{name: "strong event title overrides game topic", topic: "pokemon", title: "【今夜19時】公認ポケモンチャンピオンズ大会!新たな歴史の一ページが生まれる…!?", wantType: broadcasttype.Event, wantSource: testTypeSourceTitle},
+		{name: "personal event title overrides game topic despite uma musume", topic: testTopicMinecraft, title: "【生誕祭】ウマ娘やる！", wantType: broadcasttype.Event, wantSource: testTypeSourceTitle},
+		{name: "game topic keeps priority over talk title", topic: testTopicMinecraft, title: "【Minecraft】雑談しながら整地", wantType: broadcasttype.Game, wantSource: testTypeSourceTopic},
+		{name: "game topic keeps priority over generic event title", topic: testTopicMinecraft, title: "【Minecraft】ウォーデン100体もたおした!!大会もみた!次はおまえだ", wantType: broadcasttype.Game, wantSource: testTypeSourceTopic},
+		{name: "non-game topic keeps priority over game title", topic: "singing", title: "【Minecraft】歌いながら整地", wantType: broadcasttype.Singing, wantSource: testTypeSourceTopic},
 		{name: "unknown source", topic: "endurance", title: "【緊急ゲリラ】", wantType: broadcasttype.Unknown, wantSource: "unknown"},
-		{name: "instrument title does not override game topic", topic: "minecraft", title: "【マイクラ】ピアノ作ってみた！", wantType: broadcasttype.Game, wantSource: "topic"},
-		{name: "generic news does not override game topic", topic: "valorant", title: "大事な告知があります！ランク行く", wantType: broadcasttype.Game, wantSource: "topic"},
+		{name: "instrument title does not override game topic", topic: testTopicMinecraft, title: "【マイクラ】ピアノ作ってみた！", wantType: broadcasttype.Game, wantSource: testTypeSourceTopic},
+		{name: "generic news does not override game topic", topic: "valorant", title: "大事な告知があります！ランク行く", wantType: broadcasttype.Game, wantSource: testTypeSourceTopic},
 	}
 
 	for _, tt := range tests {

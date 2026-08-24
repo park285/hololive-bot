@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -45,28 +44,28 @@ func TestExtractPublishedAtFromHTML_InvalidCandidate(t *testing.T) {
 	publishedAt, err := ExtractPublishedAtFromHTML(`<meta itemprop="datePublished" content="garbage">`)
 	require.Error(t, err)
 	assert.Nil(t, publishedAt)
-	assert.True(t, errors.Is(err, ErrPublishedAtNotFound))
+	assert.ErrorIs(t, err, ErrPublishedAtNotFound)
 }
 
 func TestExtractPublishedAtFromHTML_MetaWithoutContent(t *testing.T) {
 	publishedAt, err := ExtractPublishedAtFromHTML(`<meta itemprop="datePublished">`)
 	require.Error(t, err)
 	assert.Nil(t, publishedAt)
-	assert.True(t, errors.Is(err, ErrPublishedAtNotFound))
+	assert.ErrorIs(t, err, ErrPublishedAtNotFound)
 }
 
 func TestExtractPublishedAtFromHTML_GarbageInput(t *testing.T) {
 	publishedAt, err := ExtractPublishedAtFromHTML("not html at all <<< >>>")
 	require.Error(t, err)
 	assert.Nil(t, publishedAt)
-	assert.True(t, errors.Is(err, ErrPublishedAtNotFound))
+	assert.ErrorIs(t, err, ErrPublishedAtNotFound)
 }
 
 func TestExtractPublishedAtFromHTML_EmptyInput(t *testing.T) {
 	publishedAt, err := ExtractPublishedAtFromHTML("")
 	require.Error(t, err)
 	assert.Nil(t, publishedAt)
-	assert.True(t, errors.Is(err, ErrPublishedAtNotFound))
+	assert.ErrorIs(t, err, ErrPublishedAtNotFound)
 }
 
 func TestExtractCommunityPublishedAtFromHTML_HappyPath(t *testing.T) {
@@ -81,15 +80,15 @@ func TestExtractCommunityPublishedAtFromHTML_NotFoundMapsToCommunityError(t *tes
 	publishedAt, err := ExtractCommunityPublishedAtFromHTML("<html></html>")
 	require.Error(t, err)
 	assert.Nil(t, publishedAt)
-	assert.True(t, errors.Is(err, ErrCommunityPublishedAtNotFound))
-	assert.False(t, errors.Is(err, ErrPublishedAtNotFound))
+	require.ErrorIs(t, err, ErrCommunityPublishedAtNotFound)
+	assert.NotErrorIs(t, err, ErrPublishedAtNotFound)
 }
 
 func TestExtractCommunityPublishedAtFromHTML_EmptyInput(t *testing.T) {
 	publishedAt, err := ExtractCommunityPublishedAtFromHTML("")
 	require.Error(t, err)
 	assert.Nil(t, publishedAt)
-	assert.True(t, errors.Is(err, ErrCommunityPublishedAtNotFound))
+	assert.ErrorIs(t, err, ErrCommunityPublishedAtNotFound)
 }
 
 func TestNormalizePublishedAtCandidate(t *testing.T) {

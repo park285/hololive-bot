@@ -31,7 +31,6 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
-
 	"github.com/kapu/hololive-shared/pkg/constants"
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -73,9 +72,11 @@ func NewMonthlyScheduler(
 		formatter:        formatter,
 		summarizer:       summarizer,
 	}
+
 	for _, opt := range opts {
 		opt(scheduler)
 	}
+
 	return scheduler
 }
 
@@ -83,6 +84,7 @@ func (s *MonthlyScheduler) SetClock(clockFn func() time.Time) {
 	if s == nil {
 		return
 	}
+
 	s.digest.SetClock(clockFn)
 }
 
@@ -131,7 +133,7 @@ type monthlyCollected struct {
 func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 	monthKey := s.getMonthKey()
 
-	return schedulerkit.RunDigest(ctx, s.digest, schedulerkit.DigestOp[monthlyCollected]{
+	if err := s.digest.RunDigest(ctx, schedulerkit.DigestOp[monthlyCollected]{
 		LockKey:           fmt.Sprintf("majorevent:lock:monthly:%s", monthKey),
 		OnLockNotAcquired: func() error { return triggercontracts.ErrNotificationInProgress },
 		Collect: func(ctx context.Context) (monthlyCollected, bool, error) {
@@ -140,7 +142,11 @@ func (s *MonthlyScheduler) SendMonthlyNotification(ctx context.Context) error {
 		Execute: func(ctx context.Context, c monthlyCollected) error {
 			return s.executeMonthlyNotification(ctx, c, monthKey)
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("run digest: %w", err)
+	}
+
+	return nil
 }
 
 func (s *MonthlyScheduler) monthlyNotificationInputs(
@@ -151,63 +157,74 @@ func (s *MonthlyScheduler) monthlyNotificationInputs(
 	if err != nil {
 		return monthlyCollected{}, false, fmt.Errorf("get subscribed rooms: %w", err)
 	}
+
 	if len(rooms) == 0 {
 		s.digest.Logger.Info("No subscribed rooms, skipping monthly notification")
+
 		return monthlyCollected{}, false, nil
 	}
 
 	nowKST := s.digest.Clock().In(kst)
 	year, month := nowKST.Year(), int(nowKST.Month())
+
 	events, err := s.repository.GetEventsByMonth(ctx, year, month, monthKey)
 	if err != nil {
 		return monthlyCollected{}, false, fmt.Errorf("get events by month: %w", err)
 	}
+
 	events, err = filterPromptEvents(events, s.promptGuard, s.digest.Logger)
 	if err != nil {
 		return monthlyCollected{}, false, fmt.Errorf("guard monthly major events: %w", err)
 	}
+
 	if len(events) == 0 {
 		s.digest.Logger.Info("No events for this month, skipping notification",
 			slog.Int("year", year),
 			slog.Int("month", month))
+
 		return monthlyCollected{}, false, nil
 	}
+
 	return monthlyCollected{rooms: rooms, events: events}, true, nil
 }
 
 func (s *MonthlyScheduler) executeMonthlyNotification(ctx context.Context, c monthlyCollected, monthKey string) error {
 	domainEvents, eventIDs := toDomainEventsAndIDs(c.events)
-	message := s.monthlyNotificationMessage(ctx, domainEvents, monthKey)
-	result := enqueueToRooms(ctx, s.outboxRepository, roomTargets(c.rooms), domain.DeliveryKindMajorEventMonthly, monthKey, message, s.outputGuard, s.digest.Logger)
 
-	s.digest.Logger.Info("Monthly notification enqueue result",
-		slog.Int("attempted", result.Attempted),
-		slog.Int("sent", result.Sent),
-		slog.Int("failed", result.Failed),
-		slog.Int("event_count", len(c.events)))
-
-	shouldMark, err := schedulerkit.ShouldMark(result)
+	shouldMark, err := enqueueNotification(ctx, notificationEnqueue{
+		outboxRepository: s.outboxRepository,
+		outputGuard:      s.outputGuard,
+		logger:           s.digest.Logger,
+		rooms:            c.rooms,
+		kind:             domain.DeliveryKindMajorEventMonthly,
+		periodKey:        monthKey,
+		message:          s.monthlyNotificationMessage(ctx, domainEvents, monthKey),
+		eventCount:       len(c.events),
+		enqueueLogMsg:    "Monthly notification enqueue result",
+		deferLogMsg:      "Partial room enqueue failure, deferring monthly event marking",
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("execute monthly notification: %w", err)
 	}
+
 	if !shouldMark {
-		s.digest.Logger.Warn("Partial room enqueue failure, deferring monthly event marking",
-			slog.Int("sent", result.Sent),
-			slog.Int("failed", result.Failed),
-			slog.Any("failed_rooms", result.FailedRooms))
 		return nil
 	}
+
 	if err := s.repository.MarkEventsAsMonthlyNotified(ctx, eventIDs, monthKey); err != nil {
 		s.digest.Logger.Error("Failed to mark events as monthly notified", slog.String("error", err.Error()))
 	}
+
 	return nil
 }
 
 func (s *MonthlyScheduler) monthlyNotificationMessage(ctx context.Context, events []domain.MajorEvent, monthKey string) string {
 	var llmSummary string
+
 	if s.summarizer != nil {
 		llmSummary = s.summarizer.Summarize(ctx, events, mesummarizer.SummaryTypeMonthly, monthKey)
 	}
+
 	return s.formatter.FormatMajorEventMonthlySummary(ctx, events, llmSummary)
 }
 

@@ -18,6 +18,7 @@ func NewPolicy(hosts, suffixes []string) Policy {
 	for _, h := range hosts {
 		exact[NormalizeHost(h)] = struct{}{}
 	}
+
 	return Policy{exact: exact, suffixes: suffixes}
 }
 
@@ -50,25 +51,32 @@ func (p Policy) ValidateURL(raw string) error {
 	if err != nil {
 		return fmt.Errorf("parse image url: %w", err)
 	}
+
 	if parsed.Scheme != "https" {
 		return fmt.Errorf("image url scheme %q is not allowed", parsed.Scheme)
 	}
+
 	if parsed.User != nil {
 		return errors.New("image url must not carry userinfo")
 	}
+
 	if port := parsed.Port(); port != "" && port != "443" {
 		return fmt.Errorf("image url port %q is not allowed", port)
 	}
+
 	host := NormalizeHost(parsed.Hostname())
 	if host == "" {
 		return errors.New("image url host is empty")
 	}
+
 	if _, err := netip.ParseAddr(host); err == nil {
 		return fmt.Errorf("image url host %q must not be an IP literal", host)
 	}
+
 	if !p.AllowsHost(host) {
 		return fmt.Errorf("image host %q is not allowed", host)
 	}
+
 	return nil
 }
 
@@ -81,11 +89,13 @@ func (p Policy) AllowsHost(host string) bool {
 	if _, ok := p.exact[host]; ok {
 		return true
 	}
+
 	for _, suffix := range p.suffixes {
 		if strings.HasSuffix(host, suffix) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -94,6 +104,7 @@ func (p Policy) Hosts() []string {
 	for h := range p.exact {
 		hosts = append(hosts, h)
 	}
+
 	return hosts
 }
 

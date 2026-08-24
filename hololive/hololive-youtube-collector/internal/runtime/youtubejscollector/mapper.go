@@ -27,6 +27,7 @@ func communityPayload(channelID string, posts []*parser.CommunityPost, maxResult
 			VideoID:        post.VideoID,
 		})
 	}
+
 	return contract.CommunityPayloadV1{
 		ChannelID: channelID,
 		Posts:     mapped,
@@ -51,6 +52,7 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 			ScheduledFor: item.ScheduledFor,
 		})
 	}
+
 	if shorts {
 		return contract.VideoListV1{}, contract.ShortsListV1{
 			ChannelID: channelID,
@@ -64,6 +66,7 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 			},
 		}
 	}
+
 	return contract.VideoListV1{
 		ChannelID: channelID,
 		Videos:    videos,
@@ -81,6 +84,7 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem)
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
 	statuses := make([]string, 0, 4)
 	seenStatus := make(map[string]struct{}, 4)
+
 	for _, session := range sessions {
 		mapped = append(mapped, contract.LiveSessionV1{
 			VideoID:     session.VideoID,
@@ -93,12 +97,15 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem)
 		if _, ok := seenStatus[session.Status]; ok {
 			continue
 		}
+
 		seenStatus[session.Status] = struct{}{}
 		statuses = append(statuses, session.Status)
 	}
+
 	if len(statuses) == 0 {
 		statuses = []string{"LIVE", "UPCOMING"}
 	}
+
 	return contract.LiveSnapshotV1{
 		Sessions: mapped,
 		Coverage: contract.GlobalChannelCoverageV1{
@@ -111,18 +118,23 @@ func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem)
 
 func channelStatsPayload(channelID string, stats youtubejs.ChannelStatsItem) (contract.ChannelStatsV1, bool) {
 	fields := make([]string, 0, 3)
+
 	if stats.SubscriberCount != nil {
 		fields = append(fields, "subscriber_count")
 	}
+
 	if stats.ViewCount != nil {
 		fields = append(fields, "view_count")
 	}
+
 	if stats.VideoCount != nil {
 		fields = append(fields, "video_count")
 	}
+
 	if len(fields) == 0 {
 		return contract.ChannelStatsV1{}, false
 	}
+
 	return contract.ChannelStatsV1{
 		ChannelID:       channelID,
 		SubscriberCount: stats.SubscriberCount,
@@ -138,26 +150,37 @@ func channelStatsPayload(channelID string, stats youtubejs.ChannelStatsItem) (co
 func channelProfilePayload(channelID string, profile youtubejs.ChannelProfileItem) (contract.ChannelProfileV1, bool) {
 	payload := contract.ChannelProfileV1{ChannelID: channelID}
 	fields := make([]string, 0, 4)
+
 	if profile.Handle != nil {
 		payload.Handle = contract.FieldValue[string]{Present: true, Value: *profile.Handle}
+
 		fields = append(fields, "handle")
 	}
+
 	if profile.Description != nil {
 		payload.Description = contract.FieldValue[string]{Present: true, Value: *profile.Description}
+
 		fields = append(fields, "description")
 	}
+
 	if profile.Country != nil {
 		payload.Country = contract.FieldValue[string]{Present: true, Value: *profile.Country}
+
 		fields = append(fields, "country")
 	}
+
 	if profile.JoinedDate != nil {
 		payload.JoinedDate = contract.FieldValue[string]{Present: true, Value: *profile.JoinedDate}
+
 		fields = append(fields, "joined_date")
 	}
+
 	if len(fields) == 0 {
 		return contract.ChannelProfileV1{}, false
 	}
+
 	payload.Coverage = contract.ChannelProfileCoverageV1{ChannelID: channelID, Fields: fields}
+
 	return payload, true
 }
 
@@ -165,9 +188,11 @@ func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVari
 	if len(variants) == 0 {
 		return contract.ChannelPhotoV1{}, false
 	}
+
 	mapped := make([]contract.PhotoVariantV1, 0, len(variants))
 	kinds := make([]string, 0, 2)
 	seen := make(map[string]struct{}, 2)
+
 	for _, variant := range variants {
 		mapped = append(mapped, contract.PhotoVariantV1{
 			Kind:   variant.Kind,
@@ -178,9 +203,11 @@ func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVari
 		if _, ok := seen[variant.Kind]; ok {
 			continue
 		}
+
 		seen[variant.Kind] = struct{}{}
 		kinds = append(kinds, variant.Kind)
 	}
+
 	return contract.ChannelPhotoV1{
 		ChannelID: channelID,
 		Variants:  mapped,
@@ -210,9 +237,11 @@ func thumbnails(values []parser.Thumbnail) []contract.Thumbnail {
 	if len(values) == 0 {
 		return nil
 	}
+
 	mapped := make([]contract.Thumbnail, 0, len(values))
 	for _, value := range values {
 		mapped = append(mapped, contract.Thumbnail{URL: value.URL, Width: value.Width, Height: value.Height})
 	}
+
 	return mapped
 }

@@ -31,7 +31,7 @@ func newBulkAlarmSentMarkInputs(marks []AlarmSentMark) (bulkAlarmSentMarkInputs,
 
 	for i, mark := range marks {
 		if err := appendBulkAlarmSentMarkInput(&inputs, i, mark); err != nil {
-			return bulkAlarmSentMarkInputs{}, err
+			return bulkAlarmSentMarkInputs{}, fmt.Errorf("append bulk alarm sent mark input: %w", err)
 		}
 	}
 
@@ -42,6 +42,7 @@ func appendBulkAlarmSentMarkInput(inputs *bulkAlarmSentMarkInputs, index int, ma
 	if mark.AlarmSentAt.IsZero() {
 		return fmt.Errorf("bulk mark alarm sent: alarm sent at is empty at index %d", index)
 	}
+
 	canonicalContentID := canonicalTrackingIdentity(mark.Kind, mark.ContentID)
 	if strings.TrimSpace(canonicalContentID) == "" {
 		return fmt.Errorf("bulk mark alarm sent: canonical content id is empty at index %d", index)

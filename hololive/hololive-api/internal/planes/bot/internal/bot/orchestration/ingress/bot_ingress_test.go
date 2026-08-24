@@ -25,10 +25,16 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-shared/pkg/domain"
+)
+
+const (
+	testUserID          = "user-1"
+	testMaxUint64RoomID = "18446744073709551615"
 )
 
 func TestMessageIngressPrepare_SkipsSelfSender(t *testing.T) {
@@ -76,7 +82,7 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		Room:   "홀로라이브",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID: "user-1",
+			UserID: testUserID,
 			ChatID: "chat-123",
 		},
 	}
@@ -98,8 +104,8 @@ func TestMessageIngressPrepare_ParsesCommand(t *testing.T) {
 		t.Fatalf("room name = %q, want %q", envelope.RoomName, "홀로라이브")
 	}
 
-	if envelope.UserID != "user-1" {
-		t.Fatalf("user id = %q, want %q", envelope.UserID, "user-1")
+	if envelope.UserID != testUserID {
+		t.Fatalf("user id = %q, want %q", envelope.UserID, testUserID)
 	}
 
 	if envelope.UserName != "사용자" {
@@ -139,19 +145,22 @@ func TestMessageIngressPrepare_ObservesRoomChat(t *testing.T) {
 		Room:   "room-title",
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID:     "user-1",
-			ChatID:     "18446744073709551615",
+			UserID:     testUserID,
+			ChatID:     testMaxUint64RoomID,
 			RoomType:   " MultiChat ",
 			RoomLinkID: "",
 		},
 	})
+
 	if !ok || envelope == nil {
 		t.Fatal("expected command to be accepted")
 	}
+
 	if envelope.RoomType != "MultiChat" || envelope.RoomLinkID != "" {
 		t.Fatalf("envelope room = %q/%q", envelope.RoomType, envelope.RoomLinkID)
 	}
-	if rooms.roomID != "18446744073709551615" || rooms.roomType != "MultiChat" {
+
+	if rooms.roomID != testMaxUint64RoomID || rooms.roomType != "MultiChat" {
 		t.Fatalf("observed = %+v", rooms)
 	}
 }

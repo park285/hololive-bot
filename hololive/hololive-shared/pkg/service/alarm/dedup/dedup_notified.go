@@ -15,31 +15,36 @@ func (s *Service) MarkAsNotified(ctx context.Context, streamID string, startSche
 	key := keys.NotifiedKey(streamID)
 	scheduledStr := keys.FormatScheduled(startScheduled)
 
-	existing, err := s.loadNotifiedData(ctx, key)
+	existing, _, err := s.loadNotifiedData(ctx, key)
 	if err != nil {
 		return fmt.Errorf("mark as notified: load existing data: %w", err)
 	}
 
 	if err := s.resetStaleNotifiedData(ctx, key, existing, scheduledStr); err != nil {
-		return err
+		return fmt.Errorf("reset stale notified data: %w", err)
 	}
 
-	return s.writeNotifiedHashFields(ctx, key, scheduledStr, minutesUntil)
+	if err := s.writeNotifiedHashFields(ctx, key, scheduledStr, minutesUntil); err != nil {
+		return fmt.Errorf("write notified hash fields: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) resetStaleNotifiedData(
 	ctx context.Context,
 	key string,
-	existing *NotifiedData,
+	existing NotifiedData,
 	scheduledStr string,
 ) error {
-	if existing == nil || existing.StartScheduled == "" || existing.StartScheduled == scheduledStr {
+	if existing.StartScheduled == "" || existing.StartScheduled == scheduledStr {
 		return nil
 	}
 
 	if err := s.cache.Del(ctx, key); err != nil {
 		return fmt.Errorf("mark as notified: reset old schedule hash: %w", err)
 	}
+
 	return nil
 }
 
@@ -51,9 +56,11 @@ func (s *Service) writeNotifiedHashFields(ctx context.Context, key, scheduledStr
 	if err := s.cache.HMSet(ctx, key, fields); err != nil {
 		return fmt.Errorf("mark as notified: hmset fields: %w", err)
 	}
+
 	if err := s.cache.Expire(ctx, key, constants.CacheTTL.NotificationSent); err != nil {
 		return fmt.Errorf("mark as notified: set expiration: %w", err)
 	}
+
 	return nil
 }
 
@@ -61,11 +68,12 @@ func (s *Service) IsAlreadyNotifiedForSchedule(ctx context.Context, streamID str
 	key := keys.NotifiedKey(streamID)
 	scheduledStr := keys.FormatScheduled(startScheduled)
 
-	data, err := s.readNotifiedData(ctx, key)
+	data, ok, err := s.readNotifiedData(ctx, key)
 	if err != nil {
 		return false, fmt.Errorf("is already notified for schedule: %w", err)
 	}
-	if data == nil {
+
+	if !ok {
 		return false, nil
 	}
 
@@ -96,35 +104,42 @@ func targetMinuteAlreadySent(sentAt map[int]bool, targetMinutes []int) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func (s *Service) IsAlreadyNotified(ctx context.Context, streamID string) (bool, error) {
 	key := keys.NotifiedKey(streamID)
-	data, err := s.readNotifiedData(ctx, key)
+
+	data, ok, err := s.readNotifiedData(ctx, key)
 	if err != nil {
 		return false, fmt.Errorf("is already notified: %w", err)
 	}
-	if data == nil {
+
+	if !ok {
 		return false, nil
 	}
+
 	return len(data.SentAt) > 0, nil
 }
 
 func (s *Service) RecentlyNotifiedStreamIDs(ctx context.Context, streamIDs []string) (map[string]struct{}, error) {
 	result := make(map[string]struct{})
+
 	if s == nil || len(streamIDs) == 0 {
 		return result, nil
 	}
 
 	for _, streamID := range uniqueNonEmptyStrings(streamIDs) {
-		data, err := s.readNotifiedData(ctx, keys.NotifiedKey(streamID))
+		data, ok, err := s.readNotifiedData(ctx, keys.NotifiedKey(streamID))
 		if err != nil {
 			return nil, fmt.Errorf("recently notified stream ids: read %s: %w", streamID, err)
 		}
-		if data == nil || len(data.SentAt) == 0 {
+
+		if !ok || len(data.SentAt) == 0 {
 			continue
 		}
+
 		result[streamID] = struct{}{}
 	}
 
@@ -134,16 +149,20 @@ func (s *Service) RecentlyNotifiedStreamIDs(ctx context.Context, streamIDs []str
 func uniqueNonEmptyStrings(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
+
 	for _, value := range values {
 		value = strings.TrimSpace(value)
 		if value == "" {
 			continue
 		}
+
 		if _, ok := seen[value]; ok {
 			continue
 		}
+
 		seen[value] = struct{}{}
 		result = append(result, value)
 	}
+
 	return result
 }

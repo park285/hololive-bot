@@ -16,6 +16,8 @@ func newChzzkLookupJob(youtubeChannelID, chzzkChannelID string, subscriberMap ma
 	if job.youtubeChannelID == "" || job.chzzkChannelID == "" {
 		return chzzkLookupJob{}, false
 	}
+
 	job.subscriberRooms = subscriberMap[job.youtubeChannelID]
+
 	return job, len(job.subscriberRooms) > 0
 }

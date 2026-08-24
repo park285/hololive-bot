@@ -22,12 +22,12 @@ package domain
 
 import (
 	"database/sql/driver"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 )
 
 type AlarmType string
@@ -70,19 +70,22 @@ func (t AlarmType) DisplayName() string {
 	if displayName, ok := alarmTypeDisplayNames[t]; ok {
 		return displayName
 	}
+
 	return string(t)
 }
 
-type AlarmTypes []AlarmType
+type AlarmTypes []AlarmType //nolint:recvcheck // sql.Scanner는 포인터 수신자를, driver.Valuer는 값 수신자를 요구한다. Value를 포인터로 옮기면 값으로 전달되는 Alarm.AlarmTypes가 Valuer로 인식되지 않는다.
 
 func (a AlarmTypes) Value() (driver.Value, error) {
 	if len(a) == 0 {
 		return "{}", nil
 	}
+
 	parts := make([]string, len(a))
 	for i, t := range a {
 		parts[i] = string(t)
 	}
+
 	return "{" + strings.Join(parts, ",") + "}", nil
 }
 
@@ -91,11 +94,14 @@ func (a *AlarmTypes) Scan(value any) error {
 		*a = nil
 		return nil
 	}
+
 	str, err := alarmTypesString(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("alarm types string: %w", err)
 	}
+
 	*a = parseAlarmTypesArray(str)
+
 	return nil
 }
 
@@ -113,17 +119,21 @@ func alarmTypesString(value any) (string, error) {
 func parseAlarmTypesArray(str string) AlarmTypes {
 	str = strings.TrimPrefix(str, "{")
 	str = strings.TrimSuffix(str, "}")
+
 	if str == "" {
 		return nil
 	}
+
 	parts := strings.Split(str, ",")
 	result := make(AlarmTypes, 0, len(parts))
+
 	for _, p := range parts {
 		t := AlarmType(strings.TrimSpace(p))
 		if t.IsValid() {
 			result = append(result, t)
 		}
 	}
+
 	return result
 }
 
@@ -178,9 +188,11 @@ func (n *AlarmNotification) IsStarting() bool {
 	if n == nil {
 		return false
 	}
+
 	if n.MinutesUntil <= 0 {
 		return true
 	}
+
 	return n.Stream != nil && (n.Stream.IsLive() || n.Stream.StartActual != nil)
 }
 
@@ -190,18 +202,25 @@ func (n *AlarmNotification) IsLiveCatchup() bool {
 
 func (n *AlarmNotification) ValidateLiveDispatchRoute() error {
 	if n == nil {
-		return fmt.Errorf("live alarm route: notification is nil")
+		return errors.New("live alarm route: notification is nil")
 	}
-	return validateLiveDispatchAlarmType(n.AlarmType)
+
+	if err := validateLiveDispatchAlarmType(n.AlarmType); err != nil {
+		return fmt.Errorf("validate live dispatch alarm type: %w", err)
+	}
+
+	return nil
 }
 
 func validateLiveDispatchAlarmType(alarmType AlarmType) error {
 	if alarmType == AlarmTypeLive {
 		return nil
 	}
+
 	if alarmType == "" {
-		return fmt.Errorf("live alarm route requires explicit alarm type")
+		return errors.New("live alarm route requires explicit alarm type")
 	}
+
 	return fmt.Errorf("live alarm route does not support alarm type %q", alarmType)
 }
 
@@ -261,6 +280,7 @@ func (e *AlarmQueueEnvelope) OriginalPayload() string {
 	if e == nil {
 		return ""
 	}
+
 	return e.rawPayload
 }
 
@@ -268,6 +288,7 @@ func (e *AlarmQueueEnvelope) NormalizedPayload() string {
 	if e == nil {
 		return ""
 	}
+
 	return e.normalizedPayload
 }
 
@@ -275,6 +296,7 @@ func (e *AlarmQueueEnvelope) SourcePayload() string {
 	if e == nil {
 		return ""
 	}
+
 	return e.SourcePayloadRaw
 }
 
@@ -282,6 +304,7 @@ func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
 	if e == nil {
 		return
 	}
+
 	if e.SourcePayloadRaw == "" && e.rawPayload != "" {
 		e.SourcePayloadRaw = e.rawPayload
 	}
@@ -289,6 +312,7 @@ func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
 
 func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	var wire alarmQueueEnvelopeWire
+
 	if err := jsonv2.Unmarshal(data, &wire); err != nil {
 		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
 	}
@@ -326,6 +350,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("marshal alarm queue envelope: %w", err)
 	}
+
 	e.normalizedPayload = string(normalizedPayload)
 
 	return nil

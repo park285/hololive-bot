@@ -21,23 +21,25 @@
 package settings
 
 import (
-	"context"
 	"net"
 	"testing"
 	"time"
 )
 
 func TestSettingsIrisH3DialGuardAllowsOnlyBaseURLLiteralIP(t *testing.T) {
-	guard, err := newSettingsIrisH3DialGuard(context.Background(), "https://192.0.2.10:3001", time.Second)
+	guard, err := newSettingsIrisH3DialGuard(t.Context(), "https://192.0.2.10:3001", time.Second)
 	if err != nil {
 		t.Fatalf("newSettingsIrisH3DialGuard() error = %v", err)
 	}
+
 	if err := guard(t.Context(), net.ParseIP("192.0.2.10")); err != nil {
 		t.Fatalf("guard(allowed IP) error = %v", err)
 	}
+
 	if err := guard(t.Context(), net.ParseIP("192.0.2.11")); err == nil {
 		t.Fatal("guard(disallowed IP) error = nil")
 	}
+
 	if err := guard(t.Context(), nil); err == nil {
 		t.Fatal("guard(nil) error = nil")
 	}

@@ -25,13 +25,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestNotifierPublishBatchAndMarkEmpty(t *testing.T) {
@@ -119,6 +120,7 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	firstClaimKey, firstClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-partial-1", "stream-partial-1", start, 10)
 	require.NoError(t, err)
 	require.True(t, firstClaimed)
+
 	secondClaimKey, secondClaimed, err := dedupService.TryClaimNotification(t.Context(), "room-partial-2", "stream-partial-2", start, 10)
 	require.NoError(t, err)
 	require.True(t, secondClaimed)
@@ -131,7 +133,7 @@ func TestNotifierPublishBatchAndMarkErrorReleasesUnprocessedClaims(t *testing.T)
 	processed, err := notifier.publishBatchAndMark(t.Context(), items)
 	require.Error(t, err)
 	assert.Equal(t, 1, processed)
-	assert.ErrorContains(t, err, "publish queue batch")
+	require.ErrorContains(t, err, "publish queue batch")
 	assert.Equal(t, 2, outbox.insertBatchCalls)
 
 	_, firstClaimedAgain, err := dedupService.TryClaimNotification(t.Context(), "room-partial-1", "stream-partial-1", start, 10)
@@ -168,6 +170,7 @@ func newNotifierPublishTestItem(
 		Channel:        &domain.Channel{ID: channelID, Name: "Publish Channel"},
 	}
 	notification := domain.NewAlarmNotification(roomID, stream.Channel, stream, minutesUntil, []string{}, "")
+
 	return claimedSend{
 		payload: &sendInput{
 			notification:   notification,

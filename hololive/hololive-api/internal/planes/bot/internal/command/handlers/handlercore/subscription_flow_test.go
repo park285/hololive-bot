@@ -27,6 +27,11 @@ import (
 	"testing"
 )
 
+const (
+	opSubscribe   = "subscribe"
+	opUnsubscribe = "unsubscribe"
+)
+
 type fakeSubscriptionPort struct {
 	isSubscribed       bool
 	isSubscribedErr    error
@@ -83,52 +88,52 @@ func TestSubscriptionFlow_AllPaths(t *testing.T) {
 	tests := []subscriptionFlowTestCase{
 		{
 			name:      "subscribe check error",
-			operation: "subscribe",
+			operation: opSubscribe,
 			port:      &fakeSubscriptionPort{isSubscribedErr: boom},
 			wantHook:  "checkError",
 			wantErr:   boom,
 		},
 		{
 			name:      "subscribe already subscribed",
-			operation: "subscribe",
+			operation: opSubscribe,
 			port:      &fakeSubscriptionPort{isSubscribed: true},
 			wantHook:  "alreadySubscribed",
 		},
 		{
 			name:      "subscribe newly subscribed",
-			operation: "subscribe",
+			operation: opSubscribe,
 			port:      &fakeSubscriptionPort{isSubscribed: false},
 			wantHook:  "subscribed",
 		},
 		{
 			name:      "subscribe mutate error",
-			operation: "subscribe",
+			operation: opSubscribe,
 			port:      &fakeSubscriptionPort{isSubscribed: false, subscribeErr: boom},
 			wantHook:  "subscribeError",
 			wantErr:   boom,
 		},
 		{
 			name:      "unsubscribe check error",
-			operation: "unsubscribe",
+			operation: opUnsubscribe,
 			port:      &fakeSubscriptionPort{isSubscribedErr: boom},
 			wantHook:  "checkError",
 			wantErr:   boom,
 		},
 		{
 			name:      "unsubscribe not subscribed",
-			operation: "unsubscribe",
+			operation: opUnsubscribe,
 			port:      &fakeSubscriptionPort{isSubscribed: false},
 			wantHook:  "notSubscribed",
 		},
 		{
 			name:      "unsubscribe newly unsubscribed",
-			operation: "unsubscribe",
+			operation: opUnsubscribe,
 			port:      &fakeSubscriptionPort{isSubscribed: true},
 			wantHook:  "unsubscribed",
 		},
 		{
 			name:      "unsubscribe mutate error",
-			operation: "unsubscribe",
+			operation: opUnsubscribe,
 			port:      &fakeSubscriptionPort{isSubscribed: true, unsubscribeErr: boom},
 			wantHook:  "unsubscribeError",
 			wantErr:   boom,
@@ -201,6 +206,7 @@ func (r *subscriptionFlowCaseRunner) record(hook string) func(context.Context, e
 	return func(_ context.Context, err error) error {
 		r.gotHook = hook
 		r.gotErr = err
+
 		return r.sentinel
 	}
 }
@@ -215,22 +221,36 @@ func (r *subscriptionFlowCaseRunner) recordMessage(hook string) func(context.Con
 func (r *subscriptionFlowCaseRunner) recordStatus(_ context.Context, subscribed bool) error {
 	r.hasStatus = true
 	r.gotStatus = subscribed
+
 	if subscribed {
 		r.gotHook = "statusTrue"
 	} else {
 		r.gotHook = "statusFalse"
 	}
+
 	return r.sentinel
 }
 
 func (r *subscriptionFlowCaseRunner) run(flow SubscriptionFlow, operation string) error {
 	switch operation {
-	case "subscribe":
-		return flow.Subscribe(context.Background(), r.gotRoom, "room-name")
-	case "unsubscribe":
-		return flow.Unsubscribe(context.Background(), r.gotRoom)
+	case opSubscribe:
+		if err := flow.Subscribe(context.Background(), r.gotRoom, "room-name"); err != nil {
+			return fmt.Errorf("subscribe: %w", err)
+		}
+
+		return nil
+	case opUnsubscribe:
+		if err := flow.Unsubscribe(context.Background(), r.gotRoom); err != nil {
+			return fmt.Errorf("unsubscribe: %w", err)
+		}
+
+		return nil
 	case "status":
-		return flow.Status(context.Background(), r.gotRoom)
+		if err := flow.Status(context.Background(), r.gotRoom); err != nil {
+			return fmt.Errorf("status: %w", err)
+		}
+
+		return nil
 	default:
 		return fmt.Errorf("unknown operation %q", operation)
 	}
@@ -242,12 +262,15 @@ func (r *subscriptionFlowCaseRunner) assertResult(t *testing.T, tc *subscription
 	if r.gotHook != tc.wantHook {
 		t.Fatalf("hook = %q, want %q", r.gotHook, tc.wantHook)
 	}
+
 	if !errors.Is(err, r.sentinel) {
 		t.Fatalf("flow returned %v, want sentinel hook return value", err)
 	}
+
 	if tc.wantErr != nil && !errors.Is(r.gotErr, tc.wantErr) {
 		t.Fatalf("error hook received %v, want %v", r.gotErr, tc.wantErr)
 	}
+
 	r.assertStatusHook(t, tc.wantHook)
 	r.assertRoomMutation(t, tc)
 }
@@ -256,10 +279,11 @@ func (r *subscriptionFlowCaseRunner) assertStatusHook(t *testing.T, wantHook str
 	t.Helper()
 
 	if wantHook == "statusTrue" && (!r.hasStatus || !r.gotStatus) {
-		t.Fatalf("status hook not invoked with true")
+		t.Fatal("status hook not invoked with true")
 	}
+
 	if wantHook == "statusFalse" && (!r.hasStatus || r.gotStatus) {
-		t.Fatalf("status hook not invoked with false")
+		t.Fatal("status hook not invoked with false")
 	}
 }
 
@@ -269,6 +293,7 @@ func (r *subscriptionFlowCaseRunner) assertRoomMutation(t *testing.T, tc *subscr
 	if tc.wantHook == "subscribed" && tc.port.subscribedRoomID != r.gotRoom {
 		t.Fatalf("subscribe room id = %q, want %q", tc.port.subscribedRoomID, r.gotRoom)
 	}
+
 	if tc.wantHook == "unsubscribed" && tc.port.unsubscribedRoomID != r.gotRoom {
 		t.Fatalf("unsubscribe room id = %q, want %q", tc.port.unsubscribedRoomID, r.gotRoom)
 	}

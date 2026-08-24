@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,17 +14,20 @@ import (
 
 func (r *Repository) ListPostDeliveryTimelinesSince(ctx context.Context, since time.Time) ([]timeline.PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post delivery timelines since: db is nil")
+		return nil, errors.New("list post delivery timelines since: db is nil")
 	}
+
 	if since.IsZero() {
-		return nil, fmt.Errorf("list post delivery timelines since: since is empty")
+		return nil, errors.New("list post delivery timelines since: since is empty")
 	}
 
 	sinceUTC := since.UTC()
+
 	rows, err := r.listPostDeliveryTimelines(ctx, &sinceUTC, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines since: %w", err)
 	}
+
 	return rows, nil
 }
 
@@ -33,31 +37,35 @@ func (r *Repository) ListPostDeliveryTimelinesWithinPublishedWindow(
 	windowEnd time.Time,
 ) ([]timeline.PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post delivery timelines within published window: db is nil")
+		return nil, errors.New("list post delivery timelines within published window: db is nil")
 	}
+
 	if windowStart.IsZero() {
-		return nil, fmt.Errorf("list post delivery timelines within published window: window start is empty")
+		return nil, errors.New("list post delivery timelines within published window: window start is empty")
 	}
+
 	if windowEnd.IsZero() {
-		return nil, fmt.Errorf("list post delivery timelines within published window: window end is empty")
+		return nil, errors.New("list post delivery timelines within published window: window end is empty")
 	}
 
 	startUTC := windowStart.UTC()
 	endUTC := windowEnd.UTC()
+
 	if !startUTC.Before(endUTC) {
-		return nil, fmt.Errorf("list post delivery timelines within published window: window start must be before window end")
+		return nil, errors.New("list post delivery timelines within published window: window start must be before window end")
 	}
 
 	rows, err := r.listPostDeliveryTimelines(ctx, &startUTC, &endUTC, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines within published window: %w", err)
 	}
+
 	return rows, nil
 }
 
 func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, outboxIDs []int64) ([]timeline.PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post delivery timelines by outbox ids: db is nil")
+		return nil, errors.New("list post delivery timelines by outbox ids: db is nil")
 	}
 
 	uniqueIDs := deliverysql.UniqueInt64s(outboxIDs)
@@ -69,6 +77,7 @@ func (r *Repository) ListPostDeliveryTimelinesByOutboxIDs(ctx context.Context, o
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by outbox ids: %w", err)
 	}
+
 	return rows, nil
 }
 
@@ -77,13 +86,14 @@ func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 	identities []timeline.PostTrackingIdentity,
 ) ([]timeline.PostDeliveryTimeline, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post delivery timelines by tracking identities: db is nil")
+		return nil, errors.New("list post delivery timelines by tracking identities: db is nil")
 	}
 
 	normalized, err := timeline.NormalizePostTrackingIdentities(identities)
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by tracking identities: %w", err)
 	}
+
 	if len(normalized) == 0 {
 		return []timeline.PostDeliveryTimeline{}, nil
 	}
@@ -92,6 +102,7 @@ func (r *Repository) ListPostDeliveryTimelinesByTrackingIdentities(
 	if err != nil {
 		return nil, fmt.Errorf("list post delivery timelines by tracking identities: %w", err)
 	}
+
 	return rows, nil
 }
 
@@ -103,47 +114,74 @@ func (r *Repository) listPostDeliveryTimelines(
 	identities []timeline.PostTrackingIdentity,
 ) ([]timeline.PostDeliveryTimeline, error) {
 	var scanned []postDeliveryTimelineScanRow
+
+	query, args := postDeliveryTimelineQuery(windowStart, windowEnd, outboxIDs, identities)
+
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
+		return nil, fmt.Errorf("scan rows: %w", err)
+	}
+
+	return buildPostDeliveryTimelinesFromScanRows(scanned), nil
+}
+
+func postDeliveryTimelineQuery(
+	windowStart *time.Time,
+	windowEnd *time.Time,
+	outboxIDs []int64,
+	identities []timeline.PostTrackingIdentity,
+) (string, []any) {
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	query := mustSQL("timelines_query_0107_01.sql") + postDeliveryTimelineSelect() + `
 		FROM youtube_content_alarm_tracking AS track
 		LEFT JOIN youtube_notification_outbox o ON o.kind = track.kind AND o.content_id = track.content_id
 	`
 	args := make([]any, 0)
+
 	if windowStart != nil {
 		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?"
+
 		args = append(args, windowStart.UTC())
 	} else {
 		query += " LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id"
 	}
+
 	query += " WHERE " + deliverysql.DeliveryInClause("track.kind", len(postKinds))
+
 	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
+
 	if windowStart != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) >= ?"
+
 		args = append(args, windowStart.UTC())
 	}
+
 	if windowEnd != nil {
 		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
+
 		args = append(args, windowEnd.UTC())
 	}
+
 	if len(outboxIDs) > 0 {
 		query += " AND " + deliverysql.DeliveryInClause("o.id", len(outboxIDs))
+
 		args = deliverysql.AppendDeliveryInt64Args(args, outboxIDs)
 	}
+
 	if len(identities) > 0 {
 		clause, identityArgs := postTrackingIdentityWhere(identities)
+
 		query += " AND (" + clause + ")"
+
 		args = append(args, identityArgs...)
 	}
+
 	query += `
 		GROUP BY ` + postDeliveryTimelineGroup() + `
 		ORDER BY COALESCE(track.alarm_sent_at, MAX(COALESCE(t.attempt_finished_at, t.event_at)), track.actual_published_at, track.detected_at) DESC,
 		         track.content_id ASC
 	`
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
-		return nil, fmt.Errorf("scan rows: %w", err)
-	}
 
-	return buildPostDeliveryTimelinesFromScanRows(scanned), nil
+	return query, args
 }
 
 func postDeliveryTimelineSelect() string {
@@ -205,9 +243,11 @@ func postDeliveryTimelineTrackGroupColumns() []string {
 func postTrackingIdentityWhere(identities []timeline.PostTrackingIdentity) (result1 string, result2 []any) {
 	clauses := make([]string, 0, len(identities))
 	args := make([]any, 0, len(identities)*2)
+
 	for i := range identities {
 		clauses = append(clauses, "(track.kind = ? AND track.content_id = ?)")
 		args = append(args, identities[i].Kind, identities[i].ContentID)
 	}
+
 	return strings.Join(clauses, " OR "), args
 }

@@ -7,35 +7,45 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 )
 
+// golden 기대값은 프로덕션 상수를 참조하지 않고 여기에 리터럴로 고정한다.
+// 프로덕션 값이 바뀌면 기대값이 함께 따라가지 않고 테스트가 실패해야 한다.
+const (
+	goldenKeyType          = "type"
+	goldenTypeString       = "string"
+	goldenSeverityCritical = "critical"
+	goldenSeverityWarning  = "warning"
+	goldenSeverityInfo     = "info"
+)
+
 func TestReviewVerdictSchema_Golden(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]any{
-		"type":                 "object",
+		goldenKeyType:          "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
-			"approved": map[string]any{"type": "boolean"},
+			"approved": map[string]any{goldenKeyType: "boolean"},
 			"issues": map[string]any{
-				"type": "array",
+				goldenKeyType: "array",
 				"items": map[string]any{
-					"type":                 "object",
+					goldenKeyType:          "object",
 					"additionalProperties": false,
 					"properties": map[string]any{
-						"field":      map[string]any{"type": "string"},
-						"item_index": map[string]any{"type": "integer"},
+						"field":      map[string]any{goldenKeyType: goldenTypeString},
+						"item_index": map[string]any{goldenKeyType: "integer"},
 						"severity": map[string]any{
-							"type": "string",
-							"enum": []string{"critical", "warning", "info"},
+							goldenKeyType: goldenTypeString,
+							"enum":        []string{goldenSeverityCritical, goldenSeverityWarning, goldenSeverityInfo},
 						},
-						"description": map[string]any{"type": "string"},
+						"description": map[string]any{goldenKeyType: goldenTypeString},
 					},
 					"required": []string{"field", "item_index", "severity", "description"},
 				},
 			},
 			"confidence": map[string]any{
-				"type":    "number",
-				"minimum": 0.0,
-				"maximum": 1.0,
+				goldenKeyType: "number",
+				"minimum":     0.0,
+				"maximum":     1.0,
 			},
 		},
 		"required": []string{"approved", "issues", "confidence"},
@@ -50,33 +60,33 @@ func TestMemberNewsSummarySchema_Golden(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]any{
-		"type":                 "object",
+		goldenKeyType:          "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
 			"period": map[string]any{
-				"type": "string",
-				"enum": []string{"weekly", "monthly"},
+				goldenKeyType: goldenTypeString,
+				"enum":        []string{"weekly", "monthly"},
 			},
-			"headline": map[string]any{"type": "string"},
+			"headline": map[string]any{goldenKeyType: goldenTypeString},
 			"top_items": map[string]any{
-				"type":     "array",
-				"maxItems": 5,
+				goldenKeyType: "array",
+				"maxItems":    5,
 				"items": map[string]any{
-					"type":                 "object",
+					goldenKeyType:          "object",
 					"additionalProperties": false,
 					"properties": map[string]any{
-						"member":     map[string]any{"type": "string"},
-						"category":   map[string]any{"type": "string"},
-						"title":      map[string]any{"type": "string"},
-						"date_text":  map[string]any{"type": "string"},
-						"summary":    map[string]any{"type": "string"},
-						"source_url": map[string]any{"type": "string"},
+						"member":     map[string]any{goldenKeyType: goldenTypeString},
+						"category":   map[string]any{goldenKeyType: goldenTypeString},
+						"title":      map[string]any{goldenKeyType: goldenTypeString},
+						"date_text":  map[string]any{goldenKeyType: goldenTypeString},
+						"summary":    map[string]any{goldenKeyType: goldenTypeString},
+						"source_url": map[string]any{goldenKeyType: goldenTypeString},
 					},
 					"required": []string{"member", "category", "title", "date_text", "summary", "source_url"},
 				},
 			},
-			"more_summary":  map[string]any{"type": "string"},
-			"omitted_count": map[string]any{"type": "integer", "minimum": 0},
+			"more_summary":  map[string]any{goldenKeyType: goldenTypeString},
+			"omitted_count": map[string]any{goldenKeyType: "integer", "minimum": 0},
 		},
 		"required": []string{"period", "headline", "top_items", "more_summary", "omitted_count"},
 	}

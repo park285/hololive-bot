@@ -33,7 +33,7 @@ const (
 )
 
 // keepTrailing은 식별자 구간 뒤에 오는 고정 구간 수다. Kakao 방 제목은 ':'를 포함할 수 있어
-// 앞에서 세면 구간이 밀린다. streamID/channelID/unix/fingerprint/category는 ':'를 담을 수 없으므로
+// 앞에서 세면 구간이 밀린다. 반면 streamID/channelID/unix/fingerprint/category는 ':'를 담을 수 없으므로
 // 뒤에서 세야만 방 제목 길이와 무관하게 경계가 고정된다.
 type identifierKeyRule struct {
 	prefix       string
@@ -104,17 +104,21 @@ func matchIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 	if !found || hasVerbatimKeyPrefix(key, len(matched.prefix)) {
 		return identifierKeyRule{}, false
 	}
+
 	return matched, true
 }
 
 func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 	var matched identifierKeyRule
+
 	found := false
+
 	for _, rule := range identifierKeyRules {
 		if len(rule.prefix) > len(matched.prefix) && strings.HasPrefix(key, rule.prefix) {
 			matched, found = rule, true
 		}
 	}
+
 	return matched, found
 }
 
@@ -124,6 +128,7 @@ func hasVerbatimKeyPrefix(key string, longerThan int) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

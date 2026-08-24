@@ -20,26 +20,19 @@ case "$iris_transport" in
   h3|http3|http/3|quic)
     iris_transport="h3"
     ;;
-  h2|http2)
-    iris_transport="http2"
-    ;;
-  h2c)
-    ;;
   http|http1|http/1.1)
     iris_transport="http1"
+    ;;
+  *)
+    echo "error: unsupported IRIS_TRANSPORT=$iris_transport" >&2
+    exit 1
     ;;
 esac
 
 case "$iris_transport" in
-  h3|http2)
+  h3)
     if [[ ! "$base_url" =~ ^https:// ]]; then
       echo "error: IRIS_TRANSPORT=$iris_transport requires https iris base url" >&2
-      exit 1
-    fi
-    ;;
-  h2c)
-    if [[ ! "$base_url" =~ ^http:// ]]; then
-      echo "error: IRIS_TRANSPORT=h2c requires http iris base url" >&2
       exit 1
     fi
     ;;

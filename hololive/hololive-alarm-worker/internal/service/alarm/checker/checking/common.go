@@ -22,19 +22,21 @@ package checking
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/valkey-io/valkey-go"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -98,8 +100,10 @@ func cloneStringSlice(values []string) []string {
 	if values == nil {
 		return nil
 	}
+
 	cloned := make([]string, len(values))
 	copy(cloned, values)
+
 	return cloned
 }
 
@@ -138,6 +142,7 @@ func LoadMemberNamesByChannel(ctx context.Context, cacheClient cache.Client, cha
 	if err != nil {
 		return nil, fmt.Errorf("load member names by channel: %w", err)
 	}
+
 	return memberNames, nil
 }
 
@@ -147,6 +152,7 @@ func ApplyMemberNamesToStreams(streamsByChannel map[string][]*domain.Stream, mem
 		if memberName == "" {
 			continue
 		}
+
 		for _, stream := range streams {
 			ApplyMemberNameToStream(stream, channelID, memberName)
 		}
@@ -157,13 +163,16 @@ func ApplyMemberNameToStream(stream *domain.Stream, channelID, memberName string
 	if stream == nil {
 		return
 	}
+
 	stream.ChannelName = memberName
 	if stream.Channel == nil {
 		stream.Channel = &domain.Channel{ID: channelID}
 	}
+
 	if strings.TrimSpace(stream.Channel.ID) == "" {
 		stream.Channel.ID = channelID
 	}
+
 	stream.Channel.Name = memberName
 }
 
@@ -171,9 +180,11 @@ func ChannelNameForMember(channelID, memberName, fallback string) string {
 	if memberName = strings.TrimSpace(memberName); memberName != "" {
 		return memberName
 	}
+
 	if fallback = strings.TrimSpace(fallback); fallback != "" {
 		return fallback
 	}
+
 	return strings.TrimSpace(channelID)
 }
 
@@ -228,6 +239,7 @@ func RoomNotificationsWithScheduleChanges(
 
 		scheduleMessage, previousScheduled := ScheduleChangeNotificationDetails(change)
 		notification := domain.NewAlarmNotification(roomID, channel, stream, minutesUntil, []string{}, scheduleMessage)
+
 		notification.ScheduleChangePreviousStart = previousScheduled
 		notifications = append(notifications, notification)
 	}
@@ -251,6 +263,10 @@ func ScheduleChangeNotificationDetails(change *dedup.ScheduleChange) (message, p
 	return change.Message, change.PreviousScheduledString()
 }
 
+// ErrBatchedSubscriberRoomsUnavailable: DoMulti 파이프라인을 쓸 수 없어 순차 조회로 되돌려야 함을 알리는 sentinel.
+// 조회 실패가 아니라 경로 전환 신호이므로 호출자는 이 오류를 밖으로 전파하지 않는다.
+var ErrBatchedSubscriberRoomsUnavailable = errors.New("batched subscriber rooms unavailable")
+
 func LoadSubscriberRoomsByChannel(
 	ctx context.Context,
 	cacheClient cache.Client,
@@ -261,26 +277,38 @@ func LoadSubscriberRoomsByChannel(
 		return map[string][]string{}, nil
 	}
 
-	if result, ok, err := TryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs); ok {
-		return result, err
+	result, err := TryLoadSubscriberRoomsByChannelBatched(ctx, cacheClient, uniqueChannelIDs)
+	if err == nil {
+		return result, nil
 	}
 
-	return LoadSubscriberRoomsByChannelSequential(ctx, cacheClient, uniqueChannelIDs)
+	if !errors.Is(err, ErrBatchedSubscriberRoomsUnavailable) {
+		return nil, fmt.Errorf("load subscriber rooms by channel batched: %w", err)
+	}
+
+	out, sequentialErr := LoadSubscriberRoomsByChannelSequential(ctx, cacheClient, uniqueChannelIDs)
+	if sequentialErr != nil {
+		return nil, fmt.Errorf("load subscriber rooms by channel sequential: %w", sequentialErr)
+	}
+
+	return out, nil
 }
 
 func TryLoadSubscriberRoomsByChannelBatched(
 	ctx context.Context,
 	cacheClient cache.Client,
 	uniqueChannelIDs []string,
-) (_ map[string][]string, ok bool, _ error) {
+) (result map[string][]string, err error) {
 	defer func() {
-		recovered := recover()
-		ok = recovered == nil && ok
+		// DoMulti 파이프라인이 panic 하면 순차 조회로 되돌려야 하므로 sentinel 로 바꿔 전파한다.
+		if recovered := recover(); recovered != nil {
+			result, err = nil, ErrBatchedSubscriberRoomsUnavailable
+		}
 	}()
 
 	client := cacheClient.GetClient()
 	if client == nil {
-		return nil, false, nil
+		return nil, ErrBatchedSubscriberRoomsUnavailable
 	}
 
 	cmds := make([]valkey.Completed, 0, len(uniqueChannelIDs))
@@ -290,11 +318,15 @@ func TryLoadSubscriberRoomsByChannelBatched(
 
 	results := cacheClient.DoMulti(ctx, cmds...)
 	if len(results) != len(uniqueChannelIDs) {
-		return nil, false, nil
+		return nil, ErrBatchedSubscriberRoomsUnavailable
 	}
 
-	result, err := CollectBatchedSubscriberRooms(results, uniqueChannelIDs)
-	return result, true, err
+	collected, collectErr := CollectBatchedSubscriberRooms(results, uniqueChannelIDs)
+	if collectErr != nil {
+		return nil, fmt.Errorf("collect batched subscriber rooms: %w", collectErr)
+	}
+
+	return collected, nil
 }
 
 func CollectBatchedSubscriberRooms(
@@ -307,6 +339,7 @@ func CollectBatchedSubscriberRooms(
 		if err != nil {
 			return nil, fmt.Errorf("load subscriber rooms by channel: smembers channel %s: %w", channelID, err)
 		}
+
 		if len(rooms) > 0 {
 			result[channelID] = rooms
 		}
@@ -339,6 +372,7 @@ func LoadSubscriberRoomsByChannelSequential(
 			}
 
 			mu.Lock()
+
 			result[channelID] = rooms
 			mu.Unlock()
 
@@ -352,6 +386,7 @@ func LoadSubscriberRoomsByChannelSequential(
 
 	return result, nil
 }
+
 func SafeLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
 		return slog.Default()

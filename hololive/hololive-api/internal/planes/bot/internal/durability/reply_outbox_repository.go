@@ -89,7 +89,7 @@ const (
 )
 
 // accepted는 Iris가 이미 수리한 뒤라 그 행을 claim 큐로 되돌리면 admission idempotency TTL이 지난
-// 시점에 중복 발화가 된다. accepted에서 갈 수 있는 곳은 재발송 불가한 종단뿐이고, 정산이 없으면
+// 시점에 중복 발화가 된다. 그래서 accepted에서 갈 수 있는 곳은 재발송 불가한 종단뿐이고, 정산이 없으면
 // reclaim_expired가 흡수한다.
 var replyOutboxSettleSources = map[string][]string{
 	ReplyOutboxHandoffCompleted:     {replyOutboxStatusSubmitting, replyOutboxStatusAccepted},
@@ -139,6 +139,7 @@ func NewReplyOutboxRepository(pool *pgxpool.Pool) *ReplyOutboxRepository {
 	if err != nil {
 		panic(err)
 	}
+
 	return repository
 }
 
@@ -146,33 +147,42 @@ func NewReplyOutboxRepositoryWithPolicy(pool *pgxpool.Pool, maxAttempts int32, a
 	if maxAttempts < 1 {
 		return nil, errors.Join(ErrInvalidArgument, errors.New("reply outbox max attempts must be positive"))
 	}
+
 	if _, err := leaseMilliseconds(automaticReplayHorizon); err != nil {
 		return nil, errors.Join(ErrInvalidArgument, fmt.Errorf("reply outbox automatic replay horizon: %w", err))
 	}
+
 	return &ReplyOutboxRepository{pool: pool, maxAttempts: maxAttempts, automaticReplayHorizon: automaticReplayHorizon}, nil
 }
 
 func (r *ReplyOutboxRepository) ReadySnapshot(ctx context.Context) (ReadyQueueSnapshot, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReadyQueueSnapshot{}, err
+		return ReadyQueueSnapshot{}, fmt.Errorf("ensure pool: %w", err)
 	}
+
 	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
-		return ReadyQueueSnapshot{}, err
+		return ReadyQueueSnapshot{}, fmt.Errorf("lease milliseconds: %w", err)
 	}
-	var snapshot ReadyQueueSnapshot
-	var oldestAgeSeconds float64
+
+	var (
+		snapshot         ReadyQueueSnapshot
+		oldestAgeSeconds float64
+	)
+
 	if err := r.pool.QueryRow(ctx, replyOutboxReadySnapshotSQL, r.maxAttempts, replayHorizonMS).
 		Scan(&snapshot.Depth, &oldestAgeSeconds); err != nil {
 		return ReadyQueueSnapshot{}, fmt.Errorf("snapshot reply outbox ready queue: %w", err)
 	}
+
 	snapshot.OldestAge = time.Duration(oldestAgeSeconds * float64(time.Second))
+
 	return snapshot, nil
 }
 
 func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEntry) (ReplyOutboxInsertOutcome, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return ReplyOutboxInserted, err
+		return ReplyOutboxInserted, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	if entry == nil {
@@ -181,11 +191,12 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 
 	normalized, err := normalizeReplyOutboxEntry(entry)
 	if err != nil {
-		return ReplyOutboxInserted, err
+		return ReplyOutboxInserted, fmt.Errorf("normalize reply outbox entry: %w", err)
 	}
 
 	digest := sha256.Sum256(normalized.Payload)
 	payloadHash := hex.EncodeToString(digest[:])
+
 	tag, err := r.pool.Exec(ctx, replyOutboxInsertSQL,
 		normalized.MessageID,
 		normalized.Phase,
@@ -196,13 +207,19 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 		normalized.ClientRequestID,
 	)
 	if err != nil {
-		return ReplyOutboxInserted, safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err)
+		return ReplyOutboxInserted, fmt.Errorf("%w", safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err))
 	}
+
 	if tag.RowsAffected() == 1 {
 		return ReplyOutboxInserted, nil
 	}
 
-	return r.classifyRecordedPayload(ctx, &normalized, payloadHash)
+	out, err := r.classifyRecordedPayload(ctx, &normalized, payloadHash)
+	if err != nil {
+		return out, fmt.Errorf("classify recorded payload: %w", err)
+	}
+
+	return out, nil
 }
 
 // 재처리는 LLM 출력과 가변 상태에서 바이트를 다시 만들어 내므로 같은 슬롯에 같은 바이트가 온다는
@@ -210,11 +227,12 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 // 여기서는 관측 신호로만 강등하고 발송 권한은 계속 저장본이 갖는다.
 func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, entry *ReplyOutboxEntry, payloadHash string) (ReplyOutboxInsertOutcome, error) {
 	var recordedHash, recordedClientRequestID string
+
 	err := r.pool.QueryRow(ctx, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
 		Scan(&recordedHash, &recordedClientRequestID)
 	if err != nil {
 		return ReplyOutboxAlreadyRecorded,
-			safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err)
+			fmt.Errorf("%w", safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err))
 	}
 
 	if recordedHash != payloadHash || recordedClientRequestID != entry.ClientRequestID {
@@ -226,29 +244,35 @@ func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, ent
 
 func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, lease time.Duration) (*ReplyOutboxClaim, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("require bounded identity: %w", err)
 	}
+
 	leaseMS, err := leaseMilliseconds(lease)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lease milliseconds: %w", err)
 	}
 
 	var claim ReplyOutboxClaim
+
 	replayHorizonMS, err := leaseMilliseconds(r.automaticReplayHorizon)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lease milliseconds: %w", err)
 	}
+
 	row := r.pool.QueryRow(ctx, replyOutboxClaimSQL, token, leaseMS, r.maxAttempts, replayHorizonMS)
+
 	err = row.Scan(&claim.ID, &claim.MessageID, &claim.Phase, &claim.Ordinal,
 		&claim.RoomID, &claim.Payload, &claim.ClientRequestID, &claim.Attempts)
+
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // 행 없음(no row)을 알리는 계약값이다. runtime 폴링 루프가 nil 결과로 유휴를 판정하므로 sentinel 오류로 바꾸려면 이 패키지 밖 호출자를 함께 고쳐야 한다.
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("claim reply outbox row: %w", err)
 	}
@@ -258,16 +282,17 @@ func (r *ReplyOutboxRepository) Claim(ctx context.Context, claimToken string, le
 
 func (r *ReplyOutboxRepository) MarkAccepted(ctx context.Context, id int64, claimToken, irisRequestID string) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, err
+		return false, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	token, err := requireBoundedIdentity("claim token", claimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("require bounded identity: %w", err)
 	}
+
 	requestID, err := requireIdentity("iris request id", irisRequestID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("require identity: %w", err)
 	}
 
 	tag, err := r.pool.Exec(ctx, replyOutboxMarkAcceptedSQL, id, token, requestID)
@@ -280,13 +305,14 @@ func (r *ReplyOutboxRepository) MarkAccepted(ctx context.Context, id int64, clai
 
 func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutboxSettlement) (bool, error) {
 	if err := ensurePool(r.pool); err != nil {
-		return false, err
+		return false, fmt.Errorf("ensure pool: %w", err)
 	}
 
 	token, err := requireBoundedIdentity("claim token", settlement.ClaimToken, claimTokenRuneLimit)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("require bounded identity: %w", err)
 	}
+
 	sources, ok := replyOutboxSettleSources[settlement.Status]
 	if !ok {
 		return false, errors.Join(ErrInvalidArgument, fmt.Errorf("unsupported reply outbox settle status %q", settlement.Status))
@@ -294,8 +320,9 @@ func (r *ReplyOutboxRepository) Settle(ctx context.Context, settlement ReplyOutb
 
 	retryMS, err := replyOutboxRetryMilliseconds(settlement)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("reply outbox retry milliseconds: %w", err)
 	}
+
 	tag, err := r.pool.Exec(ctx, replyOutboxSettleSQL, settlement.ID, token, settlement.Status,
 		clampColumnText(settlement.LastError, lastErrorByteLimit), sources, retryMS)
 	if err != nil {
@@ -309,8 +336,15 @@ func replyOutboxRetryMilliseconds(settlement ReplyOutboxSettlement) (int64, erro
 	if settlement.Status != ReplyOutboxRetryablePreDispatch && settlement.Status != ReplyOutboxOutcomeUnknown {
 		return 0, nil
 	}
+
 	if settlement.RetryAfter <= 0 {
 		settlement.RetryAfter = time.Millisecond
 	}
-	return leaseMilliseconds(settlement.RetryAfter)
+
+	out, err := leaseMilliseconds(settlement.RetryAfter)
+	if err != nil {
+		return out, fmt.Errorf("lease milliseconds: %w", err)
+	}
+
+	return out, nil
 }

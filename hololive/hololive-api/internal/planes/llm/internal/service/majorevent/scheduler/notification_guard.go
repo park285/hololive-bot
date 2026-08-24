@@ -22,21 +22,69 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도)
+// outboxEnqueuer: outbox enqueue 연산 인터페이스 (테스트 mock 용도).
 type outboxEnqueuer interface {
 	Enqueue(ctx context.Context, kind domain.DeliveryOutboxKind, periodKey, roomID, message string) error
 }
 
-// enqueueToRooms: Room별 outbox enqueue (claim 없이 DB UNIQUE로 dedup)
+type notificationEnqueue struct {
+	outboxRepository outboxEnqueuer
+	outputGuard      *outputguard.Guard
+	logger           *slog.Logger
+	rooms            []*domain.EventRoomSubscription
+	kind             domain.DeliveryOutboxKind
+	periodKey        string
+	message          string
+	eventCount       int
+	enqueueLogMsg    string
+	deferLogMsg      string
+}
+
+func enqueueNotification(ctx context.Context, notification notificationEnqueue) (bool, error) {
+	result := enqueueToRooms(
+		ctx,
+		notification.outboxRepository,
+		roomTargets(notification.rooms),
+		notification.kind,
+		notification.periodKey,
+		notification.message,
+		notification.outputGuard,
+		notification.logger,
+	)
+
+	notification.logger.Info(notification.enqueueLogMsg,
+		slog.Int("attempted", result.Attempted),
+		slog.Int("sent", result.Sent),
+		slog.Int("failed", result.Failed),
+		slog.Int("event_count", notification.eventCount))
+
+	shouldMark, err := schedulerkit.ShouldMark(result)
+	if err != nil {
+		return false, fmt.Errorf("should mark: %w", err)
+	}
+
+	if !shouldMark {
+		notification.logger.Warn(notification.deferLogMsg,
+			slog.Int("sent", result.Sent),
+			slog.Int("failed", result.Failed),
+			slog.Any("failed_rooms", result.FailedRooms))
+	}
+
+	return shouldMark, nil
+}
+
+// enqueueToRooms: Room별 outbox enqueue (claim 없이 DB UNIQUE로 dedup).
 func enqueueToRooms(
 	ctx context.Context,
 	outboxRepository outboxEnqueuer,
@@ -48,6 +96,7 @@ func enqueueToRooms(
 	logger *slog.Logger,
 ) delivery.SendResult {
 	var result delivery.SendResult
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -60,11 +109,14 @@ func enqueueToRooms(
 			slog.Any("reasons", evaluation.ReasonCodes),
 			slog.Any("rules", evaluation.RuleIDs),
 		)
+
 		result.Attempted = len(rooms)
 		result.Failed = len(rooms)
+
 		for _, room := range rooms {
 			result.FailedRooms = append(result.FailedRooms, room.roomID)
 		}
+
 		return result
 	}
 
@@ -75,12 +127,16 @@ func enqueueToRooms(
 			logger.Error("Failed to enqueue notification",
 				slog.String("room_id", room.roomID),
 				slog.String("error", err.Error()))
+
 			result.Failed++
+
 			result.FailedRooms = append(result.FailedRooms, room.roomID)
+
 			continue
 		}
 
 		result.Sent++
+
 		logger.Info("Enqueued notification",
 			slog.String("room_id", room.roomID))
 	}
@@ -88,7 +144,7 @@ func enqueueToRooms(
 	return result
 }
 
-// roomTarget: enqueueToRooms에 전달할 room 정보
+// roomTarget: enqueueToRooms에 전달할 room 정보.
 type roomTarget struct {
 	roomID string
 }

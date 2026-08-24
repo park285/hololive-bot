@@ -37,13 +37,16 @@ func (r *ScraperProxyApplyResult) AsMap() map[string]any {
 	if r == nil {
 		return map[string]any{}
 	}
+
 	out := map[string]any{
 		"requested": r.Requested,
 	}
 	putOptionalPtr(out, "applied", r.Applied)
+
 	if r.Reason != "" {
 		out["reason"] = r.Reason
 	}
+
 	putOptionalPtr(out, "youtube_applied", r.YoutubeApplied)
 	putOptionalPtr(out, "youtube_enabled", r.YoutubeEnabled)
 	putOptionalPtr(out, "holodex_applied", r.HolodexApplied)
@@ -51,6 +54,7 @@ func (r *ScraperProxyApplyResult) AsMap() map[string]any {
 	putOptionalPtr(out, "scheduler_pollers_applied", r.SchedulerPollersApplied)
 	putOptionalPtr(out, "scheduler_enabled", r.SchedulerEnabled)
 	putOptionalPtr(out, "scheduler_known", r.SchedulerKnown)
+
 	return out
 }
 
@@ -75,9 +79,11 @@ func (r AlarmAdvanceMinutesApplyResult) AsMap() map[string]any {
 	if r.AlarmReason != "" {
 		out["alarm_reason"] = r.AlarmReason
 	}
+
 	if len(r.AlarmTargetMinutes) > 0 {
 		out["alarm_target_minutes"] = r.AlarmTargetMinutes
 	}
+
 	return out
 }
 
@@ -95,12 +101,15 @@ func (r MemberNewsWeeklyRunNowResult) AsMap() map[string]any {
 	if r.Reason != "" {
 		out["reason"] = r.Reason
 	}
+
 	if r.Error != "" {
 		out["error"] = r.Error
 	}
+
 	if r.Source != "" {
 		out["source"] = r.Source
 	}
+
 	return out
 }
 
@@ -119,29 +128,37 @@ func (r *ScraperProxyRuntimeStateResult) AsMap() map[string]any {
 	if r == nil {
 		return map[string]any{}
 	}
+
 	out := map[string]any{
 		"requested": r.Requested,
 	}
 	if r.Known != nil {
 		out["known"] = *r.Known
 	}
+
 	if r.Reason != "" {
 		out["reason"] = r.Reason
 	}
+
 	if r.YoutubeEnabled != nil {
 		out["youtube_enabled"] = *r.YoutubeEnabled
 	}
+
 	if r.HolodexEnabled != nil {
 		out["holodex_enabled"] = *r.HolodexEnabled
 	}
+
 	if r.SchedulerEnabled != nil {
 		out["scheduler_enabled"] = *r.SchedulerEnabled
 	}
+
 	if r.SchedulerKnown != nil {
 		out["scheduler_known"] = *r.SchedulerKnown
 	}
+
 	if len(r.AlarmTargetMinutes) > 0 {
 		out["alarm_target_minutes"] = r.AlarmTargetMinutes
 	}
+
 	return out
 }

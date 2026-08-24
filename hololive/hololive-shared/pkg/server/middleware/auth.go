@@ -33,9 +33,11 @@ import (
 
 func errorPayload(code, message string) gin.H {
 	payload := gin.H{"error": code}
+
 	if message != "" {
 		payload["message"] = message
 	}
+
 	return payload
 }
 
@@ -54,21 +56,26 @@ func AuthMiddleware(config httputil.AdminAuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if config.Disabled {
 			c.Next()
+
 			return
 		}
+
 		if expected == "" {
 			abortWithError(c, http.StatusServiceUnavailable, "auth_not_configured", "API key not configured")
+
 			return
 		}
 
 		providedKey := c.GetHeader(common.APIKeyHeader)
 		if providedKey == "" {
 			abortWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
+
 			return
 		}
 
 		if !httputil.ConstantTimeStringEqual(providedKey, expected) {
 			abortWithError(c, http.StatusForbidden, "forbidden", "invalid API key")
+
 			return
 		}
 
@@ -86,21 +93,26 @@ func NoRouteHandler(config httputil.AdminAuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if config.Disabled {
 			respondWithError(c, http.StatusNotFound, "not_found", "endpoint not found")
+
 			return
 		}
+
 		if expected == "" {
 			respondWithError(c, http.StatusServiceUnavailable, "auth_not_configured", "API key not configured")
+
 			return
 		}
 
 		providedKey := c.GetHeader(common.APIKeyHeader)
 		if providedKey == "" {
 			respondWithError(c, http.StatusUnauthorized, "unauthorized", "API key required")
+
 			return
 		}
 
 		if !httputil.ConstantTimeStringEqual(providedKey, expected) {
 			respondWithError(c, http.StatusForbidden, "forbidden", "invalid API key")
+
 			return
 		}
 

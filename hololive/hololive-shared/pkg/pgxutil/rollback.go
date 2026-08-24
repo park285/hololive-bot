@@ -23,6 +23,7 @@ package pgxutil
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -43,6 +44,12 @@ func Rollback(ctx context.Context, tx Rollbacker) error {
 
 	base := context.WithoutCancel(ctx)
 	rollbackCtx, cancel := context.WithTimeout(base, rollbackTimeout)
+
 	defer cancel()
-	return tx.Rollback(rollbackCtx)
+
+	if err := tx.Rollback(rollbackCtx); err != nil {
+		return fmt.Errorf("rollback: %w", err)
+	}
+
+	return nil
 }

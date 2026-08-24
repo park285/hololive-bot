@@ -30,8 +30,10 @@ func TestDockerHTTPTransport(t *testing.T) {
 			baseURL, transport, err := dockerHTTPTransport(tt.dockerHost)
 			if tt.wantErr {
 				requireTransportError(t, tt.dockerHost, err)
+
 				return
 			}
+
 			requireTransportSuccess(t, tt.dockerHost, baseURL, tt.wantBaseURL, transport, tt.wantUnix, err)
 		})
 	}
@@ -44,10 +46,12 @@ func TestDockerNetworkTransportsOwnConnectionPools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first dockerHTTPTransport() error = %v", err)
 	}
+
 	_, second, err := dockerHTTPTransport("http://127.0.0.1:2375")
 	if err != nil {
 		t.Fatalf("second dockerHTTPTransport() error = %v", err)
 	}
+
 	if first == http.DefaultTransport || second == http.DefaultTransport || first == second {
 		t.Fatal("Docker network transports must not share the process-global or each other's idle connection pool")
 	}
@@ -55,6 +59,7 @@ func TestDockerNetworkTransportsOwnConnectionPools(t *testing.T) {
 
 func requireTransportError(t *testing.T, dockerHost string, err error) {
 	t.Helper()
+
 	if err == nil {
 		t.Fatalf("dockerHTTPTransport(%q) err = nil, want error", dockerHost)
 	}
@@ -62,24 +67,30 @@ func requireTransportError(t *testing.T, dockerHost string, err error) {
 
 func requireTransportSuccess(t *testing.T, dockerHost, baseURL, wantBaseURL string, transport http.RoundTripper, wantUnix bool, err error) {
 	t.Helper()
+
 	if err != nil {
 		t.Fatalf("dockerHTTPTransport(%q) err = %v", dockerHost, err)
 	}
+
 	if baseURL != wantBaseURL {
 		t.Fatalf("baseURL = %q, want %q", baseURL, wantBaseURL)
 	}
+
 	httpTransport, ok := transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("transport = %T, want *http.Transport", transport)
 	}
+
 	requireTransportKind(t, httpTransport, transport, wantUnix)
 }
 
 func requireTransportKind(t *testing.T, httpTransport *http.Transport, transport http.RoundTripper, wantUnix bool) {
 	t.Helper()
+
 	if transport == http.DefaultTransport {
 		t.Fatal("Docker client must own its idle connection pool")
 	}
+
 	if wantUnix && httpTransport.DialContext == nil {
 		t.Fatal("unix host must install a custom DialContext")
 	}

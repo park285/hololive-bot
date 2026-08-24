@@ -41,6 +41,7 @@ func init() {
 
 func observeScraperFetch(engine FetcherEngine, statusCode int, err error, elapsed time.Duration) {
 	ensureScraperFetchMetrics()
+
 	outcome, reason := fetchMetricOutcome(err)
 	engineLabel := fetcherEngineMetricLabel(engine)
 	scraperFetchRequestsTotal.WithLabelValues(engineLabel, outcome, reason, fetchStatusCodeLabel(statusCode)).Inc()
@@ -49,6 +50,7 @@ func observeScraperFetch(engine FetcherEngine, statusCode int, err error, elapse
 
 func observeScraperFetchFallback(fromEngine, toEngine FetcherEngine, err error) {
 	ensureScraperFetchMetrics()
+
 	_, reason := fetchMetricOutcome(err)
 	scraperFetchFallbackTotal.WithLabelValues(
 		fetcherEngineMetricLabel(fromEngine),
@@ -61,7 +63,9 @@ func fetchMetricOutcome(err error) (result1, result2 string) {
 	if err == nil {
 		return "success", string(FailureReasonNone)
 	}
+
 	detail := ClassifyFailure(err, FailureSourceHTML)
+
 	return "error", string(detail.Reason)
 }
 
@@ -69,6 +73,7 @@ func fetchStatusCodeLabel(statusCode int) string {
 	if statusCode <= 0 {
 		return "none"
 	}
+
 	return strconv.Itoa(statusCode)
 }
 

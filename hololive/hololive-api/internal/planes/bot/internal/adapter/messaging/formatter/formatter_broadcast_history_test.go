@@ -18,10 +18,10 @@ func TestBroadcastHistoryShowsLimitFilter(t *testing.T) {
 	}, []BroadcastHistoryEntry{
 		{
 			VideoID:    "AqxEw3kXcgU",
-			MemberName: "테스트",
+			MemberName: testDisplayName,
 			TypeLabel:  "게임",
 			Title:      "test",
-			Time:       time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+			Time:       time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC),
 			URL:        "https://www.youtube.com/watch?v=AqxEw3kXcgU",
 		},
 	})
@@ -40,9 +40,9 @@ func TestBroadcastHistoryShowsThumbnailShortcut(t *testing.T) {
 	got := formatter.BroadcastHistory(t.Context(), BroadcastHistoryFilter{}, []BroadcastHistoryEntry{
 		{
 			VideoID:      "MKjXgiJSB_o",
-			MemberName:   "테스트",
+			MemberName:   testDisplayName,
 			TypeLabel:    "게임",
-			Time:         time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+			Time:         time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC),
 			HasThumbnail: true,
 		},
 	})
@@ -50,6 +50,7 @@ func TestBroadcastHistoryShowsThumbnailShortcut(t *testing.T) {
 	if want := "   !썸네일 MKjXgiJSB_o"; !strings.Contains(got, want) {
 		t.Fatalf("BroadcastHistory() missing %q in:\n%s", want, got)
 	}
+
 	if notWant := "썸네일 다운로드:"; strings.Contains(got, notWant) {
 		t.Fatalf("BroadcastHistory() still contains redundant thumbnail label %q in:\n%s", notWant, got)
 	}
@@ -66,13 +67,14 @@ func TestBroadcastHistoryOmitsRedundantMembershipTitleTag(t *testing.T) {
 			Type:       "membership",
 			TypeLabel:  "멤버십",
 			Title:      "【メンバー限定】ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】",
-			Time:       time.Date(2026, 7, 5, 15, 32, 44, 0, time.UTC),
+			Time:       time.Date(2026, time.July, 5, 15, 32, 44, 0, time.UTC),
 		},
 	})
 
 	if want := "   ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】"; !strings.Contains(got, want) {
 		t.Fatalf("BroadcastHistory() missing cleaned membership title %q in:\n%s", want, got)
 	}
+
 	if notWant := "【メンバー限定】"; strings.Contains(got, notWant) {
 		t.Fatalf("BroadcastHistory() still contains redundant membership tag %q in:\n%s", notWant, got)
 	}
@@ -133,9 +135,9 @@ func TestBroadcastHistoryReportsTruncatedQueryBudget(t *testing.T) {
 		Truncated: true,
 	}, []BroadcastHistoryEntry{{
 		VideoID:    "AqxEw3kXcgU",
-		MemberName: "테스트",
+		MemberName: testDisplayName,
 		TypeLabel:  "게임",
-		Time:       time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC),
+		Time:       time.Date(2026, time.July, 5, 12, 0, 0, 0, time.UTC),
 	}})
 
 	if !strings.Contains(got, "조회 예산") {
@@ -148,6 +150,7 @@ func TestBroadcastHistoryEmptyReportsTruncatedQueryBudget(t *testing.T) {
 
 	formatter := NewResponseFormatter("!", nil)
 	got := formatter.BroadcastHistoryEmpty(t.Context(), BroadcastHistoryFilter{Truncated: true})
+
 	if !strings.Contains(got, "조회 예산") {
 		t.Fatalf("BroadcastHistoryEmpty() missing truncation notice in:\n%s", got)
 	}

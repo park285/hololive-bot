@@ -27,6 +27,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testDefaultSchemaName = "event_summary"
+
+func testObjectSchema() map[string]any {
+	return map[string]any{"type": "object"}
+}
+
 func TestOptionWithSchemaName(t *testing.T) {
 	t.Parallel()
 
@@ -43,7 +49,7 @@ func TestOptionWithSchemaName(t *testing.T) {
 		{
 			name:   "empty string is no-op",
 			option: WithSchemaName(""),
-			want:   "event_summary",
+			want:   testDefaultSchemaName,
 		},
 	}
 
@@ -51,7 +57,7 @@ func TestOptionWithSchemaName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			options := Options{SchemaName: "event_summary"}
+			options := Options{SchemaName: testDefaultSchemaName}
 			tt.option(&options)
 
 			assert.Equal(t, tt.want, options.SchemaName)
@@ -95,11 +101,12 @@ func TestOptionWithTemperature(t *testing.T) {
 
 			if !tt.wantSet {
 				assert.Nil(t, options.Temperature)
+
 				return
 			}
 
 			require.NotNil(t, options.Temperature)
-			assert.Equal(t, tt.wantValue, *options.Temperature)
+			assert.InDelta(t, tt.wantValue, *options.Temperature, 0)
 		})
 	}
 }
@@ -178,7 +185,8 @@ func TestOptionWithReasoningEffort(t *testing.T) {
 func TestOptionsCompose(t *testing.T) {
 	t.Parallel()
 
-	options := Options{SchemaName: "event_summary"}
+	options := Options{SchemaName: testDefaultSchemaName}
+
 	for _, option := range []Option{
 		WithSchemaName("member_news_summary"),
 		WithTemperature(0.2),
@@ -192,7 +200,7 @@ func TestOptionsCompose(t *testing.T) {
 	require.NotNil(t, options.Temperature)
 	require.NotNil(t, options.WebSearch)
 	assert.Equal(t, "member_news_summary", options.SchemaName)
-	assert.Equal(t, 0.2, *options.Temperature)
+	assert.InDelta(t, 0.2, *options.Temperature, 0)
 	assert.False(t, *options.WebSearch)
 	assert.True(t, options.ChatCompletions)
 	assert.Equal(t, "high", options.ReasoningEffort)

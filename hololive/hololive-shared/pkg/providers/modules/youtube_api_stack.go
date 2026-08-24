@@ -4,9 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/internal/service/youtube/apiservice"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
@@ -34,6 +33,7 @@ func BuildYouTubeAPIStack(ctx context.Context, params *YouTubeAPIStackParams) *p
 		if params.Logger != nil {
 			params.Logger.Warn("YouTube service init failed (optional feature)", slog.Any("error", err))
 		}
+
 		return &providers.YouTubeStack{}
 	}
 

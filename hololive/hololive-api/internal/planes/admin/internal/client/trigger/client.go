@@ -28,9 +28,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	triggercontracts "github.com/kapu/hololive-shared/pkg/contracts/trigger"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 // Client는 llm-scheduler 내부 트리거 API를 호출한다.
@@ -80,7 +81,7 @@ func (c *Client) SendMemberNewsWeekly(ctx context.Context) error {
 
 func (c *Client) postTrigger(ctx context.Context, path string) error {
 	if err := c.validate(); err != nil {
-		return err
+		return fmt.Errorf("validate: %w", err)
 	}
 
 	req, err := c.httpClient.NewRequest(ctx, http.MethodPost, path)
@@ -92,23 +93,31 @@ func (c *Client) postTrigger(ctx context.Context, path string) error {
 	if err != nil {
 		return fmt.Errorf("post trigger: request %s: %w", path, err)
 	}
+
 	if resp == nil {
 		return fmt.Errorf("post trigger: request %s: response is nil", path)
 	}
+
 	if resp.Body == nil {
 		return fmt.Errorf("post trigger: request %s: response body is nil", path)
 	}
 
-	return c.handleTriggerResponse(resp, path)
+	if err := c.handleTriggerResponse(resp, path); err != nil {
+		return fmt.Errorf("handle trigger response: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) validate() error {
 	if c == nil {
 		return errors.New("post trigger: client is nil")
 	}
+
 	if c.httpClient == nil {
 		return errors.New("post trigger: http client is not configured")
 	}
+
 	return nil
 }
 
@@ -116,12 +125,18 @@ func (c *Client) handleTriggerResponse(resp *http.Response, path string) error {
 	if resp == nil {
 		return fmt.Errorf("post trigger: request %s: response is nil", path)
 	}
+
 	if resp.Body == nil {
 		return fmt.Errorf("post trigger: request %s: response body is nil", path)
 	}
 
-	if handled, err := c.handleTriggerConflict(resp, path); handled || err != nil {
-		return err
+	handled, err := c.handleTriggerConflict(resp, path)
+	if err != nil {
+		return fmt.Errorf("handle trigger conflict: %w", err)
+	}
+
+	if handled {
+		return nil
 	}
 
 	if err := c.httpClient.CheckStatus(resp); err != nil {
@@ -149,12 +164,15 @@ func (c *Client) handleTriggerConflict(resp *http.Response, path string) (bool, 
 	if resp == nil {
 		return true, fmt.Errorf("post trigger: request %s: response is nil", path)
 	}
+
 	if resp.Body == nil {
 		return true, fmt.Errorf("post trigger: request %s: response body is nil", path)
 	}
+
 	if resp.StatusCode != http.StatusConflict {
 		return false, nil
 	}
+
 	if closeErr := resp.Body.Close(); closeErr != nil {
 		return true, fmt.Errorf("post trigger: close conflict response body %s: %w", path, closeErr)
 	}

@@ -1,6 +1,7 @@
 package botruntime
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -31,6 +32,7 @@ func TestNoLegacyRuntimeSplitInternalImportsRemain(t *testing.T) {
 	}
 
 	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+
 	hits, err := findLegacyRuntimeSplitInternalImports(moduleRoot, forbiddenImports)
 	if err != nil {
 		t.Fatalf("scan module imports: %v", err)
@@ -46,7 +48,9 @@ func TestNoLegacyRuntimeSplitInternalImportsRemain(t *testing.T) {
 
 func findLegacyRuntimeSplitInternalImports(moduleRoot string, forbiddenImports map[string]string) ([]string, error) {
 	fset := token.NewFileSet()
+
 	var hits []string
+
 	walkErr := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -67,17 +71,18 @@ func findLegacyRuntimeSplitInternalImports(moduleRoot string, forbiddenImports m
 
 		relPath, relErr := filepath.Rel(moduleRoot, path)
 		if relErr != nil {
-			return relErr
+			return fmt.Errorf("rel: %w", relErr)
 		}
 
 		fileNode, parseErr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if parseErr != nil {
-			return parseErr
+			return fmt.Errorf("parse file: %w", parseErr)
 		}
 
 		for _, spec := range fileNode.Imports {
 			importPath := strings.Trim(spec.Path.Value, "\"")
 			replacement, blocked := forbiddenImports[importPath]
+
 			if !blocked {
 				continue
 			}
@@ -87,5 +92,9 @@ func findLegacyRuntimeSplitInternalImports(moduleRoot string, forbiddenImports m
 
 		return nil
 	})
-	return hits, walkErr
+	if walkErr != nil {
+		return nil, fmt.Errorf("walk module tree: %w", walkErr)
+	}
+
+	return hits, nil
 }

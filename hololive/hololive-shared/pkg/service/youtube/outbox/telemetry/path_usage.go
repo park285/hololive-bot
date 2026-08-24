@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,13 +32,15 @@ type postDeliveryPathUsageScanRow struct {
 
 func (r *Repository) ListPostDeliveryPathUsageSince(ctx context.Context, since time.Time) ([]analytics.PostDeliveryPathUsage, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list post delivery path usage since: db is nil")
+		return nil, errors.New("list post delivery path usage since: db is nil")
 	}
+
 	if since.IsZero() {
-		return nil, fmt.Errorf("list post delivery path usage since: since is empty")
+		return nil, errors.New("list post delivery path usage since: since is empty")
 	}
 
 	var scanned []postDeliveryPathUsageScanRow
+
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
 	query := mustSQL("path_usage_0044_01.sql") + strings.Join([]string{
 		"track.kind AS outbox_kind",
@@ -72,8 +75,10 @@ func (r *Repository) ListPostDeliveryPathUsageSince(ctx context.Context, since t
 		ORDER BY track.channel_id ASC, track.content_id ASC, COALESCE(t.delivery_path, '') ASC
 	`
 	args := []any{since.UTC()}
+
 	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
 	args = append(args, since.UTC())
+
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "list post delivery path usage since: scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("list post delivery path usage since: scan rows: %w", err)
 	}

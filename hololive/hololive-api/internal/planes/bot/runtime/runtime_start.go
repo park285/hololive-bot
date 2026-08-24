@@ -30,9 +30,11 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
 	}
+
 	if r.durable != nil {
 		r.durable.Start(ctx)
 	}
+
 	r.startWorkerProfileChecker(ctx)
 
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
@@ -47,6 +49,7 @@ func (r *BotRuntime) Start(ctx context.Context, errCh chan<- error) {
 			if r.Bot == nil {
 				return nil
 			}
+
 			return r.Bot.Start(ctx)
 		},
 		StartH3CertReload: r.h3CertReloadStart,

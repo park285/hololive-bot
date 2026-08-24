@@ -8,8 +8,11 @@ import (
 func TestPublishIsolatesInputSubscribersAndHistory(t *testing.T) {
 	hub := NewHub(nil)
 	_, updatesA, unsubscribeA := hub.Subscribe()
+
 	defer unsubscribeA()
+
 	_, updatesB, unsubscribeB := hub.Subscribe()
+
 	defer unsubscribeB()
 
 	errorText := "upstream unavailable"
@@ -30,6 +33,7 @@ func TestPublishIsolatesInputSubscribersAndHistory(t *testing.T) {
 
 	gotA := receiveSystemStats(t, updatesA)
 	gotB := receiveSystemStats(t, updatesB)
+
 	gotA.ServiceRuntime[0].Count = 88
 	*gotA.ServiceRuntime[0].Error = "subscriber mutated"
 
@@ -37,9 +41,11 @@ func TestPublishIsolatesInputSubscribersAndHistory(t *testing.T) {
 
 	history, _, unsubscribeHistory := hub.Subscribe()
 	unsubscribeHistory()
+
 	if len(history) != 1 {
 		t.Fatalf("history len = %d, want 1", len(history))
 	}
+
 	assertOriginalRuntimeSnapshot(t, &history[0])
 
 	history[0].ServiceRuntime[0].Count = 77
@@ -47,32 +53,39 @@ func TestPublishIsolatesInputSubscribersAndHistory(t *testing.T) {
 
 	historyAgain, _, unsubscribeAgain := hub.Subscribe()
 	unsubscribeAgain()
+
 	if len(historyAgain) != 1 {
 		t.Fatalf("second history len = %d, want 1", len(historyAgain))
 	}
+
 	assertOriginalRuntimeSnapshot(t, &historyAgain[0])
 }
 
 func receiveSystemStats(t *testing.T, updates <-chan SystemStats) SystemStats {
 	t.Helper()
+
 	select {
 	case stats := <-updates:
 		return stats
 	case <-time.After(time.Second):
 		t.Fatal("subscriber did not receive published stats")
+
 		return SystemStats{}
 	}
 }
 
 func assertOriginalRuntimeSnapshot(t *testing.T, stats *SystemStats) {
 	t.Helper()
+
 	if len(stats.ServiceRuntime) != 1 {
 		t.Fatalf("service runtime len = %d, want 1", len(stats.ServiceRuntime))
 	}
+
 	runtime := stats.ServiceRuntime[0]
 	if runtime.Count != 7 {
 		t.Fatalf("runtime count = %d, want 7", runtime.Count)
 	}
+
 	if runtime.Error == nil || *runtime.Error != "upstream unavailable" {
 		t.Fatalf("runtime error = %v, want upstream unavailable", runtime.Error)
 	}

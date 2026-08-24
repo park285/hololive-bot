@@ -21,7 +21,6 @@
 package youtubedispatch
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -44,8 +43,11 @@ func cleanupTestClaimManager(db *deliveryTestDB, cfg *dispatchstate.Config) *Cla
 
 func outboxRowCount(t *testing.T, db *deliveryTestDB, id int64) int64 {
 	t.Helper()
+
 	var count int64
+
 	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &count, "id = ?", id).Error)
+
 	return count
 }
 
@@ -56,7 +58,7 @@ func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
 		ClaimFreshnessWindow: 2 * time.Hour,
 		LockTimeout:          5 * time.Minute,
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 
 	now := time.Now().UTC()
 	veryOld := now.Add(-30 * 24 * time.Hour)
@@ -70,6 +72,7 @@ func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
 			NextAttemptAt: createdAt, CreatedAt: createdAt, LockedAt: lockedAt,
 		}
 		require.NoError(t, insertDeliveryTestRows(db, row).Error)
+
 		return row
 	}
 
@@ -79,7 +82,7 @@ func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
 
 	orphanWithDelivery := newPending("orphan-with-delivery", veryOld, nil)
 	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
-		OutboxID: orphanWithDelivery.ID, RoomID: "room-1", Status: domain.OutboxStatusPending,
+		OutboxID: orphanWithDelivery.ID, RoomID: testRoomOne, Status: domain.OutboxStatusPending,
 	}).Error)
 
 	cm.cleanupOutbox(ctx)
@@ -90,6 +93,7 @@ func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
 	assert.Equal(t, int64(1), outboxRowCount(t, db, orphanWithDelivery.ID), "delivery 행 있는 PENDING은 보존")
 
 	var deliveryCount int64
+
 	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, &deliveryCount, "outbox_id = ?", orphanWithDelivery.ID).Error)
 	assert.Equal(t, int64(1), deliveryCount, "보존된 PENDING의 delivery 행도 CASCADE로 삭제되지 않음")
 }
@@ -101,7 +105,7 @@ func TestCleanupOutbox_UsesMaxOfCleanupAfterAndFreshnessWindow(t *testing.T) {
 		ClaimFreshnessWindow: 2 * time.Hour,
 		LockTimeout:          5 * time.Minute,
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 
 	now := time.Now().UTC()
 	betweenCutoffs := now.Add(-90 * time.Minute)
@@ -114,6 +118,7 @@ func TestCleanupOutbox_UsesMaxOfCleanupAfterAndFreshnessWindow(t *testing.T) {
 			NextAttemptAt: createdAt, CreatedAt: createdAt,
 		}
 		require.NoError(t, insertDeliveryTestRows(db, row).Error)
+
 		return row
 	}
 

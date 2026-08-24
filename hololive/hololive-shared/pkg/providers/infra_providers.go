@@ -22,15 +22,15 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -46,7 +46,7 @@ type DatabaseResources struct {
 	Close   func()
 }
 
-// ProvideCacheResources - 캐시 리소스 생성 (정리 함수 포함)
+// ProvideCacheResources - 캐시 리소스 생성 (정리 함수 포함).
 func ProvideCacheResources(ctx context.Context, valkeyConfig settings.ValkeyConfig, logger *slog.Logger) (*CacheResources, func(), error) {
 	cacheClient, err := cache.NewCacheService(ctx, cache.Config{
 		Host:       valkeyConfig.Host,
@@ -67,14 +67,16 @@ func ProvideCacheResources(ctx context.Context, valkeyConfig settings.ValkeyConf
 			}
 		},
 	}
+
 	return resources, resources.Close, nil
 }
 
-// ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함)
+// ProvideDatabaseResources - 데이터베이스 리소스 생성 (정리 함수 포함).
 func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*DatabaseResources, func(), error) {
 	if postgresConfig == nil {
-		return nil, nil, fmt.Errorf("postgres config is nil")
+		return nil, nil, errors.New("postgres config is nil")
 	}
+
 	dbService, err := database.NewPostgresService(ctx, &database.PostgresConfig{
 		Host:          postgresConfig.Host,
 		Port:          postgresConfig.Port,
@@ -99,14 +101,20 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 			}
 		},
 	}
+
 	return resources, resources.Close, nil
 }
 
 const irisBaseURLFileEnv = "IRIS_BASE_URL_FILE"
 
-// ProvideIrisClient - Iris 발송 클라이언트 생성
+// ProvideIrisClient - Iris 발송 클라이언트 생성.
 func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (iris.Client, error) {
-	return provideRuntimeIrisClient(logger, opts...)
+	out, err := provideRuntimeIrisClient(logger, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("provide runtime iris client: %w", err)
+	}
+
+	return out, nil
 }
 
 type IrisKaringClient interface {
@@ -115,26 +123,34 @@ type IrisKaringClient interface {
 }
 
 func ProvideIrisKaringClient(logger *slog.Logger, opts ...iris.ClientOption) (IrisKaringClient, error) {
-	return provideRuntimeIrisClient(logger, opts...)
+	out, err := provideRuntimeIrisClient(logger, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("provide runtime iris client: %w", err)
+	}
+
+	return out, nil
 }
 
 func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*delivery.RuntimeIrisClient, error) {
 	irisConfig := iris.ResolveClientSDKConfig(opts)
 	fallbackBaseURL := strings.TrimSpace(irisConfig.BaseURL)
+
 	if fallbackBaseURL == "" {
 		fallbackBaseURL = strings.TrimSpace(os.Getenv(iris.EnvBaseURL))
 	}
+
 	baseURLFilePath := strings.TrimSpace(os.Getenv(irisBaseURLFileEnv))
 	if fallbackBaseURL == "" && baseURLFilePath == "" {
-		return nil, fmt.Errorf("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
+		return nil, errors.New("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
 	botToken := strings.TrimSpace(irisConfig.BotToken)
 	if botToken == "" {
 		botToken = strings.TrimSpace(os.Getenv(iris.EnvBotToken))
 	}
+
 	if botToken == "" {
-		return nil, fmt.Errorf("provide iris client: bot token is required")
+		return nil, errors.New("provide iris client: bot token is required")
 	}
 
 	client := delivery.NewRuntimeIrisClient(
@@ -147,5 +163,6 @@ func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*
 	if err := client.ValidateBaseURL(); err != nil {
 		return nil, fmt.Errorf("provide iris client: %w", err)
 	}
+
 	return client, nil
 }

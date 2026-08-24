@@ -22,9 +22,9 @@ package holodexprovider
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -36,9 +36,7 @@ import (
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	apiclient "github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient"
@@ -51,34 +49,42 @@ import (
 
 func newInMemoryCacheClient() *cachemocks.Client {
 	var mu sync.Mutex
+
 	store := make(map[string][]byte)
 
 	return &cachemocks.Client{
 		GetFunc: func(_ context.Context, key string, dest any) error {
 			mu.Lock()
+
 			payload, ok := store[key]
 			mu.Unlock()
+
 			if !ok {
 				return nil
 			}
+
 			return jsonv2.Unmarshal(payload, dest)
 		},
 		SetFunc: func(_ context.Context, key string, value any, _ time.Duration) error {
 			payload, err := jsonv2.Marshal(value)
 			if err != nil {
-				return err
+				return fmt.Errorf("marshal: %w", err)
 			}
+
 			mu.Lock()
+
 			store[key] = payload
 			mu.Unlock()
+
 			return nil
 		},
 	}
 }
 
 func newServiceForFallbackTest(requester apiclient.Requester) *Service {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	cacheClient := newInMemoryCacheClient()
+
 	return &Service{
 		requester:    requester,
 		logger:       logger,
@@ -90,19 +96,38 @@ func newServiceForFallbackTest(requester apiclient.Requester) *Service {
 
 func newServiceForFallbackTestWithScraper(requester apiclient.Requester, scraperService *htmlscraper.Service) *Service {
 	service := newServiceForFallbackTest(requester)
+
 	service.scraper = scraperService
+
 	return service
 }
 
-func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
-	var (
-		inFlight       atomic.Int32
-		maxInFlight    atomic.Int32
-		channelReqsCnt atomic.Int32
-	)
-	mockReq := &MockRequester{
+type fallbackConcurrencyTracker struct {
+	inFlight    atomic.Int32
+	maxInFlight atomic.Int32
+	requests    atomic.Int32
+}
+
+func (tracker *fallbackConcurrencyTracker) enter() {
+	current := tracker.inFlight.Add(1)
+	tracker.requests.Add(1)
+
+	for {
+		previous := tracker.maxInFlight.Load()
+		if current <= previous || tracker.maxInFlight.CompareAndSwap(previous, current) {
+			break
+		}
+	}
+}
+
+func (tracker *fallbackConcurrencyTracker) leave() {
+	tracker.inFlight.Add(-1)
+}
+
+func newConcurrencyTrackingChannelRequester(tracker *fallbackConcurrencyTracker) *MockRequester {
+	return &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
 
@@ -110,7 +135,7 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 				return nil, &apiclient.APIError{
 					Operation:  "list_channels",
 					StatusCode: http.StatusServiceUnavailable,
-					Err:        fmt.Errorf("forced /channels failure"),
+					Err:        errors.New("forced /channels failure"),
 				}
 			}
 
@@ -119,29 +144,26 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 			}
 
 			channelID := strings.TrimPrefix(path, "/channels/")
-			current := inFlight.Add(1)
-			channelReqsCnt.Add(1)
-			for {
-				previous := maxInFlight.Load()
-				if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
-					break
-				}
-			}
 
+			tracker.enter()
 			time.Sleep(20 * time.Millisecond)
-			inFlight.Add(-1)
+			tracker.leave()
 
 			return fmt.Appendf(nil, `{"id":"%s","name":"%s"}`, channelID, channelID), nil
 		},
 	}
+}
 
-	service := newServiceForFallbackTest(mockReq)
+func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
+	var tracker fallbackConcurrencyTracker
+
+	service := newServiceForFallbackTest(newConcurrencyTrackingChannelRequester(&tracker))
 	channelIDs := []string{
 		"c01", "c02", "c03", "c04", "c05", "c06",
 		"c07", "c08", "c09", "c10", "c11", "c12",
 	}
 
-	got, err := service.GetChannels(context.Background(), channelIDs)
+	got, err := service.GetChannels(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("GetChannels() error = %v", err)
 	}
@@ -156,45 +178,52 @@ func TestGetChannels_FallbackWorkerPoolLimitsConcurrency(t *testing.T) {
 		}
 	}
 
-	if observedMax := maxInFlight.Load(); observedMax > 5 {
+	if observedMax := tracker.maxInFlight.Load(); observedMax > 5 {
 		t.Fatalf("fallback max concurrency = %d, want <= 5", observedMax)
 	}
 
-	if gotReqs := channelReqsCnt.Load(); int(gotReqs) != len(channelIDs) {
+	if gotReqs := tracker.requests.Load(); int(gotReqs) != len(channelIDs) {
 		t.Fatalf("fallback request count = %d, want %d", gotReqs, len(channelIDs))
 	}
 }
 
 func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 	var fallbackChannelReqs atomic.Int32
+
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
+
 			if path == "/channels" {
 				return nil, context.Canceled
 			}
+
 			if strings.HasPrefix(path, "/channels/") {
 				fallbackChannelReqs.Add(1)
+
 				return nil, context.Canceled
 			}
+
 			return nil, fmt.Errorf("unexpected path: %s", path)
 		},
 	}
 
 	service := newServiceForFallbackTest(mockReq)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	_, err := service.GetChannels(ctx, []string{"c1", "c2", "c3"})
 	if err == nil {
 		t.Fatal("GetChannels() error = nil, want non-nil")
 	}
+
 	if !strings.Contains(err.Error(), "get channels batch list") {
 		t.Fatalf("GetChannels() error = %v, want contains %q", err, "get channels batch list")
 	}
+
 	if got := fallbackChannelReqs.Load(); got != 0 {
 		t.Fatalf("fallback channel request count = %d, want 0", got)
 	}
@@ -202,7 +231,7 @@ func TestGetChannels_FallbackStopsWhenContextCanceled(t *testing.T) {
 
 func TestCollectIndividualChannelFetchResultsReturnsOnCancel(t *testing.T) {
 	service := newServiceForFallbackTest(&MockRequester{})
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	resultChan := make(chan channelFetchResult)
 	done := make(chan error, 1)
 
@@ -218,6 +247,7 @@ func TestCollectIndividualChannelFetchResultsReturnsOnCancel(t *testing.T) {
 		if err == nil {
 			t.Fatal("collectIndividualChannelFetchResults() error = nil, want non-nil")
 		}
+
 		if !strings.Contains(err.Error(), "batch channel fetch canceled") {
 			t.Fatalf("collectIndividualChannelFetchResults() error = %v, want canceled batch error", err)
 		}
@@ -228,38 +258,46 @@ func TestCollectIndividualChannelFetchResultsReturnsOnCancel(t *testing.T) {
 
 func TestGetChannels_DoesNotFallbackOnNonRetryableListError(t *testing.T) {
 	var fallbackChannelReqs atomic.Int32
+
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
+
 			if path == "/channels" {
 				return nil, &apiclient.APIError{
 					Operation:  "list_channels",
 					StatusCode: http.StatusBadRequest,
-					Err:        fmt.Errorf("bad request"),
+					Err:        errors.New("bad request"),
 				}
 			}
+
 			if strings.HasPrefix(path, "/channels/") {
 				fallbackChannelReqs.Add(1)
+
 				return []byte(`{"id":"c1","name":"c1"}`), nil
 			}
+
 			return nil, fmt.Errorf("unexpected path: %s", path)
 		},
 	}
 
 	service := newServiceForFallbackTest(mockReq)
 
-	got, err := service.GetChannels(context.Background(), []string{"c1", "c2"})
+	got, err := service.GetChannels(t.Context(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannels() error = nil, want non-nil")
 	}
+
 	if !strings.Contains(err.Error(), "get channels batch list") {
 		t.Fatalf("GetChannels() error = %v, want contains %q", err, "get channels batch list")
 	}
+
 	if len(got) != 0 {
 		t.Fatalf("GetChannels() len = %d, want 0", len(got))
 	}
+
 	if gotReqs := fallbackChannelReqs.Load(); gotReqs != 0 {
 		t.Fatalf("fallback channel request count = %d, want 0", gotReqs)
 	}
@@ -277,30 +315,32 @@ func TestGetChannelsLiveStatusUsesYouTubeScraperWithoutOfficialScheduleFallback(
 	startUnix := time.Now().UTC().Add(10 * time.Minute).Unix()
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
 
-	scraperService := newScraperServiceForTest(server.Client(), slog.New(slog.NewTextHandler(io.Discard, nil)), server.URL, func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(server.Client(), slog.New(slog.DiscardHandler), server.URL, func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		switch channelID {
 		case "c1":
 			return []*parser.UpcomingEvent{
 				{
-					VideoID:      "video-1",
+					VideoID:      testVideoID,
 					Title:        "stream-1",
 					Status:       "UPCOMING",
 					StartTime:    &startUnix,
-					ChannelTitle: "channel-1",
+					ChannelTitle: testChannelID,
 				},
 			}, nil
 		case "c2":
@@ -313,16 +353,19 @@ func TestGetChannelsLiveStatusUsesYouTubeScraperWithoutOfficialScheduleFallback(
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{"c1", "c2"})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
+
 	if len(streams) != 1 {
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
+
 	if streams[0].ChannelID != "c1" {
 		t.Fatalf("channel_id = %s, want c1", streams[0].ChannelID)
 	}
+
 	if got := officialRequests.Load(); got != 0 {
 		t.Fatalf("official schedule requests = %d, want 0", got)
 	}
@@ -331,33 +374,36 @@ func TestGetChannelsLiveStatusUsesYouTubeScraperWithoutOfficialScheduleFallback(
 func TestGetChannelsLiveStatusPropagatesYouTubeScraperFallbackError(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		return nil, fmt.Errorf("%s: %w", channelID, ytscraper.ErrRateLimited)
 	})
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
-
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
 	}
+
 	if !errors.Is(err, ytscraper.ErrRateLimited) {
 		t.Fatalf("GetChannelsLiveStatus() error = %v, want ErrRateLimited", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
@@ -367,29 +413,31 @@ func TestGetChannelsLiveStatus_PropagatesSourceLevelFallbackErrorWithPartialStre
 	startUnix := time.Now().UTC().Add(10 * time.Minute).Unix()
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		switch channelID {
 		case "c1":
 			return []*parser.UpcomingEvent{
 				{
-					VideoID:      "video-1",
+					VideoID:      testVideoID,
 					Title:        "stream-1",
 					Status:       "UPCOMING",
 					StartTime:    &startUnix,
-					ChannelTitle: "channel-1",
+					ChannelTitle: testChannelID,
 				},
 			}, nil
 		case "c2":
@@ -401,14 +449,15 @@ func TestGetChannelsLiveStatus_PropagatesSourceLevelFallbackErrorWithPartialStre
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
-
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
 	}
+
 	if !errors.Is(err, ytscraper.ErrRateLimited) {
 		t.Fatalf("GetChannelsLiveStatus() error = %v, want ErrRateLimited", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
@@ -416,39 +465,46 @@ func TestGetChannelsLiveStatus_PropagatesSourceLevelFallbackErrorWithPartialStre
 
 func TestGetChannelsLiveStatus_DoesNotFallbackOnNonRetryableError(t *testing.T) {
 	var scraperCalls atomic.Int32
+
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusBadRequest,
-				Err:        fmt.Errorf("bad request"),
+				Err:        errors.New("bad request"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		scraperCalls.Add(1)
+
 		return nil, fmt.Errorf("unexpected scraper call for %s", channelID)
 	},
 	)
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
 	}
+
 	if !strings.Contains(err.Error(), "get channels live status") {
 		t.Fatalf("GetChannelsLiveStatus() error = %v, want contains %q", err, "get channels live status")
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
+
 	if got := scraperCalls.Load(); got != 0 {
 		t.Fatalf("scraper calls = %d, want 0", got)
 	}
@@ -457,33 +513,38 @@ func TestGetChannelsLiveStatus_DoesNotFallbackOnNonRetryableError(t *testing.T) 
 func TestGetChannel_DoesNotFallbackOnNonRetryableAPIError(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
+
 			if path != "/channels/c1" {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			return nil, &apiclient.APIError{
 				Operation:  "get_channel",
 				StatusCode: http.StatusBadRequest,
-				Err:        fmt.Errorf("bad request"),
+				Err:        errors.New("bad request"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "", nil)
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "", nil)
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	channel, err := service.GetChannel(context.Background(), "c1")
+	channel, err := service.GetChannel(t.Context(), "c1")
 	if err == nil {
 		t.Fatal("GetChannel() error = nil, want non-nil")
 	}
+
 	if !strings.Contains(err.Error(), "get channel") {
 		t.Fatalf("GetChannel() error = %v, want contains %q", err, "get channel")
 	}
+
 	if strings.Contains(err.Error(), "scraper fallback failed") {
 		t.Fatalf("GetChannel() error = %v, want no scraper fallback attempt", err)
 	}
+
 	if channel != nil {
 		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
 	}
@@ -501,41 +562,35 @@ func (e *mockTimeoutError) Temporary() bool { return false }
 func TestShouldUseFallbackTimeout(t *testing.T) {
 	service := newServiceForFallbackTest(&MockRequester{})
 
-	activeCtx := context.Background()
+	activeCtx := t.Context()
 
 	tests := []struct {
 		name     string
-		ctx      context.Context
 		err      error
 		expected bool
 	}{
 		{
 			name:     "DeadlineExceeded with active ctx",
-			ctx:      activeCtx,
 			err:      context.DeadlineExceeded,
 			expected: false,
 		},
 		{
 			name:     "wrapped timeout with active ctx",
-			ctx:      activeCtx,
 			err:      fmt.Errorf("request: %w", context.DeadlineExceeded),
 			expected: false,
 		},
 		{
 			name:     "net timeout with active ctx",
-			ctx:      activeCtx,
 			err:      &mockTimeoutError{msg: "i/o timeout", timeout: true},
 			expected: false,
 		},
 		{
 			name:     "일반 에러는 폴백 안함",
-			ctx:      activeCtx,
-			err:      fmt.Errorf("some error"),
+			err:      errors.New("some error"),
 			expected: false,
 		},
 		{
 			name:     "nil 에러",
-			ctx:      activeCtx,
 			err:      nil,
 			expected: false,
 		},
@@ -543,7 +598,7 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := service.shouldUseFallback(tt.ctx, tt.err)
+			got := service.shouldUseFallback(activeCtx, tt.err)
 			if got != tt.expected {
 				t.Errorf("shouldUseFallback(%v) = %v, want %v", tt.err, got, tt.expected)
 			}
@@ -554,7 +609,7 @@ func TestShouldUseFallbackTimeout(t *testing.T) {
 func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
 	service := newServiceForFallbackTest(&MockRequester{})
 
-	canceledCtx, cancel := context.WithCancel(context.Background())
+	canceledCtx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	if service.shouldUseFallback(canceledCtx, context.DeadlineExceeded) {
@@ -569,30 +624,34 @@ func TestShouldUseFallbackCallerContextExpired(t *testing.T) {
 func TestGetChannel_ReturnsErrorWhenRetryableFallbackAlsoFails(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, _ url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
+
 			if path != "/channels/c1" {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			return nil, &apiclient.APIError{
 				Operation:  "get_channel",
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "", nil)
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "", nil)
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	channel, err := service.GetChannel(context.Background(), "c1")
+	channel, err := service.GetChannel(t.Context(), "c1")
 	if err == nil {
 		t.Fatal("GetChannel() error = nil, want non-nil")
 	}
+
 	if !strings.Contains(err.Error(), "primary and scraper fallback failed") {
 		t.Fatalf("GetChannel() error = %v, want contains %q", err, "primary and scraper fallback failed")
 	}
+
 	if channel != nil {
 		t.Fatalf("GetChannel() channel = %#v, want nil", channel)
 	}
@@ -603,23 +662,23 @@ func TestGetChannelsLiveStatusWithFailures_ReportsPartialBenignFailuresWithoutCa
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
-	benignErr := fmt.Errorf("transient fetch failure")
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	benignErr := errors.New("transient fetch failure")
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		switch channelID {
 		case "c1":
 			return []*parser.UpcomingEvent{
 				{
-					VideoID:      "video-1",
+					VideoID:      testVideoID,
 					Title:        "stream-1",
 					Status:       "UPCOMING",
 					StartTime:    &startUnix,
-					ChannelTitle: "channel-1",
+					ChannelTitle: testChannelID,
 				},
 			}, nil
 		case "c2":
@@ -632,24 +691,28 @@ func TestGetChannelsLiveStatusWithFailures_ReportsPartialBenignFailuresWithoutCa
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 	channelIDs := []string{"c1", "c2"}
 
-	streams, failed, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
-
+	streams, failed, err := service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 	}
+
 	if len(streams) != 1 {
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
-	if streams[0].ID != "video-1" {
-		t.Fatalf("streams[0].ID = %q, want %q", streams[0].ID, "video-1")
+
+	if streams[0].ID != testVideoID {
+		t.Fatalf("streams[0].ID = %q, want %q", streams[0].ID, testVideoID)
 	}
+
 	if len(failed) != 1 {
 		t.Fatalf("len(failed) = %d, want 1", len(failed))
 	}
+
 	if failedErr, ok := failed["c2"]; !ok || !errors.Is(failedErr, benignErr) {
 		t.Fatalf("failed[\"c2\"] = %v (present=%v), want wrapped benign error", failedErr, ok)
 	}
-	if _, found := service.cacheManager.GetChannelsLiveStatusStreams(context.Background(), channelIDs); found {
+
+	if _, found := service.cacheManager.GetChannelsLiveStatusStreams(t.Context(), channelIDs); found {
 		t.Fatal("partial fallback result must not be cached for the full channel set")
 	}
 }
@@ -658,43 +721,51 @@ func TestChannelsLiveStatusFallbackDefersUnattemptedChannelsByCap(t *testing.T) 
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
+
 	var attempted []string
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		attempted = append(attempted, channelID)
 		return nil, nil
 	})
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
 	service.liveStatusFallback = settings.HolodexLiveStatusFallbackConfig{
 		MaxPerCycle:     2,
 		WallClockBudget: time.Second,
 	}
 
 	channelIDs := []string{"c1", "c2", "c3", "c4", "c5"}
-	streams, failed, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
 
+	streams, failed, err := service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
+
 	if len(attempted) != 2 {
 		t.Fatalf("attempted len = %d, want 2 (%v)", len(attempted), attempted)
 	}
+
 	if len(failed) != 3 {
 		t.Fatalf("failed len = %d, want 3", len(failed))
 	}
+
 	for _, channelID := range []string{"c3", "c4", "c5"} {
 		if !livestatus.IsDeferred(failed[channelID]) {
 			t.Fatalf("failed[%s] = %v, want deferred", channelID, failed[channelID])
 		}
+
 		if got := livestatus.ReasonOf(failed[channelID]); got != livestatus.DeferredReasonPerCycleCap {
 			t.Fatalf("failed[%s] reason = %q, want %q", channelID, got, livestatus.DeferredReasonPerCycleCap)
 		}
@@ -705,27 +776,29 @@ func TestChannelsLiveStatusFallbackRotatesCursor(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
 	attempted := make(map[string]int)
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		attempted[channelID]++
 		return nil, nil
 	})
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
 	service.liveStatusFallback = settings.HolodexLiveStatusFallbackConfig{
 		MaxPerCycle:     2,
 		WallClockBudget: time.Second,
 	}
 
 	channelIDs := []string{"c1", "c2", "c3", "c4", "c5"}
+
 	for range 3 {
-		_, _, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+		_, _, err := service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 		if err != nil {
 			t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 		}
@@ -742,35 +815,39 @@ func TestChannelsLiveStatusFallbackRotatesAcrossBatchSets(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
 	attempted := make(map[string]int)
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		attempted[channelID]++
 		return nil, nil
 	})
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
 	service.liveStatusFallback = settings.HolodexLiveStatusFallbackConfig{
 		MaxPerCycle:     4,
 		WallClockBudget: time.Second,
 	}
+
 	channelSets := make([][]string, 0, 3)
+
 	for setIndex, size := range []int{40, 40, 34} {
 		channelIDs := make([]string, 0, size)
 		for channelIndex := range size {
 			channelIDs = append(channelIDs, fmt.Sprintf("set-%d-channel-%02d", setIndex, channelIndex))
 		}
+
 		channelSets = append(channelSets, channelIDs)
 	}
 
 	for range 10 {
 		for _, channelIDs := range channelSets {
-			_, _, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+			_, _, err := service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 			if err != nil {
 				t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 			}
@@ -788,6 +865,7 @@ func TestChannelsLiveStatusFallbackRotatesAcrossBatchSets(t *testing.T) {
 
 func TestLiveStatusFallbackCursorStateIsBounded(t *testing.T) {
 	service := &Service{}
+
 	for index := range liveFallbackCursorSetLimit + 1 {
 		channelIDs := []string{fmt.Sprintf("set-%03d-channel", index)}
 		service.nextLiveStatusFallbackChannel(channelIDs, newLiveFallbackSetKey(channelIDs))
@@ -802,9 +880,9 @@ func TestChannelsLiveStatusFallbackDoesNotAdvanceCursorForBudgetUnattemptedChann
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
@@ -814,36 +892,43 @@ func TestChannelsLiveStatusFallbackDoesNotAdvanceCursorForBudgetUnattemptedChann
 		firstCall      = true
 		secondAttempts []string
 	)
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		mu.Lock()
+
 		blockFirst := firstCall
 		if firstCall {
 			firstCall = false
 		} else {
 			secondAttempts = append(secondAttempts, channelID)
 		}
+
 		mu.Unlock()
 
 		if blockFirst {
 			<-ctx.Done()
+
 			return nil, ctx.Err()
 		}
+
 		return nil, nil
 	})
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
 	service.liveStatusFallback = settings.HolodexLiveStatusFallbackConfig{
 		MaxPerCycle:     2,
 		WallClockBudget: 20 * time.Millisecond,
 	}
 
 	channelIDs := []string{"c1", "c2", "c3"}
-	_, _, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+
+	_, _, err := service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("first GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 	}
 
-	_, _, err = service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+	_, _, err = service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("second GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 	}
@@ -858,43 +943,49 @@ func TestChannelsLiveStatusFallbackAllDeferredIsSoft(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(context.Context, string) ([]*parser.UpcomingEvent, error) {
 		return nil, ytscraper.ErrTransientCooldown
 	})
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
+
 	service.liveStatusFallback = settings.HolodexLiveStatusFallbackConfig{
 		MaxPerCycle:     2,
 		WallClockBudget: time.Second,
 	}
 
 	channelIDs := []string{"c1", "c2"}
-	streams, failed, err := service.GetChannelsLiveStatusWithFailures(context.Background(), channelIDs)
+
+	streams, failed, err := service.GetChannelsLiveStatusWithFailures(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatusWithFailures() error = %v, want nil", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
+
 	if len(failed) != len(channelIDs) {
 		t.Fatalf("failed len = %d, want %d", len(failed), len(channelIDs))
 	}
+
 	for _, channelID := range channelIDs {
 		if !livestatus.IsDeferred(failed[channelID]) {
 			t.Fatalf("failed[%s] = %v, want deferred", channelID, failed[channelID])
 		}
 	}
 
-	streams, err = service.GetChannelsLiveStatus(context.Background(), channelIDs)
+	streams, err = service.GetChannelsLiveStatus(t.Context(), channelIDs)
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v, want nil for deferred-only result", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
@@ -904,18 +995,18 @@ func TestGetChannelsLiveStatus_PropagatesSourceLevelErrorEvenWhenNotLast(t *test
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
-				Operation:  "channels_live_status",
+				Operation:  testOpChannelsLiveStatus,
 				StatusCode: http.StatusServiceUnavailable,
-				Err:        fmt.Errorf("upstream unavailable"),
+				Err:        errors.New("upstream unavailable"),
 			}
 		},
 	}
-	scraperService := newScraperServiceForTest(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
+	scraperService := newScraperServiceForTest(nil, slog.New(slog.DiscardHandler), "http://example.invalid", func(_ context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
 		switch channelID {
 		case "c1":
 			return nil, ytscraper.ErrRateLimited
 		case "c2":
-			return nil, fmt.Errorf("transient fetch failure")
+			return nil, errors.New("transient fetch failure")
 		default:
 			return nil, fmt.Errorf("unexpected channel: %s", channelID)
 		}
@@ -923,14 +1014,15 @@ func TestGetChannelsLiveStatus_PropagatesSourceLevelErrorEvenWhenNotLast(t *test
 
 	service := newServiceForFallbackTestWithScraper(mockReq, scraperService)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{"c1", "c2"})
-
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{"c1", "c2"})
 	if err == nil {
 		t.Fatal("GetChannelsLiveStatus() error = nil, want non-nil")
 	}
+
 	if !errors.Is(err, ytscraper.ErrRateLimited) {
 		t.Fatalf("GetChannelsLiveStatus() error = %v, want ErrRateLimited regardless of channel order", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}

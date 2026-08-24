@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func insertClaimedEnvelope(t *testing.T, repository *PgxRepository, workerID string) *Record {
@@ -20,8 +21,8 @@ func insertClaimedEnvelope(t *testing.T, repository *PgxRepository, workerID str
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeLive,
 			RoomID:    "room-dlq-1",
-			Channel:   &domain.Channel{ID: "channel-1"},
-			Stream:    &domain.Stream{ID: "stream-dlq-1", ChannelID: "channel-1", StartScheduled: &start},
+			Channel:   &domain.Channel{ID: testChannelID},
+			Stream:    &domain.Stream{ID: "stream-dlq-1", ChannelID: testChannelID, StartScheduled: &start},
 		},
 		Version: 1,
 	}
@@ -81,8 +82,8 @@ func TestLoadExistingEventRows_ReturnsRowsInEventKeyOrder(t *testing.T) {
 			Notification: domain.AlarmNotification{
 				AlarmType: domain.AlarmTypeLive,
 				RoomID:    "room-order",
-				Channel:   &domain.Channel{ID: "channel-1"},
-				Stream:    &domain.Stream{ID: streamID, ChannelID: "channel-1", StartScheduled: &start},
+				Channel:   &domain.Channel{ID: testChannelID},
+				Stream:    &domain.Stream{ID: streamID, ChannelID: testChannelID, StartScheduled: &start},
 			},
 			Version: 1,
 		})

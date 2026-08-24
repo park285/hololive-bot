@@ -14,33 +14,40 @@ func (c *Consumer) reconcileSchedule(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-) (schedule.Decision, ReconcileResult, error) {
+) (ReconcileResult, error) {
 	evidence, err := scheduleEvidenceFromObservation(claimed)
 	if err != nil {
-		return schedule.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("schedule evidence from observation: %w", err)
 	}
-	if err := lockScheduleSubject(ctx, tx, evidence.GroupKey); err != nil {
-		return schedule.Decision{}, ReconcileResult{}, err
+
+	if lockErr := lockScheduleSubject(ctx, tx, evidence.GroupKey); lockErr != nil {
+		return ReconcileResult{}, fmt.Errorf("lock schedule subject: %w", lockErr)
 	}
+
 	state, err := loadScheduleState(ctx, tx, evidence.GroupKey, evidence.Items)
 	if err != nil {
-		return schedule.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("load schedule state: %w", err)
 	}
+
 	decision, err := schedule.Reduce(state, evidence)
 	if err != nil {
-		return schedule.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
-	if err := persistScheduleDecision(ctx, tx, claimed, &decision); err != nil {
-		return schedule.Decision{}, ReconcileResult{}, err
+
+	if persistErr := persistScheduleDecision(ctx, tx, claimed, &decision); persistErr != nil {
+		return ReconcileResult{}, fmt.Errorf("persist schedule decision: %w", persistErr)
 	}
-	return decision, ReconcileResult{Applications: mapScheduleApplications(decision.Applications)}, nil
+
+	return ReconcileResult{Applications: mapScheduleApplications(decision.Applications)}, nil
 }
 
 func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidence, error) {
 	var payload contract.ScheduleSnapshotV1
+
 	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return schedule.Evidence{}, fmt.Errorf("decode schedule payload: %w", err)
 	}
+
 	items := make([]schedule.Item, 0, len(payload.Items))
 	for i := range payload.Items {
 		items = append(items, schedule.Item{
@@ -56,6 +63,7 @@ func scheduleEvidenceFromObservation(observation *Observation) (schedule.Evidenc
 			CollaboTalentNames: persistedCollaboTalentNames(payload.Items[i].CollaboTalentNames),
 		})
 	}
+
 	return schedule.Evidence{
 		ObservationID: observation.ID,
 		Provider:      observation.Provider,
@@ -75,5 +83,6 @@ func mapScheduleApplications(items []schedule.Application) []Application {
 			Decision:   items[i].Decision,
 		}
 	}
+
 	return applications
 }

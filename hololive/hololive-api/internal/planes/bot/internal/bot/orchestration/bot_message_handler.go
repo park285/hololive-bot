@@ -27,13 +27,14 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/park285/iris-client-go/v2/webhook"
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/ingress"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/iris-client-go/v2/webhook"
-	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 var ErrCommandOutcomeUnknown = errors.New("command execution outcome unknown")
@@ -52,10 +53,12 @@ func commandOutcome(err error) error {
 	if err == nil || IsCommandOutcomeUnknown(err) {
 		return err
 	}
+
 	if errors.Is(err, transport.ErrReplyStagingFailed) || errors.Is(err, transport.ErrReplyOutcomeUnknown) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return commandOutcomeUnknownError{cause: err}
 	}
+
 	return err
 }
 
@@ -68,6 +71,7 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 				slog.Any("panic", r),
 				slog.String("command", commandType),
 			)
+
 			resultErr = commandOutcomeUnknownError{cause: fmt.Errorf("process bot command: panic: %v", r)}
 		}
 	}()
@@ -80,14 +84,18 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 	commandType = envelope.CommandType
 
 	cmdCtx := newCommandContextFromIngress(envelope)
+
 	cmdCtx.ThreadID = messageThreadID(message)
 	cmdCtx.MessageID = canonicalReplyIdentity(message)
+
 	if cmdCtx.MessageID == "" {
 		b.rejectWithoutReplyIdentity(ctx, envelope, commandType)
+
 		return nil
 	}
 
 	reqCtx := commandRequestContext(ctx, cmdCtx)
+
 	reqCtx = transport.WithRoomChat(reqCtx, envelope.RoomType, envelope.RoomLinkID)
 
 	if err := b.executeCommand(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
@@ -95,13 +103,19 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 		if responseErr != nil {
 			return commandOutcomeUnknownError{cause: errors.Join(err, responseErr)}
 		}
-		return commandOutcome(err)
+
+		return fmt.Errorf("%w", commandOutcome(err))
 	}
+
 	return nil
 }
 
 func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
-	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
+	if err := b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	return nil
 }
 
 func newCommandContextFromIngress(envelope *ingress.Envelope) *domain.CommandContext {
@@ -124,6 +138,7 @@ func messageThreadID(message *webhook.Message) *string {
 	if trimmed == "" {
 		return nil
 	}
+
 	return &trimmed
 }
 
@@ -132,6 +147,7 @@ func commandRequestContext(ctx context.Context, cmdCtx *domain.CommandContext) c
 	if cmdCtx.ThreadID != nil {
 		ctx = transport.WithThreadID(ctx, *cmdCtx.ThreadID)
 	}
+
 	return ctx
 }
 
@@ -156,22 +172,28 @@ func (b *Bot) rejectWithoutReplyIdentity(ctx context.Context, envelope *ingress.
 
 func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandType string, err error) error {
 	errorMsg := b.getErrorMessage(err)
+
 	if chatID == "" {
 		return nil
 	}
+
 	if b.skipErrorResponseOnUnknownOutcome(ctx, chatID, commandType, err) {
 		return nil
 	}
+
 	if sendErr := b.sendError(ctx, chatID, errorMsg); sendErr != nil {
 		errorAttrs := sharedlog.ErrorAttrs(sendErr)
 		attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
+
 		attrs = append(attrs,
 			privacylog.ChatIDAttr(chatID),
 			slog.String("command", commandType),
 		)
 		attrs = append(attrs, errorAttrs...)
 		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
-		return sendErr
+
+		return fmt.Errorf("%w", sendErr)
 	}
+
 	return nil
 }

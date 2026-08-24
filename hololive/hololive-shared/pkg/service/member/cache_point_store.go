@@ -30,14 +30,17 @@ import (
 func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string) {
 	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
+
 	if c.snapshotGeneration.Load() != generation {
 		return
 	}
 
 	c.storePointMemberInMemoryLocked(member, generation)
+
 	if !c.distributedCacheUsable() {
 		return
 	}
+
 	c.cacheMemberByChannelID(ctx, member)
 	c.cacheMemberByName(ctx, member)
 	c.cacheMemberByAlias(ctx, member, alias)
@@ -47,6 +50,7 @@ func (c *Cache) cacheMemberByChannelID(ctx context.Context, member *domain.Membe
 	if member.ChannelID == "" {
 		return
 	}
+
 	channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
 	if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
 		c.logger.Warn("Failed to cache member by channel ID",
@@ -70,6 +74,7 @@ func (c *Cache) cacheMemberByAlias(ctx context.Context, member *domain.Member, a
 	if alias == "" {
 		return
 	}
+
 	aliasKey := c.epochDataKey(memberAliasKeyPrefix + alias)
 	if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
 		c.logger.Warn("Failed to cache member alias",
@@ -83,5 +88,6 @@ func (c *Cache) storePointMemberInMemoryLocked(member *domain.Member, generation
 	if member.ChannelID != "" {
 		c.byChannelID.Store(member.ChannelID, entry)
 	}
+
 	c.byName.Store(member.Name, entry)
 }

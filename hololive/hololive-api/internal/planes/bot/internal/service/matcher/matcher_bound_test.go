@@ -49,6 +49,7 @@ func TestStoreMatch_EnforcesSizeBound(t *testing.T) {
 	}
 
 	mm.matchCacheMu.RLock()
+
 	size := len(mm.matchCache)
 	mm.matchCacheMu.RUnlock()
 
@@ -65,6 +66,7 @@ func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 	// cap 을 정확히 채우되 결정적 Timestamp 로 oldest 를 고정한다.
 	for i := range matchCacheMaxEntries {
 		key := fmt.Sprintf("match:k-%d", i)
+
 		mm.matchCache[key] = &MatchCacheEntry{
 			Channel:   &domain.Channel{ID: key},
 			Timestamp: base.Add(time.Duration(i) * time.Millisecond),
@@ -81,9 +83,11 @@ func TestStoreMatch_EvictsOldestWhenFull(t *testing.T) {
 	if len(mm.matchCache) > matchCacheMaxEntries {
 		t.Fatalf("matchCache exceeded cap after overflow insert: size=%d cap=%d", len(mm.matchCache), matchCacheMaxEntries)
 	}
+
 	if _, ok := mm.matchCache["match:overflow"]; !ok {
 		t.Fatal("expected newly stored entry to be present")
 	}
+
 	if _, ok := mm.matchCache[oldestKey]; ok {
 		t.Fatalf("expected oldest entry %q to be evicted", oldestKey)
 	}
@@ -101,6 +105,7 @@ func TestStoreMatch_PrefersExpiredEviction(t *testing.T) {
 		if i == 5 {
 			ts = base.Add(-2 * mm.matchCacheTTL)
 		}
+
 		mm.matchCache[key] = &MatchCacheEntry{
 			Channel:   &domain.Channel{ID: key},
 			Timestamp: ts,
@@ -115,6 +120,7 @@ func TestStoreMatch_PrefersExpiredEviction(t *testing.T) {
 	if _, ok := mm.matchCache["match:k-5"]; ok {
 		t.Fatal("expected expired entry match:k-5 to be evicted before oldest")
 	}
+
 	if _, ok := mm.matchCache["match:k-0"]; !ok {
 		t.Fatal("expected non-expired oldest entry match:k-0 to survive when an expired entry exists")
 	}

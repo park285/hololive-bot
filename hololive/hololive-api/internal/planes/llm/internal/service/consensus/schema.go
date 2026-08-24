@@ -20,9 +20,11 @@
 
 package consensus
 
+const schemaTypeKey = "type"
+
 func ObjectSchema(properties map[string]any, required []string) map[string]any {
 	return map[string]any{
-		"type":                 "object",
+		schemaTypeKey:          "object",
 		"additionalProperties": false,
 		"properties":           properties,
 		"required":             required,
@@ -31,27 +33,27 @@ func ObjectSchema(properties map[string]any, required []string) map[string]any {
 
 func ArraySchema(items map[string]any) map[string]any {
 	return map[string]any{
-		"type":  "array",
-		"items": items,
+		schemaTypeKey: "array",
+		"items":       items,
 	}
 }
 
 func TypeSchema(schemaType string) map[string]any {
-	return map[string]any{"type": schemaType}
+	return map[string]any{schemaTypeKey: schemaType}
 }
 
 func EnumSchema(schemaType string, values []string) map[string]any {
 	return map[string]any{
-		"type": schemaType,
-		"enum": values,
+		schemaTypeKey: schemaType,
+		"enum":        values,
 	}
 }
 
 func NumberRangeSchema(minimum, maximum float64) map[string]any {
 	return map[string]any{
-		"type":    "number",
-		"minimum": minimum,
-		"maximum": maximum,
+		schemaTypeKey: "number",
+		"minimum":     minimum,
+		"maximum":     maximum,
 	}
 }
 

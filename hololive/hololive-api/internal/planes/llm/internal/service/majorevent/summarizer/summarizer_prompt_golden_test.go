@@ -29,6 +29,7 @@ func assertPromptMatchesGolden(t *testing.T, summaryType SummaryType, goldenName
 	if err != nil {
 		t.Fatalf("golden 디렉터리 열기 실패: %v", err)
 	}
+
 	defer func() {
 		if closeErr := root.Close(); closeErr != nil {
 			t.Fatalf("golden 디렉터리 닫기 실패: %v", closeErr)
@@ -36,11 +37,12 @@ func assertPromptMatchesGolden(t *testing.T, summaryType SummaryType, goldenName
 	}()
 
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.MkdirAll("testdata", 0o750); err != nil {
-			t.Fatalf("golden 디렉터리 생성 실패: %v", err)
+		if mkdirErr := os.MkdirAll("testdata", 0o750); mkdirErr != nil {
+			t.Fatalf("golden 디렉터리 생성 실패: %v", mkdirErr)
 		}
-		if err := root.WriteFile(goldenName, []byte(prompt), 0o600); err != nil {
-			t.Fatalf("golden 파일 갱신 실패: %v", err)
+
+		if writeErr := root.WriteFile(goldenName, []byte(prompt), 0o600); writeErr != nil {
+			t.Fatalf("golden 파일 갱신 실패: %v", writeErr)
 		}
 	}
 

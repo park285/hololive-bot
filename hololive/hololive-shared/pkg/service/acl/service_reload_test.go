@@ -35,8 +35,9 @@ func TestReloadPropagatesAnotherInstanceRoomAddition(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
-	store.settings[dbKeyEnabled] = "true"
-	store.settings[dbKeyMode] = "whitelist"
+
+	store.settings[dbKeyEnabled] = testDBEnabledTrue
+	store.settings[dbKeyMode] = string(ACLModeWhitelist)
 
 	adminSide := newReloadTestService(store, newReloadTestCache())
 	botSide := newReloadTestService(store, newReloadTestCache())
@@ -49,6 +50,7 @@ func TestReloadPropagatesAnotherInstanceRoomAddition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddRoom error: %v", err)
 	}
+
 	if !added {
 		t.Fatal("AddRoom should report the room as added")
 	}
@@ -70,21 +72,24 @@ func TestReloadPropagatesRoomRemovalAndSettings(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
-	store.settings[dbKeyEnabled] = "true"
-	store.settings[dbKeyMode] = "whitelist"
+
+	store.settings[dbKeyEnabled] = testDBEnabledTrue
+	store.settings[dbKeyMode] = string(ACLModeWhitelist)
 	store.rooms[roomKey{roomID: "room-old", listType: listTypeWhitelist}] = struct{}{}
 
 	botSide := newReloadTestService(store, newReloadTestCache())
 	if err := botSide.Reload(t.Context()); err != nil {
 		t.Fatalf("initial Reload error: %v", err)
 	}
+
 	if !botSide.IsRoomAllowed("", "room-old") {
 		t.Fatal("seeded room must be allowed after the first reload")
 	}
 
 	delete(store.rooms, roomKey{roomID: "room-old", listType: listTypeWhitelist})
+
 	store.settings[dbKeyMode] = "blacklist"
-	store.settings[dbKeyEnabled] = "false"
+	store.settings[dbKeyEnabled] = testDBEnabledFalse
 
 	if err := botSide.Reload(t.Context()); err != nil {
 		t.Fatalf("Reload error: %v", err)
@@ -94,9 +99,11 @@ func TestReloadPropagatesRoomRemovalAndSettings(t *testing.T) {
 	if enabled {
 		t.Fatal("reload must pick up enabled=false")
 	}
+
 	if mode != ACLModeBlacklist {
 		t.Fatalf("reload must pick up mode=blacklist, got %s", mode)
 	}
+
 	if len(rooms) != 0 {
 		t.Fatalf("reload must drop the removed room, got %v", rooms)
 	}
@@ -108,20 +115,32 @@ func TestReloadDoesNotWriteToCache(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
-	store.settings[dbKeyEnabled] = "true"
-	store.settings[dbKeyMode] = "whitelist"
-	store.rooms[roomKey{roomID: "room-a", listType: listTypeWhitelist}] = struct{}{}
+
+	store.settings[dbKeyEnabled] = testDBEnabledTrue
+	store.settings[dbKeyMode] = string(ACLModeWhitelist)
+	store.rooms[roomKey{roomID: testRoomA, listType: listTypeWhitelist}] = struct{}{}
 
 	var writes atomic.Int32
+
 	cacheClient := &cachemocks.Client{
-		SetFunc: func(context.Context, string, any, time.Duration) error { writes.Add(1); return nil },
-		DelFunc: func(context.Context, string) error { writes.Add(1); return nil },
+		SetFunc: func(context.Context, string, any, time.Duration) error {
+			writes.Add(1)
+
+			return nil
+		},
+		DelFunc: func(context.Context, string) error {
+			writes.Add(1)
+
+			return nil
+		},
 		SAddFunc: func(_ context.Context, _ string, members []string) (int64, error) {
 			writes.Add(1)
+
 			return int64(len(members)), nil
 		},
 		SRemFunc: func(_ context.Context, _ string, members []string) (int64, error) {
 			writes.Add(1)
+
 			return int64(len(members)), nil
 		},
 	}
@@ -140,9 +159,11 @@ func TestReloadKeepsCurrentSettingsWhenRowsMissing(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
-	store.rooms[roomKey{roomID: "room-a", listType: listTypeWhitelist}] = struct{}{}
+
+	store.rooms[roomKey{roomID: testRoomA, listType: listTypeWhitelist}] = struct{}{}
 
 	service := newReloadTestService(store, newReloadTestCache())
+
 	service.enabled = false
 	service.mode = ACLModeBlacklist
 
@@ -154,6 +175,7 @@ func TestReloadKeepsCurrentSettingsWhenRowsMissing(t *testing.T) {
 	if enabled {
 		t.Fatal("missing enabled row must keep the current value")
 	}
+
 	if mode != ACLModeBlacklist {
 		t.Fatalf("missing mode row must keep the current value, got %s", mode)
 	}
@@ -163,10 +185,12 @@ func TestReloadRejectsUnparsableMode(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
-	store.settings[dbKeyEnabled] = "true"
+
+	store.settings[dbKeyEnabled] = testDBEnabledTrue
 	store.settings[dbKeyMode] = "not-a-mode"
 
 	service := newReloadTestService(store, newReloadTestCache())
+
 	service.whitelistRooms["room-keep"] = struct{}{}
 
 	if err := service.Reload(t.Context()); err == nil {
@@ -182,10 +206,12 @@ func TestReloadRejectsUnparsableEnabledSetting(t *testing.T) {
 	t.Parallel()
 
 	store := newFakeACLStore()
+
 	store.settings[dbKeyEnabled] = "not-a-bool"
-	store.settings[dbKeyMode] = "whitelist"
+	store.settings[dbKeyMode] = string(ACLModeWhitelist)
 
 	service := newReloadTestService(store, newReloadTestCache())
+
 	service.enabled = false
 	service.whitelistRooms["room-keep"] = struct{}{}
 

@@ -28,18 +28,18 @@ import (
 	"sync"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
-const summaryCacheTTL = 24 * time.Hour
-const searchTimeout = 12 * time.Second
+const (
+	summaryCacheTTL = 24 * time.Hour
+	searchTimeout   = 12 * time.Second
+)
 
 type CacheStore interface {
 	Get(ctx context.Context, key string, dest any) error
@@ -91,9 +91,11 @@ func normalizeConsensusConfig(config SummarizerConsensusConfig) SummarizerConsen
 	if config.ReviewTimeout < 5*time.Second {
 		config.ReviewTimeout = 30 * time.Second
 	}
+
 	if config.AdjudicateTimeout < 5*time.Second {
 		config.AdjudicateTimeout = 45 * time.Second
 	}
+
 	return config
 }
 
@@ -111,9 +113,11 @@ func NewEventSummarizer(llm LLMClient, cache CacheStore, searcher sharedmodel.We
 			AdjudicateTimeout:   45 * time.Second,
 		}),
 	}
+
 	for _, opt := range opts {
 		opt(s)
 	}
+
 	return s
 }
 
@@ -135,13 +139,16 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 	searchContext, err := s.runDualSearch(ctx, summaryType, periodKey)
 	if err != nil {
 		s.logger.Error("Major event external content guard unavailable", slog.String("error", err.Error()))
+
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
+
 	resp, err := s.buildSummaryResponse(ctx, events, summaryType, periodKey, searchContext)
 	if err != nil {
 		s.logger.Error("LLM 요약 실패 (fallback 사용)",
 			slog.String("type", string(summaryType)),
 			slog.String("error", err.Error()))
+
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
@@ -152,6 +159,7 @@ func (s *EventSummarizer) SummarizeResult(ctx context.Context, events []domain.M
 	if result == "" {
 		s.logger.Warn("LLM 요약 결과가 비어있음",
 			slog.String("type", string(summaryType)))
+
 		return SummaryResult{ResultType: sharedmodel.SummaryResultEmpty}
 	}
 
@@ -170,6 +178,7 @@ func (s *EventSummarizer) summaryCacheKey(events []domain.MajorEvent, summaryTyp
 	if err != nil {
 		s.logger.Warn("LLM 요약 캐시 키 생성 실패", slog.String("error", err.Error()))
 	}
+
 	return cacheKey
 }
 
@@ -177,13 +186,17 @@ func (s *EventSummarizer) cachedSummaryResult(ctx context.Context, cacheKey stri
 	if s.cache == nil || cacheKey == "" {
 		return SummaryResult{}, false
 	}
+
 	var cached string
+
 	if err := s.cache.Get(ctx, cacheKey, &cached); err != nil || cached == "" {
 		return SummaryResult{}, false
 	}
+
 	s.logger.Info("LLM 요약 캐시 히트",
 		slog.String("type", string(summaryType)),
 		slog.String("period", periodKey))
+
 	return SummaryResult{Text: cached, ResultType: sharedmodel.SummaryResultPrimary}, true
 }
 
@@ -198,13 +211,16 @@ func (s *EventSummarizer) applyConsensusReview(
 	if !s.consensus.Enabled || !shouldRunConsensusReview(resp) {
 		return resp
 	}
+
 	consensusResp, consensusUsed := s.runConsensus(ctx, events, summaryType, periodKey, searchContext, resp)
 	if consensusResp == nil {
 		return resp
 	}
+
 	if consensusUsed {
 		consensusResp.DiscoveredEvents = filterTrustedDiscoveredEvents(consensusResp.DiscoveredEvents)
 	}
+
 	return consensusResp
 }
 
@@ -219,10 +235,12 @@ func (s *EventSummarizer) reviewFinalSummaryOutput(
 	if s.reviewer == nil || !shouldRunFinalOutputReview(resp, result) {
 		return result
 	}
+
 	reviewed, applied := s.runFinalOutputReview(ctx, events, summaryType, periodKey, result)
 	if !applied {
 		return result
 	}
+
 	return reviewed
 }
 
@@ -230,6 +248,7 @@ func (s *EventSummarizer) storeSummaryResult(ctx context.Context, cacheKey, resu
 	if s.cache == nil || cacheKey == "" {
 		return
 	}
+
 	if err := s.cache.Set(ctx, cacheKey, result, summaryCacheTTL); err != nil {
 		s.logger.Warn("LLM 요약 캐시 저장 실패", slog.String("error", err.Error()))
 	}
@@ -248,6 +267,7 @@ func shouldRunConsensusReview(resp *summaryResponse) bool {
 	if resp == nil {
 		return false
 	}
+
 	return len(resp.Highlights) > 0 || len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0
 }
 
@@ -255,9 +275,11 @@ func shouldRunFinalOutputReview(resp *summaryResponse, assembled string) bool {
 	if resp == nil || strings.TrimSpace(assembled) == "" {
 		return false
 	}
+
 	if len(resp.OngoingEvents) > 0 || len(resp.DiscoveredEvents) > 0 {
 		return true
 	}
+
 	return len(resp.Highlights) > 0
 }
 
@@ -268,6 +290,7 @@ func (s *EventSummarizer) searchWithTimeout(ctx context.Context, query, warnMess
 	results, err := s.searcher.Search(searchCtx, query)
 	if err != nil {
 		s.logger.Warn(warnMessage, slog.String("error", err.Error()))
+
 		return nil, false
 	}
 
@@ -287,15 +310,18 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 		wg        sync.WaitGroup
 	)
 
-	runSearch := func(query string, warnMessage string, dst *[]sharedmodel.SearchResult) {
+	runSearch := func(query, warnMessage string, dst *[]sharedmodel.SearchResult) {
 		wg.Add(1)
 		panicguard.Go(s.logger, "major-event-summary-search", func() {
 			defer wg.Done()
+
 			found, ok := s.searchWithTimeout(ctx, query, warnMessage)
 			if !ok {
 				return
 			}
+
 			mu.Lock()
+
 			*dst = found
 			mu.Unlock()
 		})
@@ -307,12 +333,15 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 	wg.Wait()
 
 	combined := make([]sharedmodel.SearchResult, 0, len(results)+len(krResults))
+
 	combined = append(combined, results...)
 	combined = append(combined, krResults...)
+
 	combined, err := guardrail.FilterSearchResults(combined, s.promptGuard, s.logger, "majorevent_search")
 	if err != nil {
 		return "", fmt.Errorf("guard major event search results: %w", err)
 	}
+
 	deduped := dedupeSearchResults(combined)
 	capped := capSearchResults(deduped, maxSearchResults)
 
@@ -321,47 +350,9 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 			slog.Int("primary_count", len(results)),
 			slog.Int("kr_count", len(krResults)),
 			slog.Int("final_count", len(capped)))
+
 		return formatSearchResults(capped), nil
 	}
+
 	return "", nil
-}
-
-func (s *EventSummarizer) buildSummaryResponse(
-	ctx context.Context,
-	events []domain.MajorEvent,
-	summaryType SummaryType,
-	periodKey, searchContext string,
-) (*summaryResponse, error) {
-	sysPrompt, err := getSystemPrompt(summaryType)
-	if err != nil {
-		return nil, fmt.Errorf("get system prompt: %w", err)
-	}
-	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
-	schema := summaryResponseSchema()
-
-	rawJSON, err := s.llm.GenerateJSON(ctx, sysPrompt, userPrompt, schema)
-	if err != nil {
-		return nil, fmt.Errorf("generate summary json: %w", err)
-	}
-
-	var resp summaryResponse
-	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
-		return nil, fmt.Errorf("parse summary json: %w", err)
-	}
-	return &resp, nil
-}
-
-func filterTrustedDiscoveredEvents(input []discoveredEvent) []discoveredEvent {
-	if len(input) == 0 {
-		return input
-	}
-
-	filtered := make([]discoveredEvent, 0, len(input))
-	for i := range input {
-		item := input[i]
-		if isTrustedDiscoveredSource(item.Source) {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
 }

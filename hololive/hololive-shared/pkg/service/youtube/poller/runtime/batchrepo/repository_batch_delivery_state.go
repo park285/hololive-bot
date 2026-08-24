@@ -22,11 +22,10 @@ package batchrepo
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -50,55 +49,70 @@ func loadFailedNotificationOutboxRows(ctx context.Context, tx batchDB, notificat
 	}
 
 	args := make([]any, 0, len(inputs)*2+1)
+
 	var values strings.Builder
+
 	appendValuesPlaceholders(&values, len(inputs), 2)
+
 	for i := range inputs {
 		args = append(args, inputs[i].Kind, inputs[i].ContentID)
 	}
+
 	args = append(args, domain.OutboxStatusFailed)
 
 	var rows []failedNotificationOutboxRow
+
 	if err := dbx.SelectSQL(ctx, tx, &rows, "query failed outbox rows", `
 		WITH input(kind, content_id) AS (
 			VALUES `+values.String()+mustSQL("repository_batch_delivery_state_0063_01.sql"), args...); err != nil {
 		return nil, fmt.Errorf("query failed outbox rows: %w", err)
 	}
+
 	return rows, nil
 }
 
 func collectFailedNotificationIdentityInputs(notifications []*domain.YouTubeNotificationOutbox) []failedNotificationIdentityInput {
 	inputs := make([]failedNotificationIdentityInput, 0, len(notifications))
 	seen := make(map[string]struct{}, len(notifications))
+
 	for i := range notifications {
 		notification := notifications[i]
 		if notification == nil || !isCommunityShortsOutboxKind(notification.Kind) {
 			continue
 		}
+
 		contentID := strings.TrimSpace(notification.ContentID)
 		if contentID == "" {
 			continue
 		}
+
 		identityKey := notificationIdentityKey(notification.Kind, contentID)
 		if _, ok := seen[identityKey]; ok {
 			continue
 		}
+
 		seen[identityKey] = struct{}{}
+
 		inputs = append(inputs, failedNotificationIdentityInput{Kind: notification.Kind, ContentID: contentID})
 	}
+
 	return inputs
 }
 
 func partitionFailedNotificationOutboxRows(rows []failedNotificationOutboxRow, completedSentAtByIdentity map[string]time.Time) (result1, result2 []failedNotificationOutboxRow) {
 	completed := make([]failedNotificationOutboxRow, 0, len(rows))
 	reactivations := make([]failedNotificationOutboxRow, 0, len(rows))
+
 	for i := range rows {
 		identityKey := notificationIdentityKey(rows[i].Kind, rows[i].ContentID)
 		if _, ok := completedSentAtByIdentity[identityKey]; ok {
 			completed = append(completed, rows[i])
 			continue
 		}
+
 		reactivations = append(reactivations, rows[i])
 	}
+
 	return completed, reactivations
 }
 
@@ -114,11 +128,14 @@ func filterCompletedNotifications(notifications []*domain.YouTubeNotificationOut
 			filtered = append(filtered, notification)
 			continue
 		}
+
 		if _, ok := completedSentAtByIdentity[notificationIdentityKey(notification.Kind, notification.ContentID)]; ok {
 			continue
 		}
+
 		filtered = append(filtered, notification)
 	}
+
 	return filtered
 }
 
@@ -129,13 +146,16 @@ func collectFailedNotificationOutboxIDs(rows []failedNotificationOutboxRow) []in
 
 	ids := make([]int64, 0, len(rows))
 	seen := make(map[int64]struct{}, len(rows))
+
 	for i := range rows {
 		if _, ok := seen[rows[i].ID]; ok {
 			continue
 		}
+
 		seen[rows[i].ID] = struct{}{}
 		ids = append(ids, rows[i].ID)
 	}
+
 	return ids
 }
 
@@ -154,17 +174,21 @@ func resolveNotificationReactivationPostID(kind domain.OutboxKind, contentID, pa
 
 func resolveShortNotificationReactivationPostID(contentID, payload string) string {
 	var parsed shortNotificationPublishedAtPayload
+
 	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return strings.TrimSpace(contentID)
 	}
+
 	return firstNonBlankNotificationPostID(parsed.CanonicalPostID, contentID, parsed.VideoID)
 }
 
 func resolveCommunityNotificationReactivationPostID(contentID, payload string) string {
 	var parsed communityNotificationPublishedAtPayload
+
 	if err := jsonv2.Unmarshal([]byte(payload), &parsed); err != nil {
 		return strings.TrimSpace(contentID)
 	}
+
 	return firstNonBlankNotificationPostID(parsed.CanonicalPostID, contentID, parsed.PostID)
 }
 
@@ -174,6 +198,7 @@ func firstNonBlankNotificationPostID(values ...string) string {
 			return postID
 		}
 	}
+
 	return ""
 }
 
@@ -187,14 +212,17 @@ func rearmFailedDeliveryRows(ctx context.Context, tx batchDB, outboxIDs []int64,
 	}
 
 	args := make([]any, 0, 3+len(outboxIDs))
+
 	args = append(args, domain.OutboxStatusPending, nextAttemptAt)
 	args = append(args, dbx.AnyArgs(outboxIDs)...)
 	args = append(args, domain.OutboxStatusFailed)
+
 	if _, err := dbx.ExecSQL(ctx, tx, "update delivery rows", mustSQL("repository_batch_delivery_state_0198_02.sql")+dbx.InPlaceholders(len(outboxIDs))+`)
 		  AND status = ?`,
 		args...,
 	); err != nil {
 		return fmt.Errorf("update delivery rows: %w", err)
 	}
+
 	return nil
 }

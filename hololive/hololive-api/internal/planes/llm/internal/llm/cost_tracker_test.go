@@ -43,7 +43,7 @@ func TestOpenAIClient_recordUsage_DelegatesPositiveTokensWithProviderModel(t *te
 	ft := &fakeCostTracker{}
 	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
 
-	c.recordUsage(context.Background(), 1234)
+	c.recordUsage(t.Context(), 1234)
 	require.Equal(t, []int64{1234}, ft.tokens)
 	require.Equal(t, []string{"openai"}, ft.providers)
 	require.Equal(t, []string{"gpt-test"}, ft.models)
@@ -53,15 +53,15 @@ func TestOpenAIClient_recordUsage_SkipsZeroOrNegativeTokens(t *testing.T) {
 	ft := &fakeCostTracker{}
 	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil, WithCostTracker(ft))
 
-	c.recordUsage(context.Background(), 0)
-	c.recordUsage(context.Background(), -5)
+	c.recordUsage(t.Context(), 0)
+	c.recordUsage(t.Context(), -5)
 	require.Empty(t, ft.tokens)
 }
 
 func TestOpenAIClient_recordUsage_NoTrackerIsNoOp(t *testing.T) {
 	c := mustNewClient(t, "https://example.com", "key", "gpt-test", nil)
 	require.NotPanics(t, func() {
-		c.recordUsage(context.Background(), 100)
+		c.recordUsage(t.Context(), 100)
 	})
 
 	// WithCostTracker(nil)은 tracker를 설정하지 않아야 한다(no-op).

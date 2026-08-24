@@ -14,33 +14,40 @@ func (c *Consumer) reconcileLive(
 	ctx context.Context,
 	tx dbx.Tx,
 	claimed *Observation,
-) (live.Decision, ReconcileResult, error) {
+) (ReconcileResult, error) {
 	evidence, err := liveEvidenceFromObservation(claimed)
 	if err != nil {
-		return live.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("live evidence from observation: %w", err)
 	}
-	if err := lockLiveSubject(ctx, tx, claimed.SubjectKey); err != nil {
-		return live.Decision{}, ReconcileResult{}, err
+
+	if lockErr := lockLiveSubject(ctx, tx, claimed.SubjectKey); lockErr != nil {
+		return ReconcileResult{}, fmt.Errorf("lock live subject: %w", lockErr)
 	}
+
 	state, err := loadLiveState(ctx, tx, evidence.Coverage.RequestedChannelIDs, videoIDsOf(&evidence))
 	if err != nil {
-		return live.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("load live state: %w", err)
 	}
+
 	decision, err := live.Reduce(state, evidence, c.liveGrace, claimed.ReceivedAt)
 	if err != nil {
-		return live.Decision{}, ReconcileResult{}, err
+		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
-	if err := persistLiveDecision(ctx, tx, &decision); err != nil {
-		return live.Decision{}, ReconcileResult{}, err
+
+	if persistErr := persistLiveDecision(ctx, tx, &decision); persistErr != nil {
+		return ReconcileResult{}, fmt.Errorf("persist live decision: %w", persistErr)
 	}
-	return decision, ReconcileResult{Applications: mapLiveApplications(decision.Applications)}, nil
+
+	return ReconcileResult{Applications: mapLiveApplications(decision.Applications)}, nil
 }
 
 func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error) {
 	var payload contract.LiveSnapshotV1
+
 	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return live.Evidence{}, fmt.Errorf("decode live snapshot payload: %w", err)
 	}
+
 	facts := make([]live.SessionFact, 0, len(payload.Sessions))
 	for i := range payload.Sessions {
 		facts = append(facts, live.SessionFact{
@@ -52,6 +59,7 @@ func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error
 			EndedAt:     payload.Sessions[i].EndedAt,
 		})
 	}
+
 	return live.Evidence{
 		Kind:           observation.ObservationKind,
 		ObservationID:  observation.ID,
@@ -73,6 +81,7 @@ func videoIDsOf(evidence *live.Evidence) []string {
 	for i := range evidence.Sessions {
 		ids = append(ids, evidence.Sessions[i].VideoID)
 	}
+
 	return ids
 }
 
@@ -85,5 +94,6 @@ func mapLiveApplications(items []live.Application) []Application {
 			Decision:   items[i].Decision,
 		}
 	}
+
 	return applications
 }

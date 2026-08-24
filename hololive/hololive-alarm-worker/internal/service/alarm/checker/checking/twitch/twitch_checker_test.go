@@ -28,11 +28,11 @@ import (
 	"testing"
 	"time"
 
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
@@ -40,9 +40,9 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 	cache := newCheckerTestCacheClient(t)
 	ctx := t.Context()
 
-	require.NoError(t, cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, "aqua", "yt-1"))
+	require.NoError(t, cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, testTwitchLogin, testTwitchYouTubeID))
 
-	_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
+	_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testTwitchYouTubeID, []string{testTwitchRoomID})
 	require.NoError(t, err)
 
 	startedAt := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
@@ -77,7 +77,7 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 	notifications, checkErr := checker.Check(ctx)
 	require.NoError(t, checkErr)
 	require.Len(t, notifications, 1)
-	assert.Equal(t, "room-1", notifications[0].RoomID)
+	assert.Equal(t, testTwitchRoomID, notifications[0].RoomID)
 	assert.True(t, notifications[0].Stream.IsTwitchOnly)
 
 	// dedup claim은 Notifier 책임이므로 checker는 동일 라이브 후보를 다시 반환한다.
@@ -88,14 +88,16 @@ func TestTwitchCheckerCheck_LiveAndOffline(t *testing.T) {
 }
 
 func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("client not configured", func(t *testing.T) {
 		t.Parallel()
 
 		cache := newCheckerTestCacheClient(t)
 		ctx := t.Context()
-		require.NoError(t, cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, "aqua", "yt-1"))
+		require.NoError(t, cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, testTwitchLogin, testTwitchYouTubeID))
 
-		_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
+		_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testTwitchYouTubeID, []string{testTwitchRoomID})
 		require.NoError(t, err)
 
 		checker, err := NewTwitchChecker(cache, twitch.NewClient(&twitch.ClientConfig{}, newCheckerTestLogger()), newCheckerTestLogger())
@@ -108,11 +110,13 @@ func TestTwitchCheckerCheck_APIErrors(t *testing.T) {
 	})
 
 	t.Run("server 5xx", func(t *testing.T) {
+		t.Parallel()
+
 		cache := newCheckerTestCacheClient(t)
 		ctx := t.Context()
-		require.NoError(t, cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, "aqua", "yt-1"))
+		require.NoError(t, cache.HSet(ctx, sharedalarmkeys.TwitchLoginMapKey, testTwitchLogin, testTwitchYouTubeID))
 
-		_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1"})
+		_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testTwitchYouTubeID, []string{testTwitchRoomID})
 		require.NoError(t, err)
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -171,33 +175,33 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 	}{
 		{
 			name:          "stream found면 room 수만큼 알림 생성",
-			loginMappings: map[string]string{"aqua": "yt-1"},
-			subscriberMap: map[string][]string{"yt-1": {"room-1", "room-2"}},
+			loginMappings: map[string]string{testTwitchLogin: testTwitchYouTubeID},
+			subscriberMap: map[string][]string{testTwitchYouTubeID: {testTwitchRoomID, "room-2"}},
 			streamsResponse: &twitch.StreamsResponse{
 				Data: []twitch.StreamData{
-					{ID: "stream-1", UserID: "user-1", UserLogin: "aqua", UserName: "Aqua", Type: "live", Title: "hello", StartedAt: now},
+					{ID: testTwitchStreamID, UserID: testTwitchUserID, UserLogin: testTwitchLogin, UserName: "Aqua", Type: testTwitchStreamType, Title: "hello", StartedAt: now},
 				},
 			},
 			wantLen: 2,
 		},
 		{
 			name:          "stream not found(매핑 없음)이면 스킵",
-			loginMappings: map[string]string{"aqua": "yt-1"},
-			subscriberMap: map[string][]string{"yt-1": {"room-1"}},
+			loginMappings: map[string]string{testTwitchLogin: testTwitchYouTubeID},
+			subscriberMap: map[string][]string{testTwitchYouTubeID: {testTwitchRoomID}},
 			streamsResponse: &twitch.StreamsResponse{
 				Data: []twitch.StreamData{
-					{ID: "stream-1", UserID: "user-1", UserLogin: "unknown", Type: "live", StartedAt: now},
+					{ID: testTwitchStreamID, UserID: testTwitchUserID, UserLogin: "unknown", Type: testTwitchStreamType, StartedAt: now},
 				},
 			},
 			wantLen: 0,
 		},
 		{
 			name:          "checker는 dedup 선점 없이 live 후보를 생성",
-			loginMappings: map[string]string{"aqua": "yt-1"},
-			subscriberMap: map[string][]string{"yt-1": {"room-1"}},
+			loginMappings: map[string]string{testTwitchLogin: testTwitchYouTubeID},
+			subscriberMap: map[string][]string{testTwitchYouTubeID: {testTwitchRoomID}},
 			streamsResponse: &twitch.StreamsResponse{
 				Data: []twitch.StreamData{
-					{ID: "stream-1", UserID: "user-1", UserLogin: "aqua", Type: "live", StartedAt: now},
+					{ID: testTwitchStreamID, UserID: testTwitchUserID, UserLogin: testTwitchLogin, Type: testTwitchStreamType, StartedAt: now},
 				},
 			},
 			wantLen: 1,
@@ -223,7 +227,7 @@ func TestTwitchCheckerBuildLiveNotifications_TableDriven(t *testing.T) {
 			notifications := checker.buildLiveNotifications(
 				tc.loginMappings,
 				tc.subscriberMap,
-				map[string]string{"ch1": "아쿠아"},
+				map[string]string{testTwitchChannelID: "아쿠아"},
 				tc.streamsResponse,
 			)
 			require.Len(t, notifications, tc.wantLen)

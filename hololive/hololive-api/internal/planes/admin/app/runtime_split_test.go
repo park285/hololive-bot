@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -18,12 +18,12 @@ func TestBuildAdminAPIRuntime_FailFastOnNilInputs(t *testing.T) {
 	runtime, err := BuildAdminAPIRuntime(t.Context(), nil, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Equal(t, "config must not be nil", err.Error())
+	require.ErrorContains(t, err, "config must not be nil")
 
 	runtime, err = BuildAdminAPIRuntime(t.Context(), &settings.Config{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
-	assert.Equal(t, "logger must not be nil", err.Error())
+	require.ErrorContains(t, err, "logger must not be nil")
 }
 
 func TestNormalizeAdminAPIRuntimeInputs_ReturnsValidatedConfig(t *testing.T) {

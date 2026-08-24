@@ -25,12 +25,15 @@ func (s *Service) MarkUpcomingEventNotified(ctx context.Context, roomID, channel
 	data := UpcomingEventNotifiedData{
 		NotifiedAt: time.Now().UTC().Format(time.RFC3339),
 	}
+
 	if err := s.cache.Set(ctx, key, data, constants.CacheTTL.NotificationSent); err != nil {
 		return fmt.Errorf("mark upcoming event notified: set cache key: %w", err)
 	}
+
 	if err := s.MarkLogicalScheduleObserved(ctx, roomID, channelID, stream); err != nil {
 		return fmt.Errorf("mark upcoming event notified: mark logical schedule observed: %w", err)
 	}
+
 	return nil
 }
 
@@ -42,6 +45,7 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 	if stream.StartScheduled == nil || stream.StartScheduled.IsZero() {
 		return false, nil
 	}
+
 	if window <= 0 {
 		return false, nil
 	}
@@ -49,9 +53,11 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 	key := keys.BuildUpcomingEventKey(roomID, channelID, stream.ID, stream.Title, *stream.StartScheduled)
 
 	var data UpcomingEventNotifiedData
+
 	if err := s.cache.Get(ctx, key, &data); err != nil {
 		return false, fmt.Errorf("was upcoming event notified recently: get cache data: %w", err)
 	}
+
 	if data.NotifiedAt == "" {
 		return false, nil
 	}
@@ -63,6 +69,7 @@ func (s *Service) WasUpcomingEventNotifiedRecently(ctx context.Context, roomID, 
 			slog.String("notified_at", data.NotifiedAt),
 			slog.String("error", err.Error()),
 		)
+
 		return false, nil
 	}
 

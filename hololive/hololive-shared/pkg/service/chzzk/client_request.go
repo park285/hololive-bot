@@ -22,19 +22,20 @@ package chzzk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 const chzzkUserAgent = "hololive-bot (Chzzk API client; +https://github.com/park285/hololive-bot)"
 
-// IsCircuitOpen은 read-only 상태 조회입니다. side-effect가 없습니다.
+// IsCircuitOpen은 read-only 상태 조회입니다. 부수 효과는 없습니다.
 func (c *Client) IsCircuitOpen() bool {
 	return c.breaker.IsOpen()
 }
@@ -59,12 +60,14 @@ func (c *Client) executeRequest(
 ) error {
 	body, err := c.doRequest(op, req, readErrorPrefix)
 	if err != nil {
+		//nolint:wrapcheck // doRequest가 돌려주는 APIError에 operation과 status가 이미 담겨 있어, 호출 계층 이름을 덧씌워도 errors.As 소비자에게 새 정보를 주지 못한다.
 		return err
 	}
 
 	if err := handleBody(body); err != nil {
 		c.recordFailure()
-		return err
+
+		return fmt.Errorf("handle body: %w", err)
 	}
 
 	c.breaker.RecordSuccess()
@@ -76,14 +79,21 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.recordFailure()
+
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, chzzkRequestError(op, err, resp == nil)
 	}
+
 	if resp == nil {
 		c.recordFailure()
-		return nil, chzzkRequestError(op, fmt.Errorf("nil response"), true)
+
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
+		return nil, chzzkRequestError(op, errors.New("nil response"), true)
 	}
-	if err := c.validateResponse(op, resp); err != nil {
-		return nil, err
+
+	if validateErr := c.validateResponse(op, resp); validateErr != nil {
+		//nolint:wrapcheck // validateResponse도 operation이 박힌 APIError만 돌려주므로 접두사를 겹치지 않는다.
+		return nil, validateErr
 	}
 
 	defer func() {
@@ -104,6 +114,7 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 	body, err := httputil.ReadAllLimited(resp.Body, c.maxResponseBodyBytes)
 	if err != nil {
 		c.recordFailure()
+
 		return nil, fmt.Errorf("%s: %w", readErrorPrefix, err)
 	}
 
@@ -113,12 +124,18 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 func (c *Client) validateResponse(op string, resp *http.Response) error {
 	if resp == nil {
 		c.recordFailure()
-		return chzzkRequestError(op, fmt.Errorf("nil response"), false)
+
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
+		return chzzkRequestError(op, errors.New("nil response"), false)
 	}
+
 	if resp.Body == nil {
 		c.recordFailure()
-		return chzzkRequestError(op, fmt.Errorf("nil response body"), false)
+
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
+		return chzzkRequestError(op, errors.New("nil response body"), false)
 	}
+
 	return nil
 }
 
@@ -126,6 +143,7 @@ func chzzkRequestError(op string, err error, nilResponse bool) error {
 	if nilResponse {
 		err = fmt.Errorf("nil response: %w", err)
 	}
+
 	return &apperrors.APIError{
 		Operation:  op,
 		StatusCode: 0,
@@ -134,7 +152,7 @@ func chzzkRequestError(op string, err error, nilResponse bool) error {
 }
 
 // rejectIfCircuitOpen은 Allow() 기반으로 동작합니다.
-// timeout 경과 시 reset(open=false, failures=0) side-effect가 발생하므로
+// 지정한 timeout이 경과하면 reset(open=false, failures=0) side-effect가 발생하므로
 // 자동 reset 후 첫 요청이 통과하고, failures=0부터 재카운트가 시작됩니다.
 func (c *Client) rejectIfCircuitOpen() error {
 	if c.breaker.Allow() {

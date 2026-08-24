@@ -99,14 +99,16 @@ func (l *BotLifecycle) Start(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		l.logInfo("Context canceled, shutting down...")
+
 		return fmt.Errorf("start bot: context canceled: %w", ctx.Err())
 	case <-l.stopCh:
 		l.logInfo("Stop signal received")
+
 		return nil
 	}
 }
 
-func (l *BotLifecycle) Shutdown(ctx context.Context) error {
+func (l *BotLifecycle) Shutdown(_ context.Context) error {
 	l.logInfo("Shutting down bot...")
 
 	l.stopHolodex()

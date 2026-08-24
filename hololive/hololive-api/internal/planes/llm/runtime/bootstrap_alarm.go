@@ -28,20 +28,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	llmclient "github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	mnsummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/summarizer"
-
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-
-	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/envutil"
-	"github.com/park285/shared-go/v2/pkg/promptguard"
 )
 
 func initMemberNewsService(
@@ -57,6 +55,7 @@ func initMemberNewsService(
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
+
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
 	costTracker := ProvideLLMCostTracker(cacheClient, llmConfig.MonthlyTokenCeiling, logger)
 	llmClient := guardLLMClient(ProvideMemberNewsLLMClient(cliproxy, llmConfig, costTracker, logger), guards)
@@ -66,7 +65,9 @@ func initMemberNewsService(
 	searcher := provideExaSearcher(exaConfig, logger)
 
 	validator := initMemberNewsSourceValidator(membersData, logger)
+
 	var promptGuard *promptguard.Guard
+
 	if guards != nil {
 		promptGuard = guards.prompt
 	}
@@ -74,6 +75,7 @@ func initMemberNewsService(
 	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger, mnsummarizer.WithPromptGuard(promptGuard))
 
 	var summarizer model.Summarizer = baseSummarizer
+
 	if llmConfig.MemberNews.Enabled && reviewer != nil {
 		summarizer = mnsummarizer.NewConsensusSummarizer(
 			baseSummarizer, reviewer, adjudicator, validator,
@@ -103,14 +105,17 @@ func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client
 	if client == nil {
 		return nil
 	}
+
 	if guards == nil {
 		return llmclient.NewGuardedClient(client, nil)
 	}
+
 	return llmclient.NewGuardedClient(client, guards.output)
 }
 
 func initMemberNewsSourceValidator(membersData domain.MemberDataProvider, logger *slog.Logger) *membernews.SourceValidator {
 	allowlistPath := resolveMemberNewsXAllowlistPath()
+
 	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
 	if err == nil {
 		return validator
@@ -120,12 +125,14 @@ func initMemberNewsSourceValidator(membersData domain.MemberDataProvider, logger
 		slog.String("path", allowlistPath),
 		slog.String("error", err.Error()),
 	)
+
 	validator, err = membernews.NewSourceValidator("", membersData, logger)
 	if err != nil {
 		logger.Warn("Failed to initialize empty member news x allowlist",
 			slog.String("error", err.Error()),
 		)
 	}
+
 	return validator
 }
 
@@ -143,5 +150,6 @@ func resolveMemberNewsXAllowlistPath() string {
 			return candidate
 		}
 	}
+
 	return ""
 }

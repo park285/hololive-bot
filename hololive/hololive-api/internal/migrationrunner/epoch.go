@@ -23,16 +23,18 @@ const (
 func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
 	count, err := ledgerCount(ctx, conn)
 	if err != nil {
-		return err
+		return fmt.Errorf("ledger count: %w", err)
 	}
+
 	if count > 0 {
 		return nil
 	}
 
 	baseSchema, err := baseSchemaPresent(ctx, conn)
 	if err != nil {
-		return err
+		return fmt.Errorf("base schema present: %w", err)
 	}
+
 	if !baseSchema {
 		return nil
 	}
@@ -44,14 +46,17 @@ func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, ledg
 				"refusing to stamp the whole manifest as applied (that would silently skip genuinely-pending migrations). " +
 				"set MIGRATION_BASELINE_THROUGH to the last manifest migration already applied to this database, then rerun")
 	}
+
 	if !containsEntry(entries, through) {
 		return fmt.Errorf("MIGRATION_BASELINE_THROUGH=%q is not a manifest migration filename", through)
 	}
 
 	cfg.logf("existing schema with empty ledger; baselining through %s (no SQL re-run), applying the remainder", through)
+
 	if err := recordBaselineThrough(ctx, conn, fsys, ledger, entries, through); err != nil {
 		return fmt.Errorf("baseline migrations: %w", err)
 	}
+
 	return nil
 }
 
@@ -67,16 +72,20 @@ func recordBaselineThrough(
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	txExec := func(ctx context.Context, query string, args ...any) error {
-		_, err := tx.Exec(ctx, query, args...)
-		return err
-	}
+
+	txExec := txExecer(tx)
 	if err := recordBaselineEntries(ctx, fsys, ledger, txExec, entries, through); err != nil {
-		return rollbackTxSegmentOnError(ctx, tx, err)
+		if rollbackErr := rollbackTxSegmentOnError(ctx, tx, err); rollbackErr != nil {
+			return fmt.Errorf("rollback tx segment on error: %w", rollbackErr)
+		}
+
+		return nil
 	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
+
 	return nil
 }
 
@@ -90,12 +99,14 @@ func recordBaselineEntries(
 ) error {
 	for _, name := range entries {
 		if err := recordBaselineEntry(ctx, fsys, ledger, exec, name); err != nil {
-			return err
+			return fmt.Errorf("record baseline entry: %w", err)
 		}
+
 		if name == through {
 			return nil
 		}
 	}
+
 	return fmt.Errorf("baseline target %s was not reached", through)
 }
 
@@ -104,10 +115,16 @@ func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledge
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
+
 	if err := recordMigrationChecksum(ctx, exec, name, migrationChecksum(content)); err != nil {
-		return err
+		return fmt.Errorf("record migration checksum: %w", err)
 	}
-	return ledger.Record(ctx, exec, name)
+
+	if err := ledger.Record(ctx, exec, name); err != nil {
+		return fmt.Errorf("record: %w", err)
+	}
+
+	return nil
 }
 
 // manifest 밖 ledger 항목(이전 epoch 잔재)이 있는 DB는 checkpoint를 거친 경우에만
@@ -118,27 +135,43 @@ func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate
 	if len(entries) == 0 {
 		return nil
 	}
+
 	baseline := entries[0]
+
 	residue, err := hasLegacyResidue(ctx, conn, entries)
 	if err != nil {
-		return err
+		return fmt.Errorf("has legacy residue: %w", err)
 	}
+
 	querier := pgxRowQuerier{conn: conn}
+
 	applied, err := ledger.Applied(ctx, querier, baseline)
 	if err != nil {
-		return err
+		return fmt.Errorf("applied: %w", err)
 	}
+
 	if residue {
-		return validateLegacyResidue(ctx, ledger, querier, baseline, applied)
+		if err := validateLegacyResidue(ctx, ledger, querier, baseline, applied); err != nil {
+			return fmt.Errorf("validate legacy residue: %w", err)
+		}
+
+		return nil
 	}
-	return validateCurrentEpochBaseline(ctx, conn, baseline, applied)
+
+	if err := validateCurrentEpochBaseline(ctx, conn, baseline, applied); err != nil {
+		return fmt.Errorf("validate current epoch baseline: %w", err)
+	}
+
+	return nil
 }
 
 func hasLegacyResidue(ctx context.Context, conn *pgxpool.Conn, entries []string) (bool, error) {
 	var residue bool
+
 	if err := conn.QueryRow(ctx, mustSQL("legacy_residue_present.sql"), entries).Scan(&residue); err != nil {
 		return false, fmt.Errorf("detect legacy ledger residue: %w", err)
 	}
+
 	return residue, nil
 }
 
@@ -149,19 +182,23 @@ func validateLegacyResidue(ctx context.Context, ledger dbmigrate.Ledger, querier
 				"this database predates the epoch squash without the checkpoint migration — deploy the checkpoint release first",
 			baseline)
 	}
+
 	if baseline != epoch2Baseline {
 		return nil
 	}
+
 	cleanupApplied, err := ledger.Applied(ctx, querier, epoch2LegacyLedgerCleanup)
 	if err != nil {
-		return err
+		return fmt.Errorf("applied: %w", err)
 	}
+
 	if cleanupApplied {
 		return fmt.Errorf(
 			"schema_migrations still has entries outside the current manifest after %s was applied; "+
 				"they are not the epoch-2 legacy ledger, so remove them manually before rerunning",
 			epoch2LegacyLedgerCleanup)
 	}
+
 	return nil
 }
 
@@ -169,13 +206,16 @@ func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, basel
 	if baseline != epoch2Baseline || !applied {
 		return nil
 	}
+
 	_, checksumPresent, err := loadMigrationChecksum(ctx, conn, baseline)
 	if err != nil {
-		return err
+		return fmt.Errorf("load migration checksum: %w", err)
 	}
+
 	if checksumPresent {
 		return nil
 	}
+
 	return fmt.Errorf(
 		"epoch baseline %s is recorded without its checksum and no legacy ledger residue remains; "+
 			"refusing to trust a marker that cannot be proven by a completed R2 application",
@@ -188,17 +228,22 @@ func containsEntry(entries []string, target string) bool {
 
 func ledgerCount(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
 	var count int64
+
 	if err := conn.QueryRow(ctx, mustSQL("ledger_count.sql")).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count schema_migrations: %w", err)
 	}
+
 	return count, nil
 }
 
 func baseSchemaPresent(ctx context.Context, conn *pgxpool.Conn) (bool, error) {
 	var present bool
+
 	query := mustSQL("base_schema_present.sql")
+
 	if err := conn.QueryRow(ctx, query).Scan(&present); err != nil {
 		return false, fmt.Errorf("detect base schema: %w", err)
 	}
+
 	return present, nil
 }

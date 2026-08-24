@@ -29,6 +29,8 @@ const (
 	outcomeRejected     = "rejected"
 	outcomeSuperseded   = "superseded"
 	outcomeEmpty        = "empty"
+	labelProvider       = "provider"
+	labelKind           = "kind"
 )
 
 type Metrics struct {
@@ -50,40 +52,42 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	if registerer == nil {
 		registerer = prometheus.DefaultRegisterer
 	}
+
 	metrics := &Metrics{lastSuccessAt: make(map[string]time.Time)}
+
 	metrics.attempts = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_attempts_total",
 		Help: "YouTube collection attempts by provider, kind, and bounded result.",
-	}, []string{"provider", "kind", "result"})
+	}, []string{labelProvider, labelKind, "result"})
 	metrics.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_collection_duration_seconds",
 		Help:    "YouTube collection duration by provider and kind.",
 		Buckets: prometheus.DefBuckets,
-	}, []string{"provider", "kind"})
+	}, []string{labelProvider, labelKind})
 	metrics.lastSuccess = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_collection_last_success_timestamp_seconds",
 		Help: "Unix timestamp of the last successful YouTube collection.",
-	}, []string{"provider", "kind"})
+	}, []string{labelProvider, labelKind})
 	metrics.freshness = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_collection_freshness_seconds",
 		Help: "Age of the last successful YouTube collection.",
-	}, []string{"provider", "kind"})
+	}, []string{labelProvider, labelKind})
 	metrics.completeness = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_completeness_total",
 		Help: "YouTube collection completeness and continuity outcomes.",
-	}, []string{"provider", "kind", "completeness", "continuity"})
+	}, []string{labelProvider, labelKind, "completeness", "continuity"})
 	metrics.leaseAcquire = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_lease_acquire_total",
 		Help: "YouTube collection lease acquire attempts.",
-	}, []string{"provider", "kind", "result"})
+	}, []string{labelProvider, labelKind, "result"})
 	metrics.leaseLost = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_lease_lost_total",
 		Help: "YouTube collection lease losses by phase.",
-	}, []string{"provider", "kind", "phase"})
+	}, []string{labelProvider, labelKind, "phase"})
 	metrics.publish = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_observation_publish_total",
 		Help: "YouTube observation publish outcomes.",
-	}, []string{"provider", "kind", "outcome"})
+	}, []string{labelProvider, labelKind, "outcome"})
 	metrics.enqueue = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_collection_enqueue_total",
 		Help: "YouTube collection local queue enqueue results.",
@@ -92,6 +96,7 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		metrics.attempts, metrics.duration, metrics.lastSuccess, metrics.freshness,
 		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish, metrics.enqueue,
 	)
+
 	return metrics
 }
 
@@ -99,6 +104,7 @@ func (m *Metrics) ObserveAttempt(provider contract.Provider, kind, result string
 	if m == nil {
 		return
 	}
+
 	m.attempts.WithLabelValues(string(provider), kind, boundedResult(result)).Inc()
 	m.duration.WithLabelValues(string(provider), kind).Observe(duration.Seconds())
 }
@@ -107,9 +113,11 @@ func (m *Metrics) ObserveSuccess(provider contract.Provider, kind string, now ti
 	if m == nil {
 		return
 	}
+
 	m.lastSuccess.WithLabelValues(string(provider), kind).Set(float64(now.Unix()))
 	m.freshness.WithLabelValues(string(provider), kind).Set(0)
 	m.mu.Lock()
+
 	m.lastSuccessAt[string(provider)+"/"+kind] = now
 	m.mu.Unlock()
 }
@@ -118,12 +126,16 @@ func (m *Metrics) ObserveFreshness(provider contract.Provider, kind string, now 
 	if m == nil {
 		return
 	}
+
 	m.mu.Lock()
+
 	last, ok := m.lastSuccessAt[string(provider)+"/"+kind]
 	m.mu.Unlock()
+
 	if !ok {
 		return
 	}
+
 	m.freshness.WithLabelValues(string(provider), kind).Set(now.Sub(last).Seconds())
 }
 
@@ -131,6 +143,7 @@ func (m *Metrics) ObserveCompleteness(provider contract.Provider, kind string, c
 	if m == nil {
 		return
 	}
+
 	m.completeness.WithLabelValues(string(provider), kind, string(completeness), string(continuity)).Inc()
 }
 
@@ -138,6 +151,7 @@ func (m *Metrics) ObserveAcquire(provider contract.Provider, kind, result string
 	if m == nil {
 		return
 	}
+
 	m.leaseAcquire.WithLabelValues(string(provider), kind, boundedAcquire(result)).Inc()
 }
 
@@ -145,6 +159,7 @@ func (m *Metrics) ObserveLeaseLost(provider contract.Provider, kind, phase strin
 	if m == nil {
 		return
 	}
+
 	m.leaseLost.WithLabelValues(string(provider), kind, boundedPhase(phase)).Inc()
 }
 
@@ -152,6 +167,7 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 	if m == nil {
 		return
 	}
+
 	m.publish.WithLabelValues(string(provider), kind, boundedOutcome(outcome)).Inc()
 }
 
@@ -159,6 +175,7 @@ func (m *Metrics) ObserveEnqueue(result EnqueueResult) {
 	if m == nil {
 		return
 	}
+
 	m.enqueue.WithLabelValues(boundedEnqueue(string(result))).Inc()
 }
 

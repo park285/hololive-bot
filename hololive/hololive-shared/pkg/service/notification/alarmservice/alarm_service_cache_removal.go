@@ -22,6 +22,7 @@ package alarmservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -37,9 +38,10 @@ func (as *AlarmService) removeAlarmFromCache(
 	removeRoomChannel bool,
 ) (bool, error) {
 	alarmKey := as.getAlarmKey(roomID)
+
 	removedRoomChannel, err := as.removeRoomAlarmMember(ctx, alarmKey, channelID, removeRoomChannel)
 	if err != nil {
-		return false, err
+		return false, errors.Join(err)
 	}
 
 	registryKey := as.getRegistryKey(roomID)
@@ -52,7 +54,7 @@ func (as *AlarmService) removeAlarmFromCache(
 	}
 
 	if err := as.cleanupRoomRegistryAfterRemoval(ctx, roomID, alarmKey, registryKey, removeRoomChannel); err != nil {
-		return false, err
+		return false, fmt.Errorf("cleanup room registry after removal: %w", err)
 	}
 
 	return removedRoomChannel > 0 || len(alarmTypes) > 0, nil
@@ -102,6 +104,7 @@ func (as *AlarmService) clearRoomAlarmsFromCache(ctx context.Context, roomID str
 	}
 
 	alarmKey := as.getAlarmKey(roomID)
+
 	removed, err := as.cache.SRem(ctx, alarmKey, channelIDs)
 	if err != nil {
 		return 0, fmt.Errorf("remove room alarms: %w", err)

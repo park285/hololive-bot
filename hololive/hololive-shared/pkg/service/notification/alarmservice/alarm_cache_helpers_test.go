@@ -28,11 +28,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestChannelSubscribersKeyByType(t *testing.T) {
@@ -150,26 +151,26 @@ func TestResolveStreamChannelID(t *testing.T) {
 		{
 			name:      "nil stream",
 			stream:    nil,
-			fallback:  "default",
-			wantValue: "default",
+			fallback:  testFallbackChannelID,
+			wantValue: testFallbackChannelID,
 		},
 		{
 			name:      "stream channel id has priority",
 			stream:    &domain.Stream{ChannelID: "stream-id", Channel: &domain.Channel{ID: "channel-id"}},
-			fallback:  "default",
+			fallback:  testFallbackChannelID,
 			wantValue: "stream-id",
 		},
 		{
 			name:      "falls back to stream channel object",
 			stream:    &domain.Stream{Channel: &domain.Channel{ID: "channel-id"}},
-			fallback:  "default",
+			fallback:  testFallbackChannelID,
 			wantValue: "channel-id",
 		},
 		{
 			name:      "falls back to default",
 			stream:    &domain.Stream{},
-			fallback:  "default",
-			wantValue: "default",
+			fallback:  testFallbackChannelID,
+			wantValue: testFallbackChannelID,
 		},
 	}
 
@@ -188,9 +189,11 @@ func TestBuildUpcomingEventKey(t *testing.T) {
 	t.Parallel()
 
 	as := &AlarmService{}
+
 	as.cacheState = alarmcache.NewState(nil, nil, nil)
+
 	start := time.Date(2026, time.March, 2, 10, 30, 59, 0, time.UTC)
-	key := as.buildUpcomingEventKey("room1", "channel1", "stream1", "Title", start)
+	key := as.buildUpcomingEventKey(testAltRoomID, "channel1", "stream1", "Title", start)
 
 	parts := strings.Split(key, ":")
 	if len(parts) < 7 {
@@ -224,15 +227,15 @@ func TestMarkUpcomingEventNotifiedWritesMarker(t *testing.T) {
 		StartScheduled: &start,
 	}
 
-	require.NoError(t, as.MarkUpcomingEventNotified(ctx, "room1", "channel1", stream))
-	requireUpcomingEventMarker(t, as, ctx, "room1", "channel1", stream)
+	require.NoError(t, as.MarkUpcomingEventNotified(ctx, testAltRoomID, "channel1", stream))
+	requireUpcomingEventMarker(ctx, t, as, testAltRoomID, "channel1", stream)
 
 	otherRoomKey := as.buildUpcomingEventKey("other-room", "channel1", stream.ID, stream.Title, *stream.StartScheduled)
 	otherRoomExists, err := as.cache.Exists(ctx, otherRoomKey)
 	require.NoError(t, err)
 	assert.False(t, otherRoomExists)
 
-	require.NoError(t, as.MarkUpcomingEventNotified(ctx, "room1", "channel1", nil))
+	require.NoError(t, as.MarkUpcomingEventNotified(ctx, testAltRoomID, "channel1", nil))
 }
 
 type nextStreamInfoCase struct {
@@ -284,21 +287,21 @@ func TestGetNextStreamInfo(t *testing.T) {
 		},
 		{
 			name:   "invalid status ignored",
-			seed:   map[string]any{"status": "broken", "video_id": "v1", "title": "t1"},
+			seed:   map[string]any{testNextStreamStatusField: "broken", "video_id": "v1", "title": "t1"},
 			assert: assertNoNextStreamInfo,
 		},
 		{
 			name:   "upcoming requires complete fields",
-			seed:   map[string]any{"status": "upcoming", "video_id": "v1"},
+			seed:   map[string]any{testNextStreamStatusField: "upcoming", "video_id": "v1"},
 			assert: assertNoNextStreamInfo,
 		},
 		{
 			name: "upcoming complete fields",
 			seed: map[string]any{
-				"status":          "upcoming",
-				"video_id":        "v1",
-				"title":           "테스트",
-				"start_scheduled": "2026-03-02T00:00:00Z",
+				testNextStreamStatusField: "upcoming",
+				"video_id":                "v1",
+				"title":                   "테스트",
+				"start_scheduled":         "2026-03-02T00:00:00Z",
 			},
 			assert: assertUpcomingNextStreamInfo,
 		},
@@ -339,13 +342,13 @@ func TestGetNextStreamInfosBatch(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, as.cache.HMSet(ctx, sharedalarmkeys.NextStreamKeyPrefix+"UC_ok", map[string]any{
-		"status":          "upcoming",
-		"video_id":        "vid-ok",
-		"title":           "배치 방송",
-		"start_scheduled": "2026-03-06T00:00:00Z",
+		testNextStreamStatusField: "upcoming",
+		"video_id":                "vid-ok",
+		"title":                   "배치 방송",
+		"start_scheduled":         "2026-03-06T00:00:00Z",
 	}))
 	require.NoError(t, as.cache.HMSet(ctx, sharedalarmkeys.NextStreamKeyPrefix+"UC_invalid", map[string]any{
-		"status": "broken",
+		testNextStreamStatusField: "broken",
 	}))
 	require.NoError(t, as.cache.HSet(ctx, sharedalarmkeys.MemberNameKey, "UC_ok", "미코"))
 
@@ -374,12 +377,12 @@ func TestBuildAlarmListViews(t *testing.T) {
 	entries := buildAlarmListViews(
 		[]*domain.Alarm{
 			{
-				ChannelID:  "ch-1",
+				ChannelID:  testChannelID,
 				MemberName: "DB 이름",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive},
 			},
 			{
-				ChannelID:  "ch-2",
+				ChannelID:  testOtherChannelID,
 				MemberName: "  ",
 				AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 			},
@@ -390,20 +393,20 @@ func TestBuildAlarmListViews(t *testing.T) {
 			},
 		},
 		map[string]string{
-			"ch-1": "캐시 이름",
-			"ch-2": " ",
+			testChannelID:      "캐시 이름",
+			testOtherChannelID: " ",
 		},
 		map[string]*domain.NextStreamInfo{
-			"ch-1": nextStream,
+			testChannelID: nextStream,
 		},
 	)
 
 	require.Len(t, entries, 3)
 	assert.Equal(t, "캐시 이름", entries[0].MemberName)
 	assert.Equal(t, nextStream, entries[0].NextStream)
-	assert.Equal(t, "ch-1", entries[0].ChannelID)
+	assert.Equal(t, testChannelID, entries[0].ChannelID)
 
-	assert.Equal(t, "ch-2", entries[1].MemberName)
+	assert.Equal(t, testOtherChannelID, entries[1].MemberName)
 	assert.Nil(t, entries[1].NextStream)
 
 	assert.Equal(t, "ch-3", entries[2].MemberName)

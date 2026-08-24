@@ -46,19 +46,19 @@ func TestChannel_GetDisplayName(t *testing.T) {
 		{
 			// EnglishName 필드 없음 → Name 반환
 			name:    "영문 이름 없음",
-			channel: &domain.Channel{Name: "호쇼 마린"},
-			want:    "호쇼 마린",
+			channel: &domain.Channel{Name: testNameMarine},
+			want:    testNameMarine,
 		},
 		{
 			// EnglishName 포인터가 빈 문자열 → Name 반환
 			name:    "영문 이름 빈 문자열",
-			channel: &domain.Channel{Name: "호쇼 마린", EnglishName: &emptyEnglish},
-			want:    "호쇼 마린",
+			channel: &domain.Channel{Name: testNameMarine, EnglishName: &emptyEnglish},
+			want:    testNameMarine,
 		},
 		{
 			// 유효한 EnglishName → 영문 이름 반환
 			name:    "유효한 영문 이름",
-			channel: &domain.Channel{Name: "호쇼 마린", EnglishName: &englishName},
+			channel: &domain.Channel{Name: testNameMarine, EnglishName: &englishName},
 			want:    "Houshou Marine",
 		},
 	}
@@ -66,6 +66,7 @@ func TestChannel_GetDisplayName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.channel.GetDisplayName()
 			if got != tt.want {
 				t.Errorf("GetDisplayName() = %q, want %q", got, tt.want)
@@ -94,19 +95,19 @@ func TestChannel_IsHololive(t *testing.T) {
 		{
 			// Org 포인터가 nil → false
 			name:    "nil Org",
-			channel: &domain.Channel{Name: "테스트"},
+			channel: &domain.Channel{Name: testName},
 			want:    false,
 		},
 		{
 			// Org = "Other" → false
 			name:    "Org가 Other",
-			channel: &domain.Channel{Name: "테스트", Org: &orgOther},
+			channel: &domain.Channel{Name: testName, Org: &orgOther},
 			want:    false,
 		},
 		{
 			// Org = "Hololive" → true
 			name:    "Org가 Hololive",
-			channel: &domain.Channel{Name: "테스트", Org: &orgHololive},
+			channel: &domain.Channel{Name: testName, Org: &orgHololive},
 			want:    true,
 		},
 	}
@@ -114,6 +115,7 @@ func TestChannel_IsHololive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.channel.IsHololive()
 			if got != tt.want {
 				t.Errorf("IsHololive() = %v, want %v", got, tt.want)
@@ -142,19 +144,19 @@ func TestChannel_HasPhoto(t *testing.T) {
 		{
 			// Photo 포인터가 nil → false
 			name:    "nil Photo",
-			channel: &domain.Channel{Name: "테스트"},
+			channel: &domain.Channel{Name: testName},
 			want:    false,
 		},
 		{
 			// Photo 포인터가 빈 문자열 → false
 			name:    "빈 Photo",
-			channel: &domain.Channel{Name: "테스트", Photo: &emptyPhoto},
+			channel: &domain.Channel{Name: testName, Photo: &emptyPhoto},
 			want:    false,
 		},
 		{
 			// 유효한 Photo URL → true
 			name:    "유효한 Photo",
-			channel: &domain.Channel{Name: "테스트", Photo: &validPhoto},
+			channel: &domain.Channel{Name: testName, Photo: &validPhoto},
 			want:    true,
 		},
 	}
@@ -162,6 +164,7 @@ func TestChannel_HasPhoto(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.channel.HasPhoto()
 			if got != tt.want {
 				t.Errorf("HasPhoto() = %v, want %v", got, tt.want)
@@ -189,13 +192,13 @@ func TestChannel_GetPhotoURL(t *testing.T) {
 		{
 			// Photo 없음 → 빈 문자열
 			name:    "Photo 없음",
-			channel: &domain.Channel{Name: "테스트"},
+			channel: &domain.Channel{Name: testName},
 			want:    "",
 		},
 		{
 			// 유효한 Photo → URL 반환
 			name:    "유효한 Photo",
-			channel: &domain.Channel{Name: "테스트", Photo: &validPhoto},
+			channel: &domain.Channel{Name: testName, Photo: &validPhoto},
 			want:    "https://yt3.googleusercontent.com/example.jpg",
 		},
 	}
@@ -203,6 +206,7 @@ func TestChannel_GetPhotoURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.channel.GetPhotoURL()
 			if got != tt.want {
 				t.Errorf("GetPhotoURL() = %q, want %q", got, tt.want)

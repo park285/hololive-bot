@@ -43,3 +43,6 @@
 043 182_epoch2_legacy_ledger_cleanup.sql
 044 183_postgres_idle_transaction_timeout.sql
 045 184_source_observation_retention_lateral.sql
+046 185_source_application_orphan_retention_index.sql
+047 186_source_checkpoint_retention_candidate_index.sql
+048 187_youtube_dependent_retention_api.sql

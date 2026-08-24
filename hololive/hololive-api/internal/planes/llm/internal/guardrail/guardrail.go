@@ -27,20 +27,28 @@ func CheckExternalContent(guard *promptguard.Guard, parts ...string) (promptguar
 	if guard == nil {
 		return promptguard.Evaluation{}, promptguard.ErrGuardUnavailable
 	}
-	return guard.Check(promptguard.CheckRequest{
+
+	out, err := guard.Check(promptguard.CheckRequest{
 		Text:        promptguard.JoinParts(parts...),
 		Source:      promptguard.SourceWebSearchResult,
 		Enforcement: promptguard.EnforcementInteractive,
 	})
+	if err != nil {
+		return out, fmt.Errorf("check: %w", err)
+	}
+
+	return out, nil
 }
 
 func FilterSearchResults(results []model.SearchResult, guard *promptguard.Guard, logger *slog.Logger, boundary string) ([]model.SearchResult, error) {
 	if len(results) == 0 {
 		return results, nil
 	}
+
 	if guard == nil {
 		return nil, promptguard.ErrGuardUnavailable
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -48,6 +56,7 @@ func FilterSearchResults(results []model.SearchResult, guard *promptguard.Guard,
 	filtered := make([]model.SearchResult, 0, len(results))
 	for i := range results {
 		result := &results[i]
+
 		evaluation, err := CheckExternalContent(guard, result.Title, result.URL, result.Content, result.PublishedDate)
 		if err == nil {
 			filtered = append(filtered, *result)
@@ -55,6 +64,7 @@ func FilterSearchResults(results []model.SearchResult, guard *promptguard.Guard,
 		}
 
 		var blocked *promptguard.BlockedError
+
 		if !errors.As(err, &blocked) {
 			return nil, fmt.Errorf("check search result: %w", err)
 		}
@@ -67,6 +77,7 @@ func FilterSearchResults(results []model.SearchResult, guard *promptguard.Guard,
 			slog.Any("rules", blocked.Rules),
 		)
 	}
+
 	return filtered, nil
 }
 
@@ -81,6 +92,7 @@ func ValidateGeneratedOutput(guard *outputguard.Guard, text, boundary string) (o
 	}
 
 	RecordBlock("output", boundary)
+
 	return evaluation, outputguard.ErrRestrictedGeneratedText
 }
 

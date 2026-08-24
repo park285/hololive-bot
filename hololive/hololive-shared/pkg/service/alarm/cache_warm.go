@@ -33,7 +33,12 @@ func WarmSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Cl
 		return CacheWarmSummary{}, errors.New("warm subscriber cache from repository: repository is nil")
 	}
 
-	return warmSubscriberCacheFromRepository(ctx, cacheClient, repository, false)
+	out, err := warmSubscriberCacheFromRepository(ctx, cacheClient, repository, false)
+	if err != nil {
+		return out, fmt.Errorf("warm subscriber cache from repository: %w", err)
+	}
+
+	return out, nil
 }
 
 func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository) (CacheWarmSummary, error) {
@@ -41,7 +46,12 @@ func RebuildSubscriberCacheFromRepository(ctx context.Context, cacheClient cache
 		return CacheWarmSummary{}, errors.New("rebuild subscriber cache from repository: repository is nil")
 	}
 
-	return warmSubscriberCacheFromRepository(ctx, cacheClient, repository, true)
+	out, err := warmSubscriberCacheFromRepository(ctx, cacheClient, repository, true)
+	if err != nil {
+		return out, fmt.Errorf("warm subscriber cache from repository: %w", err)
+	}
+
+	return out, nil
 }
 
 func warmSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Client, repository *Repository, rebuild bool) (CacheWarmSummary, error) {
@@ -53,17 +63,17 @@ func warmSubscriberCacheFromRepository(ctx context.Context, cacheClient cache.Cl
 	// 이전의 add는 스냅샷에 포함되어 양쪽 경쟁 창이 모두 닫힌다.
 	if rebuild {
 		if err := clearSubscriberCacheNamespace(ctx, cacheClient); err != nil {
-			return CacheWarmSummary{}, err
+			return CacheWarmSummary{}, fmt.Errorf("clear subscriber cache namespace: %w", err)
 		}
 	}
 
 	warmData, err := loadSubscriberCacheWarmData(ctx, repository, operation)
 	if err != nil {
-		return CacheWarmSummary{}, err
+		return CacheWarmSummary{}, fmt.Errorf("load subscriber cache warm data: %w", err)
 	}
 
 	if err := writeSubscriberCacheWarmData(ctx, cacheClient, warmData); err != nil {
-		return CacheWarmSummary{}, err
+		return CacheWarmSummary{}, fmt.Errorf("write subscriber cache warm data: %w", err)
 	}
 
 	return warmData.summary, nil
@@ -73,6 +83,7 @@ func subscriberCacheWarmOperation(rebuild bool) string {
 	if rebuild {
 		return "rebuild"
 	}
+
 	return "warm"
 }
 
@@ -86,12 +97,14 @@ func loadSubscriberCacheWarmData(ctx context.Context, repository *Repository, op
 	for _, alarmRecord := range alarms {
 		warmData.addAlarm(alarmRecord)
 	}
+
 	warmData.summary = warmData.finish()
 
 	memberNames, err := loadMemberNamesFromRepository(ctx, repository)
 	if err != nil {
 		return nil, fmt.Errorf("%s subscriber cache from repository: load member names: %w", operation, err)
 	}
+
 	if len(memberNames) > 0 {
 		warmData.memberNames = memberNames
 	}
@@ -106,22 +119,28 @@ func clearSubscriberCacheNamespace(ctx context.Context, cacheClient cache.Client
 
 	keysToDelete, err := subscriberCacheStaticKeysToDelete(ctx, cacheClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("subscriber cache static keys to delete: %w", err)
 	}
 
 	roomAlarmKeys, err := scanRoomAlarmKeys(ctx, cacheClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("scan room alarm keys: %w", err)
 	}
+
 	keysToDelete = append(keysToDelete, roomAlarmKeys...)
 
 	patternKeys, err := scanSubscriberCachePatternKeys(ctx, cacheClient)
 	if err != nil {
-		return err
+		return fmt.Errorf("scan subscriber cache pattern keys: %w", err)
 	}
+
 	keysToDelete = append(keysToDelete, patternKeys...)
 
-	return deleteSubscriberCacheKeys(ctx, cacheClient, keysToDelete)
+	if err := deleteSubscriberCacheKeys(ctx, cacheClient, keysToDelete); err != nil {
+		return fmt.Errorf("delete subscriber cache keys: %w", err)
+	}
+
+	return nil
 }
 
 func subscriberCacheStaticKeysToDelete(ctx context.Context, cacheClient cache.Client) ([]string, error) {
@@ -139,9 +158,11 @@ func subscriberCacheStaticKeysToDelete(ctx context.Context, cacheClient cache.Cl
 	if err != nil {
 		return nil, fmt.Errorf("rebuild subscriber cache from alarms: read room registry: %w", err)
 	}
+
 	for _, roomID := range registryRooms {
 		keysToDelete = appendRoomAlarmKey(keysToDelete, roomID)
 	}
+
 	return keysToDelete, nil
 }
 
@@ -150,11 +171,13 @@ func appendRoomAlarmKey(keys []string, roomID string) []string {
 	if roomID == "" {
 		return keys
 	}
+
 	return append(keys, sharedalarmkeys.BuildRoomAlarmKey(roomID))
 }
 
 func scanSubscriberCachePatternKeys(ctx context.Context, cacheClient cache.Client) ([]string, error) {
 	var keysToDelete []string
+
 	for _, pattern := range []string{
 		sharedalarmkeys.ChannelSubscribersKeyPrefix + "*",
 		sharedalarmkeys.ChannelSubscribersEmptyKeyPrefix + "*",
@@ -163,8 +186,10 @@ func scanSubscriberCachePatternKeys(ctx context.Context, cacheClient cache.Clien
 		if scanErr != nil {
 			return nil, fmt.Errorf("rebuild subscriber cache from alarms: scan keys %q: %w", pattern, scanErr)
 		}
+
 		keysToDelete = append(keysToDelete, keys...)
 	}
+
 	return keysToDelete, nil
 }
 
@@ -193,6 +218,7 @@ func scanRoomAlarmKeys(ctx context.Context, cacheClient cache.Client) ([]string,
 			roomKeys = append(roomKeys, key)
 		}
 	}
+
 	return roomKeys, nil
 }
 
@@ -203,6 +229,7 @@ func compactUniqueStrings(values []string) []string {
 
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
+
 	for _, value := range values {
 		value = strings.TrimSpace(value)
 		if value == "" {
@@ -216,6 +243,7 @@ func compactUniqueStrings(values []string) []string {
 		seen[value] = struct{}{}
 		result = append(result, value)
 	}
+
 	return result
 }
 
@@ -230,7 +258,7 @@ func WarmSubscriberCacheFromAlarms(ctx context.Context, cacheClient cache.Client
 	}
 
 	if err := writeSubscriberCacheWarmData(ctx, cacheClient, warmData); err != nil {
-		return CacheWarmSummary{}, err
+		return CacheWarmSummary{}, fmt.Errorf("write subscriber cache warm data: %w", err)
 	}
 
 	return warmData.finish(), nil
@@ -240,34 +268,46 @@ func normalizedWarmAlarmIdentity(alarmRecord *domain.Alarm) (normalizedRoomID, n
 	if alarmRecord == nil {
 		return "", "", false
 	}
+
 	roomID := strings.TrimSpace(alarmRecord.RoomID)
 	channelID := strings.TrimSpace(alarmRecord.ChannelID)
+
 	return roomID, channelID, roomID != "" && channelID != ""
 }
 
 func writeSubscriberCacheWarmData(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
 	if err := writeSubscriberCacheSets(ctx, cacheClient, data); err != nil {
-		return err
+		return fmt.Errorf("write subscriber cache sets: %w", err)
 	}
+
 	if err := writeSubscriberCacheHashes(ctx, cacheClient, data); err != nil {
-		return err
+		return fmt.Errorf("write subscriber cache hashes: %w", err)
 	}
-	return writeSubscriberCacheWarmMarkers(ctx, cacheClient, data.summary.AlarmCount == 0)
+
+	if err := writeSubscriberCacheWarmMarkers(ctx, cacheClient, data.summary.AlarmCount == 0); err != nil {
+		return fmt.Errorf("write subscriber cache warm markers: %w", err)
+	}
+
+	return nil
 }
 
 func writeSubscriberCacheSets(ctx context.Context, cacheClient cache.Client, data *subscriberCacheWarmData) error {
 	if err := writeWarmSetMap(ctx, cacheClient, data.roomAlarmMembers, "room alarms"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
+
 	if err := writeWarmSet(ctx, cacheClient, sharedalarmkeys.AlarmRegistryKey, compactUniqueStrings(data.registryRooms), "room registry"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
+
 	if err := writeWarmSet(ctx, cacheClient, sharedalarmkeys.AlarmChannelRegistryKey, compactUniqueStrings(data.channelRegistry), "channel registry"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
+
 	if err := writeWarmSetMap(ctx, cacheClient, data.channelSubscribers, "channel subscribers"); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: %w", err)
 	}
+
 	return nil
 }
 
@@ -275,12 +315,15 @@ func writeSubscriberCacheHashes(ctx context.Context, cacheClient cache.Client, d
 	if err := writeWarmHash(ctx, cacheClient, sharedalarmkeys.MemberNameKey, data.memberNames); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: cache member names: %w", err)
 	}
+
 	if err := writeWarmHash(ctx, cacheClient, sharedalarmkeys.RoomNamesCacheKey, data.roomNames); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: cache room names: %w", err)
 	}
+
 	if err := writeWarmHash(ctx, cacheClient, sharedalarmkeys.UserNamesCacheKey, data.userNames); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: cache user names: %w", err)
 	}
+
 	return nil
 }
 
@@ -288,20 +331,34 @@ func writeSubscriberCacheWarmMarkers(ctx context.Context, cacheClient cache.Clie
 	if err := markSubscriberCacheEmptyState(ctx, cacheClient, empty); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: mark empty state: %w", err)
 	}
+
 	if err := bumpAlarmChannelRegistryVersion(ctx, cacheClient); err != nil {
 		return fmt.Errorf("warm subscriber cache from alarms: bump channel registry version: %w", err)
 	}
+
 	return nil
 }
 
 func bumpAlarmChannelRegistryVersion(ctx context.Context, cacheClient cache.Client) error {
-	return cacheClient.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0)
+	if err := cacheClient.Set(ctx, sharedalarmkeys.AlarmChannelRegistryVersionKey, time.Now().UTC().UnixNano(), 0); err != nil {
+		return fmt.Errorf("set: %w", err)
+	}
+
+	return nil
 }
 
 func markSubscriberCacheEmptyState(ctx context.Context, cacheClient cache.Client, empty bool) error {
 	if empty {
-		return cacheClient.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0)
+		if err := cacheClient.Set(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey, "1", 0); err != nil {
+			return fmt.Errorf("set: %w", err)
+		}
+
+		return nil
 	}
 
-	return cacheClient.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey)
+	if err := cacheClient.Del(ctx, sharedalarmkeys.AlarmSubscriberCacheEmptyKey); err != nil {
+		return fmt.Errorf("del: %w", err)
+	}
+
+	return nil
 }

@@ -22,20 +22,21 @@ package cache
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
+
+const testPayloadValue = "value"
 
 type testPayload struct {
 	Name string `json:"name"`
@@ -45,7 +46,7 @@ func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 	t.Helper()
 
 	host, _, mini := testredis.StartMiniRedis(t)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	addr := net.JoinHostPort(host, mini.Port())
 
 	client, err := valkey.NewClient(valkey.ClientOption{
@@ -58,19 +59,24 @@ func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 		mini.Close()
 		t.Fatalf("failed to create valkey client: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+
 	defer cancel()
+
 	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
 		mini.Close()
 		t.Fatalf("failed to ping miniredis: %v", err)
 	}
+
 	service := &Service{client: client, logger: logger}
 
 	t.Cleanup(func() {
 		if err := service.Close(); err != nil {
 			t.Errorf("close cache service: %v", err)
 		}
+
 		mini.Close()
 	})
 
@@ -79,18 +85,20 @@ func newTestCacheService(t *testing.T) (*Service, *miniredis.Miniredis) {
 
 func TestCacheServiceSetGetAndExists(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	value := testPayload{Name: "value"}
+	value := testPayload{Name: testPayloadValue}
 	if err := service.Set(ctx, "key", value, 0); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
 
 	var got testPayload
+
 	if err := service.Get(ctx, "key", &got); err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
-	if got.Name != "value" {
+
+	if got.Name != testPayloadValue {
 		t.Fatalf("unexpected value: %+v", got)
 	}
 
@@ -98,27 +106,30 @@ func TestCacheServiceSetGetAndExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("exists failed: %v", err)
 	}
+
 	if !exists {
-		t.Fatalf("expected key to exist")
+		t.Fatal("expected key to exist")
 	}
 
-	if err := service.Expire(ctx, "key", time.Second); err != nil {
-		t.Fatalf("expire failed: %v", err)
+	if expireErr := service.Expire(ctx, "key", time.Second); expireErr != nil {
+		t.Fatalf("expire failed: %v", expireErr)
 	}
+
 	mini.FastForward(2 * time.Second)
 
 	exists, err = service.Exists(ctx, "key")
 	if err != nil {
 		t.Fatalf("exists after expire failed: %v", err)
 	}
+
 	if exists {
-		t.Fatalf("expected key to expire")
+		t.Fatal("expected key to expire")
 	}
 }
 
 func TestCacheServiceMSetMGetDel(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	pairs := map[string]any{
 		"a": testPayload{Name: "A"},
@@ -132,10 +143,13 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mget failed: %v", err)
 	}
+
 	var decoded testPayload
-	if err := jsonv2.Unmarshal([]byte(values["a"]), &decoded); err != nil {
-		t.Fatalf("decode failed: %v", err)
+
+	if unmarshalErr := jsonv2.Unmarshal([]byte(values["a"]), &decoded); unmarshalErr != nil {
+		t.Fatalf("decode failed: %v", unmarshalErr)
 	}
+
 	if decoded.Name != "A" {
 		t.Fatalf("unexpected decoded value: %+v", decoded)
 	}
@@ -144,6 +158,7 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delmany failed: %v", err)
 	}
+
 	if count != 2 {
 		t.Fatalf("expected 2 deletions, got %d", count)
 	}
@@ -151,11 +166,13 @@ func TestCacheServiceMSetMGetDel(t *testing.T) {
 
 func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	keys := make([]string, 0, 1200)
+
 	for i := range 1200 {
 		key := fmt.Sprintf("bulk:%d", i)
+
 		keys = append(keys, key)
 		requireNoError(t, service.Set(ctx, key, testPayload{Name: key}, 0))
 	}
@@ -163,9 +180,11 @@ func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
 	before := mini.CommandCount()
 	count, err := service.DelMany(ctx, keys)
 	requireNoError(t, err)
+
 	if count != int64(len(keys)) {
 		t.Fatalf("expected %d deletions, got %d", len(keys), count)
 	}
+
 	if got := mini.CommandCount() - before; got != 3 {
 		t.Fatalf("expected 3 delete commands, got %d", got)
 	}
@@ -173,7 +192,7 @@ func TestCacheServiceDelManyChunksLargeRequests(t *testing.T) {
 
 func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	requireNoError(t, service.HMSet(ctx, "members", map[string]any{
 		"UC_A": "Member A",
@@ -186,9 +205,11 @@ func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
 	if got := values["UC_A"]; got != "Member A" {
 		t.Fatalf("values[UC_A] = %q, want Member A", got)
 	}
+
 	if _, ok := values["UC_MISSING"]; ok {
 		t.Fatalf("values contains missing field: %#v", values)
 	}
+
 	if got := values["UC_B"]; got != "Member B" {
 		t.Fatalf("values[UC_B] = %q, want Member B", got)
 	}
@@ -196,55 +217,61 @@ func TestCacheServiceBatchHGetReturnsExistingFields(t *testing.T) {
 
 func TestCacheServiceMSetFailsWithoutWritingOnMarshalError(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := service.MSet(ctx, map[string]any{
 		"good": testPayload{Name: "A"},
 		"bad":  make(chan int),
 	}, time.Minute)
 	if err == nil {
-		t.Fatalf("expected marshal error from mset")
+		t.Fatal("expected marshal error from mset")
 	}
 
 	exists, existsErr := service.Exists(ctx, "good")
 	if existsErr != nil {
 		t.Fatalf("exists failed: %v", existsErr)
 	}
+
 	if exists {
-		t.Fatalf("expected mset to avoid partial writes on marshal failure")
+		t.Fatal("expected mset to avoid partial writes on marshal failure")
 	}
 }
 
 func TestCacheServiceSetCeilsSubSecondTTL(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	requireNoError(t, service.Set(ctx, "ttl:set", testPayload{Name: "value"}, 500*time.Millisecond))
+	requireNoError(t, service.Set(ctx, "ttl:set", testPayload{Name: testPayloadValue}, 500*time.Millisecond))
 
 	exists, err := service.Exists(ctx, "ttl:set")
 	requireNoError(t, err)
+
 	if !exists {
-		t.Fatalf("expected key to exist immediately after set")
+		t.Fatal("expected key to exist immediately after set")
 	}
 
 	mini.FastForward(900 * time.Millisecond)
+
 	exists, err = service.Exists(ctx, "ttl:set")
 	requireNoError(t, err)
+
 	if !exists {
-		t.Fatalf("key expired too early; expected ceil-rounded ttl")
+		t.Fatal("key expired too early; expected ceil-rounded ttl")
 	}
 
 	mini.FastForward(200 * time.Millisecond)
+
 	exists, err = service.Exists(ctx, "ttl:set")
 	requireNoError(t, err)
+
 	if exists {
-		t.Fatalf("expected key to expire after rounded ttl elapsed")
+		t.Fatal("expected key to expire after rounded ttl elapsed")
 	}
 }
 
 func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	requireNoError(t, service.MSet(ctx, map[string]any{
 		"ttl:mset:a": testPayload{Name: "A"},
@@ -252,18 +279,22 @@ func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
 	}, 500*time.Millisecond))
 
 	mini.FastForward(900 * time.Millisecond)
+
 	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
 		exists, err := service.Exists(ctx, key)
 		requireNoError(t, err)
+
 		if !exists {
 			t.Fatalf("%s expired too early; expected ceil-rounded ttl", key)
 		}
 	}
 
 	mini.FastForward(200 * time.Millisecond)
+
 	for _, key := range []string{"ttl:mset:a", "ttl:mset:b"} {
 		exists, err := service.Exists(ctx, key)
 		requireNoError(t, err)
+
 		if exists {
 			t.Fatalf("expected %s to expire after rounded ttl elapsed", key)
 		}
@@ -272,29 +303,33 @@ func TestCacheServiceMSetCeilsSubSecondTTL(t *testing.T) {
 
 func TestCacheServiceExpireCeilsSubSecondTTL(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	requireNoError(t, service.Set(ctx, "ttl:expire", testPayload{Name: "value"}, 0))
+	requireNoError(t, service.Set(ctx, "ttl:expire", testPayload{Name: testPayloadValue}, 0))
 	requireNoError(t, service.Expire(ctx, "ttl:expire", 500*time.Millisecond))
 
 	mini.FastForward(900 * time.Millisecond)
+
 	exists, err := service.Exists(ctx, "ttl:expire")
 	requireNoError(t, err)
+
 	if !exists {
-		t.Fatalf("key expired too early; expected ceil-rounded ttl")
+		t.Fatal("key expired too early; expected ceil-rounded ttl")
 	}
 
 	mini.FastForward(200 * time.Millisecond)
+
 	exists, err = service.Exists(ctx, "ttl:expire")
 	requireNoError(t, err)
+
 	if exists {
-		t.Fatalf("expected key to expire after rounded ttl elapsed")
+		t.Fatal("expected key to expire after rounded ttl elapsed")
 	}
 }
 
 func TestMemberCacheOperations(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	members := map[string]string{"member:Hololive": "channel"}
 	if err := service.InitializeMemberDatabase(ctx, members); err != nil {
@@ -305,6 +340,7 @@ func TestMemberCacheOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get all failed: %v", err)
 	}
+
 	if all["member:Hololive"] != "channel" {
 		t.Fatalf("unexpected members: %+v", all)
 	}
@@ -312,7 +348,7 @@ func TestMemberCacheOperations(t *testing.T) {
 
 func TestStreamCacheOperations(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	streams := []*domain.Stream{{ID: "stream-1"}}
 	service.SetStreams(ctx, "streams:key", streams, time.Minute)
@@ -324,7 +360,7 @@ func TestStreamCacheOperations(t *testing.T) {
 
 	_, found = service.GetStreams(ctx, "streams:missing")
 	if found {
-		t.Fatalf("expected missing streams to return false")
+		t.Fatal("expected missing streams to return false")
 	}
 }
 
@@ -372,7 +408,7 @@ func TestSetNX(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			if tt.setup != nil {
 				tt.setup(service, ctx)
@@ -381,8 +417,10 @@ func TestSetNX(t *testing.T) {
 			got, err := service.SetNX(ctx, tt.key, tt.value, tt.ttl)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetNX() error = %v, wantErr %v", err, tt.wantErr)
+
 				return
 			}
+
 			if got != tt.wantResult {
 				t.Errorf("SetNX() = %v, want %v", got, tt.wantResult)
 			}
@@ -392,12 +430,13 @@ func TestSetNX(t *testing.T) {
 
 func TestSetNXWithTTLExpiry(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	acquired, err := service.SetNX(ctx, "lock:expiry", "1", time.Second)
 	if err != nil {
 		t.Fatalf("SetNX failed: %v", err)
 	}
+
 	if !acquired {
 		t.Fatal("expected to acquire lock")
 	}
@@ -406,6 +445,7 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second SetNX failed: %v", err)
 	}
+
 	if acquired {
 		t.Fatal("expected second SetNX to fail while lock is held")
 	}
@@ -416,6 +456,7 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("third SetNX after expiry failed: %v", err)
 	}
+
 	if !acquired {
 		t.Fatal("expected to acquire lock after expiry")
 	}
@@ -423,24 +464,29 @@ func TestSetNXWithTTLExpiry(t *testing.T) {
 
 func TestSetNXCeilsSubSecondTTL(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	acquired, err := service.SetNX(ctx, "lock:ceil", "1", 500*time.Millisecond)
 	requireNoError(t, err)
+
 	if !acquired {
 		t.Fatal("expected initial lock acquisition to succeed")
 	}
 
 	mini.FastForward(900 * time.Millisecond)
+
 	acquired, err = service.SetNX(ctx, "lock:ceil", "2", 500*time.Millisecond)
 	requireNoError(t, err)
+
 	if acquired {
 		t.Fatal("lock should still be held before rounded ttl elapses")
 	}
 
 	mini.FastForward(200 * time.Millisecond)
+
 	acquired, err = service.SetNX(ctx, "lock:ceil", "3", 500*time.Millisecond)
 	requireNoError(t, err)
+
 	if !acquired {
 		t.Fatal("expected lock acquisition after rounded ttl elapsed")
 	}
@@ -448,6 +494,7 @@ func TestSetNXCeilsSubSecondTTL(t *testing.T) {
 
 func requireNoError(t *testing.T, err error) {
 	t.Helper()
+
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -455,7 +502,7 @@ func requireNoError(t *testing.T, err error) {
 
 func TestService_DoMulti(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	result := service.DoMulti(ctx)
 	if result != nil {
@@ -467,9 +514,11 @@ func TestService_DoMulti(t *testing.T) {
 		service.Builder().Set().Key("multi2").Value("val2").Build(),
 	}
 	results := service.DoMulti(ctx, cmds...)
+
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
+
 	for _, res := range results {
 		if err := res.Error(); err != nil {
 			t.Errorf("command failed: %v", err)
@@ -478,6 +527,7 @@ func TestService_DoMulti(t *testing.T) {
 
 	val1, err := service.GetClient().Do(ctx, service.Builder().Get().Key("multi1").Build()).ToString()
 	requireNoError(t, err)
+
 	if val1 != "val1" {
 		t.Errorf("expected val1, got %s", val1)
 	}

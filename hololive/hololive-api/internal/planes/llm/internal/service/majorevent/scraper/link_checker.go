@@ -62,20 +62,24 @@ func NewLinkChecker(client *http.Client, config LinkCheckerConfig, logger *slog.
 	if client == nil {
 		client = httputil.NewExternalAPIClient(defaultLinkCheckerHTTPClient)
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	normalized := config
 	defaults := DefaultLinkCheckerConfig()
+
 	if normalized.Timeout <= 0 {
 		normalized.Timeout = defaults.Timeout
 	}
+
 	if normalized.Concurrency < 1 {
 		normalized.Concurrency = defaults.Concurrency
 	}
 
 	resolver := net.DefaultResolver
+
 	client = withBlockedRedirectPolicy(client, resolver, normalized.Timeout)
 	client = withValidatedDialPolicy(client, resolver, normalized.Timeout)
 
@@ -90,6 +94,7 @@ func NewLinkChecker(client *http.Client, config LinkCheckerConfig, logger *slog.
 // CheckEvents는 이벤트 링크를 병렬 검증한다.
 func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEvent) (LinkCheckResult, error) {
 	result := LinkCheckResult{}
+
 	if len(events) == 0 {
 		return result, nil
 	}
@@ -112,6 +117,7 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 			mu.Unlock()
 
 			c.logEventLinkCheckFailure(check)
+
 			return nil
 		})
 	}
@@ -125,6 +131,7 @@ func (c *LinkChecker) CheckEvents(ctx context.Context, events []*domain.MajorEve
 
 func (c *LinkChecker) checkEventLink(ctx context.Context, event *domain.MajorEvent) eventLinkCheck {
 	status, err := c.CheckLink(ctx, event.Link)
+
 	return eventLinkCheck{
 		event:     event,
 		status:    status,
@@ -157,6 +164,7 @@ func (c *LinkChecker) logEventLinkCheckFailure(check eventLinkCheck) {
 	if check.err == nil {
 		return
 	}
+
 	c.logger.Debug(
 		"Major event link check failed",
 		slog.String("link", redactLinkForLog(check.event.Link)),
@@ -173,30 +181,49 @@ func (c *LinkChecker) CheckLink(ctx context.Context, rawURL string) (domain.Majo
 	}
 
 	targetURL := parsed.String()
-	if status, done, err := c.checkHeadLink(ctx, targetURL); done {
-		return status, err
+	if status, done, checkErr := c.checkHeadLink(ctx, targetURL); done {
+		if checkErr != nil {
+			return status, fmt.Errorf("check head link: %w", checkErr)
+		}
+
+		return status, nil
 	}
-	return c.checkGetLink(ctx, targetURL)
+
+	out, err := c.checkGetLink(ctx, targetURL)
+	if err != nil {
+		return out, fmt.Errorf("check get link: %w", err)
+	}
+
+	return out, nil
 }
 
 func statusForLinkError(err error) domain.MajorEventLinkStatus {
 	if isBlockedLinkError(err) {
 		return domain.MajorEventLinkStatusBlocked
 	}
+
 	return domain.MajorEventLinkStatusFailed
 }
 
 func (c *LinkChecker) checkHeadLink(ctx context.Context, targetURL string) (domain.MajorEventLinkStatus, bool, error) {
 	headStatus, headErr := c.probe(ctx, http.MethodHead, targetURL)
 	if isBlockedLinkError(headErr) {
-		return domain.MajorEventLinkStatusBlocked, true, headErr
+		return domain.MajorEventLinkStatusBlocked, true, fmt.Errorf("check link: head request blocked: %w", headErr)
 	}
+
 	if headErr == nil {
-		return statusForHeadResponse(headStatus)
+		out1, out2, err := statusForHeadResponse(headStatus)
+		if err != nil {
+			return out1, out2, fmt.Errorf("status for head response: %w", err)
+		}
+
+		return out1, out2, nil
 	}
+
 	if shouldFallbackToGET(0, headErr) {
 		return "", false, nil
 	}
+
 	return domain.MajorEventLinkStatusFailed, true, fmt.Errorf("check link: head request failed: %w", headErr)
 }
 
@@ -204,29 +231,34 @@ func statusForHeadResponse(headStatus int) (domain.MajorEventLinkStatus, bool, e
 	if isSuccessStatus(headStatus) {
 		return domain.MajorEventLinkStatusOK, true, nil
 	}
+
 	if shouldFallbackToGET(headStatus, nil) {
 		return "", false, nil
 	}
+
 	return domain.MajorEventLinkStatusFailed, true, fmt.Errorf("check link: head status %d", headStatus)
 }
 
 func (c *LinkChecker) checkGetLink(ctx context.Context, targetURL string) (domain.MajorEventLinkStatus, error) {
 	getStatus, getErr := c.probe(ctx, http.MethodGet, targetURL)
 	if isBlockedLinkError(getErr) {
-		return domain.MajorEventLinkStatusBlocked, getErr
+		return domain.MajorEventLinkStatusBlocked, fmt.Errorf("check link: get request blocked: %w", getErr)
 	}
+
 	if getErr != nil {
 		return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: get request failed: %w", getErr)
 	}
+
 	if isSuccessStatus(getStatus) {
 		return domain.MajorEventLinkStatusOK, nil
 	}
+
 	return domain.MajorEventLinkStatusFailed, fmt.Errorf("check link: get status %d", getStatus)
 }
 
 func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int, error) {
 	if err := c.validateRequestTarget(ctx, targetURL); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("validate request target: %w", err)
 	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
@@ -236,6 +268,7 @@ func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int,
 	if err != nil {
 		return 0, fmt.Errorf("probe link: build request: %w", err)
 	}
+
 	if method == http.MethodGet {
 		req.Header.Set("Range", "bytes=0-0")
 	}
@@ -244,17 +277,20 @@ func (c *LinkChecker) probe(ctx context.Context, method, targetURL string) (int,
 	if err != nil {
 		return 0, fmt.Errorf("probe link: do request: %w", err)
 	}
+
 	if resp == nil {
-		return 0, fmt.Errorf("probe link: response is nil")
+		return 0, errors.New("probe link: response is nil")
 	}
+
 	if resp.Body == nil {
-		return 0, fmt.Errorf("probe link: response body is nil")
+		return 0, errors.New("probe link: response body is nil")
 	}
 
 	statusCode := resp.StatusCode
 	if closeErr := resp.Body.Close(); closeErr != nil {
 		return 0, fmt.Errorf("probe link: close response body: %w", closeErr)
 	}
+
 	return statusCode, nil
 }
 
@@ -269,7 +305,9 @@ func shouldFallbackToGET(statusCode int, probeErr error) bool {
 		if errors.Is(probeErr, context.DeadlineExceeded) {
 			return true
 		}
+
 		normalized := strings.ToLower(probeErr.Error())
+
 		return strings.Contains(normalized, "timeout") ||
 			strings.Contains(normalized, "connection reset") ||
 			strings.Contains(normalized, "method not allowed")

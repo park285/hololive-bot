@@ -34,6 +34,7 @@ func (e *PartialTransitionError) Error() string {
 	if len(e.UnappliedIDs) > 0 {
 		return fmt.Sprintf("%s: partial transition: updated %d of %d rows, unapplied ids %v", e.Action, e.Updated, e.Expected, e.UnappliedIDs)
 	}
+
 	return fmt.Sprintf("%s: ownership changed after external send: updated %d of %d rows", e.Action, e.Updated, e.Expected)
 }
 
@@ -45,9 +46,11 @@ func NewPgxRepository(postgres database.Client, logger *slog.Logger) *PgxReposit
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	if postgres == nil {
 		return &PgxRepository{now: time.Now, logger: logger}
 	}
+
 	return &PgxRepository{pool: postgres.GetPool(), now: time.Now, logger: logger}
 }
 
@@ -55,6 +58,7 @@ func NewPgxRepositoryFromPool(pool *pgxpool.Pool, logger *slog.Logger) *PgxRepos
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &PgxRepository{pool: pool, now: time.Now, logger: logger}
 }
 
@@ -62,15 +66,19 @@ func expectRowsAffected(got int64, want int, action string) error {
 	if got == int64(want) {
 		return nil
 	}
+
 	return fmt.Errorf("%s: ownership mismatch: updated %d of %d rows", action, got, want)
 }
 
 func scanDeliveryRecord(row pgx.Row) (*Record, error) {
-	var record Record
-	var status string
-	var lockedBy *string
-	var dispatchGroupKey *string
-	var sendUnitID *int64
+	var (
+		record           Record
+		status           string
+		lockedBy         *string
+		dispatchGroupKey *string
+		sendUnitID       *int64
+	)
+
 	err := row.Scan(
 		&record.ID,
 		&record.EventID,
@@ -98,18 +106,23 @@ func scanDeliveryRecord(row pgx.Row) (*Record, error) {
 		&record.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan: %w", err)
 	}
+
 	if lockedBy != nil {
 		record.LockedBy = *lockedBy
 	}
+
 	if dispatchGroupKey != nil {
 		record.DispatchGroupKey = *dispatchGroupKey
 	}
+
 	if sendUnitID != nil {
 		record.SendUnitID = *sendUnitID
 	}
+
 	record.Status = Status(status)
+
 	return &record, nil
 }
 
@@ -120,5 +133,6 @@ func idsFromEnvelopes(envelopes []domain.AlarmQueueEnvelope) []int64 {
 			ids = append(ids, envelopes[i].DispatchOutboxID)
 		}
 	}
+
 	return ids
 }

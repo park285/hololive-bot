@@ -22,18 +22,19 @@ package handlercore
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
-	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type Command interface {
@@ -108,6 +109,9 @@ type BroadcastHistoryResult struct {
 	Entries   []BroadcastHistoryEntry
 	Truncated bool
 }
+
+// GetEndedBroadcast는 조회 대상이 없을 때 ErrBroadcastNotFound를 반환한다.
+var ErrBroadcastNotFound = errors.New("broadcast not found")
 
 type BroadcastHistoryRepository interface {
 	ListEndedBroadcasts(ctx context.Context, query *BroadcastHistoryQuery) (BroadcastHistoryResult, error)

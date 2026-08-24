@@ -1,7 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -19,9 +18,10 @@ func TestCleanupOutbox_DeletesTerminalRowsInBatches(t *testing.T) {
 		CleanupAfter: 7 * 24 * time.Hour,
 		LockTimeout:  5 * time.Minute,
 	})
-	ctx := context.Background()
+	ctx := t.Context()
 
 	veryOld := time.Now().UTC().Add(-30 * 24 * time.Hour)
+
 	for i := range 3 {
 		row := &domain.YouTubeNotificationOutbox{
 			Kind: domain.OutboxKindNewVideo, ChannelID: "ch-batch", ContentID: fmt.Sprintf("batch-sent-%d", i),
@@ -37,6 +37,7 @@ func TestCleanupOutbox_DeletesTerminalRowsInBatches(t *testing.T) {
 	assert.Equal(t, int64(3), deleted, "배치 크기보다 많은 terminal outbox도 루프로 전량 삭제해야 한다")
 
 	var remaining int64
+
 	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &remaining, "channel_id = ?", "ch-batch").Error)
 	assert.Zero(t, remaining)
 }

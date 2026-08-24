@@ -75,10 +75,15 @@ type configLoadOptions struct {
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
-	return loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{
+	out, err := loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{
 		CORSDefaultEnforce: true,
 		TracingRuntime:     tracingRuntimeHololiveAPI,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("load config validated: %w", err)
+	}
+
+	return out, nil
 }
 
 func loadConfigValidated(validate func(*Config) error, options configLoadOptions) (*Config, error) {
@@ -87,9 +92,10 @@ func loadConfigValidated(validate func(*Config) error, options configLoadOptions
 	}
 
 	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
+
 	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction, options)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build config: %w", err)
 	}
 
 	if err := validate(config); err != nil {
@@ -148,11 +154,12 @@ func loadIrisConfig(webhookToken, botToken string) IrisConfig {
 func loadKakaoConfig() (*KakaoConfig, error) {
 	enabled, err := loadKakaoACLEnabled()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load kakao ACL enabled: %w", err)
 	}
+
 	mode, err := loadKakaoACLMode()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load kakao ACL mode: %w", err)
 	}
 
 	return &KakaoConfig{
@@ -163,27 +170,35 @@ func loadKakaoConfig() (*KakaoConfig, error) {
 }
 
 func loadKakaoACLEnabled() (bool, error) {
-	const key = "KAKAO_ACL_ENABLED"
+	const key = kakaoACLEnabledEnv
+
 	raw, found := os.LookupEnv(key)
+
 	if !found {
 		return true, nil
 	}
+
 	if strings.TrimSpace(raw) == "" {
 		return false, fmt.Errorf("%s must not be empty", key)
 	}
+
 	enabled, err := sharedenv.BoolE(key, true)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("read bool env: %w", err)
 	}
+
 	return enabled, nil
 }
 
 func loadKakaoACLMode() (string, error) {
-	const key = "KAKAO_ACL_MODE"
+	const key = kakaoACLModeEnv
+
 	raw, found := os.LookupEnv(key)
+
 	if !found {
 		return "whitelist", nil
 	}
+
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	switch mode {
 	case "whitelist", "blacklist":
@@ -218,6 +233,7 @@ func loadBotConfig() BotConfig {
 
 func loadHolodexConfig() HolodexConfig {
 	d := DefaultHolodexOperationalConfig()
+
 	return HolodexConfig{
 		BaseURL:           sharedenv.String("HOLODEX_BASE_URL", d.BaseURL),
 		APIKey:            resolveHolodexAPIKey(),
@@ -251,10 +267,12 @@ func loadHolodexConfig() HolodexConfig {
 
 func loadYouTubeConfig() (YouTubeConfig, error) {
 	if err := rejectRetiredYouTubeProducerEnv(); err != nil {
-		return YouTubeConfig{}, err
+		return YouTubeConfig{}, fmt.Errorf("reject retired youtube producer env: %w", err)
 	}
+
 	d := DefaultYouTubeOperationalConfig()
 	interval := time.Duration(sharedenv.Int("YOUTUBE_REQUEST_INTERVAL_SECONDS", int(d.RequestInterval/time.Second))) * time.Second
+
 	return YouTubeConfig{
 		CacheExpiration:      time.Duration(sharedenv.Int("YOUTUBE_CACHE_EXPIRATION_SECONDS", int(d.CacheExpiration/time.Second))) * time.Second,
 		MaxPageBodyBytes:     int64(sharedenv.Int("YOUTUBE_MAX_PAGE_BODY_BYTES", int(d.MaxPageBodyBytes))),
@@ -278,6 +296,7 @@ func loadYouTubeConfig() (YouTubeConfig, error) {
 
 func loadChzzkConfig() ChzzkConfig {
 	d := DefaultChzzkOperationalConfig()
+
 	return ChzzkConfig{
 		ClientID:                  sharedenv.String("CHZZK_CLIENT_ID", ""),
 		ClientSecret:              sharedenv.String("CHZZK_CLIENT_SECRET", ""),
@@ -289,6 +308,7 @@ func loadChzzkConfig() ChzzkConfig {
 
 func loadTwitchConfig() TwitchConfig {
 	d := DefaultTwitchOperationalConfig()
+
 	return TwitchConfig{
 		ClientID:           sharedenv.String("TWITCH_CLIENT_ID", ""),
 		ClientSecret:       sharedenv.String("TWITCH_CLIENT_SECRET", ""),
@@ -304,6 +324,7 @@ func loadTwitchConfig() TwitchConfig {
 
 func loadOfficialScheduleConfig() OfficialScheduleConfig {
 	d := DefaultOfficialScheduleConfig()
+
 	return OfficialScheduleConfig{
 		BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", d.BaseURL),
 		Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
@@ -314,6 +335,7 @@ func loadOfficialScheduleConfig() OfficialScheduleConfig {
 
 func loadOfficialProfileConfig() OfficialProfileConfig {
 	d := DefaultOfficialProfileConfig()
+
 	return OfficialProfileConfig{
 		BaseURL:        sharedenv.String("OFFICIAL_PROFILE_BASE_URL", d.BaseURL),
 		UserAgent:      sharedenv.String("OFFICIAL_PROFILE_USER_AGENT", d.UserAgent),

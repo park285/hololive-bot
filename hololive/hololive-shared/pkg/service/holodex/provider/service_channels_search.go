@@ -24,11 +24,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"strings"
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
-
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -45,7 +45,11 @@ func (h *Service) SearchChannels(ctx context.Context, query string) ([]*domain.C
 
 	channels, err := h.fetchHololiveChannelList(ctx)
 	if err != nil {
-		return nil, sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query))
+		if logErr := sharedlog.LogAndWrapError(ctx, h.logger, "search channels", err, searchQueryAttr(query)); logErr != nil {
+			return nil, fmt.Errorf("log and wrap error: %w", logErr)
+		}
+
+		return nil, nil
 	}
 
 	h.logger.Debug("Holodex API search results",
@@ -73,6 +77,7 @@ func buildSearchChannelsCacheKey(query string) string {
 	}
 
 	sum := sha256.Sum256([]byte(normalized))
+
 	return searchChannelsCacheKeyPrefix + hex.EncodeToString(sum[:])
 }
 
@@ -84,10 +89,12 @@ func filterChannelsByQuery(channels []*domain.Channel, query string, filter *str
 		if !isSearchableHololiveChannel(ch, filter) {
 			continue
 		}
+
 		if normalizedQuery == "" {
 			filtered = append(filtered, ch)
 			continue
 		}
+
 		if channelMatchesSearchQuery(ch, normalizedQuery) {
 			filtered = append(filtered, ch)
 		}
@@ -100,6 +107,7 @@ func isSearchableHololiveChannel(ch *domain.Channel, filter *streammapping.Strea
 	if ch == nil {
 		return false
 	}
+
 	return ch.Org != nil && *ch.Org == constants.HolodexAPIParams.OrgHololive && !filter.IsHolostarsChannel(ch)
 }
 
@@ -107,9 +115,11 @@ func channelMatchesSearchQuery(ch *domain.Channel, normalizedQuery string) bool 
 	if strings.Contains(strings.ToLower(ch.Name), normalizedQuery) {
 		return true
 	}
+
 	if ch.EnglishName != nil && strings.Contains(strings.ToLower(*ch.EnglishName), normalizedQuery) {
 		return true
 	}
+
 	return strings.Contains(strings.ToLower(ch.ID), normalizedQuery)
 }
 

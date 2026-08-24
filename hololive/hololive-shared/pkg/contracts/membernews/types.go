@@ -27,10 +27,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
-var (
-	// ErrNoSubscribedMembers: 방에 설정된 알람 멤버가 없을 때 반환합니다.
-	ErrNoSubscribedMembers = errors.New("no subscribed members")
-)
+// ErrNoSubscribedMembers: 방에 설정된 알람 멤버가 없을 때 반환합니다.
+var ErrNoSubscribedMembers = errors.New("no subscribed members")
 
 type Period string
 

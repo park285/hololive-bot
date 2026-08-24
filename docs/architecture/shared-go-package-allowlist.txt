@@ -8,6 +8,7 @@ h3
 healthprobe
 httputil
 internal/guardtext
+internal/testsupport
 jsonutil
 kakaoformat
 llm
@@ -20,6 +21,7 @@ netguard
 obsmetrics
 outputguard
 promptguard
+reflectutil
 retry
 runtime/automaxprocs
 runtime/bootstrap

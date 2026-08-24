@@ -19,9 +19,11 @@ func NewDigestScheduler(locker delivery.NotificationLocker, logger *slog.Logger)
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	if locker == nil {
 		locker = delivery.NewLocker(nil, logger)
 	}
+
 	return &DigestScheduler{
 		Locker:  locker,
 		Logger:  logger,
@@ -33,6 +35,7 @@ func (d *DigestScheduler) SetClock(clockFn func() time.Time) {
 	if d == nil {
 		return
 	}
+
 	d.runtime.SetClock(clockFn)
 }
 
@@ -40,6 +43,7 @@ func (d *DigestScheduler) Clock() time.Time {
 	if d == nil || d.runtime == nil {
 		return time.Now()
 	}
+
 	return d.runtime.Now()
 }
 
@@ -47,6 +51,7 @@ func (d *DigestScheduler) Start(ctx context.Context, cfg *Config) {
 	if d == nil {
 		return
 	}
+
 	d.runtime.Start(ctx, cfg)
 }
 
@@ -54,6 +59,7 @@ func (d *DigestScheduler) Stop() {
 	if d == nil {
 		return
 	}
+
 	d.runtime.Stop()
 }
 
@@ -64,31 +70,47 @@ type DigestOp[C any] struct {
 	Execute           func(ctx context.Context, collected C) error
 }
 
-func RunDigest[C any](ctx context.Context, d *DigestScheduler, op DigestOp[C]) error {
+func (d *DigestScheduler) RunDigest[C any](ctx context.Context, op DigestOp[C]) error {
 	token, acquired, err := d.Locker.TryAcquire(ctx, op.LockKey, delivery.DefaultExecutionLockTTL)
 	if err != nil {
 		return fmt.Errorf("acquire lock: %w", err)
 	}
+
 	if !acquired {
-		return handleDigestLockNotAcquired(op.OnLockNotAcquired)
+		if handleErr := handleDigestLockNotAcquired(op.OnLockNotAcquired); handleErr != nil {
+			return fmt.Errorf("handle digest lock not acquired: %w", handleErr)
+		}
+
+		return nil
 	}
+
 	defer d.releaseDigestLock(ctx, op.LockKey, token)
 
 	collected, ok, err := op.Collect(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("collect: %w", err)
 	}
+
 	if !ok {
 		return nil
 	}
 
-	return op.Execute(ctx, collected)
+	if err := op.Execute(ctx, collected); err != nil {
+		return fmt.Errorf("execute: %w", err)
+	}
+
+	return nil
 }
 
 func handleDigestLockNotAcquired(onLockNotAcquired func() error) error {
 	if onLockNotAcquired != nil {
-		return onLockNotAcquired()
+		if err := onLockNotAcquired(); err != nil {
+			return fmt.Errorf("on lock not acquired: %w", err)
+		}
+
+		return nil
 	}
+
 	return nil
 }
 
@@ -99,6 +121,7 @@ func (d *DigestScheduler) releaseDigestLock(ctx context.Context, lockKey, token 
 	// DefaultExecutionLockTTL(15분)까지 잔존하므로 해제는 취소와 분리한다.
 	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), digestLockReleaseTimeout)
 	defer cancel()
+
 	if releaseErr := d.Locker.Release(releaseCtx, lockKey, token); releaseErr != nil && d.Logger != nil {
 		d.Logger.Warn("release digest lock failed", slog.String("lock_key", lockKey), slog.Any("error", releaseErr))
 	}

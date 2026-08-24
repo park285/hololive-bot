@@ -50,7 +50,12 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 			slog.Int("month", month), slog.Int("year", year),
 			slog.Any("error", err),
 		)
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrCalendarQueryFailed)
+
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrCalendarQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	if c.trySendCalendarImage(ctx, cmdCtx.Room, month, year, entries) {
@@ -58,20 +63,28 @@ func (c *CalendarCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 	}
 
 	message := c.Deps().Formatter.CelebrationCalendar(ctx, month, year, entries)
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (c *CalendarCommand) targetMonthYear(params map[string]any) (month, year int) {
 	now := c.nowKST()
+
 	month = int(now.Month())
 	year = now.Year()
 
 	if m, ok := params["month"].(int); ok && m >= 1 && m <= 12 {
 		return m, year
 	}
+
 	if offset, ok := params["monthOffset"].(int); ok && offset != 0 {
 		base := time.Date(year, now.Month(), 1, 0, 0, 0, 0, now.Location())
 		target := base.AddDate(0, offset, 0)
+
 		return int(target.Month()), target.Year()
 	}
 
@@ -82,6 +95,7 @@ func (c *CalendarCommand) nowKST() time.Time {
 	if c.now != nil {
 		return util.ToKST(c.now())
 	}
+
 	return util.NowKST()
 }
 
@@ -95,6 +109,7 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 		c.Deps().Logger.Warn("calendar image render failed, falling back to text",
 			slog.Any("error", err),
 		)
+
 		return false
 	}
 
@@ -103,12 +118,14 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 			c.Deps().Logger.Warn("calendar image outcome unknown, suppressing text fallback",
 				slog.Any("error", err),
 			)
+
 			return true
 		}
 
 		c.Deps().Logger.Warn("calendar image send failed, falling back to text",
 			slog.Any("error", err),
 		)
+
 		return false
 	}
 
@@ -116,18 +133,26 @@ func (c *CalendarCommand) trySendCalendarImage(ctx context.Context, room string,
 }
 
 func (c *CalendarCommand) renderCalendarImage(ctx context.Context, month, year int, entries []domain.CalendarEntry) ([]byte, error) {
-	return c.imageRenderer.RenderCalendarImageContext(ctx, month, year, entries)
+	out, err := c.imageRenderer.RenderCalendarImageContext(ctx, month, year, entries)
+	if err != nil {
+		return out, fmt.Errorf("render calendar image context: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *CalendarCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("calendar command: ensure base deps: %w", err)
 	}
+
 	if c.Deps().Formatter == nil {
 		return errors.New("calendar command: formatter not configured")
 	}
+
 	if c.memberRepo == nil {
 		return errors.New("calendar command: member repository not configured")
 	}
+
 	return nil
 }

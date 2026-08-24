@@ -43,6 +43,7 @@ func (s *writeCapableStub) LoadAll(context.Context) ([]*domain.Alarm, error) {
 	if s.loadErr != nil {
 		return nil, s.loadErr
 	}
+
 	return s.alarms, nil
 }
 
@@ -68,24 +69,26 @@ func TestRestrictForwardsReads(t *testing.T) {
 	}
 	reader := alarmread.Restrict(source)
 
-	channelIDs, err := reader.GetAllChannelIDs(context.Background())
+	channelIDs, err := reader.GetAllChannelIDs(t.Context())
 	if err != nil {
 		t.Fatalf("GetAllChannelIDs returned error: %v", err)
 	}
+
 	if len(channelIDs) != 2 || channelIDs[0] != "UC-a" || channelIDs[1] != "UC-b" {
 		t.Fatalf("GetAllChannelIDs = %v, want [UC-a UC-b]", channelIDs)
 	}
 
-	alarms, err := reader.LoadAll(context.Background())
+	alarms, err := reader.LoadAll(t.Context())
 	if err != nil {
 		t.Fatalf("LoadAll returned error: %v", err)
 	}
+
 	if len(alarms) != 1 || alarms[0].ChannelID != "UC-a" {
 		t.Fatalf("LoadAll = %v, want one alarm for UC-a", alarms)
 	}
 
 	source.loadErr = wantErr
-	if _, err := reader.LoadAll(context.Background()); !errors.Is(err, wantErr) {
+	if _, err := reader.LoadAll(t.Context()); !errors.Is(err, wantErr) {
 		t.Fatalf("LoadAll error = %v, want %v", err, wantErr)
 	}
 }

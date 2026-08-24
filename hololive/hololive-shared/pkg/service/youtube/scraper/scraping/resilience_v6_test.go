@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/jsonutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
@@ -22,13 +23,16 @@ import (
 
 func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {
 	var attempts atomic.Int32
+
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				statusBody := ""
+
 				if attempts.Add(1) == 2 {
 					statusBody = "<html>ok</html>"
 				}
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -41,7 +45,7 @@ func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	body, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	body, err := client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       2,
 		PerAttemptTimeout: time.Second,
 		BaseDelay:         time.Millisecond,
@@ -54,14 +58,19 @@ func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {
 
 func TestFetchPageDoesNotRetryBlockedSuccessfulResponse(t *testing.T) {
 	var attempts atomic.Int32
+
 	sorryURL, err := url.Parse("https://www.google.com/sorry/index?continue=...")
 	require.NoError(t, err)
+
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				attempts.Add(1)
+
 				redirected := req.Clone(req.Context())
+
 				redirected.URL = sorryURL
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -74,7 +83,7 @@ func TestFetchPageDoesNotRetryBlockedSuccessfulResponse(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	_, err = client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	_, err = client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       3,
 		PerAttemptTimeout: time.Second,
 		BaseDelay:         time.Millisecond,
@@ -109,13 +118,16 @@ func TestFinalURLLooksBlockedDetectsRedirectToSorry(t *testing.T) {
 
 func TestFetchPagePerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 	var attempts atomic.Int32
+
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if attempts.Add(1) == 1 {
 					<-req.Context().Done()
+
 					return nil, req.Context().Err()
 				}
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -128,7 +140,7 @@ func TestFetchPagePerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	body, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	body, err := client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       2,
 		PerAttemptTimeout: 5 * time.Millisecond,
 		BaseDelay:         time.Millisecond,
@@ -141,6 +153,7 @@ func TestFetchPagePerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 
 func TestFetchPageBodyReadPerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 	var attempts atomic.Int32
+
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -152,6 +165,7 @@ func TestFetchPageBodyReadPerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 						Request:    req,
 					}, nil
 				}
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -164,7 +178,7 @@ func TestFetchPageBodyReadPerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	body, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	body, err := client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       2,
 		PerAttemptTimeout: 5 * time.Millisecond,
 		BaseDelay:         time.Millisecond,
@@ -176,12 +190,19 @@ func TestFetchPageBodyReadPerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 }
 
 type contextDeadlineReadCloser struct {
+	//nolint:containedctx // io.Reader.Read에 ctx 인자가 없어 취소 시점을 구조체로 나르는 것 외에 방법이 없다.
 	ctx context.Context
 }
 
 func (r *contextDeadlineReadCloser) Read([]byte) (int, error) {
 	<-r.ctx.Done()
-	return 0, r.ctx.Err()
+
+	if err := r.ctx.Err(); err != nil {
+		//nolint:wrapcheck // io.Reader 소비자가 취소 센티널을 등가 비교할 수 있으므로 그대로 돌려준다.
+		return 0, err
+	}
+
+	return 0, nil
 }
 
 func (r *contextDeadlineReadCloser) Close() error {
@@ -197,7 +218,7 @@ func TestClassifyFailureNewResponseReasons(t *testing.T) {
 	require.False(t, shouldRetryFetchPage(ErrBlockedResponse))
 	require.False(t, shouldRetryFetchPage(ErrBlockedBodySignature))
 	require.False(t, shouldRetryFetchPage(ErrResponseTooLarge))
-	require.True(t, errors.Is(ErrBlockedResponse, ErrBlockedResponse))
+	require.False(t, shouldRetryFetchPage(fmt.Errorf("fetch page: %w", ErrBlockedResponse)))
 }
 
 func TestBodyLooksBlockedByYouTubeIgnoresGenericContentWords(t *testing.T) {
@@ -242,10 +263,12 @@ func TestHB05BodySubstringRejectsParserInputWithoutBlockCooldown_9e234216(t *tes
 
 func TestFetchPageSuspiciousBlockedBodyDoesNotRetryOrHardCooldown(t *testing.T) {
 	var attempts atomic.Int32
+
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				attempts.Add(1)
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -258,7 +281,7 @@ func TestFetchPageSuspiciousBlockedBodyDoesNotRetryOrHardCooldown(t *testing.T) 
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	_, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	_, err := client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       3,
 		PerAttemptTimeout: time.Second,
 		BaseDelay:         time.Millisecond,
@@ -272,20 +295,25 @@ func TestFetchPageSuspiciousBlockedBodyDoesNotRetryOrHardCooldown(t *testing.T) 
 }
 
 func TestFetchPageSuspiciousBlockedBodyUsesBrowserSnapshotFallback(t *testing.T) {
-	var originAttempts atomic.Int32
-	var snapshotAttempts atomic.Int32
+	var (
+		originAttempts   atomic.Int32
+		snapshotAttempts atomic.Int32
+	)
+
 	snapshotServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		snapshotAttempts.Add(1)
-		require.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, http.MethodPost, r.Method)
 		w.Header().Set("Content-Type", "application/json")
 		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>ytInitialData = {\"ok\":true};</html>"}`)
 	}))
+
 	defer snapshotServer.Close()
 
 	client := NewClient(
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				originAttempts.Add(1)
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -299,7 +327,7 @@ func TestFetchPageSuspiciousBlockedBodyUsesBrowserSnapshotFallback(t *testing.T)
 		WithBrowserSnapshotFetcher(NewBrowserSnapshotFetcher(snapshotServer.URL, time.Second)),
 	)
 
-	body, err := client.fetchPage(context.Background(), "https://www.youtube.com/test", FetchPolicy{
+	body, err := client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
 		MaxAttempts:       3,
 		PerAttemptTimeout: time.Second,
 		BaseDelay:         time.Millisecond,

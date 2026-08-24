@@ -15,9 +15,10 @@ type spyLatencyPersister struct {
 	identities []LatencyClassificationIdentity
 }
 
-func (s *spyLatencyPersister) PersistPostLatencyClassificationsByIdentities(ctx context.Context, identities []LatencyClassificationIdentity) error {
+func (s *spyLatencyPersister) PersistPostLatencyClassificationsByIdentities(_ context.Context, identities []LatencyClassificationIdentity) error {
 	s.called = true
 	s.identities = append(s.identities, identities...)
+
 	return nil
 }
 
@@ -29,13 +30,13 @@ func TestPgxBatchRepositoryPersistVideosCallsLatencyPersister(t *testing.T) {
 	)
 	spy := &spyLatencyPersister{}
 	repository := NewPgxBatchRepositoryWithPersister(db, spy)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	detectedAt := publishedAt.Add(20 * time.Second)
 	shortVideo := &domain.YouTubeVideo{
 		VideoID:     "video-latency-1",
-		ChannelID:   "channel-1",
+		ChannelID:   testChannelID,
 		Title:       "title-short-latency",
 		IsShort:     true,
 		PublishedAt: &publishedAt,
@@ -46,7 +47,7 @@ func TestPgxBatchRepositoryPersistVideosCallsLatencyPersister(t *testing.T) {
 		[]*domain.YouTubeVideo{shortVideo},
 		[]*domain.YouTubeNotificationOutbox{{
 			Kind:      domain.OutboxKindNewShort,
-			ChannelID: "channel-1",
+			ChannelID: testChannelID,
 			ContentID: "short:video-latency-1",
 			Payload:   buildShortNotificationPayload(shortVideo, "short:video-latency-1"),
 			Status:    domain.OutboxStatusPending,
@@ -54,12 +55,12 @@ func TestPgxBatchRepositoryPersistVideosCallsLatencyPersister(t *testing.T) {
 		[]*domain.YouTubeContentAlarmTracking{{
 			Kind:              domain.OutboxKindNewShort,
 			ContentID:         "short:video-latency-1",
-			ChannelID:         "channel-1",
+			ChannelID:         testChannelID,
 			ActualPublishedAt: &publishedAt,
 			DetectedAt:        detectedAt,
 		}},
 		&domain.YouTubeContentWatermark{
-			ChannelID:     "channel-1",
+			ChannelID:     testChannelID,
 			WatermarkType: domain.WatermarkTypeShort,
 			Initialized:   true,
 			LastContentID: "short:video-latency-1",
@@ -81,16 +82,16 @@ func TestPgxBatchRepositoryPersistCommunityPostsCallsLatencyPersister(t *testing
 	)
 	spy := &spyLatencyPersister{}
 	repository := NewPgxBatchRepositoryWithPersister(db, spy)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	publishedAt := time.Date(2026, 4, 10, 1, 11, 12, 0, time.UTC)
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
 	detectedAt := publishedAt.Add(20 * time.Second)
 	post := &domain.YouTubeCommunityPost{
 		PostID:        "post-latency-1",
-		ChannelID:     "channel-1",
-		AuthorName:    "author",
-		ContentText:   "hello",
-		PublishedText: "1 hour ago",
+		ChannelID:     testChannelID,
+		AuthorName:    testAuthorName,
+		ContentText:   testContentText,
+		PublishedText: testPublishedText,
 		PublishedAt:   &publishedAt,
 		LikeCount:     10,
 		CommentCount:  2,
@@ -100,7 +101,7 @@ func TestPgxBatchRepositoryPersistCommunityPostsCallsLatencyPersister(t *testing
 		[]*domain.YouTubeCommunityPost{post},
 		[]*domain.YouTubeNotificationOutbox{{
 			Kind:      domain.OutboxKindCommunityPost,
-			ChannelID: "channel-1",
+			ChannelID: testChannelID,
 			ContentID: "post-latency-1",
 			Payload:   buildCommunityNotificationPayload(post, post.PostID),
 			Status:    domain.OutboxStatusPending,
@@ -109,7 +110,7 @@ func TestPgxBatchRepositoryPersistCommunityPostsCallsLatencyPersister(t *testing
 			Kind:               domain.OutboxKindCommunityPost,
 			ContentID:          "post-latency-1",
 			CanonicalContentID: "community:post-latency-1",
-			ChannelID:          "channel-1",
+			ChannelID:          testChannelID,
 			ActualPublishedAt:  &publishedAt,
 			DetectedAt:         detectedAt,
 		}},

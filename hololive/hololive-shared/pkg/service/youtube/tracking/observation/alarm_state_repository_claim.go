@@ -16,14 +16,19 @@ import (
 
 func (r *alarmStateRepository) UpsertAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) error {
 	if record == nil {
-		return fmt.Errorf("upsert alarm state: record is nil")
+		return errors.New("upsert alarm state: record is nil")
 	}
-	return r.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{record})
+
+	if err := r.UpsertAlarmStateBatch(ctx, []*domain.YouTubeCommunityShortsAlarmState{record}); err != nil {
+		return fmt.Errorf("upsert alarm state batch: %w", err)
+	}
+
+	return nil
 }
 
 func (r *alarmStateRepository) TryClaimAlarmState(ctx context.Context, record *domain.YouTubeCommunityShortsAlarmState) (bool, error) {
 	if r == nil || r.db == nil {
-		return false, fmt.Errorf("try claim alarm state: db is nil")
+		return false, errors.New("try claim alarm state: db is nil")
 	}
 
 	normalizedRecord, err := normalizeAlarmStateClaim(record)
@@ -31,7 +36,12 @@ func (r *alarmStateRepository) TryClaimAlarmState(ctx context.Context, record *d
 		return false, fmt.Errorf("try claim alarm state: %w", err)
 	}
 
-	return r.insertAlarmStateClaim(ctx, normalizedRecord)
+	out, err := r.insertAlarmStateClaim(ctx, normalizedRecord)
+	if err != nil {
+		return out, fmt.Errorf("insert alarm state claim: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *alarmStateRepository) insertAlarmStateClaim(
@@ -39,8 +49,12 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 	normalizedRecord *domain.YouTubeCommunityShortsAlarmState,
 ) (bool, error) {
 	now := yttimestamp.Normalize(time.Now())
-	var returnedAuthorizedAt time.Time
-	var returnedAlarmSentAt pgtype.Timestamptz
+
+	var (
+		returnedAuthorizedAt time.Time
+		returnedAlarmSentAt  pgtype.Timestamptz
+	)
+
 	err := r.db.QueryRow(ctx, mustSQL("alarm_state_repository_claim_0044_01.sql"),
 		normalizedRecord.Kind,
 		normalizedRecord.PostID,
@@ -54,11 +68,13 @@ func (r *alarmStateRepository) insertAlarmStateClaim(
 		now,
 		now,
 	).Scan(&returnedAuthorizedAt, &returnedAlarmSentAt)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
+
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("scan: %w", err)
 	}
 
 	return alarmStateClaimMatches(returnedAuthorizedAt, returnedAlarmSentAt, *normalizedRecord.AuthorizedAt), nil
@@ -68,18 +84,21 @@ func alarmStateClaimMatches(returnedAuthorizedAt time.Time, returnedAlarmSentAt 
 	if returnedAuthorizedAt.IsZero() {
 		return false
 	}
+
 	if returnedAlarmSentAt.Valid && !returnedAlarmSentAt.Time.IsZero() {
 		return false
 	}
+
 	return normalizeDatabaseTimestamp(returnedAuthorizedAt).Equal(normalizeDatabaseTimestamp(expectedAuthorizedAt))
 }
 
 func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind domain.OutboxKind, postID string, authorizedAt time.Time) (bool, error) {
 	if r == nil || r.db == nil {
-		return false, fmt.Errorf("release alarm state claim: db is nil")
+		return false, errors.New("release alarm state claim: db is nil")
 	}
+
 	if authorizedAt.IsZero() {
-		return false, fmt.Errorf("release alarm state claim: authorized_at is empty")
+		return false, errors.New("release alarm state claim: authorized_at is empty")
 	}
 
 	normalizedKind, normalizedPostID, err := normalizeSourcePostIdentity(kind, postID)
@@ -88,9 +107,10 @@ func (r *alarmStateRepository) ReleaseAlarmStateClaim(ctx context.Context, kind 
 	}
 
 	updatedAt := yttimestamp.Normalize(time.Now())
+
 	rowsAffected, err := dbx.ExecSQL(ctx, r.db, "release alarm state claim: update row", mustSQL("alarm_state_repository_claim_0109_02.sql"), domain.YouTubeCommunityShortsAlarmStateStatusDetected, updatedAt, normalizedKind, normalizedPostID, normalizeDatabaseTimestamp(authorizedAt))
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("exec SQL: %w", err)
 	}
 
 	return rowsAffected > 0, nil

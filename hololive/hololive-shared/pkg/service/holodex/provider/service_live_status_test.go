@@ -3,8 +3,8 @@ package holodexprovider
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
@@ -19,15 +19,18 @@ func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
 	channelID := constants.IndieChannelIDs[0]
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			if got := params.Get("channels"); got != channelID {
 				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
 			}
+
 			return fmt.Appendf(nil, `[
 				{
 					"id":"video-1",
@@ -42,16 +45,19 @@ func TestGetChannelsLiveStatus_FillsIndieOrgWhenUsersLiveOmitsIt(t *testing.T) {
 
 	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
+
 	if len(streams) != 1 {
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
+
 	if streams[0].Channel == nil || streams[0].Channel.Org == nil {
 		t.Fatalf("stream channel/org not hydrated: %+v", streams[0].Channel)
 	}
+
 	if got := *streams[0].Channel.Org; got != constants.HolodexAPIParams.OrgIndie {
 		t.Fatalf("channel org = %q, want %q", got, constants.HolodexAPIParams.OrgIndie)
 	}
@@ -63,15 +69,18 @@ func TestGetChannelsLiveStatus_FillsIndieChannelWhenUsersLiveOmitsChannelObject(
 	channelID := constants.IndieChannelIDs[0]
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			if got := params.Get("channels"); got != channelID {
 				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
 			}
+
 			return fmt.Appendf(nil, `[
 				{
 					"id":"video-1",
@@ -85,22 +94,27 @@ func TestGetChannelsLiveStatus_FillsIndieChannelWhenUsersLiveOmitsChannelObject(
 
 	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
+
 	if len(streams) != 1 {
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
+
 	if streams[0].Channel == nil {
-		t.Fatalf("stream channel not hydrated")
+		t.Fatal("stream channel not hydrated")
 	}
+
 	if got := streams[0].Channel.ID; got != channelID {
 		t.Fatalf("channel id = %q, want %q", got, channelID)
 	}
+
 	if streams[0].Channel.Org == nil {
-		t.Fatalf("channel org not hydrated")
+		t.Fatal("channel org not hydrated")
 	}
+
 	if got := *streams[0].Channel.Org; got != constants.HolodexAPIParams.OrgIndie {
 		t.Fatalf("channel org = %q, want %q", got, constants.HolodexAPIParams.OrgIndie)
 	}
@@ -112,15 +126,18 @@ func TestGetChannelsLiveStatus_DoesNotHydrateNonIndieMissingOrg(t *testing.T) {
 	channelID := "UC_NON_INDIE"
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			if got := params.Get("channels"); got != channelID {
 				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
 			}
+
 			return []byte(`[
 				{
 					"id":"video-2",
@@ -135,10 +152,11 @@ func TestGetChannelsLiveStatus_DoesNotHydrateNonIndieMissingOrg(t *testing.T) {
 
 	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
@@ -148,22 +166,27 @@ func TestGetChannelsLiveStatus_AppliesIndieOrgOverride(t *testing.T) {
 	t.Parallel()
 
 	const channelID = "UCt30jJgChL8qeT9VPadidSw" // しぐれうい (Shigure Ui)
+
 	override, ok := constants.IndieChannelOrgOverrides[channelID]
+
 	if !ok {
 		t.Fatalf("channel %q missing from IndieChannelOrgOverrides", channelID)
 	}
 
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, method, path string, params url.Values) ([]byte, error) {
-			if method != "GET" {
+			if method != http.MethodGet {
 				return nil, fmt.Errorf("unexpected method: %s", method)
 			}
-			if path != "/users/live" {
+
+			if path != usersLivePath {
 				return nil, fmt.Errorf("unexpected path: %s", path)
 			}
+
 			if got := params.Get("channels"); got != channelID {
 				return nil, fmt.Errorf("channels = %q, want %q", got, channelID)
 			}
+
 			return fmt.Appendf(nil, `[
 				{
 					"id":"video-ui",
@@ -178,16 +201,19 @@ func TestGetChannelsLiveStatus_AppliesIndieOrgOverride(t *testing.T) {
 
 	service := newServiceForFallbackTest(mockReq)
 
-	streams, err := service.GetChannelsLiveStatus(context.Background(), []string{channelID})
+	streams, err := service.GetChannelsLiveStatus(t.Context(), []string{channelID})
 	if err != nil {
 		t.Fatalf("GetChannelsLiveStatus() error = %v", err)
 	}
+
 	if len(streams) != 1 {
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
+
 	if streams[0].Channel == nil || streams[0].Channel.Org == nil {
 		t.Fatalf("stream channel/org not hydrated: %+v", streams[0].Channel)
 	}
+
 	if got := *streams[0].Channel.Org; got != override {
 		t.Fatalf("channel org = %q, want %q (override forced over Holodex value)", got, override)
 	}
@@ -198,24 +224,27 @@ func TestCacheManager_GetChannelsLiveStatusStreams_OrderIndependentKeys(t *testi
 
 	cacheManager := NewCacheManager(
 		newInMemoryCacheClient(),
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 	)
 	expected := []*domain.Stream{
-		{ID: "video-1"},
+		{ID: testVideoID},
 	}
 
-	cacheManager.SetChannelsLiveStatusStreams(context.Background(), []string{"UC_B", "UC_A"}, expected, time.Minute)
+	cacheManager.SetChannelsLiveStatusStreams(t.Context(), []string{"UC_B", "UC_A"}, expected, time.Minute)
 
-	got, found := cacheManager.GetChannelsLiveStatusStreams(context.Background(), []string{"UC_A", "UC_B"})
+	got, found := cacheManager.GetChannelsLiveStatusStreams(t.Context(), []string{"UC_A", "UC_B"})
 	if !found {
 		t.Fatal("GetChannelsLiveStatusStreams() found = false, want true")
 	}
+
 	if len(got) != len(expected) {
 		t.Fatalf("len(got) = %d, want %d", len(got), len(expected))
 	}
+
 	if got[0] == nil {
 		t.Fatal("got[0] = nil, want stream")
 	}
+
 	if got[0].ID != expected[0].ID {
 		t.Fatalf("got[0].ID = %q, want %q", got[0].ID, expected[0].ID)
 	}

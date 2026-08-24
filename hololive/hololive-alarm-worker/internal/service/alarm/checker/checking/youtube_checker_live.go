@@ -6,10 +6,11 @@ import (
 	"log/slog"
 	"time"
 
+	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+
 	sharedconstants "github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
-	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 func (c *YouTubeChecker) buildLiveCatchupNotifications(
@@ -32,13 +33,16 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 
 	minutesUntil := c.targetPolicySnapshot().PrimaryAdvanceMinute()
 	resolvedStream := EnsureScheduledTime(stream, *startAt)
+
 	if resolvedStream == nil {
 		return nil, nil
 	}
+
 	notifications, suppressedRooms, err := c.unsuppressedLiveCatchupNotifications(ctx, channelID, resolvedStream, subscriberRooms, sentRooms, minutesUntil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unsuppressed live catchup notifications: %w", err)
 	}
+
 	return c.finalizeLiveCatchupNotifications(ctx, stream, startAt, now, notifications, suppressedRooms), nil
 }
 
@@ -50,19 +54,26 @@ func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time, obser
 	startAt := resolveLiveStart(stream)
 	if startAt == nil {
 		observeYouTubeLiveCatchup("missing_start")
+
 		return nil, false
 	}
+
 	if startAt.After(now) {
 		observeYouTubeLiveCatchup("future_start")
+
 		return nil, false
 	}
+
 	if now.Sub(*startAt) > sharedconstants.LiveCatchupWindow {
 		if liveObservedRecently(observedAt, now) {
 			return startAt, true
 		}
+
 		observeYouTubeLiveCatchup("outside_window")
+
 		return nil, false
 	}
+
 	return startAt, true
 }
 
@@ -70,7 +81,9 @@ func liveObservedRecently(observedAt []*time.Time, now time.Time) bool {
 	if len(observedAt) == 0 || observedAt[0] == nil || observedAt[0].IsZero() {
 		return false
 	}
+
 	observed := observedAt[0].UTC()
+
 	return !observed.After(now) && now.Sub(observed) <= sharedconstants.LiveCatchupWindow
 }
 
@@ -84,28 +97,35 @@ func (c *YouTubeChecker) unsuppressedLiveCatchupNotifications(
 ) ([]*domain.AlarmNotification, int, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(subscriberRooms))
 	suppressedRooms := 0
+
 	for _, roomID := range subscriberRooms {
 		if _, sent := sentRooms[roomID]; sent {
 			suppressedRooms++
 			continue
 		}
+
 		recentlyUpcoming, err := c.roomHasRecentUpcomingNotification(ctx, roomID, channelID, stream)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, 0, err
+				return nil, 0, fmt.Errorf("room has recent upcoming notification: %w", err)
 			}
+
 			c.logger.Warn("live catchup dedup check failed, skipping room",
 				privacylog.RoomIDAttr(roomID),
 				slog.String("channel_id", channelID),
 				slog.String("error", err.Error()))
+
 			continue
 		}
+
 		if recentlyUpcoming {
 			suppressedRooms++
 			continue
 		}
+
 		notifications = append(notifications, RoomNotifications([]string{roomID}, stream.Channel, stream, minutesUntil, "")...)
 	}
+
 	return notifications, suppressedRooms, nil
 }
 
@@ -120,6 +140,7 @@ func (c *YouTubeChecker) roomHasRecentUpcomingNotification(ctx context.Context, 
 	if err != nil {
 		return false, fmt.Errorf("build live catchup notifications: check upcoming suppress window: %w", err)
 	}
+
 	return recentlyUpcoming, nil
 }
 
@@ -134,6 +155,7 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 	if suppressedRooms > 0 {
 		observeYouTubeLiveCatchup("suppressed_recent_upcoming")
 	}
+
 	if len(notifications) == 0 {
 		if suppressedRooms > 0 {
 			sharedlog.Debug(ctx, c.logger, "alarm.youtube.live_catchup.suppressed", "youtube live catchup alarm suppressed",
@@ -143,6 +165,7 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 				slog.Int("suppressed_rooms", suppressedRooms),
 			)
 		}
+
 		return notifications
 	}
 
@@ -156,5 +179,6 @@ func (c *YouTubeChecker) finalizeLiveCatchupNotifications(
 		slog.Int("rooms", len(notifications)),
 		slog.Int("suppressed_rooms", suppressedRooms),
 	)
+
 	return notifications
 }

@@ -28,9 +28,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 const aliasMaxLength = 100
@@ -61,6 +62,7 @@ func (h *MemberHandler) handleAliasOperation(
 
 	if h == nil || h.Handler == nil || h.memberCache == nil || repoFunc == nil {
 		respondServiceUnavailable(c, "member service not available")
+
 		return
 	}
 
@@ -91,6 +93,7 @@ func (h *MemberHandler) handleAliasOperation(
 
 func (h *MemberHandler) bindAliasRequest(c *gin.Context) (aliasRequest, bool) {
 	var req aliasRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
@@ -135,6 +138,7 @@ func (h *MemberHandler) respondAliasOperationSuccess(c *gin.Context, memberID in
 func (h *MemberHandler) AddAlias(c *gin.Context) {
 	if h == nil || h.Handler == nil || h.repository == nil {
 		respondServiceUnavailable(c, "member service not available")
+
 		return
 	}
 
@@ -144,6 +148,7 @@ func (h *MemberHandler) AddAlias(c *gin.Context) {
 func (h *MemberHandler) RemoveAlias(c *gin.Context) {
 	if h == nil || h.Handler == nil || h.repository == nil {
 		respondServiceUnavailable(c, "member service not available")
+
 		return
 	}
 

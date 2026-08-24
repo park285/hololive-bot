@@ -2,16 +2,14 @@ package bot_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	handlers "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type stubBotCommand struct {
@@ -28,7 +26,7 @@ func (c *stubBotCommand) Execute(context.Context, *domain.CommandContext, map[st
 }
 
 func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestCloneCommandBuildersNilSourceReturnsNil(t *testing.T) {
@@ -49,11 +47,13 @@ func TestCloneCommandBuildersProducesIndependentSlice(t *testing.T) {
 	if len(clone) != len(src) {
 		t.Fatalf("clone len = %d, want %d", len(clone), len(src))
 	}
+
 	if got := clone[1](nil); got != handlercore.Command(second) {
 		t.Fatalf("clone[1]() = %v, want the original second builder result", got)
 	}
 
 	clone[0] = func(*handlercore.Dependencies) handlercore.Command { return second }
+
 	if got := src[0](nil); got != handlercore.Command(first) {
 		t.Fatal("mutating the clone changed the source builders")
 	}
@@ -62,10 +62,11 @@ func TestCloneCommandBuildersProducesIndependentSlice(t *testing.T) {
 func TestCommandRouterExecuteWithoutRegistryFails(t *testing.T) {
 	router := orchcmd.NewCommandRouter(nil, discardLogger(), nil, nil, nil)
 
-	err := router.Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, domain.CommandHelp, nil)
 	if err == nil {
 		t.Fatal("expected error for missing registry, got nil")
 	}
+
 	if !strings.Contains(err.Error(), "command registry is not initialized") {
 		t.Fatalf("error = %q, want registry initialization message", err)
 	}
@@ -83,10 +84,11 @@ func TestCommandRouterExecutesRegisteredCommand(t *testing.T) {
 	stub := &stubBotCommand{name: key}
 	registry.Register(stub)
 
-	err := router.Execute(context.Background(), &domain.CommandContext{Room: "room-1", UserID: "user-1"}, domain.CommandHelp, nil)
+	err := router.Execute(t.Context(), &domain.CommandContext{Room: "room-1", UserID: "user-1"}, domain.CommandHelp, nil)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+
 	if stub.calls != 1 {
 		t.Fatalf("registered command calls = %d, want 1", stub.calls)
 	}

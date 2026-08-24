@@ -22,10 +22,10 @@ package configsub
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
@@ -67,11 +67,13 @@ func (s *Subscriber) Run(ctx context.Context) {
 
 func (s *Subscriber) handleMessage(msg valkey.PubSubMessage) {
 	var update contractssettings.ConfigUpdateV1
+
 	if err := jsonv2.Unmarshal([]byte(msg.Message), &update); err != nil {
 		s.logger.Warn("Failed to unmarshal config update",
 			slog.String("channel", s.channel),
 			slog.Any("error", err),
 		)
+
 		return
 	}
 
@@ -79,6 +81,7 @@ func (s *Subscriber) handleMessage(msg valkey.PubSubMessage) {
 		s.logger.Warn("Config update with empty type, ignoring",
 			slog.String("channel", s.channel),
 		)
+
 		return
 	}
 

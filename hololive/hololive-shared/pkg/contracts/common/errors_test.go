@@ -1,9 +1,8 @@
 package common_test
 
 import (
-	"testing"
-
 	jsonv2 "encoding/json/v2"
+	"testing"
 
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 )
@@ -15,6 +14,7 @@ func TestErrorResponseCompatibilityShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal error response: %v", err)
 	}
+
 	if string(payload) != `{"error":"notification_in_progress"}` {
 		t.Fatalf("payload = %s, want compatibility shape", payload)
 	}
@@ -31,18 +31,23 @@ func TestErrorResponseAdditiveFields(t *testing.T) {
 	}`)
 
 	var response commoncontracts.ErrorResponse
+
 	if err := jsonv2.Unmarshal(payload, &response); err != nil {
 		t.Fatalf("unmarshal error response: %v", err)
 	}
+
 	if response.Error != "no_subscribed_members" {
 		t.Fatalf("Error = %q, want no_subscribed_members", response.Error)
 	}
+
 	if response.Message != "no subscribed members" {
 		t.Fatalf("Message = %q, want no subscribed members", response.Message)
 	}
+
 	if response.RequestID != "req-1" {
 		t.Fatalf("RequestID = %q, want req-1", response.RequestID)
 	}
+
 	if response.Details["room_id"] != "room-1" {
 		t.Fatalf("Details[room_id] = %v, want room-1", response.Details["room_id"])
 	}

@@ -27,12 +27,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type BroadcastHistoryCommand struct {
@@ -47,6 +46,11 @@ const (
 	defaultBroadcastHistoryDays = 7
 	maxBroadcastHistoryDays     = 365
 )
+
+const broadcastThumbnailNotFoundMessage = "종료된 방송 이력에서 해당 video_id를 찾지 못했습니다."
+
+// 사용자-facing 응답을 이미 보냈으니 호출자는 추가 응답 없이 종료해야 한다.
+var errBroadcastHistoryHandled = errors.New("broadcast history request handled")
 
 func NewBroadcastHistoryCommand(deps *handlercore.Dependencies) *BroadcastHistoryCommand {
 	return &BroadcastHistoryCommand{BaseCommand: handlercore.NewBaseCommand(deps)}
@@ -70,9 +74,14 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 	}
 
 	query, filter, err := c.buildQuery(ctx, cmdCtx, params)
-	if err != nil {
-		return err
+	if errors.Is(err, errBroadcastHistoryHandled) {
+		return nil
 	}
+
+	if err != nil {
+		return fmt.Errorf("build query: %w", err)
+	}
+
 	if query == nil {
 		return nil
 	}
@@ -80,25 +89,35 @@ func (c *BroadcastHistoryCommand) Execute(ctx context.Context, cmdCtx *domain.Co
 	result, err := c.Deps().BroadcastHistory.ListEndedBroadcasts(ctx, query)
 	if err != nil {
 		c.Deps().Logger.Error("broadcast history query failed", slog.Any("error", err))
+
 		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
-			return sendErr
+			return fmt.Errorf("send message: %w", sendErr)
 		}
+
 		return nil
 	}
 
 	filter.Truncated = result.Truncated
+
 	message := c.Deps().Formatter.BroadcastHistory(ctx, *filter, broadcastHistoryFormatterEntries(result.Entries))
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (c *BroadcastHistoryCommand) buildQuery(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) (*handlercore.BroadcastHistoryQuery, *formatter.BroadcastHistoryFilter, error) {
 	query, filter := newBroadcastHistoryQuery(params)
-	if handled, err := c.applyBroadcastHistoryType(ctx, cmdCtx, params, &query, &filter); handled || err != nil {
-		return nil, nil, err
+	if err := c.applyBroadcastHistoryType(ctx, cmdCtx, params, &query, &filter); err != nil {
+		return nil, nil, fmt.Errorf("apply broadcast history type: %w", err)
 	}
-	if handled, err := c.applyBroadcastHistoryMember(ctx, cmdCtx, params, &query, &filter); handled || err != nil {
-		return nil, nil, err
+
+	if err := c.applyBroadcastHistoryMember(ctx, cmdCtx, params, &query, &filter); err != nil {
+		return nil, nil, fmt.Errorf("apply broadcast history member: %w", err)
 	}
+
 	return &query, &filter, nil
 }
 
@@ -107,12 +126,15 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 	if boolParam(params, "all") {
 		days = maxBroadcastHistoryDays
 	}
+
 	limit := normalizeBroadcastHistoryLimit(intBroadcastHistoryParam(params, "limit", defaultBroadcastHistoryLimit))
+
 	query = handlercore.BroadcastHistoryQuery{
 		Limit:   limit,
 		TopicID: stringParam(params, "topic"),
 		Since:   time.Now().AddDate(0, 0, -days),
 	}
+
 	return query, formatter.BroadcastHistoryFilter{
 		TopicID: query.TopicID,
 		Days:    days,
@@ -120,52 +142,65 @@ func newBroadcastHistoryQuery(params map[string]any) (query handlercore.Broadcas
 	}
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) (bool, error) {
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryType(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
 	rawType := stringParam(params, "type")
 	if rawType == "" {
-		return false, nil
+		return nil
 	}
+
 	typ, ok := broadcasttype.Parse(rawType)
 	if !ok {
-		return true, c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류")
+		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, "알 수 없는 방송 타입입니다. 사용 가능: 게임, 잡담, 노래, ASMR, 멤버십, 이벤트, 경마, 동시시청, 뉴스, 기타, 미분류"); err != nil {
+			return fmt.Errorf("send message: %w", err)
+		}
+
+		return errBroadcastHistoryHandled
 	}
+
 	query.Type = string(typ)
 	filter.TypeLabel = typ.Label()
-	return false, nil
+
+	return nil
 }
 
-func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) (bool, error) {
-	memberName := stringParam(params, "member")
+func (c *BroadcastHistoryCommand) applyBroadcastHistoryMember(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any, query *handlercore.BroadcastHistoryQuery, filter *formatter.BroadcastHistoryFilter) error {
+	memberName := stringParam(params, paramMember)
 	if memberName == "" {
-		return false, nil
+		return nil
 	}
+
 	if c.Deps().Matcher == nil {
-		return false, errors.New("broadcast history matcher not configured")
+		return errors.New("broadcast history matcher not configured")
 	}
 
 	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "방송 이력")
 	if memberLookupHandled(err) {
-		return true, nil
+		return errBroadcastHistoryHandled
 	}
+
 	if err != nil {
-		return false, fmt.Errorf("failed to find member: %w", err)
+		return fmt.Errorf("failed to find member: %w", err)
 	}
+
 	if channel == nil {
-		return true, nil
+		return errBroadcastHistoryHandled
 	}
 
 	query.ChannelID = channel.ID
 	filter.MemberName = channel.Name
-	return false, nil
+
+	return nil
 }
 
 func (c *BroadcastHistoryCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
+
 	if c.Deps().BroadcastHistory == nil || c.Deps().Formatter == nil {
 		return errors.New("broadcast history services not configured")
 	}
+
 	return nil
 }
 
@@ -184,58 +219,101 @@ func (c *BroadcastThumbnailCommand) Execute(ctx context.Context, cmdCtx *domain.
 
 	videoID := stringParam(params, "video_id")
 	if videoID == "" {
-		return c.Deps().SendMessage(ctx, cmdCtx.Room, "사용법: 방송이력 썸네일 <video_id>")
-	}
-
-	entry, handled, err := c.lookupBroadcastThumbnailEntry(ctx, cmdCtx, videoID)
-	if handled || err != nil {
-		return err
-	}
-	image, contentType, handled, err := c.downloadBroadcastThumbnail(ctx, cmdCtx, entry)
-	if handled || err != nil {
-		return err
-	}
-
-	return c.Deps().SendImage(transport.WithImageContentType(ctx, contentType), cmdCtx.Room, image)
-}
-
-func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Context, cmdCtx *domain.CommandContext, videoID string) (*handlercore.BroadcastHistoryEntry, bool, error) {
-	entry, err := c.Deps().BroadcastHistory.GetEndedBroadcast(ctx, handlercore.BroadcastThumbnailQuery{VideoID: videoID})
-	if err != nil {
-		c.Deps().Logger.Error("broadcast thumbnail lookup failed", slog.String("video_id", videoID), slog.Any("error", err))
-		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
-			return nil, true, sendErr
+		if err := c.Deps().SendMessage(ctx, cmdCtx.Room, "사용법: 방송이력 썸네일 <video_id>"); err != nil {
+			return fmt.Errorf("send message: %w", err)
 		}
-		return nil, true, nil
+
+		return nil
 	}
-	if entry == nil {
-		return nil, true, c.Deps().SendMessage(ctx, cmdCtx.Room, "종료된 방송 이력에서 해당 video_id를 찾지 못했습니다.")
+
+	if err := c.sendBroadcastThumbnail(ctx, cmdCtx, videoID); err != nil {
+		return fmt.Errorf("send broadcast thumbnail: %w", err)
 	}
-	return entry, false, nil
+
+	return nil
 }
 
-func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, entry *handlercore.BroadcastHistoryEntry) (image []byte, contentType string, handled bool, err error) {
+func (c *BroadcastThumbnailCommand) sendBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, videoID string) error {
+	entry, err := c.lookupBroadcastThumbnailEntry(ctx, cmdCtx, videoID)
+	if errors.Is(err, errBroadcastHistoryHandled) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("lookup broadcast thumbnail entry: %w", err)
+	}
+
+	image, contentType, err := c.downloadBroadcastThumbnail(ctx, cmdCtx, entry)
+	if errors.Is(err, errBroadcastHistoryHandled) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("download broadcast thumbnail: %w", err)
+	}
+
+	if err := c.Deps().SendImage(transport.WithImageContentType(ctx, contentType), cmdCtx.Room, image); err != nil {
+		return fmt.Errorf("send image: %w", err)
+	}
+
+	return nil
+}
+
+func (c *BroadcastThumbnailCommand) lookupBroadcastThumbnailEntry(ctx context.Context, cmdCtx *domain.CommandContext, videoID string) (*handlercore.BroadcastHistoryEntry, error) {
+	entry, err := c.Deps().BroadcastHistory.GetEndedBroadcast(ctx, handlercore.BroadcastThumbnailQuery{VideoID: videoID})
+	if err != nil && !errors.Is(err, handlercore.ErrBroadcastNotFound) {
+		c.Deps().Logger.Error("broadcast thumbnail lookup failed", slog.String("video_id", videoID), slog.Any("error", err))
+
+		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "방송 이력 조회 중 오류가 발생했습니다."); sendErr != nil {
+			return nil, fmt.Errorf("send message: %w", sendErr)
+		}
+
+		return nil, errBroadcastHistoryHandled
+	}
+
 	if entry == nil {
-		return nil, "", true, c.Deps().SendMessage(ctx, cmdCtx.Room, "종료된 방송 이력에서 해당 video_id를 찾지 못했습니다.")
+		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, broadcastThumbnailNotFoundMessage); sendErr != nil {
+			return nil, fmt.Errorf("send message: %w", sendErr)
+		}
+
+		return nil, errBroadcastHistoryHandled
 	}
-	image, contentType, err = c.Deps().ThumbnailDownloader.Download(ctx, entry)
+
+	return entry, nil
+}
+
+func (c *BroadcastThumbnailCommand) downloadBroadcastThumbnail(ctx context.Context, cmdCtx *domain.CommandContext, entry *handlercore.BroadcastHistoryEntry) ([]byte, string, error) {
+	if entry == nil {
+		if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, broadcastThumbnailNotFoundMessage); sendErr != nil {
+			return nil, "", fmt.Errorf("send message: %w", sendErr)
+		}
+
+		return nil, "", errBroadcastHistoryHandled
+	}
+
+	image, contentType, err := c.Deps().ThumbnailDownloader.Download(ctx, entry)
 	if err == nil {
-		return image, contentType, false, nil
+		return image, contentType, nil
 	}
+
 	c.Deps().Logger.Error("broadcast thumbnail download failed", slog.String("video_id", entry.VideoID), slog.Any("error", err))
+
 	if sendErr := c.Deps().SendMessage(ctx, cmdCtx.Room, "고화질 썸네일을 다운로드하지 못했습니다."); sendErr != nil {
-		return nil, "", true, sendErr
+		return nil, "", fmt.Errorf("send message: %w", sendErr)
 	}
-	return nil, "", true, nil
+
+	return nil, "", errBroadcastHistoryHandled
 }
 
 func (c *BroadcastThumbnailCommand) ensureDeps() error {
 	if err := c.EnsureBaseDeps(); err != nil {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
+
 	if c.Deps().BroadcastHistory == nil || c.Deps().ThumbnailDownloader == nil || c.Deps().SendImage == nil {
 		return errors.New("broadcast thumbnail services not configured")
 	}
+
 	return nil
 }
 
@@ -243,6 +321,7 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 	result := make([]formatter.BroadcastHistoryEntry, 0, len(entries))
 	for i := range entries {
 		entry := &entries[i]
+
 		result = append(result, formatter.BroadcastHistoryEntry{
 			VideoID:      entry.VideoID,
 			MemberName:   entry.MemberName,
@@ -255,6 +334,7 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 			HasThumbnail: validYouTubeVideoID(entry.VideoID),
 		})
 	}
+
 	return result
 }
 
@@ -264,6 +344,7 @@ func broadcastHistoryEntryTime(entry *handlercore.BroadcastHistoryEntry) time.Ti
 			return *candidate
 		}
 	}
+
 	return entry.LastSeenAt
 }
 
@@ -272,6 +353,7 @@ func intBroadcastHistoryParam(params map[string]any, key string, defaultValue in
 	if !ok {
 		return defaultValue
 	}
+
 	switch value := raw.(type) {
 	case int:
 		return value
@@ -286,8 +368,10 @@ func normalizeBroadcastHistoryDays(days int) int {
 	if days <= 0 {
 		return defaultBroadcastHistoryDays
 	}
+
 	if days > maxBroadcastHistoryDays {
 		return maxBroadcastHistoryDays
 	}
+
 	return days
 }

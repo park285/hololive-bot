@@ -28,13 +28,19 @@ import (
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
+const (
+	responseKeyError   = "error"
+	responseKeyMessage = "message"
+	responseKeyStatus  = "status"
+)
+
 func respondJSON(c *gin.Context, status int, payload any) {
 	ginjson.Respond(c, status, payload)
 }
 
 // RespondError는 API 에러 응답 payload를 일관된 형식으로 반환합니다.
 func RespondError(c *gin.Context, status int, message string, extra gin.H) {
-	payload := gin.H{"error": message}
+	payload := gin.H{responseKeyError: message}
 	maps.Copy(payload, extra)
 	respondJSON(c, status, payload)
 }
@@ -50,10 +56,13 @@ func RespondInternalError(
 ) {
 	if logger != nil {
 		logAttrs := make([]any, 0, len(attrs)+1)
+
 		logAttrs = append(logAttrs, slog.Any("error", err))
+
 		for _, attr := range attrs {
 			logAttrs = append(logAttrs, attr)
 		}
+
 		logger.Error(logMessage, logAttrs...)
 	}
 

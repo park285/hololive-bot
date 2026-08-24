@@ -3,6 +3,7 @@ package apiclient
 import (
 	"context"
 	stdErrors "errors"
+	"fmt"
 	"log/slog"
 	"net"
 )
@@ -11,18 +12,22 @@ func (state *holodexRequestRetryState) recordAttemptError(logger *slog.Logger, p
 	if err == nil {
 		return false
 	}
+
 	state.lastErr = err
 	if !IsTimeoutError(err) {
 		return false
 	}
+
 	state.timeoutCount++
 	if state.timeoutCount < state.maxTimeoutRetries {
 		return false
 	}
+
 	logger.Warn("Timeout retry limit reached",
 		slog.Int("timeout_count", state.timeoutCount),
 		slog.String("path", path),
 	)
+
 	return true
 }
 
@@ -30,7 +35,12 @@ func (c *APIClient) waitHolodexRequestBackoff(ctx context.Context, attempt, maxA
 	if attempt >= maxAttempts-1 {
 		return nil
 	}
-	return c.waitBackoff(ctx, attempt)
+
+	if err := c.waitBackoff(ctx, attempt); err != nil {
+		return fmt.Errorf("wait backoff: %w", err)
+	}
+
+	return nil
 }
 
 func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, attempt, maxAttempts int) bool {
@@ -40,6 +50,7 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 	}
 
 	errorType := "network"
+
 	if IsTimeoutError(err) {
 		errorType = "timeout"
 	}
@@ -56,6 +67,7 @@ func (c *APIClient) retryAfterNetworkFailure(ctx context.Context, err error, att
 			slog.String("error_type", errorType),
 			slog.Int("attempt", attempt+1),
 		)
+
 		return true
 	}
 
@@ -66,9 +78,12 @@ func IsTimeoutError(err error) bool {
 	if stdErrors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
+
 	var netErr net.Error
+
 	if stdErrors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
+
 	return false
 }

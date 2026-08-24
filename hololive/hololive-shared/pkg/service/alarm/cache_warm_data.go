@@ -39,19 +39,23 @@ func (data *subscriberCacheWarmData) addAlarm(alarmRecord *domain.Alarm) {
 	}
 
 	registryKey := alarmRecord.RegistryKey()
+
 	data.addRoomAlarmMember(roomID, channelID)
+
 	data.registryRooms = append(data.registryRooms, registryKey)
 	data.channelRegistry = append(data.channelRegistry, channelID)
 	data.addChannelSubscribers(channelID, registryKey, alarmRecord.AlarmTypes)
 	data.addNames(alarmRecord, roomID, channelID)
 
 	data.summary.AlarmCount++
+
 	data.rooms[roomID] = struct{}{}
 	data.channels[channelID] = struct{}{}
 }
 
 func (data *subscriberCacheWarmData) addRoomAlarmMember(roomID, channelID string) {
 	key := sharedalarmkeys.BuildRoomAlarmKey(roomID)
+
 	data.roomAlarmMembers[key] = append(data.roomAlarmMembers[key], channelID)
 }
 
@@ -59,8 +63,10 @@ func (data *subscriberCacheWarmData) addChannelSubscribers(channelID, registryKe
 	if len(alarmTypes) == 0 {
 		alarmTypes = domain.DefaultAlarmTypes
 	}
+
 	for _, alarmType := range alarmTypes {
 		key := sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
+
 		data.channelSubscribers[key] = append(data.channelSubscribers[key], registryKey)
 	}
 }
@@ -69,9 +75,11 @@ func (data *subscriberCacheWarmData) addNames(alarmRecord *domain.Alarm, roomID,
 	if alarmRecord.MemberName != "" {
 		data.memberNames[channelID] = alarmRecord.MemberName
 	}
+
 	if alarmRecord.RoomName != "" {
 		data.roomNames[roomID] = alarmRecord.RoomName
 	}
+
 	if alarmRecord.UserName != "" && alarmRecord.UserID != "" {
 		data.userNames[alarmRecord.UserID] = alarmRecord.UserName
 	}
@@ -80,5 +88,6 @@ func (data *subscriberCacheWarmData) addNames(alarmRecord *domain.Alarm, roomID,
 func (data *subscriberCacheWarmData) finish() CacheWarmSummary {
 	data.summary.RoomCount = len(data.rooms)
 	data.summary.ChannelCount = len(data.channels)
+
 	return data.summary
 }

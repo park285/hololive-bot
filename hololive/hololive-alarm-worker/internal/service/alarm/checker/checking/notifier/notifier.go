@@ -90,15 +90,18 @@ func (n *Notifier) publishPreparedBatch(ctx context.Context, prepared []claimedS
 	if err != nil {
 		result.Sent += publishedCount
 		result.Failed += len(prepared) - publishedCount
+
 		errs = append(errs, fmt.Errorf("send notifications: publish batch: %w", err))
 	} else {
 		result.Sent += publishedCount
 	}
+
 	for _, item := range prepared[:publishedCount] {
 		if n.tierScheduler != nil {
 			n.tierScheduler.MarkChannelRecentlyNotified(item.payload.channelID)
 		}
 	}
+
 	return errs
 }
 
@@ -120,4 +123,12 @@ type sendInput struct {
 type claimedSend struct {
 	payload   *sendInput
 	claimKeys []string
+}
+
+// preparedSend: prepareOne 의 3-way 결과(sent/skipped/failed)를 한 값으로 묶는다.
+// 이 중 skipped 는 payload 가 없는 정상 결과라서 (nil, nil) 로는 실패와 구분되지 않는다.
+type preparedSend struct {
+	payload   *sendInput
+	claimKeys []string
+	outcome   sendOutcome
 }

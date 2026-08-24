@@ -36,16 +36,18 @@ func TestApplyMigrationsRollsBackBeginWrappedFileOnFailure(t *testing.T) {
 	t.Setenv(migrationsDirEnv, dir)
 
 	pool := NewBlankPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := ApplyMigrations(ctx, pool); err == nil {
 		t.Fatal("ApplyMigrations() error = nil, want failure from statement inside BEGIN block")
 	}
 
 	var exists bool
+
 	if err := pool.QueryRow(ctx, "SELECT to_regclass('tx_atomic_probe') IS NOT NULL").Scan(&exists); err != nil {
 		t.Fatalf("check tx_atomic_probe: %v", err)
 	}
+
 	if exists {
 		t.Fatal("tx_atomic_probe present: BEGIN-wrapped migration failure must roll back the whole block")
 	}
@@ -58,16 +60,19 @@ func TestApplyMigrationsAppliesBeginWrappedFileWithTrailingAutocommit(t *testing
 	t.Setenv(migrationsDirEnv, dir)
 
 	pool := NewBlankPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("ApplyMigrations() error = %v", err)
 	}
+
 	for _, table := range []string{"tx_inside_ran", "tx_after_ran"} {
 		var exists bool
+
 		if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
 			t.Fatalf("check %s: %v", table, err)
 		}
+
 		if !exists {
 			t.Fatalf("table %s not present after BEGIN-wrapped migration", table)
 		}
@@ -77,49 +82,54 @@ func TestApplyMigrationsAppliesBeginWrappedFileWithTrailingAutocommit(t *testing
 func TestApplyMigrationsCanRerunAfterTrailingAutocommitFailure(t *testing.T) {
 	dir := t.TempDir()
 	writeMigrationFixture(t, dir, manifestFileName, "001 001_tx.sql\n")
-	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE dbtest_committed_probe(id integer);\nCOMMIT;\nSELECT * FROM dbtest_missing_probe;\n")
+	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE dbtest_committed_probe(id integer);\nCOMMIT;\nSELECT 1 FROM dbtest_missing_probe;\n")
 	t.Setenv(migrationsDirEnv, dir)
 
 	pool := NewBlankPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := ApplyMigrations(ctx, pool); err == nil {
 		t.Fatal("ApplyMigrations() error = nil, want trailing autocommit failure")
 	}
-	assertMigrationTablePresent(t, ctx, pool, "dbtest_committed_probe")
-	assertMigrationTableAbsent(t, ctx, pool, "dbtest_tail_ran")
+
+	assertMigrationTablePresent(ctx, t, pool, "dbtest_committed_probe")
+	assertMigrationTableAbsent(ctx, t, pool, "dbtest_tail_ran")
 
 	writeMigrationFixture(t, dir, "001_tx.sql", "BEGIN;\nCREATE TABLE IF NOT EXISTS dbtest_committed_probe(id integer);\nCOMMIT;\nCREATE TABLE dbtest_tail_ran(id integer);\n")
+
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatalf("ApplyMigrations() rerun error = %v", err)
 	}
-	assertMigrationTablePresent(t, ctx, pool, "dbtest_committed_probe")
-	assertMigrationTablePresent(t, ctx, pool, "dbtest_tail_ran")
+
+	assertMigrationTablePresent(ctx, t, pool, "dbtest_committed_probe")
+	assertMigrationTablePresent(ctx, t, pool, "dbtest_tail_ran")
 }
 
-func assertMigrationTablePresent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) {
+func assertMigrationTablePresent(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) {
 	t.Helper()
 
-	if !migrationTableExists(t, ctx, pool, name) {
+	if !migrationTableExists(ctx, t, pool, name) {
 		t.Fatalf("table %s missing", name)
 	}
 }
 
-func assertMigrationTableAbsent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) {
+func assertMigrationTableAbsent(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) {
 	t.Helper()
 
-	if migrationTableExists(t, ctx, pool, name) {
+	if migrationTableExists(ctx, t, pool, name) {
 		t.Fatalf("table %s present", name)
 	}
 }
 
-func migrationTableExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) bool {
+func migrationTableExists(ctx context.Context, t *testing.T, pool *pgxpool.Pool, name string) bool {
 	t.Helper()
 
 	var exists bool
+
 	if err := pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", name).Scan(&exists); err != nil {
 		t.Fatalf("check table %s: %v", name, err)
 	}
+
 	return exists
 }
 

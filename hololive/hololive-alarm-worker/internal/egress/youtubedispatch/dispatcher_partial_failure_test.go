@@ -22,7 +22,6 @@ package youtubedispatch
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net"
 	"strconv"
@@ -69,7 +68,7 @@ type deliveryTestOutboxModel struct {
 }
 
 func (deliveryTestOutboxModel) TableName() string {
-	return "youtube_notification_outbox"
+	return testTableOutbox
 }
 
 type deliveryTestDeliveryModel struct {
@@ -86,51 +85,62 @@ type deliveryTestDeliveryModel struct {
 }
 
 func (deliveryTestDeliveryModel) TableName() string {
-	return "youtube_notification_delivery"
+	return testTableDelivery
 }
 
 func (s *testSender) SendMessage(_ context.Context, roomID, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.failRoom[roomID] {
 		return assert.AnError
 	}
+
 	s.messages = append(s.messages, roomID+":"+message)
+
 	return nil
 }
 
 func (s *testSender) SendMessageWithClientRequestID(_ context.Context, roomID, message, clientRequestID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.failRoom[roomID] {
 		return assert.AnError
 	}
+
 	s.messages = append(s.messages, roomID+":"+message)
 	s.clientRequestIDs = append(s.clientRequestIDs, clientRequestID)
+
 	return nil
 }
 
 func (s *failFirstSendTestSender) SendMessage(_ context.Context, roomID, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	s.attempts++
+
 	s.messages = append(s.messages, roomID+":"+message)
+
 	if s.attempts == 1 {
 		return assert.AnError
 	}
+
 	return nil
 }
 
 func (s *failFirstSendTestSender) messageCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return len(s.messages)
 }
 
 func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now()
@@ -147,7 +157,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -159,6 +169,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{})
 
 	var updated domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &updated, item.ID).Error)
 	assert.Equal(t, domain.OutboxStatusPending, updated.Status)
 	assert.Equal(t, 1, updated.AttemptCount)
@@ -170,7 +181,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now()
@@ -187,7 +198,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -203,6 +214,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	})
 
 	var updated domain.YouTubeNotificationOutbox
+
 	require.NoError(t, firstDeliveryTestRow(db, &updated, item.ID).Error)
 	assert.Equal(t, domain.OutboxStatusSent, updated.Status)
 }
@@ -210,14 +222,14 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	now := time.Now()
 	shortsItem := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewShort,
 		ChannelID:     "UC_mixed_targets",
-		ContentID:     "short-1",
+		ContentID:     testShortOne,
 		Payload:       `{"video_id":"short-1","title":"short-title"}`,
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
@@ -227,18 +239,19 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 	communityItem := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindCommunityPost,
 		ChannelID:     "UC_mixed_targets",
-		ContentID:     "post-1",
+		ContentID:     testPostOne,
 		Payload:       `{"post_id":"post-1","content_text":"community-title"}`,
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
 		LockedAt:      &now,
 	}
+
 	require.NoError(t, insertDeliveryTestRows(db, &shortsItem).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &communityItem).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -249,24 +262,25 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 
 	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{shortsItem, communityItem}, map[string]channelAlarmRoomTargets{
 		shortsItem.ChannelID: {
-			domain.AlarmTypeShorts:    {"room-shorts": true},
-			domain.AlarmTypeCommunity: {"room-community": true},
+			domain.AlarmTypeShorts:    {testRoomShorts: true},
+			domain.AlarmTypeCommunity: {testRoomCommunity: true},
 		},
 	})
 
 	var rows []deliveryTestDeliveryModel
+
 	require.NoError(t, findDeliveryTestRowsOrdered(db, &rows, "outbox_id ASC, room_id ASC").Error)
 	require.Len(t, rows, 2)
 	assert.Equal(t, shortsItem.ID, rows[0].OutboxID)
-	assert.Equal(t, "room-shorts", rows[0].RoomID)
+	assert.Equal(t, testRoomShorts, rows[0].RoomID)
 	assert.Equal(t, communityItem.ID, rows[1].OutboxID)
-	assert.Equal(t, "room-community", rows[1].RoomID)
+	assert.Equal(t, testRoomCommunity, rows[1].RoomID)
 }
 
 func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	cacheClient := cachemocks.NewLenientClient()
@@ -291,7 +305,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 
 	delivery := domain.YouTubeNotificationDelivery{
 		OutboxID:      item.ID,
-		RoomID:        "room-community",
+		RoomID:        testRoomCommunity,
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
@@ -299,7 +313,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, cacheClient, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -317,17 +331,20 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.TouchedOutboxIDs))
 
 	var updatedDelivery deliveryTestDeliveryModel
+
 	require.NoError(t, firstDeliveryTestRow(db, &updatedDelivery, delivery.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedDelivery.Status)
 	require.NotNil(t, updatedDelivery.SentAt)
 
 	var updatedOutbox deliveryTestOutboxModel
+
 	require.NoError(t, firstDeliveryTestRow(db, &updatedOutbox, item.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedOutbox.Status)
 	require.NotNil(t, updatedOutbox.SentAt)
 
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
+
 	require.Len(t, sender.messages, 1)
 	assert.Contains(t, sender.messages[0], "room-community:🔔 **VTuber** 커뮤니티 글")
 	assert.Contains(t, sender.messages[0], "community-title")
@@ -344,12 +361,12 @@ func newDispatcherTestCache(t *testing.T) (*cache.Service, *miniredis.Miniredis)
 	port, err := strconv.Atoi(rawPort)
 	require.NoError(t, err)
 
-	service, err := cache.NewCacheService(context.Background(), cache.Config{
+	service, err := cache.NewCacheService(t.Context(), cache.Config{
 		Host:              host,
 		Port:              port,
 		DisableCache:      true,
 		ForceSingleClient: true,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 
 	return service, mini

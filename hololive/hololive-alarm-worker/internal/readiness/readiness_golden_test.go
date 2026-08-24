@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -22,6 +23,7 @@ func TestGoldenInternalReadyAllHealthy(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("/internal/ready status = %d, want %d", code, http.StatusOK)
 	}
+
 	want := `{"dependencies":{"postgres":true,"valkey":true},"goroutines":0,"runtime":"alarm-worker","status":"ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/internal/ready body = %s, want %s", body, want)
@@ -36,6 +38,7 @@ func TestGoldenInternalReadyDependencyDown(t *testing.T) {
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("/internal/ready status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
+
 	want := `{"dependencies":{"postgres":false,"valkey":true},"goroutines":0,"runtime":"alarm-worker","status":"not_ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/internal/ready body = %s, want %s", body, want)
@@ -48,6 +51,7 @@ func TestGoldenInternalReadyNilProbe(t *testing.T) {
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("/internal/ready status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
+
 	want := `{"goroutines":0,"status":"not_ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/internal/ready body = %s, want %s", body, want)
@@ -62,6 +66,7 @@ func TestGoldenPublicReadyAllHealthy(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
 	}
+
 	want := `{"goroutines":0,"runtime":"alarm-worker","status":"ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/ready body = %s, want %s", body, want)
@@ -74,6 +79,7 @@ func TestGoldenPublicReadyNilProbe(t *testing.T) {
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
+
 	want := `{"goroutines":0,"status":"not_ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/ready body = %s, want %s", body, want)
@@ -84,6 +90,7 @@ func serveReadyGolden(t *testing.T, handler gin.HandlerFunc) (statusCode int, ca
 	t.Helper()
 
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.New()
 	router.GET("/ready", handler)
 
@@ -98,14 +105,18 @@ func canonicalizeGolden(t *testing.T, raw []byte) string {
 	t.Helper()
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("golden unmarshal: %v, raw=%s", err, raw)
 	}
+
 	normalizeGoldenDynamicFields(t, payload)
+
 	out, err := jsonv2.Marshal(payload, jsonv2.Deterministic(true))
 	if err != nil {
 		t.Fatalf("golden marshal: %v", err)
 	}
+
 	return string(out)
 }
 
@@ -117,15 +128,19 @@ func normalizeGoldenDynamicFields(t *testing.T, payload map[string]any) {
 		if !exists {
 			continue
 		}
+
 		if _, ok := value.(string); !ok {
 			t.Fatalf("%s = %T, want string", key, value)
 		}
+
 		payload[key] = placeholder
 	}
+
 	if value, exists := payload["goroutines"]; exists {
 		if _, ok := value.(float64); !ok {
 			t.Fatalf("goroutines = %T, want number", value)
 		}
+
 		payload["goroutines"] = float64(0)
 	}
 }

@@ -4,16 +4,17 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 var errAlarmDispatchRunnerTestMarkSending = errors.New("mark sending partial update")
 
 func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
+		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
 	}
 	sender := &alarmDispatchRunnerTestSender{}
@@ -42,7 +43,7 @@ func TestAlarmDispatchRunnerCompensatesMarkSendingFailureWithoutConsumingAttempt
 
 func TestAlarmDispatchRunnerCompensatesKaringMarkSendingFailureWithSendingRetry(t *testing.T) {
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
+		batches:        [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,
 	}
 	sender := &alarmDispatchRunnerTestSender{}
@@ -66,8 +67,10 @@ func TestAlarmDispatchRunnerCompensatesKaringMarkSendingFailureWithSendingRetry(
 }
 
 func TestAlarmDispatchRunnerMarkSendingFailureDoesNotExhaustExistingAttempt(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: 2})
-	envelope.ClaimKeys = []string{"alarm:dispatch:claim:room-1:stream-1"}
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
+
+	envelope.ClaimKeys = []string{testAlarmClaimKey}
+
 	consumer := &alarmDispatchRunnerTestConsumer{
 		batches:        [][]domain.AlarmQueueEnvelope{{envelope}},
 		markSendingErr: errAlarmDispatchRunnerTestMarkSending,

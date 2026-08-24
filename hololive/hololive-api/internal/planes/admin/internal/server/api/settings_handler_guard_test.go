@@ -24,7 +24,9 @@ func (r *recordingSettingsActivityLogger) Log(string, string, map[string]any) {
 func newGuardTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
+
 	ctx.Request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/holo/settings", http.NoBody)
+
 	return ctx, rec
 }
 
@@ -73,6 +75,7 @@ func TestSettingsHandler_Guards(t *testing.T) {
 			if tc.guard(tc.nilHandler, ctx) {
 				t.Fatalf("%s: guard passed with nil dependency, want fail", tc.name)
 			}
+
 			assertErrorResponse(t, rec, http.StatusServiceUnavailable, tc.wantMessage)
 		})
 
@@ -81,9 +84,11 @@ func TestSettingsHandler_Guards(t *testing.T) {
 			if !tc.guard(tc.okHandler, ctx) {
 				t.Fatalf("%s: guard failed with dependency present, want pass", tc.name)
 			}
+
 			if rec.Code != http.StatusOK {
 				t.Fatalf("%s: guard wrote status=%d on pass, want untouched %d", tc.name, rec.Code, http.StatusOK)
 			}
+
 			if rec.Body.Len() != 0 {
 				t.Fatalf("%s: guard wrote body %q on pass, want empty", tc.name, rec.Body.String())
 			}
@@ -94,16 +99,18 @@ func TestSettingsHandler_Guards(t *testing.T) {
 func TestSettingsHandler_SafeLogger(t *testing.T) {
 	custom := newDiscardLogger()
 	if got := (&SettingsHandler{Logger: custom}).safeLogger(); got != custom {
-		t.Fatalf("safeLogger returned configured logger mismatch")
+		t.Fatal("safeLogger returned configured logger mismatch")
 	}
+
 	if got := (&SettingsHandler{}).safeLogger(); got != slog.Default() {
-		t.Fatalf("safeLogger with nil Logger did not fall back to slog.Default()")
+		t.Fatal("safeLogger with nil Logger did not fall back to slog.Default()")
 	}
 }
 
 func TestSettingsHandler_LogActivity(t *testing.T) {
 	rec := &recordingSettingsActivityLogger{}
 	(&SettingsHandler{Activity: rec}).logActivity("t", "s", map[string]any{"k": "v"})
+
 	if rec.calls != 1 {
 		t.Fatalf("logActivity calls=%d want=1", rec.calls)
 	}

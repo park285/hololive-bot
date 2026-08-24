@@ -4,11 +4,13 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 )
@@ -24,7 +26,13 @@ func (s *stubYouTubeCommunityShortsOpsRepository) ListPostSendCountsSince(
 	if s.listPostSendCountsSince == nil {
 		return nil, nil
 	}
-	return s.listPostSendCountsSince(ctx, since)
+
+	out, err := s.listPostSendCountsSince(ctx, since)
+	if err != nil {
+		return out, fmt.Errorf("list post send counts since: %w", err)
+	}
+
+	return out, nil
 }
 
 func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
@@ -39,6 +47,7 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	}
 
 	var response YouTubeCommunityShortsOpsResponse
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
@@ -46,23 +55,12 @@ func TestStatsHandler_GetYouTubeCommunityShortsOps(t *testing.T) {
 	assertYouTubeCommunityShortsOpsResponse(t, &response, secondLatencyMillis)
 }
 
+const youTubeOpsSecondLatencyMillis = int64(180000)
+
 func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandler, secondLatencyMillis int64) {
 	t.Helper()
 
 	now := time.Now().UTC()
-	withinTarget := false
-	exceeded := true
-	firstPublishedAt := now.Add(-20 * time.Minute)
-	secondPublishedAt := now.Add(-10 * time.Minute)
-	thirdPublishedAt := now.Add(-90 * time.Minute)
-	firstAlarmSentAt := firstPublishedAt.Add(60 * time.Second)
-	thirdAlarmSentAt := thirdPublishedAt.Add(90 * time.Second)
-	firstLatencyMillis := int64(60000)
-	secondLatencyMillis = int64(180000)
-	thirdLatencyMillis := int64(90000)
-	firstEventAt := firstPublishedAt.Add(45 * time.Second)
-	secondEventAt := secondPublishedAt.Add(2 * time.Minute)
-	thirdEventAt := thirdPublishedAt.Add(70 * time.Second)
 
 	handler = &StatsHandler{Handler: &Handler{
 		communityShortsOps: &stubYouTubeCommunityShortsOpsRepository{
@@ -70,52 +68,8 @@ func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandle
 				if since.IsZero() {
 					t.Fatal("since must be set")
 				}
-				return []analytics.PostSendCount{
-					{
-						AlarmType:            domain.AlarmTypeCommunity,
-						ChannelID:            "channel-1",
-						ContentID:            "community-1",
-						ActualPublishedAt:    &firstPublishedAt,
-						AlarmSentAt:          &firstAlarmSentAt,
-						AlarmLatencyMillis:   &firstLatencyMillis,
-						AlarmLatencyExceeded: &withinTarget,
-						OutboxCount:          1,
-						SuccessSendCount:     1,
-						SuccessRoomCount:     1,
-						FirstEventAt:         &firstEventAt,
-						LastEventAt:          &firstEventAt,
-						FirstSuccessAt:       &firstEventAt,
-						LastSuccessAt:        &firstEventAt,
-					},
-					{
-						AlarmType:            domain.AlarmTypeShorts,
-						ChannelID:            "channel-1",
-						ContentID:            "shorts-1",
-						ActualPublishedAt:    &secondPublishedAt,
-						AlarmLatencyMillis:   &secondLatencyMillis,
-						AlarmLatencyExceeded: &exceeded,
-						OutboxCount:          1,
-						FailedAttemptCount:   1,
-						FirstEventAt:         &secondEventAt,
-						LastEventAt:          &secondEventAt,
-					},
-					{
-						AlarmType:            domain.AlarmTypeCommunity,
-						ChannelID:            "channel-2",
-						ContentID:            "community-2",
-						ActualPublishedAt:    &thirdPublishedAt,
-						AlarmSentAt:          &thirdAlarmSentAt,
-						AlarmLatencyMillis:   &thirdLatencyMillis,
-						AlarmLatencyExceeded: &withinTarget,
-						OutboxCount:          1,
-						SuccessSendCount:     1,
-						SuccessRoomCount:     1,
-						FirstEventAt:         &thirdEventAt,
-						LastEventAt:          &thirdEventAt,
-						FirstSuccessAt:       &thirdEventAt,
-						LastSuccessAt:        &thirdEventAt,
-					},
-				}, nil
+
+				return youTubeCommunityShortsOpsCounts(now), nil
 			},
 		},
 		memberIndexLoader: func(context.Context) ([]*domain.Member, error) {
@@ -124,7 +78,70 @@ func newYouTubeCommunityShortsOpsTestHandler(t *testing.T) (handler *StatsHandle
 		logger: newDiscardLogger(),
 	}}
 
-	return handler, secondLatencyMillis
+	return handler, youTubeOpsSecondLatencyMillis
+}
+
+func youTubeCommunityShortsOpsCounts(now time.Time) []analytics.PostSendCount {
+	withinTarget := false
+	exceeded := true
+	firstPublishedAt := now.Add(-20 * time.Minute)
+	secondPublishedAt := now.Add(-10 * time.Minute)
+	thirdPublishedAt := now.Add(-90 * time.Minute)
+	firstAlarmSentAt := firstPublishedAt.Add(60 * time.Second)
+	thirdAlarmSentAt := thirdPublishedAt.Add(90 * time.Second)
+	firstLatencyMillis := int64(60000)
+	secondLatencyMillis := youTubeOpsSecondLatencyMillis
+	thirdLatencyMillis := int64(90000)
+	firstEventAt := firstPublishedAt.Add(45 * time.Second)
+	secondEventAt := secondPublishedAt.Add(2 * time.Minute)
+	thirdEventAt := thirdPublishedAt.Add(70 * time.Second)
+
+	return []analytics.PostSendCount{
+		{
+			AlarmType:            domain.AlarmTypeCommunity,
+			ChannelID:            "channel-1",
+			ContentID:            "community-1",
+			ActualPublishedAt:    &firstPublishedAt,
+			AlarmSentAt:          &firstAlarmSentAt,
+			AlarmLatencyMillis:   &firstLatencyMillis,
+			AlarmLatencyExceeded: &withinTarget,
+			OutboxCount:          1,
+			SuccessSendCount:     1,
+			SuccessRoomCount:     1,
+			FirstEventAt:         &firstEventAt,
+			LastEventAt:          &firstEventAt,
+			FirstSuccessAt:       &firstEventAt,
+			LastSuccessAt:        &firstEventAt,
+		},
+		{
+			AlarmType:            domain.AlarmTypeShorts,
+			ChannelID:            "channel-1",
+			ContentID:            "shorts-1",
+			ActualPublishedAt:    &secondPublishedAt,
+			AlarmLatencyMillis:   &secondLatencyMillis,
+			AlarmLatencyExceeded: &exceeded,
+			OutboxCount:          1,
+			FailedAttemptCount:   1,
+			FirstEventAt:         &secondEventAt,
+			LastEventAt:          &secondEventAt,
+		},
+		{
+			AlarmType:            domain.AlarmTypeCommunity,
+			ChannelID:            "channel-2",
+			ContentID:            "community-2",
+			ActualPublishedAt:    &thirdPublishedAt,
+			AlarmSentAt:          &thirdAlarmSentAt,
+			AlarmLatencyMillis:   &thirdLatencyMillis,
+			AlarmLatencyExceeded: &withinTarget,
+			OutboxCount:          1,
+			SuccessSendCount:     1,
+			SuccessRoomCount:     1,
+			FirstEventAt:         &thirdEventAt,
+			LastEventAt:          &thirdEventAt,
+			FirstSuccessAt:       &thirdEventAt,
+			LastSuccessAt:        &thirdEventAt,
+		},
+	}
 }
 
 func assertYouTubeCommunityShortsOpsResponse(
@@ -134,54 +151,76 @@ func assertYouTubeCommunityShortsOpsResponse(
 ) {
 	t.Helper()
 
-	if response.WindowHours != youtubeCommunityShortsOpsWindowHours {
-		t.Fatalf("windowHours=%d want=%d", response.WindowHours, youtubeCommunityShortsOpsWindowHours)
+	assertYouTubeOpsOverviewCounts(t, response)
+	assertYouTubeOpsLatency(t, response, secondLatencyMillis)
+	assertYouTubeOpsChannels(t, response)
+}
+
+func assertYouTubeOpsOverviewCounts(t *testing.T, response *YouTubeCommunityShortsOpsResponse) {
+	t.Helper()
+
+	overview := response.Overview
+
+	checks := []struct {
+		name string
+		got  int64
+		want int64
+	}{
+		{"windowHours", int64(response.WindowHours), youtubeCommunityShortsOpsWindowHours},
+		{"channelCount", overview.ChannelCount, 2},
+		{"detectedPostCount", overview.DetectedPostCount, 3},
+		{"successPostCount", overview.SuccessPostCount, 2},
+		{"detectedUnsentPostCount", overview.DetectedUnsentPostCount, 1},
+		{"pendingPostCount", overview.PendingPostCount, 1},
+		{"exceededPostCount", overview.ExceededPostCount, 1},
+		{"communityDetectedPostCount", overview.CommunityDetectedPostCount, 2},
+		{"shortsDetectedPostCount", overview.ShortsDetectedPostCount, 1},
 	}
-	if response.Overview.ChannelCount != 2 {
-		t.Fatalf("channelCount=%d want=2", response.Overview.ChannelCount)
+
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Fatalf("%s=%d want=%d", check.name, check.got, check.want)
+		}
 	}
-	if response.Overview.DetectedPostCount != 3 {
-		t.Fatalf("detectedPostCount=%d want=3", response.Overview.DetectedPostCount)
+}
+
+func assertYouTubeOpsLatency(t *testing.T, response *YouTubeCommunityShortsOpsResponse, secondLatencyMillis int64) {
+	t.Helper()
+
+	overview := response.Overview
+
+	if overview.AverageLatencyMillis == nil || *overview.AverageLatencyMillis != 110000 {
+		t.Fatalf("averageLatencyMillis=%v want=110000", overview.AverageLatencyMillis)
 	}
-	if response.Overview.SuccessPostCount != 2 {
-		t.Fatalf("successPostCount=%d want=2", response.Overview.SuccessPostCount)
+
+	if overview.MaxLatencyMillis == nil || *overview.MaxLatencyMillis != secondLatencyMillis {
+		t.Fatalf("maxLatencyMillis=%v want=%d", overview.MaxLatencyMillis, secondLatencyMillis)
 	}
-	if response.Overview.DetectedUnsentPostCount != 1 {
-		t.Fatalf("detectedUnsentPostCount=%d want=1", response.Overview.DetectedUnsentPostCount)
-	}
-	if response.Overview.PendingPostCount != 1 {
-		t.Fatalf("pendingPostCount=%d want=1", response.Overview.PendingPostCount)
-	}
-	if response.Overview.ExceededPostCount != 1 {
-		t.Fatalf("exceededPostCount=%d want=1", response.Overview.ExceededPostCount)
-	}
-	if response.Overview.CommunityDetectedPostCount != 2 {
-		t.Fatalf("communityDetectedPostCount=%d want=2", response.Overview.CommunityDetectedPostCount)
-	}
-	if response.Overview.ShortsDetectedPostCount != 1 {
-		t.Fatalf("shortsDetectedPostCount=%d want=1", response.Overview.ShortsDetectedPostCount)
-	}
-	if response.Overview.AverageLatencyMillis == nil || *response.Overview.AverageLatencyMillis != 110000 {
-		t.Fatalf("averageLatencyMillis=%v want=110000", response.Overview.AverageLatencyMillis)
-	}
-	if response.Overview.MaxLatencyMillis == nil || *response.Overview.MaxLatencyMillis != secondLatencyMillis {
-		t.Fatalf("maxLatencyMillis=%v want=%d", response.Overview.MaxLatencyMillis, secondLatencyMillis)
-	}
+}
+
+func assertYouTubeOpsChannels(t *testing.T, response *YouTubeCommunityShortsOpsResponse) {
+	t.Helper()
+
 	if len(response.Channels) != 2 {
 		t.Fatalf("channels=%d want=2", len(response.Channels))
 	}
+
 	if response.Channels[0].ChannelID != "channel-1" {
 		t.Fatalf("first channel=%s want=channel-1", response.Channels[0].ChannelID)
 	}
+
 	if response.Channels[0].MemberName != "Mio" {
 		t.Fatalf("first memberName=%s want=Mio", response.Channels[0].MemberName)
 	}
+
 	if response.Channels[0].ExceededPostCount != 1 {
 		t.Fatalf("first exceededPostCount=%d want=1", response.Channels[0].ExceededPostCount)
 	}
+
 	if response.Channels[0].PendingPostCount != 1 {
 		t.Fatalf("first pendingPostCount=%d want=1", response.Channels[0].PendingPostCount)
 	}
+
 	if response.Channels[1].MemberName != "Sora" {
 		t.Fatalf("second memberName=%s want=Sora", response.Channels[1].MemberName)
 	}

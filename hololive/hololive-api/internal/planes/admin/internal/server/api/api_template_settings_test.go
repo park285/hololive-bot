@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -62,6 +63,25 @@ func (s *stubSettingsApplier) ScraperProxyRuntimeState(requested bool) sharedset
 	}
 }
 
+const (
+	templateKeyParam       = "key"
+	templateInvalidKey     = "invalid"
+	templateInvalidKeyPath = "/api/holo/templates/invalid"
+	settingsPath           = "/api/holo/settings"
+	settingsLLMPath        = "/api/holo/settings/llm"
+)
+
+type templateValidationCase struct {
+	name       string
+	method     string
+	path       string
+	body       []byte
+	paramKey   string
+	paramValue string
+	invoke     gin.HandlerFunc
+	wantStatus int
+}
+
 func TestTemplateHandler_ValidationBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -70,157 +90,100 @@ func TestTemplateHandler_ValidationBranches(t *testing.T) {
 		logger:        newDiscardLogger(),
 	}}
 
-	t.Run("get by key invalid key", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/templates/invalid", nil)
+	previewPath := templateInvalidKeyPath + "/preview"
 
-		ctx.Params = gin.Params{{Key: "key", Value: "invalid"}}
-		handler.GetTemplateByKey(ctx)
+	tests := []templateValidationCase{
+		{"get by key invalid key", http.MethodGet, templateInvalidKeyPath, nil, templateKeyParam, templateInvalidKey, handler.GetTemplateByKey, http.StatusNotFound},
+		{"upsert invalid json", http.MethodPut, templateInvalidKeyPath, []byte("{"), templateKeyParam, templateInvalidKey, handler.UpsertTemplate, http.StatusBadRequest},
+		{"upsert invalid key", http.MethodPut, templateInvalidKeyPath, []byte(`{"body":"hello"}`), templateKeyParam, templateInvalidKey, handler.UpsertTemplate, http.StatusNotFound},
+		{"delete override missing channel id", http.MethodDelete, templateInvalidKeyPath, nil, templateKeyParam, templateInvalidKey, handler.DeleteTemplateOverride, http.StatusBadRequest},
+		{"preview invalid json", http.MethodPost, previewPath, []byte("{"), templateKeyParam, templateInvalidKey, handler.PreviewTemplate, http.StatusBadRequest},
+		{"preview invalid key", http.MethodPost, previewPath, []byte(`{"body":"hello"}`), templateKeyParam, templateInvalidKey, handler.PreviewTemplate, http.StatusNotFound},
+		{"get revision invalid id", http.MethodGet, "/api/holo/templates/revisions/abc", nil, "id", "abc", handler.GetTemplateRevision, http.StatusBadRequest},
+	}
 
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, rec := newAPITestContext(tt.method, tt.path, tt.body)
 
-	t.Run("upsert invalid json", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodPut, "/api/holo/templates/invalid", []byte("{"))
+			ctx.Params = gin.Params{{Key: tt.paramKey, Value: tt.paramValue}}
+			tt.invoke(ctx)
 
-		ctx.Params = gin.Params{{Key: "key", Value: "invalid"}}
-		handler.UpsertTemplate(ctx)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
-	})
-
-	t.Run("upsert invalid key", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodPut, "/api/holo/templates/invalid", []byte(`{"body":"hello"}`))
-
-		ctx.Params = gin.Params{{Key: "key", Value: "invalid"}}
-		handler.UpsertTemplate(ctx)
-
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
-		}
-	})
-
-	t.Run("delete override missing channel id", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodDelete, "/api/holo/templates/invalid", nil)
-
-		ctx.Params = gin.Params{{Key: "key", Value: "invalid"}}
-		handler.DeleteTemplateOverride(ctx)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
-	})
-
-	t.Run("preview invalid json", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/templates/invalid/preview", []byte("{"))
-
-		ctx.Params = gin.Params{{Key: "key", Value: "invalid"}}
-		handler.PreviewTemplate(ctx)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
-	})
-
-	t.Run("preview invalid key", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/templates/invalid/preview", []byte(`{"body":"hello"}`))
-
-		ctx.Params = gin.Params{{Key: "key", Value: "invalid"}}
-		handler.PreviewTemplate(ctx)
-
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
-		}
-	})
-
-	t.Run("get revision invalid id", func(t *testing.T) {
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/templates/revisions/abc", nil)
-
-		ctx.Params = gin.Params{{Key: "id", Value: "abc"}}
-		handler.GetTemplateRevision(ctx)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
-		}
-	})
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+		})
+	}
 }
 
 func TestSettingsAPIHandler_BasicBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	t.Run("invalid json branches", func(t *testing.T) {
-		handler := &SettingsAPIHandler{Handler: &Handler{
-			logger: newDiscardLogger(),
-		}}
+	t.Run("invalid json branches", settingsInvalidJSONBranches)
+	t.Run("get logs/settings and update success", settingsGetAndUpdateSuccess)
+}
 
-		ctx, rec := newAPITestContext(http.MethodPost, "/api/holo/settings/room-name", []byte("{"))
-		handler.SetRoomName(ctx)
+func settingsInvalidJSONBranches(t *testing.T) {
+	handler := &SettingsAPIHandler{Handler: &Handler{
+		logger: newDiscardLogger(),
+	}}
+
+	tests := []struct {
+		method string
+		path   string
+		invoke gin.HandlerFunc
+	}{
+		{http.MethodPost, "/api/holo/settings/room-name", handler.SetRoomName},
+		{http.MethodPost, "/api/holo/settings/user-name", handler.SetUserName},
+		{http.MethodPatch, settingsPath, handler.UpdateSettings},
+		{http.MethodPatch, settingsLLMPath, handler.UpdateLLMSettings},
+	}
+
+	for _, tt := range tests {
+		ctx, rec := newAPITestContext(tt.method, tt.path, []byte("{"))
+		tt.invoke(ctx)
 
 		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
+	}
+}
 
-		ctx, rec = newAPITestContext(http.MethodPost, "/api/holo/settings/user-name", []byte("{"))
-		handler.SetUserName(ctx)
+func settingsGetAndUpdateSuccess(t *testing.T) {
+	applier := &stubSettingsApplier{}
+	settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
+		AlarmAdvanceMinutes: 5,
+		ScraperProxyEnabled: false,
+	}, newDiscardLogger())
 
-		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
+	handler := &SettingsAPIHandler{Handler: &Handler{
+		logger:          newDiscardLogger(),
+		activity:        newActivityLoggerForTest(t),
+		settings:        settingsService,
+		settingsApplier: applier,
+	}}
 
-		ctx, rec = newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte("{"))
-		handler.UpdateSettings(ctx)
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   []byte
+		invoke gin.HandlerFunc
+	}{
+		{"GetLogs", http.MethodGet, "/api/holo/settings/logs", nil, handler.GetLogs},
+		{"GetSettings", http.MethodGet, settingsPath, nil, handler.GetSettings},
+		{"UpdateSettings", http.MethodPatch, settingsPath, []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`), handler.UpdateSettings},
+		{"UpdateLLMSettings", http.MethodPatch, settingsLLMPath, []byte(`{"memberNewsWeeklyRunNow":true}`), handler.UpdateLLMSettings},
+	}
 
-		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
-
-		ctx, rec = newAPITestContext(http.MethodPatch, "/api/holo/settings/llm", []byte("{"))
-		handler.UpdateLLMSettings(ctx)
-
-		assertErrorResponse(t, rec, http.StatusBadRequest, "invalid request body")
-	})
-
-	t.Run("get logs/settings and update success", func(t *testing.T) {
-		applier := &stubSettingsApplier{}
-		settingsService := settings.NewSettingsService(filepath.Join(t.TempDir(), "settings.json"), settings.Settings{
-			AlarmAdvanceMinutes: 5,
-			ScraperProxyEnabled: false,
-		}, newDiscardLogger())
-
-		handler := &SettingsAPIHandler{Handler: &Handler{
-			logger:          newDiscardLogger(),
-			activity:        newActivityLoggerForTest(t),
-			settings:        settingsService,
-			settingsApplier: applier,
-		}}
-
-		ctx, rec := newAPITestContext(http.MethodGet, "/api/holo/settings/logs", nil)
-		handler.GetLogs(ctx)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("GetLogs status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
-
-		ctx, rec = newAPITestContext(http.MethodGet, "/api/holo/settings", nil)
-		handler.GetSettings(ctx)
+	for _, tt := range tests {
+		ctx, rec := newAPITestContext(tt.method, tt.path, tt.body)
+		tt.invoke(ctx)
 
 		if rec.Code != http.StatusOK {
-			t.Fatalf("GetSettings status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			t.Fatalf("%s status=%d want=%d body=%s", tt.name, rec.Code, http.StatusOK, rec.Body.String())
 		}
+	}
 
-		ctx, rec = newAPITestContext(http.MethodPatch, "/api/holo/settings", []byte(`{"alarmAdvanceMinutes":7,"scraperProxyEnabled":true}`))
-		handler.UpdateSettings(ctx)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("UpdateSettings status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
-
-		ctx, rec = newAPITestContext(http.MethodPatch, "/api/holo/settings/llm", []byte(`{"memberNewsWeeklyRunNow":true}`))
-		handler.UpdateLLMSettings(ctx)
-
-		if rec.Code != http.StatusOK {
-			t.Fatalf("UpdateLLMSettings status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
-		}
-
-		if !applier.memberNewsApplied {
-			t.Fatal("ApplyMemberNewsWeeklyRunNow should be called")
-		}
-	})
+	if !applier.memberNewsApplied {
+		t.Fatal("ApplyMemberNewsWeeklyRunNow should be called")
+	}
 }

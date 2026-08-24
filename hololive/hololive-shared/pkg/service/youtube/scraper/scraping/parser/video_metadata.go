@@ -30,6 +30,7 @@ func ExtractWatchLiveMetadata(html string) WatchLiveMetadata {
 
 	metadata := WatchLiveMetadata{LiveContent: LiveContentUnknown}
 	liveContent := playerResponse.Get("videoDetails.isLiveContent")
+
 	if liveContent.Exists() && liveContent.Type == gjson.True {
 		metadata.LiveContent = LiveContentTrue
 	} else if liveContent.Exists() && liveContent.Type == gjson.False {
@@ -51,6 +52,7 @@ func extractInitialPlayerResponse(html string) (gjson.Result, bool) {
 			return playerResponse, true
 		}
 	}
+
 	return gjson.Result{}, false
 }
 
@@ -74,6 +76,7 @@ func DetectReplayStatus(html string) ReplayStatus {
 	if replayBroadcastPattern.MatchString(html) || replayLiveContentPattern.MatchString(html) || hasLiveBroadcastMeta(html) {
 		return ReplayStatusReplay
 	}
+
 	if replayNotLiveContentPattern.MatchString(html) {
 		return ReplayStatusNotReplay
 	}
@@ -86,13 +89,18 @@ func hasLiveBroadcastMeta(html string) bool {
 	if err != nil {
 		return false
 	}
+
 	found := false
+
 	document.Find("meta").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
 		if !strings.EqualFold(strings.TrimSpace(selection.AttrOr("itemprop", "")), "isLiveBroadcast") {
 			return true
 		}
+
 		found = strings.EqualFold(strings.TrimSpace(selection.AttrOr("content", "")), "true")
+
 		return !found
 	})
+
 	return found
 }

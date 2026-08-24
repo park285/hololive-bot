@@ -53,12 +53,20 @@ func (c *UpcomingCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 
 	options := parseUpcomingOptions(params)
 
-	memberName, hasMember := params["member"].(string)
+	memberName, hasMember := params[paramMember].(string)
 	if hasMember && memberName != "" {
-		return c.executeMemberUpcoming(ctx, cmdCtx.Room, memberName, options.hours)
+		if err := c.executeMemberUpcoming(ctx, cmdCtx.Room, memberName, options.hours); err != nil {
+			return fmt.Errorf("execute member upcoming: %w", err)
+		}
+
+		return nil
 	}
 
-	return c.executeAllUpcoming(ctx, cmdCtx.Room, options)
+	if err := c.executeAllUpcoming(ctx, cmdCtx.Room, options); err != nil {
+		return fmt.Errorf("execute all upcoming: %w", err)
+	}
+
+	return nil
 }
 
 type upcomingOptions struct {
@@ -126,29 +134,52 @@ func (c *UpcomingCommand) executeMemberUpcoming(ctx context.Context, roomID, mem
 	if memberLookupHandled(err) {
 		return nil
 	}
+
 	if err != nil {
 		return fmt.Errorf("failed to find member: %w", err)
 	}
+
 	if channel == nil {
 		return nil
 	}
 
+	if err := c.sendMemberUpcomingStreams(ctx, roomID, channel, hours); err != nil {
+		return fmt.Errorf("send member upcoming streams: %w", err)
+	}
+
+	return nil
+}
+
+func (c *UpcomingCommand) sendMemberUpcomingStreams(ctx context.Context, roomID string, channel *domain.Channel, hours int) error {
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, hours)
 	if err != nil {
-		return c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed)
+		if err := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
+
 	if streams == nil {
 		streams = []*domain.Stream{}
 	}
 
 	memberStreams := filterUpcomingStreamsByChannel(streams, channel.ID)
 	if len(memberStreams) == 0 {
-		return c.Deps().SendMessage(ctx, roomID, c.Deps().Formatter.FormatMemberNoUpcoming(ctx, channel.Name, hours))
+		if err := c.Deps().SendMessage(ctx, roomID, c.Deps().Formatter.FormatMemberNoUpcoming(ctx, channel.Name, hours)); err != nil {
+			return fmt.Errorf("send message: %w", err)
+		}
+
+		return nil
 	}
 
 	message := c.Deps().Formatter.UpcomingStreams(ctx, memberStreams, hours)
 
-	return c.Deps().SendMessage(ctx, roomID, message)
+	if err := c.Deps().SendMessage(ctx, roomID, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func filterUpcomingStreamsByChannel(streams []*domain.Stream, channelID string) []*domain.Stream {
@@ -157,18 +188,25 @@ func filterUpcomingStreamsByChannel(streams []*domain.Stream, channelID string) 
 		if stream == nil {
 			continue
 		}
+
 		if stream.ChannelID == channelID {
 			memberStreams = append(memberStreams, stream)
 		}
 	}
+
 	return memberStreams
 }
 
 func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string, options upcomingOptions) error {
 	streams, err := c.Deps().Holodex.GetUpcomingStreams(ctx, options.hours)
 	if err != nil {
-		return c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed)
+		if err := c.Deps().SendError(ctx, roomID, messaging.ErrUpcomingStreamQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
+
 	if streams == nil {
 		streams = []*domain.Stream{}
 	}
@@ -179,7 +217,11 @@ func (c *UpcomingCommand) executeAllUpcoming(ctx context.Context, roomID string,
 
 	message := c.Deps().Formatter.UpcomingStreams(ctx, streams, options.hours)
 
-	return c.Deps().SendMessage(ctx, roomID, message)
+	if err := c.Deps().SendMessage(ctx, roomID, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (c *UpcomingCommand) ensureDeps() error {

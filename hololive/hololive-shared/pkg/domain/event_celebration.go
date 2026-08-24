@@ -34,6 +34,7 @@ func (p *CelebrationDispatchPayload) Identity() string {
 			identity += ":" + videoID
 		}
 	}
+
 	return identity
 }
 

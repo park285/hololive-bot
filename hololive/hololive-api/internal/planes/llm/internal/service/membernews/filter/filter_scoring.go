@@ -64,5 +64,6 @@ func containsAny(text string, keywords []string) bool {
 			return true
 		}
 	}
+
 	return false
 }

@@ -1,7 +1,6 @@
 package observation
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 func TestFindAlarmStateByPostIDReturnsNilOnMissing(t *testing.T) {
 	repository := NewRepository(newAlarmStateRepositoryTestDB(t))
 
-	row, err := repository.FindAlarmStateByPostID(context.Background(), domain.OutboxKindCommunityPost, "community:missing")
+	row, err := repository.FindAlarmStateByPostID(t.Context(), domain.OutboxKindCommunityPost, "community:missing")
 
 	require.NoError(t, err)
 	require.Nil(t, row)
@@ -22,8 +21,8 @@ func TestFindAlarmStateByPostIDReturnsNilOnMissing(t *testing.T) {
 
 func TestFindAlarmStateByPostIDReturnsExisting(t *testing.T) {
 	repository := NewRepository(newAlarmStateRepositoryTestDB(t))
-	ctx := context.Background()
-	publishedAt := time.Date(2026, 4, 10, 1, 2, 0, 0, time.UTC)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 2, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(30 * time.Second)
 	authorizedAt := publishedAt.Add(45 * time.Second)
 
@@ -55,8 +54,8 @@ func TestFindAlarmStateByPostIDReturnsExisting(t *testing.T) {
 
 func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
 	repository := NewRepository(newAlarmStateRepositoryTestDB(t))
-	ctx := context.Background()
-	publishedAt := time.Date(2026, 4, 10, 1, 1, 0, 0, time.UTC)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 1, 0, 0, time.UTC)
 	laterDetectedAt := publishedAt.Add(2 * time.Minute)
 	earlierDetectedAt := publishedAt.Add(time.Minute)
 	laterAuthorizedAt := publishedAt.Add(3 * time.Minute)
@@ -101,7 +100,7 @@ func TestUpsertAlarmStateBatchMergesDuplicateRecords(t *testing.T) {
 }
 
 func TestMergeNormalizedAlarmStateHandlesNilAndTimestampPriority(t *testing.T) {
-	existingDetectedAt := time.Date(2026, 4, 10, 1, 2, 0, 0, time.UTC)
+	existingDetectedAt := time.Date(2026, time.April, 10, 1, 2, 0, 0, time.UTC)
 	nextDetectedAt := existingDetectedAt.Add(-time.Minute)
 	existingAuthorizedAt := existingDetectedAt.Add(2 * time.Minute)
 	nextAuthorizedAt := existingDetectedAt.Add(time.Minute)
@@ -143,7 +142,7 @@ func TestMergeNormalizedAlarmStateHandlesNilAndTimestampPriority(t *testing.T) {
 
 func TestAlarmStateRepositoryNilDBReturnsError(t *testing.T) {
 	repository := NewRepository(nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	row, err := repository.FindAlarmStateByPostID(ctx, domain.OutboxKindNewShort, "short:nil")
 	require.Nil(t, row)
@@ -152,5 +151,6 @@ func TestAlarmStateRepositoryNilDBReturnsError(t *testing.T) {
 
 func newAlarmStateRepositoryTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+
 	return newTrackingTestDB(t)
 }

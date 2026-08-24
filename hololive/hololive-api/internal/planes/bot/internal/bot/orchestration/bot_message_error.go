@@ -23,6 +23,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -35,19 +36,35 @@ import (
 )
 
 func (b *Bot) sendMessage(ctx context.Context, room, message string) error {
-	return b.ensureTransport().SendMessage(ctx, room, message)
+	if err := b.ensureTransport().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendImage(ctx context.Context, room string, imageData []byte, opts ...iris.SendOption) error {
-	return b.ensureTransport().SendImage(ctx, room, imageData, opts...)
+	if err := b.ensureTransport().SendImage(ctx, room, imageData, opts...); err != nil {
+		return fmt.Errorf("send image: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendImages(ctx context.Context, room string, images [][]byte, opts ...iris.SendOption) error {
-	return b.ensureTransport().SendImages(ctx, room, images, opts...)
+	if err := b.ensureTransport().SendImages(ctx, room, images, opts...); err != nil {
+		return fmt.Errorf("send images: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Bot) sendError(ctx context.Context, room, errorMsg string) error {
-	return b.ensureTransport().SendError(ctx, room, errorMsg)
+	if err := b.ensureTransport().SendError(ctx, room, errorMsg); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	return nil
 }
 
 // outcome이 unknown이면 reply가 이미 전달됐을 수 있어, 오류 응답을 덧붙이면 중복 발화가 된다.
@@ -58,6 +75,7 @@ func (b *Bot) skipErrorResponseOnUnknownOutcome(ctx context.Context, chatID, com
 
 	errorAttrs := sharedlog.ErrorAttrs(err)
 	attrs := make([]slog.Attr, 0, 2+len(errorAttrs))
+
 	attrs = append(attrs,
 		privacylog.ChatIDAttr(chatID),
 		slog.String("command", commandType),
@@ -74,6 +92,7 @@ func (b *Bot) getErrorMessage(err error) string {
 	}
 
 	var serviceErr *appErrors.ServiceError
+
 	if errors.As(err, &serviceErr) && serviceErr.Service == serviceNameIris {
 		return messaging.ErrIrisConnectionFailed
 	}

@@ -28,6 +28,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+const testChannelAboutPath = "/channel/UC_TEST/about"
+
 func TestFindVideosTabContentMatchesAdditionalLocales(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -38,11 +40,11 @@ func TestFindVideosTabContentMatchesAdditionalLocales(t *testing.T) {
 		{name: "english", tabTitle: "Videos", tabURL: "/channel/UC_TEST/videos", shouldHit: true},
 		{name: "korean", tabTitle: "동영상", tabURL: "/channel/UC_TEST/videos", shouldHit: true},
 		{name: "japanese", tabTitle: "動画", tabURL: "/channel/UC_TEST/videos", shouldHit: true},
-		{name: "simplified_chinese", tabTitle: "视频", tabURL: "/channel/UC_TEST/about", shouldHit: true},
-		{name: "traditional_chinese", tabTitle: "影片", tabURL: "/channel/UC_TEST/about", shouldHit: true},
-		{name: "portuguese", tabTitle: "Vídeos", tabURL: "/channel/UC_TEST/about", shouldHit: true},
-		{name: "russian", tabTitle: "Видео", tabURL: "/channel/UC_TEST/about", shouldHit: true},
-		{name: "french", tabTitle: "Vidéos", tabURL: "/channel/UC_TEST/about", shouldHit: true},
+		{name: "simplified_chinese", tabTitle: "视频", tabURL: testChannelAboutPath, shouldHit: true},
+		{name: "traditional_chinese", tabTitle: "影片", tabURL: testChannelAboutPath, shouldHit: true},
+		{name: "portuguese", tabTitle: "Vídeos", tabURL: testChannelAboutPath, shouldHit: true},
+		{name: "russian", tabTitle: "Видео", tabURL: testChannelAboutPath, shouldHit: true},
+		{name: "french", tabTitle: "Vidéos", tabURL: testChannelAboutPath, shouldHit: true},
 		{name: "url_only", tabTitle: "Unknown", tabURL: "/channel/UC_TEST/videos", shouldHit: true},
 		{name: "non_videos_tab", tabTitle: "Home", tabURL: "/channel/UC_TEST", shouldHit: false},
 	}
@@ -60,7 +62,9 @@ func TestFindVideosTabContentMatchesAdditionalLocales(t *testing.T) {
 
 func jsonQuote(s string) string {
 	var b strings.Builder
+
 	b.WriteByte('"')
+
 	for _, r := range s {
 		switch r {
 		case '"':
@@ -71,7 +75,9 @@ func jsonQuote(s string) string {
 			b.WriteRune(r)
 		}
 	}
+
 	b.WriteByte('"')
+
 	return b.String()
 }
 
@@ -111,6 +117,7 @@ func TestParseLockupVideoViewModelHandlesSwappedMetadataParts(t *testing.T) {
             }}
         }}
     }`
+
 	got = parseLockupVideoViewModel(parseGJSONResultPtr(lockupSwapped), "UC_X")
 	assert.NotNil(t, got)
 	assert.Equal(t, int64(1_200_000), got.ViewCount, "viewCount는 위치와 무관하게 숫자 패턴으로 식별되어야 함")
@@ -119,14 +126,19 @@ func TestParseLockupVideoViewModelHandlesSwappedMetadataParts(t *testing.T) {
 
 func TestCollectVideoRenderers_BoundedScan(t *testing.T) {
 	var builder strings.Builder
+
 	builder.WriteString(`{"contents":`)
+
 	for range maxVideoRendererFallbackNodes + 32 {
 		builder.WriteString(`{"child":`)
 	}
+
 	builder.WriteString(`{"videoRenderer":{"videoId":"too-deep","title":{"runs":[{"text":"Too Deep"}]}}}`)
+
 	for range maxVideoRendererFallbackNodes + 32 {
 		builder.WriteString(`}`)
 	}
+
 	builder.WriteString(`}`)
 
 	contents := gjson.Parse(builder.String()).Get("contents")

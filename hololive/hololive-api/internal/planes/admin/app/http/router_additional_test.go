@@ -1,19 +1,19 @@
 package apphttp
 
 import (
+	jsonv2 "encoding/json/v2"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/gin-gonic/gin"
 
-	jsonv2 "encoding/json/v2"
-
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
@@ -33,6 +33,7 @@ func TestProvideAPIRouterRegistersDomainRoutes(t *testing.T) {
 	}
 
 	routeSet := make(map[string]struct{})
+
 	for _, route := range router.Routes() {
 		routeSet[route.Method+" "+route.Path] = struct{}{}
 	}
@@ -79,10 +80,13 @@ func TestValidateAPIRouterInputsRejectsMissingDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			err := validateAPIRouterInputs(tt.cfg, tt.domains, tt.auth)
 			if err == nil {
 				t.Fatal("validateAPIRouterInputs() expected error")
 			}
+
 			if err.Error() != tt.wantErr {
 				t.Fatalf("validateAPIRouterInputs() error = %q, want %q", err.Error(), tt.wantErr)
 			}
@@ -112,6 +116,8 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			domains := *(&server.Handler{}).DomainHandlers()
 			tt.mutate(&domains)
 
@@ -119,6 +125,7 @@ func TestValidateDomainHandlersRejectsEachMissingHandler(t *testing.T) {
 			if err == nil {
 				t.Fatal("validateDomainHandlers() expected error")
 			}
+
 			if err.Error() != tt.wantErr {
 				t.Fatalf("validateDomainHandlers() error = %q, want %q", err.Error(), tt.wantErr)
 			}
@@ -146,6 +153,7 @@ func TestNewAPICORSConfigModes(t *testing.T) {
 	if !reflect.DeepEqual(enforced.AllowOrigins, []string{"https://a.example", "https://b.example"}) {
 		t.Fatalf("enforced AllowOrigins = %#v", enforced.AllowOrigins)
 	}
+
 	if enforced.AllowOriginFunc != nil {
 		t.Fatal("enforced explicit origin config should not set AllowOriginFunc")
 	}
@@ -170,6 +178,7 @@ func TestCorsOriginGuardAllowsNoOriginAndMonitorMode(t *testing.T) {
 	noOriginReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/no-origin", http.NoBody)
 	noOriginRec := httptest.NewRecorder()
 	router.ServeHTTP(noOriginRec, noOriginReq)
+
 	if noOriginRec.Code != http.StatusOK {
 		t.Fatalf("no origin status = %d, want %d", noOriginRec.Code, http.StatusOK)
 	}
@@ -182,8 +191,10 @@ func TestCorsOriginGuardAllowsNoOriginAndMonitorMode(t *testing.T) {
 
 	monitorReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/monitor", http.NoBody)
 	monitorReq.Header.Set("Origin", "https://blocked.example")
+
 	monitorRec := httptest.NewRecorder()
 	monitorRouter.ServeHTTP(monitorRec, monitorReq)
+
 	if monitorRec.Code != http.StatusOK {
 		t.Fatalf("monitor status = %d, want %d", monitorRec.Code, http.StatusOK)
 	}
@@ -207,6 +218,7 @@ func TestNewAPIRouterCORSValidation(t *testing.T) {
 	if err := validateAPICORSConfig(productionWildcard, true); err == nil {
 		t.Fatal("validateAPICORSConfig() expected production wildcard error")
 	}
+
 	if err := validateAPICORSConfig(productionWildcard, false); err != nil {
 		t.Fatalf("validateAPICORSConfig() non-production error = %v", err)
 	}
@@ -215,6 +227,7 @@ func TestNewAPIRouterCORSValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newAPIRouter() error = %v", err)
 	}
+
 	if router == nil {
 		t.Fatal("newAPIRouter() returned nil router")
 	}
@@ -224,22 +237,29 @@ func TestProvideAPIRouterRejectsEmptyAdminAllowedIPsOnlyInProduction(t *testing.
 	gin.SetMode(gin.TestMode)
 
 	productionEmpty := testRouterConfig()
+
 	productionEmpty.Environment = "production"
 	productionEmpty.Server.AdminAllowedIPs = nil
-	if router, err := provideTestAPIRouter(t, productionEmpty); err == nil || router != nil || err.Error() != "ADMIN_ALLOWED_IPS must be configured in production" {
+
+	if router, err := provideTestAPIRouter(t, productionEmpty); err == nil || router != nil ||
+		!strings.Contains(err.Error(), "ADMIN_ALLOWED_IPS must be configured in production") {
 		t.Fatalf("production empty allowlist router=%v error=%v, want production allowlist error", router, err)
 	}
 
 	productionAllowed := testRouterConfig()
+
 	productionAllowed.Environment = "production"
 	productionAllowed.Server.AdminAllowedIPs = []string{"100.100.1.0/24"}
+
 	if router, err := provideTestAPIRouter(t, productionAllowed); err != nil || router == nil {
 		t.Fatalf("production configured allowlist router=%v error=%v, want no error", router, err)
 	}
 
 	nonProductionEmpty := testRouterConfig()
+
 	nonProductionEmpty.Environment = "development"
 	nonProductionEmpty.Server.AdminAllowedIPs = nil
+
 	if router, err := provideTestAPIRouter(t, nonProductionEmpty); err != nil || router == nil {
 		t.Fatalf("non-production empty allowlist router=%v error=%v, want no error", router, err)
 	}
@@ -257,6 +277,7 @@ func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/limited", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
+
 	if rec.Code != http.StatusTeapot {
 		t.Fatalf("nil cache rate limit status = %d, want %d", rec.Code, http.StatusTeapot)
 	}
@@ -269,14 +290,17 @@ func TestAPIRateLimitNilCacheAndAbortResponse(t *testing.T) {
 	abortReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/limited", http.NoBody)
 	abortRec := httptest.NewRecorder()
 	abortRouter.ServeHTTP(abortRec, abortReq)
+
 	if abortRec.Code != http.StatusTooManyRequests {
 		t.Fatalf("abort status = %d, want %d", abortRec.Code, http.StatusTooManyRequests)
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(abortRec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
+
 	if payload["error"] != "too many requests" {
 		t.Fatalf("error=%v want=%q", payload["error"], "too many requests")
 	}
@@ -300,14 +324,17 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/stats", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
+
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("missing api key status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/holo/stats", http.NoBody)
 	req.Header.Set(common.APIKeyHeader, "wrong-key")
+
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
+
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("wrong api key status = %d, want %d", rec.Code, http.StatusForbidden)
 	}
@@ -316,7 +343,7 @@ func TestRegisteredRoutesRequireAPIKeyInAppHTTPPackage(t *testing.T) {
 func provideTestAPIRouter(t *testing.T, cfg *settings.Config) (*gin.Engine, error) {
 	t.Helper()
 
-	return ProvideAPIRouter(
+	router, err := ProvideAPIRouter(
 		t.Context(),
 		cfg,
 		slog.New(slog.DiscardHandler),
@@ -324,6 +351,11 @@ func provideTestAPIRouter(t *testing.T, cfg *settings.Config) (*gin.Engine, erro
 		&server.AuthHandler{},
 		nil,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("provide API router: %w", err)
+	}
+
+	return router, nil
 }
 
 func testRouterConfig() *settings.Config {

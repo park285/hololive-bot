@@ -84,15 +84,18 @@ func TestResolveStreamOrg(t *testing.T) {
 				if err == nil {
 					t.Fatalf("resolveStreamOrg(%q) expected error, got nil", tt.input)
 				}
+
 				if !stdErrors.Is(err, ErrInvalidStreamOrg) {
 					t.Fatalf("resolveStreamOrg(%q) expected ErrInvalidStreamOrg, got %v", tt.input, err)
 				}
+
 				return
 			}
 
 			if err != nil {
 				t.Fatalf("resolveStreamOrg(%q) unexpected error: %v", tt.input, err)
 			}
+
 			if got != tt.want {
 				t.Fatalf("resolveStreamOrg(%q) = %q, want %q", tt.input, got, tt.want)
 			}
@@ -105,6 +108,7 @@ func TestStreamTargetOrgs(t *testing.T) {
 
 	got := streamTargetOrgs(constants.HolodexAPIParams.OrgAll)
 	want := append([]string{}, constants.HolodexAPIParams.SyncTargetOrgs...)
+
 	want = append(want, constants.HolodexAPIParams.OrgIndie)
 
 	if !reflect.DeepEqual(got, want) {
@@ -118,9 +122,11 @@ func TestHolodexOrgFetchParallelism(t *testing.T) {
 	if got := holodexOrgFetchParallelism(constants.HolodexAPIParams.OrgAll, 3); got != 3 {
 		t.Fatalf("holodexOrgFetchParallelism(all, 3) = %d, want 3", got)
 	}
+
 	if got := holodexOrgFetchParallelism(constants.HolodexAPIParams.OrgHololive, 3); got != 1 {
 		t.Fatalf("holodexOrgFetchParallelism(hololive, 3) = %d, want 1", got)
 	}
+
 	if got := holodexOrgFetchParallelism(constants.HolodexAPIParams.OrgAll, 0); got != 1 {
 		t.Fatalf("holodexOrgFetchParallelism(all, 0) = %d, want 1", got)
 	}

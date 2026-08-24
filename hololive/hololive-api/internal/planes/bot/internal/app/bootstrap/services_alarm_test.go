@@ -24,13 +24,13 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	membermocks "github.com/kapu/hololive-shared/pkg/service/member/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {

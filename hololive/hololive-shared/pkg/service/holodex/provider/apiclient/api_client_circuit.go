@@ -8,7 +8,7 @@ import (
 )
 
 // rejectIfCircuitOpen은 Allow() 기반으로 동작합니다.
-// timeout 경과 시 reset side-effect가 발생하므로 자동 reset 후
+// 지정한 timeout이 경과하면 reset side-effect가 발생하므로 자동 reset 후
 // failures=0부터 재카운트가 시작됩니다.
 func (c *APIClient) rejectIfCircuitOpen() error {
 	if c.breaker.Allow() {
@@ -18,10 +18,11 @@ func (c *APIClient) rejectIfCircuitOpen() error {
 	remainingMs := c.breaker.RetryAfter().Milliseconds()
 
 	c.logger.Warn("Circuit breaker is open", slog.Int64("retry_after_ms", remainingMs))
+
 	return NewAPIError("Circuit breaker open", 503)
 }
 
-// IsCircuitOpen은 read-only 상태 조회입니다. side-effect가 없습니다.
+// IsCircuitOpen은 read-only 상태 조회입니다. 부수 효과는 없습니다.
 func (c *APIClient) IsCircuitOpen() bool {
 	return c.breaker.IsOpen()
 }

@@ -22,13 +22,13 @@ package holodexprovider
 
 import (
 	"context"
-	stdErrors "errors"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
@@ -57,20 +57,25 @@ func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Cha
 
 		return nil, fmt.Errorf(
 			"get channel: primary and scraper fallback failed: %w",
-			stdErrors.Join(err, fallbackErr),
+			errors.Join(err, fallbackErr),
 		)
 	}
 
-	return nil, sharedlog.LogAndWrapError(ctx, h.logger, "get channel", err, slog.String("channel_id", channelID))
+	if logErr := sharedlog.LogAndWrapError(ctx, h.logger, "get channel", err, slog.String("channel_id", channelID)); logErr != nil {
+		return nil, fmt.Errorf("log and wrap error: %w", logErr)
+	}
+
+	return nil, fmt.Errorf("get channel %s: %w", channelID, err)
 }
 
 func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*domain.Channel, error) {
-	body, err := h.requester.DoRequest(ctx, "GET", "/channels/"+channelID, nil)
+	body, err := h.requester.DoRequest(ctx, http.MethodGet, "/channels/"+channelID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetch channel direct: %w", err)
 	}
 
 	var rawChannel streammapping.ChannelRaw
+
 	if err := jsonv2.Unmarshal(body, &rawChannel); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal channel: %w", err)
 	}
@@ -81,10 +86,10 @@ func (h *Service) fetchChannelDirect(ctx context.Context, channelID string) (*do
 	return channel, nil
 }
 
-// getChannelFromScraper: YouTube 스크래퍼를 사용하여 채널 정보를 조회합니다. (Holodex 폴백)
+// getChannelFromScraper: YouTube 스크래퍼를 사용하여 채널 정보를 조회합니다. (Holodex 폴백).
 func (h *Service) getChannelFromScraper(ctx context.Context, channelID string) (*domain.Channel, error) {
 	if h.scraper == nil {
-		return nil, fmt.Errorf("scraper fallback not configured")
+		return nil, errors.New("scraper fallback not configured")
 	}
 
 	stats, err := h.scraper.GetChannelStats(ctx, channelID)
@@ -92,6 +97,7 @@ func (h *Service) getChannelFromScraper(ctx context.Context, channelID string) (
 		h.logger.Warn("Scraper fallback also failed for channel",
 			slog.String("channel", channelID),
 			slog.Any("error", err))
+
 		return nil, fmt.Errorf("get channel stats from scraper: %w", err)
 	}
 

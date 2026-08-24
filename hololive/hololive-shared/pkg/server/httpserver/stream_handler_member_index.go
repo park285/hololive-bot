@@ -22,6 +22,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -44,7 +45,7 @@ func (h *StreamHandler) GetActiveMemberIndex(ctx context.Context) (result0 []str
 
 	snapshot, ok := value.(*memberIndexSnapshot)
 	if !ok || snapshot == nil {
-		return nil, nil, fmt.Errorf("member index snapshot: unexpected type")
+		return nil, nil, errors.New("member index snapshot: unexpected type")
 	}
 
 	return snapshot.channelIDs, snapshot.channelNames, nil
@@ -60,7 +61,7 @@ func (h *StreamHandler) refreshActiveMemberIndexSnapshot(ctx context.Context, st
 
 	members, err := h.fetchAllMembers(refreshCtx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch all members: %w", err)
 	}
 
 	channelIDs, channelToName := BuildActiveMemberIndex(members)
@@ -90,7 +91,7 @@ func (s *StreamState) storeMemberIndexSnapshot(channelIDs []string, channelToNam
 
 func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, error) {
 	if h.MemberIndexLoader == nil {
-		return nil, fmt.Errorf("load members: repository loader is nil")
+		return nil, errors.New("load members: repository loader is nil")
 	}
 
 	members, err := h.MemberIndexLoader(ctx)
@@ -104,10 +105,12 @@ func (h *StreamHandler) fetchAllMembers(ctx context.Context) ([]*domain.Member, 
 func BuildActiveMemberIndex(members []*domain.Member) (result0 []string, result1 map[string]string) {
 	channelIDs := make([]string, 0, len(members))
 	channelToName := make(map[string]string, len(members))
+
 	for _, member := range members {
 		if member.ChannelID == "" || member.IsGraduated {
 			continue
 		}
+
 		channelIDs = append(channelIDs, member.ChannelID)
 		channelToName[member.ChannelID] = member.Name
 	}

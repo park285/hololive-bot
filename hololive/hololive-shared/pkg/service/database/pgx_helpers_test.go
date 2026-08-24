@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -56,6 +57,7 @@ func TestIsNoRows(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := database.IsNoRows(tt.err)
 			if got != tt.want {
 				t.Errorf("IsNoRows(%v) = %v, want %v", tt.err, got, tt.want)

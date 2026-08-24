@@ -22,17 +22,25 @@ package summarizer
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/util"
+)
+
+const (
+	testPrimaryHeadline  = "테스트 헤드라인"
+	testItemCategory     = "event"
+	testItemDateText     = "2026-02-20"
+	testSeverityCritical = "critical"
+	testSeverityWarning  = "warning"
+	testSeverityInfo     = "info"
 )
 
 // fakeLLMWithCounter: 호출 횟수를 추적하는 LLM 모의 클라이언트.
@@ -44,9 +52,11 @@ type fakeLLMWithCounter struct {
 
 func (f *fakeLLMWithCounter) GenerateJSON(_ context.Context, _, _ string, _ map[string]any) (string, error) {
 	f.callCount.Add(1)
+
 	if f.err != nil {
 		return "", f.err
 	}
+
 	return f.response, nil
 }
 
@@ -60,6 +70,7 @@ func (f *fakeSummarizer) Summarize(_ context.Context, _ *model.SummarizeInput) (
 	if f.err != nil {
 		return nil, f.err
 	}
+
 	return f.digest, nil
 }
 
@@ -74,8 +85,8 @@ func defaultConsensusConfig() consensus.Config {
 func defaultTestInput() *model.SummarizeInput {
 	return &model.SummarizeInput{
 		Period:      model.PeriodWeekly,
-		Now:         time.Date(2026, 2, 16, 10, 0, 0, 0, util.KSTZone),
-		RoomMembers: []string{"사쿠라 미코"},
+		Now:         time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone),
+		RoomMembers: []string{testMemberMiko},
 		Candidates:  sampleCandidates(),
 	}
 }
@@ -83,15 +94,15 @@ func defaultTestInput() *model.SummarizeInput {
 func primaryDigest() *model.Digest {
 	return &model.Digest{
 		Period:   model.PeriodWeekly,
-		Headline: "테스트 헤드라인",
+		Headline: testPrimaryHeadline,
 		TopItems: []model.SummaryItem{
 			{
-				Member:    "사쿠라 미코",
-				Category:  "event",
+				Member:    testMemberMiko,
+				Category:  testItemCategory,
 				Title:     "EXPO",
-				DateText:  "2026-02-20",
+				DateText:  testItemDateText,
 				Summary:   "요약",
-				SourceURL: "https://hololive.hololivepro.com/news/1",
+				SourceURL: testSourceURLNews1,
 			},
 		},
 		MoreSummary:  "",
@@ -106,10 +117,12 @@ func approvedVerdictJSON(confidence float64) string {
 		Issues:     []consensus.ReviewIssue{},
 		Confidence: confidence,
 	}
+
 	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(b)
 }
 
@@ -117,14 +130,16 @@ func criticalVerdictJSON() string {
 	v := consensus.ReviewVerdict{
 		Approved: false,
 		Issues: []consensus.ReviewIssue{
-			{Field: "source_url", ItemIndex: 0, Severity: "critical", Description: "URL fabricated"},
+			{Field: "source_url", ItemIndex: 0, Severity: testSeverityCritical, Description: "URL fabricated"},
 		},
 		Confidence: 0.3,
 	}
+
 	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(b)
 }
 
@@ -134,10 +149,12 @@ func lowConfidenceVerdictJSON() string {
 		Issues:     []consensus.ReviewIssue{},
 		Confidence: 0.5,
 	}
+
 	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(b)
 }
 
@@ -145,14 +162,16 @@ func warningOnlyVerdictJSON() string {
 	v := consensus.ReviewVerdict{
 		Approved: true,
 		Issues: []consensus.ReviewIssue{
-			{Field: "category", ItemIndex: 0, Severity: "warning", Description: "minor mismatch"},
+			{Field: "category", ItemIndex: 0, Severity: testSeverityWarning, Description: "minor mismatch"},
 		},
 		Confidence: 0.9,
 	}
+
 	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(b)
 }
 
@@ -161,15 +180,17 @@ func adjudicatorResponseJSON(title string) string {
 		Period:   "weekly",
 		Headline: "수정된 헤드라인",
 		TopItems: []summaryResponseItem{
-			{Member: "사쿠라 미코", Category: "event", Title: title, DateText: "2026-02-20", Summary: "수정된 요약", SourceURL: "https://hololive.hololivepro.com/news/1"},
+			{Member: testMemberMiko, Category: testItemCategory, Title: title, DateText: testItemDateText, Summary: "수정된 요약", SourceURL: testSourceURLNews1},
 		},
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
+
 	b, err := jsonv2.Marshal(r)
 	if err != nil {
 		panic(err)
 	}
+
 	return string(b)
 }
 
@@ -182,16 +203,19 @@ func TestConsensus_ReviewerApproves_PassThrough(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
+
 	if reviewer.callCount.Load() != 1 {
 		t.Errorf("reviewer should be called once, got %d", reviewer.callCount.Load())
 	}
+
 	if adjudicator.callCount.Load() != 0 {
 		t.Errorf("adjudicator should not be called, got %d", adjudicator.callCount.Load())
 	}
@@ -208,16 +232,19 @@ func TestConsensus_CriticalIssues_TriggersAdjudication(t *testing.T) {
 		defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if adjudicator.callCount.Load() != 1 {
 		t.Fatalf("adjudicator should be called once, got %d", adjudicator.callCount.Load())
 	}
+
 	if len(digest.TopItems) == 0 {
 		t.Fatal("expected adjudicator items")
 	}
+
 	if digest.TopItems[0].Title != "수정된 EXPO" {
 		t.Errorf("expected adjudicator title, got %q", digest.TopItems[0].Title)
 	}
@@ -232,16 +259,19 @@ func TestConsensus_ReviewerFails_GracefulDegradation(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
+
 	if reviewer.callCount.Load() != 1 {
 		t.Errorf("reviewer should be called once, got %d", reviewer.callCount.Load())
 	}
+
 	if adjudicator.callCount.Load() != 0 {
 		t.Errorf("adjudicator should not be called on reviewer failure, got %d", adjudicator.callCount.Load())
 	}
@@ -256,13 +286,15 @@ func TestConsensus_AdjudicatorFails_ReturnsPrimary(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
+
 	if adjudicator.callCount.Load() != 1 {
 		t.Errorf("adjudicator should be called once, got %d", adjudicator.callCount.Load())
 	}
@@ -276,11 +308,12 @@ func TestConsensus_AdjudicatorNil_SkipsStage3(t *testing.T) {
 		reviewer, nil, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
 }
@@ -296,13 +329,15 @@ func TestConsensus_LowConfidence_TriggersAdjudication(t *testing.T) {
 		defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if adjudicator.callCount.Load() != 1 {
 		t.Fatalf("adjudicator should be called for low confidence, got %d", adjudicator.callCount.Load())
 	}
+
 	if digest.TopItems[0].Title != "수정됨" {
 		t.Errorf("expected adjudicator title, got %q", digest.TopItems[0].Title)
 	}
@@ -317,14 +352,16 @@ func TestConsensus_OnlyWarnings_NoAdjudication(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if adjudicator.callCount.Load() != 0 {
 		t.Errorf("adjudicator should not be called for warnings only, got %d", adjudicator.callCount.Load())
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
 }
@@ -335,12 +372,13 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 		Period:   "weekly",
 		Headline: "수정됨",
 		TopItems: []summaryResponseItem{
-			{Member: "사쿠라 미코", Category: "event", Title: "Good", DateText: "2026-02-20", Summary: "요약", SourceURL: "https://hololive.hololivepro.com/news/1"},
-			{Member: "B", Category: "event", Title: "Bad URL", DateText: "2026-02-20", Summary: "요약", SourceURL: "https://evil.com/fake"},
+			{Member: testMemberMiko, Category: testItemCategory, Title: "Good", DateText: testItemDateText, Summary: "요약", SourceURL: testSourceURLNews1},
+			{Member: "B", Category: testItemCategory, Title: "Bad URL", DateText: testItemDateText, Summary: "요약", SourceURL: "https://evil.com/fake"},
 		},
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
+
 	badJSON, err := jsonv2.Marshal(badResponse)
 	if err != nil {
 		t.Fatalf("marshal bad response: %v", err)
@@ -356,10 +394,11 @@ func TestConsensus_ValidationRunsOnAdjudicatorOutput(t *testing.T) {
 		defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	// validator가 bad URL 항목을 제거해야 함
 	if len(digest.TopItems) >= 2 {
 		t.Errorf("expected validator to drop bad URL item, got %d items", len(digest.TopItems))
@@ -380,13 +419,15 @@ func TestConsensus_PrimaryEmpty_ReturnsFallback(t *testing.T) {
 		reviewer, nil, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if len(digest.TopItems) != 0 {
 		t.Errorf("expected empty items from primary empty, got %d", len(digest.TopItems))
 	}
+
 	if reviewer.callCount.Load() != 0 {
 		t.Errorf("reviewer should not be called when primary is empty, got %d", reviewer.callCount.Load())
 	}
@@ -401,13 +442,15 @@ func TestConsensus_ReviewerMalformedJSON(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline on malformed JSON, got %q", digest.Headline)
 	}
+
 	if adjudicator.callCount.Load() != 0 {
 		t.Errorf("adjudicator should not be called on parse failure, got %d", adjudicator.callCount.Load())
 	}
@@ -423,13 +466,15 @@ func TestConsensus_ReviewerTimeout(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline on timeout, got %q", digest.Headline)
 	}
+
 	if adjudicator.callCount.Load() != 0 {
 		t.Errorf("adjudicator should not be called on timeout, got %d", adjudicator.callCount.Load())
 	}
@@ -441,16 +486,19 @@ func TestConsensus_ReviewerIsNotCalledWithoutReservedParentBudget(t *testing.T) 
 		&fakeSummarizer{digest: primaryDigest()},
 		reviewer, nil, nil, defaultConsensusConfig(), nil,
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+
 	defer cancel()
 
 	digest, err := cs.Summarize(ctx, defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
+
 	if reviewer.callCount.Load() != 0 {
 		t.Errorf("reviewer should not be called without reserved budget, got %d", reviewer.callCount.Load())
 	}
@@ -466,6 +514,7 @@ func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 		},
 		Confidence: 0.9,
 	}
+
 	b, err := jsonv2.Marshal(v)
 	if err != nil {
 		t.Fatalf("marshal verdict: %v", err)
@@ -479,14 +528,16 @@ func TestConsensus_UnknownSeverity_TreatedAsInfo(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if adjudicator.callCount.Load() != 0 {
 		t.Errorf("adjudicator should not be called for unknown severity, got %d", adjudicator.callCount.Load())
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline, got %q", digest.Headline)
 	}
 }
@@ -500,13 +551,15 @@ func TestConsensus_AdjudicatorMalformedJSON_ReturnsPrimary(t *testing.T) {
 		reviewer, adjudicator, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline on adjudicator parse fail, got %q", digest.Headline)
 	}
+
 	if adjudicator.callCount.Load() != 1 {
 		t.Errorf("adjudicator should be called once, got %d", adjudicator.callCount.Load())
 	}
@@ -518,12 +571,13 @@ func TestConsensus_ValidationDropsAllAdjudicatorItems_ReturnsPrimary(t *testing.
 		Period:   "weekly",
 		Headline: "수정됨",
 		TopItems: []summaryResponseItem{
-			{Member: "A", Category: "event", Title: "Bad1", DateText: "2026-02-20", Summary: "요약", SourceURL: "https://evil.com/fake1"},
-			{Member: "B", Category: "event", Title: "Bad2", DateText: "2026-02-20", Summary: "요약", SourceURL: "https://evil.com/fake2"},
+			{Member: "A", Category: testItemCategory, Title: "Bad1", DateText: testItemDateText, Summary: "요약", SourceURL: "https://evil.com/fake1"},
+			{Member: "B", Category: testItemCategory, Title: "Bad2", DateText: testItemDateText, Summary: "요약", SourceURL: "https://evil.com/fake2"},
 		},
 		MoreSummary:  "",
 		OmittedCount: 0,
 	}
+
 	allBadJSON, err := jsonv2.Marshal(allBadResponse)
 	if err != nil {
 		t.Fatalf("marshal all bad response: %v", err)
@@ -539,14 +593,16 @@ func TestConsensus_ValidationDropsAllAdjudicatorItems_ReturnsPrimary(t *testing.
 		defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	// validation이 모든 항목을 제거 → primary로 fallback
-	if digest.Headline != "테스트 헤드라인" {
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline when all adjudicator items dropped, got %q", digest.Headline)
 	}
+
 	if adjudicator.callCount.Load() != 1 {
 		t.Errorf("adjudicator should be called once, got %d", adjudicator.callCount.Load())
 	}
@@ -558,11 +614,12 @@ func TestConsensus_ReviewerNil_ReturnsPrimary(t *testing.T) {
 		nil, nil, nil, defaultConsensusConfig(), nil,
 	)
 
-	digest, err := cs.Summarize(context.Background(), defaultTestInput())
+	digest, err := cs.Summarize(t.Context(), defaultTestInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if digest.Headline != "테스트 헤드라인" {
+
+	if digest.Headline != testPrimaryHeadline {
 		t.Errorf("expected primary headline when reviewer is nil, got %q", digest.Headline)
 	}
 }
@@ -572,14 +629,14 @@ func TestNormalizeSeverity(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"critical", "critical"},
-		{"CRITICAL", "critical"},
-		{"warning", "warning"},
-		{"info", "info"},
-		{"unknown", "info"},
-		{"", "info"},
-		{"  Warning  ", "warning"},
-		{"error", "info"},
+		{testSeverityCritical, testSeverityCritical},
+		{"CRITICAL", testSeverityCritical},
+		{testSeverityWarning, testSeverityWarning},
+		{testSeverityInfo, testSeverityInfo},
+		{"unknown", testSeverityInfo},
+		{"", testSeverityInfo},
+		{"  Warning  ", testSeverityWarning},
+		{"error", testSeverityInfo},
 	}
 	for _, tt := range tests {
 		got := consensus.NormalizeSeverity(tt.input)

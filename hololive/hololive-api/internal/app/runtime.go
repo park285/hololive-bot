@@ -7,16 +7,15 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedlifecycle "github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/app"
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
-
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	sharedlifecycle "github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 // Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
@@ -37,13 +36,16 @@ func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, lo
 	if appConfig == nil {
 		return nil, errors.New("hololive-api config must not be nil")
 	}
+
 	if logger == nil {
 		return nil, errors.New("logger must not be nil")
 	}
+
 	planes, err := buildAPIPlanes(ctx, appConfig, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build API planes: %w", err)
 	}
+
 	return assembleAPIRuntime(appConfig, logger, planes), nil
 }
 
@@ -59,45 +61,76 @@ func buildAPIPlanes(ctx context.Context, appConfig *settings.HololiveAPIConfig, 
 	if err != nil {
 		return apiPlanes{}, fmt.Errorf("build llm plane: %w", err)
 	}
+
 	admin, err := app.BuildAdminAPIRuntime(ctx, appConfig.Admin, logger.With(slog.String("plane", "admin")))
 	if err != nil {
 		llm.Close()
+
 		return apiPlanes{}, fmt.Errorf("build admin plane: %w", err)
 	}
+
 	bot, err := botruntime2.BuildRuntime(ctx, appConfig.Bot, logger.With(slog.String("plane", "bot")))
 	if err != nil {
 		admin.Close()
 		llm.Close()
+
 		return apiPlanes{}, fmt.Errorf("build bot plane: %w", err)
 	}
-	youtube, err := buildYouTubePlane(ctx, appConfig, logger)
-	if err != nil {
-		bot.Close()
-		admin.Close()
-		llm.Close()
-		return apiPlanes{}, err
+
+	planes := apiPlanes{bot: bot, admin: admin, llm: llm}
+	youtubeResult := buildOptionalYouTubePlane(ctx, appConfig, logger)
+
+	if youtubeResult.err != nil {
+		planes.shutdown()
+
+		return apiPlanes{}, fmt.Errorf("build youtube plane: %w", youtubeResult.err)
 	}
-	if err := installAPIWorkerRegistry(ctx, appConfig, bot, youtube); err != nil {
-		if youtube != nil {
-			youtube.Close()
-		}
-		bot.Close()
-		admin.Close()
-		llm.Close()
+
+	planes.youtube = youtubeResult.runtime
+
+	if err := installAPIWorkerRegistry(ctx, appConfig, bot, planes.youtube); err != nil {
+		planes.shutdown()
+
 		return apiPlanes{}, fmt.Errorf("build worker registry: %w", err)
 	}
-	return apiPlanes{bot: bot, admin: admin, llm: llm, youtube: youtube}, nil
+
+	return planes, nil
 }
 
-func buildYouTubePlane(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (*youtuberuntime.Runtime, error) {
+type optionalYouTubePlaneResult struct {
+	runtime *youtuberuntime.Runtime
+	err     error
+}
+
+func buildOptionalYouTubePlane(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) optionalYouTubePlaneResult {
 	if !appConfig.YouTube.Enabled {
-		return nil, nil
+		return optionalYouTubePlaneResult{}
 	}
-	youtube, err := youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
+
+	runtime, err := youtuberuntime.Build(ctx, &appConfig.YouTube, &appConfig.Bot.Postgres, logger.With(slog.String("plane", "youtube")))
 	if err != nil {
-		return nil, fmt.Errorf("build youtube plane: %w", err)
+		return optionalYouTubePlaneResult{err: fmt.Errorf("build youtube runtime: %w", err)}
 	}
-	return youtube, nil
+
+	return optionalYouTubePlaneResult{runtime: runtime}
+}
+
+func (p apiPlanes) shutdown() {
+	if p.youtube != nil {
+		p.youtube.Close()
+	}
+
+	if p.bot != nil {
+		p.bot.Close()
+	}
+
+	if p.admin != nil {
+		p.admin.Close()
+	}
+
+	if p.llm != nil {
+		p.llm.Close()
+	}
 }
 
 func assembleAPIRuntime(appConfig *settings.HololiveAPIConfig, logger *slog.Logger, planes apiPlanes) *Runtime {
@@ -109,7 +142,9 @@ func assembleAPIRuntime(appConfig *settings.HololiveAPIConfig, logger *slog.Logg
 		LLM:     planes.llm,
 		YouTube: planes.youtube,
 	}
+
 	runtime.group = applifecycle.NewGroupRuntime(logger, apiPlaneComponents(planes)...)
+
 	return runtime
 }
 
@@ -122,6 +157,7 @@ func apiPlaneComponents(planes apiPlanes) []applifecycle.GroupComponent {
 	if planes.youtube == nil {
 		return components
 	}
+
 	return append([]applifecycle.GroupComponent{{
 		Name:     "youtube",
 		Start:    planes.youtube.Start,
@@ -134,7 +170,7 @@ func (r *Runtime) Run() error {
 		return nil
 	}
 
-	err := sharedlifecycle.Run(sharedlifecycle.Options{
+	err := sharedlifecycle.Run(context.Background(), sharedlifecycle.Options{
 		ShutdownTimeout: constants.AppTimeout.Shutdown,
 		Start:           r.group.Start,
 		OnSignal: func(signal os.Signal) {
@@ -150,8 +186,11 @@ func (r *Runtime) Run() error {
 	})
 	if err != nil {
 		r.Logger.Error("hololive-api shutdown completed with errors", slog.Any("error", err))
+
+		return fmt.Errorf("run hololive-api lifecycle: %w", err)
 	}
-	return err
+
+	return nil
 }
 
 // Close는 Run이 모든 listener와 background loop을 drain한 뒤 프로세스 자원을 해제한다.
@@ -160,15 +199,19 @@ func (r *Runtime) Close() {
 	if r == nil {
 		return
 	}
+
 	if r.Bot != nil {
 		r.Bot.Close()
 	}
+
 	if r.Admin != nil {
 		r.Admin.Close()
 	}
+
 	if r.LLM != nil {
 		r.LLM.Close()
 	}
+
 	if r.YouTube != nil {
 		r.YouTube.Close()
 	}

@@ -2,17 +2,18 @@ package streamschedule
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
+
+const testChzzkChannelID = "chzzk-1"
 
 type stubStreamProvider struct {
 	streams []*domain.Stream
@@ -32,7 +33,7 @@ func (s *stubStreamProvider) GetChannelSchedule(context.Context, string, int, bo
 }
 
 func (s *stubStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, nil
+	return &domain.Channel{}, nil
 }
 
 type stubMemberDataProvider struct {
@@ -43,6 +44,7 @@ func (s *stubMemberDataProvider) FindMemberByChannelID(channelID string) *domain
 	if s.member != nil && s.member.ChannelID == channelID {
 		return s.member
 	}
+
 	return nil
 }
 
@@ -66,6 +68,7 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := jsonv2.MarshalWrite(w, map[string]any{
 			"code": 200,
 			"content": map[string]any{
@@ -80,6 +83,7 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 			t.Fatalf("encode schedule response: %v", err)
 		}
 	}))
+
 	defer server.Close()
 
 	service := NewService(
@@ -89,7 +93,7 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 			member: &domain.Member{
 				ChannelID:      "yt-1",
 				Name:           "유니",
-				ChzzkChannelID: "chzzk-1",
+				ChzzkChannelID: testChzzkChannelID,
 			},
 		},
 		slog.New(slog.DiscardHandler),
@@ -108,7 +112,7 @@ func TestServiceGetChannelSchedule_AddsChzzkSchedules(t *testing.T) {
 		t.Fatalf("url = %q, want chzzk live url", streams[0].GetYouTubeURL())
 	}
 
-	if streams[0].ChzzkChannelID != "chzzk-1" {
+	if streams[0].ChzzkChannelID != testChzzkChannelID {
 		t.Fatalf("ChzzkChannelID = %q, want chzzk-1", streams[0].ChzzkChannelID)
 	}
 }
@@ -123,6 +127,7 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := jsonv2.MarshalWrite(w, map[string]any{
 			"code": 200,
 			"content": map[string]any{
@@ -137,6 +142,7 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 			t.Fatalf("encode schedule response: %v", err)
 		}
 	}))
+
 	defer server.Close()
 
 	service := NewService(
@@ -157,7 +163,7 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 			member: &domain.Member{
 				ChannelID:      "yt-1",
 				Name:           "유니",
-				ChzzkChannelID: "chzzk-1",
+				ChzzkChannelID: testChzzkChannelID,
 			},
 		},
 		slog.New(slog.DiscardHandler),
@@ -176,7 +182,7 @@ func TestServiceGetChannelSchedule_MergesMatchingHolodexStream(t *testing.T) {
 		t.Fatal("expected merged stream to be marked integrated")
 	}
 
-	if streams[0].ChzzkChannelID != "chzzk-1" {
+	if streams[0].ChzzkChannelID != testChzzkChannelID {
 		t.Fatalf("ChzzkChannelID = %q, want chzzk-1", streams[0].ChzzkChannelID)
 	}
 }
@@ -191,6 +197,7 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
 		if err := jsonv2.MarshalWrite(w, map[string]any{
 			"code": 200,
 			"content": map[string]any{
@@ -205,6 +212,7 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 			t.Fatalf("encode schedule response: %v", err)
 		}
 	}))
+
 	defer server.Close()
 
 	service := NewService(
@@ -214,7 +222,7 @@ func TestServiceGetChannelSchedule_FiltersChzzkSchedulesOutsideHoursWindow(t *te
 			member: &domain.Member{
 				ChannelID:      "yt-1",
 				Name:           "유니",
-				ChzzkChannelID: "chzzk-1",
+				ChzzkChannelID: testChzzkChannelID,
 			},
 		},
 		slog.New(slog.DiscardHandler),

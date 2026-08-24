@@ -23,6 +23,7 @@ package auth
 import (
 	"context"
 	stdErrors "errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -37,20 +38,22 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email, clientIP stri
 	if !validateEmail(email) {
 		return "", newError(CodeInvalidInput, "invalid email", nil)
 	}
+
 	if err := s.checkPasswordResetRequestRateLimit(ctx, clientIP); err != nil {
-		return "", err
+		return "", fmt.Errorf("check password reset request rate limit: %w", err)
 	}
 
 	user, found, err := s.findPasswordResetUser(ctx, email)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("find password reset user: %w", err)
 	}
+
 	if !found {
 		return "", nil
 	}
 
-	if _, err := s.db.Exec(ctx, mustSQL("service_password_reset_0052_01.sql"), user.ID); err != nil {
-		return "", newError(CodeInternal, "failed to clear existing reset tokens", err)
+	if _, execErr := s.db.Exec(ctx, mustSQL("service_password_reset_0052_01.sql"), user.ID); execErr != nil {
+		return "", newError(CodeInternal, "failed to clear existing reset tokens", execErr)
 	}
 
 	rawToken, err := generateToken(resetTokenPrefix, 32)
@@ -78,13 +81,16 @@ func (s *Service) checkPasswordResetRequestRateLimit(ctx context.Context, client
 	if s.cacheClient == nil {
 		return nil
 	}
+
 	limited, err := s.isPasswordResetRequestRateLimited(ctx, clientIP)
 	if err != nil {
 		return newError(CodeInternal, "password reset rate limit check failed", err)
 	}
+
 	if limited {
 		return newError(CodeRateLimited, "rate limited", nil)
 	}
+
 	return nil
 }
 
@@ -93,9 +99,11 @@ func (s *Service) findPasswordResetUser(ctx context.Context, email string) (user
 	if err == nil {
 		return user, true, nil
 	}
+
 	if stdErrors.Is(err, pgx.ErrNoRows) {
 		return userModel{}, false, nil
 	}
+
 	return userModel{}, false, newError(CodeInternal, "failed to query user", err)
 }
 
@@ -106,8 +114,9 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 
 	now := time.Now().UTC()
 	tokenHash := sha256Hex(token)
+
 	if _, err := s.findValidPasswordResetToken(ctx, tokenHash, now); err != nil {
-		return err
+		return fmt.Errorf("find valid password reset token: %w", err)
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.config.BcryptCost)
@@ -117,9 +126,11 @@ func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) 
 
 	userID, err := s.applyPasswordReset(ctx, tokenHash, string(passwordHash), now)
 	if err != nil {
-		return err
+		return fmt.Errorf("apply password reset: %w", err)
 	}
+
 	s.warnIfPasswordResetSessionRevokeFails(ctx, userID)
+
 	return nil
 }
 
@@ -128,14 +139,17 @@ func (s *Service) findValidPasswordResetToken(ctx context.Context, tokenHash str
 	if err == nil {
 		return reset, nil
 	}
+
 	if stdErrors.Is(err, pgx.ErrNoRows) {
 		return passwordResetTokenModel{}, newError(CodeInvalidInput, "invalid reset token", nil)
 	}
+
 	return passwordResetTokenModel{}, newError(CodeInternal, "failed to query reset token", err)
 }
 
 func scanPasswordResetToken(row rowScanner) (passwordResetTokenModel, error) {
 	var reset passwordResetTokenModel
+
 	err := row.Scan(
 		&reset.TokenHash,
 		&reset.UserID,
@@ -143,7 +157,11 @@ func scanPasswordResetToken(row rowScanner) (passwordResetTokenModel, error) {
 		&reset.UsedAt,
 		&reset.CreatedAt,
 	)
-	return reset, err
+	if err != nil {
+		return reset, fmt.Errorf("scan password reset token row: %w", err)
+	}
+
+	return reset, nil
 }
 
 func (s *Service) applyPasswordReset(
@@ -159,17 +177,21 @@ func (s *Service) applyPasswordReset(
 		if authErr, ok := stdErrors.AsType[*Error](err); ok {
 			return "", authErr
 		}
+
 		return "", newError(CodeInternal, "failed to apply password reset transaction", err)
 	}
+
 	return userID, nil
 }
 
 func claimTokenAndUpdatePassword(ctx context.Context, tx dbx.Tx, tokenHash, passwordHash string, now time.Time) (string, error) {
 	var claimedUserID string
+
 	if err := tx.QueryRow(ctx, mustSQL("service_password_reset_0177_04.sql"), now, tokenHash).Scan(&claimedUserID); err != nil {
 		if stdErrors.Is(err, pgx.ErrNoRows) {
 			return "", newError(CodeInvalidInput, "invalid reset token", nil)
 		}
+
 		return "", newError(CodeInternal, "failed to claim reset token", err)
 	}
 
@@ -184,6 +206,7 @@ func (s *Service) warnIfPasswordResetSessionRevokeFails(ctx context.Context, use
 	if s.logger == nil {
 		return
 	}
+
 	if err := s.revokeAllSessions(ctx, userID); err != nil {
 		s.logger.Warn(
 			"Failed to revoke existing sessions after password reset",

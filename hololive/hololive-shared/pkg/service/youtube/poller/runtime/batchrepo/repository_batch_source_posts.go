@@ -39,10 +39,12 @@ func buildShortSourcePosts(videos []*domain.YouTubeVideo, trackingRows []*domain
 	fallbackDetectedAt := yttimestamp.Normalize(time.Now())
 
 	addTrackingSourcePosts(rowsByKey, trackingRows, domain.OutboxKindNewShort)
+
 	for i := range videos {
 		if videos[i] == nil || !videos[i].IsShort {
 			continue
 		}
+
 		addContentSourcePost(
 			rowsByKey,
 			domain.OutboxKindNewShort,
@@ -61,10 +63,12 @@ func buildCommunitySourcePosts(posts []*domain.YouTubeCommunityPost, trackingRow
 	fallbackDetectedAt := yttimestamp.Normalize(time.Now())
 
 	addTrackingSourcePosts(rowsByKey, trackingRows, domain.OutboxKindCommunityPost)
+
 	for i := range posts {
 		if posts[i] == nil {
 			continue
 		}
+
 		addContentSourcePost(
 			rowsByKey,
 			domain.OutboxKindCommunityPost,
@@ -87,10 +91,12 @@ func addTrackingSourcePosts(
 		if trackingRows[i] == nil || trackingRows[i].Kind != kind {
 			continue
 		}
+
 		postID := normalizeSourcePostID(kind, trackingRows[i].ContentID)
 		if postID == "" {
 			continue
 		}
+
 		rowsByKey[sourcePostKey{kind: kind, postID: postID}] = &domain.YouTubeCommunityShortsSourcePost{
 			Kind:              kind,
 			PostID:            postID,
@@ -119,11 +125,14 @@ func addContentSourcePost(
 		if row.ActualPublishedAt == nil {
 			row.ActualPublishedAt = yttimestamp.NormalizePtr(publishedAt)
 		}
+
 		if row.ChannelID == "" {
 			row.ChannelID = strings.TrimSpace(channelID)
 		}
+
 		return
 	}
+
 	rowsByKey[key] = &domain.YouTubeCommunityShortsSourcePost{
 		Kind:              kind,
 		PostID:            postID,
@@ -139,8 +148,10 @@ func flattenSourcePosts(rowsByKey map[sourcePostKey]*domain.YouTubeCommunityShor
 		if row == nil {
 			continue
 		}
+
 		rows = append(rows, row)
 	}
+
 	return rows
 }
 
@@ -149,9 +160,11 @@ func normalizeSourcePostID(kind domain.OutboxKind, postID string) string {
 	if normalizedPostID == "" {
 		return ""
 	}
+
 	canonicalPostID, err := ytcontentid.ForOutboxKind(kind, normalizedPostID)
 	if err == nil && strings.TrimSpace(canonicalPostID) != "" {
 		return canonicalPostID
 	}
+
 	return normalizedPostID
 }

@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -23,14 +24,17 @@ func (r *CalendarCardRenderer) diskCachedImage(key calendarCacheKey) ([]byte, bo
 	if path == "" {
 		return nil, false
 	}
+
 	info, err := os.Stat(path)
 	if err != nil || info.Size() <= 0 || info.Size() > calendarDiskCacheMaxBytes {
 		return nil, false
 	}
+
 	data, err := readCalendarDiskCacheFile(path)
 	if err != nil || !isPNGData(data) {
 		return nil, false
 	}
+
 	return data, true
 }
 
@@ -46,6 +50,7 @@ func (r *CalendarCardRenderer) storeDiskCachedImage(key calendarCacheKey, data [
 	if path == "" || !writeCalendarDiskCacheFile(path, data) {
 		return
 	}
+
 	r.pruneDiskCacheMonth(key)
 }
 
@@ -59,18 +64,24 @@ func writeCalendarDiskCacheFile(path string, data []byte) bool {
 	if err != nil {
 		return false
 	}
+
 	tmpName := tmp.Name()
 
 	_, writeErr := tmp.Write(data)
 	closeErr := tmp.Close()
+
 	if writeErr != nil || closeErr != nil {
 		removeCalendarDiskCacheFile(tmpName)
+
 		return false
 	}
+
 	if err := os.Rename(tmpName, path); err != nil {
 		removeCalendarDiskCacheFile(tmpName)
+
 		return false
 	}
+
 	return true
 }
 
@@ -79,11 +90,14 @@ func (r *CalendarCardRenderer) pruneDiskCacheMonth(key calendarCacheKey) {
 	if keep == "" {
 		return
 	}
+
 	pattern := filepath.Join(filepath.Dir(keep), fmt.Sprintf("%04d-%02d-*.png", key.year, key.month))
+
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return
 	}
+
 	for _, match := range matches {
 		if match != keep {
 			removeCalendarDiskCacheFile(match)
@@ -101,7 +115,9 @@ func (r *CalendarCardRenderer) diskCachePath(key calendarCacheKey) string {
 	if r == nil || r.diskCacheDir == "" {
 		return ""
 	}
+
 	filename := fmt.Sprintf("%04d-%02d-%s.png", key.year, key.month, key.entriesHash)
+
 	return filepath.Join(r.diskCacheDir, calendarDiskCacheVersion, filename)
 }
 
@@ -112,8 +128,15 @@ func isPNGData(data []byte) bool {
 func readCalendarDiskCacheFile(path string) ([]byte, error) {
 	cleaned := filepath.Clean(path)
 	dir, name := filepath.Split(cleaned)
+
 	if dir == "" || name == "" || !fs.ValidPath(name) {
-		return nil, fmt.Errorf("invalid calendar disk cache path")
+		return nil, errors.New("invalid calendar disk cache path")
 	}
-	return fs.ReadFile(os.DirFS(dir), name)
+
+	out, err := fs.ReadFile(os.DirFS(dir), name)
+	if err != nil {
+		return out, fmt.Errorf("read file: %w", err)
+	}
+
+	return out, nil
 }

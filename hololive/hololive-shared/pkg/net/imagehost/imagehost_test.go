@@ -55,6 +55,7 @@ func TestValidateURL(t *testing.T) {
 	if !ThumbnailHosts.AllowsURL("https://i9.ytimg.com/vi/abc/hqdefault.jpg") {
 		t.Error("ThumbnailHosts must allow numbered ytimg subdomain via suffix")
 	}
+
 	if ThumbnailHosts.AllowsURL("https://notytimg.com/x.jpg") {
 		t.Error("ThumbnailHosts must reject suffix lookalike host")
 	}

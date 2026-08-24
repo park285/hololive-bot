@@ -2,7 +2,6 @@ package youtubedispatch
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -33,16 +32,18 @@ func TestDispatcherCutoverHandsOffMilestoneWithoutDirectSend(t *testing.T) {
 
 	sender := &youtubeOutboxKaringTestSender{}
 	publisher := &youtubeOutboxHandoffTestPublisher{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
+
 	if err := dispatcher.ConfigureHandoff(handoff.ModeCutover, publisher); err != nil {
 		t.Fatalf("ConfigureHandoff() error = %v", err)
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 21, OutboxID: 201, RoomID: "room-1"}}
+
+	rows := []domain.YouTubeNotificationDelivery{{ID: 21, OutboxID: 201, RoomID: testRoomOne}}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		201: {ID: 201, ChannelID: "UCmilestone", Kind: domain.OutboxKindMilestone, ContentID: "milestone:1", Payload: `{"milestone":"100만"}`},
+		201: {ID: 201, ChannelID: "UCmilestone", Kind: domain.OutboxKindMilestone, ContentID: "milestone:1", Payload: testPayloadMilestone},
 	}
 
 	result := dispatcher.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
@@ -50,6 +51,7 @@ func TestDispatcherCutoverHandsOffMilestoneWithoutDirectSend(t *testing.T) {
 	if len(result.SuccessDeliveryIDs) != 1 || len(publisher.pending) != 1 {
 		t.Fatalf("result=%#v pending=%d", result, len(publisher.pending))
 	}
+
 	if len(sender.messages) != 0 || len(sender.payloads) != 0 {
 		t.Fatalf("direct sends messages=%d payloads=%d", len(sender.messages), len(sender.payloads))
 	}
@@ -60,14 +62,16 @@ func TestDispatcherShadowHandoffPreservesDirectKaringSend(t *testing.T) {
 
 	sender := &youtubeOutboxKaringTestSender{}
 	publisher := &youtubeOutboxHandoffTestPublisher{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
+
 	if err := dispatcher.ConfigureHandoff(handoff.ModeShadow, publisher); err != nil {
 		t.Fatalf("ConfigureHandoff() error = %v", err)
 	}
-	rows := []domain.YouTubeNotificationDelivery{{ID: 31, OutboxID: 301, RoomID: "room-1"}}
+
+	rows := []domain.YouTubeNotificationDelivery{{ID: 31, OutboxID: 301, RoomID: testRoomOne}}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 		301: {ID: 301, ChannelID: "UCcommunity", Kind: domain.OutboxKindCommunityPost, ContentID: "post:1", Payload: `{"post_id":"1","content_text":"hello"}`},
 	}

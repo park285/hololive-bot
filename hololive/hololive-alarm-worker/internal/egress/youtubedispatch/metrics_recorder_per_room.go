@@ -23,6 +23,7 @@ func (mr *MetricsRecorder) recordPerRoomFormatFailure(
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
 	)
+
 	failedAt := time.Now()
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, "per_room", "failure", "format message", nil)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, "per_room", "failure", "format message")
@@ -58,7 +59,9 @@ func (mr *MetricsRecorder) recordPerRoomRequestBuildFailure(
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
 	)
+
 	failedAt := time.Now()
+
 	mr.logger.Warn("Failed to build per-room delivery request",
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
@@ -85,6 +88,7 @@ func (mr *MetricsRecorder) recordPerRoomSendFailure(
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
 	)
+
 	failedAt := time.Now()
 	reason := deliveryFailureReason(sendErr)
 	mr.logger.Warn("Failed to send per-room delivery",
@@ -109,6 +113,7 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 	mu *sync.Mutex,
 ) {
 	sentAt := time.Now()
+
 	mr.logger.Info("Sent per-room delivery",
 		slog.Int64("delivery_id", row.ID),
 		slog.Int64("outbox_id", row.OutboxID),
@@ -118,6 +123,7 @@ func (mr *MetricsRecorder) recordPerRoomSuccess(
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, "per_room", "success", "")
 
 	mu.Lock()
+
 	result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, row.ID)
 	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, row.OutboxID)
 	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)

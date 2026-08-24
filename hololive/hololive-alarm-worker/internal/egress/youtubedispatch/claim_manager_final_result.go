@@ -2,6 +2,7 @@ package youtubedispatch
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
@@ -9,7 +10,11 @@ import (
 )
 
 func (d *ClaimManager) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {
-	return d.auditLogger.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs)
+	if err := d.auditLogger.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs); err != nil {
+		return fmt.Errorf("log finalized community shorts outbox results: %w", err)
+	}
+
+	return nil
 }
 
 func appendLatencyClassificationLogAttr(attrs []any, classification *timeline.PostLatencyClassificationResult) []any {

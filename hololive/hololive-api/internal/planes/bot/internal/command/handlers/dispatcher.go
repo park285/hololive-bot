@@ -23,6 +23,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -54,7 +55,7 @@ func (d *sequentialDispatcher) Publish(ctx context.Context, cmdCtx *domain.Comma
 
 		key, params := d.normalize(event.Type, normalizedParams)
 		if err := d.registry.Execute(ctx, cmdCtx, key, params); err != nil {
-			return executed, err
+			return executed, fmt.Errorf("execute: %w", err)
 		}
 
 		executed++

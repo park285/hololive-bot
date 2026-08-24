@@ -5,17 +5,23 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
+
+	"github.com/kapu/hololive-shared/pkg/constants"
+	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 
 func (c *APIClient) waitForRateLimiter(ctx context.Context, path string) error {
 	if err := c.rateLimiter.Wait(ctx); err != nil {
 		return fmt.Errorf("rate limiter wait failed: %w", err)
 	}
-	return c.waitForDistributedRateLimiter(ctx, path)
+
+	if err := c.waitForDistributedRateLimiter(ctx, path); err != nil {
+		return fmt.Errorf("wait for distributed rate limiter: %w", err)
+	}
+
+	return nil
 }
 
 func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path string) error {
@@ -23,19 +29,25 @@ func (c *APIClient) waitForDistributedRateLimiter(ctx context.Context, path stri
 		return nil
 	}
 
-	return c.waitForDistributedRateLimitBucket(ctx, c.distributedRateLimitBucket(path))
+	if err := c.waitForDistributedRateLimitBucket(ctx, c.distributedRateLimitBucket(path)); err != nil {
+		return fmt.Errorf("wait for distributed rate limit bucket: %w", err)
+	}
+
+	return nil
 }
 
 func (c *APIClient) waitForDistributedRateLimitBucket(ctx context.Context, bucket string) error {
 	for {
 		decision, err := c.allowDistributedRateLimit(ctx, bucket)
 		if err != nil {
-			return err
+			return fmt.Errorf("allow distributed rate limit: %w", err)
 		}
+
 		done, err := waitDistributedRateLimitDecision(ctx, bucket, decision)
 		if err != nil {
-			return err
+			return fmt.Errorf("wait distributed rate limit decision: %w", err)
 		}
+
 		if done {
 			return nil
 		}
@@ -52,6 +64,7 @@ func (c *APIClient) allowDistributedRateLimit(ctx context.Context, bucket string
 	if err != nil {
 		return ratelimit.Decision{}, fmt.Errorf("distributed rate limiter allow failed: %w", err)
 	}
+
 	return decision, nil
 }
 
@@ -59,6 +72,7 @@ func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decisi
 	if decision.Allowed {
 		return true, nil
 	}
+
 	if decision.RetryAfter <= 0 {
 		return false, fmt.Errorf(
 			"distributed rate limiter denied without retry_after: bucket=%s current=%d limit=%d",
@@ -67,9 +81,11 @@ func waitDistributedRateLimitDecision(ctx context.Context, bucket string, decisi
 			decision.Limit,
 		)
 	}
+
 	if !retry.Sleep(ctx, decision.RetryAfter) {
 		return false, fmt.Errorf("distributed rate limiter wait canceled: %w", ctx.Err())
 	}
+
 	return false, nil
 }
 
@@ -78,7 +94,9 @@ func (c *APIClient) distributedRateLimitBucket(path string) string {
 	if trimmed == "" {
 		trimmed = "root"
 	}
+
 	normalized := strings.ReplaceAll(trimmed, "/", ":")
+
 	return c.distributedRLCfg.BucketBase + ":" + normalized
 }
 
@@ -87,5 +105,6 @@ func (c *APIClient) waitBackoff(ctx context.Context, attempt int) error {
 	if !retry.Sleep(ctx, delay) {
 		return fmt.Errorf("context canceled during backoff: %w", ctx.Err())
 	}
+
 	return nil
 }

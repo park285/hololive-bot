@@ -3,15 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"log/slog"
 
+	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 )
 
 func buildAdminAPIACLService(
@@ -25,7 +24,7 @@ func buildAdminAPIACLService(
 		return nil, fmt.Errorf("invalid KAKAO_ACL_MODE: %w", err)
 	}
 
-	return acl.NewACLService(
+	aclService, err := acl.NewACLService(
 		ctx,
 		infra.Postgres,
 		infra.Cache,
@@ -34,6 +33,11 @@ func buildAdminAPIACLService(
 		defaultMode,
 		appConfig.Kakao.Rooms,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("ACL service: %w", err)
+	}
+
+	return aclService, nil
 }
 
 func buildAdminAPIAuthService(
@@ -44,5 +48,11 @@ func buildAdminAPIAuthService(
 	authConfig := authsvc.DefaultConfig()
 	// bcrypt cost는 env로 조정 가능. 범위 밖 값은 NewService가 안전 기본값으로 보정한다.
 	authConfig.BcryptCost = sharedenv.Int("AUTH_BCRYPT_COST", authsvc.DefaultBcryptCost)
-	return authsvc.NewService(ctx, infra.Postgres.GetPool(), infra.Cache, logger, authConfig)
+
+	authService, err := authsvc.NewService(ctx, infra.Postgres.GetPool(), infra.Cache, logger, authConfig)
+	if err != nil {
+		return nil, fmt.Errorf("service: %w", err)
+	}
+
+	return authService, nil
 }

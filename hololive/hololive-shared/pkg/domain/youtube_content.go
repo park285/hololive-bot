@@ -21,6 +21,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -126,6 +127,7 @@ func ResolveYouTubeContentAlarmDeliveryStatus(alarmSentAt *time.Time) YouTubeCon
 	if alarmSentAt != nil && !alarmSentAt.IsZero() {
 		return YouTubeContentAlarmDeliveryStatusSent
 	}
+
 	return YouTubeContentAlarmDeliveryStatusPending
 }
 
@@ -175,9 +177,11 @@ func ResolveYouTubeCommunityShortsAlarmStateStatus(authorizedAt, alarmSentAt *ti
 	if alarmSentAt != nil && !alarmSentAt.IsZero() {
 		return YouTubeCommunityShortsAlarmStateStatusSent
 	}
+
 	if authorizedAt != nil && !authorizedAt.IsZero() {
 		return YouTubeCommunityShortsAlarmStateStatusEnqueued
 	}
+
 	return YouTubeCommunityShortsAlarmStateStatusDetected
 }
 
@@ -238,6 +242,7 @@ func (k OutboxKind) ToTemplateKey() TemplateKey {
 	if templateKey, ok := outboxKindTemplateKeys[k]; ok {
 		return templateKey
 	}
+
 	return TemplateKeyOutboxVideo
 }
 
@@ -264,7 +269,7 @@ type YouTubeNotificationOutbox struct {
 	Error         string       `db:"error" json:"error,omitempty"`
 }
 
-func (YouTubeNotificationOutbox) TableName() string {
+func (*YouTubeNotificationOutbox) TableName() string {
 	return "youtube_notification_outbox"
 }
 
@@ -272,12 +277,12 @@ func (YouTubeNotificationOutbox) TableName() string {
 func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (string, error) {
 	normalizedKind := strings.TrimSpace(string(kind))
 	if normalizedKind == "" {
-		return "", fmt.Errorf("build youtube notification dedupe key: kind is empty")
+		return "", errors.New("build youtube notification dedupe key: kind is empty")
 	}
 
 	normalizedContentID := strings.TrimSpace(contentID)
 	if normalizedContentID == "" {
-		return "", fmt.Errorf("build youtube notification dedupe key: content id is empty")
+		return "", errors.New("build youtube notification dedupe key: content id is empty")
 	}
 
 	return fmt.Sprintf("%s:%s:%s", youtubeNotificationDedupeKeyPrefix, normalizedKind, normalizedContentID), nil
@@ -286,9 +291,15 @@ func BuildYouTubeNotificationDedupeKey(kind OutboxKind, contentID string) (strin
 // DedupeKey는 outbox row의 dedupe key를 반환한다.
 func (o *YouTubeNotificationOutbox) DedupeKey() (string, error) {
 	if o == nil {
-		return "", fmt.Errorf("build youtube notification dedupe key: outbox is nil")
+		return "", errors.New("build youtube notification dedupe key: outbox is nil")
 	}
-	return BuildYouTubeNotificationDedupeKey(o.Kind, o.ContentID)
+
+	out, err := BuildYouTubeNotificationDedupeKey(o.Kind, o.ContentID)
+	if err != nil {
+		return out, fmt.Errorf("build youtube notification dedupe key: %w", err)
+	}
+
+	return out, nil
 }
 
 type LiveStatus string

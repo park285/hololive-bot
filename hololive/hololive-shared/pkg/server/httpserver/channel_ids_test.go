@@ -22,6 +22,12 @@ package httpserver
 
 import "testing"
 
+const (
+	testChannelID1 = "UC123"
+	testChannelID2 = "UC456"
+	testChannelID3 = "UC789"
+)
+
 func TestSplitChannelIDs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -30,23 +36,23 @@ func TestSplitChannelIDs(t *testing.T) {
 	}{
 		{
 			name: "single",
-			raw:  "UC123",
-			want: []string{"UC123"},
+			raw:  testChannelID1,
+			want: []string{testChannelID1},
 		},
 		{
 			name: "multiple",
 			raw:  "UC123,UC456,UC789",
-			want: []string{"UC123", "UC456", "UC789"},
+			want: []string{testChannelID1, testChannelID2, testChannelID3},
 		},
 		{
 			name: "spaces and tabs",
 			raw:  " UC123,\tUC456 , UC789 ",
-			want: []string{"UC123", "UC456", "UC789"},
+			want: []string{testChannelID1, testChannelID2, testChannelID3},
 		},
 		{
 			name: "empty and commas",
 			raw:  ",,UC123,,",
-			want: []string{"UC123"},
+			want: []string{testChannelID1},
 		},
 		{
 			name: "empty input",
@@ -61,6 +67,7 @@ func TestSplitChannelIDs(t *testing.T) {
 			if len(got) != len(tt.want) {
 				t.Fatalf("SplitChannelIDs(%q) len=%d want=%d got=%v", tt.raw, len(got), len(tt.want), got)
 			}
+
 			for i := range got {
 				if got[i] != tt.want[i] {
 					t.Fatalf("SplitChannelIDs(%q)[%d]=%q want=%q", tt.raw, i, got[i], tt.want[i])

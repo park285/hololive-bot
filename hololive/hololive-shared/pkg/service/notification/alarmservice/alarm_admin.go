@@ -41,17 +41,21 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 		if as.logger != nil {
 			as.logger.Warn("failed to load cached room names", slog.Any("error", err))
 		}
+
 		roomNamesMap = map[string]string{}
 	}
 
 	alarms, channelIDsForNames := as.collectAlarmEntries(ctx, registryKeys, roomNamesMap)
+
 	memberNames, err := as.getMemberNamesBatch(ctx, channelIDsForNames)
 	if err != nil {
 		if as.logger != nil {
 			as.logger.Warn("failed to load member names", slog.Any("error", err))
 		}
+
 		memberNames = map[string]string{}
 	}
+
 	for _, alarm := range alarms {
 		alarm.MemberName = memberNames[alarm.ChannelID]
 	}
@@ -80,6 +84,7 @@ func (as *AlarmService) collectAlarmEntries(
 		}
 
 		roomAlarms := buildRoomAlarmEntries(roomID, roomNamesMap[roomID], channelIDs)
+
 		channelIDsForNames = append(channelIDsForNames, channelIDs...)
 		alarms = append(alarms, roomAlarms...)
 	}
@@ -100,6 +105,7 @@ func buildRoomAlarmEntries(roomID, roomName string, channelIDs []string) []*doma
 			ChannelID: channelID,
 		})
 	}
+
 	return alarms
 }
 

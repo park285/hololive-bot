@@ -21,21 +21,22 @@
 package configsub
 
 import (
+	jsonv2 "encoding/json/v2"
 	"sync/atomic"
 	"testing"
 
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
-	jsonv2 "encoding/json/v2"
+	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
 
 func TestHandleMessageRecoversApplyPanicAndKeepsSubscribing(t *testing.T) {
 	t.Parallel()
 
 	var applied atomic.Int32
+
 	s := &Subscriber{
 		logger:  newDiscardLogger(),
 		channel: defaultChannel,
@@ -48,6 +49,7 @@ func TestHandleMessageRecoversApplyPanicAndKeepsSubscribing(t *testing.T) {
 
 	payload, err := jsonv2.Marshal(contractssettings.ConfigUpdateV1{Type: "scraper_proxy"})
 	require.NoError(t, err)
+
 	msg := valkey.PubSubMessage{Channel: defaultChannel, Message: string(payload)}
 
 	require.NotPanics(t, func() { s.handleMessage(msg) })

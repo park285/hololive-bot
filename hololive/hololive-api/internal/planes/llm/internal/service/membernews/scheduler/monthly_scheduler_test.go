@@ -21,7 +21,6 @@
 package scheduler
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -42,28 +41,28 @@ func TestMonthlyScheduler_CalculateNextRun(t *testing.T) {
 	}{
 		{
 			name: "before 1st target same month",
-			now:  time.Date(2026, 3, 1, 9, 0, 0, 0, util.KSTZone),
-			want: time.Date(2026, 3, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.March, 1, 9, 0, 0, 0, util.KSTZone),
+			want: time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone),
 		},
 		{
 			name: "after 1st target next month",
-			now:  time.Date(2026, 3, 1, 10, 30, 0, 0, util.KSTZone),
-			want: time.Date(2026, 4, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.March, 1, 10, 30, 0, 0, util.KSTZone),
+			want: time.Date(2026, time.April, 1, 10, 0, 0, 0, util.KSTZone),
 		},
 		{
 			name: "exact 1st 10:00 target next month",
-			now:  time.Date(2026, 3, 1, 10, 0, 0, 0, util.KSTZone),
-			want: time.Date(2026, 4, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone),
+			want: time.Date(2026, time.April, 1, 10, 0, 0, 0, util.KSTZone),
 		},
 		{
 			name: "year end december to january",
-			now:  time.Date(2026, 12, 2, 0, 0, 0, 0, util.KSTZone),
-			want: time.Date(2027, 1, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2026, time.December, 2, 0, 0, 0, 0, util.KSTZone),
+			want: time.Date(2027, time.January, 1, 10, 0, 0, 0, util.KSTZone),
 		},
 		{
 			name: "leap year february to march",
-			now:  time.Date(2028, 2, 1, 11, 0, 0, 0, util.KSTZone), // 2028 = 윤년
-			want: time.Date(2028, 3, 1, 10, 0, 0, 0, util.KSTZone),
+			now:  time.Date(2028, time.February, 1, 11, 0, 0, 0, util.KSTZone), // 2028 = 윤년
+			want: time.Date(2028, time.March, 1, 10, 0, 0, 0, util.KSTZone),
 		},
 	}
 
@@ -81,22 +80,23 @@ func TestMonthlyScheduler_LifecycleNilGuards(t *testing.T) {
 	var scheduler *MonthlyScheduler
 
 	scheduler.SetClock(time.Now)
-	scheduler.Start(context.Background())
+	scheduler.Start(t.Context())
 	scheduler.Stop()
 }
 
 func TestMonthlyScheduler_LockHeldSkip(t *testing.T) {
-	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: "room-1"}}}
+	service := &mockDigestService{rooms: []model.SubscribedRoom{{RoomID: testRoomID}}}
 	locker := &mockNotificationLocker{acquireAcquired: false}
 	outbox := newMockOutboxRepository()
-	now := time.Date(2026, 3, 1, 10, 0, 0, 0, util.KSTZone)
+	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendMonthlyDigest(context.Background()); err != nil {
+	if err := scheduler.SendMonthlyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error when lock held, got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 0 {
 		t.Fatalf("expected no enqueued items, got %d", len(outbox.enqueuedItems))
 	}
@@ -109,17 +109,20 @@ func TestMonthlyScheduler_PartialEnqueueNoError(t *testing.T) {
 			{RoomID: "room-ok"},
 		},
 	}
-	locker := &mockNotificationLocker{acquireToken: "tok", acquireAcquired: true}
+	locker := &mockNotificationLocker{acquireToken: testLockHandle, acquireAcquired: true}
 	outbox := newMockOutboxRepository()
+
 	outbox.enqueueErr["room-fail"] = errors.New("db error")
-	now := time.Date(2026, 3, 1, 10, 0, 0, 0, util.KSTZone)
+
+	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, util.KSTZone)
 
 	scheduler := NewMonthlyScheduler(service, mockFormatter{}, locker, outbox, nil, WithMonthlyOutputGuard(outputguard.NewGuard()))
 	scheduler.SetClock(func() time.Time { return now })
 
-	if err := scheduler.SendMonthlyDigest(context.Background()); err != nil {
+	if err := scheduler.SendMonthlyDigest(t.Context()); err != nil {
 		t.Fatalf("expected no error for partial failure, got %v", err)
 	}
+
 	if len(outbox.enqueuedItems) != 1 {
 		t.Errorf("expected 1 enqueued item, got %d", len(outbox.enqueuedItems))
 	}

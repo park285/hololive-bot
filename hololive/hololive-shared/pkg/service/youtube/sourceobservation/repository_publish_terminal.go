@@ -21,8 +21,13 @@ func (r *Repository) completePublishTerminal(
 	hasCollision bool,
 ) error {
 	if !hasCollision {
-		return completeCollectionJob(ctx, tx, proof, "")
+		if err := completeCollectionJob(ctx, tx, proof, ""); err != nil {
+			return fmt.Errorf("complete collection job: %w", err)
+		}
+
+		return nil
 	}
+
 	diagnostic, err := contract.NewFailureDiagnostic(
 		contract.ErrorObservationCollision,
 		contract.ClassDataContract,
@@ -31,7 +36,12 @@ func (r *Repository) completePublishTerminal(
 	if err != nil {
 		return fmt.Errorf("publish source observation batch: %w", err)
 	}
-	return completeCollectionJobWithError(ctx, tx, proof, diagnostic)
+
+	if err := completeCollectionJobWithError(ctx, tx, proof, diagnostic); err != nil {
+		return fmt.Errorf("complete collection job with error: %w", err)
+	}
+
+	return nil
 }
 
 func deferPublishTerminal(deferInput DeferCollectionInput) leaseTerminalFunc {
@@ -49,7 +59,9 @@ func completeCollectionJobWithError(
 	if err := diagnostic.ValidateFor(contract.TerminalCompleteError); err != nil {
 		return fmt.Errorf("publish source observation batch: %w", err)
 	}
+
 	var jobKey string
+
 	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_job_complete_error_0081_81.sql"),
@@ -62,12 +74,15 @@ func completeCollectionJobWithError(
 		string(diagnostic.Class()),
 		diagnostic.Detail(),
 	).Scan(&jobKey)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrCollectionFenceLost
 	}
+
 	if err != nil {
 		return fmt.Errorf("publish source observation batch: complete collection job: %w", err)
 	}
+
 	return nil
 }
 
@@ -80,10 +95,13 @@ func deferCollectionJob(
 	if err := deferInput.Validate(); err != nil {
 		return fmt.Errorf("publish source observation batch: %w", err)
 	}
+
 	diagnostic := deferInput.Diagnostic()
 	schedule := deferInput.Schedule()
 	bounds := deferInput.Bounds()
+
 	var jobKey string
+
 	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_job_defer_0082_82.sql"),
@@ -101,11 +119,14 @@ func deferCollectionJob(
 		bounds.Minimum.Milliseconds(),
 		bounds.Maximum.Milliseconds(),
 	).Scan(&jobKey)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrCollectionFenceLost
 	}
+
 	if err != nil {
 		return fmt.Errorf("publish source observation batch: defer collection job: %w", err)
 	}
+
 	return nil
 }

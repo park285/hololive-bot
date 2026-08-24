@@ -22,13 +22,13 @@ package scraping
 
 import (
 	"encoding/json/jsontext"
-	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
+
+	initialdata "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/internal/initialdata"
 )
 
 func TestParseSubscriberCount(t *testing.T) {
@@ -187,7 +187,7 @@ func TestExtractYtInitialData_IgnoresTrailingStatements(t *testing.T) {
 	got, err := initialdata.Extract(html)
 	require.NoError(t, err)
 	assert.True(t, jsontext.Value(got).IsValid())
-	assert.True(t, strings.Contains(got, `"twoColumnBrowseResultsRenderer"`))
+	assert.Contains(t, got, `"twoColumnBrowseResultsRenderer"`)
 
 	data := gjson.Parse(got)
 	assert.True(t, data.Get("contents.twoColumnBrowseResultsRenderer.tabs").Exists())

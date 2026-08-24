@@ -24,4 +24,41 @@ import (
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
+const (
+	severityCritical = "critical"
+	severityWarning  = "warning"
+	severityInfo     = "info"
+)
+
+const (
+	testFesName    = "fes"
+	testEventNameA = "Event A"
+	testEventDateA = "3/1(토)"
+	testEventNote  = "테스트"
+	testEventTitle = "Test"
+
+	testLinkFes = "https://example.com/fes"
+	testLinkOne = "https://example.com/1"
+)
+
+const (
+	wantKeyType                 = "type"
+	wantKeyDescription          = "description"
+	wantKeyProperties           = "properties"
+	wantKeyRequired             = "required"
+	wantKeyAdditionalProperties = "additionalProperties"
+	wantKeyMaxLength            = "maxLength"
+
+	wantTypeObject = "object"
+	wantTypeString = "string"
+	wantTypeArray  = "array"
+
+	wantFieldName    = "name"
+	wantFieldDate    = "date"
+	wantFieldMembers = "members"
+	wantFieldNote    = "note"
+	wantFieldLink    = "link"
+	wantFieldSource  = "source"
+)
+
 var testLogger = sharedlogging.NewLogger

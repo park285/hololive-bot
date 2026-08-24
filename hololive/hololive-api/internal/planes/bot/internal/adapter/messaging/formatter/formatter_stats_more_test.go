@@ -23,9 +23,10 @@ package formatter
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/stretchr/testify/assert"
 )
 
 const cmdStatsCountBody = `📊 {{.MemberName}} 구독자 {{.Subscribers}}명`

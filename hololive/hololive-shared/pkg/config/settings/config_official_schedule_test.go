@@ -44,9 +44,11 @@ func TestValidateOfficialScheduleConfig(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+
 			config := DefaultOfficialScheduleConfig()
 			maxBytes := test.mutate(&config)
 			err := validateOfficialScheduleConfig(&config, maxBytes)
+
 			if (err != nil) != test.wantFail {
 				t.Fatalf("validateOfficialScheduleConfig() error = %v, wantFail %v", err, test.wantFail)
 			}
@@ -65,15 +67,19 @@ func TestLoadOfficialScheduleRuntimeConfig(t *testing.T) {
 	if config.OfficialSchedule.BaseURL != "https://schedule.example" {
 		t.Fatalf("BaseURL = %q", config.OfficialSchedule.BaseURL)
 	}
+
 	if config.OfficialSchedule.Timeout != 7*time.Second {
 		t.Fatalf("Timeout = %s", config.OfficialSchedule.Timeout)
 	}
+
 	if config.OfficialSchedule.CacheExpiry != 10*time.Minute {
 		t.Fatalf("CacheExpiry = %s", config.OfficialSchedule.CacheExpiry)
 	}
+
 	if config.OfficialSchedule.PageCacheTTL != 9*time.Second {
 		t.Fatalf("PageCacheTTL = %s", config.OfficialSchedule.PageCacheTTL)
 	}
+
 	if config.MaxResponseBodyBytes != 12345 {
 		t.Fatalf("MaxResponseBodyBytes = %d", config.MaxResponseBodyBytes)
 	}
@@ -90,9 +96,11 @@ func TestConfigOfficialScheduleRuntimeUsesLoadedFields(t *testing.T) {
 		MaxResponseBodyBytes: 8192,
 	}
 	runtime := cfg.OfficialScheduleRuntime()
+
 	if runtime.OfficialSchedule.BaseURL != "https://schedule.from-config.example" {
 		t.Fatalf("BaseURL = %q", runtime.OfficialSchedule.BaseURL)
 	}
+
 	if runtime.MaxResponseBodyBytes != 8192 {
 		t.Fatalf("MaxResponseBodyBytes = %d", runtime.MaxResponseBodyBytes)
 	}

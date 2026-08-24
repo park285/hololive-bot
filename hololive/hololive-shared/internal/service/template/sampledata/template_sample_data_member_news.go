@@ -27,6 +27,7 @@ func templateSampleMemberNewsData() map[domain.TemplateKey]any {
 		domain.TemplateKeyCmdMemberNewsDigest: templateMemberNewsDigestSample(),
 	}
 	addTemplateMemberNewsSubscriptionSamples(data)
+
 	return data
 }
 
@@ -51,7 +52,7 @@ func templateMemberNewsDigestItems() []map[string]any {
 			"SourceURL": "https://hololive.hololivepro.com/news/",
 		},
 		{
-			"Member":    "시라카미 후부키",
+			"Member":    sampleMemberFubuki,
 			"Category":  "event",
 			fieldTitle:  "hololive SUPER EXPO 2026",
 			"DateText":  "2026-03-07",

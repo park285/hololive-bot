@@ -29,10 +29,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 )
 
-const durabilityTestLease = 30 * time.Second
+const (
+	durabilityTestLease = 30 * time.Second
+
+	testClaimToken    = "token-a"
+	testMessageID     = "message:m-1"
+	testOperatorEmail = "operator@example.com"
+)
 
 func newDurabilityPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -63,146 +69,230 @@ func inboxRow(ctx context.Context, t *testing.T, pool *pgxpool.Pool, messageID s
 func TestInboxRepository(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := NewInboxRepository(pool)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	message := InboxMessage{
-		MessageID:   "message:m-1",
+		MessageID:   testMessageID,
 		RoomID:      "room-1",
 		OrderingKey: "room:room-1",
 		Payload:     []byte(`{"body":"first"}`),
 	}
 
 	t.Run("admit is keyed by message id and never overwrites the payload", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-
-		admitted, err := repo.Admit(ctx, message)
-		require.NoError(t, err)
-		assert.True(t, admitted)
-
-		redelivered := message
-		redelivered.Payload = []byte(`{"body":"second"}`)
-		admitted, err = repo.Admit(ctx, redelivered)
-		require.NoError(t, err, "중복 webhook 재전송은 실패가 아니다")
-		assert.False(t, admitted)
-
-		_, payload, _, _ := inboxRow(ctx, t, pool, message.MessageID)
-		assert.JSONEq(t, `{"body":"first"}`, string(payload))
+		assertInboxAdmitIsKeyedByMessageID(ctx, t, pool, repo, message)
 	})
 
 	t.Run("claim leases exactly one due row and counts the attempt", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		admitOne(ctx, t, repo, message)
-
-		claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
-		require.NoError(t, err)
-		require.NotNil(t, claim)
-		assert.Equal(t, message.MessageID, claim.MessageID)
-		assert.Equal(t, message.OrderingKey, claim.OrderingKey)
-		assert.Equal(t, int32(1), claim.Attempts)
-		var storedLeaseUntil time.Time
-		require.NoError(t, pool.QueryRow(ctx,
-			"SELECT lease_until FROM bot_webhook_inbox WHERE message_id = $1", message.MessageID).Scan(&storedLeaseUntil))
-		assert.Equal(t, storedLeaseUntil, claim.LeaseUntil)
-
-		second, err := repo.Claim(ctx, "token-b", durabilityTestLease)
-		require.NoError(t, err)
-		assert.Nil(t, second, "leased row must not be claimable again")
-
-		status, _, _, token := inboxRow(ctx, t, pool, message.MessageID)
-		assert.Equal(t, "processing", status)
-		require.NotNil(t, token)
-		assert.Equal(t, "token-a", *token)
+		assertInboxClaimLeasesOneDueRow(ctx, t, pool, repo, message)
 	})
 
 	t.Run("heartbeat returns the authoritative renewed lease deadline", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		admitOne(ctx, t, repo, message)
-		claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
-		require.NoError(t, err)
-		require.NotNil(t, claim)
-
-		renewedUntil, applied, err := repo.Heartbeat(ctx, message.MessageID, "token-a", time.Minute)
-		require.NoError(t, err)
-		require.True(t, applied)
-		assert.Greater(t, renewedUntil, claim.LeaseUntil)
-		var storedLeaseUntil time.Time
-		require.NoError(t, pool.QueryRow(ctx,
-			"SELECT lease_until FROM bot_webhook_inbox WHERE message_id = $1", message.MessageID).Scan(&storedLeaseUntil))
-		assert.Equal(t, storedLeaseUntil, renewedUntil)
+		assertInboxHeartbeatRenewsLease(ctx, t, pool, repo, message)
 	})
 
 	t.Run("complete is fenced by the claim token", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		admitOne(ctx, t, repo, message)
-		_, err := repo.Claim(ctx, "token-a", durabilityTestLease)
-		require.NoError(t, err)
-
-		applied, err := repo.Complete(ctx, message.MessageID, "token-stale")
-		require.NoError(t, err)
-		assert.False(t, applied, "stale token must transition zero rows")
-
-		applied, err = repo.Complete(ctx, message.MessageID, "token-a")
-		require.NoError(t, err)
-		assert.True(t, applied)
-
-		applied, err = repo.Complete(ctx, message.MessageID, "token-a")
-		require.NoError(t, err)
-		assert.False(t, applied, "settled row must not transition twice")
-
-		status, _, _, token := inboxRow(ctx, t, pool, message.MessageID)
-		assert.Equal(t, "succeeded", status)
-		assert.Nil(t, token)
+		assertInboxCompleteIsFenced(ctx, t, pool, repo, message)
 	})
 
 	t.Run("release is fenced and defers the next attempt", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-		admitOne(ctx, t, repo, message)
-		_, err := repo.Claim(ctx, "token-a", durabilityTestLease)
-		require.NoError(t, err)
-
-		outcome, err := repo.Release(ctx, message.MessageID, "token-stale", 3, time.Minute, "boom")
-		require.NoError(t, err)
-		assert.Equal(t, InboxReleaseNotOwned, outcome)
-
-		outcome, err = repo.Release(ctx, message.MessageID, "token-a", 3, time.Minute, "boom")
-		require.NoError(t, err)
-		assert.Equal(t, InboxReleaseRetried, outcome)
-
-		status, _, attempts, token := inboxRow(ctx, t, pool, message.MessageID)
-		assert.Equal(t, "retry", status)
-		assert.Equal(t, int32(1), attempts)
-		assert.Nil(t, token)
-
-		claim, err := repo.Claim(ctx, "token-c", durabilityTestLease)
-		require.NoError(t, err)
-		assert.Nil(t, claim, "released row must stay invisible until available_at")
+		assertInboxReleaseIsFencedAndDefers(ctx, t, pool, repo, message)
 	})
 
 	t.Run("claim returns no row on an empty inbox", func(t *testing.T) {
-		truncateDurabilityTables(ctx, t, pool)
-
-		claim, err := repo.Claim(ctx, "token-a", durabilityTestLease)
-		require.NoError(t, err)
-		assert.Nil(t, claim)
+		assertInboxClaimReturnsNoRowOnEmptyInbox(ctx, t, pool, repo)
 	})
 
 	t.Run("invalid arguments are rejected before touching postgres", func(t *testing.T) {
-		_, err := repo.Admit(ctx, InboxMessage{RoomID: "room-1", OrderingKey: "k", Payload: []byte(`{}`)})
-		require.ErrorIs(t, err, ErrInvalidArgument)
-
-		_, err = repo.Claim(ctx, "token-a", 0)
-		require.ErrorIs(t, err, ErrInvalidArgument)
-
-		_, err = repo.Complete(ctx, message.MessageID, "  ")
-		require.ErrorIs(t, err, ErrInvalidArgument)
+		assertInboxRejectsInvalidArguments(ctx, t, repo, message)
 	})
+}
+
+func assertInboxAdmitIsKeyedByMessageID(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *InboxRepository,
+	message InboxMessage,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	admitted, err := repo.Admit(ctx, message)
+	require.NoError(t, err)
+	assert.True(t, admitted)
+
+	redelivered := message
+
+	redelivered.Payload = []byte(`{"body":"second"}`)
+	admitted, err = repo.Admit(ctx, redelivered)
+	require.NoError(t, err, "중복 webhook 재전송은 실패가 아니다")
+	assert.False(t, admitted)
+
+	_, payload, _, _ := inboxRow(ctx, t, pool, message.MessageID)
+	assert.JSONEq(t, `{"body":"first"}`, string(payload))
+}
+
+func assertInboxClaimLeasesOneDueRow(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *InboxRepository,
+	message InboxMessage,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+	admitOne(ctx, t, repo, message)
+
+	claim, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	assert.Equal(t, message.MessageID, claim.MessageID)
+	assert.Equal(t, message.OrderingKey, claim.OrderingKey)
+	assert.Equal(t, int32(1), claim.Attempts)
+
+	var storedLeaseUntil time.Time
+
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT lease_until FROM bot_webhook_inbox WHERE message_id = $1", message.MessageID).Scan(&storedLeaseUntil))
+	assert.Equal(t, storedLeaseUntil, claim.LeaseUntil)
+
+	second, err := repo.Claim(ctx, "token-b", durabilityTestLease)
+	require.NoError(t, err)
+	assert.Nil(t, second, "leased row must not be claimable again")
+
+	status, _, _, token := inboxRow(ctx, t, pool, message.MessageID)
+	assert.Equal(t, "processing", status)
+	require.NotNil(t, token)
+	assert.Equal(t, testClaimToken, *token)
+}
+
+func assertInboxHeartbeatRenewsLease(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *InboxRepository,
+	message InboxMessage,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+	admitOne(ctx, t, repo, message)
+
+	claim, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+
+	renewedUntil, applied, err := repo.Heartbeat(ctx, message.MessageID, testClaimToken, time.Minute)
+	require.NoError(t, err)
+	require.True(t, applied)
+	assert.Greater(t, renewedUntil, claim.LeaseUntil)
+
+	var storedLeaseUntil time.Time
+
+	require.NoError(t, pool.QueryRow(ctx,
+		"SELECT lease_until FROM bot_webhook_inbox WHERE message_id = $1", message.MessageID).Scan(&storedLeaseUntil))
+	assert.Equal(t, storedLeaseUntil, renewedUntil)
+}
+
+func assertInboxCompleteIsFenced(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *InboxRepository,
+	message InboxMessage,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+	admitOne(ctx, t, repo, message)
+
+	_, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+
+	applied, err := repo.Complete(ctx, message.MessageID, "token-stale")
+	require.NoError(t, err)
+	assert.False(t, applied, "stale token must transition zero rows")
+
+	applied, err = repo.Complete(ctx, message.MessageID, testClaimToken)
+	require.NoError(t, err)
+	assert.True(t, applied)
+
+	applied, err = repo.Complete(ctx, message.MessageID, testClaimToken)
+	require.NoError(t, err)
+	assert.False(t, applied, "settled row must not transition twice")
+
+	status, _, _, token := inboxRow(ctx, t, pool, message.MessageID)
+	assert.Equal(t, "succeeded", status)
+	assert.Nil(t, token)
+}
+
+func assertInboxReleaseIsFencedAndDefers(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *InboxRepository,
+	message InboxMessage,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+	admitOne(ctx, t, repo, message)
+
+	_, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+
+	outcome, err := repo.Release(ctx, message.MessageID, "token-stale", 3, time.Minute, "boom")
+	require.NoError(t, err)
+	assert.Equal(t, InboxReleaseNotOwned, outcome)
+
+	outcome, err = repo.Release(ctx, message.MessageID, testClaimToken, 3, time.Minute, "boom")
+	require.NoError(t, err)
+	assert.Equal(t, InboxReleaseRetried, outcome)
+
+	status, _, attempts, token := inboxRow(ctx, t, pool, message.MessageID)
+	assert.Equal(t, "retry", status)
+	assert.Equal(t, int32(1), attempts)
+	assert.Nil(t, token)
+
+	claim, err := repo.Claim(ctx, "token-c", durabilityTestLease)
+	require.NoError(t, err)
+	assert.Nil(t, claim, "released row must stay invisible until available_at")
+}
+
+func assertInboxClaimReturnsNoRowOnEmptyInbox(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *InboxRepository,
+) {
+	t.Helper()
+	truncateDurabilityTables(ctx, t, pool)
+
+	claim, err := repo.Claim(ctx, testClaimToken, durabilityTestLease)
+	require.NoError(t, err)
+	assert.Nil(t, claim)
+}
+
+func assertInboxRejectsInvalidArguments(
+	ctx context.Context,
+	t *testing.T,
+	repo *InboxRepository,
+	message InboxMessage,
+) {
+	t.Helper()
+
+	_, err := repo.Admit(ctx, InboxMessage{RoomID: "room-1", OrderingKey: "k", Payload: []byte(`{}`)})
+	require.ErrorIs(t, err, ErrInvalidArgument)
+
+	_, err = repo.Claim(ctx, testClaimToken, 0)
+	require.ErrorIs(t, err, ErrInvalidArgument)
+
+	_, err = repo.Complete(ctx, message.MessageID, "  ")
+	require.ErrorIs(t, err, ErrInvalidArgument)
 }
 
 func TestInboxRepositoryWithoutPool(t *testing.T) {
 	repo := NewInboxRepository(nil)
 
-	_, err := repo.Admit(context.Background(), InboxMessage{
-		MessageID:   "message:m-1",
+	_, err := repo.Admit(t.Context(), InboxMessage{
+		MessageID:   testMessageID,
 		RoomID:      "room-1",
 		OrderingKey: "room:room-1",
 		Payload:     []byte(`{}`),

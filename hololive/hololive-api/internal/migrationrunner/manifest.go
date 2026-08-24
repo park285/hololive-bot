@@ -31,21 +31,25 @@ func applyManifest(
 ) (Result, error) {
 	querier := pgxRowQuerier{conn: conn}
 	result := Result{Total: len(entries)}
+
 	for _, name := range entries {
 		source, err := loadMigrationSource(ctx, conn, fsys, name)
 		if err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("load migration source: %w", err)
 		}
+
 		applied, err := applyMigrationSource(ctx, exec, ledger, querier, source, cfg)
 		if err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("apply migration source: %w", err)
 		}
+
 		if applied {
 			result.Applied++
 		} else {
 			result.Skipped++
 		}
 	}
+
 	return result, nil
 }
 
@@ -54,14 +58,18 @@ func loadMigrationSource(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, na
 	if err != nil {
 		return migrationSource{}, fmt.Errorf("read migration %s: %w", name, err)
 	}
+
 	checksum := migrationChecksum(content)
+
 	stored, present, err := loadMigrationChecksum(ctx, conn, name)
 	if err != nil {
-		return migrationSource{}, err
+		return migrationSource{}, fmt.Errorf("load migration checksum: %w", err)
 	}
+
 	if present && stored != checksum {
 		return migrationSource{}, fmt.Errorf("migration %s checksum mismatch: ledger=%s source=%s", name, stored, checksum)
 	}
+
 	return migrationSource{name: name, content: string(content), checksum: checksum, checksumPresent: present}, nil
 }
 
@@ -75,15 +83,23 @@ func applyMigrationSource(
 ) (bool, error) {
 	alreadyApplied, err := ledger.Applied(ctx, querier, source.name)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("applied: %w", err)
 	}
+
 	if alreadyApplied {
-		return false, skipAppliedMigration(source, cfg)
+		if err := skipAppliedMigration(source, cfg); err != nil {
+			return false, fmt.Errorf("skip applied migration: %w", err)
+		}
+
+		return false, nil
 	}
+
 	cfg.logf("apply %s", source.name)
+
 	if err := applyEntry(ctx, exec, ledger, source); err != nil {
-		return false, err
+		return false, fmt.Errorf("apply entry: %w", err)
 	}
+
 	return true, nil
 }
 
@@ -93,24 +109,38 @@ func skipAppliedMigration(source migrationSource, cfg Config) error {
 			"migration %s is recorded in schema_migrations but its checksum is missing; refusing to trust the current source",
 			source.name)
 	}
+
 	cfg.logf("skip %s (already applied)", source.name)
+
 	return nil
 }
 
 func applyEntry(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
 	if err := exec.validateMigrationSource(source.name, source.content); err != nil {
-		return err
+		return fmt.Errorf("validate migration source: %w", err)
 	}
+
 	if source.name == epoch2Baseline {
-		return applyEpoch2Baseline(ctx, exec, ledger, source)
+		if err := applyEpoch2Baseline(ctx, exec, ledger, source); err != nil {
+			return fmt.Errorf("apply epoch2 baseline: %w", err)
+		}
+
+		return nil
 	}
+
 	if err := exec.execFile(ctx, source.name, source.content); err != nil {
-		return err
+		return fmt.Errorf("exec file: %w", err)
 	}
+
 	if err := recordMigrationChecksum(ctx, exec.Exec, source.name, source.checksum); err != nil {
-		return err
+		return fmt.Errorf("record migration checksum: %w", err)
 	}
-	return ledger.Record(ctx, exec.Exec, source.name)
+
+	if err := ledger.Record(ctx, exec.Exec, source.name); err != nil {
+		return fmt.Errorf("record: %w", err)
+	}
+
+	return nil
 }
 
 func applyEpoch2Baseline(ctx context.Context, exec *guardedExecer, ledger dbmigrate.Ledger, source migrationSource) error {
@@ -118,29 +148,33 @@ func applyEpoch2Baseline(ctx context.Context, exec *guardedExecer, ledger dbmigr
 	if err != nil {
 		return fmt.Errorf("exec %s: %w", source.name, err)
 	}
+
 	if len(segments) != 1 || !segments[0].Transactional {
 		return fmt.Errorf("exec %s: epoch-2 baseline must be one top-level transaction", source.name)
 	}
+
 	tx, err := exec.conn.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("exec %s: begin: %w", source.name, err)
 	}
+
 	if err := execTxStatements(ctx, tx, source.name, segments[0].Statements); err != nil {
-		return rollbackTxSegmentOnError(ctx, tx, err)
+		return fmt.Errorf("rollback tx segment on error: %w", rollbackTxSegmentOnError(ctx, tx, err))
 	}
-	txExec := func(ctx context.Context, query string, args ...any) error {
-		_, err := tx.Exec(ctx, query, args...)
-		return err
-	}
+
+	txExec := txExecer(tx)
 	if err := recordMigrationChecksum(ctx, txExec, source.name, source.checksum); err != nil {
-		return rollbackTxSegmentOnError(ctx, tx, err)
+		return fmt.Errorf("rollback tx segment on error: %w", rollbackTxSegmentOnError(ctx, tx, err))
 	}
+
 	if err := ledger.Record(ctx, txExec, source.name); err != nil {
-		return rollbackTxSegmentOnError(ctx, tx, err)
+		return fmt.Errorf("rollback tx segment on error: %w", rollbackTxSegmentOnError(ctx, tx, err))
 	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("exec %s: commit: %w", source.name, err)
 	}
+
 	return nil
 }
 
@@ -153,6 +187,7 @@ func ensureChecksumTable(ctx context.Context, exec dbmigrate.Execer) error {
 	if err := exec(ctx, mustSQL("ensure_migration_checksums.sql")); err != nil {
 		return fmt.Errorf("ensure migration checksum ledger: %w", err)
 	}
+
 	return nil
 }
 
@@ -160,6 +195,7 @@ func loadMigrationChecksum(ctx context.Context, conn *pgxpool.Conn, name string)
 	if scanErr := conn.QueryRow(ctx, mustSQL("checksum_by_filename.sql"), name).Scan(&checksum, &present); scanErr != nil {
 		return "", false, fmt.Errorf("query migration checksum %s: %w", name, scanErr)
 	}
+
 	return checksum, present, nil
 }
 
@@ -167,5 +203,6 @@ func recordMigrationChecksum(ctx context.Context, exec dbmigrate.Execer, name, c
 	if err := exec(ctx, mustSQL("record_migration_checksum.sql"), name, checksum); err != nil {
 		return fmt.Errorf("record migration checksum %s: %w", name, err)
 	}
+
 	return nil
 }

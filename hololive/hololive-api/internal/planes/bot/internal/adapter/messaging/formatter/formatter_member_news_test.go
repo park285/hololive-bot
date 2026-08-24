@@ -39,7 +39,7 @@ func TestFormatMemberNewsDigest_RendersTemplate(t *testing.T) {
 	digest := &membernewscontracts.Digest{
 		Headline: "🗞️ 이번주 구독 멤버 뉴스",
 		TopItems: []membernewscontracts.SummaryItem{
-			{Member: "사쿠라 미코", Category: "birthday_live", Title: "생일 라이브", DateText: "2026-02-20", SourceURL: "https://hololive.hololivepro.com/news/1"},
+			{Member: testMemberSakuraMiko, Category: "birthday_live", Title: "생일 라이브", DateText: "2026-02-20", SourceURL: "https://hololive.hololivepro.com/news/1"},
 			{Member: "후부키", Category: "event", Title: "EXPO", DateText: "2026-02-21", SourceURL: "https://hololive.hololivepro.com/news/2"},
 		},
 		MoreSummary: "외 3건",

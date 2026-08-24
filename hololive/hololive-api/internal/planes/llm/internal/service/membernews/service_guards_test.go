@@ -21,11 +21,11 @@
 package membernews
 
 import (
-	"context"
-	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"strings"
 	"testing"
 	"time"
+
+	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 )
 
 func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
@@ -35,10 +35,13 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 		t.Parallel()
 
 		var service *Service
-		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", model.PeriodWeekly)
+
+		digest, err := service.GenerateRoomDigest(t.Context(), "room-1", model.PeriodWeekly)
+
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
+
 		if err == nil || !strings.Contains(err.Error(), "membernews service is nil") {
 			t.Fatalf("error = %v, want membernews service is nil", err)
 		}
@@ -48,10 +51,12 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 		t.Parallel()
 
 		service := &Service{}
-		digest, err := service.GenerateRoomDigest(context.Background(), "room-1", model.PeriodWeekly)
+		digest, err := service.GenerateRoomDigest(t.Context(), "room-1", model.PeriodWeekly)
+
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
+
 		if err == nil || !strings.Contains(err.Error(), "membernews repository is nil") {
 			t.Fatalf("error = %v, want membernews repository is nil", err)
 		}
@@ -61,10 +66,12 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 		t.Parallel()
 
 		service := &Service{repository: &Repository{}}
-		digest, err := service.GenerateRoomDigest(context.Background(), "   ", model.PeriodWeekly)
+		digest, err := service.GenerateRoomDigest(t.Context(), "   ", model.PeriodWeekly)
+
 		if digest != nil {
 			t.Fatalf("digest = %#v, want nil", digest)
 		}
+
 		if err == nil || !strings.Contains(err.Error(), "room id is required") {
 			t.Fatalf("error = %v, want room id is required", err)
 		}
@@ -74,7 +81,7 @@ func TestServiceGenerateRoomDigest_GuardBranches(t *testing.T) {
 func TestServiceSetClock_NilInputIsNoop(t *testing.T) {
 	t.Parallel()
 
-	fixed := time.Date(2026, 3, 5, 9, 30, 0, 0, time.UTC)
+	fixed := time.Date(2026, time.March, 5, 9, 30, 0, 0, time.UTC)
 	service := &Service{
 		now: func() time.Time {
 			return fixed
@@ -82,10 +89,12 @@ func TestServiceSetClock_NilInputIsNoop(t *testing.T) {
 	}
 
 	service.SetClock(nil)
+
 	if got := service.now(); !got.Equal(fixed) {
 		t.Fatalf("SetClock(nil) changed clock: got %v, want %v", got, fixed)
 	}
 
 	var nilService *Service
+
 	nilService.SetClock(nil)
 }

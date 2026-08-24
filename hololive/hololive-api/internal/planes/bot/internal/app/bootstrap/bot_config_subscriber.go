@@ -36,8 +36,11 @@ func buildScraperProxyHandler(
 ) func(contractssettings.ScraperProxyPayloadV1) {
 	return func(payload contractssettings.ScraperProxyPayloadV1) {
 		sharedsettings.ApplyScraperProxyToggle(payload.Enabled, runtimeDeps.YouTubeService, runtimeDeps.HolodexService, scraperScheduler, logger)
+
 		current := deps.Settings.Get()
+
 		current.ScraperProxyEnabled = payload.Enabled
+
 		if err := deps.Settings.Update(current); err != nil {
 			logger.Warn("Failed to persist scraper_proxy setting", slog.Any("error", err))
 		}
@@ -50,6 +53,7 @@ func buildACLReloadHandler(
 	logger *slog.Logger,
 ) func(contractssettings.ACLPayloadV1) {
 	baseCtx := context.WithoutCancel(ctx)
+
 	return func(payload contractssettings.ACLPayloadV1) {
 		if runtimeDeps.ACL == nil {
 			return
@@ -63,6 +67,7 @@ func buildACLReloadHandler(
 				slog.String("reason", payload.Reason),
 				slog.Any("error", err),
 			)
+
 			return
 		}
 
@@ -81,9 +86,11 @@ func buildAlarmAdvanceMinutesHandler(
 	logger *slog.Logger,
 ) func(contractssettings.AlarmAdvanceMinutesPayloadV1) {
 	baseCtx := context.WithoutCancel(ctx)
+
 	return func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
 		updateCtx, cancel := context.WithTimeout(baseCtx, constants.RequestTimeout.AlarmService)
 		targets := runtimeDeps.AlarmCRUD.UpdateAlarmAdvanceMinutes(updateCtx, payload.Minutes)
+
 		cancel()
 
 		// 원격 alarm client는 실패 시 빈 슬라이스를 돌려주고, 로컬 AlarmService는 항상 1개 이상을 돌려준다.
@@ -91,6 +98,7 @@ func buildAlarmAdvanceMinutesHandler(
 			logger.Warn("Skipped persisting alarm_advance_minutes: alarm update returned no targets",
 				slog.Int("minutes", payload.Minutes),
 			)
+
 			return
 		}
 
@@ -98,9 +106,12 @@ func buildAlarmAdvanceMinutesHandler(
 			slog.Int("minutes", payload.Minutes),
 			slog.Any("targets", targets),
 		)
+
 		current := deps.Settings.Get()
+
 		current.AlarmAdvanceMinutes = payload.Minutes
 		current.TargetMinutes = PersistedTargetMinutes(payload.Minutes, targets)
+
 		if err := deps.Settings.Update(current); err != nil {
 			logger.Warn("Failed to persist alarm_advance_minutes setting", slog.Any("error", err))
 		}

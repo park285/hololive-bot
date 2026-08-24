@@ -78,15 +78,31 @@ func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alar
 	defer cancel()
 
 	if writer, ok := as.alarmWriter.(alarmTypesUpdater); ok {
-		return updateAlarmTypesWithWriter(persistCtx, writer, alarm)
+		return errors.Join(persistUpdatedAlarmTypes(persistCtx, writer, alarm))
 	}
 
 	if writer, ok := as.alarmWriter.(alarmUpsertWriter); ok {
-		return upsertAlarmTypeUpdate(persistCtx, writer, alarm)
+		return errors.Join(persistUpsertedAlarmTypes(persistCtx, writer, alarm))
 	}
 
 	if err := as.alarmWriter.Add(persistCtx, alarm); err != nil {
 		return fmt.Errorf("persist alarm type update: %w", err)
+	}
+
+	return nil
+}
+
+func persistUpdatedAlarmTypes(ctx context.Context, writer alarmTypesUpdater, alarm *domain.Alarm) error {
+	if err := updateAlarmTypesWithWriter(ctx, writer, alarm); err != nil {
+		return fmt.Errorf("update alarm types with writer: %w", err)
+	}
+
+	return nil
+}
+
+func persistUpsertedAlarmTypes(ctx context.Context, writer alarmUpsertWriter, alarm *domain.Alarm) error {
+	if err := upsertAlarmTypeUpdate(ctx, writer, alarm); err != nil {
+		return fmt.Errorf("upsert alarm type update: %w", err)
 	}
 
 	return nil
@@ -142,6 +158,7 @@ func alarmPersistenceContext(ctx context.Context) (context.Context, context.Canc
 	if ctx == nil {
 		return context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
 	}
+
 	return context.WithTimeout(ctx, alarmPersistTaskTimeout)
 }
 
@@ -188,6 +205,7 @@ func (as *AlarmService) rebuildAlarmCacheFromRepository(ctx context.Context, ope
 func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 	if as.alarmRepository == nil {
 		as.logger.Info("Alarm repository not configured, skipping cache warming")
+
 		return nil
 	}
 
@@ -205,6 +223,7 @@ func (as *AlarmService) WarmCacheFromDB(ctx context.Context) error {
 
 	if summary.AlarmCount == 0 {
 		as.logger.Info("No alarms found in DB, cache warming skipped")
+
 		return nil
 	}
 

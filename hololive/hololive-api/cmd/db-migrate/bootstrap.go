@@ -15,7 +15,7 @@ import (
 //
 // POSTGRES_ADMIN_PASSWORD가 명시되지 않으면 순수 migrate(롤백) 경로로 보고 bootstrap을
 // 생략한다 — PGPASSWORD로 fallback하면 migrator 자격증명으로 admin 접속을 시도해 순수
-// migrate가 깨지기 때문이다. compose는 POSTGRES_ADMIN_PASSWORD를 항상 설정한다.
+// migrate가 깨지기 때문이다. 참고로 compose는 POSTGRES_ADMIN_PASSWORD를 항상 설정한다.
 func bootstrapScraperRole(ctx context.Context) error {
 	adminPassword := os.Getenv("POSTGRES_ADMIN_PASSWORD")
 	if strings.TrimSpace(adminPassword) == "" {
@@ -28,9 +28,14 @@ func bootstrapScraperRole(ctx context.Context) error {
 	database := envDefault("PGDATABASE", "hololive")
 
 	if err := ensureScraperRole(ctx, adminConnString("postgres", adminUser, adminPassword), scraperUser, scraperPassword, database); err != nil {
-		return err
+		return fmt.Errorf("ensure scraper role: %w", err)
 	}
-	return grantScraperSchemaUsage(ctx, adminConnString(database, adminUser, adminPassword), scraperUser)
+
+	if err := grantScraperSchemaUsage(ctx, adminConnString(database, adminUser, adminPassword), scraperUser); err != nil {
+		return fmt.Errorf("grant scraper schema usage: %w", err)
+	}
+
+	return nil
 }
 
 func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPassword, database string) (err error) {
@@ -38,27 +43,31 @@ func ensureScraperRole(ctx context.Context, connString, scraperUser, scraperPass
 	if err != nil {
 		return fmt.Errorf("bootstrap: connect admin: %w", err)
 	}
+
 	defer func() { err = closeConn(ctx, conn, "admin", err) }()
 
 	if err := upsertScraperRole(ctx, conn, scraperUser, scraperPassword); err != nil {
-		return err
+		return fmt.Errorf("upsert scraper role: %w", err)
 	}
 
 	grant := fmt.Sprintf(mustSQL("grant_connect.sql.tpl"), pgx.Identifier{database}.Sanitize(), pgx.Identifier{scraperUser}.Sanitize())
 	if _, err := conn.Exec(ctx, grant); err != nil {
 		return fmt.Errorf("bootstrap: grant connect: %w", err)
 	}
+
 	return nil
 }
 
 func upsertScraperRole(ctx context.Context, conn *pgx.Conn, scraperUser, scraperPassword string) error {
 	var exists bool
+
 	if err := conn.QueryRow(ctx, mustSQL("check_scraper_role.sql"), scraperUser).Scan(&exists); err != nil {
 		return fmt.Errorf("bootstrap: check scraper role: %w", err)
 	}
 
 	roleIdent := pgx.Identifier{scraperUser}.Sanitize()
 	passwordLiteral := quoteSQLLiteral(scraperPassword)
+
 	if !exists {
 		if _, err := conn.Exec(ctx, fmt.Sprintf(mustSQL("create_scraper_role.sql.tpl"), roleIdent, passwordLiteral)); err != nil {
 			return fmt.Errorf("bootstrap: create scraper role: %w", err)
@@ -72,6 +81,7 @@ func upsertScraperRole(ctx context.Context, conn *pgx.Conn, scraperUser, scraper
 	if _, err := conn.Exec(ctx, alter); err != nil {
 		return fmt.Errorf("bootstrap: alter scraper role: %w", err)
 	}
+
 	return nil
 }
 
@@ -80,12 +90,14 @@ func grantScraperSchemaUsage(ctx context.Context, connString, scraperUser string
 	if err != nil {
 		return fmt.Errorf("bootstrap: connect database: %w", err)
 	}
+
 	defer func() { err = closeConn(ctx, conn, "database", err) }()
 
 	stmt := fmt.Sprintf(mustSQL("grant_schema_usage.sql.tpl"), pgx.Identifier{scraperUser}.Sanitize())
 	if _, err := conn.Exec(ctx, stmt); err != nil {
 		return fmt.Errorf("bootstrap: grant schema usage: %w", err)
 	}
+
 	return nil
 }
 
@@ -93,11 +105,13 @@ func closeConn(ctx context.Context, conn *pgx.Conn, label string, err error) err
 	if closeErr := conn.Close(ctx); closeErr != nil && err == nil {
 		return fmt.Errorf("bootstrap: close %s: %w", label, closeErr)
 	}
+
 	return err
 }
 
 func adminConnString(database, user, password string) string {
 	parts := make([]string, 0, 7)
+
 	parts = append(parts,
 		connPart("host", envDefault("PGHOST", "postgres")),
 		connPart("port", envDefault("PGPORT", "5432")),
@@ -106,6 +120,7 @@ func adminConnString(database, user, password string) string {
 		connPart("password", password),
 	)
 	parts = append(parts, sslConnParts()...)
+
 	return strings.Join(parts, " ")
 }
 

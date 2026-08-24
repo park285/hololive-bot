@@ -27,22 +27,34 @@ func (e *guardedExecer) execFile(ctx context.Context, name, content string) erro
 	if unparsed {
 		return fmt.Errorf("exec %s: concurrent index target identity could not be parsed", name)
 	}
+
 	segments, err := sqlsplit.Segments(content)
 	if err != nil {
 		return fmt.Errorf("exec %s: %w", name, err)
 	}
+
 	if err := e.execSegments(ctx, name, segments); err != nil {
-		return joinIndexCleanupError(ctx, e.conn, targets, err)
+		if joinErr := joinIndexCleanupError(ctx, e.conn, targets, err); joinErr != nil {
+			return fmt.Errorf("join index cleanup error: %w", joinErr)
+		}
+
+		return nil
 	}
-	return dropInvalidIndexes(ctx, e.conn, targets)
+
+	if err := dropInvalidIndexes(ctx, e.conn, targets); err != nil {
+		return fmt.Errorf("drop invalid indexes: %w", err)
+	}
+
+	return nil
 }
 
 func (e *guardedExecer) execSegments(ctx context.Context, name string, segments []sqlsplit.Segment) error {
 	for _, segment := range segments {
 		if err := e.execSegment(ctx, name, segment); err != nil {
-			return err
+			return fmt.Errorf("exec segment: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -51,6 +63,7 @@ func joinIndexCleanupError(ctx context.Context, conn *pgxpool.Conn, targets []co
 	if cleanupErr != nil {
 		return errors.Join(execErr, cleanupErr)
 	}
+
 	return execErr
 }
 
@@ -58,13 +71,16 @@ func concurrentIndexNames(content string) []string {
 	targets, _ := concurrentIndexTargets(content)
 	names := make([]string, 0, len(targets))
 	seen := make(map[string]struct{}, len(targets))
+
 	for _, target := range targets {
 		if _, exists := seen[target.indexName]; exists {
 			continue
 		}
+
 		seen[target.indexName] = struct{}{}
 		names = append(names, target.indexName)
 	}
+
 	return names
 }
 
@@ -73,37 +89,47 @@ func concurrentIndexTargets(content string) ([]concurrentIndexTarget, bool) {
 	targets := make([]concurrentIndexTarget, 0, len(statements))
 	seen := make(map[concurrentIndexTarget]struct{}, len(statements))
 	unparsed := false
+
 	for _, statement := range statements {
 		target, concurrent, parsed := parseConcurrentIndexStatement(statement)
 		if !concurrent {
 			continue
 		}
+
 		if !parsed {
 			unparsed = true
 			continue
 		}
+
 		if _, exists := seen[target]; exists {
 			continue
 		}
+
 		seen[target] = struct{}{}
 		targets = append(targets, target)
 	}
+
 	return targets, unparsed
 }
 
 func parseConcurrentIndexStatement(statement string) (concurrentIndexTarget, bool, bool) {
 	statement = strings.TrimSpace(stripMigrationComments(statement))
+
 	location := createIndexConcurrentlyPattern.FindStringIndex(statement)
+
 	if location == nil {
 		return concurrentIndexTarget{}, false, true
 	}
+
 	if location[0] != 0 {
 		return concurrentIndexTarget{}, false, true
 	}
+
 	match := concurrentIndexTargetPattern.FindStringSubmatch(statement)
 	if match == nil {
 		return concurrentIndexTarget{}, true, false
 	}
+
 	return buildConcurrentIndexTarget(match), true, true
 }
 
@@ -112,9 +138,11 @@ func buildConcurrentIndexTarget(match []string) concurrentIndexTarget {
 	tableSchema := parsedIdentifier(match[3], match[4])
 	tableName := parsedIdentifier(match[5], match[6])
 	tableRelation := quotePostgresIdentifier(tableName)
+
 	if tableSchema != "" {
 		tableRelation = quotePostgresIdentifier(tableSchema) + "." + tableRelation
 	}
+
 	return concurrentIndexTarget{indexName: indexName, tableRelation: tableRelation}
 }
 
@@ -122,6 +150,7 @@ func parsedIdentifier(quoted, unquoted string) string {
 	if quoted != "" {
 		return strings.ReplaceAll(quoted, `""`, `"`)
 	}
+
 	return strings.ToLower(unquoted)
 }
 
@@ -131,14 +160,18 @@ func quotePostgresIdentifier(identifier string) string {
 
 func stripMigrationComments(statement string) string {
 	var stripped strings.Builder
+
 	stripped.Grow(len(statement))
+
 	for pos := 0; pos < len(statement); {
 		next, done := copyMigrationPart(&stripped, statement, pos)
 		if done {
 			break
 		}
+
 		pos = next
 	}
+
 	return stripped.String()
 }
 
@@ -146,13 +179,17 @@ func copyMigrationPart(dst *strings.Builder, statement string, pos int) (int, bo
 	if strings.HasPrefix(statement[pos:], "--") {
 		return copyMigrationLineComment(dst, statement, pos)
 	}
+
 	if strings.HasPrefix(statement[pos:], "/*") {
 		return copyMigrationBlockComment(dst, statement, pos)
 	}
+
 	if statement[pos] == '\'' || statement[pos] == '"' {
 		return copyMigrationQuotedToken(dst, statement, pos), false
 	}
+
 	dst.WriteByte(statement[pos])
+
 	return pos + 1, false
 }
 
@@ -161,7 +198,9 @@ func copyMigrationLineComment(dst *strings.Builder, statement string, pos int) (
 	if newline < 0 {
 		return len(statement), true
 	}
+
 	dst.WriteByte('\n')
+
 	return pos + newline + 1, false
 }
 
@@ -170,26 +209,36 @@ func copyMigrationBlockComment(dst *strings.Builder, statement string, pos int) 
 	if !ok {
 		return len(statement), true
 	}
+
 	dst.WriteByte(' ')
+
 	return end, false
 }
 
 func migrationBlockCommentEnd(statement string, start int) (int, bool) {
 	depth := 1
 	pos := start + 2
+
 	for {
 		open := strings.Index(statement[pos:], "/*")
 		closing := strings.Index(statement[pos:], "*/")
+
 		if closing < 0 {
 			return 0, false
 		}
+
 		if open >= 0 && open < closing {
 			depth++
+
 			pos += open + 2
+
 			continue
 		}
+
 		depth--
+
 		pos += closing + 2
+
 		if depth == 0 {
 			return pos, true
 		}
@@ -199,26 +248,36 @@ func migrationBlockCommentEnd(statement string, start int) (int, bool) {
 func copyMigrationQuotedToken(dst *strings.Builder, statement string, pos int) int {
 	quote := statement[pos]
 	dst.WriteByte(quote)
+
 	pos++
 	for pos < len(statement) {
 		current := statement[pos]
 		dst.WriteByte(current)
+
 		pos++
 		if isBackslashEscape(quote, current, pos, len(statement)) {
 			dst.WriteByte(statement[pos])
+
 			pos++
+
 			continue
 		}
+
 		if current != quote {
 			continue
 		}
+
 		if hasRepeatedQuote(statement, pos, quote) {
 			dst.WriteByte(statement[pos])
+
 			pos++
+
 			continue
 		}
+
 		return pos
 	}
+
 	return pos
 }
 

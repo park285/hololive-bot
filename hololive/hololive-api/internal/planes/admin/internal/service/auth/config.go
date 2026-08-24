@@ -45,6 +45,7 @@ const DefaultBcryptCost = 12
 
 func DefaultConfig() Config {
 	sessionTTL := 7 * 24 * time.Hour
+
 	return Config{
 		SessionTTL:                             sessionTTL,
 		ResetTokenTTL:                          60 * time.Minute,

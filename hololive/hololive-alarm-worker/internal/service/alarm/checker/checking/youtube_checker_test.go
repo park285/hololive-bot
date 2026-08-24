@@ -29,15 +29,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
@@ -73,11 +72,13 @@ func (s *fakeYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
 	_ time.Time,
 ) (map[string]struct{}, error) {
 	dispatched := make(map[string]struct{})
+
 	for _, streamID := range streamIDs {
 		if s.recentDispatch[streamID] {
 			dispatched[streamID] = struct{}{}
 		}
 	}
+
 	return dispatched, nil
 }
 
@@ -89,15 +90,19 @@ func (s *fakeYouTubeLiveSessionSource) RecentlySentLiveStreamRooms(
 	if s.recentSentRoomsErr != nil {
 		return nil, s.recentSentRoomsErr
 	}
+
 	sentRoomsByStreamID := make(map[string]map[string]struct{})
+
 	for _, streamID := range streamIDs {
 		for _, roomID := range s.recentSentRooms[streamID] {
 			if sentRoomsByStreamID[streamID] == nil {
 				sentRoomsByStreamID[streamID] = make(map[string]struct{})
 			}
+
 			sentRoomsByStreamID[streamID][roomID] = struct{}{}
 		}
 	}
+
 	return sentRoomsByStreamID, nil
 }
 
@@ -179,7 +184,7 @@ func TestYouTubeCheckerCheck_TableDrivenFiveCases(t *testing.T) {
 
 	const (
 		channelID = "UC_TEST_CHANNEL"
-		roomID    = "room-1"
+		roomID    = testRoomID1
 		streamID  = "stream-test-1"
 	)
 
@@ -235,6 +240,7 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 
 	startScheduled := time.Now().UTC().Truncate(time.Second).Add(5*time.Minute + 10*time.Second)
 	server := newYouTubeCheckerScenarioServer(t, tc.scenario, channelID, streamID, startScheduled)
+
 	defer server.Close()
 
 	cache := newCheckerTestCacheClient(t)
@@ -248,8 +254,10 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 	require.NoError(t, err)
 
 	setupCtx := t.Context()
+
 	_, err = cache.SAdd(setupCtx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
+
 	_, err = cache.SAdd(setupCtx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
@@ -259,18 +267,24 @@ func runYouTubeCheckerCheckCase(t *testing.T, tc *youtubeCheckerCheckTestCase, c
 	}
 
 	runCtx := setupCtx
+
 	if tc.ctxTimeout > 0 {
 		var cancel context.CancelFunc
+
 		runCtx, cancel = context.WithTimeout(setupCtx, tc.ctxTimeout)
+
 		defer cancel()
 	}
 
 	notifications, checkErr := checker.Check(runCtx)
+
 	if len(tc.wantErrContains) > 0 {
 		require.Error(t, checkErr)
+
 		for _, wantErrContains := range tc.wantErrContains {
 			assert.Contains(t, checkErr.Error(), wantErrContains)
 		}
+
 		return
 	}
 
@@ -282,14 +296,18 @@ func newYouTubeCheckerScenarioServer(t *testing.T, scenario, channelID, streamID
 	t.Helper()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/live" {
+		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
 			http.Error(w, "missing channels query", http.StatusBadRequest)
+
 			return
 		}
+
 		writeYouTubeCheckerScenarioResponse(t, w, scenario, channelID, streamID, startScheduled)
 	}))
 }
@@ -298,6 +316,7 @@ func writeYouTubeCheckerScenarioResponse(t *testing.T, w http.ResponseWriter, sc
 	t.Helper()
 
 	w.Header().Set("Content-Type", "application/json")
+
 	switch scenario {
 	case "ok", "dedup":
 		writeYouTubeTestResponse(t, w, buildUpcomingResponse(channelID, streamID, startScheduled))
@@ -336,18 +355,21 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 
 	const (
 		channelID = "UC_TEST_CHANNEL"
-		roomID    = "room-1"
+		roomID    = testRoomID1
 		streamID  = "stream-live-after-start"
 	)
 
 	startActual := time.Now().UTC().Truncate(time.Second).Add(-5 * time.Minute)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/live" {
+		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
 			http.Error(w, "missing channels query", http.StatusBadRequest)
+
 			return
 		}
 
@@ -361,6 +383,7 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 			channelID,
 		)))
 	}))
+
 	defer server.Close()
 
 	cache := newCheckerTestCacheClient(t)
@@ -374,8 +397,10 @@ func TestYouTubeCheckerCheck_RecoversMissedPrimaryReminderFromLiveCatchup(t *tes
 	require.NoError(t, err)
 
 	ctx := t.Context()
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
@@ -390,17 +415,20 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 
 	const (
 		channelID = "UC_TEST_CHANNEL"
-		roomID    = "room-1"
+		roomID    = testRoomID1
 		streamID  = "stream-live-from-db"
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/live" {
+		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		if !strings.Contains(r.URL.Query().Get("channels"), channelID) {
 			http.Error(w, "missing channels query", http.StatusBadRequest)
+
 			return
 		}
 
@@ -426,7 +454,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 				ChannelID:   channelID,
 				Status:      domain.StreamStatusLive,
 				StartActual: &startActual,
-				Channel:     &domain.Channel{ID: channelID, Name: "DB Channel"},
+				Channel:     &domain.Channel{ID: channelID, Name: testDBChannelName},
 			},
 			LastSeenAt: lastSeenAt,
 		}},
@@ -437,8 +465,10 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 	require.NoError(t, err)
 
 	ctx := t.Context()
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
@@ -455,15 +485,17 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 
 	const (
 		channelID = "UC_TEST_CHANNEL"
-		roomID    = "room-1"
+		roomID    = testRoomID1
 		streamID  = "stream-force-due"
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/live" {
+		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		writeYouTubeTestResponse(t, w, `[]`)
 	}))
@@ -484,8 +516,10 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 	require.NoError(t, err)
 
 	ctx := t.Context()
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
@@ -521,15 +555,17 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 
 	const (
 		channelID = "UC_TEST_CHANNEL"
-		roomID    = "room-1"
+		roomID    = testRoomID1
 		streamID  = "stream-live-holodex-failed"
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/users/live" {
+		if r.URL.Path != testUsersLivePath {
 			http.NotFound(w, r)
+
 			return
 		}
+
 		http.Error(w, "holodex unavailable", http.StatusInternalServerError)
 	}))
 	defer server.Close()
@@ -551,7 +587,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 				ChannelID:   channelID,
 				Status:      domain.StreamStatusLive,
 				StartActual: &startActual,
-				Channel:     &domain.Channel{ID: channelID, Name: "DB Channel"},
+				Channel:     &domain.Channel{ID: channelID, Name: testDBChannelName},
 			},
 			LastSeenAt: lastSeenAt,
 		}},
@@ -562,8 +598,10 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 	require.NoError(t, err)
 
 	ctx := t.Context()
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
 	require.NoError(t, err)
+
 	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
 	require.NoError(t, err)
 
@@ -586,21 +624,21 @@ func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 75*time.Second, logger)
 	require.NoError(t, err)
 
-	now := time.Date(2026, 4, 9, 11, 56, 0, 0, time.UTC)
-	startScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.April, 9, 11, 56, 0, 0, time.UTC)
+	startScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
 	window := sharedchecker.ResolveEvaluationWindow(
-		time.Date(2026, 4, 9, 11, 51, 0, 0, time.UTC),
+		time.Date(2026, time.April, 9, 11, 51, 0, 0, time.UTC),
 		now,
 		75*time.Second,
 	)
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "late-stream",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &startScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -620,18 +658,18 @@ func TestYouTubeChecker_BuildUpcomingNotifications_FallsBackToThreeMinuteTarget(
 	require.NoError(t, err)
 
 	window := sharedchecker.EvaluationWindow{
-		Start: time.Date(2026, 4, 9, 11, 56, 30, 0, time.UTC),
-		End:   time.Date(2026, 4, 9, 11, 57, 10, 0, time.UTC),
+		Start: time.Date(2026, time.April, 9, 11, 56, 30, 0, time.UTC),
+		End:   time.Date(2026, time.April, 9, 11, 57, 10, 0, time.UTC),
 	}
-	startScheduled := time.Date(2026, 4, 9, 12, 0, 20, 0, time.UTC)
+	startScheduled := time.Date(2026, time.April, 9, 12, 0, 20, 0, time.UTC)
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "late-stream",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &startScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 3, notifications[0].MinutesUntil)
@@ -651,19 +689,19 @@ func TestYouTubeChecker_BuildUpcomingNotifications_PrefersRecoveredFiveMinuteTar
 	require.NoError(t, err)
 
 	window := sharedchecker.EvaluationWindow{
-		Start:  time.Date(2026, 4, 9, 11, 55, 55, 0, time.UTC),
-		End:    time.Date(2026, 4, 9, 11, 57, 10, 0, time.UTC),
+		Start:  time.Date(2026, time.April, 9, 11, 55, 55, 0, time.UTC),
+		End:    time.Date(2026, time.April, 9, 11, 57, 10, 0, time.UTC),
 		Capped: true,
 	}
-	startScheduled := time.Date(2026, 4, 9, 12, 1, 9, 0, time.UTC)
+	startScheduled := time.Date(2026, time.April, 9, 12, 1, 9, 0, time.UTC)
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "recovered-five-over-three",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &startScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -683,18 +721,18 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DoesNotInventThreeMinuteTarge
 	require.NoError(t, err)
 
 	window := sharedchecker.EvaluationWindow{
-		Start: time.Date(2026, 4, 9, 11, 56, 30, 0, time.UTC),
-		End:   time.Date(2026, 4, 9, 11, 57, 10, 0, time.UTC),
+		Start: time.Date(2026, time.April, 9, 11, 56, 30, 0, time.UTC),
+		End:   time.Date(2026, time.April, 9, 11, 57, 10, 0, time.UTC),
 	}
-	startScheduled := time.Date(2026, 4, 9, 12, 0, 20, 0, time.UTC)
+	startScheduled := time.Date(2026, time.April, 9, 12, 0, 20, 0, time.UTC)
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "late-stream",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &startScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1}, window)
 	require.NoError(t, err)
 	assert.Empty(t, notifications)
 }
@@ -712,22 +750,23 @@ func TestYouTubeChecker_BuildUpcomingNotifications_SendsScheduleDelayOnNonTarget
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
-	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
-	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, time.April, 9, 12, 2, 0, 0, time.UTC)
+
 	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "delayed-stream", previousScheduled, 5))
 
 	window := sharedchecker.EvaluationWindow{
-		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
-		End:   time.Date(2026, 4, 9, 11, 53, 10, 0, time.UTC),
+		Start: time.Date(2026, time.April, 9, 11, 52, 50, 0, time.UTC),
+		End:   time.Date(2026, time.April, 9, 11, 53, 10, 0, time.UTC),
 	}
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "delayed-stream",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &currentScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 8, notifications[0].MinutesUntil)
@@ -747,22 +786,23 @@ func TestYouTubeChecker_BuildUpcomingNotifications_TargetReminderDoesNotCarrySch
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
-	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
-	currentScheduled := time.Date(2026, 4, 9, 12, 30, 0, 0, time.UTC)
+	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, time.April, 9, 12, 30, 0, 0, time.UTC)
+
 	require.NoError(t, dedupService.MarkAsNotified(t.Context(), "delayed-target-stream", previousScheduled, 5))
 
 	window := sharedchecker.EvaluationWindow{
-		Start: time.Date(2026, 4, 9, 12, 24, 0, 0, time.UTC),
-		End:   time.Date(2026, 4, 9, 12, 25, 0, 0, time.UTC),
+		Start: time.Date(2026, time.April, 9, 12, 24, 0, 0, time.UTC),
+		End:   time.Date(2026, time.April, 9, 12, 25, 0, 0, time.UTC),
 	}
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "delayed-target-stream",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &currentScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, 5, notifications[0].MinutesUntil)
@@ -783,34 +823,34 @@ func TestYouTubeChecker_BuildUpcomingNotifications_DetectsReplacedWaitingRoomSch
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
-	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
-	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, time.April, 9, 12, 2, 0, 0, time.UTC)
 	previousStream := &domain.Stream{
 		ID:             "old-waiting-room",
 		Title:          "same broadcast title",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &previousScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
 	}
-	require.NoError(t, dedupService.MarkUpcomingEventNotified(t.Context(), "room-1", "ch-1", previousStream))
+	require.NoError(t, dedupService.MarkUpcomingEventNotified(t.Context(), testRoomID1, testChID1, previousStream))
 
 	window := sharedchecker.EvaluationWindow{
-		Start: time.Date(2026, 4, 9, 11, 52, 50, 0, time.UTC),
-		End:   time.Date(2026, 4, 9, 11, 53, 10, 0, time.UTC),
+		Start: time.Date(2026, time.April, 9, 11, 52, 50, 0, time.UTC),
+		End:   time.Date(2026, time.April, 9, 11, 53, 10, 0, time.UTC),
 	}
 
 	notifications, err := checker.buildUpcomingNotifications(t.Context(), &domain.Stream{
 		ID:             "new-waiting-room",
 		Title:          "same broadcast title",
-		ChannelID:      "ch-1",
+		ChannelID:      testChID1,
 		Status:         domain.StreamStatusUpcoming,
 		StartScheduled: &currentScheduled,
-		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
-	}, []string{"room-1", "room-2"}, window)
+		Channel:        &domain.Channel{ID: testChID1, Name: testChannelName1},
+	}, []string{testRoomID1, testRoomID2}, window)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
-	assert.Equal(t, "room-1", notifications[0].RoomID)
+	assert.Equal(t, testRoomID1, notifications[0].RoomID)
 	assert.Equal(t, 8, notifications[0].MinutesUntil)
 	assert.Equal(t, "일정이 늦춰졌습니다.", notifications[0].ScheduleChangeMessage)
 }
@@ -828,8 +868,8 @@ func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannel
 	checker, err := NewYouTubeChecker(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, logger)
 	require.NoError(t, err)
 
-	previousScheduled := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
-	currentScheduled := time.Date(2026, 5, 22, 12, 2, 0, 0, time.UTC)
+	previousScheduled := time.Date(2026, time.May, 22, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, time.May, 22, 12, 2, 0, 0, time.UTC)
 	previousStream := &domain.Stream{
 		ID:             "old-room-schedule",
 		Title:          "same room schedule",
@@ -838,7 +878,7 @@ func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannel
 		StartScheduled: &previousScheduled,
 		Channel:        &domain.Channel{ID: "ch-fallback", Name: "Channel fallback"},
 	}
-	require.NoError(t, dedupService.MarkUpcomingEventNotified(t.Context(), "room-1", "ch-fallback", previousStream))
+	require.NoError(t, dedupService.MarkUpcomingEventNotified(t.Context(), testRoomID1, "ch-fallback", previousStream))
 
 	currentStream := &domain.Stream{
 		ID:             "new-room-schedule",
@@ -847,11 +887,12 @@ func TestYouTubeChecker_DetectRoomScheduleChangesDeduplicatesRoomsAndUsesChannel
 		StartScheduled: &currentScheduled,
 		Channel:        &domain.Channel{ID: "ch-fallback", Name: "Channel fallback"},
 	}
-	changes, err := checker.detectRoomScheduleChanges(t.Context(), currentStream, []string{"room-1", "room-1", "room-2", ""})
+	changes, err := checker.detectRoomScheduleChanges(t.Context(), currentStream, []string{testRoomID1, testRoomID1, testRoomID2, ""})
 	require.NoError(t, err)
 	require.Len(t, changes, 1)
-	require.Contains(t, changes, "room-1")
-	roomChange := changes["room-1"]
+	require.Contains(t, changes, testRoomID1)
+
+	roomChange := changes[testRoomID1]
 	require.NotNil(t, roomChange)
 	assert.Equal(t, "일정이 늦춰졌습니다.", roomChange.Message)
 	assert.Equal(t, previousScheduled, roomChange.PreviousScheduled)
@@ -909,10 +950,12 @@ func TestNormalizeTargetMinutes(t *testing.T) {
 
 func TestFillMissingYouTubeStreamCopiesCollaboTalentNames(t *testing.T) {
 	t.Parallel()
+
 	dst := &domain.Stream{ID: "vid"}
 	src := &domain.Stream{ID: "vid", CollaboTalentNames: []string{"Guest One"}}
 	fillMissingYouTubeStreamFields(dst, src)
 	require.Equal(t, []string{"Guest One"}, dst.CollaboTalentNames)
+
 	dst.CollaboTalentNames[0] = "mutated"
 	assert.Equal(t, "Guest One", src.CollaboTalentNames[0])
 }
@@ -934,7 +977,7 @@ func TestCloneStream(t *testing.T) {
 			ID:                 "s1",
 			StartScheduled:     &start,
 			StartActual:        &actual,
-			Channel:            &domain.Channel{ID: "ch1"},
+			Channel:            &domain.Channel{ID: testChIDShort1},
 			CollaboTalentNames: []string{"Guest"},
 		}
 		copied := CloneStream(original)
@@ -943,6 +986,7 @@ func TestCloneStream(t *testing.T) {
 		assert.NotSame(t, original.StartScheduled, copied.StartScheduled)
 		assert.NotSame(t, original.StartActual, copied.StartActual)
 		assert.NotSame(t, original.Channel, copied.Channel)
+
 		copied.CollaboTalentNames[0] = "mutated"
 		assert.Equal(t, "Guest", original.CollaboTalentNames[0])
 	})
@@ -988,7 +1032,7 @@ func TestEnsureScheduledTime(t *testing.T) {
 func TestRoomNotifications(t *testing.T) {
 	t.Parallel()
 
-	ch := &domain.Channel{ID: "ch1"}
+	ch := &domain.Channel{ID: testChIDShort1}
 	s := &domain.Stream{ID: "s1"}
 
 	tests := map[string]struct {
@@ -1016,10 +1060,10 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 	cache := newCheckerTestCacheClient(t)
 	ctx := t.Context()
 
-	_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"ch1", []string{"r1", "r2"})
+	_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort1, []string{"r1", "r2"})
 	require.NoError(t, err)
 
-	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"ch2", []string{"r3"})
+	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+testChIDShort2, []string{"r3"})
 	require.NoError(t, err)
 
 	tests := map[string]struct {
@@ -1027,13 +1071,15 @@ func TestLoadSubscriberRoomsByChannel_Table(t *testing.T) {
 		wantLen    int
 	}{
 		"빈 채널":     {channelIDs: nil, wantLen: 0},
-		"구독자 있음":   {channelIDs: []string{"ch1", "ch2"}, wantLen: 2},
+		"구독자 있음":   {channelIDs: []string{testChIDShort1, testChIDShort2}, wantLen: 2},
 		"구독자 없음":   {channelIDs: []string{"unknown"}, wantLen: 0},
-		"중복 채널 제거": {channelIDs: []string{"ch1", "ch1"}, wantLen: 1},
+		"중복 채널 제거": {channelIDs: []string{testChIDShort1, testChIDShort1}, wantLen: 1},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			got, loadErr := LoadSubscriberRoomsByChannel(ctx, cache, tc.channelIDs)
 			require.NoError(t, loadErr)
 			assert.Len(t, got, tc.wantLen)
@@ -1068,14 +1114,14 @@ func TestGroupStreamsByChannel(t *testing.T) {
 		"빈 channelID 무시": {streams: []*domain.Stream{{ID: "s1"}}, wantLen: 0},
 		"정상 그룹핑": {
 			streams: []*domain.Stream{
-				{ID: "s1", ChannelID: "ch1"},
-				{ID: "s2", ChannelID: "ch1"},
-				{ID: "s3", ChannelID: "ch2"},
+				{ID: "s1", ChannelID: testChIDShort1},
+				{ID: "s2", ChannelID: testChIDShort1},
+				{ID: "s3", ChannelID: testChIDShort2},
 			},
 			wantLen: 2,
 		},
 		"Channel 객체 폴백": {
-			streams: []*domain.Stream{{ID: "s1", Channel: &domain.Channel{ID: "ch1"}}},
+			streams: []*domain.Stream{{ID: "s1", Channel: &domain.Channel{ID: testChIDShort1}}},
 			wantLen: 1,
 		},
 	}

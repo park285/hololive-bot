@@ -27,6 +27,7 @@ func (r *photoSyncTestMemberRepository) GetMembersNeedingPhotoSync(context.Conte
 			close(r.reached)
 		})
 	}
+
 	return nil, nil
 }
 
@@ -38,12 +39,13 @@ func TestPhotoSyncRunPeriodicSyncLogsStoppedWhenContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
+
 	ps := &PhotoSyncService{
 		logger:       slog.New(slog.NewTextHandler(&logs, nil)),
 		syncInterval: time.Hour,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	ps.runPeriodicSync(ctx)
@@ -66,8 +68,9 @@ func TestPhotoSyncRunPeriodicSyncCallsSyncOnPeriodicTick(t *testing.T) {
 		staleThreshold:   time.Hour,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
+
 	go func() {
 		ps.runPeriodicSync(ctx)
 		close(done)
@@ -81,6 +84,7 @@ func TestPhotoSyncRunPeriodicSyncCallsSyncOnPeriodicTick(t *testing.T) {
 	}
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(250 * time.Millisecond):

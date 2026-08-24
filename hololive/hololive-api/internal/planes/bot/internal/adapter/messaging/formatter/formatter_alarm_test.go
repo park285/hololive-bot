@@ -25,9 +25,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/stretchr/testify/assert"
 )
 
 const cmdAlarmNotificationGroupBody = `🔔 방송 알림 ({{.Count}})
@@ -45,6 +46,7 @@ func newAlarmGroupTestFormatter(t *testing.T) *ResponseFormatter {
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdAlarmNotificationGroup: cmdAlarmNotificationGroupBody,
 	})
+
 	return NewResponseFormatter("!", renderer)
 }
 
@@ -68,11 +70,11 @@ func TestAlarmChannelName_WithStelliveOrg(t *testing.T) {
 			name: "Hololive member no tag",
 			notification: &domain.AlarmNotification{
 				Channel: &domain.Channel{
-					Name: "사쿠라 미코",
+					Name: testMemberSakuraMiko,
 					Org:  new("Hololive"),
 				},
 			},
-			want: "사쿠라 미코",
+			want: testMemberSakuraMiko,
 		},
 		{
 			name: "Nijisanji member shows tag",
@@ -141,12 +143,12 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 				Title:          "테스트 방송",
 				ChannelName:    "아야츠노 유니",
 				ChzzkChannelID: "f997979606554ef4827038e244845582",
-				ChzzkLiveURL:   "https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+				ChzzkLiveURL:   testChzzkLiveURL,
 				IsIntegrated:   true,
 			},
 			wantContains: []string{
 				"https://youtube.com/watch?v=abc123",
-				"https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+				testChzzkLiveURL,
 			},
 			wantNotContains: []string{
 				"📺",
@@ -158,11 +160,11 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 				Title:          "치지직 전용 방송",
 				ChannelName:    "아야츠노 유니",
 				ChzzkChannelID: "f997979606554ef4827038e244845582",
-				ChzzkLiveURL:   "https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+				ChzzkLiveURL:   testChzzkLiveURL,
 				IsChzzkOnly:    true,
 			},
 			wantContains: []string{
-				"https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+				testChzzkLiveURL,
 			},
 			wantNotContains: []string{
 				"youtube.com",
@@ -174,7 +176,7 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 			stream: &domain.Stream{
 				ID:          "xyz789",
 				Title:       "YouTube 전용 방송",
-				ChannelName: "사쿠라 미코",
+				ChannelName: testMemberSakuraMiko,
 			},
 			wantContains: []string{
 				"https://youtube.com/watch?v=xyz789",
@@ -188,12 +190,12 @@ func TestAlarmNotification_IntegratedURLs(t *testing.T) {
 			name: "Chzzk info present but no YouTube ID",
 			stream: &domain.Stream{
 				Title:          "치지직만",
-				ChannelName:    "테스트",
+				ChannelName:    testDisplayName,
 				ChzzkChannelID: "f997979606554ef4827038e244845582",
-				ChzzkLiveURL:   "https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+				ChzzkLiveURL:   testChzzkLiveURL,
 			},
 			wantContains: []string{
-				"https://chzzk.naver.com/live/f997979606554ef4827038e244845582",
+				testChzzkLiveURL,
 			},
 			wantNotContains: []string{
 				"youtube.com",
@@ -213,11 +215,13 @@ func assertAlarmNotificationURLText(t *testing.T, stream *domain.Stream, wantCon
 	t.Helper()
 
 	urlText := alarmNotificationURLText(stream)
+
 	for _, want := range wantContains {
 		if !strings.Contains(urlText, want) {
 			t.Errorf("URL text missing expected string %q\nGot: %s", want, urlText)
 		}
 	}
+
 	for _, notWant := range wantNotContains {
 		if strings.Contains(urlText, notWant) {
 			t.Errorf("URL text contains unexpected string %q\nGot: %s", notWant, urlText)
@@ -286,11 +290,11 @@ func TestAlarmNotificationGroup_WithScheduledTime(t *testing.T) {
 	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
-			Channel: &domain.Channel{Name: "채널A"},
+			Channel: &domain.Channel{Name: testChannelA},
 			Stream: &domain.Stream{
 				ID:             "stream-a",
 				Title:          "방송 A",
-				ChannelName:    "채널A",
+				ChannelName:    testChannelA,
 				StartScheduled: &scheduled,
 			},
 			MinutesUntil: 5,
@@ -318,11 +322,11 @@ func TestAlarmNotificationGroup_LiveStartedLabel(t *testing.T) {
 	scheduled := time.Date(2026, time.February, 12, 12, 0, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
-			Channel: &domain.Channel{Name: "채널A"},
+			Channel: &domain.Channel{Name: testChannelA},
 			Stream: &domain.Stream{
 				ID:             "stream-a",
 				Title:          "방송 A",
-				ChannelName:    "채널A",
+				ChannelName:    testChannelA,
 				StartScheduled: &scheduled,
 			},
 			MinutesUntil: 0,
@@ -342,11 +346,11 @@ func TestAlarmNotificationGroup_HeaderWithMultipleScheduledTimes(t *testing.T) {
 	scheduledB := time.Date(2026, time.February, 12, 12, 30, 0, 0, time.UTC)
 	notifications := []*domain.AlarmNotification{
 		{
-			Channel: &domain.Channel{Name: "채널A"},
+			Channel: &domain.Channel{Name: testChannelA},
 			Stream: &domain.Stream{
 				ID:             "stream-a",
 				Title:          "방송 A",
-				ChannelName:    "채널A",
+				ChannelName:    testChannelA,
 				StartScheduled: &scheduledA,
 			},
 			MinutesUntil: 5,

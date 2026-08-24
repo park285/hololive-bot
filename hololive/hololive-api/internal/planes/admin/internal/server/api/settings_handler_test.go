@@ -3,13 +3,13 @@ package api
 import (
 	"bytes"
 	"context"
-	"fmt"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 
 	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
@@ -64,8 +64,10 @@ func newSettingsTestContext(t *testing.T, body []byte) (*gin.Context, *httptest.
 
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
+
 	ctx.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/holo/settings", bytes.NewReader(body))
 	ctx.Request.Header.Set("Content-Type", "application/json")
+
 	return ctx, rec
 }
 
@@ -73,9 +75,11 @@ func decodeSettingsResponse(t *testing.T, rec *httptest.ResponseRecorder) map[st
 	t.Helper()
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+
 	return payload
 }
 
@@ -103,24 +107,30 @@ func TestSettingsHandler_UpdateSettings_PublishesConfigUpdates(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
+
 	if len(publisher.scraperCalls) != 1 || !publisher.scraperCalls[0] {
 		t.Fatalf("scraper publish calls=%v", publisher.scraperCalls)
 	}
+
 	if len(publisher.alarmCalls) != 1 || publisher.alarmCalls[0] != 7 {
 		t.Fatalf("alarm publish calls=%v", publisher.alarmCalls)
 	}
+
 	if got := settingsService.Get().TargetMinutes; len(got) != 3 || got[0] != 7 || got[1] != 3 || got[2] != 1 {
 		t.Fatalf("persisted target minutes=%v want=[7 3 1]", got)
 	}
 
 	payload := decodeSettingsResponse(t, rec)
 	runtime, ok := payload["runtime"].(map[string]any)
+
 	if !ok {
 		t.Fatalf("runtime payload missing: %#v", payload["runtime"])
 	}
+
 	if got := runtime["config_publish_scraper_proxy"]; got != true {
 		t.Fatalf("config_publish_scraper_proxy=%v want=true", got)
 	}
+
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != true {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=true", got)
 	}
@@ -135,8 +145,8 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 		ScraperProxyEnabled: false,
 	}, newDiscardLogger())
 	publisher := &recordingConfigPublisher{
-		failScraper: fmt.Errorf("scraper publish failed"),
-		failAlarm:   fmt.Errorf("alarm publish failed"),
+		failScraper: errors.New("scraper publish failed"),
+		failAlarm:   errors.New("alarm publish failed"),
 	}
 
 	handler := &SettingsHandler{
@@ -156,12 +166,15 @@ func TestSettingsHandler_UpdateSettings_ReportsPublishFailure(t *testing.T) {
 
 	payload := decodeSettingsResponse(t, rec)
 	runtime, ok := payload["runtime"].(map[string]any)
+
 	if !ok {
 		t.Fatalf("runtime payload missing: %#v", payload["runtime"])
 	}
+
 	if got := runtime["config_publish_scraper_proxy"]; got != false {
 		t.Fatalf("config_publish_scraper_proxy=%v want=false", got)
 	}
+
 	if got := runtime["config_publish_alarm_advance_minutes"]; got != false {
 		t.Fatalf("config_publish_alarm_advance_minutes=%v want=false", got)
 	}
@@ -191,9 +204,11 @@ func TestSettingsHandler_UpdateSettings_RejectsInvalidAlarmAdvanceMinutes(t *tes
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d want=%d body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
+
 	if len(publisher.alarmCalls) != 0 || len(publisher.scraperCalls) != 0 {
 		t.Fatalf("invalid settings must not publish config updates: alarm=%v scraper=%v", publisher.alarmCalls, publisher.scraperCalls)
 	}
+
 	if got := settingsService.Get().AlarmAdvanceMinutes; got != 5 {
 		t.Fatalf("AlarmAdvanceMinutes=%d want unchanged 5", got)
 	}

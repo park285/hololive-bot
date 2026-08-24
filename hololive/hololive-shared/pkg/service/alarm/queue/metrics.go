@@ -24,9 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 var (
@@ -43,6 +44,8 @@ var (
 	alarmDispatchWakeupFailedTotal        prometheus.Counter
 	alarmDispatchWakeupExpireFailedTotal  prometheus.Counter
 )
+
+const metricLabelMode = "mode"
 
 func initQueueMetrics() {
 	queueMetricsInitOnce.Do(func() {
@@ -64,35 +67,35 @@ func initAlarmDispatchPublishMetrics() {
 			Name: "alarm_dispatch_publish_requested_deliveries_total",
 			Help: "Requested alarm dispatch deliveries published.",
 		},
-		[]string{"mode"},
+		[]string{metricLabelMode},
 	)
 	alarmDispatchPublishProcessedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_publish_processed_deliveries_total",
 			Help: "Alarm dispatch deliveries successfully processed by the active publish mode.",
 		},
-		[]string{"mode"},
+		[]string{metricLabelMode},
 	)
 	alarmDispatchPublishInsertedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_publish_inserted_deliveries_total",
 			Help: "Inserted alarm dispatch deliveries.",
 		},
-		[]string{"mode"},
+		[]string{metricLabelMode},
 	)
 	alarmDispatchPublishDuplicateTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_publish_duplicate_deliveries_total",
 			Help: "Duplicate alarm dispatch deliveries skipped.",
 		},
-		[]string{"mode"},
+		[]string{metricLabelMode},
 	)
 	alarmDispatchPublishHashConflictTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "alarm_dispatch_publish_hash_conflict_total",
 			Help: "Alarm dispatch event hash conflicts observed while publishing.",
 		},
-		[]string{"mode"},
+		[]string{metricLabelMode},
 	)
 }
 
@@ -119,7 +122,9 @@ const alarmDispatchPublishModeLabel = "pg_first"
 
 func observeAlarmDispatchPublishBatch(duration time.Duration, result *dispatchoutbox.PublishBatchResult) {
 	initQueueMetrics()
+
 	modeLabel := alarmDispatchPublishModeLabel
+
 	if alarmDispatchPublishBatchDuration == nil ||
 		alarmDispatchPublishRequestedTotal == nil ||
 		alarmDispatchPublishProcessedTotal == nil ||
@@ -128,6 +133,7 @@ func observeAlarmDispatchPublishBatch(duration time.Duration, result *dispatchou
 		alarmDispatchPublishHashConflictTotal == nil {
 		return
 	}
+
 	alarmDispatchPublishBatchDuration.Observe(duration.Seconds())
 	alarmDispatchPublishRequestedTotal.WithLabelValues(modeLabel).Add(float64(result.RequestedDeliveries))
 	alarmDispatchPublishProcessedTotal.WithLabelValues(modeLabel).Add(float64(result.ProcessedDeliveries))
@@ -138,32 +144,40 @@ func observeAlarmDispatchPublishBatch(duration time.Duration, result *dispatchou
 
 func observeAlarmDispatchWakeupSent() {
 	initQueueMetrics()
+
 	if alarmDispatchWakeupSentTotal == nil {
 		return
 	}
+
 	alarmDispatchWakeupSentTotal.Inc()
 }
 
 func observeAlarmDispatchWakeupSuppressed() {
 	initQueueMetrics()
+
 	if alarmDispatchWakeupSuppressedTotal == nil {
 		return
 	}
+
 	alarmDispatchWakeupSuppressedTotal.Inc()
 }
 
 func observeAlarmDispatchWakeupFailed() {
 	initQueueMetrics()
+
 	if alarmDispatchWakeupFailedTotal == nil {
 		return
 	}
+
 	alarmDispatchWakeupFailedTotal.Inc()
 }
 
 func observeAlarmDispatchWakeupExpireFailed() {
 	initQueueMetrics()
+
 	if alarmDispatchWakeupExpireFailedTotal == nil {
 		return
 	}
+
 	alarmDispatchWakeupExpireFailedTotal.Inc()
 }

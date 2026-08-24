@@ -16,15 +16,19 @@ func ParseChannelStatsFromInitialData(data *gjson.Result, channelID string) *Cha
 	}
 
 	subscriberText := data.Get(aboutChannelViewModelPath + ".subscriberCountText").String()
+
 	stats.SubscriberCount = ParseSubscriberCount(subscriberText)
 
 	viewCountText := data.Get(aboutChannelViewModelPath + ".viewCountText").String()
+
 	stats.ViewCount = ParseViewCount(viewCountText)
 
 	videoCountText := data.Get(aboutChannelViewModelPath + ".videoCountText").String()
+
 	stats.VideoCount = ParseVideoCount(videoCountText)
 
 	joinedText := data.Get(aboutChannelViewModelPath + ".joinedDateText.content").String()
+
 	stats.JoinedDate = ParseJoinedDate(joinedText)
 
 	stats.Description = data.Get(aboutChannelViewModelPath + ".description").String()
@@ -37,6 +41,7 @@ func ParseChannelStatsFromInitialData(data *gjson.Result, channelID string) *Cha
 func ParseChannelSnippetFromInitialData(data *gjson.Result) *ChannelSnippet {
 	avatarSources := data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.image.decoratedAvatarViewModel.avatar.avatarViewModel.image.sources")
 	bannerSources := data.Get("header.pageHeaderRenderer.content.pageHeaderViewModel.banner.imageBannerViewModel.image.sources")
+
 	return &ChannelSnippet{
 		Avatar: ParseThumbnailSources(&avatarSources),
 		Banner: ParseThumbnailSources(&bannerSources),
@@ -48,22 +53,27 @@ func ParseChannelHandle(data *gjson.Result) string {
 	if handle != "" && handle[0] == '/' {
 		return handle[1:]
 	}
+
 	return handle
 }
 
 func ParseThumbnailSources(sources *gjson.Result) []Thumbnail {
 	thumbnails := make([]Thumbnail, 0)
+
 	if !sources.IsArray() {
 		return thumbnails
 	}
+
 	sources.ForEach(func(_, img gjson.Result) bool {
 		thumbnails = append(thumbnails, Thumbnail{
 			URL:    img.Get("url").String(),
 			Width:  int(img.Get("width").Int()),
 			Height: int(img.Get("height").Int()),
 		})
+
 		return true
 	})
+
 	return thumbnails
 }
 
@@ -74,6 +84,7 @@ func ParseShortNumber(text string) int64 {
 	}
 
 	text, multiplier := shortNumberBaseAndMultiplier(text)
+
 	text = strings.ReplaceAll(text, ",", "")
 
 	val, err := strconv.ParseFloat(text, 64)
@@ -98,12 +109,14 @@ func shortNumberBaseAndMultiplier(text string) (result1 string, result2 int64) {
 			return before, unit.multiplier
 		}
 	}
+
 	return text, 1
 }
 
 func ParseSubscriberCount(text string) int64 {
 	text = strings.TrimSuffix(text, " subscribers")
 	text = strings.TrimSuffix(text, " subscriber")
+
 	return ParseShortNumber(text)
 }
 
@@ -117,6 +130,7 @@ func ParseViewCount(text string) int64 {
 	text = strings.TrimSpace(text)
 
 	multiplier := float64(1)
+
 	for _, unit := range []struct {
 		suffix string
 		value  float64
@@ -133,16 +147,19 @@ func ParseViewCount(text string) int64 {
 		if before, ok := strings.CutSuffix(text, unit.suffix); ok {
 			text = before
 			multiplier = unit.value
+
 			break
 		}
 	}
 
 	text = strings.ReplaceAll(text, ",", "")
 	text = strings.TrimSpace(text)
+
 	val, err := strconv.ParseFloat(text, 64)
 	if err != nil {
 		return 0
 	}
+
 	return int64(val * multiplier)
 }
 
@@ -150,10 +167,12 @@ func ParseVideoCount(text string) int64 {
 	text = strings.TrimSuffix(text, " videos")
 	text = strings.TrimSuffix(text, " video")
 	text = strings.ReplaceAll(text, ",", "")
+
 	val, err := strconv.ParseInt(text, 10, 64)
 	if err != nil {
 		return 0
 	}
+
 	return val
 }
 
@@ -167,7 +186,7 @@ func ParseJoinedDate(text string) int64 {
 		"Jan 2, 2006",
 		"January 2, 2006",
 		"2 Jan 2006",
-		"2006-01-02",
+		time.DateOnly,
 	}
 
 	for _, format := range formats {

@@ -19,12 +19,14 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 	now time.Time,
 ) recentLiveDispatchEvidence {
 	evidence := newRecentLiveDispatchEvidence()
+
 	if c.persistedLiveSource == nil {
 		return evidence
 	}
 
 	since := now.Add(-persistedLiveDispatchRecentWindow)
 	streamIDs := currentLiveStreamIDs(streamsByChannel)
+
 	if len(streamIDs) == 0 {
 		return evidence
 	}
@@ -35,6 +37,7 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 		c.logger.Warn("YouTube live guardrail dispatch check failed",
 			slog.Any("error", err),
 		)
+
 		return evidence
 	}
 
@@ -42,6 +45,7 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 	for _, meta := range metas {
 		c.observePersistedLiveGuardrailMeta(&meta, evidence, since)
 	}
+
 	return evidence
 }
 
@@ -52,9 +56,11 @@ func currentLiveStreamIDs(streamsByChannel map[string][]*domain.Stream) []string
 			if stream == nil || !stream.IsLive() {
 				continue
 			}
+
 			streamIDs = append(streamIDs, stream.ID)
 		}
 	}
+
 	return UniqueStrings(streamIDs)
 }
 
@@ -65,26 +71,37 @@ func (c *YouTubeChecker) observePersistedLiveGuardrailMeta(
 ) {
 	sentRooms := evidence.sentRoomsByStreamID[meta.streamID]
 	missingRooms := missingLiveDeliveryRooms(meta.rooms, sentRooms)
+
 	if len(missingRooms) == 0 {
 		observeYouTubeLiveGuardrail("has_recent_delivery")
+
 		return
 	}
+
 	if len(sentRooms) > 0 {
 		c.logPartialLiveDeliveryGuardrail(meta, sentRooms, missingRooms, since)
+
 		return
 	}
+
 	if evidence.deliveryCheckFailed {
 		c.observeStreamLevelLiveGuardrailMeta(meta, evidence, since)
+
 		return
 	}
+
 	if _, ok := evidence.pgDispatchedStreamIDs[meta.streamID]; ok {
 		c.logMissingLiveDeliveryGuardrail(meta, since)
+
 		return
 	}
+
 	if _, ok := evidence.valkeyNotifiedStreamIDs[meta.streamID]; ok {
 		observeYouTubeLiveGuardrail("has_recent_notified")
+
 		return
 	}
+
 	c.logMissingLiveDispatchGuardrail(meta, since)
 }
 
@@ -95,12 +112,16 @@ func (c *YouTubeChecker) observeStreamLevelLiveGuardrailMeta(
 ) {
 	if _, ok := evidence.pgDispatchedStreamIDs[meta.streamID]; ok {
 		observeYouTubeLiveGuardrail("has_recent_dispatch")
+
 		return
 	}
+
 	if _, ok := evidence.valkeyNotifiedStreamIDs[meta.streamID]; ok {
 		observeYouTubeLiveGuardrail("has_recent_notified")
+
 		return
 	}
+
 	c.logMissingLiveDispatchGuardrail(meta, since)
 }
 
@@ -158,11 +179,13 @@ func (c *YouTubeChecker) recentlyDispatchedOrNotifiedLiveStreamIDs(
 ) (map[string]struct{}, error) {
 	evidence, err := c.recentLiveDispatchEvidence(ctx, streamIDs, since)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("recent live dispatch evidence: %w", err)
 	}
+
 	result := make(map[string]struct{}, len(evidence.pgDispatchedStreamIDs)+len(evidence.valkeyNotifiedStreamIDs))
 	mergeStringSet(result, evidence.pgDispatchedStreamIDs)
 	mergeStringSet(result, evidence.valkeyNotifiedStreamIDs)
+
 	return result, nil
 }
 
@@ -177,16 +200,20 @@ func (c *YouTubeChecker) recentLiveDispatchEvidence(
 
 	c.collectPgLiveDispatchEvidence(ctx, streamIDs, since, &evidence, &errs, &deliveryErrs)
 	c.collectValkeyLiveDispatchEvidence(ctx, streamIDs, &evidence, &errs)
+
 	if err := errors.Join(deliveryErrs...); err != nil {
 		evidence.deliveryCheckFailed = true
+
 		observeYouTubeLiveGuardrail("delivery_check_error")
 		c.logger.Warn("YouTube live guardrail delivery check failed",
 			slog.Any("error", err),
 		)
 	}
+
 	if evidence.hasAny() {
 		return evidence, nil
 	}
+
 	return evidence, errors.Join(append(errs, deliveryErrs...)...)
 }
 
@@ -234,11 +261,13 @@ func (c *YouTubeChecker) collectValkeyLiveDispatchEvidence(
 	if c.dedupService == nil {
 		return
 	}
+
 	notified, err := c.dedupService.RecentlyNotifiedStreamIDs(ctx, streamIDs)
 	if err != nil {
 		*errs = append(*errs, fmt.Errorf("valkey notified evidence: %w", err))
 		return
 	}
+
 	mergeStringSet(evidence.valkeyNotifiedStreamIDs, notified)
 }
 
@@ -254,6 +283,7 @@ func mergeStringSet(dst, src map[string]struct{}) {
 		if key == "" {
 			continue
 		}
+
 		dst[key] = struct{}{}
 	}
 }
@@ -272,13 +302,16 @@ func persistedLiveGuardrailMetas(
 ) []persistedLiveGuardrailMeta {
 	metas := make([]persistedLiveGuardrailMeta, 0, len(sessions))
 	seen := make(map[string]struct{}, len(sessions))
+
 	for _, session := range sessions {
 		meta, ok := persistedLiveGuardrailMetaFromSession(session, subscriberMap, seen, now)
 		if !ok {
 			continue
 		}
+
 		metas = append(metas, meta)
 	}
+
 	return metas
 }
 
@@ -292,21 +325,27 @@ func persistedLiveGuardrailMetaFromSession(
 	if stream == nil || !stream.IsLive() || stream.ID == "" {
 		return persistedLiveGuardrailMeta{}, false
 	}
+
 	observedAt := persistedLiveGuardrailObservedAt(session)
 	if observedAt.IsZero() || now.Sub(observedAt) < persistedLiveGuardrailGraceWindow {
 		observeYouTubeLiveGuardrail("pending_grace")
+
 		return persistedLiveGuardrailMeta{}, false
 	}
+
 	if _, ok := seen[stream.ID]; ok {
 		return persistedLiveGuardrailMeta{}, false
 	}
+
 	channelID := youtubeStreamChannelID(stream)
 	rooms := subscriberMap[channelID]
+
 	if channelID == "" || len(rooms) == 0 {
 		return persistedLiveGuardrailMeta{}, false
 	}
 
 	seen[stream.ID] = struct{}{}
+
 	return persistedLiveGuardrailMeta{
 		streamID:   stream.ID,
 		channelID:  channelID,
@@ -319,9 +358,11 @@ func persistedLiveGuardrailObservedAt(session PersistedYouTubeLiveSession) time.
 	if !session.LiveFirstSeenAt.IsZero() {
 		return session.LiveFirstSeenAt.UTC()
 	}
+
 	if !session.LastSeenAt.IsZero() {
 		return session.LastSeenAt.UTC()
 	}
+
 	return time.Time{}
 }
 
@@ -330,12 +371,15 @@ func missingLiveDeliveryRooms(rooms []string, sentRooms map[string]struct{}) []s
 	if len(uniqueRooms) == 0 {
 		return nil
 	}
+
 	missing := make([]string, 0, len(uniqueRooms))
 	for _, room := range uniqueRooms {
 		if _, ok := sentRooms[room]; ok {
 			continue
 		}
+
 		missing = append(missing, room)
 	}
+
 	return missing
 }

@@ -48,15 +48,19 @@ func (h *Hub) StartContext(ctx context.Context) {
 	if h == nil {
 		return
 	}
+
 	if ctx == nil {
 		return
 	}
 
 	h.lifecycleMu.Lock()
+
 	if h.started {
 		h.lifecycleMu.Unlock()
+
 		return
 	}
+
 	h.started = true
 	h.lifecycleMu.Unlock()
 
@@ -67,8 +71,11 @@ func (h *Hub) StartContext(ctx context.Context) {
 
 func (h *Hub) run(ctx context.Context) {
 	defer close(h.done)
+
 	ticker := time.NewTicker(2 * time.Second)
+
 	defer ticker.Stop()
+
 	for h.tick(ctx, ticker.C) {
 	}
 }
@@ -81,6 +88,7 @@ func (h *Hub) tick(ctx context.Context, tick <-chan time.Time) bool {
 		return false
 	case <-tick:
 		h.broadcastIfSubscribed(ctx)
+
 		return true
 	}
 }
@@ -94,12 +102,14 @@ func (h *Hub) broadcastIfSubscribed(ctx context.Context) {
 func (h *Hub) hasSubscribers() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	return len(h.subs) > 0
 }
 
 func (h *Hub) broadcastSample(parent context.Context) {
 	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
+
 	stats := h.collect(ctx)
 	h.Publish(&stats)
 }
@@ -110,13 +120,17 @@ func (h *Hub) Stop() {
 	}
 
 	h.lifecycleMu.Lock()
+
 	if !h.started {
 		h.lifecycleMu.Unlock()
+
 		return
 	}
+
 	h.stopOnce.Do(func() {
 		close(h.stop)
 	})
+
 	done := h.done
 	h.lifecycleMu.Unlock()
 
@@ -126,19 +140,25 @@ func (h *Hub) Stop() {
 func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsubscribe func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	h.nextID++
+
 	id := h.nextID
 	ch := make(chan SystemStats, 4)
+
 	h.subs[id] = ch
 
 	var unsubscribeOnce sync.Once
+
 	return cloneSystemStatsHistory(h.history), ch, func() {
 		unsubscribeOnce.Do(func() {
 			h.mu.Lock()
+
 			if _, ok := h.subs[id]; ok {
 				delete(h.subs, id)
 				close(ch)
 			}
+
 			h.mu.Unlock()
 		})
 	}
@@ -146,12 +166,15 @@ func (h *Hub) Subscribe() (history []SystemStats, updates chan SystemStats, unsu
 
 func (h *Hub) Publish(stats *SystemStats) {
 	snapshot := cloneSystemStats(stats)
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	h.history = append(h.history, snapshot)
 	if len(h.history) > historyCap {
 		h.history = h.history[len(h.history)-historyCap:]
 	}
+
 	for _, ch := range h.subs {
 		subscriberSnapshot := cloneSystemStats(&snapshot)
 		sendDropOldest(ch, &subscriberSnapshot)
@@ -162,10 +185,12 @@ func sendDropOldest(ch chan SystemStats, stats *SystemStats) {
 	if trySend(ch, stats) {
 		return
 	}
+
 	select {
 	case <-ch:
 	default:
 	}
+
 	trySend(ch, stats)
 }
 
@@ -185,20 +210,27 @@ func (h *Hub) collect(ctx context.Context) SystemStats {
 	threadCount := threadCount()
 	adminGoroutines := runtime.NumGoroutine()
 	serviceRuntime := make([]ServiceRuntimeStats, 0, len(endpointSnapshot.endpoints)+1)
+
 	serviceRuntime = append(serviceRuntime, ServiceRuntimeStats{Name: "admin-dashboard", Count: adminGoroutines, MetricKind: RuntimeMetricGoroutine, Available: true})
+
 	for i := range endpointSnapshot.endpoints {
 		serviceRuntime = append(serviceRuntime, cloneServiceRuntimeStat(endpointSnapshot.endpoints[i].runtime))
 	}
+
 	totalGo := 0
+
 	for _, service := range serviceRuntime {
 		if service.Available && service.MetricKind == RuntimeMetricGoroutine {
 			totalGo += service.Count
 		}
 	}
+
 	memoryUsage := 0.0
+
 	if memTotal > 0 {
 		memoryUsage = float64(memUsed) / float64(memTotal) * 100
 	}
+
 	return SystemStats{
 		SampledAt:         endpointSnapshot.sampledAt.UnixMilli(),
 		CPUUsage:          h.processSampler.cpuUsage(),
@@ -218,9 +250,11 @@ func (h *Hub) collect(ctx context.Context) SystemStats {
 func (h *Hub) externalRuntimeStats(ctx context.Context) []ServiceRuntimeStats {
 	snapshot := h.endpointSampler.sample(ctx)
 	results := make([]ServiceRuntimeStats, len(snapshot.endpoints))
+
 	for i := range snapshot.endpoints {
 		results[i] = cloneServiceRuntimeStat(snapshot.endpoints[i].runtime)
 	}
+
 	return results
 }
 
@@ -238,9 +272,11 @@ func componentGoroutines(components map[string]healthComponent) int {
 	if !ok {
 		return 0
 	}
+
 	value, ok := app.Detail["goroutines"].(float64)
 	if !ok {
 		return 0
 	}
+
 	return int(value)
 }

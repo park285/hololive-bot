@@ -25,6 +25,7 @@ func ParseVideosFromInitialData(
 		slog.Debug("channel has no videos tab",
 			"channel_id", channelID,
 			"found_tabs", strings.Join(foundTabTitles, ", "))
+
 		return []*Video{}, nil
 	}
 
@@ -48,6 +49,7 @@ func ParseVideosFromInitialDataWithoutTabs(
 			"channel_id", channelID,
 			"fallback_videos", len(fallbackVideos),
 			"contents_keys", strings.Join(topKeys, ", "))
+
 		return fallbackVideos
 	}
 
@@ -55,6 +57,7 @@ func ParseVideosFromInitialDataWithoutTabs(
 		slog.Debug("ytInitialData responseContext-only payload",
 			"channel_id", channelID,
 			"raw_len", len(data.Raw))
+
 		return []*Video{}
 	}
 
@@ -70,10 +73,12 @@ func ParseVideosFromInitialDataWithoutTabs(
 
 func collectTopLevelKeys(contents *gjson.Result) []string {
 	var topKeys []string
+
 	contents.ForEach(func(key, _ gjson.Result) bool {
 		topKeys = append(topKeys, key.String())
 		return true
 	})
+
 	return topKeys
 }
 
@@ -100,13 +105,17 @@ func isVideosTabTitle(title string) bool {
 	if title == "" {
 		return false
 	}
+
 	_, ok := videosTabTitles[title]
+
 	return ok
 }
 
 func FindVideosTabContent(tabs *gjson.Result) (result1 gjson.Result, result2 []string) {
-	var videosContent gjson.Result
-	var foundTabTitles []string
+	var (
+		videosContent  gjson.Result
+		foundTabTitles []string
+	)
 
 	tabs.ForEach(func(_, tab gjson.Result) bool {
 		tabTitle := tab.Get("tabRenderer.title").String()
@@ -121,6 +130,7 @@ func FindVideosTabContent(tabs *gjson.Result) (result1 gjson.Result, result2 []s
 		}
 
 		videosContent = tab.Get("tabRenderer.content")
+
 		return false
 	})
 
@@ -131,6 +141,7 @@ func isVideosTabMatch(tabTitle, tabURL string) bool {
 	if isVideosTabTitle(tabTitle) {
 		return true
 	}
+
 	return strings.Contains(tabURL, "/videos")
 }
 
@@ -143,14 +154,17 @@ func parseVideosFromRichGrid(
 	richGridItems := videosContent.Get("richGridRenderer.contents")
 	items := collectRecentVideoItems(&richGridItems)
 	videos := make([]*Video, 0, min(len(items), maxResults))
+
 	for i, item := range items {
 		if i >= maxResults {
 			break
 		}
+
 		if video := parseRecentVideoItem(&item, channelID, videoParser); video != nil {
 			videos = append(videos, video)
 		}
 	}
+
 	return videos
 }
 
@@ -158,17 +172,21 @@ func parseRecentVideoItem(item *gjson.Result, channelID string, videoParser func
 	if renderer := item.Get("videoRenderer"); renderer.Exists() {
 		return videoParser(&renderer, channelID)
 	}
+
 	if lockup := item.Get("lockupViewModel"); lockup.Exists() {
 		return ParseLockupVideoViewModel(&lockup, channelID)
 	}
+
 	return nil
 }
 
 func collectRecentVideoItems(richGridItems *gjson.Result) []gjson.Result {
 	var items []gjson.Result
+
 	if !richGridItems.Exists() {
 		return items
 	}
+
 	richGridItems.ForEach(func(_, item gjson.Result) bool {
 		videoRenderer := item.Get("richItemRenderer.content.videoRenderer")
 		if videoRenderer.Exists() {
@@ -180,8 +198,10 @@ func collectRecentVideoItems(richGridItems *gjson.Result) []gjson.Result {
 		if lockupViewModel.Get("contentType").String() == "LOCKUP_CONTENT_TYPE_VIDEO" {
 			items = append(items, gjson.Parse(`{"lockupViewModel":`+lockupViewModel.Raw+`}`))
 		}
+
 		return true
 	})
+
 	return items
 }
 
@@ -197,12 +217,14 @@ func parseVideosFromContentsFallback(
 
 	videoRenderers := CollectVideoRenderers(contents, maxResults)
 	videos := make([]*Video, 0, len(videoRenderers))
+
 	for _, renderer := range videoRenderers {
 		video := videoParser(&renderer, channelID)
 		if video != nil {
 			videos = append(videos, video)
 		}
 	}
+
 	return videos
 }
 
@@ -213,6 +235,7 @@ func CollectVideoRenderers(root *gjson.Result, maxResults int) []gjson.Result {
 
 	collector := newVideoRendererCollector(maxResults)
 	collector.walk(root)
+
 	return collector.results
 }
 
@@ -237,6 +260,7 @@ func (c *videoRendererCollector) walk(node *gjson.Result) {
 	}
 
 	c.visited++
+
 	node.ForEach(func(key, value gjson.Result) bool {
 		return c.visit(&key, &value)
 	})
@@ -246,6 +270,7 @@ func (c *videoRendererCollector) canVisit(node *gjson.Result) bool {
 	if c.shouldStop() || !node.Exists() {
 		return false
 	}
+
 	return node.IsArray() || node.IsObject()
 }
 
@@ -257,12 +282,15 @@ func (c *videoRendererCollector) visit(key, value *gjson.Result) bool {
 	if c.shouldStop() {
 		return false
 	}
+
 	if key.String() == "videoRenderer" {
 		c.add(value)
+
 		return true
 	}
 
 	c.walk(value)
+
 	return !c.shouldStop()
 }
 
@@ -271,6 +299,7 @@ func (c *videoRendererCollector) add(value *gjson.Result) {
 	if videoID == "" {
 		return
 	}
+
 	if _, ok := c.seen[videoID]; ok {
 		return
 	}
@@ -288,17 +317,20 @@ func ParseLockupVideoViewModel(lockup *gjson.Result, channelID string) *Video {
 	if videoID == "" {
 		videoID = lockup.Get("rendererContext.commandContext.onTap.innertubeCommand.watchEndpoint.videoId").String()
 	}
+
 	if videoID == "" {
 		return nil
 	}
 
 	var thumbnails []Thumbnail
+
 	lockup.Get("contentImage.thumbnailViewModel.image.sources").ForEach(func(_, t gjson.Result) bool {
 		thumbnails = append(thumbnails, Thumbnail{
 			URL:    t.Get("url").String(),
 			Width:  int(t.Get("width").Int()),
 			Height: int(t.Get("height").Int()),
 		})
+
 		return true
 	})
 
@@ -315,56 +347,4 @@ func ParseLockupVideoViewModel(lockup *gjson.Result, channelID string) *Video {
 		ChannelID:     channelID,
 		Source:        VideoSourceHTML,
 	}
-}
-
-func PickLockupMetadataTexts(parts *gjson.Result) (viewCount int64, publishedText string) {
-	texts := CollectLockupTexts(parts)
-	if viewCount, published, ok := PickViewCountAndPublished(texts); ok {
-		return viewCount, published
-	}
-	return FallbackPickMetadata(texts)
-}
-
-func CollectLockupTexts(parts *gjson.Result) []string {
-	var texts []string
-	parts.ForEach(func(_, part gjson.Result) bool {
-		text := part.Get("text.content").String()
-		if text != "" {
-			texts = append(texts, text)
-		}
-		return true
-	})
-	return texts
-}
-
-func PickViewCountAndPublished(texts []string) (viewCount int64, publishedText string, ok bool) {
-	for i, t := range texts {
-		parsed := ParseViewCount(t)
-		if parsed <= 0 {
-			continue
-		}
-		return parsed, firstOtherText(texts, i), true
-	}
-	return 0, "", false
-}
-
-func firstOtherText(texts []string, excludeIdx int) string {
-	for i, t := range texts {
-		if i == excludeIdx {
-			continue
-		}
-		return t
-	}
-	return ""
-}
-
-func FallbackPickMetadata(texts []string) (result1 int64, result2 string) {
-	var viewText, publishedText string
-	if len(texts) > 0 {
-		viewText = texts[0]
-	}
-	if len(texts) > 1 {
-		publishedText = texts[1]
-	}
-	return ParseViewCount(viewText), publishedText
 }

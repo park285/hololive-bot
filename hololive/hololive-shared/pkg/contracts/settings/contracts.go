@@ -30,7 +30,7 @@ const (
 )
 
 const (
-	// ConfigUpdateVersionV1: 설정 업데이트 메시지 버전 (payload 내에 version 필드가 포함되지는 않음)
+	// ConfigUpdateVersionV1: 설정 업데이트 메시지 버전 (payload 내에 version 필드가 포함되지는 않음).
 	ConfigUpdateVersionV1 uint8 = 1
 )
 

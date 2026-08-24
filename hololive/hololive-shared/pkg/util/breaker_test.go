@@ -30,6 +30,7 @@ func TestBreaker_OpensAfterThreshold(t *testing.T) {
 		if b.IsOpen() {
 			t.Fatalf("breaker opened after %d failures (before threshold %d)", i, threshold)
 		}
+
 		b.RecordFailure()
 	}
 
@@ -141,6 +142,7 @@ func TestBreaker_ConcurrentRecordFailure(t *testing.T) {
 	b := newTestBreaker(100, 30*time.Second)
 
 	const goroutines = 50
+
 	var wg sync.WaitGroup
 
 	for range goroutines {
@@ -177,24 +179,31 @@ func TestBreaker_RecordFailure_ConcurrentTransitionOpensOnce(t *testing.T) {
 	b.RecordFailure() // failures=1 (threshold-1)
 
 	const goroutines = 64
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+
+	var (
+		wg sync.WaitGroup
+		mu sync.Mutex
+	)
+
 	openedCount := 0
 
 	for range goroutines {
 		wg.Go(func() {
 			if b.RecordFailure() {
 				mu.Lock()
+
 				openedCount++
 				mu.Unlock()
 			}
 		})
 	}
+
 	wg.Wait()
 
 	if openedCount != 1 {
 		t.Errorf("expected exactly 1 open transition under concurrency, got %d", openedCount)
 	}
+
 	if !b.IsOpen() {
 		t.Error("breaker should be open after concurrent threshold failures")
 	}
@@ -229,6 +238,7 @@ func TestBreaker_AfterReset_ThresholdRequiredAgain(t *testing.T) {
 	for range 3 {
 		b.RecordFailure()
 	}
+
 	if !b.IsOpen() {
 		t.Fatal("should be open after threshold failures")
 	}
@@ -242,6 +252,7 @@ func TestBreaker_AfterReset_ThresholdRequiredAgain(t *testing.T) {
 
 	// reset 후 단 1회 실패로는 열리지 않아야 함
 	b.RecordFailure()
+
 	if b.IsOpen() {
 		t.Fatal("single failure after reset must not re-open (threshold=3)")
 	}

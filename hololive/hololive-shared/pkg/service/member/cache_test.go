@@ -21,8 +21,6 @@
 package member
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -32,8 +30,8 @@ import (
 func TestCacheInvalidateAll_WithoutValkeyStillClearsMemory(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+	ctx := t.Context()
 
 	member := &domain.Member{Name: "miko", ChannelID: "UC_2"}
 	c := &Cache{
@@ -48,12 +46,14 @@ func TestCacheInvalidateAll_WithoutValkeyStillClearsMemory(t *testing.T) {
 	}
 
 	if _, ok := c.byChannelID.Load(member.ChannelID); ok {
-		t.Fatalf("expected channel cache to be cleared")
+		t.Fatal("expected channel cache to be cleared")
 	}
+
 	if _, ok := c.byName.Load(member.Name); ok {
-		t.Fatalf("expected name cache to be cleared")
+		t.Fatal("expected name cache to be cleared")
 	}
+
 	if _, ok := c.allMembers.Load(allChannelIDsKey); ok {
-		t.Fatalf("expected all-members cache to be cleared")
+		t.Fatal("expected all-members cache to be cleared")
 	}
 }

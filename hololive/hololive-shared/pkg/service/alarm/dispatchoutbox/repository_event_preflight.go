@@ -23,13 +23,16 @@ type eventPreflightClassification struct {
 
 func loadExistingEventRows(ctx context.Context, tx pgx.Tx, events []eventInsert) (map[string]insertedEventRow, error) {
 	existing := make(map[string]insertedEventRow)
+
 	if len(events) == 0 {
 		return existing, nil
 	}
+
 	keys := make([]string, 0, len(events))
 	for i := range events {
 		keys = append(keys, events[i].EventKey)
 	}
+
 	rows, err := tx.Query(ctx, mustSQL("repository_event_preflight_0033_01.sql"), keys)
 	if err != nil {
 		return nil, fmt.Errorf("preflight dispatch events: %w", err)
@@ -38,14 +41,18 @@ func loadExistingEventRows(ctx context.Context, tx pgx.Tx, events []eventInsert)
 
 	for rows.Next() {
 		var row insertedEventRow
+
 		if err := rows.Scan(&row.ID, &row.EventKey, &row.PayloadHash); err != nil {
 			return nil, fmt.Errorf("preflight dispatch events: scan: %w", err)
 		}
+
 		existing[row.EventKey] = row
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("preflight dispatch events: rows: %w", err)
 	}
+
 	return existing, nil
 }
 
@@ -57,20 +64,24 @@ func classifyEventPreflight(events []eventInsert, existing map[string]insertedEv
 	for i := range events {
 		event := &events[i]
 		row, ok := existing[event.EventKey]
+
 		if !ok {
 			classified.InsertEvents = append(classified.InsertEvents, *event)
 			continue
 		}
+
 		if row.PayloadHash == event.PayloadHash {
 			classified.EventIDs[event.EventKey] = row.ID
 			continue
 		}
+
 		classified.Collisions = append(classified.Collisions, eventCollision{
 			Event:               *event,
 			ExistingEventID:     row.ID,
 			ExistingPayloadHash: row.PayloadHash,
 		})
 	}
+
 	return classified
 }
 
@@ -80,11 +91,13 @@ func mergeEventIDs(dst, src map[string]int64) {
 
 func missingInsertedEvents(events []eventInsert, eventIDs map[string]int64) []eventInsert {
 	missing := make([]eventInsert, 0)
+
 	for _, event := range events {
 		if _, ok := eventIDs[event.EventKey]; !ok {
 			missing = append(missing, event)
 		}
 	}
+
 	return missing
 }
 
@@ -92,6 +105,7 @@ func logEventCollisions(logger *slog.Logger, collisions []eventCollision) {
 	if logger == nil {
 		return
 	}
+
 	for i := range collisions {
 		collision := &collisions[i]
 		logger.Warn("dispatch event hash conflict",
@@ -115,13 +129,17 @@ func attachCollisionEventIDs(collisions []eventCollision, eventIDs map[string]in
 	if len(collisions) == 0 {
 		return collisions
 	}
+
 	attached := make([]eventCollision, len(collisions))
 	for i := range collisions {
 		collision := &collisions[i]
+
 		attached[i] = *collision
+
 		if attached[i].ExistingEventID == 0 {
 			attached[i].ExistingEventID = eventIDs[collision.Event.EventKey]
 		}
 	}
+
 	return attached
 }

@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,10 +14,11 @@ func (r *Repository) ListChannelPostDeliverySummariesSince(
 	since time.Time,
 ) ([]analytics.ChannelPostDeliverySummary, error) {
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("list channel post delivery summaries since: db is nil")
+		return nil, errors.New("list channel post delivery summaries since: db is nil")
 	}
+
 	if since.IsZero() {
-		return nil, fmt.Errorf("list channel post delivery summaries since: since is empty")
+		return nil, errors.New("list channel post delivery summaries since: since is empty")
 	}
 
 	posts, err := r.ListPostSendCountsSince(ctx, since)

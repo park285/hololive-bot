@@ -70,7 +70,9 @@ func serveShortLinkRequest(t *testing.T, method, path, userAgent string) *httpte
 
 	request := httptest.NewRequestWithContext(t.Context(), method, path, http.NoBody)
 	request.Header.Set("User-Agent", userAgent)
+
 	response := httptest.NewRecorder()
 	ProvideShortLinkHandler().ServeHTTP(response, request)
+
 	return response
 }

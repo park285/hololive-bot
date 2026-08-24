@@ -30,6 +30,7 @@ func buildCandidateMemberTokenSet(members []string) map[string]struct{} {
 			memberTokenSet[normalized] = struct{}{}
 		}
 	}
+
 	return memberTokenSet
 }
 
@@ -41,6 +42,8 @@ func appendUniqueMatchedMember(
 	if _, exists := matchedSet[display]; exists {
 		return matched
 	}
+
 	matchedSet[display] = struct{}{}
+
 	return append(matched, display)
 }

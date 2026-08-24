@@ -74,6 +74,7 @@ func TestPolicyShouldRun(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := tt.policy.ShouldRun(tt.primaryResults, tt.failedTargets); got != tt.want {
 				t.Fatalf("ShouldRun() = %v, want %v", got, tt.want)
 			}
@@ -88,21 +89,24 @@ func TestExecuteCollectsSuccessesAndFailures(t *testing.T) {
 		successes []int
 		mu        sync.Mutex
 	)
-	summary := Execute(context.Background(), FetchPlan[int, string]{
+
+	summary := FetchPlan[int, string]{
 		Targets:     []int{1, 2, 3},
 		Parallelism: 2,
 		Fetch: func(_ context.Context, target int) (string, error) {
 			if target == 2 {
 				return "", errors.New("fail")
 			}
+
 			return "ok", nil
 		},
 		OnSuccess: func(target int, _ string) {
 			mu.Lock()
+
 			successes = append(successes, target)
 			mu.Unlock()
 		},
-	})
+	}.Execute(t.Context())
 
 	slices.Sort(successes)
 	slices.Sort(summary.FailedTargets)
@@ -110,12 +114,15 @@ func TestExecuteCollectsSuccessesAndFailures(t *testing.T) {
 	if summary.SuccessCount != 2 {
 		t.Fatalf("SuccessCount = %d, want 2", summary.SuccessCount)
 	}
+
 	if summary.FailedCount != 1 {
 		t.Fatalf("FailedCount = %d, want 1", summary.FailedCount)
 	}
+
 	if !reflect.DeepEqual(successes, []int{1, 3}) {
 		t.Fatalf("successes = %#v, want [1 3]", successes)
 	}
+
 	if !reflect.DeepEqual(summary.FailedTargets, []int{2}) {
 		t.Fatalf("FailedTargets = %#v, want [2]", summary.FailedTargets)
 	}
@@ -124,23 +131,26 @@ func TestExecuteCollectsSuccessesAndFailures(t *testing.T) {
 func TestExecuteCountsRecoveredPanicAsFailure(t *testing.T) {
 	t.Parallel()
 
-	summary := Execute(context.Background(), FetchPlan[int, string]{
+	summary := FetchPlan[int, string]{
 		Targets:     []int{1, 2},
 		Parallelism: 2,
 		Fetch: func(_ context.Context, target int) (string, error) {
 			if target == 2 {
 				panic("fetch panic")
 			}
+
 			return "ok", nil
 		},
-	})
+	}.Execute(t.Context())
 
 	if summary.SuccessCount != 1 {
 		t.Fatalf("SuccessCount = %d, want 1", summary.SuccessCount)
 	}
+
 	if summary.FailedCount != 1 {
 		t.Fatalf("FailedCount = %d, want 1", summary.FailedCount)
 	}
+
 	if !reflect.DeepEqual(summary.FailedTargets, []int{2}) {
 		t.Fatalf("FailedTargets = %#v, want [2]", summary.FailedTargets)
 	}
@@ -149,14 +159,17 @@ func TestExecuteCountsRecoveredPanicAsFailure(t *testing.T) {
 func TestExecuteRespectsParallelismLimit(t *testing.T) {
 	t.Parallel()
 
-	var inFlight atomic.Int32
-	var maxInFlight atomic.Int32
+	var (
+		inFlight    atomic.Int32
+		maxInFlight atomic.Int32
+	)
 
-	summary := Execute(context.Background(), FetchPlan[int, string]{
+	summary := FetchPlan[int, string]{
 		Targets:     []int{1, 2, 3, 4, 5, 6},
 		Parallelism: 2,
-		Fetch: func(_ context.Context, target int) (string, error) {
+		Fetch: func(_ context.Context, _ int) (string, error) {
 			current := inFlight.Add(1)
+
 			for {
 				previous := maxInFlight.Load()
 				if current <= previous || maxInFlight.CompareAndSwap(previous, current) {
@@ -166,13 +179,15 @@ func TestExecuteRespectsParallelismLimit(t *testing.T) {
 
 			time.Sleep(10 * time.Millisecond)
 			inFlight.Add(-1)
+
 			return "ok", nil
 		},
-	})
+	}.Execute(t.Context())
 
 	if summary.SuccessCount != 6 {
 		t.Fatalf("SuccessCount = %d, want 6", summary.SuccessCount)
 	}
+
 	if observedMax := maxInFlight.Load(); observedMax > 2 {
 		t.Fatalf("maxInFlight = %d, want <= 2", observedMax)
 	}
@@ -181,25 +196,30 @@ func TestExecuteRespectsParallelismLimit(t *testing.T) {
 func TestRunPrimaryCollectsFailuresInOriginalOrder(t *testing.T) {
 	t.Parallel()
 
-	result := RunPrimary(context.Background(), []string{"a", "b", "c"}, FetchPlan[string, struct{}]{Parallelism: 2}, func(_ context.Context, key string) error {
+	result := FetchPlan[string, struct{}]{Parallelism: 2}.RunPrimary(t.Context(), []string{"a", "b", "c"}, func(_ context.Context, key string) error {
 		if key == "b" {
 			return errors.New("boom")
 		}
+
 		return nil
 	})
 
 	if result.Attempted != 3 {
 		t.Fatalf("Attempted = %d, want 3", result.Attempted)
 	}
+
 	if result.Succeeded != 2 {
 		t.Fatalf("Succeeded = %d, want 2", result.Succeeded)
 	}
+
 	if !reflect.DeepEqual(result.Failed, []string{"b"}) {
 		t.Fatalf("Failed = %#v, want [\"b\"]", result.Failed)
 	}
+
 	if !result.HasFailures() {
 		t.Fatal("HasFailures() = false, want true")
 	}
+
 	if result.AllFailed() {
 		t.Fatal("AllFailed() = true, want false")
 	}

@@ -94,6 +94,7 @@ func WithChannelHealthPolicy(policy *ChannelHealthPolicy) ClientOption {
 		if policy == nil {
 			return
 		}
+
 		c.channelHealthPolicy = *policy
 	}
 }

@@ -13,7 +13,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 )
 
 type repositoryReplyOutboxWriter struct {
@@ -25,6 +25,8 @@ func (w repositoryReplyOutboxWriter) RecordReply(ctx context.Context, entry *tra
 		MessageID: entry.MessageID, Phase: entry.Phase, Ordinal: entry.Ordinal,
 		RoomID: entry.Room, Payload: []byte(entry.Payload), ClientRequestID: entry.ClientRequestID,
 	})
+
+	//nolint:wrapcheck // 테스트가 재현하는 redaction 체인을 그대로 대조하므로 이 어댑터는 계층을 덧붙이면 안 된다.
 	return err
 }
 
@@ -33,6 +35,7 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 		rawID     = "message:raw-private-handler-id"
 		causeText = "database rejected"
 	)
+
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(t.Context(), `
 		CREATE FUNCTION fail_handler_reply_insert_for_privacy_test() RETURNS trigger AS $$
@@ -44,6 +47,7 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.NoError(t, err)
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	writer := repositoryReplyOutboxWriter{repo: durability.NewReplyOutboxRepository(pool)}
 	bot := &Bot{
@@ -52,11 +56,13 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 			transport.WithReplyOutboxWriter(writer)),
 	}
 	ctx := transport.WithReplyIdentity(t.Context(), rawID)
-	err = bot.handleCommandExecutionError(ctx, "room-1", "privacy-test", errors.New("command failed"))
+
+	err = bot.handleCommandExecutionError(ctx, testRoomID, "privacy-test", errors.New("command failed"))
 	require.Error(t, err)
 
 	var pgErr *pgconn.PgError
-	require.True(t, errors.As(err, &pgErr), "repository cause must remain available through staging wrappers")
+
+	require.ErrorAs(t, err, &pgErr, "repository cause must remain available through staging wrappers")
 	require.Contains(t, pgErr.Error(), rawID)
 	require.NotContains(t, err.Error(), rawID)
 	require.NotContains(t, err.Error(), causeText)

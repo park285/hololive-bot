@@ -2,30 +2,38 @@ package viewer
 
 import (
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func Reduce(state State, evidence Evidence) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
+func Reduce(state State, evidence Evidence) (Decision, error) {
 	if evidence.Sample.VideoID == "" {
-		return Decision{}, fmt.Errorf("viewer reducer received empty video id")
+		return Decision{}, errors.New("viewer reducer received empty video id")
 	}
+
 	digest, err := sampleDigest(evidence.Sample.Availability, evidence.Sample.ViewerCount)
 	if err != nil {
-		return Decision{}, err
+		return Decision{}, fmt.Errorf("sample digest: %w", err)
 	}
+
 	workingState := state.clone()
 	workingEvidence := evidence.clone()
 	sample := &workingEvidence.Sample
+
 	sample.Provider = workingEvidence.Provider
 	sample.ObservationID = workingEvidence.ObservationID
+
 	head := workingState.Head
+
 	head.VideoID = evidence.Sample.VideoID
+
 	if sameWindow(head.UnresolvedWindowStart, sample.WindowStart) {
-		return replayOrConflict(&workingState, sample, digest, &head, "WINDOW_UNRESOLVED")
+		return replayOrConflict(&workingState, sample, digest, &head, "WINDOW_UNRESOLVED"), nil
 	}
+
 	if head.LastResolvedWindowStart != nil && sample.WindowStart.Before(*head.LastResolvedWindowStart) {
 		return Decision{
 			Sample: sample,
@@ -35,9 +43,11 @@ func Reduce(state State, evidence Evidence) (Decision, error) { //nolint:gocriti
 			}},
 		}, nil
 	}
+
 	if sameWindow(head.LastResolvedWindowStart, sample.WindowStart) || windowHasConflict(state.Window, digest) {
-		return replayOrConflict(&workingState, sample, digest, &head, "EQUAL_WINDOW")
+		return replayOrConflict(&workingState, sample, digest, &head, "EQUAL_WINDOW"), nil
 	}
+
 	return advanceResolved(&head, sample), nil
 }
 
@@ -47,17 +57,20 @@ func windowHasConflict(existing []WindowEvidence, digest string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
-func replayOrConflict(state *State, sample *Sample, digest string, head *Head, decision string) (Decision, error) {
+func replayOrConflict(state *State, sample *Sample, digest string, head *Head, decision string) Decision {
 	if matched, ok := matchWindowEvidence(state.Window, sample, digest, head); ok {
-		return matched, nil
+		return matched
 	}
+
 	if decision == "EQUAL_WINDOW" && lastResolvedDigest(head) != digest {
-		return unresolvedDecision(head, sample, lastResolvedDigest(head), digest), nil
+		return unresolvedDecision(head, sample, lastResolvedDigest(head), digest)
 	}
-	return replayViewerDecision(head, sample), nil
+
+	return replayViewerDecision(head, sample)
 }
 
 func matchWindowEvidence(existing []WindowEvidence, sample *Sample, digest string, head *Head) (Decision, bool) {
@@ -66,12 +79,15 @@ func matchWindowEvidence(existing []WindowEvidence, sample *Sample, digest strin
 			if item.Digest == digest {
 				return replayViewerDecision(head, sample), true
 			}
+
 			return unresolvedDecision(head, sample, item.Digest, digest), true
 		}
+
 		if item.Digest != digest {
 			return unresolvedDecision(head, sample, item.Digest, digest), true
 		}
 	}
+
 	return Decision{}, false
 }
 
@@ -93,6 +109,7 @@ func advanceResolved(head *Head, sample *Sample) Decision {
 	head.LastResolvedCount = copyCount(sample.ViewerCount)
 	head.LastResolvedAvailability = sample.Availability
 	head.UnresolvedWindowStart = nil
+
 	return Decision{
 		Sample: sample,
 		Head:   *head,
@@ -111,12 +128,15 @@ func unresolvedDecision(head *Head, sample *Sample, existingDigest, attemptedDig
 		head.PriorResolvedCount = nil
 		head.PriorResolvedAvailability = ""
 	}
+
 	head.UnresolvedWindowStart = copyTime(sample.WindowStart)
+
 	conflict := Conflict{
 		FieldName:            "viewer_count",
 		ExistingValueSHA256:  existingDigest,
 		AttemptedValueSHA256: attemptedDigest,
 	}
+
 	return Decision{
 		Sample:       sample,
 		Head:         *head,
@@ -129,7 +149,12 @@ func unresolvedDecision(head *Head, sample *Sample, existingDigest, attemptedDig
 }
 
 func SampleDigest(availability string, count *int64) (string, error) {
-	return sampleDigest(availability, count)
+	out, err := sampleDigest(availability, count)
+	if err != nil {
+		return out, fmt.Errorf("sample digest: %w", err)
+	}
+
+	return out, nil
 }
 
 func sampleDigest(availability string, count *int64) (string, error) {
@@ -140,6 +165,7 @@ func sampleDigest(availability string, count *int64) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal viewer sample digest: %w", err)
 	}
+
 	return contract.SHA256Hex(payload), nil
 }
 
@@ -148,6 +174,7 @@ func lastResolvedDigest(head *Head) string {
 	if err != nil {
 		return ""
 	}
+
 	return digest
 }
 
@@ -168,6 +195,8 @@ func copyCount(value *int64) *int64 {
 	if value == nil {
 		return nil
 	}
+
 	copied := *value
+
 	return &copied
 }

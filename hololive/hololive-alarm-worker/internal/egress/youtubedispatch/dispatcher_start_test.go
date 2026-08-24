@@ -2,7 +2,6 @@ package youtubedispatch
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -45,15 +44,17 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	db := newDeliveryPool(t)
 
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key == sharedalarmkeys.BuildChannelSubscriberKey("UCstart", domain.AlarmTypeLive) {
 			return []string{"room-start"}, nil
 		}
+
 		return nil, nil
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -61,6 +62,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 		RetryBackoff:        time.Minute,
 		DeliveryParallelism: 2,
 	})
+
 	dispatcher.telemetry = nil
 
 	item := domain.YouTubeNotificationOutbox{
@@ -81,6 +83,7 @@ func TestDispatcherStartProcessesPendingOutboxImmediately(t *testing.T) {
 	require.Eventually(t, func() bool {
 		sender.mu.Lock()
 		defer sender.mu.Unlock()
+
 		return len(sender.messages) == 1
 	}, 2*time.Second, 20*time.Millisecond)
 }
@@ -91,7 +94,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_run_tick")
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        10 * time.Millisecond,
@@ -100,11 +103,13 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 		DeliveryParallelism: 1,
 		CleanupEnabled:      false,
 	})
+
 	dispatcher.telemetry = nil
 	dispatcher.setOnProcessOnce(probe.tick)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
+
 	go func() {
 		dispatcher.run(ctx)
 		close(done)
@@ -118,6 +123,7 @@ func TestDispatcherRunProcessesPeriodicTick(t *testing.T) {
 	}
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
@@ -131,7 +137,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(2)
 	db := openDispatcherStartTestDB(t, "dispatcher_aggregate_tick")
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:             10,
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
@@ -143,8 +149,9 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	})
 	dispatcher.setOnAggregateSync(probe.tick)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
+
 	go func() {
 		dispatcher.aggregateSyncLoop(ctx)
 		close(done)
@@ -158,6 +165,7 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 	}
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
@@ -167,7 +175,9 @@ func TestDispatcherAggregateSyncLoopProcessesPeriodicTick(t *testing.T) {
 
 func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	oldInterval := outboxCleanupLoopInterval
+
 	outboxCleanupLoopInterval = 10 * time.Millisecond
+
 	t.Cleanup(func() {
 		outboxCleanupLoopInterval = oldInterval
 	})
@@ -175,7 +185,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	probe := newDispatcherTickProbe(1)
 	db := openDispatcherStartTestDB(t, "dispatcher_cleanup_tick")
 
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
 		PollInterval:   time.Hour,
@@ -184,11 +194,13 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 		CleanupAfter:   time.Hour,
 		CleanupEnabled: true,
 	})
+
 	dispatcher.telemetry = nil
 	dispatcher.setOnCleanup(probe.tick)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
+
 	go func() {
 		dispatcher.cleanupLoop(ctx)
 		close(done)
@@ -202,6 +214,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 	}
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
@@ -210,7 +223,7 @@ func TestDispatcherCleanupLoopProcessesPeriodicTick(t *testing.T) {
 }
 
 func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
-	dispatcher := NewDispatcher(nil, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(nil, nil, nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		PollInterval:          time.Hour,
 		AggregateSyncInterval: time.Hour,
 		TelemetryPollInterval: time.Hour,
@@ -220,18 +233,23 @@ func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
+
 	var releaseOnce sync.Once
+
 	releaseLoop := func() {
 		releaseOnce.Do(func() { close(release) })
 	}
+
 	dispatcher.setOnAggregateSync(func() {
 		close(entered)
 		<-release
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+
 	done := make(chan error, 1)
+
 	go func() {
 		done <- dispatcher.Run(ctx)
 	}()
@@ -245,6 +263,7 @@ func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
 	}
 
 	cancel()
+
 	select {
 	case err := <-done:
 		t.Fatalf("Run returned before delayed background loop exited: %v", err)
@@ -252,6 +271,7 @@ func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
 	}
 
 	releaseLoop()
+
 	select {
 	case err := <-done:
 		require.NoError(t, err)
@@ -264,6 +284,8 @@ func openDispatcherStartTestDB(t *testing.T, name string) *deliveryTestDB {
 	t.Helper()
 
 	_ = name
+
 	db := newDeliveryPool(t)
+
 	return db
 }

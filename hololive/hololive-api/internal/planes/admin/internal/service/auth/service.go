@@ -22,7 +22,7 @@ package auth
 
 import (
 	"context"
-	stdErrors "errors"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -69,11 +69,13 @@ type Service struct {
 
 func NewService(ctx context.Context, db *pgxpool.Pool, cacheClient cache.Client, logger *slog.Logger, config Config) (*Service, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("ctx must not be nil")
+		return nil, errors.New("ctx must not be nil")
 	}
+
 	if db == nil {
-		return nil, fmt.Errorf("db must not be nil")
+		return nil, errors.New("db must not be nil")
 	}
+
 	logger, config = normalizeServiceConfig(logger, config)
 
 	dummyHash, err := bcrypt.GenerateFromPassword([]byte(loginDummyPassword), config.BcryptCost)
@@ -97,9 +99,11 @@ func normalizeServiceConfig(logger *slog.Logger, config Config) (*slog.Logger, C
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	if config.SessionTTL <= 0 {
 		config = DefaultConfig()
 	}
+
 	if config.BcryptCost < bcrypt.MinCost || config.BcryptCost > bcrypt.MaxCost {
 		config.BcryptCost = DefaultBcryptCost
 	}
@@ -134,6 +138,7 @@ func (s *Service) Register(ctx context.Context, email, password, displayName str
 		if pgxdb.IsDuplicateKey(err) {
 			return nil, newError(CodeEmailExists, "email already exists", err)
 		}
+
 		return nil, newError(CodeInternal, "failed to create user", err)
 	}
 
@@ -148,23 +153,23 @@ func (s *Service) Login(ctx context.Context, email, password, clientIP string) (
 	}
 
 	if err := s.validateLoginGuards(ctx, email, clientIP); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("validate login guards: %w", err)
 	}
 
 	user, err := s.findLoginUser(ctx, email, password)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("find login user: %w", err)
 	}
 
-	if err := s.validateLoginPassword(ctx, email, user.PasswordHash, password); err != nil {
-		return nil, nil, err
+	if validateErr := s.validateLoginPassword(ctx, email, user.PasswordHash, password); validateErr != nil {
+		return nil, nil, fmt.Errorf("validate login password: %w", validateErr)
 	}
 
 	s.onLoginSucceeded(ctx, email)
 
 	session, err := s.createSession(ctx, user.ID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create session: %w", err)
 	}
 
 	return session, toUser(&user), nil
@@ -176,9 +181,14 @@ func (s *Service) validateLoginGuards(ctx context.Context, email, clientIP strin
 	}
 
 	if err := s.validateLoginRateLimit(ctx, clientIP); err != nil {
-		return err
+		return fmt.Errorf("validate login rate limit: %w", err)
 	}
-	return s.validateAccountLock(ctx, email)
+
+	if err := s.validateAccountLock(ctx, email); err != nil {
+		return fmt.Errorf("validate account lock: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) validateLoginRateLimit(ctx context.Context, clientIP string) error {
@@ -186,9 +196,11 @@ func (s *Service) validateLoginRateLimit(ctx context.Context, clientIP string) e
 	if err != nil {
 		return newError(CodeInternal, "rate limit check failed", err)
 	}
+
 	if limited {
 		return newError(CodeRateLimited, "rate limited", nil)
 	}
+
 	return nil
 }
 
@@ -197,9 +209,11 @@ func (s *Service) validateAccountLock(ctx context.Context, email string) error {
 	if err != nil {
 		return newError(CodeInternal, "lock check failed", err)
 	}
+
 	if locked {
 		return newError(CodeAccountLocked, "account locked", nil)
 	}
+
 	return nil
 }
 
@@ -208,14 +222,18 @@ func (s *Service) findLoginUser(ctx context.Context, email, password string) (us
 	if err == nil {
 		return user, nil
 	}
-	if stdErrors.Is(err, pgx.ErrNoRows) {
+
+	if errors.Is(err, pgx.ErrNoRows) {
 		// 사용자 미존재 경로도 wrong-password 경로와 같은 bcrypt 비용을 지불해 email enumeration 타이밍 누설을 막는다.
 		if compareErr := comparePassword(s.loginDummyHash, []byte(password)); compareErr != nil && s.logger != nil {
 			s.logger.Debug("login_dummy_password_compare_completed", slog.Any("error", compareErr))
 		}
+
 		s.onLoginFailed(ctx, email)
+
 		return user, newError(CodeInvalidCredentials, "invalid credentials", nil)
 	}
+
 	return user, newError(CodeInternal, "failed to query user", err)
 }
 
@@ -225,6 +243,7 @@ type rowScanner interface {
 
 func scanUser(row rowScanner) (userModel, error) {
 	var user userModel
+
 	err := row.Scan(
 		&user.ID,
 		&user.Email,
@@ -234,22 +253,38 @@ func scanUser(row rowScanner) (userModel, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-	return user, err
+	if err != nil {
+		return user, fmt.Errorf("scan user row: %w", err)
+	}
+
+	return user, nil
 }
 
 func (s *Service) findUserByEmail(ctx context.Context, email string) (userModel, error) {
-	return scanUser(s.db.QueryRow(ctx, mustSQL("service_0244_02.sql"), email))
+	out, err := scanUser(s.db.QueryRow(ctx, mustSQL("service_0244_02.sql"), email))
+	if err != nil {
+		return out, fmt.Errorf("scan user: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *Service) findUserByID(ctx context.Context, id string) (userModel, error) {
-	return scanUser(s.db.QueryRow(ctx, mustSQL("service_0252_03.sql"), id))
+	out, err := scanUser(s.db.QueryRow(ctx, mustSQL("service_0252_03.sql"), id))
+	if err != nil {
+		return out, fmt.Errorf("scan user: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *Service) validateLoginPassword(ctx context.Context, email, passwordHash, password string) error {
 	if comparePassword([]byte(passwordHash), []byte(password)) == nil {
 		return nil
 	}
+
 	s.onLoginFailed(ctx, email)
+
 	return newError(CodeInvalidCredentials, "invalid credentials", nil)
 }
 

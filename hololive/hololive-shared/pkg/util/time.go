@@ -26,13 +26,14 @@ import (
 )
 
 // KSTZone은 KST(UTC+9) 고정 오프셋 Location입니다.
-// time.LoadLocation 기반 kstLocation과 달리 tzdata 없이 동작합니다.
+// 이 값은 time.LoadLocation 기반 kstLocation과 달리 tzdata 없이 동작합니다.
 var KSTZone = time.FixedZone("KST", 9*60*60)
 
 var kstLocation *time.Location
 
 func init() {
 	var err error
+
 	kstLocation, err = time.LoadLocation("Asia/Seoul")
 	if err != nil {
 		kstLocation = time.FixedZone("KST", 9*60*60)
@@ -45,6 +46,7 @@ func FirstNonNilTime(values ...*time.Time) *time.Time {
 			return value
 		}
 	}
+
 	return nil
 }
 
@@ -71,6 +73,7 @@ func MinutesUntilFloorPtr(target *time.Time, reference time.Time) int {
 
 	duration := target.Sub(reference)
 	minutesUntil := math.Floor(duration.Minutes())
+
 	if minutesUntil < 0 {
 		return -1
 	}

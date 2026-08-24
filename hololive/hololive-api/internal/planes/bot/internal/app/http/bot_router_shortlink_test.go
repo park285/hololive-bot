@@ -20,6 +20,7 @@ func TestBotRouteRegistrarIncludesPublicShortLink(t *testing.T) {
 
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/l/dQw4w9WgXcQ", http.NoBody)
 	request.Header.Set("User-Agent", "facebookexternalhit/1.1; kakaotalk-scrap/1.0")
+
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 

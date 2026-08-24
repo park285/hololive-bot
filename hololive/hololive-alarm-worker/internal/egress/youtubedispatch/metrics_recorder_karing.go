@@ -27,7 +27,9 @@ func (mr *MetricsRecorder) recordKaringRequestBuildFailure(
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
 	)
+
 	failedAt := time.Now()
+
 	mr.logger.Warn("Failed to build Karing delivery request",
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
@@ -37,6 +39,7 @@ func (mr *MetricsRecorder) recordKaringRequestBuildFailure(
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, mode, "failure", "karing request", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, mode, "failure", "karing request")
+
 	for i := range rows {
 		mr.recordDeliveryFailure(result, mu, "karing request", rows[i].ID, rows[i].OutboxID)
 	}
@@ -60,7 +63,9 @@ func (mr *MetricsRecorder) recordKaringSendFailure(
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
 	)
+
 	failedAt := time.Now()
+
 	mr.logger.Warn("Failed to send Karing delivery",
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
@@ -70,6 +75,7 @@ func (mr *MetricsRecorder) recordKaringSendFailure(
 		slog.Any("error", err))
 	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, rows, outboxes, failedAt, mode, "failure", "karing send", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, failedAt, mode, "failure", "karing send")
+
 	for i := range rows {
 		mr.recordDeliveryFailureWithRetryAfter(result, mu, "karing send", rows[i].ID, rows[i].OutboxID, deliveryRetryAfter(err))
 	}
@@ -89,6 +95,7 @@ func (mr *MetricsRecorder) recordKaringSuccess(
 	mu *sync.Mutex,
 ) {
 	sentAt := time.Now()
+
 	mr.logger.Info("Sent Karing delivery",
 		slog.String("room_id", roomID),
 		slog.String("channel_id", channelID),
@@ -100,10 +107,12 @@ func (mr *MetricsRecorder) recordKaringSuccess(
 	mr.auditLogger.logCommunityShortsDeliveryResult(rows, outboxes, sentAt, mode, "success", "")
 
 	mu.Lock()
+
 	for i := range rows {
 		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, rows[i].ID)
 		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, rows[i].OutboxID)
 	}
+
 	result.SuccessClaimTokens = append(result.SuccessClaimTokens, claimTokens...)
 	mu.Unlock()
 }

@@ -35,12 +35,13 @@ func (r *SendResult) Merge(child SendResult) {
 	r.Sent += child.Sent
 	r.Skipped += child.Skipped
 	r.Failed += child.Failed
+
 	if len(child.FailedRooms) > 0 {
 		r.FailedRooms = append(r.FailedRooms, child.FailedRooms...)
 	}
 }
 
-// 분산 락 / Room별 delivery claim TTL
+// 분산 락 / Room별 delivery claim TTL.
 const (
 	DefaultExecutionLockTTL = 15 * time.Minute
 	WeeklyDeliveryClaimTTL  = 8 * 24 * time.Hour  // 다음 주 새 weekKey 전까지 유효

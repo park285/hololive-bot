@@ -4,11 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T) {
@@ -17,11 +18,11 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	pool := dbtest.NewPool(t)
 	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
 	dateStr := "2026-07-10"
-	eventKey := birthdayGreetingEventKey("UC_a", dateStr)
+	eventKey := birthdayGreetingEventKey(testChannelA, dateStr)
 	envelopes := []domain.AlarmQueueEnvelope{
-		birthdayGreetingTestEnvelope("UC_a", "room-sent", dateStr),
-		birthdayGreetingTestEnvelope("UC_a", "room-retry", dateStr),
-		birthdayGreetingTestEnvelope("UC_b", "room-other-member", dateStr),
+		birthdayGreetingTestEnvelope(testChannelA, "room-sent", dateStr),
+		birthdayGreetingTestEnvelope(testChannelA, "room-retry", dateStr),
+		birthdayGreetingTestEnvelope(testChannelB, "room-other-member", dateStr),
 	}
 	_, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
@@ -29,7 +30,8 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	})
 	require.NoError(t, err)
 
-	sentAt := time.Date(2026, 7, 10, 0, 5, 0, 0, time.UTC)
+	sentAt := time.Date(2026, time.July, 10, 0, 5, 0, 0, time.UTC)
+
 	_, err = pool.Exec(t.Context(), `
 		UPDATE alarm_dispatch_deliveries d
 		SET status = 'sent', sent_at = $1
@@ -43,14 +45,14 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	store := NewPgxStore(pool)
 	roomsByEventKey, err := store.FindSentRoomsByEventKeys(t.Context(), []string{
 		eventKey,
-		birthdayGreetingEventKey("UC_b", dateStr),
+		birthdayGreetingEventKey(testChannelB, dateStr),
 		birthdayGreetingEventKey("UC_missing", dateStr),
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"room-sent"}, roomsByEventKey[eventKey])
 	assert.NotContains(t, roomsByEventKey[eventKey], "room-retry")
-	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey("UC_b", dateStr))
+	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey(testChannelB, dateStr))
 	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey("UC_missing", dateStr))
 }
 

@@ -22,10 +22,12 @@ package workerruntime
 
 import (
 	"context"
+	"fmt"
+
+	"golang.org/x/sync/errgroup"
 
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"golang.org/x/sync/errgroup"
 )
 
 func (r *AlarmWorkerRuntime) Run() error {
@@ -33,7 +35,11 @@ func (r *AlarmWorkerRuntime) Run() error {
 		return nil
 	}
 
-	return applifecycle.Run(r.Logger, r.Start, r.Shutdown)
+	if err := applifecycle.Run(r.Logger, r.Start, r.Shutdown); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
+	return nil
 }
 
 func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
@@ -42,9 +48,11 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 	}
 
 	r.beginAlarmScheduler()
+
 	if r.WorkerObservability != nil {
 		r.WorkerObservability.Start(ctx)
 	}
+
 	applifecycle.Start(ctx, errCh, applifecycle.StartHooks{
 		Logger:     r.Logger,
 		ServerAddr: r.ServerAddr,
@@ -68,27 +76,36 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
+
 	if r.Scheduler != nil {
 		panicguard.GoE(eg, r.Logger, "alarm-worker-scheduler", func() error {
 			return r.Scheduler.Start(egCtx)
 		})
 	}
+
 	if r.NotificationEgress != nil {
 		panicguard.GoE(eg, r.Logger, "alarm-worker-notification-egress", func() error {
 			return r.NotificationEgress.Start(egCtx)
 		})
 	}
+
 	if r.CelebrationRunner != nil {
 		panicguard.GoE(eg, r.Logger, "alarm-worker-celebration", func() error {
 			return r.CelebrationRunner.Start(egCtx)
 		})
 	}
+
 	if r.BirthdayStreamRunner != nil {
 		panicguard.GoE(eg, r.Logger, "alarm-worker-birthday-stream", func() error {
 			return r.BirthdayStreamRunner.Start(egCtx)
 		})
 	}
-	return eg.Wait()
+
+	if err := eg.Wait(); err != nil {
+		return fmt.Errorf("wait: %w", err)
+	}
+
+	return nil
 }
 
 func (r *AlarmWorkerRuntime) StartHTTPServer(errCh chan<- error) {

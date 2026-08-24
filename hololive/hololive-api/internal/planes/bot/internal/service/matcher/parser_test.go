@@ -41,7 +41,7 @@ func TestParseNameWithOrg(t *testing.T) {
 			name:         "with org Hololive",
 			input:        "미코 (Hololive)",
 			expectedName: "미코",
-			expectedOrg:  "Hololive",
+			expectedOrg:  orgHololive,
 		},
 		{
 			name:         "with org Nijisanji",
@@ -65,13 +65,13 @@ func TestParseNameWithOrg(t *testing.T) {
 			name:         "with extra spaces",
 			input:        "미코  (Hololive) ",
 			expectedName: "미코",
-			expectedOrg:  "Hololive",
+			expectedOrg:  orgHololive,
 		},
 		{
 			name:         "name with spaces",
 			input:        "사쿠라 미코 (Hololive)",
 			expectedName: "사쿠라 미코",
-			expectedOrg:  "Hololive",
+			expectedOrg:  orgHololive,
 		},
 		{
 			name:         "empty input",

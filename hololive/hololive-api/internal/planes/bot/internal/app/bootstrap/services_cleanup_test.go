@@ -26,6 +26,7 @@ func TestComposeBotInfrastructureCleanupClosesIrisAndInfraOnce(t *testing.T) {
 	if irisClient.closed != 1 {
 		t.Fatalf("iris client close count = %d, want 1", irisClient.closed)
 	}
+
 	if infraClosed != 1 {
 		t.Fatalf("infra close count = %d, want 1", infraClosed)
 	}

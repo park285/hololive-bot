@@ -14,6 +14,7 @@ func TestNewClientReturnsErrorWhenH3ClientConfigFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("NewClient() error = nil, want h3 client config error")
 	}
+
 	if client != nil {
 		t.Fatalf("NewClient() = %v, want nil on h3 config error", client)
 	}

@@ -5,12 +5,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func newAlarmCleanupCacheMock(
@@ -19,7 +20,7 @@ func newAlarmCleanupCacheMock(
 ) *cachemocks.Client {
 	t.Helper()
 
-	cache := sharedtestutil.NewTestCacheService(t, t.Context())
+	cache := sharedtestutil.NewTestCacheService(t.Context(), t)
 	client := cachemocks.NewLenientClient()
 
 	client.BuilderFunc = cache.Builder
@@ -43,7 +44,7 @@ func TestRemoveChannelSubscribers_ReturnsErrorOnUnexpectedSRemResultCount(t *tes
 	err := as.removeChannelSubscribers(
 		t.Context(),
 		"channel-1",
-		"room-1",
+		testRoomID,
 		domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts},
 	)
 	require.Error(t, err)
@@ -69,7 +70,7 @@ func TestClearChannelSubscribersPipeline_ReturnsErrorOnScardParseFailure(t *test
 		logger: newDiscardAlarmLogger(),
 	}
 
-	err := as.clearChannelSubscribersPipeline(t.Context(), []string{"channel-1"}, "room-1")
+	err := as.clearChannelSubscribersPipeline(t.Context(), []string{"channel-1"}, testRoomID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scard key")
 }
@@ -77,7 +78,7 @@ func TestClearChannelSubscribersPipeline_ReturnsErrorOnScardParseFailure(t *test
 func TestCleanupChannelRegistryIfEmpty_ReturnsErrorWhenRemovingRegistryEntryFails(t *testing.T) {
 	t.Parallel()
 
-	cache := sharedtestutil.NewTestCacheService(t, t.Context())
+	cache := sharedtestutil.NewTestCacheService(t.Context(), t)
 	as := &AlarmService{
 		cache: &cachemocks.Client{
 			BuilderFunc: cache.Builder,

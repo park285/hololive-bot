@@ -7,9 +7,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/retry"
+
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 const (
@@ -50,26 +51,32 @@ type Lease struct {
 
 func Acquire(ctx context.Context, cacheClient cache.Client, spec *Spec, logger *slog.Logger) (*Lease, error) {
 	if cacheClient == nil {
-		return nil, fmt.Errorf("acquire lease: cache client must not be nil")
+		return nil, errors.New("acquire lease: cache client must not be nil")
 	}
+
 	if spec == nil || spec.Key == "" || spec.Owner == "" {
-		return nil, fmt.Errorf("acquire lease: key and owner are required")
+		return nil, errors.New("acquire lease: key and owner are required")
 	}
+
 	if spec.TTL <= 0 {
 		return nil, fmt.Errorf("acquire lease: ttl must be positive, got %v", spec.TTL)
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	l := newLease(cacheClient, spec, logger)
 
 	acquired, err := cacheClient.SetNX(ctx, l.key, l.owner, l.ttl)
 	if err != nil {
 		return nil, fmt.Errorf("acquire lease: setnx: %w", err)
 	}
+
 	if !acquired {
 		return nil, fmt.Errorf("acquire lease: %w: key=%s", ErrHeld, privacylog.RedactCacheKey(l.key))
 	}
+
 	return l, nil
 }
 
@@ -78,14 +85,17 @@ func newLease(cacheClient cache.Client, spec *Spec, logger *slog.Logger) *Lease 
 	if maxAttempts < 1 {
 		maxAttempts = defaultRenewMaxAttempts
 	}
+
 	baseDelay := spec.RenewBaseDelay
 	if baseDelay <= 0 {
 		baseDelay = defaultRenewBaseDelay
 	}
+
 	jitter := spec.RenewJitter
 	if jitter <= 0 {
 		jitter = defaultRenewJitter
 	}
+
 	return &Lease{
 		cache:       cacheClient,
 		name:        spec.Name,
@@ -104,6 +114,7 @@ func (l *Lease) Owner() string {
 	if l == nil {
 		return ""
 	}
+
 	return l.owner
 }
 
@@ -111,6 +122,7 @@ func (l *Lease) Renew(ctx context.Context) error {
 	if l == nil {
 		return nil
 	}
+
 	err := retry.WithRetry(ctx, retry.RetryOptions{
 		MaxAttempts: l.maxAttempts,
 		BaseDelay:   l.baseDelay,
@@ -121,13 +133,16 @@ func (l *Lease) Renew(ctx context.Context) error {
 		},
 		OnRetry: l.logRenewRetry,
 	}, l.renewOnce)
-	if err == nil {
-		return nil
+	if isRenewFailure(ctx, err) {
+		return fmt.Errorf("renew lease %q: %w", l.name, err)
 	}
-	if ctx.Err() != nil {
-		return nil
-	}
-	return fmt.Errorf("renew lease %q: %w", l.name, err)
+
+	return nil
+}
+
+// 컨텍스트가 이미 취소된 뒤의 갱신 실패는 정상 종료 과정이므로 실패로 세지 않는다.
+func isRenewFailure(ctx context.Context, err error) bool {
+	return err != nil && ctx.Err() == nil
 }
 
 func (l *Lease) renewOnce(ctx context.Context) error {
@@ -135,9 +150,11 @@ func (l *Lease) renewOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("renew lease: %w", err)
 	}
+
 	if !renewed {
 		return fmt.Errorf("renew lease: %w: key=%s", ErrOwnershipLost, privacylog.RedactCacheKey(l.key))
 	}
+
 	return nil
 }
 
@@ -145,6 +162,7 @@ func (l *Lease) logRenewRetry(attempt int, err error, delay time.Duration) {
 	if l.logger == nil {
 		return
 	}
+
 	l.logger.Warn("lease renew retrying",
 		slog.String("lease", l.name),
 		privacylog.CacheKeyAttr(l.key),
@@ -158,15 +176,19 @@ func (l *Lease) RenewLoop(ctx context.Context) error {
 	if l == nil {
 		return nil
 	}
+
 	if l.renewGap <= 0 {
 		return fmt.Errorf("renew loop %q: renew gap must be positive, got %v", l.name, l.renewGap)
 	}
+
 	ticker := time.NewTicker(l.renewGap)
+
 	defer ticker.Stop()
 
 	for {
 		stop, err := l.renewOnTick(ctx, ticker.C)
 		if stop {
+			//nolint:wrapcheck // Renew가 이미 리스 이름을 담은 완결된 메시지를 만들므로, 다시 감싸면 이름이 두 번 나온다.
 			return err
 		}
 	}
@@ -178,6 +200,8 @@ func (l *Lease) renewOnTick(ctx context.Context, tick <-chan time.Time) (bool, e
 		return true, nil
 	case <-tick:
 		err := l.Renew(ctx)
+
+		//nolint:wrapcheck // Renew가 이미 리스 이름을 담은 완결된 메시지를 만들므로, 다시 감싸면 이름이 두 번 나온다.
 		return err != nil, err
 	}
 }
@@ -186,12 +210,15 @@ func (l *Lease) Release(ctx context.Context) error {
 	if l == nil {
 		return nil
 	}
+
 	released, err := l.cache.CompareAndDelete(ctx, l.key, l.owner)
 	if err != nil {
 		return fmt.Errorf("release lease: compare-and-delete: %w", err)
 	}
+
 	if !released {
 		return fmt.Errorf("release lease: ownership mismatch: key=%s", privacylog.RedactCacheKey(l.key))
 	}
+
 	return nil
 }

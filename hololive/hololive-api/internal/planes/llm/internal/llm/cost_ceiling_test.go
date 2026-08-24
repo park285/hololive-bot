@@ -22,7 +22,6 @@ package llm
 
 import (
 	"bytes"
-	"context"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -37,6 +36,7 @@ import (
 
 func newMiniredisCache(t *testing.T) cache.Client {
 	t.Helper()
+
 	mini, err := miniredis.Run()
 	require.NoError(t, err)
 	t.Cleanup(mini.Close)
@@ -44,7 +44,7 @@ func newMiniredisCache(t *testing.T) cache.Client {
 	port, err := strconv.Atoi(mini.Port())
 	require.NoError(t, err)
 
-	svc, err := cache.NewCacheService(context.Background(), cache.Config{
+	svc, err := cache.NewCacheService(t.Context(), cache.Config{
 		Host:              mini.Host(),
 		Port:              port,
 		DisableCache:      true,
@@ -52,6 +52,7 @@ func newMiniredisCache(t *testing.T) cache.Client {
 	}, slog.New(slog.NewTextHandler(noopWriter{}, nil)))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, svc.Close()) })
+
 	return svc
 }
 
@@ -61,14 +62,19 @@ func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 func TestValkeyCostCeiling_AccumulatesMonthlyAndWarnsOnceAtCrossing(t *testing.T) {
 	cacheClient := newMiniredisCache(t)
+
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
 
 	tracker := NewValkeyCostCeiling(cacheClient, 100, logger)
 	require.NotNil(t, tracker)
-	fixed := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+
+	fixed := time.Date(2026, time.June, 3, 12, 0, 0, 0, time.UTC)
+
 	tracker.now = func() time.Time { return fixed }
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	// 60 누적 → 임계(100) 미만, 경고 없음.
 	tracker.RecordUsage(ctx, "openai", "gpt-x", 60)
@@ -91,18 +97,20 @@ func TestValkeyCostCeiling_AccumulatesMonthlyAndWarnsOnceAtCrossing(t *testing.T
 
 func TestValkeyCostCeiling_DisabledWhenNilCacheOrZeroCeiling(t *testing.T) {
 	require.Nil(t, NewValkeyCostCeiling(nil, 100, nil))
+
 	cacheClient := newMiniredisCache(t)
 	require.Nil(t, NewValkeyCostCeiling(cacheClient, 0, nil))
 
 	// nil tracker의 RecordUsage는 패닉 없이 no-op.
 	var nilTracker *ValkeyCostCeiling
+
 	require.NotPanics(t, func() {
-		nilTracker.RecordUsage(context.Background(), "openai", "m", 100)
+		nilTracker.RecordUsage(t.Context(), "openai", "m", 100)
 	})
 }
 
 func TestValkeyCostCeiling_MonthKeyIsUTCBucketed(t *testing.T) {
 	tracker := &ValkeyCostCeiling{}
-	require.Equal(t, "llm:cost:tokens:2026-06", tracker.monthKey(time.Date(2026, 6, 30, 23, 0, 0, 0, time.UTC)))
-	require.Equal(t, "llm:cost:tokens:2026-07", tracker.monthKey(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)))
+	require.Equal(t, "llm:cost:tokens:2026-06", tracker.monthKey(time.Date(2026, time.June, 30, 23, 0, 0, 0, time.UTC)))
+	require.Equal(t, "llm:cost:tokens:2026-07", tracker.monthKey(time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)))
 }

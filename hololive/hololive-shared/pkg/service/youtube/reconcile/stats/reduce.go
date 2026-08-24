@@ -2,48 +2,60 @@ package stats
 
 import (
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-func Reduce(state State, evidence Evidence) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
+func Reduce(state State, evidence Evidence) (Decision, error) {
 	if evidence.Sample.ChannelID == "" {
-		return Decision{}, fmt.Errorf("channel stats reducer received empty channel id")
+		return Decision{}, errors.New("channel stats reducer received empty channel id")
 	}
+
 	digest, err := sampleDigest(&evidence.Sample)
 	if err != nil {
-		return Decision{}, err
+		return Decision{}, fmt.Errorf("sample digest: %w", err)
 	}
+
 	workingState := state.clone()
 	workingEvidence := evidence.clone()
 	sample := &workingEvidence.Sample
+
 	sample.Provider = workingEvidence.Provider
 	sample.ObservationID = workingEvidence.ObservationID
+
 	head := workingState.Head
+
 	head.ChannelID = evidence.Sample.ChannelID
+
 	if sameSlot(head.UnresolvedScheduledFor, sample.ScheduledFor) {
-		return replayOrConflict(&workingState, sample, digest, &head)
+		return replayOrConflict(&workingState, sample, digest, &head), nil
 	}
+
 	if head.LastResolvedScheduledFor != nil && sample.ScheduledFor.Before(*head.LastResolvedScheduledFor) {
-		return olderSlot(&workingState, sample, digest, &head)
+		return olderSlot(&workingState, sample, digest, &head), nil
 	}
+
 	if sameSlot(head.LastResolvedScheduledFor, sample.ScheduledFor) || slotHasConflict(workingState.Slot, sample) {
-		return replayOrConflict(&workingState, sample, digest, &head)
+		return replayOrConflict(&workingState, sample, digest, &head), nil
 	}
+
 	return advanceResolved(&head, sample), nil
 }
 
-func olderSlot(state *State, sample *Sample, digest string, head *Head) (Decision, error) {
+func olderSlot(state *State, sample *Sample, digest string, head *Head) Decision {
 	if slotHasConflict(state.Slot, sample) {
-		return unresolvedDecision(head, sample, firstConflictingDigest(state.Slot, sample), digest, false), nil
+		return unresolvedDecision(head, sample, firstConflictingDigest(state.Slot, sample), digest, false)
 	}
+
 	for i := range state.Slot {
 		if state.Slot[i].Digest == digest {
-			return replayDecision(head, sample), nil
+			return replayDecision(head, sample)
 		}
 	}
+
 	return Decision{
 		Sample:        sample,
 		Head:          *head,
@@ -51,7 +63,7 @@ func olderSlot(state *State, sample *Sample, digest string, head *Head) (Decisio
 		Applications: []Application{{
 			EntityKind: "youtube_channel_stats", EntityKey: sample.ChannelID, Decision: "OLDER_RETAINED",
 		}},
-	}, nil
+	}
 }
 
 func slotHasConflict(existing []SlotEvidence, sample *Sample) bool {
@@ -60,6 +72,7 @@ func slotHasConflict(existing []SlotEvidence, sample *Sample) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -69,20 +82,24 @@ func firstConflictingDigest(existing []SlotEvidence, sample *Sample) string {
 			return existing[i].Digest
 		}
 	}
+
 	return ""
 }
 
-func replayOrConflict(state *State, sample *Sample, digest string, head *Head) (Decision, error) {
+func replayOrConflict(state *State, sample *Sample, digest string, head *Head) Decision {
 	if decision, ok := matchSlotEvidence(state.Slot, sample, digest, head); ok {
-		return decision, nil
+		return decision
 	}
+
 	if sameSlot(head.LastResolvedScheduledFor, sample.ScheduledFor) && lastResolvedConflicts(head, sample) {
-		return unresolvedDecision(head, sample, lastResolvedDigest(head), digest, true), nil
+		return unresolvedDecision(head, sample, lastResolvedDigest(head), digest, true)
 	}
+
 	if sameSlot(head.LastResolvedScheduledFor, sample.ScheduledFor) {
-		return replayDecision(head, sample), nil
+		return replayDecision(head, sample)
 	}
-	return advanceResolved(head, sample), nil
+
+	return advanceResolved(head, sample)
 }
 
 func matchSlotEvidence(existing []SlotEvidence, sample *Sample, digest string, head *Head) (Decision, bool) {
@@ -92,12 +109,15 @@ func matchSlotEvidence(existing []SlotEvidence, sample *Sample, digest string, h
 			if item.Digest == digest {
 				return replayDecision(head, sample), true
 			}
+
 			return unresolvedDecision(head, sample, item.Digest, digest, true), true
 		}
+
 		if samplesConflict(slotSample(item), sample) {
 			return unresolvedDecision(head, sample, item.Digest, digest, true), true
 		}
 	}
+
 	return Decision{}, false
 }
 
@@ -111,6 +131,7 @@ func advanceResolved(head *Head, sample *Sample) Decision {
 	head.LastResolvedViewCount = mergeCount(sample.ViewCovered, sample.ViewCount, head.LastResolvedViewCount)
 	head.LastResolvedVideoCount = mergeCount(sample.VideoCovered, sample.VideoCount, head.LastResolvedVideoCount)
 	head.UnresolvedScheduledFor = nil
+
 	return Decision{
 		Sample:        sample,
 		Head:          *head,
@@ -132,7 +153,9 @@ func unresolvedDecision(head *Head, sample *Sample, existingDigest, attemptedDig
 		head.PriorResolvedViewCount = nil
 		head.PriorResolvedVideoCount = nil
 	}
+
 	head.UnresolvedScheduledFor = copyTime(sample.ScheduledFor)
+
 	return Decision{
 		Sample:        sample,
 		Head:          *head,
@@ -159,7 +182,12 @@ func replayDecision(head *Head, sample *Sample) Decision {
 }
 
 func SampleDigest(sample *Sample) (string, error) {
-	return sampleDigest(sample)
+	out, err := sampleDigest(sample)
+	if err != nil {
+		return out, fmt.Errorf("sample digest: %w", err)
+	}
+
+	return out, nil
 }
 
 func sampleDigest(sample *Sample) (string, error) {
@@ -177,6 +205,7 @@ func sampleDigest(sample *Sample) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal channel stats digest: %w", err)
 	}
+
 	return contract.SHA256Hex(payload), nil
 }
 
@@ -189,10 +218,12 @@ func lastResolvedDigest(head *Head) string {
 		ViewCovered:       head.LastResolvedViewCount != nil,
 		VideoCovered:      head.LastResolvedVideoCount != nil,
 	}
+
 	digest, err := sampleDigest(&digestSample)
 	if err != nil {
 		return ""
 	}
+
 	return digest
 }
 
@@ -205,6 +236,7 @@ func lastResolvedConflicts(head *Head, sample *Sample) bool {
 		ViewCovered:       sample.ViewCovered && head.LastResolvedViewCount != nil,
 		VideoCovered:      sample.VideoCovered && head.LastResolvedVideoCount != nil,
 	}
+
 	return samplesConflict(&resolved, sample)
 }
 
@@ -218,12 +250,15 @@ func overlappingCountConflicts(leftCovered bool, left *int64, rightCovered bool,
 	if !leftCovered || !rightCovered {
 		return false
 	}
+
 	if left == nil && right == nil {
 		return false
 	}
+
 	if left == nil || right == nil {
 		return true
 	}
+
 	return *left != *right
 }
 
@@ -243,6 +278,7 @@ func mergeCount(covered bool, incoming, previous *int64) *int64 {
 	if covered {
 		return copyCount(incoming)
 	}
+
 	return copyCount(previous)
 }
 
@@ -259,6 +295,8 @@ func copyCount(value *int64) *int64 {
 	if value == nil {
 		return nil
 	}
+
 	copied := *value
+
 	return &copied
 }

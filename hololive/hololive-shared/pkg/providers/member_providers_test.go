@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -17,7 +16,7 @@ type providerMemberAdapterContextKey struct{}
 func TestProvideMemberServiceAdapter_DetachesCancellationAndPreservesValues(t *testing.T) {
 	t.Parallel()
 
-	parent := context.WithValue(context.Background(), providerMemberAdapterContextKey{}, "build-value")
+	parent := context.WithValue(t.Context(), providerMemberAdapterContextKey{}, "build-value")
 	buildCtx, cancel := context.WithCancel(parent)
 	cancel()
 
@@ -25,6 +24,7 @@ func TestProvideMemberServiceAdapter_DetachesCancellationAndPreservesValues(t *t
 	if err := adapterCtx.Err(); err != nil {
 		t.Fatalf("adapter ctx err = %v, want nil", err)
 	}
+
 	if got := adapterCtx.Value(providerMemberAdapterContextKey{}); got != "build-value" {
 		t.Fatalf("adapter ctx value = %v, want build-value", got)
 	}
@@ -40,22 +40,27 @@ func (s failingMemberSnapshot) AllMembers(context.Context) ([]*domain.Member, er
 
 func TestInitializeMemberDatabaseFromSnapshot_SkipsDestructiveInitAfterColdFailure(t *testing.T) {
 	wantErr := errors.New("database unavailable")
+
 	var initializeCalls atomic.Int64
+
 	cacheClient := cachemocks.NewLenientClient()
+
 	cacheClient.InitializeMemberDatabaseFunc = func(context.Context, map[string]string) error {
 		initializeCalls.Add(1)
+
 		return nil
 	}
 
 	err := initializeMemberDatabaseFromSnapshot(
-		context.Background(),
+		t.Context(),
 		failingMemberSnapshot{err: wantErr},
 		cacheClient,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		slog.New(slog.DiscardHandler),
 	)
 	if err != nil {
 		t.Fatalf("initializeMemberDatabaseFromSnapshot() error = %v, want nil", err)
 	}
+
 	if initializeCalls.Load() != 0 {
 		t.Fatalf("InitializeMemberDatabase() calls = %d, want 0 after cold scan failure", initializeCalls.Load())
 	}

@@ -1,6 +1,7 @@
 package observation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,25 +18,28 @@ const alarmLatencyExceededThresholdMillis = alarmtiming.LatencyExceededThreshold
 
 func normalizeRecord(record *domain.YouTubeContentAlarmTracking) (*domain.YouTubeContentAlarmTracking, error) {
 	if record == nil {
-		return nil, fmt.Errorf("record is nil")
+		return nil, errors.New("record is nil")
 	}
 
 	normalizedKind, normalizedContentID, err := normalizeIdentity(record.Kind, record.ContentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize identity: %w", err)
 	}
 
 	normalizedChannelID := strings.TrimSpace(record.ChannelID)
 	if normalizedChannelID == "" {
-		return nil, fmt.Errorf("channel id is empty")
+		return nil, errors.New("channel id is empty")
 	}
+
 	if record.DetectedAt.IsZero() {
-		return nil, fmt.Errorf("detected_at is empty")
+		return nil, errors.New("detected_at is empty")
 	}
 
 	actualPublishedAt := yttimestamp.NormalizePtr(record.ActualPublishedAt)
 	timing := alarmtiming.Build(actualPublishedAt, record.AlarmSentAt)
+
 	actualPublishedAt = timing.ActualPublishedAt
+
 	alarmSentAt := timing.AlarmSentAt
 	latencyMillis := timing.AlarmLatencyMillis
 	latencyExceeded := timing.AlarmLatencyExceeded
@@ -74,6 +78,7 @@ func mergeNormalizedTrackingRecord(existing, next *domain.YouTubeContentAlarmTra
 	if existing == nil {
 		return next
 	}
+
 	if next == nil {
 		return existing
 	}
@@ -88,9 +93,11 @@ func mergeTrackingRecordFields(merged, next *domain.YouTubeContentAlarmTracking)
 	if strings.TrimSpace(next.ChannelID) != "" {
 		merged.ChannelID = next.ChannelID
 	}
+
 	if next.ActualPublishedAt != nil {
 		merged.ActualPublishedAt = next.ActualPublishedAt
 	}
+
 	if next.DetectedAt.Before(merged.DetectedAt) {
 		merged.DetectedAt = next.DetectedAt
 	}
@@ -109,6 +116,7 @@ func mergeTrackingAlarmSentAt(merged *domain.YouTubeContentAlarmTracking, nextAl
 
 func normalizeMergedTrackingRecord(merged *domain.YouTubeContentAlarmTracking) *domain.YouTubeContentAlarmTracking {
 	timing := alarmtiming.Build(merged.ActualPublishedAt, merged.AlarmSentAt)
+
 	merged.ActualPublishedAt = timing.ActualPublishedAt
 	merged.AlarmSentAt = timing.AlarmSentAt
 	merged.AlarmLatencyMillis = timing.AlarmLatencyMillis
@@ -121,7 +129,7 @@ func normalizeMergedTrackingRecord(merged *domain.YouTubeContentAlarmTracking) *
 func normalizeIdentity(kind domain.OutboxKind, contentID string) (domain.OutboxKind, string, error) {
 	normalizedContentID := strings.TrimSpace(contentID)
 	if normalizedContentID == "" {
-		return "", "", fmt.Errorf("content id is empty")
+		return "", "", errors.New("content id is empty")
 	}
 
 	switch kind {
@@ -136,14 +144,17 @@ func normalizeIdentity(kind domain.OutboxKind, contentID string) (domain.OutboxK
 
 func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) []string {
 	normalizedContentID := strings.TrimSpace(contentID)
+
 	switch kind {
 	case domain.OutboxKindNewShort:
 		canonicalContentID := canonicalTrackingIdentity(kind, normalizedContentID)
 		rawContentID, err := ytcontentid.NormalizeShortVideoID(normalizedContentID)
+
 		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
 	case domain.OutboxKindCommunityPost:
 		canonicalContentID := canonicalTrackingIdentity(kind, normalizedContentID)
 		rawContentID, err := ytcontentid.NormalizeCommunityPostID(normalizedContentID)
+
 		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
 	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
 		return []string{normalizedContentID}
@@ -156,6 +167,7 @@ func trackingIdentityCandidatePair(canonicalContentID, rawContentID string, err 
 	if err != nil || strings.TrimSpace(rawContentID) == "" {
 		return []string{canonicalContentID}
 	}
+
 	if canonicalContentID == rawContentID {
 		return []string{canonicalContentID}
 	}
@@ -165,10 +177,12 @@ func trackingIdentityCandidatePair(canonicalContentID, rawContentID string, err 
 
 func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) string {
 	normalizedContentID := strings.TrimSpace(contentID)
+
 	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, normalizedContentID)
 	if err != nil {
 		return normalizedContentID
 	}
+
 	return canonicalContentID
 }
 

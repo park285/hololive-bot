@@ -16,29 +16,36 @@ func lockLiveSubject(ctx context.Context, tx dbx.Tx, subjectKey string) error {
 	if _, err := tx.Exec(ctx, mustSQL("repository_live_subject_lock_0044_44.sql"), subjectKey); err != nil {
 		return fmt.Errorf("lock live subject: %w", err)
 	}
+
 	return nil
 }
 
 func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string) (live.State, error) {
 	state := live.State{Sessions: map[string]live.SessionState{}, PendingEnds: map[string]live.PendingEnd{}}
 	if err := loadLiveSessions(ctx, tx, &state, channelIDs, videoIDs); err != nil {
-		return live.State{}, err
+		return live.State{}, fmt.Errorf("load live sessions: %w", err)
 	}
+
 	ids := make([]string, 0, len(state.Sessions)+len(videoIDs))
 	seen := map[string]struct{}{}
+
 	for videoID := range state.Sessions {
 		ids = append(ids, videoID)
 		seen[videoID] = struct{}{}
 	}
+
 	for _, videoID := range videoIDs {
 		if _, ok := seen[videoID]; ok {
 			continue
 		}
+
 		ids = append(ids, videoID)
 	}
+
 	if err := loadLiveHeads(ctx, tx, &state, ids); err != nil {
-		return live.State{}, err
+		return live.State{}, fmt.Errorf("load live heads: %w", err)
 	}
+
 	return state, nil
 }
 
@@ -46,24 +53,35 @@ func loadLiveSessions(ctx context.Context, tx dbx.Tx, state *live.State, channel
 	if len(channelIDs) == 0 && len(videoIDs) == 0 {
 		return nil
 	}
+
 	rows, err := tx.Query(ctx, mustSQL("repository_live_sessions_0045_45.sql"), channelIDs, videoIDs)
 	if err != nil {
 		return fmt.Errorf("load live sessions: %w", err)
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		session, err := scanLiveSession(rows)
 		if err != nil {
-			return err
+			return fmt.Errorf("scan live session: %w", err)
 		}
+
 		state.Sessions[session.VideoID] = session
 	}
-	return rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("load live sessions: %w", err)
+	}
+
+	return nil
 }
 
 func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
-	var session live.SessionState
-	var status string
+	var (
+		session live.SessionState
+		status  string
+	)
+
 	if err := rows.Scan(
 		&session.VideoID, &session.ChannelID, &status, &session.Title,
 		&session.ScheduledStartTime, &session.StartedAt, &session.EndedAt,
@@ -71,8 +89,10 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 	); err != nil {
 		return live.SessionState{}, fmt.Errorf("scan live session: %w", err)
 	}
+
 	session.Status = domain.LiveStatus(status)
 	session.Present = true
+
 	return session, nil
 }
 
@@ -80,37 +100,51 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs [
 	if len(videoIDs) == 0 {
 		return nil
 	}
+
 	rows, err := tx.Query(ctx, mustSQL("repository_live_heads_0046_46.sql"), videoIDs)
 	if err != nil {
 		return fmt.Errorf("load live heads: %w", err)
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		if err := applyLiveHeadRow(rows, state); err != nil {
-			return err
+			return fmt.Errorf("apply live head row: %w", err)
 		}
 	}
-	return rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("load live heads: %w", err)
+	}
+
+	return nil
 }
 
 func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
-	head, pending, err := scanLiveHead(rows)
+	head, pending, hasPending, err := scanLiveHead(rows)
 	if err != nil {
-		return err
+		return fmt.Errorf("scan live head: %w", err)
 	}
+
 	existing := state.Sessions[head.VideoID]
+
 	existing.VideoID = head.VideoID
+
 	if existing.Status == "" {
 		existing.Status = head.Status
 	}
+
 	existing.Clock = head.Clock
 	existing.EndReason = head.EndReason
 	existing.LastAbsenceScheduledFor = head.LastAbsenceScheduledFor
 	applyAbsenceSlotHints(&existing)
+
 	state.Sessions[head.VideoID] = existing
-	if pending != nil {
-		state.PendingEnds[head.VideoID] = *pending
+
+	if hasPending {
+		state.PendingEnds[head.VideoID] = pending
 	}
+
 	return nil
 }
 
@@ -118,15 +152,17 @@ func applyAbsenceSlotHints(existing *live.SessionState) {
 	if existing == nil {
 		return
 	}
+
 	if existing.Clock.ConsecutiveAbsenceSlots == 1 {
 		existing.FirstAbsenceScheduledFor = existing.LastAbsenceScheduledFor
 	}
+
 	if existing.Clock.ConsecutiveAbsenceSlots >= 2 {
 		existing.SecondAbsenceScheduledFor = existing.LastAbsenceScheduledFor
 	}
 }
 
-func scanLiveHead(rows pgx.Rows) (live.SessionState, *live.PendingEnd, error) {
+func scanLiveHead(rows pgx.Rows) (live.SessionState, live.PendingEnd, bool, error) {
 	var (
 		session      live.SessionState
 		status       string
@@ -135,6 +171,7 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, *live.PendingEnd, error) {
 		endReason    *string
 		absenceSched *time.Time
 	)
+
 	if err := rows.Scan(
 		&session.VideoID, &status,
 		&session.Clock.LastUpcomingPositiveAt, &session.Clock.LastUpcomingPositiveSeenAt,
@@ -143,18 +180,24 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, *live.PendingEnd, error) {
 		&session.Clock.ConsecutiveAbsenceSlots, &candidate, &candidateID,
 		&session.Clock.NextEndCheckAt, &session.Clock.EndedAt, &endReason,
 	); err != nil {
-		return live.SessionState{}, nil, fmt.Errorf("scan live head: %w", err)
+		return live.SessionState{}, live.PendingEnd{}, false, fmt.Errorf("scan live head: %w", err)
 	}
+
 	session.Status = domain.LiveStatus(status)
 	session.LastAbsenceScheduledFor = absenceSched
+
 	if endReason != nil {
 		reason := live.EndReason(*endReason)
+
 		session.EndReason = &reason
 	}
+
 	if candidate != nil && candidateID != nil {
 		kind := live.EndEvidenceKind(*candidate)
+
 		session.Clock.EndCandidateKind = &kind
 		session.Clock.EndCandidateObservationID = candidateID
+
 		pending := live.PendingEnd{
 			Kind:             kind,
 			VideoID:          session.VideoID,
@@ -162,10 +205,13 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, *live.PendingEnd, error) {
 			NegativeEligible: kind == live.EndEvidenceScopedAbsence,
 			ScopeCovers:      kind == live.EndEvidenceScopedAbsence || kind == live.EndEvidenceExplicitEnd || kind == live.EndEvidenceExplicitCancel,
 		}
+
 		if session.Clock.LastEndEvidenceAt != nil {
 			pending.EffectiveAt = *session.Clock.LastEndEvidenceAt
 		}
-		return session, &pending, nil
+
+		return session, pending, true, nil
 	}
-	return session, nil, nil
+
+	return session, live.PendingEnd{}, false, nil
 }

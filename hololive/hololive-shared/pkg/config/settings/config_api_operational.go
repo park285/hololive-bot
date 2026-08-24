@@ -131,6 +131,7 @@ func DefaultOfficialScheduleConfig() OfficialScheduleConfig {
 
 func LoadOfficialScheduleRuntimeConfig() OfficialScheduleRuntimeConfig {
 	defaults := DefaultOfficialScheduleConfig()
+
 	return OfficialScheduleRuntimeConfig{
 		OfficialSchedule: OfficialScheduleConfig{
 			BaseURL:      sharedenv.String("OFFICIAL_SCHEDULE_BASE_URL", defaults.BaseURL),
@@ -146,6 +147,7 @@ func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
 	if c == nil {
 		return LoadOfficialScheduleRuntimeConfig()
 	}
+
 	return OfficialScheduleRuntimeConfig{
 		OfficialSchedule:     c.OfficialSchedule,
 		MaxResponseBodyBytes: c.MaxResponseBodyBytes,

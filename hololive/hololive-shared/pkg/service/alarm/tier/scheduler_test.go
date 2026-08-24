@@ -37,10 +37,14 @@ func newTestScheduler() *TieredScheduler {
 	return NewTieredScheduler(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 }
 
-func TestComputeNextCheckAt(t *testing.T) {
-	tolerance := 2 * time.Second
+type computeNextCheckAtCase struct {
+	name             string
+	nearestStart     *time.Time
+	lastNotifiedAt   *time.Time
+	expectedInterval time.Duration
+}
 
-	now := time.Now()
+func computeNextCheckAtCases(now time.Time) []computeNextCheckAtCase {
 	notified5m := now.Add(-5 * time.Minute)
 	notified20m := now.Add(-20 * time.Minute)
 	past5m := now.Add(-5 * time.Minute)
@@ -49,12 +53,7 @@ func TestComputeNextCheckAt(t *testing.T) {
 	tier3mid := now.Add(constants.Tier2Window + 1*time.Hour)
 	tier4mid := now.Add(constants.Tier3Window + 1*time.Hour)
 
-	tests := []struct {
-		name             string
-		nearestStart     *time.Time
-		lastNotifiedAt   *time.Time
-		expectedInterval time.Duration
-	}{
+	return []computeNextCheckAtCase{
 		{
 			name:             "예정 없음, 최근 알림 없음 -> NoUpcomingInterval",
 			nearestStart:     nil,
@@ -104,15 +103,21 @@ func TestComputeNextCheckAt(t *testing.T) {
 			expectedInterval: constants.Tier4Interval,
 		},
 	}
+}
 
-	for _, tc := range tests {
+func TestComputeNextCheckAt(t *testing.T) {
+	const tolerance = 2 * time.Second
+
+	for _, tc := range computeNextCheckAtCases(time.Now()) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := ComputeNextCheckAt(tc.nearestStart, tc.lastNotifiedAt)
 			expected := time.Now().Add(tc.expectedInterval)
 			diff := result.Sub(expected)
+
 			if diff < 0 {
 				diff = -diff
 			}
+
 			assert.Less(t, diff, tolerance, "expected ~%v from now, got diff=%v", tc.expectedInterval, diff)
 		})
 	}
@@ -123,34 +128,36 @@ func TestSelectDueChannels_UnknownChannelsAreDue(t *testing.T) {
 	// full_refresh_at을 미래로 설정하여 forceAll 방지
 	ts.fullRefreshAt = time.Now().Add(1 * time.Hour)
 
-	ids := []string{"UC_A", "UC_B"}
+	ids := []string{testChannelIDA, "UC_B"}
 	due := ts.SelectDueChannels(ids)
 	assert.Len(t, due, 2)
 }
 
 func TestSelectDueChannels_ForceDueChannels(t *testing.T) {
 	ts := newTestScheduler()
+
 	ts.fullRefreshAt = time.Now().Add(1 * time.Hour)
 
-	ts.states["UC_A"] = &channelScheduleState{
+	ts.states[testChannelIDA] = &channelScheduleState{
 		nextCheckAt: time.Now().Add(1 * time.Hour),
 		forceDue:    true,
 	}
 
-	due := ts.SelectDueChannels([]string{"UC_A"})
+	due := ts.SelectDueChannels([]string{testChannelIDA})
 	assert.Len(t, due, 1)
 }
 
 func TestSelectDueChannels_FutureNextCheckAtNotDue(t *testing.T) {
 	ts := newTestScheduler()
+
 	ts.fullRefreshAt = time.Now().Add(1 * time.Hour)
 
-	ts.states["UC_A"] = &channelScheduleState{
+	ts.states[testChannelIDA] = &channelScheduleState{
 		nextCheckAt: time.Now().Add(1 * time.Hour),
 		forceDue:    false,
 	}
 
-	due := ts.SelectDueChannels([]string{"UC_A"})
+	due := ts.SelectDueChannels([]string{testChannelIDA})
 	assert.Empty(t, due)
 }
 
@@ -158,7 +165,7 @@ func TestSelectDueChannels_FullRefreshReturnsAll(t *testing.T) {
 	ts := newTestScheduler()
 	// fullRefreshAt은 zero value -> 즉시 만료
 
-	ids := []string{"UC_A", "UC_B", "UC_C"}
+	ids := []string{testChannelIDA, "UC_B", "UC_C"}
 	for _, id := range ids {
 		ts.states[id] = &channelScheduleState{
 			nextCheckAt: time.Now().Add(1 * time.Hour),
@@ -179,18 +186,20 @@ func TestUpdateChannelState_SetsNearestStart(t *testing.T) {
 		StartScheduled: &start,
 	}
 
-	ts.UpdateChannelState("UC_A", []*domain.Stream{stream})
+	ts.UpdateChannelState(testChannelIDA, []*domain.Stream{stream})
 
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
-	st, ok := ts.states["UC_A"]
+	st, ok := ts.states[testChannelIDA]
 	require.True(t, ok)
 	require.NotNil(t, st.nearestStartAt)
+
 	diff := st.nearestStartAt.Sub(start)
 	if diff < 0 {
 		diff = -diff
 	}
+
 	assert.Less(t, diff, time.Second)
 }
 
@@ -199,67 +208,76 @@ func TestUpdateChannelState_PreservesLastNotifiedAt(t *testing.T) {
 	notifiedAt := time.Now().Add(-3 * time.Minute)
 
 	ts.mu.Lock()
-	ts.states["UC_A"] = &channelScheduleState{
+
+	ts.states[testChannelIDA] = &channelScheduleState{
 		lastNotifiedAt: &notifiedAt,
 	}
 	ts.mu.Unlock()
 
-	ts.UpdateChannelState("UC_A", nil)
+	ts.UpdateChannelState(testChannelIDA, nil)
 
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
-	st := ts.states["UC_A"]
+	st := ts.states[testChannelIDA]
 	require.NotNil(t, st.lastNotifiedAt)
 	assert.Equal(t, notifiedAt, *st.lastNotifiedAt)
 }
 
 func TestMarkChannelDue_ThenSelectReturnsIt(t *testing.T) {
 	ts := newTestScheduler()
+
 	ts.fullRefreshAt = time.Now().Add(1 * time.Hour)
 
-	ts.states["UC_A"] = &channelScheduleState{
+	ts.states[testChannelIDA] = &channelScheduleState{
 		nextCheckAt: time.Now().Add(1 * time.Hour),
 		forceDue:    false,
 	}
 
-	assert.Empty(t, ts.SelectDueChannels([]string{"UC_A"}))
+	assert.Empty(t, ts.SelectDueChannels([]string{testChannelIDA}))
 
-	ts.MarkChannelDue("UC_A")
+	ts.MarkChannelDue(testChannelIDA)
 
-	due := ts.SelectDueChannels([]string{"UC_A"})
+	due := ts.SelectDueChannels([]string{testChannelIDA})
 	assert.Len(t, due, 1)
 }
 
 func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 	ts := newTestScheduler()
-	ts.MarkChannelRecentlyNotified("UC_A")
+	ts.MarkChannelRecentlyNotified(testChannelIDA)
 
 	ts.mu.RLock()
-	st, ok := ts.states["UC_A"]
+
+	st, ok := ts.states[testChannelIDA]
 	require.True(t, ok)
 	require.NotNil(t, st)
+
 	lastNotified := st.lastNotifiedAt
+
 	ts.mu.RUnlock()
 
 	// 예정 없음 + 최근 알림 -> Tier2Interval
 	result := ComputeNextCheckAt(nil, lastNotified)
 	expected := time.Now().Add(constants.Tier2Interval)
 	diff := result.Sub(expected)
+
 	if diff < 0 {
 		diff = -diff
 	}
+
 	assert.Less(t, diff, 2*time.Second)
 }
 
 func TestForgetChannel(t *testing.T) {
 	ts := newTestScheduler()
-	ts.states["UC_A"] = &channelScheduleState{}
 
-	ts.ForgetChannel("UC_A")
+	ts.states[testChannelIDA] = &channelScheduleState{}
+
+	ts.ForgetChannel(testChannelIDA)
 
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	_, ok := ts.states["UC_A"]
+
+	_, ok := ts.states[testChannelIDA]
 	assert.False(t, ok)
 }

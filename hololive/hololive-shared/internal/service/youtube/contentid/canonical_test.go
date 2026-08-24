@@ -8,6 +8,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	testShortVideoID         = "AbC123xyZ89"
+	testShortCanonicalID     = "short:AbC123xyZ89"
+	testCommunityPostID      = "UgkxPost123"
+	testCommunityCanonicalID = "community:UgkxPost123"
+)
+
 func TestForShort(t *testing.T) {
 	t.Parallel()
 
@@ -17,10 +24,10 @@ func TestForShort(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "raw video id", input: "AbC123xyZ89", want: "short:AbC123xyZ89"},
-		{name: "trim spaces", input: "  AbC123xyZ89  ", want: "short:AbC123xyZ89"},
-		{name: "already canonical", input: "short:AbC123xyZ89", want: "short:AbC123xyZ89"},
-		{name: "canonical suffix trim", input: "short:  AbC123xyZ89  ", want: "short:AbC123xyZ89"},
+		{name: "raw video id", input: testShortVideoID, want: testShortCanonicalID},
+		{name: "trim spaces", input: "  AbC123xyZ89  ", want: testShortCanonicalID},
+		{name: "already canonical", input: testShortCanonicalID, want: testShortCanonicalID},
+		{name: "canonical suffix trim", input: "short:  AbC123xyZ89  ", want: testShortCanonicalID},
 		{name: "wrong prefix", input: "community:UgkxPost", wantErr: "prefix mismatch"},
 		{name: "empty", input: "   ", wantErr: "is empty"},
 	}
@@ -32,8 +39,10 @@ func TestForShort(t *testing.T) {
 			got, err := ForShort(tt.input)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
+
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -49,10 +58,10 @@ func TestNormalizeShortVideoID(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "raw video id", input: "AbC123xyZ89", want: "AbC123xyZ89"},
-		{name: "trim spaces", input: "  AbC123xyZ89  ", want: "AbC123xyZ89"},
-		{name: "already canonical", input: "short:AbC123xyZ89", want: "AbC123xyZ89"},
-		{name: "canonical suffix trim", input: "short:  AbC123xyZ89  ", want: "AbC123xyZ89"},
+		{name: "raw video id", input: testShortVideoID, want: testShortVideoID},
+		{name: "trim spaces", input: "  AbC123xyZ89  ", want: testShortVideoID},
+		{name: "already canonical", input: testShortCanonicalID, want: testShortVideoID},
+		{name: "canonical suffix trim", input: "short:  AbC123xyZ89  ", want: testShortVideoID},
 		{name: "wrong prefix", input: "community:UgkxPost", wantErr: "prefix mismatch"},
 		{name: "empty", input: "   ", wantErr: "is empty"},
 	}
@@ -64,8 +73,10 @@ func TestNormalizeShortVideoID(t *testing.T) {
 			got, err := NormalizeShortVideoID(tt.input)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
+
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -73,7 +84,6 @@ func TestNormalizeShortVideoID(t *testing.T) {
 }
 
 func TestNormalizeCommunityPostID(t *testing.T) {
-
 	t.Parallel()
 
 	tests := []struct {
@@ -82,14 +92,14 @@ func TestNormalizeCommunityPostID(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "raw post id", input: "UgkxPost123", want: "UgkxPost123"},
-		{name: "trim spaces", input: "  UgkxPost123  ", want: "UgkxPost123"},
-		{name: "already canonical", input: "community:UgkxPost123", want: "UgkxPost123"},
-		{name: "canonical suffix trim", input: "community:  UgkxPost123 ", want: "UgkxPost123"},
-		{name: "relative post url", input: "/post/UgkxPost123?lc=1", want: "UgkxPost123"},
-		{name: "full post url", input: "https://www.youtube.com/post/UgkxPost123?lc=1", want: "UgkxPost123"},
-		{name: "escaped post url", input: `https:\/\/www.youtube.com\/post\/UgkxPost123?lc=1`, want: "UgkxPost123"},
-		{name: "wrong prefix", input: "short:AbC123xyZ89", wantErr: "prefix mismatch"},
+		{name: "raw post id", input: testCommunityPostID, want: testCommunityPostID},
+		{name: "trim spaces", input: "  UgkxPost123  ", want: testCommunityPostID},
+		{name: "already canonical", input: testCommunityCanonicalID, want: testCommunityPostID},
+		{name: "canonical suffix trim", input: "community:  UgkxPost123 ", want: testCommunityPostID},
+		{name: "relative post url", input: "/post/UgkxPost123?lc=1", want: testCommunityPostID},
+		{name: "full post url", input: "https://www.youtube.com/post/UgkxPost123?lc=1", want: testCommunityPostID},
+		{name: "escaped post url", input: `https:\/\/www.youtube.com\/post\/UgkxPost123?lc=1`, want: testCommunityPostID},
+		{name: "wrong prefix", input: testShortCanonicalID, wantErr: "prefix mismatch"},
 		{name: "empty", input: "", wantErr: "is empty"},
 	}
 
@@ -100,8 +110,10 @@ func TestNormalizeCommunityPostID(t *testing.T) {
 			got, err := NormalizeCommunityPostID(tt.input)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
+
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -117,12 +129,12 @@ func TestForCommunity(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "raw post id", input: "UgkxPost123", want: "community:UgkxPost123"},
-		{name: "trim spaces", input: "  UgkxPost123  ", want: "community:UgkxPost123"},
-		{name: "already canonical", input: "community:UgkxPost123", want: "community:UgkxPost123"},
-		{name: "canonical suffix trim", input: "community:  UgkxPost123 ", want: "community:UgkxPost123"},
-		{name: "post url", input: "/post/UgkxPost123?lc=1", want: "community:UgkxPost123"},
-		{name: "wrong prefix", input: "short:AbC123xyZ89", wantErr: "prefix mismatch"},
+		{name: "raw post id", input: testCommunityPostID, want: testCommunityCanonicalID},
+		{name: "trim spaces", input: "  UgkxPost123  ", want: testCommunityCanonicalID},
+		{name: "already canonical", input: testCommunityCanonicalID, want: testCommunityCanonicalID},
+		{name: "canonical suffix trim", input: "community:  UgkxPost123 ", want: testCommunityCanonicalID},
+		{name: "post url", input: "/post/UgkxPost123?lc=1", want: testCommunityCanonicalID},
+		{name: "wrong prefix", input: testShortCanonicalID, wantErr: "prefix mismatch"},
 		{name: "empty", input: "", wantErr: "is empty"},
 	}
 
@@ -133,8 +145,10 @@ func TestForCommunity(t *testing.T) {
 			got, err := ForCommunity(tt.input)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
+
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -144,13 +158,13 @@ func TestForCommunity(t *testing.T) {
 func TestForOutboxKind(t *testing.T) {
 	t.Parallel()
 
-	shortID, err := ForOutboxKind(domain.OutboxKindNewShort, "AbC123xyZ89")
+	shortID, err := ForOutboxKind(domain.OutboxKindNewShort, testShortVideoID)
 	require.NoError(t, err)
-	require.Equal(t, "short:AbC123xyZ89", shortID)
+	require.Equal(t, testShortCanonicalID, shortID)
 
 	communityID, err := ForOutboxKind(domain.OutboxKindCommunityPost, "/post/UgkxPost123?lc=1")
 	require.NoError(t, err)
-	require.Equal(t, "community:UgkxPost123", communityID)
+	require.Equal(t, testCommunityCanonicalID, communityID)
 
 	_, err = ForOutboxKind(domain.OutboxKindNewVideo, "video-1")
 	require.ErrorContains(t, err, "unsupported outbox kind")

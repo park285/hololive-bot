@@ -43,8 +43,8 @@ var pretendardSemiBoldData []byte
 var notoSansJPData []byte
 
 var (
-	fontsOnce sync.Once
-	fontsErr  error
+	fontsOnce    sync.Once
+	errFontsLoad error
 
 	pretendardRegular  *opentype.Font
 	pretendardSemiBold *opentype.Font
@@ -56,19 +56,30 @@ var (
 // 반환되는 Face는 내부 sfnt.Buffer와 래스터 상태를 공유해 동시 사용에 안전하지 않다 —
 // 호출자는 render.fontMu처럼 렌더 전 구간을 단일 뮤텍스로 직렬화해야 한다(기존 계약).
 func CaptionFaceSized(size float64) (font.Face, error) {
-	return captionFace("regular", size)
+	out, err := captionFace("regular", size)
+	if err != nil {
+		return nil, fmt.Errorf("caption face: %w", err)
+	}
+
+	return out, nil
 }
 
 func CaptionBoldFaceSized(size float64) (font.Face, error) {
-	return captionFace("semibold", size)
+	out, err := captionFace("semibold", size)
+	if err != nil {
+		return nil, fmt.Errorf("caption face: %w", err)
+	}
+
+	return out, nil
 }
 
 func captionFace(weight string, size float64) (font.Face, error) {
 	if size <= 0 {
 		size = 24
 	}
+
 	if err := loadFonts(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load fonts: %w", err)
 	}
 
 	cacheKey := fmt.Sprintf("%s:%.2f", weight, size)
@@ -80,19 +91,22 @@ func captionFace(weight string, size float64) (font.Face, error) {
 
 	combined, err := buildCaptionFace(weight, size)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build caption face: %w", err)
 	}
 
 	actual, _ := captionFaceCache.LoadOrStore(cacheKey, combined)
 	actualFace, ok := actual.(font.Face)
+
 	if !ok {
 		return nil, fmt.Errorf("caption font cache stored %T, want font.Face", actual)
 	}
+
 	return actualFace, nil
 }
 
 func buildCaptionFace(weight string, size float64) (font.Face, error) {
 	primary := pretendardRegular
+
 	if weight == "semibold" {
 		primary = pretendardSemiBold
 	}
@@ -103,6 +117,7 @@ func buildCaptionFace(weight string, size float64) (font.Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create %s caption face size %.2f: %w", weight, size, err)
 	}
+
 	jpFace, err := opentype.NewFace(notoSansJP, opts)
 	if err != nil {
 		return nil, fmt.Errorf("create jp fallback face size %.2f: %w", size, err)
@@ -118,21 +133,25 @@ func buildCaptionFace(weight string, size float64) (font.Face, error) {
 func loadFonts() error {
 	fontsOnce.Do(func() {
 		parse := func(name string, data []byte) *opentype.Font {
-			if fontsErr != nil {
+			if errFontsLoad != nil {
 				return nil
 			}
+
 			parsed, err := opentype.Parse(data)
 			if err != nil {
-				fontsErr = fmt.Errorf("parse %s font: %w", name, err)
+				errFontsLoad = fmt.Errorf("parse %s font: %w", name, err)
 				return nil
 			}
+
 			return parsed
 		}
+
 		pretendardRegular = parse("pretendard-regular", pretendardRegularData)
 		pretendardSemiBold = parse("pretendard-semibold", pretendardSemiBoldData)
 		notoSansJP = parse("noto-sans-jp", notoSansJPData)
 	})
-	return fontsErr
+
+	return errFontsLoad
 }
 
 // fallbackFace는 rune 단위로 primary(Pretendard) cmap에 글리프가 없을 때만
@@ -149,6 +168,7 @@ func (f *fallbackFace) pick(r rune) font.Face {
 	if err != nil || gi == 0 {
 		return f.fallback
 	}
+
 	return f.primary
 }
 
@@ -173,6 +193,7 @@ func (f *fallbackFace) Kern(r0, r1 rune) fixed.Int26_6 {
 	if first == second {
 		return first.Kern(r0, r1)
 	}
+
 	return 0
 }
 

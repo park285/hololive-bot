@@ -32,6 +32,7 @@ func (h *StreamHandler) GetChannel(c *gin.Context) {
 	channelIDs := c.Query("channelIds")
 	if channelIDs != "" {
 		h.getChannelsByIDs(c, channelIDs)
+
 		return
 	}
 
@@ -42,6 +43,7 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 	ids := SplitChannelIDs(channelIDs)
 	if len(ids) == 0 {
 		h.respondBadRequest(c, "channelIds parameter is empty or invalid", nil)
+
 		return
 	}
 
@@ -50,6 +52,7 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 			"limit":    100,
 			"received": len(ids),
 		})
+
 		return
 	}
 
@@ -62,10 +65,11 @@ func (h *StreamHandler) getChannelsByIDs(c *gin.Context, channelIDs string) {
 			err,
 			slog.Int("count", len(ids)),
 		)
+
 		return
 	}
 
-	respondJSON(c, 200, gin.H{"status": "ok", "channels": channelResponses(channelsMap)})
+	respondJSON(c, 200, gin.H{responseKeyStatus: "ok", "channels": channelResponses(channelsMap)})
 }
 
 func (h *StreamHandler) respondChannelQueryError(c *gin.Context) {
@@ -77,6 +81,7 @@ func channelResponses(channelsMap map[string]*domain.Member) []*ChannelResponse 
 	for _, member := range channelsMap {
 		channels = append(channels, MemberToChannelResponse(member))
 	}
+
 	return channels
 }
 
@@ -90,6 +95,7 @@ func MemberToChannelResponse(m *domain.Member) *ChannelResponse {
 	if m == nil {
 		return nil
 	}
+
 	resp := &ChannelResponse{
 		ID:   m.ChannelID,
 		Name: m.Name,
@@ -97,14 +103,17 @@ func MemberToChannelResponse(m *domain.Member) *ChannelResponse {
 	if m.Photo != "" {
 		resp.Photo = &m.Photo
 	}
+
 	return resp
 }
 
 func (h *StreamHandler) SearchChannels(c *gin.Context) {
 	ctx := c.Request.Context()
 	query := c.Query("q")
+
 	if query == "" {
 		h.respondBadRequest(c, "q parameter required", nil)
+
 		return
 	}
 
@@ -112,8 +121,9 @@ func (h *StreamHandler) SearchChannels(c *gin.Context) {
 	if err != nil {
 		h.respondInternalError(c, "Failed to search channels", "Failed to search channels", err,
 			slog.String("query", query))
+
 		return
 	}
 
-	respondJSON(c, 200, gin.H{"status": "ok", "channels": channels})
+	respondJSON(c, 200, gin.H{responseKeyStatus: "ok", "channels": channels})
 }

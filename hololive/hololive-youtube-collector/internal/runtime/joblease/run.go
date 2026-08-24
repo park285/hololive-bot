@@ -32,14 +32,19 @@ func (r *Repository) Run(ctx context.Context, lease Lease, run RunFunc) LeaseRun
 	if r == nil || lease == nil || run == nil {
 		return LeaseRunResult{Outcome: LeaseRunCallbackFailed, Err: fmt.Errorf("run collection job: %w", ErrInvalidJob)}
 	}
+
 	runCtx, cancel := context.WithCancel(ctx)
+
 	defer cancel()
+
 	result := make(chan error, 1)
+
 	panicguard.Go(nil, "collection-job-run", func() {
 		result <- panicguard.RunE(nil, "collection-job-run", func() error {
 			return run(runCtx, lease.Proof())
 		})
 	})
+
 	return r.awaitRun(ctx, runCtx, cancel, lease, result)
 }
 
@@ -52,6 +57,7 @@ func (r *Repository) awaitRun(
 ) LeaseRunResult {
 	ticker := time.NewTicker(r.config.RenewInterval)
 	defer ticker.Stop()
+
 	for {
 		if err, done := r.awaitRunOnce(ctx, runCtx, cancel, lease, result, ticker); done {
 			return err
@@ -70,6 +76,7 @@ func (r *Repository) awaitRunOnce(
 	if ctx.Err() != nil {
 		return r.handleRunCancel(ctx, cancel, lease, result), true
 	}
+
 	select {
 	case err := <-result:
 		return r.finishAvailableRun(ctx, cancel, lease, err), true
@@ -89,10 +96,15 @@ func (r *Repository) finishAvailableRun(
 	if ctx.Err() == nil {
 		return finishRunResult(cancel, runErr)
 	}
+
 	cancel()
+
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), r.config.CleanupTimeout)
+
 	defer cleanupCancel()
+
 	releaseErr := releaseWithTimeout(cleanupCtx, lease, ReleaseShutdown, r.config.DBTimeout)
+
 	return LeaseRunResult{
 		Outcome: LeaseRunReleasedAfterParentCancel,
 		Err:     fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), releaseErr, nonCancellationError(runErr))),
@@ -101,9 +113,11 @@ func (r *Repository) finishAvailableRun(
 
 func finishRunResult(cancel context.CancelFunc, err error) LeaseRunResult {
 	cancel()
+
 	if err != nil {
 		return LeaseRunResult{Outcome: LeaseRunCallbackFailed, Err: fmt.Errorf("run collection job: %w", err)}
 	}
+
 	return LeaseRunResult{Outcome: LeaseRunCallbackCompleted}
 }
 
@@ -118,12 +132,16 @@ func (r *Repository) handleRunRenew(
 		return finishRunResult(cancel, err), true
 	default:
 	}
+
 	renewCtx, renewCancel := context.WithTimeout(runCtx, r.config.RenewTimeout)
 	err := lease.Renew(renewCtx)
+
 	renewCancel()
+
 	if err != nil {
 		return r.finishRenewFailure(runCtx, cancel, lease, result, err), true
 	}
+
 	return LeaseRunResult{}, false
 }
 
@@ -137,14 +155,20 @@ func (r *Repository) finishRenewFailure(
 	if errors.Is(err, ErrFenceLost) {
 		return r.finishFenceLoss(runCtx, cancel, result)
 	}
+
 	cancel()
+
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(runCtx), r.config.CleanupTimeout)
+
 	defer cleanupCancel()
+
 	releaseErr := releaseWithTimeout(cleanupCtx, lease, ReleaseRenewFail, r.config.DBTimeout)
 	runErr := waitRunResult(cleanupCtx, result)
+
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after renew failure: %w", errors.Join(err, releaseErr, runErr))}
 	}
+
 	return LeaseRunResult{
 		Outcome: LeaseRunReleasedAfterRenewFailure,
 		Err:     fmt.Errorf("run collection job: renew lease: %w", errors.Join(err, releaseErr, nonCancellationError(runErr))),
@@ -161,13 +185,18 @@ func (r *Repository) finishFenceLoss(
 		return finishRunResult(cancel, runErr)
 	default:
 	}
+
 	cancel()
+
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(runCtx), r.config.CleanupTimeout)
+
 	defer cleanupCancel()
+
 	runErr := waitRunResult(cleanupCtx, result)
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", runErr)}
 	}
+
 	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: ErrFenceLost}
 }
 
@@ -178,13 +207,18 @@ func (r *Repository) handleRunCancel(
 	result <-chan error,
 ) LeaseRunResult {
 	cancel()
+
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), r.config.CleanupTimeout)
+
 	defer cleanupCancel()
+
 	releaseErr := releaseWithTimeout(cleanupCtx, lease, ReleaseShutdown, r.config.DBTimeout)
 	runErr := waitRunResult(cleanupCtx, result)
+
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: canceled cleanup: %w", errors.Join(ctx.Err(), releaseErr, runErr))}
 	}
+
 	return LeaseRunResult{
 		Outcome: LeaseRunReleasedAfterParentCancel,
 		Err:     fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), releaseErr, nonCancellationError(runErr))),
@@ -194,13 +228,19 @@ func (r *Repository) handleRunCancel(
 func releaseWithTimeout(ctx context.Context, lease Lease, reason ReleaseReason, timeout time.Duration) error {
 	releaseCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return lease.Release(releaseCtx, reason)
+
+	if err := lease.Release(releaseCtx, reason); err != nil {
+		return fmt.Errorf("release: %w", err)
+	}
+
+	return nil
 }
 
 func nonCancellationError(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return nil
 	}
+
 	return err
 }
 

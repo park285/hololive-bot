@@ -54,6 +54,7 @@ func TestProvisionBaseDSNRejectsUnprovenPreset(t *testing.T) {
 
 func TestProvisionBaseDSNAllowsExplicitDisposableServer(t *testing.T) {
 	const dsn = "postgres://example.invalid/test"
+
 	t.Setenv(testDatabaseURLEnv, dsn)
 	t.Setenv(testDatabaseOwnerTokenEnv, "")
 	t.Setenv(allowExternalTestDBEnv, "true")

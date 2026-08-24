@@ -52,7 +52,7 @@ func TestAdvanceNextRunAt_PreservesAnchorAcrossBacklog(t *testing.T) {
 
 func TestSchedulerRescheduleJobReanchorsAfterImmediateFirstRun(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 
 	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:                 p,
@@ -67,10 +67,13 @@ func TestSchedulerRescheduleJobReanchorsAfterImmediateFirstRun(t *testing.T) {
 	require.True(t, job.immediateFirstRun)
 
 	before := time.Now()
+
 	scheduler.rescheduleJob(job)
+
 	after := time.Now()
 
 	assert.False(t, job.immediateFirstRun)
+
 	lowerBound := nextPollAt(before, job.Interval, job.Offset)
 	upperBound := nextPollAt(after, job.Interval, job.Offset)
 	assert.False(t, job.NextRunAt.Before(lowerBound))
@@ -84,9 +87,10 @@ func TestSchedulerRescheduleJobBacksOffAfterPollFailure(t *testing.T) {
 		ErrorBackoffMin: 10 * time.Second,
 		ErrorBackoffMax: time.Minute,
 	})
-	p := &errorPollerStub{name: "videos", err: assert.AnError}
+	p := &errorPollerStub{name: testPollerVideos, err: assert.AnError}
 
 	scheduler.Register("channel-failing", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-failing:videos"]
 	require.NotNil(t, job)
 
@@ -94,7 +98,9 @@ func TestSchedulerRescheduleJobBacksOffAfterPollFailure(t *testing.T) {
 	require.Equal(t, -1, job.index)
 
 	before := time.Now()
+
 	scheduler.rescheduleJobAfterPoll(job, assert.AnError)
+
 	after := time.Now()
 
 	require.Equal(t, 1, job.consecutiveFailures)
@@ -110,9 +116,10 @@ func TestSchedulerRescheduleJobReanchorsAfterFailureRecovery(t *testing.T) {
 		ErrorBackoffMin: 10 * time.Second,
 		ErrorBackoffMax: time.Minute,
 	})
-	p := &errorPollerStub{name: "videos", err: assert.AnError}
+	p := &errorPollerStub{name: testPollerVideos, err: assert.AnError}
 
 	scheduler.Register("channel-recovered", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-recovered:videos"]
 	require.NotNil(t, job)
 
@@ -124,10 +131,13 @@ func TestSchedulerRescheduleJobReanchorsAfterFailureRecovery(t *testing.T) {
 	require.Equal(t, 1, job.consecutiveFailures)
 
 	before := time.Now()
+
 	scheduler.rescheduleJobAfterPoll(job, nil)
+
 	after := time.Now()
 
 	require.Equal(t, 0, job.consecutiveFailures)
+
 	lowerBound := nextPollAt(before, job.Interval, job.Offset)
 	upperBound := nextPollAt(after, job.Interval, job.Offset)
 	assert.False(t, job.NextRunAt.Before(lowerBound))
@@ -141,11 +151,13 @@ func TestSchedulerSyncPollerTargetsIntervalIncreaseRecalculatesOffsetAndClearsFa
 		ErrorBackoffMin: 10 * time.Second,
 		ErrorBackoffMax: time.Minute,
 	})
-	p := &errorPollerStub{name: "videos", err: assert.AnError}
+	p := &errorPollerStub{name: testPollerVideos, err: assert.AnError}
 
 	scheduler.Register("channel-reset", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-reset:videos"]
 	require.NotNil(t, job)
+
 	originalOffset := job.Offset
 
 	heap.Remove(&scheduler.jobs, job.index)
@@ -159,12 +171,14 @@ func TestSchedulerSyncPollerTargetsIntervalIncreaseRecalculatesOffsetAndClearsFa
 	wantOffset := calculateOffset(job.key, newInterval)
 
 	before := time.Now()
+
 	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:     p,
 		Priority:   PriorityHigh,
 		Interval:   newInterval,
 		ChannelIDs: []string{"channel-reset"},
 	})
+
 	after := time.Now()
 
 	require.Equal(t, 0, job.consecutiveFailures)
@@ -175,15 +189,17 @@ func TestSchedulerSyncPollerTargetsIntervalIncreaseRecalculatesOffsetAndClearsFa
 
 	lowerBound := nextPollAt(before, newInterval, wantOffset)
 	upperBound := nextPollAt(after, newInterval, wantOffset)
+
 	assert.False(t, job.NextRunAt.Before(lowerBound))
 	assert.False(t, job.NextRunAt.After(upperBound))
 }
 
 func TestSchedulerUpdatePriorityIntervalDecreaseRecalculatesOffsetAndAnchor(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 
 	scheduler.Register("channel-priority", p, PriorityNormal, 2*time.Hour)
+
 	job := scheduler.jobMap["channel-priority:videos"]
 	require.NotNil(t, job)
 
@@ -193,7 +209,9 @@ func TestSchedulerUpdatePriorityIntervalDecreaseRecalculatesOffsetAndAnchor(t *t
 	wantOffset := calculateOffset(job.key, newInterval)
 
 	before := time.Now()
+
 	scheduler.UpdatePriority("channel-priority", p.Name(), PriorityHigh, newInterval)
+
 	after := time.Now()
 
 	require.Equal(t, PriorityHigh, job.Priority)
@@ -204,6 +222,7 @@ func TestSchedulerUpdatePriorityIntervalDecreaseRecalculatesOffsetAndAnchor(t *t
 
 	lowerBound := nextPollAt(before, newInterval, wantOffset)
 	upperBound := nextPollAt(after, newInterval, wantOffset)
+
 	assert.False(t, job.NextRunAt.Before(lowerBound))
 	assert.False(t, job.NextRunAt.After(upperBound))
 }

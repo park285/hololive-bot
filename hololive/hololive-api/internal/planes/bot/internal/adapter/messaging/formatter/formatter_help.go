@@ -23,6 +23,7 @@ package formatter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -39,13 +40,16 @@ type HelpContent struct {
 
 func (f *ResponseFormatter) FormatHelpContent(ctx context.Context) (HelpContent, error) {
 	data := helpTemplateData{Prefix: f.prefix}
+
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdHelp, data)
 	if err != nil {
-		return HelpContent{}, err
+		return HelpContent{}, fmt.Errorf("render: %w", err)
 	}
+
 	if strings.TrimSpace(rendered) == "" {
 		return HelpContent{}, errors.New("help template rendered empty")
 	}
+
 	return HelpContent{
 		TextFallback: f.foldSeeMore(rendered),
 	}, nil
@@ -56,5 +60,6 @@ func (f *ResponseFormatter) FormatHelp(ctx context.Context) string {
 	if err != nil {
 		return messagestrings.FallbackSentinel
 	}
+
 	return content.TextFallback
 }

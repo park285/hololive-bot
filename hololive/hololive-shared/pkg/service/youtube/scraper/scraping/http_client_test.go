@@ -37,6 +37,7 @@ import (
 
 type startCountingTracerProvider struct {
 	embedded.TracerProvider
+
 	starts atomic.Int64
 }
 
@@ -46,38 +47,34 @@ func (p *startCountingTracerProvider) Tracer(string, ...trace.TracerOption) trac
 
 type startCountingTracer struct {
 	embedded.Tracer
+
 	starts *atomic.Int64
 }
 
 func (t *startCountingTracer) Start(ctx context.Context, _ string, _ ...trace.SpanStartOption) (context.Context, trace.Span) {
 	t.starts.Add(1)
+
 	return noop.NewTracerProvider().Tracer("test-noop").Start(ctx, "test-noop")
 }
 
-func TestCreateHTTPClient_DirectHTTP2(t *testing.T) {
-	client, transport, err := createHTTPClient(ProxyConfig{})
-	require.NoError(t, err)
-	require.NotNil(t, client)
-
-	require.NotNil(t, transport, "base transport should be returned")
-	assert.True(t, transport.ForceAttemptHTTP2, "direct path should have ForceAttemptHTTP2=true")
-}
-
-func TestCreateHTTPClient_ProxyHTTP2(t *testing.T) {
-	client, transport, err := createHTTPClient(ProxyConfig{
-		Enabled: true,
-		URL:     "socks5://proxy.internal:1080",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, client)
-
-	require.NotNil(t, transport, "base transport should be returned")
-	assert.False(t, transport.ForceAttemptHTTP2, "proxy path should disable HTTP/2 (single tunnel multiplex is fragile)")
+func TestCreateHTTPClient_UsesHTTP1Only(t *testing.T) {
+	for _, proxyConfig := range []ProxyConfig{
+		{},
+		{Enabled: true, URL: "socks5://proxy.internal:1080"},
+	} {
+		client, transport, err := createHTTPClient(proxyConfig)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+		require.NotNil(t, transport, "base transport should be returned")
+		require.NotNil(t, transport.Protocols)
+		assert.Equal(t, "{HTTP1}", transport.Protocols.String())
+	}
 }
 
 func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *testing.T) {
 	provider := &startCountingTracerProvider{}
 	previousProvider := otel.GetTracerProvider()
+
 	otel.SetTracerProvider(provider)
 	t.Cleanup(func() {
 		otel.SetTracerProvider(previousProvider)
@@ -90,8 +87,10 @@ func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *test
 	requestURIs := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestURIs <- r.URL.RequestURI()
+
 		w.WriteHeader(http.StatusNoContent)
 	}))
+
 	defer server.Close()
 
 	client, transport, err := createHTTPClient(ProxyConfig{})
@@ -99,17 +98,21 @@ func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *test
 	require.Same(t, transport, client.Transport, "scraper client must retain the configured base transport")
 
 	const sentinelURI = "/youtube/videos/sensitive-video-id?channel=sensitive-channel-id&q=sensitive-query"
+
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+sentinelURI, http.NoBody)
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+
 	if resp == nil {
 		t.Fatal("scraper request returned a nil response without an error")
 	}
+
 	defer func() {
 		mustClose(t, resp.Body)
 	}()
+
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 	require.Equal(t, sentinelURI, <-requestURIs)
 	assert.Equal(t, int64(1), provider.starts.Load(), "scraper request must not create an outbound client span")
@@ -143,7 +146,7 @@ func TestCreateHTTPClient_RejectsInvalidProxyURL(t *testing.T) {
 type nilResponseTransport struct{}
 
 func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, nil
+	return nil, nil //nolint:nilnil // RoundTripper가 (nil, nil)을 돌려주는 비정상 구현을 재현하는 픽스처라 sentinel error로 바꾸면 검증 대상이 사라진다.
 }
 
 func TestNetHTTPPageFetcherNilResponse(t *testing.T) {
@@ -164,7 +167,9 @@ func TestNetHTTPPageFetcherReturnsFinalURLAfterRedirect(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		mustWriteResponse(t, w, "final body")
 	})
+
 	server := httptest.NewServer(mux)
+
 	defer server.Close()
 
 	client := NewClient(WithHTTPClient(server.Client()))

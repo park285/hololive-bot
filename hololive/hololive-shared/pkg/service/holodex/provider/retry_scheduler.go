@@ -62,17 +62,21 @@ func (s *retryScheduler) schedule(ctx context.Context, key string, fn func(ctx c
 	if s.stopped {
 		return
 	}
+
 	if _, exists := s.pending[key]; exists {
 		return
 	}
+
 	if len(s.pending) >= s.maxSize {
 		s.logger.Warn("캐시 워밍 재시도 큐 초과", slog.String("key", key), slog.Int("max_size", s.maxSize))
+
 		return
 	}
 
 	task := &retryTask{
 		key: key,
 	}
+
 	task.timer = time.AfterFunc(s.delay, func() {
 		s.execute(ctx, task.key, fn)
 	})
@@ -83,10 +87,13 @@ func (s *retryScheduler) schedule(ctx context.Context, key string, fn func(ctx c
 
 func (s *retryScheduler) execute(parentCtx context.Context, key string, fn func(ctx context.Context)) {
 	s.mu.Lock()
+
 	if s.stopped {
 		s.mu.Unlock()
+
 		return
 	}
+
 	delete(s.pending, key)
 	s.wg.Add(1)
 	s.mu.Unlock()
@@ -95,6 +102,7 @@ func (s *retryScheduler) execute(parentCtx context.Context, key string, fn func(
 
 	ctx := context.WithValue(parentCtx, retryContextKey{}, true)
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+
 	defer cancel()
 
 	s.logger.Info("캐시 워밍 재시도 실행", slog.String("key", key))
@@ -103,9 +111,11 @@ func (s *retryScheduler) execute(parentCtx context.Context, key string, fn func(
 
 func (s *retryScheduler) stop() {
 	s.mu.Lock()
+
 	if s.stopped {
 		s.mu.Unlock()
 		s.wg.Wait()
+
 		return
 	}
 
@@ -115,6 +125,7 @@ func (s *retryScheduler) stop() {
 			task.timer.Stop()
 		}
 	}
+
 	s.pending = make(map[string]*retryTask)
 	s.mu.Unlock()
 
@@ -124,6 +135,7 @@ func (s *retryScheduler) stop() {
 func (s *retryScheduler) pendingCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return len(s.pending)
 }
 
@@ -133,5 +145,6 @@ func isRetryContext(ctx context.Context) bool {
 	}
 
 	isRetry, ok := ctx.Value(retryContextKey{}).(bool)
+
 	return ok && isRetry
 }

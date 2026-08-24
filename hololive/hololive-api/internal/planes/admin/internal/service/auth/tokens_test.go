@@ -21,27 +21,30 @@
 package auth
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/testutil"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func TestGenerateToken_Uniqueness(t *testing.T) {
 	t.Parallel()
 
 	seen := make(map[string]struct{})
+
 	for range 100 {
 		token, err := generateToken("sess_", 32)
 		require.NoError(t, err)
 		assert.NotEmpty(t, token)
 		assert.Contains(t, token, "sess_")
+
 		_, exists := seen[token]
 		assert.False(t, exists, "중복 토큰 생성됨: %s", token)
+
 		seen[token] = struct{}{}
 	}
 }
@@ -51,11 +54,11 @@ func TestGenerateToken_DifferentPrefixes(t *testing.T) {
 
 	sessToken, err := generateToken("sess_", 32)
 	require.NoError(t, err)
-	assert.True(t, len(sessToken) > len("sess_"))
+	assert.Greater(t, len(sessToken), len("sess_"))
 
 	resetToken, err := generateToken("reset_", 32)
 	require.NoError(t, err)
-	assert.True(t, len(resetToken) > len("reset_"))
+	assert.Greater(t, len(resetToken), len("reset_"))
 
 	// 접두사가 올바른지 확인
 	assert.Contains(t, sessToken, "sess_")
@@ -75,6 +78,7 @@ func TestGenerateToken_InvalidByteLen(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := generateToken("test_", tc.byteLen)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "byteLen must be positive")
@@ -110,16 +114,17 @@ func TestSha256Hex_EmptyString(t *testing.T) {
 }
 
 func TestCreateSession_Success(t *testing.T) {
-	cache := testutil.NewTestCacheService(t, context.Background())
+	cache := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.SessionTTL = 30 * time.Minute
 	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
 	require.NoError(t, err)
 
-	session, err := service.createSession(context.Background(), "user-123")
+	session, err := service.createSession(t.Context(), "user-123")
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	assert.NotEmpty(t, session.Token)
@@ -129,62 +134,64 @@ func TestCreateSession_Success(t *testing.T) {
 }
 
 func TestCreateSession_StoresJSONSessionDataAndUserIndex(t *testing.T) {
-	cache := testutil.NewTestCacheService(t, context.Background())
+	cache := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.SessionTTL = 30 * time.Minute
 	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), newTestDB(t), cache, sharedlogging.NewTestLogger(), config)
 	require.NoError(t, err)
 
-	session, err := service.createSession(context.Background(), "user-123")
+	session, err := service.createSession(t.Context(), "user-123")
 	require.NoError(t, err)
 
 	sessionHash := sha256Hex(session.Token)
 
 	var stored sessionData
-	require.NoError(t, cache.Get(context.Background(), sessionKeyPrefix+sessionHash, &stored))
+
+	require.NoError(t, cache.Get(t.Context(), sessionKeyPrefix+sessionHash, &stored))
 	assert.Equal(t, "user-123", stored.UserID)
 	assert.WithinDuration(t, session.ExpiresAt, stored.ExpiresAt, time.Second)
 	assert.False(t, stored.CreatedAt.IsZero())
 
-	userSessions, err := cache.SMembers(context.Background(), userSessionsKeyPrefix+"user-123")
+	userSessions, err := cache.SMembers(t.Context(), userSessionsKeyPrefix+"user-123")
 	require.NoError(t, err)
 	assert.Contains(t, userSessions, sessionHash)
 }
 
 func TestCreateSession_NoCacheService(t *testing.T) {
 	db := newTestDB(t)
-	service, err := NewService(context.Background(), db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	_, err = service.createSession(context.Background(), "user-123")
+	_, err = service.createSession(t.Context(), "user-123")
 	require.Error(t, err)
 	assertAuthCode(t, err, CodeInternal)
 }
 
 func TestCreateSession_EmptyUserID(t *testing.T) {
-	cache := testutil.NewTestCacheService(t, context.Background())
+	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	_, err = service.createSession(context.Background(), "")
+	_, err = service.createSession(t.Context(), "")
 	require.Error(t, err)
 	assertAuthCode(t, err, CodeInternal)
 }
 
 func TestCreateSession_UniqueSessions(t *testing.T) {
-	cache := testutil.NewTestCacheService(t, context.Background())
+	cache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), newTestDB(t), cache, sharedlogging.NewTestLogger(), DefaultConfig())
 	require.NoError(t, err)
 
-	s1, err := service.createSession(context.Background(), "user-123")
+	s1, err := service.createSession(t.Context(), "user-123")
 	require.NoError(t, err)
 
-	s2, err := service.createSession(context.Background(), "user-123")
+	s2, err := service.createSession(t.Context(), "user-123")
 	require.NoError(t, err)
 
 	assert.NotEqual(t, s1.Token, s2.Token, "동일 사용자여도 세션 토큰이 달라야 함")

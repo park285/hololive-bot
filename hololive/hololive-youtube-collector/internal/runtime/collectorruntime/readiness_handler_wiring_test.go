@@ -1,7 +1,6 @@
 package collectorruntime
 
 import (
-	"context"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -31,20 +30,22 @@ func TestConfigureFeedsCapturedTrackerIntoReadinessEvaluation(t *testing.T) {
 
 	cfg := settings.DefaultYouTubeCollectorConfig()
 	deps := readiness.deps(&cfg)
+
 	if deps.tracker != scheduler.readiness {
 		t.Fatal("deps.tracker = distinct instance, want the tracker captured by configure")
 	}
+
 	deps.helper = &stubHelper{}
 	deps.store = &stubStore{}
 
-	before := evaluateReadiness(context.Background(), &deps)
+	before := evaluateReadiness(t.Context(), &deps)
 	if before.FirstSuccess || before.State != ReadyWaitingCollection || before.Dependency != "first_success" {
 		t.Fatalf("before first success = %+v, want WAITING_COLLECTION first_success", before)
 	}
 
 	scheduler.recordTerminalSuccess(nil)
 
-	after := evaluateReadiness(context.Background(), &deps)
+	after := evaluateReadiness(t.Context(), &deps)
 	if !after.FirstSuccess || after.State != ReadyWaitingHandoff || after.Dependency != "observation_handoff" {
 		t.Fatalf("after first success = %+v, want WAITING_HANDOFF observation_handoff", after)
 	}

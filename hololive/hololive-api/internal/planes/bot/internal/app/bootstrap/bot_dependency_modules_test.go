@@ -9,8 +9,14 @@ import (
 	"testing"
 	"time"
 
-	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -21,15 +27,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	settingsmocks "github.com/kapu/hololive-shared/pkg/service/settings/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-	"github.com/park285/iris-client-go/v2/iris"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 )
+
+const testRoomA = "room-a"
 
 func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t *testing.T) {
 	t.Parallel()
@@ -91,6 +91,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 		irisClient,
 		logger,
 	)
+
 	commandBuilders[0] = stubCommandBuilderThree
 
 	assertBotDependencyModulesWireRuntimeObjects(t, &modules, cacheClient, postgres, memberData, alarmCRUD, irisClient, messageAdapter, formatter)
@@ -115,42 +116,55 @@ func assertBotDependencyModulesWireRuntimeObjects(
 	if modules.Core.BotSelfUser != "bot-self" {
 		t.Fatalf("Core.BotSelfUser = %q, want bot-self", modules.Core.BotSelfUser)
 	}
+
 	if modules.Core.IrisBaseURL != "http://iris.local" {
 		t.Fatalf("Core.IrisBaseURL = %q, want http://iris.local", modules.Core.IrisBaseURL)
 	}
+
 	if modules.Core.CalendarImageCacheDir != "data/test-calendar-cache" {
 		t.Fatalf("Core.CalendarImageCacheDir = %q, want data/test-calendar-cache", modules.Core.CalendarImageCacheDir)
 	}
+
 	if modules.Core.CalendarEntryCacheTTL != time.Hour {
 		t.Fatalf("Core.CalendarEntryCacheTTL = %s, want 1h", modules.Core.CalendarEntryCacheTTL)
 	}
+
 	if !slices.Equal(modules.Core.Notification.AdvanceMinutes, []int{15, 3, 1}) {
 		t.Fatalf("Core.Notification.AdvanceMinutes = %v, want [15 3 1]", modules.Core.Notification.AdvanceMinutes)
 	}
+
 	if modules.Data.Cache != cacheClient {
 		t.Fatal("Data.Cache did not preserve the injected cache client")
 	}
+
 	if modules.Data.Postgres != postgres {
 		t.Fatal("Data.Postgres did not preserve the injected postgres client")
 	}
+
 	if modules.Data.MembersData != memberData {
 		t.Fatal("Data.MembersData did not preserve the alarm member data provider")
 	}
+
 	if modules.Stream.Alarm != alarmCRUD {
 		t.Fatal("Stream.Alarm did not preserve the alarm CRUD provider")
 	}
+
 	if modules.Messaging.Client != irisClient {
 		t.Fatal("Messaging.Client did not preserve the Iris client")
 	}
+
 	if modules.Messaging.MessageAdapter != messageAdapter {
 		t.Fatal("Messaging.MessageAdapter did not preserve the message adapter")
 	}
+
 	if modules.Messaging.Formatter != formatter {
 		t.Fatal("Messaging.Formatter did not preserve the formatter")
 	}
+
 	if !modules.Messaging.MarkdownReplies {
 		t.Fatal("Messaging.MarkdownReplies did not preserve the bot markdown replies flag")
 	}
+
 	assertCommandBuilderPointers(t, modules.Feature.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
@@ -170,33 +184,43 @@ func assertBotDependenciesWireRuntimeObjects(
 	if deps.Cache != cacheClient {
 		t.Fatal("Dependencies.Cache did not preserve the module cache client")
 	}
+
 	if deps.Postgres != postgres {
 		t.Fatal("Dependencies.Postgres did not preserve the module postgres client")
 	}
+
 	if deps.CalendarImageCacheDir != "data/test-calendar-cache" {
 		t.Fatalf("Dependencies.CalendarImageCacheDir = %q, want data/test-calendar-cache", deps.CalendarImageCacheDir)
 	}
+
 	if deps.CalendarEntryCacheTTL != time.Hour {
 		t.Fatalf("Dependencies.CalendarEntryCacheTTL = %s, want 1h", deps.CalendarEntryCacheTTL)
 	}
+
 	if deps.MembersData != memberData {
 		t.Fatal("Dependencies.MembersData did not preserve the module member data provider")
 	}
+
 	if deps.Alarm != alarmCRUD {
 		t.Fatal("Dependencies.Alarm did not preserve the module alarm CRUD provider")
 	}
+
 	if deps.Service != youtube.Service(youTubeService) {
 		t.Fatal("Dependencies.Service did not preserve the YouTube service from the stack")
 	}
+
 	if deps.Activity != activityLogger {
 		t.Fatal("Dependencies.Activity did not preserve the activity logger")
 	}
+
 	if deps.Settings != settingsService {
 		t.Fatal("Dependencies.Settings did not preserve the settings service")
 	}
+
 	if !deps.MarkdownReplies {
 		t.Fatal("Dependencies.MarkdownReplies did not preserve the module markdown replies flag")
 	}
+
 	assertCommandBuilderPointers(t, deps.CommandBuilders, []orchcmd.CommandBuilder{stubCommandBuilderOne, stubCommandBuilderTwo})
 }
 
@@ -217,6 +241,7 @@ func TestPersistedTargetMinutesKeepsConfiguredTargetsBeforeRuntimeFallback(t *te
 	if got := PersistedTargetMinutes(15, []int{3, 15, 3, 0}); !slices.Equal(got, []int{15, 3}) {
 		t.Fatalf("PersistedTargetMinutes configured = %v, want [15 3]", got)
 	}
+
 	if got := PersistedTargetMinutes(15, nil); !slices.Equal(got, []int{15, 3, 1}) {
 		t.Fatalf("PersistedTargetMinutes fallback = %v, want [15 3 1]", got)
 	}
@@ -225,10 +250,11 @@ func TestPersistedTargetMinutesKeepsConfiguredTargetsBeforeRuntimeFallback(t *te
 func TestProvideACLServiceWrapsInitializationError(t *testing.T) {
 	t.Parallel()
 
-	_, err := ProvideACLService(context.Background(), true, "whitelist", []string{"room-a"}, nil, cachemocks.NewLenientClient(), slog.New(slog.DiscardHandler))
+	_, err := ProvideACLService(t.Context(), true, "whitelist", []string{testRoomA}, nil, cachemocks.NewLenientClient(), slog.New(slog.DiscardHandler))
 	if err == nil {
 		t.Fatal("ProvideACLService() error = nil, want initialization error")
 	}
+
 	if !strings.Contains(err.Error(), "failed to create ACL service") || !strings.Contains(err.Error(), "postgres service is nil") {
 		t.Fatalf("ProvideACLService() error = %q, want wrapped postgres initialization failure", err)
 	}
@@ -253,23 +279,23 @@ func (s *stubBotIrisClient) SendMessage(context.Context, string, string, ...iris
 }
 
 func (s *stubBotIrisClient) SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
 
 func (s *stubBotIrisClient) SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
 
 func (s *stubBotIrisClient) SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
 
 func (s *stubBotIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
 
 func (s *stubBotIrisClient) GetReplyStatus(context.Context, string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, nil
+	return &iris.ReplyStatusSnapshot{}, nil
 }
 
 func (s *stubBotIrisClient) Ping(context.Context) bool {
@@ -277,7 +303,7 @@ func (s *stubBotIrisClient) Ping(context.Context) bool {
 }
 
 func (s *stubBotIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
-	return nil, nil
+	return &iris.ConfigResponse{}, nil
 }
 
 type stubYouTubeService struct{}
@@ -291,7 +317,7 @@ func (s *stubYouTubeService) ScraperProxyEnabled() bool {
 }
 
 func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return nil, nil
+	return map[string]*youtube.ChannelStats{}, nil
 }
 
 func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
@@ -327,7 +353,7 @@ func (s *stubAlarmCRUD) ClearRoomAlarms(context.Context, string) (int, error) {
 }
 
 func (s *stubAlarmCRUD) GetNextStreamInfo(context.Context, string) (*domain.NextStreamInfo, error) {
-	return nil, nil
+	return &domain.NextStreamInfo{}, nil
 }
 
 func (s *stubAlarmCRUD) UpdateAlarmAdvanceMinutes(_ context.Context, minutes int) []int {
@@ -373,6 +399,7 @@ func assertCommandBuilderPointers(t *testing.T, got, want []orchcmd.CommandBuild
 	if len(got) != len(want) {
 		t.Fatalf("CommandBuilders len = %d, want %d", len(got), len(want))
 	}
+
 	for i := range got {
 		if reflect.ValueOf(got[i]).Pointer() != reflect.ValueOf(want[i]).Pointer() {
 			t.Fatalf("CommandBuilders[%d] pointer mismatch", i)

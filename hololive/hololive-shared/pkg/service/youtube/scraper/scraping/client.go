@@ -24,14 +24,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"net"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
 	"time"
+
+	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
+	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 const FetchPageMaxAttempts = 3
@@ -49,6 +50,7 @@ func defaultFetchPerAttemptTimeout(fallback time.Duration) time.Duration {
 	if ytDefaults.ScraperHTTPTimeout > 0 {
 		return ytDefaults.ScraperHTTPTimeout
 	}
+
 	return fallback
 }
 
@@ -134,7 +136,7 @@ var ErrChannelNotFound = errors.New("channel does not exist")
 
 var ErrChannelUnavailable = errors.New("channel is unavailable")
 
-// httpStatusError: HTTP 상태 코드 기반 에러 (재시도 판단용)
+// httpStatusError: HTTP 상태 코드 기반 에러 (재시도 판단용).
 type httpStatusError struct {
 	code       int
 	retryAfter time.Duration
@@ -145,6 +147,7 @@ func (e *httpStatusError) Error() string {
 	if e.retryAfter > 0 {
 		return fmt.Sprintf("unexpected status code: %d (retry-after: %s)", e.code, e.retryAfter.Round(time.Second))
 	}
+
 	return fmt.Sprintf("unexpected status code: %d", e.code)
 }
 
@@ -156,10 +159,13 @@ func extractHTTPStatusCode(err error) (int, bool) {
 	if err == nil {
 		return 0, false
 	}
+
 	var statusErr *httpStatusError
+
 	if !errors.As(err, &statusErr) {
 		return 0, false
 	}
+
 	return statusErr.code, true
 }
 
@@ -167,10 +173,13 @@ func extractHTTPRetryAfter(err error) time.Duration {
 	if err == nil {
 		return 0
 	}
+
 	var statusErr *httpStatusError
+
 	if !errors.As(err, &statusErr) {
 		return 0
 	}
+
 	return statusErr.retryAfter
 }
 
@@ -187,6 +196,7 @@ func isRetryableFetchPageError(err error) bool {
 	if youtubeadmission.IsDeferred(err) {
 		return false
 	}
+
 	return errors.Is(err, ErrEmptyResponse) ||
 		errors.Is(err, errFetchAttemptTimeout) ||
 		isRetryableStatusError(err) ||
@@ -202,7 +212,7 @@ func isRetryableStatusCode(code int) bool {
 	}
 }
 
-// isRetryable5xx: 5xx 서버 에러인지 확인 (재시도 대상)
+// isRetryable5xx: 5xx 서버 에러인지 확인 (재시도 대상).
 func isRetryable5xx(code int) bool {
 	switch code {
 	case 500, 502, 503, 504:
@@ -212,7 +222,7 @@ func isRetryable5xx(code int) bool {
 	}
 }
 
-// isRetryableTransportError: 네트워크/프록시 계층 일시 장애인지 확인
+// isRetryableTransportError: 네트워크/프록시 계층 일시 장애인지 확인.
 func isRetryableTransportError(err error) bool {
 	if err == nil {
 		return false
@@ -242,6 +252,7 @@ func isRetryableTransportError(err error) bool {
 
 func isRetryableDeadlineExceeded(err error) bool {
 	var urlErr *url.Error
+
 	if errors.As(err, &urlErr) && urlErr.Err != nil {
 		return hasTransientTransportSignature(urlErr.Err.Error())
 	}
@@ -253,12 +264,15 @@ func isRetryableURLError(err *url.Error) bool {
 	if isTimeoutOrTemporaryError(err) {
 		return true
 	}
+
 	if err.Err == nil {
 		return false
 	}
+
 	if isTimeoutOrTemporaryError(err.Err) {
 		return true
 	}
+
 	return hasTransientTransportSignature(err.Err.Error())
 }
 
@@ -278,18 +292,23 @@ func isTimeoutNetError(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	var urlErr *url.Error
+
 	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
 		if urlErr.Err == nil {
 			return false
 		}
+
 		return isTimeoutNetError(urlErr.Err)
 	}
 
 	var netErr net.Error
+
 	if errors.As(err, &netErr) && !isNilInterfaceValue(netErr) && netErr.Timeout() {
 		return true
 	}
+
 	return false
 }
 
@@ -297,21 +316,27 @@ func isTemporaryNetError(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	var urlErr *url.Error
+
 	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
 		if urlErr.Err == nil {
 			return false
 		}
+
 		return isTemporaryNetError(urlErr.Err)
 	}
 
 	var tempErr temporaryError
+
 	if !errors.As(err, &tempErr) {
 		return false
 	}
+
 	if isNilInterfaceValue(tempErr) {
 		return false
 	}
+
 	return tempErr.Temporary()
 }
 
@@ -319,8 +344,10 @@ func isNilInterfaceValue(value any) bool {
 	if value == nil {
 		return true
 	}
+
 	reflected := reflect.ValueOf(value)
 	kind := reflected.Kind()
+
 	if kind == reflect.Chan ||
 		kind == reflect.Func ||
 		kind == reflect.Interface ||
@@ -329,6 +356,7 @@ func isNilInterfaceValue(value any) bool {
 		kind == reflect.Slice {
 		return reflected.IsNil()
 	}
+
 	return false
 }
 
@@ -337,8 +365,6 @@ var transientTransportSignatures = []string{
 	"connection reset",
 	"connection refused",
 	"broken pipe",
-	"http2: timeout awaiting response headers",
-	"http2: client connection lost",
 	"server closed idle connection",
 	"use of closed network connection",
 	"forcibly closed by the remote host",
@@ -352,10 +378,12 @@ var transientTransportSignatures = []string{
 
 func hasTransientTransportSignature(msg string) bool {
 	lower := strings.ToLower(msg)
+
 	for _, signature := range transientTransportSignatures {
 		if strings.Contains(lower, signature) {
 			return true
 		}
 	}
+
 	return false
 }

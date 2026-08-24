@@ -4,14 +4,15 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func commandExecutionAttrs(cmdCtx *domain.CommandContext, commandKey string, cmdType domain.CommandType) []slog.Attr {
 	attrs := commandContextAttrs(cmdCtx, commandKey)
+
 	attrs = append(attrs, slog.String("command_type", cmdType.String()))
+
 	return attrs
 }
 
@@ -19,6 +20,7 @@ func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slo
 	attrs := []slog.Attr{
 		slog.String("command", strings.TrimSpace(commandKey)),
 	}
+
 	if cmdCtx == nil {
 		return attrs
 	}
@@ -33,6 +35,7 @@ func commandContextAttrs(cmdCtx *domain.CommandContext, commandKey string) []slo
 	}
 
 	attrs = append(attrs, messageSummaryAttrs(cmdCtx.Message)...)
+
 	return attrs
 }
 

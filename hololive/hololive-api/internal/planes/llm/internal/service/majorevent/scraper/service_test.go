@@ -22,7 +22,6 @@ package scraper
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -38,11 +37,11 @@ type fakeEventRepository struct {
 	upserted          []*domain.MajorEvent
 }
 
-func (f *fakeEventRepository) GetRecentExternalIDs(ctx context.Context, eventType domain.MajorEventType, limit int) ([]string, *time.Time, error) {
+func (f *fakeEventRepository) GetRecentExternalIDs(_ context.Context, _ domain.MajorEventType, _ int) ([]string, *time.Time, error) {
 	return f.recentExternalIDs, f.latestPubDate, nil
 }
 
-func (f *fakeEventRepository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) error {
+func (f *fakeEventRepository) UpsertEvent(_ context.Context, event *domain.MajorEvent) error {
 	f.upserted = append(f.upserted, event)
 	return nil
 }
@@ -50,7 +49,7 @@ func (f *fakeEventRepository) UpsertEvent(ctx context.Context, event *domain.Maj
 func TestServiceScrape_StoresOnlyNewEvents(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if _, err := w.Write([]byte(sampleRSS)); err != nil {
 			t.Errorf("write response: %v", err)
 		}
@@ -62,7 +61,7 @@ func TestServiceScrape_StoresOnlyNewEvents(t *testing.T) {
 	}
 	parser := NewRSSParser()
 	fetcher := NewFeedFetcher(server.Client(), DefaultFeedFetcherConfig())
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	service, err := NewService(repository, fetcher, parser, ServiceConfig{
 		Sources: []FeedSource{
@@ -79,13 +78,15 @@ func TestServiceScrape_StoresOnlyNewEvents(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	result, scrapeErr := service.Scrape(context.Background())
+	result, scrapeErr := service.Scrape(t.Context())
 	if scrapeErr != nil {
 		t.Fatalf("Scrape() error = %v", scrapeErr)
 	}
+
 	if result.StoredEvents != 0 {
 		t.Fatalf("Scrape() stored = %d, want 0", result.StoredEvents)
 	}
+
 	if result.SkippedKnown != 1 {
 		t.Fatalf("Scrape() skipped = %d, want 1", result.SkippedKnown)
 	}

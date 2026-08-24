@@ -21,25 +21,25 @@
 package youtubedispatch
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cache, mini := newDispatcherTestCache(t)
+
 	defer mini.Close()
 	defer func() {
 		if err := cache.Close(); err != nil {
@@ -49,7 +49,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 
 	dispatcher := NewDispatcher(nil, cache, &testSender{
 		failRoom: map[string]bool{"room-fail": true},
-	}, newSendTestRenderer(t), slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 	})
 
@@ -76,20 +76,25 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	if !reflect.DeepEqual(result.SuccessDeliveryIDs, []int64{1}) {
 		t.Fatalf("successDeliveryIDs = %#v, want []int64{1}", result.SuccessDeliveryIDs)
 	}
+
 	if result.FailedDeliveries != 2 {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
-	if !reflect.DeepEqual(result.FailureBuckets["send message"], []int64{2}) {
-		t.Fatalf("send message failures = %#v, want []int64{2}", result.FailureBuckets["send message"])
+
+	if !reflect.DeepEqual(result.FailureBuckets[deliveryReasonSendMessage], []int64{2}) {
+		t.Fatalf("send message failures = %#v, want []int64{2}", result.FailureBuckets[deliveryReasonSendMessage])
 	}
+
 	if !reflect.DeepEqual(result.FailureBuckets["outbox row not found"], []int64{3}) {
 		t.Fatalf("outbox row not found failures = %#v, want []int64{3}", result.FailureBuckets["outbox row not found"])
 	}
+
 	wantTouched := []int64{100, 100, 999}
 	gotTouched := make([]int64, len(result.TouchedOutboxIDs))
 	copy(gotTouched, result.TouchedOutboxIDs)
 	slices.Sort(gotTouched)
 	slices.Sort(wantTouched)
+
 	if !reflect.DeepEqual(gotTouched, wantTouched) {
 		t.Fatalf("touchedOutboxIDs (sorted) = %#v, want %#v", gotTouched, wantTouched)
 	}
@@ -98,7 +103,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnotherWorker(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
@@ -113,11 +118,12 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 
-	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
 	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
 	require.Equal(t, store.DeliveryStatusSending, got.Status)
 	require.Equal(t, 0, got.AttemptCount)
@@ -129,7 +135,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnothe
 func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnotherWorker(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
@@ -144,11 +150,12 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 
-	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
 	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
 	require.NoError(t, err)
 
 	var got domain.YouTubeNotificationDelivery
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
 	require.Equal(t, domain.OutboxStatusSent, got.Status)
 	require.Equal(t, 0, got.AttemptCount)
@@ -160,7 +167,7 @@ func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnoth
 func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	lockedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
@@ -176,8 +183,8 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 
 	manager := &ClaimManager{
 		config:   dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Second},
-		logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		delivery: store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		logger:   slog.New(slog.DiscardHandler),
+		delivery: store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler)),
 	}
 	startedAt := time.Now().UTC()
 	result := dispatchstate.DispatchResult{
@@ -187,6 +194,7 @@ func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
 	manager.markRetryDispatchFailureBucket(ctx, []domain.YouTubeNotificationDelivery{row}, &result, "rate-limited", []int64{row.ID})
 
 	var got domain.YouTubeNotificationDelivery
+
 	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
 	require.Equal(t, domain.OutboxStatusPending, got.Status)
 	require.Equal(t, 1, got.AttemptCount)

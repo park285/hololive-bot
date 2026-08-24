@@ -25,9 +25,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type profileTemplateData struct {
@@ -165,6 +166,7 @@ func (f *ResponseFormatter) profileSocialLinks(ctx context.Context, raw *domain.
 	for i := range maxLinks {
 		link := raw.SocialLinks[i]
 		linkURL := profileLinkURL(link.URL)
+
 		if stringutil.TrimSpace(link.Label) == "" || linkURL == "" {
 			continue
 		}
@@ -189,12 +191,15 @@ func profileOfficialURL(raw *domain.TalentProfile) string {
 func profileLinkURL(raw string) string {
 	value := stringutil.TrimSpace(raw)
 	parsed, err := url.ParseRequestURI(value)
+
 	if err != nil || parsed.Host == "" {
 		return ""
 	}
+
 	if parsed.Scheme != "https" && parsed.Scheme != "http" {
 		return ""
 	}
+
 	return parsed.String()
 }
 
@@ -273,6 +278,7 @@ func parseDisplayNameComponents(display string) []string {
 func displayNameRawParts(display string) []string {
 	openIdx := strings.Index(display, "(")
 	closeIdx := strings.LastIndex(display, ")")
+
 	if openIdx == -1 || closeIdx == -1 || closeIdx <= openIdx {
 		return []string{display}
 	}
@@ -281,6 +287,7 @@ func displayNameRawParts(display string) []string {
 	appendDisplayNamePart(&rawParts, display[:openIdx])
 	appendDisplayNamePart(&rawParts, display[openIdx+1:closeIdx])
 	appendDisplayNamePart(&rawParts, display[closeIdx+1:])
+
 	return rawParts
 }
 
@@ -293,12 +300,14 @@ func appendDisplayNamePart(rawParts *[]string, part string) {
 
 func splitDisplayNameParts(rawParts []string) []string {
 	var result []string
+
 	for _, part := range rawParts {
 		segments := strings.SplitSeq(part, "/")
 		for segment := range segments {
 			appendDisplayNamePart(&result, segment)
 		}
 	}
+
 	return result
 }
 

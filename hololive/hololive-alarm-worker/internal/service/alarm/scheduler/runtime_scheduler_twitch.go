@@ -25,35 +25,33 @@ import (
 	"fmt"
 	"log/slog"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	twitch2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/twitch"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
-	"golang.org/x/sync/errgroup"
 )
 
-func newOptionalTwitchChecker(
+func newTwitchChecker(
 	cacheClient cache.Client,
 	twitchClient *twitch.Client,
-	twitchEnabled bool,
 	logger *slog.Logger,
 ) (checking.Runner, error) {
-	if !twitchEnabled {
-		logger.Info("Twitch alarm loop disabled")
-		return nil, nil
-	}
 	twitchChecker, err := twitch2.NewTwitchChecker(cacheClient, twitchClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create twitch checker: %w", err)
 	}
+
 	return twitchChecker, nil
 }
 
-func (s *RuntimeScheduler) startTwitchLoop(eg *errgroup.Group, ctx context.Context) {
+func (s *RuntimeScheduler) startTwitchLoop(ctx context.Context, eg *errgroup.Group) {
 	if s.twitchChecker == nil {
 		return
 	}
+
 	panicguard.GoE(eg, s.logger, "alarm-scheduler-twitch", func() error {
 		return s.runLoop(ctx, runtimeSchedulerLoopNameTwitch, s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
 	})

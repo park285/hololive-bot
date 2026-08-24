@@ -43,11 +43,13 @@ func TestProvideAlarmReaderWithholdsWriteMethods(t *testing.T) {
 	}); ok {
 		t.Fatal("ProvideAlarmReader must not expose Add to alarm read consumers")
 	}
+
 	if _, ok := reader.(interface {
 		Remove(context.Context, string, string) error
 	}); ok {
 		t.Fatal("ProvideAlarmReader must not expose Remove to alarm read consumers")
 	}
+
 	if _, ok := reader.(interface {
 		ClearByRoom(context.Context, string) (int64, error)
 	}); ok {

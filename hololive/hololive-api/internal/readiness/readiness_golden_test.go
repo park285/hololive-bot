@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 )
 
@@ -19,6 +20,7 @@ func TestGoldenReadyAllHealthy(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
 	}
+
 	want := `{"dependencies":{"postgres":true,"valkey":true},"goroutines":0,"plane":"bot","status":"ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/ready body = %s, want %s", body, want)
@@ -36,6 +38,7 @@ func TestGoldenReadyDependencyDown(t *testing.T) {
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusServiceUnavailable)
 	}
+
 	want := `{"dependencies":{"postgres":true,"valkey":false},"goroutines":0,"plane":"admin","status":"not_ready","uptime":"UPTIME","version":"VERSION"}`
 	if body != want {
 		t.Fatalf("/ready body = %s, want %s", body, want)
@@ -50,6 +53,7 @@ func TestGoldenReadyNilProbe(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("/ready status = %d, want %d", code, http.StatusOK)
 	}
+
 	want := `{"health":{"goroutines":0,"status":"ok","uptime":"UPTIME","version":"VERSION"},"status":"ready"}`
 	if body != want {
 		t.Fatalf("/ready body = %s, want %s", body, want)
@@ -60,6 +64,7 @@ func serveReadyGolden(t *testing.T, handler gin.HandlerFunc) (statusCode int, ca
 	t.Helper()
 
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.New()
 	router.GET("/ready", handler)
 
@@ -74,17 +79,22 @@ func canonicalizeGolden(t *testing.T, raw []byte) string {
 	t.Helper()
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("golden unmarshal: %v, raw=%s", err, raw)
 	}
+
 	normalizeGoldenDynamicFields(t, payload)
+
 	if nested, ok := payload["health"].(map[string]any); ok {
 		normalizeGoldenDynamicFields(t, nested)
 	}
+
 	out, err := jsonv2.Marshal(payload, jsonv2.Deterministic(true))
 	if err != nil {
 		t.Fatalf("golden marshal: %v", err)
 	}
+
 	return string(out)
 }
 
@@ -96,15 +106,19 @@ func normalizeGoldenDynamicFields(t *testing.T, payload map[string]any) {
 		if !exists {
 			continue
 		}
+
 		if _, ok := value.(string); !ok {
 			t.Fatalf("%s = %T, want string", key, value)
 		}
+
 		payload[key] = placeholder
 	}
+
 	if value, exists := payload["goroutines"]; exists {
 		if _, ok := value.(float64); !ok {
 			t.Fatalf("goroutines = %T, want number", value)
 		}
+
 		payload["goroutines"] = float64(0)
 	}
 }

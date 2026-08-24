@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -11,8 +12,10 @@ import (
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
-var ErrPublishedAtNotFound = errors.New("published_at not found")
-var ErrCommunityPublishedAtNotFound = errors.New("community published_at not found")
+var (
+	ErrPublishedAtNotFound          = errors.New("published_at not found")
+	ErrCommunityPublishedAtNotFound = errors.New("community published_at not found")
+)
 
 var communityPublishedAtJSONPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)"(?:datePublished|dateCreated|uploadDate|publishDate)"\s*:\s*"([^"]+)"`),
@@ -38,9 +41,11 @@ func ExtractCommunityPublishedAtFromHTML(html string) (*time.Time, error) {
 	if errors.Is(err, ErrPublishedAtNotFound) {
 		return nil, ErrCommunityPublishedAtNotFound
 	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("extract published at from HTML: %w", err)
 	}
+
 	return publishedAt, nil
 }
 
@@ -69,9 +74,11 @@ func (collector *publishedAtCandidateCollector) add(value string) {
 	if value == "" {
 		return
 	}
+
 	if _, exists := collector.seen[value]; exists {
 		return
 	}
+
 	collector.seen[value] = struct{}{}
 	collector.candidates = append(collector.candidates, value)
 }
@@ -108,6 +115,7 @@ func (collector *publishedAtCandidateCollector) collectJSONCandidates(html strin
 			if len(match) < 2 {
 				continue
 			}
+
 			collector.add(match[1])
 		}
 	}

@@ -18,8 +18,10 @@ func WithRoomChat(ctx context.Context, roomType, roomLinkID string) context.Cont
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
 	roomType = strings.TrimSpace(roomType)
 	roomLinkID = strings.TrimSpace(roomLinkID)
+
 	if roomType == "" && roomLinkID == "" {
 		return ctx
 	}
@@ -31,6 +33,7 @@ func RoomChatFromContext(ctx context.Context) (roomType, roomLinkID string, ok b
 	if ctx == nil {
 		return "", "", false
 	}
+
 	value, exists := ctx.Value(roomChatContextKey{}).(roomChat)
 	if !exists {
 		return "", "", false
@@ -47,9 +50,11 @@ func markdownForRoom(ctx context.Context, roomID string, enabled bool, rooms Roo
 	if !enabled {
 		return false
 	}
+
 	if roomType, roomLinkID, ok := RoomChatFromContext(ctx); ok {
 		return kakaoformat.IsOpenChat(roomType, roomLinkID)
 	}
+
 	if rooms != nil {
 		return rooms.OpenChat(ctx, roomID)
 	}

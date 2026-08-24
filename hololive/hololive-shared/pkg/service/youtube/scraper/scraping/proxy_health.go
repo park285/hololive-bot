@@ -10,7 +10,7 @@ type ProxyFallbackPolicy struct {
 }
 
 // proxyHealthTracker: proxy client 사용 중의 success/failure 카운트를 추적하여
-// 임계치 도달 시 1회 fallback 신호를 반환한다. mu로 동시 호출 안전 보장.
+// 임계치 도달 시 1회 fallback 신호를 반환하며, mu로 동시 호출 안전을 보장한다.
 type proxyHealthTracker struct {
 	mu                  sync.Mutex
 	policy              ProxyFallbackPolicy
@@ -22,6 +22,7 @@ func newProxyHealthTracker(policy ProxyFallbackPolicy) *proxyHealthTracker {
 	if policy.MaxConsecutiveFailures <= 0 {
 		policy.MaxConsecutiveFailures = 5
 	}
+
 	return &proxyHealthTracker{policy: policy}
 }
 
@@ -31,16 +32,20 @@ func (t *proxyHealthTracker) RecordTransportFailure() bool {
 	if t == nil || !t.policy.Enabled {
 		return false
 	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	if t.triggered {
 		return false
 	}
+
 	t.consecutiveFailures++
 	if t.consecutiveFailures >= t.policy.MaxConsecutiveFailures {
 		t.triggered = true
 		return true
 	}
+
 	return false
 }
 
@@ -48,8 +53,10 @@ func (t *proxyHealthTracker) RecordSuccess() {
 	if t == nil || !t.policy.Enabled {
 		return
 	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	t.consecutiveFailures = 0
 	t.triggered = false
 }
@@ -58,8 +65,10 @@ func (t *proxyHealthTracker) Arm() {
 	if t == nil {
 		return
 	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	t.consecutiveFailures = 0
 	t.triggered = false
 }

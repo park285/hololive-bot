@@ -31,9 +31,8 @@ import (
 	mescraper "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/scraper"
 	mesummarizer "github.com/kapu/hololive-api/internal/planes/llm/internal/service/majorevent/summarizer"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
-	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -46,8 +45,11 @@ func buildMajorEventComponents(
 	guards *llmGuards,
 	logger *slog.Logger,
 ) (*mescheduler.Scheduler, *mescheduler.MonthlyScheduler, *mescraper.RuntimeScheduler) {
-	var promptGuard *promptguard.Guard
-	var outputGuard *outputguard.Guard
+	var (
+		promptGuard *promptguard.Guard
+		outputGuard *outputguard.Guard
+	)
+
 	if guards != nil {
 		promptGuard = guards.prompt
 		outputGuard = guards.output
@@ -76,6 +78,7 @@ func buildMajorEventComponents(
 	majorEventScraperScheduler, err := mescraper.NewRuntimeScheduler(majorEventRepository, logger)
 	if err != nil {
 		logger.Error("Failed to initialize major event scraper runtime scheduler", slog.String("error", err.Error()))
+
 		majorEventScraperScheduler = nil
 	}
 
@@ -92,6 +95,7 @@ func buildMemberNewsComponents(
 ) (*mnscheduler.Scheduler, *mnscheduler.MonthlyScheduler) {
 	if memberNews == nil {
 		logger.Info("Member news scheduler disabled: service unavailable")
+
 		return nil, nil
 	}
 
@@ -111,5 +115,6 @@ func buildMemberNewsComponents(
 		logger,
 		mnscheduler.WithMonthlyOutputGuard(outputGuard),
 	)
+
 	return scheduler, monthlyScheduler
 }

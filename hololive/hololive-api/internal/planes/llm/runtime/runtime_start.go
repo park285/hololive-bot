@@ -8,6 +8,7 @@ func (r *LLMSchedulerRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
 	}
+
 	r.startSchedulers(ctx)
 	r.startHTTPServer(errCh)
 }

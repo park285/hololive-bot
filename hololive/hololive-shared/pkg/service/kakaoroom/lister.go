@@ -28,6 +28,7 @@ func (l irisRooms) GetRooms(ctx context.Context) ([]Facts, error) {
 	if err != nil {
 		return nil, fmt.Errorf("iris get rooms: %w", err)
 	}
+
 	if resp == nil {
 		return nil, nil
 	}

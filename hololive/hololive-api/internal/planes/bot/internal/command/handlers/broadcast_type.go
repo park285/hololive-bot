@@ -21,15 +21,15 @@
 package handlers
 
 import (
+	_ "embed"
 	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"golang.org/x/text/unicode/norm"
 
-	_ "embed"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 )
 
 type BroadcastClassification struct {
@@ -100,15 +100,19 @@ func ClassifyBroadcast(topicID, title string) broadcasttype.Type {
 func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification {
 	topicType := classifyBroadcastTopic(topicID)
 	titleClass := classifyBroadcastTitle(title)
+
 	if broadcastTitleOverridesTopic(titleClass, topicType) {
 		return BroadcastClassification{Type: titleClass.Type, Source: "title"}
 	}
+
 	if topicType != broadcasttype.Unknown {
 		return BroadcastClassification{Type: topicType, Source: "topic"}
 	}
+
 	if titleClass.Type != broadcasttype.Unknown {
 		return BroadcastClassification{Type: titleClass.Type, Source: "title"}
 	}
+
 	return BroadcastClassification{Type: broadcasttype.Unknown, Source: "unknown"}
 }
 
@@ -116,9 +120,11 @@ func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topic
 	if titleClass.Type == broadcasttype.Unknown || topicType == broadcasttype.Unknown {
 		return false
 	}
+
 	if !broadcastTopicAcceptsTitleOverride(topicType) {
 		return false
 	}
+
 	return broadcastTitleClassOverridesTopic(titleClass)
 }
 
@@ -148,6 +154,7 @@ func classifyBroadcastTopic(topicID string) broadcasttype.Type {
 			return typ
 		}
 	}
+
 	return broadcasttype.Unknown
 }
 
@@ -155,23 +162,29 @@ func classifyBroadcastTitle(title string) broadcastTitleClassification {
 	normalized := normalizeBroadcastText(title)
 	leadTag := normalizeBroadcastTitleTag(firstBroadcastTitleTag(title))
 	rejectScope := leadTag
+
 	if rejectScope == "" {
 		rejectScope = normalized
 	}
+
 	if typ, ok := classifyBroadcastTitleByKeyword(normalized, rejectScope, broadcastRules.TitleRules); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthStrong}
 	}
+
 	if leadTag != "" {
 		if typ, ok := classifyBroadcastTitleByKeyword(leadTag, rejectScope, broadcastRules.Generic); ok {
 			return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthLead}
 		}
 	}
+
 	if titleLooksLikeGameBroadcast(normalized, leadTag) {
 		return broadcastTitleClassification{Type: broadcasttype.Game, Strength: broadcastTitleStrengthStrong}
 	}
+
 	if typ, ok := classifyBroadcastTitleByKeyword(normalized, normalized, broadcastRules.Generic); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthGeneric}
 	}
+
 	return broadcastTitleClassification{Type: broadcasttype.Unknown, Strength: broadcastTitleStrengthUnknown}
 }
 
@@ -180,10 +193,12 @@ func classifyBroadcastTitleByKeyword(normalized, rejectScope string, rules []bro
 		if broadcastRejectScopeMatches(rejectScope, rule.RejectKeywords) {
 			continue
 		}
+
 		if containsAnyBroadcastKeyword(normalized, rule.Keywords) {
 			return rule.Type, true
 		}
 	}
+
 	return broadcasttype.Unknown, false
 }
 
@@ -194,6 +209,7 @@ func broadcastRejectScopeMatches(rejectScope string, keywords []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -201,11 +217,13 @@ func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
 	if leadTag != "" && containsExactBroadcastKeyword(leadTag, broadcastRules.GameTag.Exact) {
 		return true
 	}
+
 	if leadTag != "" &&
 		!containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.RejectKeywords) &&
 		containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.Contains) {
 		return true
 	}
+
 	return containsAnyBroadcastKeyword(normalized, broadcastRules.GameTag.Contains)
 }
 
@@ -219,18 +237,22 @@ var broadcastTitleTagDelims = [][2]string{
 func firstBroadcastTitleTag(title string) string {
 	tag := ""
 	tagIdx := -1
+
 	for _, delim := range broadcastTitleTagDelims {
 		open := strings.Index(title, delim[0])
 		if open < 0 || (tagIdx >= 0 && open >= tagIdx) {
 			continue
 		}
+
 		body, _, ok := strings.Cut(title[open+len(delim[0]):], delim[1])
 		if !ok {
 			continue
 		}
+
 		tagIdx = open
 		tag = strings.TrimSpace(body)
 	}
+
 	return tag
 }
 
@@ -244,6 +266,7 @@ func containsAnyBroadcastKeyword(value string, keywords []string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -251,22 +274,28 @@ func broadcastKeywordMatches(value, keyword string) bool {
 	if keyword == "" {
 		return false
 	}
+
 	if !isASCIIBroadcastKeyword(keyword) {
 		return strings.Contains(value, keyword)
 	}
+
 	start := 0
 	for start <= len(value) {
 		idx := strings.Index(value[start:], keyword)
 		if idx < 0 {
 			return false
 		}
+
 		matchStart := start + idx
 		matchEnd := matchStart + len(keyword)
+
 		if hasBroadcastKeywordBoundary(value, matchStart, matchEnd) {
 			return true
 		}
+
 		start = matchStart + 1
 	}
+
 	return false
 }
 
@@ -276,6 +305,7 @@ func isASCIIBroadcastKeyword(value string) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -289,12 +319,14 @@ func hasBroadcastKeywordBoundary(value string, start, end int) bool {
 			return false
 		}
 	}
+
 	if end < len(value) {
 		r, _ := utf8.DecodeRuneInString(value[end:])
 		if isBroadcastWordRune(r) && !unicode.IsDigit(r) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -305,12 +337,14 @@ func isBroadcastWordRune(r rune) bool {
 func broadcastTopics(topicID string) []string {
 	parts := strings.Split(topicID, ",")
 	topics := make([]string, 0, len(parts))
+
 	for _, part := range parts {
 		topic := normalizeBroadcastTopic(part)
 		if topic != "" {
 			topics = append(topics, topic)
 		}
 	}
+
 	return topics
 }
 
@@ -319,6 +353,7 @@ func broadcastTopicMatches(topicID, wanted string) bool {
 	if wanted == "" {
 		return true
 	}
+
 	return slices.Contains(broadcastTopics(topicID), wanted)
 }
 
@@ -342,5 +377,6 @@ func normalizeBroadcastText(value string) string {
 		}
 	}, value)
 	value = strings.ToLower(strings.TrimSpace(value))
+
 	return strings.Join(strings.Fields(value), " ")
 }

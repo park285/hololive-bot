@@ -6,17 +6,16 @@ import (
 	"testing"
 	"time"
 
-	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/jackc/pgx/v5/pgxpool"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
+	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 
 func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
@@ -41,7 +40,7 @@ func TestInitCoreIntegrationServices_PopulatesCommandBuilders(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, services)
 	assert.NotNil(t, services.CommandBuilders)
-	assert.Len(t, services.CommandBuilders, 0)
+	assert.Empty(t, services.CommandBuilders)
 }
 
 func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
@@ -81,5 +80,5 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 
 	require.NotNil(t, deps)
 	assert.NotNil(t, deps.CommandBuilders)
-	assert.Len(t, deps.CommandBuilders, 0)
+	assert.Empty(t, deps.CommandBuilders)
 }

@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/member"
-	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/member"
+	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
 func setupProfileCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
@@ -25,6 +25,7 @@ func setupProfileCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	if _, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`); err != nil {
 		t.Fatalf("clear templates: %v", err)
 	}
+
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO notification_templates(template_key, channel_id, body)
 		VALUES ($1, NULL, $2)
@@ -42,13 +43,17 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		ChannelID: "ch-fubuki",
 		Name:      "Shirakami Fubuki",
 	}})
+
 	profiles, err := member.NewProfileService(nil, provider, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewProfileService() error = %v", err)
 	}
 
-	var textSent string
-	var imageSent bool
+	var (
+		textSent  string
+		imageSent bool
+	)
+
 	deps := &handlercore.Dependencies{
 		Matcher:          matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		MembersData:      provider,
@@ -64,13 +69,14 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		},
 		SendError: func(_ context.Context, _, msg string) error {
 			t.Fatalf("unexpected SendError: %s", msg)
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err = info.NewMemberInfoCommand(deps).Execute(context.Background(), &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Shirakami Fubuki",
+	err = info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: "Shirakami Fubuki",
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -79,6 +85,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 	if !strings.Contains(textSent, "시라카미 후부키") && !strings.Contains(textSent, "Shirakami Fubuki") {
 		t.Fatalf("profile text = %q, want member name included", textSent)
 	}
+
 	if imageSent {
 		t.Fatal("image path must not be used for profile")
 	}

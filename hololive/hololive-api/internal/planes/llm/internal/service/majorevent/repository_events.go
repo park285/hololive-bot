@@ -43,21 +43,29 @@ func (r *Repository) GetRecentExternalIDs(ctx context.Context, eventType domain.
 	}
 	defer rows.Close()
 
-	return scanRecentExternalIDs(rows, limit)
+	out1, out2, err := scanRecentExternalIDs(rows, limit)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scan recent external IDs: %w", err)
+	}
+
+	return out1, out2, nil
 }
 
 func scanRecentExternalIDs(rows pgx.Rows, limit int) ([]string, *time.Time, error) {
 	externalIDs := make([]string, 0, limit)
+
 	var latestPubDate *time.Time
 
 	for rows.Next() {
 		externalID, pubDate, err := scanRecentExternalIDRow(rows)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("scan recent external ID row: %w", err)
 		}
+
 		if externalID != "" {
 			externalIDs = append(externalIDs, externalID)
 		}
+
 		latestPubDate = firstRecentPubDate(latestPubDate, pubDate)
 	}
 
@@ -69,11 +77,15 @@ func scanRecentExternalIDs(rows pgx.Rows, limit int) ([]string, *time.Time, erro
 }
 
 func scanRecentExternalIDRow(rows pgx.Rows) (string, *time.Time, error) {
-	var externalID string
-	var pubDate *time.Time
+	var (
+		externalID string
+		pubDate    *time.Time
+	)
+
 	if err := rows.Scan(&externalID, &pubDate); err != nil {
 		return "", nil, fmt.Errorf("scan recent external ID: %w", err)
 	}
+
 	return externalID, pubDate, nil
 }
 
@@ -81,7 +93,9 @@ func firstRecentPubDate(current, candidate *time.Time) *time.Time {
 	if current != nil || candidate == nil {
 		return current
 	}
+
 	normalized := candidate.UTC()
+
 	return &normalized
 }
 
@@ -92,7 +106,12 @@ func (r *Repository) queryEvents(ctx context.Context, action, query string, args
 	}
 	defer rows.Close()
 
-	return r.scanEvents(rows)
+	out, err := r.scanEvents(rows)
+	if err != nil {
+		return out, fmt.Errorf("scan events: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) error {
@@ -116,6 +135,7 @@ func (r *Repository) UpsertEvent(ctx context.Context, event *domain.MajorEvent) 
 	if err != nil {
 		return fmt.Errorf("upsert event: %w", err)
 	}
+
 	return nil
 }
 
@@ -129,7 +149,7 @@ func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDat
 		ORDER BY event_start_date ASC
 	`
 
-	return r.queryEvents(
+	out, err := r.queryEvents(
 		ctx,
 		"get events by date range",
 		query,
@@ -140,6 +160,11 @@ func (r *Repository) GetEventsByDateRange(ctx context.Context, startDate, endDat
 		endDate,
 		weekKey,
 	)
+	if err != nil {
+		return out, fmt.Errorf("query events: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, monthKey string) ([]*domain.MajorEvent, error) {
@@ -155,7 +180,7 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 		ORDER BY event_start_date ASC
 	`
 
-	return r.queryEvents(
+	out, err := r.queryEvents(
 		ctx,
 		"get events by month",
 		query,
@@ -166,6 +191,11 @@ func (r *Repository) GetEventsByMonth(ctx context.Context, year, month int, mont
 		monthStart,
 		monthKey,
 	)
+	if err != nil {
+		return out, fmt.Errorf("query events: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) MarkEventsAsMonthlyNotified(ctx context.Context, eventIDs []int, monthKey string) error {
@@ -179,6 +209,7 @@ func (r *Repository) MarkEventsAsMonthlyNotified(ctx context.Context, eventIDs [
 	if err != nil {
 		return fmt.Errorf("mark events as monthly notified: %w", err)
 	}
+
 	return nil
 }
 
@@ -193,6 +224,7 @@ func (r *Repository) MarkEventsAsNotified(ctx context.Context, eventIDs []int, w
 	if err != nil {
 		return fmt.Errorf("mark events as notified: %w", err)
 	}
+
 	return nil
 }
 
@@ -203,6 +235,7 @@ func (r *Repository) UpdateExpiredEvents(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("update expired events: %w", err)
 	}
+
 	return result.RowsAffected(), nil
 }
 
@@ -211,7 +244,13 @@ func (r *Repository) GetAllActiveEvents(ctx context.Context) ([]*domain.MajorEve
 		WHERE status = $1
 		ORDER BY event_start_date ASC
 	`
-	return r.queryEvents(ctx, "get all active events", query, domain.MajorEventStatusActive)
+
+	out, err := r.queryEvents(ctx, "get all active events", query, domain.MajorEventStatusActive)
+	if err != nil {
+		return out, fmt.Errorf("query events: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) UpdateEventLinkStatuses(ctx context.Context, events []*domain.MajorEvent) (int64, error) {
@@ -226,6 +265,7 @@ func (r *Repository) UpdateEventLinkStatuses(ctx context.Context, events []*doma
 	if err != nil {
 		return 0, fmt.Errorf("update event link statuses: %w", err)
 	}
+
 	return result.RowsAffected(), nil
 }
 
@@ -241,6 +281,7 @@ func eventLinkStatusArrays(events []*domain.MajorEvent) (ids []int, statuses []s
 		if event == nil || event.ID == 0 || event.LinkCheckedAt == nil {
 			continue
 		}
+
 		ids = append(ids, event.ID)
 		statuses = append(statuses, string(event.LinkStatus))
 		checkedAts = append(checkedAts, event.LinkCheckedAt.UTC())
@@ -255,6 +296,7 @@ func (r *Repository) scanEvents(rows pgx.Rows) ([]*domain.MajorEvent, error) {
 
 	for rows.Next() {
 		var event domain.MajorEvent
+
 		err := rows.Scan(
 			&event.ID,
 			&event.ExternalID,
@@ -278,6 +320,7 @@ func (r *Repository) scanEvents(rows pgx.Rows) ([]*domain.MajorEvent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
+
 		events = append(events, &event)
 	}
 

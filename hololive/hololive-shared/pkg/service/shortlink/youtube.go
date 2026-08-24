@@ -27,15 +27,18 @@ func NewYouTubeBuilder(rawOrigin string) (YouTubeBuilder, error) {
 	if err != nil {
 		return YouTubeBuilder{}, fmt.Errorf("parse origin: %w", err)
 	}
+
 	if err := validateYouTubeOriginAuthority(parsed); err != nil {
-		return YouTubeBuilder{}, err
+		return YouTubeBuilder{}, fmt.Errorf("validate youtube origin authority: %w", err)
 	}
+
 	if err := validateYouTubeOriginSuffix(parsed); err != nil {
-		return YouTubeBuilder{}, err
+		return YouTubeBuilder{}, fmt.Errorf("validate youtube origin suffix: %w", err)
 	}
 
 	parsed.Path = ""
 	parsed.RawPath = ""
+
 	return YouTubeBuilder{origin: strings.TrimSuffix(parsed.String(), "/")}, nil
 }
 
@@ -43,12 +46,15 @@ func validateYouTubeOriginAuthority(parsed *url.URL) error {
 	if parsed.Scheme != "https" {
 		return errors.New("origin must use https")
 	}
+
 	if parsed.Hostname() == "" {
 		return errors.New("origin host is required")
 	}
+
 	if parsed.User != nil {
 		return errors.New("origin user info is not allowed")
 	}
+
 	return nil
 }
 
@@ -56,12 +62,15 @@ func validateYouTubeOriginSuffix(parsed *url.URL) error {
 	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawPath != "" {
 		return errors.New("origin path is not allowed")
 	}
+
 	if parsed.RawQuery != "" || parsed.ForceQuery {
 		return errors.New("origin query is not allowed")
 	}
+
 	if parsed.Fragment != "" {
 		return errors.New("origin fragment is not allowed")
 	}
+
 	return nil
 }
 
@@ -76,6 +85,7 @@ func (b YouTubeBuilder) URL(videoID string) (string, bool) {
 	if !b.Enabled() || !ValidYouTubeVideoID(videoID) {
 		return "", false
 	}
+
 	return b.origin + shortlinkcontracts.YouTubePathPrefix + videoID, true
 }
 
@@ -84,11 +94,13 @@ func ValidYouTubeVideoID(videoID string) bool {
 	if len(videoID) != youtubeVideoIDLength {
 		return false
 	}
+
 	for i := range len(videoID) {
 		if !validYouTubeVideoIDByte(videoID[i]) {
 			return false
 		}
 	}
+
 	return true
 }
 

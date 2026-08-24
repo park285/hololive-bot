@@ -22,6 +22,7 @@ package settings
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -33,9 +34,14 @@ func newSettingsIrisH3DialGuard(
 	baseURL string,
 	resolveTimeout time.Duration,
 ) (func(context.Context, net.IP) error, error) {
-	return iris.NewH3DialGuardForBaseURL(
+	out, err := iris.NewH3DialGuardForBaseURL(
 		ctx,
 		baseURL,
 		iris.WithH3DialGuardResolveTimeout(resolveTimeout),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("H3 dial guard for base URL: %w", err)
+	}
+
+	return out, nil
 }

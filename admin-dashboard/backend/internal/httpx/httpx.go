@@ -1,12 +1,12 @@
 package httpx
 
 import (
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
@@ -29,6 +29,7 @@ func (e *AppError) Error() string {
 	if e.Cause != nil {
 		return e.Cause.Error()
 	}
+
 	return e.Body.Error
 }
 
@@ -56,19 +57,26 @@ func Internal(err error) *AppError {
 func JSON(w http.ResponseWriter, status int, payload any) error {
 	body, err := jsonv2.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal: %w", err)
 	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_, err = w.Write(body)
-	return err
+
+	if _, err := w.Write(body); err != nil {
+		return fmt.Errorf("write response body: %w", err)
+	}
+
+	return nil
 }
 
 func Error(w http.ResponseWriter, err error) {
 	if appErr, ok := errors.AsType[*AppError](err); ok {
 		respondJSON(w, appErr.Status, appErr.Body)
+
 		return
 	}
+
 	respondJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "An internal error occurred"})
 }
 
@@ -82,26 +90,35 @@ func Abort(c *gin.Context, err error) {
 	if appErr, ok := errors.AsType[*AppError](err); ok {
 		ginjson.Respond(c, appErr.Status, appErr.Body)
 		c.Abort()
+
 		return
 	}
+
 	ginjson.Respond(c, http.StatusInternalServerError, ErrorResponse{Error: "An internal error occurred"})
 	c.Abort()
 }
 
 func DecodeJSON(r *http.Request, dst any, maxBytes int64) error {
 	defer closeBody(r.Body)
+
 	if maxBytes <= 0 {
-		return fmt.Errorf("invalid json body: maximum body size must be positive")
+		return errors.New("invalid json body: maximum body size must be positive")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes+1))
 	if err != nil {
 		return fmt.Errorf("invalid json body: read body: %w", err)
 	}
+
 	if int64(len(body)) > maxBytes {
 		return fmt.Errorf("invalid json body: body exceeds %d bytes", maxBytes)
 	}
-	return DecodeJSONBytes(body, dst)
+
+	if err := DecodeJSONBytes(body, dst); err != nil {
+		return fmt.Errorf("decode JSON bytes: %w", err)
+	}
+
+	return nil
 }
 
 // DecodeJSONBytes decodes exactly one JSON value and rejects unknown fields.
@@ -109,6 +126,7 @@ func DecodeJSONBytes(body []byte, dst any) error {
 	if err := jsonv2.Unmarshal(body, dst, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return fmt.Errorf("invalid json body: %w", err)
 	}
+
 	return nil
 }
 

@@ -13,15 +13,19 @@ func appendCommunityShortsAlarmTimingLogAttrs(attrs []any, timing alarmtiming.Sn
 	if timing.ActualPublishedAt != nil {
 		attrs = append(attrs, slog.Time(logschema.FieldActualPublishedAt, timing.ActualPublishedAt.UTC()))
 	}
+
 	if timing.AlarmSentAt != nil {
 		attrs = append(attrs, slog.Time(logschema.FieldAlarmSentAt, timing.AlarmSentAt.UTC()))
 	}
+
 	if timing.AlarmLatencyMillis != nil {
 		attrs = append(attrs, slog.Int64(logschema.FieldAlarmLatencyMillis, *timing.AlarmLatencyMillis))
 	}
+
 	if timing.AlarmLatencyExceeded != nil {
 		attrs = append(attrs, slog.Bool(logschema.FieldAlarmLatencyExceeded, *timing.AlarmLatencyExceeded))
 	}
+
 	return attrs
 }
 

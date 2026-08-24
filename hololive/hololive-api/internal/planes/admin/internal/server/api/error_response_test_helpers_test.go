@@ -1,10 +1,9 @@
 package api
 
 import (
+	jsonv2 "encoding/json/v2"
 	"net/http/httptest"
 	"testing"
-
-	jsonv2 "encoding/json/v2"
 )
 
 func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantMessage string) {
@@ -15,6 +14,7 @@ func assertErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, wantStatu
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v body=%s", err, rec.Body.String())
 	}

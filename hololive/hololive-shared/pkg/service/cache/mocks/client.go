@@ -23,6 +23,7 @@ package mocks
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/valkey-io/valkey-go"
@@ -79,15 +80,17 @@ type Client struct {
 	GetAllMembersFunc            func(ctx context.Context) (map[string]string, error)
 }
 
-var _ cache.Client = (*Client)(nil)
-var _ cache.KeyValueCache = (*Client)(nil)
-var _ cache.SetCache = (*Client)(nil)
-var _ cache.HashCache = (*Client)(nil)
-var _ cache.ScriptCache = (*Client)(nil)
-var _ cache.StreamCache = (*Client)(nil)
-var _ cache.MemberCache = (*Client)(nil)
-var _ cache.ConnectionManager = (*Client)(nil)
-var _ cache.LowLevelCache = (*Client)(nil)
+var (
+	_ cache.Client            = (*Client)(nil)
+	_ cache.KeyValueCache     = (*Client)(nil)
+	_ cache.SetCache          = (*Client)(nil)
+	_ cache.HashCache         = (*Client)(nil)
+	_ cache.ScriptCache       = (*Client)(nil)
+	_ cache.StreamCache       = (*Client)(nil)
+	_ cache.MemberCache       = (*Client)(nil)
+	_ cache.ConnectionManager = (*Client)(nil)
+	_ cache.LowLevelCache     = (*Client)(nil)
+)
 
 var ErrUnimplemented = errors.New("cache mock: method not configured")
 
@@ -105,242 +108,225 @@ func (m *Client) panicIfUnset(name string) {
 	}
 }
 
-func (m *Client) unsetError(name string) error {
-	m.panicIfUnset(name)
-	return nil
-}
-
-func (m *Client) unsetInt64(name string) (int64, error) {
-	m.panicIfUnset(name)
-	return 0, nil
-}
-
 func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	if m.GetFunc != nil {
-		return m.GetFunc(ctx, key, dest)
+		if err := m.GetFunc(ctx, key, dest); err != nil {
+			return fmt.Errorf("get func: %w", err)
+		}
+
+		return nil
 	}
+
 	m.panicIfUnset("GetFunc")
+
 	return nil
 }
 
 func (m *Client) GetString(ctx context.Context, key string) (value0 string, ok1 bool, err error) {
 	if m.GetStringFunc != nil {
-		return m.GetStringFunc(ctx, key)
+		out1, out2, err := m.GetStringFunc(ctx, key)
+		if err != nil {
+			return out1, out2, fmt.Errorf("get string func: %w", err)
+		}
+
+		return out1, out2, nil
 	}
+
 	m.panicIfUnset("GetStringFunc")
+
 	return "", false, nil
 }
 
 func (m *Client) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	if m.SetFunc != nil {
-		return m.SetFunc(ctx, key, value, ttl)
+		if err := m.SetFunc(ctx, key, value, ttl); err != nil {
+			return fmt.Errorf("set func: %w", err)
+		}
+
+		return nil
 	}
-	return m.unsetError("SetFunc")
+
+	m.panicIfUnset("SetFunc")
+
+	return nil
 }
 
 func (m *Client) MSet(ctx context.Context, pairs map[string]any, ttl time.Duration) error {
 	if m.MSetFunc != nil {
-		return m.MSetFunc(ctx, pairs, ttl)
+		if err := m.MSetFunc(ctx, pairs, ttl); err != nil {
+			return fmt.Errorf("m set func: %w", err)
+		}
+
+		return nil
 	}
-	return m.unsetError("MSetFunc")
+
+	m.panicIfUnset("MSetFunc")
+
+	return nil
 }
 
 func (m *Client) Del(ctx context.Context, key string) error {
 	if m.DelFunc != nil {
-		return m.DelFunc(ctx, key)
+		if err := m.DelFunc(ctx, key); err != nil {
+			//nolint:wrapcheck // 설정된 mock callback의 오류 문자열과 concrete type을 그대로 돌려주는 테스트 대역 계약이다.
+			return err
+		}
+
+		return nil
 	}
-	return m.unsetError("DelFunc")
+
+	m.panicIfUnset("DelFunc")
+
+	return nil
 }
 
 func (m *Client) DelMany(ctx context.Context, keys []string) (int64, error) {
 	if m.DelManyFunc != nil {
-		return m.DelManyFunc(ctx, keys)
+		out, err := m.DelManyFunc(ctx, keys)
+		if err != nil {
+			return out, fmt.Errorf("del many func: %w", err)
+		}
+
+		return out, nil
 	}
-	return m.unsetInt64("DelManyFunc")
+
+	m.panicIfUnset("DelManyFunc")
+
+	return 0, nil
 }
 
 func (m *Client) ScanKeys(ctx context.Context, pattern string, batchSize int64) ([]string, error) {
 	if m.ScanKeysFunc != nil {
-		return m.ScanKeysFunc(ctx, pattern, batchSize)
+		out, err := m.ScanKeysFunc(ctx, pattern, batchSize)
+		if err != nil {
+			return out, fmt.Errorf("scan keys func: %w", err)
+		}
+
+		return out, nil
 	}
+
 	m.panicIfUnset("ScanKeysFunc")
+
 	return nil, nil
 }
 
 func (m *Client) SAdd(ctx context.Context, key string, members []string) (int64, error) {
 	if m.SAddFunc != nil {
-		return m.SAddFunc(ctx, key, members)
+		out, err := m.SAddFunc(ctx, key, members)
+		if err != nil {
+			//nolint:wrapcheck // 설정된 mock callback의 오류 문자열과 concrete type을 그대로 돌려주는 테스트 대역 계약이다.
+			return out, err
+		}
+
+		return out, nil
 	}
-	return m.unsetInt64("SAddFunc")
+
+	m.panicIfUnset("SAddFunc")
+
+	return 0, nil
 }
 
 func (m *Client) SRem(ctx context.Context, key string, members []string) (int64, error) {
 	if m.SRemFunc != nil {
-		return m.SRemFunc(ctx, key, members)
+		out, err := m.SRemFunc(ctx, key, members)
+		if err != nil {
+			//nolint:wrapcheck // 설정된 mock callback의 오류 문자열과 concrete type을 그대로 돌려주는 테스트 대역 계약이다.
+			return out, err
+		}
+
+		return out, nil
 	}
-	return m.unsetInt64("SRemFunc")
+
+	m.panicIfUnset("SRemFunc")
+
+	return 0, nil
 }
 
 func (m *Client) SMembers(ctx context.Context, key string) ([]string, error) {
 	if m.SMembersFunc != nil {
-		return m.SMembersFunc(ctx, key)
+		out, err := m.SMembersFunc(ctx, key)
+		if err != nil {
+			return out, fmt.Errorf("s members func: %w", err)
+		}
+
+		return out, nil
 	}
+
 	m.panicIfUnset("SMembersFunc")
+
 	return nil, nil
 }
 
 func (m *Client) SIsMember(ctx context.Context, key, member string) (bool, error) {
 	if m.SIsMemberFunc != nil {
-		return m.SIsMemberFunc(ctx, key, member)
+		out, err := m.SIsMemberFunc(ctx, key, member)
+		if err != nil {
+			return out, fmt.Errorf("s is member func: %w", err)
+		}
+
+		return out, nil
 	}
+
 	m.panicIfUnset("SIsMemberFunc")
+
 	return false, nil
 }
 
 func (m *Client) HSet(ctx context.Context, key, field, value string) error {
 	if m.HSetFunc != nil {
-		return m.HSetFunc(ctx, key, field, value)
+		if err := m.HSetFunc(ctx, key, field, value); err != nil {
+			return fmt.Errorf("h set func: %w", err)
+		}
+
+		return nil
 	}
-	return m.unsetError("HSetFunc")
+
+	m.panicIfUnset("HSetFunc")
+
+	return nil
 }
 
 func (m *Client) HMSet(ctx context.Context, key string, fields map[string]any) error {
 	if m.HMSetFunc != nil {
-		return m.HMSetFunc(ctx, key, fields)
+		if err := m.HMSetFunc(ctx, key, fields); err != nil {
+			return fmt.Errorf("HM set func: %w", err)
+		}
+
+		return nil
 	}
-	return m.unsetError("HMSetFunc")
+
+	m.panicIfUnset("HMSetFunc")
+
+	return nil
 }
 
 func (m *Client) HGet(ctx context.Context, key, field string) (string, error) {
 	if m.HGetFunc != nil {
-		return m.HGetFunc(ctx, key, field)
+		out, err := m.HGetFunc(ctx, key, field)
+		if err != nil {
+			return out, fmt.Errorf("h get func: %w", err)
+		}
+
+		return out, nil
 	}
+
 	m.panicIfUnset("HGetFunc")
+
 	return "", nil
 }
 
 func (m *Client) BatchHGet(ctx context.Context, key string, fields []string) (map[string]string, error) {
 	if m.BatchHGetFunc != nil {
-		return m.BatchHGetFunc(ctx, key, fields)
+		out, err := m.BatchHGetFunc(ctx, key, fields)
+		if err != nil {
+			return nil, fmt.Errorf("batch h get func: %w", err)
+		}
+
+		return out, nil
 	}
+
 	m.panicIfUnset("BatchHGetFunc")
+
+	//nolint:nilnil // lenient mock의 미설정 기본값은 제로값이라는 계약이다. sentinel 오류를 내보내면 이 mock을 쓰는 다른 패키지 테스트가 실패 경로로 갈라진다.
 	return nil, nil
-}
-
-func (m *Client) HDel(ctx context.Context, key string, fields ...string) error {
-	if m.HDelFunc != nil {
-		return m.HDelFunc(ctx, key, fields...)
-	}
-	return m.unsetError("HDelFunc")
-}
-
-func (m *Client) HGetAll(ctx context.Context, key string) (map[string]string, error) {
-	if m.HGetAllFunc != nil {
-		return m.HGetAllFunc(ctx, key)
-	}
-	m.panicIfUnset("HGetAllFunc")
-	return nil, nil
-}
-
-func (m *Client) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	if m.ExpireFunc != nil {
-		return m.ExpireFunc(ctx, key, ttl)
-	}
-	return m.unsetError("ExpireFunc")
-}
-
-func (m *Client) Exists(ctx context.Context, key string) (bool, error) {
-	if m.ExistsFunc != nil {
-		return m.ExistsFunc(ctx, key)
-	}
-	m.panicIfUnset("ExistsFunc")
-	return false, nil
-}
-
-func (m *Client) Close() error {
-	if m.CloseFunc != nil {
-		return m.CloseFunc()
-	}
-	m.panicIfUnset("CloseFunc")
-	return nil
-}
-
-func (m *Client) IsConnected(ctx context.Context) bool {
-	if m.IsConnectedFunc != nil {
-		return m.IsConnectedFunc(ctx)
-	}
-	m.panicIfUnset("IsConnectedFunc")
-	return false
-}
-
-func (m *Client) WaitUntilReady(ctx context.Context, timeout time.Duration) error {
-	if m.WaitUntilReadyFunc != nil {
-		return m.WaitUntilReadyFunc(ctx, timeout)
-	}
-	m.panicIfUnset("WaitUntilReadyFunc")
-	return nil
-}
-
-func (m *Client) GetClient() valkey.Client {
-	if m.GetClientFunc != nil {
-		return m.GetClientFunc()
-	}
-	m.panicIfUnset("GetClientFunc")
-	return nil
-}
-
-func (m *Client) SetNX(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
-	if m.SetNXFunc != nil {
-		return m.SetNXFunc(ctx, key, value, ttl)
-	}
-	m.panicIfUnset("SetNXFunc")
-	return false, nil
-}
-
-func (m *Client) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
-	if m.DoMultiFunc != nil {
-		return m.DoMultiFunc(ctx, cmds...)
-	}
-	m.panicIfUnset("DoMultiFunc")
-	return nil
-}
-
-func (m *Client) Builder() valkey.Builder {
-	if m.BuilderFunc != nil {
-		return m.BuilderFunc()
-	}
-	m.panicIfUnset("BuilderFunc")
-	return valkey.Builder{}
-}
-
-func (m *Client) B() valkey.Builder {
-	if m.BFunc != nil {
-		return m.BFunc()
-	}
-	m.panicIfUnset("BFunc")
-	return valkey.Builder{}
-}
-
-func (m *Client) SetNXMulti(ctx context.Context, entries []cache.SetNXEntry) ([]cache.SetNXResult, error) {
-	if m.SetNXMultiFunc != nil {
-		return m.SetNXMultiFunc(ctx, entries)
-	}
-	m.panicIfUnset("SetNXMultiFunc")
-	return nil, nil
-}
-
-func (m *Client) CompareAndDelete(ctx context.Context, key, expectedValue string) (bool, error) {
-	if m.CompareAndDeleteFunc != nil {
-		return m.CompareAndDeleteFunc(ctx, key, expectedValue)
-	}
-	m.panicIfUnset("CompareAndDeleteFunc")
-	return false, nil
-}
-
-func (m *Client) CompareAndExpire(ctx context.Context, key, expectedValue string, ttl time.Duration) (bool, error) {
-	if m.CompareAndExpireFunc != nil {
-		return m.CompareAndExpireFunc(ctx, key, expectedValue, ttl)
-	}
-	m.panicIfUnset("CompareAndExpireFunc")
-	return false, nil
 }

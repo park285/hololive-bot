@@ -8,6 +8,7 @@ func FindByChannelAndScheduledMinute(streams []*domain.Stream, candidate *domain
 	}
 
 	candidateMinute := scheduledMinute(candidate)
+
 	for _, stream := range streams {
 		if matchesChannelAndScheduledMinute(stream, candidate.ChannelID, candidateMinute) {
 			return stream
@@ -21,9 +22,11 @@ func matchesChannelAndScheduledMinute(stream *domain.Stream, channelID string, m
 	if stream == nil || stream.StartScheduled == nil {
 		return false
 	}
+
 	if stream.ChannelID != channelID {
 		return false
 	}
+
 	return scheduledMinute(stream) == minute
 }
 

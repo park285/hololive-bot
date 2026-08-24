@@ -10,28 +10,30 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (*sendInput, []string, sendOutcome, error) {
+func (n *Notifier) prepareOne(ctx context.Context, notif *domain.AlarmNotification) (preparedSend, error) {
 	payload := resolveSendInput(notif, time.Now().UTC())
 	if payload == nil {
-		return nil, nil, sendOutcomeSkipped, nil
+		return preparedSend{outcome: sendOutcomeSkipped}, nil
 	}
+
 	if err := payload.notification.ValidateLiveDispatchRoute(); err != nil {
-		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate live dispatch route: %w", err)
+		return preparedSend{outcome: sendOutcomeFailed}, fmt.Errorf("send one: validate live dispatch route: %w", err)
 	}
+
 	if err := payload.notification.ValidateLiveDispatchPersistenceIdentity(); err != nil {
-		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: validate live dispatch persistence identity: %w", err)
+		return preparedSend{outcome: sendOutcomeFailed}, fmt.Errorf("send one: validate live dispatch persistence identity: %w", err)
 	}
 
 	claimKeys, claimed, err := n.claimDedup(ctx, payload)
 	if err != nil {
-		return nil, nil, sendOutcomeFailed, fmt.Errorf("send one: claim dedup: %w", err)
+		return preparedSend{outcome: sendOutcomeFailed}, fmt.Errorf("send one: claim dedup: %w", err)
 	}
 
 	if !claimed {
-		return nil, nil, sendOutcomeSkipped, nil
+		return preparedSend{outcome: sendOutcomeSkipped}, nil
 	}
 
-	return payload, claimKeys, sendOutcomeSent, nil
+	return preparedSend{payload: payload, claimKeys: claimKeys, outcome: sendOutcomeSent}, nil
 }
 
 func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput {
@@ -51,6 +53,7 @@ func resolveSendInput(notif *domain.AlarmNotification, now time.Time) *sendInput
 	}
 
 	resolvedNotification := *notif
+
 	resolvedNotification.Stream = resolvedStream
 
 	return &sendInput{

@@ -39,7 +39,7 @@ type templateState struct {
 }
 
 var sharedTemplates = struct {
-	sync.Mutex
+	mu    sync.Mutex
 	byKey map[string]*templateState
 }{byKey: make(map[string]*templateState)}
 
@@ -55,46 +55,55 @@ var sharedTemplates = struct {
 // manifest 전체가 빈 DB에서 재생되는 이유: epoch baseline이 base 테이블과 cutoff
 // 상태를 복원하고 이후 suffix migration이 현재 상태까지 전진시키기 때문이다.
 //
-// per-schema가 아닌 per-database 격리를 쓰는 이유: prod migration 다수가 idempotent guard로
+// 격리 단위가 per-schema가 아니라 per-database인 이유: prod migration 다수가 idempotent guard로
 // information_schema를 table_schema 한정 없이 조회한다(예: 037이 acl_rooms.list_type 존재 여부를
 // 전체 카탈로그에서 확인). 단일 DB 내 여러 스키마로 격리하면 한 스키마의 변경이 다른 스키마의
 // guard 판정을 오염시킨다. DB 단위로 격리하면 카탈로그가 완전히 분리되어 guard가 정확히 동작한다.
-func NewPool(t testing.TB) *pgxpool.Pool {
-	t.Helper()
+func NewPool(tb testing.TB) *pgxpool.Pool {
+	tb.Helper()
 
-	baseDSN := acquireBaseDSN(t)
-	templateName := acquireMigrationTemplate(t, baseDSN)
-	return newIsolatedPool(t, baseDSN, templateName)
+	baseDSN := acquireBaseDSN(tb)
+	templateName := acquireMigrationTemplate(tb, baseDSN)
+
+	return newIsolatedPool(tb, baseDSN, templateName)
 }
 
-func acquireMigrationTemplate(t testing.TB, baseDSN string) string {
-	t.Helper()
+func acquireMigrationTemplate(tb testing.TB, baseDSN string) string {
+	tb.Helper()
 
 	fingerprint, err := migrationFingerprint()
 	if err != nil {
-		t.Fatalf("dbtest: fingerprint migrations: %v", err)
+		tb.Fatalf("dbtest: fingerprint migrations: %v", err)
 	}
+
 	key := baseDSN + "\x00" + fingerprint
-	sharedTemplates.Lock()
+
+	sharedTemplates.mu.Lock()
+
 	state := sharedTemplates.byKey[key]
 	if state == nil {
 		state = &templateState{}
 		sharedTemplates.byKey[key] = state
 	}
-	sharedTemplates.Unlock()
+
+	sharedTemplates.mu.Unlock()
 
 	state.once.Do(func() {
 		state.name, state.err = prepareMigrationTemplate(baseDSN, fingerprint)
 	})
+
 	if state.err != nil {
-		t.Fatalf("dbtest: prepare migration template: %v", state.err)
+		tb.Fatalf("dbtest: prepare migration template: %v", state.err)
 	}
+
 	return state.name
 }
 
 func prepareMigrationTemplate(baseDSN, fingerprint string) (name string, err error) {
 	name = "dbtest_template_" + fingerprint[:16]
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
 	defer cancel()
 
 	adminPool, err := poolForDatabase(ctx, baseDSN, "")
@@ -108,57 +117,77 @@ func prepareMigrationTemplate(baseDSN, fingerprint string) (name string, err err
 		return "", fmt.Errorf("acquire template lock connection: %w", err)
 	}
 	defer conn.Release()
+
 	unlock, err := lockMigrationTemplate(ctx, conn, name)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("lock migration template: %w", err)
 	}
+
 	defer func() {
 		cleanupCtx, cleanupCancel := migrationCleanupContext(ctx)
 		defer cleanupCancel()
+
 		err = errors.Join(err, unlock(cleanupCtx))
 	}()
 
-	return prepareMigrationTemplateBody(ctx, conn, baseDSN, name, fingerprint)
+	out, err := prepareMigrationTemplateBody(ctx, conn, baseDSN, name, fingerprint)
+	if err != nil {
+		return out, fmt.Errorf("prepare migration template body: %w", err)
+	}
+
+	return out, nil
 }
 
 func lockMigrationTemplate(ctx context.Context, conn *pgxpool.Conn, name string) (func(context.Context) error, error) {
 	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtext($1))", name); err != nil {
 		return nil, fmt.Errorf("lock migration template: %w", err)
 	}
+
 	return func(ctx context.Context) error {
-		_, err := conn.Exec(ctx, "SELECT pg_advisory_unlock(hashtext($1))", name)
-		return err
+		if _, err := conn.Exec(ctx, "SELECT pg_advisory_unlock(hashtext($1))", name); err != nil {
+			return fmt.Errorf("unlock migration template: %w", err)
+		}
+
+		return nil
 	}, nil
 }
 
 func prepareMigrationTemplateBody(ctx context.Context, conn *pgxpool.Conn, baseDSN, name, fingerprint string) (resultName string, err error) {
 	templateCreated := false
+
 	defer func() {
 		cleanupCtx, cleanupCancel := migrationCleanupContext(ctx)
 		defer cleanupCancel()
+
 		err = cleanupMigrationTemplate(cleanupCtx, baseDSN, name, templateCreated, err)
 	}()
 
 	ready, err := migrationTemplateReady(ctx, conn, name, fingerprint)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("migration template ready: %w", err)
 	}
+
 	if ready {
 		return name, nil
 	}
+
 	if err := resetMigrationTemplate(ctx, conn, baseDSN, name); err != nil {
-		return "", err
+		return "", fmt.Errorf("reset migration template: %w", err)
 	}
+
 	templateCreated = true
 
 	if err := applyMigrationTemplate(ctx, baseDSN, name); err != nil {
-		return "", err
+		return "", fmt.Errorf("apply migration template: %w", err)
 	}
+
 	comment := "dbtest-template:" + fingerprint
 	if _, err := conn.Exec(ctx, fmt.Sprintf("COMMENT ON DATABASE %s IS '%s'", quoteIdent(name), comment)); err != nil {
 		return "", fmt.Errorf("mark migration template complete: %w", err)
 	}
+
 	templateCreated = false
+
 	return name, nil
 }
 
@@ -166,10 +195,12 @@ func cleanupMigrationTemplate(ctx context.Context, baseDSN, name string, templat
 	if !templateCreated || err == nil {
 		return err
 	}
+
 	cleanupErr := dropDatabase(ctx, baseDSN, name)
 	if cleanupErr != nil {
 		return errors.Join(err, fmt.Errorf("cleanup incomplete migration template: %w", cleanupErr))
 	}
+
 	return err
 }
 
@@ -181,9 +212,11 @@ func resetMigrationTemplate(ctx context.Context, conn *pgxpool.Conn, baseDSN, na
 	if err := dropDatabase(ctx, baseDSN, name); err != nil {
 		return fmt.Errorf("drop incomplete migration template: %w", err)
 	}
+
 	if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", quoteIdent(name))); err != nil {
 		return fmt.Errorf("create migration template: %w", err)
 	}
+
 	return nil
 }
 
@@ -193,23 +226,29 @@ func applyMigrationTemplate(ctx context.Context, baseDSN, name string) error {
 		return fmt.Errorf("connect migration template: %w", err)
 	}
 	defer templatePool.Close()
+
 	if err := ApplyMigrations(ctx, templatePool); err != nil {
 		return fmt.Errorf("apply migration template: %w", err)
 	}
+
 	return nil
 }
 
 func migrationTemplateReady(ctx context.Context, conn *pgxpool.Conn, name, fingerprint string) (bool, error) {
 	var comment *string
+
 	err := conn.QueryRow(ctx, `
 		SELECT shobj_description(oid, 'pg_database')
 		FROM pg_database
 		WHERE datname = $1`, name).Scan(&comment)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
+
 	if err != nil {
 		return false, fmt.Errorf("inspect migration template: %w", err)
 	}
+
 	return comment != nil && *comment == "dbtest-template:"+fingerprint, nil
 }

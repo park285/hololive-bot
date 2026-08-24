@@ -54,6 +54,7 @@ func (s StaticSupportedContracts) Supports(version ContractVersion) bool {
 
 func InitialSupportedContracts() StaticSupportedContracts {
 	result := make(StaticSupportedContracts)
+
 	for _, version := range []ContractVersion{
 		{contract.ProviderYouTubeJS, contract.KindCommunityPage, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindVideoList, 1, 1},
@@ -73,6 +74,7 @@ func InitialSupportedContracts() StaticSupportedContracts {
 	} {
 		result[version] = struct{}{}
 	}
+
 	return result
 }
 
@@ -263,35 +265,44 @@ func (o ClaimOptions) validate() error {
 	if err := validateText("consumer name", o.ConsumerName, 128); err != nil {
 		return fmt.Errorf("validate source observation claim: %w", err)
 	}
+
 	if err := validateText("lease owner", o.LeaseOwner, 128); err != nil {
 		return fmt.Errorf("validate source observation claim: %w", err)
 	}
+
 	if err := validateClaimKinds(o.Kinds); err != nil {
-		return err
+		return fmt.Errorf("validate claim kinds: %w", err)
 	}
+
 	if o.Limit < 1 || o.Limit > MaxClaimBatchSize {
 		return fmt.Errorf("validate source observation claim: limit must be between 1 and %d", MaxClaimBatchSize)
 	}
+
 	if o.LeaseDuration < time.Second || o.LeaseDuration > 10*time.Minute {
-		return fmt.Errorf("validate source observation claim: lease duration must be between 1 second and 10 minutes")
+		return errors.New("validate source observation claim: lease duration must be between 1 second and 10 minutes")
 	}
+
 	return nil
 }
 
 func validateClaimKinds(kinds []contract.ObservationKind) error {
 	if len(kinds) == 0 || len(kinds) > 9 {
-		return fmt.Errorf("validate source observation claim: kind count must be between 1 and 9")
+		return errors.New("validate source observation claim: kind count must be between 1 and 9")
 	}
+
 	seen := make(map[contract.ObservationKind]struct{}, len(kinds))
 	for _, kind := range kinds {
 		if !kind.Valid() {
 			return fmt.Errorf("validate source observation claim: invalid kind %q", kind)
 		}
+
 		if _, ok := seen[kind]; ok {
 			return fmt.Errorf("validate source observation claim: duplicate kind %q", kind)
 		}
+
 		seen[kind] = struct{}{}
 	}
+
 	return nil
 }
 
@@ -299,9 +310,11 @@ func validateErrorFields(action, code, detail string) error {
 	if err := validateText("error code", code, maxErrorCodeBytes); err != nil {
 		return fmt.Errorf("validate source observation %s: %w", action, err)
 	}
+
 	if len(detail) > maxErrorTextBytes {
 		return fmt.Errorf("validate source observation %s: error detail exceeds %d bytes", action, maxErrorTextBytes)
 	}
+
 	return nil
 }
 
@@ -309,12 +322,15 @@ func validateText(name, value string, maxLength int) error {
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("%s is empty", name)
 	}
+
 	if strings.TrimSpace(value) != value {
 		return fmt.Errorf("%s must not contain surrounding whitespace", name)
 	}
+
 	if len(value) > maxLength {
 		return fmt.Errorf("%s exceeds %d bytes", name, maxLength)
 	}
+
 	return nil
 }
 
@@ -322,10 +338,12 @@ func lowercaseHexToken(value string) bool {
 	if len(value) != 64 {
 		return false
 	}
+
 	for _, character := range value {
 		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
 			return false
 		}
 	}
+
 	return true
 }

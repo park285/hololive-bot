@@ -46,6 +46,7 @@ func TestSequentialDispatcherPublishRequiresConfiguration(t *testing.T) {
 	ctx := t.Context()
 
 	var nilDispatcher *sequentialDispatcher
+
 	if _, err := nilDispatcher.Publish(ctx, nil); err == nil {
 		t.Fatal("expected error for nil dispatcher")
 	}

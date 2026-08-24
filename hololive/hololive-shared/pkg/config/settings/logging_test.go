@@ -26,6 +26,7 @@ func TestLoggingConfigFrom(t *testing.T) {
 		got.Compress != cfg.Logging.Compress {
 		t.Fatalf("LoggingConfigFrom() = %+v, want the same values as %+v", got, cfg.Logging)
 	}
+
 	if got.Format != "" {
 		t.Fatalf("LoggingConfigFrom() Format = %q, want the shared default (json)", got.Format)
 	}
@@ -34,7 +35,7 @@ func TestLoggingConfigFrom(t *testing.T) {
 func TestLoggingConfigFromNilConfig(t *testing.T) {
 	t.Parallel()
 
-	if got := LoggingConfigFrom(nil); got != (LoggingConfigFrom(&Config{})) {
+	if got := LoggingConfigFrom(nil); got != LoggingConfigFrom(&Config{}) {
 		t.Fatalf("LoggingConfigFrom(nil) = %+v, want the zero config", got)
 	}
 }

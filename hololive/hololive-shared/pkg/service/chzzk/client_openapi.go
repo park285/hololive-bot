@@ -22,6 +22,7 @@ package chzzk
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,12 +31,16 @@ import (
 	"strings"
 	"sync"
 
-	jsonv2 "encoding/json/v2"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
-const maxLivesPageScanPages = 100
+const (
+	maxLivesPageScanPages = 100
+
+	openAPILivesPath = "/open/v1/lives"
+)
 
 func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesResponse, error) {
 	if !c.HasOpenAPICredentials() {
@@ -43,10 +48,10 @@ func (c *Client) GetLives(ctx context.Context, size int, next string) (*LivesRes
 	}
 
 	if err := c.rejectIfCircuitOpen(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reject if circuit open: %w", err)
 	}
 
-	return getOpenAPIContent[LivesResponse](ctx, c, chzzkGetLivesOp, c.openAPILivesURL(size, next))
+	return c.getOpenAPIContent[LivesResponse](ctx, chzzkGetLivesOp, c.openAPILivesURL(size, next))
 }
 
 func (c *Client) openAPILivesURL(size int, next string) string {
@@ -60,7 +65,7 @@ func (c *Client) openAPILivesURL(size int, next string) string {
 		params.Set("next", next)
 	}
 
-	reqURL := c.openAPIBaseURL + "/open/v1/lives"
+	reqURL := c.openAPIBaseURL + openAPILivesPath
 
 	if len(params) > 0 {
 		reqURL += "?" + params.Encode()
@@ -83,10 +88,10 @@ func (c *Client) GetChannels(ctx context.Context, channelIDs []string) (*Channel
 	}
 
 	if err := c.rejectIfCircuitOpen(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reject if circuit open: %w", err)
 	}
 
-	return getOpenAPIContent[ChannelsResponse](ctx, c, chzzkGetChannelsOp, c.openAPIChannelsURL(channelIDs))
+	return c.getOpenAPIContent[ChannelsResponse](ctx, chzzkGetChannelsOp, c.openAPIChannelsURL(channelIDs))
 }
 
 func (c *Client) openAPIChannelsURL(channelIDs []string) string {
@@ -96,29 +101,29 @@ func (c *Client) openAPIChannelsURL(channelIDs []string) string {
 	return c.openAPIBaseURL + "/open/v1/channels?" + params.Encode()
 }
 
-func getOpenAPIContent[T any](ctx context.Context, c *Client, op, reqURL string) (*T, error) {
+func (c *Client) getOpenAPIContent[T any](ctx context.Context, op, reqURL string) (*T, error) {
 	req, err := c.newOpenAPIRequest(ctx, "GET", reqURL)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	var apiResp OpenAPIResponse[T]
-	if err := c.executeRequest(op, req, "read response body", func(body []byte) error {
-		return decodeOpenAPIResponse(body, &apiResp)
-	}); err != nil {
+
+	if err := c.executeRequest(op, req, "read response body", apiResp.decode); err != nil {
+		//nolint:wrapcheck // executeRequest가 APIError를 그대로 넘겨주므로 정규화된 문자열을 유지한다.
 		return nil, err
 	}
 
 	return &apiResp.Content, nil
 }
 
-func decodeOpenAPIResponse[T any](body []byte, apiResp *OpenAPIResponse[T]) error {
-	if err := jsonv2.Unmarshal(body, apiResp); err != nil {
+func (r *OpenAPIResponse[T]) decode(body []byte) error {
+	if err := jsonv2.Unmarshal(body, r); err != nil {
 		return fmt.Errorf("unmarshal response: %w", err)
 	}
 
-	if apiResp.Code != http.StatusOK {
-		return fmt.Errorf("API error: code=%d, message=%s", apiResp.Code, apiResp.Message)
+	if r.Code != http.StatusOK {
+		return fmt.Errorf("API error: code=%d, message=%s", r.Code, r.Message)
 	}
 
 	return nil
@@ -135,10 +140,20 @@ func (c *Client) GetLivesByChannelIDs(ctx context.Context, channelIDs []string) 
 	}
 
 	if len(targets) <= c.batchLookupThreshold {
-		return c.getLivesByStatusChecks(ctx, targets)
+		out, err := c.getLivesByStatusChecks(ctx, targets)
+		if err != nil {
+			return out, fmt.Errorf("get lives by status checks: %w", err)
+		}
+
+		return out, nil
 	}
 
-	return c.getLivesByPageScan(ctx, targets)
+	out, err := c.getLivesByPageScan(ctx, targets)
+	if err != nil {
+		return out, fmt.Errorf("get lives by page scan: %w", err)
+	}
+
+	return out, nil
 }
 
 func normalizeChannelTargets(channelIDs []string) []string {
@@ -168,17 +183,19 @@ func (c *Client) getLivesByStatusChecks(ctx context.Context, channelIDs []string
 		g       errgroup.Group
 		liveMap = make(map[string]LiveData, len(channelIDs))
 	)
+
 	g.SetLimit(c.maxConcurrentStatusChecks)
 
 	for _, channelID := range channelIDs {
 		panicguard.GoE(&g, c.logger, "chzzk-live-status", func() error {
 			live, ok, err := c.liveDataFromStatus(ctx, channelID)
 			if err != nil {
-				return err
+				return fmt.Errorf("live data from status: %w", err)
 			}
 
 			if ok {
 				mu.Lock()
+
 				liveMap[channelID] = live
 				mu.Unlock()
 			}
@@ -200,7 +217,7 @@ func (c *Client) liveDataFromStatus(ctx context.Context, channelID string) (Live
 		return LiveData{}, false, fmt.Errorf("get live status for %s: %w", channelID, err)
 	}
 
-	if status == nil || !strings.EqualFold(status.Status, "OPEN") {
+	if status == nil || !strings.EqualFold(status.Status, statusOpen) {
 		return LiveData{}, false, nil
 	}
 
@@ -233,6 +250,7 @@ func (c *Client) getLivesByPageScan(ctx context.Context, channelIDs []string) ([
 		if _, ok := seenNext[resp.Page.Next]; ok {
 			return nil, fmt.Errorf("pagination cursor repeated: %s", resp.Page.Next)
 		}
+
 		seenNext[resp.Page.Next] = struct{}{}
 		next = resp.Page.Next
 	}
@@ -265,6 +283,7 @@ func addTargetLives(found map[string]LiveData, targets map[string]struct{}, live
 
 func orderedLives(channelIDs []string, liveMap map[string]LiveData) []LiveData {
 	result := make([]LiveData, 0, len(liveMap))
+
 	for _, channelID := range channelIDs {
 		live, ok := liveMap[channelID]
 		if !ok {
@@ -273,6 +292,7 @@ func orderedLives(channelIDs []string, liveMap map[string]LiveData) []LiveData {
 
 		result = append(result, live)
 	}
+
 	return result
 }
 

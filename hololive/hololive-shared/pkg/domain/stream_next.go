@@ -27,13 +27,13 @@ type NextStreamStatus string
 // NextStreamStatus 상수 목록.
 // NextStreamStatus 상수 목록.
 const (
-	// NextStreamStatusLive: 현재 방송 중
+	// NextStreamStatusLive: 현재 방송 중.
 	NextStreamStatusLive NextStreamStatus = "live"
-	// NextStreamStatusUpcoming: 방송 예정 정보 있음
+	// NextStreamStatusUpcoming: 방송 예정 정보 있음.
 	NextStreamStatusUpcoming NextStreamStatus = "upcoming"
-	// NextStreamStatusNoUpcoming: 예정된 방송이 없음
+	// NextStreamStatusNoUpcoming: 예정된 방송이 없음.
 	NextStreamStatusNoUpcoming NextStreamStatus = "no_upcoming"
-	// NextStreamStatusTimeUnknown: 방송 예정이나 시작 시간을 알 수 없음
+	// NextStreamStatusTimeUnknown: 방송 예정이나 시작 시간을 알 수 없음.
 	NextStreamStatusTimeUnknown NextStreamStatus = "time_unknown"
 )
 

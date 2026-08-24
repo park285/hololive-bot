@@ -22,9 +22,8 @@ package member
 
 import (
 	"context"
-	"fmt"
-
 	jsonv2 "encoding/json/v2"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -38,6 +37,7 @@ func (r *Repository) AddAlias(ctx context.Context, memberID int, aliasType, alia
 	if err != nil {
 		return fmt.Errorf("failed to add alias: %w", err)
 	}
+
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
@@ -54,6 +54,7 @@ func (r *Repository) RemoveAlias(ctx context.Context, memberID int, aliasType, a
 	if err != nil {
 		return fmt.Errorf("failed to remove alias: %w", err)
 	}
+
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
@@ -66,9 +67,11 @@ func (r *Repository) SetGraduation(ctx context.Context, memberID int, isGraduate
 	if err != nil {
 		return fmt.Errorf("failed to update graduation status: %w", err)
 	}
+
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
+
 	return nil
 }
 
@@ -77,9 +80,11 @@ func (r *Repository) UpdateChannelID(ctx context.Context, memberID int, channelI
 	if err != nil {
 		return fmt.Errorf("failed to update channel ID: %w", err)
 	}
+
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
+
 	return nil
 }
 
@@ -88,9 +93,11 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 	if err != nil {
 		return fmt.Errorf("failed to update member name: %w", err)
 	}
+
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member %d not found", memberID)
 	}
+
 	return nil
 }
 
@@ -104,20 +111,26 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	slug := member.Name
 
 	chID := member.ChannelID
+
 	var chIDPtr *string
+
 	if chID != "" {
 		chIDPtr = &chID
 	}
 
 	var nameJaPtr *string
+
 	if member.NameJa != "" {
 		val := member.NameJa
+
 		nameJaPtr = &val
 	}
 
 	var nameKoPtr *string
+
 	if member.NameKo != "" {
 		val := member.NameKo
+
 		nameKoPtr = &val
 	}
 
@@ -125,6 +138,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	org := "Hololive" // org가 없는 생성 요청의 canonical 기본값
 	syncSource := "manual"
 	status := "active"
+
 	if member.IsGraduated {
 		status = "graduated"
 	}

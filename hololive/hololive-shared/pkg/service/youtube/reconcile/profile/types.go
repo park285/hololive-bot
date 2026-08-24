@@ -85,19 +85,23 @@ type Decision struct {
 
 func (s *State) clone() State {
 	cloned := *s
+
 	cloned.Head.Handle = s.Head.Handle.clone()
 	cloned.Head.Description = s.Head.Description.clone()
 	cloned.Head.Country = s.Head.Country.clone()
 	cloned.Head.JoinedDate = s.Head.JoinedDate.clone()
+
 	return cloned
 }
 
 func (f *CanonicalField) clone() CanonicalField {
 	cloned := *f
+
 	cloned.EffectiveAt = cloneTime(f.EffectiveAt)
 	cloned.EmptyFirstAt = cloneTime(f.EmptyFirstAt)
 	cloned.EmptyLastAt = cloneTime(f.EmptyLastAt)
 	cloned.EmptyFirstRx = cloneTime(f.EmptyFirstRx)
+
 	return cloned
 }
 
@@ -105,6 +109,8 @@ func cloneTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
+
 	cloned := *value
+
 	return &cloned
 }

@@ -3,7 +3,6 @@ package youtubedispatch
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -26,25 +25,29 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 	release := make(chan struct{})
 
 	cache := cachemocks.NewStrictClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		switch key {
 		case shortsKey:
 			close(shortsStarted)
 			<-release
-			return []string{"room-shorts"}, nil
+
+			return []string{testRoomShorts}, nil
 		case communityKey:
 			close(communityStarted)
 			<-release
-			return []string{"room-community"}, nil
+
+			return []string{testRoomCommunity}, nil
 		default:
 			return nil, nil
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{})
+	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
 	done := make(chan map[string]channelAlarmRoomTargets, 1)
+
 	go func() {
-		done <- dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
+		done <- dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 			{ChannelID: "UCparallel", Kind: domain.OutboxKindNewShort},
 			{ChannelID: "UCparallel", Kind: domain.OutboxKindCommunityPost},
 		})
@@ -66,8 +69,8 @@ func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 
 	roomsByChannel := <-done
 	require.Contains(t, roomsByChannel, "UCparallel")
-	require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeShorts], "room-shorts")
-	require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeCommunity], "room-community")
+	require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeShorts], testRoomShorts)
+	require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeCommunity], testRoomCommunity)
 }
 
 func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
@@ -81,13 +84,15 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
 	}).Error)
 
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberKey("UCfallback", domain.AlarmTypeShorts), key)
+
 		return nil, nil
 	}
 
-	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{})
-	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback", Kind: domain.OutboxKindNewShort},
 	})
 
@@ -106,13 +111,15 @@ func TestCollectRoomsByChannelFallsBackToDBWhenCacheErrors(t *testing.T) {
 	}).Error)
 
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		require.Equal(t, sharedalarmkeys.BuildChannelSubscriberKey("UCfallback-error", domain.AlarmTypeCommunity), key)
+
 		return nil, errors.New("cache unavailable")
 	}
 
-	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{})
-	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(context.Background(), []domain.YouTubeNotificationOutbox{
+	dispatcher := NewDispatcher(db, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: "UCfallback-error", Kind: domain.OutboxKindCommunityPost},
 	})
 

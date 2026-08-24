@@ -22,6 +22,7 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -66,16 +67,19 @@ func NewService(
 	logger *slog.Logger,
 ) (*Service, error) {
 	if repository == nil {
-		return nil, fmt.Errorf("new scraper service: repository is nil")
+		return nil, errors.New("new scraper service: repository is nil")
 	}
+
 	if fetcher == nil {
-		return nil, fmt.Errorf("new scraper service: fetcher is nil")
+		return nil, errors.New("new scraper service: fetcher is nil")
 	}
+
 	if parser == nil {
-		return nil, fmt.Errorf("new scraper service: parser is nil")
+		return nil, errors.New("new scraper service: parser is nil")
 	}
 
 	normalized := normalizeServiceConfig(config)
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -94,12 +98,15 @@ func normalizeServiceConfig(config ServiceConfig) ServiceConfig {
 	if len(normalized.Sources) == 0 {
 		normalized.Sources = DefaultServiceConfig().Sources
 	}
+
 	if normalized.FeedConcurrency < 1 {
 		normalized.FeedConcurrency = DefaultServiceConfig().FeedConcurrency
 	}
+
 	if normalized.IncrementalLimit < 1 {
 		normalized.IncrementalLimit = defaultIncrementalMax
 	}
+
 	return normalized
 }
 
@@ -109,25 +116,31 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 
 	aggregated := ScrapeResult{}
 	allEvents := make([]*domain.MajorEvent, 0)
+
 	for _, result := range results {
 		aggregated.FeedsAttempted++
+
 		if result.failed {
 			aggregated.FeedsFailed++
+
 			s.logger.Warn(
 				"Major event feed scrape failed",
 				slog.String("source", result.source.Name),
 				slog.String("event_type", string(result.source.EventType)),
 				slog.String("error", result.failureInfo),
 			)
+
 			continue
 		}
+
 		aggregated.SkippedKnown += result.skipped
 		aggregated.ParsedEvents += len(result.events)
+
 		allEvents = append(allEvents, result.events...)
 	}
 
 	if aggregated.FeedsAttempted > 0 && aggregated.FeedsAttempted == aggregated.FeedsFailed {
-		return aggregated, fmt.Errorf("scrape feeds: all feeds failed")
+		return aggregated, errors.New("scrape feeds: all feeds failed")
 	}
 
 	deduped := dedupeEvents(allEvents)
@@ -138,8 +151,10 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 				slog.String("external_id", event.ExternalID),
 				slog.String("error", err.Error()),
 			)
+
 			continue
 		}
+
 		aggregated.StoredEvents++
 	}
 
@@ -148,6 +163,7 @@ func (s *Service) Scrape(ctx context.Context) (ScrapeResult, error) {
 
 func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 	results := make([]sourceScrapeResult, 0, len(s.config.Sources))
+
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -156,9 +172,12 @@ func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 	for _, source := range s.config.Sources {
 		panicguard.GoE(eg, s.logger, "major-event-source-scrape", func() error {
 			result := s.scrapeSingleSource(egCtx, source)
+
 			mu.Lock()
+
 			results = append(results, result)
 			mu.Unlock()
+
 			return nil
 		})
 	}
@@ -166,9 +185,11 @@ func (s *Service) scrapeSources(ctx context.Context) []sourceScrapeResult {
 	if err := eg.Wait(); err != nil && s.logger != nil {
 		s.logger.Warn("major event source scrape group failed", slog.Any("error", err))
 	}
+
 	slices.SortFunc(results, func(a, b sourceScrapeResult) int {
 		return strings.Compare(a.source.Name, b.source.Name)
 	})
+
 	return results
 }
 
@@ -221,6 +242,7 @@ func (s *Service) filterIncrementalEvents(
 	latestUTC := latestPubDateUTC(latestPubDate)
 
 	filtered, skipped := collectIncrementalEvents(events, knownExternalIDs, latestUTC)
+
 	return filtered, skipped, nil
 }
 
@@ -236,6 +258,7 @@ func collectIncrementalEvents(
 			if skipKnown {
 				skipped++
 			}
+
 			continue
 		}
 
@@ -252,8 +275,10 @@ func knownExternalIDSet(externalIDs []string) map[string]struct{} {
 		if trimmed == "" {
 			continue
 		}
+
 		knownExternalIDs[trimmed] = struct{}{}
 	}
+
 	return knownExternalIDs
 }
 
@@ -261,6 +286,7 @@ func latestPubDateUTC(latestPubDate *time.Time) time.Time {
 	if latestPubDate == nil {
 		return time.Time{}
 	}
+
 	return latestPubDate.UTC()
 }
 
@@ -292,9 +318,11 @@ func dedupeEvents(events []*domain.MajorEvent) []*domain.MajorEvent {
 
 	seen := make(map[string]struct{}, len(events))
 	deduped := make([]*domain.MajorEvent, 0, len(events))
+
 	for _, event := range events {
 		deduped = appendDedupeEvent(deduped, seen, event)
 	}
+
 	return deduped
 }
 
@@ -313,6 +341,7 @@ func appendDedupeEvent(
 	}
 
 	seen[key] = struct{}{}
+
 	return append(deduped, event)
 }
 
@@ -325,8 +354,10 @@ func dedupeEventKey(event *domain.MajorEvent) (string, bool) {
 	if key == "" {
 		key = strings.TrimSpace(event.Link)
 	}
+
 	if key == "" {
 		return "", false
 	}
+
 	return key, true
 }

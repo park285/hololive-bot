@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -21,11 +22,22 @@ type execCountingQuerier struct {
 
 func (c *execCountingQuerier) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	c.execCalls++
-	return c.inner.Exec(ctx, sql, args...)
+
+	out, err := c.inner.Exec(ctx, sql, args...)
+	if err != nil {
+		return out, fmt.Errorf("exec: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *execCountingQuerier) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	return c.inner.Query(ctx, sql, args...)
+	out, err := c.inner.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *execCountingQuerier) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
@@ -38,7 +50,8 @@ func newTelemetryEnqueueTestRepo(t *testing.T) (*Repository, *execCountingQuerie
 	pool := dbtest.NewPool(t)
 
 	var outboxID int64
-	if err := pool.QueryRow(context.Background(), `
+
+	if err := pool.QueryRow(t.Context(), `
 		INSERT INTO youtube_notification_outbox (kind, channel_id, content_id, payload)
 		VALUES ('COMMUNITY_POST', 'UC_test_channel', 'content-1', '{}'::jsonb)
 		RETURNING id
@@ -47,6 +60,7 @@ func newTelemetryEnqueueTestRepo(t *testing.T) (*Repository, *execCountingQuerie
 	}
 
 	counting := &execCountingQuerier{inner: pool}
+
 	return NewRepository(counting), counting, outboxID
 }
 
@@ -54,6 +68,7 @@ func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) domain.YouTubeN
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	latency := int64(1500)
 	sentAt := now.Add(-time.Minute)
+
 	return domain.YouTubeNotificationDeliveryTelemetry{
 		DeliveryID:         deliveryID,
 		AttemptOrdinal:     ordinal,
@@ -77,7 +92,7 @@ func makeEnqueueTestRow(outboxID, deliveryID int64, ordinal int) domain.YouTubeN
 
 func TestEnqueuePreparedInsertsBatchInSingleRoundTrip(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	rows := []domain.YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 101, 1),
@@ -94,16 +109,21 @@ func TestEnqueuePreparedInsertsBatchInSingleRoundTrip(t *testing.T) {
 	}
 
 	var count int
+
 	if err := counting.inner.QueryRow(ctx, `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count); err != nil {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
+
 	if count != len(rows) {
 		t.Fatalf("persisted rows = %d, want %d", count, len(rows))
 	}
 
-	var gotChannelID, gotPostID string
-	var gotLatency *int64
-	var gotSentAt *time.Time
+	var (
+		gotChannelID, gotPostID string
+		gotLatency              *int64
+		gotSentAt               *time.Time
+	)
+
 	if err := counting.inner.QueryRow(ctx, `
 		SELECT channel_id, post_id, alarm_latency_millis, alarm_sent_at
 		FROM youtube_notification_delivery_telemetry
@@ -111,12 +131,15 @@ func TestEnqueuePreparedInsertsBatchInSingleRoundTrip(t *testing.T) {
 	`).Scan(&gotChannelID, &gotPostID, &gotLatency, &gotSentAt); err != nil {
 		t.Fatalf("load persisted telemetry row: %v", err)
 	}
+
 	if gotChannelID != "UC_test_channel" || gotPostID != "post-1" {
 		t.Fatalf("persisted row = (%q, %q), want (UC_test_channel, post-1)", gotChannelID, gotPostID)
 	}
+
 	if gotLatency == nil || *gotLatency != 1500 {
 		t.Fatalf("persisted alarm_latency_millis = %v, want 1500", gotLatency)
 	}
+
 	if gotSentAt == nil {
 		t.Fatal("persisted alarm_sent_at = nil, want non-nil")
 	}
@@ -124,12 +147,13 @@ func TestEnqueuePreparedInsertsBatchInSingleRoundTrip(t *testing.T) {
 
 func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, size := range []int{1, 499, 500, 501, 1001} {
 		if _, err := counting.inner.Exec(ctx, `TRUNCATE youtube_notification_delivery_telemetry`); err != nil {
 			t.Fatalf("truncate telemetry rows: %v", err)
 		}
+
 		counting.execCalls = 0
 
 		rows := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, size)
@@ -147,9 +171,11 @@ func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 		}
 
 		var count int
+
 		if err := counting.inner.QueryRow(ctx, `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count); err != nil {
 			t.Fatalf("count telemetry rows (size=%d): %v", size, err)
 		}
+
 		if count != size {
 			t.Fatalf("persisted rows (size=%d) = %d, want %d", size, count, size)
 		}
@@ -158,7 +184,7 @@ func TestEnqueuePreparedChunkBoundaries(t *testing.T) {
 
 func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	rows := []domain.YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 301, 1),
@@ -171,9 +197,11 @@ func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
 	}
 
 	var count int
+
 	if err := counting.inner.QueryRow(ctx, `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count); err != nil {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
+
 	if count != 2 {
 		t.Fatalf("persisted rows with intra-batch duplicate = %d, want 2", count)
 	}
@@ -181,7 +209,7 @@ func TestEnqueuePreparedSkipsDuplicateWithinSingleBatch(t *testing.T) {
 
 func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := repo.EnqueuePrepared(ctx, []domain.YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 401, 1),
@@ -194,6 +222,7 @@ func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
 	}
 
 	var count int
+
 	if err := counting.inner.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM youtube_notification_delivery_telemetry
@@ -201,6 +230,7 @@ func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
 	`, outboxID).Scan(&count); err != nil {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
+
 	if count != 1 {
 		t.Fatalf("telemetry rows after source outbox delete = %d, want 1", count)
 	}
@@ -210,13 +240,15 @@ func TestTelemetrySurvivesOutboxRetentionDelete(t *testing.T) {
 // 통째로 롤백하고(이미 영속된 이전 chunk는 유지) 즉시 반환한다.
 func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	size := enqueueTelemetryChunkSize + 2
 	rows := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, size)
+
 	for i := range size {
 		rows = append(rows, makeEnqueueTestRow(outboxID, int64(2000+i), 1))
 	}
+
 	rows[size-1].ContentID = strings.Repeat("x", 51)
 
 	if err := repo.EnqueuePrepared(ctx, rows); err == nil {
@@ -224,9 +256,11 @@ func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 	}
 
 	var count int
+
 	if err := counting.inner.QueryRow(ctx, `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count); err != nil {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
+
 	if count != enqueueTelemetryChunkSize {
 		t.Fatalf("persisted rows after failing second chunk = %d, want %d (first chunk only)", count, enqueueTelemetryChunkSize)
 	}
@@ -234,7 +268,7 @@ func TestEnqueuePreparedChunkFailureRollsBackOnlyThatChunk(t *testing.T) {
 
 func TestEnqueuePreparedSkipsConflictsWithinBatch(t *testing.T) {
 	repo, counting, outboxID := newTelemetryEnqueueTestRepo(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first := []domain.YouTubeNotificationDeliveryTelemetry{
 		makeEnqueueTestRow(outboxID, 201, 1),
@@ -253,9 +287,11 @@ func TestEnqueuePreparedSkipsConflictsWithinBatch(t *testing.T) {
 	}
 
 	var count int
+
 	if err := counting.inner.QueryRow(ctx, `SELECT COUNT(*) FROM youtube_notification_delivery_telemetry`).Scan(&count); err != nil {
 		t.Fatalf("count telemetry rows: %v", err)
 	}
+
 	if count != 3 {
 		t.Fatalf("persisted rows after duplicate batch = %d, want 3", count)
 	}

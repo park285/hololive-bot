@@ -23,6 +23,7 @@ package alarm
 import (
 	"context"
 	"encoding/json/jsontext"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -54,9 +55,11 @@ func NewClient(baseURL string, logger *slog.Logger) *Client {
 
 func NewClientWithAPIKey(baseURL, apiKey string, logger *slog.Logger) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
+
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     strings.TrimSpace(apiKey),
@@ -124,8 +127,9 @@ type apiEnvelope struct {
 
 func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	if req == nil {
-		return false, fmt.Errorf("alarm-api: add alarm request must not be nil")
+		return false, errors.New("alarm-api: add alarm request must not be nil")
 	}
+
 	body := addAlarmReq{
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
@@ -135,10 +139,12 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 		UserName:   req.UserName,
 		AlarmTypes: req.AlarmTypes,
 	}
-	var resp addAlarmResp
-	if err := c.postJSON(ctx, contractsalarm.AddPath, body, &resp); err != nil {
+
+	resp, err := c.postJSON[addAlarmResp](ctx, contractsalarm.AddPath, body)
+	if err != nil {
 		return false, err
 	}
+
 	return resp.Added, nil
 }
 
@@ -148,115 +154,148 @@ func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alar
 		ChannelID:  channelID,
 		AlarmTypes: alarmTypes,
 	}
-	var resp removeAlarmResp
-	if err := c.postJSON(ctx, contractsalarm.RemovePath, body, &resp); err != nil {
+
+	resp, err := c.postJSON[removeAlarmResp](ctx, contractsalarm.RemovePath, body)
+	if err != nil {
 		return false, err
 	}
+
 	return resp.Removed, nil
 }
 
 func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
 	alarms, err := c.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get room alarms with types: %w", err)
 	}
+
 	ids := make([]string, 0, len(alarms))
 	for _, alarm := range alarms {
 		if alarm != nil {
 			ids = append(ids, alarm.ChannelID)
 		}
 	}
+
 	return ids, nil
 }
 
 func (c *Client) GetRoomAlarmsWithTypes(ctx context.Context, roomID string) ([]*domain.Alarm, error) {
-	var alarms []*domain.Alarm
-	if err := c.getJSON(ctx, contractsalarm.RoomAlarmsPath(roomID), &alarms); err != nil {
+	alarms, err := c.getJSON[[]*domain.Alarm](ctx, contractsalarm.RoomAlarmsPath(roomID))
+	if err != nil {
 		return nil, err
 	}
+
 	if alarms == nil {
 		return []*domain.Alarm{}, nil
 	}
+
 	return alarms, nil
 }
 
 func (c *Client) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
-	var entries []domain.AlarmListView
-	if err := c.getJSON(ctx, contractsalarm.RoomAlarmsViewPath(roomID), &entries); err != nil {
+	entries, err := c.getJSON[[]domain.AlarmListView](ctx, contractsalarm.RoomAlarmsViewPath(roomID))
+	if err != nil {
 		return nil, err
 	}
+
 	if entries == nil {
 		return []domain.AlarmListView{}, nil
 	}
+
 	return entries, nil
 }
 
 func (c *Client) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
 	body := clearRoomReq{RoomID: roomID}
-	var resp clearRoomResp
-	if err := c.postJSON(ctx, contractsalarm.ClearPath, body, &resp); err != nil {
+
+	resp, err := c.postJSON[clearRoomResp](ctx, contractsalarm.ClearPath, body)
+	if err != nil {
 		return 0, err
 	}
+
 	return resp.Deleted, nil
 }
 
 // GetNextStreamInfo는 provider에 next-stream payload가 없으면 nil을 반환한다.
 func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*domain.NextStreamInfo, error) {
-	var info *domain.NextStreamInfo
-	if err := c.getJSON(ctx, contractsalarm.NextStreamPath(channelID), &info); err != nil {
+	info, err := c.getJSON[*domain.NextStreamInfo](ctx, contractsalarm.NextStreamPath(channelID))
+	if err != nil {
 		return nil, err
 	}
-	if info == nil || !info.Status.IsValid() {
-		return nil, nil
+
+	var valid *domain.NextStreamInfo
+
+	if info != nil && info.Status.IsValid() {
+		valid = info
 	}
-	return info, nil
+
+	return valid, nil
 }
 
 func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
 	if ctx == nil {
 		c.logger.Warn("UpdateAlarmAdvanceMinutes skipped: nil context", slog.Int("minutes", minutes))
+
 		return []int{}
 	}
+
 	body := updateAdvanceMinutesReq{Minutes: minutes}
-	var resp minutesResp
-	if err := c.putJSON(ctx, contractsalarm.SettingsPath, body, &resp); err != nil {
+
+	resp, err := c.putJSON[minutesResp](ctx, contractsalarm.SettingsPath, body)
+	if err != nil {
 		c.logger.Warn("UpdateAlarmAdvanceMinutes failed",
 			slog.Int("minutes", minutes),
 			slog.Any("error", err),
 		)
+
 		return []int{}
 	}
+
 	result := append([]int(nil), resp.TargetMinutes...)
+
 	c.targetMinutesMu.Lock()
+
 	c.targetMinutes = result
 	c.targetMinutesMu.Unlock()
+
 	return append([]int(nil), result...)
 }
 
 func (c *Client) GetTargetMinutes() []int {
 	c.targetMinutesMu.RLock()
 	defer c.targetMinutesMu.RUnlock()
+
 	return append([]int(nil), c.targetMinutes...)
 }
 
 func (c *Client) SetRoomName(ctx context.Context, roomID, roomName string) error {
 	body := setRoomNameReq{RoomID: roomID, RoomName: roomName}
-	return c.putJSON(ctx, contractsalarm.RoomNamePath, body, nil)
+	if err := c.putNoData(ctx, contractsalarm.RoomNamePath, body); err != nil {
+		return fmt.Errorf("put no data: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) SetUserName(ctx context.Context, userID, userName string) error {
 	body := setUserNameReq{UserID: userID, UserName: userName}
-	return c.putJSON(ctx, contractsalarm.UserNamePath, body, nil)
+	if err := c.putNoData(ctx, contractsalarm.UserNamePath, body); err != nil {
+		return fmt.Errorf("put no data: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
-	var entries []*domain.AlarmEntry
-	if err := c.getJSON(ctx, contractsalarm.KeysPath, &entries); err != nil {
+	entries, err := c.getJSON[[]*domain.AlarmEntry](ctx, contractsalarm.KeysPath)
+	if err != nil {
 		return nil, err
 	}
+
 	if entries == nil {
 		return []*domain.AlarmEntry{}, nil
 	}
+
 	return entries, nil
 }
 

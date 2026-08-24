@@ -31,6 +31,7 @@ func (m *mockRepository) Subscribe(_ context.Context, _, _ string) error { retur
 func (m *mockRepository) IsSubscribed(_ context.Context, _ string) (bool, error) {
 	return true, nil
 }
+
 func (m *mockRepository) ListSubscribedRooms(_ context.Context) ([]string, error) {
 	return []string{"room-1"}, nil
 }
@@ -41,10 +42,12 @@ func TestSubscriptionRepositoryContract(t *testing.T) {
 	t.Parallel()
 
 	repository := &mockRepository{}
-	rooms, err := repository.ListSubscribedRooms(context.Background())
+
+	rooms, err := repository.ListSubscribedRooms(t.Context())
 	if err != nil {
 		t.Fatalf("ListSubscribedRooms() error = %v", err)
 	}
+
 	if len(rooms) != 1 || rooms[0] != "room-1" {
 		t.Fatalf("ListSubscribedRooms() = %v, want [room-1]", rooms)
 	}

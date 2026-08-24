@@ -23,9 +23,10 @@ package alarmservice
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/stretchr/testify/require"
 )
 
 func seedAlarmChannelRegistry(t *testing.T, as *AlarmService, channelIDs ...string) {
@@ -63,7 +64,7 @@ func TestSyncPlatformMappings_WritesChzzkAndTwitchHashes(t *testing.T) {
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
 			{
-				ChannelID:      "UC_alpha",
+				ChannelID:      testAlphaChannelID,
 				ChzzkChannelID: "chzzk_alpha",
 				TwitchUserID:   "AlphaLogin",
 			},
@@ -74,10 +75,10 @@ func TestSyncPlatformMappings_WritesChzzkAndTwitchHashes(t *testing.T) {
 		},
 	}
 
-	seedAlarmChannelRegistry(t, as, "UC_alpha", "UC_beta", "UC_missing")
+	seedAlarmChannelRegistry(t, as, testAlphaChannelID, "UC_beta", "UC_missing")
 	require.NoError(t, as.SyncPlatformMappings(t.Context()))
-	assertChzzkMapContains(t, as, map[string]string{"UC_alpha": "chzzk_alpha", "UC_beta": "chzzk_beta"})
-	assertTwitchMaps(t, as, map[string]string{"alphalogin": "UC_alpha"}, map[string]string{"UC_alpha": "alphalogin"})
+	assertChzzkMapContains(t, as, map[string]string{testAlphaChannelID: "chzzk_alpha", "UC_beta": "chzzk_beta"})
+	assertTwitchMaps(t, as, map[string]string{"alphalogin": testAlphaChannelID}, map[string]string{testAlphaChannelID: "alphalogin"})
 }
 
 func TestSyncPlatformMappings_ClearsStaleHashes(t *testing.T) {
@@ -114,20 +115,20 @@ func TestSyncPlatformMappingForChannel_AddAndRemoveIncrementally(t *testing.T) {
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
 			{
-				ChannelID:      "UC_alpha",
+				ChannelID:      testAlphaChannelID,
 				ChzzkChannelID: "chzzk_alpha",
 				TwitchUserID:   "AlphaLogin",
 			},
 		},
 	}
 
-	seedAlarmChannelRegistry(t, as, "UC_alpha")
+	seedAlarmChannelRegistry(t, as, testAlphaChannelID)
 	require.NoError(t, as.cache.Set(t.Context(), sharedalarmkeys.ChzzkChannelMapEmptyKey, "1", 0))
 	require.NoError(t, as.cache.Set(t.Context(), sharedalarmkeys.TwitchLoginMapEmptyKey, "1", 0))
 	require.NoError(t, as.cache.Set(t.Context(), sharedalarmkeys.TwitchChannelLoginMapEmptyKey, "1", 0))
-	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), "UC_alpha"))
-	assertChzzkMapContains(t, as, map[string]string{"UC_alpha": "chzzk_alpha"})
-	assertTwitchMaps(t, as, map[string]string{"alphalogin": "UC_alpha"}, map[string]string{"UC_alpha": "alphalogin"})
+	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), testAlphaChannelID))
+	assertChzzkMapContains(t, as, map[string]string{testAlphaChannelID: "chzzk_alpha"})
+	assertTwitchMaps(t, as, map[string]string{"alphalogin": testAlphaChannelID}, map[string]string{testAlphaChannelID: "alphalogin"})
 
 	chzzkEmpty, err := as.cache.Exists(t.Context(), sharedalarmkeys.ChzzkChannelMapEmptyKey)
 	require.NoError(t, err)
@@ -141,9 +142,9 @@ func TestSyncPlatformMappingForChannel_AddAndRemoveIncrementally(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, twitchChannelEmpty)
 
-	_, removeErr := as.cache.SRem(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, []string{"UC_alpha"})
+	_, removeErr := as.cache.SRem(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, []string{testAlphaChannelID})
 	require.NoError(t, removeErr)
-	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), "UC_alpha"))
+	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), testAlphaChannelID))
 	assertChzzkMapContains(t, as, map[string]string{})
 	assertTwitchMaps(t, as, map[string]string{}, map[string]string{})
 }
@@ -156,15 +157,15 @@ func TestSyncPlatformMappingForChannel_ReplacesTwitchLoginInO1Path(t *testing.T)
 	as.memberData = &mockMemberDataProvider{
 		members: []*domain.Member{
 			{
-				ChannelID:    "UC_alpha",
+				ChannelID:    testAlphaChannelID,
 				TwitchUserID: "NewLogin",
 			},
 		},
 	}
 
-	seedAlarmChannelRegistry(t, as, "UC_alpha")
-	require.NoError(t, as.cache.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "oldlogin", "UC_alpha"))
-	require.NoError(t, as.cache.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "oldlogin"))
-	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), "UC_alpha"))
-	assertTwitchMaps(t, as, map[string]string{"newlogin": "UC_alpha"}, map[string]string{"UC_alpha": "newlogin"})
+	seedAlarmChannelRegistry(t, as, testAlphaChannelID)
+	require.NoError(t, as.cache.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "oldlogin", testAlphaChannelID))
+	require.NoError(t, as.cache.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, testAlphaChannelID, "oldlogin"))
+	require.NoError(t, as.syncPlatformMappingForChannel(t.Context(), testAlphaChannelID))
+	assertTwitchMaps(t, as, map[string]string{"newlogin": testAlphaChannelID}, map[string]string{testAlphaChannelID: "newlogin"})
 }

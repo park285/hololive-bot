@@ -22,6 +22,7 @@ package summarizer
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
@@ -67,19 +68,22 @@ func buildPromptCandidates(input *model.SummarizeInput) []promptCandidate {
 	if input == nil {
 		return nil
 	}
+
 	candidates := make([]promptCandidate, 0, len(input.Candidates))
 	for i := range input.Candidates {
 		candidate := &input.Candidates[i]
+
 		candidates = append(candidates, promptCandidate{
 			Member:     candidate.MemberText,
 			Category:   string(candidate.Category),
 			Title:      candidate.Candidate.Title,
-			Date:       candidate.EffectiveDate.In(kst).Format("2006-01-02"),
+			Date:       candidate.EffectiveDate.In(kst).Format(time.DateOnly),
 			SourceURL:  candidate.SourceURL,
 			SourceTier: string(candidate.SourceTier),
 			Summary:    candidate.Candidate.Description,
 		})
 	}
+
 	return candidates
 }
 

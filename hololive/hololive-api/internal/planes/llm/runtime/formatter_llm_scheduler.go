@@ -22,6 +22,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -38,7 +39,7 @@ import (
 )
 
 // llmSchedulerFormatter는 llm-scheduler가 사용하는 최소 메시지 포맷터 구현이다.
-// bot 전용 adapter에 의존하지 않고 template.Renderer만으로 필요한 formatter 계약만 맞춘다.
+// 이 구현은 bot 전용 adapter에 의존하지 않고 template.Renderer만으로 필요한 formatter 계약만 맞춘다.
 type llmSchedulerFormatter struct {
 	prefix      string
 	renderer    *template.Renderer
@@ -51,9 +52,11 @@ func newLLMSchedulerFormatter(prefix string, renderer *template.Renderer, logger
 	if stringutil.TrimSpace(prefix) == "" {
 		prefix = "!"
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &llmSchedulerFormatter{
 		prefix:      prefix,
 		renderer:    renderer,
@@ -64,13 +67,14 @@ func newLLMSchedulerFormatter(prefix string, renderer *template.Renderer, logger
 
 func (f *llmSchedulerFormatter) render(ctx context.Context, key domain.TemplateKey, data any) (string, error) {
 	if f == nil || f.renderer == nil {
-		return "", fmt.Errorf("template renderer not configured")
+		return "", errors.New("template renderer not configured")
 	}
 
 	rendered, err := f.renderer.Render(ctx, key, "", data)
 	if err != nil {
 		return "", fmt.Errorf("render template %s: %w", key, err)
 	}
+
 	return strings.TrimRight(rendered, "\n"), nil
 }
 
@@ -78,11 +82,14 @@ func (f *llmSchedulerFormatter) renderOrError(ctx context.Context, key domain.Te
 	rendered, err := f.render(ctx, key, data)
 	if err != nil {
 		f.logger.Warn(warnMsg, slog.Any("error", err))
+
 		return messagestrings.FallbackSentinel
 	}
+
 	if f.seeMoreFold {
 		return util.FoldForSeeMore(rendered, util.KakaoSeeMoreThreshold)
 	}
+
 	return rendered
 }
 
@@ -107,6 +114,7 @@ func (f *llmSchedulerFormatter) formatMajorEventSummary(ctx context.Context, key
 
 	normalizedSummary := strings.TrimSpace(llmSummary)
 	views := buildMajorEventViews(events)
+
 	if normalizedSummary != "" {
 		// LLM 요약이 있는 경우 템플릿의 기본 목록과 중복 노출을 방지합니다.
 		views = nil
@@ -125,6 +133,7 @@ func majorEventSummaryWarnMsg(key domain.TemplateKey) string {
 	if key == domain.TemplateKeyCmdMajorEventMonthlySummary {
 		return "major event monthly summary render failed"
 	}
+
 	return "major event weekly summary render failed"
 }
 
@@ -165,6 +174,7 @@ func (f *llmSchedulerFormatter) localizeMemberNewsItems(ctx context.Context, ite
 
 	localized := make([]model.SummaryItem, len(items))
 	copy(localized, items)
+
 	for i := range localized {
 		localized[i].Category = f.memberNewsCategoryLabel(ctx, localized[i].Category)
 	}
@@ -176,5 +186,6 @@ func (f *llmSchedulerFormatter) memberNewsCategoryLabel(ctx context.Context, raw
 	if label := f.store.GetContext(ctx, messagestrings.NamespaceNewsCat, strings.ToLower(strings.TrimSpace(raw))); label != "" {
 		return label
 	}
+
 	return raw
 }

@@ -2,6 +2,7 @@ package format
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,13 +16,19 @@ type DispatchPayloadFormatter interface {
 }
 
 func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	return (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
+	out, err := (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
+	if err != nil {
+		return out, fmt.Errorf("format youtube outbox payload: %w", err)
+	}
+
+	return out, nil
 }
 
 func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
 	if err := payload.Validate(); err != nil {
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}
+
 	if msg := strings.TrimSpace(payload.PreRenderedMessage); msg != "" {
 		return msg, nil
 	}
@@ -33,13 +40,31 @@ func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payl
 
 	items := notificationOutboxItemsFromDispatchPayload(payload)
 	if len(items) == 1 {
-		data, err := mf.BuildTemplateData(memberName, &items[0])
-		if err != nil {
-			return "", err
-		}
-		return mf.renderTemplate(ctx, items[0].Kind.ToTemplateKey(), items[0].ChannelID, data)
+		out, itemErr := mf.formatSingleOutboxItem(ctx, memberName, &items[0])
+
+		return out, errors.Join(itemErr)
 	}
-	return mf.FormatGroupedMessage(ctx, memberName, payload.ChannelID, payload.Kind, items)
+
+	out, err := mf.FormatGroupedMessage(ctx, memberName, payload.ChannelID, payload.Kind, items)
+	if err != nil {
+		return out, fmt.Errorf("format grouped message: %w", err)
+	}
+
+	return out, nil
+}
+
+func (mf *MessageFormatter) formatSingleOutboxItem(ctx context.Context, memberName string, item *domain.YouTubeNotificationOutbox) (string, error) {
+	data, err := mf.BuildTemplateData(memberName, item)
+	if err != nil {
+		return "", fmt.Errorf("build template data: %w", err)
+	}
+
+	out, err := mf.renderTemplate(ctx, item.Kind.ToTemplateKey(), item.ChannelID, data)
+	if err != nil {
+		return out, fmt.Errorf("render template: %w", err)
+	}
+
+	return out, nil
 }
 
 func notificationOutboxItemsFromDispatchPayload(payload *domain.YouTubeOutboxDispatchPayload) []domain.YouTubeNotificationOutbox {
@@ -53,5 +78,6 @@ func notificationOutboxItemsFromDispatchPayload(payload *domain.YouTubeOutboxDis
 			Payload:   payload.Items[i].Payload,
 		})
 	}
+
 	return items
 }

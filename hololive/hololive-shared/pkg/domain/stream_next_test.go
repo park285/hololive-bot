@@ -51,6 +51,7 @@ func TestNextStreamStatus_IsLive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.status.IsLive()
 			if got != tt.want {
 				t.Errorf("IsLive() = %v, want %v", got, tt.want)
@@ -84,6 +85,7 @@ func TestNextStreamStatus_IsUpcoming(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.status.IsUpcoming()
 			if got != tt.want {
 				t.Errorf("IsUpcoming() = %v, want %v", got, tt.want)
@@ -106,6 +108,7 @@ func TestNextStreamStatus_IsValid(t *testing.T) {
 	for _, s := range validStatuses {
 		t.Run(string(s)+"_유효", func(t *testing.T) {
 			t.Parallel()
+
 			if !s.IsValid() {
 				t.Errorf("IsValid() = false, want true (status=%q)", s)
 			}
@@ -123,6 +126,7 @@ func TestNextStreamStatus_IsValid(t *testing.T) {
 	for _, tt := range invalidStatuses {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if tt.status.IsValid() {
 				t.Errorf("IsValid() = true, want false (status=%q)", tt.status)
 			}

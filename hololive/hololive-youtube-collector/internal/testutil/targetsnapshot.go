@@ -1,11 +1,11 @@
 package testutil
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -13,43 +13,52 @@ import (
 )
 
 func TargetSnapshot(
-	t testing.TB,
+	tb testing.TB,
 	spec *joblease.JobSpec,
 	job sourceobservation.JobContract,
 	subjects map[contract.ObservationKind][]string,
 ) joblease.TargetSnapshot {
-	t.Helper()
-	ctx := context.Background()
-	pool := dbtest.NewPool(t)
+	tb.Helper()
+
+	ctx := tb.Context()
+	pool := dbtest.NewPool(tb)
+
 	var generation int64
+
 	if err := pool.QueryRow(ctx, mustTestSQL("insert_projection.sql"), subjectCount(subjects)).Scan(&generation); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
-	insertSnapshotTargets(t, ctx, pool, generation, spec, subjects)
+
+	insertSnapshotTargets(tb, pool, generation, spec, subjects)
+
 	repository, err := joblease.NewRepository(pool, targetSnapshotConfig())
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	snapshot, err := repository.LoadTargetSnapshot(ctx, targetSnapshotProof(spec, generation), spec, job, 100_000)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
+
 	return snapshot
 }
 
 func insertSnapshotTargets(
-	t testing.TB,
-	ctx context.Context,
+	tb testing.TB,
 	pool *pgxpool.Pool,
 	generation int64,
 	spec *joblease.JobSpec,
 	subjects map[contract.ObservationKind][]string,
 ) {
-	t.Helper()
+	tb.Helper()
+
+	ctx := tb.Context()
+
 	for kind, values := range subjects {
 		for _, subject := range values {
 			if _, err := pool.Exec(ctx, mustTestSQL("insert_target.sql"), generation, subject, kind, spec.PollInterval.Milliseconds()); err != nil {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
 		}
 	}
@@ -69,14 +78,16 @@ func targetSnapshotProof(spec *joblease.JobSpec, generation int64) *contract.Lea
 	return &contract.LeaseProof{
 		JobKey: spec.JobKey, CollectionJobKind: spec.CollectionJobKind, OwnerInstance: "collector-a",
 		FenceEpoch: 1, ProjectionGeneration: generation,
-		ScheduledFor: time.Date(2026, 8, 14, 1, 0, 0, 0, time.UTC),
+		ScheduledFor: time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC),
 	}
 }
 
 func subjectCount(subjects map[contract.ObservationKind][]string) int {
 	count := 0
+
 	for _, values := range subjects {
 		count += len(values)
 	}
+
 	return count
 }

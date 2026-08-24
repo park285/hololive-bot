@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 )
 
@@ -124,11 +125,11 @@ func TestWriteAuthErrorPayload(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !bytes.Contains([]byte(body), []byte(`"success":false`)) {
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"success":false`)) {
 		t.Fatalf("missing success=false payload: %s", body)
 	}
 
-	if !bytes.Contains([]byte(body), []byte(`"error":"UNAUTHORIZED"`)) {
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"error":"UNAUTHORIZED"`)) {
 		t.Fatalf("missing error code payload: %s", body)
 	}
 }

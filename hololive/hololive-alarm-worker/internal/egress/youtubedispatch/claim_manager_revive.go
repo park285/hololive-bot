@@ -31,7 +31,7 @@ import (
 )
 
 // reviveStaleFailedOutbox는 전송 실패로 한 번도 발송 못 한 채 영구 FAILED된 알람을 PENDING으로 되살려
-// 디스패처가 재전송하도록 한다. poll-persist의 ON CONFLICT rearm은 재발견(re-poll)된 행에만 도달하지만
+// 디스패처가 재전송하도록 한다. 여기서 poll-persist의 ON CONFLICT rearm은 재발견(re-poll)된 행에만 도달하지만
 // NEW_VIDEO/LIVE_STREAM은 poll-persist rearm 대상이 아니므로, 폴링과 무관하게 FAILED를 되살리는
 // 경로는 이것뿐이다(community/shorts 포함 전 kind).
 //
@@ -57,9 +57,11 @@ func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWin
 	if d == nil || d.db == nil {
 		return 0, nil
 	}
+
 	if freshnessWindow <= 0 {
 		return 0, nil
 	}
+
 	if batchSize <= 0 {
 		batchSize = d.config.BatchSize
 	}
@@ -69,72 +71,86 @@ func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWin
 	lockCutoff := now.Add(-d.deliveryClaimTimeout())
 
 	var revived int64
+
 	err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
 		return reviveStaleFailedOutboxTx(ctx, tx, freshCutoff, lockCutoff, batchSize, now, &revived)
 	})
 	if err != nil {
 		observeOutboxReviveError()
+
 		return 0, fmt.Errorf("revive stale failed outbox: %w", err)
 	}
 
 	if revived > 0 {
 		observeOutboxRevived(revived)
 	}
+
 	return revived, nil
 }
 
 func reviveStaleFailedOutboxTx(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int, now time.Time, revived *int64) error {
 	ids, err := selectStaleFailedOutboxIDs(ctx, tx, freshCutoff, lockCutoff, batchSize)
 	if err != nil {
-		return err
+		return fmt.Errorf("select stale failed outbox IDs: %w", err)
 	}
+
 	if len(ids) == 0 {
 		return nil
 	}
 
 	err = resetFailedDeliveryRows(ctx, tx, ids, now)
 	if err != nil {
-		return err
+		return fmt.Errorf("reset failed delivery rows: %w", err)
 	}
 
 	affected, err := resetFailedOutboxRows(ctx, tx, ids, now)
 	if err != nil {
-		return err
+		return fmt.Errorf("reset failed outbox rows: %w", err)
 	}
+
 	*revived = affected
+
 	return nil
 }
 
 func selectStaleFailedOutboxIDs(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int) ([]int64, error) {
 	var ids []int64
+
 	if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", mustSQL("dispatcher_claim_revive_0109_01.sql"), string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, string(domain.OutboxStatusFailed), batchSize); err != nil {
 		return nil, fmt.Errorf("revive: select stale failed outbox: %w", err)
 	}
+
 	return ids, nil
 }
 
 // per-room dedup: FAILED delivery 행만 재시도 대상으로 리셋, SENT 행은 불변.
 func resetFailedDeliveryRows(ctx context.Context, tx dbx.Querier, ids []int64, now time.Time) error {
 	deliveryArgs := []any{now}
+
 	deliveryArgs = deliverysql.AppendDeliveryInt64Args(deliveryArgs, ids)
 	deliveryArgs = append(deliveryArgs, string(domain.OutboxStatusFailed))
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset failed delivery rows", mustSQL("dispatcher_claim_revive_0141_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(ids))+`
 		  AND status = ?
 	`, deliveryArgs...); err != nil {
 		return fmt.Errorf("revive: reset failed delivery rows: %w", err)
 	}
+
 	return nil
 }
 
 func resetFailedOutboxRows(ctx context.Context, tx dbx.Querier, ids []int64, now time.Time) (int64, error) {
 	outboxArgs := []any{now}
+
 	outboxArgs = deliverysql.AppendDeliveryInt64Args(outboxArgs, ids)
 	outboxArgs = append(outboxArgs, string(domain.OutboxStatusFailed))
+
 	affected, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset outbox rows", mustSQL("dispatcher_claim_revive_0156_03.sql")+deliverysql.DeliveryInClause("id", len(ids))+`
 		  AND status = ?
 	`, outboxArgs...)
 	if err != nil {
 		return 0, fmt.Errorf("revive: reset outbox rows: %w", err)
 	}
+
 	return affected, nil
 }

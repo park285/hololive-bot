@@ -23,13 +23,13 @@ package holodexprovider
 import (
 	"cmp"
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"slices"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -43,26 +43,36 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 	}
 
 	statusStr := channelScheduleStatus(includeLive)
-	body, err := h.requester.DoRequest(ctx, "GET", "/live", channelScheduleParams(channelID, hours, statusStr))
+
+	body, err := h.requester.DoRequest(ctx, http.MethodGet, "/live", channelScheduleParams(channelID, hours, statusStr))
 	if err != nil {
-		return h.handleChannelScheduleRequestError(ctx, channelID, hours, includeLive, statusStr, err)
+		schedule, scheduleErr := h.handleChannelScheduleRequestError(ctx, channelID, hours, includeLive, statusStr, err)
+		if scheduleErr != nil {
+			return nil, fmt.Errorf("handle channel schedule request error: %w", scheduleErr)
+		}
+
+		return schedule, nil
 	}
 
 	var rawStreams []streammapping.StreamRaw
+
 	if err := jsonv2.Unmarshal(body, &rawStreams); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal channel schedule: %w", err)
 	}
 
 	result := h.buildChannelSchedule(rawStreams, includeLive)
 	h.cacheManager.SetChannelSchedule(ctx, channelID, hours, includeLive, result, constants.CacheTTL.ChannelSchedule)
+
 	return result, nil
 }
 
 func (h *Service) channelScheduleFromCache(cached []*domain.Stream, includeLive bool) []*domain.Stream {
 	copied := copyChannelScheduleStreams(cached)
+
 	if includeLive {
 		return copied
 	}
+
 	return h.filter.FilterUpcomingStreams(copied)
 }
 
@@ -72,17 +82,23 @@ func copyChannelScheduleStreams(streams []*domain.Stream) []*domain.Stream {
 		if stream == nil {
 			continue
 		}
+
 		streamCopy := *stream
 		if stream.StartScheduled != nil {
 			t := *stream.StartScheduled
+
 			streamCopy.StartScheduled = &t
 		}
+
 		if stream.StartActual != nil {
 			t := *stream.StartActual
+
 			streamCopy.StartActual = &t
 		}
+
 		copied[i] = &streamCopy
 	}
+
 	return copied
 }
 
@@ -90,6 +106,7 @@ func channelScheduleStatus(includeLive bool) string {
 	if includeLive {
 		return string(domain.StreamStatusLive) + "," + string(domain.StreamStatusUpcoming)
 	}
+
 	return string(domain.StreamStatusUpcoming)
 }
 
@@ -99,6 +116,7 @@ func channelScheduleParams(channelID string, hours int, statusStr string) url.Va
 	params.Set("status", statusStr)
 	params.Set("type", "stream")
 	params.Set("max_upcoming_hours", fmt.Sprintf("%d", hours))
+
 	return params
 }
 
@@ -114,6 +132,7 @@ func (h *Service) handleChannelScheduleRequestError(
 		slog.String("channel_id", channelID),
 		slog.String("status", statusStr),
 		slog.Any("error", primaryErr))
+
 	if !h.shouldUseFallback(ctx, primaryErr) || h.scraper == nil {
 		return nil, fmt.Errorf("get channel schedule: %w", primaryErr)
 	}
@@ -122,8 +141,10 @@ func (h *Service) handleChannelScheduleRequestError(
 	if err != nil {
 		return nil, fmt.Errorf("get channel schedule fallbacks: %w", errors.Join(primaryErr, err))
 	}
+
 	sortStreamsByScheduledTime(streams)
 	h.cacheManager.SetChannelSchedule(ctx, channelID, hours, includeLive, streams, constants.CacheTTL.ChannelSchedule)
+
 	return streams, nil
 }
 
@@ -131,9 +152,11 @@ func (h *Service) buildChannelSchedule(rawStreams []streammapping.StreamRaw, inc
 	allStreams := h.mapper.MapStreamsResponse(rawStreams)
 	hololiveOnly := h.filter.FilterHololiveStreams(allStreams)
 	sortStreamsByScheduledTime(hololiveOnly)
+
 	if includeLive {
 		return hololiveOnly
 	}
+
 	return h.filter.FilterUpcomingStreams(hololiveOnly)
 }
 
@@ -147,5 +170,6 @@ func streamScheduledUnix(stream *domain.Stream) int64 {
 	if stream == nil || stream.StartScheduled == nil {
 		return 0
 	}
+
 	return stream.StartScheduled.Unix()
 }

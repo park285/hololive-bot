@@ -29,13 +29,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
-
-	"github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 )
 
 type apiRateLimitHandler struct {
@@ -116,6 +116,7 @@ func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.H
 	if cacheClient == nil {
 		logger.Warn("api_rate_limit_disabled_no_cache")
 		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonNoCache).Inc()
+
 		return func(c *gin.Context) { c.Next() }
 	}
 
@@ -123,6 +124,7 @@ func apiRateLimitMiddleware(cacheClient cache.Client, logger *slog.Logger) gin.H
 	if err != nil {
 		logger.Error("api_rate_limit_init_failed", slog.String("error", err.Error()))
 		apiRateLimitFailOpenTotal.WithLabelValues(rateLimitFailOpenReasonInitFailed).Inc()
+
 		return func(c *gin.Context) { c.Next() }
 	}
 
@@ -143,6 +145,7 @@ func (h apiRateLimitHandler) Handle(c *gin.Context) {
 	ip := c.ClientIP()
 	if ip == "" {
 		abortWithRateLimitError(c)
+
 		return
 	}
 

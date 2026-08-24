@@ -2,7 +2,7 @@ package render
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"image"
 	"image/png"
 	"net/http"
@@ -15,14 +15,21 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	testShortKoreanName = "페코라"
+	testAvatarURL       = "https://yt3.googleusercontent.com/avatar=s88-c"
+)
+
 func TestCalendarCardRenderer_RenderCalendarImage_EmptyEntries(t *testing.T) {
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
+
 	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, nil)
 	if err != nil {
 		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
+
 	assertValidPNG(t, data)
 }
 
@@ -31,7 +38,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 
 	r := NewCalendarCardRenderer()
 	entries := []domain.CalendarEntry{
-		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
+		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testShortKoreanName}, Day: 15},
 		{Kind: domain.CelebrationKindAnniversary, Member: &domain.Member{ShortKoreanName: "미코"}, Day: 15, Ordinal: 3},
 		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{NameKo: "스이세이"}, Day: 22},
 	}
@@ -40,6 +47,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderCalendarImageContext() error = %v", err)
 	}
+
 	assertValidPNG(t, data)
 
 	img, decErr := png.Decode(bytes.NewReader(data))
@@ -51,6 +59,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_WithEntries(t *testing.T) {
 	if bounds.Dx() != calendarOutputWidth {
 		t.Errorf("width = %d, want %d", bounds.Dx(), calendarOutputWidth)
 	}
+
 	outputHeaderH := newCalendarMetrics(1).headerH * calendarOutputWidth / canvasWidth
 	if bounds.Dy() <= outputHeaderH {
 		t.Error("height should be larger than header for entries")
@@ -61,8 +70,9 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 	t.Parallel()
 
 	r := NewCalendarCardRenderer()
+
 	data, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, []domain.CalendarEntry{
-		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: "페코라"}, Day: 15},
+		{Kind: domain.CelebrationKindBirthday, Member: &domain.Member{ShortKoreanName: testShortKoreanName}, Day: 15},
 	})
 	if err != nil {
 		t.Fatalf("RenderCalendarImageContext() error = %v", err)
@@ -83,14 +93,16 @@ func TestCalendarCardRenderer_RenderCalendarImage_UsesTransportFriendlyCanvas(t 
 
 func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.T) {
 	var requests atomic.Int32
+
 	server := newPNGServer(t, &requests)
+
 	defer server.Close()
 
 	r := NewCalendarCardRenderer()
 	entries := []domain.CalendarEntry{
 		{
 			Kind:   domain.CelebrationKindBirthday,
-			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Member: &domain.Member{ShortKoreanName: testShortKoreanName, Photo: server.URL + "/avatar=s88-c"},
 			Day:    15,
 		},
 	}
@@ -99,9 +111,11 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 	if err != nil {
 		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
+
 	if len(first) == 0 {
 		t.Fatal("first RenderCalendarImageContext() returned empty image data")
 	}
+
 	first[0] = 0
 
 	second, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
@@ -110,6 +124,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_ReusesMonthlyCache(t *testing.
 	}
 
 	assertValidPNG(t, second)
+
 	if got, want := requests.Load(), int32(1); got != want {
 		t.Fatalf("photo requests = %d, want %d", got, want)
 	}
@@ -120,12 +135,14 @@ func TestAwaitCalendarRenderCallRejectsMissingImageData(t *testing.T) {
 
 	done := make(chan struct{})
 	close(done)
+
 	call := &calendarRenderCall{done: done}
 
 	data, err := NewCalendarCardRenderer().awaitCalendarRenderCall(t.Context(), calendarCacheKey{}, call)
 	if err == nil {
 		t.Fatal("awaitCalendarRenderCall() error = nil, want missing image data error")
 	}
+
 	if data != nil {
 		t.Fatalf("awaitCalendarRenderCall() data = %d bytes, want nil", len(data))
 	}
@@ -133,44 +150,54 @@ func TestAwaitCalendarRenderCallRejectsMissingImageData(t *testing.T) {
 
 func TestCalendarCardRenderer_CoalescesConcurrentColdRenders(t *testing.T) {
 	pngData := tinyPNG(t)
+
 	var requests atomic.Int32
+
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
 		time.Sleep(40 * time.Millisecond)
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	})))
 
 	renderer := NewCalendarCardRenderer()
 	entries := []domain.CalendarEntry{{
 		Kind: domain.CelebrationKindBirthday,
 		Member: &domain.Member{
-			ShortKoreanName: "페코라",
-			Photo:           "https://yt3.googleusercontent.com/avatar=s88-c",
+			ShortKoreanName: testShortKoreanName,
+			Photo:           testAvatarURL,
 		},
 		Day: 15,
 	}}
 
 	start := make(chan struct{})
 	errCh := make(chan error, 12)
+
 	var wg sync.WaitGroup
+
 	for range 12 {
 		wg.Go(func() {
 			<-start
+
 			data, err := renderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 			if err == nil && !isPNGData(data) {
-				err = fmt.Errorf("render returned invalid PNG")
+				err = errors.New("render returned invalid PNG")
 			}
+
 			errCh <- err
 		})
 	}
+
 	close(start)
 	wg.Wait()
 	close(errCh)
+
 	for err := range errCh {
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("photo requests = %d, want 1 coalesced cold render", got)
 	}
@@ -178,30 +205,36 @@ func TestCalendarCardRenderer_CoalescesConcurrentColdRenders(t *testing.T) {
 
 func TestCalendarCardRenderer_RenderCalendarImage_ReusesDiskCacheAcrossRenderers(t *testing.T) {
 	var requests atomic.Int32
+
 	server := newPNGServer(t, &requests)
+
 	defer server.Close()
 
 	dir := t.TempDir()
 	entries := []domain.CalendarEntry{
 		{
 			Kind:   domain.CelebrationKindBirthday,
-			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Member: &domain.Member{ShortKoreanName: testShortKoreanName, Photo: server.URL + "/avatar=s88-c"},
 			Day:    15,
 		},
 	}
 
 	firstRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+
 	first, err := firstRenderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
 		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
+
 	assertValidPNG(t, first)
 
 	secondRenderer := NewCalendarCardRenderer(WithCalendarDiskCacheDir(dir))
+
 	second, err := secondRenderer.RenderCalendarImageContext(t.Context(), 6, 2026, entries)
 	if err != nil {
 		t.Fatalf("second RenderCalendarImageContext() error = %v", err)
 	}
+
 	assertValidPNG(t, second)
 
 	if got, want := requests.Load(), int32(1); got != want {
@@ -225,9 +258,11 @@ func TestStoreDiskCachedImage_PrunesStaleMonthHashes(t *testing.T) {
 	if _, ok := r.diskCachedImage(old); ok {
 		t.Fatal("stale same-month hash should be pruned")
 	}
+
 	if data, ok := r.diskCachedImage(fresh); !ok || !bytes.Equal(data, pngBytes) {
 		t.Fatalf("latest same-month hash should remain, got ok=%v", ok)
 	}
+
 	if _, ok := r.diskCachedImage(otherMonth); !ok {
 		t.Fatal("other-month entry must not be pruned")
 	}
@@ -245,31 +280,37 @@ func TestDiskCache_ConcurrentCrossHashStoreServesValidDataOrMiss(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+
 	for _, key := range keys {
 		wg.Go(func() {
 			for range 40 {
 				r.storeDiskCachedImage(key, pngBytes)
+
 				got, ok := r.diskCachedImage(key)
 				if ok && !bytes.Equal(got, pngBytes) {
 					t.Errorf("corrupt data for hash %s", key.entriesHash[:4])
+
 					return
 				}
 			}
 		})
 	}
+
 	wg.Wait()
 }
 
 func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChange(t *testing.T) {
 	var requests atomic.Int32
+
 	server := newPNGServer(t, &requests)
+
 	defer server.Close()
 
 	r := NewCalendarCardRenderer()
 	entries := []domain.CalendarEntry{
 		{
 			Kind:   domain.CelebrationKindBirthday,
-			Member: &domain.Member{ShortKoreanName: "페코라", Photo: server.URL + "/avatar=s88-c"},
+			Member: &domain.Member{ShortKoreanName: testShortKoreanName, Photo: server.URL + "/avatar=s88-c"},
 			Day:    15,
 		},
 	}
@@ -284,6 +325,7 @@ func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChang
 	if _, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, entries); err != nil {
 		t.Fatalf("first RenderCalendarImageContext() error = %v", err)
 	}
+
 	if _, err := r.RenderCalendarImageContext(t.Context(), 6, 2026, changedEntries); err != nil {
 		t.Fatalf("changed RenderCalendarImageContext() error = %v", err)
 	}
@@ -295,14 +337,15 @@ func TestCalendarCardRenderer_RenderCalendarImage_RefreshesCacheWhenEntriesChang
 
 func TestFetchMemberPhotoRequestsHighResolutionThumbnail(t *testing.T) {
 	var requestedPath string
+
 	pngData := tinyPNG(t)
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requestedPath = req.URL.Path
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	})))
 
 	photos := make(map[string]image.Image)
-	photoURL := "https://yt3.googleusercontent.com/avatar=s88-c"
+	photoURL := testAvatarURL
 	fetchMemberPhoto(domain.CalendarEntry{
 		Member: &domain.Member{Photo: photoURL},
 	}, photos)
@@ -310,6 +353,7 @@ func TestFetchMemberPhotoRequestsHighResolutionThumbnail(t *testing.T) {
 	if _, ok := photos[photoURL]; !ok {
 		t.Fatal("photo was not stored")
 	}
+
 	if !strings.Contains(requestedPath, "=s1024-") {
 		t.Fatalf("requested path = %q, want high resolution thumbnail", requestedPath)
 	}
@@ -322,16 +366,18 @@ func TestFetchImageAcceptsLargeThumbnailPayload(t *testing.T) {
 	}
 
 	withCalendarPhotoClient(t, newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	})))
 
 	img, err := fetchImage("https://yt3.googleusercontent.com/avatar=s1024-c")
 	if err != nil {
 		t.Fatalf("fetchImage() error = %v", err)
 	}
+
 	if img == nil {
 		t.Fatal("fetchImage() returned nil image")
 	}
+
 	if img.Bounds().Dx() == 0 || img.Bounds().Dy() == 0 {
 		t.Fatalf("image bounds = %v, want non-empty image", img.Bounds())
 	}
@@ -369,6 +415,7 @@ func TestCalendarCacheKeyDistinguishesDelimiterCharacters(t *testing.T) {
 
 	leftKey := newCalendarCacheKey(6, 2026, left)
 	rightKey := newCalendarCacheKey(6, 2026, right)
+
 	if leftKey == rightKey {
 		t.Fatal("cache keys should differ for delimiter-containing fields")
 	}
@@ -401,6 +448,7 @@ func TestCalendarCardRenderer_CompactsBusyMonthIntoSingleImage(t *testing.T) {
 
 	r := NewCalendarCardRenderer()
 	entries := make([]domain.CalendarEntry, 200)
+
 	for i := range entries {
 		entries[i] = domain.CalendarEntry{
 			Kind:   domain.CelebrationKindBirthday,
@@ -418,9 +466,11 @@ func TestCalendarCardRenderer_CompactsBusyMonthIntoSingleImage(t *testing.T) {
 	if decErr != nil {
 		t.Fatalf("png.Decode() error = %v", decErr)
 	}
+
 	if img.Bounds().Dx() != calendarOutputWidth {
 		t.Errorf("width = %d, want %d", img.Bounds().Dx(), calendarOutputWidth)
 	}
+
 	if img.Bounds().Dy() > calendarOutputHeight {
 		t.Errorf("height %d exceeds single-image budget %d", img.Bounds().Dy(), calendarOutputHeight)
 	}
@@ -465,12 +515,15 @@ func TestGroupEntriesByDay(t *testing.T) {
 	if len(groups) != 3 {
 		t.Fatalf("len(groups) = %d, want 3", len(groups))
 	}
+
 	if groups[0].day != 5 || len(groups[0].entries) != 2 {
 		t.Errorf("group[0] = day %d, entries %d", groups[0].day, len(groups[0].entries))
 	}
+
 	if groups[1].day != 10 || len(groups[1].entries) != 3 {
 		t.Errorf("group[1] = day %d, entries %d", groups[1].day, len(groups[1].entries))
 	}
+
 	if groups[2].day != 20 || len(groups[2].entries) != 1 {
 		t.Errorf("group[2] = day %d, entries %d", groups[2].day, len(groups[2].entries))
 	}
@@ -485,15 +538,17 @@ func TestEntryDisplayName(t *testing.T) {
 		want   string
 	}{
 		{"nil member", nil, "알 수 없음"},
-		{"short korean name", &domain.Member{ShortKoreanName: "페코라", NameKo: "우사다 페코라", Name: "Pekora"}, "페코라"},
+		{"short korean name", &domain.Member{ShortKoreanName: testShortKoreanName, NameKo: "우사다 페코라", Name: "Pekora"}, testShortKoreanName},
 		{"korean name fallback", &domain.Member{NameKo: "우사다 페코라", Name: "Pekora"}, "우사다 페코라"},
 		{"english name fallback", &domain.Member{Name: "Pekora"}, "Pekora"},
 	}
 
 	m := newCalendarMetrics(1)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := entryDisplayName(t.Context(), &m, tt.member); got != tt.want {
 				t.Errorf("entryDisplayName() = %q, want %q", got, tt.want)
 			}
@@ -514,9 +569,11 @@ func TestBirthdayStreamKindIsInertInCalendar(t *testing.T) {
 
 	m := newCalendarMetrics(1)
 	style := resolveEntryStyle(t.Context(), &m, domain.CalendarEntry{Kind: domain.CelebrationKindBirthdayStream})
+
 	if style.badgeText != "" {
 		t.Fatalf("badgeText = %q, want empty for dispatch-only kind", style.badgeText)
 	}
+
 	if style.accent == colAmber600 {
 		t.Fatal("birthday_stream must not reuse the birthday style")
 	}
@@ -528,23 +585,26 @@ func assertValidPNG(t *testing.T, data []byte) {
 	if len(data) == 0 {
 		t.Fatal("image data is empty")
 	}
+
 	if !bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G'}) {
 		t.Fatal("data is not a valid PNG")
 	}
 }
 
 type pngPhotoServer struct {
-	URL   string
-	close func()
+	URL           string
+	restoreClient func()
 }
 
 func (s *pngPhotoServer) Close() {
-	if s.close != nil {
-		s.close()
+	if s.restoreClient != nil {
+		s.restoreClient()
 	}
 }
 
 func newPNGServer(t *testing.T, requests *atomic.Int32) *pngPhotoServer {
+	t.Helper()
+
 	return newDelayedPNGServer(t, requests, 0)
 }
 
@@ -553,16 +613,20 @@ func newDelayedPNGServer(t *testing.T, requests *atomic.Int32, delay time.Durati
 
 	pngData := tinyPNG(t)
 	previous := photoClient
+
 	photoClient = newCalendarPhotoTestClient(calendarPhotoRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requests.Add(1)
+
 		if delay > 0 {
 			time.Sleep(delay)
 		}
-		return calendarPhotoTestResponse(req, "image/png", pngData), nil
+
+		return calendarPhotoTestResponse(req, calendarPhotoContentTypePNG, pngData), nil
 	}))
+
 	return &pngPhotoServer{
 		URL: "https://yt3.googleusercontent.com",
-		close: func() {
+		restoreClient: func() {
 			photoClient = previous
 		},
 	}
@@ -572,9 +636,11 @@ func tinyPNG(t *testing.T) []byte {
 	t.Helper()
 
 	var buf bytes.Buffer
+
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
 		t.Fatalf("png.Encode() error = %v", err)
 	}
+
 	return buf.Bytes()
 }
 
@@ -582,9 +648,11 @@ func largePNG(t *testing.T) []byte {
 	t.Helper()
 
 	img := image.NewRGBA(image.Rect(0, 0, 512, 512))
+
 	for y := range 512 {
 		for x := range 512 {
 			offset := img.PixOffset(x, y)
+
 			img.Pix[offset] = uint8(x)
 			img.Pix[offset+1] = uint8(y)
 			img.Pix[offset+2] = uint8((x ^ y) & 0xff)
@@ -593,9 +661,12 @@ func largePNG(t *testing.T) []byte {
 	}
 
 	var buf bytes.Buffer
+
 	encoder := png.Encoder{CompressionLevel: png.NoCompression}
+
 	if err := encoder.Encode(&buf, img); err != nil {
 		t.Fatalf("png.Encode() error = %v", err)
 	}
+
 	return buf.Bytes()
 }

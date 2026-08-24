@@ -8,13 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mustWriteResponse(t testing.TB, w http.ResponseWriter, body string) {
-	t.Helper()
+func mustWriteResponse(tb testing.TB, w http.ResponseWriter, body string) {
+	tb.Helper()
+
 	_, err := w.Write([]byte(body))
-	require.NoError(t, err)
+	require.NoError(tb, err)
 }
 
-func mustClose(t testing.TB, closer io.Closer) {
-	t.Helper()
-	require.NoError(t, closer.Close())
+func mustClose(tb testing.TB, closer io.Closer) {
+	tb.Helper()
+	require.NoError(tb, closer.Close())
 }

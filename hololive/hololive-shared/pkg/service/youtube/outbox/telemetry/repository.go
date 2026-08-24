@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -27,9 +28,14 @@ func NewRepository(db any) *Repository {
 func (r *Repository) Enqueue(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
 	prepared, err := r.PrepareRows(ctx, rows)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare rows: %w", err)
 	}
-	return r.EnqueuePrepared(ctx, prepared)
+
+	if err := r.EnqueuePrepared(ctx, prepared); err != nil {
+		return fmt.Errorf("enqueue prepared: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Repository) PrepareRows(
@@ -42,16 +48,19 @@ func (r *Repository) PrepareRows(
 
 	normalized := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(rows))
 	now := time.Now().UTC()
+
 	for i := range rows {
 		if row, ok := prepareDeliveryTelemetryRow(&rows[i], now); ok {
 			normalized = append(normalized, row)
 		}
 	}
+
 	if len(normalized) == 0 {
 		return nil, nil
 	}
+
 	if err := r.enrichRows(ctx, normalized); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("enrich rows: %w", err)
 	}
 
 	return normalized, nil
@@ -68,30 +77,38 @@ func prepareDeliveryTelemetryRow(
 	normalizeDeliveryTelemetryAttemptTimes(row, now)
 	applyDeliveryTelemetryTiming(row)
 	applyDeliveryTelemetryDefaults(row, now)
+
 	return *row, true
 }
 
 func normalizeDeliveryTelemetryAttemptTimes(row *domain.YouTubeNotificationDeliveryTelemetry, now time.Time) {
 	row.AttemptStartedAt = deliverysql.CloneUTCTimePtr(row.AttemptStartedAt)
 	row.AttemptFinishedAt = deliverysql.CloneUTCTimePtr(row.AttemptFinishedAt)
+
 	if row.AttemptFinishedAt == nil && !row.EventAt.IsZero() {
 		finishedAt := row.EventAt.UTC()
+
 		row.AttemptFinishedAt = &finishedAt
 	}
+
 	if row.EventAt.IsZero() && row.AttemptFinishedAt != nil {
 		row.EventAt = row.AttemptFinishedAt.UTC()
 	}
+
 	if row.EventAt.IsZero() {
 		row.EventAt = now
 	}
+
 	if row.AttemptFinishedAt == nil {
 		finishedAt := row.EventAt.UTC()
+
 		row.AttemptFinishedAt = &finishedAt
 	}
 }
 
 func applyDeliveryTelemetryTiming(row *domain.YouTubeNotificationDeliveryTelemetry) {
 	timing := communityShortsAlarmTimingForTelemetryRow(row)
+
 	row.ActualPublishedAt = timing.ActualPublishedAt
 	row.AlarmSentAt = timing.AlarmSentAt
 	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
@@ -101,6 +118,7 @@ func applyDeliveryTelemetryDefaults(row *domain.YouTubeNotificationDeliveryTelem
 	if row.NextAttemptAt.IsZero() {
 		row.NextAttemptAt = now
 	}
+
 	row.DeliveryPath = NormalizeCommunityShortsDeliveryPath(row.DeliveryPath)
 	ApplyTelemetryPostID(row)
 }
@@ -117,14 +135,15 @@ func (r *Repository) EnqueuePrepared(
 	if len(rows) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("enqueue delivery telemetry: db is nil")
+		return errors.New("enqueue delivery telemetry: db is nil")
 	}
 
 	for start := 0; start < len(rows); start += enqueueTelemetryChunkSize {
 		end := min(start+enqueueTelemetryChunkSize, len(rows))
 		if err := r.enqueuePreparedChunk(ctx, rows[start:end]); err != nil {
-			return err
+			return fmt.Errorf("enqueue prepared chunk: %w", err)
 		}
 	}
 
@@ -133,6 +152,7 @@ func (r *Repository) EnqueuePrepared(
 
 func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.YouTubeNotificationDeliveryTelemetry) error {
 	var sb strings.Builder
+
 	sb.WriteString(mustSQL("repository_0136_01.sql"))
 
 	args := make([]any, 0, len(rows)*enqueueTelemetryColumnsPerRow)
@@ -140,9 +160,12 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 		if i > 0 {
 			sb.WriteByte(',')
 		}
+
 		writeTelemetryRowPlaceholders(&sb, i*enqueueTelemetryColumnsPerRow)
+
 		args = appendTelemetryRowArgs(args, &rows[i])
 	}
+
 	sb.WriteString(mustSQL("repository_0152_02.sql"))
 
 	if _, err := r.db.Exec(ctx, sb.String(), args...); err != nil {
@@ -154,13 +177,16 @@ func (r *Repository) enqueuePreparedChunk(ctx context.Context, rows []domain.You
 
 func writeTelemetryRowPlaceholders(sb *strings.Builder, base int) {
 	sb.WriteByte('(')
+
 	for j := range enqueueTelemetryColumnsPerRow {
 		if j > 0 {
 			sb.WriteByte(',')
 		}
+
 		sb.WriteByte('$')
 		sb.WriteString(strconv.Itoa(base + j + 1))
 	}
+
 	sb.WriteByte(')')
 }
 
@@ -184,10 +210,12 @@ func (r *Repository) queryTelemetryRows(ctx context.Context, action, query strin
 		return nil, fmt.Errorf("%s: %w", action, err)
 	}
 	defer rows.Close()
+
 	items, err := pgx.CollectRows(rows, scanTelemetryRow)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", action, err)
 	}
+
 	return items, nil
 }
 
@@ -208,8 +236,9 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 		LIMIT $3
 	`, now, lockExpiry, batchSize)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query telemetry rows: %w", err)
 	}
+
 	if len(candidates) == 0 {
 		return nil, nil
 	}
@@ -218,15 +247,18 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 	for i := range candidates {
 		candidateIDs = append(candidateIDs, candidates[i].ID)
 	}
+
 	slices.Sort(candidateIDs)
 
 	err = r.lockPendingTelemetryRows(ctx, candidateIDs, now, lockExpiry)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lock pending telemetry rows: %w", err)
 	}
 
 	reloadArgs := deliverysql.AppendDeliveryInt64Args(nil, candidateIDs)
+
 	reloadArgs = append(reloadArgs, now)
+
 	locked, err := r.queryTelemetryRows(ctx, "reload locked delivery telemetry rows", mustSQL("repository_0237_04.sql")+deliveryTelemetrySelectColumns()+`
 		FROM youtube_notification_delivery_telemetry
 		WHERE `+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
@@ -234,10 +266,11 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 		ORDER BY event_at ASC
 	`, reloadArgs...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query telemetry rows: %w", err)
 	}
+
 	if err := r.refreshLockedRows(ctx, locked); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("refresh locked rows: %w", err)
 	}
 
 	return locked, nil
@@ -245,14 +278,17 @@ func (r *Repository) FetchAndLockPending(ctx context.Context, batchSize int, loc
 
 func (r *Repository) lockPendingTelemetryRows(ctx context.Context, candidateIDs []int64, now, lockExpiry time.Time) error {
 	lockArgs := []any{now}
+
 	lockArgs = deliverysql.AppendDeliveryInt64Args(lockArgs, candidateIDs)
 	lockArgs = append(lockArgs, lockExpiry)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "lock delivery telemetry rows", mustSQL("repository_0258_05.sql")+deliverysql.DeliveryInClause("id", len(candidateIDs))+`
 		  AND logged_at IS NULL
 		  AND (locked_at IS NULL OR locked_at < ?)
 	`, lockArgs...); err != nil {
 		return fmt.Errorf("lock delivery telemetry rows: %w", err)
 	}
+
 	return nil
 }
 
@@ -264,7 +300,9 @@ func (r *Repository) MarkLoggedBatch(ctx context.Context, ids []int64) error {
 
 	now := time.Now().UTC()
 	args := []any{now}
+
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry logged", mustSQL("repository_0279_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery telemetry logged: %w", err)
@@ -281,100 +319,13 @@ func (r *Repository) MarkRetryBatch(ctx context.Context, ids []int64, backoff ti
 
 	nextAttemptAt := time.Now().UTC().Add(backoff)
 	args := []any{nextAttemptAt, deliverysql.TruncateString(errMsg, 500)}
+
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+
 	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery telemetry retry", mustSQL("repository_0299_07.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery telemetry retry: %w", err)
 	}
 
 	return nil
-}
-
-func (r *Repository) refreshLockedRows(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDeliveryTelemetry,
-) error {
-	if len(rows) == 0 {
-		return nil
-	}
-
-	enriched := append([]domain.YouTubeNotificationDeliveryTelemetry(nil), rows...)
-	if err := r.enrichRows(ctx, enriched); err != nil {
-		return fmt.Errorf("refresh locked delivery telemetry rows: %w", err)
-	}
-
-	ids := make([]int64, 0, len(enriched))
-	actualPublishedAt := make([]*time.Time, 0, len(enriched))
-	alarmSentAt := make([]*time.Time, 0, len(enriched))
-	alarmLatencyMillis := make([]*int64, 0, len(enriched))
-	detectedAt := make([]*time.Time, 0, len(enriched))
-	for i := range enriched {
-		if deliveryTelemetryTrackingContextChanged(&rows[i], &enriched[i]) {
-			ids = append(ids, enriched[i].ID)
-			actualPublishedAt = append(actualPublishedAt, enriched[i].ActualPublishedAt)
-			alarmSentAt = append(alarmSentAt, enriched[i].AlarmSentAt)
-			alarmLatencyMillis = append(alarmLatencyMillis, enriched[i].AlarmLatencyMillis)
-			detectedAt = append(detectedAt, enriched[i].DetectedAt)
-		}
-		rows[i] = enriched[i]
-	}
-
-	if len(ids) == 0 {
-		return nil
-	}
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "refresh locked delivery telemetry rows", mustSQL("repository_0343_08.sql"), ids, actualPublishedAt, alarmSentAt, alarmLatencyMillis, detectedAt); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-const retentionDeleteBatchSize = 1000
-
-func (r *Repository) DeleteLoggedBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	return r.deleteLoggedBeforeInBatches(ctx, cutoff, retentionDeleteBatchSize)
-}
-
-func (r *Repository) deleteLoggedBeforeInBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
-	if r == nil || r.db == nil || cutoff.IsZero() {
-		return 0, nil
-	}
-
-	var total int64
-	for {
-		deleted, done, err := r.deleteLoggedBeforeBatch(ctx, cutoff, batchSize)
-		total += deleted
-		if done || err != nil {
-			return total, err
-		}
-	}
-}
-
-func (r *Repository) deleteLoggedBeforeBatch(ctx context.Context, cutoff time.Time, batchSize int) (deleted int64, done bool, err error) {
-	tag, err := r.db.Exec(ctx, mustSQL("repository_0364_09.sql"), cutoff.UTC(), batchSize)
-	if err != nil {
-		return 0, true, fmt.Errorf("delete delivery telemetry before cutoff: %w", err)
-	}
-
-	deleted = tag.RowsAffected()
-	if deleted < int64(batchSize) {
-		return deleted, true, nil
-	}
-	if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
-		return deleted, true, err
-	}
-
-	return deleted, false, nil
-}
-
-func CollectTelemetryOutboxIDs(rows []domain.YouTubeNotificationDeliveryTelemetry) []int64 {
-	outboxIDs := make([]int64, 0, len(rows))
-	for i := range rows {
-		if rows[i].OutboxID <= 0 {
-			continue
-		}
-		outboxIDs = append(outboxIDs, rows[i].OutboxID)
-	}
-	return deliverysql.UniqueInt64s(outboxIDs)
 }

@@ -25,12 +25,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func setupFormatterTestStore(t *testing.T) *messagestrings.Store {
@@ -38,6 +39,7 @@ func setupFormatterTestStore(t *testing.T) *messagestrings.Store {
 
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, store.Load(t.Context()))
+
 	return store
 }
 
@@ -85,6 +87,7 @@ func TestNewResponseFormatterAndPrefix(t *testing.T) {
 		t.Parallel()
 
 		var formatter *ResponseFormatter
+
 		assert.Equal(t, "!", formatter.Prefix())
 	})
 }

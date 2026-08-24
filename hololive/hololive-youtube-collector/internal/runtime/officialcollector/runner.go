@@ -2,6 +2,7 @@ package officialcollector
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -28,25 +29,34 @@ func (r *Runner) JobID() sourceobservation.JobID {
 
 func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if r == nil || r.client == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule client is not configured")
 	}
+
 	if input == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
+
 	started := time.Now()
+
 	body, err := r.client.Fetch(ctx)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("fetch: %w", err)
 	}
+
 	payload, err := parseScheduleSnapshot(body)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("parse schedule snapshot: %w", err)
 	}
+
 	generation, err := input.Generation(contract.KindSchedule)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("generation: %w", err)
 	}
+
 	lease := input.Lease()
+
 	envelope, err := collectutil.Envelope(
 		contract.ProviderHololiveOfficial,
 		contract.KindSchedule,
@@ -60,5 +70,11 @@ func (r *Runner) Collect(ctx context.Context, input *collectutil.RunInput) (coll
 	if err != nil {
 		return collectutil.CollectResult{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
 	}
-	return collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+
+	out, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{envelope}, started)
+	if err != nil {
+		return out, fmt.Errorf("complete from envelopes: %w", err)
+	}
+
+	return out, nil
 }

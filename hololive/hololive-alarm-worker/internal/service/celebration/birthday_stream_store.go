@@ -10,7 +10,7 @@ import (
 )
 
 type birthdayStreamSessionStore interface {
-	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, seenSince time.Time) ([]birthdayStreamSession, error)
+	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, seenSince time.Time) ([]BirthdayStreamSession, error)
 	ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error)
 	FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error)
 }
@@ -31,16 +31,18 @@ func (s *PgxStore) FindBirthdaySessions(
 	ctx context.Context,
 	channelIDs []string,
 	windowStartUTC, windowEndUTC, seenSince time.Time,
-) ([]birthdayStreamSession, error) {
+) ([]BirthdayStreamSession, error) {
 	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0050_01.sql"), channelIDs, windowStartUTC, windowEndUTC, seenSince)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query sessions: %w", err)
 	}
 	defer rows.Close()
 
-	sessions := make([]birthdayStreamSession, 0, birthdayStreamMaxPublishedPerMemberDay*len(channelIDs))
+	sessions := make([]BirthdayStreamSession, 0, birthdayStreamMaxPublishedPerMemberDay*len(channelIDs))
+
 	for rows.Next() {
-		var session birthdayStreamSession
+		var session BirthdayStreamSession
+
 		if err := rows.Scan(
 			&session.VideoID,
 			&session.ChannelID,
@@ -51,11 +53,14 @@ func (s *PgxStore) FindBirthdaySessions(
 		); err != nil {
 			return nil, fmt.Errorf("birthday stream runner: scan session: %w", err)
 		}
+
 		sessions = append(sessions, session)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("birthday stream runner: iterate sessions: %w", err)
 	}
+
 	return sessions, nil
 }
 
@@ -63,6 +68,7 @@ var birthdayStreamLikeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `
 
 func (s *PgxStore) ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error) {
 	pattern := birthdayStreamLikeEscaper.Replace(keyPrefix) + "%"
+
 	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0081_02.sql"), pattern)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query published event keys: %w", err)
@@ -70,16 +76,21 @@ func (s *PgxStore) ListPublishedEventKeys(ctx context.Context, keyPrefix string)
 	defer rows.Close()
 
 	var keys []string
+
 	for rows.Next() {
 		var key string
+
 		if err := rows.Scan(&key); err != nil {
 			return nil, fmt.Errorf("birthday stream runner: scan published event key: %w", err)
 		}
+
 		keys = append(keys, key)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("birthday stream runner: iterate published event keys: %w", err)
 	}
+
 	return keys, nil
 }
 
@@ -87,6 +98,7 @@ func (s *PgxStore) FindSentRoomsByEventKeys(ctx context.Context, eventKeys []str
 	if len(eventKeys) == 0 {
 		return map[string][]string{}, nil
 	}
+
 	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0104_03.sql"), eventKeys)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query sent birthday rooms: %w", err)
@@ -94,16 +106,23 @@ func (s *PgxStore) FindSentRoomsByEventKeys(ctx context.Context, eventKeys []str
 	defer rows.Close()
 
 	roomsByEventKey := make(map[string][]string, len(eventKeys))
+
 	for rows.Next() {
-		var eventKey string
-		var roomID string
+		var (
+			eventKey string
+			roomID   string
+		)
+
 		if err := rows.Scan(&eventKey, &roomID); err != nil {
 			return nil, fmt.Errorf("birthday stream runner: scan sent birthday room: %w", err)
 		}
+
 		roomsByEventKey[eventKey] = append(roomsByEventKey[eventKey], roomID)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("birthday stream runner: iterate sent birthday rooms: %w", err)
 	}
+
 	return roomsByEventKey, nil
 }

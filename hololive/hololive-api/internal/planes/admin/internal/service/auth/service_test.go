@@ -23,19 +23,19 @@ package auth
 import (
 	"context"
 	stdErrors "errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/valkey-io/valkey-go"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 )
 
 type failingCacheClient struct {
@@ -59,48 +59,83 @@ func (c *failingCacheClient) CompareAndDelete(ctx context.Context, key, expected
 	if c.casKeyConflict != "" && key == c.casKeyConflict {
 		return false, nil
 	}
-	return c.Client.CompareAndDelete(ctx, key, expectedValue)
+
+	out, err := c.Client.CompareAndDelete(ctx, key, expectedValue)
+	if err != nil {
+		return out, fmt.Errorf("compare and delete: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *failingCacheClient) SAdd(ctx context.Context, key string, members []string) (int64, error) {
 	if c.failSAddErr != nil && key == c.failSAddKey {
 		return 0, c.failSAddErr
 	}
-	return c.Client.SAdd(ctx, key, members)
+
+	out, err := c.Client.SAdd(ctx, key, members)
+	if err != nil {
+		return out, fmt.Errorf("s add: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *failingCacheClient) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	if c.failExpireErr != nil && key == c.failExpireKey {
 		return c.failExpireErr
 	}
-	return c.Client.Expire(ctx, key, ttl)
+
+	if err := c.Client.Expire(ctx, key, ttl); err != nil {
+		return fmt.Errorf("expire: %w", err)
+	}
+
+	return nil
 }
 
 func (c *failingCacheClient) Del(ctx context.Context, key string) error {
 	if err, ok := c.failDelKeys[key]; ok {
 		return err
 	}
-	return c.Client.Del(ctx, key)
+
+	if err := c.Client.Del(ctx, key); err != nil {
+		return fmt.Errorf("del: %w", err)
+	}
+
+	return nil
 }
 
 func (c *failingCacheClient) DelMany(ctx context.Context, keys []string) (int64, error) {
 	if c.failDelMany != nil {
 		return 0, c.failDelMany
 	}
-	return c.Client.DelMany(ctx, keys)
+
+	out, err := c.Client.DelMany(ctx, keys)
+	if err != nil {
+		return out, fmt.Errorf("del many: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *failingCacheClient) SRem(ctx context.Context, key string, members []string) (int64, error) {
 	if c.failSRemErr != nil && key == c.failSRemKey {
 		return 0, c.failSRemErr
 	}
-	return c.Client.SRem(ctx, key, members)
+
+	out, err := c.Client.SRem(ctx, key, members)
+	if err != nil {
+		return out, fmt.Errorf("s rem: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *failingCacheClient) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
 	if c.nilDoMulti {
 		return nil
 	}
+
 	return c.Client.DoMulti(ctx, cmds...)
 }
 
@@ -114,9 +149,11 @@ func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 	t.Helper()
 
 	var ae *Error
+
 	if !stdErrors.As(err, &ae) {
 		t.Fatalf("expected *auth.Error, got: %T (%v)", err, err)
 	}
+
 	if ae.Code != want {
 		t.Fatalf("unexpected code: got=%s want=%s", ae.Code, want)
 	}
@@ -124,255 +161,278 @@ func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 
 func TestRegister_DuplicateEmail(t *testing.T) {
 	db := newTestDB(t)
-	service, err := NewService(context.Background(), db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
+
+	service, err := NewService(t.Context(), db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "USER@example.com", "Password1", "User2")
+	_, err = service.Register(t.Context(), "USER@example.com", "Password1", "User2")
 	if err == nil {
-		t.Fatalf("expected duplicate error, got nil")
+		t.Fatal("expected duplicate error, got nil")
 	}
+
 	assertAuthCode(t, err, CodeEmailExists)
 }
 
 func TestLogin_SessionFlow(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.SessionTTL = 30 * time.Minute
 	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, user, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, user, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
+
 	if session == nil || session.Token == "" {
-		t.Fatalf("expected session token")
-	}
-	if user == nil || user.ID == "" {
-		t.Fatalf("expected user")
+		t.Fatal("expected session token")
 	}
 
-	me, err := service.Me(context.Background(), session.Token)
+	if user == nil || user.ID == "" {
+		t.Fatal("expected user")
+	}
+
+	me, err := service.Me(t.Context(), session.Token)
 	if err != nil {
 		t.Fatalf("me failed: %v", err)
 	}
+
 	if me.ID != user.ID {
 		t.Fatalf("unexpected me user: got=%s want=%s", me.ID, user.ID)
 	}
 
-	refreshed, err := service.Refresh(context.Background(), session.Token)
+	refreshed, err := service.Refresh(t.Context(), session.Token)
 	if err != nil {
 		t.Fatalf("refresh failed: %v", err)
 	}
 
-	_, err = service.Me(context.Background(), session.Token)
+	_, err = service.Me(t.Context(), session.Token)
 	if err == nil {
-		t.Fatalf("expected old token to be invalid after refresh")
+		t.Fatal("expected old token to be invalid after refresh")
 	}
+
 	assertAuthCode(t, err, CodeUnauthorized)
 
-	_, err = service.Me(context.Background(), refreshed.Token)
+	_, err = service.Me(t.Context(), refreshed.Token)
 	if err != nil {
 		t.Fatalf("me with refreshed token failed: %v", err)
 	}
 
-	if err := service.Logout(context.Background(), refreshed.Token); err != nil {
-		t.Fatalf("logout failed: %v", err)
+	if logoutErr := service.Logout(t.Context(), refreshed.Token); logoutErr != nil {
+		t.Fatalf("logout failed: %v", logoutErr)
 	}
 
-	_, err = service.Me(context.Background(), refreshed.Token)
+	_, err = service.Me(t.Context(), refreshed.Token)
 	if err == nil {
-		t.Fatalf("expected token to be invalid after logout")
+		t.Fatal("expected token to be invalid after logout")
 	}
+
 	assertAuthCode(t, err, CodeUnauthorized)
 }
 
 func TestLogin_RateLimited(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.LoginRateLimitPerMinute = 2
 	config.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
+	_, _, err = service.Login(t.Context(), "user@example.com", "WrongPass1", "1.2.3.4")
 	if err == nil {
-		t.Fatalf("expected login failure")
+		t.Fatal("expected login failure")
 	}
+
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
+	_, _, err = service.Login(t.Context(), "user@example.com", "WrongPass1", "1.2.3.4")
 	if err == nil {
-		t.Fatalf("expected login failure")
+		t.Fatal("expected login failure")
 	}
+
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "1.2.3.4")
+	_, _, err = service.Login(t.Context(), "user@example.com", "WrongPass1", "1.2.3.4")
 	if err == nil {
-		t.Fatalf("expected rate limited error")
+		t.Fatal("expected rate limited error")
 	}
+
 	assertAuthCode(t, err, CodeRateLimited)
 }
 
 func TestLogin_AccountLocked(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.LoginRateLimitPerMinute = 1000
 	config.LoginFailLimit = 3
 	config.LoginFailWindow = 10 * time.Minute
 	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
 	for i := range 3 {
-		_, _, err = service.Login(context.Background(), "user@example.com", "WrongPass1", "127.0.0.1")
+		_, _, err = service.Login(t.Context(), "user@example.com", "WrongPass1", "127.0.0.1")
 		if err == nil {
 			t.Fatalf("expected login failure at attempt %d", i+1)
 		}
+
 		assertAuthCode(t, err, CodeInvalidCredentials)
 	}
 
-	_, _, err = service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	_, _, err = service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err == nil {
-		t.Fatalf("expected account locked error")
+		t.Fatal("expected account locked error")
 	}
+
 	assertAuthCode(t, err, CodeAccountLocked)
 }
 
 func TestLogin_UnknownEmailRecordsFailureAndLocksAccount(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.LoginRateLimitPerMinute = 1000
 	config.LoginFailLimit = 1
 	config.LoginFailWindow = 10 * time.Minute
 	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, _, err = service.Login(context.Background(), "missing@example.com", "Password1", "127.0.0.1")
+	_, _, err = service.Login(t.Context(), "missing@example.com", "Password1", "127.0.0.1")
 	if err == nil {
-		t.Fatalf("expected invalid credentials for unknown email")
+		t.Fatal("expected invalid credentials for unknown email")
 	}
+
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = service.Login(context.Background(), "missing@example.com", "Password1", "127.0.0.1")
+	_, _, err = service.Login(t.Context(), "missing@example.com", "Password1", "127.0.0.1")
 	if err == nil {
-		t.Fatalf("expected account locked after unknown-email failure hook")
+		t.Fatal("expected account locked after unknown-email failure hook")
 	}
+
 	assertAuthCode(t, err, CodeAccountLocked)
 }
 
 func TestMe_ReturnsUnauthorizedWhenSessionUserIsMissing(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	session, err := service.createSession(context.Background(), "missing-user")
+	session, err := service.createSession(t.Context(), "missing-user")
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 
-	_, err = service.Me(context.Background(), session.Token)
+	_, err = service.Me(t.Context(), session.Token)
 	if err == nil {
-		t.Fatalf("expected unauthorized for missing user")
+		t.Fatal("expected unauthorized for missing user")
 	}
+
 	assertAuthCode(t, err, CodeUnauthorized)
 }
 
 func TestPasswordReset_RevokesSessions(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.LoginRateLimitPerMinute = 1000
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
-	resetToken, err := service.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
+	resetToken, err := service.RequestPasswordReset(t.Context(), "user@example.com", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("reset-request failed: %v", err)
 	}
+
 	if resetToken == "" {
-		t.Fatalf("expected reset token")
+		t.Fatal("expected reset token")
 	}
 
-	if err := service.ResetPassword(context.Background(), resetToken, "NewPassw0rd1"); err != nil {
-		t.Fatalf("reset failed: %v", err)
+	if resetErr := service.ResetPassword(t.Context(), resetToken, "NewPassw0rd1"); resetErr != nil {
+		t.Fatalf("reset failed: %v", resetErr)
 	}
 
-	_, err = service.Me(context.Background(), session.Token)
+	_, err = service.Me(t.Context(), session.Token)
 	if err == nil {
-		t.Fatalf("expected old session revoked after reset")
+		t.Fatal("expected old session revoked after reset")
 	}
+
 	assertAuthCode(t, err, CodeUnauthorized)
 
-	_, _, err = service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	_, _, err = service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err == nil {
-		t.Fatalf("expected old password to be invalid")
+		t.Fatal("expected old password to be invalid")
 	}
+
 	assertAuthCode(t, err, CodeInvalidCredentials)
 
-	_, _, err = service.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1")
+	_, _, err = service.Login(t.Context(), "user@example.com", "NewPassw0rd1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("expected login with new password: %v", err)
 	}
@@ -380,17 +440,18 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 
 func TestPasswordResetRequest_UnknownEmailReturnsEmptyToken(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	token, err := service.RequestPasswordReset(context.Background(), "missing@example.com", "127.0.0.1")
+	token, err := service.RequestPasswordReset(t.Context(), "missing@example.com", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("request password reset for unknown email should not fail: %v", err)
 	}
+
 	if token != "" {
 		t.Fatalf("expected empty token for unknown email, got %q", token)
 	}
@@ -398,44 +459,47 @@ func TestPasswordResetRequest_UnknownEmailReturnsEmptyToken(t *testing.T) {
 
 func TestPasswordResetRequest_RateLimited(t *testing.T) {
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
 	config := DefaultConfig()
+
 	config.PasswordResetRequestRateLimitPerMinute = 2
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	_, err = service.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
+	_, err = service.RequestPasswordReset(t.Context(), "user@example.com", "10.0.0.1")
 	if err != nil {
 		t.Fatalf("first reset-request failed: %v", err)
 	}
 
-	_, err = service.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
+	_, err = service.RequestPasswordReset(t.Context(), "user@example.com", "10.0.0.1")
 	if err != nil {
 		t.Fatalf("second reset-request failed: %v", err)
 	}
 
-	_, err = service.RequestPasswordReset(context.Background(), "user@example.com", "10.0.0.1")
+	_, err = service.RequestPasswordReset(t.Context(), "user@example.com", "10.0.0.1")
 	if err == nil {
-		t.Fatalf("expected rate limited error")
+		t.Fatal("expected rate limited error")
 	}
+
 	assertAuthCode(t, err, CodeRateLimited)
 }
 
 func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, ctx)
+	cacheClient := testutil.NewTestCacheService(ctx, t)
 
 	config := DefaultConfig()
+
 	config.BcryptCost = bcrypt.MinCost
 
 	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
@@ -443,8 +507,8 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	if _, err := service.Register(ctx, "user@example.com", "Password1", "User"); err != nil {
-		t.Fatalf("register failed: %v", err)
+	if _, registerErr := service.Register(ctx, "user@example.com", "Password1", "User"); registerErr != nil {
+		t.Fatalf("register failed: %v", registerErr)
 	}
 
 	resetToken, err := service.RequestPasswordReset(ctx, "user@example.com", "127.0.0.1")
@@ -458,7 +522,8 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 	}
 
 	oldHash := storedPasswordHash(t, service)
-	if _, err := db.Exec(ctx, `
+
+	if _, execErr := db.Exec(ctx, `
 		CREATE OR REPLACE FUNCTION auth_reset_token_sleep()
 		RETURNS trigger AS $$
 		BEGIN
@@ -466,15 +531,16 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 			RETURN NEW;
 		END;
 		$$ LANGUAGE plpgsql
-	`); err != nil {
-		t.Fatalf("create sleep function: %v", err)
+	`); execErr != nil {
+		t.Fatalf("create sleep function: %v", execErr)
 	}
-	if _, err := db.Exec(ctx, `
+
+	if _, execErr2 := db.Exec(ctx, `
 		CREATE TRIGGER auth_reset_token_sleep_before_update
 		BEFORE UPDATE ON auth_password_reset_tokens
 		FOR EACH ROW EXECUTE FUNCTION auth_reset_token_sleep()
-	`); err != nil {
-		t.Fatalf("create sleep trigger: %v", err)
+	`); execErr2 != nil {
+		t.Fatalf("create sleep trigger: %v", execErr2)
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
@@ -482,8 +548,9 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 
 	_, err = service.applyPasswordReset(timeoutCtx, reset.TokenHash, "new-hash", time.Now().UTC())
 	if err == nil {
-		t.Fatalf("expected applyPasswordReset to fail")
+		t.Fatal("expected applyPasswordReset to fail")
 	}
+
 	assertAuthCode(t, err, CodeInternal)
 
 	if got := storedPasswordHash(t, service); got != oldHash {
@@ -491,75 +558,38 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 	}
 
 	var usedAt *time.Time
+
 	if err := db.QueryRow(ctx, `SELECT used_at FROM auth_password_reset_tokens WHERE token_hash = $1`, reset.TokenHash).Scan(&usedAt); err != nil {
 		t.Fatalf("load token used_at: %v", err)
 	}
+
 	if usedAt != nil {
-		t.Fatalf("token used_at should remain null after rollback")
+		t.Fatal("token used_at should remain null after rollback")
 	}
 }
 
 func TestResetPassword_ConsumesTokenExactlyOnceUnderConcurrency(t *testing.T) {
-	ctx := context.Background()
-	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, ctx)
-
-	config := DefaultConfig()
-	config.BcryptCost = bcrypt.MinCost
-	config.LoginRateLimitPerMinute = 1000
-
-	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	if _, err := service.Register(ctx, "user@example.com", "Password1", "User"); err != nil {
-		t.Fatalf("register failed: %v", err)
-	}
-
-	resetToken, err := service.RequestPasswordReset(ctx, "user@example.com", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("request password reset: %v", err)
-	}
+	ctx := t.Context()
+	service, resetToken := newPasswordResetRaceFixture(t)
 
 	const workers = 8
-	var (
-		wg        sync.WaitGroup
-		start     = make(chan struct{})
-		mu        sync.Mutex
-		successes int
-		failures  []error
-	)
-	wg.Add(workers)
-	for range workers {
-		go func() {
-			defer wg.Done()
-			<-start
-			err := service.ResetPassword(ctx, resetToken, "NewPassw0rd1")
-			mu.Lock()
-			defer mu.Unlock()
-			if err == nil {
-				successes++
-				return
-			}
-			failures = append(failures, err)
-		}()
-	}
-	close(start)
-	wg.Wait()
+
+	successes, failures := runConcurrentPasswordResets(t, service, resetToken, "NewPassw0rd1", workers)
 
 	if successes != 1 {
 		t.Fatalf("expected exactly one concurrent reset to succeed, got %d", successes)
 	}
+
 	if len(failures) != workers-1 {
 		t.Fatalf("expected %d rejected resets, got %d", workers-1, len(failures))
 	}
+
 	for _, err := range failures {
 		assertAuthCode(t, err, CodeInvalidInput)
 	}
 
 	if err := service.ResetPassword(ctx, resetToken, "NewPassw0rd2"); err == nil {
-		t.Fatalf("expected reused token to be rejected after consumption")
+		t.Fatal("expected reused token to be rejected after consumption")
 	} else {
 		assertAuthCode(t, err, CodeInvalidInput)
 	}
@@ -569,9 +599,83 @@ func TestResetPassword_ConsumesTokenExactlyOnceUnderConcurrency(t *testing.T) {
 	}
 }
 
+func newPasswordResetRaceFixture(t *testing.T) (*Service, string) {
+	t.Helper()
+
+	ctx := t.Context()
+	db := newTestDB(t)
+	cacheClient := testutil.NewTestCacheService(ctx, t)
+
+	config := DefaultConfig()
+
+	config.BcryptCost = bcrypt.MinCost
+	config.LoginRateLimitPerMinute = 1000
+
+	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	if _, registerErr := service.Register(ctx, "user@example.com", "Password1", "User"); registerErr != nil {
+		t.Fatalf("register failed: %v", registerErr)
+	}
+
+	resetToken, err := service.RequestPasswordReset(ctx, "user@example.com", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("request password reset: %v", err)
+	}
+
+	return service, resetToken
+}
+
+func runConcurrentPasswordResets(
+	t *testing.T,
+	service *Service,
+	resetToken, newPassword string,
+	workers int,
+) (successes int, failures []error) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	var (
+		wg    sync.WaitGroup
+		start = make(chan struct{})
+		mu    sync.Mutex
+	)
+
+	wg.Add(workers)
+
+	for range workers {
+		go func() {
+			defer wg.Done()
+
+			<-start
+
+			err := service.ResetPassword(ctx, resetToken, newPassword)
+
+			mu.Lock()
+			defer mu.Unlock()
+
+			if err == nil {
+				successes++
+
+				return
+			}
+
+			failures = append(failures, err)
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+
+	return successes, failures
+}
+
 func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
 	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t, context.Background())
+	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
 	userID := "user-1"
 	cacheClient := &failingCacheClient{
@@ -581,21 +685,23 @@ func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
 		failDelKeys: map[string]error{},
 	}
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.createSession(context.Background(), userID)
+	_, err = service.createSession(t.Context(), userID)
 	if err == nil {
-		t.Fatalf("expected createSession error")
+		t.Fatal("expected createSession error")
 	}
+
 	assertAuthCode(t, err, CodeInternal)
 
-	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
+	sessionKeys, err := baseCache.ScanKeys(t.Context(), sessionKeyPrefix+"*", 10)
 	if err != nil {
 		t.Fatalf("scan session keys: %v", err)
 	}
+
 	if len(sessionKeys) != 0 {
 		t.Fatalf("expected no session keys after rollback, got=%v", sessionKeys)
 	}
@@ -603,7 +709,7 @@ func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
 
 func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
 	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t, context.Background())
+	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
 	userID := "user-1"
 	cacheClient := &failingCacheClient{
@@ -613,63 +719,68 @@ func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
 		failDelKeys:   map[string]error{},
 	}
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.createSession(context.Background(), userID)
+	_, err = service.createSession(t.Context(), userID)
 	if err == nil {
-		t.Fatalf("expected createSession error")
+		t.Fatal("expected createSession error")
 	}
+
 	assertAuthCode(t, err, CodeInternal)
 
-	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
+	sessionKeys, err := baseCache.ScanKeys(t.Context(), sessionKeyPrefix+"*", 10)
 	if err != nil {
 		t.Fatalf("scan session keys: %v", err)
 	}
+
 	if len(sessionKeys) != 0 {
 		t.Fatalf("expected no session keys after rollback, got=%v", sessionKeys)
 	}
 }
 
 // CAS 회전에서 old session claim이 실패하면(동시 회전) 새 세션을 만들지 않고
-// CodeUnauthorized를 반환해야 한다. old session 키는 다른 요청이 소유하므로 건드리지 않는다.
+// CodeUnauthorized를 반환해야 한다. 기존 old session 키는 다른 요청이 소유하므로 건드리지 않는다.
 func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t, context.Background())
+	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
 	oldKey := sessionKeyPrefix + sha256Hex(session.Token)
+
 	service.cacheClient = &failingCacheClient{
 		Client:         baseCache,
 		casKeyConflict: oldKey,
 	}
 
-	_, err = service.Refresh(context.Background(), session.Token)
+	_, err = service.Refresh(t.Context(), session.Token)
 	if err == nil {
-		t.Fatalf("expected refresh to be rejected when session already claimed")
+		t.Fatal("expected refresh to be rejected when session already claimed")
 	}
+
 	assertAuthCode(t, err, CodeUnauthorized)
 
-	sessionKeys, err := baseCache.ScanKeys(context.Background(), sessionKeyPrefix+"*", 10)
+	sessionKeys, err := baseCache.ScanKeys(t.Context(), sessionKeyPrefix+"*", 10)
 	if err != nil {
 		t.Fatalf("scan session keys: %v", err)
 	}
+
 	if len(sessionKeys) != 1 || sessionKeys[0] != oldKey {
 		t.Fatalf("expected only old session key to remain (no new session), got=%v", sessionKeys)
 	}
@@ -677,82 +788,86 @@ func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 
 func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
 	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t, context.Background())
+	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, user, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, user, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
 	oldHash := sha256Hex(session.Token)
 	oldKey := sessionKeyPrefix + oldHash
+
 	service.cacheClient = &failingCacheClient{
 		Client:      baseCache,
 		failSRemKey: userSessionsKeyPrefix + user.ID,
 		failSRemErr: stdErrors.New("remove old session index failed"),
 	}
 
-	newSession, err := service.Refresh(context.Background(), session.Token)
+	newSession, err := service.Refresh(t.Context(), session.Token)
 	if err != nil {
 		t.Fatalf("refresh should succeed when old session key is removed: %v", err)
 	}
 
 	if newSession == nil || newSession.Token == "" {
-		t.Fatalf("expected new session")
+		t.Fatal("expected new session")
 	}
 
-	exists, err := baseCache.Exists(context.Background(), oldKey)
+	exists, err := baseCache.Exists(t.Context(), oldKey)
 	if err != nil {
 		t.Fatalf("check old session key: %v", err)
 	}
+
 	if exists {
-		t.Fatalf("expected old session key to be deleted")
+		t.Fatal("expected old session key to be deleted")
 	}
 
 	newKey := sessionKeyPrefix + sha256Hex(newSession.Token)
-	exists, err = baseCache.Exists(context.Background(), newKey)
+
+	exists, err = baseCache.Exists(t.Context(), newKey)
 	if err != nil {
 		t.Fatalf("check new session key: %v", err)
 	}
+
 	if !exists {
-		t.Fatalf("expected new session key to remain")
+		t.Fatal("expected new session key to remain")
 	}
 
-	if _, err := service.Me(context.Background(), newSession.Token); err != nil {
+	if _, err := service.Me(t.Context(), newSession.Token); err != nil {
 		t.Fatalf("expected new session token to be valid: %v", err)
 	}
 }
 
 func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) {
 	db := newTestDB(t)
-	baseCache := testutil.NewTestCacheService(t, context.Background())
+	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	_, err = service.Register(context.Background(), "user@example.com", "Password1", "User")
+	_, err = service.Register(t.Context(), "user@example.com", "Password1", "User")
 	if err != nil {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
-	resetToken, err := service.RequestPasswordReset(context.Background(), "user@example.com", "127.0.0.1")
+	resetToken, err := service.RequestPasswordReset(t.Context(), "user@example.com", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("request password reset failed: %v", err)
 	}
@@ -762,29 +877,30 @@ func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) 
 		failDelMany: stdErrors.New("delete sessions failed"),
 	}
 
-	err = service.ResetPassword(context.Background(), resetToken, "NewPassw0rd1")
+	err = service.ResetPassword(t.Context(), resetToken, "NewPassw0rd1")
 	if err != nil {
 		t.Fatalf("reset password should succeed after password commit: %v", err)
 	}
 
-	if _, err := service.Me(context.Background(), session.Token); err != nil {
+	if _, err := service.Me(t.Context(), session.Token); err != nil {
 		t.Fatalf("expected existing session to remain when revocation fails: %v", err)
 	}
 
-	if _, _, err := service.Login(context.Background(), "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
+	if _, _, err := service.Login(t.Context(), "user@example.com", "NewPassw0rd1", "127.0.0.1"); err != nil {
 		t.Fatalf("expected login with new password to succeed: %v", err)
 	}
 }
 
 func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
-	cacheClient, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
+	cacheClient, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 
 	key := "auth:test:counter"
 
-	count, err := incrWithTTL(context.Background(), cacheClient, key, 500*time.Millisecond)
+	count, err := incrWithTTL(t.Context(), cacheClient, key, 500*time.Millisecond)
 	if err != nil {
 		t.Fatalf("first incr failed: %v", err)
 	}
+
 	if count != 1 {
 		t.Fatalf("unexpected first count: got=%d want=1", count)
 	}
@@ -794,10 +910,11 @@ func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
 		t.Fatalf("expected first ttl to ceil to 1s, got=%v", firstTTL)
 	}
 
-	count, err = incrWithTTL(context.Background(), cacheClient, key, 2*time.Second)
+	count, err = incrWithTTL(t.Context(), cacheClient, key, 2*time.Second)
 	if err != nil {
 		t.Fatalf("second incr failed: %v", err)
 	}
+
 	if count != 2 {
 		t.Fatalf("unexpected second count: got=%d want=2", count)
 	}
@@ -809,38 +926,43 @@ func TestIncrWithTTL_SetsTTLOnFirstIncrementAndKeepsIt(t *testing.T) {
 }
 
 func TestIncrWithTTL_HealsCounterWithoutTTLOnNextIncrement(t *testing.T) {
-	cacheClient, mini := testutil.NewTestCacheServiceWithMini(t, context.Background())
+	cacheClient, mini := testutil.NewTestCacheServiceWithMini(t.Context(), t)
 
 	key := "auth:test:counter:no-ttl"
-	results := cacheClient.DoMulti(context.Background(), cacheClient.B().Incr().Key(key).Build())
+	results := cacheClient.DoMulti(t.Context(), cacheClient.B().Incr().Key(key).Build())
+
 	if len(results) != 1 {
 		t.Fatalf("seed incr result count=%d want=1", len(results))
 	}
+
 	if err := results[0].Error(); err != nil {
 		t.Fatalf("seed incr failed: %v", err)
 	}
+
 	if ttl := mini.TTL(key); ttl != 0 {
 		t.Fatalf("seed key ttl=%v want no ttl", ttl)
 	}
 
-	count, err := incrWithTTL(context.Background(), cacheClient, key, 2*time.Second)
+	count, err := incrWithTTL(t.Context(), cacheClient, key, 2*time.Second)
 	if err != nil {
 		t.Fatalf("incrWithTTL failed: %v", err)
 	}
+
 	if count != 2 {
 		t.Fatalf("count=%d want=2", count)
 	}
+
 	if ttl := mini.TTL(key); ttl != 2*time.Second {
 		t.Fatalf("healed ttl=%v want=2s", ttl)
 	}
 }
 
 func TestIncrWithTTL_ReturnsErrorOnNilPipelineResults(t *testing.T) {
-	baseCache := testutil.NewTestCacheService(t, context.Background())
+	baseCache := testutil.NewTestCacheService(t.Context(), t)
 	cacheClient := &failingCacheClient{Client: baseCache, nilDoMulti: true}
 
-	_, err := incrWithTTL(context.Background(), cacheClient, "auth:test:nil-results", time.Minute)
+	_, err := incrWithTTL(t.Context(), cacheClient, "auth:test:nil-results", time.Minute)
 	if err == nil {
-		t.Fatalf("expected error for nil pipeline results")
+		t.Fatal("expected error for nil pipeline results")
 	}
 }

@@ -2,6 +2,8 @@ package youtubejscollector
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -39,41 +41,73 @@ func (r *ChannelRunner) JobID() sourceobservation.JobID {
 }
 
 func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
-	if r == nil || r.client == nil {
+	if invalidChannelRunner(r) {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
 	}
+
 	if input == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
+
 	started := time.Now()
+
 	enabled, err := enabledChannelKinds(input, input.Job().Emissions())
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("enabled channel kinds: %w", err)
 	}
+
 	if !anyChannelKindEnabled(enabled) {
-		return collectutil.CompleteFromEnvelopes(nil, started)
+		out, completeErr := completeEmptyCollection(started)
+
+		return out, errors.Join(completeErr)
 	}
+
 	result, completeness, continuity, err := r.fetchChannelPage(ctx, input)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("fetch channel page: %w", err)
 	}
+
 	envelopes, err := r.channelEnvelopes(input, &result, enabled, completeness, continuity)
 	if err != nil {
-		return collectutil.CollectResult{}, err
+		return collectutil.CollectResult{}, fmt.Errorf("channel envelopes: %w", err)
 	}
-	return collectutil.CompleteFromEnvelopes(envelopes, started)
+
+	out, err := collectutil.CompleteFromEnvelopes(envelopes, started)
+	if err != nil {
+		return out, fmt.Errorf("complete from envelopes: %w", err)
+	}
+
+	return out, nil
+}
+
+func invalidChannelRunner(r *ChannelRunner) bool {
+	return r == nil || r.client == nil
+}
+
+func completeEmptyCollection(started time.Time) (collectutil.CollectResult, error) {
+	out, err := collectutil.CompleteFromEnvelopes(nil, started)
+	if err != nil {
+		return out, fmt.Errorf("complete from envelopes: %w", err)
+	}
+
+	return out, nil
 }
 
 func enabledChannelKinds(input *collectutil.RunInput, kinds []contract.ObservationKind) (map[contract.ObservationKind]bool, error) {
 	enabled := make(map[contract.ObservationKind]bool, len(kinds))
 	spec := input.Spec()
+
 	for _, kind := range kinds {
 		allowed, err := input.Allows(kind, spec.SubjectKey)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("allows: %w", err)
 		}
+
 		enabled[kind] = allowed
 	}
+
 	return enabled, nil
 }
 
@@ -89,15 +123,18 @@ func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
 	if err != nil {
-		return youtubejs.ChannelResult{}, "", "", err
+		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("fetch channel: %w", err)
 	}
-	if err := validateLiveIdentity(input.Spec().SubjectKey, result.LiveSessions); err != nil {
-		return youtubejs.ChannelResult{}, "", "", err
+
+	if validateErr := validateLiveIdentity(input.Spec().SubjectKey, result.LiveSessions); validateErr != nil {
+		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("validate live identity: %w", validateErr)
 	}
+
 	completeness, continuity, err := collectutil.PaginationOf(&result.Pagination)
 	if err != nil {
-		return youtubejs.ChannelResult{}, "", "", err
+		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("pagination of: %w", err)
 	}
+
 	return result, completeness, continuity, nil
 }
 
@@ -110,17 +147,21 @@ func (r *ChannelRunner) channelEnvelopes(
 ) ([]contract.Envelope, error) {
 	envelopes := make([]contract.Envelope, 0, 4)
 	if err := r.appendLiveEnvelope(input, result, enabled, completeness, continuity, &envelopes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("append live envelope: %w", err)
 	}
+
 	if err := r.appendChannelStats(input, result, enabled, completeness, continuity, &envelopes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("append channel stats: %w", err)
 	}
+
 	if err := r.appendChannelProfile(input, result, enabled, completeness, continuity, &envelopes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("append channel profile: %w", err)
 	}
+
 	if err := r.appendChannelPhoto(input, result, enabled, completeness, continuity, &envelopes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("append channel photo: %w", err)
 	}
+
 	return envelopes, nil
 }
 
@@ -135,14 +176,18 @@ func (r *ChannelRunner) appendLiveEnvelope(
 	if !enabled[contract.KindLiveSnapshot] {
 		return nil
 	}
+
 	if result.MissingTab {
 		return nil
 	}
+
 	live, err := r.envelope(input, contract.KindLiveSnapshot, completeness, continuity, liveSnapshotPayload(input.Spec().SubjectKey, result.LiveSessions))
 	if err != nil {
-		return err
+		return fmt.Errorf("envelope: %w", err)
 	}
+
 	*envelopes = append(*envelopes, live)
+
 	return nil
 }
 
@@ -155,7 +200,11 @@ func (r *ChannelRunner) appendChannelStats(
 	envelopes *[]contract.Envelope,
 ) error {
 	payload, ok := channelStatsPayload(input.Spec().SubjectKey, result.Stats)
-	return r.appendBuiltEnvelope(input, contract.KindChannelStats, enabled, completeness, continuity, payload, ok, envelopes)
+	if err := r.appendBuiltEnvelope(input, contract.KindChannelStats, enabled, completeness, continuity, payload, ok, envelopes); err != nil {
+		return fmt.Errorf("append built envelope: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ChannelRunner) appendChannelProfile(
@@ -167,7 +216,11 @@ func (r *ChannelRunner) appendChannelProfile(
 	envelopes *[]contract.Envelope,
 ) error {
 	payload, ok := channelProfilePayload(input.Spec().SubjectKey, result.Profile)
-	return r.appendBuiltEnvelope(input, contract.KindChannelProfile, enabled, completeness, continuity, payload, ok, envelopes)
+	if err := r.appendBuiltEnvelope(input, contract.KindChannelProfile, enabled, completeness, continuity, payload, ok, envelopes); err != nil {
+		return fmt.Errorf("append built envelope: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ChannelRunner) appendChannelPhoto(
@@ -179,7 +232,11 @@ func (r *ChannelRunner) appendChannelPhoto(
 	envelopes *[]contract.Envelope,
 ) error {
 	payload, ok := channelPhotoPayload(input.Spec().SubjectKey, result.Photo)
-	return r.appendBuiltEnvelope(input, contract.KindChannelPhoto, enabled, completeness, continuity, payload, ok, envelopes)
+	if err := r.appendBuiltEnvelope(input, contract.KindChannelPhoto, enabled, completeness, continuity, payload, ok, envelopes); err != nil {
+		return fmt.Errorf("append built envelope: %w", err)
+	}
+
+	return nil
 }
 
 func (r *ChannelRunner) appendBuiltEnvelope(
@@ -195,11 +252,14 @@ func (r *ChannelRunner) appendBuiltEnvelope(
 	if !ok || !enabled[kind] {
 		return nil
 	}
+
 	envelope, err := r.envelope(input, kind, completeness, continuity, payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("envelope: %w", err)
 	}
+
 	*envelopes = append(*envelopes, envelope)
+
 	return nil
 }
 
@@ -212,9 +272,11 @@ func (r *ChannelRunner) envelope(
 ) (contract.Envelope, error) {
 	generation, err := input.Generation(kind)
 	if err != nil {
-		return contract.Envelope{}, err
+		return contract.Envelope{}, fmt.Errorf("generation: %w", err)
 	}
+
 	lease := input.Lease()
+
 	envelope, err := collectutil.Envelope(
 		contract.ProviderYouTubeJS,
 		kind,
@@ -228,5 +290,6 @@ func (r *ChannelRunner) envelope(
 	if err != nil {
 		return contract.Envelope{}, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, err)
 	}
+
 	return envelope, nil
 }

@@ -14,6 +14,7 @@ func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID
 	if !c.shouldCaptureBrowserDiagnostic(ctx, channelID) {
 		return nil
 	}
+
 	snapshot := Snapshot{
 		Operation:  "browser_diagnostic",
 		ChannelID:  channelID,
@@ -26,19 +27,25 @@ func (c *Client) CaptureBrowserDiagnosticSnapshot(ctx context.Context, channelID
 	if !c.reserveSnapshotInterval(ctx, &snapshot) {
 		return nil
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("create browser diagnostic request: %w", err)
 	}
+
 	applyScraperHeaders(req, c.uaProvider.Headers(ctx))
+
 	resp, err := c.browserSnapshotFetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
 	if err != nil {
 		slog.Warn("browser diagnostic snapshot failed", "channel_id", channelID, "url", pageURL, "error", err)
-		return err
+
+		return fmt.Errorf("fetch page: %w", err)
 	}
+
 	snapshot.StatusCode = resp.StatusCode
 	snapshot.Body = resp.Body
 	c.captureSnapshotWithInterval(ctx, &snapshot, false)
+
 	return nil
 }
 
@@ -46,10 +53,13 @@ func (c *Client) shouldCaptureBrowserDiagnostic(ctx context.Context, channelID s
 	if c == nil || c.browserSnapshotFetcher == nil || c.channelHealth == nil {
 		return false
 	}
+
 	if !c.snapshotPolicy.Enabled || c.snapshotSink == nil {
 		return false
 	}
+
 	health, ok := c.channelHealth.Get(ctx, channelID, FailureSourceHTML)
+
 	return ok &&
 		health.LastFailureReason == FailureReasonParserDrift &&
 		health.ConsecutiveFailures >= browserDiagnosticMinParserDriftFailures

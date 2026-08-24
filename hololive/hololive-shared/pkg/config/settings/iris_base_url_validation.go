@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -19,15 +20,26 @@ var settingsIrisBaseURLUnvalidatedHostWarnOnce sync.Once
 
 func resolveIrisBaseURL(config *IrisConfig) (string, error) {
 	if baseURL := strings.TrimSpace(config.BaseURL); baseURL != "" {
-		return validateSettingsIrisBaseURL(baseURL, "IRIS_BASE_URL")
+		out, err := validateSettingsIrisBaseURL(baseURL, "IRIS_BASE_URL")
+		if err != nil {
+			return out, fmt.Errorf("validate settings iris base URL: %w", err)
+		}
+
+		return out, nil
 	}
-	return resolveIrisBaseURLFile(config.BaseURLFile)
+
+	out, err := resolveIrisBaseURLFile(config.BaseURLFile)
+	if err != nil {
+		return out, fmt.Errorf("resolve iris base URL file: %w", err)
+	}
+
+	return out, nil
 }
 
 func resolveIrisBaseURLFile(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "", fmt.Errorf("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
+		return "", errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
 	raw, err := os.ReadFile(path) //nolint:gosec // Runtime operator-provided Iris base URL file.
@@ -37,9 +49,15 @@ func resolveIrisBaseURLFile(path string) (string, error) {
 
 	baseURL := strings.TrimSpace(string(raw))
 	if baseURL == "" {
-		return "", fmt.Errorf("IRIS_BASE_URL_FILE is empty")
+		return "", errors.New("IRIS_BASE_URL_FILE is empty")
 	}
-	return validateSettingsIrisBaseURL(baseURL, "IRIS_BASE_URL_FILE")
+
+	out, err := validateSettingsIrisBaseURL(baseURL, "IRIS_BASE_URL_FILE")
+	if err != nil {
+		return out, fmt.Errorf("validate settings iris base URL: %w", err)
+	}
+
+	return out, nil
 }
 
 func validateSettingsIrisBaseURL(raw, source string) (string, error) {
@@ -50,27 +68,38 @@ func validateSettingsIrisBaseURL(raw, source string) (string, error) {
 
 	parsed, err := url.ParseRequestURI(baseURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse request URI: %w", err)
 	}
-	return validateParsedSettingsIrisBaseURL(baseURL, source, parsed)
+
+	out, err := validateParsedSettingsIrisBaseURL(baseURL, source, parsed)
+	if err != nil {
+		return out, fmt.Errorf("validate parsed settings iris base URL: %w", err)
+	}
+
+	return out, nil
 }
 
 func validateParsedSettingsIrisBaseURL(baseURL, source string, parsed *url.URL) (string, error) {
-	if parsed.Scheme != "https" {
+	if parsed.Scheme != schemeHTTPS {
 		return "", fmt.Errorf("%s requires https URL, got %s", source, parsed.Scheme)
 	}
+
 	if parsed.Host == "" {
 		return "", fmt.Errorf("%s URL host is empty", source)
 	}
+
 	if parsed.User != nil {
 		return "", fmt.Errorf("%s URL must not include userinfo", source)
 	}
+
 	if err := validateSettingsIrisBaseURLHost(source, parsed.Hostname()); err != nil {
-		return "", err
+		return "", fmt.Errorf("validate settings iris base URL host: %w", err)
 	}
+
 	if parsed.Path == "/" {
 		return strings.TrimSuffix(baseURL, "/"), nil
 	}
+
 	return baseURL, nil
 }
 
@@ -84,10 +113,13 @@ func validateSettingsIrisBaseURLHost(source, host string) error {
 	if _, ok := allowedHosts[normalizedHost]; ok {
 		return nil
 	}
+
 	if settingsIrisBaseURLHostAllowlistConfigured() {
 		return fmt.Errorf("%s host %q must match %s or %s", source, host, settingsIrisH3ServerNameEnv, settingsIrisBaseURLAllowedHostsEnv)
 	}
+
 	warnSettingsIrisBaseURLHostUnvalidated(source, host)
+
 	return nil
 }
 
@@ -107,6 +139,7 @@ func settingsIrisBaseURLHostAllowlistConfigured() bool {
 
 func settingsIrisAllowedBaseURLHosts() map[string]struct{} {
 	allowedHosts := make(map[string]struct{})
+
 	for _, rawHost := range append(
 		[]string{os.Getenv(settingsIrisH3ServerNameEnv)},
 		strings.Split(os.Getenv(settingsIrisBaseURLAllowedHostsEnv), ",")...,
@@ -115,8 +148,10 @@ func settingsIrisAllowedBaseURLHosts() map[string]struct{} {
 		if host == "" {
 			continue
 		}
+
 		allowedHosts[host] = struct{}{}
 	}
+
 	return allowedHosts
 }
 
@@ -125,10 +160,13 @@ func normalizeSettingsIrisBaseURLHost(raw string) string {
 	if host == "" {
 		return ""
 	}
+
 	if splitHost, _, err := net.SplitHostPort(host); err == nil {
 		host = splitHost
 	}
+
 	host = strings.TrimPrefix(strings.TrimSuffix(host, "."), "[")
 	host = strings.TrimSuffix(host, "]")
+
 	return host
 }

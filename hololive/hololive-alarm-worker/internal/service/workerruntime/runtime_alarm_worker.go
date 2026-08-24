@@ -26,16 +26,14 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-shared/pkg/panicguard"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
-
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/panicguard"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 type Scheduler interface {
@@ -43,6 +41,8 @@ type Scheduler interface {
 }
 
 type AlarmWorkerRuntime struct {
+	lifecycle.Managed
+
 	Config *settings.Config
 	Logger *slog.Logger
 
@@ -59,7 +59,6 @@ type AlarmWorkerRuntime struct {
 	schedulerMu     sync.Mutex
 	schedulerCancel context.CancelFunc
 	schedulerDone   chan struct{}
-	lifecycle.Managed
 }
 
 type NamedScheduler struct {
@@ -93,7 +92,12 @@ func (r notificationEgressRunner) Start(ctx context.Context) error {
 	if len(runners) == 0 {
 		return nil
 	}
-	return r.startRunners(ctx, runners)
+
+	if err := r.startRunners(ctx, runners); err != nil {
+		return fmt.Errorf("start runners: %w", err)
+	}
+
+	return nil
 }
 
 func activeNamedSchedulers(runners []NamedScheduler) []NamedScheduler {
@@ -103,6 +107,7 @@ func activeNamedSchedulers(runners []NamedScheduler) []NamedScheduler {
 			active = append(active, runner)
 		}
 	}
+
 	return active
 }
 
@@ -110,10 +115,16 @@ func (r youtubeOutboxDispatcherRunner) Start(ctx context.Context) error {
 	if r.dispatcher == nil {
 		return nil
 	}
+
 	if r.logger != nil {
 		r.logger.Info("YouTube outbox dispatcher started by alarm-worker")
 	}
-	return r.dispatcher.Run(ctx)
+
+	if err := r.dispatcher.Run(ctx); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
+	return nil
 }
 
 func (r notificationEgressRunner) startRunners(ctx context.Context, runners []NamedScheduler) error {
@@ -122,6 +133,7 @@ func (r notificationEgressRunner) startRunners(ctx context.Context, runners []Na
 		for _, runner := range runners {
 			names = append(names, runner.Name)
 		}
+
 		r.logger.Info("Notification egress owned by this alarm-worker instance",
 			slog.String("event", "notification_egress_started"),
 			slog.Any("runners", names),
@@ -129,29 +141,39 @@ func (r notificationEgressRunner) startRunners(ctx context.Context, runners []Na
 	}
 
 	runnerErrCh := r.startRunnerGroup(ctx, runners)
-	return r.handleRunnerGroupResult(<-runnerErrCh)
+
+	if err := r.handleRunnerGroupResult(<-runnerErrCh); err != nil {
+		return fmt.Errorf("handle runner group result: %w", err)
+	}
+
+	return nil
 }
 
 func (r notificationEgressRunner) handleRunnerGroupResult(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return fmt.Errorf("notification egress runner stopped: %w", err)
 }
 
 func (r notificationEgressRunner) startRunnerGroup(ctx context.Context, runners []NamedScheduler) <-chan error {
 	ch := make(chan error, 1)
+
 	panicguard.Go(r.logger, "notification-egress-runner-group", func() {
 		ch <- panicguard.RunE(r.logger, "notification-egress-runner-group", func() error {
 			eg, egCtx := errgroup.WithContext(ctx)
+
 			for _, runner := range runners {
 				panicguard.GoE(eg, r.logger, "notification-egress-"+runner.Name, func() error {
 					return runner.Scheduler.Start(egCtx)
 				})
 			}
+
 			return eg.Wait()
 		})
 	})
+
 	return ch
 }
 
@@ -161,10 +183,13 @@ func (r *AlarmWorkerRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) 
 	}
 
 	r.schedulerMu.Lock()
+
 	if r.schedulerDone == nil {
 		r.schedulerDone = make(chan struct{})
 	}
+
 	prevCancel := r.schedulerCancel
+
 	r.schedulerCancel = cancel
 	r.schedulerMu.Unlock()
 
@@ -175,12 +200,15 @@ func (r *AlarmWorkerRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) 
 
 func (r *AlarmWorkerRuntime) clearAlarmSchedulerCancel() bool {
 	r.schedulerMu.Lock()
+
 	cancel := r.schedulerCancel
+
 	r.schedulerCancel = nil
 	r.schedulerMu.Unlock()
 
 	if cancel != nil {
 		cancel()
+
 		return true
 	}
 
@@ -189,14 +217,17 @@ func (r *AlarmWorkerRuntime) clearAlarmSchedulerCancel() bool {
 
 func (r *AlarmWorkerRuntime) beginAlarmScheduler() {
 	r.schedulerMu.Lock()
+
 	r.schedulerDone = make(chan struct{})
 	r.schedulerMu.Unlock()
 }
 
 func (r *AlarmWorkerRuntime) alarmSchedulerDone() chan struct{} {
 	r.schedulerMu.Lock()
+
 	done := r.schedulerDone
 	r.schedulerMu.Unlock()
+
 	return done
 }
 

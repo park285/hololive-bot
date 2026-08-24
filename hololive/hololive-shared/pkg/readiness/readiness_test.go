@@ -33,10 +33,12 @@ func TestNewProbeFiltersAndNormalizesChecks(t *testing.T) {
 	if probe.Name() != "bot" {
 		t.Fatalf("Name() = %q, want %q", probe.Name(), "bot")
 	}
+
 	ready, groups := probe.Evaluate(t.Context())
 	if !ready {
-		t.Fatalf("Evaluate ready = false, want true")
+		t.Fatal("Evaluate ready = false, want true")
 	}
+
 	if got := groups[GroupDependencies]; len(got) != 1 || !got["postgres"] {
 		t.Fatalf("dependencies = %v, want only trimmed postgres", got)
 	}
@@ -48,8 +50,9 @@ func TestEvaluateSeedsDependenciesWhenEmpty(t *testing.T) {
 	ready, groups := NewProbe("bot").Evaluate(t.Context())
 
 	if !ready {
-		t.Fatalf("Evaluate ready = false, want true")
+		t.Fatal("Evaluate ready = false, want true")
 	}
+
 	deps, ok := groups[GroupDependencies]
 	if !ok || len(deps) != 0 {
 		t.Fatalf("dependencies group = %v (present=%v), want present and empty", deps, ok)
@@ -65,13 +68,15 @@ func TestEvaluateFailingCheckNotReady(t *testing.T) {
 	).Evaluate(t.Context())
 
 	if ready {
-		t.Fatalf("Evaluate ready = true, want false")
+		t.Fatal("Evaluate ready = true, want false")
 	}
+
 	if !groups[GroupDependencies]["postgres"] {
-		t.Fatalf("postgres = false, want true")
+		t.Fatal("postgres = false, want true")
 	}
+
 	if groups[GroupDependencies]["valkey"] {
-		t.Fatalf("valkey = true, want false")
+		t.Fatal("valkey = true, want false")
 	}
 }
 
@@ -82,9 +87,11 @@ func TestEvaluateHangingCheckBoundedByTimeout(t *testing.T) {
 		Name: "postgres",
 		Probe: func(ctx context.Context) error {
 			<-ctx.Done()
+
 			return ctx.Err()
 		},
 	})
+
 	probe.timeout = 50 * time.Millisecond
 
 	start := time.Now()
@@ -94,8 +101,9 @@ func TestEvaluateHangingCheckBoundedByTimeout(t *testing.T) {
 	if elapsed > time.Second {
 		t.Fatalf("Evaluate did not bound a hanging probe: elapsed %v", elapsed)
 	}
+
 	if ready {
-		t.Fatalf("Evaluate ready = true, want false")
+		t.Fatal("Evaluate ready = true, want false")
 	}
 }
 
@@ -106,13 +114,16 @@ func TestDependencyChecksNilClientsFailClosed(t *testing.T) {
 	if postgres.Group != GroupDependencies {
 		t.Fatalf("PostgresCheck group = %q, want %q", postgres.Group, GroupDependencies)
 	}
+
 	if err := postgres.Probe(t.Context()); err == nil {
 		t.Fatal("PostgresCheck(nil) probe error = nil, want non-nil")
 	}
+
 	valkey := ValkeyCheck(nil)
 	if valkey.Group != GroupDependencies {
 		t.Fatalf("ValkeyCheck group = %q, want %q", valkey.Group, GroupDependencies)
 	}
+
 	if err := valkey.Probe(t.Context()); err == nil {
 		t.Fatal("ValkeyCheck(nil) probe error = nil, want non-nil")
 	}
@@ -124,6 +135,7 @@ func TestHTTPStatus(t *testing.T) {
 	if code, status := HTTPStatus(true); code != http.StatusOK || status != "ready" {
 		t.Fatalf("HTTPStatus(true) = (%d, %q), want (%d, ready)", code, status, http.StatusOK)
 	}
+
 	if code, status := HTTPStatus(false); code != http.StatusServiceUnavailable || status != "not_ready" {
 		t.Fatalf("HTTPStatus(false) = (%d, %q), want (%d, not_ready)", code, status, http.StatusServiceUnavailable)
 	}
@@ -138,6 +150,7 @@ func TestBasePayloadCarriesHealthFields(t *testing.T) {
 	if len(payload) != 4 {
 		t.Fatalf("payload keys = %d, want 4: %v", len(payload), payload)
 	}
+
 	if payload["status"] != "ready" || payload["version"] != "v1" || payload["uptime"] != "1s" || payload["goroutines"] != 7 {
 		t.Fatalf("payload = %v, want status/version/uptime/goroutines", payload)
 	}
@@ -148,17 +161,22 @@ func TestRequestContextPrefersRequestThenFallback(t *testing.T) {
 
 	fallback := t.Context()
 	if got := RequestContext(fallback, nil); got != fallback {
-		t.Fatalf("RequestContext(fallback, nil) did not return fallback")
+		t.Fatal("RequestContext(fallback, nil) did not return fallback")
 	}
+
 	var nilFallback context.Context
+
 	if got := RequestContext(nilFallback, nil); got == nil {
-		t.Fatalf("RequestContext(nil, nil) = nil, want background")
+		t.Fatal("RequestContext(nil, nil) = nil, want background")
 	}
 
 	gin.SetMode(gin.ReleaseMode)
+
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
 	ginCtx.Request = httptest.NewRequestWithContext(fallback, http.MethodGet, "/ready", http.NoBody)
-	if got := RequestContext(context.Background(), ginCtx); got != ginCtx.Request.Context() {
-		t.Fatalf("RequestContext did not prefer request context")
+
+	if got := RequestContext(t.Context(), ginCtx); got != ginCtx.Request.Context() {
+		t.Fatal("RequestContext did not prefer request context")
 	}
 }

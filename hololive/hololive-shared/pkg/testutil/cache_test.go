@@ -21,7 +21,6 @@
 package testutil
 
 import (
-	"context"
 	"testing"
 	"time"
 )
@@ -31,12 +30,13 @@ type wrapperCachePayload struct {
 }
 
 func TestNewTestCacheServiceWithMini(t *testing.T) {
-	ctx := context.Background()
-	service, mini := NewTestCacheServiceWithMini(t, ctx)
+	ctx := t.Context()
+	service, mini := NewTestCacheServiceWithMini(ctx, t)
 
 	if service == nil {
 		t.Fatal("service is nil")
 	}
+
 	if mini == nil {
 		t.Fatal("miniredis is nil")
 	}
@@ -47,17 +47,20 @@ func TestNewTestCacheServiceWithMini(t *testing.T) {
 	}
 
 	var out wrapperCachePayload
+
 	if err := service.Get(ctx, "wrapper:test:key", &out); err != nil {
 		t.Fatalf("get: %v", err)
 	}
+
 	if out.Value != in.Value {
 		t.Fatalf("value mismatch: got %q want %q", out.Value, in.Value)
 	}
 }
 
 func TestNewTestCacheService(t *testing.T) {
-	ctx := context.Background()
-	service := NewTestCacheService(t, ctx)
+	ctx := t.Context()
+	service := NewTestCacheService(ctx, t)
+
 	if service == nil {
 		t.Fatal("service is nil")
 	}

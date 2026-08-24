@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (as *AlarmService) ListRoomAlarmsView(ctx context.Context, roomID string) ([]domain.AlarmListView, error) {
@@ -76,5 +77,10 @@ func buildAlarmListViews(
 }
 
 func (as *AlarmService) getMemberNamesBatch(ctx context.Context, channelIDs []string) (map[string]string, error) {
-	return as.cacheState.GetMemberNamesBatch(ctx, channelIDs)
+	out, err := as.cacheState.GetMemberNamesBatch(ctx, channelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get member names batch: %w", err)
+	}
+
+	return out, nil
 }

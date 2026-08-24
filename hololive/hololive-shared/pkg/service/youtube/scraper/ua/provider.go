@@ -45,9 +45,9 @@ type Provider interface {
 type Strategy int
 
 const (
-	// StrategyPerRequest: 매 요청마다 새 UA 생성 (비권장: 비정상 패턴으로 탐지될 수 있음)
+	// StrategyPerRequest: 매 요청마다 새 UA 생성 (비권장: 비정상 패턴으로 탐지될 수 있음).
 	StrategyPerRequest Strategy = iota
-	// StrategySessionTTL: 세션 단위로 UA 유지 후 TTL 만료 시 회전 (권장)
+	// StrategySessionTTL: 세션 단위로 UA 유지 후 TTL 만료 시 회전 (권장).
 	StrategySessionTTL
 )
 
@@ -67,6 +67,7 @@ func NewRotatingProvider(strategy Strategy, ttl time.Duration) *RotatingProvider
 	if ttl <= 0 {
 		ttl = 45 * time.Minute
 	}
+
 	return &RotatingProvider{
 		r:        newRand(),
 		strategy: strategy,
@@ -88,8 +89,10 @@ func (p *RotatingProvider) Headers(_ context.Context) HeaderSnapshot {
 		p.cachedSnapshot = p.generate()
 		// TTL에 지터 적용 (80%~120%)하여 회전 패턴 고정 방지
 		jitter := time.Duration(float64(p.ttl) * (0.8 + 0.4*p.r.Float64()))
+
 		p.expires = now.Add(jitter)
 	}
+
 	return p.cachedSnapshot
 }
 
@@ -99,19 +102,23 @@ type weighted[T any] struct {
 	w int
 }
 
-// pickWeighted: 가중치 기반 랜덤 선택
+// pickWeighted: 가중치 기반 랜덤 선택.
 func pickWeighted[T any](r *rand.Rand, items []weighted[T]) T {
 	total := 0
+
 	for _, it := range items {
 		total += it.w
 	}
+
 	n := r.Intn(total)
+
 	for _, it := range items {
 		n -= it.w
 		if n < 0 {
 			return it.v
 		}
 	}
+
 	return items[len(items)-1].v
 }
 
@@ -139,7 +146,7 @@ const (
 
 type snapshotGenerator func(*RotatingProvider, os) HeaderSnapshot
 
-// GREASE 브랜드 후보 (Chromium GREASE 사양)
+// GREASE 브랜드 후보 (Chromium GREASE 사양).
 var greaseBrands = []string{
 	"Not(A:Brand",
 	"Not A;Brand",
@@ -195,26 +202,29 @@ const (
 func (p *RotatingProvider) generate() HeaderSnapshot {
 	b := p.pickBrowser()
 	generator := snapshotGenerators[b]
+
 	if generator == nil {
 		generator = (*RotatingProvider).genChromeSnapshot
 	}
+
 	return generator(p, p.pickOS(b))
 }
 
-// pickBrowser: 대략적인 데스크톱 브라우저 점유율 기반 가중치로 선택
+// pickBrowser: 대략적인 데스크톱 브라우저 점유율 기반 가중치로 선택.
 func (p *RotatingProvider) pickBrowser() browser {
 	return pickWeighted(p.r, browserWeights)
 }
 
-// pickOS: 브라우저별 지원 OS 분포 기반 가중치로 선택
+// pickOS: 브라우저별 지원 OS 분포 기반 가중치로 선택.
 func (p *RotatingProvider) pickOS(b browser) os {
 	if b == brSafari {
 		return pickWeighted(p.r, safariOSWeights)
 	}
+
 	return pickWeighted(p.r, desktopOSWeights)
 }
 
-// genChromeSnapshot: Chrome HeaderSnapshot 생성 (UA Reduction + Client Hints)
+// genChromeSnapshot: Chrome HeaderSnapshot 생성 (UA Reduction + Client Hints).
 func (p *RotatingProvider) genChromeSnapshot(o os) HeaderSnapshot {
 	major := randInt(p.r, 141, 145)
 	// Chrome 107+ UA Reduction: build/patch=0 고정
@@ -234,7 +244,7 @@ func (p *RotatingProvider) genChromeSnapshot(o os) HeaderSnapshot {
 	}
 }
 
-// genEdgeSnapshot: Edge HeaderSnapshot 생성 (UA Reduction + Client Hints)
+// genEdgeSnapshot: Edge HeaderSnapshot 생성 (UA Reduction + Client Hints).
 func (p *RotatingProvider) genEdgeSnapshot(o os) HeaderSnapshot {
 	major := randInt(p.r, 141, 145)
 	// Edge도 UA Reduction 적용: build/patch=0 고정
@@ -254,9 +264,10 @@ func (p *RotatingProvider) genEdgeSnapshot(o os) HeaderSnapshot {
 	}
 }
 
-// genFirefoxSnapshot: Firefox HeaderSnapshot 생성 (Client Hints 미지원)
+// genFirefoxSnapshot: Firefox HeaderSnapshot 생성 (Client Hints 미지원).
 func genFirefoxSnapshot(r *rand.Rand, o os) HeaderSnapshot {
 	major := randInt(r, 132, 135)
+
 	return HeaderSnapshot{
 		UserAgent: fmt.Sprintf(
 			"Mozilla/5.0 (%s; rv:%d.0) Gecko/20100101 Firefox/%d.0",
@@ -266,9 +277,10 @@ func genFirefoxSnapshot(r *rand.Rand, o os) HeaderSnapshot {
 	}
 }
 
-// genSafariSnapshot: Safari HeaderSnapshot 생성 (Client Hints 미지원)
+// genSafariSnapshot: Safari HeaderSnapshot 생성 (Client Hints 미지원).
 func genSafariSnapshot(r *rand.Rand, o os) HeaderSnapshot {
 	ver := randInt(r, 17, 18)
+
 	return HeaderSnapshot{
 		UserAgent: fmt.Sprintf(
 			"Mozilla/5.0 (%s) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/%d.0 Safari/605.1.15",
@@ -286,15 +298,16 @@ func genSafariSnapshotFromProvider(p *RotatingProvider, o os) HeaderSnapshot {
 	return genSafariSnapshot(p.r, o)
 }
 
-// osToken: OS 토큰 문자열 반환
+// osToken: OS 토큰 문자열 반환.
 func osToken(o os) string {
 	if token, ok := osTokens[o]; ok {
 		return token
 	}
+
 	return osTokens[osWin10]
 }
 
-// osPlatform: Sec-CH-UA-Platform 값 반환
+// osPlatform: Sec-CH-UA-Platform 값 반환.
 func osPlatform(o os) string {
 	switch o {
 	case osWin10, osWin11:
@@ -306,11 +319,12 @@ func osPlatform(o os) string {
 	}
 }
 
-// randInt: minVal~maxVal 범위의 랜덤 정수 반환
+// randInt: minVal~maxVal 범위의 랜덤 정수 반환.
 func randInt(r *rand.Rand, minVal, maxVal int) int {
 	if maxVal <= minVal {
 		return minVal
 	}
+
 	return minVal + r.Intn(maxVal-minVal+1)
 }
 
@@ -319,10 +333,13 @@ func randInt(r *rand.Rand, minVal, maxVal int) int {
 //nolint:gosec // UA 회전용 비보안 난수로, 보안 경계(토큰/암호화)에 사용되지 않음.
 func newRand() *rand.Rand {
 	var b [8]byte
+
 	if _, err := crand.Read(b[:]); err != nil {
 		return rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
+
 	seed := int64(binary.LittleEndian.Uint64(b[:]))
+
 	return rand.New(rand.NewSource(seed))
 }
 

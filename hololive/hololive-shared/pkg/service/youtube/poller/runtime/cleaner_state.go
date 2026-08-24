@@ -21,6 +21,7 @@
 package polling
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -48,15 +49,19 @@ func (s viewerSampleCleanupStep) validate() error {
 	if s.candidateCount < 0 || s.candidateCount > viewerSampleCleanupSessionPageSize {
 		return fmt.Errorf("viewer sample candidate count is out of range: %d", s.candidateCount)
 	}
+
 	if (s.candidateCount == 0) != (s.pageEnd == nil) {
 		return fmt.Errorf("viewer sample page end does not match candidate count: %d", s.candidateCount)
 	}
+
 	if s.target == nil && s.deleted != 0 {
 		return fmt.Errorf("viewer sample cleanup deleted %d rows without a target session", s.deleted)
 	}
+
 	if s.target != nil && s.deleted <= 0 {
 		return fmt.Errorf("viewer sample cleanup target %q produced no deleted rows", s.target.videoID)
 	}
+
 	return nil
 }
 
@@ -65,11 +70,13 @@ func (s viewerSampleCleanupStep) nextCursor() (viewerSampleCleanupCursor, bool, 
 		next := *s.target
 		return next, false, nil
 	}
+
 	if s.candidateCount < viewerSampleCleanupSessionPageSize {
 		return viewerSampleCleanupCursor{}, true, nil
 	}
+
 	if s.pageEnd == nil {
-		return viewerSampleCleanupCursor{}, false, fmt.Errorf("full candidate page has no page-end cursor")
+		return viewerSampleCleanupCursor{}, false, errors.New("full candidate page has no page-end cursor")
 	}
 
 	return *s.pageEnd, false, nil
@@ -78,14 +85,16 @@ func (s viewerSampleCleanupStep) nextCursor() (viewerSampleCleanupCursor, bool, 
 func viewerSampleCleanupCursorFromPG(
 	endedAt pgtype.Timestamptz,
 	videoID pgtype.Text,
-) (*viewerSampleCleanupCursor, error) {
+) (viewerSampleCleanupCursor, bool, error) {
 	if endedAt.Valid != videoID.Valid {
-		return nil, fmt.Errorf("cursor fields have mismatched nullability")
+		return viewerSampleCleanupCursor{}, false, errors.New("cursor fields have mismatched nullability")
 	}
+
 	if !endedAt.Valid {
-		return nil, nil
+		return viewerSampleCleanupCursor{}, false, nil
 	}
-	return &viewerSampleCleanupCursor{endedAt: endedAt.Time.UTC(), videoID: videoID.String}, nil
+
+	return viewerSampleCleanupCursor{endedAt: endedAt.Time.UTC(), videoID: videoID.String}, true, nil
 }
 
 func initialViewerSampleCleanupCursor() viewerSampleCleanupCursor {

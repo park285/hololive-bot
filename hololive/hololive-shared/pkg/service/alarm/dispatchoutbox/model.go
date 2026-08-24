@@ -18,7 +18,7 @@ const (
 	StatusSent        Status = "sent"
 	StatusDLQ         Status = "dlq"
 	StatusQuarantined Status = "quarantined"
-	StatusCancelled   Status = "cancelled"
+	StatusCancelled   Status = "cancelled" //nolint:misspell // dispatch_delivery.status에 저장되는 실제 값이라, canceled로 바꾸면 기존 행과 상태 비교가 어긋난다.
 )
 
 type InsertResult string
@@ -122,18 +122,34 @@ type Writer interface {
 	InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error)
 }
 
-type Repository interface {
-	Writer
+type LeaseManager interface {
 	ClaimDue(ctx context.Context, workerID string, limit int, lease time.Duration) ([]*Record, error)
+	ReleaseLeased(ctx context.Context, ids []int64, workerID string) error
+	RecoverExpiredLeased(ctx context.Context, limit int) (int, error)
+}
+
+type EventLoader interface {
 	LoadEventsByID(ctx context.Context, eventIDs []int64) (map[int64]EventRecord, error)
+}
+
+type DeliveryProgressWriter interface {
 	MarkSending(ctx context.Context, ids []int64, workerID string, extendLease time.Duration) error
 	MarkSent(ctx context.Context, ids []int64, workerID string) error
 	RouteFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
 	RouteSendingFailures(ctx context.Context, updates []FailureUpdate, workerID string) error
 	RequeuePreSend(ctx context.Context, updates []FailureUpdate, workerID string) error
+}
+
+type TerminalWriter interface {
 	MoveToDLQ(ctx context.Context, updates []TerminalUpdate, workerID string) error
 	Quarantine(ctx context.Context, updates []TerminalUpdate, workerID string) error
-	ReleaseLeased(ctx context.Context, ids []int64, workerID string) error
-	RecoverExpiredLeased(ctx context.Context, limit int) (int, error)
 	QuarantineStaleSending(ctx context.Context, olderThan time.Duration, limit int) (int, error)
+}
+
+type Repository interface {
+	Writer
+	LeaseManager
+	EventLoader
+	DeliveryProgressWriter
+	TerminalWriter
 }

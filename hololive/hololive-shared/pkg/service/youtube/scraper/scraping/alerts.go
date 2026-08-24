@@ -41,9 +41,11 @@ func checkAlerts(data *gjson.Result) error {
 	if selected.text == "" {
 		selected.text = "unknown channel alert"
 	}
+
 	if selected.notFound {
 		return fmt.Errorf("%w: %s", ErrChannelNotFound, selected.text)
 	}
+
 	return fmt.Errorf("%w: %s", ErrChannelUnavailable, selected.text)
 }
 
@@ -55,10 +57,12 @@ type selectedAlertError struct {
 
 func selectAlertError(alerts *gjson.Result) selectedAlertError {
 	selected := selectedAlertError{}
+
 	alerts.ForEach(func(_, alert gjson.Result) bool {
 		selected = selectAlertCandidate(selected, &alert)
 		return !selected.notFound
 	})
+
 	return selected
 }
 
@@ -68,10 +72,13 @@ func selectAlertCandidate(selected selectedAlertError, alert *gjson.Result) sele
 	}
 
 	alertText := extractAlertText(alert)
+
 	selected.found = true
+
 	if selected.text == "" {
 		selected.text = alertText
 	}
+
 	return selectNotFoundAlertText(selected, alertText)
 }
 
@@ -81,14 +88,17 @@ func selectNotFoundAlertText(selected selectedAlertError, alertText string) sele
 	}
 
 	selected.notFound = true
+
 	if alertText != "" {
 		selected.text = alertText
 	}
+
 	return selected
 }
 
 func alertTextMeansNotFound(alertText string) bool {
 	lowerText := strings.ToLower(alertText)
+
 	return strings.Contains(lowerText, "does not exist") ||
 		strings.Contains(lowerText, "doesn't exist") ||
 		strings.Contains(lowerText, "been terminated")
@@ -101,11 +111,13 @@ func extractAlertText(alert *gjson.Result) string {
 	}
 
 	var parts []string
+
 	alert.Get("alertRenderer.text.runs").ForEach(func(_, run gjson.Result) bool {
 		text := strings.TrimSpace(run.Get("text").String())
 		if text != "" {
 			parts = append(parts, text)
 		}
+
 		return true
 	})
 

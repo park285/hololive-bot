@@ -70,7 +70,7 @@ func TestCompareAndExpire(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service, mini := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			if tt.setup != nil {
 				tt.setup(service, ctx)
@@ -80,15 +80,18 @@ func TestCompareAndExpire(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CompareAndExpire() error = %v", err)
 			}
+
 			if got != tt.wantResult {
 				t.Fatalf("CompareAndExpire() = %v, want %v", got, tt.wantResult)
 			}
 
 			mini.FastForward(2 * time.Second)
+
 			exists, err := service.Exists(ctx, tt.key)
 			if err != nil {
 				t.Fatalf("Exists() error = %v", err)
 			}
+
 			if exists != tt.wantExists {
 				t.Fatalf("Exists() = %v, want %v", exists, tt.wantExists)
 			}
@@ -98,16 +101,16 @@ func TestCompareAndExpire(t *testing.T) {
 
 func TestCompareAndExpireInvalidTTL(t *testing.T) {
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if _, err := service.CompareAndExpire(ctx, "k", "v", 0); err == nil {
-		t.Fatalf("expected error for zero ttl")
+		t.Fatal("expected error for zero ttl")
 	}
 }
 
 func TestCompareAndExpireCeilSeconds(t *testing.T) {
 	service, mini := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := service.GetClient().Do(ctx, service.B().Set().Key("cas-expire:ceil").Value("owner").Build()).Error(); err != nil {
 		t.Fatalf("set key: %v", err)
@@ -117,25 +120,30 @@ func TestCompareAndExpireCeilSeconds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompareAndExpire() error = %v", err)
 	}
+
 	if !ok {
-		t.Fatalf("CompareAndExpire() = false, want true")
+		t.Fatal("CompareAndExpire() = false, want true")
 	}
 
 	mini.FastForward(1400 * time.Millisecond)
+
 	exists, err := service.Exists(ctx, "cas-expire:ceil")
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
+
 	if !exists {
-		t.Fatalf("key expired too early; ttl should be ceil-rounded")
+		t.Fatal("key expired too early; ttl should be ceil-rounded")
 	}
 
 	mini.FastForward(700 * time.Millisecond)
+
 	exists, err = service.Exists(ctx, "cas-expire:ceil")
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
+
 	if exists {
-		t.Fatalf("key should be expired after rounded ttl elapsed")
+		t.Fatal("key should be expired after rounded ttl elapsed")
 	}
 }

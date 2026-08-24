@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 )
 
@@ -15,5 +14,6 @@ func InitInfraResources(ctx context.Context, appConfig *settings.Config, logger 
 	if err != nil {
 		return nil, fmt.Errorf("provide infra resources: %w", err)
 	}
+
 	return module, nil
 }

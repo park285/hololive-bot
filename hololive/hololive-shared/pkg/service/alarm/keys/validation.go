@@ -19,6 +19,7 @@ func ValidateChannelContentAlarmTargetDefinitions(definitions []ChannelContentAl
 
 	for idx, definition := range definitions {
 		definitionMissing, definitionDuplicates := validateChannelContentAlarmTargetDefinition(idx, definition, seenTargets)
+
 		missing = append(missing, definitionMissing...)
 		duplicates = append(duplicates, definitionDuplicates...)
 	}
@@ -31,9 +32,11 @@ func ValidateChannelContentAlarmTargetDefinitions(definitions []ChannelContentAl
 	sort.Strings(duplicates)
 
 	issues := make([]string, 0, 2)
+
 	if len(missing) > 0 {
 		issues = append(issues, "missing operating channel targets for "+strings.Join(missing, ", "))
 	}
+
 	if len(duplicates) > 0 {
 		issues = append(issues, "duplicate deployment targets: "+strings.Join(duplicates, "; "))
 	}
@@ -44,6 +47,7 @@ func ValidateChannelContentAlarmTargetDefinitions(definitions []ChannelContentAl
 func validateChannelContentAlarmTargetDefinition(idx int, definition ChannelContentAlarmTargetDefinition, seenTargets map[string]string) (validationErrors, warnings []string) {
 	ownerLabel := normalizedTargetDefinitionOwner(definition.OwnerLabel, idx)
 	channelID := strings.TrimSpace(definition.ChannelID)
+
 	if channelID == "" {
 		return []string{ownerLabel}, nil
 	}
@@ -71,12 +75,14 @@ func validateChannelContentAlarmTargetDefinition(idx int, definition ChannelCont
 			duplicates = append(duplicates, fmt.Sprintf("%s duplicates %s (%s)", targetOwner, previousLabel, entry.key))
 			continue
 		}
+
 		seenWithinDefinition[entry.key] = targetOwner
 
 		if previousOwner, exists := seenTargets[entry.key]; exists {
 			duplicates = append(duplicates, fmt.Sprintf("%s duplicates %s (%s)", targetOwner, previousOwner, entry.key))
 			continue
 		}
+
 		seenTargets[entry.key] = targetOwner
 	}
 
@@ -88,5 +94,6 @@ func normalizedTargetDefinitionOwner(ownerLabel string, idx int) string {
 	if trimmed != "" {
 		return trimmed
 	}
+
 	return fmt.Sprintf("definition[%d]", idx+1)
 }

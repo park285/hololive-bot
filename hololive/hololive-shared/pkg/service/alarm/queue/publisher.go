@@ -22,6 +22,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -33,9 +34,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-const AlarmDispatchWakeupQueue = "alarm:dispatch:wakeup"
-const alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
-const defaultPublishBatchDeliveryLimit = 1000
+const (
+	AlarmDispatchWakeupQueue         = "alarm:dispatch:wakeup"
+	alarmDispatchWakeupGuardKey      = "alarm:dispatch:wakeup:guard"
+	defaultPublishBatchDeliveryLimit = 1000
+)
 
 type PublishConfig struct {
 	WakeupEnabled         bool
@@ -76,6 +79,7 @@ func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) 
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	initQueueMetrics()
 
 	publisher := &Publisher{
@@ -87,73 +91,116 @@ func NewPublisher(c cache.Client, logger *slog.Logger, opts ...PublisherOption) 
 		logger: logger,
 		now:    time.Now,
 	}
+
 	for _, opt := range opts {
 		opt(publisher)
 	}
+
 	if publisher.publishConfig.MaxDeliveriesPerBatch <= 0 {
 		publisher.publishConfig.MaxDeliveriesPerBatch = defaultPublishBatchDeliveryLimit
 	}
+
 	return publisher
 }
 
 func (p *Publisher) Publish(ctx context.Context, notification *domain.AlarmNotification, claimKeys []string) (dispatchoutbox.PublishBatchResult, error) {
-	return p.PublishBatch(ctx, []*domain.AlarmNotification{notification}, [][]string{claimKeys})
+	out, err := p.PublishBatch(ctx, []*domain.AlarmNotification{notification}, [][]string{claimKeys})
+	if err != nil {
+		return out, fmt.Errorf("publish batch: %w", err)
+	}
+
+	return out, nil
 }
 
 func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.AlarmNotification, claimKeys [][]string) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
+
 	if len(notifications) == 0 {
 		return dispatchoutbox.PublishBatchResult{}, nil
 	}
+
 	if len(claimKeys) > 0 && len(claimKeys) != len(notifications) {
 		return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm queue batch: claim key count %d does not match notification count %d", len(claimKeys), len(notifications))
 	}
+
 	envelopes, err := p.buildPublishBatchEnvelopes(notifications, claimKeys)
 	if err != nil {
-		return dispatchoutbox.PublishBatchResult{}, err
+		return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("build publish batch envelopes: %w", err)
 	}
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
+
 	defer func() {
 		observeAlarmDispatchPublishBatch(time.Since(startedAt), &result)
 	}()
 
 	result, err = p.publishEnvelopes(ctx, envelopes)
-	return result, err
+	if err != nil {
+		return result, fmt.Errorf("publish envelopes: %w", err)
+	}
+
+	return result, nil
 }
 
 func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
-	return p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusPending)
+	out, err := p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusPending)
+	if err != nil {
+		return out, fmt.Errorf("publish dispatch batch: %w", err)
+	}
+
+	return out, nil
 }
 
 func (p *Publisher) PublishShadowDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
-	return p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusShadowed)
+	out, err := p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusShadowed)
+	if err != nil {
+		return out, fmt.Errorf("publish dispatch batch: %w", err)
+	}
+
+	return out, nil
 }
 
 func (p *Publisher) publishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
+
 	if len(envelopes) == 0 {
 		return dispatchoutbox.PublishBatchResult{}, nil
 	}
-	for i := range envelopes {
-		if err := envelopes[i].ValidateCanonicalDispatch(); err != nil {
-			return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("publish alarm dispatch batch: validate envelope %d: %w", i, err)
-		}
-		if strings.TrimSpace(envelopes[i].EnqueuedAt) == "" {
-			envelopes[i].EnqueuedAt = p.now().UTC().Format(time.RFC3339)
-		}
-		if envelopes[i].Version == 0 {
-			envelopes[i].Version = contractsalarm.QueueEnvelopeVersionV1
-		}
+
+	if err := p.prepareDispatchEnvelopes(envelopes); err != nil {
+		return dispatchoutbox.PublishBatchResult{}, fmt.Errorf("prepare dispatch envelopes: %w", err)
 	}
 
 	result := dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}
+
 	defer func() {
 		observeAlarmDispatchPublishBatch(time.Since(startedAt), &result)
 	}()
 
 	result, err := p.publishEnvelopesWithStatus(ctx, envelopes, status)
-	return result, err
+	if err != nil {
+		return result, fmt.Errorf("publish envelopes with status: %w", err)
+	}
+
+	return result, nil
+}
+
+func (p *Publisher) prepareDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) error {
+	for i := range envelopes {
+		if err := envelopes[i].ValidateCanonicalDispatch(); err != nil {
+			return fmt.Errorf("publish alarm dispatch batch: validate envelope %d: %w", i, err)
+		}
+
+		if strings.TrimSpace(envelopes[i].EnqueuedAt) == "" {
+			envelopes[i].EnqueuedAt = p.now().UTC().Format(time.RFC3339)
+		}
+
+		if envelopes[i].Version == 0 {
+			envelopes[i].Version = contractsalarm.QueueEnvelopeVersionV1
+		}
+	}
+
+	return nil
 }
 
 func (p *Publisher) buildPublishBatchEnvelopes(
@@ -164,10 +211,12 @@ func (p *Publisher) buildPublishBatchEnvelopes(
 	for i, notification := range notifications {
 		envelope, err := p.buildPublishBatchEnvelope(i, notification, claimKeys)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("build publish batch envelope: %w", err)
 		}
+
 		envelopes = append(envelopes, envelope)
 	}
+
 	return envelopes, nil
 }
 
@@ -179,12 +228,15 @@ func (p *Publisher) buildPublishBatchEnvelope(
 	if notification == nil {
 		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: notification %d is nil", index)
 	}
+
 	if err := notification.ValidateLiveDispatchRoute(); err != nil {
 		return domain.AlarmQueueEnvelope{}, fmt.Errorf("publish alarm queue batch: validate live dispatch route: %w", err)
 	}
+
 	if len(claimKeys) == 0 {
 		return p.buildEnvelope(notification, nil), nil
 	}
+
 	return p.buildEnvelope(notification, claimKeys[index]), nil
 }
 
@@ -192,36 +244,51 @@ func (p *Publisher) publishEnvelopes(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
-	return p.publishEnvelopesWithStatus(ctx, envelopes, dispatchoutbox.StatusPending)
+	out, err := p.publishEnvelopesWithStatus(ctx, envelopes, dispatchoutbox.StatusPending)
+	if err != nil {
+		return out, fmt.Errorf("publish envelopes with status: %w", err)
+	}
+
+	return out, nil
 }
 
 func (p *Publisher) publishEnvelopesWithStatus(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	if p.outbox == nil {
-		return dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}, fmt.Errorf("publish alarm queue batch: pg_first requires outbox repository")
+		return dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}, errors.New("publish alarm queue batch: pg_first requires outbox repository")
 	}
+
 	result, err := p.insertOutboxChunks(ctx, envelopes, status)
+
 	result.RequestedDeliveries = len(envelopes)
+
 	if err != nil {
 		return result, fmt.Errorf("publish alarm queue batch: insert %s outbox: %w", status, err)
 	}
+
 	if status == dispatchoutbox.StatusPending && result.InsertedDeliveries > 0 && p.publishConfig.WakeupEnabled {
 		p.publishWakeup(ctx)
 	}
+
 	return result, nil
 }
 
 func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	var total dispatchoutbox.PublishBatchResult
+
 	limit := p.publishConfig.MaxDeliveriesPerBatch
+
 	if limit <= 0 {
 		limit = defaultPublishBatchDeliveryLimit
 	}
+
 	for start := 0; start < len(envelopes); start += limit {
 		end := min(start+limit, len(envelopes))
+
 		result, err := p.outbox.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes[start:end], Status: status})
 		if err != nil {
-			return total, err
+			return total, fmt.Errorf("insert batch: %w", err)
 		}
+
 		total.RequestedEvents += result.RequestedEvents
 		total.InsertedEvents += result.InsertedEvents
 		total.DuplicateEvents += result.DuplicateEvents
@@ -232,6 +299,7 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 		total.DuplicateDeliveries += result.DuplicateDeliveries
 		total.TerminalDuplicates += result.TerminalDuplicates
 	}
+
 	return total, nil
 }
 
@@ -248,29 +316,40 @@ func (p *Publisher) publishWakeup(ctx context.Context) {
 	if p.cache == nil {
 		return
 	}
+
 	acquired, err := p.cache.SetNX(ctx, alarmDispatchWakeupGuardKey, "1", 3*time.Second)
 	if err != nil {
 		observeAlarmDispatchWakeupFailed()
 		p.logger.Warn("Alarm outbox wakeup guard failed", slog.Any("error", err))
+
 		return
 	}
+
 	if !acquired {
 		observeAlarmDispatchWakeupSuppressed()
+
 		return
 	}
+
 	cmd := p.cache.B().Lpush().Key(AlarmDispatchWakeupQueue).Element("1").Build()
 	results := p.cache.DoMulti(ctx, cmd)
+
 	if len(results) != 1 {
 		observeAlarmDispatchWakeupFailed()
 		p.logger.Warn("Alarm outbox wakeup failed", slog.Int("result_count", len(results)))
+
 		return
 	}
+
 	if err := results[0].Error(); err != nil {
 		observeAlarmDispatchWakeupFailed()
 		p.logger.Warn("Alarm outbox wakeup failed", slog.Any("error", err))
+
 		return
 	}
+
 	observeAlarmDispatchWakeupSent()
+
 	if err := p.cache.Expire(ctx, AlarmDispatchWakeupQueue, 5*time.Second); err != nil {
 		observeAlarmDispatchWakeupExpireFailed()
 		p.logger.Warn("Alarm outbox wakeup expire failed", slog.Any("error", err))

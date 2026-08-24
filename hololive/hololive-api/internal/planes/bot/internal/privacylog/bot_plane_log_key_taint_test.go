@@ -36,7 +36,7 @@ func TestIdentifierBearingKeysNeverReachLogAttrValues(t *testing.T) {
 
 	for _, seed := range []string{"BuildNotifyClaimKey", "BuildUpcomingEventKey", "BuildRoomAlarmKey"} {
 		if !hasCallableNamed(taint.builders, seed) {
-			t.Fatalf("%q was not recognised as an identifier-bearing key builder; "+
+			t.Fatalf("%q was not recognized as an identifier-bearing key builder; "+
 				"the analysis is not reading the keys package", seed)
 		}
 	}
@@ -91,6 +91,7 @@ func TestKeyTaintAnalysisFlagsBuilderResultsInLogValues(t *testing.T) {
 			t.Parallel()
 
 			fileSet := token.NewFileSet()
+
 			file, err := parser.ParseFile(fileSet, "inject.go", tc.source, parser.SkipObjectResolution)
 			if err != nil {
 				t.Fatalf("parse injected source: %v", err)
@@ -98,6 +99,7 @@ func TestKeyTaintAnalysisFlagsBuilderResultsInLogValues(t *testing.T) {
 
 			sources := untypedTestScannedSources(fileSet, map[string]*ast.File{"inject.go": file})
 			reports := analyzeKeyTaint(sources).violations(fileSet, sources)
+
 			if flagged := len(reports) > 0; flagged != tc.flagged {
 				t.Fatalf("flagged=%v, want %v (reports=%v) for %s", flagged, tc.flagged, reports, tc.source)
 			}
@@ -117,6 +119,7 @@ func TestKeyTaintAnalysisUsesReceiverQualifiedCallables(t *testing.T) {
 			"example/sink/sink.go":   `package sink; import "example/cache"; type Logger struct{}; func (Logger) Warn(string, ...any) {}; var logger Logger; type Service struct{}; func (*Service) emit(key string) { logger.Warn("m", "cache_key", key) }; func (s *Service) Run(room string) { c := &cache.Service{}; s.emit(c.Build(room)) }`,
 		})
 		taint := analyzeKeyTaint(sources)
+
 		if reports := taint.violations(fileSet, sources); len(reports) != 1 {
 			t.Fatalf("cross-package reports = %v, want one (builders=%v params=%v)", reports, taint.builders, taint.taintedParam)
 		}
@@ -130,6 +133,7 @@ func TestKeyTaintAnalysisUsesReceiverQualifiedCallables(t *testing.T) {
 			"example/sensitive/key.go": `package sensitive; type Service struct{}; func (*Service) Build(roomID string) string { return roomID }`,
 			"example/clean/use.go":     `package clean; type Logger struct{}; func (Logger) Warn(string, ...any) {}; var logger Logger; type Service struct{}; func (*Service) Build(channelID string) string { return channelID }; func (s *Service) Run(channel string) { logger.Warn("m", "cache_key", s.Build(channel)) }`,
 		})
+
 		if reports := analyzeKeyTaint(sources).violations(fileSet, sources); len(reports) != 0 {
 			t.Fatalf("same-named clean function produced reports: %v", reports)
 		}
@@ -142,6 +146,7 @@ func TestKeyTaintAnalysisUsesReceiverQualifiedCallables(t *testing.T) {
 		sources := parseTaintFixture(t, fileSet, map[string]string{
 			"example/service/use.go": `package service; type Logger struct{}; func (Logger) Warn(string, ...any) {}; var logger Logger; type Sensitive struct{}; func (*Sensitive) Build(roomID string) string { return roomID }; type Clean struct{}; func (*Clean) Build(channelID string) string { return channelID }; func (c *Clean) Run(channel string) { logger.Warn("m", "cache_key", c.Build(channel)) }`,
 		})
+
 		if reports := analyzeKeyTaint(sources).violations(fileSet, sources); len(reports) != 0 {
 			t.Fatalf("same-package receiver methods produced reports: %v", reports)
 		}
@@ -157,6 +162,7 @@ func parseTaintFixture(t *testing.T, fileSet *token.FileSet, contents map[string
 		if err != nil {
 			t.Fatalf("parse %s: %v", filename, err)
 		}
+
 		files[filename] = file
 	}
 
@@ -180,8 +186,10 @@ func typedTestScannedSources(t *testing.T, fileSet *token.FileSet, files map[str
 
 func fixtureImportPaths(files map[string]*ast.File) map[string]string {
 	importPaths := make(map[string]string)
+
 	for filename := range files {
 		scope := filepath.Clean(filepath.Dir(filename))
+
 		importPaths[scope] = filepath.ToSlash(scope)
 	}
 
@@ -203,6 +211,7 @@ func analyzeKeyTaint(sources scannedSources) keyTaint {
 		builders:     map[string]struct{}{},
 		taintedParam: map[string]map[int]struct{}{},
 	}
+
 	for filename, file := range sources.files {
 		for _, fn := range functionDecls(file) {
 			if returnsOneString(fn) && hasRoomIdentifierParam(fn) {
@@ -222,6 +231,7 @@ func analyzeKeyTaint(sources scannedSources) keyTaint {
 
 func (k keyTaint) propagate(sources scannedSources) bool {
 	changed := false
+
 	for filename, file := range sources.files {
 		for _, fn := range functionDecls(file) {
 			if k.propagateThrough(sources, filename, file, fn) {
@@ -237,6 +247,7 @@ func (k keyTaint) propagateThrough(sources scannedSources, filename string, file
 	tainted := k.taintedLocals(sources, filename, file, fn)
 
 	changed := false
+
 	ast.Inspect(fn.Body, func(node ast.Node) bool {
 		switch typed := node.(type) {
 		case *ast.ReturnStmt:
@@ -255,6 +266,7 @@ func (k keyTaint) propagateThrough(sources scannedSources, filename string, file
 
 func (k keyTaint) propagateIntoCallee(sources scannedSources, filename string, file *ast.File, call *ast.CallExpr, tainted map[string]struct{}) bool {
 	changed := false
+
 	for index, arg := range call.Args {
 		if k.isTainted(sources, filename, file, arg, tainted) {
 			changed = k.markParam(sources.calleeID(filename, file, call), index) || changed
@@ -276,6 +288,7 @@ func (k keyTaint) anyTainted(sources scannedSources, filename string, file *ast.
 
 func (k keyTaint) taintedLocals(sources scannedSources, filename string, file *ast.File, fn *ast.FuncDecl) map[string]struct{} {
 	tainted := map[string]struct{}{}
+
 	for index, name := range flattenParams(fn) {
 		if _, ok := k.taintedParam[sources.functionID(filename, fn)][index]; ok && name != "" && name != "_" {
 			tainted[name] = struct{}{}
@@ -291,11 +304,13 @@ func (k keyTaint) taintedLocals(sources scannedSources, filename string, file *a
 
 func (k keyTaint) growTaintedLocals(sources scannedSources, filename string, file *ast.File, fn *ast.FuncDecl, tainted map[string]struct{}) bool {
 	grew := false
+
 	ast.Inspect(fn.Body, func(node ast.Node) bool {
 		assign, ok := node.(*ast.AssignStmt)
 		if !ok {
 			return true
 		}
+
 		if k.anyTainted(sources, filename, file, assign.Rhs, tainted) {
 			grew = markTaintedNames(assign.Lhs, tainted) || grew
 		}
@@ -308,11 +323,13 @@ func (k keyTaint) growTaintedLocals(sources scannedSources, filename string, fil
 
 func markTaintedNames(exprs []ast.Expr, tainted map[string]struct{}) bool {
 	grew := false
+
 	for _, expr := range exprs {
 		name, ok := expr.(*ast.Ident)
 		if !ok || name.Name == "_" {
 			continue
 		}
+
 		if _, seen := tainted[name.Name]; !seen {
 			tainted[name.Name] = struct{}{}
 			grew = true
@@ -333,9 +350,11 @@ func (k keyTaint) isTainted(sources scannedSources, filename string, file *ast.F
 		if _, clean := keyTaintSanitizers[name]; clean {
 			return false
 		}
+
 		if _, builder := k.builders[sources.calleeID(filename, file, typed)]; builder {
 			return true
 		}
+
 		if name == "string" && len(typed.Args) == 1 {
 			return k.isTainted(sources, filename, file, typed.Args[0], tainted)
 		}
@@ -359,6 +378,7 @@ func (k keyTaint) isTainted(sources scannedSources, filename string, file *ast.F
 
 func (k keyTaint) violations(fileSet *token.FileSet, sources scannedSources) []string {
 	var reports []string
+
 	for filename, file := range sources.files {
 		for _, fn := range functionDecls(file) {
 			tainted := k.taintedLocals(sources, filename, file, fn)
@@ -368,10 +388,12 @@ func (k keyTaint) violations(fileSet *token.FileSet, sources scannedSources) []s
 				if !ok {
 					return true
 				}
+
 				for _, value := range logAttrValues(call) {
 					if !k.isTainted(sources, filename, file, value, tainted) {
 						continue
 					}
+
 					reports = append(reports, fmt.Sprintf(
 						"%s: this log attr value carries a cache key built from a room identifier; "+
 							"log the non-identifying parts as their own attrs and the room through privacylog.RoomIDAttr",
@@ -400,16 +422,19 @@ func logAttrValues(call *ast.CallExpr) []ast.Expr {
 
 		return nil
 	}
+
 	if hasReceiver {
 		if _, facade := structuredLogFacades[receiver.Name]; facade {
 			return nil
 		}
 	}
+
 	if _, isLevel := slogLevelMethods[selector.Sel.Name]; !isLevel {
 		return nil
 	}
 
 	var values []ast.Expr
+
 	for _, index := range looseKeyIndexes(call, selector.Sel.Name) {
 		if index+1 < len(call.Args) {
 			values = append(values, call.Args[index+1])
@@ -423,6 +448,7 @@ func (k keyTaint) markBuilder(name string) bool {
 	if _, ok := k.builders[name]; ok {
 		return false
 	}
+
 	k.builders[name] = struct{}{}
 
 	return true
@@ -432,18 +458,21 @@ func (k keyTaint) markParam(name string, index int) bool {
 	if name == "" {
 		return false
 	}
+
 	if _, ok := k.taintedParam[name]; !ok {
 		k.taintedParam[name] = map[int]struct{}{}
 	}
+
 	if _, ok := k.taintedParam[name][index]; ok {
 		return false
 	}
+
 	k.taintedParam[name][index] = struct{}{}
 
 	return true
 }
 
-func (s scannedSources) functionID(filename string, fn *ast.FuncDecl) string {
+func (s *scannedSources) functionID(filename string, fn *ast.FuncDecl) string {
 	if info := s.typesInfo[s.files[filename]]; info != nil {
 		if callable, ok := info.Defs[fn.Name].(*types.Func); ok {
 			return callableID(callable)
@@ -458,7 +487,7 @@ func (s scannedSources) functionID(filename string, fn *ast.FuncDecl) string {
 	return s.packageID(filename) + "." + fn.Name.Name
 }
 
-func (s scannedSources) packageID(filename string) string {
+func (s *scannedSources) packageID(filename string) string {
 	scope := filepath.Clean(filepath.Dir(filename))
 	if importPath := s.importPathByScope[scope]; importPath != "" {
 		return importPath
@@ -467,7 +496,7 @@ func (s scannedSources) packageID(filename string) string {
 	return filepath.ToSlash(scope)
 }
 
-func (s scannedSources) calleeID(filename string, file *ast.File, call *ast.CallExpr) string {
+func (s *scannedSources) calleeID(filename string, file *ast.File, call *ast.CallExpr) string {
 	if callable := callableFromCall(s.typesInfo[file], call); callable != nil {
 		return callableID(callable)
 	}
@@ -483,6 +512,7 @@ func callableFromCall(info *types.Info, call *ast.CallExpr) *types.Func {
 	if info == nil {
 		return nil
 	}
+
 	switch fun := call.Fun.(type) {
 	case *ast.Ident:
 		return objectFunc(info.Uses[fun])
@@ -490,6 +520,7 @@ func callableFromCall(info *types.Info, call *ast.CallExpr) *types.Func {
 		if selection := info.Selections[fun]; selection != nil {
 			return objectFunc(selection.Obj())
 		}
+
 		return objectFunc(info.Uses[fun.Sel])
 	default:
 		return nil
@@ -510,14 +541,17 @@ func callableID(fn *types.Func) string {
 	if pkg == nil {
 		return fn.FullName()
 	}
+
 	signature, ok := fn.Type().(*types.Signature)
 	if !ok || signature.Recv() == nil {
 		return pkg.Path() + "." + fn.Name()
 	}
+
 	receiver := types.TypeString(signature.Recv().Type(), func(other *types.Package) string {
 		if other == pkg {
 			return ""
 		}
+
 		return other.Path()
 	})
 
@@ -528,10 +562,12 @@ func receiverTypeName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return ""
 	}
+
 	expr := fn.Recv.List[0].Type
 	if pointer, ok := expr.(*ast.StarExpr); ok {
 		expr = pointer.X
 	}
+
 	if identifier, ok := expr.(*ast.Ident); ok {
 		return identifier.Name
 	}
@@ -548,14 +584,18 @@ type sourceTypesImporter struct {
 
 func (s *scannedSources) loadTypes() error {
 	s.typesInfo = make(map[*ast.File]*types.Info, len(s.files))
+
 	var exportRoot *os.Root
+
 	if len(s.exports) > 0 {
 		var err error
+
 		exportRoot, err = os.OpenRoot(s.buildCacheRoot)
 		if err != nil {
 			return fmt.Errorf("open Go build cache root: %w", err)
 		}
 	}
+
 	lookup := func(importPath string) (io.ReadCloser, error) {
 		export := s.exports[importPath]
 		if export == "" {
@@ -571,17 +611,22 @@ func (s *scannedSources) loadTypes() error {
 		checking: map[string]bool{},
 	}
 	paths := make([]string, 0, len(s.importPathByScope))
+
 	for _, importPath := range s.importPathByScope {
 		paths = append(paths, importPath)
 	}
+
 	sort.Strings(paths)
+
 	var loadErr error
+
 	for _, importPath := range paths {
 		if _, err := loader.loadSourcePackage(importPath); err != nil {
 			loadErr = err
 			break
 		}
 	}
+
 	if exportRoot != nil {
 		loadErr = errors.Join(loadErr, exportRoot.Close())
 	}
@@ -591,22 +636,26 @@ func (s *scannedSources) loadTypes() error {
 
 func openExportFile(root *os.Root, rootPath, exportPath string) (io.ReadCloser, error) {
 	if root == nil {
-		return nil, fmt.Errorf("Go build cache root is unavailable")
+		return nil, errors.New("Go build cache root is unavailable")
 	}
+
 	relative, err := filepath.Rel(rootPath, filepath.Clean(exportPath))
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("export data path %q is outside Go build cache %q", exportPath, rootPath)
 	}
+
 	file, err := root.Open(relative)
 	if err != nil {
 		return nil, fmt.Errorf("open export data for %q: %w", exportPath, err)
 	}
+
 	info, err := file.Stat()
 	if err != nil {
 		closeErr := file.Close()
 
 		return nil, fmt.Errorf("stat export data for %q: %w", exportPath, errors.Join(err, closeErr))
 	}
+
 	if !info.Mode().IsRegular() {
 		if err := file.Close(); err != nil {
 			return nil, fmt.Errorf("close non-regular export data path %q: %w", exportPath, err)
@@ -620,38 +669,62 @@ func openExportFile(root *os.Root, rootPath, exportPath string) (io.ReadCloser, 
 
 func (i *sourceTypesImporter) Import(importPath string) (*types.Package, error) {
 	if !i.sources.sourceImports {
-		return i.fallback.Import(importPath)
+		out, err := i.fallback.Import(importPath)
+		if err != nil {
+			return nil, fmt.Errorf("import: %w", err)
+		}
+
+		return out, nil
 	}
 
-	return i.loadSourcePackage(importPath)
+	out, err := i.loadSourcePackage(importPath)
+	if err != nil {
+		//nolint:nilnil // types.Config.Check는 오류와 함께 부분 완성된 패키지를 돌려주고 go/types가 이를 사용하므로, 오류 경로에서도 그대로 전달해야 한다.
+		return out, fmt.Errorf("load source package: %w", err)
+	}
+
+	return out, nil
 }
 
 func (i *sourceTypesImporter) loadSourcePackage(importPath string) (*types.Package, error) {
 	if pkg := i.packages[importPath]; pkg != nil {
 		return pkg, nil
 	}
+
 	scope := ""
+
 	for candidateScope, candidatePath := range i.sources.importPathByScope {
 		if candidatePath == importPath {
 			scope = candidateScope
 			break
 		}
 	}
+
 	if scope == "" {
-		return i.fallback.Import(importPath)
+		out, err := i.fallback.Import(importPath)
+		if err != nil {
+			return nil, fmt.Errorf("import: %w", err)
+		}
+
+		return out, nil
 	}
+
 	if i.checking[importPath] {
 		return nil, fmt.Errorf("type import cycle involving %s", importPath)
 	}
+
 	i.checking[importPath] = true
+
 	defer delete(i.checking, importPath)
 
 	var files []*ast.File
+
 	for filename, file := range i.sources.files {
 		if filepath.Clean(filepath.Dir(filename)) == scope {
 			files = append(files, file)
 		}
 	}
+
 	info := &types.Info{
 		Defs:       map[*ast.Ident]types.Object{},
 		Uses:       map[*ast.Ident]types.Object{},
@@ -660,18 +733,26 @@ func (i *sourceTypesImporter) loadSourcePackage(importPath string) (*types.Packa
 	}
 	config := types.Config{Importer: i, Sizes: types.SizesFor("gc", runtime.GOARCH)}
 	pkg, err := config.Check(importPath, i.sources.fileSet, files, info)
+
 	if pkg != nil {
 		i.packages[importPath] = pkg
+
 		for _, file := range files {
 			i.sources.typesInfo[file] = info
 		}
 	}
 
-	return pkg, err
+	if err != nil {
+		//nolint:nilnil // types.Config.Check는 오류와 함께 부분 완성된 패키지를 돌려주고 go/types가 이를 사용하므로, 오류 경로에서도 그대로 전달해야 한다.
+		return pkg, fmt.Errorf("type-check %s: %w", importPath, err)
+	}
+
+	return pkg, nil
 }
 
 func functionDecls(file *ast.File) []*ast.FuncDecl {
 	var decls []*ast.FuncDecl
+
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if ok && fn.Body != nil {
@@ -688,12 +769,14 @@ func flattenParams(fn *ast.FuncDecl) []string {
 	}
 
 	var names []string
+
 	for _, field := range fn.Type.Params.List {
 		if len(field.Names) == 0 {
 			names = append(names, "")
 
 			continue
 		}
+
 		for _, name := range field.Names {
 			names = append(names, name.Name)
 		}
@@ -706,9 +789,11 @@ func returnsOneString(fn *ast.FuncDecl) bool {
 	if fn.Type.Results == nil || len(fn.Type.Results.List) != 1 {
 		return false
 	}
+
 	if len(fn.Type.Results.List[0].Names) > 1 {
 		return false
 	}
+
 	identifier, ok := fn.Type.Results.List[0].Type.(*ast.Ident)
 
 	return ok && identifier.Name == "string"

@@ -1,6 +1,7 @@
 package keys
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -68,6 +69,7 @@ func TestRoomBearingKeysAreRedactedForLogs(t *testing.T) {
 				t.Fatalf("%s: privacylog.RedactCacheKey(%q) = %q leaks the room identifier; "+
 					"register the key prefix in privacylog identifierKeyRules", name, key, redacted)
 			}
+
 			if redacted == key {
 				t.Fatalf("%s: privacylog.RedactCacheKey left %q untouched", name, key)
 			}
@@ -79,6 +81,7 @@ func TestEveryRoomBearingBuilderIsCovered(t *testing.T) {
 	t.Parallel()
 
 	covered := roomBearingKeyBuilders()
+
 	for _, name := range exportedRoomKeyBuilders(t) {
 		if _, ok := covered[name]; !ok {
 			t.Errorf("%s takes a roomID but has no redaction fixture; add it to roomBearingKeyBuilders "+
@@ -91,20 +94,23 @@ func exportedRoomKeyBuilders(t *testing.T) []string {
 	t.Helper()
 
 	fileSet := token.NewFileSet()
+
 	var names []string
 
 	err := filepath.WalkDir(".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 
 		file, parseErr := parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
 		if parseErr != nil {
-			return parseErr
+			return fmt.Errorf("parse file: %w", parseErr)
 		}
+
 		names = append(names, roomKeyBuilderNames(file)...)
 
 		return nil
@@ -112,6 +118,7 @@ func exportedRoomKeyBuilders(t *testing.T) []string {
 	if err != nil {
 		t.Fatalf("walk keys package: %v", err)
 	}
+
 	if len(names) == 0 {
 		t.Fatal("no roomID-taking builder was found; the scan is not reading the keys package")
 	}
@@ -121,11 +128,13 @@ func exportedRoomKeyBuilders(t *testing.T) []string {
 
 func roomKeyBuilderNames(file *ast.File) []string {
 	var names []string
+
 	for _, decl := range file.Decls {
 		function, ok := decl.(*ast.FuncDecl)
 		if !ok || function.Recv != nil || !function.Name.IsExported() || !returnsString(function) {
 			continue
 		}
+
 		if takesRoomIdentifier(function) {
 			names = append(names, function.Name.Name)
 		}
@@ -150,6 +159,7 @@ func returnsString(function *ast.FuncDecl) bool {
 	if function.Type.Results == nil || len(function.Type.Results.List) != 1 {
 		return false
 	}
+
 	identifier, ok := function.Type.Results.List[0].Type.(*ast.Ident)
 
 	return ok && identifier.Name == "string"

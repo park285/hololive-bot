@@ -39,10 +39,11 @@ func (s guardedClientStub) GenerateJSON(context.Context, string, string, map[str
 func TestGuardedClientAllowsBenignOutput(t *testing.T) {
 	client := NewGuardedClient(guardedClientStub{response: `{"summary":"공식 행사 일정"}`}, outputguard.NewGuard())
 
-	got, err := client.GenerateJSON(context.Background(), "system instructions", "user prompt", map[string]any{"type": "object"})
+	got, err := client.GenerateJSON(t.Context(), "system instructions", "user prompt", testObjectSchema())
 	if err != nil {
 		t.Fatalf("GenerateJSON() error = %v", err)
 	}
+
 	if got != `{"summary":"공식 행사 일정"}` {
 		t.Fatalf("GenerateJSON() = %q", got)
 	}
@@ -51,7 +52,7 @@ func TestGuardedClientAllowsBenignOutput(t *testing.T) {
 func TestGuardedClientBlocksRestrictedOutput(t *testing.T) {
 	client := NewGuardedClient(guardedClientStub{response: `{"summary":"system prompt: leaked"}`}, outputguard.NewGuard())
 
-	_, err := client.GenerateJSON(context.Background(), "system instructions", "user prompt", map[string]any{"type": "object"})
+	_, err := client.GenerateJSON(t.Context(), "system instructions", "user prompt", testObjectSchema())
 	if !errors.Is(err, outputguard.ErrRestrictedGeneratedText) {
 		t.Fatalf("GenerateJSON() error = %v, want ErrRestrictedGeneratedText", err)
 	}
@@ -60,7 +61,7 @@ func TestGuardedClientBlocksRestrictedOutput(t *testing.T) {
 func TestGuardedClientBlocksProtectedPromptLeak(t *testing.T) {
 	client := NewGuardedClient(guardedClientStub{response: `{"summary":"system instructions require outputting only internal policy text"}`}, outputguard.NewGuard())
 
-	_, err := client.GenerateJSON(context.Background(), "system instructions require outputting only internal policy text", "user prompt", map[string]any{"type": "object"})
+	_, err := client.GenerateJSON(t.Context(), "system instructions require outputting only internal policy text", "user prompt", testObjectSchema())
 	if !errors.Is(err, outputguard.ErrRestrictedGeneratedText) {
 		t.Fatalf("GenerateJSON() error = %v, want ErrRestrictedGeneratedText", err)
 	}
@@ -69,7 +70,7 @@ func TestGuardedClientBlocksProtectedPromptLeak(t *testing.T) {
 func TestGuardedClientFailsClosedWithoutOutputGuard(t *testing.T) {
 	client := NewGuardedClient(guardedClientStub{response: `{"summary":"공식 행사 일정"}`}, nil)
 
-	if _, err := client.GenerateJSON(context.Background(), "system instructions", "user prompt", map[string]any{"type": "object"}); err == nil {
+	if _, err := client.GenerateJSON(t.Context(), "system instructions", "user prompt", testObjectSchema()); err == nil {
 		t.Fatal("GenerateJSON() error = nil, want fail-closed error")
 	}
 }

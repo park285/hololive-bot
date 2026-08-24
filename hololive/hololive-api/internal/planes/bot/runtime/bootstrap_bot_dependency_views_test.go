@@ -24,16 +24,13 @@ import (
 	"context"
 	"testing"
 
+	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
+	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
-
-	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
 type stubYouTubeService struct{}
@@ -41,8 +38,9 @@ type stubYouTubeService struct{}
 func (s *stubYouTubeService) SetScraperProxyEnabled(enabled bool) bool { return enabled }
 func (s *stubYouTubeService) ScraperProxyEnabled() bool                { return false }
 func (s *stubYouTubeService) GetChannelStatistics(context.Context, []string) (map[string]*youtube.ChannelStats, error) {
-	return nil, nil
+	return map[string]*youtube.ChannelStats{}, nil
 }
+
 func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]string, error) {
 	return nil, nil
 }
@@ -50,7 +48,7 @@ func (s *stubYouTubeService) GetRecentVideos(context.Context, string, int64) ([]
 type stubSettingsReadWriter struct{}
 
 func (s *stubSettingsReadWriter) Get() settings.Settings { return settings.Settings{} }
-func (s *stubSettingsReadWriter) Update(newSettings settings.Settings) error {
+func (s *stubSettingsReadWriter) Update(settings.Settings) error {
 	return nil
 }
 
@@ -66,6 +64,7 @@ func TestBuildBotWebhookRuntimeDependencies(t *testing.T) {
 		cacheService := &cache.Service{}
 		deps := &orchestration.Dependencies{Cache: cacheService}
 		view := buildBotWebhookRuntimeDependencies(deps)
+
 		if view.Cache != cacheService {
 			t.Fatal("cache mapping mismatch")
 		}
@@ -85,9 +84,11 @@ func TestBuildBotConfigSubscriberDependencies(t *testing.T) {
 		settingsService := &stubSettingsReadWriter{}
 		deps := &orchestration.Dependencies{Cache: cacheService, Settings: settingsService}
 		view := buildBotConfigSubscriberDependencies(deps)
+
 		if view.Cache != cacheService {
 			t.Fatal("cache mapping mismatch")
 		}
+
 		if view.Settings != settingsService {
 			t.Fatal("settings mapping mismatch")
 		}
@@ -105,7 +106,9 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 	t.Run("maps runtime fields", func(t *testing.T) {
 		youtubeService := &stubYouTubeService{}
 		holodexService := &holodexprovider.Service{}
+
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+
 		infra := &appbootstrap.BotInfrastructure{
 			Deps:           &orchestration.Dependencies{Service: youtubeService},
 			HolodexService: holodexService,
@@ -116,9 +119,11 @@ func TestBuildBotConfigSubscriberRuntimeDependencies(t *testing.T) {
 		if view.YouTubeService != youtubeService {
 			t.Fatal("youtube service mapping mismatch")
 		}
+
 		if view.HolodexService != holodexService {
 			t.Fatal("holodex service mapping mismatch")
 		}
+
 		if view.AlarmCRUD != alarmCRUD {
 			t.Fatal("alarm CRUD mapping mismatch")
 		}
@@ -131,6 +136,7 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		if views.botDeps != nil {
 			t.Fatal("nil infra must yield nil bot deps")
 		}
+
 		if views.webhook.Cache != nil || views.configSubscriber.Cache != nil || views.configSubscriberRuntime.AlarmCRUD != nil {
 			t.Fatal("nil infra must yield zero-value runtime dependency views")
 		}
@@ -141,7 +147,9 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		settingsService := &stubSettingsReadWriter{}
 		youtubeService := &stubYouTubeService{}
 		holodexService := &holodexprovider.Service{}
+
 		var alarmCRUD domain.AlarmCRUD = testAlarmCRUD{}
+
 		deps := &orchestration.Dependencies{Cache: cacheService, Settings: settingsService, Service: youtubeService}
 		infra := &appbootstrap.BotInfrastructure{Deps: deps, AlarmCRUD: alarmCRUD, HolodexService: holodexService}
 
@@ -149,12 +157,15 @@ func TestBuildBotRuntimeDependencyViews(t *testing.T) {
 		if views.botDeps != deps {
 			t.Fatal("bot deps mapping mismatch")
 		}
+
 		if views.webhook.Cache != cacheService {
 			t.Fatal("webhook view mapping mismatch")
 		}
+
 		if views.configSubscriber.Cache != cacheService || views.configSubscriber.Settings != settingsService {
 			t.Fatal("config subscriber view mapping mismatch")
 		}
+
 		if views.configSubscriberRuntime.AlarmCRUD != alarmCRUD || views.configSubscriberRuntime.HolodexService != holodexService {
 			t.Fatal("config subscriber runtime view mapping mismatch")
 		}

@@ -2,10 +2,10 @@ package status
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"sync"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
@@ -68,28 +68,37 @@ func (s *Sampler) sample(ctx context.Context) endpointSnapshot {
 		sampledAt: now,
 		endpoints: make([]endpointSample, len(s.endpoints)),
 	}
+
 	var wg sync.WaitGroup
+
 	for i := range s.endpoints {
-		index := i
 		endpoint := s.endpoints[i]
+
 		wg.Add(1)
 		panicguard.Go(nil, "admin-dashboard-endpoint-sample", func() {
 			defer wg.Done()
+
 			var sample endpointSample
+
 			if err := panicguard.RunE(nil, "admin-dashboard-endpoint-sample", func() error {
 				sample = s.sampleEndpoint(ctx, endpoint)
 				return nil
 			}); err != nil {
 				errText := err.Error()
+
 				sample = failedEndpointSample(endpoint.Name, errText, nil)
 			}
-			snapshot.endpoints[index] = sample
+
+			snapshot.endpoints[i] = sample
 		})
 	}
+
 	wg.Wait()
+
 	if ctx.Err() == nil {
 		s.cached = cloneEndpointSnapshot(snapshot)
 	}
+
 	return snapshot
 }
 
@@ -97,12 +106,16 @@ func (s *Sampler) sampleEndpoint(ctx context.Context, endpoint ServiceEndpoint) 
 	result := doHealthGET(ctx, s.clients[endpoint.Name], endpoint)
 	if result.errMsg != "" {
 		var latency *uint64
+
 		if result.measured {
 			value := result.latencyMS
+
 			latency = &value
 		}
+
 		return failedEndpointSample(endpoint.Name, result.errMsg, latency)
 	}
+
 	latency := result.latencyMS
 	sample := endpointSample{
 		status: ServiceStatus{
@@ -115,31 +128,43 @@ func (s *Sampler) sampleEndpoint(ctx context.Context, endpoint ServiceEndpoint) 
 			MetricKind: RuntimeMetricGoroutine,
 		},
 	}
+
 	var payload healthPayload
+
 	decodeErr := jsonv2.UnmarshalRead(result.resp.Body, &payload)
 	closeErr := result.resp.Body.Close()
+
 	if decodeErr != nil {
 		errText := "invalid health payload: " + decodeErr.Error()
+
 		sample.runtime.Error = &errText
+
 		return sample
 	}
+
 	if closeErr != nil {
 		errText := "close health payload: " + closeErr.Error()
+
 		sample.runtime.Error = &errText
+
 		return sample
 	}
+
 	count := payload.Goroutines
 	if count == 0 {
 		count = componentGoroutines(payload.Components)
 	}
+
 	sample.runtime.Count = count
 	sample.runtime.Available = true
+
 	return sample
 }
 
 func failedEndpointSample(name, errText string, latency *uint64) endpointSample {
 	statusError := errText
 	runtimeError := errText
+
 	return endpointSample{
 		status: ServiceStatus{
 			Name:           name,
@@ -167,25 +192,32 @@ func cloneEndpointSnapshot(snapshot endpointSnapshot) endpointSnapshot {
 			runtime: cloneServiceRuntimeStat(snapshot.endpoints[i].runtime),
 		}
 	}
+
 	return cloned
 }
 
 func cloneServiceStatus(status ServiceStatus) ServiceStatus {
 	if status.ResponseTimeMS != nil {
 		value := *status.ResponseTimeMS
+
 		status.ResponseTimeMS = &value
 	}
+
 	if status.Error != nil {
 		value := *status.Error
+
 		status.Error = &value
 	}
+
 	return status
 }
 
 func cloneServiceRuntimeStat(stats ServiceRuntimeStats) ServiceRuntimeStats {
 	if stats.Error != nil {
 		value := *stats.Error
+
 		stats.Error = &value
 	}
+
 	return stats
 }

@@ -21,6 +21,7 @@
 package sqlsplit
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -32,7 +33,7 @@ type Segment struct {
 
 // Segments는 statement 분할에 top-level BEGIN;/COMMIT; 블록 경계를 더한다.
 //
-// statement별 autocommit Exec 러너(pgxpool)는 BEGIN을 보내면 그 커넥션이
+// 각 statement를 autocommit으로 실행하는 러너(pgxpool)는 BEGIN을 보내면 그 커넥션이
 // 트랜잭션 상태(TxStatus != 'I')로 release돼 pgxpool이 즉시 파기한다 — BEGIN이
 // 침묵 해체되고 내부 문장이 각각 autocommit되며 COMMIT은 WARNING으로 성공
 // 처리된다. 따라서 러너는 BEGIN/COMMIT 토큰을 직접 실행하면 안 되고, 이 함수가
@@ -40,12 +41,19 @@ type Segment struct {
 // BEGIN/COMMIT 토큰 자체는 segment에 포함되지 않는다.
 func Segments(sql string) ([]Segment, error) {
 	parser := segmentParser{}
+
 	for _, stmt := range Statements(sql) {
 		if err := parser.add(stmt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("add: %w", err)
 		}
 	}
-	return parser.finish()
+
+	out, err := parser.finish()
+	if err != nil {
+		return out, fmt.Errorf("finish: %w", err)
+	}
+
+	return out, nil
 }
 
 type segmentParser struct {
@@ -57,50 +65,86 @@ type segmentParser struct {
 func (p *segmentParser) add(stmt string) error {
 	control, err := classifyTxControl(stmt)
 	if err != nil {
-		return err
+		return fmt.Errorf("classify tx control: %w", err)
 	}
+
 	switch control {
 	case txControlBegin:
-		return p.begin()
+		return errors.Join(p.addBegin())
 	case txControlCommit:
-		return p.commit()
+		return errors.Join(p.addCommit())
 	case txControlNone:
-		return p.appendStatement(stmt)
+		return errors.Join(p.addStatement(stmt))
 	}
+
+	return nil
+}
+
+func (p *segmentParser) addBegin() error {
+	if err := p.begin(); err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+
+	return nil
+}
+
+func (p *segmentParser) addCommit() error {
+	if err := p.commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+func (p *segmentParser) addStatement(stmt string) error {
+	if err := p.appendStatement(stmt); err != nil {
+		return fmt.Errorf("append statement: %w", err)
+	}
+
 	return nil
 }
 
 func (p *segmentParser) begin() error {
 	if p.inTx {
-		return fmt.Errorf("nested BEGIN inside a BEGIN/COMMIT block")
+		return errors.New("nested BEGIN inside a BEGIN/COMMIT block")
 	}
+
 	p.flush(false)
+
 	p.inTx = true
+
 	return nil
 }
 
 func (p *segmentParser) commit() error {
 	if !p.inTx {
-		return fmt.Errorf("COMMIT without a matching top-level BEGIN")
+		return errors.New("COMMIT without a matching top-level BEGIN")
 	}
+
 	p.flush(true)
+
 	p.inTx = false
+
 	return nil
 }
 
 func (p *segmentParser) appendStatement(stmt string) error {
 	if p.inTx && containsSQLWord(stmt, "CONCURRENTLY") {
-		return fmt.Errorf("CONCURRENTLY statement inside a BEGIN/COMMIT block")
+		return errors.New("CONCURRENTLY statement inside a BEGIN/COMMIT block")
 	}
+
 	p.pending = append(p.pending, stmt)
+
 	return nil
 }
 
 func (p *segmentParser) finish() ([]Segment, error) {
 	if p.inTx {
-		return nil, fmt.Errorf("top-level BEGIN without a matching COMMIT")
+		return nil, errors.New("top-level BEGIN without a matching COMMIT")
 	}
+
 	p.flush(false)
+
 	return p.segments, nil
 }
 
@@ -108,6 +152,7 @@ func (p *segmentParser) flush(transactional bool) {
 	if len(p.pending) == 0 {
 		return
 	}
+
 	p.segments = append(p.segments, Segment{Transactional: transactional, Statements: p.pending})
 	p.pending = nil
 }
@@ -125,35 +170,81 @@ func classifyTxControl(stmt string) (txControl, error) {
 	if len(words) == 0 {
 		return txControlNone, nil
 	}
-	return classifyTxWords(words)
+
+	out, err := classifyTxWords(words)
+	if err != nil {
+		return out, fmt.Errorf("classify tx words: %w", err)
+	}
+
+	return out, nil
 }
 
 func classifyTxWords(words []string) (txControl, error) {
 	switch words[0] {
 	case "BEGIN":
-		return classifyTxKeywordTail(txControlBegin, words)
+		out, err := classifyTxWordsTail(txControlBegin, words)
+
+		return out, errors.Join(err)
 	case "START":
-		return classifyStartTransaction(words)
+		out, err := classifyStartTxWords(words)
+
+		return out, errors.Join(err)
 	case "COMMIT", "END":
-		return classifyTxKeywordTail(txControlCommit, words)
+		out, err := classifyTxWordsTail(txControlCommit, words)
+
+		return out, errors.Join(err)
 	default:
-		return rejectUnsupportedTxControl(words[0])
+		err := classifyNonControlWord(words[0])
+
+		return txControlNone, errors.Join(err)
 	}
+}
+
+func classifyNonControlWord(word string) error {
+	if err := rejectUnsupportedTxControl(word); err != nil {
+		return fmt.Errorf("reject unsupported tx control: %w", err)
+	}
+
+	return nil
+}
+
+func classifyTxWordsTail(control txControl, words []string) (txControl, error) {
+	out, err := classifyTxKeywordTail(control, words)
+	if err != nil {
+		return out, fmt.Errorf("classify tx keyword tail: %w", err)
+	}
+
+	return out, nil
+}
+
+func classifyStartTxWords(words []string) (txControl, error) {
+	out, err := classifyStartTransaction(words)
+	if err != nil {
+		return out, fmt.Errorf("classify start transaction: %w", err)
+	}
+
+	return out, nil
 }
 
 func classifyStartTransaction(words []string) (txControl, error) {
 	if len(words) >= 2 && words[1] == "TRANSACTION" {
-		return classifyTxKeywordTail(txControlBegin, words[1:])
+		out, err := classifyTxKeywordTail(txControlBegin, words[1:])
+		if err != nil {
+			return out, fmt.Errorf("classify tx keyword tail: %w", err)
+		}
+
+		return out, nil
 	}
+
 	return txControlNone, nil
 }
 
-func rejectUnsupportedTxControl(keyword string) (txControl, error) {
+func rejectUnsupportedTxControl(keyword string) error {
 	switch keyword {
 	case "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT":
-		return txControlNone, fmt.Errorf("unsupported top-level transaction control statement %q", keyword)
+		return fmt.Errorf("unsupported top-level transaction control statement %q", keyword)
 	default:
-		return txControlNone, nil
+		return nil
 	}
 }
 
@@ -163,20 +254,24 @@ func classifyTxKeywordTail(control txControl, words []string) (txControl, error)
 			return txControlNone, fmt.Errorf("unsupported transaction control statement %q (only bare BEGIN/COMMIT forms are replayable)", strings.Join(words, " "))
 		}
 	}
+
 	return control, nil
 }
 
 func stripLeadingSQLComments(stmt string) string {
 	s := stmt
+
 	for {
 		s = strings.TrimLeft(s, " \t\r\n")
 		if !hasLeadingSQLComment(s) {
 			return s
 		}
+
 		rest, ok := stripLeadingSQLComment(s)
 		if !ok {
 			return ""
 		}
+
 		s = rest
 	}
 }
@@ -189,6 +284,7 @@ func stripLeadingSQLComment(s string) (string, bool) {
 	if strings.HasPrefix(s, "--") {
 		return stripLineComment(s)
 	}
+
 	return skipNestedBlockComment(s)
 }
 
@@ -197,19 +293,24 @@ func stripLineComment(s string) (string, bool) {
 	if !ok {
 		return "", false
 	}
+
 	return after, true
 }
 
 func skipNestedBlockComment(s string) (rest string, ok bool) {
 	depth := 0
 	i := 0
+
 	for i < len(s) {
 		var closed bool
+
 		depth, i, closed = advanceNestedBlockComment(s, i, depth)
+
 		if closed {
 			return s[i:], true
 		}
 	}
+
 	return "", false
 }
 

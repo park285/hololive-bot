@@ -1,16 +1,18 @@
 package scraping
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
+
+const floatCompareDelta = 1e-9
 
 func TestFetchPageOnceRecordsFetcherSuccessMetrics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -26,12 +28,12 @@ func TestFetchPageOnceRecordsFetcherSuccessMetrics(t *testing.T) {
 	)
 
 	before := testutil.ToFloat64(scraperFetchRequestsTotal.WithLabelValues("nethttp", "success", "none", "200"))
-	body, err := client.fetchPageOnce(context.Background(), server.URL)
+	body, err := client.fetchPageOnce(t.Context(), server.URL)
 	after := testutil.ToFloat64(scraperFetchRequestsTotal.WithLabelValues("nethttp", "success", "none", "200"))
 
 	require.NoError(t, err)
 	assert.Contains(t, body, "ytInitialData")
-	assert.Equal(t, float64(1), after-before)
+	assert.InDelta(t, float64(1), after-before, floatCompareDelta)
 }
 
 func TestFetchPageOnceRecordsFetcherFailureMetrics(t *testing.T) {
@@ -47,10 +49,10 @@ func TestFetchPageOnceRecordsFetcherFailureMetrics(t *testing.T) {
 	)
 
 	before := testutil.ToFloat64(scraperFetchRequestsTotal.WithLabelValues("nethttp", "error", "rate_limited", "429"))
-	_, err := client.fetchPageOnce(context.Background(), server.URL)
+	_, err := client.fetchPageOnce(t.Context(), server.URL)
 	after := testutil.ToFloat64(scraperFetchRequestsTotal.WithLabelValues("nethttp", "error", "rate_limited", "429"))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrRateLimited)
-	assert.Equal(t, float64(1), after-before)
+	require.ErrorIs(t, err, ErrRateLimited)
+	assert.InDelta(t, float64(1), after-before, floatCompareDelta)
 }

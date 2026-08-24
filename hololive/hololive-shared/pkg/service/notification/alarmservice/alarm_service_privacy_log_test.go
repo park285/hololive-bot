@@ -13,10 +13,13 @@ import (
 func TestAlarmAddedLogNeverCarriesRoomTitleOrNickname(t *testing.T) {
 	t.Parallel()
 
-	const roomTitle = "상대방닉네임 님과의 대화"
-	const nickname = "상대방닉네임"
+	const (
+		roomTitle = "상대방닉네임 님과의 대화"
+		nickname  = "상대방닉네임"
+	)
 
 	var buffer bytes.Buffer
+
 	service := &AlarmService{logger: slog.New(slog.NewJSONHandler(&buffer, nil))}
 
 	service.logAlarmAdded(&domain.AddAlarmRequest{
@@ -29,16 +32,19 @@ func TestAlarmAddedLogNeverCarriesRoomTitleOrNickname(t *testing.T) {
 	}, domain.AlarmTypes{"live"})
 
 	line := buffer.String()
+
 	for _, plaintext := range []string{roomTitle, nickname, "1234567890"} {
 		if strings.Contains(line, plaintext) {
 			t.Fatalf("alarm add log leaked %q: %s", plaintext, line)
 		}
 	}
+
 	for _, bannedKey := range []string{`"room_name"`, `"user_name"`} {
 		if strings.Contains(line, bannedKey) {
 			t.Fatalf("alarm add log still carries %s: %s", bannedKey, line)
 		}
 	}
+
 	if !strings.Contains(line, privacylog.PseudonymPrefix) {
 		t.Fatalf("alarm add log lost its room correlation token: %s", line)
 	}
@@ -48,6 +54,7 @@ func TestAlarmAddedLogKeepsCanonicalRoomIdentifiersReadable(t *testing.T) {
 	t.Parallel()
 
 	var buffer bytes.Buffer
+
 	service := &AlarmService{logger: slog.New(slog.NewJSONHandler(&buffer, nil))}
 
 	service.logAlarmAdded(&domain.AddAlarmRequest{

@@ -11,6 +11,7 @@ import (
 
 type recordingBatchRollbackTx struct {
 	pgx.Tx
+
 	rollbackCtxErr      error
 	rollbackHasDeadline bool
 	rollbackErr         error
@@ -19,11 +20,13 @@ type recordingBatchRollbackTx struct {
 func (tx *recordingBatchRollbackTx) Rollback(ctx context.Context) error {
 	tx.rollbackCtxErr = ctx.Err()
 	_, tx.rollbackHasDeadline = ctx.Deadline()
+
 	return tx.rollbackErr
 }
 
 type panicBatchBeginner struct {
 	batchDB
+
 	tx pgx.Tx
 }
 
@@ -32,17 +35,20 @@ func (db *panicBatchBeginner) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, e
 }
 
 func TestInBatchTxPreservesPanicWhenRollbackFails(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	tx := &recordingBatchRollbackTx{rollbackErr: errors.New("rollback failed")}
 	db := &panicBatchBeginner{tx: tx}
 	panicValue := &struct{ message string }{message: "batch panic"}
 
 	var recovered any
+
 	func() {
 		defer func() {
 			recovered = recover()
 		}()
+
 		require.NoError(t, inBatchTx(ctx, db, func(batchDB) error {
 			panic(panicValue)
 		}))

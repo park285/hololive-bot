@@ -31,12 +31,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
-// ProvideMemberRepository - 멤버 저장소 생성
+// ProvideMemberRepository - 멤버 저장소 생성.
 func ProvideMemberRepository(postgres database.Client, logger *slog.Logger) *member.Repository {
 	return member.NewMemberRepository(postgres, logger)
 }
 
-// ProvideMemberCache - 멤버 캐시 생성 (초기 워밍업 포함)
+// ProvideMemberCache - 멤버 캐시 생성 (초기 워밍업 포함).
 func ProvideMemberCache(
 	ctx context.Context,
 	repository *member.Repository,
@@ -45,15 +45,17 @@ func ProvideMemberCache(
 ) (*member.Cache, error) {
 	memberCache, err := buildMemberCache(ctx, repository, cacheClient, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build member cache: %w", err)
 	}
 
 	if cacheClient == nil {
 		logger.Warn("Cache service is nil; member database init skipped")
+
 		return memberCache, nil
 	}
+
 	if err := initializeMemberDatabaseFromSnapshot(ctx, memberCache, cacheClient, logger); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initialize member database from snapshot: %w", err)
 	}
 
 	return memberCache, nil
@@ -72,9 +74,15 @@ func initializeMemberDatabaseFromSnapshot(
 	members, err := memberCache.AllMembers(ctx)
 	if err != nil {
 		logger.Warn("Failed to reuse members for member database init; initialization skipped", slog.Any("error", err))
+
 		return nil
 	}
-	return initializeMemberDatabase(ctx, members, cacheClient)
+
+	if err := initializeMemberDatabase(ctx, members, cacheClient); err != nil {
+		return fmt.Errorf("initialize member database: %w", err)
+	}
+
+	return nil
 }
 
 func initializeMemberDatabase(
@@ -93,10 +101,11 @@ func initializeMemberDatabase(
 	if err := cacheClient.InitializeMemberDatabase(ctx, memberMap); err != nil {
 		return fmt.Errorf("failed to initialize member database: %w", err)
 	}
+
 	return nil
 }
 
-// ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성
+// ProvideMemberServiceAdapter - 멤버 데이터 제공자 어댑터 생성.
 func ProvideMemberServiceAdapter(ctx context.Context, memberCache *member.Cache, logger *slog.Logger) domain.MemberDataProvider {
 	ctx = memberAdapterContext(ctx)
 
@@ -107,10 +116,11 @@ func memberAdapterContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		return context.Background()
 	}
+
 	return context.WithoutCancel(ctx)
 }
 
-// ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함)
+// ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함).
 func ProvideProfileService(
 	ctx context.Context,
 	cacheClient cache.Client,
@@ -121,6 +131,8 @@ func ProvideProfileService(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create profile service: %w", err)
 	}
+
 	service.PreloadTranslations(ctx)
+
 	return service, nil
 }

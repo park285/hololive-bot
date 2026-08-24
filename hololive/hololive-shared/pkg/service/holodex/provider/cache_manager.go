@@ -51,9 +51,11 @@ func (cm *CacheManager) GetLiveStreams(ctx context.Context) ([]*domain.Stream, b
 
 func (cm *CacheManager) GetLiveStreamsByOrg(ctx context.Context, org string) ([]*domain.Stream, bool) {
 	var cached []*domain.Stream
+
 	if err := cm.cache.Get(ctx, buildLiveStreamsCacheKey(org), &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -71,10 +73,13 @@ func (cm *CacheManager) GetUpcomingStreams(ctx context.Context, hours int) ([]*d
 
 func (cm *CacheManager) GetUpcomingStreamsByOrg(ctx context.Context, org string, hours int) ([]*domain.Stream, bool) {
 	cacheKey := buildUpcomingStreamsCacheKey(org, hours)
+
 	var cached []*domain.Stream
+
 	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -89,10 +94,13 @@ func (cm *CacheManager) SetUpcomingStreamsByOrg(ctx context.Context, org string,
 
 func (cm *CacheManager) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, bool) {
 	cacheKey := fmt.Sprintf("channel_schedule_%s_%d_%v", channelID, hours, includeLive)
+
 	var cached []*domain.Stream
+
 	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -103,10 +111,13 @@ func (cm *CacheManager) SetChannelSchedule(ctx context.Context, channelID string
 
 func (cm *CacheManager) GetSearchChannels(ctx context.Context, query string) ([]*domain.Channel, bool) {
 	cacheKey := buildSearchChannelsCacheKey(query)
+
 	var cached []*domain.Channel
+
 	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -117,10 +128,13 @@ func (cm *CacheManager) SetSearchChannels(ctx context.Context, query string, cha
 
 func (cm *CacheManager) GetChannel(ctx context.Context, channelID string) (*domain.Channel, bool) {
 	cacheKey := fmt.Sprintf("channel_%s", channelID)
+
 	var cached *domain.Channel
+
 	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -131,9 +145,11 @@ func (cm *CacheManager) SetChannel(ctx context.Context, channelID string, channe
 
 func (cm *CacheManager) GetChannels(ctx context.Context) ([]*domain.Channel, bool) {
 	var cached []*domain.Channel
+
 	if err := cm.cache.Get(ctx, "hololive_channels", &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -143,9 +159,11 @@ func (cm *CacheManager) SetChannels(ctx context.Context, channels []*domain.Chan
 
 func (cm *CacheManager) GetChannelsLiveStatus(ctx context.Context) (map[string]bool, bool) {
 	var cached map[string]bool
+
 	if err := cm.cache.Get(ctx, "channels_live_status", &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -155,10 +173,13 @@ func (cm *CacheManager) SetChannelsLiveStatus(ctx context.Context, status map[st
 
 func (cm *CacheManager) GetChannelsLiveStatusStreams(ctx context.Context, channelIDs []string) ([]*domain.Stream, bool) {
 	cacheKey := fmt.Sprintf("channels_live_status_%s", canonicalizeChannelIDsForCache(channelIDs))
+
 	var cached []*domain.Stream
+
 	if err := cm.cache.Get(ctx, cacheKey, &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -169,9 +190,11 @@ func (cm *CacheManager) SetChannelsLiveStatusStreams(ctx context.Context, channe
 
 func (cm *CacheManager) GetHololiveChannelList(ctx context.Context) ([]*domain.Channel, bool) {
 	var cached []*domain.Channel
+
 	if err := cm.cache.Get(ctx, "hololive_channel_list", &cached); err == nil && cached != nil {
 		return cached, true
 	}
+
 	return nil, false
 }
 
@@ -190,6 +213,7 @@ func buildLiveStreamsCacheKey(org string) string {
 	if strings.EqualFold(normalized, constants.HolodexAPIParams.OrgHololive) {
 		return "live_streams"
 	}
+
 	return fmt.Sprintf("live_streams_%s", normalized)
 }
 
@@ -198,6 +222,7 @@ func buildUpcomingStreamsCacheKey(org string, hours int) string {
 	if strings.EqualFold(normalized, constants.HolodexAPIParams.OrgHololive) {
 		return fmt.Sprintf("upcoming_streams_%d", hours)
 	}
+
 	return fmt.Sprintf("upcoming_streams_%s_%d", normalized, hours)
 }
 
@@ -206,6 +231,7 @@ func normalizeOrgForCache(org string) string {
 	if normalized == "" {
 		return strings.ToLower(constants.HolodexAPIParams.OrgHololive)
 	}
+
 	return normalized
 }
 
@@ -218,9 +244,11 @@ func canonicalizeChannelIDsForCache(channelIDs []string) string {
 		if trimmed == "" {
 			continue
 		}
+
 		if _, ok := seen[trimmed]; ok {
 			continue
 		}
+
 		seen[trimmed] = struct{}{}
 		canonical = append(canonical, trimmed)
 	}

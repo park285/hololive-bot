@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,8 +27,9 @@ func (r *Repository) enrichRows(ctx context.Context, rows []domain.YouTubeNotifi
 	if len(rows) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("enrich delivery telemetry context: db is nil")
+		return errors.New("enrich delivery telemetry context: db is nil")
 	}
 
 	identities := collectDeliveryTelemetryIdentities(rows)
@@ -37,10 +39,11 @@ func (r *Repository) enrichRows(ctx context.Context, rows []domain.YouTubeNotifi
 
 	trackingByIdentity, err := r.loadTrackingSnapshots(ctx, identities)
 	if err != nil {
-		return err
+		return fmt.Errorf("load tracking snapshots: %w", err)
 	}
 
 	applyDeliveryTelemetryTrackingContexts(rows, trackingByIdentity)
+
 	return nil
 }
 
@@ -53,6 +56,7 @@ func collectDeliveryTelemetryIdentities(
 			identities[identity] = struct{}{}
 		}
 	}
+
 	return identities
 }
 
@@ -65,11 +69,14 @@ func applyDeliveryTelemetryTrackingContexts(
 		if !ok {
 			continue
 		}
+
 		snapshot, found := trackingByIdentity[identity]
 		if !found {
 			applyDeliveryTelemetryTrackingContext(&rows[i], nil)
+
 			continue
 		}
+
 		snapshotCopy := snapshot
 		applyDeliveryTelemetryTrackingContext(&rows[i], &snapshotCopy)
 	}
@@ -84,6 +91,7 @@ func applyDeliveryTelemetryTrackingContext(
 	}
 
 	timing := communityShortsAlarmTimingForTelemetryRow(row)
+
 	row.ActualPublishedAt = timing.ActualPublishedAt
 	row.AlarmSentAt = timing.AlarmSentAt
 	row.AlarmLatencyMillis = timeline.ClonePostLatencyInt64(timing.AlarmLatencyMillis)
@@ -107,15 +115,19 @@ func deliveryTelemetryTrackingContextChanged(
 	if !sameUTCTimePtr(left.ActualPublishedAt, right.ActualPublishedAt) {
 		return true
 	}
+
 	if !sameUTCTimePtr(left.AlarmSentAt, right.AlarmSentAt) {
 		return true
 	}
+
 	if !sameInt64Ptr(left.AlarmLatencyMillis, right.AlarmLatencyMillis) {
 		return true
 	}
+
 	if !sameUTCTimePtr(left.DetectedAt, right.DetectedAt) {
 		return true
 	}
+
 	return false
 }
 

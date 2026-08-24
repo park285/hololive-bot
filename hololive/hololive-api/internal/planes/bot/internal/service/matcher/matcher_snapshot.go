@@ -41,28 +41,36 @@ func (mm *Matcher) getSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 		return nil, fmt.Errorf("build member matcher snapshot: %w", err)
 	}
 
-	return validatedMatcherSnapshot(value)
+	out, err := validatedMatcherSnapshot(value)
+	if err != nil {
+		return nil, fmt.Errorf("validated matcher snapshot: %w", err)
+	}
+
+	return out, nil
 }
 
 func (mm *Matcher) cachedSnapshot() *matcherSnapshot {
 	mm.snapshotMu.RLock()
+
 	snapshot := mm.snapshot
 	mm.snapshotMu.RUnlock()
 
 	if snapshot != nil && time.Since(snapshot.builtAt) < mm.snapshotTTL {
 		return snapshot
 	}
+
 	return nil
 }
 
 func (mm *Matcher) rebuildSnapshot(ctx context.Context) (*matcherSnapshot, error) {
 	built, err := mm.buildSnapshot(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build snapshot: %w", err)
 	}
 
 	if built.dynamicLoadErr == nil {
 		mm.snapshotMu.Lock()
+
 		mm.snapshot = built
 		mm.snapshotMu.Unlock()
 	}
@@ -75,6 +83,7 @@ func validatedMatcherSnapshot(value any) (*matcherSnapshot, error) {
 	if !ok {
 		return nil, fmt.Errorf("build member matcher snapshot: unexpected snapshot type %T", value)
 	}
+
 	if rebuilt == nil {
 		return nil, errors.New("build member matcher snapshot: empty snapshot")
 	}

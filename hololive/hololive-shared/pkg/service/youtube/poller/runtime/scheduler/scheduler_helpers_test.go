@@ -22,22 +22,35 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/prometheus/client_golang/prometheus"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+)
+
+const (
+	testPollerVideos     = "videos"
+	testPollerCommunity  = "community"
+	testChannelID        = "channel-1"
+	testBudgetNamespace  = "test"
+	testBudgetInstanceID = "worker-a"
+	testAdmissionScope   = "test"
 )
 
 func newTestMetrics(t *testing.T) *polling.Metrics {
 	t.Helper()
+
 	registry := prometheus.NewRegistry()
 	jobLeaseRenewTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "youtube_poller_test_job_lease_renew_total",
 		Help: "Test-only job lease renewal results.",
 	}, []string{"poller", "result"})
 	registry.MustRegister(jobLeaseRenewTotal)
+
 	return &polling.Metrics{JobLeaseRenewTotal: jobLeaseRenewTotal}
 }
 
@@ -90,12 +103,15 @@ func (c *schedulerClaimStub) TryClaim(
 	_, _ time.Duration,
 ) (polling.JobClaimStatus, polling.JobClaim, error) {
 	c.tryCalls++
+
 	c.poller = pollerName
 	c.channelID = channelID
-	if c.claim == nil {
+
+	if c.err != nil {
 		return c.status, nil, c.err
 	}
-	return c.status, c.claim, c.err
+
+	return c.status, c.claim, nil
 }
 
 type schedulerClaimHandleStub struct {
@@ -110,18 +126,30 @@ type schedulerClaimHandleStub struct {
 func (c *schedulerClaimHandleStub) Renew(ctx context.Context, ttl time.Duration) (bool, error) {
 	c.renewCalls++
 	if c.renewFn != nil {
-		return c.renewFn(ctx, ttl)
+		out, err := c.renewFn(ctx, ttl)
+		if err != nil {
+			return out, fmt.Errorf("renew fn: %w", err)
+		}
+
+		return out, nil
 	}
+
 	return true, nil
 }
+
 func (c *schedulerClaimHandleStub) MarkCompleted(ctx context.Context, _ time.Duration) (bool, error) {
 	c.markCompletedCalls++
+
 	c.markCompletedCtxErr = ctx.Err()
+
 	return true, nil
 }
+
 func (c *schedulerClaimHandleStub) Release(ctx context.Context) (bool, error) {
 	c.releaseCalls++
+
 	c.releaseCtxErr = ctx.Err()
+
 	return true, nil
 }
 
@@ -145,22 +173,28 @@ func (l *schedulerBudgetLimiterStub) TryReserve(
 ) (polling.BudgetReservation, polling.BudgetDecision, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.calls++
+
 	if job != nil {
 		l.job = *job
 	}
+
 	l.profile = profile
 	l.ttl = ttl
 	l.ctxErr = ctx.Err()
-	if l.reservation != nil {
-		return l.reservation, l.decision, l.err
+
+	if l.err != nil {
+		return nil, l.decision, l.err
 	}
-	return nil, l.decision, l.err
+
+	return l.reservation, l.decision, nil
 }
 
 func (l *schedulerBudgetLimiterStub) callCount() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.calls
 }
 
@@ -177,16 +211,22 @@ type schedulerBudgetReservationStub struct {
 func (r *schedulerBudgetReservationStub) Commit(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.commitCalls++
+
 	r.commitCtxErr = ctx.Err()
+
 	return r.commitErr
 }
 
 func (r *schedulerBudgetReservationStub) Release(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.releaseCalls++
+
 	r.releaseCtxErr = ctx.Err()
+
 	return r.releaseErr
 }
 
@@ -222,28 +262,38 @@ func (s *sharedSchedulerClaimState) TryClaim(
 ) (polling.JobClaimStatus, polling.JobClaim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.completed {
 		s.results[polling.JobClaimAlreadyCompleted]++
+
+		//nolint:nilnil // claim 미획득은 오류가 아닌 정상 결과이며, polling.JobClaimer 계약상 nil claim과 nil error를 함께 돌려줘야 resolveJobClaimDecision이 claim-skip으로 처리한다.
 		return polling.JobClaimStatus{Result: polling.JobClaimAlreadyCompleted, RetryAfter: time.Minute}, nil, nil
 	}
+
 	if s.owner {
 		s.results[polling.JobClaimPeerOwned]++
+
+		//nolint:nilnil // 위와 같은 이유로 peer 소유 상태도 오류가 아니라 nil claim과 nil error를 함께 반환한다.
 		return polling.JobClaimStatus{Result: polling.JobClaimPeerOwned, RetryAfter: time.Minute}, nil, nil
 	}
+
 	s.owner = true
 	s.results[polling.JobClaimAcquired]++
+
 	return polling.JobClaimStatus{Result: polling.JobClaimAcquired}, &sharedSchedulerClaimHandle{state: s}, nil
 }
 
 func (s *sharedSchedulerClaimState) resultCount(result polling.JobClaimResult) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.results[result]
 }
 
 func (s *sharedSchedulerClaimState) completedCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	return s.markCompleted
 }
 
@@ -258,17 +308,21 @@ func (h *sharedSchedulerClaimHandle) Renew(context.Context, time.Duration) (bool
 func (h *sharedSchedulerClaimHandle) MarkCompleted(context.Context, time.Duration) (bool, error) {
 	h.state.mu.Lock()
 	defer h.state.mu.Unlock()
+
 	h.state.completed = true
 	h.state.owner = false
 	h.state.markCompleted++
+
 	return true, nil
 }
 
 func (h *sharedSchedulerClaimHandle) Release(context.Context) (bool, error) {
 	h.state.mu.Lock()
 	defer h.state.mu.Unlock()
+
 	h.state.owner = false
 	h.state.releases++
+
 	return true, nil
 }
 
@@ -283,12 +337,18 @@ type blockingCountingPollerStub struct {
 
 func (p *blockingCountingPollerStub) Poll(ctx context.Context, _ string) error {
 	p.mu.Lock()
+
 	p.calls++
 	p.mu.Unlock()
 	p.once.Do(func() { close(p.entered) })
+
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("poll: %w", err)
+		}
+
+		return nil
 	case <-p.release:
 		return nil
 	}
@@ -299,5 +359,6 @@ func (p *blockingCountingPollerStub) Name() string { return p.name }
 func (p *blockingCountingPollerStub) callCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	return p.calls
 }

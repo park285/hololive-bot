@@ -22,14 +22,16 @@ package acl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type ACLMode string
@@ -50,7 +52,12 @@ func ParseACLMode(s string) ACLMode {
 
 // ParseACLModeStrict는 invalid 값을 whitelist 기본값으로 바꾸지 않는 검증 경계용 parser다.
 func ParseACLModeStrict(s string) (ACLMode, error) {
-	return parseACLModeStrict(s)
+	out, err := parseACLModeStrict(s)
+	if err != nil {
+		return out, fmt.Errorf("parse ACL mode strict: %w", err)
+	}
+
+	return out, nil
 }
 
 func normalizeACLModeStrict(mode ACLMode) (ACLMode, error) {
@@ -104,6 +111,7 @@ func normalizeRoomList(input []string) []string {
 	}
 
 	sort.Strings(rooms)
+
 	return rooms
 }
 
@@ -173,16 +181,18 @@ func NewACLService(
 
 	store, err := aclStoreFromClient(postgres)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("acl store from client: %w", err)
 	}
+
 	if cacheClient == nil {
-		return nil, fmt.Errorf("cache service is nil")
+		return nil, errors.New("cache service is nil")
 	}
 
 	normalizedMode, err := normalizeACLModeStrict(defaultMode)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize ACL mode strict: %w", err)
 	}
+
 	normalizedRooms := normalizeRoomList(defaultRooms)
 
 	service := &Service{
@@ -212,12 +222,14 @@ func NewACLService(
 
 func aclStoreFromClient(postgres database.Client) (aclStore, error) {
 	if postgres == nil {
-		return nil, fmt.Errorf("postgres service is nil")
+		return nil, errors.New("postgres service is nil")
 	}
+
 	pool := postgres.GetPool()
 	if pool == nil {
-		return nil, fmt.Errorf("postgres pool is nil")
+		return nil, errors.New("postgres pool is nil")
 	}
+
 	return newPgxACLStore(pool), nil
 }
 

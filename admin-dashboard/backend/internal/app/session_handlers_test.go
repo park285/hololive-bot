@@ -19,6 +19,7 @@ import (
 
 type heartbeatBody struct {
 	io.Reader
+
 	closeErr error
 	closed   bool
 }
@@ -56,6 +57,7 @@ func TestParseHeartbeatRejectsNullIdle(t *testing.T) {
 
 func TestParseHeartbeatAcceptsExactLimit(t *testing.T) {
 	payload := `{"idle":true}`
+
 	payload += strings.Repeat(" ", int(maxHeartbeatBodyBytes)-len(payload))
 
 	hb, err := parseHeartbeat(heartbeatRequestWithBody(payload))
@@ -65,6 +67,7 @@ func TestParseHeartbeatAcceptsExactLimit(t *testing.T) {
 
 func TestParseHeartbeatRejectsOversizedValidPrefix(t *testing.T) {
 	payload := `{"idle":true}`
+
 	payload += strings.Repeat(" ", int(maxHeartbeatBodyBytes)-len(payload)+1)
 
 	_, err := parseHeartbeat(heartbeatRequestWithBody(payload))
@@ -78,8 +81,10 @@ func TestParseHeartbeatRejectsUnknownFields(t *testing.T) {
 
 func TestParseHeartbeatRejectsMultipleValues(t *testing.T) {
 	_, err := parseHeartbeat(heartbeatRequestWithBody(`{"idle":false}{"idle":true}`))
+
 	var syntaxErr *jsontext.SyntacticError
-	require.True(t, errors.As(err, &syntaxErr))
+
+	require.ErrorAs(t, err, &syntaxErr)
 }
 
 func TestParseHeartbeatReturnsBodyCloseError(t *testing.T) {
@@ -105,29 +110,33 @@ func TestParseHeartbeatPreservesReadAndCloseErrors(t *testing.T) {
 }
 
 func TestWaitForLoginBackoffStopsWhenRequestIsCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	require.False(t, waitForLoginBackoff(ctx, time.Hour))
 }
 
 func TestWaitForLoginBackoffSkipsNonPositiveDelay(t *testing.T) {
-	require.True(t, waitForLoginBackoff(context.Background(), 0))
+	require.True(t, waitForLoginBackoff(t.Context(), 0))
 }
 
 func TestLogoutDuringRotationGraceDeletesMarkerAndReplacement(t *testing.T) {
 	replacement := liveSession("replacement-session")
 	store := storeWithSessions(rotatedMarker("marker-session", "replacement-session"), replacement)
+
 	var deleted []string
+
 	store.deleteFn = func(_ context.Context, id string) error {
 		deleted = append(deleted, id)
 		return nil
 	}
+
 	rt := newTestRuntime(t, store, nil)
 
 	csrf, err := auth.NewCSRFToken("marker-session", testSecret)
 	require.NoError(t, err)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie("marker-session"))
 	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	req.Header.Set("X-CSRF-Token", csrf)
@@ -142,16 +151,20 @@ func TestLogoutDuringRotationGraceDeletesMarkerAndReplacement(t *testing.T) {
 
 func TestLogoutOutsideGraceDeletesSingleSession(t *testing.T) {
 	store := storeWith(liveSession("plain-session"))
+
 	var deleted []string
+
 	store.deleteFn = func(_ context.Context, id string) error {
 		deleted = append(deleted, id)
 		return nil
 	}
+
 	rt := newTestRuntime(t, store, nil)
 
 	csrf, err := auth.NewCSRFToken("plain-session", testSecret)
 	require.NoError(t, err)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/logout", http.NoBody)
 	req.AddCookie(signedSessionCookie("plain-session"))
 	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	req.Header.Set("X-CSRF-Token", csrf)

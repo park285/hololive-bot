@@ -21,16 +21,18 @@
 package middleware
 
 import (
-	"context"
 	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	common "github.com/kapu/hololive-shared/pkg/contracts/common"
 	"github.com/park285/shared-go/v2/pkg/httputil"
+
+	common "github.com/kapu/hololive-shared/pkg/contracts/common"
 )
+
+const testAPIKey = "test-key"
 
 func TestAPIKeyAuthMiddleware(t *testing.T) {
 	t.Parallel()
@@ -50,20 +52,20 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 		},
 		{
 			name:       "유효한 키 설정 시 헤더 미전송 → 401",
-			apiKey:     "test-key",
+			apiKey:     testAPIKey,
 			headerVal:  "",
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "잘못된 키 전송 → 403",
-			apiKey:     "test-key",
+			apiKey:     testAPIKey,
 			headerVal:  "wrong-key",
 			wantStatus: http.StatusForbidden,
 		},
 		{
 			name:       "올바른 키 전송 → 200",
-			apiKey:     "test-key",
-			headerVal:  "test-key",
+			apiKey:     testAPIKey,
+			headerVal:  testAPIKey,
 			wantStatus: http.StatusOK,
 		},
 	}
@@ -78,10 +80,12 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 				c.Status(http.StatusOK)
 			})
 
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test", http.NoBody)
+
 			if tt.headerVal != "" {
 				req.Header.Set(common.APIKeyHeader, tt.headerVal)
 			}
+
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 
@@ -97,12 +101,12 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.Use(APIKeyAuthMiddleware("test-key"))
+	router.Use(APIKeyAuthMiddleware(testAPIKey))
 	router.GET("/test", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -111,6 +115,7 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
@@ -118,6 +123,7 @@ func TestAPIKeyAuthMiddleware_ResponseBodyContract(t *testing.T) {
 	if got := payload["error"]; got != "unauthorized" {
 		t.Fatalf("error = %v, want %q", got, "unauthorized")
 	}
+
 	if got := payload["message"]; got != "API key required" {
 		t.Fatalf("message = %v, want %q", got, "API key required")
 	}
@@ -133,7 +139,7 @@ func TestAuthMiddlewareExplicitDisabled(t *testing.T) {
 		c.Status(http.StatusOK)
 	})
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/test", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -160,20 +166,20 @@ func TestNoRouteAuthHandler(t *testing.T) {
 		},
 		{
 			name:       "유효한 키 설정 시 헤더 미전송 → 401",
-			apiKey:     "test-key",
+			apiKey:     testAPIKey,
 			headerVal:  "",
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:       "잘못된 키 전송 → 403",
-			apiKey:     "test-key",
+			apiKey:     testAPIKey,
 			headerVal:  "wrong-key",
 			wantStatus: http.StatusForbidden,
 		},
 		{
 			name:       "올바른 키 전송이지만 경로 없음 → 404",
-			apiKey:     "test-key",
-			headerVal:  "test-key",
+			apiKey:     testAPIKey,
+			headerVal:  testAPIKey,
 			wantStatus: http.StatusNotFound,
 		},
 	}
@@ -186,10 +192,12 @@ func TestNoRouteAuthHandler(t *testing.T) {
 			// NoRoute 핸들러만 등록 (실제 라우트 없음)
 			router.NoRoute(NoRouteAuthHandler(tt.apiKey))
 
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
+
 			if tt.headerVal != "" {
 				req.Header.Set(common.APIKeyHeader, tt.headerVal)
 			}
+
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 
@@ -205,10 +213,11 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
-	router.NoRoute(NoRouteAuthHandler("test-key"))
+	router.NoRoute(NoRouteAuthHandler(testAPIKey))
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
 	req.Header.Set(common.APIKeyHeader, "wrong-key")
+
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -217,6 +226,7 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
@@ -224,6 +234,7 @@ func TestNoRouteAuthHandler_ResponseBodyContract(t *testing.T) {
 	if got := payload["error"]; got != "forbidden" {
 		t.Fatalf("error = %v, want %q", got, "forbidden")
 	}
+
 	if got := payload["message"]; got != "invalid API key" {
 		t.Fatalf("message = %v, want %q", got, "invalid API key")
 	}
@@ -236,7 +247,7 @@ func TestNoRouteHandlerExplicitDisabled(t *testing.T) {
 	router := gin.New()
 	router.NoRoute(NoRouteHandler(httputil.AdminAuthConfig{Disabled: true}))
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nonexistent", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

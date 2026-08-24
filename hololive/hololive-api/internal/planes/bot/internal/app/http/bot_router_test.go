@@ -22,12 +22,12 @@ package apphttp
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
@@ -43,6 +43,7 @@ func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
@@ -50,9 +51,11 @@ func TestBotReadyResponder_OmitsWorkerAndWebhookDiagnostics(t *testing.T) {
 	if _, ok := payload["health"]; !ok {
 		t.Fatalf("/ready payload missing \"health\": %v", payload)
 	}
+
 	if _, ok := payload["workerProfile"]; ok {
 		t.Fatalf("unauthenticated /ready must omit \"workerProfile\": %v", payload)
 	}
+
 	if _, ok := payload["irisWebhookReceive"]; ok {
 		t.Fatalf("unauthenticated /ready must omit \"irisWebhookReceive\": %v", payload)
 	}
@@ -73,12 +76,15 @@ func TestBotReadyResponder_DegradedDependencyReturns503(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
+
 	if payload["status"] != "not_ready" {
 		t.Fatalf("status = %v, want not_ready", payload["status"])
 	}
+
 	if _, ok := payload["workerProfile"]; ok {
 		t.Fatalf("degraded /ready must omit \"workerProfile\": %v", payload)
 	}
@@ -99,9 +105,11 @@ func TestBotReadyResponder_HealthyDependencyReturns200(t *testing.T) {
 	}
 
 	var payload map[string]any
+
 	if err := jsonv2.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("/ready JSON 파싱 실패: %v, raw=%s", err, rec.Body.String())
 	}
+
 	if payload["status"] != "ready" {
 		t.Fatalf("status = %v, want ready", payload["status"])
 	}
@@ -111,11 +119,13 @@ func serveBotReady(t *testing.T, handler func(*gin.Context)) *httptest.ResponseR
 	t.Helper()
 
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.New()
 	router.GET("/ready", handler)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", http.NoBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
+
 	return rec
 }

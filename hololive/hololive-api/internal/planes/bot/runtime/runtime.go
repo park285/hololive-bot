@@ -26,17 +26,19 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
-	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/quic-go/quic-go/http3"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
 
 type BotRuntime struct {
+	lifecycle.Managed
+
 	Config *settings.Config
 	Logger *slog.Logger
 
@@ -57,13 +59,12 @@ type BotRuntime struct {
 	durable              *durableRuntime
 	workerRegistry       *workercontract.Registry
 	workerProfileChecker *workercontract.ProfileFileChecker
-	lifecycle.Managed
 }
 
 func BuildRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*BotRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
 
 	runtime, cleanup, err := InitializeBotRuntime(ctx, appConfig, logger)

@@ -2,6 +2,7 @@ package htmlscraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -9,11 +10,21 @@ import (
 )
 
 func (s *Service) FetchYouTubeSchedule(ctx context.Context, channelID string) ([]*domain.Stream, error) {
-	return s.fetchYouTubeSchedule(ctx, channelID, false)
+	out, err := s.fetchYouTubeSchedule(ctx, channelID, false)
+	if err != nil {
+		return out, fmt.Errorf("fetch youtube schedule: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *Service) FetchYouTubeScheduleWaitAdmission(ctx context.Context, channelID string) ([]*domain.Stream, error) {
-	return s.fetchYouTubeSchedule(ctx, channelID, true)
+	out, err := s.fetchYouTubeSchedule(ctx, channelID, true)
+	if err != nil {
+		return out, fmt.Errorf("fetch youtube schedule: %w", err)
+	}
+
+	return out, nil
 }
 
 func (s *Service) fetchYouTubeSchedule(ctx context.Context, channelID string, waitAdmission bool) ([]*domain.Stream, error) {
@@ -26,14 +37,24 @@ func (s *Service) fetchYouTubeSchedule(ctx context.Context, channelID string, wa
 }
 
 func (s *Service) fetchYouTubeEvents(ctx context.Context, channelID string, waitAdmission bool) ([]*parser.UpcomingEvent, error) {
-	switch {
-	case s.youtubeClient != nil && waitAdmission:
-		return s.youtubeClient.GetUpcomingEventsWaitAdmission(ctx, channelID)
-	case s.youtubeClient != nil:
-		return s.youtubeClient.GetUpcomingEvents(ctx, channelID)
-	default:
-		return nil, fmt.Errorf("youtube scraper not configured")
+	if s.youtubeClient == nil {
+		return nil, errors.New("youtube scraper not configured")
 	}
+
+	fetch := s.youtubeClient.GetUpcomingEvents
+	operation := "get upcoming events"
+
+	if waitAdmission {
+		fetch = s.youtubeClient.GetUpcomingEventsWaitAdmission
+		operation = "get upcoming events wait admission"
+	}
+
+	out, err := fetch(ctx, channelID)
+	if err != nil {
+		return out, fmt.Errorf("%s: %w", operation, err)
+	}
+
+	return out, nil
 }
 
 func (s *Service) convertEventsToStreams(events []*parser.UpcomingEvent, channelID string) []*domain.Stream {
@@ -41,5 +62,6 @@ func (s *Service) convertEventsToStreams(events []*parser.UpcomingEvent, channel
 	for _, event := range events {
 		streams = append(streams, s.convertEventToStream(event, channelID))
 	}
+
 	return streams
 }

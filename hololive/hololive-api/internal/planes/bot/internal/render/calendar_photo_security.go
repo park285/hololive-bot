@@ -11,19 +11,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/net/imagehost"
 	"github.com/park285/shared-go/v2/pkg/netguard"
+
+	"github.com/kapu/hololive-shared/pkg/net/imagehost"
 )
 
 const (
 	calendarPhotoRequestTimeout = 5 * time.Second
 	calendarPhotoMaxRedirects   = 2
+
+	calendarPhotoContentTypeJPEG = "image/jpeg"
+	calendarPhotoContentTypePNG  = "image/png"
+	calendarPhotoContentTypeWebP = "image/webp"
 )
 
 var calendarPhotoAllowedContentTypes = map[string]struct{}{
-	"image/jpeg": {},
-	"image/png":  {},
-	"image/webp": {},
+	calendarPhotoContentTypeJPEG: {},
+	calendarPhotoContentTypePNG:  {},
+	calendarPhotoContentTypeWebP: {},
 }
 
 type calendarPhotoResolver interface {
@@ -55,9 +60,12 @@ func newCalendarPhotoTransport() *http.Transport {
 			DialContext: calendarPhotoNetworkDialer.DialContext,
 		}, calendarPhotoNetguardPolicy())
 	}
+
 	transport := baseTransport.Clone()
+
 	transport.Proxy = nil
 	transport.DialContext = calendarPhotoNetworkDialer.DialContext
+
 	return netguard.GuardedTransport(transport, calendarPhotoNetguardPolicy())
 }
 
@@ -65,6 +73,7 @@ func validateCalendarPhotoURL(rawURL string) error {
 	if err := imagehost.AvatarHosts.ValidateURL(rawURL); err != nil {
 		return fmt.Errorf("calendar photo url: %w", err)
 	}
+
 	return nil
 }
 
@@ -72,6 +81,7 @@ func checkCalendarPhotoRedirect(req *http.Request, via []*http.Request) error {
 	if req.URL.User != nil {
 		return errors.New("calendar photo redirect url must not carry userinfo")
 	}
+
 	return netguard.RedirectPolicy(netguard.RedirectConfig{
 		Policy:       calendarPhotoNetguardPolicy(),
 		MaxRedirects: calendarPhotoMaxRedirects,
@@ -93,10 +103,12 @@ func validateCalendarPhotoContentType(rawContentType string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse calendar photo content type: %w", err)
 	}
+
 	contentType = strings.ToLower(strings.TrimSpace(contentType))
 	if _, ok := calendarPhotoAllowedContentTypes[contentType]; !ok {
 		return "", fmt.Errorf("calendar photo content type %q is not allowed", contentType)
 	}
+
 	return contentType, nil
 }
 
@@ -109,5 +121,6 @@ func calendarPhotoURLHost(rawURL string) string {
 	if err != nil {
 		return ""
 	}
+
 	return normalizedCalendarPhotoHost(parsed)
 }

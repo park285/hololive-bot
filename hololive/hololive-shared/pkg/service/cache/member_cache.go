@@ -22,6 +22,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -34,33 +35,38 @@ const memberHashKey = "hololive:members"
 func (c *Service) InitializeMemberDatabase(ctx context.Context, memberData map[string]string) error {
 	for field := range memberData {
 		if !isCanonicalMemberField(field) {
-			return fmt.Errorf("initialize member database: member field must use name:org format")
+			return errors.New("initialize member database: member field must use name:org format")
 		}
 	}
 
 	if err := c.client.Do(ctx, c.client.B().Del().Key(memberHashKey).Build()).Error(); err != nil {
 		c.logger.Error("Failed to clear member database", slog.Any("error", err))
+
 		return NewCacheError("del", memberHashKey, err)
 	}
 
 	if len(memberData) == 0 {
 		c.logger.Info("Member database cleared (no members provided)")
+
 		return nil
 	}
 
 	builder := c.client.B().Hset().Key(memberHashKey).FieldValue()
+
 	for name, channelID := range memberData {
 		builder = builder.FieldValue(name, channelID)
 	}
 
 	if err := c.client.Do(ctx, builder.Build()).Error(); err != nil {
 		c.logger.Error("Failed to initialize member database", slog.Any("error", err))
+
 		return NewCacheError("hset", memberHashKey, err)
 	}
 
 	c.logger.Info("Member database initialized",
 		slog.Int("members", len(memberData)),
 	)
+
 	return nil
 }
 
@@ -68,12 +74,13 @@ func (c *Service) GetAllMembers(ctx context.Context) (map[string]string, error) 
 	resp := c.client.Do(ctx, c.client.B().Hgetall().Key(memberHashKey).Build())
 	if resp.Error() != nil {
 		c.logger.Error("Failed to get all members", slog.Any("error", resp.Error()))
-		return map[string]string{}, NewCacheError("hgetall", memberHashKey, resp.Error())
+
+		return nil, NewCacheError("hgetall", memberHashKey, resp.Error())
 	}
 
 	values, err := resp.AsStrMap()
 	if err != nil {
-		return map[string]string{}, NewCacheError("hgetall", memberHashKey, err)
+		return nil, NewCacheError("hgetall", memberHashKey, err)
 	}
 
 	canonical := make(map[string]string, len(values))
@@ -82,6 +89,7 @@ func (c *Service) GetAllMembers(ctx context.Context) (map[string]string, error) 
 			canonical[field] = channelID
 		}
 	}
+
 	return canonical, nil
 }
 
@@ -96,11 +104,13 @@ func (c *Service) GetMemberChannelIDWithOrg(ctx context.Context, memberName, org
 	if valkey.IsValkeyNil(resp.Error()) {
 		return "", nil
 	}
+
 	if resp.Error() != nil {
 		c.logger.Error("Failed to get member channel ID with org",
 			slog.String("member", memberName),
 			slog.String("org", org),
 			slog.Any("error", resp.Error()))
+
 		return "", NewCacheError("hget", memberHashKey, resp.Error())
 	}
 
@@ -120,17 +130,13 @@ func (c *Service) GetMemberChannelIDs(ctx context.Context, memberName string) ([
 
 	allMembers, err := c.GetAllMembers(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get all members: %w", err)
 	}
 
 	var channelIDs []string
-	for key, channelID := range allMembers {
-		name := key
-		if idx := strings.LastIndex(key, ":"); idx > 0 {
-			name = key[:idx]
-		}
 
-		if name == memberName {
+	for field, channelID := range allMembers {
+		if memberNameFromField(field) == memberName {
 			channelIDs = append(channelIDs, channelID)
 		}
 	}
@@ -138,10 +144,20 @@ func (c *Service) GetMemberChannelIDs(ctx context.Context, memberName string) ([
 	return channelIDs, nil
 }
 
+func memberNameFromField(field string) string {
+	if idx := strings.LastIndex(field, ":"); idx > 0 {
+		return field[:idx]
+	}
+
+	return field
+}
+
 func isCanonicalMemberField(field string) bool {
 	if strings.Count(field, ":") != 1 {
 		return false
 	}
+
 	name, org, _ := strings.Cut(field, ":")
+
 	return strings.TrimSpace(name) != "" && strings.TrimSpace(org) != ""
 }

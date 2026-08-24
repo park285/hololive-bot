@@ -11,13 +11,17 @@ func TestClient_UpdateAlarmAdvanceMinutes_NilContextSkipsRequest(t *testing.T) {
 	t.Parallel()
 
 	var requestCount int
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/alarm/settings", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/internal/alarm/settings", func(w http.ResponseWriter, _ *http.Request) {
 		requestCount++
+
 		w.WriteHeader(http.StatusOK)
 	})
+
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
+
 	client := NewClient(server.URL, nil)
 
 	var nilCtx context.Context
@@ -26,6 +30,7 @@ func TestClient_UpdateAlarmAdvanceMinutes_NilContextSkipsRequest(t *testing.T) {
 	if len(got) != 0 {
 		t.Fatalf("len(got) = %d, want 0", len(got))
 	}
+
 	if requestCount != 0 {
 		t.Fatalf("requestCount = %d, want 0", requestCount)
 	}

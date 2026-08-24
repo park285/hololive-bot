@@ -27,7 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -37,24 +37,27 @@ func TestAlarmTypeQueriesUseContainmentAndKeepEmptyArrayDefault(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	channelID := "UC_alarm_type_contains"
-	baseTime := time.Date(2026, 7, 3, 10, 0, 0, 0, time.UTC)
+	baseTime := time.Date(2026, time.July, 3, 10, 0, 0, 0, time.UTC)
 
 	insertAlarmForTypeQuery(t, pool, "room-live", channelID, domain.AlarmTypes{domain.AlarmTypeLive}, baseTime)
 	insertAlarmForTypeQuery(t, pool, "room-empty", channelID, domain.AlarmTypes{}, baseTime.Add(time.Second))
-	insertAlarmForTypeQuery(t, pool, "room-community", channelID, domain.AlarmTypes{domain.AlarmTypeCommunity}, baseTime.Add(2*time.Second))
+	insertAlarmForTypeQuery(t, pool, testCommunityRoomID, channelID, domain.AlarmTypes{domain.AlarmTypeCommunity}, baseTime.Add(2*time.Second))
 	insertAlarmForTypeQuery(t, pool, "room-other-channel", "UC_other_channel", domain.AlarmTypes{domain.AlarmTypeLive}, baseTime.Add(3*time.Second))
 
 	repository := &Repository{pool: pool}
+
 	got, err := repository.FindByChannelAndType(ctx, channelID, domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("FindByChannelAndType() error = %v", err)
 	}
+
 	requireAlarmRoomIDs(t, got, []string{"room-live", "room-empty"})
 
 	subscribers, err := loadChannelSubscriberAlarms(ctx, pool, channelID, domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("loadChannelSubscriberAlarms() error = %v", err)
 	}
+
 	requireAlarmRoomIDs(t, subscribers, []string{"room-live", "room-empty"})
 }
 
@@ -71,15 +74,16 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 	`, "display-member", "UC_display_name", "Display Member", "표시 멤버", "표시"); err != nil {
 		t.Fatalf("insert display member: %v", err)
 	}
+
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO alarms (room_id, user_id, channel_id, member_name, alarm_types, created_at)
 		VALUES
 			('room-display', 'user-display', 'UC_display_name', '', ARRAY['LIVE']::alarm_type[], $1),
 			('room-fallback-old', 'user-fallback-old', 'UC_alarm_fallback', 'Old Fallback', ARRAY['LIVE']::alarm_type[], $2),
 			('room-fallback-new', 'user-fallback-new', 'UC_alarm_fallback', 'New Fallback', ARRAY['LIVE']::alarm_type[], $3)
-	`, time.Date(2026, 7, 3, 11, 0, 0, 0, time.UTC),
-		time.Date(2026, 7, 3, 11, 1, 0, 0, time.UTC),
-		time.Date(2026, 7, 3, 11, 2, 0, 0, time.UTC)); err != nil {
+	`, time.Date(2026, time.July, 3, 11, 0, 0, 0, time.UTC),
+		time.Date(2026, time.July, 3, 11, 1, 0, 0, time.UTC),
+		time.Date(2026, time.July, 3, 11, 2, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("insert member-name alarms: %v", err)
 	}
 
@@ -87,6 +91,7 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 	if err != nil {
 		t.Fatalf("GetMemberName(display) error = %v", err)
 	}
+
 	if displayName != "표시" {
 		t.Fatalf("display member name = %q, want 표시", displayName)
 	}
@@ -95,6 +100,7 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 	if err != nil {
 		t.Fatalf("GetMemberName(fallback) error = %v", err)
 	}
+
 	if fallbackName != "New Fallback" {
 		t.Fatalf("fallback member name = %q, want New Fallback", fallbackName)
 	}
@@ -103,9 +109,11 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 	if err != nil {
 		t.Fatalf("GetAllMemberNames() error = %v", err)
 	}
+
 	if names["UC_display_name"] != "표시" {
 		t.Fatalf("all member names display = %q, want 표시", names["UC_display_name"])
 	}
+
 	if names["UC_alarm_fallback"] != "New Fallback" {
 		t.Fatalf("all member names fallback = %q, want New Fallback", names["UC_alarm_fallback"])
 	}
@@ -118,6 +126,7 @@ func insertAlarmForTypeQuery(t *testing.T, db *pgxpool.Pool, roomID, channelID s
 	if err != nil {
 		t.Fatalf("encode alarm types: %v", err)
 	}
+
 	if _, err := db.Exec(t.Context(), `
 		INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7::alarm_type[], $8)
@@ -133,6 +142,7 @@ func requireAlarmRoomIDs(t *testing.T, alarms []*domain.Alarm, want []string) {
 	for _, alarm := range alarms {
 		got = append(got, alarm.RoomID)
 	}
+
 	if !slices.Equal(got, want) {
 		t.Fatalf("room IDs = %v, want %v", got, want)
 	}

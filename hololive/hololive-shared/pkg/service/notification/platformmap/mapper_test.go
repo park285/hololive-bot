@@ -7,13 +7,16 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
-	"github.com/stretchr/testify/require"
 )
+
+const alphaChannelID = "UC_alpha"
 
 type stubMemberDataProvider struct {
 	members []*domain.Member
@@ -25,6 +28,7 @@ func (m *stubMemberDataProvider) FindMemberByChannelID(channelID string) *domain
 			return member
 		}
 	}
+
 	return nil
 }
 
@@ -45,15 +49,17 @@ func (m *stubMemberDataProvider) FindMembersByAlias(_ string) []*domain.Member {
 func newTestMapper(t *testing.T, members ...*domain.Member) (*Mapper, cache.Client) {
 	t.Helper()
 
-	cacheClient := sharedtestutil.NewTestCacheService(t, t.Context())
+	cacheClient := sharedtestutil.NewTestCacheService(t.Context(), t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	provider := &stubMemberDataProvider{members: members}
 	memberDataFn := func() domain.MemberDataProvider { return provider }
+
 	return NewMapper(cacheClient, memberDataFn, logger), cacheClient
 }
 
 func registerChannel(t *testing.T, c cache.Client, channelIDs ...string) {
 	t.Helper()
+
 	_, err := c.SAdd(t.Context(), sharedalarmkeys.AlarmChannelRegistryKey, channelIDs)
 	require.NoError(t, err)
 }
@@ -74,19 +80,19 @@ func TestSyncForChannel_FreshTwitchMappingCreation(t *testing.T) {
 	t.Parallel()
 
 	mapper, c := newTestMapper(t, &domain.Member{
-		ChannelID:    "UC_alpha",
+		ChannelID:    alphaChannelID,
 		TwitchUserID: "AlphaLogin",
 	})
 
-	registerChannel(t, c, "UC_alpha")
+	registerChannel(t, c, alphaChannelID)
 	require.NoError(t, c.Set(t.Context(), sharedalarmkeys.TwitchLoginMapEmptyKey, "1", 0))
 	require.NoError(t, c.Set(t.Context(), sharedalarmkeys.TwitchChannelLoginMapEmptyKey, "1", 0))
 
-	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_alpha"))
+	require.NoError(t, mapper.SyncForChannel(t.Context(), alphaChannelID))
 
 	assertTwitchHashes(t, c,
-		map[string]string{"alphalogin": "UC_alpha"},
-		map[string]string{"UC_alpha": "alphalogin"},
+		map[string]string{"alphalogin": alphaChannelID},
+		map[string]string{alphaChannelID: "alphalogin"},
 	)
 
 	for _, key := range []string{sharedalarmkeys.TwitchLoginMapEmptyKey, sharedalarmkeys.TwitchChannelLoginMapEmptyKey} {
@@ -105,8 +111,8 @@ func TestHB05IncrementalSyncPrunesStaleTwitchLoginMapping_cf189323(t *testing.T)
 	})
 
 	registerChannel(t, c, "UC_beta")
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "sharedlogin", "UC_alpha"))
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "sharedlogin"))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "sharedlogin", alphaChannelID))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, alphaChannelID, "sharedlogin"))
 
 	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_beta"))
 
@@ -120,19 +126,19 @@ func TestSyncForChannel_ChangedLoginReplacesOwnedMapping(t *testing.T) {
 	t.Parallel()
 
 	mapper, c := newTestMapper(t, &domain.Member{
-		ChannelID:    "UC_alpha",
+		ChannelID:    alphaChannelID,
 		TwitchUserID: "NewLogin",
 	})
 
-	registerChannel(t, c, "UC_alpha")
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "oldlogin", "UC_alpha"))
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "oldlogin"))
+	registerChannel(t, c, alphaChannelID)
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "oldlogin", alphaChannelID))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, alphaChannelID, "oldlogin"))
 
-	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_alpha"))
+	require.NoError(t, mapper.SyncForChannel(t.Context(), alphaChannelID))
 
 	assertTwitchHashes(t, c,
-		map[string]string{"newlogin": "UC_alpha"},
-		map[string]string{"UC_alpha": "newlogin"},
+		map[string]string{"newlogin": alphaChannelID},
+		map[string]string{alphaChannelID: "newlogin"},
 	)
 }
 
@@ -140,18 +146,18 @@ func TestSyncForChannel_ChangedLoginPrunesLegacyMappingWithoutReverseIndex(t *te
 	t.Parallel()
 
 	mapper, c := newTestMapper(t, &domain.Member{
-		ChannelID:    "UC_alpha",
+		ChannelID:    alphaChannelID,
 		TwitchUserID: "NewLogin",
 	})
 
-	registerChannel(t, c, "UC_alpha")
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "oldlogin", "UC_alpha"))
+	registerChannel(t, c, alphaChannelID)
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "oldlogin", alphaChannelID))
 
-	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_alpha"))
+	require.NoError(t, mapper.SyncForChannel(t.Context(), alphaChannelID))
 
 	assertTwitchHashes(t, c,
-		map[string]string{"newlogin": "UC_alpha"},
-		map[string]string{"UC_alpha": "newlogin"},
+		map[string]string{"newlogin": alphaChannelID},
+		map[string]string{alphaChannelID: "newlogin"},
 	)
 }
 
@@ -159,15 +165,15 @@ func TestSyncForChannel_UnregisteredRemovesOwnedTwitchMapping(t *testing.T) {
 	t.Parallel()
 
 	mapper, c := newTestMapper(t, &domain.Member{
-		ChannelID:    "UC_alpha",
+		ChannelID:    alphaChannelID,
 		TwitchUserID: "AlphaLogin",
 	})
 
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "alphalogin", "UC_alpha"))
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "alphalogin"))
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.ChzzkChannelMapKey, "UC_alpha", "chzzk_alpha"))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "alphalogin", alphaChannelID))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, alphaChannelID, "alphalogin"))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.ChzzkChannelMapKey, alphaChannelID, "chzzk_alpha"))
 
-	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_alpha"))
+	require.NoError(t, mapper.SyncForChannel(t.Context(), alphaChannelID))
 
 	assertTwitchHashes(t, c, map[string]string{}, map[string]string{})
 
@@ -180,14 +186,14 @@ func TestSyncForChannel_UnregisteredKeepsTwitchLoginOwnedByOther(t *testing.T) {
 	t.Parallel()
 
 	mapper, c := newTestMapper(t, &domain.Member{
-		ChannelID:    "UC_alpha",
+		ChannelID:    alphaChannelID,
 		TwitchUserID: "AlphaLogin",
 	})
 
 	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "alphalogin", "UC_other"))
-	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "alphalogin"))
+	require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, alphaChannelID, "alphalogin"))
 
-	require.NoError(t, mapper.SyncForChannel(t.Context(), "UC_alpha"))
+	require.NoError(t, mapper.SyncForChannel(t.Context(), alphaChannelID))
 
 	assertTwitchHashes(t, c,
 		map[string]string{"alphalogin": "UC_other"},
@@ -229,18 +235,20 @@ func TestSyncForChannel_MissingDependenciesError(t *testing.T) {
 
 	t.Run("nil cache", func(t *testing.T) {
 		t.Parallel()
+
 		mapper := NewMapper(nil, func() domain.MemberDataProvider {
 			return &stubMemberDataProvider{}
 		}, logger)
-		err := mapper.SyncForChannel(context.Background(), "UC_alpha")
+		err := mapper.SyncForChannel(t.Context(), alphaChannelID)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "cache service not configured")
 	})
 
 	t.Run("nil member data", func(t *testing.T) {
 		t.Parallel()
+
 		mapper := NewMapper(cachemocks.NewLenientClient(), nil, logger)
-		err := mapper.SyncForChannel(context.Background(), "UC_alpha")
+		err := mapper.SyncForChannel(t.Context(), alphaChannelID)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "member data provider not configured")
 	})
@@ -251,22 +259,24 @@ func TestReconcileTwitchMappingsForChannel_RemoveStaleOnlyWhenOwned(t *testing.T
 
 	t.Run("owned stale login removed when desired empty", func(t *testing.T) {
 		t.Parallel()
-		mapper, c := newTestMapper(t)
-		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "stale", "UC_alpha"))
-		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "stale"))
 
-		require.NoError(t, mapper.reconcileTwitchMappingsForChannel(t.Context(), "UC_alpha", ""))
+		mapper, c := newTestMapper(t)
+		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "stale", alphaChannelID))
+		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, alphaChannelID, "stale"))
+
+		require.NoError(t, mapper.reconcileTwitchMappingsForChannel(t.Context(), alphaChannelID, ""))
 
 		assertTwitchHashes(t, c, map[string]string{}, map[string]string{})
 	})
 
 	t.Run("foreign stale login kept when desired empty", func(t *testing.T) {
 		t.Parallel()
+
 		mapper, c := newTestMapper(t)
 		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "stale", "UC_other"))
-		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, "UC_alpha", "stale"))
+		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchChannelLoginMapKey, alphaChannelID, "stale"))
 
-		require.NoError(t, mapper.reconcileTwitchMappingsForChannel(t.Context(), "UC_alpha", ""))
+		require.NoError(t, mapper.reconcileTwitchMappingsForChannel(t.Context(), alphaChannelID, ""))
 
 		assertTwitchHashes(t, c,
 			map[string]string{"stale": "UC_other"},
@@ -280,19 +290,21 @@ func TestRemoveStaleTwitchLoginMappingIfOwned(t *testing.T) {
 
 	t.Run("blank login or channel is no-op", func(t *testing.T) {
 		t.Parallel()
-		mapper, c := newTestMapper(t)
-		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "x", "UC_alpha"))
 
-		require.NoError(t, mapper.removeStaleTwitchLoginMappingIfOwned(t.Context(), "", "UC_alpha"))
+		mapper, c := newTestMapper(t)
+		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "x", alphaChannelID))
+
+		require.NoError(t, mapper.removeStaleTwitchLoginMappingIfOwned(t.Context(), "", alphaChannelID))
 		require.NoError(t, mapper.removeStaleTwitchLoginMappingIfOwned(t.Context(), "x", "  "))
 
 		loginMap, err := c.HGetAll(t.Context(), sharedalarmkeys.TwitchLoginMapKey)
 		require.NoError(t, err)
-		require.Equal(t, map[string]string{"x": "UC_alpha"}, loginMap)
+		require.Equal(t, map[string]string{"x": alphaChannelID}, loginMap)
 	})
 
 	t.Run("owner mismatch keeps mapping", func(t *testing.T) {
 		t.Parallel()
+
 		mapper, c := newTestMapper(t)
 		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "login", "UC_owner"))
 
@@ -305,6 +317,7 @@ func TestRemoveStaleTwitchLoginMappingIfOwned(t *testing.T) {
 
 	t.Run("owned mapping removed", func(t *testing.T) {
 		t.Parallel()
+
 		mapper, c := newTestMapper(t)
 		require.NoError(t, c.HSet(t.Context(), sharedalarmkeys.TwitchLoginMapKey, "login", "UC_owner"))
 
@@ -317,6 +330,7 @@ func TestRemoveStaleTwitchLoginMappingIfOwned(t *testing.T) {
 
 	t.Run("empty owner removed", func(t *testing.T) {
 		t.Parallel()
+
 		mapper, c := newTestMapper(t)
 
 		require.NoError(t, mapper.removeStaleTwitchLoginMappingIfOwned(t.Context(), "login", "UC_owner"))
@@ -352,14 +366,16 @@ func TestSyncForChannel_PropagatesRegistryError(t *testing.T) {
 	sentinel := errors.New("registry boom")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	mock := cachemocks.NewStrictClient()
+
 	mock.SIsMemberFunc = func(context.Context, string, string) (bool, error) {
 		return false, sentinel
 	}
+
 	mapper := NewMapper(mock, func() domain.MemberDataProvider {
 		return &stubMemberDataProvider{}
 	}, logger)
 
-	err := mapper.SyncForChannel(context.Background(), "UC_alpha")
+	err := mapper.SyncForChannel(t.Context(), alphaChannelID)
 	require.Error(t, err)
 	require.ErrorIs(t, err, sentinel)
 	require.Contains(t, err.Error(), "check channel registry membership")

@@ -22,6 +22,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -33,6 +34,7 @@ func StartHTTP3Server(server *http3.Server, logger *slog.Logger, errCh chan<- er
 	if server == nil {
 		return
 	}
+
 	httpserver.StartServerWithPrefix(server, "HTTP/3 server error", logger, errCh)
 }
 
@@ -40,13 +42,19 @@ func ShutdownHTTP3Server(ctx context.Context, server *http3.Server) error {
 	if server == nil {
 		return nil
 	}
-	return httpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed")
+
+	if err := httpserver.Shutdown(ctx, server, "HTTP/3 server shutdown failed"); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }
 
 func StartShortLinkServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}
+
 	httpserver.StartServerWithPrefix(server, "short-link server error", logger, errCh)
 }
 
@@ -54,13 +62,19 @@ func ShutdownShortLinkServer(ctx context.Context, server *http.Server) error {
 	if server == nil {
 		return nil
 	}
-	return httpserver.Shutdown(ctx, server, "short-link server shutdown failed")
+
+	if err := httpserver.Shutdown(ctx, server, "short-link server shutdown failed"); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }
 
 func StartMetricsServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}
+
 	httpserver.StartServerWithPrefix(server, "metrics server error", logger, errCh)
 }
 
@@ -68,13 +82,19 @@ func ShutdownMetricsServer(ctx context.Context, server *http.Server) error {
 	if server == nil {
 		return nil
 	}
-	return httpserver.Shutdown(ctx, server, "metrics server shutdown failed")
+
+	if err := httpserver.Shutdown(ctx, server, "metrics server shutdown failed"); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }
 
 func StartPprofServer(server *http.Server, logger *slog.Logger, errCh chan<- error) {
 	if server == nil {
 		return
 	}
+
 	httpserver.StartServerWithPrefix(server, "pprof server error", logger, errCh)
 }
 
@@ -82,5 +102,10 @@ func ShutdownPprofServer(ctx context.Context, server *http.Server) error {
 	if server == nil {
 		return nil
 	}
-	return httpserver.Shutdown(ctx, server, "pprof server shutdown failed")
+
+	if err := httpserver.Shutdown(ctx, server, "pprof server shutdown failed"); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	return nil
 }

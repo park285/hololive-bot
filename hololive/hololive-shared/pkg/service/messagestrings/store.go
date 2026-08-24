@@ -75,6 +75,7 @@ type Store struct {
 
 func NewStore(pool *pgxpool.Pool, logger *slog.Logger) *Store {
 	initMetrics()
+
 	return &Store{pool: pool, logger: logger, loadTimeout: lazyLoadTimeout}
 }
 
@@ -82,7 +83,12 @@ func (s *Store) Load(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	return s.reload(ctx)
+
+	if err := s.reload(ctx); err != nil {
+		return fmt.Errorf("reload: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) Get(namespace, key string) string {
@@ -93,24 +99,33 @@ func (s *Store) GetContext(ctx context.Context, namespace, key string) string {
 	if s == nil {
 		return ""
 	}
+
 	s.ensureLoaded(ctx)
 
 	s.mu.RLock()
+
 	loaded := s.loaded
+
 	var value string
+
 	if values, ok := s.cache[namespace]; ok {
 		value = values[key]
 	}
+
 	s.mu.RUnlock()
+
 	if value != "" {
 		return value
 	}
 
 	reason := fallbackReasonMissing
+
 	if !loaded {
 		reason = fallbackReasonUnloaded
 	}
+
 	observeLookupFallback(reason, namespace)
+
 	return ""
 }
 
@@ -118,6 +133,7 @@ func (s *Store) GetOrContext(ctx context.Context, namespace, key, fallback strin
 	if v := s.GetContext(ctx, namespace, key); v != "" {
 		return v
 	}
+
 	return fallback
 }
 
@@ -125,6 +141,7 @@ func (s *Store) VTuberFallbackContext(ctx context.Context) string {
 	if v := s.GetContext(ctx, NamespaceMisc, "vtuber_fallback"); v != "" {
 		return v
 	}
+
 	return "VTuber"
 }
 
@@ -132,21 +149,26 @@ func (s *Store) GetMap(namespace string) map[string]string {
 	if s == nil {
 		return nil
 	}
+
 	s.ensureLoaded(context.Background())
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	src := s.cache[namespace]
 	if src == nil {
 		return nil
 	}
+
 	out := make(map[string]string, len(src))
 	maps.Copy(out, src)
+
 	return out
 }
 
 func (s *Store) Invalidate() {
 	s.mu.Lock()
+
 	s.loaded = false
 	s.cache = nil
 	s.nextRetryAt = time.Time{}
@@ -155,8 +177,10 @@ func (s *Store) Invalidate() {
 
 func (s *Store) ensureLoaded(ctx context.Context) {
 	s.mu.RLock()
+
 	loaded := s.loaded
 	s.mu.RUnlock()
+
 	if loaded {
 		return
 	}
@@ -165,12 +189,16 @@ func (s *Store) ensureLoaded(ctx context.Context) {
 	defer s.reloadMu.Unlock()
 
 	s.mu.RLock()
+
 	loaded = s.loaded
+
 	retryAt := s.nextRetryAt
 	s.mu.RUnlock()
+
 	if loaded {
 		return
 	}
+
 	if !retryAt.IsZero() && time.Now().Before(retryAt) {
 		return
 	}
@@ -179,11 +207,14 @@ func (s *Store) ensureLoaded(ctx context.Context) {
 	if timeout <= 0 {
 		timeout = lazyLoadTimeout
 	}
+
 	loadCtx, cancel := context.WithTimeout(ctx, timeout)
+
 	defer cancel()
 
 	if err := s.reload(loadCtx); err != nil {
 		s.mu.Lock()
+
 		s.nextRetryAt = time.Now().Add(lazyLoadRetryInterval)
 		s.mu.Unlock()
 		s.warn(ctx, "messagestrings: lazy load failed", "error", err)
@@ -193,8 +224,10 @@ func (s *Store) ensureLoaded(ctx context.Context) {
 func (s *Store) reload(ctx context.Context) error {
 	if err := s.load(ctx); err != nil {
 		observeLoadFailure()
-		return err
+
+		return fmt.Errorf("load: %w", err)
 	}
+
 	return nil
 }
 
@@ -206,27 +239,34 @@ func (s *Store) load(ctx context.Context) error {
 	defer rows.Close()
 
 	next := make(map[string]map[string]string)
+
 	for rows.Next() {
 		var namespace, key, value string
+
 		if scanErr := rows.Scan(&namespace, &key, &value); scanErr != nil {
 			return fmt.Errorf("scan message_strings: %w", scanErr)
 		}
+
 		values, ok := next[namespace]
 		if !ok {
 			values = make(map[string]string)
 			next[namespace] = values
 		}
+
 		values[key] = value
 	}
+
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate message_strings: %w", err)
 	}
 
 	s.mu.Lock()
+
 	s.cache = next
 	s.loaded = true
 	s.nextRetryAt = time.Time{}
 	s.mu.Unlock()
+
 	return nil
 }
 

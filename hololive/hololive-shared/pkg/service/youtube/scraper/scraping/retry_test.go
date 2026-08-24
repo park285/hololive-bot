@@ -23,6 +23,7 @@ package scraping
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -54,7 +55,12 @@ func (p *fixedSnapshotProvider) Headers(_ context.Context) ua.HeaderSnapshot {
 type roundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 type flakyNetError struct {
@@ -84,6 +90,7 @@ func TestIsTimeoutOrTemporaryErrorTypedNil(t *testing.T) {
 
 func TestIsTimeoutFailureNestedTypedNil(t *testing.T) {
 	var typedNil *flakyNetError
+
 	err := &url.Error{Op: "Get", URL: "https://youtube.example", Err: typedNil}
 
 	require.NotPanics(t, func() {
@@ -101,14 +108,17 @@ func (d *stubDialer) Dial(_, _ string) (net.Conn, error) {
 	if d.delay > 0 {
 		time.Sleep(d.delay)
 	}
+
 	if d.err != nil {
 		return nil, d.err
 	}
+
 	return d.conn, nil
 }
 
 type trackingConn struct {
 	net.Conn
+
 	closeCh   chan struct{}
 	closeOnce sync.Once
 }
@@ -124,16 +134,23 @@ func (c *trackingConn) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.closeCh)
 	})
-	return c.Conn.Close()
+
+	if err := c.Conn.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	return nil
 }
 
-func TestFetchPage_Retry5xx(t *testing.T) {
-	tests := []struct {
-		name           string
-		statusSequence []int
-		expectSuccess  bool
-		expectAttempts int32
-	}{
+type retry5xxCase struct {
+	name           string
+	statusSequence []int
+	expectSuccess  bool
+	expectAttempts int32
+}
+
+func retry5xxCases() []retry5xxCase {
+	return []retry5xxCase{
 		{
 			name:           "504 then 200 succeeds",
 			statusSequence: []int{504, 200},
@@ -165,8 +182,10 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 			expectAttempts: 1,
 		},
 	}
+}
 
-	for _, tt := range tests {
+func TestFetchPage_Retry5xx(t *testing.T) {
+	for _, tt := range retry5xxCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			var attempts atomic.Int32
 
@@ -175,6 +194,7 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 				if idx >= len(tt.statusSequence) {
 					idx = len(tt.statusSequence) - 1
 				}
+
 				status := tt.statusSequence[idx]
 				if status == 200 {
 					w.WriteHeader(http.StatusOK)
@@ -191,7 +211,7 @@ func TestFetchPage_Retry5xx(t *testing.T) {
 				WithUAProvider(ua.NewStaticProvider("test-agent")),
 			)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 
 			result, err := client.fetchPage(ctx, server.URL)
@@ -226,7 +246,7 @@ func TestNetHTTPPageFetcher_StatusBodyAndHeaders(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	body, err := client.fetchPageOnce(context.Background(), server.URL)
+	body, err := client.fetchPageOnce(t.Context(), server.URL)
 	require.NoError(t, err)
 	assert.Contains(t, body, "ytInitialData")
 	assert.Equal(t, "test-agent", receivedHeaders.Get("User-Agent"))
@@ -248,13 +268,13 @@ func TestFetchPage_NoRetryOn429(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	_, err := client.fetchPage(ctx, server.URL)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrRateLimited)
+	require.ErrorIs(t, err, ErrRateLimited)
 	assert.Equal(t, int32(1), attempts.Load())
 }
 
@@ -273,13 +293,13 @@ func TestFetchPage_NoRetryOn403(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	_, err := client.fetchPage(ctx, server.URL)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrForbidden)
+	require.ErrorIs(t, err, ErrForbidden)
 	assert.Equal(t, int32(1), attempts.Load())
 }
 
@@ -302,7 +322,7 @@ func TestFetchPage_NoRetryOn4xx(t *testing.T) {
 				WithUAProvider(ua.NewStaticProvider("test-agent")),
 			)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 
 			_, err := client.fetchPage(ctx, server.URL)
@@ -315,6 +335,7 @@ func TestFetchPage_NoRetryOn4xx(t *testing.T) {
 
 func TestGetShorts_UsesSingleAttemptHighFrequencyPolicy(t *testing.T) {
 	var attempts atomic.Int32
+
 	shortsJSON := `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"title":"Shorts","content":{"richGridRenderer":{"contents":[]}}}}]}}}`
 	shortsHTML := "<script>var ytInitialData = " + shortsJSON + ";</script>"
 
@@ -322,6 +343,7 @@ func TestGetShorts_UsesSingleAttemptHighFrequencyPolicy(t *testing.T) {
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				assert.Equal(t, "/channel/UC_TEST/shorts", req.URL.Path)
+
 				if attempts.Add(1) == 1 {
 					return &http.Response{
 						StatusCode: http.StatusBadGateway,
@@ -330,6 +352,7 @@ func TestGetShorts_UsesSingleAttemptHighFrequencyPolicy(t *testing.T) {
 						Request:    req,
 					}, nil
 				}
+
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     make(http.Header),
@@ -342,56 +365,40 @@ func TestGetShorts_UsesSingleAttemptHighFrequencyPolicy(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	_, err := client.GetShorts(context.Background(), "UC_TEST", 10)
+	_, err := client.GetShorts(t.Context(), "UC_TEST", 10)
 	require.Error(t, err)
 	assert.Equal(t, int32(1), attempts.Load())
 }
 
-func TestFetchPage_TransportRetryClassification(t *testing.T) {
-	tests := []struct {
-		name             string
-		firstErr         func(req *http.Request) error
-		expectAttempts   int32
-		expectSuccess    bool
-		expectErrIs      error
-		expectErrContain string
-	}{
+type transportRetryCase struct {
+	name             string
+	firstErr         func(req *http.Request) error
+	expectAttempts   int32
+	expectSuccess    bool
+	expectErrIs      error
+	expectErrContain string
+}
+
+func transportGetURLError(cause error) func(req *http.Request) error {
+	return func(req *http.Request) error {
+		return &url.Error{Op: http.MethodGet, URL: req.URL.String(), Err: cause}
+	}
+}
+
+func transportRetryClassificationCases() []transportRetryCase {
+	return []transportRetryCase{
 		{
-			name: "transient transport reset retried",
-			firstErr: func(req *http.Request) error {
-				return &url.Error{
-					Op:  http.MethodGet,
-					URL: req.URL.String(),
-					Err: &flakyNetError{msg: "read: connection reset by peer"},
-				}
-			},
-			expectAttempts: 2,
-			expectSuccess:  true,
-		},
-		{
-			name: "http2 response header timeout retried",
-			firstErr: func(req *http.Request) error {
-				return &url.Error{
-					Op:  http.MethodGet,
-					URL: req.URL.String(),
-					Err: &flakyNetError{msg: "http2: timeout awaiting response headers", timeout: true},
-				}
-			},
+			name:           "transient transport reset retried",
+			firstErr:       transportGetURLError(&flakyNetError{msg: "read: connection reset by peer"}),
 			expectAttempts: 2,
 			expectSuccess:  true,
 		},
 		{
 			name: "client timeout signature retried",
-			firstErr: func(req *http.Request) error {
-				return &url.Error{
-					Op:  http.MethodGet,
-					URL: req.URL.String(),
-					Err: &flakyNetError{
-						msg:     "context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
-						timeout: true,
-					},
-				}
-			},
+			firstErr: transportGetURLError(&flakyNetError{
+				msg:     "context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+				timeout: true,
+			}),
 			expectAttempts: 2,
 			expectSuccess:  true,
 		},
@@ -405,21 +412,17 @@ func TestFetchPage_TransportRetryClassification(t *testing.T) {
 			expectErrIs:    context.DeadlineExceeded,
 		},
 		{
-			name: "non transient url error not retried",
-			firstErr: func(req *http.Request) error {
-				return &url.Error{
-					Op:  http.MethodGet,
-					URL: req.URL.String(),
-					Err: errors.New("x509: certificate signed by unknown authority"),
-				}
-			},
+			name:             "non transient url error not retried",
+			firstErr:         transportGetURLError(errors.New("x509: certificate signed by unknown authority")),
 			expectAttempts:   1,
 			expectSuccess:    false,
 			expectErrContain: "x509",
 		},
 	}
+}
 
-	for _, tt := range tests {
+func TestFetchPage_TransportRetryClassification(t *testing.T) {
+	for _, tt := range transportRetryClassificationCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			var attempts atomic.Int32
 
@@ -444,22 +447,26 @@ func TestFetchPage_TransportRetryClassification(t *testing.T) {
 				WithUAProvider(ua.NewStaticProvider("test-agent")),
 			)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 12*time.Second)
 			defer cancel()
 
 			result, err := client.fetchPage(ctx, "https://example.com/channel/test")
+
 			assert.Equal(t, tt.expectAttempts, attempts.Load())
 
 			if tt.expectSuccess {
 				require.NoError(t, err)
 				assert.Contains(t, result, "ytInitialData")
+
 				return
 			}
 
 			require.Error(t, err)
+
 			if tt.expectErrIs != nil {
-				assert.ErrorIs(t, err, tt.expectErrIs)
+				require.ErrorIs(t, err, tt.expectErrIs)
 			}
+
 			if tt.expectErrContain != "" {
 				assert.Contains(t, err.Error(), tt.expectErrContain)
 			}
@@ -506,6 +513,7 @@ func TestClient_SetProxyEnabled_CustomHTTPClient_NoOp(t *testing.T) {
 func TestDialSOCKS5WithContextFallback_CancelClosesConn(t *testing.T) {
 	clientSide, peerSide := net.Pipe()
 	tracking := newTrackingConn(clientSide)
+
 	t.Cleanup(func() {
 		mustClose(t, tracking)
 		mustClose(t, peerSide)
@@ -516,12 +524,12 @@ func TestDialSOCKS5WithContextFallback_CancelClosesConn(t *testing.T) {
 		conn:  tracking,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 
 	conn, err := dialSOCKS5WithContextFallback(ctx, dialer, "tcp", "example.com:443")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Nil(t, conn)
 
 	select {
@@ -534,6 +542,7 @@ func TestDialSOCKS5WithContextFallback_CancelClosesConn(t *testing.T) {
 func TestDialSOCKS5WithContextFallback_SuccessKeepsConnOpen(t *testing.T) {
 	clientSide, peerSide := net.Pipe()
 	tracking := newTrackingConn(clientSide)
+
 	t.Cleanup(func() {
 		mustClose(t, tracking)
 		mustClose(t, peerSide)
@@ -544,7 +553,7 @@ func TestDialSOCKS5WithContextFallback_SuccessKeepsConnOpen(t *testing.T) {
 		conn:  tracking,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 
 	conn, err := dialSOCKS5WithContextFallback(ctx, dialer, "tcp", "example.com:443")
@@ -591,6 +600,7 @@ func TestBackoffState_WithCooldownJitterStaysInRange(t *testing.T) {
 	for range 50 {
 		bs := backoff.NewBackoffState(backoff.WithCooldownJitter(0.1))
 		bs.RecordError()
+
 		cd := bs.HardCooldownRemaining()
 		base := 30 * time.Minute
 		// jitter 범위 [0.9, 1.1] base에 wall-clock drift 여유를 더한 값이다.
@@ -602,6 +612,7 @@ func TestBackoffState_WithCooldownJitterStaysInRange(t *testing.T) {
 func TestBackoffState_WithCooldownJitterDisabledMatchesBaseline(t *testing.T) {
 	bs := backoff.NewBackoffState(backoff.WithCooldownJitter(0))
 	bs.RecordError()
+
 	cd := bs.HardCooldownRemaining()
 	// jitter=0이면 정확히 30분 base (시계 drift 마진 2초).
 	assert.InDelta(t, 30*time.Minute, cd, float64(2*time.Second))
@@ -612,11 +623,13 @@ func TestBackoffState_DualState(t *testing.T) {
 
 	// hard 에러 기록
 	bs.RecordError()
+
 	hardCD := bs.HardCooldownRemaining()
 	assert.Greater(t, hardCD, time.Duration(0), "hard cooldown should be active after RecordError")
 
 	// transient 에러 기록
 	bs.RecordTransientError()
+
 	transientCD := bs.TransientCooldownRemaining()
 	assert.Greater(t, transientCD, time.Duration(0), "transient cooldown should be active after RecordTransientError")
 
@@ -629,16 +642,19 @@ func TestBackoffState_RecordTransientError(t *testing.T) {
 
 	// 1회: 30초
 	bs.RecordTransientError()
+
 	cd1 := bs.TransientCooldownRemaining()
 	assert.InDelta(t, 30*time.Second, cd1, float64(2*time.Second))
 
 	// 2회: 3분
 	bs.RecordTransientError()
+
 	cd2 := bs.TransientCooldownRemaining()
 	assert.InDelta(t, 3*time.Minute, cd2, float64(5*time.Second))
 
 	// 3회: 10분
 	bs.RecordTransientError()
+
 	cd3 := bs.TransientCooldownRemaining()
 	assert.InDelta(t, 10*time.Minute, cd3, float64(5*time.Second))
 }
@@ -660,6 +676,7 @@ func TestBackoffState_CounterDecayOnExpiry(t *testing.T) {
 
 	// 만료 후 첫 에러는 30초로 시작해야 함 (카운터 리셋 검증)
 	bs.RecordTransientError()
+
 	cdAfterDecay := bs.TransientCooldownRemaining()
 	assert.InDelta(t, 30*time.Second, cdAfterDecay, float64(2*time.Second))
 }
@@ -678,24 +695,15 @@ func TestBackoffState_SuccessResetsAll(t *testing.T) {
 	assert.Equal(t, time.Duration(0), bs.CooldownRemaining())
 }
 
-func TestBackoffState_ConcurrentAccess(t *testing.T) {
+func TestBackoffState_ConcurrentAccess(_ *testing.T) {
 	bs := backoff.NewBackoffState()
+
 	var wg sync.WaitGroup
 
 	for range 10 {
-		wg.Add(3)
-		go func() {
-			defer wg.Done()
-			bs.RecordError()
-		}()
-		go func() {
-			defer wg.Done()
-			bs.RecordTransientError()
-		}()
-		go func() {
-			defer wg.Done()
-			bs.RecordSuccess()
-		}()
+		wg.Go(bs.RecordError)
+		wg.Go(bs.RecordTransientError)
+		wg.Go(bs.RecordSuccess)
 	}
 
 	wg.Wait()
@@ -721,7 +729,7 @@ func TestFetchPage_504RetryNotBlockedByTransientCooldown(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	result, err := client.fetchPage(ctx, server.URL)
@@ -747,7 +755,7 @@ func TestFetchPageOnce_HardCooldownOnly(t *testing.T) {
 	client.backoffState.RecordTransientError()
 	assert.Greater(t, client.backoffState.TransientCooldownRemaining(), time.Duration(0))
 
-	ctx := context.Background()
+	ctx := t.Context()
 	// fetchPageOnce는 transient cooldown에서 ErrRateLimited를 반환하지 않아야 함
 	result, err := client.fetchPageOnce(ctx, server.URL)
 	require.NoError(t, err, "fetchPageOnce should not be blocked by transient cooldown")
@@ -756,23 +764,29 @@ func TestFetchPageOnce_HardCooldownOnly(t *testing.T) {
 
 func TestRateLimiter_ConcurrentSlots(t *testing.T) {
 	const interval = 100 * time.Millisecond
+
 	rl := ratelimiter.New(interval)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var wg sync.WaitGroup
+
 	elapsed := make([]time.Duration, 3)
+	waitErrs := make([]error, 3)
 	start := time.Now()
 
 	for i := range 3 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			require.NoError(t, rl.Wait(ctx))
-			elapsed[idx] = time.Since(start)
-		}(i)
+		wg.Go(func() {
+			waitErrs[i] = rl.Wait(ctx)
+			elapsed[i] = time.Since(start)
+		})
 	}
 
 	wg.Wait()
+
+	for i, waitErr := range waitErrs {
+		require.NoErrorf(t, waitErr, "waiter #%d", i)
+	}
+
 	slices.Sort(elapsed)
 
 	// time.Timer는 지정 시각 이전에 발화하지 않으므로 k번째 완료 시각의 하한 k*interval은 CPU 경합과 무관하게 성립한다. 상한은 스케줄링 지터에 취약해 검증하지 않는다.
@@ -784,14 +798,14 @@ func TestRateLimiter_ConcurrentSlots(t *testing.T) {
 
 func TestRateLimiter_ContextCancel(t *testing.T) {
 	rl := ratelimiter.New(10 * time.Second)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 첫 호출: 즉시 반환
 	err := rl.Wait(ctx)
 	require.NoError(t, err)
 
 	// 두 번째 호출: 취소된 context
-	cancelCtx, cancel := context.WithCancel(context.Background())
+	cancelCtx, cancel := context.WithCancel(t.Context())
 	cancel() // 즉시 취소
 
 	err = rl.Wait(cancelCtx)
@@ -801,30 +815,34 @@ func TestRateLimiter_ContextCancel(t *testing.T) {
 
 func TestRateLimiter_CancelDoesNotConsumeSlot(t *testing.T) {
 	rl := ratelimiter.New(50 * time.Millisecond)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 첫 호출: 즉시 반환, lastTime 설정
 	err := rl.Wait(ctx)
 	require.NoError(t, err)
 
 	// 두 번째 호출: 취소된 context → slot rollback
-	cancelCtx, cancel := context.WithCancel(context.Background())
+	cancelCtx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	err = rl.Wait(cancelCtx)
 	require.Error(t, err)
 
 	// 50ms 대기 후 다음 호출: rollback 덕분에 즉시 반환 가능
 	time.Sleep(60 * time.Millisecond)
+
 	start := time.Now()
+
 	err = rl.Wait(ctx)
 	require.NoError(t, err)
+
 	elapsed := time.Since(start)
 	assert.Less(t, elapsed, 20*time.Millisecond, "Wait should return immediately after rollback + interval")
 }
 
 func TestRateLimiter_ConcurrentCancelStress(t *testing.T) {
 	rl := ratelimiter.New(50 * time.Millisecond)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := rl.Wait(ctx)
 	require.NoError(t, err)
@@ -833,13 +851,15 @@ func TestRateLimiter_ConcurrentCancelStress(t *testing.T) {
 
 	startCh := make(chan struct{})
 	errCh := make(chan error, concurrentCancels)
+
 	var wg sync.WaitGroup
 
 	for range concurrentCancels {
 		wg.Go(func() {
-			cancelCtx, cancel := context.WithCancel(context.Background())
+			cancelCtx, cancel := context.WithCancel(t.Context())
 			cancel()
 			<-startCh
+
 			errCh <- rl.Wait(cancelCtx)
 		})
 	}
@@ -850,13 +870,16 @@ func TestRateLimiter_ConcurrentCancelStress(t *testing.T) {
 
 	for waitErr := range errCh {
 		require.Error(t, waitErr)
-		assert.ErrorIs(t, waitErr, context.Canceled)
+		require.ErrorIs(t, waitErr, context.Canceled)
 	}
 
 	time.Sleep(60 * time.Millisecond)
+
 	start := time.Now()
+
 	err = rl.Wait(ctx)
 	require.NoError(t, err)
+
 	elapsed := time.Since(start)
 	assert.Less(t, elapsed, 20*time.Millisecond, "concurrent canceled waiters should not consume future slots")
 }
@@ -889,21 +912,27 @@ func TestFetchPage_ConcurrentTransientErrors_NoAmplification(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup
+
 	errCh := make(chan error, 2)
+
 	wg.Add(2)
+
 	for range 2 {
 		go func() {
 			defer wg.Done()
+
 			_, err := client.fetchPage(ctx, server.URL)
 			errCh <- err
 		}()
 	}
+
 	wg.Wait()
 	close(errCh)
+
 	for err := range errCh {
 		require.Error(t, err)
 	}
@@ -930,7 +959,7 @@ func TestFetchPage_ContextCancel_NoTransientRecord(t *testing.T) {
 	)
 
 	// 500ms 타임아웃: 첫 502 응답 후 retry sleep 중 만료됨
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
 	_, err := client.fetchPage(ctx, server.URL)
@@ -939,7 +968,7 @@ func TestFetchPage_ContextCancel_NoTransientRecord(t *testing.T) {
 	actualErrors := client.backoffState.TransientErrors()
 
 	assert.Equal(t, 0, actualErrors,
-		"transientErrors should not be recorded when context is cancelled")
+		"transientErrors should not be recorded when context is canceled")
 }
 
 func TestFetchPageOnce_Headers(t *testing.T) {
@@ -947,6 +976,7 @@ func TestFetchPageOnce_Headers(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeaders = r.Header.Clone()
+
 		w.WriteHeader(http.StatusOK)
 		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
@@ -962,7 +992,7 @@ func TestFetchPageOnce_Headers(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider(chromeUA)),
 	)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	_, err := client.fetchPageOnce(ctx, server.URL)
 	require.NoError(t, err)
 
@@ -986,6 +1016,7 @@ func TestFetchPageOnce_ClientHintsHeaders(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeaders = r.Header.Clone()
+
 		w.WriteHeader(http.StatusOK)
 		mustWriteResponse(t, w, "<html>ytInitialData = {};</html>")
 	}))
@@ -1004,7 +1035,7 @@ func TestFetchPageOnce_ClientHintsHeaders(t *testing.T) {
 		WithUAProvider(&fixedSnapshotProvider{snap: snap}),
 	)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	_, err := client.fetchPageOnce(ctx, server.URL)
 	require.NoError(t, err)
 
@@ -1060,10 +1091,10 @@ func TestFetchPage_RateLimitUsesRetryAfterCooldown(t *testing.T) {
 		WithUAProvider(ua.NewStaticProvider("test-agent")),
 	)
 
-	_, err := client.fetchPage(context.Background(), server.URL)
+	_, err := client.fetchPage(t.Context(), server.URL)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrRateLimited)
+	require.ErrorIs(t, err, ErrRateLimited)
 
 	cooldown := client.backoffState.HardCooldownRemaining()
 	assert.Greater(t, cooldown, 65*time.Minute)
@@ -1074,10 +1105,12 @@ func TestBackoffState_HardRetryAfterDoesNotUndercutStagedCooldown(t *testing.T) 
 	state := backoff.NewBackoffState()
 
 	state.RecordErrorWithSuggestedCooldown(5 * time.Second)
+
 	first := state.HardCooldownRemaining()
 	assert.Greater(t, first, 29*time.Minute)
 
 	state.RecordErrorWithSuggestedCooldown(5 * time.Second)
+
 	second := state.HardCooldownRemaining()
 	assert.Greater(t, second, 59*time.Minute)
 }
@@ -1086,10 +1119,12 @@ func TestBackoffState_TransientRetryAfterDoesNotUndercutStagedCooldown(t *testin
 	state := backoff.NewBackoffState()
 
 	state.RecordTransientErrorWithSuggestedCooldown(1 * time.Second)
+
 	first := state.TransientCooldownRemaining()
 	assert.Greater(t, first, 29*time.Second)
 
 	state.RecordTransientErrorWithSuggestedCooldown(1 * time.Second)
+
 	second := state.TransientCooldownRemaining()
 	assert.Greater(t, second, 179*time.Second)
 }
@@ -1098,12 +1133,14 @@ func TestBackoffState_HardCooldownDoesNotShrinkExistingLongerDeadline(t *testing
 	state := backoff.NewBackoffState()
 
 	state.RecordErrorWithSuggestedCooldown(4 * time.Hour)
+
 	before := state.HardCooldownRemaining()
 	require.Greater(t, before, 3*time.Hour+50*time.Minute)
 
 	time.Sleep(10 * time.Millisecond)
 
 	state.RecordErrorWithSuggestedCooldown(5 * time.Second)
+
 	after := state.HardCooldownRemaining()
 	assert.GreaterOrEqual(t, after, before-2*time.Second)
 }
@@ -1112,12 +1149,14 @@ func TestBackoffState_TransientCooldownDoesNotShrinkExistingLongerDeadline(t *te
 	state := backoff.NewBackoffState()
 
 	state.RecordTransientErrorWithSuggestedCooldown(8 * time.Minute)
+
 	before := state.TransientCooldownRemaining()
 	require.Greater(t, before, 7*time.Minute+50*time.Second)
 
 	time.Sleep(10 * time.Millisecond)
 
 	state.RecordTransientErrorWithSuggestedCooldown(1 * time.Second)
+
 	after := state.TransientCooldownRemaining()
 	assert.GreaterOrEqual(t, after, before-2*time.Second)
 }

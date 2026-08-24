@@ -2,6 +2,7 @@ package workerruntime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 )
 
@@ -22,8 +23,14 @@ func (r deliveryOutboxDispatcherRunner) Start(ctx context.Context) error {
 	if r.dispatcher == nil {
 		return nil
 	}
+
 	if r.logger != nil {
 		r.logger.Info("Notification delivery outbox dispatcher started by alarm-worker")
 	}
-	return r.dispatcher.Run(ctx)
+
+	if err := r.dispatcher.Run(ctx); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
+	return nil
 }

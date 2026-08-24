@@ -28,6 +28,7 @@ func TestCatalogObserveOpenAndRegular(t *testing.T) {
 	if !c.OpenChat(ctx, "1") {
 		t.Fatal("open room should use markdown")
 	}
+
 	if c.OpenChat(ctx, "2") {
 		t.Fatal("regular room should not use markdown")
 	}
@@ -91,9 +92,11 @@ func TestCatalogRefreshSkipsBlankTypeAndLink(t *testing.T) {
 	}}, nil)
 	ctx := t.Context()
 	c.Observe(ctx, "2", "OM", "keep")
+
 	if !c.OpenChat(ctx, "3") {
 		t.Fatal("iris open room should still resolve")
 	}
+
 	if !c.OpenChat(ctx, "2") {
 		t.Fatal("refresh must not clobber an observed open room with a blank iris row")
 	}
@@ -103,7 +106,9 @@ func TestCatalogDBErrorDoesNotUseIrisFallback(t *testing.T) {
 	t.Parallel()
 
 	c := New(nil, stubLister{rooms: []Facts{{RoomID: "1", RoomType: "OM"}}}, nil)
+
 	c.store = errStore{err: errors.New("db down")}
+
 	if c.OpenChat(t.Context(), "1") {
 		t.Fatal("database error must not treat iris rooms as found")
 	}
@@ -115,13 +120,16 @@ func TestFactsFromSummary(t *testing.T) {
 	roomType := "OM"
 	linkID := int64(77)
 	got := factsFromSummary(iris.RoomSummary{ChatID: 12, Type: &roomType, LinkID: &linkID})
+
 	if got.RoomID != "12" || got.RoomType != "OM" || got.RoomLinkID != "77" || !got.OpenChat() {
 		t.Fatalf("factsFromSummary() = %+v", got)
 	}
 
 	openType := "MultiChat"
 	linkURL := "https://open.kakao.com/o/test"
+
 	got = factsFromSummary(iris.RoomSummary{ChatID: 13, Type: &openType, LinkURL: &linkURL})
+
 	if !got.OpenChat() || got.RoomLinkID != linkURL {
 		t.Fatalf("open link summary = %+v", got)
 	}

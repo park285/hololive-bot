@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
 
 type celebrationTestMemberRepo struct {
@@ -46,6 +47,7 @@ func (p *celebrationTestPublisher) PublishDispatchBatch(_ context.Context, envel
 	if p.onPublish != nil {
 		p.onPublish()
 	}
+
 	return p.result, p.err
 }
 
@@ -53,33 +55,35 @@ func TestBuildCelebrationEnvelopesBirthday(t *testing.T) {
 	t.Parallel()
 
 	members := []*domain.Member{{
-		ChannelID:       "UC_a",
+		ChannelID:       testChannelA,
 		ShortKoreanName: "후부키",
 		Photo:           "https://example.com/a.jpg",
 	}}
-	rooms := []string{"room-1", "room-2"}
+	rooms := []string{testRoom1, testRoom2}
 
 	envelopes := buildCelebrationEnvelopes(members, nil, rooms, "2026-05-26", 2026)
 
 	require.Len(t, envelopes, 2)
+
 	for _, env := range envelopes {
 		assert.Equal(t, domain.AlarmTypeBirthday, env.Notification.AlarmType)
 		assert.Equal(t, domain.AlarmDispatchSourceKindCelebration, env.SourceKind)
 		require.NotNil(t, env.Celebration)
 		assert.Equal(t, domain.CelebrationKindBirthday, env.Celebration.Kind)
 		assert.Equal(t, "후부키", env.Celebration.MemberName)
-		assert.Equal(t, "UC_a", env.Celebration.ChannelID)
+		assert.Equal(t, testChannelA, env.Celebration.ChannelID)
 		assert.Equal(t, "2026-05-26", env.Celebration.Date)
 	}
-	assert.Equal(t, "room-1", envelopes[0].Notification.RoomID)
-	assert.Equal(t, "room-2", envelopes[1].Notification.RoomID)
+
+	assert.Equal(t, testRoom1, envelopes[0].Notification.RoomID)
+	assert.Equal(t, testRoom2, envelopes[1].Notification.RoomID)
 }
 
 func TestBuildCelebrationEnvelopesBirthdayOrdinalFromDebut(t *testing.T) {
 	t.Parallel()
 
-	birthday := time.Date(2024, 5, 29, 0, 0, 0, 0, time.UTC)
-	debut := time.Date(2024, 11, 9, 0, 0, 0, 0, time.UTC)
+	birthday := time.Date(2024, time.May, 29, 0, 0, 0, 0, time.UTC)
+	debut := time.Date(2024, time.November, 9, 0, 0, 0, 0, time.UTC)
 	members := []*domain.Member{{
 		ChannelID:       "UC9LSiN9hXI55svYEBrrK-tw",
 		ShortKoreanName: "리오나",
@@ -87,7 +91,7 @@ func TestBuildCelebrationEnvelopesBirthdayOrdinalFromDebut(t *testing.T) {
 		DebutDate:       &debut,
 	}}
 
-	envelopes := buildCelebrationEnvelopes(members, nil, []string{"room-1"}, "2026-05-29", 2026)
+	envelopes := buildCelebrationEnvelopes(members, nil, []string{testRoom1}, "2026-05-29", 2026)
 
 	require.Len(t, envelopes, 1)
 	assert.Equal(t, 2, envelopes[0].Celebration.Ordinal)
@@ -96,8 +100,8 @@ func TestBuildCelebrationEnvelopesBirthdayOrdinalFromDebut(t *testing.T) {
 func TestBuildCelebrationEnvelopesBirthdayOrdinalLeapDay(t *testing.T) {
 	t.Parallel()
 
-	birthday := time.Date(2020, 2, 29, 0, 0, 0, 0, time.UTC)
-	debut := time.Date(2021, 8, 23, 0, 0, 0, 0, time.UTC)
+	birthday := time.Date(2020, time.February, 29, 0, 0, 0, 0, time.UTC)
+	debut := time.Date(2021, time.August, 23, 0, 0, 0, 0, time.UTC)
 	members := []*domain.Member{{
 		ChannelID: "UCgmPnx-EEeOrZSg5Tiw7ZRQ",
 		Name:      "Hakos Baelz",
@@ -105,7 +109,7 @@ func TestBuildCelebrationEnvelopesBirthdayOrdinalLeapDay(t *testing.T) {
 		DebutDate: &debut,
 	}}
 
-	envelopes := buildCelebrationEnvelopes(members, nil, []string{"room-1"}, "2028-02-29", 2028)
+	envelopes := buildCelebrationEnvelopes(members, nil, []string{testRoom1}, "2028-02-29", 2028)
 
 	require.Len(t, envelopes, 1)
 	assert.Equal(t, 2, envelopes[0].Celebration.Ordinal)
@@ -114,18 +118,19 @@ func TestBuildCelebrationEnvelopesBirthdayOrdinalLeapDay(t *testing.T) {
 func TestBuildCelebrationEnvelopesAnniversary(t *testing.T) {
 	t.Parallel()
 
-	debut := time.Date(2019, 9, 1, 0, 0, 0, 0, time.UTC)
+	debut := time.Date(2019, time.September, 1, 0, 0, 0, 0, time.UTC)
 	members := []*domain.Member{{
-		ChannelID: "UC_b",
+		ChannelID: testChannelB,
 		Name:      "Tokino Sora",
 		NameKo:    "토키노 소라",
 		DebutDate: &debut,
 	}}
-	rooms := []string{"room-1"}
+	rooms := []string{testRoom1}
 
 	envelopes := buildCelebrationEnvelopes(nil, members, rooms, "2026-09-01", 2026)
 
 	require.Len(t, envelopes, 1)
+
 	env := envelopes[0]
 	assert.Equal(t, domain.AlarmTypeAnniversary, env.Notification.AlarmType)
 	assert.Equal(t, domain.CelebrationKindAnniversary, env.Celebration.Kind)
@@ -138,16 +143,16 @@ func TestBuildCelebrationEnvelopesNilDebutDateSkipped(t *testing.T) {
 	t.Parallel()
 
 	members := []*domain.Member{{ChannelID: "UC_c", Name: "No Debut"}}
-	envelopes := buildCelebrationEnvelopes(nil, members, []string{"room-1"}, "2026-01-01", 2026)
+	envelopes := buildCelebrationEnvelopes(nil, members, []string{testRoom1}, "2026-01-01", 2026)
 	assert.Empty(t, envelopes)
 }
 
 func TestBuildCelebrationEnvelopesZeroYearsSkipped(t *testing.T) {
 	t.Parallel()
 
-	debut := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	debut := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	members := []*domain.Member{{ChannelID: "UC_d", Name: "Same Year", DebutDate: &debut}}
-	envelopes := buildCelebrationEnvelopes(nil, members, []string{"room-1"}, "2026-01-01", 2026)
+	envelopes := buildCelebrationEnvelopes(nil, members, []string{testRoom1}, "2026-01-01", 2026)
 	assert.Empty(t, envelopes)
 }
 
@@ -163,7 +168,7 @@ func TestCelebrationRunnerRunOnceNoMembers(t *testing.T) {
 	publisher := &celebrationTestPublisher{}
 	runner := &Runner{
 		memberRepo:   &celebrationTestMemberRepo{},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
 		publisher:    publisher,
 		checkHourKST: -1,
 	}
@@ -175,10 +180,10 @@ func TestCelebrationRunnerRunOnceNoMembers(t *testing.T) {
 }
 
 func TestCelebrationRunnerRunOnceNoRooms(t *testing.T) {
-	birthday := time.Date(2000, 5, 26, 0, 0, 0, 0, time.UTC)
+	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
 	publisher := &celebrationTestPublisher{}
 	runner := &Runner{
-		memberRepo:   &celebrationTestMemberRepo{birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}}},
+		memberRepo:   &celebrationTestMemberRepo{birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}}},
 		alarmRepo:    &celebrationTestAlarmRepo{},
 		publisher:    publisher,
 		checkHourKST: -1,
@@ -191,11 +196,11 @@ func TestCelebrationRunnerRunOnceNoRooms(t *testing.T) {
 }
 
 func TestCelebrationRunnerRunOncePublishes(t *testing.T) {
-	birthday := time.Date(2000, 5, 26, 0, 0, 0, 0, time.UTC)
+	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
 	publisher := &celebrationTestPublisher{result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 2}}
 	runner := &Runner{
-		memberRepo:   &celebrationTestMemberRepo{birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}}},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1", "room-2"}},
+		memberRepo:   &celebrationTestMemberRepo{birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1, testRoom2}},
 		publisher:    publisher,
 		checkHourKST: -1,
 	}
@@ -221,6 +226,7 @@ func TestNextCelebrationRunAtFromLatePreviousDay(t *testing.T) {
 func TestCelebrationSchedule_SameDayRestart_7f8d8a9e(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
 	current := time.Date(2026, time.May, 26, 0, 1, 0, 0, kst)
+
 	var sleepCalls []time.Duration
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -233,9 +239,9 @@ func TestCelebrationSchedule_SameDayRestart_7f8d8a9e(t *testing.T) {
 	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
 	runner := &Runner{
 		memberRepo: &celebrationTestMemberRepo{
-			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+			birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}},
 		},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
 		publisher:    publisher,
 		checkHourKST: 0,
 		now: func() time.Time {
@@ -243,10 +249,13 @@ func TestCelebrationSchedule_SameDayRestart_7f8d8a9e(t *testing.T) {
 		},
 		sleep: func(ctx context.Context, d time.Duration) bool {
 			sleepCalls = append(sleepCalls, d)
+
 			if ctx.Err() != nil {
 				return false
 			}
+
 			current = current.Add(d)
+
 			return true
 		},
 	}
@@ -264,6 +273,7 @@ func TestCelebrationSchedule_SameDayRestart_7f8d8a9e(t *testing.T) {
 func TestCelebrationSchedule_RestartOutsideGraceWaitsNextDay_7f8d8a9e(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
 	current := time.Date(2026, time.May, 26, 2, 30, 0, 0, kst)
+
 	var sleepCalls []time.Duration
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -276,9 +286,9 @@ func TestCelebrationSchedule_RestartOutsideGraceWaitsNextDay_7f8d8a9e(t *testing
 	birthday := time.Date(2000, time.May, 27, 0, 0, 0, 0, time.UTC)
 	runner := &Runner{
 		memberRepo: &celebrationTestMemberRepo{
-			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+			birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}},
 		},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
 		publisher:    publisher,
 		checkHourKST: 0,
 		now: func() time.Time {
@@ -286,10 +296,13 @@ func TestCelebrationSchedule_RestartOutsideGraceWaitsNextDay_7f8d8a9e(t *testing
 		},
 		sleep: func(ctx context.Context, d time.Duration) bool {
 			sleepCalls = append(sleepCalls, d)
+
 			if ctx.Err() != nil {
 				return false
 			}
+
 			current = current.Add(d)
+
 			return true
 		},
 	}
@@ -304,23 +317,27 @@ func TestCelebrationSchedule_RestartOutsideGraceWaitsNextDay_7f8d8a9e(t *testing
 func TestCelebrationRunnerStartPublishesAtScheduledMidnight(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
 	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
-	var publishedAt time.Time
-	var sleepCalls []time.Duration
+
+	var (
+		publishedAt time.Time
+		sleepCalls  []time.Duration
+	)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	publisher := &celebrationTestPublisher{
 		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
 		onPublish: func() {
 			publishedAt = current
+
 			cancel()
 		},
 	}
 	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
 	runner := &Runner{
 		memberRepo: &celebrationTestMemberRepo{
-			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+			birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}},
 		},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
 		publisher:    publisher,
 		checkHourKST: 0,
 		now: func() time.Time {
@@ -328,10 +345,13 @@ func TestCelebrationRunnerStartPublishesAtScheduledMidnight(t *testing.T) {
 		},
 		sleep: func(ctx context.Context, d time.Duration) bool {
 			sleepCalls = append(sleepCalls, d)
+
 			if ctx.Err() != nil {
 				return false
 			}
+
 			current = current.Add(d)
+
 			return true
 		},
 	}
@@ -350,6 +370,7 @@ func TestCelebrationRunnerStartPublishesAtScheduledMidnight(t *testing.T) {
 func TestCelebrationRunnerStartPublishesScheduledDateWhenWakeIsLate(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
 	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
+
 	var sleepCalls []time.Duration
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -362,9 +383,9 @@ func TestCelebrationRunnerStartPublishesScheduledDateWhenWakeIsLate(t *testing.T
 	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
 	runner := &Runner{
 		memberRepo: &celebrationTestMemberRepo{
-			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+			birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}},
 		},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
 		publisher:    publisher,
 		checkHourKST: 0,
 		now: func() time.Time {
@@ -374,11 +395,14 @@ func TestCelebrationRunnerStartPublishesScheduledDateWhenWakeIsLate(t *testing.T
 			if ctx.Err() != nil {
 				return false
 			}
+
 			sleepCalls = append(sleepCalls, d)
 			if len(sleepCalls) > 1 {
 				return false
 			}
+
 			current = time.Date(2026, time.May, 26, 1, 5, 0, 0, kst)
+
 			return true
 		},
 	}
@@ -396,8 +420,11 @@ func TestCelebrationRunnerStartPublishesScheduledDateWhenWakeIsLate(t *testing.T
 func TestCelebrationRunnerStartSleepsUntilNextDayAfterScheduledRun(t *testing.T) {
 	kst := time.FixedZone("KST", 9*60*60)
 	current := time.Date(2026, time.May, 25, 23, 50, 0, 0, kst)
-	var publishCount int
-	var sleepCalls []time.Duration
+
+	var (
+		publishCount int
+		sleepCalls   []time.Duration
+	)
 
 	publisher := &celebrationTestPublisher{
 		result: dispatchoutbox.PublishBatchResult{InsertedEvents: 1, InsertedDeliveries: 1},
@@ -408,9 +435,9 @@ func TestCelebrationRunnerStartSleepsUntilNextDayAfterScheduledRun(t *testing.T)
 	birthday := time.Date(2000, time.May, 26, 0, 0, 0, 0, time.UTC)
 	runner := &Runner{
 		memberRepo: &celebrationTestMemberRepo{
-			birthday: []*domain.Member{{ChannelID: "UC_a", Name: "Test", Birthday: &birthday}},
+			birthday: []*domain.Member{{ChannelID: testChannelA, Name: testMemberName, Birthday: &birthday}},
 		},
-		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{"room-1"}},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
 		publisher:    publisher,
 		checkHourKST: 0,
 		now: func() time.Time {
@@ -421,7 +448,9 @@ func TestCelebrationRunnerStartSleepsUntilNextDayAfterScheduledRun(t *testing.T)
 			if len(sleepCalls) == 2 {
 				return false
 			}
+
 			current = current.Add(d)
+
 			return true
 		},
 	}

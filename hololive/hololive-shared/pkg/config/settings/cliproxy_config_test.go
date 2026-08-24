@@ -15,6 +15,7 @@ func TestLoadCliproxyConfigRequiresExplicitBaseURL(t *testing.T) {
 
 func TestLoadCliproxyConfigUsesExplicitBaseURL(t *testing.T) {
 	const endpoint = "https://cliproxy.example/v1"
+
 	t.Setenv("CLIPROXY_BASE_URL", endpoint)
 
 	cfg := loadCliproxyConfig()

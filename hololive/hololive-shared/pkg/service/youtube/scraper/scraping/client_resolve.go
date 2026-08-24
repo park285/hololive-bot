@@ -27,11 +27,12 @@ import (
 	"log/slog"
 	"time"
 
-	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	"github.com/park285/shared-go/v2/pkg/retry"
+
+	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 )
 
-// fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함)
+// fetchPage: YouTube 페이지 HTML 가져오기 (5xx 에러 시 재시도 포함).
 func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchPolicy) (string, error) {
 	// transient cooldown은 worker를 점유한 채 sleep하지 않고 스케줄러에 재시도 지연을 위임한다.
 	if wait := c.backoffState.TransientCooldownRemaining(); wait > 0 {
@@ -47,30 +48,42 @@ func (c *Client) fetchPage(ctx context.Context, pageURL string, policy ...FetchP
 	var result string
 
 	err := retry.WithRetry(ctx, c.fetchPageRetryOptions(pageURL, resolvedPolicy), func(ctx context.Context) error {
-		if err := c.fetchPagePreflight(ctx, pageURL, resolvedPolicy); err != nil {
-			return err
-		}
-
-		attemptCtx, cancel := contextWithFetchAttemptTimeout(ctx, resolvedPolicy)
-		defer cancel()
-
-		var err error
-		result, err = c.fetchPageOnce(attemptCtx, pageURL)
-		if err != nil && errors.Is(attemptCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
-			return fmt.Errorf("%w: %w", errFetchAttemptTimeout, err)
-		}
-		return err
+		return c.fetchPageAttempt(ctx, pageURL, resolvedPolicy, &result)
 	})
-
 	if err != nil {
 		c.recordFetchPageTransientError(ctx, err)
+
 		return "", fmt.Errorf("fetchPage failed after retries: %w", err)
 	}
+
 	return result, nil
+}
+
+func (c *Client) fetchPageAttempt(ctx context.Context, pageURL string, policy FetchPolicy, result *string) error {
+	if err := c.fetchPagePreflight(ctx, pageURL, policy); err != nil {
+		return fmt.Errorf("fetch page preflight: %w", err)
+	}
+
+	attemptCtx, cancel := contextWithFetchAttemptTimeout(ctx, policy)
+	defer cancel()
+
+	out, err := c.fetchPageOnce(attemptCtx, pageURL)
+	if err == nil {
+		*result = out
+
+		return nil
+	}
+
+	if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+		return fmt.Errorf("%w: %w", errFetchAttemptTimeout, err)
+	}
+
+	return fmt.Errorf("fetch page once: %w", err)
 }
 
 func resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
 	resolved := DefaultFetchPolicy
+
 	if len(policy) == 0 {
 		return resolved
 	}
@@ -79,19 +92,25 @@ func resolveFetchPolicy(policy ...FetchPolicy) FetchPolicy {
 	if override.MaxAttempts > 0 {
 		resolved.MaxAttempts = override.MaxAttempts
 	}
+
 	if override.PerAttemptTimeout > 0 {
 		resolved.PerAttemptTimeout = override.PerAttemptTimeout
 	}
+
 	if override.BaseDelay > 0 {
 		resolved.BaseDelay = override.BaseDelay
 	}
+
 	if override.Jitter > 0 {
 		resolved.Jitter = override.Jitter
 	}
+
 	if override.MaxDelay > 0 {
 		resolved.MaxDelay = override.MaxDelay
 	}
+
 	resolved.AdmissionBlocking = override.AdmissionBlocking
+
 	return resolved
 }
 
@@ -99,9 +118,11 @@ func contextWithFetchAttemptTimeout(ctx context.Context, policy FetchPolicy) (co
 	if policy.PerAttemptTimeout <= 0 {
 		return ctx, func() {}
 	}
+
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= policy.PerAttemptTimeout {
 		return ctx, func() {}
 	}
+
 	return context.WithTimeout(ctx, policy.PerAttemptTimeout)
 }
 
@@ -117,6 +138,7 @@ func (c *Client) fetchPageRetryOptions(pageURL string, policy FetchPolicy) retry
 			if isRetryableTransportError(err) {
 				c.closeIdleConnections()
 			}
+
 			slog.Debug("Scraper retry",
 				"url", pageURL,
 				"attempt", attempt,
@@ -132,6 +154,7 @@ func fetchPageRetryDelayOverride(err error, computed time.Duration) (time.Durati
 	}
 
 	var cooldown *CooldownError
+
 	if errors.As(err, &cooldown) && cooldown.RetryDelay() > 0 {
 		return cooldown.RetryDelay(), true
 	}
@@ -147,6 +170,7 @@ func shouldRetryFetchPage(err error) bool {
 		errors.Is(err, ErrResponseTooLarge) {
 		return false
 	}
+
 	return isRetryableFetchPageError(err)
 }
 
@@ -154,6 +178,7 @@ func (c *Client) recordFetchPageTransientError(ctx context.Context, err error) {
 	if ctx.Err() != nil || youtubeadmission.IsDeferred(err) {
 		return
 	}
+
 	if isRetryableFetchPageError(err) {
 		c.backoffState.RecordTransientErrorWithSuggestedCooldown(extractHTTPRetryAfter(err))
 	}

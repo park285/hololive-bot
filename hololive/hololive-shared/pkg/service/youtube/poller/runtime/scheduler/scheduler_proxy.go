@@ -24,6 +24,7 @@ package scheduler
 func (s *Scheduler) SetProxyEnabled(enabled bool) int {
 	pollers := s.collectProxyTogglePollers()
 	applied := 0
+
 	for _, poller := range pollers {
 		if poller.SetProxyEnabled(enabled) {
 			applied++
@@ -44,6 +45,7 @@ func (s *Scheduler) ProxyEnabled() (enabled, known bool) {
 	if len(pollers) == 0 {
 		return false, false
 	}
+
 	return pollers[0].ProxyEnabled(), true
 }
 
@@ -53,20 +55,25 @@ func (s *Scheduler) collectProxyTogglePollers() []proxyTogglePoller {
 
 	seen := make(map[Poller]struct{})
 	pollers := make([]proxyTogglePoller, 0)
+
 	for _, job := range s.jobMap {
 		if job == nil || job.Poller == nil {
 			continue
 		}
+
 		if _, exists := seen[job.Poller]; exists {
 			continue
 		}
+
 		seen[job.Poller] = struct{}{}
 
 		toggler, ok := job.Poller.(proxyTogglePoller)
 		if !ok {
 			continue
 		}
+
 		pollers = append(pollers, toggler)
 	}
+
 	return pollers
 }

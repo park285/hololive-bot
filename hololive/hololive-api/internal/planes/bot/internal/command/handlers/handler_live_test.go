@@ -26,12 +26,12 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
@@ -52,7 +52,7 @@ func (s *liveStreamProviderStub) GetChannelSchedule(context.Context, string, int
 }
 
 func (s *liveStreamProviderStub) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, nil
+	return nil, errTestStubNoChannel
 }
 
 func TestBuildChzzkLiveStreams(t *testing.T) {
@@ -61,9 +61,9 @@ func TestBuildChzzkLiveStreams(t *testing.T) {
 	streams := buildChzzkLiveStreams(
 		[]*domain.Member{
 			{
-				ChannelID:      "yt-1",
+				ChannelID:      testYouTubeChannelID,
 				Name:           "미코",
-				ChzzkChannelID: "cz-1",
+				ChzzkChannelID: testChzzkChannelID,
 			},
 			{
 				ChannelID:      "yt-2",
@@ -73,7 +73,7 @@ func TestBuildChzzkLiveStreams(t *testing.T) {
 			},
 		},
 		[]chzzk.LiveData{
-			{ChannelID: "cz-1", LiveTitle: "치지직 방송"},
+			{ChannelID: testChzzkChannelID, LiveTitle: "치지직 방송"},
 			{ChannelID: "cz-2", LiveTitle: "보이면 안됨"},
 			{ChannelID: "unknown", LiveTitle: "무시"},
 		},
@@ -83,7 +83,7 @@ func TestBuildChzzkLiveStreams(t *testing.T) {
 		t.Fatalf("expected 1 stream, got %d", len(streams))
 	}
 
-	if streams[0].ChannelID != "yt-1" {
+	if streams[0].ChannelID != testYouTubeChannelID {
 		t.Fatalf("channel_id = %q, want yt-1", streams[0].ChannelID)
 	}
 
@@ -100,7 +100,7 @@ func TestCollectChzzkLiveStreams_UsesBatchResult(t *testing.T) {
 	t.Parallel()
 
 	members := []*domain.Member{
-		{ChannelID: "yt-1", Name: "미코", ChzzkChannelID: "cz-1"},
+		{ChannelID: testYouTubeChannelID, Name: "미코", ChzzkChannelID: testChzzkChannelID},
 		{ChannelID: "yt-2", Name: "스이세이", ChzzkChannelID: "cz-2"},
 	}
 
@@ -116,7 +116,7 @@ func TestCollectChzzkLiveStreams_UsesBatchResult(t *testing.T) {
 			}
 
 			return []chzzk.LiveData{
-				{ChannelID: "cz-1", LiveTitle: "batch-live-1"},
+				{ChannelID: testChzzkChannelID, LiveTitle: "batch-live-1"},
 				{ChannelID: "cz-2", LiveTitle: "batch-live-2"},
 			}, nil
 		},
@@ -144,7 +144,7 @@ func TestCollectChzzkLiveStreams_ReturnsNilOnBatchError(t *testing.T) {
 
 	streams := collectChzzkLiveStreams(
 		[]*domain.Member{
-			{ChannelID: "yt-1", Name: "미코", ChzzkChannelID: "cz-1"},
+			{ChannelID: testYouTubeChannelID, Name: "미코", ChzzkChannelID: testChzzkChannelID},
 		},
 		func([]string) ([]chzzk.LiveData, error) {
 			return nil, errors.New("batch failed")
@@ -161,7 +161,7 @@ func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
 
 	streams := collectChzzkLiveStreams(
 		[]*domain.Member{
-			{ChannelID: "yt-1", Name: "미코", ChzzkChannelID: "cz-1"},
+			{ChannelID: testYouTubeChannelID, Name: "미코", ChzzkChannelID: testChzzkChannelID},
 		},
 		func([]string) ([]chzzk.LiveData, error) {
 			return nil, nil
@@ -171,6 +171,7 @@ func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
 	if streams == nil {
 		t.Fatal("expected non-nil empty stream slice")
 	}
+
 	if len(streams) != 0 {
 		t.Fatalf("len(streams) = %d, want 0", len(streams))
 	}
@@ -179,8 +180,11 @@ func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
 func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore.Dependencies, single *[]byte, text *string) {
 	t.Helper()
 
-	var singleSent []byte
-	var textSent string
+	var (
+		singleSent []byte
+		textSent   string
+	)
+
 	deps = &handlercore.Dependencies{
 		Holodex:   &liveStreamProviderStub{},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), newContextAwareMemberProvider(members), nil, nil, nil, slog.New(slog.DiscardHandler)),
@@ -196,6 +200,7 @@ func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore
 		SendError: func(context.Context, string, string) error { return nil },
 		Logger:    slog.New(slog.DiscardHandler),
 	}
+
 	return deps, &singleSent, &textSent
 }
 
@@ -203,11 +208,12 @@ func TestLiveCommand_Execute_AllLiveSendsText(t *testing.T) {
 	t.Parallel()
 
 	deps, singleSent, textSent := liveCardTestDeps(t, nil)
+
 	deps.Holodex = &liveStreamProviderStub{liveStreams: []*domain.Stream{
 		{ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"},
 	}}
 
-	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: "room-1"}, map[string]any{})
+	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -215,6 +221,7 @@ func TestLiveCommand_Execute_AllLiveSendsText(t *testing.T) {
 	if *textSent == "" {
 		t.Fatal("expected text message")
 	}
+
 	if *singleSent != nil {
 		t.Fatal("image path must not be used for all-live")
 	}
@@ -224,8 +231,8 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 	t.Parallel()
 
 	memberProvider := newContextAwareMemberProvider([]*domain.Member{{
-		ChannelID: "ch-aqua",
-		Name:      "Aqua",
+		ChannelID: testChannelAqua,
+		Name:      testMemberAqua,
 	}})
 	deps := &handlercore.Dependencies{
 		Holodex:   &liveStreamProviderStub{},
@@ -236,6 +243,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 		},
 		SendError: func(context.Context, string, string) error {
 			t.Fatal("unexpected send error")
+
 			return nil
 		},
 		Logger: slog.New(slog.DiscardHandler),
@@ -243,8 +251,8 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 
 	ctx := context.WithValue(t.Context(), testContextKey("request-id"), "live-propagation")
 
-	err := NewLiveCommand(deps).Execute(ctx, &domain.CommandContext{Room: "room-1"}, map[string]any{
-		"member": "Aqua",
+	err := NewLiveCommand(deps).Execute(ctx, &domain.CommandContext{Room: testRoomID}, map[string]any{
+		paramMember: testMemberAqua,
 	})
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)

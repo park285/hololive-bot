@@ -53,7 +53,9 @@ func NormalizePtr(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
+
 	normalized := Normalize(*value)
+
 	return &normalized
 }
 
@@ -63,7 +65,9 @@ func Format(value time.Time) string {
 
 func ParsePublishedAt(value string) (*time.Time, bool) {
 	cleaned := strings.TrimSpace(htmlpkg.UnescapeString(value))
+
 	cleaned = strings.Trim(cleaned, `"`)
+
 	if cleaned == "" {
 		return nil, false
 	}
@@ -73,7 +77,9 @@ func ParsePublishedAt(value string) (*time.Time, bool) {
 		if err != nil {
 			continue
 		}
+
 		normalized := Normalize(parsed)
+
 		return &normalized, true
 	}
 

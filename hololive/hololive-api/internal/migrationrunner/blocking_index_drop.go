@@ -19,13 +19,14 @@ var (
 func configureBlockingIndexDropPolicy(ctx context.Context, conn *pgxpool.Conn, exec *guardedExecer, cfg Config) error {
 	count, err := ledgerCount(ctx, conn)
 	if err != nil {
-		return err
+		return fmt.Errorf("ledger count: %w", err)
 	}
 
 	exec.allowBlockingIndexDrop = count == 0 || cfg.AllowBlockingIndexDrop
 	if count > 0 && cfg.AllowBlockingIndexDrop {
 		cfg.logf("blocking index-drop override enabled for existing database; dedicated maintenance window is required")
 	}
+
 	return nil
 }
 
@@ -39,10 +40,12 @@ func (e *guardedExecer) validateMigrationSource(name, content string) error {
 		if !dropIndexPattern.MatchString(normalized) || dropIndexConcurrentlyPattern.MatchString(normalized) {
 			continue
 		}
+
 		return fmt.Errorf(
 			"exec %s: blocking index drops are disabled on an existing database; use the CONCURRENTLY form or rerun in a dedicated maintenance window with MIGRATION_ALLOW_BLOCKING_INDEX_DROP=true",
 			name,
 		)
 	}
+
 	return nil
 }

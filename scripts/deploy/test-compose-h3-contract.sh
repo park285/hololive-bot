@@ -323,16 +323,16 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
     check_no_unused_scraper_env(name, env)
     check(f"youtube-collector absent from {name} AP render", "youtube-collector" not in services)
 
-H2C_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
+CLEARTEXT_INTERNAL_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
 
 for render_name, services in (("oracle", main), ("main-ap", ap)):
     offenders = [
         f"{name}.{key}={value}"
         for name, svc in services.items()
         for key, value in (svc.get("environment") or {}).items()
-        if isinstance(value, str) and any(p in value for p in H2C_URL_PATTERNS)
+        if isinstance(value, str) and any(p in value for p in CLEARTEXT_INTERNAL_URL_PATTERNS)
     ]
-    check(f"no h2c internal URLs in {render_name} render", not offenders)
+    check(f"no retired cleartext internal URLs in {render_name} render", not offenders)
     for offender in offenders:
         print(f"  offender: {offender}", file=sys.stderr)
 

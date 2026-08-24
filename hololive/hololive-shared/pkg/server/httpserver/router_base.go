@@ -39,10 +39,11 @@ type BaseMiddlewareOptions struct {
 
 func newReleaseModeEngine() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
+
 	return gin.New()
 }
 
-func ApplyBaseMiddleware(router *gin.Engine, ctx context.Context, logger *slog.Logger, opts BaseMiddlewareOptions) {
+func ApplyBaseMiddleware(ctx context.Context, router *gin.Engine, logger *slog.Logger, opts BaseMiddlewareOptions) {
 	if router == nil {
 		return
 	}
@@ -70,9 +71,11 @@ func RegisterHealthRoutes(router gin.IRoutes) {
 	router.GET("/ready", func(c *gin.Context) {
 		response, ready := health.GetReadiness()
 		status := http.StatusOK
+
 		if !ready {
 			status = http.StatusServiceUnavailable
 		}
+
 		respondJSON(c, status, response)
 	})
 }

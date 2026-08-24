@@ -43,6 +43,7 @@ func (r *Repository) requirePool(action string) error {
 	if r == nil || r.pool == nil {
 		return fmt.Errorf("%s: postgres pool not configured", action)
 	}
+
 	return nil
 }
 
@@ -69,7 +70,7 @@ func normalizeEventForUpsert(event *domain.MajorEvent) (domain.MajorEventType, d
 
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if err := r.requirePool("subscribe major event"); err != nil {
-		return err
+		return fmt.Errorf("require pool: %w", err)
 	}
 
 	query := mustSQL("repository_0080_02.sql")
@@ -78,40 +79,45 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 	if err != nil {
 		return fmt.Errorf("subscribe major event: %w", err)
 	}
+
 	return nil
 }
 
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	if err := r.requirePool("unsubscribe major event"); err != nil {
-		return err
+		return fmt.Errorf("require pool: %w", err)
 	}
 
 	query := mustSQL("repository_0099_03.sql")
+
 	_, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
 		return fmt.Errorf("unsubscribe major event: %w", err)
 	}
+
 	return nil
 }
 
 func (r *Repository) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
 	if err := r.requirePool("check subscription"); err != nil {
-		return false, err
+		return false, fmt.Errorf("require pool: %w", err)
 	}
 
 	query := mustSQL("repository_0112_04.sql")
 
 	var exists bool
+
 	err := r.pool.QueryRow(ctx, query, roomID).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check subscription: %w", err)
 	}
+
 	return exists, nil
 }
 
 func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoomSubscription, error) {
 	if err := r.requirePool("get subscribed rooms"); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("require pool: %w", err)
 	}
 
 	query := mustSQL("repository_0127_05.sql")
@@ -122,7 +128,12 @@ func (r *Repository) GetSubscribedRooms(ctx context.Context) ([]*domain.EventRoo
 	}
 	defer rows.Close()
 
-	return r.scanSubscriptions(rows)
+	out, err := r.scanSubscriptions(rows)
+	if err != nil {
+		return out, fmt.Errorf("scan subscriptions: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscription, error) {
@@ -130,10 +141,12 @@ func (r *Repository) scanSubscriptions(rows pgx.Rows) ([]*domain.EventRoomSubscr
 
 	for rows.Next() {
 		var sub domain.EventRoomSubscription
+
 		err := rows.Scan(&sub.ID, &sub.RoomID, &sub.RoomName, &sub.CreatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan subscription: %w", err)
 		}
+
 		subscriptions = append(subscriptions, &sub)
 	}
 

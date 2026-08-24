@@ -25,24 +25,24 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) {
 	t.Parallel()
 
 	services, err := InitCoreIntegrationServices(
-		context.Background(),
+		t.Context(),
 		&settings.Config{
 			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
 				ACLMode:    "whitelist",
-				Rooms:      []string{"room-a"},
+				Rooms:      []string{testRoomA},
 			},
 		},
 		&sharedmodules.InfraModule{
@@ -54,7 +54,7 @@ func TestInitCoreIntegrationServicesReturnsACLInitializationError(t *testing.T) 
 
 	require.Nil(t, services)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to create ACL service")
+	require.ErrorContains(t, err, "failed to create ACL service")
 	assert.ErrorContains(t, err, "postgres service is nil")
 }
 
@@ -62,7 +62,7 @@ func TestInitCoreIntegrationServicesRejectsInvalidACLMode(t *testing.T) {
 	t.Parallel()
 
 	services, err := InitCoreIntegrationServices(
-		context.Background(),
+		t.Context(),
 		&settings.Config{Kakao: settings.KakaoConfig{ACLMode: "not-a-mode"}},
 		&sharedmodules.InfraModule{},
 		slog.New(slog.DiscardHandler),
@@ -76,7 +76,7 @@ func TestInitCoreIntegrationServicesRejectsInvalidACLMode(t *testing.T) {
 func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.WithValue(context.Background(), bootstrapTestContextKey{}, "integration-context")
+	ctx := context.WithValue(t.Context(), bootstrapTestContextKey{}, "integration-context")
 	cacheClient, observedCalls := newACLCacheSyncMock(t, "integration-context")
 
 	services, err := InitCoreIntegrationServices(
@@ -85,7 +85,7 @@ func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 			Kakao: settings.KakaoConfig{
 				ACLEnabled: true,
 				ACLMode:    "whitelist",
-				Rooms:      []string{"room-a"},
+				Rooms:      []string{testRoomA},
 			},
 			Server: settings.ServerConfig{APIKey: "test-api-key"},
 		},
@@ -100,5 +100,5 @@ func TestInitCoreIntegrationServicesCreatesRuntimeDependencies(t *testing.T) {
 	require.NotNil(t, services)
 	assert.NotNil(t, services.ACLService)
 	assert.Empty(t, services.CommandBuilders)
-	assert.Greater(t, observedCalls.Load(), int64(0))
+	assert.Positive(t, observedCalls.Load())
 }

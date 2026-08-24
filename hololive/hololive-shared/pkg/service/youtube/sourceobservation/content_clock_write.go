@@ -14,11 +14,14 @@ func upsertContentClock(ctx context.Context, tx dbx.Tx, _ contract.ObservationKi
 	if err != nil {
 		return fmt.Errorf("upsert content evidence clock: %w", err)
 	}
+
 	var lastAbs any
+
 	if clock.LastAbsenceObservationID != 0 {
 		lastAbs = clock.LastAbsenceObservationID
 	}
-	if _, err := tx.Exec(
+
+	if _, execErr := tx.Exec(
 		ctx,
 		mustSQL("repository_content_clock_upsert_0037_37.sql"),
 		clock.VideoID,
@@ -36,8 +39,9 @@ func upsertContentClock(ctx context.Context, tx dbx.Tx, _ contract.ObservationKi
 		clock.Clock.MissingSinceEffectiveAt,
 		clock.ConsecutiveAbsenceSlots,
 		clock.WithdrawnAt,
-	); err != nil {
-		return fmt.Errorf("upsert content evidence clock: %w", err)
+	); execErr != nil {
+		return fmt.Errorf("upsert content evidence clock: %w", execErr)
 	}
-	return err
+
+	return nil
 }

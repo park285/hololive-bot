@@ -1,8 +1,6 @@
 package youtubedispatch
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -15,7 +13,7 @@ import (
 func TestDeliveryRepositoryMarkPermanentFailureBatchIfLockedSkipsRowsRelockedByAnotherWorker(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	originalLockedAt := now
@@ -38,13 +36,14 @@ func TestDeliveryRepositoryMarkPermanentFailureBatchIfLockedSkipsRowsRelockedByA
 		"id = ?", row.ID,
 	).Error)
 
-	repository := store.NewDeliveryRepository(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
 	err := repository.MarkPermanentFailureBatchIfLocked(ctx, []store.LockToken{
 		store.NewLockToken(row.ID, &originalLockedAt),
 	}, 3, "auth")
 	require.NoError(t, err)
 
 	var updated deliveryTestDeliveryModel
+
 	require.NoError(t, firstDeliveryTestRow(db, &updated, row.ID).Error)
 	require.Equal(t, string(store.DeliveryStatusSending), updated.Status)
 	require.Equal(t, 0, updated.AttemptCount)

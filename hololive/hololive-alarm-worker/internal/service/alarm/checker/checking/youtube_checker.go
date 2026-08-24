@@ -28,15 +28,15 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -66,7 +66,7 @@ func NewYouTubeChecker(
 	evaluationWindowCap time.Duration,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
-	return NewYouTubeCheckerWithPersistedLiveSource(
+	out, err := NewYouTubeCheckerWithPersistedLiveSource(
 		cacheClient,
 		holodexService,
 		tierScheduler,
@@ -76,6 +76,11 @@ func NewYouTubeChecker(
 		nil,
 		logger,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("youtube checker with persisted live source: %w", err)
+	}
+
+	return out, nil
 }
 
 func NewYouTubeCheckerWithPersistedLiveSource(
@@ -133,16 +138,17 @@ func (c *YouTubeChecker) UpdateTargetMinutes(targetMinutes []int) {
 // Check는 upcoming/live-catchup 알림 후보를 생성한다.
 func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification, error) {
 	now := time.Now().UTC()
+
 	dueChannels, streamsByChannel, liveEvidence, subscriberMap, err := c.loadDueYouTubeCheckInputs(ctx, now)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load due youtube check inputs: %w", err)
 	}
 
 	if len(dueChannels) == 0 {
 		return []*domain.AlarmNotification{}, nil
 	}
 
-	return c.collectDueYouTubeNotifications(
+	out, err := c.collectDueYouTubeNotifications(
 		ctx,
 		dueChannels,
 		streamsByChannel,
@@ -151,6 +157,11 @@ func (c *YouTubeChecker) Check(ctx context.Context) ([]*domain.AlarmNotification
 		liveEvidence.sentRoomsByStreamID,
 		now,
 	)
+	if err != nil {
+		return out, fmt.Errorf("collect due youtube notifications: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *YouTubeChecker) collectDueYouTubeNotifications(
@@ -163,6 +174,7 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 	now time.Time,
 ) ([]*domain.AlarmNotification, error) {
 	notifications := make([]*domain.AlarmNotification, 0, len(dueChannels)*5)
+
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -173,7 +185,8 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 		if !ok {
 			continue
 		}
-		c.startYouTubeChannelWorker(eg, egCtx, &work, liveObservedAtByStreamID, sentRoomsByStreamID, now, &mu, &notifications)
+
+		c.startYouTubeChannelWorker(egCtx, eg, &work, liveObservedAtByStreamID, sentRoomsByStreamID, now, &mu, &notifications)
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -184,8 +197,8 @@ func (c *YouTubeChecker) collectDueYouTubeNotifications(
 }
 
 func (c *YouTubeChecker) startYouTubeChannelWorker(
-	eg *errgroup.Group,
 	ctx context.Context,
+	eg *errgroup.Group,
 	work *youtubeChannelCheckWork,
 	liveObservedAtByStreamID map[string]time.Time,
 	sentRoomsByStreamID map[string]map[string]struct{},
@@ -207,7 +220,9 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 		if err != nil {
 			return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
 		}
+
 		appendYouTubeChannelNotifications(mu, notifications, channelNotifications)
+
 		return nil
 	})
 }

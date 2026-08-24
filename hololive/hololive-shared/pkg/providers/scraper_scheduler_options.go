@@ -21,17 +21,19 @@
 package providers
 
 import (
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 	"maps"
 	"time"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )
 
 type ChannelPollerRegistration struct {
+	*ChannelPollerRegistrationOptions
+
 	Poller   scheduler.Poller
 	Priority scheduler.Priority
 	Interval time.Duration
-	*ChannelPollerRegistrationOptions
 }
 
 type ChannelPollerRegistrationOptions struct {
@@ -80,35 +82,40 @@ func NewChannelPollerRegistration(p scheduler.Poller, priority scheduler.Priorit
 }
 
 func (r ChannelPollerRegistration) WithChannelIDs(channelIDs []string) ChannelPollerRegistration {
-	options := r.cloneOptions()
+	options := cloneRegistrationOptions(&r)
+
 	options.ChannelIDs = append([]string(nil), channelIDs...)
 	options.HasExplicitChannelIDs = true
+
 	return r
 }
 
 func (r ChannelPollerRegistration) WithTargetGroup(group ChannelTargetGroup) ChannelPollerRegistration {
-	r.cloneOptions().TargetGroup = group
+	cloneRegistrationOptions(&r).TargetGroup = group
 	return r
 }
 
 func (r ChannelPollerRegistration) WithRequestsPerRun(requestsPerRun int) ChannelPollerRegistration {
 	if requestsPerRun > 0 {
-		r.cloneOptions().RequestsPerRun = requestsPerRun
+		cloneRegistrationOptions(&r).RequestsPerRun = requestsPerRun
 	}
+
 	return r
 }
 
 func (r ChannelPollerRegistration) WithWorstCaseAttempts(attempts int) ChannelPollerRegistration {
 	if attempts > 0 {
-		r.cloneOptions().WorstCaseAttempts = attempts
+		cloneRegistrationOptions(&r).WorstCaseAttempts = attempts
 	}
+
 	return r
 }
 
 func (r ChannelPollerRegistration) WithWorstCaseRequestUnitsPerRun(units float64) ChannelPollerRegistration {
 	if units > 0 {
-		r.cloneOptions().WorstCaseRequestUnitsPerRun = units
+		cloneRegistrationOptions(&r).WorstCaseRequestUnitsPerRun = units
 	}
+
 	return r
 }
 
@@ -116,16 +123,22 @@ func (r ChannelPollerRegistration) WithBudgetProfile(profile polling.BudgetProfi
 	if profile.SourceUnits != nil {
 		sourceUnits := make(map[polling.BudgetSource]float64, len(profile.SourceUnits))
 		maps.Copy(sourceUnits, profile.SourceUnits)
+
 		profile.SourceUnits = sourceUnits
 	}
+
 	if profile.FallbackSourceUnits != nil {
 		fallbackSourceUnits := make(map[polling.BudgetSource]float64, len(profile.FallbackSourceUnits))
 		maps.Copy(fallbackSourceUnits, profile.FallbackSourceUnits)
+
 		profile.FallbackSourceUnits = fallbackSourceUnits
 	}
-	options := r.cloneOptions()
+
+	options := cloneRegistrationOptions(&r)
+
 	options.BudgetProfile = profile
 	options.HasBudgetProfile = true
+
 	return r
 }
 
@@ -136,7 +149,8 @@ func NewGlobalPollerRegistration(p scheduler.Poller, priority scheduler.Priority
 }
 
 func (r ChannelPollerRegistration) ToTargetSync() scheduler.PollerTargetSync {
-	options := r.optionsOrDefault()
+	options := registrationOptionsOrDefault(&r)
+
 	return scheduler.PollerTargetSync{
 		Poller:        r.Poller,
 		Priority:      r.Priority,
@@ -146,28 +160,33 @@ func (r ChannelPollerRegistration) ToTargetSync() scheduler.PollerTargetSync {
 	}
 }
 
-func (r *ChannelPollerRegistration) ensureOptions() *ChannelPollerRegistrationOptions {
+func ensureRegistrationOptions(r *ChannelPollerRegistration) *ChannelPollerRegistrationOptions {
 	if r.ChannelPollerRegistrationOptions == nil {
 		r.ChannelPollerRegistrationOptions = defaultChannelPollerRegistrationOptions()
 	}
+
 	return r.ChannelPollerRegistrationOptions
 }
 
-func (r *ChannelPollerRegistration) cloneOptions() *ChannelPollerRegistrationOptions {
+func cloneRegistrationOptions(r *ChannelPollerRegistration) *ChannelPollerRegistrationOptions {
 	if r.ChannelPollerRegistrationOptions == nil {
 		r.ChannelPollerRegistrationOptions = defaultChannelPollerRegistrationOptions()
 		return r.ChannelPollerRegistrationOptions
 	}
+
 	options := *r.ChannelPollerRegistrationOptions
+
 	options.ChannelIDs = append([]string(nil), options.ChannelIDs...)
 	r.ChannelPollerRegistrationOptions = &options
+
 	return r.ChannelPollerRegistrationOptions
 }
 
-func (r *ChannelPollerRegistration) optionsOrDefault() *ChannelPollerRegistrationOptions {
+func registrationOptionsOrDefault(r *ChannelPollerRegistration) *ChannelPollerRegistrationOptions {
 	if r == nil || r.ChannelPollerRegistrationOptions == nil {
 		return defaultChannelPollerRegistrationOptions()
 	}
+
 	return r.ChannelPollerRegistrationOptions
 }
 
@@ -196,8 +215,9 @@ type scraperSchedulerOptions struct {
 func WithChannelPollerRegistrations(registrations []ChannelPollerRegistration) ScraperSchedulerOption {
 	copied := make([]ChannelPollerRegistration, len(registrations))
 	copy(copied, registrations)
+
 	for i := range copied {
-		copied[i].ensureOptions()
+		ensureRegistrationOptions(&copied[i])
 	}
 
 	return func(options *scraperSchedulerOptions) {
@@ -258,10 +278,12 @@ func WithSchedulerChannelIDs(channelIDs []string) ScraperSchedulerOption {
 
 func resolveScraperSchedulerOptions(opts ...ScraperSchedulerOption) scraperSchedulerOptions {
 	resolved := scraperSchedulerOptions{}
+
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&resolved)
 		}
 	}
+
 	return resolved
 }

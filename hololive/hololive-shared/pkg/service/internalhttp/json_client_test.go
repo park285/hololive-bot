@@ -13,6 +13,7 @@ func TestNewClientForURLStrictReturnsErrorWhenH3ClientConfigFails(t *testing.T) 
 	if err == nil {
 		t.Fatal("NewClientForURLStrict() error = nil, want h3 client config error")
 	}
+
 	if client != nil {
 		t.Fatalf("NewClientForURLStrict() client = %T, want nil on error", client)
 	}
@@ -25,6 +26,7 @@ func TestNewClientForURLStrictKeepsPlainHTTPClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClientForURLStrict(http) error = %v", err)
 	}
+
 	if client == nil {
 		t.Fatal("NewClientForURLStrict(http) client = nil")
 	}

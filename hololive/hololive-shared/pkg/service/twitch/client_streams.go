@@ -2,6 +2,7 @@ package twitch
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,11 +10,12 @@ import (
 	"net/url"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
+
+const opGetStreams = "twitch_get_streams"
 
 func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, error) {
 	targets := normalizeUserLogins(userLogins)
@@ -30,10 +32,16 @@ func (c *Client) GetStreams(ctx context.Context, userLogins []string) (*StreamsR
 		if err != nil {
 			return nil, fmt.Errorf("get streams: %w", err)
 		}
+
 		return streams, nil
 	}
 
-	return c.getStreamChunks(ctx, targets)
+	out, err := c.getStreamChunks(ctx, targets)
+	if err != nil {
+		return nil, fmt.Errorf("get stream chunks: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *Client) getStreamChunks(ctx context.Context, targets []string) (*StreamsResponse, error) {
@@ -106,8 +114,16 @@ func (c *Client) getStreams(
 	userLogins []string,
 	allowRefreshRetry bool,
 ) (*StreamsResponse, error) {
-	if streams, done, err := c.prepareGetStreams(ctx, userLogins); done {
-		return streams, err
+	if !c.IsConfigured() {
+		return nil, errors.New("twitch client not configured")
+	}
+
+	if len(userLogins) == 0 {
+		return &StreamsResponse{Data: []StreamData{}}, nil
+	}
+
+	if err := c.prepareGetStreams(ctx); err != nil {
+		return nil, fmt.Errorf("prepare get streams: %w", err)
 	}
 
 	req, err := c.newStreamsRequest(ctx, userLogins)
@@ -120,37 +136,63 @@ func (c *Client) getStreams(
 		return nil, fmt.Errorf("do streams request: %w", err)
 	}
 
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.logger.Warn("Failed to close Twitch streams response body", slog.Any("error", closeErr))
-		}
-	}()
+	defer c.closeStreamsResponse(resp)
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		return c.retryUnauthorizedStreamsWithContext(ctx, userLogins, allowRefreshRetry)
+	out, err := c.handleStreamsResponse(ctx, resp, userLogins, allowRefreshRetry)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
 	}
 
-	return c.decodeStreamsHTTPResponse(resp)
+	return out, nil
 }
 
-func (c *Client) prepareGetStreams(ctx context.Context, userLogins []string) (*StreamsResponse, bool, error) {
-	if !c.IsConfigured() {
-		return nil, true, errors.New("twitch client not configured")
+func (c *Client) handleStreamsResponse(ctx context.Context, resp *http.Response, userLogins []string, allowRefreshRetry bool) (*StreamsResponse, error) {
+	if resp.StatusCode == http.StatusUnauthorized {
+		out, err := c.retryUnauthorizedStreamsResponse(ctx, userLogins, allowRefreshRetry)
+		if err != nil {
+			return nil, errors.Join(err)
+		}
+
+		return out, nil
 	}
-	if len(userLogins) == 0 {
-		return &StreamsResponse{Data: []StreamData{}}, true, nil
+
+	out, err := c.decodeStreamsHTTPResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("decode streams HTTP response: %w", err)
 	}
+
+	return out, nil
+}
+
+func (c *Client) retryUnauthorizedStreamsResponse(ctx context.Context, userLogins []string, allowRefreshRetry bool) (*StreamsResponse, error) {
+	retried, err := c.retryUnauthorizedStreamsWithContext(ctx, userLogins, allowRefreshRetry)
+	if err != nil {
+		return nil, fmt.Errorf("retry unauthorized streams with context: %w", err)
+	}
+
+	return retried, nil
+}
+
+func (c *Client) closeStreamsResponse(resp *http.Response) {
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		c.logger.Warn("Failed to close Twitch streams response body", slog.Any("error", closeErr))
+	}
+}
+
+func (c *Client) prepareGetStreams(ctx context.Context) error {
 	if c.isCircuitOpen() {
-		return nil, true, &apperrors.APIError{
-			Operation:  "twitch_get_streams",
+		return &apperrors.APIError{
+			Operation:  opGetStreams,
 			StatusCode: 503,
 			Err:        errors.New("circuit breaker open"),
 		}
 	}
+
 	if err := c.ensureValidToken(ctx); err != nil {
-		return nil, true, fmt.Errorf("ensure token: %w", err)
+		return fmt.Errorf("ensure token: %w", err)
 	}
-	return nil, false, nil
+
+	return nil
 }
 
 func (c *Client) retryUnauthorizedStreamsWithContext(
@@ -162,6 +204,7 @@ func (c *Client) retryUnauthorizedStreamsWithContext(
 	if retryErr != nil {
 		return nil, fmt.Errorf("retry unauthorized streams: %w", retryErr)
 	}
+
 	return retriedStreams, nil
 }
 
@@ -174,6 +217,7 @@ func (c *Client) decodeStreamsHTTPResponse(resp *http.Response) (*StreamsRespons
 	result, err := c.decodeStreamsResponse(body)
 	if err != nil {
 		c.recordFailure()
+
 		return nil, fmt.Errorf("decode streams response: %w", err)
 	}
 
@@ -186,18 +230,24 @@ func (c *Client) doStreamsRequest(req *http.Request) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		c.recordFailure()
+
 		if resp == nil {
 			err = fmt.Errorf("nil response: %w", err)
 		}
+
 		return nil, fmt.Errorf("do request: %w", err)
 	}
+
 	if resp == nil {
 		c.recordFailure()
-		return nil, fmt.Errorf("do request: nil response")
+
+		return nil, errors.New("do request: nil response")
 	}
+
 	if resp.Body == nil {
 		c.recordFailure()
-		return nil, fmt.Errorf("do request: nil response body")
+
+		return nil, errors.New("do request: nil response body")
 	}
 
 	return resp, nil
@@ -213,7 +263,7 @@ func (c *Client) retryUnauthorizedStreams(
 
 	if !allowRefreshRetry {
 		return nil, &apperrors.APIError{
-			Operation:  "twitch_get_streams",
+			Operation:  opGetStreams,
 			StatusCode: http.StatusUnauthorized,
 			Err:        errors.New("unauthorized after token refresh"),
 		}
@@ -252,7 +302,7 @@ func (c *Client) validateStreamsResponse(resp *http.Response) error {
 		c.recordFailure()
 
 		return &apperrors.APIError{
-			Operation:  "twitch_get_streams",
+			Operation:  opGetStreams,
 			StatusCode: http.StatusTooManyRequests,
 			Err:        errors.New("rate limited"),
 		}
@@ -260,13 +310,13 @@ func (c *Client) validateStreamsResponse(resp *http.Response) error {
 		c.recordFailure()
 
 		return &apperrors.APIError{
-			Operation:  "twitch_get_streams",
+			Operation:  opGetStreams,
 			StatusCode: resp.StatusCode,
 			Err:        errors.New("server error"),
 		}
 	default:
 		return &apperrors.APIError{
-			Operation:  "twitch_get_streams",
+			Operation:  opGetStreams,
 			StatusCode: resp.StatusCode,
 			Err:        errors.New("unexpected status"),
 		}

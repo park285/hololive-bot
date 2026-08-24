@@ -26,16 +26,19 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmHandler_HandlerSignatures(t *testing.T) {
 	t.Parallel()
 
-	var _ gin.HandlerFunc = (&AlarmHandler{}).GetAlarms
-	var _ gin.HandlerFunc = (&AlarmHandler{}).DeleteAlarm
+	var (
+		_ gin.HandlerFunc = (&AlarmHandler{}).GetAlarms
+		_ gin.HandlerFunc = (&AlarmHandler{}).DeleteAlarm
+	)
 }
 
 func TestAlarmHandler_GetAlarmsRequiresAlarmDependency(t *testing.T) {
@@ -128,9 +131,11 @@ func TestAlarmHandler_DeleteAlarmRequiresAlarmDependency(t *testing.T) {
 func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
 	t.Parallel()
 
-	var gotRoomID string
-	var gotChannelID string
-	var gotAlarmTypes domain.AlarmTypes
+	var (
+		gotRoomID     string
+		gotChannelID  string
+		gotAlarmTypes domain.AlarmTypes
+	)
 
 	handler := &AlarmHandler{Handler: &Handler{
 		alarm: &stubAlarmCRUDForServer{
@@ -143,6 +148,7 @@ func TestAlarmHandler_DeleteAlarmReturnsRemovedFalse(t *testing.T) {
 				gotRoomID = roomID
 				gotChannelID = channelID
 				gotAlarmTypes = alarmTypes
+
 				return false, nil
 			},
 		},

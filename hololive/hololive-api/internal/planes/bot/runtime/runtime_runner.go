@@ -21,6 +21,8 @@
 package botruntime
 
 import (
+	"fmt"
+
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
@@ -29,5 +31,9 @@ func (r *BotRuntime) Run() error {
 		return nil
 	}
 
-	return applifecycle.Run(r.Logger, r.Start, r.Shutdown)
+	if err := applifecycle.Run(r.Logger, r.Start, r.Shutdown); err != nil {
+		return fmt.Errorf("run: %w", err)
+	}
+
+	return nil
 }

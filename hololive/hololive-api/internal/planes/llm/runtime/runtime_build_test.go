@@ -21,8 +21,6 @@
 package runtime
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 
@@ -30,29 +28,33 @@ import (
 )
 
 func TestBuildLLMSchedulerRuntime_FailFastOnNilInputs(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	t.Run("nil config", func(t *testing.T) {
-		runtime, err := BuildLLMSchedulerRuntime(context.Background(), nil, logger)
+		runtime, err := BuildLLMSchedulerRuntime(t.Context(), nil, logger)
 		if err == nil {
 			t.Fatal("BuildLLMSchedulerRuntime() expected error for nil config")
 		}
+
 		if err.Error() != "llm scheduler config must not be nil" {
 			t.Fatalf("BuildLLMSchedulerRuntime() error = %q, want %q", err.Error(), "llm scheduler config must not be nil")
 		}
+
 		if runtime != nil {
 			t.Fatal("BuildLLMSchedulerRuntime() expected nil runtime on error")
 		}
 	})
 
 	t.Run("nil logger", func(t *testing.T) {
-		runtime, err := BuildLLMSchedulerRuntime(context.Background(), &settings.LLMSchedulerConfig{}, nil)
+		runtime, err := BuildLLMSchedulerRuntime(t.Context(), &settings.LLMSchedulerConfig{}, nil)
 		if err == nil {
 			t.Fatal("BuildLLMSchedulerRuntime() expected error for nil logger")
 		}
+
 		if err.Error() != "logger must not be nil" {
 			t.Fatalf("BuildLLMSchedulerRuntime() error = %q, want %q", err.Error(), "logger must not be nil")
 		}
+
 		if runtime != nil {
 			t.Fatal("BuildLLMSchedulerRuntime() expected nil runtime on error")
 		}

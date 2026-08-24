@@ -12,9 +12,11 @@ func TestHB04ParseTrustedProxyCIDRs_e8fc8b7d(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parseTrustedProxyCIDRs error = %v", err)
 		}
+
 		if len(got) != 2 {
 			t.Fatalf("len = %d, want 2", len(got))
 		}
+
 		if !got[0].Contains(netip.MustParseAddr("10.5.5.5")) {
 			t.Fatal("first cidr must contain 10.5.5.5")
 		}
@@ -29,6 +31,7 @@ func TestHB04ParseTrustedProxyCIDRs_e8fc8b7d(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error = %v", err)
 		}
+
 		if len(got) != 0 {
 			t.Fatalf("len = %d, want 0", len(got))
 		}
@@ -37,6 +40,7 @@ func TestHB04ParseTrustedProxyCIDRs_e8fc8b7d(t *testing.T) {
 
 func TestIsLocalhostOrigin(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		origin string
 		want   bool
@@ -63,6 +67,7 @@ func TestIsLocalhostOrigin(t *testing.T) {
 
 func TestNormalizeEscapedBcryptHash(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name string
 		in   string
@@ -77,6 +82,8 @@ func TestNormalizeEscapedBcryptHash(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := normalizeEscapedBcryptHash(tt.in); got != tt.want {
 				t.Fatalf("normalizeEscapedBcryptHash(%q) = %q, want %q", tt.in, got, tt.want)
 			}
@@ -86,6 +93,7 @@ func TestNormalizeEscapedBcryptHash(t *testing.T) {
 
 func TestSessionConfigValidateFailureBranches(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name   string
 		mutate func(*SessionConfig)
@@ -98,8 +106,11 @@ func TestSessionConfigValidateFailureBranches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			cfg := DefaultSessionConfig()
 			tt.mutate(&cfg)
+
 			if err := cfg.Validate(); err == nil {
 				t.Fatalf("Validate() = nil, want error for %s", tt.name)
 			}
@@ -109,6 +120,7 @@ func TestSessionConfigValidateFailureBranches(t *testing.T) {
 
 func TestForwardedTrustWarning(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name       string
 		forceHTTPS bool
@@ -121,11 +133,15 @@ func TestForwardedTrustWarning(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			cfg := Config{Security: SecurityConfig{ForceHTTPS: tc.forceHTTPS}, TrustedForwarders: tc.trusted}
 			got := cfg.ForwardedTrustWarning()
+
 			if tc.wantEmpty && got != "" {
 				t.Fatalf("ForwardedTrustWarning() = %q, want empty", got)
 			}
+
 			if !tc.wantEmpty && got == "" {
 				t.Fatal("ForwardedTrustWarning() = empty, want warning")
 			}
@@ -135,6 +151,7 @@ func TestForwardedTrustWarning(t *testing.T) {
 
 func TestSessionConfigValidateDefaultPasses(t *testing.T) {
 	t.Parallel()
+
 	cfg := DefaultSessionConfig()
 	if err := (&cfg).Validate(); err != nil {
 		t.Fatalf("DefaultSessionConfig().Validate() = %v, want nil", err)
@@ -143,6 +160,7 @@ func TestSessionConfigValidateDefaultPasses(t *testing.T) {
 
 func TestValidateTTLWindowsFailureBranches(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name   string
 		mutate func(*SessionConfig)
@@ -155,8 +173,11 @@ func TestValidateTTLWindowsFailureBranches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			cfg := DefaultSessionConfig()
 			tt.mutate(&cfg)
+
 			if err := cfg.validateTTLWindows(); err == nil {
 				t.Fatalf("validateTTLWindows() = nil, want error for %s", tt.name)
 			}
@@ -166,6 +187,7 @@ func TestValidateTTLWindowsFailureBranches(t *testing.T) {
 
 func TestValidateTTLWindowsDefaultPasses(t *testing.T) {
 	t.Parallel()
+
 	cfg := DefaultSessionConfig()
 	if err := (&cfg).validateTTLWindows(); err != nil {
 		t.Fatalf("validateTTLWindows() = %v, want nil", err)
@@ -181,6 +203,7 @@ func TestAliasOrDefault(t *testing.T) {
 	t.Run("primary wins", func(t *testing.T) {
 		t.Setenv("AO_PRIMARY", "primary-val")
 		t.Setenv("AO_SECONDARY", "secondary-val")
+
 		if got := aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "primary-val" {
 			t.Fatalf("aliasOrDefault = %q, want primary-val", got)
 		}
@@ -188,6 +211,7 @@ func TestAliasOrDefault(t *testing.T) {
 	t.Run("secondary used when primary empty", func(t *testing.T) {
 		t.Setenv("AO_PRIMARY", "")
 		t.Setenv("AO_SECONDARY", "secondary-val")
+
 		if got := aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "secondary-val" {
 			t.Fatalf("aliasOrDefault = %q, want secondary-val", got)
 		}
@@ -203,10 +227,12 @@ func TestRequiredAlias(t *testing.T) {
 	t.Run("returns first non-empty alias", func(t *testing.T) {
 		t.Setenv("RA_PRIMARY", "")
 		t.Setenv("RA_SECONDARY", "found")
+
 		got, err := requiredAlias("RA_PRIMARY", "RA_SECONDARY")
 		if err != nil {
 			t.Fatalf("requiredAlias error = %v", err)
 		}
+
 		if got != "found" {
 			t.Fatalf("requiredAlias = %q, want found", got)
 		}

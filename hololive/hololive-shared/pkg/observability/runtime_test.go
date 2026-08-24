@@ -11,6 +11,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 )
 
+var errRuntimeBuildMustNotRun = errors.New("runtime build must not run")
+
 type testRuntime struct {
 	events  *[]string
 	runErr  error
@@ -36,6 +38,7 @@ type testProvider struct {
 func (p *testProvider) Shutdown(context.Context) error {
 	*p.events = append(*p.events, "provider_shutdown")
 	p.shutdownCall++
+
 	return p.shutdownErr
 }
 
@@ -45,7 +48,7 @@ func TestBuildRuntimeOwnsProviderUntilRuntimeClose(t *testing.T) {
 	runtime := &testRuntime{events: &events}
 
 	managed, err := buildRuntime(
-		context.Background(),
+		t.Context(),
 		&telemetry.Config{Enabled: true, ServiceName: "test-service"},
 		slog.Default(),
 		func(context.Context) (*testRuntime, error) {
@@ -62,6 +65,7 @@ func TestBuildRuntimeOwnsProviderUntilRuntimeClose(t *testing.T) {
 	if err := managed.Run(); err != nil {
 		t.Fatalf("ManagedRuntime.Run() error = %v", err)
 	}
+
 	managed.Close()
 	managed.Close()
 
@@ -69,9 +73,11 @@ func TestBuildRuntimeOwnsProviderUntilRuntimeClose(t *testing.T) {
 	if strings.Join(events, ",") != strings.Join(want, ",") {
 		t.Fatalf("lifecycle events = %v, want %v", events, want)
 	}
+
 	if !runtime.closeOK {
 		t.Fatal("runtime was not closed")
 	}
+
 	if traceProvider.shutdownCall != 1 {
 		t.Fatalf("provider Shutdown() calls = %d, want 1", traceProvider.shutdownCall)
 	}
@@ -83,7 +89,7 @@ func TestBuildRuntimeShutsProviderDownWhenRuntimeBuildFails(t *testing.T) {
 	wantErr := errors.New("runtime unavailable")
 
 	managed, err := buildRuntime(
-		context.Background(),
+		t.Context(),
 		&telemetry.Config{Enabled: true},
 		slog.Default(),
 		func(context.Context) (*testRuntime, error) {
@@ -96,9 +102,11 @@ func TestBuildRuntimeShutsProviderDownWhenRuntimeBuildFails(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("buildRuntime() error = %v, want %v", err, wantErr)
 	}
+
 	if managed != nil {
 		t.Fatal("buildRuntime() returned a runtime after build failure")
 	}
+
 	if traceProvider.shutdownCall != 1 {
 		t.Fatalf("provider Shutdown() calls = %d, want 1", traceProvider.shutdownCall)
 	}
@@ -111,7 +119,7 @@ func TestManagedRuntimeShutsProviderDownAfterRuntimeRunFails(t *testing.T) {
 	traceProvider := &testProvider{events: &events}
 
 	managed, err := buildRuntime(
-		context.Background(),
+		t.Context(),
 		&telemetry.Config{Enabled: true},
 		slog.Default(),
 		func(context.Context) (*testRuntime, error) {
@@ -128,12 +136,14 @@ func TestManagedRuntimeShutsProviderDownAfterRuntimeRunFails(t *testing.T) {
 	if err := managed.Run(); !errors.Is(err, wantErr) {
 		t.Fatalf("ManagedRuntime.Run() error = %v, want %v", err, wantErr)
 	}
+
 	managed.Close()
 
 	want := []string{"run", "runtime_close", "provider_shutdown"}
 	if strings.Join(events, ",") != strings.Join(want, ",") {
 		t.Fatalf("lifecycle events = %v, want %v", events, want)
 	}
+
 	if traceProvider.shutdownCall != 1 {
 		t.Fatalf("provider Shutdown() calls = %d, want 1", traceProvider.shutdownCall)
 	}
@@ -144,12 +154,13 @@ func TestBuildRuntimeStopsBeforeRuntimeBuildWhenProviderFails(t *testing.T) {
 	buildCalled := false
 
 	managed, err := buildRuntime(
-		context.Background(),
+		t.Context(),
 		&telemetry.Config{Enabled: true},
 		slog.Default(),
 		func(context.Context) (*testRuntime, error) {
 			buildCalled = true
-			return nil, nil
+
+			return nil, errRuntimeBuildMustNotRun
 		},
 		func(context.Context, *telemetry.Config) (provider, error) {
 			return nil, wantErr
@@ -158,9 +169,11 @@ func TestBuildRuntimeStopsBeforeRuntimeBuildWhenProviderFails(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("buildRuntime() error = %v, want %v", err, wantErr)
 	}
+
 	if managed != nil {
 		t.Fatal("buildRuntime() returned a runtime after provider failure")
 	}
+
 	if buildCalled {
 		t.Fatal("runtime build started after provider failure")
 	}
@@ -173,11 +186,13 @@ func TestManagedRuntimeRedactsProviderShutdownError(t *testing.T) {
 		events:      &events,
 		shutdownErr: errors.New("export https://trace-user:trace-password@example.invalid failed"),
 	}
+
 	var output bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&output, nil))
 
 	managed, err := buildRuntime(
-		context.Background(),
+		t.Context(),
 		&telemetry.Config{Enabled: true},
 		logger,
 		func(context.Context) (*testRuntime, error) {
@@ -196,6 +211,7 @@ func TestManagedRuntimeRedactsProviderShutdownError(t *testing.T) {
 	if strings.Contains(output.String(), "trace-user") || strings.Contains(output.String(), "trace-password") {
 		t.Fatalf("shutdown log contains credentials: %s", output.String())
 	}
+
 	if !strings.Contains(output.String(), "***REDACTED***@example.invalid") {
 		t.Fatalf("shutdown log did not contain redacted diagnostic: %s", output.String())
 	}

@@ -25,10 +25,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/runtime"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+
+	botruntime "github.com/kapu/hololive-api/internal/planes/bot/runtime"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func main() {
@@ -38,6 +38,7 @@ func main() {
 	appConfig, err := settings.LoadBotRuntime()
 	if err != nil {
 		slog.Error("load_config_failed", slog.Any("error", err))
+
 		return
 	}
 
@@ -50,8 +51,10 @@ func main() {
 	}, "warm_member_cache.log", appConfig.Logging.Level)
 	if err != nil {
 		slog.Error("init_logger_failed", slog.Any("error", err))
+
 		return
 	}
+
 	slog.SetDefault(logger)
 
 	logger.Info("Manual member list cache refresh started")
@@ -59,6 +62,7 @@ func main() {
 	_, cleanup, err := botruntime.InitializeWarmMemberCache(ctx, appConfig, logger)
 	if err != nil {
 		logger.Error("Manual cache refresh failed", slog.Any("error", err))
+
 		return
 	}
 	defer cleanup()

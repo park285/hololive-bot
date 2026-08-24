@@ -166,6 +166,7 @@ func TestActivityLogger_GetRecentLogsTailAcrossChunkBoundary(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
 	l := NewActivityLogger(filePath, logger)
+
 	t.Cleanup(func() {
 		if err := l.Close(); err != nil {
 			t.Errorf("close activity logger: %v", err)
@@ -174,7 +175,9 @@ func TestActivityLogger_GetRecentLogsTailAcrossChunkBoundary(t *testing.T) {
 
 	// 한 줄이 1KB를 넘도록 만들어 tail chunk(64KB) 경계를 여러 번 가로지르게 한다.
 	const entries = 200
+
 	padding := strings.Repeat("p", 1024)
+
 	for i := range entries {
 		l.Log("system", fmt.Sprintf("entry-%d", i), map[string]any{"pad": padding})
 	}
@@ -183,6 +186,7 @@ func TestActivityLogger_GetRecentLogsTailAcrossChunkBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRecentLogs() error = %v", err)
 	}
+
 	if len(logs) != 3 {
 		t.Fatalf("GetRecentLogs() len = %d, want 3", len(logs))
 	}
@@ -193,6 +197,7 @@ func TestActivityLogger_GetRecentLogsTailAcrossChunkBoundary(t *testing.T) {
 			t.Fatalf("logs[%d].Summary = %q, want %q (full order: %v)", i, logs[i].Summary, summary, logSummaries(logs))
 		}
 	}
+
 	if logs[2].Details["pad"] != padding {
 		t.Fatal("tail read lost entry details")
 	}
@@ -202,6 +207,7 @@ func TestActivityLogger_GetRecentLogsHonoursLimitLargerThanFile(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "activity.log")
 	l := NewActivityLogger(filePath, slog.New(slog.DiscardHandler))
+
 	t.Cleanup(func() {
 		if err := l.Close(); err != nil {
 			t.Errorf("close activity logger: %v", err)
@@ -214,6 +220,7 @@ func TestActivityLogger_GetRecentLogsHonoursLimitLargerThanFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRecentLogs() error = %v", err)
 	}
+
 	if len(logs) != 1 || logs[0].Summary != "only-entry" {
 		t.Fatalf("GetRecentLogs() = %v, want a single only-entry", logSummaries(logs))
 	}
@@ -231,6 +238,7 @@ func TestActivityLogger_GetRecentLogsSkipsCorruptTrailingLine(t *testing.T) {
 	}
 
 	l := NewActivityLogger(filePath, slog.New(slog.DiscardHandler))
+
 	t.Cleanup(func() {
 		if err := l.Close(); err != nil {
 			t.Errorf("close activity logger: %v", err)
@@ -241,6 +249,7 @@ func TestActivityLogger_GetRecentLogsSkipsCorruptTrailingLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRecentLogs() error = %v", err)
 	}
+
 	if len(logs) != 2 || logs[0].Summary != "good-1" || logs[1].Summary != "good-2" {
 		t.Fatalf("GetRecentLogs() = %v, want [good-1 good-2]", logSummaries(logs))
 	}
@@ -250,6 +259,7 @@ func TestActivityLogger_LogReopensAfterExternalRemoval(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "activity.log")
 	l := NewActivityLogger(filePath, slog.New(slog.DiscardHandler))
+
 	t.Cleanup(func() {
 		if err := l.Close(); err != nil {
 			t.Errorf("close activity logger: %v", err)
@@ -257,6 +267,7 @@ func TestActivityLogger_LogReopensAfterExternalRemoval(t *testing.T) {
 	})
 
 	l.Log("system", "before-removal", nil)
+
 	if err := os.Remove(filePath); err != nil {
 		t.Fatalf("remove activity log: %v", err)
 	}
@@ -267,6 +278,7 @@ func TestActivityLogger_LogReopensAfterExternalRemoval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRecentLogs() error = %v", err)
 	}
+
 	if len(logs) != 1 || logs[0].Summary != "after-removal" {
 		t.Fatalf("GetRecentLogs() = %v, want [after-removal]", logSummaries(logs))
 	}
@@ -277,5 +289,6 @@ func logSummaries(logs []LogEntry) []string {
 	for _, entry := range logs {
 		summaries = append(summaries, entry.Summary)
 	}
+
 	return summaries
 }

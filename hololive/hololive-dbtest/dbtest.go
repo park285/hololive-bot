@@ -37,13 +37,13 @@ import (
 )
 
 const (
-	// testDatabaseURLEnv가 설정되면 testcontainers 대신 해당 DSN을 base로 쓴다.
+	// TEST_DATABASE_URL이 설정되면 testcontainers 대신 해당 DSN을 base로 쓴다.
 	testDatabaseURLEnv        = "TEST_DATABASE_URL"
 	testDatabaseOwnerTokenEnv = "TEST_DATABASE_OWNER_TOKEN"
 	allowExternalTestDBEnv    = "ALLOW_EXTERNAL_TEST_DB"
 	ownershipSentinelQuery    = "SELECT token FROM ci_ephemeral_sentinel LIMIT 1"
 
-	// postgresImage는 production migration 기준과 같은 PostgreSQL 18 image다.
+	// PostgreSQL 18 image로, production migration 기준과 같은 태그를 고정한다.
 	postgresImage = "postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2"
 )
 
@@ -59,39 +59,49 @@ var sharedBase baseProvider
 // dbSeq는 격리 데이터베이스 이름 충돌 방지용 카운터다.
 var dbSeq atomic.Uint64
 
-func NewReplayPool(t testing.TB) *pgxpool.Pool {
-	t.Helper()
+func NewReplayPool(tb testing.TB) *pgxpool.Pool {
+	tb.Helper()
 
-	ctx := context.Background()
-	pool := NewBlankPool(t)
+	ctx := tb.Context()
+	pool := NewBlankPool(tb)
+
 	if err := ApplyMigrations(ctx, pool); err != nil {
-		t.Fatalf("dbtest: apply migrations: %v", err)
+		tb.Fatalf("dbtest: apply migrations: %v", err)
 	}
+
 	return pool
 }
 
-func NewBlankPool(t testing.TB) *pgxpool.Pool {
-	t.Helper()
+func NewBlankPool(tb testing.TB) *pgxpool.Pool {
+	tb.Helper()
 
-	baseDSN := acquireBaseDSN(t)
-	return newIsolatedPool(t, baseDSN, "")
+	baseDSN := acquireBaseDSN(tb)
+
+	return newIsolatedPool(tb, baseDSN, "")
 }
 
-func newIsolatedPool(t testing.TB, baseDSN, templateName string) *pgxpool.Pool {
-	t.Helper()
+func newIsolatedPool(tb testing.TB, baseDSN, templateName string) *pgxpool.Pool {
+	tb.Helper()
 
+	//nolint:usetesting // 이 컨텍스트는 t.Cleanup의 데이터베이스 정리에서 재사용되므로, 테스트 종료와 함께 취소되는 t.Context()를 쓸 수 없다.
 	ctx := context.Background()
 	dbName := fmt.Sprintf("test_%d_%d", time.Now().UnixNano(), dbSeq.Add(1))
 
-	createIsolatedDatabase(t, ctx, baseDSN, dbName, templateName)
-	pool := openTestPool(t, ctx, baseDSN, dbName)
+	if err := createIsolatedDatabase(ctx, baseDSN, dbName, templateName); err != nil {
+		tb.Fatalf("dbtest: %v", err)
+	}
 
-	t.Cleanup(func() {
+	pool, err := openTestPool(ctx, baseDSN, dbName)
+	if err != nil {
+		tb.Fatalf("dbtest: %v", err)
+	}
+
+	tb.Cleanup(func() {
 		if dropErr := dropDatabase(ctx, baseDSN, dbName); dropErr != nil {
-			t.Errorf("dbtest: drop database %s: %v", dbName, dropErr)
+			tb.Errorf("dbtest: drop database %s: %v", dbName, dropErr)
 		}
 	})
-	t.Cleanup(pool.Close)
+	tb.Cleanup(pool.Close)
 
 	return pool
 }
@@ -99,51 +109,53 @@ func newIsolatedPool(t testing.TB, baseDSN, templateName string) *pgxpool.Pool {
 // createIsolatedDatabase는 base DSN의 기본 데이터베이스에 admin pool로 연결해
 // 격리 DB(dbName)를 생성한다. 식별자는 내부 생성(time+seq)이라 인젝션 위험이 없으나
 // quote로 안전하게 감싼다.
-func createIsolatedDatabase(t testing.TB, ctx context.Context, baseDSN, dbName, templateName string) {
-	t.Helper()
-
+func createIsolatedDatabase(ctx context.Context, baseDSN, dbName, templateName string) error {
 	adminPool, err := poolForDatabase(ctx, baseDSN, "")
 	if err != nil {
-		t.Fatalf("dbtest: connect base for database setup: %v", err)
+		return fmt.Errorf("connect base for database setup: %w", err)
 	}
 	defer adminPool.Close()
 
 	statement := fmt.Sprintf("CREATE DATABASE %s", quoteIdent(dbName))
+
 	if templateName != "" {
 		statement += " TEMPLATE " + quoteIdent(templateName)
 	}
+
 	if _, err := adminPool.Exec(ctx, statement); err != nil {
-		t.Fatalf("dbtest: create database %s: %v", dbName, err)
+		return fmt.Errorf("create database %s: %w", dbName, err)
 	}
+
+	return nil
 }
 
 // openTestPool은 격리 DB에 연결된 pool을 반환한다. 연결 실패 시 best-effort로
-// 해당 DB를 drop한 뒤 t.Fatalf로 종료한다.
-func openTestPool(t testing.TB, ctx context.Context, baseDSN, dbName string) *pgxpool.Pool {
-	t.Helper()
-
+// 해당 DB를 drop한 뒤 원인 오류를 반환한다.
+func openTestPool(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, error) {
 	pool, err := poolForDatabase(ctx, baseDSN, dbName)
-	if err != nil {
-		if dropErr := dropDatabase(ctx, baseDSN, dbName); dropErr != nil {
-			t.Errorf("dbtest: drop database %s after test pool failure: %v", dbName, dropErr)
-		}
-
-		t.Fatalf("dbtest: connect test database pool: %v", err)
+	if err == nil {
+		return pool, nil
 	}
 
-	return pool
+	connectErr := fmt.Errorf("connect test database pool: %w", err)
+
+	if dropErr := dropDatabase(ctx, baseDSN, dbName); dropErr != nil {
+		return nil, errors.Join(connectErr, fmt.Errorf("drop database %s after test pool failure: %w", dbName, dropErr))
+	}
+
+	return nil, connectErr
 }
 
 // acquireBaseDSN은 공유 base DSN을 반환한다(최초 1회 확보).
-func acquireBaseDSN(t testing.TB) string {
-	t.Helper()
+func acquireBaseDSN(tb testing.TB) string {
+	tb.Helper()
 
 	sharedBase.once.Do(func() {
 		sharedBase.dsn, sharedBase.err = provisionBaseDSN()
 	})
 
 	if sharedBase.err != nil {
-		t.Fatalf("dbtest: provision base database: %v", sharedBase.err)
+		tb.Fatalf("dbtest: provision base database: %v", sharedBase.err)
 	}
 
 	return sharedBase.dsn
@@ -153,7 +165,12 @@ func acquireBaseDSN(t testing.TB) string {
 // 컨테이너는 프로세스 종료 시 testcontainers reaper(Ryuk)가 회수하므로 명시적 종료를 등록하지 않는다.
 func provisionBaseDSN() (_ string, err error) {
 	if dsn := os.Getenv(testDatabaseURLEnv); dsn != "" {
-		return validatedPresetDSN(dsn)
+		out, presetErr := validatedPresetDSN(dsn)
+		if presetErr != nil {
+			return out, fmt.Errorf("validated preset DSN: %w", presetErr)
+		}
+
+		return out, nil
 	}
 
 	ctx := context.Background()
@@ -162,6 +179,7 @@ func provisionBaseDSN() (_ string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("lock session provisioning: %w", err)
 	}
+
 	defer func() { err = errors.Join(err, unlock()) }()
 
 	container, err := provisionPostgresContainer(
@@ -187,22 +205,30 @@ func holdExistingSessionReaper(ctx context.Context) error {
 	if verifiedReaperConn != nil {
 		return nil
 	}
+
 	_, found, err := findSessionReaper(ctx)
 	if err != nil {
 		if isTransientReaperError(err) {
 			return nil
 		}
-		return err
+
+		return fmt.Errorf("find session reaper: %w", err)
 	}
+
 	if !found {
 		return nil
 	}
-	return ensureVerifiedReaperClient(ctx)
+
+	if err := ensureVerifiedReaperClient(ctx); err != nil {
+		return fmt.Errorf("ensure verified reaper client: %w", err)
+	}
+
+	return nil
 }
 
 func validatedPresetDSN(dsn string) (string, error) {
 	if err := verifyPresetDSNOwnership(dsn); err != nil {
-		return "", err
+		return "", fmt.Errorf("verify preset DSN ownership: %w", err)
 	}
 
 	return dsn, nil
@@ -211,8 +237,13 @@ func validatedPresetDSN(dsn string) (string, error) {
 func verifyPresetDSNOwnership(dsn string) error {
 	expectedToken := strings.TrimSpace(os.Getenv(testDatabaseOwnerTokenEnv))
 	allowExternal := os.Getenv(allowExternalTestDBEnv) == "true"
+
 	if expectedToken == "" {
-		return validateOwnershipEvidence("", "", nil, allowExternal)
+		if err := validateOwnershipEvidence("", "", nil, allowExternal); err != nil {
+			return fmt.Errorf("validate ownership evidence: %w", err)
+		}
+
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -225,9 +256,14 @@ func verifyPresetDSNOwnership(dsn string) error {
 	defer pool.Close()
 
 	var gotToken string
+
 	queryErr := pool.QueryRow(ctx, ownershipSentinelQuery).Scan(&gotToken)
 
-	return validateOwnershipEvidence(expectedToken, gotToken, queryErr, allowExternal)
+	if err := validateOwnershipEvidence(expectedToken, gotToken, queryErr, allowExternal); err != nil {
+		return fmt.Errorf("validate ownership evidence: %w", err)
+	}
+
+	return nil
 }
 
 func validateOwnershipEvidence(expectedToken, gotToken string, queryErr error, allowExternal bool) error {
@@ -238,11 +274,13 @@ func validateOwnershipEvidence(expectedToken, gotToken string, queryErr error, a
 
 		return fmt.Errorf("dbtest: unproven database ownership; use testcontainers or opt in to a dedicated disposable server with %s=true", allowExternalTestDBEnv)
 	}
+
 	if queryErr != nil {
 		return fmt.Errorf("dbtest: read ownership sentinel: %w", queryErr)
 	}
+
 	if gotToken != expectedToken {
-		return fmt.Errorf("dbtest: ownership sentinel mismatch")
+		return errors.New("dbtest: ownership sentinel mismatch")
 	}
 
 	return nil
@@ -260,27 +298,33 @@ func sessionProvisionLockPath() string {
 
 func lockSessionProvisioning() (func() error, error) {
 	path := sessionProvisionLockPath()
+
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // TempDir와 parent pid로만 구성되는 test lock path입니다.
 	if err != nil {
 		return nil, fmt.Errorf("open lock file %s: %w", path, err)
 	}
+
 	if flockErr := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); flockErr != nil {
 		err := fmt.Errorf("flock %s: %w", path, flockErr)
+
 		if closeErr := file.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close lock file: %w", closeErr))
 		}
+
 		return nil, err
 	}
+
 	return func() error {
 		if closeErr := file.Close(); closeErr != nil {
 			return fmt.Errorf("close lock file %s: %w", path, closeErr)
 		}
+
 		return nil
 	}, nil
 }
 
-// dropDatabase는 격리 데이터베이스를 제거한다(cleanup 경로). best-effort지만 에러를
-// 반환하여 호출자가 visible하게 보고할 수 있게 한다.
+// dropDatabase는 격리 데이터베이스를 제거한다(cleanup 경로). 실패해도 진행하는 best-effort
+// 경로지만, 에러를 반환하여 호출자가 visible하게 보고할 수 있게 한다.
 //
 // 우선 DROP DATABASE ... WITH (FORCE)(PG 13+)로 잔여 연결까지 끊고 제거한다. FORCE가
 // 실패하면(PG<13 syntax 미지원 또는 그 외) 잔여 연결을 pg_terminate_backend로 정리한 뒤
@@ -317,11 +361,11 @@ func dropDatabase(ctx context.Context, baseDSN, dbName string) error {
 }
 
 // poolForDatabase는 base DSN을 파싱해 데이터베이스명만 교체한 *pgxpool.Pool을 만든다.
-// dbName이 빈 문자열이면 base DSN의 데이터베이스를 그대로 쓴다.
+// 빈 dbName은 base DSN의 데이터베이스를 그대로 쓴다는 뜻이다.
 //
-// url.Parse 대신 pgxpool.ParseConfig를 쓰는 이유: TEST_DATABASE_URL이 URL 형식
-// (postgres://...)뿐 아니라 libpq keyword 형식(host=... dbname=...)일 수 있는데,
-// url.Parse는 keyword DSN을 깨뜨린다. ParseConfig는 두 형식을 모두 처리한다.
+// URL 형식과 libpq keyword 형식(host=, dbname=)을 모두 받아야 하므로 url.Parse가 아니라
+// ParseConfig를 쓴다. TEST_DATABASE_URL이 keyword DSN으로 오면 url.Parse는 이를 깨뜨리지만,
+// ParseConfig는 두 형식을 모두 처리한다.
 func poolForDatabase(ctx context.Context, baseDSN, dbName string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(baseDSN)
 	if err != nil {

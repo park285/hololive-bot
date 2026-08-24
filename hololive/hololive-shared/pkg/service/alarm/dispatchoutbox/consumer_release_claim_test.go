@@ -25,13 +25,17 @@ type fakeClaimKeyReleaser struct {
 
 func (f *fakeClaimKeyReleaser) DelMany(_ context.Context, keys []string) (int64, error) {
 	f.calls++
+
 	f.lastKeys = append([]string(nil), keys...)
+
 	if f.err != nil {
 		return 0, f.err
 	}
+
 	if f.ret != 0 {
 		return f.ret, nil
 	}
+
 	return int64(len(keys)), nil
 }
 
@@ -41,16 +45,18 @@ func TestReleaseClaimKeysDeletesPrefixedKeysWhenReleaserSet(t *testing.T) {
 	releaser := &fakeClaimKeyReleaser{}
 	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
 
-	err := consumer.ReleaseClaimKeys(context.Background(), []string{
+	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		" notified:claim:room-1:stream-1:100:live ",
 		"notified:claim:event:room-1:channel-1:100:fp:live",
 	})
 	if err != nil {
 		t.Fatalf("ReleaseClaimKeys() error = %v", err)
 	}
+
 	if releaser.calls != 1 {
 		t.Fatalf("DelMany calls = %d, want 1", releaser.calls)
 	}
+
 	want := []string{
 		"notified:claim:room-1:stream-1:100:live",
 		"notified:claim:event:room-1:channel-1:100:fp:live",
@@ -58,6 +64,7 @@ func TestReleaseClaimKeysDeletesPrefixedKeysWhenReleaserSet(t *testing.T) {
 	if len(releaser.lastKeys) != len(want) {
 		t.Fatalf("DelMany keys = %v, want %v", releaser.lastKeys, want)
 	}
+
 	for i := range want {
 		if releaser.lastKeys[i] != want[i] {
 			t.Fatalf("DelMany keys[%d] = %q, want %q", i, releaser.lastKeys[i], want[i])
@@ -71,7 +78,7 @@ func TestReleaseClaimKeysSkipsNonPrefixedKeys(t *testing.T) {
 	releaser := &fakeClaimKeyReleaser{}
 	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
 
-	err := consumer.ReleaseClaimKeys(context.Background(), []string{
+	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		"alarm:dispatch:claim:room-1:stream-1",
 		"invalid:key",
 		"",
@@ -80,6 +87,7 @@ func TestReleaseClaimKeysSkipsNonPrefixedKeys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReleaseClaimKeys() error = %v", err)
 	}
+
 	if releaser.calls != 0 {
 		t.Fatalf("DelMany calls = %d, want 0 (no prefixed keys)", releaser.calls)
 	}
@@ -90,7 +98,7 @@ func TestReleaseClaimKeysIsNoOpWhenReleaserNil(t *testing.T) {
 
 	consumer := NewConsumer(&consumerTestRepository{}, slog.Default())
 
-	err := consumer.ReleaseClaimKeys(context.Background(), []string{
+	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		"notified:claim:room-1:stream-1:100:live",
 	})
 	if err != nil {
@@ -104,12 +112,14 @@ func TestReleaseClaimKeysEmptyInputDoesNotCallReleaser(t *testing.T) {
 	releaser := &fakeClaimKeyReleaser{}
 	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
 
-	if err := consumer.ReleaseClaimKeys(context.Background(), nil); err != nil {
+	if err := consumer.ReleaseClaimKeys(t.Context(), nil); err != nil {
 		t.Fatalf("ReleaseClaimKeys(nil) error = %v", err)
 	}
-	if err := consumer.ReleaseClaimKeys(context.Background(), []string{}); err != nil {
+
+	if err := consumer.ReleaseClaimKeys(t.Context(), []string{}); err != nil {
 		t.Fatalf("ReleaseClaimKeys([]) error = %v", err)
 	}
+
 	if releaser.calls != 0 {
 		t.Fatalf("DelMany calls = %d, want 0 for empty input", releaser.calls)
 	}
@@ -122,10 +132,11 @@ func TestReleaseClaimKeysWrapsReleaserError(t *testing.T) {
 	releaser := &fakeClaimKeyReleaser{err: sentinel}
 	consumer := NewConsumer(&consumerTestRepository{}, slog.Default(), WithClaimKeyReleaser(releaser))
 
-	err := consumer.ReleaseClaimKeys(context.Background(), []string{"notified:claim:room-1:stream-1:100:live"})
+	err := consumer.ReleaseClaimKeys(t.Context(), []string{"notified:claim:room-1:stream-1:100:live"})
 	if err == nil {
 		t.Fatal("ReleaseClaimKeys() error = nil, want wrapped releaser error")
 	}
+
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("ReleaseClaimKeys() error = %v, want wrap of %v", err, sentinel)
 	}

@@ -41,6 +41,7 @@ type Runtime struct {
 func NewRuntime() *Runtime {
 	rt := &Runtime{}
 	rt.init()
+
 	return rt
 }
 
@@ -48,9 +49,11 @@ func (r *Runtime) SetClock(clockFn func() time.Time) {
 	if r == nil || clockFn == nil {
 		return
 	}
+
 	r.init()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.now = clockFn
 }
 
@@ -58,10 +61,13 @@ func (r *Runtime) Now() time.Time {
 	if r == nil {
 		return time.Now()
 	}
+
 	r.init()
 	r.mu.Lock()
+
 	now := r.now
 	r.mu.Unlock()
+
 	return now()
 }
 
@@ -69,14 +75,19 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 	if r == nil || config == nil || config.CalculateNextRun == nil || config.OnTick == nil {
 		return
 	}
+
 	r.init()
 
 	r.mu.Lock()
+
 	if r.started {
 		r.mu.Unlock()
+
 		return
 	}
+
 	stopCh := r.stopCh
+
 	r.started = true
 	r.wg.Add(1)
 	r.mu.Unlock()
@@ -90,10 +101,12 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 		defer r.wg.Done()
 
 		var reason StopReason
+
 		panicguard.Run(logger, "schedulerkit-runtime", func() {
 			reason = r.run(ctx, config, logger, stopCh)
 		})
 		r.finishRun(stopCh)
+
 		if config.OnStop != nil {
 			panicguard.Run(logger, "schedulerkit-onstop", func() {
 				config.OnStop(reason)
@@ -106,8 +119,10 @@ func (r *Runtime) Stop() {
 	if r == nil {
 		return
 	}
+
 	r.init()
 	r.mu.Lock()
+
 	stopOnce := r.stopOnce
 	stopCh := r.stopCh
 	started := r.started
@@ -134,6 +149,7 @@ func (r *Runtime) run(ctx context.Context, config *Config, logger *slog.Logger, 
 		if reason, stopped := waitRuntimeTick(ctx, config, logger, stopCh, timer); stopped {
 			return reason
 		}
+
 		panicguard.Run(logger, "schedulerkit-tick", func() {
 			config.OnTick(ctx)
 		})
@@ -151,10 +167,12 @@ func waitRuntimeTick(
 	case <-ctx.Done():
 		stopTimer(timer)
 		logger.Info(config.ContextStopLog)
+
 		return StopReasonContextCancelled, true
 	case <-stopCh:
 		stopTimer(timer)
 		logger.Info(config.StopLog)
+
 		return StopReasonManual, true
 	case <-timer.C:
 		return 0, false
@@ -165,6 +183,7 @@ func (r *Runtime) finishRun(stopCh chan struct{}) {
 	r.init()
 
 	r.mu.Lock()
+
 	currentStopCh := r.stopCh
 	stopOnce := r.stopOnce
 	r.mu.Unlock()
@@ -197,6 +216,7 @@ func stopTimer(timer *time.Timer) {
 	if timer == nil {
 		return
 	}
+
 	if !timer.Stop() {
 		select {
 		case <-timer.C:

@@ -3,7 +3,6 @@ package youtubedispatch
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"slices"
 	"strings"
@@ -40,6 +39,7 @@ func newRouteAuditCacheClient() (*cachemocks.Client, *routeAuditCache) {
 	}
 
 	client := cachemocks.NewStrictClient()
+
 	client.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
 		return auditStore.addSetMembers(key, members), nil
 	}
@@ -48,6 +48,7 @@ func newRouteAuditCacheClient() (*cachemocks.Client, *routeAuditCache) {
 	}
 	client.HSetFunc = func(_ context.Context, key, field, value string) error {
 		auditStore.setHash(key, field, value)
+
 		return nil
 	}
 	client.HGetFunc = func(_ context.Context, key, field string) (string, error) {
@@ -55,10 +56,12 @@ func newRouteAuditCacheClient() (*cachemocks.Client, *routeAuditCache) {
 	}
 	client.DelFunc = func(_ context.Context, key string) error {
 		auditStore.deleteKey(key)
+
 		return nil
 	}
 	client.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
 		auditStore.setHash("__strings__", key, fmt.Sprintf("%v", value))
+
 		return nil
 	}
 
@@ -76,10 +79,12 @@ func (c *routeAuditCache) addSetMembers(key string, members []string) int64 {
 	}
 
 	var added int64
+
 	for _, member := range members {
 		if _, exists := set[member]; exists {
 			continue
 		}
+
 		set[member] = struct{}{}
 		added++
 	}
@@ -95,10 +100,13 @@ func (c *routeAuditCache) members(key string) []string {
 
 	set := c.sets[key]
 	members := make([]string, 0, len(set))
+
 	for member := range set {
 		members = append(members, member)
 	}
+
 	slices.Sort(members)
+
 	return members
 }
 
@@ -111,6 +119,7 @@ func (c *routeAuditCache) setHash(key, field, value string) {
 		hash = make(map[string]string)
 		c.hashes[key] = hash
 	}
+
 	hash[field] = value
 }
 
@@ -135,13 +144,14 @@ func (c *routeAuditCache) lookupKeys() []string {
 
 	keys := make([]string, len(c.lookedUpKeys))
 	copy(keys, c.lookedUpKeys)
+
 	return keys
 }
 
 func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTypedKeys(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
 	cache, cacheStore := newRouteAuditCacheClient()
@@ -161,22 +171,9 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	expectedTargets := collectRouteAuditTargets(alarms)
 	require.Len(t, expectedTargets, 4)
 
-	items := buildRouteAuditOutboxItems(expectedTargets)
-	require.NoError(t, insertDeliveryTestRows(db, &items).Error)
-
-	trackingRows := make([]deliveryTestTrackingModel, 0, len(items))
-	for _, item := range items {
-		trackingRows = append(trackingRows, deliveryTestTrackingModel{
-			Kind:       string(item.Kind),
-			ContentID:  item.ContentID,
-			ChannelID:  item.ChannelID,
-			DetectedAt: item.NextAttemptAt,
-		})
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &trackingRows).Error)
-
+	items := seedRouteAuditOutboxRows(t, db, expectedTargets)
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -189,6 +186,7 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	dispatcher.claim.enqueueDeliveries(ctx, items, roomsByChannel)
 
 	var deliveryRows []domain.YouTubeNotificationDelivery
+
 	require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveryRows, "id ASC").Error)
 	require.Len(t, deliveryRows, totalRouteAuditDeliveries(expectedTargets))
 
@@ -207,15 +205,55 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	require.ElementsMatch(t, expectedRouteAuditLookupKeys(expectedTargets), cacheStore.lookupKeys())
 	require.NotContains(t, cacheStore.lookupKeys(), sharedalarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))
 
+	assertRouteAuditPersistedRows(t, db, items, expectedTargets)
+	require.ElementsMatch(t, expectedRouteAuditSentRooms(expectedTargets), senderRoomIDs(sender.messages))
+}
+
+func seedRouteAuditOutboxRows(
+	t *testing.T,
+	db *deliveryTestDB,
+	expectedTargets map[routeAuditTarget][]string,
+) []domain.YouTubeNotificationOutbox {
+	t.Helper()
+
+	items := buildRouteAuditOutboxItems(expectedTargets)
+	require.NoError(t, insertDeliveryTestRows(db, &items).Error)
+
+	trackingRows := make([]deliveryTestTrackingModel, 0, len(items))
+	for i := range items {
+		trackingRows = append(trackingRows, deliveryTestTrackingModel{
+			Kind:       string(items[i].Kind),
+			ContentID:  items[i].ContentID,
+			ChannelID:  items[i].ChannelID,
+			DetectedAt: items[i].NextAttemptAt,
+		})
+	}
+
+	require.NoError(t, insertDeliveryTestRows(db, &trackingRows).Error)
+
+	return items
+}
+
+func assertRouteAuditPersistedRows(
+	t *testing.T,
+	db *deliveryTestDB,
+	items []domain.YouTubeNotificationOutbox,
+	expectedTargets map[routeAuditTarget][]string,
+) {
+	t.Helper()
+
 	var deliveries []deliveryTestDeliveryModel
+
 	require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveries, "outbox_id ASC, room_id ASC").Error)
 	require.Len(t, deliveries, totalRouteAuditDeliveries(expectedTargets))
 
 	gotRoomsByOutbox := make(map[int64][]string, len(items))
-	for _, row := range deliveries {
-		require.Equal(t, string(domain.OutboxStatusSent), row.Status)
-		require.NotNil(t, row.SentAt)
-		gotRoomsByOutbox[row.OutboxID] = append(gotRoomsByOutbox[row.OutboxID], row.RoomID)
+
+	for i := range deliveries {
+		require.Equal(t, string(domain.OutboxStatusSent), deliveries[i].Status)
+		require.NotNil(t, deliveries[i].SentAt)
+
+		gotRoomsByOutbox[deliveries[i].OutboxID] = append(gotRoomsByOutbox[deliveries[i].OutboxID], deliveries[i].RoomID)
 	}
 
 	for outboxID, wantRooms := range expectedRouteAuditRoomsByOutbox(items, expectedTargets) {
@@ -223,18 +261,19 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 	}
 
 	var updatedItems []domain.YouTubeNotificationOutbox
+
 	require.NoError(t, findDeliveryTestRowsOrdered(db, &updatedItems, "id ASC").Error)
 	require.Len(t, updatedItems, len(items))
-	for _, item := range updatedItems {
-		require.Equal(t, domain.OutboxStatusSent, item.Status)
-		require.NotNil(t, item.SentAt)
-	}
 
-	require.ElementsMatch(t, expectedRouteAuditSentRooms(expectedTargets), senderRoomIDs(sender.messages))
+	for i := range updatedItems {
+		require.Equal(t, domain.OutboxStatusSent, updatedItems[i].Status)
+		require.NotNil(t, updatedItems[i].SentAt)
+	}
 }
 
 func collectRouteAuditTargets(alarms []*domain.Alarm) map[routeAuditTarget][]string {
 	targets := make(map[routeAuditTarget][]string)
+
 	for _, alarm := range alarms {
 		if alarm == nil {
 			continue
@@ -249,7 +288,9 @@ func collectRouteAuditTargets(alarms []*domain.Alarm) map[routeAuditTarget][]str
 			if alarmType != domain.AlarmTypeCommunity && alarmType != domain.AlarmTypeShorts {
 				continue
 			}
+
 			target := routeAuditTarget{channelID: alarm.ChannelID, alarmType: alarmType}
+
 			targets[target] = append(targets[target], alarm.RegistryKey())
 		}
 	}
@@ -309,21 +350,26 @@ func sortedRouteAuditTargets(targets map[routeAuditTarget][]string) []routeAudit
 	for target := range targets {
 		sortedTargets = append(sortedTargets, target)
 	}
+
 	slices.SortFunc(sortedTargets, func(left, right routeAuditTarget) int {
 		if left.channelID != right.channelID {
 			return strings.Compare(left.channelID, right.channelID)
 		}
+
 		return strings.Compare(string(left.alarmType), string(right.alarmType))
 	})
+
 	return sortedTargets
 }
 
 func expectedRouteAuditLookupKeys(targets map[routeAuditTarget][]string) []string {
 	sortedTargets := sortedRouteAuditTargets(targets)
 	keys := make([]string, 0, len(sortedTargets))
+
 	for _, target := range sortedTargets {
 		keys = append(keys, sharedalarmkeys.BuildChannelSubscriberKey(target.channelID, target.alarmType))
 	}
+
 	return keys
 }
 
@@ -334,26 +380,33 @@ func expectedRouteAuditRoomsByOutbox(items []domain.YouTubeNotificationOutbox, t
 		target := routeAuditTarget{channelID: item.ChannelID, alarmType: item.Kind.ToAlarmType()}
 		rooms := append([]string(nil), targets[target]...)
 		slices.Sort(rooms)
+
 		roomsByOutbox[item.ID] = rooms
 	}
+
 	return roomsByOutbox
 }
 
 func expectedRouteAuditSentRooms(targets map[routeAuditTarget][]string) []string {
 	sortedTargets := sortedRouteAuditTargets(targets)
 	rooms := make([]string, 0, totalRouteAuditDeliveries(targets))
+
 	for _, target := range sortedTargets {
 		rooms = append(rooms, targets[target]...)
 	}
+
 	slices.Sort(rooms)
+
 	return rooms
 }
 
 func totalRouteAuditDeliveries(targets map[routeAuditTarget][]string) int {
 	total := 0
+
 	for _, rooms := range targets {
 		total += len(rooms)
 	}
+
 	return total
 }
 
@@ -365,8 +418,11 @@ func senderRoomIDs(messages []string) []string {
 			roomIDs = append(roomIDs, message)
 			continue
 		}
+
 		roomIDs = append(roomIDs, roomID)
 	}
+
 	slices.Sort(roomIDs)
+
 	return roomIDs
 }

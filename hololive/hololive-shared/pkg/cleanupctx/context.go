@@ -15,11 +15,12 @@ const DefaultTimeout = 5 * time.Second
 var ErrNilDone = errors.New("cleanup done channel is nil")
 
 // WithTimeout은 parent의 값을 보존하고 취소와 deadline을 분리한 cleanup context를 반환한다.
-// timeout이 양수가 아니면 DefaultTimeout을 사용한다.
+// 지정한 timeout이 양수가 아니면 DefaultTimeout을 사용한다.
 func WithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
+
 	return context.WithTimeout(context.WithoutCancel(parent), timeout)
 }
 
@@ -28,8 +29,11 @@ func Wait(parent context.Context, timeout time.Duration, done <-chan struct{}) e
 	if done == nil {
 		return ErrNilDone
 	}
+
 	ctx, cancel := WithTimeout(parent, timeout)
+
 	defer cancel()
+
 	select {
 	case <-done:
 		return nil

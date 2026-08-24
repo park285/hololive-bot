@@ -27,46 +27,46 @@ func TestMetricsBudgetAndLeaseCollectors(t *testing.T) {
 	m.ObserveBudgetRetryAfter(profile, 3*time.Second)
 	m.AddBudgetInflight(profile, 1)
 	m.AddBudgetInflight(profile, -1)
-	m.ObserveJobLeaseTTL("videos", 90*time.Second)
-	m.ObserveJobLeaseElapsedRatio("videos", 0.8)
-	m.ObserveJobLeaseNearExpiry("videos")
+	m.ObserveJobLeaseTTL(testPollerNameVideos, 90*time.Second)
+	m.ObserveJobLeaseElapsedRatio(testPollerNameVideos, 0.8)
+	m.ObserveJobLeaseNearExpiry(testPollerNameVideos)
 
 	families, err := reg.Gather()
 	require.NoError(t, err)
 
 	sourceLabels := map[string]string{
-		"source":      string(BudgetSourceYouTubeScraper),
-		"burst_class": string(BudgetBurstPrimary),
-		"priority":    string(BudgetPriorityHigh),
+		metricLabelSource: string(BudgetSourceYouTubeScraper),
+		"burst_class":     string(BudgetBurstPrimary),
+		"priority":        string(BudgetPriorityHigh),
 	}
 	assertCounterValue(t, families, "youtube_poller_budget_reserve_total", map[string]string{
-		"source":      sourceLabels["source"],
-		"result":      "allowed",
-		"burst_class": sourceLabels["burst_class"],
-		"priority":    sourceLabels["priority"],
+		metricLabelSource: sourceLabels[metricLabelSource],
+		metricLabelResult: "allowed",
+		"burst_class":     sourceLabels["burst_class"],
+		"priority":        sourceLabels["priority"],
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_budget_reserve_total", map[string]string{
-		"source":      sourceLabels["source"],
-		"result":      "denied",
-		"burst_class": sourceLabels["burst_class"],
-		"priority":    sourceLabels["priority"],
+		metricLabelSource: sourceLabels[metricLabelSource],
+		metricLabelResult: "denied",
+		"burst_class":     sourceLabels["burst_class"],
+		"priority":        sourceLabels["priority"],
 	}, 1)
 	assertHistogramLabels(t, families, "youtube_poller_budget_reserve_wait_seconds", map[string]string{
-		"source": sourceLabels["source"],
+		metricLabelSource: sourceLabels[metricLabelSource],
 	})
 	assertHistogramLabels(t, families, "youtube_poller_budget_retry_after_seconds", map[string]string{
-		"source": sourceLabels["source"],
+		metricLabelSource: sourceLabels[metricLabelSource],
 	})
 	assertGaugeValue(t, families, "youtube_poller_budget_inflight", map[string]string{
-		"source": sourceLabels["source"],
+		metricLabelSource: sourceLabels[metricLabelSource],
 	}, 0)
 	assertGaugeValue(t, families, "youtube_poller_job_lease_ttl_seconds", map[string]string{
-		"poller": "videos",
+		metricLabelPoller: testPollerNameVideos,
 	}, 90)
 	assertGaugeValue(t, families, "youtube_poller_job_lease_elapsed_ratio", map[string]string{
-		"poller": "videos",
+		metricLabelPoller: testPollerNameVideos,
 	}, 0.8)
 	assertCounterValue(t, families, "youtube_poller_job_lease_near_expiry_total", map[string]string{
-		"poller": "videos",
+		metricLabelPoller: testPollerNameVideos,
 	}, 1)
 }

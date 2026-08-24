@@ -22,6 +22,7 @@ package alarm
 
 import (
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -41,12 +42,18 @@ type Handler struct {
 
 func decodeAlarmRequest(c *gin.Context, destination any) error {
 	if err := jsonv2.UnmarshalRead(c.Request.Body, destination); err != nil {
-		return err
+		return fmt.Errorf("unmarshal read: %w", err)
 	}
+
 	if binding.Validator == nil {
 		return nil
 	}
-	return binding.Validator.ValidateStruct(destination)
+
+	if err := binding.Validator.ValidateStruct(destination); err != nil {
+		return fmt.Errorf("validate struct: %w", err)
+	}
+
+	return nil
 }
 
 func NewHandler(alarm domain.AlarmCRUD, logger *slog.Logger) *Handler {
@@ -79,8 +86,10 @@ func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 
 func (h *Handler) AddAlarm(c *gin.Context) {
 	var req AddAlarmRequest
+
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
 		return
 	}
 
@@ -105,6 +114,7 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("알람 추가 실패", slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_add_failed", "alarm add failed"))
+
 		return
 	}
 
@@ -113,8 +123,10 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 
 func (h *Handler) RemoveAlarm(c *gin.Context) {
 	var req RemoveAlarmRequest
+
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
 		return
 	}
 
@@ -129,6 +141,7 @@ func (h *Handler) RemoveAlarm(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("알람 제거 실패", slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_remove_failed", "alarm remove failed"))
+
 		return
 	}
 
@@ -143,6 +156,7 @@ func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("방 알람 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_room_alarms_failed", "get room alarms failed"))
+
 		return
 	}
 
@@ -157,6 +171,7 @@ func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("방 알람 표시 조회 실패", privacylog.RoomIDAttr(roomID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_room_alarms_view_failed", "get room alarms view failed"))
+
 		return
 	}
 
@@ -165,8 +180,10 @@ func (h *Handler) GetRoomAlarmsView(c *gin.Context) {
 
 func (h *Handler) ClearRoomAlarms(c *gin.Context) {
 	var req ClearAlarmsRequest
+
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
 		return
 	}
 
@@ -176,6 +193,7 @@ func (h *Handler) ClearRoomAlarms(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("방 알람 전체 삭제 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("clear_room_alarms_failed", "clear room alarms failed"))
+
 		return
 	}
 
@@ -190,11 +208,13 @@ func (h *Handler) GetNextStreamInfo(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("다음 방송 정보 조회 실패", slog.String("channel_id", channelID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_next_stream_info_failed", "get next stream info failed"))
+
 		return
 	}
 
 	if info == nil {
 		ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: nil})
+
 		return
 	}
 
@@ -203,8 +223,10 @@ func (h *Handler) GetNextStreamInfo(c *gin.Context) {
 
 func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 	var req UpdateAdvanceMinutesRequest
+
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
 		return
 	}
 
@@ -214,8 +236,10 @@ func (h *Handler) UpdateAlarmAdvanceMinutes(c *gin.Context) {
 
 func (h *Handler) SetRoomName(c *gin.Context) {
 	var req SetRoomNameRequest
+
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
 		return
 	}
 
@@ -224,6 +248,7 @@ func (h *Handler) SetRoomName(c *gin.Context) {
 	if err := h.alarm.SetRoomName(ctx, req.RoomID, req.RoomName); err != nil {
 		h.logger.Error("방 이름 설정 실패", privacylog.RoomIDAttr(req.RoomID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("set_room_name_failed", "set room name failed"))
+
 		return
 	}
 
@@ -232,8 +257,10 @@ func (h *Handler) SetRoomName(c *gin.Context) {
 
 func (h *Handler) SetUserName(c *gin.Context) {
 	var req SetUserNameRequest
+
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
 		return
 	}
 
@@ -242,6 +269,7 @@ func (h *Handler) SetUserName(c *gin.Context) {
 	if err := h.alarm.SetUserName(ctx, req.UserID, req.UserName); err != nil {
 		h.logger.Error("사용자 이름 설정 실패", slog.String("user_id", req.UserID), slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("set_user_name_failed", "set user name failed"))
+
 		return
 	}
 
@@ -255,6 +283,7 @@ func (h *Handler) GetAllAlarmKeys(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("알람 키 전체 조회 실패", slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("get_all_alarm_keys_failed", "get all alarm keys failed"))
+
 		return
 	}
 

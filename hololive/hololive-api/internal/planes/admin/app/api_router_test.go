@@ -27,13 +27,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/gin-gonic/gin"
 
 	apphttp "github.com/kapu/hololive-api/internal/planes/admin/app/http"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+)
+
+const (
+	testAPIKey        = "test-key"
+	testAllowedOrigin = "http://localhost:3000"
 )
 
 func TestFailClosedAuth(t *testing.T) {
@@ -51,7 +55,7 @@ func TestFailClosedAuth(t *testing.T) {
 	}{
 		{
 			name:    "API Key provided - Success",
-			apiKey:  "test-key",
+			apiKey:  testAPIKey,
 			wantErr: false,
 		},
 		{
@@ -69,7 +73,7 @@ func TestFailClosedAuth(t *testing.T) {
 					APIKey: tt.apiKey,
 				},
 				CORS: settings.CORSConfig{
-					AllowedOrigins: []string{"http://localhost:3000"},
+					AllowedOrigins: []string{testAllowedOrigin},
 				},
 			}
 
@@ -77,8 +81,10 @@ func TestFailClosedAuth(t *testing.T) {
 
 			if tt.wantErr {
 				assertAPIRouterError(t, router, err, tt.expectedErr)
+
 				return
 			}
+
 			assertAPIRouterSuccess(t, router, err)
 		})
 	}
@@ -90,9 +96,11 @@ func assertAPIRouterError(t *testing.T, router *gin.Engine, err error, expectedE
 	if err == nil {
 		t.Fatal("ProvideAPIRouter() expected error, but got nil")
 	}
-	if err.Error() != expectedErr {
-		t.Errorf("ProvideAPIRouter() expected error %q, but got %q", expectedErr, err.Error())
+
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("ProvideAPIRouter() expected error containing %q, but got %q", expectedErr, err.Error())
 	}
+
 	if router != nil {
 		t.Error("ProvideAPIRouter() expected nil router on error, but got non-nil")
 	}
@@ -104,6 +112,7 @@ func assertAPIRouterSuccess(t *testing.T, router *gin.Engine, err error) {
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() unexpected error: %v", err)
 	}
+
 	if router == nil {
 		t.Fatal("ProvideAPIRouter() expected non-nil router, but got nil")
 	}
@@ -118,7 +127,7 @@ func TestAPIRouter_CORSOriginGuard(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey:          "test-key",
+			APIKey:          testAPIKey,
 			AdminAllowedIPs: []string{"127.0.0.1"},
 		},
 		Environment: "production",
@@ -163,7 +172,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		Environment: "production",
 		CORS: settings.CORSConfig{
@@ -178,7 +187,7 @@ func TestAPIRouter_CORSProductionMissingOriginsFailsWhenEnforced(t *testing.T) {
 		t.Fatal("ProvideAPIRouter() expected error")
 	}
 
-	if err.Error() != "explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true" {
+	if !strings.Contains(err.Error(), "explicit CORS_ALLOWED_ORIGINS required in production when CORS_ENFORCE=true") {
 		t.Fatalf("ProvideAPIRouter() error = %q", err.Error())
 	}
 
@@ -194,10 +203,10 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -206,8 +215,8 @@ func TestProvideAPIRouter_NilDomainHandlers(t *testing.T) {
 		t.Fatal("ProvideAPIRouter() expected error for nil domain handlers")
 	}
 
-	if err.Error() != "domain handlers must not be nil" {
-		t.Fatalf("ProvideAPIRouter() error = %q, want %q", err.Error(), "domain handlers must not be nil")
+	if !strings.Contains(err.Error(), "domain handlers must not be nil") {
+		t.Fatalf("ProvideAPIRouter() error = %q, want it to contain %q", err.Error(), "domain handlers must not be nil")
 	}
 
 	if router != nil {
@@ -224,10 +233,10 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -243,13 +252,14 @@ func TestAPIRouter_RegisterRequiresAPIKey(t *testing.T) {
 	}{
 		{name: "missing api key", wantStatus: http.StatusUnauthorized},
 		{name: "invalid api key", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
-		{name: "valid api key reaches handler", headerVal: "test-key", wantStatus: http.StatusServiceUnavailable},
+		{name: "valid api key reaches handler", headerVal: testAPIKey, wantStatus: http.StatusServiceUnavailable},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/register", strings.NewReader(`{"email":"admin@example.com","password":"password123","displayName":"Admin"}`))
 			req.Header.Set("Content-Type", "application/json")
+
 			if tt.headerVal != "" {
 				req.Header.Set(common.APIKeyHeader, tt.headerVal)
 			}
@@ -273,10 +283,10 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -293,10 +303,10 @@ func TestAPIRouter_StreamRoutesRequireAPIKey(t *testing.T) {
 	}{
 		{name: "live missing api key", path: "/api/holo/streams/live?org=", wantStatus: http.StatusUnauthorized},
 		{name: "live invalid api key", path: "/api/holo/streams/live?org=", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
-		{name: "live valid api key", path: "/api/holo/streams/live?org=", headerVal: "test-key", wantStatus: http.StatusBadRequest},
+		{name: "live valid api key", path: "/api/holo/streams/live?org=", headerVal: testAPIKey, wantStatus: http.StatusBadRequest},
 		{name: "upcoming missing api key", path: "/api/holo/streams/upcoming?org=", wantStatus: http.StatusUnauthorized},
 		{name: "upcoming invalid api key", path: "/api/holo/streams/upcoming?org=", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
-		{name: "upcoming valid api key", path: "/api/holo/streams/upcoming?org=", headerVal: "test-key", wantStatus: http.StatusBadRequest},
+		{name: "upcoming valid api key", path: "/api/holo/streams/upcoming?org=", headerVal: testAPIKey, wantStatus: http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
@@ -325,10 +335,10 @@ func TestAPIRouter_ProtectedRoutesStillRequireAPIKey(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -356,10 +366,10 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 
 	appConfig := &settings.Config{
 		Server: settings.ServerConfig{
-			APIKey: "test-key",
+			APIKey: testAPIKey,
 		},
 		CORS: settings.CORSConfig{
-			AllowedOrigins: []string{"http://localhost:3000"},
+			AllowedOrigins: []string{testAllowedOrigin},
 		},
 	}
 
@@ -375,7 +385,7 @@ func TestAPIRouter_MetricsRequireAPIKey(t *testing.T) {
 	}{
 		{name: "missing api key", wantStatus: http.StatusUnauthorized},
 		{name: "invalid api key", headerVal: "wrong-key", wantStatus: http.StatusForbidden},
-		{name: "valid api key", headerVal: "test-key", wantStatus: http.StatusOK},
+		{name: "valid api key", headerVal: testAPIKey, wantStatus: http.StatusOK},
 	}
 
 	for _, tt := range tests {

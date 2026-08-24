@@ -13,7 +13,7 @@ import (
 
 func TestWebhookMetricsObservesCountersAndHistograms(t *testing.T) {
 	registry := prometheus.NewRegistry()
-	metrics := NewWebhookMetrics(registry)
+	metrics := newWebhookMetrics(registry)
 
 	metrics.ObserveRequest()
 	metrics.ObserveUnauthorized()
@@ -42,6 +42,7 @@ func TestWebhookMetricsObservesCountersAndHistograms(t *testing.T) {
 
 func assertMetricValue(t *testing.T, collector prometheus.Collector, want float64) {
 	t.Helper()
+
 	if got := testutil.ToFloat64(collector); got != want {
 		t.Fatalf("metric = %v, want %v", got, want)
 	}
@@ -49,18 +50,22 @@ func assertMetricValue(t *testing.T, collector prometheus.Collector, want float6
 
 func assertHistogramCount(t *testing.T, registry prometheus.Gatherer, name string) {
 	t.Helper()
+
 	families, err := registry.Gather()
 	if err != nil {
 		t.Fatalf("gather metrics: %v", err)
 	}
+
 	for _, family := range families {
 		if family.GetName() == name {
 			if got := family.Metric[0].GetHistogram().GetSampleCount(); got != 1 {
 				t.Fatalf("metric %s sample count = %v, want 1", name, got)
 			}
+
 			return
 		}
 	}
+
 	t.Fatalf("metric %s was not gathered", name)
 }
 
@@ -76,7 +81,7 @@ func TestWebhookMetricsExposeSignatureVersionDiagnostics(t *testing.T) {
 	t.Parallel()
 
 	registry := prometheus.NewRegistry()
-	metrics := NewWebhookMetrics(registry)
+	metrics := newWebhookMetrics(registry)
 	metrics.BindSignatureDiagnostics(fixedWebhookSignatureDiagnostics{value: webhook.SignatureVersionDiagnostics{
 		V3Validated:       3,
 		UnknownRejected:   4,
@@ -90,14 +95,17 @@ func TestWebhookMetricsExposeSignatureVersionDiagnostics(t *testing.T) {
 	}
 	families, err := registry.Gather()
 	require.NoError(t, err)
+
 	for _, family := range families {
 		expected, ok := want[family.GetName()]
 		if !ok {
 			continue
 		}
+
 		require.NotEmpty(t, family.Metric)
-		assert.Equal(t, expected, family.Metric[0].GetCounter().GetValue())
+		assert.InDelta(t, expected, family.Metric[0].GetCounter().GetValue(), 0)
 		delete(want, family.GetName())
 	}
+
 	require.Empty(t, want)
 }

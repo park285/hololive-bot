@@ -45,10 +45,11 @@ func (c Config) logf(format string, args ...any) {
 
 func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Result, error) {
 	if pool == nil {
-		return Result{}, fmt.Errorf("postgres pool is nil")
+		return Result{}, errors.New("postgres pool is nil")
 	}
+
 	if fsys == nil {
-		return Result{}, fmt.Errorf("migration fs is nil")
+		return Result{}, errors.New("migration fs is nil")
 	}
 
 	conn, err := pool.Acquire(ctx)
@@ -62,19 +63,27 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 		LockTimeout:      sessionLockTimeout,
 		StatementTimeout: sessionStatementTimeout,
 	}
-	if err := sessionCfg.Configure(ctx, exec.Exec); err != nil {
-		return Result{}, fmt.Errorf("configure migration session: %w", err)
+
+	if configureErr := sessionCfg.Configure(ctx, exec.Exec); configureErr != nil {
+		return Result{}, fmt.Errorf("configure migration session: %w", configureErr)
 	}
 
 	lockSession := pgxAdvisoryLockSession{conn: conn}
+
 	var result Result
+
 	err = dbmigrate.WithAdvisoryLock(ctx, lockSession, dbmigrate.LockConfig{Key: lockKey(cfg), Release: advisoryUnlockTimeout}, func(lockCtx context.Context) error {
 		var applyErr error
+
 		result, applyErr = applyLocked(lockCtx, conn, fsys, exec, cfg)
-		return applyErr
+		if applyErr != nil {
+			return fmt.Errorf("apply locked: %w", applyErr)
+		}
+
+		return nil
 	})
 	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("with advisory lock: %w", err)
 	}
 
 	return result, nil
@@ -83,10 +92,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, cfg Config) (Resul
 func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guardedExecer, cfg Config) (Result, error) {
 	ledger := dbmigrate.Ledger{}
 	if err := ledger.Ensure(ctx, exec.Exec); err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("ensure: %w", err)
 	}
+
 	if err := ensureChecksumTable(ctx, exec.Exec); err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("ensure checksum table: %w", err)
 	}
 
 	entries, err := dbmigrate.Manifest(fsys)
@@ -94,24 +104,27 @@ func applyLocked(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, exec *guar
 		return Result{}, fmt.Errorf("dbmigrate: %w", err)
 	}
 
-	if err := reconcileBaseline(ctx, conn, fsys, ledger, entries, cfg); err != nil {
-		return Result{}, err
+	if reconcileErr := reconcileBaseline(ctx, conn, fsys, ledger, entries, cfg); reconcileErr != nil {
+		return Result{}, fmt.Errorf("reconcile baseline: %w", reconcileErr)
 	}
-	if err := guardEpochResidue(ctx, conn, ledger, entries); err != nil {
-		return Result{}, err
+
+	if guardErr := guardEpochResidue(ctx, conn, ledger, entries); guardErr != nil {
+		return Result{}, fmt.Errorf("guard epoch residue: %w", guardErr)
 	}
-	if err := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); err != nil {
-		return Result{}, err
+
+	if configureBlockingErr := configureBlockingIndexDropPolicy(ctx, conn, exec, cfg); configureBlockingErr != nil {
+		return Result{}, fmt.Errorf("configure blocking index drop policy: %w", configureBlockingErr)
 	}
 
 	result, err := applyManifest(ctx, conn, fsys, exec, ledger, entries, cfg)
 	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("apply manifest: %w", err)
 	}
 
 	if err := assertNoInvalidIndexes(ctx, conn); err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("assert no invalid indexes: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -119,6 +132,7 @@ func lockKey(cfg Config) int64 {
 	if cfg.LockKey != 0 {
 		return cfg.LockKey
 	}
+
 	return AdvisoryLockKey
 }
 
@@ -130,21 +144,42 @@ type guardedExecer struct {
 }
 
 func (e *guardedExecer) Exec(ctx context.Context, query string, args ...any) error {
-	_, err := e.conn.Exec(ctx, query, args...)
-	return err
+	if _, err := e.conn.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("exec: %w", err)
+	}
+
+	return nil
+}
+
+// dbmigrate.Execer는 non-nil return을 실패로 보고 호출자가 tx를 rollback한다 —
+// nil 검사 없이 감싸면 성공한 statement가 rollback을 유발한다.
+func txExecer(tx pgx.Tx) dbmigrate.Execer {
+	return func(ctx context.Context, query string, args ...any) error {
+		if _, err := tx.Exec(ctx, query, args...); err != nil {
+			return fmt.Errorf("exec: %w", err)
+		}
+
+		return nil
+	}
 }
 
 // CONCURRENTLY 실패가 남긴 invalid index는 이름을 점유해 다음 실행의 IF NOT EXISTS를
 // no-op으로 만들 수 있다. 다른 운영 작업의 index를 건드리지 않도록 현재 파일의 대상만 정리한다.
 func (e *guardedExecer) execSegment(ctx context.Context, name string, segment sqlsplit.Segment) error {
 	if segment.Transactional {
-		return e.execTxSegment(ctx, name, segment.Statements)
+		if err := e.execTxSegment(ctx, name, segment.Statements); err != nil {
+			return fmt.Errorf("exec tx segment: %w", err)
+		}
+
+		return nil
 	}
+
 	for _, stmt := range segment.Statements {
 		if _, err := e.conn.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("exec %s: %w", name, err)
 		}
 	}
+
 	return nil
 }
 
@@ -153,12 +188,19 @@ func (e *guardedExecer) execTxSegment(ctx context.Context, name string, statemen
 	if err != nil {
 		return fmt.Errorf("exec %s: begin: %w", name, err)
 	}
+
 	if err := execTxStatements(ctx, tx, name, statements); err != nil {
-		return rollbackTxSegmentOnError(ctx, tx, err)
+		if rollbackTxErr := rollbackTxSegmentOnError(ctx, tx, err); rollbackTxErr != nil {
+			return fmt.Errorf("rollback tx segment on error: %w", rollbackTxErr)
+		}
+
+		return nil
 	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("exec %s: commit: %w", name, err)
 	}
+
 	return nil
 }
 
@@ -168,6 +210,7 @@ func execTxStatements(ctx context.Context, tx pgx.Tx, name string, statements []
 			return fmt.Errorf("exec %s: %w", name, err)
 		}
 	}
+
 	return nil
 }
 
@@ -175,17 +218,20 @@ func rollbackTxSegmentOnError(ctx context.Context, tx pgx.Tx, err error) error {
 	if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 		return errors.Join(err, fmt.Errorf("rollback tx segment: %w", rollbackErr))
 	}
+
 	return err
 }
 
 func assertNoInvalidIndexes(ctx context.Context, conn *pgxpool.Conn) error {
 	indexes, err := invalidIndexes(ctx, conn, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid indexes: %w", err)
 	}
+
 	if len(indexes) > 0 {
 		return fmt.Errorf("invalid PostgreSQL indexes remain: %s", strings.Join(indexes, ", "))
 	}
+
 	return nil
 }
 
@@ -193,10 +239,12 @@ func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concu
 	if len(targets) == 0 {
 		return nil
 	}
+
 	indexes, err := invalidIndexes(ctx, conn, targets)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid indexes: %w", err)
 	}
+
 	if len(indexes) == 0 {
 		return nil
 	}
@@ -207,25 +255,33 @@ func dropInvalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concu
 			errs = append(errs, fmt.Errorf("drop invalid index %s: %w", name, dropErr))
 		}
 	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("invalid index cleanup: %w", errors.Join(errs...))
 	}
+
 	return fmt.Errorf("invalid PostgreSQL indexes dropped: %s", strings.Join(indexes, ", "))
 }
 
 func invalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concurrentIndexTarget) ([]string, error) {
 	query := mustSQL("invalid_indexes.sql")
+
 	var args []any
+
 	if len(targets) > 0 {
 		query = mustSQL("invalid_named_indexes.sql")
+
 		indexNames := make([]string, 0, len(targets))
 		tableRelations := make([]string, 0, len(targets))
+
 		for _, target := range targets {
 			indexNames = append(indexNames, target.indexName)
 			tableRelations = append(tableRelations, target.tableRelation)
 		}
+
 		args = append(args, indexNames, tableRelations)
 	}
+
 	rows, err := conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query invalid indexes: %w", err)
@@ -233,16 +289,21 @@ func invalidIndexes(ctx context.Context, conn *pgxpool.Conn, targets []concurren
 	defer rows.Close()
 
 	var indexes []string
+
 	for rows.Next() {
 		var name string
+
 		if scanErr := rows.Scan(&name); scanErr != nil {
 			return nil, fmt.Errorf("scan invalid index: %w", scanErr)
 		}
+
 		indexes = append(indexes, name)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read invalid indexes: %w", err)
 	}
+
 	return indexes, nil
 }
 
@@ -260,12 +321,20 @@ type pgxAdvisoryLockSession struct {
 
 func (s pgxAdvisoryLockSession) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {
 	var acquired bool
-	err := s.conn.QueryRow(ctx, mustSQL("try_advisory_lock.sql"), key).Scan(&acquired)
-	return acquired, err
+
+	if err := s.conn.QueryRow(ctx, mustSQL("try_advisory_lock.sql"), key).Scan(&acquired); err != nil {
+		return false, fmt.Errorf("scan try advisory lock: %w", err)
+	}
+
+	return acquired, nil
 }
 
 func (s pgxAdvisoryLockSession) AdvisoryUnlock(ctx context.Context, key int64) (bool, error) {
 	var released bool
-	err := s.conn.QueryRow(ctx, mustSQL("advisory_unlock.sql"), key).Scan(&released)
-	return released, err
+
+	if err := s.conn.QueryRow(ctx, mustSQL("advisory_unlock.sql"), key).Scan(&released); err != nil {
+		return false, fmt.Errorf("scan advisory unlock: %w", err)
+	}
+
+	return released, nil
 }

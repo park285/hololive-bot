@@ -36,6 +36,7 @@ func buildBotWebhookRuntimeDependencies(deps *orchestration.Dependencies) appboo
 	if deps == nil {
 		return appbootstrap.BotWebhookRuntimeDependencies{}
 	}
+
 	return appbootstrap.BotWebhookRuntimeDependencies{Cache: deps.Cache}
 }
 
@@ -43,6 +44,7 @@ func buildBotConfigSubscriberDependencies(deps *orchestration.Dependencies) appb
 	if deps == nil {
 		return appbootstrap.BotConfigSubscriberDependencies{}
 	}
+
 	return appbootstrap.BotConfigSubscriberDependencies{
 		Cache:    deps.Cache,
 		Settings: deps.Settings,

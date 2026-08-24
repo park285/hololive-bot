@@ -3,8 +3,9 @@ package scraping
 import (
 	"context"
 	"fmt"
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"time"
+
+	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 // 신선도 resolve는 best-effort 부가 조회라서 실패를 채널 헬스에 기록하지 않는다.
@@ -15,6 +16,7 @@ func (c *Client) GetShortPublishedAt(ctx context.Context, channelID, videoID str
 	}
 
 	url := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+
 	html, err := c.fetchPage(ctx, url, MetadataResolveFetchPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("fetch short watch page %s: %w", videoID, err)
@@ -24,5 +26,6 @@ func (c *Client) GetShortPublishedAt(ctx context.Context, channelID, videoID str
 	if err != nil {
 		return nil, fmt.Errorf("extract short published_at %s: %w", videoID, err)
 	}
+
 	return publishedAt, nil
 }

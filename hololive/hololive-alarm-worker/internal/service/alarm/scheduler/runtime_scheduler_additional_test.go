@@ -23,19 +23,20 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	sharedcache "github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
@@ -49,7 +50,12 @@ func (r *runnerFunc) Check(ctx context.Context) ([]*domain.AlarmNotification, er
 		return nil, nil
 	}
 
-	return r.check(ctx)
+	out, err := r.check(ctx)
+	if err != nil {
+		return out, fmt.Errorf("check: %w", err)
+	}
+
+	return out, nil
 }
 
 type senderFunc struct {
@@ -61,7 +67,12 @@ func (s *senderFunc) Send(ctx context.Context, notifications []*domain.AlarmNoti
 		return delivery.SendResult{}, nil
 	}
 
-	return s.send(ctx, notifications)
+	out, err := s.send(ctx, notifications)
+	if err != nil {
+		return out, fmt.Errorf("send: %w", err)
+	}
+
+	return out, nil
 }
 
 type targetMinutesSourceStub struct {
@@ -89,11 +100,13 @@ type alarmCacheWarmerStub struct {
 
 func (s *alarmCacheWarmerStub) WarmCacheFromDB(context.Context) error {
 	s.calls.Add(1)
+
 	return s.err
 }
 
 func (s *alarmCacheWarmerStub) SyncPlatformMappings(context.Context) error {
 	s.syncCalls.Add(1)
+
 	return s.syncErr
 }
 
@@ -151,321 +164,297 @@ func TestRuntimeSchedulerStart_NilContext(t *testing.T) {
 func TestRuntimeSchedulerRunIterations(t *testing.T) {
 	t.Parallel()
 
-	notify := []*domain.AlarmNotification{
-		{RoomID: "room-1"},
+	t.Run("youtube check failure", testYouTubeIterationCheckFailure)
+	t.Run("youtube dispatch failure", testYouTubeIterationDispatchFailure)
+	t.Run("youtube iteration syncs target minutes before check", testYouTubeIterationSyncsTargetMinutes)
+	t.Run("youtube iteration picks up updated alarm service targets", testYouTubeIterationUpdatedServiceTargets)
+	t.Run("youtube cache failure triggers immediate cache recovery", testYouTubeIterationCacheFailureRecovery)
+	t.Run("chzzk success", testChzzkIterationSuccess)
+	t.Run("twitch success empty notifications short-circuit", testTwitchIterationEmptyNotifications)
+}
+
+func testYouTubeIterationCheckFailure(t *testing.T) {
+	t.Parallel()
+
+	s := &RuntimeScheduler{
+		youtubeChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return nil, errors.New("youtube check failed")
+			},
+		},
+		notifier: &senderFunc{},
+		logger:   testSchedulerLogger(),
 	}
 
-	t.Run("youtube check failure", func(t *testing.T) {
-		s := &RuntimeScheduler{
-			youtubeChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return nil, errors.New("youtube check failed")
-				},
-			},
-			notifier: &senderFunc{},
-			logger:   testSchedulerLogger(),
-		}
+	err := s.runYouTubeIteration(t.Context())
 
-		err := s.runYouTubeIteration(t.Context())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "run youtube iteration: check notifications")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "run youtube iteration: check notifications")
+}
+
+func testYouTubeIterationDispatchFailure(t *testing.T) {
+	t.Parallel()
+
+	s := &RuntimeScheduler{
+		youtubeChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return []*domain.AlarmNotification{{RoomID: "room-1"}}, nil
+			},
+		},
+		notifier: &senderFunc{
+			send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+				return delivery.SendResult{}, errors.New("send failed")
+			},
+		},
+		logger: testSchedulerLogger(),
+	}
+
+	err := s.runYouTubeIteration(t.Context())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dispatch notifications: send notifications")
+}
+
+func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
+	t.Parallel()
+
+	youtubeUpdater := &targetMinutesUpdaterStub{}
+	dedupUpdater := &targetMinutesUpdaterStub{}
+	s := &RuntimeScheduler{
+		youtubeChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return nil, nil
+			},
+		},
+		youtubeTargetUpdater: youtubeUpdater,
+		dedupTargetUpdater:   dedupUpdater,
+		targetMinutesSource:  &targetMinutesSourceStub{targets: []int{10, 3, 1}},
+		notifier:             &senderFunc{},
+		logger:               testSchedulerLogger(),
+	}
+
+	require.NoError(t, s.runYouTubeIteration(t.Context()))
+	assert.Equal(t, [][]int{{10, 3, 1}}, youtubeUpdater.calls)
+	assert.Equal(t, [][]int{{10, 3, 1}}, dedupUpdater.calls)
+}
+
+func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
+	t.Parallel()
+
+	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+	require.NoError(t, err)
+
+	youtubeUpdater := &targetMinutesUpdaterStub{}
+	dedupUpdater := &targetMinutesUpdaterStub{}
+	s := &RuntimeScheduler{
+		youtubeChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return nil, nil
+			},
+		},
+		youtubeTargetUpdater: youtubeUpdater,
+		dedupTargetUpdater:   dedupUpdater,
+		targetMinutesSource:  alarmService,
+		notifier:             &senderFunc{},
+		logger:               testSchedulerLogger(),
+	}
+
+	require.Equal(t, []int{12, 3, 1}, alarmService.UpdateAlarmAdvanceMinutes(t.Context(), 12))
+
+	require.NoError(t, s.runYouTubeIteration(t.Context()))
+	assert.Equal(t, [][]int{{12, 3, 1}}, youtubeUpdater.calls)
+	assert.Equal(t, [][]int{{12, 3, 1}}, dedupUpdater.calls)
+}
+
+func testYouTubeIterationCacheFailureRecovery(t *testing.T) {
+	t.Parallel()
+
+	warmer := &alarmCacheWarmerStub{}
+	waitUntilReadyCalls := atomic.Int32{}
+	cache := cachemocks.NewStrictClient()
+
+	cache.WaitUntilReadyFunc = func(context.Context, time.Duration) error {
+		waitUntilReadyCalls.Add(1)
+
+		return nil
+	}
+	cache.ExistsFunc = alarmCacheExistsFunc(t, map[string]bool{
+		sharedalarmkeys.AlarmChannelRegistryKey:      false,
+		sharedalarmkeys.AlarmSubscriberCacheEmptyKey: false,
 	})
 
-	t.Run("youtube dispatch failure", func(t *testing.T) {
-		s := &RuntimeScheduler{
-			youtubeChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return notify, nil
-				},
+	s := &RuntimeScheduler{
+		youtubeChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return nil, sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
 			},
-			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
-					return delivery.SendResult{}, errors.New("send failed")
-				},
+		},
+		cacheClient:           cache,
+		alarmCacheWarmer:      warmer,
+		platformMappingSyncer: warmer,
+		notifier:              &senderFunc{},
+		logger:                testSchedulerLogger(),
+	}
+
+	require.Error(t, s.runYouTubeIteration(t.Context()))
+	assert.Equal(t, int32(1), waitUntilReadyCalls.Load())
+	assert.Equal(t, int32(1), warmer.calls.Load())
+	assert.Equal(t, int32(1), warmer.syncCalls.Load())
+}
+
+func testChzzkIterationSuccess(t *testing.T) {
+	t.Parallel()
+
+	sent := atomic.Int32{}
+	s := &RuntimeScheduler{
+		chzzkChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return []*domain.AlarmNotification{{RoomID: "room-1"}}, nil
 			},
-			logger: testSchedulerLogger(),
+		},
+		notifier: &senderFunc{
+			send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+				sent.Add(1)
+
+				return delivery.SendResult{Sent: 1}, nil
+			},
+		},
+		logger: testSchedulerLogger(),
+	}
+
+	require.NoError(t, s.runChzzkIteration(t.Context()))
+	assert.Equal(t, int32(1), sent.Load())
+}
+
+func testTwitchIterationEmptyNotifications(t *testing.T) {
+	t.Parallel()
+
+	sent := atomic.Int32{}
+	s := &RuntimeScheduler{
+		twitchChecker: &runnerFunc{
+			check: func(context.Context) ([]*domain.AlarmNotification, error) {
+				return nil, nil
+			},
+		},
+		notifier: &senderFunc{
+			send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
+				sent.Add(1)
+
+				return delivery.SendResult{}, nil
+			},
+		},
+		logger: testSchedulerLogger(),
+	}
+
+	require.NoError(t, s.runTwitchIteration(t.Context()))
+	assert.Equal(t, int32(0), sent.Load())
+}
+
+type recoverAlarmCacheCase struct {
+	name          string
+	existsByKey   map[string]bool
+	wantWarmCalls int32
+	wantSyncCalls int32
+}
+
+func recoverAlarmCacheCases() []recoverAlarmCacheCase {
+	return []recoverAlarmCacheCase{
+		{
+			name: "rebuilds subscriber cache and platform mappings when channel registry key is missing",
+			existsByKey: map[string]bool{
+				sharedalarmkeys.AlarmChannelRegistryKey:      false,
+				sharedalarmkeys.AlarmSubscriberCacheEmptyKey: false,
+			},
+			wantWarmCalls: 1,
+			wantSyncCalls: 1,
+		},
+		{
+			name: "does not rebuild when channel registry is missing because DB alarm state is empty",
+			existsByKey: map[string]bool{
+				sharedalarmkeys.AlarmChannelRegistryKey:      false,
+				sharedalarmkeys.AlarmSubscriberCacheEmptyKey: true,
+			},
+			wantWarmCalls: 0,
+			wantSyncCalls: 0,
+		},
+		{
+			name: "does not warm cache when registry key exists",
+			existsByKey: map[string]bool{
+				sharedalarmkeys.AlarmChannelRegistryKey:       true,
+				sharedalarmkeys.ChzzkChannelMapKey:            true,
+				sharedalarmkeys.ChzzkChannelMapEmptyKey:       true,
+				sharedalarmkeys.TwitchLoginMapKey:             true,
+				sharedalarmkeys.TwitchLoginMapEmptyKey:        true,
+				sharedalarmkeys.TwitchChannelLoginMapKey:      true,
+				sharedalarmkeys.TwitchChannelLoginMapEmptyKey: true,
+			},
+			wantWarmCalls: 0,
+			wantSyncCalls: 0,
+		},
+		{
+			name: "syncs platform mappings when registry exists but platform keys are missing",
+			existsByKey: map[string]bool{
+				sharedalarmkeys.AlarmChannelRegistryKey:  true,
+				sharedalarmkeys.ChzzkChannelMapKey:       false,
+				sharedalarmkeys.ChzzkChannelMapEmptyKey:  false,
+				sharedalarmkeys.TwitchLoginMapKey:        true,
+				sharedalarmkeys.TwitchChannelLoginMapKey: true,
+			},
+			wantWarmCalls: 0,
+			wantSyncCalls: 1,
+		},
+		{
+			name: "skips platform sync when missing mapping has empty marker",
+			existsByKey: map[string]bool{
+				sharedalarmkeys.AlarmChannelRegistryKey:  true,
+				sharedalarmkeys.ChzzkChannelMapKey:       false,
+				sharedalarmkeys.ChzzkChannelMapEmptyKey:  true,
+				sharedalarmkeys.TwitchLoginMapKey:        true,
+				sharedalarmkeys.TwitchChannelLoginMapKey: true,
+			},
+			wantWarmCalls: 0,
+			wantSyncCalls: 0,
+		},
+	}
+}
+
+func alarmCacheExistsFunc(t *testing.T, existsByKey map[string]bool) func(context.Context, string) (bool, error) {
+	t.Helper()
+
+	return func(_ context.Context, key string) (bool, error) {
+		exists, ok := existsByKey[key]
+		if !ok {
+			t.Fatalf("unexpected key: %s", key)
 		}
 
-		err := s.runYouTubeIteration(t.Context())
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "dispatch notifications: send notifications")
-	})
-
-	t.Run("youtube iteration syncs target minutes before check", func(t *testing.T) {
-		youtubeUpdater := &targetMinutesUpdaterStub{}
-		dedupUpdater := &targetMinutesUpdaterStub{}
-		s := &RuntimeScheduler{
-			youtubeChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return nil, nil
-				},
-			},
-			youtubeTargetUpdater: youtubeUpdater,
-			dedupTargetUpdater:   dedupUpdater,
-			targetMinutesSource:  &targetMinutesSourceStub{targets: []int{10, 3, 1}},
-			notifier:             &senderFunc{},
-			logger:               testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.runYouTubeIteration(t.Context()))
-		assert.Equal(t, [][]int{{10, 3, 1}}, youtubeUpdater.calls)
-		assert.Equal(t, [][]int{{10, 3, 1}}, dedupUpdater.calls)
-	})
-
-	t.Run("youtube iteration picks up updated alarm service targets", func(t *testing.T) {
-		alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
-		require.NoError(t, err)
-
-		youtubeUpdater := &targetMinutesUpdaterStub{}
-		dedupUpdater := &targetMinutesUpdaterStub{}
-		s := &RuntimeScheduler{
-			youtubeChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return nil, nil
-				},
-			},
-			youtubeTargetUpdater: youtubeUpdater,
-			dedupTargetUpdater:   dedupUpdater,
-			targetMinutesSource:  alarmService,
-			notifier:             &senderFunc{},
-			logger:               testSchedulerLogger(),
-		}
-
-		updated := alarmService.UpdateAlarmAdvanceMinutes(t.Context(), 12)
-		require.Equal(t, []int{12, 3, 1}, updated)
-
-		require.NoError(t, s.runYouTubeIteration(t.Context()))
-		assert.Equal(t, [][]int{{12, 3, 1}}, youtubeUpdater.calls)
-		assert.Equal(t, [][]int{{12, 3, 1}}, dedupUpdater.calls)
-	})
-
-	t.Run("youtube cache failure triggers immediate cache recovery", func(t *testing.T) {
-		warmer := &alarmCacheWarmerStub{}
-		waitUntilReadyCalls := atomic.Int32{}
-		cache := cachemocks.NewStrictClient()
-		cache.WaitUntilReadyFunc = func(context.Context, time.Duration) error {
-			waitUntilReadyCalls.Add(1)
-			return nil
-		}
-		cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			switch key {
-			case sharedalarmkeys.AlarmChannelRegistryKey,
-				sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
-			default:
-				t.Fatalf("unexpected key: %s", key)
-			}
-			return false, nil
-		}
-
-		s := &RuntimeScheduler{
-			youtubeChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return nil, sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
-				},
-			},
-			cacheClient:           cache,
-			alarmCacheWarmer:      warmer,
-			platformMappingSyncer: warmer,
-			notifier:              &senderFunc{},
-			logger:                testSchedulerLogger(),
-		}
-
-		err := s.runYouTubeIteration(t.Context())
-		require.Error(t, err)
-		assert.Equal(t, int32(1), waitUntilReadyCalls.Load())
-		assert.Equal(t, int32(1), warmer.calls.Load())
-		assert.Equal(t, int32(1), warmer.syncCalls.Load())
-	})
-
-	t.Run("chzzk success", func(t *testing.T) {
-		sent := atomic.Int32{}
-		s := &RuntimeScheduler{
-			chzzkChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return notify, nil
-				},
-			},
-			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
-					sent.Add(1)
-					return delivery.SendResult{Sent: 1}, nil
-				},
-			},
-			logger: testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.runChzzkIteration(t.Context()))
-		assert.Equal(t, int32(1), sent.Load())
-	})
-
-	t.Run("twitch success empty notifications short-circuit", func(t *testing.T) {
-		sent := atomic.Int32{}
-		s := &RuntimeScheduler{
-			twitchChecker: &runnerFunc{
-				check: func(context.Context) ([]*domain.AlarmNotification, error) {
-					return nil, nil
-				},
-			},
-			notifier: &senderFunc{
-				send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
-					sent.Add(1)
-					return delivery.SendResult{}, nil
-				},
-			},
-			logger: testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.runTwitchIteration(t.Context()))
-		assert.Equal(t, int32(0), sent.Load())
-	})
+		return exists, nil
+	}
 }
 
 func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 	t.Parallel()
 
-	t.Run("rebuilds subscriber cache and platform mappings when channel registry key is missing", func(t *testing.T) {
-		warmer := &alarmCacheWarmerStub{}
-		cache := cachemocks.NewStrictClient()
-		cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			switch key {
-			case sharedalarmkeys.AlarmChannelRegistryKey,
-				sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
-			default:
-				t.Fatalf("unexpected key: %s", key)
+	for _, tc := range recoverAlarmCacheCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			warmer := &alarmCacheWarmerStub{}
+			cache := cachemocks.NewStrictClient()
+
+			cache.ExistsFunc = alarmCacheExistsFunc(t, tc.existsByKey)
+
+			s := &RuntimeScheduler{
+				cacheClient:           cache,
+				alarmCacheWarmer:      warmer,
+				platformMappingSyncer: warmer,
+				logger:                testSchedulerLogger(),
 			}
-			return false, nil
-		}
 
-		s := &RuntimeScheduler{
-			cacheClient:           cache,
-			alarmCacheWarmer:      warmer,
-			platformMappingSyncer: warmer,
-			logger:                testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
-		assert.Equal(t, int32(1), warmer.calls.Load())
-		assert.Equal(t, int32(1), warmer.syncCalls.Load())
-	})
-
-	t.Run("does not rebuild when channel registry is missing because DB alarm state is empty", func(t *testing.T) {
-		warmer := &alarmCacheWarmerStub{}
-		cache := cachemocks.NewStrictClient()
-		cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			switch key {
-			case sharedalarmkeys.AlarmChannelRegistryKey:
-				return false, nil
-			case sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
-				return true, nil
-			default:
-				t.Fatalf("unexpected key: %s", key)
-				return false, nil
-			}
-		}
-
-		s := &RuntimeScheduler{
-			cacheClient:           cache,
-			alarmCacheWarmer:      warmer,
-			platformMappingSyncer: warmer,
-			logger:                testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
-		assert.Equal(t, int32(0), warmer.calls.Load())
-		assert.Equal(t, int32(0), warmer.syncCalls.Load())
-	})
-
-	t.Run("does not warm cache when registry key exists", func(t *testing.T) {
-		warmer := &alarmCacheWarmerStub{}
-		cache := cachemocks.NewStrictClient()
-		cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			switch key {
-			case sharedalarmkeys.AlarmChannelRegistryKey,
-				sharedalarmkeys.ChzzkChannelMapKey,
-				sharedalarmkeys.ChzzkChannelMapEmptyKey,
-				sharedalarmkeys.TwitchLoginMapKey,
-				sharedalarmkeys.TwitchLoginMapEmptyKey,
-				sharedalarmkeys.TwitchChannelLoginMapKey,
-				sharedalarmkeys.TwitchChannelLoginMapEmptyKey:
-			default:
-				t.Fatalf("unexpected key: %s", key)
-			}
-			return true, nil
-		}
-
-		s := &RuntimeScheduler{
-			cacheClient:           cache,
-			alarmCacheWarmer:      warmer,
-			platformMappingSyncer: warmer,
-			logger:                testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
-		assert.Equal(t, int32(0), warmer.calls.Load())
-		assert.Equal(t, int32(0), warmer.syncCalls.Load())
-	})
-
-	t.Run("syncs platform mappings when registry exists but platform keys are missing", func(t *testing.T) {
-		warmer := &alarmCacheWarmerStub{}
-		cache := cachemocks.NewStrictClient()
-		cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			switch key {
-			case sharedalarmkeys.AlarmChannelRegistryKey:
-				return true, nil
-			case sharedalarmkeys.ChzzkChannelMapKey:
-				return false, nil
-			case sharedalarmkeys.ChzzkChannelMapEmptyKey:
-				return false, nil
-			case sharedalarmkeys.TwitchLoginMapKey, sharedalarmkeys.TwitchChannelLoginMapKey:
-				return true, nil
-			default:
-				t.Fatalf("unexpected key: %s", key)
-				return false, nil
-			}
-		}
-
-		s := &RuntimeScheduler{
-			cacheClient:           cache,
-			alarmCacheWarmer:      warmer,
-			platformMappingSyncer: warmer,
-			logger:                testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
-		assert.Equal(t, int32(0), warmer.calls.Load())
-		assert.Equal(t, int32(1), warmer.syncCalls.Load())
-	})
-
-	t.Run("skips platform sync when missing mapping has empty marker", func(t *testing.T) {
-		warmer := &alarmCacheWarmerStub{}
-		cache := cachemocks.NewStrictClient()
-		cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-			switch key {
-			case sharedalarmkeys.AlarmChannelRegistryKey:
-				return true, nil
-			case sharedalarmkeys.ChzzkChannelMapKey:
-				return false, nil
-			case sharedalarmkeys.ChzzkChannelMapEmptyKey:
-				return true, nil
-			case sharedalarmkeys.TwitchLoginMapKey, sharedalarmkeys.TwitchChannelLoginMapKey:
-				return true, nil
-			default:
-				t.Fatalf("unexpected key: %s", key)
-				return false, nil
-			}
-		}
-
-		s := &RuntimeScheduler{
-			cacheClient:           cache,
-			alarmCacheWarmer:      warmer,
-			platformMappingSyncer: warmer,
-			logger:                testSchedulerLogger(),
-		}
-
-		require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
-		assert.Equal(t, int32(0), warmer.calls.Load())
-		assert.Equal(t, int32(0), warmer.syncCalls.Load())
-	})
+			require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
+			assert.Equal(t, tc.wantWarmCalls, warmer.calls.Load())
+			assert.Equal(t, tc.wantSyncCalls, warmer.syncCalls.Load())
+		})
+	}
 }
 
 func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t *testing.T) {
@@ -473,20 +462,24 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 
 	warmer := &alarmCacheWarmerStub{}
 	cache := cachemocks.NewStrictClient()
+
 	cache.WaitUntilReadyFunc = func(ctx context.Context, _ time.Duration) error {
 		_, ok := ctx.Deadline()
 		require.True(t, ok)
+
 		return nil
 	}
 	cache.ExistsFunc = func(ctx context.Context, key string) (bool, error) {
 		_, ok := ctx.Deadline()
 		require.True(t, ok)
+
 		switch key {
 		case sharedalarmkeys.AlarmChannelRegistryKey,
 			sharedalarmkeys.AlarmSubscriberCacheEmptyKey:
 		default:
 			t.Fatalf("unexpected key: %s", key)
 		}
+
 		return false, nil
 	}
 
@@ -498,7 +491,7 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 	}
 
 	err := s.recoverAlarmCacheAfterCheckFailure(
-		context.Background(),
+		t.Context(),
 		sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF")),
 	)
 	require.NoError(t, err)
@@ -516,23 +509,22 @@ func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan struct{})
+	done := make(chan error, 1)
 
 	go func() {
-		defer close(done)
-
-		err := s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, true, func(context.Context) error {
+		done <- s.runLoop(ctx, "test", 10*time.Millisecond, 50*time.Millisecond, true, func(context.Context) error {
 			calls.Add(1)
+
 			return errors.New("expected failure branch")
 		})
-		require.ErrorIs(t, err, context.Canceled)
 	}()
 
 	require.Eventually(t, func() bool { return calls.Load() >= 2 }, time.Second, 20*time.Millisecond)
 	cancel()
 
 	select {
-	case <-done:
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
 	case <-time.After(time.Second):
 		t.Fatal("runLoop did not stop after context cancellation")
 	}
@@ -569,8 +561,9 @@ func TestNextAligned(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := nextAligned(tc.now, tc.interval)
-			assert.Equal(t, tc.want, got)
+			t.Parallel()
+
+			assert.Equal(t, tc.want, nextAligned(tc.now, tc.interval))
 		})
 	}
 }

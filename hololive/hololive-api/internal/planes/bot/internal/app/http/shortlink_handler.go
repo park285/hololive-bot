@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
 	shortlinkcontracts "github.com/kapu/hololive-shared/pkg/contracts/shortlink"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
@@ -16,6 +17,7 @@ func ProvideShortLinkHandler() http.Handler {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	registerShortLinkRoutes(router)
+
 	return router
 }
 
@@ -23,6 +25,7 @@ func registerShortLinkRoutes(router gin.IRoutes) {
 	if router == nil {
 		return
 	}
+
 	router.GET(shortlinkcontracts.YouTubeRoute, handleYouTubeShortLink)
 	router.HEAD(shortlinkcontracts.YouTubeRoute, handleYouTubeShortLink)
 }
@@ -33,10 +36,13 @@ func handleYouTubeShortLink(c *gin.Context) {
 	videoID := c.Param("videoID")
 	if !shortlinkservice.ValidYouTubeVideoID(videoID) {
 		c.Status(http.StatusNotFound)
+
 		return
 	}
+
 	if isKakaoTalkScraper(c.GetHeader("User-Agent")) {
 		c.Status(http.StatusForbidden)
+
 		return
 	}
 

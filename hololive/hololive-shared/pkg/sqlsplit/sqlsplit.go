@@ -37,6 +37,7 @@ func Statements(sql string) []string {
 	flush := func() {
 		stmt := strings.TrimSpace(buf.String())
 		buf.Reset()
+
 		if stmt != "" {
 			statements = append(statements, stmt)
 		}
@@ -48,10 +49,12 @@ func Statements(sql string) []string {
 		if isSeparator {
 			flush()
 		}
+
 		i = next
 	}
 
 	flush()
+
 	return statements
 }
 
@@ -70,6 +73,7 @@ func scanSQLToken(buf *strings.Builder, runes []rune, pos int) (next int, isSepa
 		return pos + 1, true
 	default:
 		buf.WriteRune(c)
+
 		return pos + 1, false
 	}
 }
@@ -78,9 +82,11 @@ func scanComment(buf *strings.Builder, runes []rune, pos int) (end int, ok bool)
 	if isLineCommentStart(runes, pos) {
 		return scanLineComment(buf, runes, pos), true
 	}
+
 	if isBlockCommentStart(runes, pos) {
 		return scanBlockComment(buf, runes, pos), true
 	}
+
 	return pos, false
 }
 
@@ -95,35 +101,47 @@ func isBlockCommentStart(runes []rune, i int) bool {
 func scanLineComment(buf *strings.Builder, runes []rune, i int) int {
 	for i < len(runes) && runes[i] != '\n' {
 		buf.WriteRune(runes[i])
+
 		i++
 	}
+
 	return i
 }
 
 func scanBlockComment(buf *strings.Builder, runes []rune, i int) int {
 	depth := 0
+
 	for i < len(runes) {
 		next, nextDepth, closed := scanBlockCommentToken(buf, runes, i, depth)
+
 		i = next
 		depth = nextDepth
+
 		if closed {
 			return i
 		}
 	}
+
 	return i
 }
 
 func scanBlockCommentToken(buf *strings.Builder, runes []rune, pos, depth int) (next, nextDepth int, closed bool) {
 	if isBlockCommentStart(runes, pos) {
 		writeRunePair(buf, runes, pos)
+
 		return pos + 2, depth + 1, false
 	}
+
 	if isBlockCommentEnd(runes, pos) {
 		writeRunePair(buf, runes, pos)
+
 		depth--
+
 		return pos + 2, depth, depth == 0
 	}
+
 	buf.WriteRune(runes[pos])
+
 	return pos + 1, depth, false
 }
 
@@ -140,24 +158,32 @@ func scanQuoted(buf *strings.Builder, runes []rune, i int) int {
 	quote := runes[i]
 	backslashEscapes := isEscapeStringQuote(runes, i)
 	buf.WriteRune(runes[i])
+
 	i++
 	for i < len(runes) {
 		if next, escaped := scanQuotedEscape(buf, runes, i, backslashEscapes); escaped {
 			i = next
 			continue
 		}
+
 		buf.WriteRune(runes[i])
+
 		if runes[i] != quote {
 			i++
 			continue
 		}
+
 		if i+1 < len(runes) && runes[i+1] == quote {
 			buf.WriteRune(runes[i+1])
+
 			i += 2
+
 			continue
 		}
+
 		return i + 1
 	}
+
 	return i
 }
 
@@ -165,7 +191,9 @@ func scanQuotedEscape(buf *strings.Builder, runes []rune, pos int, enabled bool)
 	if !enabled || runes[pos] != '\\' || pos+1 >= len(runes) {
 		return pos, false
 	}
+
 	writeRunePair(buf, runes, pos)
+
 	return pos + 2, true
 }
 
@@ -173,10 +201,12 @@ func isEscapeStringQuote(runes []rune, quotePos int) bool {
 	if runes[quotePos] != '\'' || quotePos == 0 {
 		return false
 	}
+
 	prefixPos := quotePos - 1
 	if runes[prefixPos] != 'E' && runes[prefixPos] != 'e' {
 		return false
 	}
+
 	return prefixPos == 0 || !isDollarTagRune(runes[prefixPos-1])
 }
 
@@ -184,19 +214,25 @@ func scanDollar(buf *strings.Builder, runes []rune, i int) int {
 	tag, ok := dollarTag(runes, i)
 	if !ok {
 		buf.WriteRune(runes[i])
+
 		return i + 1
 	}
 
 	buf.WriteString(tag)
+
 	i += len([]rune(tag))
 	for i < len(runes) {
 		if other, ok2 := dollarTag(runes, i); ok2 && other == tag {
 			buf.WriteString(other)
+
 			return i + len([]rune(other))
 		}
+
 		buf.WriteRune(runes[i])
+
 		i++
 	}
+
 	return i
 }
 
@@ -210,6 +246,7 @@ func dollarTag(runes []rune, pos int) (string, bool) {
 		if c == '$' {
 			return string(runes[pos : j+1]), true
 		}
+
 		if !isDollarTagRune(c) {
 			return "", false
 		}
@@ -222,28 +259,37 @@ func isDollarTagRune(c rune) bool {
 	isLower := c >= 'a' && c <= 'z'
 	isUpper := c >= 'A' && c <= 'Z'
 	isDigit := c >= '0' && c <= '9'
+
 	return c == '_' || isLower || isUpper || isDigit
 }
 
 func containsSQLWord(sql, target string) bool {
 	runes := []rune(sql)
+
 	var discard strings.Builder
+
 	for pos := 0; pos < len(runes); {
 		if next, skipped := scanNonCodeToken(&discard, runes, pos); skipped {
 			discard.Reset()
+
 			pos = next
+
 			continue
 		}
+
 		if !isDollarTagRune(runes[pos]) {
 			pos++
 			continue
 		}
+
 		end := scanSQLWordEnd(runes, pos)
 		if strings.EqualFold(string(runes[pos:end]), target) {
 			return true
 		}
+
 		pos = end
 	}
+
 	return false
 }
 
@@ -251,6 +297,7 @@ func scanNonCodeToken(buf *strings.Builder, runes []rune, pos int) (next int, sk
 	if end, ok := scanComment(buf, runes, pos); ok {
 		return end, true
 	}
+
 	switch runes[pos] {
 	case '\'', '"':
 		return scanQuoted(buf, runes, pos), true
@@ -265,5 +312,6 @@ func scanSQLWordEnd(runes []rune, pos int) int {
 	for pos < len(runes) && isDollarTagRune(runes[pos]) {
 		pos++
 	}
+
 	return pos
 }

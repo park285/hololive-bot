@@ -9,10 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 )
 
 const privacySentinel = "SENTINEL"
@@ -31,18 +32,21 @@ type capturingHandler struct {
 
 func (h capturingHandler) Enabled(context.Context, slog.Level) bool { return true }
 
-func (h capturingHandler) Handle(_ context.Context, record slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler.Handle 인터페이스가 값 전달 시그니처를 강제
+func (h capturingHandler) Handle(_ context.Context, record slog.Record) error {
 	captured := capturedLogRecord{message: record.Message, attrs: make(map[string]any, record.NumAttrs()+len(h.attrs))}
 	for _, attr := range h.attrs {
 		flattenLogAttr(captured.attrs, nil, attr)
 	}
+
 	record.Attrs(func(attr slog.Attr) bool {
 		flattenLogAttr(captured.attrs, h.groups, attr)
+
 		return true
 	})
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	*h.records = append(*h.records, captured)
 
 	return nil
@@ -54,8 +58,10 @@ func (h capturingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	}
 
 	next := h
+
 	next.attrs = make([]slog.Attr, 0, len(h.attrs)+len(attrs))
 	next.attrs = append(next.attrs, h.attrs...)
+
 	for _, attr := range attrs {
 		next.attrs = append(next.attrs, groupedLogAttr(h.groups, attr))
 	}
@@ -69,6 +75,7 @@ func (h capturingHandler) WithGroup(name string) slog.Handler {
 	}
 
 	next := h
+
 	next.groups = appendLogGroup(h.groups, name)
 
 	return next
@@ -99,9 +106,11 @@ func flattenLogAttr(dst map[string]any, groups []string, attr slog.Attr) {
 	}
 
 	nested := groups
+
 	if attr.Key != "" {
 		nested = appendLogGroup(groups, attr.Key)
 	}
+
 	for _, member := range members {
 		flattenLogAttr(dst, nested, member)
 	}
@@ -125,6 +134,7 @@ func newCapturingLogger() (logger *slog.Logger, snapshot func() []capturedLogRec
 	snapshot = func() []capturedLogRecord {
 		mu.Lock()
 		defer mu.Unlock()
+
 		return append([]capturedLogRecord(nil), records...)
 	}
 
@@ -141,6 +151,7 @@ func requireEvent(t *testing.T, records []capturedLogRecord, event string) captu
 	}
 
 	t.Fatalf("event %q must be emitted, got records %#v", event, records)
+
 	return capturedLogRecord{}
 }
 
@@ -154,6 +165,7 @@ func requireMessage(t *testing.T, records []capturedLogRecord, message string) c
 	}
 
 	t.Fatalf("log message %q must be emitted, got records %#v", message, records)
+
 	return capturedLogRecord{}
 }
 
@@ -164,6 +176,7 @@ func assertNoSentinelInLogs(t *testing.T, records []capturedLogRecord) {
 		if strings.Contains(record.message, privacySentinel) {
 			t.Fatalf("log message leaked %q in record %#v", privacySentinel, record)
 		}
+
 		for key, value := range record.attrs {
 			if strings.Contains(fmt.Sprint(value), privacySentinel) {
 				t.Fatalf("log attr %s leaked %q in record %#v", key, privacySentinel, record)
@@ -210,7 +223,7 @@ func TestMessageIngressNeverLogsRoomTitleAsRoomID(t *testing.T) {
 				Msg:    "!없는명령",
 				Room:   roomTitle,
 				Sender: &otherSender,
-				JSON:   &webhook.MessageJSON{UserID: "user-1"},
+				JSON:   &webhook.MessageJSON{UserID: testUserID},
 			},
 			record: "Unknown command ignored",
 		},
@@ -234,9 +247,11 @@ func TestMessageIngressNeverLogsRoomTitleAsRoomID(t *testing.T) {
 			if !ok {
 				t.Fatalf("room_id attr = %#v, want a string", record.attrs[privacylog.KeyRoomID])
 			}
+
 			if !strings.HasPrefix(roomID, privacylog.PseudonymPrefix) {
 				t.Fatalf("room_id = %q, want the %q pseudonym of a non-canonical room", roomID, privacylog.PseudonymPrefix)
 			}
+
 			if roomID != privacylog.Pseudonym(roomTitle) {
 				t.Fatalf("room_id = %q, want the deterministic token %q", roomID, privacylog.Pseudonym(roomTitle))
 			}
@@ -255,7 +270,7 @@ func TestMessageIngressKeepsCanonicalRoomIDReadable(t *testing.T) {
 
 	message := &webhook.Message{
 		Msg:    "!없는명령",
-		Room:   "18446744073709551615",
+		Room:   testMaxUint64RoomID,
 		Sender: &sender,
 	}
 
@@ -265,7 +280,8 @@ func TestMessageIngressKeepsCanonicalRoomIDReadable(t *testing.T) {
 
 	records := snapshot()
 	record := requireMessage(t, records, "Unknown command ignored")
-	if record.attrs[privacylog.KeyRoomID] != "18446744073709551615" {
+
+	if record.attrs[privacylog.KeyRoomID] != testMaxUint64RoomID {
 		t.Fatalf("room_id = %v, want the canonical numeric room id", record.attrs[privacylog.KeyRoomID])
 	}
 }
@@ -282,7 +298,7 @@ func TestMessageIngressCommandReceivedLogKeepsEventWithoutContentOrNickname(t *t
 		Room:   "룸이름-" + privacySentinel,
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID: "user-1",
+			UserID: testUserID,
 			ChatID: "123456789",
 		},
 	}
@@ -294,11 +310,13 @@ func TestMessageIngressCommandReceivedLogKeepsEventWithoutContentOrNickname(t *t
 
 	records := snapshot()
 	record := requireEvent(t, records, EventCommandReceived)
+
 	if record.attrs["room_id"] != "123456789" {
 		t.Fatalf("room_id = %v, want %q", record.attrs["room_id"], "123456789")
 	}
-	if record.attrs["user_id"] != "user-1" {
-		t.Fatalf("user_id = %v, want %q", record.attrs["user_id"], "user-1")
+
+	if record.attrs["user_id"] != testUserID {
+		t.Fatalf("user_id = %v, want %q", record.attrs["user_id"], testUserID)
 	}
 
 	assertNoSentinelInLogs(t, records)
@@ -319,7 +337,7 @@ func TestMessageIngressUnknownCommandLogKeepsEventWithoutContentOrNickname(t *te
 		Room:   "룸이름-" + privacySentinel,
 		Sender: &sender,
 		JSON: &webhook.MessageJSON{
-			UserID: "user-1",
+			UserID: testUserID,
 			ChatID: "123456789",
 		},
 	}
@@ -330,6 +348,7 @@ func TestMessageIngressUnknownCommandLogKeepsEventWithoutContentOrNickname(t *te
 
 	records := snapshot()
 	record := requireMessage(t, records, "Unknown command ignored")
+
 	if record.attrs["room_id"] != "123456789" {
 		t.Fatalf("room_id = %v, want %q", record.attrs["room_id"], "123456789")
 	}
@@ -351,7 +370,7 @@ func TestMessageIngressSelfSenderLogOmitsNickname(t *testing.T) {
 		Room:   "룸이름-" + privacySentinel,
 		Sender: &selfSender,
 		JSON: &webhook.MessageJSON{
-			UserID: "user-1",
+			UserID: testUserID,
 			ChatID: "123456789",
 		},
 	}
@@ -362,6 +381,7 @@ func TestMessageIngressSelfSenderLogOmitsNickname(t *testing.T) {
 
 	records := snapshot()
 	record := requireMessage(t, records, "Skipping self-issued message")
+
 	if record.attrs["room_id"] != "123456789" {
 		t.Fatalf("room_id = %v, want %q", record.attrs["room_id"], "123456789")
 	}
@@ -377,13 +397,14 @@ func TestRoomLogAttrMatchesTheSharedCorrelationDefinition(t *testing.T) {
 	cases := []struct{ chatID, roomName string }{
 		{"", "상대방닉네임 님과의 대화"},
 		{"   ", "상대방닉네임 님과의 대화"},
-		{"18446744073709551615", "상대방닉네임 님과의 대화"},
+		{testMaxUint64RoomID, "상대방닉네임 님과의 대화"},
 		{"", ""},
 	}
 
 	for _, tc := range cases {
 		got := roomLogAttr(tc.chatID, tc.roomName)
 		want := privacylog.RoomAttr(tc.chatID, tc.roomName)
+
 		if got.Key != want.Key || got.Value.String() != want.Value.String() {
 			t.Fatalf("roomLogAttr(%q, %q) = %v, want %v", tc.chatID, tc.roomName, got, want)
 		}

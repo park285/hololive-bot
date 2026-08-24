@@ -1,10 +1,10 @@
 package youtubedispatch
 
 import (
-	"context"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -28,7 +28,7 @@ type timelineTestOutboxModel struct {
 }
 
 func (timelineTestOutboxModel) TableName() string {
-	return "youtube_notification_outbox"
+	return testTableOutbox
 }
 
 type timelineTestBufferModel struct {
@@ -60,7 +60,7 @@ type timelineTestBufferModel struct {
 }
 
 func (timelineTestBufferModel) TableName() string {
-	return "youtube_notification_delivery_telemetry"
+	return testTableDeliveryTelemetry
 }
 
 type timelineTestTrackingModel struct {
@@ -82,16 +82,22 @@ type timelineTestTrackingModel struct {
 }
 
 func (timelineTestTrackingModel) TableName() string {
-	return "youtube_content_alarm_tracking"
+	return testTableContentAlarmTracking
 }
 
-func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatencyTimelineMetrics(t *testing.T) {
-	t.Parallel()
+type postDeliveryTimelineTimes struct {
+	publishedAt             time.Time
+	detectedAt              time.Time
+	queueEnqueuedAt         time.Time
+	firstAttemptStartedAt   time.Time
+	firstAttemptFinishedAt  time.Time
+	retryReadyAt            time.Time
+	secondAttemptStartedAt  time.Time
+	secondAttemptFinishedAt time.Time
+	alarmLatencyMillis      int64
+}
 
-	ctx := context.Background()
-	db := newDeliveryPool(t)
-
-	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+func newPostDeliveryTimelineTimes(publishedAt time.Time) postDeliveryTimelineTimes {
 	detectedAt := publishedAt.Add(1 * time.Minute)
 	queueEnqueuedAt := detectedAt.Add(20 * time.Second)
 	firstAttemptStartedAt := queueEnqueuedAt.Add(10 * time.Second)
@@ -99,76 +105,34 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 	retryReadyAt := firstAttemptFinishedAt.Add(1 * time.Minute)
 	secondAttemptStartedAt := retryReadyAt.Add(5 * time.Second)
 	secondAttemptFinishedAt := secondAttemptStartedAt.Add(15 * time.Second)
-	alarmLatencyMillis := int64(secondAttemptFinishedAt.Sub(publishedAt) / time.Millisecond)
-	alarmLatencyExceeded := true
-	windowStart := publishedAt.Add(-30 * time.Minute)
 
-	outboxRow := timelineTestOutboxModel{
-		Kind:          string(domain.OutboxKindCommunityPost),
-		ChannelID:     "UC_timeline",
-		ContentID:     "post-timeline",
-		Payload:       `{"post_id":"post-timeline","content_text":"timeline"}`,
-		Status:        string(domain.OutboxStatusSent),
-		AttemptCount:  1,
-		NextAttemptAt: retryReadyAt,
-		CreatedAt:     queueEnqueuedAt,
+	return postDeliveryTimelineTimes{
+		publishedAt:             publishedAt,
+		detectedAt:              detectedAt,
+		queueEnqueuedAt:         queueEnqueuedAt,
+		firstAttemptStartedAt:   firstAttemptStartedAt,
+		firstAttemptFinishedAt:  firstAttemptFinishedAt,
+		retryReadyAt:            retryReadyAt,
+		secondAttemptStartedAt:  secondAttemptStartedAt,
+		secondAttemptFinishedAt: secondAttemptFinishedAt,
+		alarmLatencyMillis:      int64(secondAttemptFinishedAt.Sub(publishedAt) / time.Millisecond),
 	}
-	require.NoError(t, insertDeliveryTestRows(db, &outboxRow).Error)
+}
 
-	require.NoError(t, insertDeliveryTestRows(db, &timelineTestTrackingModel{
-		Kind:                 string(domain.OutboxKindCommunityPost),
-		ContentID:            outboxRow.ContentID,
-		ChannelID:            outboxRow.ChannelID,
-		ActualPublishedAt:    &publishedAt,
-		DetectedAt:           detectedAt,
-		AlarmSentAt:          &secondAttemptFinishedAt,
-		AlarmLatencyMillis:   &alarmLatencyMillis,
-		AlarmLatencyExceeded: &alarmLatencyExceeded,
-		CreatedAt:            queueEnqueuedAt,
-		UpdatedAt:            secondAttemptFinishedAt,
-	}).Error)
+func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatencyTimelineMetrics(t *testing.T) {
+	t.Parallel()
 
-	require.NoError(t, insertDeliveryTestRows(db, []timelineTestBufferModel{
-		{
-			DeliveryID:        101,
-			AttemptOrdinal:    1,
-			OutboxID:          outboxRow.ID,
-			ChannelID:         outboxRow.ChannelID,
-			ContentID:         outboxRow.ContentID,
-			PostID:            outboxRow.ContentID,
-			RoomID:            "room-a",
-			AlarmType:         string(domain.AlarmTypeCommunity),
-			DedupeKey:         "youtube-notification:COMMUNITY_POST:post-timeline",
-			DeliveryPath:      "youtube_outbox_dispatcher",
-			DeliveryMode:      "per_room",
-			SendResult:        "failure",
-			FailureReason:     "send message",
-			AttemptStartedAt:  &firstAttemptStartedAt,
-			AttemptFinishedAt: &firstAttemptFinishedAt,
-			EventAt:           firstAttemptFinishedAt,
-			NextAttemptAt:     retryReadyAt,
-		},
-		{
-			DeliveryID:        101,
-			AttemptOrdinal:    2,
-			OutboxID:          outboxRow.ID,
-			ChannelID:         outboxRow.ChannelID,
-			ContentID:         outboxRow.ContentID,
-			PostID:            outboxRow.ContentID,
-			RoomID:            "room-a",
-			AlarmType:         string(domain.AlarmTypeCommunity),
-			DedupeKey:         "youtube-notification:COMMUNITY_POST:post-timeline",
-			DeliveryPath:      "youtube_outbox_dispatcher",
-			DeliveryMode:      "per_room",
-			SendResult:        "success",
-			AttemptStartedAt:  &secondAttemptStartedAt,
-			AttemptFinishedAt: &secondAttemptFinishedAt,
-			EventAt:           secondAttemptFinishedAt,
-			NextAttemptAt:     secondAttemptFinishedAt,
-		},
-	}).Error)
+	ctx := t.Context()
+	db := newDeliveryPool(t)
+
+	times := newPostDeliveryTimelineTimes(time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC))
+	windowStart := times.publishedAt.Add(-30 * time.Minute)
+	outboxRow := seedPostDeliveryTimelineOutbox(t, db, times)
+
+	require.NoError(t, insertDeliveryTestRows(db, postDeliveryTimelineBufferRows(outboxRow, times)).Error)
 
 	repository := telemetry.NewRepository(db)
+
 	rows, err := repository.ListPostDeliveryTimelinesSince(ctx, windowStart)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -178,26 +142,126 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 	require.Equal(t, domain.AlarmTypeCommunity, row.AlarmType)
 	require.Equal(t, outboxRow.ContentID, row.ContentID)
 	require.Equal(t, outboxRow.ContentID, row.PostID)
+
+	assertPostDeliveryTimelineMarks(t, row, times)
+	assertPostDeliveryTimelineLatencies(t, row, times)
+	assertPostDeliveryTimelineEvidence(t, row, times)
+}
+
+func seedPostDeliveryTimelineOutbox(t *testing.T, db *pgxpool.Pool, times postDeliveryTimelineTimes) timelineTestOutboxModel {
+	t.Helper()
+
+	publishedAt := times.publishedAt
+	secondAttemptFinishedAt := times.secondAttemptFinishedAt
+	alarmLatencyMillis := times.alarmLatencyMillis
+	alarmLatencyExceeded := true
+
+	outboxRow := timelineTestOutboxModel{
+		Kind:          string(domain.OutboxKindCommunityPost),
+		ChannelID:     "UC_timeline",
+		ContentID:     "post-timeline",
+		Payload:       `{"post_id":"post-timeline","content_text":"timeline"}`,
+		Status:        string(domain.OutboxStatusSent),
+		AttemptCount:  1,
+		NextAttemptAt: times.retryReadyAt,
+		CreatedAt:     times.queueEnqueuedAt,
+	}
+	require.NoError(t, insertDeliveryTestRows(db, &outboxRow).Error)
+
+	require.NoError(t, insertDeliveryTestRows(db, &timelineTestTrackingModel{
+		Kind:                 string(domain.OutboxKindCommunityPost),
+		ContentID:            outboxRow.ContentID,
+		ChannelID:            outboxRow.ChannelID,
+		ActualPublishedAt:    &publishedAt,
+		DetectedAt:           times.detectedAt,
+		AlarmSentAt:          &secondAttemptFinishedAt,
+		AlarmLatencyMillis:   &alarmLatencyMillis,
+		AlarmLatencyExceeded: &alarmLatencyExceeded,
+		CreatedAt:            times.queueEnqueuedAt,
+		UpdatedAt:            times.secondAttemptFinishedAt,
+	}).Error)
+
+	return outboxRow
+}
+
+func postDeliveryTimelineBufferRows(
+	outboxRow timelineTestOutboxModel,
+	times postDeliveryTimelineTimes,
+) []timelineTestBufferModel {
+	firstAttemptStartedAt := times.firstAttemptStartedAt
+	firstAttemptFinishedAt := times.firstAttemptFinishedAt
+	secondAttemptStartedAt := times.secondAttemptStartedAt
+	secondAttemptFinishedAt := times.secondAttemptFinishedAt
+
+	return []timelineTestBufferModel{
+		{
+			DeliveryID:        101,
+			AttemptOrdinal:    1,
+			OutboxID:          outboxRow.ID,
+			ChannelID:         outboxRow.ChannelID,
+			ContentID:         outboxRow.ContentID,
+			PostID:            outboxRow.ContentID,
+			RoomID:            testRoomA,
+			AlarmType:         string(domain.AlarmTypeCommunity),
+			DedupeKey:         "youtube-notification:COMMUNITY_POST:post-timeline",
+			DeliveryPath:      "youtube_outbox_dispatcher",
+			DeliveryMode:      deliveryModePerRoom,
+			SendResult:        sendResultFailure,
+			FailureReason:     deliveryReasonSendMessage,
+			AttemptStartedAt:  &firstAttemptStartedAt,
+			AttemptFinishedAt: &firstAttemptFinishedAt,
+			EventAt:           firstAttemptFinishedAt,
+			NextAttemptAt:     times.retryReadyAt,
+		},
+		{
+			DeliveryID:        101,
+			AttemptOrdinal:    2,
+			OutboxID:          outboxRow.ID,
+			ChannelID:         outboxRow.ChannelID,
+			ContentID:         outboxRow.ContentID,
+			PostID:            outboxRow.ContentID,
+			RoomID:            testRoomA,
+			AlarmType:         string(domain.AlarmTypeCommunity),
+			DedupeKey:         "youtube-notification:COMMUNITY_POST:post-timeline",
+			DeliveryPath:      "youtube_outbox_dispatcher",
+			DeliveryMode:      deliveryModePerRoom,
+			SendResult:        sendResultSuccess,
+			AttemptStartedAt:  &secondAttemptStartedAt,
+			AttemptFinishedAt: &secondAttemptFinishedAt,
+			EventAt:           secondAttemptFinishedAt,
+			NextAttemptAt:     secondAttemptFinishedAt,
+		},
+	}
+}
+
+func assertPostDeliveryTimelineMarks(t *testing.T, row timeline.PostDeliveryTimeline, times postDeliveryTimelineTimes) {
+	t.Helper()
+
 	require.NotNil(t, row.QueueEnqueuedAt)
-	require.Equal(t, queueEnqueuedAt, row.QueueEnqueuedAt.UTC())
+	require.Equal(t, times.queueEnqueuedAt, row.QueueEnqueuedAt.UTC())
 	require.NotNil(t, row.FirstAttemptStartedAt)
-	require.Equal(t, firstAttemptStartedAt, row.FirstAttemptStartedAt.UTC())
+	require.Equal(t, times.firstAttemptStartedAt, row.FirstAttemptStartedAt.UTC())
 	require.NotNil(t, row.LastAttemptStartedAt)
-	require.Equal(t, secondAttemptStartedAt, row.LastAttemptStartedAt.UTC())
+	require.Equal(t, times.secondAttemptStartedAt, row.LastAttemptStartedAt.UTC())
 	require.NotNil(t, row.FirstAttemptFinishedAt)
-	require.Equal(t, firstAttemptFinishedAt, row.FirstAttemptFinishedAt.UTC())
+	require.Equal(t, times.firstAttemptFinishedAt, row.FirstAttemptFinishedAt.UTC())
 	require.NotNil(t, row.LastAttemptFinishedAt)
-	require.Equal(t, secondAttemptFinishedAt, row.LastAttemptFinishedAt.UTC())
+	require.Equal(t, times.secondAttemptFinishedAt, row.LastAttemptFinishedAt.UTC())
 	require.NotNil(t, row.FirstSuccessAt)
-	require.Equal(t, secondAttemptFinishedAt, row.FirstSuccessAt.UTC())
+	require.Equal(t, times.secondAttemptFinishedAt, row.FirstSuccessAt.UTC())
 	require.NotNil(t, row.LastFailureAt)
-	require.Equal(t, firstAttemptFinishedAt, row.LastFailureAt.UTC())
+	require.Equal(t, times.firstAttemptFinishedAt, row.LastFailureAt.UTC())
 	require.NotNil(t, row.NextRetryAt)
-	require.Equal(t, retryReadyAt, row.NextRetryAt.UTC())
+	require.Equal(t, times.retryReadyAt, row.NextRetryAt.UTC())
 	require.Equal(t, int64(1), row.SuccessSendCount)
 	require.Equal(t, int64(1), row.FailedAttemptCount)
 	require.Equal(t, int64(2), row.MaxAttemptOrdinal)
 	require.Equal(t, int64(1), row.RetryAttemptCount)
+}
+
+func assertPostDeliveryTimelineLatencies(t *testing.T, row timeline.PostDeliveryTimeline, times postDeliveryTimelineTimes) {
+	t.Helper()
+
 	require.NotNil(t, row.PublishToDetectMillis)
 	require.Equal(t, int64(60*time.Second/time.Millisecond), *row.PublishToDetectMillis)
 	require.NotNil(t, row.DetectToQueueMillis)
@@ -214,7 +278,7 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 	require.True(t, *row.InternalLatencyExceeded)
 	require.Equal(t, timeline.PostDelaySourceInternalDelivery, row.DelaySource)
 	require.NotNil(t, row.AlarmLatencyMillis)
-	require.Equal(t, alarmLatencyMillis, *row.AlarmLatencyMillis)
+	require.Equal(t, times.alarmLatencyMillis, *row.AlarmLatencyMillis)
 	require.NotNil(t, row.AlarmLatencyExceeded)
 	require.True(t, *row.AlarmLatencyExceeded)
 	require.NotNil(t, row.QueueWaitMillis)
@@ -223,13 +287,19 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 	require.Equal(t, int64(80*time.Second/time.Millisecond), *row.RetryAccumulationMillis)
 	require.False(t, row.JobFailureDetected)
 	require.Equal(t, timeline.PostInternalDelayCauseRetryAccumulation, row.InternalDelayCause)
+}
+
+func assertPostDeliveryTimelineEvidence(t *testing.T, row timeline.PostDeliveryTimeline, times postDeliveryTimelineTimes) {
+	t.Helper()
+
 	require.Equal(t, timeline.PostLatencyClassificationStatusExceeded, row.LatencyClassification.Status)
 	require.Equal(t, timeline.PostLatencyExceededThresholdMillis, row.LatencyClassification.ThresholdMillis)
 	require.Equal(t, timeline.PostDelaySourceInternalDelivery, row.LatencyClassification.DelaySource)
 	require.Equal(t, timeline.PostInternalDelayCauseRetryAccumulation, row.LatencyClassification.InternalDelayCause)
+
 	evidenceByKey := indexPostLatencyClassificationEvidence(row.LatencyClassification.Evidence)
 	require.NotNil(t, evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyAlarmLatency].Millis)
-	require.Equal(t, alarmLatencyMillis, *evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyAlarmLatency].Millis)
+	require.Equal(t, times.alarmLatencyMillis, *evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyAlarmLatency].Millis)
 	require.True(t, evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyAlarmLatency].Selected)
 	require.NotNil(t, evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyInternalLatency].Millis)
 	require.Equal(t, int64(125*time.Second/time.Millisecond), *evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyInternalLatency].Millis)
@@ -242,10 +312,10 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesSince_BuildsLatenc
 func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentities_StoresComputedValues(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
-	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	publishedAt := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(30 * time.Second)
 	queueEnqueuedAt := detectedAt.Add(30 * time.Second)
 	firstAttemptStartedAt := queueEnqueuedAt.Add(100 * time.Second)
@@ -289,8 +359,8 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 		AlarmType:         string(domain.AlarmTypeCommunity),
 		DedupeKey:         "youtube-notification:COMMUNITY_POST:post-persisted-latency",
 		DeliveryPath:      "youtube_outbox_dispatcher",
-		DeliveryMode:      "per_room",
-		SendResult:        "success",
+		DeliveryMode:      deliveryModePerRoom,
+		SendResult:        sendResultSuccess,
 		AttemptStartedAt:  &firstAttemptStartedAt,
 		AttemptFinishedAt: &firstAttemptFinishedAt,
 		EventAt:           firstAttemptFinishedAt,
@@ -304,6 +374,7 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 	}}))
 
 	var stored timelineTestTrackingModel
+
 	require.NoError(t, firstDeliveryTestRowWhere(db, &stored, "kind = ? AND content_id = ?", string(domain.OutboxKindCommunityPost), outboxRow.ContentID).Error)
 	require.Equal(t, string(timeline.PostLatencyClassificationStatusExceeded), stored.LatencyClassificationStatus)
 	require.Equal(t, string(timeline.PostDelaySourceInternalDelivery), stored.DelaySource)
@@ -313,7 +384,7 @@ func TestDeliveryTelemetryRepository_PersistPostLatencyClassificationsByIdentiti
 func TestDerivePostDeliveryTimelineMetrics_ClassifiesExternalCollectionDelaySource(t *testing.T) {
 	t.Parallel()
 
-	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	publishedAt := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(100 * time.Second)
 	alarmSentAt := detectedAt.Add(30 * time.Second)
 	alarmLatencyMillis := int64(alarmSentAt.Sub(publishedAt) / time.Millisecond)
@@ -338,6 +409,7 @@ func TestDerivePostDeliveryTimelineMetrics_ClassifiesExternalCollectionDelaySour
 	require.Equal(t, timeline.PostLatencyClassificationStatusExceeded, row.LatencyClassification.Status)
 	require.Equal(t, timeline.PostDelaySourceExternalCollection, row.LatencyClassification.DelaySource)
 	require.Equal(t, timeline.PostInternalDelayCauseNone, row.LatencyClassification.InternalDelayCause)
+
 	evidenceByKey := indexPostLatencyClassificationEvidence(row.LatencyClassification.Evidence)
 	require.True(t, evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyPublishToDetect].Selected)
 	require.NotNil(t, evidenceByKey[timeline.PostLatencyClassificationEvidenceKeyPublishToDetect].Millis)
@@ -347,7 +419,7 @@ func TestDerivePostDeliveryTimelineMetrics_ClassifiesExternalCollectionDelaySour
 func TestDerivePostDeliveryTimelineMetrics_ClassifiesMixedDelaySource(t *testing.T) {
 	t.Parallel()
 
-	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	publishedAt := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(70 * time.Second)
 	alarmSentAt := detectedAt.Add(70 * time.Second)
 	alarmLatencyMillis := int64(alarmSentAt.Sub(publishedAt) / time.Millisecond)
@@ -374,7 +446,7 @@ func TestDerivePostDeliveryTimelineMetrics_ClassifiesMixedDelaySource(t *testing
 func TestDerivePostDeliveryTimelineMetrics_ClassifiesQueueWaitPrimary(t *testing.T) {
 	t.Parallel()
 
-	detectedAt := time.Date(2026, 4, 10, 10, 1, 0, 0, time.UTC)
+	detectedAt := time.Date(2026, time.April, 10, 10, 1, 0, 0, time.UTC)
 	queueEnqueuedAt := detectedAt.Add(80 * time.Second)
 	firstAttemptStartedAt := queueEnqueuedAt.Add(20 * time.Second)
 	firstAttemptFinishedAt := firstAttemptStartedAt.Add(10 * time.Second)
@@ -401,7 +473,7 @@ func TestDerivePostDeliveryTimelineMetrics_ClassifiesQueueWaitPrimary(t *testing
 func TestDerivePostDeliveryTimelineMetrics_ClassifiesJobFailurePrimary(t *testing.T) {
 	t.Parallel()
 
-	detectedAt := time.Date(2026, 4, 10, 10, 1, 0, 0, time.UTC)
+	detectedAt := time.Date(2026, time.April, 10, 10, 1, 0, 0, time.UTC)
 	queueEnqueuedAt := detectedAt.Add(20 * time.Second)
 	firstAttemptStartedAt := queueEnqueuedAt.Add(10 * time.Second)
 	firstAttemptFinishedAt := firstAttemptStartedAt.Add(15 * time.Second)
@@ -434,16 +506,17 @@ func indexPostLatencyClassificationEvidence(items []timeline.PostLatencyClassifi
 	for i := range items {
 		indexed[items[i].Key] = items[i]
 	}
+
 	return indexed
 }
 
 func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWindow_AppliesUpperBound(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := newDeliveryPool(t)
 
-	publishedAt := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+	publishedAt := time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 	detectedAt := publishedAt.Add(2 * time.Minute)
 	eventAt := detectedAt.Add(1 * time.Minute)
 
@@ -478,8 +551,8 @@ func TestDeliveryTelemetryRepository_ListPostDeliveryTimelinesWithinPublishedWin
 		AlarmType:      string(domain.AlarmTypeCommunity),
 		DedupeKey:      "youtube-notification:COMMUNITY_POST:post-window",
 		DeliveryPath:   "youtube_outbox_dispatcher",
-		DeliveryMode:   "grouped",
-		SendResult:     "success",
+		DeliveryMode:   deliveryModeGrouped,
+		SendResult:     sendResultSuccess,
 		EventAt:        eventAt,
 		NextAttemptAt:  eventAt,
 	}).Error)

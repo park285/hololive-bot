@@ -47,6 +47,7 @@ type completedNotificationSentAtRow struct {
 
 func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) (map[string]time.Time, error) {
 	completed := make(map[string]time.Time)
+
 	if len(notifications) == 0 || tx == nil {
 		return completed, nil
 	}
@@ -58,33 +59,41 @@ func loadCompletedNotificationSentAtByIdentity(ctx context.Context, tx batchDB, 
 
 	trackingRows, err := loadCompletedNotificationTrackingSentAtRows(ctx, tx, inputs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load completed notification tracking sent at rows: %w", err)
 	}
+
 	mergeCompletedNotificationSentAtRows(completed, trackingRows)
 
 	alarmStateRows, err := loadCompletedNotificationAlarmStateSentAtRows(ctx, tx, inputs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load completed notification alarm state sent at rows: %w", err)
 	}
+
 	mergeCompletedNotificationSentAtRows(completed, alarmStateRows)
+
 	return completed, nil
 }
 
 func collectCompletedNotificationSentStateInputs(notifications []*domain.YouTubeNotificationOutbox) []completedNotificationSentStateInput {
 	inputs := make([]completedNotificationSentStateInput, 0, len(notifications))
 	seen := make(map[string]struct{}, len(notifications))
+
 	for i := range notifications {
 		notification := notifications[i]
 		input, ok := completedNotificationSentStateInputFor(notification)
+
 		if !ok {
 			continue
 		}
+
 		if _, ok := seen[input.IdentityKey]; ok {
 			continue
 		}
+
 		seen[input.IdentityKey] = struct{}{}
 		inputs = append(inputs, input)
 	}
+
 	return inputs
 }
 
@@ -92,10 +101,12 @@ func completedNotificationSentStateInputFor(notification *domain.YouTubeNotifica
 	if notification == nil || !isCommunityShortsOutboxKind(notification.Kind) {
 		return completedNotificationSentStateInput{}, false
 	}
+
 	contentID := strings.TrimSpace(notification.ContentID)
 	if contentID == "" {
 		return completedNotificationSentStateInput{}, false
 	}
+
 	return completedNotificationSentStateInput{
 		Kind:               notification.Kind,
 		IdentityKey:        notificationIdentityKey(notification.Kind, contentID),
@@ -112,8 +123,11 @@ func loadCompletedNotificationTrackingSentAtRows(
 	inputs []completedNotificationSentStateInput,
 ) ([]completedNotificationSentAtRow, error) {
 	args := make([]any, 0, len(inputs)*5)
+
 	var values strings.Builder
+
 	appendValuesPlaceholders(&values, len(inputs), 5)
+
 	for i := range inputs {
 		args = append(args,
 			inputs[i].Kind,
@@ -125,11 +139,13 @@ func loadCompletedNotificationTrackingSentAtRows(
 	}
 
 	var rows []completedNotificationSentAtRow
+
 	if err := dbx.SelectSQL(ctx, tx, &rows, "load completed notification tracking sent state", `
 		WITH input(kind, identity_key, requested_content_id, canonical_content_id, raw_content_id) AS (
 			VALUES `+values.String()+mustSQL("repository_batch_completed_state_0130_01.sql"), args...); err != nil {
 		return nil, fmt.Errorf("load completed notification tracking sent state: %w", err)
 	}
+
 	return rows, nil
 }
 
@@ -144,23 +160,29 @@ func loadCompletedNotificationAlarmStateSentAtRows(
 			filtered = append(filtered, inputs[i])
 		}
 	}
+
 	if len(filtered) == 0 {
 		return nil, nil
 	}
 
 	args := make([]any, 0, len(filtered)*3)
+
 	var values strings.Builder
+
 	appendValuesPlaceholders(&values, len(filtered), 3)
+
 	for i := range filtered {
 		args = append(args, filtered[i].Kind, filtered[i].IdentityKey, strings.TrimSpace(filtered[i].ReactivationPostID))
 	}
 
 	var rows []completedNotificationSentAtRow
+
 	if err := dbx.SelectSQL(ctx, tx, &rows, "load completed notification alarm state sent state", `
 		WITH input(kind, identity_key, post_id) AS (
 			VALUES `+values.String()+mustSQL("repository_batch_completed_state_0174_02.sql"), args...); err != nil {
 		return nil, fmt.Errorf("load completed notification alarm state sent state: %w", err)
 	}
+
 	return rows, nil
 }
 

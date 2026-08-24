@@ -41,10 +41,10 @@ const (
 )
 
 // pg_dump가 아닌 catalog 직렬화를 쓰는 이유: pg_dump text는 patch/tool version별 헤더·구문
-// 차이가 커 결정성을 깬다. catalog 직렬화는 PG18과 검증된 외부 test DB에서 안정적으로 동작한다.
+// 차이가 커 결정성을 깬다. 반면 catalog 직렬화는 PG18과 검증된 외부 test DB에서 안정적으로 동작한다.
 func TestSchemaSnapshotGolden(t *testing.T) {
 	pool := NewReplayPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	got, err := serializeSchema(ctx, pool)
 	if err != nil {
@@ -55,12 +55,14 @@ func TestSchemaSnapshotGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serialize schema (determinism pass): %v", err)
 	}
+
 	if got != again {
-		t.Fatalf("schema serialization is non-deterministic: two dumps of the same database differ")
+		t.Fatal("schema serialization is non-deterministic: two dumps of the same database differ")
 	}
 
 	if os.Getenv(schemaUpdateEnv) == "1" {
 		writeSchemaGolden(t, got)
+
 		return
 	}
 
@@ -113,7 +115,7 @@ func unifiedSchemaDiff(want, got string) string {
 func serializeSchema(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 	schema, err := querySchema(ctx, pool)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("query schema: %w", err)
 	}
 
 	return schema.serialize(), nil
@@ -132,52 +134,54 @@ type schemaSnapshot struct {
 }
 
 func querySchema(ctx context.Context, pool *pgxpool.Pool) (schemaSnapshot, error) {
-	var schema schemaSnapshot
-	var err error
+	var (
+		schema schemaSnapshot
+		err    error
+	)
 
 	schema.enums, err = queryEnums(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query enums: %w", err)
 	}
 
 	schema.tables, err = queryTables(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query tables: %w", err)
 	}
 
 	schema.columns, err = queryColumns(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query columns: %w", err)
 	}
 
 	schema.constraints, err = queryConstraints(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query constraints: %w", err)
 	}
 
 	schema.indexes, err = queryIndexes(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query indexes: %w", err)
 	}
 
 	schema.tableOptions, err = queryTableOptions(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query table options: %w", err)
 	}
 
 	schema.triggers, err = queryTriggers(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query triggers: %w", err)
 	}
 
 	schema.sequences, err = querySequences(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query sequences: %w", err)
 	}
 
 	schema.functions, err = queryFunctions(ctx, pool)
 	if err != nil {
-		return schemaSnapshot{}, err
+		return schemaSnapshot{}, fmt.Errorf("query functions: %w", err)
 	}
 
 	return schema, nil
@@ -192,6 +196,7 @@ func (schema *schemaSnapshot) serialize() string {
 
 	for _, e := range schema.enums {
 		b.WriteString("\nENUM " + e.name + "\n")
+
 		for _, label := range e.labels {
 			b.WriteString("  " + label + "\n")
 		}
@@ -199,6 +204,7 @@ func (schema *schemaSnapshot) serialize() string {
 
 	for _, table := range schema.tables {
 		b.WriteString("\nTABLE " + table + "\n")
+
 		if options := schema.tableOptions[table]; options != "" {
 			b.WriteString("  OPTIONS " + options + "\n")
 		}
@@ -206,12 +212,15 @@ func (schema *schemaSnapshot) serialize() string {
 		for _, col := range schema.columns[table] {
 			b.WriteString("  COLUMN " + col + "\n")
 		}
+
 		for _, con := range schema.constraints[table] {
 			b.WriteString("  CONSTRAINT " + con + "\n")
 		}
+
 		for _, idx := range schema.indexes[table] {
 			b.WriteString("  INDEX " + idx + "\n")
 		}
+
 		for _, trigger := range schema.triggers[table] {
 			b.WriteString("  TRIGGER " + trigger + "\n")
 		}
@@ -252,6 +261,7 @@ func queryEnums(ctx context.Context, pool *pgxpool.Pool) ([]schemaEnum, error) {
 
 	for rows.Next() {
 		var name, label string
+
 		if scanErr := rows.Scan(&name, &label); scanErr != nil {
 			return nil, fmt.Errorf("scan enum: %w", scanErr)
 		}
@@ -292,6 +302,7 @@ func queryTables(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 
 	for rows.Next() {
 		var name string
+
 		if scanErr := rows.Scan(&name); scanErr != nil {
 			return nil, fmt.Errorf("scan table: %w", scanErr)
 		}
@@ -399,6 +410,7 @@ func queryConstraints(ctx context.Context, pool *pgxpool.Pool) (map[string][]str
 
 	for rows.Next() {
 		var table, name, def string
+
 		if scanErr := rows.Scan(&table, &name, &def); scanErr != nil {
 			return nil, fmt.Errorf("scan constraint: %w", scanErr)
 		}
@@ -436,6 +448,7 @@ func queryIndexes(ctx context.Context, pool *pgxpool.Pool) (map[string][]string,
 
 	for rows.Next() {
 		var table, def string
+
 		if scanErr := rows.Scan(&table, &def); scanErr != nil {
 			return nil, fmt.Errorf("scan index: %w", scanErr)
 		}
@@ -465,16 +478,21 @@ func queryTableOptions(ctx context.Context, pool *pgxpool.Pool) (map[string]stri
 	defer rows.Close()
 
 	out := make(map[string]string)
+
 	for rows.Next() {
 		var table, options string
+
 		if err := rows.Scan(&table, &options); err != nil {
 			return nil, fmt.Errorf("scan table options: %w", err)
 		}
+
 		out[table] = options
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate table options: %w", err)
 	}
+
 	return out, nil
 }
 
@@ -493,16 +511,21 @@ func queryTriggers(ctx context.Context, pool *pgxpool.Pool) (map[string][]string
 	defer rows.Close()
 
 	out := make(map[string][]string)
+
 	for rows.Next() {
 		var table, definition string
+
 		if err := rows.Scan(&table, &definition); err != nil {
 			return nil, fmt.Errorf("scan trigger: %w", err)
 		}
+
 		out[table] = append(out[table], definition)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate triggers: %w", err)
 	}
+
 	return out, nil
 }
 
@@ -535,22 +558,31 @@ func querySequences(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	defer rows.Close()
 
 	var out []string
+
 	for rows.Next() {
-		var name, typ, ownedBy string
-		var start, increment, minValue, maxValue, cache int64
-		var cycle bool
+		var (
+			name, typ, ownedBy                          string
+			start, increment, minValue, maxValue, cache int64
+			cycle                                       bool
+		)
+
 		if err := rows.Scan(&name, &typ, &start, &increment, &minValue, &maxValue, &cache, &cycle, &ownedBy); err != nil {
 			return nil, fmt.Errorf("scan sequence: %w", err)
 		}
+
 		definition := fmt.Sprintf("%s AS %s START %d INCREMENT %d MIN %d MAX %d CACHE %d CYCLE %t", name, typ, start, increment, minValue, maxValue, cache, cycle)
+
 		if ownedBy != "" {
 			definition += " OWNED BY " + ownedBy
 		}
+
 		out = append(out, definition)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate sequences: %w", err)
 	}
+
 	return out, nil
 }
 
@@ -577,21 +609,31 @@ func queryFunctions(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	defer rows.Close()
 
 	var out []string
+
 	for rows.Next() {
-		var name, args, result, language, volatility, parallel, config, source string
-		var securityDefiner, leakproof bool
+		var (
+			name, args, result, language, volatility, parallel, config, source string
+			securityDefiner, leakproof                                         bool
+		)
+
 		if err := rows.Scan(&name, &args, &result, &language, &volatility, &securityDefiner, &leakproof, &parallel, &config, &source); err != nil {
 			return nil, fmt.Errorf("scan function: %w", err)
 		}
+
 		definition := fmt.Sprintf("%s(%s) RETURNS %s LANGUAGE %s VOLATILITY %s SECURITY_DEFINER %t LEAKPROOF %t PARALLEL %s", name, args, result, language, volatility, securityDefiner, leakproof, parallel)
+
 		if config != "" {
 			definition += " CONFIG " + config
 		}
+
 		definition += fmt.Sprintf(" BODY %q", source)
+
 		out = append(out, definition)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate functions: %w", err)
 	}
+
 	return out, nil
 }

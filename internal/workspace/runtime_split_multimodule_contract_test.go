@@ -45,6 +45,7 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 	}
 
 	goWork := readRepoFile(t, root, "go.work")
+
 	for _, entry := range []string{"./hololive/hololive-api", "./hololive/hololive-alarm-worker"} {
 		if !strings.Contains(goWork, entry) {
 			t.Fatalf("go.work must include %s", entry)
@@ -52,6 +53,7 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 	}
 
 	projectMap := readRepoFile(t, root, "docs/current/PROJECT_MAP.md")
+
 	for _, want := range []string{
 		"| `hololive-api` | Go 1.27 | `hololive/hololive-api/` |",
 		"| `hololive-alarm-worker` | Go 1.27 | `hololive/hololive-alarm-worker/` |",

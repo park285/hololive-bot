@@ -13,15 +13,18 @@ import (
 func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
 	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusPending})
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("insert batch: %w", err)
 	}
+
 	record, err := r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("find by dedupe key: %w", err)
 	}
+
 	if result.InsertedDeliveries > 0 {
 		return record, Inserted, nil
 	}
+
 	return record, insertDuplicateResult(record.Status), nil
 }
 
@@ -46,15 +49,18 @@ func insertDuplicateResult(status Status) InsertResult {
 
 func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error) {
 	if r == nil || r.pool == nil {
-		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: postgres pool is nil")
+		return PublishBatchResult{}, errors.New("insert dispatch ledger batch: postgres pool is nil")
 	}
+
 	status := input.Status
 	if status == "" {
 		status = StatusPending
 	}
+
 	if status != StatusPending && status != StatusShadowed {
 		return PublishBatchResult{}, fmt.Errorf("insert dispatch ledger batch: unsupported status %q", status)
 	}
+
 	result := PublishBatchResult{RequestedDeliveries: len(input.Envelopes)}
 	if len(input.Envelopes) == 0 {
 		return result, nil
@@ -62,11 +68,17 @@ func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput
 
 	eventRows, deliveries, preflightCollisions, err := prepareInsertBatchRows(input.Envelopes, status, &result)
 	if err != nil {
-		return result, err
+		return result, fmt.Errorf("prepare insert batch rows: %w", err)
 	}
-	return runPublishBatchWithDeadlockRetry(&result, func() (PublishBatchResult, error) {
+
+	out, err := runPublishBatchWithDeadlockRetry(&result, func() (PublishBatchResult, error) {
 		return r.insertPreparedBatch(ctx, eventRows, deliveries, preflightCollisions, &result)
 	})
+	if err != nil {
+		return out, fmt.Errorf("run publish batch with deadlock retry: %w", err)
+	}
+
+	return out, nil
 }
 
 const pgErrCodeDeadlockDetected = "40P01"
@@ -79,16 +91,29 @@ func runPublishBatchWithDeadlockRetry(
 ) (PublishBatchResult, error) {
 	snapshot := *result
 	publishResult, err := attempt()
+
 	if !isDeadlockDetected(err) {
-		return publishResult, err
+		if err != nil {
+			return publishResult, fmt.Errorf("attempt: %w", err)
+		}
+
+		return publishResult, nil
 	}
+
 	*result = snapshot
-	return attempt()
+
+	out, err := attempt()
+	if err != nil {
+		return out, fmt.Errorf("attempt: %w", err)
+	}
+
+	return out, nil
 }
 
 func isDeadlockDetected(err error) bool {
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return pgErr.Code == pgErrCodeDeadlockDetected
 	}
+
 	return false
 }

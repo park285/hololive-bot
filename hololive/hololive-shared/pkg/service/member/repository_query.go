@@ -35,6 +35,7 @@ func (r *Repository) FindByChannelID(ctx context.Context, channelID string) (*do
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by channel_id: %w", err)
 	}
+
 	return member, nil
 }
 
@@ -45,6 +46,7 @@ func (r *Repository) FindByName(ctx context.Context, name string) (*domain.Membe
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by name: %w", err)
 	}
+
 	return member, nil
 }
 
@@ -55,6 +57,7 @@ func (r *Repository) FindByAlias(ctx context.Context, alias string) (*domain.Mem
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by alias: %w", err)
 	}
+
 	return member, nil
 }
 
@@ -68,12 +71,16 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	defer rows.Close()
 
 	channelIDs := make([]string, 0, 256)
+
 	for rows.Next() {
 		var channelID string
+
 		if err := rows.Scan(&channelID); err != nil {
 			r.logger.Warn("Failed to scan channel ID", slog.Any("error", err))
+
 			continue
 		}
+
 		channelIDs = append(channelIDs, channelID)
 	}
 
@@ -93,7 +100,12 @@ func (r *Repository) GetAllMembers(ctx context.Context) ([]*domain.Member, error
 	}
 	defer rows.Close()
 
-	return r.collectAllMembersFromRows(rows)
+	out, err := r.collectAllMembersFromRows(rows)
+	if err != nil {
+		return out, fmt.Errorf("collect all members from rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []string) (map[string]*domain.Member, error) {
@@ -109,7 +121,13 @@ func (r *Repository) GetMembersWithPhoto(ctx context.Context, channelIDs []strin
 	}
 	defer rows.Close()
 
-	return r.collectMembersWithPhotoFromRows(rows)
+	out, err := r.collectMembersWithPhotoFromRows(rows)
+	if err != nil {
+		//nolint:nilnil // collectMembersWithPhotoFromRows와 동일하게 부분 성공 결과를 오류와 함께 그대로 전달한다.
+		return out, fmt.Errorf("collect members with photo from rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelID string) (*domain.Member, error) {
@@ -119,10 +137,11 @@ func (r *Repository) GetMemberWithPhotoByChannelID(ctx context.Context, channelI
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by channel_id: %w", err)
 	}
+
 	return member, nil
 }
 
-// 검색 대상: english_name, korean_name, aliases->>'ko', aliases->>'ja'
+// 검색 대상: english_name, korean_name, aliases->>'ko', aliases->>'ja'.
 func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.Member, error) {
 	query := mustSQL("repository_query_0170_08.sql")
 
@@ -132,7 +151,12 @@ func (r *Repository) FindAllByName(ctx context.Context, name string) ([]*domain.
 	}
 	defer rows.Close()
 
-	return r.collectMembersByNameFromRows(rows)
+	out, err := r.collectMembersByNameFromRows(rows)
+	if err != nil {
+		return out, fmt.Errorf("collect members by name from rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*domain.Member, error) {
@@ -142,5 +166,6 @@ func (r *Repository) FindByNameAndOrg(ctx context.Context, name, org string) (*d
 	if err != nil {
 		return nil, fmt.Errorf("failed to query member by name and org: %w", err)
 	}
+
 	return member, nil
 }

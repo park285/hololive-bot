@@ -14,20 +14,27 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+const (
+	testPollerNameVideos = "videos"
+	testResultSuccess    = "success"
+
+	metricValueEpsilon = 1e-9
+)
+
 func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	m, reg := newIsolatedPollerMetrics(t)
 
 	m.SchedulerRegisteredJobs.Set(2)
 	m.SchedulerDispatchDefer.WithLabelValues("").Inc()
 	m.ObserveSchedulerOldestDueAge(2500 * time.Millisecond)
-	m.SchedulerPollDuration.WithLabelValues("videos", "success").Observe(0.25)
-	m.ObservePollerSuccess("videos", time.Unix(1_700_000_000, 0))
-	m.ObserveJobClaim("videos", "acquired")
-	m.ObserveJobLeaseRenew("", "success")
+	m.SchedulerPollDuration.WithLabelValues(testPollerNameVideos, testResultSuccess).Observe(0.25)
+	m.ObservePollerSuccess(testPollerNameVideos, time.Unix(1_700_000_000, 0))
+	m.ObserveJobClaim(testPollerNameVideos, "acquired")
+	m.ObserveJobLeaseRenew("", testResultSuccess)
 	m.ObserveJobMarkCompleted("resolver", "lost")
-	m.ObserveJobDefer("resolver", "success")
+	m.ObserveJobDefer("resolver", testResultSuccess)
 	m.ObserveJobRelease("resolver", "error")
-	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", 2)
+	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, testResultSuccess, 2)
 	m.CommunityShortsDetectedPostsTotal.WithLabelValues(string(domain.AlarmTypeShorts)).Add(3)
 
 	families, err := reg.Gather()
@@ -41,46 +48,52 @@ func TestPollerMetricsUseDomainAwareNamesAndLabels(t *testing.T) {
 	}, 1)
 	assertGaugeValue(t, families, "youtube_poller_scheduler_oldest_due_age_seconds", nil, 2.5)
 	assertGaugeValue(t, families, "youtube_poller_last_success_timestamp_seconds", map[string]string{
-		"poller": "videos",
+		metricLabelPoller: testPollerNameVideos,
 	}, 1_700_000_000)
 	assertHistogramLabels(t, families, "youtube_poller_poll_duration_seconds", map[string]string{
-		"poller": "videos",
-		"status": "success",
+		metricLabelPoller: testPollerNameVideos,
+		"status":          testResultSuccess,
 	})
 	assertCounterValue(t, families, "youtube_poller_job_claim_total", map[string]string{
-		"poller": "videos",
-		"result": "acquired",
+		metricLabelPoller: testPollerNameVideos,
+		metricLabelResult: "acquired",
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_job_lease_renew_total", map[string]string{
-		"poller": "",
-		"result": "success",
+		metricLabelPoller: "",
+		metricLabelResult: testResultSuccess,
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_job_mark_completed_total", map[string]string{
-		"poller": "resolver",
-		"result": "lost",
+		metricLabelPoller: "resolver",
+		metricLabelResult: "lost",
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_job_defer_total", map[string]string{
-		"poller": "resolver",
-		"result": "success",
+		metricLabelPoller: "resolver",
+		metricLabelResult: testResultSuccess,
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_job_release_total", map[string]string{
-		"poller": "resolver",
-		"result": "error",
+		metricLabelPoller: "resolver",
+		metricLabelResult: "error",
 	}, 1)
 	assertCounterValue(t, families, "youtube_poller_outbox_insert_total", map[string]string{
-		"kind":   string(domain.OutboxKindNewVideo),
-		"result": "success",
+		"kind":            string(domain.OutboxKindNewVideo),
+		metricLabelResult: testResultSuccess,
 	}, 2)
 	assertCounterValue(t, families, "youtube_poller_community_shorts_detected_posts_total", map[string]string{
 		"alarm_type": string(domain.AlarmTypeShorts),
 	}, 3)
 }
 
+func TestMetricLabelNamesArePinnedToExportedSchema(t *testing.T) {
+	assert.Equal(t, "poller", metricLabelPoller)
+	assert.Equal(t, "result", metricLabelResult)
+	assert.Equal(t, "source", metricLabelSource)
+}
+
 func TestObserveOutboxInsertSkipsNonPositiveCounts(t *testing.T) {
 	m, reg := newIsolatedPollerMetrics(t)
 
-	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", 0)
-	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, "success", -1)
+	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, testResultSuccess, 0)
+	m.ObserveOutboxInsert(domain.OutboxKindNewVideo, testResultSuccess, -1)
 
 	families, err := reg.Gather()
 	require.NoError(t, err)
@@ -94,7 +107,7 @@ func TestBoolResultMapsClaimOutcomesToMetricLabels(t *testing.T) {
 		err  error
 		want string
 	}{
-		{name: "nil error and true result", ok: true, err: nil, want: "success"},
+		{name: "nil error and true result", ok: true, err: nil, want: testResultSuccess},
 		{name: "nil error and false result", ok: false, err: nil, want: "lost"},
 		{name: "error overrides true result", ok: true, err: errors.New("renew failed"), want: "error"},
 		{name: "error overrides false result", ok: false, err: errors.New("release failed"), want: "error"},
@@ -134,6 +147,7 @@ func assertMetricNamesAreDomainScoped(t *testing.T, families []*dto.MetricFamily
 	t.Helper()
 
 	require.NotEmpty(t, families)
+
 	for _, family := range families {
 		assert.True(t, strings.HasPrefix(family.GetName(), "youtube_poller_"), "metric name %q", family.GetName())
 	}
@@ -150,6 +164,7 @@ func assertMetricLabelsAreUnique(t *testing.T, families []*dto.MetricFamily) {
 				if _, ok := seen[name]; ok {
 					t.Fatalf("metric %s has duplicate label key %q", family.GetName(), name)
 				}
+
 				seen[name] = struct{}{}
 			}
 		}
@@ -161,7 +176,7 @@ func assertCounterValue(t *testing.T, families []*dto.MetricFamily, name string,
 
 	metric := requireMetric(t, families, name, labels)
 	require.NotNil(t, metric.GetCounter(), "metric %s must be a counter", name)
-	assert.Equal(t, want, metric.GetCounter().GetValue())
+	assert.InDelta(t, want, metric.GetCounter().GetValue(), metricValueEpsilon)
 }
 
 func assertGaugeValue(t *testing.T, families []*dto.MetricFamily, name string, labels map[string]string, want float64) {
@@ -169,7 +184,7 @@ func assertGaugeValue(t *testing.T, families []*dto.MetricFamily, name string, l
 
 	metric := requireMetric(t, families, name, labels)
 	require.NotNil(t, metric.GetGauge(), "metric %s must be a gauge", name)
-	assert.Equal(t, want, metric.GetGauge().GetValue())
+	assert.InDelta(t, want, metric.GetGauge().GetValue(), metricValueEpsilon)
 }
 
 func assertHistogramLabels(t *testing.T, families []*dto.MetricFamily, name string, labels map[string]string) {
@@ -185,12 +200,15 @@ func requireMetric(t *testing.T, families []*dto.MetricFamily, name string, labe
 
 	family := metricFamilyByName(families, name)
 	require.NotNil(t, family, "metric family %s", name)
+
 	for _, metric := range family.GetMetric() {
 		if labelsMatch(metric.GetLabel(), labels) {
 			return metric
 		}
 	}
+
 	require.Failf(t, "metric labels not found", "metric %s labels %v", name, labels)
+
 	return nil
 }
 
@@ -200,6 +218,7 @@ func metricFamilyByName(families []*dto.MetricFamily, name string) *dto.MetricFa
 			return family
 		}
 	}
+
 	return nil
 }
 
@@ -207,14 +226,17 @@ func labelsMatch(labels []*dto.LabelPair, want map[string]string) bool {
 	if len(labels) != len(want) {
 		return false
 	}
+
 	got := make(map[string]string, len(labels))
 	for _, label := range labels {
 		got[label.GetName()] = label.GetValue()
 	}
+
 	for key, value := range want {
 		if got[key] != value {
 			return false
 		}
 	}
+
 	return true
 }

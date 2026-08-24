@@ -9,82 +9,283 @@ run:
 linters:
   default: none
   enable:
-    # existing baseline
+    # correctness
     - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
 
-    # stage 1: production bug catchers
+    # resources / context / concurrency
     - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - containedctx
+    - contextcheck
     - noctx
-    - errorlint
-    - durationcheck
+    - fatcontext
     - copyloopvar
 
-    # stage 2: nil/security/context/coverage-adjacent checks
-    - gosec
-    - exhaustive
-    - contextcheck
-    - unconvert
-    - unparam
-    - gocritic
-
-    # stage 3: stricter correctness and maintainability checks
-    - errchkjson
+    # modern Go / stdlib / simplification
+    - durationcheck
+    - embeddedstructfieldcheck
+    - exptostd
+    - intrange
     - makezero
-    - prealloc
-    - nestif
-    - gocognit
+    - mirror
+    - modernize
+    - recvcheck
+    - unconvert
+    - unqueryvet
+    - usestdlibvars
+
+    # errors
+    - errchkjson
+    - errname
+    - errorlint
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - wrapcheck
+
+    # style / docs / suppression hygiene
+    - godot
+    - misspell
+    - nakedret
+    - nlreturn
     - nolintlint
+    - predeclared
+    - revive
+    - sloglint
+    - whitespace
+    - wsl_v5
+    - wastedassign
+
+    # maintainability
+    - dupl
+    - exhaustive
+    - funlen
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - interfacebloat
+    - maintidx
+    - nestif
+    - prealloc
+    - unparam
+
+    # tests
+    - testifylint
+    - thelper
+    - tparallel
+    - usetesting
+
+    # security / text safety
+    - bidichk
+    - gosec
 
   settings:
     errcheck:
       check-type-assertions: true
       check-blank: true
       exclude-functions:
-        # errors.AsType의 첫 반환값은 typed target이라 blank 할당이 의도적(ok만 검사)이다.
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*net/http.Response).Body.Close
+        - (*os.File).Close
+        - (io.Closer).Close
         - errors.AsType
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
 
     staticcheck:
       checks:
         - all
-        # ST1000/ST1020-1022는 패키지·exported 주석을 요구해 repo의 주석 금지 기본과 충돌하고, ST1003/ST1016/QF 계열은 정확성과 무관한 네이밍·quickfix 스타일이라 비활성.
         - -ST1000
         - -ST1020
         - -ST1021
         - -ST1022
-        - -ST1003
-        - -ST1016
-        - -QF1001
-        - -QF1002
-        - -QF1008
-        - -QF1012
+
+    gocyclo:
+      min-complexity: 17
 
     gocognit:
       min-complexity: 20
 
-    nestif:
-      min-complexity: 5
+    dupl:
+      threshold: 200
+
+    goconst:
+      min-len: 3
+      min-occurrences: 5
+
+    misspell:
+      locale: US
+
+    nakedret:
+      max-func-lines: 30
+
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
 
     gocritic:
       enabled-tags:
         - diagnostic
+        - experimental
+        - opinionated
         - performance
         - style
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - exitAfterDefer
+        - paramTypeCombine
+        - unnamedResult
+        - filepathJoin
+        - hugeParam
+        - emptyStringTest
+
+    funlen:
+      lines: 90
+      statements: 45
+      ignore-comments: true
+
+    revive:
+      severity: error
+      enable-default-rules: true
+      directives:
+        - name: specify-disable-reason
+          severity: error
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: use-any
+        - name: use-errors-new
+        - name: use-fmt-print
+        - name: time-date
+        - name: time-equal
+        - name: error-naming
+        - name: error-return
+        - name: unexported-naming
+        - name: unnecessary-format
+        - name: unnecessary-if
+        - name: unsecure-url-scheme
+        - name: use-waitgroup-go
+
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+
+    wsl_v5:
+      default: all
+      allow-first-in-block: false
+      allow-whole-block: false
+      branch-max-lines: 2
+      case-max-lines: 0
+
+    godot:
+      scope: declarations
+      capital: true
+      period: true
+
+    copyloopvar:
+      check-alias: true
+
+    fatcontext:
+      check-struct-pointers: true
+
+    embeddedstructfieldcheck:
+      empty-line: true
+      forbid-mutex: true
+
+    nilnil:
+      only-two: false
+      detect-opposite: true
+
+    nlreturn:
+      block-size: 2
+
+    predeclared:
+      qualified-name: true
+
+    wrapcheck:
+      report-internal-errors: true
+
+    usestdlibvars:
+      http-method: true
+      http-status-code: true
+      time-date-month: true
+      time-weekday: true
+      time-month: true
+      time-layout: true
+      crypto-hash: true
+      default-rpc-path: true
+      sql-isolation-level: true
+      tls-signature-scheme: true
+      constant-kind: true
+
+    interfacebloat:
+      max: 5
+
+    maintidx:
+      under: 35
+
+    nestif:
+      min-complexity: 4
+
+    testifylint:
+      enable-all: true
+
+    usetesting:
+      os-temp-dir: true
+      context-background: true
+      context-todo: true
 
   exclusions:
     generated: strict
     warn-unused: true
-    paths:
-      - '.*\.pb\.go$'
-      - vendor
-      - proto
-      - admin-dashboard/frontend/node_modules
-
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  uniq-by-line: true
+  uniq-by-line: false
   new: false
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
+    - goimports
+
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/kapu)
+      custom-order: true
+      no-inline-comments: true
+      no-prefix-comments: true
+
+    gofumpt:
+      module-path: github.com/kapu/hololive-bot-workspace
+      extra:
+        group-params: true
+
+    goimports:
+      local-prefixes:
+        - github.com/kapu
+
+  exclusions:
+    generated: strict
+    warn-unused: true

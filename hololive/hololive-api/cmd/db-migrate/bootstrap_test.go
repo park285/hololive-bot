@@ -19,6 +19,7 @@ func TestQuoteSQLLiteral(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := quoteSQLLiteral(tt.in); got != tt.want {
 				t.Fatalf("quoteSQLLiteral(%q) = %q, want %q", tt.in, got, tt.want)
 			}

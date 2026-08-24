@@ -20,22 +20,31 @@ func (s FileSnapshotSink) Capture(ctx context.Context, snapshot *Snapshot) error
 	if snapshot == nil {
 		return nil
 	}
+
 	if strings.TrimSpace(s.Dir) == "" || snapshot.CapturedAt.IsZero() {
 		return nil
 	}
+
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("capture snapshot: %w", ctx.Err())
 	default:
 	}
+
 	id := SnapshotID(snapshot)
 	date := snapshot.CapturedAt.UTC().Format("20060102")
 	name := fmt.Sprintf("%s_%s_%s_%s_%s.html", date, safeFilePart(snapshot.Operation), safeFilePart(snapshot.ChannelID), safeFilePart(snapshot.Stage), id[:12])
 	dir := filepath.Join(s.Dir, date)
+
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
+		return fmt.Errorf("mkdir all: %w", err)
 	}
-	return os.WriteFile(filepath.Join(dir, name), snapshot.Body, 0o600)
+
+	if err := os.WriteFile(filepath.Join(dir, name), snapshot.Body, 0o600); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+
+	return nil
 }
 
 func safeFilePart(value string) string {
@@ -43,6 +52,8 @@ func safeFilePart(value string) string {
 	if value == "" {
 		return "unknown"
 	}
+
 	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_", " ", "_")
+
 	return replacer.Replace(value)
 }

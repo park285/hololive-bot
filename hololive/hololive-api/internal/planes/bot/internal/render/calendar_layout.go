@@ -31,6 +31,7 @@ type calendarMetrics struct {
 
 func newCalendarMetrics(compact float64) calendarMetrics {
 	sf := float64(scaleFactor) * compact
+
 	return calendarMetrics{
 		sf:          sf,
 		paddingY:    int(20 * sf),

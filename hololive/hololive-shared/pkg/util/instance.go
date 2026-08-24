@@ -10,5 +10,6 @@ func InstanceID(prefix string) string {
 	if err != nil || hostname == "" {
 		hostname = "unknown-host"
 	}
+
 	return fmt.Sprintf("%s:%s:%d", prefix, hostname, os.Getpid())
 }

@@ -13,25 +13,54 @@ type scannableTime struct {
 }
 
 func (s *scannableTime) Scan(value any) error {
-	parsed, err := scanTimeValue(value)
-	if err != nil {
-		return err
+	if err := s.scanValue(value); err != nil {
+		return fmt.Errorf("scan time value: %w", err)
 	}
-	s.value = parsed
+
 	return nil
 }
 
-func scanTimeValue(value any) (*time.Time, error) {
+func (s *scannableTime) scanValue(value any) error {
 	if value == nil {
-		return nil, nil
+		s.value = nil
+
+		return nil
 	}
+
 	if v, ok := value.(time.Time); ok {
-		return normalizedTimePtr(v), nil
+		s.value = normalizedTimePtr(v)
+
+		return nil
 	}
-	if raw, ok := scanRawString(value); ok {
-		return parseScannableTime(raw)
+
+	raw, ok := scanRawString(value)
+	if !ok {
+		return fmt.Errorf("scan time: unsupported type %T", value)
 	}
-	return nil, fmt.Errorf("scan time: unsupported type %T", value)
+
+	if err := s.scanString(raw); err != nil {
+		return fmt.Errorf("parse scannable time: %w", err)
+	}
+
+	return nil
+}
+
+func (s *scannableTime) scanString(raw string) error {
+	cleaned := strings.TrimSpace(raw)
+	if cleaned == "" {
+		s.value = nil
+
+		return nil
+	}
+
+	parsed, ok := parseScannableTime(cleaned)
+	if !ok {
+		return fmt.Errorf("scan time: unsupported value %q", cleaned)
+	}
+
+	s.value = parsed
+
+	return nil
 }
 
 func scanRawString(value any) (string, bool) {
@@ -45,25 +74,30 @@ func scanRawString(value any) (string, bool) {
 	}
 }
 
-func (s scannableTime) Value() (driver.Value, error) {
+//nolint:nilnil // driver.Valuer 계약상 SQL NULL은 (nil, nil)로만 표현할 수 있다.
+func (s *scannableTime) Value() (driver.Value, error) {
 	if s.value == nil {
 		return nil, nil
 	}
+
 	return s.value.UTC(), nil
 }
 
-func (s scannableTime) Ptr() *time.Time {
+func (s *scannableTime) Ptr() *time.Time {
 	if s.value == nil {
 		return nil
 	}
+
 	normalized := s.value.UTC()
+
 	return &normalized
 }
 
-func (s scannableTime) Require(field string) (time.Time, error) {
+func (s *scannableTime) Require(field string) (time.Time, error) {
 	if s.value == nil {
 		return time.Time{}, fmt.Errorf("%s is empty", field)
 	}
+
 	return s.value.UTC(), nil
 }
 
@@ -72,31 +106,61 @@ type scannableBool struct {
 }
 
 func (s *scannableBool) Scan(value any) error {
-	parsed, err := scanBoolValue(value)
-	if err != nil {
-		return err
+	if err := s.scanValue(value); err != nil {
+		return fmt.Errorf("scan bool value: %w", err)
 	}
-	s.value = parsed
+
 	return nil
 }
 
-func scanBoolValue(value any) (*bool, error) {
+func (s *scannableBool) scanValue(value any) error {
 	if value == nil {
-		return nil, nil
+		s.value = nil
+
+		return nil
 	}
+
 	if parsed, ok := scanBoolPrimitive(value); ok {
-		return parsed, nil
+		s.value = parsed
+
+		return nil
 	}
-	if raw, ok := scanRawString(value); ok {
-		return scanBoolString(raw)
+
+	raw, ok := scanRawString(value)
+	if !ok {
+		return fmt.Errorf("scan bool: unsupported type %T", value)
 	}
-	return nil, fmt.Errorf("scan bool: unsupported type %T", value)
+
+	if err := s.scanString(raw); err != nil {
+		return fmt.Errorf("scan bool string: %w", err)
+	}
+
+	return nil
+}
+
+func (s *scannableBool) scanString(raw string) error {
+	cleaned := strings.TrimSpace(raw)
+	if cleaned == "" {
+		s.value = nil
+
+		return nil
+	}
+
+	parsed, ok := parseScannableBool(cleaned)
+	if !ok {
+		return fmt.Errorf("scan bool: unsupported value %q", cleaned)
+	}
+
+	s.value = parsed
+
+	return nil
 }
 
 func scanBoolPrimitive(value any) (*bool, bool) {
 	if v, ok := value.(bool); ok {
 		return new(v), true
 	}
+
 	return scanBoolInteger(value)
 }
 
@@ -113,47 +177,41 @@ func scanBoolInteger(value any) (*bool, bool) {
 	}
 }
 
-func (s scannableBool) Ptr() *bool {
+func (s *scannableBool) Ptr() *bool {
 	if s.value == nil {
 		return nil
 	}
+
 	value := *s.value
+
 	return &value
 }
 
-func (s scannableBool) Value() (driver.Value, error) {
+//nolint:nilnil // driver.Valuer 계약상 SQL NULL은 (nil, nil)로만 표현할 수 있다.
+func (s *scannableBool) Value() (driver.Value, error) {
 	if s.value == nil {
 		return nil, nil
 	}
+
 	return *s.value, nil
 }
 
-func scanBoolString(raw string) (*bool, error) {
-	cleaned := strings.TrimSpace(raw)
-	if cleaned == "" {
-		return nil, nil
-	}
-
+func parseScannableBool(cleaned string) (*bool, bool) {
 	if parsed, err := strconv.ParseBool(cleaned); err == nil {
-		return new(parsed), nil
+		return new(parsed), true
 	}
 
 	switch cleaned {
 	case "0":
-		return new(false), nil
+		return new(false), true
 	case "1":
-		return new(true), nil
+		return new(true), true
 	default:
-		return nil, fmt.Errorf("scan bool: unsupported value %q", cleaned)
+		return nil, false
 	}
 }
 
-func parseScannableTime(raw string) (*time.Time, error) {
-	cleaned := strings.TrimSpace(raw)
-	if cleaned == "" {
-		return nil, nil
-	}
-
+func parseScannableTime(cleaned string) (*time.Time, bool) {
 	for _, layout := range []string{
 		time.RFC3339Nano,
 		time.RFC3339,
@@ -162,26 +220,25 @@ func parseScannableTime(raw string) (*time.Time, error) {
 	} {
 		parsed, err := time.Parse(layout, cleaned)
 		if err == nil {
-			normalized := parsed.UTC()
-			return &normalized, nil
+			return normalizedTimePtr(parsed), true
 		}
 	}
 
 	for _, layout := range []string{
 		"2006-01-02 15:04:05.999999999",
-		"2006-01-02 15:04:05",
+		time.DateTime,
 	} {
 		parsed, err := time.ParseInLocation(layout, cleaned, time.UTC)
 		if err == nil {
-			normalized := parsed.UTC()
-			return &normalized, nil
+			return normalizedTimePtr(parsed), true
 		}
 	}
 
-	return nil, fmt.Errorf("scan time: unsupported value %q", cleaned)
+	return nil, false
 }
 
 func normalizedTimePtr(value time.Time) *time.Time {
 	normalized := value.UTC()
+
 	return &normalized
 }

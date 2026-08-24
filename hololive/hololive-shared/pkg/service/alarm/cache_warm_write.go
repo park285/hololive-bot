@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 func writeWarmSet(ctx context.Context, cacheClient cache.Client, key string, members []string, scope string) error {
-	return writeWarmSetMap(ctx, cacheClient, map[string][]string{key: members}, scope)
+	if err := writeWarmSetMap(ctx, cacheClient, map[string][]string{key: members}, scope); err != nil {
+		return fmt.Errorf("write warm set map: %w", err)
+	}
+
+	return nil
 }
 
 func writeWarmSetMap(ctx context.Context, cacheClient cache.Client, setMembers map[string][]string, scope string) error {
@@ -18,10 +23,18 @@ func writeWarmSetMap(ctx context.Context, cacheClient cache.Client, setMembers m
 	}
 
 	if !supportsWarmSetBatch(cacheClient) {
-		return writeWarmSetMapSequential(ctx, cacheClient, setMembers, scope)
+		if err := writeWarmSetMapSequential(ctx, cacheClient, setMembers, scope); err != nil {
+			return fmt.Errorf("write warm set map sequential: %w", err)
+		}
+
+		return nil
 	}
 
-	return writeWarmSetMapBatch(ctx, cacheClient, setMembers, scope)
+	if err := writeWarmSetMapBatch(ctx, cacheClient, setMembers, scope); err != nil {
+		return fmt.Errorf("write warm set map batch: %w", err)
+	}
+
+	return nil
 }
 
 func writeWarmSetMapSequential(ctx context.Context, cacheClient cache.Client, setMembers map[string][]string, scope string) error {
@@ -30,24 +43,29 @@ func writeWarmSetMapSequential(ctx context.Context, cacheClient cache.Client, se
 		if len(dedupedMembers) == 0 {
 			continue
 		}
+
 		if _, err := cacheClient.SAdd(ctx, key, dedupedMembers); err != nil {
 			return fmt.Errorf("add %s for key %s: %w", scope, key, err)
 		}
 	}
+
 	return nil
 }
 
 func writeWarmSetMapBatch(ctx context.Context, cacheClient cache.Client, setMembers map[string][]string, scope string) error {
 	keys := make([]string, 0, len(setMembers))
 	cmds := make([]valkey.Completed, 0, len(setMembers))
+
 	for key, members := range setMembers {
 		dedupedMembers := compactUniqueStrings(members)
 		if len(dedupedMembers) == 0 {
 			continue
 		}
+
 		keys = append(keys, key)
 		cmds = append(cmds, cacheClient.Builder().Sadd().Key(key).Member(dedupedMembers...).Build())
 	}
+
 	if len(cmds) == 0 {
 		return nil
 	}
@@ -56,7 +74,12 @@ func writeWarmSetMapBatch(ctx context.Context, cacheClient cache.Client, setMemb
 	if len(results) != len(cmds) {
 		return fmt.Errorf("add %s: unexpected result count: %d", scope, len(results))
 	}
-	return verifyWarmSetBatchResults(results, keys, scope)
+
+	if err := verifyWarmSetBatchResults(results, keys, scope); err != nil {
+		return fmt.Errorf("verify warm set batch results: %w", err)
+	}
+
+	return nil
 }
 
 func verifyWarmSetBatchResults(results []valkey.ValkeyResult, keys []string, scope string) error {
@@ -65,6 +88,7 @@ func verifyWarmSetBatchResults(results []valkey.ValkeyResult, keys []string, sco
 			return fmt.Errorf("add %s for key %s: %w", scope, keys[i], err)
 		}
 	}
+
 	return nil
 }
 
@@ -76,6 +100,7 @@ func supportsWarmSetBatch(cacheClient cache.Client) (ok bool) {
 	}()
 
 	builder := cacheClient.Builder()
+
 	return builder != (valkey.Builder{})
 }
 
@@ -94,18 +119,24 @@ func writeWarmHash(ctx context.Context, cacheClient cache.Client, key string, va
 	for field, value := range values {
 		fields[field] = value
 	}
+
 	if err := cacheClient.HMSet(ctx, key, fields); err == nil {
 		return nil
 	}
 
-	return writeWarmHashFields(ctx, cacheClient, key, values)
+	if err := writeWarmHashFields(ctx, cacheClient, key, values); err != nil {
+		return fmt.Errorf("write warm hash fields: %w", err)
+	}
+
+	return nil
 }
 
 func writeWarmHashFields(ctx context.Context, cacheClient cache.Client, key string, values map[string]string) error {
 	for field, value := range values {
 		if setErr := cacheClient.HSet(ctx, key, field, value); setErr != nil {
-			return setErr
+			return fmt.Errorf("h set: %w", setErr)
 		}
 	}
+
 	return nil
 }

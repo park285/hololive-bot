@@ -21,17 +21,14 @@
 package membernews
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -74,11 +71,13 @@ func NewSourceValidator(
 	if err != nil {
 		return nil, fmt.Errorf("load x allowlist: %w", err)
 	}
+
 	for _, account := range accounts {
 		normalized := normalizeXAccount(account)
 		if normalized == "" {
 			continue
 		}
+
 		validator.xAllowlist[normalized] = struct{}{}
 		validator.ytHandles[normalized] = struct{}{}
 	}
@@ -88,21 +87,26 @@ func NewSourceValidator(
 
 func (v *SourceValidator) ValidateSourceURL(rawURL string) (model.SourceTier, string, error) {
 	if v == nil {
-		return model.SourceTierCommunity, "", fmt.Errorf("source validator is nil")
+		return model.SourceTierCommunity, "", errors.New("source validator is nil")
 	}
 
 	parsed, host, err := parseSourceURL(rawURL)
 	if err != nil {
-		return model.SourceTierCommunity, "", err
+		return model.SourceTierCommunity, "", fmt.Errorf("parse source URL: %w", err)
 	}
 
-	return v.classifySourceHost(host, parsed)
+	out1, out2, err := v.classifySourceHost(host, parsed)
+	if err != nil {
+		return out1, out2, fmt.Errorf("classify source host: %w", err)
+	}
+
+	return out1, out2, nil
 }
 
 func parseSourceURL(rawURL string) (*url.URL, string, error) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
-		return nil, "", fmt.Errorf("source url is empty")
+		return nil, "", errors.New("source url is empty")
 	}
 
 	parsed, err := url.Parse(trimmed)
@@ -117,24 +121,35 @@ func parseSourceURL(rawURL string) (*url.URL, string, error) {
 
 	host := normalizeHost(parsed.Hostname())
 	if host == "" {
-		return nil, "", fmt.Errorf("source host is empty")
+		return nil, "", errors.New("source host is empty")
 	}
 
 	return parsed, host, nil
 }
 
 func (v *SourceValidator) classifySourceHost(host string, parsed *url.URL) (model.SourceTier, string, error) {
-	if host == "x.com" || host == "twitter.com" {
-		return v.classifyXSource(parsed)
+	if isXHost(host) {
+		tier, sourceURL, err := v.classifyXSourceURL(parsed)
+		if err != nil {
+			return tier, sourceURL, fmt.Errorf("%w", err)
+		}
+
+		return tier, sourceURL, nil
 	}
 
 	if isYouTubeHost(host) {
-		return v.classifyYouTubeSource(parsed)
+		tier, sourceURL, err := v.classifyYouTubeSourceURL(parsed)
+		if err != nil {
+			return tier, sourceURL, fmt.Errorf("%w", err)
+		}
+
+		return tier, sourceURL, nil
 	}
 
 	if containsHost(v.officialDomains, host) {
 		return model.SourceTierOfficial, parsed.String(), nil
 	}
+
 	if containsHost(v.mediaDomains, host) {
 		return model.SourceTierMedia, parsed.String(), nil
 	}
@@ -142,14 +157,38 @@ func (v *SourceValidator) classifySourceHost(host string, parsed *url.URL) (mode
 	return model.SourceTierCommunity, parsed.String(), nil
 }
 
+func isXHost(host string) bool {
+	return host == "x.com" || host == "twitter.com"
+}
+
+func (v *SourceValidator) classifyXSourceURL(parsed *url.URL) (model.SourceTier, string, error) {
+	tier, sourceURL, err := v.classifyXSource(parsed)
+	if err != nil {
+		return tier, sourceURL, fmt.Errorf("classify x source: %w", err)
+	}
+
+	return tier, sourceURL, nil
+}
+
+func (v *SourceValidator) classifyYouTubeSourceURL(parsed *url.URL) (model.SourceTier, string, error) {
+	tier, sourceURL, err := v.classifyYouTubeSource(parsed)
+	if err != nil {
+		return tier, sourceURL, fmt.Errorf("classify youtube source: %w", err)
+	}
+
+	return tier, sourceURL, nil
+}
+
 func (v *SourceValidator) classifyXSource(parsed *url.URL) (model.SourceTier, string, error) {
 	account := extractXAccount(parsed.Path)
 	if account == "" {
-		return model.SourceTierCommunity, "", fmt.Errorf("x.com account not found")
+		return model.SourceTierCommunity, "", errors.New("x.com account not found")
 	}
+
 	if !v.isAllowedXAccount(account) {
 		return model.SourceTierCommunity, "", fmt.Errorf("x.com account not in allowlist: %s", account)
 	}
+
 	return model.SourceTierOfficial, parsed.String(), nil
 }
 
@@ -164,16 +203,18 @@ func (v *SourceValidator) HasCorroboration(text string) bool {
 		if err != nil {
 			continue
 		}
+
 		if tier == model.SourceTierOfficial || tier == model.SourceTierMedia {
 			return true
 		}
 	}
+
 	return false
 }
 
 func (v *SourceValidator) classifyYouTubeSource(parsed *url.URL) (model.SourceTier, string, error) {
 	if parsed == nil {
-		return model.SourceTierCommunity, "", fmt.Errorf("youtube url is nil")
+		return model.SourceTierCommunity, "", errors.New("youtube url is nil")
 	}
 
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
@@ -191,9 +232,11 @@ func (v *SourceValidator) isAllowedYouTubeSourcePath(segments []string) bool {
 		channelID := strings.TrimSpace(segments[1])
 		return channelID != "" && v.isAllowedYouTubeChannelID(channelID)
 	}
+
 	if len(segments) == 0 {
 		return false
 	}
+
 	return v.isAllowedYouTubeHandlePath(segments)
 }
 
@@ -214,7 +257,9 @@ func (v *SourceValidator) isAllowedXAccount(account string) bool {
 	if normalized == "" {
 		return false
 	}
+
 	_, ok := v.xAllowlist[normalized]
+
 	return ok
 }
 
@@ -223,7 +268,9 @@ func (v *SourceValidator) isAllowedYouTubeChannelID(channelID string) bool {
 	if normalized == "" {
 		return false
 	}
+
 	_, ok := v.ytChannelIDs[normalized]
+
 	return ok
 }
 
@@ -232,7 +279,9 @@ func (v *SourceValidator) isAllowedYouTubeHandle(handle string) bool {
 	if normalized == "" {
 		return false
 	}
+
 	_, ok := v.ytHandles[normalized]
+
 	return ok
 }
 
@@ -246,6 +295,7 @@ func (v *SourceValidator) seedOfficialYouTubeAllowlist(membersData domain.Member
 		if trimmed == "" {
 			continue
 		}
+
 		v.ytChannelIDs[trimmed] = struct{}{}
 	}
 }
@@ -268,81 +318,4 @@ func defaultMediaDomains() map[string]struct{} {
 		"animate.tv":        {},
 		"dengekionline.com": {},
 	}
-}
-
-func loadXAllowlist(path string) ([]string, error) {
-	// #nosec G304 -- allowlist 경로는 운영자가 제공한 config/env 입력이며 사용자 요청 데이터가 아니다.
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read allowlist file: %w", err)
-	}
-
-	var direct []string
-	if err := jsonv2.Unmarshal(bytes, &direct); err == nil {
-		return direct, nil
-	}
-
-	var wrapped struct {
-		Accounts         []string `json:"accounts"`
-		OfficialAccounts []string `json:"official_accounts"`
-	}
-	if err := jsonv2.Unmarshal(bytes, &wrapped); err != nil {
-		return nil, fmt.Errorf("unmarshal allowlist: %w", err)
-	}
-
-	if len(wrapped.Accounts) > 0 {
-		return wrapped.Accounts, nil
-	}
-	return wrapped.OfficialAccounts, nil
-}
-
-func normalizeHost(host string) string {
-	host = strings.ToLower(strings.TrimSpace(host))
-	host = strings.TrimPrefix(host, "www.")
-	return host
-}
-
-func isYouTubeHost(host string) bool {
-	switch host {
-	case "youtube.com", "m.youtube.com", "youtu.be":
-		return true
-	default:
-		return false
-	}
-}
-
-func containsHost(domainSet map[string]struct{}, host string) bool {
-	for domain := range domainSet {
-		d := normalizeHost(domain)
-		if host == d || strings.HasSuffix(host, "."+d) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeXAccount(raw string) string {
-	trimmed := strings.TrimSpace(strings.ToLower(raw))
-	trimmed = strings.TrimPrefix(trimmed, "@")
-	trimmed = strings.TrimPrefix(trimmed, "https://x.com/")
-	trimmed = strings.TrimPrefix(trimmed, "http://x.com/")
-	trimmed = strings.TrimPrefix(trimmed, "https://twitter.com/")
-	trimmed = strings.TrimPrefix(trimmed, "http://twitter.com/")
-	trimmed = strings.Trim(trimmed, "/")
-	return trimmed
-}
-
-func extractXAccount(path string) string {
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	if len(segments) == 0 {
-		return ""
-	}
-	account := normalizeXAccount(segments[0])
-	if account == "" {
-		return ""
-	}
-	if account == "home" || account == "explore" || account == "i" || account == "search" {
-		return ""
-	}
-	return account
 }

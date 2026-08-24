@@ -29,9 +29,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type AuthHandler struct {
@@ -155,6 +156,7 @@ func parseBearerToken(c *gin.Context) (string, bool) {
 func (h *AuthHandler) requireAuthService(c *gin.Context) bool {
 	if h == nil || h.auth == nil {
 		writeAuthError(c, http.StatusServiceUnavailable, authsvc.CodeInternal)
+
 		return false
 	}
 
@@ -163,6 +165,7 @@ func (h *AuthHandler) requireAuthService(c *gin.Context) bool {
 
 func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
 	var ae *authsvc.Error
+
 	if !stdErrors.As(err, &ae) {
 		return http.StatusInternalServerError, authsvc.CodeInternal
 	}
@@ -171,15 +174,19 @@ func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
 	if !ok {
 		return http.StatusInternalServerError, authsvc.CodeInternal
 	}
+
 	return status, ae.Code
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}
@@ -208,10 +215,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}
@@ -246,8 +256,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
 		writeAuthError(c, http.StatusUnauthorized, authsvc.CodeUnauthorized)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}
@@ -269,8 +281,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
 		writeAuthError(c, http.StatusUnauthorized, authsvc.CodeUnauthorized)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}
@@ -299,8 +313,10 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	token, ok := parseBearerToken(c)
 	if !ok {
 		writeAuthError(c, http.StatusUnauthorized, authsvc.CodeUnauthorized)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}
@@ -330,10 +346,13 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 func (h *AuthHandler) ResetRequest(c *gin.Context) {
 	var req resetRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}
@@ -356,10 +375,13 @@ func (h *AuthHandler) ResetRequest(c *gin.Context) {
 
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		writeAuthError(c, http.StatusBadRequest, authsvc.CodeInvalidInput)
+
 		return
 	}
+
 	if !h.requireAuthService(c) {
 		return
 	}

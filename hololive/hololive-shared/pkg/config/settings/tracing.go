@@ -21,6 +21,7 @@
 package settings
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -34,6 +35,7 @@ const (
 	hololiveOTLPGRPCEndpointEnv = "HOLOLIVE_OTLP_GRPC_ENDPOINT"
 	otlpEndpointEnv             = "OTEL_EXPORTER_OTLP_ENDPOINT"
 	otlpTracesEndpointEnv       = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+	otelSampleRateEnv           = "OTEL_SAMPLE_RATE"
 )
 
 const (
@@ -63,28 +65,31 @@ type TracingConfig struct {
 
 func loadTracingConfig(runtime tracingRuntime, collectorInstanceID string) (TracingConfig, error) {
 	if err := rejectRetiredOTLPEndpointEnv(); err != nil {
-		return TracingConfig{}, err
+		return TracingConfig{}, fmt.Errorf("reject retired OTLP endpoint env: %w", err)
 	}
 
 	enabledEnv, err := tracingEnabledEnv(runtime, collectorInstanceID)
 	if err != nil {
-		return TracingConfig{}, err
+		return TracingConfig{}, fmt.Errorf("tracing enabled env: %w", err)
 	}
 
 	enabled := false
+
 	if enabledEnv != "" {
 		enabled, err = sharedenv.BoolE(enabledEnv, false)
 		if err != nil {
-			return TracingConfig{}, err
+			return TracingConfig{}, fmt.Errorf("read bool env: %w", err)
 		}
 	}
+
 	insecure, err := sharedenv.BoolE("OTEL_EXPORTER_OTLP_INSECURE", false)
 	if err != nil {
-		return TracingConfig{}, err
+		return TracingConfig{}, fmt.Errorf("read bool env: %w", err)
 	}
-	sampleRate, err := sharedenv.FloatE("OTEL_SAMPLE_RATE", defaultOTELSampleRate)
+
+	sampleRate, err := sharedenv.FloatE(otelSampleRateEnv, defaultOTELSampleRate)
 	if err != nil {
-		return TracingConfig{}, err
+		return TracingConfig{}, fmt.Errorf("read float env: %w", err)
 	}
 
 	config := TracingConfig{
@@ -94,8 +99,9 @@ func loadTracingConfig(runtime tracingRuntime, collectorInstanceID string) (Trac
 		SampleRate: sampleRate,
 	}
 	if err := validateTracingConfig(config); err != nil {
-		return TracingConfig{}, err
+		return TracingConfig{}, fmt.Errorf("validate tracing config: %w", err)
 	}
+
 	return config, nil
 }
 
@@ -105,6 +111,7 @@ func rejectRetiredOTLPEndpointEnv() error {
 			return fmt.Errorf("%s is no longer supported; use %s", retiredEnv, hololiveOTLPGRPCEndpointEnv)
 		}
 	}
+
 	return nil
 }
 
@@ -115,10 +122,21 @@ func tracingEnabledEnv(runtime tracingRuntime, collectorInstanceID string) (stri
 	case tracingRuntimeAlarmWorker:
 		return tracingAlarmWorkerEnabledEnv, nil
 	case tracingRuntimeYouTubeCollector:
-		return tracingEnabledEnvForYouTubeCollector(collectorInstanceID)
+		out, err := youtubeCollectorTracingEnabledResult(collectorInstanceID)
+
+		return out, errors.Join(err)
 	default:
 		return "", fmt.Errorf("unsupported tracing runtime %d", runtime)
 	}
+}
+
+func youtubeCollectorTracingEnabledResult(collectorInstanceID string) (string, error) {
+	out, err := tracingEnabledEnvForYouTubeCollector(collectorInstanceID)
+	if err != nil {
+		return out, fmt.Errorf("tracing enabled env for youtube collector: %w", err)
+	}
+
+	return out, nil
 }
 
 func tracingEnabledEnvForYouTubeCollector(collectorInstanceID string) (string, error) {
@@ -126,17 +144,21 @@ func tracingEnabledEnvForYouTubeCollector(collectorInstanceID string) (string, e
 	if err == nil {
 		return enabledEnv, nil
 	}
+
 	if strings.TrimSpace(collectorInstanceID) == "" {
 		return tracingYouTubeCollectorEnabledEnv, nil
 	}
+
 	disabled, disabledErr := allYouTubeCollectorTracingDisabled()
 	if disabledErr != nil {
-		return "", disabledErr
+		return "", fmt.Errorf("all youtube collector tracing disabled: %w", disabledErr)
 	}
+
 	if disabled {
 		return "", nil
 	}
-	return "", err
+
+	return "", fmt.Errorf("youtube collector tracing enabled env: %w", err)
 }
 
 func allYouTubeCollectorTracingDisabled() (bool, error) {
@@ -149,12 +171,14 @@ func allYouTubeCollectorTracingDisabled() (bool, error) {
 	} {
 		enabled, err := sharedenv.BoolE(key, false)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("read bool env: %w", err)
 		}
+
 		if enabled {
 			return false, nil
 		}
 	}
+
 	return true, nil
 }
 
@@ -166,18 +190,22 @@ func youtubeCollectorTracingEnabledEnv(instanceID string) (string, error) {
 		"c": tracingYouTubeCollectorCEnabledEnv,
 		"d": tracingYouTubeCollectorDEnabledEnv,
 	}[normalized]
+
 	if !ok {
-		return "", fmt.Errorf("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of a, b, c, d, youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
+		return "", errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID must be one of a, b, c, d, youtube-collector-a, youtube-collector-b, youtube-collector-c, youtube-collector-d")
 	}
+
 	return enabledEnv, nil
 }
 
 func validateTracingConfig(config TracingConfig) error {
 	if math.IsNaN(config.SampleRate) || math.IsInf(config.SampleRate, 0) || config.SampleRate < 0 || config.SampleRate > 1 {
-		return fmt.Errorf("OTEL_SAMPLE_RATE must be between 0 and 1")
+		return errors.New("OTEL_SAMPLE_RATE must be between 0 and 1")
 	}
+
 	if config.Enabled && strings.TrimSpace(config.Endpoint) == "" {
 		return fmt.Errorf("%s is required when tracing is enabled", hololiveOTLPGRPCEndpointEnv)
 	}
+
 	return nil
 }

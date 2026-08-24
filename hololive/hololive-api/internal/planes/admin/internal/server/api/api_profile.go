@@ -24,12 +24,12 @@ import (
 	"context"
 	"log/slog"
 
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
+	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 type ProfileResponse struct {
@@ -71,6 +71,7 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	channelID := c.Query("channelId")
 	if channelID == "" {
 		sharedserver.RespondError(c, 400, "channelId is required", nil)
+
 		return
 	}
 
@@ -125,6 +126,7 @@ func (h *ProfileHandler) GetProfileByName(c *gin.Context) {
 	name := c.Query("name")
 	if name == "" {
 		sharedserver.RespondError(c, 400, "name is required", nil)
+
 		return
 	}
 

@@ -57,6 +57,7 @@ func (c *Client) browserSnapshotPageFetcher(fallback pageFetcher) (pageFetcher, 
 	if c.browserSnapshotFetcher != nil {
 		return c.browserSnapshotFetcher, FetcherEngineBrowserSnapshot
 	}
+
 	return fallback, FetcherEngineNetHTTP
 }
 
@@ -72,6 +73,7 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 	fetcher, engine := c.currentPageFetcherWithEngine()
 	started := time.Now()
 	statusCode := 0
+
 	defer func() {
 		observeScraperFetch(engine, statusCode, err, time.Since(started))
 	}()
@@ -79,22 +81,27 @@ func (c *Client) fetchPageOnce(ctx context.Context, pageURL string) (body string
 	resp, err := fetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header})
 	if err != nil {
 		c.observeProxyTransportFailure(err)
-		return "", err
+
+		return "", fmt.Errorf("fetch page: %w", err)
 	}
+
 	statusCode = resp.StatusCode
 
-	if err := c.handleFetchStatus(pageURL, resp); err != nil {
-		return "", err
+	if statusErr := c.handleFetchStatus(pageURL, resp); statusErr != nil {
+		return "", fmt.Errorf("handle fetch status: %w", statusErr)
 	}
 
 	bodyBytes, finalEngine, finalStatusCode, err := c.validatedFetchBody(ctx, req, engine, pageURL, resp)
+
 	engine = finalEngine
 	statusCode = finalStatusCode
+
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("validated fetch body: %w", err)
 	}
 
 	c.recordFetchSuccess()
+
 	return string(bodyBytes), nil
 }
 
@@ -108,13 +115,16 @@ func (c *Client) validatedFetchBody(
 	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
 		fallbackResp, fallbackUsed, fallbackErr := c.fetchBlockedBodyBrowserSnapshotFallback(ctx, req, engine, pageURL, err)
 		if !fallbackUsed {
-			return nil, engine, resp.StatusCode, err
+			return nil, engine, resp.StatusCode, fmt.Errorf("validate successful fetch body: %w", err)
 		}
+
 		if fallbackErr != nil {
-			return nil, engine, resp.StatusCode, fallbackErr
+			return nil, engine, resp.StatusCode, fmt.Errorf("fetch blocked body browser snapshot fallback: %w", fallbackErr)
 		}
+
 		return fallbackResp.Body, FetcherEngineBrowserSnapshot, fallbackResp.StatusCode, nil
 	}
+
 	return resp.Body, engine, resp.StatusCode, nil
 }
 
@@ -130,16 +140,20 @@ func (c *Client) fetchBlockedBodyBrowserSnapshotFallback(
 	}
 
 	observeScraperFetchFallback(engine, FetcherEngineBrowserSnapshot, cause)
+
 	resp, err := c.browserSnapshotFetcher.FetchPage(ctx, pageFetchRequest{URL: pageURL, Header: req.Header.Clone()})
 	if err != nil {
 		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
 	}
+
 	if err := c.handleFetchStatus(pageURL, resp); err != nil {
 		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
 	}
+
 	if err := validateSuccessfulFetchBody(pageURL, resp.FinalURL, resp.Body); err != nil {
 		return pageFetchResponse{}, true, fmt.Errorf("browser snapshot fallback after blocked body: %w", errors.Join(cause, err))
 	}
+
 	return resp, true, nil
 }
 
@@ -150,10 +164,12 @@ func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy 
 
 	resolvedPolicy := resolveFetchPolicy(policy...)
 	bucket := distributedBucketFromURL(pageURL)
+
 	if resolvedPolicy.AdmissionBlocking {
 		if err := c.rateLimiter.WaitWithBucket(ctx, bucket); err != nil {
 			return fmt.Errorf("rate limiter wait admission failed: %w", err)
 		}
+
 		return nil
 	}
 
@@ -161,14 +177,18 @@ func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy 
 	if err != nil {
 		return fmt.Errorf("rate limiter admission failed: %w", err)
 	}
+
 	if !decision.Allowed {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return newRateLimitAdmissionDeferredError(bucket, decision)
 	}
+
 	return nil
 }
 
 func (c *Client) recordFetchSuccess() {
 	c.backoffState.RecordSuccess()
+
 	if c.ProxyEnabled() {
 		c.proxyHealth.RecordSuccess()
 	}
@@ -178,9 +198,11 @@ func (c *Client) observeProxyTransportFailure(err error) {
 	if c == nil || c.proxyHealth == nil {
 		return
 	}
+
 	if !c.ProxyEnabled() || !isRetryableTransportError(err) {
 		return
 	}
+
 	if c.proxyHealth.RecordTransportFailure() {
 		slog.Warn("scraper proxy disabled after consecutive transport failures, falling back to direct",
 			"threshold", c.proxyFallbackPolicy.MaxConsecutiveFailures,
@@ -194,9 +216,13 @@ func (c *Client) handleFetchStatus(pageURL string, resp pageFetchResponse) error
 
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests:
-		return c.handleRateLimitedFetch(pageURL, resp.StatusCode, retryAfter)
+		c.recordRateLimitedFetch(pageURL, retryAfter)
+
+		return &httpStatusError{code: resp.StatusCode, retryAfter: retryAfter, cause: ErrRateLimited}
 	case http.StatusForbidden:
-		return c.handleForbiddenFetch(pageURL, resp.StatusCode, retryAfter)
+		c.recordForbiddenFetch(pageURL, retryAfter)
+
+		return &httpStatusError{code: resp.StatusCode, retryAfter: retryAfter, cause: ErrForbidden}
 	case http.StatusOK:
 		return nil
 	default:
@@ -204,26 +230,25 @@ func (c *Client) handleFetchStatus(pageURL string, resp pageFetchResponse) error
 	}
 }
 
-func (c *Client) handleRateLimitedFetch(pageURL string, statusCode int, retryAfter time.Duration) error {
+func (c *Client) recordRateLimitedFetch(pageURL string, retryAfter time.Duration) {
 	c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
+
 	cooldown := c.backoffState.HardCooldownRemaining()
 	slog.Warn("YouTube rate limit hit, entering cooldown",
 		"url", pageURL,
 		"cooldown", cooldown.Round(time.Second),
 		"retry_after", retryAfter.Round(time.Second))
-	return &httpStatusError{code: statusCode, retryAfter: retryAfter, cause: ErrRateLimited}
 }
 
-func (c *Client) handleForbiddenFetch(pageURL string, statusCode int, retryAfter time.Duration) error {
+func (c *Client) recordForbiddenFetch(pageURL string, retryAfter time.Duration) {
 	c.backoffState.RecordErrorWithSuggestedCooldown(retryAfter)
 	slog.Warn("YouTube access forbidden",
 		"url", pageURL,
 		"retry_after", retryAfter.Round(time.Second))
-	return &httpStatusError{code: statusCode, retryAfter: retryAfter, cause: ErrForbidden}
 }
 
 // MaxRetryAfterDuration: Retry-After 헤더가 비정상적으로 큰 값을 보낼 때 적용되는 상한.
-// channel-health/cooldown 계층에서 11일짜리 차단이 propagate되는 사고를 방지한다.
+// Channel-health/cooldown 계층에서 11일짜리 차단이 propagate되는 사고를 방지한다.
 const MaxRetryAfterDuration = 6 * time.Hour
 
 func parseRetryAfter(value string, now time.Time) time.Duration {
@@ -236,6 +261,7 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 		if seconds <= 0 {
 			return 0
 		}
+
 		return clampRetryAfter(time.Duration(seconds) * time.Second)
 	}
 
@@ -248,6 +274,7 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 	if delay <= 0 {
 		return 0
 	}
+
 	return clampRetryAfter(delay)
 }
 
@@ -255,6 +282,7 @@ func clampRetryAfter(delay time.Duration) time.Duration {
 	if delay > MaxRetryAfterDuration {
 		return MaxRetryAfterDuration
 	}
+
 	return delay
 }
 
@@ -264,8 +292,9 @@ func drainResponseBody(resp *http.Response) error {
 	}
 
 	if _, err := io.CopyN(io.Discard, resp.Body, 4*1024); err != nil && !errors.Is(err, io.EOF) {
-		return err
+		return fmt.Errorf("drain response body: %w", err)
 	}
+
 	return nil
 }
 
@@ -275,15 +304,19 @@ func validateSuccessfulFetchBody(pageURL, finalURL string, body []byte) error {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return fmt.Errorf("%w: %s", ErrEmptyResponse, pageURL)
 	}
+
 	if finalURLLooksBlocked(finalURL) {
 		return fmt.Errorf("%w: %s -> %s", ErrBlockedResponse, pageURL, finalURL)
 	}
+
 	if bodyLooksBlockedByYouTube(body) {
 		slog.Warn("YouTube block-page signature found in fetch body without a blocked final URL; rejecting parser input without global cooldown",
 			"url", pageURL,
 			"final_url", finalURL)
+
 		return fmt.Errorf("%w: %s -> %s", ErrBlockedBodySignature, pageURL, finalURL)
 	}
+
 	return nil
 }
 
@@ -292,17 +325,21 @@ func finalURLLooksBlocked(finalURL string) bool {
 	if finalURL == "" {
 		return false
 	}
+
 	parsed, err := url.Parse(finalURL)
 	if err != nil {
 		return false
 	}
+
 	host := strings.ToLower(parsed.Hostname())
 	path := strings.ToLower(parsed.Path)
+
 	for _, marker := range blockedRedirectHosts {
 		if host == marker.host && (marker.pathPrefix == "" || strings.HasPrefix(path, marker.pathPrefix)) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -322,12 +359,15 @@ func bodyLooksBlockedByYouTube(body []byte) bool {
 	if len(sample) > successfulBodySignatureScanLimit {
 		sample = sample[:successfulBodySignatureScanLimit]
 	}
+
 	lower := strings.ToLower(string(sample))
+
 	for _, signature := range blockedResponseSignatures {
 		if strings.Contains(lower, signature) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -340,6 +380,7 @@ var blockedResponseSignatures = []string{
 
 func applyScraperHeaders(req *http.Request, snap ua.HeaderSnapshot) {
 	req.Header.Set("User-Agent", snap.UserAgent)
+
 	if snap.SecChUA != "" {
 		req.Header.Set("Sec-CH-UA", snap.SecChUA)
 		req.Header.Set("Sec-CH-UA-Mobile", "?0")

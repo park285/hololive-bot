@@ -1,9 +1,8 @@
 package youtubedispatch
 
 import (
-	"strings"
-
 	jsonv2 "encoding/json/v2"
+	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -23,6 +22,7 @@ func validateOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 
 func validateVideoOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 	raw, ok := decodeOutboxPayloadMap(item.Payload)
+
 	return ok &&
 		payloadString(raw, "title") != "" &&
 		(payloadString(raw, "video_id") != "" ||
@@ -32,6 +32,7 @@ func validateVideoOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 
 func validateCommunityOutboxPayload(item *domain.YouTubeNotificationOutbox) bool {
 	raw, ok := decodeOutboxPayloadMap(item.Payload)
+
 	return ok &&
 		(payloadString(raw, "content_text") != "" || payloadString(raw, "url") != "") &&
 		(payloadString(raw, "canonical_post_id") != "" ||
@@ -41,6 +42,7 @@ func validateCommunityOutboxPayload(item *domain.YouTubeNotificationOutbox) bool
 
 func decodeOutboxPayloadMap(payload string) (map[string]any, bool) {
 	var raw map[string]any
+
 	if err := jsonv2.Unmarshal([]byte(payload), &raw); err != nil {
 		return nil, false
 	}

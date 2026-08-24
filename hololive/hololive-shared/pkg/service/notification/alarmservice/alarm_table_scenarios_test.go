@@ -25,10 +25,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
 type alarmCacheScenario struct {
@@ -229,9 +230,9 @@ func TestAlarmService_AddRemoveCacheScenarios_TableDriven(t *testing.T) {
 	t.Parallel()
 
 	baseReq := domain.AddAlarmRequest{
-		RoomID:     "room-1",
-		UserID:     "user-1",
-		ChannelID:  "UC_TEST",
+		RoomID:     testRoomID,
+		UserID:     testUserID,
+		ChannelID:  testUCChannelID,
 		MemberName: "테스트 멤버",
 		RoomName:   "테스트 방",
 		UserName:   "테스트 사용자",
@@ -309,8 +310,8 @@ func TestAlarmPersistence_RoundTripScenarios_TableDriven(t *testing.T) {
 					StartScheduled: &start,
 				}
 
-				require.NoError(t, service.MarkUpcomingEventNotified(ctx, "room-1", "channel-1", stream))
-				requireUpcomingEventMarker(t, service, ctx, "room-1", "channel-1", stream)
+				require.NoError(t, service.MarkUpcomingEventNotified(ctx, testRoomID, "channel-1", stream))
+				requireUpcomingEventMarker(ctx, t, service, testRoomID, "channel-1", stream)
 			},
 		},
 	}

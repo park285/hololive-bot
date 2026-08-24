@@ -26,10 +26,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type ScheduleCommand struct {
@@ -55,22 +56,38 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 
 	rawCommandToken := popRawScheduleCommandToken(params)
 	memberName, ok := scheduleMemberName(params)
+
 	if !ok {
 		if shouldSuppressSchedulePrompt(cmdCtx, rawCommandToken) {
 			return nil
 		}
 
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrScheduleNeedMemberName)
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrScheduleNeedMemberName); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	days := scheduleDays(params)
-	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), cmdCtx.Room, memberName, "일정")
+	if err := c.executeMemberSchedule(ctx, cmdCtx.Room, memberName, days); err != nil {
+		return fmt.Errorf("execute member schedule: %w", err)
+	}
+
+	return nil
+}
+
+func (c *ScheduleCommand) executeMemberSchedule(ctx context.Context, room, memberName string, days int) error {
+	channel, err := handlercore.FindActiveMemberWithCandidatesOrError(ctx, c.Deps(), room, memberName, "일정")
+
 	if memberLookupHandled(err) {
 		return nil
 	}
+
 	if err != nil {
 		return fmt.Errorf("failed to find member: %w", err)
 	}
+
 	if channel == nil {
 		return nil
 	}
@@ -79,12 +96,20 @@ func (c *ScheduleCommand) Execute(ctx context.Context, cmdCtx *domain.CommandCon
 
 	streams, err := c.Deps().Holodex.GetChannelSchedule(ctx, channel.ID, hours, true)
 	if err != nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrScheduleQueryFailed)
+		if err := c.Deps().SendError(ctx, room, messaging.ErrScheduleQueryFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
 	message := c.Deps().Formatter.ChannelSchedule(ctx, channel, streams, days)
 
-	return c.Deps().SendMessage(ctx, cmdCtx.Room, message)
+	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func popRawScheduleCommandToken(params map[string]any) string {
@@ -95,7 +120,7 @@ func popRawScheduleCommandToken(params map[string]any) string {
 }
 
 func scheduleMemberName(params map[string]any) (string, bool) {
-	memberName, ok := params["member"].(string)
+	memberName, ok := params[paramMember].(string)
 	if !ok || memberName == "" {
 		return "", false
 	}

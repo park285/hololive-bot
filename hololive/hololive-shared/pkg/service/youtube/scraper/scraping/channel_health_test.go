@@ -4,12 +4,14 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/stretchr/testify/require"
+
+	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 type channelHealthTestStore struct {
@@ -24,34 +26,45 @@ func newChannelHealthTestStore() *channelHealthTestStore {
 func (s *channelHealthTestStore) Get(_ context.Context, key string, dest any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	raw, ok := s.values[key]
 	if !ok {
 		return errors.New("not found")
 	}
-	return jsonv2.Unmarshal(raw, dest)
+
+	if err := jsonv2.Unmarshal(raw, dest); err != nil {
+		return fmt.Errorf("unmarshal: %w", err)
+	}
+
+	return nil
 }
 
 func (s *channelHealthTestStore) Set(_ context.Context, key string, value any, _ time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	raw, err := jsonv2.Marshal(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal: %w", err)
 	}
+
 	s.values[key] = raw
+
 	return nil
 }
 
 func (s *channelHealthTestStore) Del(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	delete(s.values, key)
+
 	return nil
 }
 
 func TestChannelHealthStoreRecordsParserDriftCooldownPerSource(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
 	store := NewChannelHealthStore(newChannelHealthTestStore(), &ChannelHealthPolicy{
 		Enforce:         true,
 		TTL:             time.Hour,
@@ -65,17 +78,19 @@ func TestChannelHealthStoreRecordsParserDriftCooldownPerSource(t *testing.T) {
 	}, now)
 
 	require.Equal(t, 10*time.Minute, delay)
+
 	wait, skip := store.ShouldSkip(ctx, "UC_TEST", FailureSourceHTML, now.Add(time.Minute))
 	require.True(t, skip)
 	require.Equal(t, 9*time.Minute, wait)
+
 	rssWait, rssSkip := store.ShouldSkip(ctx, "UC_TEST", FailureSourceRSS, now.Add(time.Minute))
 	require.False(t, rssSkip)
 	require.Zero(t, rssWait)
 }
 
 func TestChannelHealthStoreDefaultPolicyEnforcesCooldown(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
 	store := NewChannelHealthStore(newChannelHealthTestStore(), nil)
 
 	delay := store.RecordFailure(ctx, "UC_TEST", FailureDetail{Reason: FailureReasonParserDrift, Source: FailureSourceHTML}, now)
@@ -87,8 +102,8 @@ func TestChannelHealthStoreDefaultPolicyEnforcesCooldown(t *testing.T) {
 }
 
 func TestClientDefaultChannelHealthPolicyEnforcesCooldown(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
 	client := NewClient(WithStateStore(newChannelHealthTestStore()))
 
 	delay := client.channelHealth.RecordFailure(ctx, "UC_TEST", FailureDetail{Reason: FailureReasonParserDrift, Source: FailureSourceHTML}, now)
@@ -100,8 +115,8 @@ func TestClientDefaultChannelHealthPolicyEnforcesCooldown(t *testing.T) {
 }
 
 func TestChannelHealthStoreDryRunRecordsWithoutSkipping(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
 	store := NewChannelHealthStore(newChannelHealthTestStore(), &ChannelHealthPolicy{
 		ParserDriftBase: 10 * time.Minute,
 		ParserDriftMax:  time.Hour,
@@ -119,8 +134,8 @@ func TestChannelHealthStoreDryRunRecordsWithoutSkipping(t *testing.T) {
 }
 
 func TestChannelHealthStoreIgnoresRateLimitedGlobalFailures(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
 	policy := DefaultChannelHealthPolicy()
 	store := NewChannelHealthStore(newChannelHealthTestStore(), &policy)
 
@@ -131,13 +146,14 @@ func TestChannelHealthStoreIgnoresRateLimitedGlobalFailures(t *testing.T) {
 	}, now)
 
 	require.Zero(t, delay)
+
 	_, skip := store.ShouldSkip(ctx, "UC_TEST", FailureSourceHTML, now.Add(time.Minute))
 	require.False(t, skip)
 }
 
 func TestChannelHealthStoreSuccessClearsCooldown(t *testing.T) {
-	ctx := context.Background()
-	now := time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC)
+	ctx := t.Context()
+	now := time.Date(2026, time.May, 13, 12, 0, 0, 0, time.UTC)
 	store := NewChannelHealthStore(newChannelHealthTestStore(), &ChannelHealthPolicy{
 		Enforce:         true,
 		TTL:             time.Hour,
@@ -154,7 +170,7 @@ func TestChannelHealthStoreSuccessClearsCooldown(t *testing.T) {
 }
 
 func TestRecordParserDriftReturnsRetryDelayOnFirstFailure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	client := NewClient(
 		WithStateStore(newChannelHealthTestStore()),
 		WithChannelHealthPolicy(&ChannelHealthPolicy{
@@ -167,6 +183,7 @@ func TestRecordParserDriftReturnsRetryDelayOnFirstFailure(t *testing.T) {
 	err := client.recordParserDrift(ctx, "recent_videos", "extract_yt_initial_data", "UC_TEST", "https://example.test", FailureSourceHTML, "<html>", errors.New("missing marker"))
 
 	var cooldown *CooldownError
+
 	require.ErrorAs(t, err, &cooldown)
 	require.Equal(t, 10*time.Minute, cooldown.RetryDelay())
 	require.True(t, parser.IsParserDriftError(err))

@@ -24,6 +24,7 @@ func (m *StreamMapper) MapStreamsResponse(rawStreams []StreamRaw) []*domain.Stre
 			streams = append(streams, stream)
 		}
 	}
+
 	return streams
 }
 
@@ -46,8 +47,10 @@ func (m *StreamMapper) MapStreamResponse(raw *StreamRaw) *domain.Stream {
 		m.logger.Warn("Stream missing ChannelID - skipping",
 			slog.String("stream_id", raw.ID),
 			slog.String("title", raw.Title))
+
 		return nil
 	}
+
 	stream.ChannelID = channelID
 
 	if raw.Channel != nil && raw.Channel.Name != "" {
@@ -73,6 +76,7 @@ func (m *StreamMapper) MapChannelsResponse(rawChannels []ChannelRaw) []*domain.C
 	for i, raw := range rawChannels {
 		channels[i] = m.MapChannelResponse(&raw)
 	}
+
 	return channels
 }
 
@@ -94,10 +98,13 @@ func (m *StreamMapper) MapChannelResponse(raw *ChannelRaw) *domain.Channel {
 func (m *StreamMapper) applyDefaultURLs(raw *StreamRaw, stream *domain.Stream) {
 	if stream.Thumbnail == nil || *stream.Thumbnail == "" {
 		thumbURL := fmt.Sprintf("https://i.ytimg.com/vi/%s/mqdefault.jpg", raw.ID)
+
 		stream.Thumbnail = &thumbURL
 	}
+
 	if stream.Link == nil || *stream.Link == "" {
 		linkURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", raw.ID)
+
 		stream.Link = &linkURL
 	}
 }
@@ -106,9 +113,11 @@ func resolveStreamChannelID(raw *StreamRaw) (string, bool) {
 	if raw.ChannelID != nil && *raw.ChannelID != "" {
 		return *raw.ChannelID, true
 	}
+
 	if raw.Channel != nil && raw.Channel.ID != "" {
 		return raw.Channel.ID, true
 	}
+
 	return "", false
 }
 
@@ -116,9 +125,11 @@ func ParseRFC3339Ptr(value *string) *time.Time {
 	if value == nil || *value == "" {
 		return nil
 	}
+
 	parsed, err := time.Parse(time.RFC3339, *value)
 	if err != nil {
 		return nil
 	}
+
 	return &parsed
 }

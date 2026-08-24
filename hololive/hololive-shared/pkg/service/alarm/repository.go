@@ -45,7 +45,7 @@ func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 	}
 }
 
-// room_id + channel_id 기준 unique (방 기반 시스템)
+// 방 기반 시스템이므로 room_id + channel_id 기준으로 unique하다.
 func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	alarmTypes := alarm.AlarmTypes
 	if len(alarmTypes) == 0 {
@@ -58,6 +58,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	if err != nil {
 		return fmt.Errorf("encode alarm types: %w", err)
 	}
+
 	_, err = r.pool.Exec(ctx, query,
 		alarm.RoomID, alarm.UserID, alarm.ChannelID,
 		alarm.MemberName, alarm.RoomName, alarm.UserName,
@@ -66,24 +67,29 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	if err != nil {
 		return fmt.Errorf("add alarm: %w", err)
 	}
+
 	return nil
 }
 
 func (r *Repository) Remove(ctx context.Context, roomID, channelID string) error {
 	query := mustSQL("repository_0082_02.sql")
+
 	_, err := r.pool.Exec(ctx, query, roomID, channelID)
 	if err != nil {
 		return fmt.Errorf("remove alarm: %w", err)
 	}
+
 	return nil
 }
 
 func (r *Repository) ClearByRoom(ctx context.Context, roomID string) (int64, error) {
 	query := mustSQL("repository_0091_03.sql")
+
 	cmdTag, err := r.pool.Exec(ctx, query, roomID)
 	if err != nil {
 		return 0, fmt.Errorf("clear alarms: %w", err)
 	}
+
 	return cmdTag.RowsAffected(), nil
 }
 
@@ -96,7 +102,12 @@ func (r *Repository) FindByRoom(ctx context.Context, roomID string) ([]*domain.A
 	}
 	defer rows.Close()
 
-	return r.scanAlarms(rows)
+	out, err := r.scanAlarms(rows)
+	if err != nil {
+		return out, fmt.Errorf("scan alarms: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*domain.Alarm, error) {
@@ -108,7 +119,12 @@ func (r *Repository) FindByChannel(ctx context.Context, channelID string) ([]*do
 	}
 	defer rows.Close()
 
-	return r.scanAlarms(rows)
+	out, err := r.scanAlarms(rows)
+	if err != nil {
+		return out, fmt.Errorf("scan alarms: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
@@ -120,20 +136,29 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 	}
 	defer rows.Close()
 
-	return r.scanAlarms(rows)
+	out, err := r.scanAlarms(rows)
+	if err != nil {
+		return out, fmt.Errorf("scan alarms: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	query := mustSQL("repository_0155_07.sql")
 
 	var memberName string
+
 	err := r.pool.QueryRow(ctx, query, channelID).Scan(&memberName)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
+
 	if err != nil {
 		return "", fmt.Errorf("get member name: %w", err)
 	}
+
 	return memberName, nil
 }
 
@@ -146,7 +171,12 @@ func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 	}
 	defer rows.Close()
 
-	return r.scanAlarms(rows)
+	out, err := r.scanAlarms(rows)
+	if err != nil {
+		return out, fmt.Errorf("scan alarms: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
@@ -159,17 +189,21 @@ func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
 	defer rows.Close()
 
 	channelIDs := make([]string, 0, 64)
+
 	for rows.Next() {
 		var channelID string
+
 		if err := rows.Scan(&channelID); err != nil {
 			return nil, fmt.Errorf("scan channel id: %w", err)
 		}
+
 		channelIDs = append(channelIDs, channelID)
 	}
 
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate channel ids: %w", rowsErr)
 	}
+
 	return channelIDs, nil
 }
 
@@ -183,40 +217,49 @@ func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, 
 	defer rows.Close()
 
 	result := make(map[string]string)
+
 	for rows.Next() {
 		var channelID, memberName string
+
 		if err := rows.Scan(&channelID, &memberName); err != nil {
 			return nil, fmt.Errorf("scan member name: %w", err)
 		}
+
 		result[channelID] = memberName
 	}
 
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate member names: %w", rowsErr)
 	}
+
 	return result, nil
 }
 
 func (r *Repository) scanAlarms(rows pgx.Rows) ([]*domain.Alarm, error) {
 	var alarms []*domain.Alarm
+
 	for rows.Next() {
 		alarm, err := scanAlarmRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan alarm row: %w", err)
 		}
+
 		alarms = append(alarms, alarm)
 	}
 
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate alarms: %w", rowsErr)
 	}
+
 	return alarms, nil
 }
 
 func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
-	var alarm domain.Alarm
-	var memberName, roomName, userName *string
-	var alarmTypesStr *string
+	var (
+		alarm                          domain.Alarm
+		memberName, roomName, userName *string
+		alarmTypesStr                  *string
+	)
 
 	err := rows.Scan(
 		&alarm.ID, &alarm.RoomID, &alarm.UserID, &alarm.ChannelID,
@@ -227,9 +270,11 @@ func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
 	}
 
 	applyAlarmNullableFields(&alarm, memberName, roomName, userName)
+
 	if err := applyAlarmTypes(&alarm, alarmTypesStr); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("apply alarm types: %w", err)
 	}
+
 	return &alarm, nil
 }
 
@@ -237,9 +282,11 @@ func applyAlarmNullableFields(alarm *domain.Alarm, memberName, roomName, userNam
 	if memberName != nil {
 		alarm.MemberName = *memberName
 	}
+
 	if roomName != nil {
 		alarm.RoomName = *roomName
 	}
+
 	if userName != nil {
 		alarm.UserName = *userName
 	}
@@ -251,8 +298,10 @@ func applyAlarmTypes(alarm *domain.Alarm, alarmTypesStr *string) error {
 			return fmt.Errorf("scan alarm types: %w", err)
 		}
 	}
+
 	if len(alarm.AlarmTypes) == 0 {
 		alarm.AlarmTypes = domain.DefaultAlarmTypes
 	}
+
 	return nil
 }

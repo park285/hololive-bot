@@ -20,25 +20,34 @@ const maxCheckpointCursorBytes = 16384
 // 전제 위에서만 호출된다. 단독 호출 시 해당 상한은 검증되지 않는다.
 func validatePublishBatch(input *PublishBatchInput) error {
 	if err := validatePublishBatchObservations(input); err != nil {
-		return err
+		return fmt.Errorf("validate publish batch observations: %w", err)
 	}
+
 	bindings, err := observationCheckpointBindings(input.Observations)
 	if err != nil {
-		return err
+		return fmt.Errorf("observation checkpoint bindings: %w", err)
 	}
-	return validatePublishBatchCheckpoints(input, bindings)
+
+	if err := validatePublishBatchCheckpoints(input, bindings); err != nil {
+		return fmt.Errorf("validate publish batch checkpoints: %w", err)
+	}
+
+	return nil
 }
 
 func validatePublishBatchCounts(input *PublishBatchInput) error {
 	if len(input.Observations) < 1 || len(input.Observations) > MaxPublishBatchSize {
 		return fmt.Errorf("%w: observation count must be between 1 and %d", ErrInvalidEnvelope, MaxPublishBatchSize)
 	}
+
 	if len(input.Checkpoint.Entries) != len(input.Observations) || len(input.Checkpoint.Entries) > MaxCheckpointCount {
 		return fmt.Errorf("%w: checkpoint count must equal observation count and be at most %d", ErrInvalidEnvelope, MaxCheckpointCount)
 	}
+
 	if input.Checkpoint.CollectionLatency < 0 || input.Checkpoint.CollectionLatency > MaxCollectionLatency {
 		return fmt.Errorf("%w: collection latency is outside the accepted range", ErrInvalidEnvelope)
 	}
+
 	return nil
 }
 
@@ -46,9 +55,10 @@ func validatePublishBatchObservations(input *PublishBatchInput) error {
 	seen := make(map[string]struct{}, len(input.Observations))
 	for i := range input.Observations {
 		if err := validatePublishBatchObservation(input, i, seen); err != nil {
-			return err
+			return fmt.Errorf("validate publish batch observation: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -57,14 +67,18 @@ func validatePublishBatchObservation(input *PublishBatchInput, index int, seen m
 	if observation.Lease != input.Lease {
 		return fmt.Errorf("%w: observation %d lease proof mismatch", ErrInvalidEnvelope, index)
 	}
+
 	if err := observation.Validate(); err != nil {
 		return fmt.Errorf("%w: observation %d: %w", ErrInvalidEnvelope, index, err)
 	}
+
 	identity := observationIdentity(observation)
 	if _, ok := seen[identity]; ok {
 		return fmt.Errorf("%w: duplicate batch identity", ErrInvalidEnvelope)
 	}
+
 	seen[identity] = struct{}{}
+
 	return nil
 }
 
@@ -75,22 +89,27 @@ func observationCheckpointBindings(observations []contract.Envelope) (map[checkp
 		if _, ok := bindings[binding]; ok {
 			return nil, fmt.Errorf("%w: duplicate observation checkpoint identity", ErrInvalidEnvelope)
 		}
+
 		bindings[binding] = struct{}{}
 	}
+
 	return bindings, nil
 }
 
 func validatePublishBatchCheckpoints(input *PublishBatchInput, bindings map[checkpointBinding]struct{}) error {
 	checkpointKeys := make(map[string]struct{}, len(input.Checkpoint.Entries))
 	matched := make(map[checkpointBinding]struct{}, len(input.Checkpoint.Entries))
+
 	for i := range input.Checkpoint.Entries {
 		if err := validatePublishCheckpoint(&input.Checkpoint.Entries[i], i, bindings, checkpointKeys, matched); err != nil {
-			return err
+			return fmt.Errorf("validate publish checkpoint: %w", err)
 		}
 	}
+
 	if len(matched) != len(bindings) {
 		return fmt.Errorf("%w: checkpoint entries are missing a batch observation binding", ErrInvalidEnvelope)
 	}
+
 	return nil
 }
 
@@ -102,12 +121,18 @@ func validatePublishCheckpoint(
 	matched map[checkpointBinding]struct{},
 ) error {
 	if err := validateCheckpointMetadata(entry, index); err != nil {
-		return err
+		return fmt.Errorf("validate checkpoint metadata: %w", err)
 	}
+
 	if err := validateCheckpointFields(entry, index); err != nil {
-		return err
+		return fmt.Errorf("validate checkpoint fields: %w", err)
 	}
-	return bindPublishCheckpoint(entry, index, bindings, checkpointKeys, matched)
+
+	if err := bindPublishCheckpoint(entry, index, bindings, checkpointKeys, matched); err != nil {
+		return fmt.Errorf("bind publish checkpoint: %w", err)
+	}
+
+	return nil
 }
 
 func validateCheckpointMetadata(entry *CheckpointEntry, index int) error {
@@ -115,14 +140,20 @@ func validateCheckpointMetadata(entry *CheckpointEntry, index int) error {
 		!entry.Continuity.Valid() || entry.LastScheduledFor.IsZero() {
 		return fmt.Errorf("%w: checkpoint %d metadata is invalid", ErrInvalidEnvelope, index)
 	}
+
 	return nil
 }
 
 func validateCheckpointFields(entry *CheckpointEntry, index int) error {
 	if err := validateCheckpointTextFields(entry, index); err != nil {
-		return err
+		return fmt.Errorf("validate checkpoint text fields: %w", err)
 	}
-	return validateCheckpointCursor(entry, index)
+
+	if err := validateCheckpointCursor(entry, index); err != nil {
+		return fmt.Errorf("validate checkpoint cursor: %w", err)
+	}
+
+	return nil
 }
 
 func validateCheckpointTextFields(entry *CheckpointEntry, index int) error {
@@ -131,9 +162,10 @@ func validateCheckpointTextFields(entry *CheckpointEntry, index int) error {
 		"scope sha256": entry.ScopeSHA256, "evidence sha256": entry.LastEvidenceSHA256,
 	} {
 		if err := validateCheckpointTextField(name, value, index); err != nil {
-			return err
+			return fmt.Errorf("validate checkpoint text field: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -142,15 +174,20 @@ func validateCheckpointTextField(name, value string, index int) error {
 		if !lowercaseHexToken(value) {
 			return fmt.Errorf("%w: checkpoint %d %s is invalid", ErrInvalidEnvelope, index, name)
 		}
+
 		return nil
 	}
+
 	limit := 512
+
 	if name == "subject key" {
 		limit = 256
 	}
+
 	if err := validateText(name, value, limit); err != nil {
 		return fmt.Errorf("%w: checkpoint %d: %w", ErrInvalidEnvelope, index, err)
 	}
+
 	return nil
 }
 
@@ -158,6 +195,7 @@ func validateCheckpointCursorSize(cursor []byte, index int) error {
 	if len(cursor) > maxCheckpointCursorBytes {
 		return fmt.Errorf("%w: checkpoint %d cursor is too large", ErrInvalidEnvelope, index)
 	}
+
 	return nil
 }
 
@@ -165,10 +203,13 @@ func validateCheckpointCursor(entry *CheckpointEntry, index int) error {
 	if len(entry.Cursor) == 0 {
 		return nil
 	}
+
 	var cursor map[string]any
+
 	if err := jsonv2.Unmarshal(entry.Cursor, &cursor); err != nil || cursor == nil {
 		return fmt.Errorf("%w: checkpoint %d cursor must be an object", ErrInvalidEnvelope, index)
 	}
+
 	return nil
 }
 
@@ -183,15 +224,21 @@ func bindPublishCheckpoint(
 	if _, ok := checkpointKeys[key]; ok {
 		return fmt.Errorf("%w: duplicate checkpoint identity", ErrInvalidEnvelope)
 	}
+
 	checkpointKeys[key] = struct{}{}
+
 	binding := checkpointBindingForEntry(entry)
+
 	if _, ok := bindings[binding]; !ok {
 		return fmt.Errorf("%w: checkpoint %d is not bound to a batch observation", ErrInvalidEnvelope, index)
 	}
+
 	if _, ok := matched[binding]; ok {
 		return fmt.Errorf("%w: checkpoint %d duplicates a batch observation binding", ErrInvalidEnvelope, index)
 	}
+
 	matched[binding] = struct{}{}
+
 	return nil
 }
 
@@ -242,10 +289,13 @@ func completeCollectionJob(
 	errorCode string,
 ) error {
 	var code any
+
 	if errorCode != "" {
 		code = errorCode
 	}
+
 	var jobKey string
+
 	err := tx.QueryRow(
 		ctx,
 		mustSQL("repository_job_complete_0011_11.sql"),
@@ -256,12 +306,15 @@ func completeCollectionJob(
 		proof.ScheduledFor,
 		code,
 	).Scan(&jobKey)
+
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrCollectionFenceLost
 	}
+
 	if err != nil {
 		return fmt.Errorf("publish source observation batch: complete collection job: %w", err)
 	}
+
 	return nil
 }
 

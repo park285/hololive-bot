@@ -35,9 +35,11 @@ func TestFoldForSeeMore(t *testing.T) {
 	if !strings.HasPrefix(folded, "헤더 라인\n") {
 		t.Fatalf("first line not preserved: %q", folded[:30])
 	}
+
 	if got := strings.Count(folded, KakaoZeroWidthSpace); got != KakaoSeeMorePadding {
 		t.Errorf("padding count = %d, want %d", got, KakaoSeeMorePadding)
 	}
+
 	if !strings.HasSuffix(folded, longRest) {
 		t.Error("body after padding not preserved")
 	}

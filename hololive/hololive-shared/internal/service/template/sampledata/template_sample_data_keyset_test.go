@@ -38,16 +38,20 @@ func TestGetAllTemplateKeysReturnsIndependentSlice(t *testing.T) {
 	if len(first) == 0 {
 		t.Fatal("GetAllTemplateKeys() returned no keys")
 	}
+
 	original := first[0]
+
 	first[0] = "mutated.by.caller"
 
 	refreshed := GetAllTemplateKeys()
 	if len(refreshed) == 0 {
 		t.Fatal("GetAllTemplateKeys() returned no keys after caller mutation")
 	}
+
 	if got := refreshed[0]; got != original {
 		t.Fatalf("caller mutation leaked into the package list: got %q, want %q", got, original)
 	}
+
 	if !IsValidTemplateKey(original) {
 		t.Fatalf("IsValidTemplateKey(%q) = false after caller mutation", original)
 	}

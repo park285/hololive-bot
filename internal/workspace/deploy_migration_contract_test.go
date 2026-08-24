@@ -25,6 +25,7 @@ func TestComposeRedeployRunsMigrationBeforeAppRuntimeCutover(t *testing.T) {
 
 	migrateIndex := strings.Index(script, "run_db_migration_before_cutover")
 	upIndex := strings.Index(script, `echo "[UP] ${TARGET}"`)
+
 	if migrateIndex < 0 || upIndex < 0 || migrateIndex > upIndex {
 		t.Fatal("compose redeploy script must run migration before target up")
 	}

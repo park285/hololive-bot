@@ -29,12 +29,14 @@ import (
 
 func TestProvideYouTubeRateLimiter_DisabledDistributed_AllowsNilCache(t *testing.T) {
 	ytCfg := settings.DefaultYouTubeOperationalConfig()
+
 	ytCfg.DistributedRateLimit.Enabled = false
 
 	limiter, err := ProvideYouTubeRateLimiterWithConfig(&ytCfg, nil, nil)
 	if err != nil {
 		t.Fatalf("ProvideYouTubeRateLimiterWithConfig() error = %v, want nil", err)
 	}
+
 	if limiter == nil {
 		t.Fatal("ProvideYouTubeRateLimiterWithConfig() limiter is nil")
 	}
@@ -42,15 +44,18 @@ func TestProvideYouTubeRateLimiter_DisabledDistributed_AllowsNilCache(t *testing
 
 func TestProvideYouTubeRateLimiter_EnabledDistributed_RequiresCache(t *testing.T) {
 	ytCfg := settings.DefaultYouTubeOperationalConfig()
+
 	ytCfg.DistributedRateLimit.Enabled = true
 
 	limiter, err := ProvideYouTubeRateLimiterWithConfig(&ytCfg, nil, nil)
 	if err == nil {
 		t.Fatal("ProvideYouTubeRateLimiterWithConfig() expected error, got nil")
 	}
+
 	if limiter != nil {
 		t.Fatal("ProvideYouTubeRateLimiterWithConfig() limiter must be nil on error")
 	}
+
 	if !strings.Contains(err.Error(), "initialize youtube distributed rate limiter") {
 		t.Fatalf("ProvideYouTubeRateLimiterWithConfig() error = %q, want contains %q", err.Error(), "initialize youtube distributed rate limiter")
 	}

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
 )
@@ -21,6 +22,7 @@ func NewInternalRouteRegistrar(apiKey string, alarmCRUD domain.AlarmCRUD, logger
 		internalAlarm := router.Group("")
 		internalAlarm.Use(middleware.APIKeyAuthMiddleware(apiKey))
 		alarmAPI.RegisterInternalRoutes(internalAlarm)
+
 		return nil
 	}
 }

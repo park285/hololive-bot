@@ -22,6 +22,7 @@ package apiservice
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -29,7 +30,6 @@ import (
 	"sync"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/kapu/hololive-shared/internal/service/fallback"
 	ytcontract "github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
@@ -79,6 +79,7 @@ func channelStatsCacheKey(channelID string) string {
 
 func (ys *serviceImpl) cachedChannelStatistics(ctx context.Context, channelIDs []string) (cached map[string]*ytcontract.ChannelStats, missingIDs []string) {
 	stats := make(map[string]*ytcontract.ChannelStats, len(channelIDs))
+
 	if ys.cache == nil {
 		return stats, slices.Clone(channelIDs)
 	}
@@ -90,6 +91,7 @@ func (ys *serviceImpl) cachedChannelStatistics(ctx context.Context, channelIDs [
 			missing = append(missing, channelID)
 			continue
 		}
+
 		stats[channelID] = channelStats
 	}
 
@@ -103,10 +105,12 @@ func (ys *serviceImpl) cachedChannelStats(ctx context.Context, channelID string)
 	}
 
 	var stats ytcontract.ChannelStats
+
 	if err := jsonv2.Unmarshal([]byte(raw), &stats); err != nil {
 		ys.logger.Debug("Channel statistics cache decode failed",
 			slog.String("channel", channelID),
 			slog.Any("error", err))
+
 		return nil, false
 	}
 
@@ -135,6 +139,7 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 	result := channelStatsScrapeResult{
 		stats: make(map[string]*ytcontract.ChannelStats),
 	}
+
 	var mu sync.Mutex
 
 	scraperCtx, scraperCancel := context.WithTimeout(
@@ -143,14 +148,17 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 	)
 	defer scraperCancel()
 
-	primary := fallback.RunPrimary(scraperCtx, channelIDs, fallback.FetchPlan[string, struct{}]{Parallelism: 5}, func(gctx context.Context, channelID string) error {
+	primary := fallback.FetchPlan[string, struct{}]{Parallelism: 5}.RunPrimary(scraperCtx, channelIDs, func(gctx context.Context, channelID string) error {
 		stats, err := ys.scrapeSingleChannelStatistics(gctx, channelID)
 		if err != nil {
-			return err
+			return fmt.Errorf("scrape single channel statistics: %w", err)
 		}
+
 		mu.Lock()
+
 		result.stats[channelID] = stats
 		mu.Unlock()
+
 		return nil
 	})
 	fallback.ObservePrimaryPhase("youtube", "channel_statistics", len(channelIDs), primary.Succeeded, len(primary.Failed))
@@ -161,6 +169,7 @@ func (ys *serviceImpl) scrapeChannelStatistics(ctx context.Context, channelIDs [
 		slog.Int("total", len(channelIDs)),
 		slog.Int("scraped", result.scraped),
 		slog.Int("failed", len(result.failedIDs)))
+
 	return result
 }
 
@@ -169,17 +178,25 @@ func (ys *serviceImpl) scrapeSingleChannelStatistics(ctx context.Context, channe
 	if err != nil {
 		return nil, fmt.Errorf("scraper channel stats for %s: %w", channelID, err)
 	}
-	return ys.channelStatsFromScraped(channelID, stats)
+
+	out, err := ys.channelStatsFromScraped(channelID, stats)
+	if err != nil {
+		return nil, fmt.Errorf("channel stats from scraped: %w", err)
+	}
+
+	return out, nil
 }
 
 func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *parser.ChannelStats) (*ytcontract.ChannelStats, error) {
 	if stats == nil {
 		return nil, fmt.Errorf("scraper channel stats for %s: empty result", channelID)
 	}
+
 	subscriberCount, videoCount, viewCount, err := validatedScrapedChannelCounts(channelID, stats)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validated scraped channel counts: %w", err)
 	}
+
 	return &ytcontract.ChannelStats{
 		ChannelID:       stats.ChannelID,
 		ChannelTitle:    ys.resolveChannelTitle(channelID, stats.Handle),
@@ -193,16 +210,19 @@ func (ys *serviceImpl) channelStatsFromScraped(channelID string, stats *parser.C
 func validatedScrapedChannelCounts(channelID string, stats *parser.ChannelStats) (subscriberCount, videoCount, viewCount uint64, err error) {
 	subscriberCount, err = validatedScrapedChannelCount(channelID, "subscriber", stats.SubscriberCount)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, fmt.Errorf("validated scraped channel count: %w", err)
 	}
+
 	videoCount, err = validatedScrapedChannelCount(channelID, "video", stats.VideoCount)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, fmt.Errorf("validated scraped channel count: %w", err)
 	}
+
 	viewCount, err = validatedScrapedChannelCount(channelID, "view", stats.ViewCount)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, fmt.Errorf("validated scraped channel count: %w", err)
 	}
+
 	return subscriberCount, videoCount, viewCount, nil
 }
 
@@ -211,6 +231,7 @@ func validatedScrapedChannelCount(channelID, label string, value int64) (uint64,
 	if !ok {
 		return 0, fmt.Errorf("scraper channel stats for %s: negative %s count %d", channelID, label, value)
 	}
+
 	return count, nil
 }
 
@@ -219,6 +240,7 @@ func (ys *serviceImpl) resolveChannelTitle(channelID, fallbackTitle string) stri
 	if channelTitle != "" {
 		return channelTitle
 	}
+
 	return fallbackTitle
 }
 
@@ -226,5 +248,6 @@ func nonNegativeYouTubeCount(value int64) (uint64, bool) {
 	if value < 0 {
 		return 0, false
 	}
+
 	return uint64(value), true
 }

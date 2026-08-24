@@ -36,8 +36,8 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 			t.Fatal("BuildRuntime() expected error for nil config")
 		}
 
-		if err.Error() != "config must not be nil" {
-			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "config must not be nil")
+		if err.Error() != "normalize runtime build inputs: config must not be nil" {
+			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "normalize runtime build inputs: config must not be nil")
 		}
 
 		if runtime != nil {
@@ -51,8 +51,8 @@ func TestBuildRuntime_FailFastOnNilInputs(t *testing.T) {
 			t.Fatal("BuildRuntime() expected error for nil logger")
 		}
 
-		if err.Error() != "logger must not be nil" {
-			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "logger must not be nil")
+		if err.Error() != "normalize runtime build inputs: logger must not be nil" {
+			t.Fatalf("BuildRuntime() error = %q, want %q", err.Error(), "normalize runtime build inputs: logger must not be nil")
 		}
 
 		if runtime != nil {

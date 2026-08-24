@@ -30,11 +30,13 @@ func SplitChannelIDs(raw string) []string {
 
 	parts := strings.Split(raw, ",")
 	ids := make([]string, 0, len(parts))
+
 	for _, part := range parts {
 		channelID := strings.TrimSpace(part)
 		if channelID == "" {
 			continue
 		}
+
 		ids = append(ids, channelID)
 	}
 

@@ -21,7 +21,6 @@
 package ua
 
 import (
-	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -30,7 +29,7 @@ import (
 
 func TestRotatingProvider_Headers_SessionTTL(t *testing.T) {
 	provider := NewRotatingProvider(StrategySessionTTL, 100*time.Millisecond)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	snap1 := provider.Headers(ctx)
 	if snap1.UserAgent == "" {
@@ -42,12 +41,14 @@ func TestRotatingProvider_Headers_SessionTTL(t *testing.T) {
 	if snap1.UserAgent != snap2.UserAgent {
 		t.Errorf("SessionTTL strategy should return same UA within TTL: got %q and %q", snap1.UserAgent, snap2.UserAgent)
 	}
+
 	if snap1.SecChUA != snap2.SecChUA {
 		t.Errorf("SessionTTL strategy should return same SecChUA within TTL: got %q and %q", snap1.SecChUA, snap2.SecChUA)
 	}
 
 	// TTL 만료 후 - 다른 스냅샷 반환 가능
 	time.Sleep(150 * time.Millisecond)
+
 	snap3 := provider.Headers(ctx)
 	if snap3.UserAgent == "" {
 		t.Error("UserAgent should not be empty after TTL expiry")
@@ -56,14 +57,16 @@ func TestRotatingProvider_Headers_SessionTTL(t *testing.T) {
 
 func TestRotatingProvider_Headers_PerRequest(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	seen := make(map[string]bool)
+
 	for range 100 {
 		snap := provider.Headers(ctx)
 		if snap.UserAgent == "" {
 			t.Error("UserAgent should not be empty")
 		}
+
 		seen[snap.UserAgent] = true
 	}
 
@@ -74,25 +77,30 @@ func TestRotatingProvider_Headers_PerRequest(t *testing.T) {
 
 func TestRotatingProvider_ChromeUA_Format(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Chrome UA Reduction: Chrome/{major}.0.0.0 패턴
 	chromePattern := regexp.MustCompile(`Chrome/\d+\.0\.0\.0`)
 
 	hasChrome := false
+
 	for range 50 {
 		snap := provider.Headers(ctx)
 		if strings.Contains(snap.UserAgent, "Chrome/") && !strings.Contains(snap.UserAgent, "Edg/") {
 			hasChrome = true
+
 			if !strings.HasPrefix(snap.UserAgent, "Mozilla/5.0 (") {
 				t.Errorf("Chrome UA should start with 'Mozilla/5.0 (': got %q", snap.UserAgent)
 			}
+
 			if !chromePattern.MatchString(snap.UserAgent) {
 				t.Errorf("Chrome UA should follow reduction format Chrome/{major}.0.0.0: got %q", snap.UserAgent)
 			}
+
 			if !strings.Contains(snap.UserAgent, "AppleWebKit/537.36") {
 				t.Errorf("Chrome UA should contain AppleWebKit: got %q", snap.UserAgent)
 			}
+
 			break
 		}
 	}
@@ -104,7 +112,7 @@ func TestRotatingProvider_ChromeUA_Format(t *testing.T) {
 
 func TestRotatingProvider_FirefoxUA_Format(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 200 {
 		snap := provider.Headers(ctx)
@@ -112,9 +120,11 @@ func TestRotatingProvider_FirefoxUA_Format(t *testing.T) {
 			if !strings.Contains(snap.UserAgent, "Gecko/20100101") {
 				t.Errorf("Firefox UA should contain 'Gecko/20100101': got %q", snap.UserAgent)
 			}
+
 			if !strings.Contains(snap.UserAgent, "rv:") {
 				t.Errorf("Firefox UA should contain 'rv:': got %q", snap.UserAgent)
 			}
+
 			return
 		}
 	}
@@ -124,7 +134,7 @@ func TestRotatingProvider_FirefoxUA_Format(t *testing.T) {
 
 func TestRotatingProvider_SafariUA_MacOnly(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 200 {
 		snap := provider.Headers(ctx)
@@ -132,6 +142,7 @@ func TestRotatingProvider_SafariUA_MacOnly(t *testing.T) {
 			if !strings.Contains(snap.UserAgent, "Macintosh;") {
 				t.Errorf("Safari UA should be macOS only: got %q", snap.UserAgent)
 			}
+
 			return
 		}
 	}
@@ -142,16 +153,18 @@ func TestRotatingProvider_SafariUA_MacOnly(t *testing.T) {
 func TestStaticProvider_Headers(t *testing.T) {
 	expectedUA := "TestBot/1.0"
 	provider := NewStaticProvider(expectedUA)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 10 {
 		snap := provider.Headers(ctx)
 		if snap.UserAgent != expectedUA {
 			t.Errorf("StaticProvider should always return same UA: expected %q, got %q", expectedUA, snap.UserAgent)
 		}
+
 		if snap.SecChUA != "" {
 			t.Errorf("StaticProvider SecChUA should be empty: got %q", snap.SecChUA)
 		}
+
 		if snap.SecChUAPlatform != "" {
 			t.Errorf("StaticProvider SecChUAPlatform should be empty: got %q", snap.SecChUAPlatform)
 		}
@@ -160,7 +173,7 @@ func TestStaticProvider_Headers(t *testing.T) {
 
 func TestRotatingProvider_Headers_Atomicity(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 100 {
 		snap := provider.Headers(ctx)
@@ -174,6 +187,7 @@ func TestRotatingProvider_Headers_Atomicity(t *testing.T) {
 			if snap.SecChUA == "" {
 				t.Errorf("Chromium UA should have SecChUA: UA=%q", snap.UserAgent)
 			}
+
 			if snap.SecChUAPlatform == "" {
 				t.Errorf("Chromium UA should have SecChUAPlatform: UA=%q", snap.UserAgent)
 			}
@@ -186,7 +200,7 @@ func TestRotatingProvider_Headers_Atomicity(t *testing.T) {
 
 func TestRotatingProvider_EdgeClientHints(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 200 {
 		snap := provider.Headers(ctx)
@@ -194,9 +208,11 @@ func TestRotatingProvider_EdgeClientHints(t *testing.T) {
 			if !strings.Contains(snap.SecChUA, "Microsoft Edge") {
 				t.Errorf("Edge UA should have 'Microsoft Edge' in SecChUA: got %q", snap.SecChUA)
 			}
+
 			if strings.Contains(snap.SecChUA, "Google Chrome") {
 				t.Errorf("Edge UA should NOT have 'Google Chrome' in SecChUA: got %q", snap.SecChUA)
 			}
+
 			return
 		}
 	}
@@ -206,7 +222,7 @@ func TestRotatingProvider_EdgeClientHints(t *testing.T) {
 
 func TestRotatingProvider_NonChromium_NoClientHints(t *testing.T) {
 	provider := NewRotatingProvider(StrategyPerRequest, 0)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 200 {
 		snap := provider.Headers(ctx)
@@ -214,9 +230,11 @@ func TestRotatingProvider_NonChromium_NoClientHints(t *testing.T) {
 			if snap.SecChUA != "" {
 				t.Errorf("Firefox should not have SecChUA: got %q", snap.SecChUA)
 			}
+
 			if snap.SecChUAPlatform != "" {
 				t.Errorf("Firefox should not have SecChUAPlatform: got %q", snap.SecChUAPlatform)
 			}
+
 			return
 		}
 	}
@@ -267,9 +285,11 @@ func TestPickWeighted_Distribution(t *testing.T) {
 	if aRatio < 0.65 || aRatio > 0.75 {
 		t.Errorf("A ratio should be ~0.70, got %.2f", aRatio)
 	}
+
 	if bRatio < 0.15 || bRatio > 0.25 {
 		t.Errorf("B ratio should be ~0.20, got %.2f", bRatio)
 	}
+
 	if cRatio < 0.05 || cRatio > 0.15 {
 		t.Errorf("C ratio should be ~0.10, got %.2f", cRatio)
 	}

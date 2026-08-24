@@ -4,17 +4,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures(t *testing.T) {
-	karingErr := &iris.HTTPError{StatusCode: 502, URL: "/karing/content-list"}
+	karingErr := &iris.HTTPError{StatusCode: 502, URL: testKaringContentListPath}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
+		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 	}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := Runner{
@@ -42,7 +43,7 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures
 	karingErr := &iris.HTTPError{StatusCode: 503}
 
 	consumer := &alarmDispatchRunnerTestConsumer{
-		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope("room-1", nil)}},
+		batches: [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}},
 	}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := Runner{
@@ -64,7 +65,7 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures
 func TestPrepareDispatchFailureUsesHTTPRetryAfterHintWhenLongerThanAttemptDelay(t *testing.T) {
 	for _, statusCode := range []int{503, 429} {
 		t.Run((&iris.HTTPError{StatusCode: statusCode}).Error(), func(t *testing.T) {
-			envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+			envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 			cause := &iris.HTTPError{StatusCode: statusCode, RetryAfter: 12 * time.Second}
 			startedAt := time.Now().UTC()
 
@@ -81,7 +82,7 @@ func TestPrepareDispatchFailureUsesHTTPRetryAfterHintWhenLongerThanAttemptDelay(
 }
 
 func TestNextAlarmDispatchRetryKeepsAttemptDelayWhenHTTPRetryAfterHintIsShorter(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", &domain.AlarmQueueRetryMetadata{Attempt: 1})
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, &domain.AlarmQueueRetryMetadata{Attempt: 1})
 	cause := &iris.HTTPError{StatusCode: 503, RetryAfter: time.Second}
 	startedAt := time.Now().UTC()
 
@@ -94,7 +95,7 @@ func TestNextAlarmDispatchRetryKeepsAttemptDelayWhenHTTPRetryAfterHintIsShorter(
 }
 
 func TestNextAlarmDispatchRetryClampsExcessiveHTTPRetryAfter(t *testing.T) {
-	envelope := alarmDispatchRunnerTestEnvelope("room-1", nil)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 	cause := &iris.HTTPError{StatusCode: 503, RetryAfter: 24 * time.Hour}
 	startedAt := time.Now().UTC()
 
@@ -109,6 +110,7 @@ func TestNextAlarmDispatchRetryClampsExcessiveHTTPRetryAfter(t *testing.T) {
 
 func assertRetryNextVisibleDelay(t *testing.T, retry *domain.AlarmQueueRetryMetadata, startedAt time.Time, delay time.Duration) {
 	t.Helper()
+
 	nextVisibleAt, err := time.Parse(time.RFC3339Nano, retry.NextVisibleAt)
 	require.NoError(t, err)
 	assert.False(t, nextVisibleAt.Before(startedAt.Add(delay)), "NextVisibleAt %s should be at least %s after start", nextVisibleAt, delay)

@@ -30,17 +30,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// aclStore는 ACL 영속 저장소 연산을 추상화한다.
-//
-// 직접 DB 호출을 메서드로 추출하여
-// Service가 구현체(pgx)에 의존하지 않고 인터페이스에 의존하도록 한다.
-type aclStore interface {
+type aclSettingStore interface {
 	// GetSetting은 key에 해당하는 설정 값을 반환한다. 없으면 found=false.
 	GetSetting(ctx context.Context, key string) (value string, found bool, err error)
 	// CreateSetting은 새 설정 행을 삽입한다.
 	CreateSetting(ctx context.Context, key, value string) error
 	// UpsertSetting은 key 기준으로 값을 삽입하거나 갱신한다.
 	UpsertSetting(ctx context.Context, key, value string) error
+}
+
+type aclRoomStore interface {
 	// ListRooms는 모든 ACL 방 행을 반환한다.
 	ListRooms(ctx context.Context) ([]Room, error)
 	// CreateRoom은 (roomID, listType) 방 행을 삽입한다.
@@ -50,6 +49,15 @@ type aclStore interface {
 	// CountRooms는 roomID(+ 선택적 listType)에 해당하는 행 수를 센다.
 	// listType이 빈 문자열이면 listType 조건 없이 roomID만으로 센다.
 	CountRooms(ctx context.Context, roomID, listType string) (int64, error)
+}
+
+// aclStore는 ACL 영속 저장소 연산을 추상화한다.
+//
+// 직접 DB 호출을 메서드로 추출하여
+// Service가 구현체(pgx)에 의존하지 않고 인터페이스에 의존하도록 한다.
+type aclStore interface {
+	aclSettingStore
+	aclRoomStore
 }
 
 // pgxACLStore는 *pgxpool.Pool + pgxscan 기반 aclStore 구현체다.

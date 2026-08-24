@@ -18,14 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package httpserver
+package domain_test
 
-import "net/http"
-
-func EnableH2C(srv *http.Server) {
-	if srv.Protocols == nil {
-		srv.Protocols = new(http.Protocols)
-	}
-	srv.Protocols.SetHTTP1(true)
-	srv.Protocols.SetUnencryptedHTTP2(true)
-}
+const (
+	testChannelID       = "UC_test"
+	testCelebrationDate = "2026-05-26"
+	testName            = "테스트"
+	testNameMarine      = "호쇼 마린"
+	testNamePekora      = "페코라"
+)

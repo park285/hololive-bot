@@ -3,15 +3,15 @@ package youtubedispatch
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	"github.com/stretchr/testify/require"
+
+	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 type fakeExecOnlyDB struct {
@@ -33,6 +33,7 @@ func (f *fakeExecOnlyDB) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row
 
 type fakeBatchDB struct {
 	fakeExecOnlyDB
+
 	batches []*pgx.Batch
 }
 
@@ -49,7 +50,9 @@ func (r *fakeBatchResults) Exec() (pgconn.CommandTag, error) {
 	if r.remaining <= 0 {
 		return pgconn.CommandTag{}, errors.New("no queued statement")
 	}
+
 	r.remaining--
+
 	return pgconn.NewCommandTag("UPDATE 1"), nil
 }
 
@@ -66,15 +69,17 @@ func (r *fakeBatchResults) Close() error {
 }
 
 func newBatchTestStatusUpdater(db any) *StatusUpdater {
-	return newStatusUpdater(db, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{})
+	return newStatusUpdater(db, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
 }
 
 func batchTestTokens(count int) []outboxLockToken {
 	lockedAt := time.Now().UTC().Add(-time.Minute)
 	tokens := make([]outboxLockToken, 0, count)
+
 	for i := range count {
 		tokens = append(tokens, outboxLockToken{id: int64(i + 1), lockedAt: &lockedAt})
 	}
+
 	return tokens
 }
 
@@ -86,7 +91,7 @@ func TestMarkSentBatchIfLockedUsesSingleBatchRoundTrip(t *testing.T) {
 	db := &fakeBatchDB{}
 	updater := newBatchTestStatusUpdater(db)
 
-	updater.markSentBatchIfLocked(context.Background(), batchTestTokens(3))
+	updater.markSentBatchIfLocked(t.Context(), batchTestTokens(3))
 
 	require.Len(t, db.batches, 1, "expected one SendBatch round trip")
 	require.Equal(t, 3, db.batches[0].Len(), "all live tokens must be queued in the batch")
@@ -105,7 +110,7 @@ func TestMarkSentBatchIfLockedSkipsTokensWithoutLock(t *testing.T) {
 		{id: 7, lockedAt: nil},
 		{id: 11, lockedAt: &lockedAt},
 	}
-	updater.markSentBatchIfLocked(context.Background(), tokens)
+	updater.markSentBatchIfLocked(t.Context(), tokens)
 
 	require.Len(t, db.batches, 1)
 	require.Equal(t, 1, db.batches[0].Len(), "only tokens with id and lock are batched")
@@ -117,7 +122,7 @@ func TestMarkSentBatchIfLockedFallsBackToPerRowExecWithoutBatchSupport(t *testin
 	db := &fakeExecOnlyDB{}
 	updater := newBatchTestStatusUpdater(db)
 
-	updater.markSentBatchIfLocked(context.Background(), batchTestTokens(3))
+	updater.markSentBatchIfLocked(t.Context(), batchTestTokens(3))
 
 	require.Len(t, db.execCalls, 3, "non-batch querier keeps the per-row path")
 }

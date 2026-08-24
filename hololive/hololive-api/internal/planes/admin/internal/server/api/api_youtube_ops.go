@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/analytics"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 const (
@@ -34,7 +35,7 @@ type YouTubeCommunityShortsOpsResponse struct {
 	WindowEnd          time.Time                          `json:"windowEnd"`
 	WindowHours        int                                `json:"windowHours"`
 	ObservedAtBasis    string                             `json:"observedAtBasis"`
-	SlaThresholdMillis int64                              `json:"slaThresholdMillis"`
+	SLAThresholdMillis int64                              `json:"slaThresholdMillis"`
 	Overview           YouTubeCommunityShortsOpsOverview  `json:"overview"`
 	Channels           []YouTubeCommunityShortsOpsChannel `json:"channels"`
 }
@@ -100,6 +101,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 
 	if h == nil || h.Handler == nil || h.communityShortsOps == nil {
 		sharedserver.RespondError(c, 503, "YouTube community/shorts ops repository not available", nil)
+
 		return
 	}
 
@@ -110,6 +112,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	if err != nil {
 		h.safeLogger().Error("Failed to load YouTube community/shorts ops posts", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to load YouTube community/shorts ops posts", nil)
+
 		return
 	}
 
@@ -117,6 +120,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	if err != nil {
 		h.safeLogger().Error("Failed to build YouTube community/shorts channel summaries", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel summaries", nil)
+
 		return
 	}
 
@@ -127,6 +131,7 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	if err != nil {
 		h.safeLogger().Error("Failed to build YouTube community/shorts latency summaries", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts latency summaries", nil)
+
 		return
 	}
 
@@ -134,27 +139,41 @@ func (h *StatsHandler) GetYouTubeCommunityShortsOps(c *gin.Context) {
 	if err != nil {
 		h.safeLogger().Error("Failed to build YouTube community/shorts channel latency summaries", slog.Any("error", err))
 		sharedserver.RespondError(c, 500, "Failed to build YouTube community/shorts channel latency summaries", nil)
+
 		return
 	}
 
 	memberNames := h.loadYouTubeCommunityShortsMemberNames(ctx)
 	latencySummary := firstYouTubeCommunityShortsOpsLatencySummary(latencySummaries)
 
-	ginjson.Respond(c, 200, YouTubeCommunityShortsOpsResponse{
+	ginjson.Respond(c, 200, buildYouTubeCommunityShortsOpsResponse(
+		now, windowStart, channelSummaries, channelLatencySummaries, memberNames, &latencySummary,
+	))
+}
+
+func buildYouTubeCommunityShortsOpsResponse(
+	now, windowStart time.Time,
+	channelSummaries []analytics.ChannelPostDeliverySummary,
+	channelLatencySummaries map[string]youtubeCommunityShortsChannelLatencySummary,
+	memberNames map[string]string,
+	latencySummary *analytics.PostLatencyPeriodSummary,
+) YouTubeCommunityShortsOpsResponse {
+	return YouTubeCommunityShortsOpsResponse{
 		Status:             "ok",
 		GeneratedAt:        now,
 		WindowStart:        windowStart,
 		WindowEnd:          now,
 		WindowHours:        youtubeCommunityShortsOpsWindowHours,
 		ObservedAtBasis:    "COALESCE(actual_published_at, detected_at)",
-		SlaThresholdMillis: youtubeCommunityShortsSLAThresholdMillis,
-		Overview:           buildYouTubeCommunityShortsOpsOverview(channelSummaries, &latencySummary),
+		SLAThresholdMillis: youtubeCommunityShortsSLAThresholdMillis,
+		Overview:           buildYouTubeCommunityShortsOpsOverview(channelSummaries, latencySummary),
 		Channels:           buildYouTubeCommunityShortsOpsChannels(channelSummaries, channelLatencySummaries, memberNames),
-	})
+	}
 }
 
 func (h *StatsHandler) loadYouTubeCommunityShortsMemberNames(ctx context.Context) map[string]string {
 	memberNames := map[string]string{}
+
 	if h == nil || h.Handler == nil || h.memberIndexLoader == nil {
 		return memberNames
 	}
@@ -162,6 +181,7 @@ func (h *StatsHandler) loadYouTubeCommunityShortsMemberNames(ctx context.Context
 	members, err := h.memberIndexLoader(ctx)
 	if err != nil {
 		h.safeLogger().Warn("Failed to load member index for YouTube community/shorts ops", slog.Any("error", err))
+
 		return memberNames
 	}
 
@@ -176,10 +196,12 @@ func addYouTubeCommunityShortsMemberName(memberNames map[string]string, member *
 	if member == nil {
 		return
 	}
+
 	channelID := strings.TrimSpace(member.ChannelID)
 	if channelID == "" {
 		return
 	}
+
 	memberNames[channelID] = youtubeCommunityShortsMemberName(member, channelID)
 }
 
@@ -188,6 +210,7 @@ func youtubeCommunityShortsMemberName(member *domain.Member, channelID string) s
 	if memberName == "" {
 		return channelID
 	}
+
 	return memberName
 }
 
@@ -205,6 +228,7 @@ func firstYouTubeCommunityShortsOpsLatencySummary(
 	if len(latencySummaries) == 0 {
 		return analytics.PostLatencyPeriodSummary{}
 	}
+
 	return latencySummaries[0]
 }
 
@@ -215,6 +239,7 @@ func buildYouTubeCommunityShortsOpsOverview(
 	if latencySummary == nil {
 		latencySummary = &analytics.PostLatencyPeriodSummary{}
 	}
+
 	overview := YouTubeCommunityShortsOpsOverview{
 		ChannelCount:               int64(len(channelSummaries)),
 		PendingPostCount:           latencySummary.PendingPostCount,
@@ -249,6 +274,7 @@ func buildYouTubeCommunityShortsOpsChannels(
 	for i := range channelSummaries {
 		channelID := strings.TrimSpace(channelSummaries[i].ChannelID)
 		latencySummary := latencySummaries[channelID]
+
 		rows = append(rows, YouTubeCommunityShortsOpsChannel{
 			ChannelID:                channelID,
 			MemberName:               memberNames[channelID],
@@ -269,6 +295,7 @@ func buildYouTubeCommunityShortsOpsChannels(
 			MaxLatencyMillis:         latencySummary.MaxLatencyMillis,
 		})
 	}
+
 	return rows
 }
 
@@ -299,6 +326,7 @@ func buildYouTubeCommunityShortsChannelLatencySummaries(
 	for channelID, accumulator := range accumulators {
 		summaries[channelID] = accumulator.finalize()
 	}
+
 	return summaries, nil
 }
 
@@ -326,27 +354,32 @@ func (a *youtubeCommunityShortsChannelLatencyAccumulator) addLatencyExceeded(exc
 		a.summary.ExceededPostCount++
 		return
 	}
+
 	a.summary.WithinTargetPostCount++
 }
 
 func (a *youtubeCommunityShortsChannelLatencyAccumulator) addLatencyMillis(latencyMillis int64) {
 	a.latencySumMillis += latencyMillis
 	a.latencyMeasuredCount++
+
 	if a.latencyMeasuredCount == 1 || latencyMillis > a.maxLatencyMillis {
 		a.maxLatencyMillis = latencyMillis
 	}
 }
 
-func (a youtubeCommunityShortsChannelLatencyAccumulator) finalize() youtubeCommunityShortsChannelLatencySummary {
+func (a *youtubeCommunityShortsChannelLatencyAccumulator) finalize() youtubeCommunityShortsChannelLatencySummary {
+	summary := a.summary
 	if a.latencyMeasuredCount <= 0 {
-		return a.summary
+		return summary
 	}
 
 	averageLatencyMillis := a.latencySumMillis / a.latencyMeasuredCount
 	maxLatencyMillis := a.maxLatencyMillis
-	a.summary.AverageLatencyMillis = &averageLatencyMillis
-	a.summary.MaxLatencyMillis = &maxLatencyMillis
-	return a.summary
+
+	summary.AverageLatencyMillis = &averageLatencyMillis
+	summary.MaxLatencyMillis = &maxLatencyMillis
+
+	return summary
 }
 
 var _ YouTubeCommunityShortsOpsRepository = (*telemetry.Repository)(nil)

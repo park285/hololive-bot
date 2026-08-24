@@ -10,10 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	command "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 const privacySentinel = "SENTINEL"
@@ -32,18 +31,21 @@ type capturingHandler struct {
 
 func (h capturingHandler) Enabled(context.Context, slog.Level) bool { return true }
 
-func (h capturingHandler) Handle(_ context.Context, record slog.Record) error { //nolint:gocritic // hugeParam: slog.Handler.Handle 인터페이스가 값 전달 시그니처를 강제
+func (h capturingHandler) Handle(_ context.Context, record slog.Record) error {
 	captured := capturedLogRecord{message: record.Message, attrs: make(map[string]any, record.NumAttrs()+len(h.attrs))}
 	for _, attr := range h.attrs {
 		flattenLogAttr(captured.attrs, nil, attr)
 	}
+
 	record.Attrs(func(attr slog.Attr) bool {
 		flattenLogAttr(captured.attrs, h.groups, attr)
+
 		return true
 	})
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	*h.records = append(*h.records, captured)
 
 	return nil
@@ -55,8 +57,10 @@ func (h capturingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	}
 
 	next := h
+
 	next.attrs = make([]slog.Attr, 0, len(h.attrs)+len(attrs))
 	next.attrs = append(next.attrs, h.attrs...)
+
 	for _, attr := range attrs {
 		next.attrs = append(next.attrs, groupedLogAttr(h.groups, attr))
 	}
@@ -70,6 +74,7 @@ func (h capturingHandler) WithGroup(name string) slog.Handler {
 	}
 
 	next := h
+
 	next.groups = appendLogGroup(h.groups, name)
 
 	return next
@@ -100,9 +105,11 @@ func flattenLogAttr(dst map[string]any, groups []string, attr slog.Attr) {
 	}
 
 	nested := groups
+
 	if attr.Key != "" {
 		nested = appendLogGroup(groups, attr.Key)
 	}
+
 	for _, member := range members {
 		flattenLogAttr(dst, nested, member)
 	}
@@ -126,6 +133,7 @@ func newCapturingLogger() (logger *slog.Logger, snapshot func() []capturedLogRec
 	snapshot = func() []capturedLogRecord {
 		mu.Lock()
 		defer mu.Unlock()
+
 		return append([]capturedLogRecord(nil), records...)
 	}
 
@@ -142,6 +150,7 @@ func requireEvent(t *testing.T, records []capturedLogRecord, event string) captu
 	}
 
 	t.Fatalf("event %q must be emitted, got records %#v", event, records)
+
 	return capturedLogRecord{}
 }
 
@@ -152,6 +161,7 @@ func assertNoSentinelInLogs(t *testing.T, records []capturedLogRecord) {
 		if strings.Contains(record.message, privacySentinel) {
 			t.Fatalf("log message leaked %q in record %#v", privacySentinel, record)
 		}
+
 		for key, value := range record.attrs {
 			if strings.Contains(fmt.Sprint(value), privacySentinel) {
 				t.Fatalf("log attr %s leaked %q in record %#v", key, privacySentinel, record)
@@ -172,10 +182,11 @@ func assertNoLogAttrKey(t *testing.T, records []capturedLogRecord, key string) {
 
 func newPrivacyCommandContext() *domain.CommandContext {
 	threadID := "thread-1"
+
 	return &domain.CommandContext{
 		Room:     "123456789",
 		RoomName: "룸이름-" + privacySentinel,
-		UserID:   "user-1",
+		UserID:   testUserID,
 		UserName: "닉네임-" + privacySentinel,
 		Message:  "!help 본문-" + privacySentinel,
 		ThreadID: &threadID,
@@ -188,9 +199,11 @@ func assertPrivacyAttrs(t *testing.T, record capturedLogRecord) {
 	if record.attrs["room_id"] != "123456789" {
 		t.Fatalf("room_id = %v, want %q", record.attrs["room_id"], "123456789")
 	}
-	if record.attrs["user_id"] != "user-1" {
-		t.Fatalf("user_id = %v, want %q", record.attrs["user_id"], "user-1")
+
+	if record.attrs["user_id"] != testUserID {
+		t.Fatalf("user_id = %v, want %q", record.attrs["user_id"], testUserID)
 	}
+
 	if record.attrs["thread_id"] != "thread-1" {
 		t.Fatalf("thread_id = %v, want %q", record.attrs["thread_id"], "thread-1")
 	}
@@ -199,6 +212,7 @@ func assertPrivacyAttrs(t *testing.T, record capturedLogRecord) {
 func TestCommandRouterExecutionLogsKeepEventsWithoutContentOrNickname(t *testing.T) {
 	registry := command.NewRegistry()
 	registry.Register(&trackedRouterCommand{name: "help"})
+
 	logger, snapshot := newCapturingLogger()
 	router := NewCommandRouter(registry, logger, func(context.Context, string, string) error { return nil }, nil, nil)
 
@@ -219,6 +233,7 @@ func TestCommandRouterExecutionLogsKeepEventsWithoutContentOrNickname(t *testing
 func TestCommandRouterFailureLogKeepsEventWithoutContentOrNickname(t *testing.T) {
 	registry := command.NewRegistry()
 	registry.Register(&failingRouterCommand{name: "help", err: errors.New("handler down")})
+
 	logger, snapshot := newCapturingLogger()
 	router := NewCommandRouter(registry, logger, func(context.Context, string, string) error { return nil }, nil, nil)
 
@@ -226,6 +241,7 @@ func TestCommandRouterFailureLogKeepsEventWithoutContentOrNickname(t *testing.T)
 	if err == nil {
 		t.Fatal("Execute() error = nil, want handler failure")
 	}
+
 	if strings.Contains(err.Error(), privacySentinel) {
 		t.Fatalf("returned error leaked sentinel: %v", err)
 	}
@@ -255,10 +271,11 @@ func TestCommandContextAttrsKeepTheIngressRoomToken(t *testing.T) {
 
 	const roomName = "상대방닉네임 님과의 대화"
 
-	cmdCtx := domain.NewCommandContext("", roomName, "user-1", "닉네임", "!알람", false)
+	cmdCtx := domain.NewCommandContext("", roomName, testUserID, "닉네임", "!알람", false)
 	attrs := commandContextAttrs(cmdCtx, "alarm")
 
 	var roomToken string
+
 	for _, attr := range attrs {
 		if attr.Key == privacylog.KeyRoomID {
 			roomToken = attr.Value.String()
@@ -268,10 +285,12 @@ func TestCommandContextAttrsKeepTheIngressRoomToken(t *testing.T) {
 	if roomToken == privacylog.UnknownToken {
 		t.Fatal("chat_id가 빈 경로에서 ingress와 상관 키가 갈렸다")
 	}
+
 	if roomToken != privacylog.RoomAttr("", roomName).Value.String() {
 		t.Fatalf("room token = %q, want the ingress token %q",
 			roomToken, privacylog.RoomAttr("", roomName).Value.String())
 	}
+
 	if strings.Contains(roomToken, roomName) {
 		t.Fatalf("방 제목이 평문으로 남았다: %q", roomToken)
 	}

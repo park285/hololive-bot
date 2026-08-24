@@ -39,7 +39,7 @@ type GroupComponent struct {
 }
 
 // GroupRuntime은 여러 runtime plane을 한 프로세스에서 조율한다. 컴포넌트는 선언 순서로
-// 시작하고 역순으로 정지한다. listener가 의존성보다 먼저 drain돼야 하면 공유 의존성
+// 시작하고 역순으로 정지한다. 어떤 listener가 의존성보다 먼저 drain돼야 하면 공유 의존성
 // provider를 앞에, 외부 노출 listener를 뒤에 배치한다.
 type GroupRuntime struct {
 	Logger     *slog.Logger
@@ -54,11 +54,13 @@ func (g *GroupRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if g == nil {
 		return
 	}
+
 	for i := range g.Components {
 		component := g.Components[i]
 		if component.Start == nil {
 			continue
 		}
+
 		name := componentName(i, component.Name)
 		component.Start(ctx, errCh)
 		logInfo(g.Logger, "runtime component started", slog.String("component", name))
@@ -69,19 +71,25 @@ func (g *GroupRuntime) Shutdown(ctx context.Context) error {
 	if g == nil {
 		return nil
 	}
+
 	var errs []error
+
 	for i, component := range slices.Backward(g.Components) {
 		if component.Shutdown == nil {
 			continue
 		}
+
 		name := componentName(i, component.Name)
 		if err := component.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("shutdown %s: %w", name, err))
 			logError(g.Logger, fmt.Sprintf("runtime component shutdown failed: %s", name), err)
+
 			continue
 		}
+
 		logInfo(g.Logger, "runtime component stopped", slog.String("component", name))
 	}
+
 	return errors.Join(errs...)
 }
 
@@ -90,5 +98,6 @@ func componentName(index int, name string) string {
 	if name != "" {
 		return name
 	}
+
 	return fmt.Sprintf("component[%d]", index)
 }

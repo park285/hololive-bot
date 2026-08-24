@@ -56,7 +56,7 @@ func TestClientSendWeeklyNotificationSuccess(t *testing.T) {
 func TestClientSendMonthlyNotificationConflict(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusConflict)
 	}))
 	t.Cleanup(srv.Close)
@@ -72,7 +72,7 @@ func TestClientSendMonthlyNotificationConflict(t *testing.T) {
 func TestClientSendMemberNewsWeeklyNon2xx(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 
 		_, err := w.Write([]byte("upstream failed"))

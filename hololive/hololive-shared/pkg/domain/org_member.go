@@ -56,8 +56,10 @@ func (m *Member) GetAllAliases() []string {
 	}
 
 	all := make([]string, 0, len(m.Aliases.Ko)+len(m.Aliases.Ja))
+
 	all = append(all, m.Aliases.Ko...)
 	all = append(all, m.Aliases.Ja...)
+
 	return all
 }
 
@@ -70,6 +72,7 @@ func (m *Member) GetOrg() string {
 	if m.Org == "" {
 		return "Hololive"
 	}
+
 	return m.Org
 }
 

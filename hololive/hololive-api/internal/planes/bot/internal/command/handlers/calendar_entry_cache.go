@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -50,13 +51,16 @@ func newCachedCelebrationCalendarFinder(
 	if isNilCelebrationCalendarFinder(base) {
 		return nil
 	}
+
 	dir = strings.TrimSpace(dir)
 	if dir == "" || ttl <= 0 {
 		return base
 	}
+
 	if now == nil {
 		now = time.Now
 	}
+
 	return &cachedCelebrationCalendarFinder{
 		base: base,
 		dir:  dir,
@@ -78,22 +82,26 @@ func (f *cachedCelebrationCalendarFinder) FindMembersWithCelebrationsInMonth(
 		if entries, ok := f.readSnapshot(path); ok {
 			return entries, nil
 		}
+
 		entries, err := f.base.FindMembersWithCelebrationsInMonth(ctx, month, referenceYear)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("find members with celebrations in month: %w", err)
 		}
+
 		cloned := cloneCalendarEntries(entries)
 		f.writeSnapshot(path, cloned)
+
 		return cloned, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find members with celebrations in month: %w", err)
 	}
 
 	entries, ok := value.([]domain.CalendarEntry)
 	if !ok {
 		return nil, fmt.Errorf("calendar entries cache returned %T", value)
 	}
+
 	return cloneCalendarEntries(entries), nil
 }
 
@@ -102,21 +110,26 @@ func (f *cachedCelebrationCalendarFinder) readSnapshot(path string) ([]domain.Ca
 	if err != nil || info.Size() <= 0 || info.Size() > calendarEntryCacheMaxBytes {
 		return nil, false
 	}
+
 	data, err := readCacheFile(path)
 	if err != nil {
 		return nil, false
 	}
 
 	var snapshot calendarEntriesSnapshot
+
 	if err := jsonv2.Unmarshal(data, &snapshot, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return nil, false
 	}
+
 	if snapshot.Version != calendarEntryCacheVersion || snapshot.CachedAt.IsZero() {
 		return nil, false
 	}
+
 	if f.now().After(snapshot.CachedAt.Add(f.ttl)) {
 		return nil, false
 	}
+
 	return cloneCalendarEntries(snapshot.Entries), true
 }
 
@@ -124,12 +137,14 @@ func (f *cachedCelebrationCalendarFinder) writeSnapshot(path string, entries []d
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return
 	}
+
 	snapshot := calendarEntriesSnapshot{
 		Version:  calendarEntryCacheVersion,
 		CachedAt: f.now().UTC(),
 		Entries:  cloneCalendarEntries(entries),
 	}
 	data, err := jsonv2.Marshal(snapshot)
+
 	if err != nil || len(data) > calendarEntryCacheMaxBytes {
 		return
 	}
@@ -138,13 +153,17 @@ func (f *cachedCelebrationCalendarFinder) writeSnapshot(path string, entries []d
 	if err != nil {
 		return
 	}
+
 	tmpName := tmp.Name()
 	_, writeErr := tmp.Write(data)
 	closeErr := tmp.Close()
+
 	if writeErr != nil || closeErr != nil {
 		removeFile(tmpName)
+
 		return
 	}
+
 	if err := os.Rename(tmpName, path); err != nil {
 		removeFile(tmpName)
 	}
@@ -165,11 +184,13 @@ func cloneCalendarEntries(entries []domain.CalendarEntry) []domain.CalendarEntry
 	if entries == nil {
 		return nil
 	}
+
 	cloned := make([]domain.CalendarEntry, len(entries))
 	for i, entry := range entries {
 		cloned[i] = entry
 		cloned[i].Member = cloneCalendarMember(entry.Member)
 	}
+
 	return cloned
 }
 
@@ -177,6 +198,7 @@ func cloneCalendarMember(member *domain.Member) *domain.Member {
 	if member == nil {
 		return nil
 	}
+
 	cloned := *member
 	if member.Aliases != nil {
 		cloned.Aliases = &domain.Aliases{
@@ -184,14 +206,19 @@ func cloneCalendarMember(member *domain.Member) *domain.Member {
 			Ja: append([]string(nil), member.Aliases.Ja...),
 		}
 	}
+
 	if member.Birthday != nil {
 		birthday := *member.Birthday
+
 		cloned.Birthday = &birthday
 	}
+
 	if member.DebutDate != nil {
 		debutDate := *member.DebutDate
+
 		cloned.DebutDate = &debutDate
 	}
+
 	return &cloned
 }
 
@@ -199,6 +226,7 @@ func isNilCelebrationCalendarFinder(base handlercore.CelebrationCalendarFinder) 
 	if base == nil {
 		return true
 	}
+
 	value := reflect.ValueOf(base)
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
@@ -233,8 +261,15 @@ func isNilCelebrationCalendarFinder(base handlercore.CelebrationCalendarFinder) 
 func readCacheFile(path string) ([]byte, error) {
 	cleaned := filepath.Clean(path)
 	dir, name := filepath.Split(cleaned)
+
 	if dir == "" || name == "" || !fs.ValidPath(name) {
-		return nil, fmt.Errorf("invalid cache path")
+		return nil, errors.New("invalid cache path")
 	}
-	return fs.ReadFile(os.DirFS(dir), name)
+
+	out, err := fs.ReadFile(os.DirFS(dir), name)
+	if err != nil {
+		return out, fmt.Errorf("read file: %w", err)
+	}
+
+	return out, nil
 }

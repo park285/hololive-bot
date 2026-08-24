@@ -65,7 +65,7 @@ func newIntegrationClient(t *testing.T) *Client {
 	proxyURL := os.Getenv("SCRAPER_PROXY_URL")
 
 	if enabled && proxyURL != "" {
-		t.Logf("Integration proxy enabled (SCRAPER_PROXY_ENABLED=true)")
+		t.Log("Integration proxy enabled (SCRAPER_PROXY_ENABLED=true)")
 		return NewClient(WithProxy(ProxyConfig{
 			Enabled: true,
 			URL:     proxyURL,
@@ -73,11 +73,11 @@ func newIntegrationClient(t *testing.T) *Client {
 	}
 
 	if enabled && proxyURL == "" {
-		t.Logf("Integration proxy enabled but SCRAPER_PROXY_URL is empty; falling back to direct")
+		t.Log("Integration proxy enabled but SCRAPER_PROXY_URL is empty; falling back to direct")
 		return NewClient()
 	}
 
-	t.Logf("Integration proxy disabled (direct connection)")
+	t.Log("Integration proxy disabled (direct connection)")
 	return NewClient()
 }
 

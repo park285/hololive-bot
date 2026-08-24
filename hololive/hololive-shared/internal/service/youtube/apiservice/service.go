@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	youtube "github.com/kapu/hololive-shared/pkg/service/youtube"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
@@ -80,6 +79,7 @@ func (ys *serviceImpl) SetScraperProxyEnabled(enabled bool) bool {
 	if ys == nil || ys.scraper == nil {
 		return false
 	}
+
 	return ys.scraper.SetProxyEnabled(enabled)
 }
 
@@ -87,10 +87,11 @@ func (ys *serviceImpl) ScraperProxyEnabled() bool {
 	if ys == nil || ys.scraper == nil {
 		return false
 	}
+
 	return ys.scraper.ProxyEnabled()
 }
 
-// loadChannelNameMap: 캐시에서 멤버 정보를 읽어 channelID -> memberName 맵을 구성
+// loadChannelNameMap: 캐시에서 멤버 정보를 읽어 channelID -> memberName 맵을 구성.
 func (ys *serviceImpl) loadChannelNameMap(ctx context.Context) {
 	if ys.cache == nil {
 		return
@@ -99,6 +100,7 @@ func (ys *serviceImpl) loadChannelNameMap(ctx context.Context) {
 	memberMap, err := ys.cache.GetAllMembers(ctx)
 	if err != nil {
 		ys.logger.Warn("Failed to load member map for channel names", slog.Any("error", err))
+
 		return
 	}
 
@@ -115,6 +117,7 @@ func (ys *serviceImpl) storeChannelNameMap(memberMap map[string]string) {
 		if channelID == "" {
 			continue
 		}
+
 		ys.channelToName[channelID] = memberNameFromCacheKey(key)
 	}
 }
@@ -123,12 +126,14 @@ func memberNameFromCacheKey(key string) string {
 	if idx := strings.LastIndex(key, ":"); idx > 0 {
 		return key[:idx]
 	}
+
 	return key
 }
 
-// getChannelName: channelID로 멤버 이름 조회 (없으면 빈 문자열)
+// getChannelName: channelID로 멤버 이름 조회 (없으면 빈 문자열).
 func (ys *serviceImpl) getChannelName(channelID string) string {
 	ys.channelMu.RLock()
 	defer ys.channelMu.RUnlock()
+
 	return ys.channelToName[channelID]
 }

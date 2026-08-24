@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -17,6 +17,7 @@ func TestViewerSampleCleanerClampsWorkBudgets(t *testing.T) {
 	cleaner := NewViewerSampleCleaner(nil, ViewerSampleCleanerConfig{
 		BatchSize: viewerSampleCleanupMaxBatchSize * 10,
 	})
+
 	cleaner.maxBatches = viewerSampleCleanupMaxBatches * 10
 	cleaner.maxDuration = viewerSampleCleanupMaxDuration * 10
 
@@ -30,17 +31,17 @@ func TestViewerSampleCleanerCleanupContinuesAfterShortSessionBatch(t *testing.T)
 	pool := dbtest.NewPool(t)
 	now := time.Now().UTC()
 
-	insertViewerSampleCleanerLiveSession(t, ctx, pool, "old-video-1", domain.LiveStatusEnded, now.AddDate(0, 0, -9))
-	insertViewerSampleCleanerLiveSession(t, ctx, pool, "old-video-2", domain.LiveStatusEnded, now.AddDate(0, 0, -8))
-	insertViewerSampleCleanerSample(t, ctx, pool, "old-video-1", now)
-	insertViewerSampleCleanerSample(t, ctx, pool, "old-video-2", now)
+	insertViewerSampleCleanerLiveSession(t, pool, "old-video-1", domain.LiveStatusEnded, now.AddDate(0, 0, -9))
+	insertViewerSampleCleanerLiveSession(t, pool, "old-video-2", domain.LiveStatusEnded, now.AddDate(0, 0, -8))
+	insertViewerSampleCleanerSample(t, pool, "old-video-1", now)
+	insertViewerSampleCleanerSample(t, pool, "old-video-2", now)
 
 	cleaner := NewViewerSampleCleaner(pool, ViewerSampleCleanerConfig{RetentionDays: 7, BatchSize: 10})
 	deleted, err := cleaner.Cleanup(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, deleted)
-	require.EqualValues(t, 0, countViewerSampleCleanerSamples(t, ctx, pool, "old-video-1"))
-	require.EqualValues(t, 0, countViewerSampleCleanerSamples(t, ctx, pool, "old-video-2"))
+	require.EqualValues(t, 0, countViewerSampleCleanerSamples(t, pool, "old-video-1"))
+	require.EqualValues(t, 0, countViewerSampleCleanerSamples(t, pool, "old-video-2"))
 }
 
 func TestViewerSampleCleanerCleanupStopsAtBatchBudgetAndResumes(t *testing.T) {
@@ -50,23 +51,24 @@ func TestViewerSampleCleanerCleanupStopsAtBatchBudgetAndResumes(t *testing.T) {
 	videoIDs := []string{"old-video-1", "old-video-2", "old-video-3"}
 
 	for i, videoID := range videoIDs {
-		insertViewerSampleCleanerLiveSession(t, ctx, pool, videoID, domain.LiveStatusEnded, now.AddDate(0, 0, -10+i))
-		insertViewerSampleCleanerSample(t, ctx, pool, videoID, now)
+		insertViewerSampleCleanerLiveSession(t, pool, videoID, domain.LiveStatusEnded, now.AddDate(0, 0, -10+i))
+		insertViewerSampleCleanerSample(t, pool, videoID, now)
 	}
 
 	cleaner := NewViewerSampleCleaner(pool, ViewerSampleCleanerConfig{RetentionDays: 7, BatchSize: 10})
+
 	cleaner.maxBatches = 2
 	cleaner.maxDuration = time.Minute
 
 	deleted, err := cleaner.Cleanup(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, deleted)
-	require.EqualValues(t, 1, countViewerSampleCleanerAllSamples(t, ctx, pool))
+	require.EqualValues(t, 1, countViewerSampleCleanerAllSamples(t, pool))
 
 	deleted, err = cleaner.Cleanup(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deleted)
-	require.EqualValues(t, 0, countViewerSampleCleanerAllSamples(t, ctx, pool))
+	require.EqualValues(t, 0, countViewerSampleCleanerAllSamples(t, pool))
 }
 
 func TestViewerSampleCleanerCleanupResumesPastEmptyPagesAndMissingBoundary(t *testing.T) {
@@ -77,23 +79,24 @@ func TestViewerSampleCleanerCleanupResumesPastEmptyPagesAndMissingBoundary(t *te
 
 	insertViewerSampleCleanerSessions(
 		t,
-		ctx,
 		pool,
 		"empty-",
 		viewerSampleCleanupSessionPageSize*2+2,
 		domain.LiveStatusEnded,
 		oldEndedAt,
 	)
-	insertViewerSampleCleanerLiveSession(t, ctx, pool, "z-eligible", domain.LiveStatusEnded, oldEndedAt)
-	insertViewerSampleCleanerSample(t, ctx, pool, "z-eligible", now)
+	insertViewerSampleCleanerLiveSession(t, pool, "z-eligible", domain.LiveStatusEnded, oldEndedAt)
+	insertViewerSampleCleanerSample(t, pool, "z-eligible", now)
 
 	cleaner := NewViewerSampleCleaner(pool, ViewerSampleCleanerConfig{RetentionDays: 7, BatchSize: 10})
+
 	cleaner.maxBatches = 1
 	cleaner.maxDuration = time.Minute
 
 	deleted, err := cleaner.Cleanup(ctx)
 	require.NoError(t, err)
 	require.Zero(t, deleted)
+
 	firstBoundary := cleaner.state.cursor.videoID
 	require.NotEmpty(t, firstBoundary)
 
@@ -109,7 +112,7 @@ func TestViewerSampleCleanerCleanupResumesPastEmptyPagesAndMissingBoundary(t *te
 	deleted, err = cleaner.Cleanup(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deleted)
-	require.EqualValues(t, 0, countViewerSampleCleanerSamples(t, ctx, pool, "z-eligible"))
+	require.EqualValues(t, 0, countViewerSampleCleanerSamples(t, pool, "z-eligible"))
 }
 
 func TestViewerSampleCleanerCleanupStopsAtTimeBudget(t *testing.T) {
@@ -117,18 +120,20 @@ func TestViewerSampleCleanerCleanupStopsAtTimeBudget(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	now := time.Now().UTC()
 
-	insertViewerSampleCleanerLiveSession(t, ctx, pool, "old-video", domain.LiveStatusEnded, now.AddDate(0, 0, -8))
-	insertViewerSampleCleanerSample(t, ctx, pool, "old-video", now)
+	insertViewerSampleCleanerLiveSession(t, pool, "old-video", domain.LiveStatusEnded, now.AddDate(0, 0, -8))
+	insertViewerSampleCleanerSample(t, pool, "old-video", now)
 
 	holder, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		rollbackViewerSampleCleanerTx(t, holder)
 	})
+
 	_, err = holder.Exec(ctx, "LOCK TABLE youtube_live_sessions IN ACCESS EXCLUSIVE MODE")
 	require.NoError(t, err)
 
 	cleaner := NewViewerSampleCleaner(pool, ViewerSampleCleanerConfig{RetentionDays: 7, BatchSize: 1})
+
 	cleaner.maxBatches = 2
 	cleaner.maxDuration = 50 * time.Millisecond
 
@@ -136,7 +141,7 @@ func TestViewerSampleCleanerCleanupStopsAtTimeBudget(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Zero(t, deleted)
 	require.NoError(t, holder.Rollback(ctx))
-	require.EqualValues(t, 1, countViewerSampleCleanerSamples(t, ctx, pool, "old-video"))
+	require.EqualValues(t, 1, countViewerSampleCleanerSamples(t, pool, "old-video"))
 }
 
 func TestViewerSampleCleanerCleanupRejectsNonSessionAffineQuerier(t *testing.T) {
@@ -155,10 +160,15 @@ type viewerSampleQuerierOnly struct {
 	dbx.Querier
 }
 
-func countViewerSampleCleanerAllSamples(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int64 {
+func countViewerSampleCleanerAllSamples(t *testing.T, pool *pgxpool.Pool) int64 {
 	t.Helper()
+
+	ctx := t.Context()
+
 	var count int64
+
 	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM youtube_live_viewer_samples").Scan(&count)
 	require.NoError(t, err)
+
 	return count
 }

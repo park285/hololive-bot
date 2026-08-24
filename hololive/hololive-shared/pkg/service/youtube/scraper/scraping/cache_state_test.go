@@ -53,11 +53,14 @@ func (s *testStateStore) Get(_ context.Context, key string, dest any) error {
 	entry, ok := s.data[key]
 	if !ok || time.Now().After(entry.until) {
 		delete(s.data, key)
+
 		return nil
 	}
+
 	if out, ok := dest.(*bool); ok {
 		*out = entry.value
 	}
+
 	return nil
 }
 
@@ -69,22 +72,26 @@ func (s *testStateStore) Set(_ context.Context, key string, value any, ttl time.
 	if !ok {
 		return fmt.Errorf("state value has type %T, want bool", value)
 	}
+
 	s.data[key] = stateEntry{
 		value: v,
 		until: time.Now().Add(ttl),
 	}
+
 	return nil
 }
 
 func (s *testStateStore) Del(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	delete(s.data, key)
+
 	return nil
 }
 
 func TestCommunityMissingState(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	client := NewClient()
 
 	require.False(t, client.isCommunityMissing(ctx, "UC_TEST"))
@@ -93,6 +100,7 @@ func TestCommunityMissingState(t *testing.T) {
 	require.True(t, client.isCommunityMissing(ctx, "UC_TEST"))
 
 	client.communityMissing.mu.Lock()
+
 	client.communityMissing.until["UC_TEST"] = time.Now().Add(-time.Second)
 	client.communityMissing.mu.Unlock()
 
@@ -100,7 +108,7 @@ func TestCommunityMissingState(t *testing.T) {
 }
 
 func TestVideoRSSBackoffState(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	client := NewClient()
 
 	require.False(t, client.isVideoRSSBackoff(ctx, "UC_TEST"))
@@ -113,7 +121,7 @@ func TestVideoRSSBackoffState(t *testing.T) {
 }
 
 func TestStateStorePersistsAcrossClientInstances(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	store := newTestStateStore()
 
 	clientA := NewClient(WithStateStore(store))
@@ -126,7 +134,9 @@ func TestStateStorePersistsAcrossClientInstances(t *testing.T) {
 	require.Contains(t, store.data, clientA.videoRSSBackoffStateKey("UC_TEST"))
 
 	clientB := NewClient(WithStateStore(store))
+
 	var communityMarker bool
+
 	require.NoError(t, store.Get(ctx, clientB.communityMissingStateKey("UC_TEST"), &communityMarker))
 	require.True(t, communityMarker)
 	require.True(t, clientB.isCommunityMissing(ctx, "UC_TEST"))

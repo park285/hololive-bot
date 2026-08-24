@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 )
 
@@ -34,7 +32,7 @@ func InitCoreIntegrationServices(
 		logger,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("provide ACL service: %w", err)
 	}
 
 	majorEventRepository, memberNewsService := ResolveLLMSchedulerClients(appConfig, logger)

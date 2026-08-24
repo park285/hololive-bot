@@ -25,11 +25,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/stringutil"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
 type ResponseFormatter struct {
@@ -53,6 +54,7 @@ func (f *ResponseFormatter) foldSeeMore(s string) string {
 	if f == nil || !f.seeMoreFold {
 		return s
 	}
+
 	return util.FoldForSeeMore(s, util.KakaoSeeMoreThreshold)
 }
 
@@ -75,9 +77,11 @@ func NewResponseFormatter(prefix string, renderer *template.Renderer, opts ...Op
 	}
 
 	f := &ResponseFormatter{prefix: prefix, renderer: renderer}
+
 	for _, opt := range opts {
 		opt(f)
 	}
+
 	return f
 }
 

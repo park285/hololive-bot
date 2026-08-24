@@ -36,11 +36,22 @@ import (
 
 func LoadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]observation.AlarmSentMark, error) {
 	status := domain.OutboxStatusPending
-	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
+
+	out, err := loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
+	if err != nil {
+		return out, fmt.Errorf("load alarm sent marks for delivery IDs with status: %w", err)
+	}
+
+	return out, nil
 }
 
 func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]observation.AlarmSentMark, error) {
-	return loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, nil)
+	out, err := loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, nil)
+	if err != nil {
+		return out, fmt.Errorf("load alarm sent marks for delivery IDs with status: %w", err)
+	}
+
+	return out, nil
 }
 
 func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken, status *domain.OutboxStatus) ([]observation.AlarmSentMark, error) {
@@ -51,18 +62,25 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 
 	claimTokensByIdentity, err := collectClaimTokensByIdentity(claimTokens)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collect claim tokens by identity: %w", err)
 	}
 
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
+
 	var targets []deliveryAlarmSentTarget
+
 	args := deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)
+
 	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
+
 	statusClause := ""
+
 	if status != nil {
 		statusClause = " AND d.status = ?"
+
 		args = append(args, *status)
 	}
+
 	if err := deliverysql.SelectDeliverySQL(ctx, db, &targets, "query delivery alarm sent targets", mustSQL("delivery_repository_tracking_0066_01.sql")+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+`
 		  AND `+deliverysql.DeliveryInClause("o.kind", len(postKinds))+`
 		`+statusClause, args...); err != nil {
@@ -77,10 +95,13 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 			AlarmSentAt: sentAt,
 		}
 		claimIdentity := DeliveryClaimIdentityKey(targets[i].Kind, CanonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID))
+
 		if authorizedAt, ok := claimTokensByIdentity[claimIdentity]; ok {
 			authorizedAtCopy := authorizedAt
+
 			mark.AuthorizedAt = &authorizedAtCopy
 		}
+
 		marks = append(marks, mark)
 	}
 
@@ -96,10 +117,11 @@ func collectClaimTokensByIdentity(claimTokens []dispatchstate.ClaimToken) (map[s
 	for i := range claimTokens {
 		identity, authorizedAt, err := claimTokenIdentityAndAuthorizedAt(claimTokens[i], i)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("claim token identity and authorized at: %w", err)
 		}
+
 		if err := collectClaimTokenAuthorizedAt(collected, identity, authorizedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("collect claim token authorized at: %w", err)
 		}
 	}
 
@@ -111,9 +133,11 @@ func claimTokenIdentityAndAuthorizedAt(claimToken dispatchstate.ClaimToken, inde
 	if postID == "" {
 		return "", time.Time{}, fmt.Errorf("collect claim tokens: post id is empty at index %d", index)
 	}
+
 	if claimToken.AuthorizedAt.IsZero() {
 		return "", time.Time{}, fmt.Errorf("collect claim tokens: authorized_at is empty at index %d", index)
 	}
+
 	return DeliveryClaimIdentityKey(claimToken.Kind, postID), claimToken.AuthorizedAt.UTC(), nil
 }
 
@@ -123,9 +147,11 @@ func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity stri
 		collected[identity] = authorizedAt
 		return nil
 	}
+
 	if !existingAuthorizedAt.Equal(authorizedAt) {
 		return fmt.Errorf("collect claim tokens: conflicting authorized_at for %s", identity)
 	}
+
 	return nil
 }
 
@@ -135,10 +161,12 @@ func DeliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
 
 func CanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
 	normalizedContentID := strings.TrimSpace(contentID)
+
 	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, normalizedContentID)
 	if err != nil {
 		return normalizedContentID
 	}
+
 	return canonicalContentID
 }
 
@@ -149,12 +177,15 @@ func UniqueStrings(values []string) []string {
 
 	unique := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
+
 	for _, value := range values {
 		if _, ok := seen[value]; ok {
 			continue
 		}
+
 		seen[value] = struct{}{}
 		unique = append(unique, value)
 	}
+
 	return unique
 }

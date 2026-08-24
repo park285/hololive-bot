@@ -21,10 +21,9 @@
 package batchrepo
 
 import (
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 
 	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -48,10 +47,12 @@ func validateCanonicalNotificationIdentity(kind domain.OutboxKind, contentID, pa
 	if err != nil {
 		return fmt.Errorf("normalize content id: %w", err)
 	}
+
 	gotPayloadCanonicalID, err := ytcontentid.ForOutboxKind(kind, payloadID)
 	if err != nil {
 		return fmt.Errorf("normalize payload resource id: %w", err)
 	}
+
 	gotCanonicalPostID, err := ytcontentid.ForOutboxKind(kind, canonicalPostID)
 	if err != nil {
 		return fmt.Errorf("normalize canonical_post_id: %w", err)
@@ -60,6 +61,7 @@ func validateCanonicalNotificationIdentity(kind domain.OutboxKind, contentID, pa
 	if gotPayloadCanonicalID != wantCanonicalContentID {
 		return fmt.Errorf("payload resource id mismatch: got %s want %s", gotPayloadCanonicalID, wantCanonicalContentID)
 	}
+
 	if gotCanonicalPostID != wantCanonicalContentID {
 		return fmt.Errorf("payload canonical_post_id mismatch: got %s want %s", gotCanonicalPostID, wantCanonicalContentID)
 	}
@@ -79,7 +81,7 @@ func validateShortNotificationPublishedAt(videos []*domain.YouTubeVideo, notific
 
 	for _, notification := range notifications {
 		if err := validateShortPublishedAtNotification(videosByID, notification); err != nil {
-			return err
+			return fmt.Errorf("validate short published at notification: %w", err)
 		}
 	}
 
@@ -92,9 +94,11 @@ func shortVideosByNotificationID(videos []*domain.YouTubeVideo) map[string]*doma
 		if video == nil || video.VideoID == "" {
 			continue
 		}
+
 		videosByID[video.VideoID] = video
 		videosByID[normalizeContentID(domain.OutboxKindNewShort, video.VideoID)] = video
 	}
+
 	return videosByID
 }
 
@@ -102,19 +106,27 @@ func validateShortPublishedAtNotification(videosByID map[string]*domain.YouTubeV
 	if notification == nil || notification.Kind != domain.OutboxKindNewShort {
 		return nil
 	}
+
 	video, ok := videosByID[notification.ContentID]
 	if !ok {
 		return nil
 	}
 
 	var payload shortNotificationPublishedAtPayload
+
 	if err := jsonv2.Unmarshal([]byte(notification.Payload), &payload); err != nil {
 		return fmt.Errorf("video %s: unmarshal payload: %w", video.VideoID, err)
 	}
+
 	if err := validateCanonicalNotificationIdentity(notification.Kind, notification.ContentID, payload.VideoID, payload.CanonicalPostID); err != nil {
 		return fmt.Errorf("video %s: %w", video.VideoID, err)
 	}
-	return validateShortPublishedAtPayload(video, payload)
+
+	if err := validateShortPublishedAtPayload(video, payload); err != nil {
+		return fmt.Errorf("validate short published at payload: %w", err)
+	}
+
+	return nil
 }
 
 func validateShortPublishedAtPayload(video *domain.YouTubeVideo, payload shortNotificationPublishedAtPayload) error {
@@ -122,17 +134,21 @@ func validateShortPublishedAtPayload(video *domain.YouTubeVideo, payload shortNo
 		if payload.PublishedAt != nil {
 			return fmt.Errorf("video %s: payload published_at set while video record is empty", video.VideoID)
 		}
+
 		return nil
 	}
+
 	if payload.PublishedAt == nil {
 		return fmt.Errorf("video %s: payload missing published_at", video.VideoID)
 	}
 
 	wantPublishedAt := yttimestamp.Format(*video.PublishedAt)
 	gotPublishedAt := payload.PublishedAt.Format(yttimestamp.Canonical.Layout)
+
 	if gotPublishedAt != wantPublishedAt {
 		return fmt.Errorf("video %s: payload published_at mismatch: got %s want %s", video.VideoID, gotPublishedAt, wantPublishedAt)
 	}
+
 	return nil
 }
 
@@ -148,7 +164,7 @@ func validateCommunityNotificationPublishedAt(posts []*domain.YouTubeCommunityPo
 
 	for _, notification := range notifications {
 		if err := validateCommunityPublishedAtNotification(postsByID, notification); err != nil {
-			return err
+			return fmt.Errorf("validate community published at notification: %w", err)
 		}
 	}
 
@@ -161,8 +177,10 @@ func communityPostsByNotificationID(posts []*domain.YouTubeCommunityPost) map[st
 		if post == nil || post.PostID == "" {
 			continue
 		}
+
 		postsByID[post.PostID] = post
 	}
+
 	return postsByID
 }
 
@@ -170,19 +188,27 @@ func validateCommunityPublishedAtNotification(postsByID map[string]*domain.YouTu
 	if notification == nil || notification.Kind != domain.OutboxKindCommunityPost {
 		return nil
 	}
+
 	post, ok := postsByID[notification.ContentID]
 	if !ok {
 		return nil
 	}
 
 	var payload communityNotificationPublishedAtPayload
+
 	if err := jsonv2.Unmarshal([]byte(notification.Payload), &payload); err != nil {
 		return fmt.Errorf("post %s: unmarshal payload: %w", post.PostID, err)
 	}
+
 	if err := validateCanonicalNotificationIdentity(notification.Kind, notification.ContentID, payload.PostID, payload.CanonicalPostID); err != nil {
 		return fmt.Errorf("post %s: %w", post.PostID, err)
 	}
-	return validateCommunityPublishedAtPayload(post, payload)
+
+	if err := validateCommunityPublishedAtPayload(post, payload); err != nil {
+		return fmt.Errorf("validate community published at payload: %w", err)
+	}
+
+	return nil
 }
 
 func validateCommunityPublishedAtPayload(post *domain.YouTubeCommunityPost, payload communityNotificationPublishedAtPayload) error {
@@ -190,16 +216,20 @@ func validateCommunityPublishedAtPayload(post *domain.YouTubeCommunityPost, payl
 		if payload.PublishedAt != nil {
 			return fmt.Errorf("post %s: payload published_at set while post record is empty", post.PostID)
 		}
+
 		return nil
 	}
+
 	if payload.PublishedAt == nil {
 		return fmt.Errorf("post %s: payload missing published_at", post.PostID)
 	}
 
 	wantPublishedAt := yttimestamp.Format(*post.PublishedAt)
 	gotPublishedAt := payload.PublishedAt.Format(yttimestamp.Canonical.Layout)
+
 	if gotPublishedAt != wantPublishedAt {
 		return fmt.Errorf("post %s: payload published_at mismatch: got %s want %s", post.PostID, gotPublishedAt, wantPublishedAt)
 	}
+
 	return nil
 }

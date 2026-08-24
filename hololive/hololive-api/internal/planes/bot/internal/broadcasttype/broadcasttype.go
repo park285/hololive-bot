@@ -63,6 +63,7 @@ func (t Type) Label() string {
 	if label, ok := labels[t]; ok {
 		return label
 	}
+
 	return "미분류"
 }
 
@@ -89,5 +90,6 @@ func NormalizeToken(value string) string {
 	value = norm.NFKC.String(value)
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = strings.TrimPrefix(value, "#")
+
 	return strings.ReplaceAll(value, " ", "_")
 }

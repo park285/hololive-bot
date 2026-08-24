@@ -28,9 +28,11 @@ func (e endpointClient) resolve() (client *http.Client, errMsg string) {
 	if e.err != nil {
 		return nil, e.err.Error()
 	}
+
 	if e.client == nil {
 		return nil, "status client missing"
 	}
+
 	return e.client, ""
 }
 
@@ -39,8 +41,10 @@ func endpointClients(endpoints []ServiceEndpoint, timeout time.Duration) map[str
 	clients := make(map[string]endpointClient, len(endpoints))
 	for _, endpoint := range endpoints {
 		client, err := internalhttp.NewClientForURLStrict(endpoint.URL, timeout, nil)
+
 		clients[endpoint.Name] = endpointClient{client: client, err: err}
 	}
+
 	return clients
 }
 
@@ -79,6 +83,7 @@ type Collector struct {
 
 func NewCollector(endpoints []ServiceEndpoint, version string) *Collector {
 	collector := NewCollectorWithSampler(NewSampler(endpoints), version)
+
 	collector.ownsSampler = true
 
 	return collector
@@ -98,17 +103,24 @@ func (c *Collector) Close() error {
 		return nil
 	}
 
-	return c.sampler.Close()
+	if err := c.sampler.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Collector) Collect(ctx context.Context) AggregatedStatus {
 	snapshot := c.sampler.sample(ctx)
 	services := make([]ServiceStatus, len(snapshot.endpoints)+1)
 	zero := uint64(0)
+
 	services[0] = ServiceStatus{Name: "admin-dashboard", Available: true, ResponseTimeMS: &zero}
+
 	for i := range snapshot.endpoints {
 		services[i+1] = cloneServiceStatus(snapshot.endpoints[i].status)
 	}
+
 	return AggregatedStatus{
 		Services:  services,
 		Uptime:    FormatDuration(time.Since(c.start)),
@@ -122,12 +134,15 @@ func FormatDuration(duration time.Duration) string {
 	days := secs / 86400
 	hours := (secs % 86400) / 3600
 	minutes := (secs % 3600) / 60
+
 	if days > 0 {
 		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
 	}
+
 	if hours > 0 {
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
+
 	return fmt.Sprintf("%dm", minutes)
 }
 
@@ -163,24 +178,33 @@ func memoryStats() (total, used uint64) {
 	if err != nil {
 		return 0, 0
 	}
+
 	values := map[string]uint64{}
+
 	for line := range strings.SplitSeq(string(data), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
 		}
+
 		key := strings.TrimSuffix(fields[0], ":")
+
 		value, err := strconv.ParseUint(fields[1], 10, 64)
 		if err != nil {
 			continue
 		}
+
 		values[key] = value * 1024
 	}
+
 	total = values["MemTotal"]
+
 	available := values["MemAvailable"]
+
 	if total > available {
 		used = total - available
 	}
+
 	return total, used
 }
 
@@ -189,22 +213,27 @@ func loadAverage() (one, five, fifteen float64) {
 	if err != nil {
 		return 0, 0, 0
 	}
+
 	fields := strings.Fields(string(data))
 	if len(fields) < 3 {
 		return 0, 0, 0
 	}
+
 	one, err = strconv.ParseFloat(fields[0], 64)
 	if err != nil {
 		return 0, 0, 0
 	}
+
 	five, err = strconv.ParseFloat(fields[1], 64)
 	if err != nil {
 		return 0, 0, 0
 	}
+
 	fifteen, err = strconv.ParseFloat(fields[2], 64)
 	if err != nil {
 		return 0, 0, 0
 	}
+
 	return one, five, fifteen
 }
 
@@ -213,12 +242,14 @@ func threadCount() int {
 	if err != nil {
 		return 0
 	}
+
 	for line := range strings.SplitSeq(string(data), "\n") {
 		value, ok := parseThreadLine(line)
 		if ok {
 			return value
 		}
 	}
+
 	return 0
 }
 
@@ -226,14 +257,17 @@ func parseThreadLine(line string) (int, bool) {
 	if !strings.HasPrefix(line, "Threads:") {
 		return 0, false
 	}
+
 	fields := strings.Fields(line)
 	if len(fields) != 2 {
 		return 0, true
 	}
+
 	value, err := strconv.Atoi(fields[1])
 	if err != nil {
 		return 0, true
 	}
+
 	return value, true
 }
 
@@ -248,20 +282,27 @@ func (s *procSampler) cpuUsage() float64 {
 	if !ok {
 		return 0
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.lastTotal == 0 {
 		s.lastTotal = total
 		s.lastIdle = idle
+
 		return 0
 	}
+
 	totalDelta := total - s.lastTotal
 	idleDelta := idle - s.lastIdle
+
 	s.lastTotal = total
 	s.lastIdle = idle
+
 	if totalDelta == 0 || idleDelta > totalDelta {
 		return 0
 	}
+
 	return float64(totalDelta-idleDelta) / float64(totalDelta) * 100
 }
 
@@ -270,18 +311,22 @@ func readCPUSample() (idle, total uint64, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
+
 	lines := strings.SplitN(string(data), "\n", 2)
 	if len(lines) == 0 {
 		return 0, 0, false
 	}
+
 	fields := strings.Fields(lines[0])
 	if len(fields) < 5 || fields[0] != "cpu" {
 		return 0, 0, false
 	}
+
 	values, ok := parseCPUFields(fields[1:])
 	if !ok {
 		return 0, 0, false
 	}
+
 	return cpuTotals(values)
 }
 
@@ -292,8 +337,10 @@ func parseCPUFields(fields []string) ([]uint64, bool) {
 		if err != nil {
 			return nil, false
 		}
+
 		values = append(values, value)
 	}
+
 	return values, true
 }
 
@@ -301,12 +348,15 @@ func cpuTotals(values []uint64) (idle, total uint64, ok bool) {
 	if len(values) < 4 {
 		return 0, 0, false
 	}
+
 	idle = values[3]
 	if len(values) > 4 {
 		idle += values[4]
 	}
+
 	for _, value := range values {
 		total += value
 	}
+
 	return idle, total, true
 }

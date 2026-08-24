@@ -3,7 +3,6 @@ package youtubedispatch
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"testing"
 	"time"
@@ -24,7 +23,7 @@ func openTelemetryLoopTestDB(t *testing.T) *deliveryTestDB {
 func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := openTelemetryLoopTestDB(t)
 
 	repository := telemetry.NewRepository(db)
@@ -38,13 +37,13 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      "youtube-notification:NEW_SHORT:short-loop",
 		DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-		DeliveryMode:   "per_room",
-		SendResult:     "success",
+		DeliveryMode:   deliveryModePerRoom,
+		SendResult:     sendResultSuccess,
 		EventAt:        time.Now().UTC(),
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          50 * time.Millisecond,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -53,6 +52,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var rows []deliveryTelemetryTestBufferModel
+
 	require.NoError(t, findDeliveryTestRows(db, &rows).Error)
 	require.Len(t, rows, 1)
 	require.Nil(t, rows[0].LoggedAt)
@@ -76,13 +76,13 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      "youtube-notification:NEW_SHORT:short-loop-bg",
 		DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-		DeliveryMode:   "per_room",
-		SendResult:     "success",
+		DeliveryMode:   deliveryModePerRoom,
+		SendResult:     sendResultSuccess,
 		EventAt:        time.Now().UTC(),
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          10 * time.Millisecond,
 		TelemetryPollInterval: 10 * time.Millisecond,
@@ -92,9 +92,11 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		var rows []deliveryTelemetryTestBufferModel
+
 		if err := findDeliveryTestRows(db, &rows).Error; err != nil || len(rows) != 1 {
 			return false
 		}
+
 		return rows[0].LoggedAt != nil
 	}, 2*time.Second, 25*time.Millisecond)
 }
@@ -112,15 +114,17 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: 20 * time.Millisecond,
 	})
 
 	done := make(chan struct{}, 1)
+
 	go func() {
 		dispatcher.telemetry.telemetryLoop(ctx)
+
 		done <- struct{}{}
 	}()
 
@@ -152,15 +156,17 @@ func TestDispatcherTelemetryLoop_StopsOnContextCancelBeforeNextTick(t *testing.T
 
 	db := openTelemetryLoopTestDB(t)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), &dispatchstate.Config{
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: time.Hour,
 	})
 
 	done := make(chan struct{}, 1)
+
 	go func() {
 		dispatcher.telemetry.telemetryLoop(ctx)
+
 		done <- struct{}{}
 	}()
 
@@ -184,8 +190,8 @@ func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) 
 		AlarmType:      domain.AlarmTypeShorts,
 		DedupeKey:      fmt.Sprintf("youtube-notification:NEW_SHORT:%s", contentID),
 		DeliveryPath:   telemetry.CommunityShortsDeliveryPath,
-		DeliveryMode:   "per_room",
-		SendResult:     "success",
+		DeliveryMode:   deliveryModePerRoom,
+		SendResult:     sendResultSuccess,
 		EventAt:        time.Now().UTC(),
 		NextAttemptAt:  time.Now().UTC(),
 	}
@@ -195,9 +201,11 @@ func telemetryLoopRowLogged(t *testing.T, db *deliveryTestDB, deliveryID int64) 
 	t.Helper()
 
 	var row deliveryTelemetryTestBufferModel
+
 	err := firstDeliveryTestRowWhere(db, &row, "delivery_id = ?", deliveryID).Error
 	if err != nil {
 		return false
 	}
+
 	return row.LoggedAt != nil
 }

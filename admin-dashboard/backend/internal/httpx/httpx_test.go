@@ -1,14 +1,13 @@
 package httpx
 
 import (
-	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +17,9 @@ func TestErrorMapsAppError(t *testing.T) {
 	Error(rec, BadRequest("nope"))
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+
 	var body ErrorResponse
+
 	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, "nope", body.Error)
 	require.Equal(t, "bad_request", body.Code)
@@ -34,9 +35,11 @@ func TestErrorMapsUnknownErrorTo500(t *testing.T) {
 
 func TestAbortMapsAppErrorAndStopsChain(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", http.NoBody)
+
+	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 
 	Abort(c, Forbidden())
 
@@ -54,22 +57,26 @@ func TestAppErrorUnwrap(t *testing.T) {
 }
 
 func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"known":1,"unknown":2}`))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"known":1,"unknown":2}`))
+
 	var dst struct {
 		Known int `json:"known"`
 	}
+
 	require.Error(t, DecodeJSON(req, &dst, 1024))
 }
 
 func TestDecodeJSONHonorsLimit(t *testing.T) {
 	payload := `{"value":"` + strings.Repeat("x", 100) + `"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(payload))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(payload))
+
 	var dst struct {
 		Value string `json:"value"`
 	}
+
 	require.Error(t, DecodeJSON(req, &dst, 10))
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"value":"ok"}`))
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(`{"value":"ok"}`))
 	require.NoError(t, DecodeJSON(req, &dst, 1024))
 	require.Equal(t, "ok", dst.Value)
 }

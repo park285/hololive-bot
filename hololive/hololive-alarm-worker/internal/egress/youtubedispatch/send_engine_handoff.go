@@ -30,11 +30,14 @@ func (d *SendEngine) dispatchClaimedRowsWithHandoff(
 	if d.handoffMode == handoff.ModeOff || d.handoff == nil || len(rows) == 0 || len(outboxes) == 0 {
 		return false
 	}
+
 	payload, err := d.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
 	if err != nil {
 		d.recordHandoffFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, "payload", err, result, mu)
+
 		return true
 	}
+
 	return d.publishClaimedRowsWithHandoff(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, &payload, result, mu)
 }
 
@@ -60,6 +63,7 @@ func (d *SendEngine) publishClaimedRowsWithHandoff(
 	default:
 		err := fmt.Errorf("unsupported youtube outbox handoff mode %q", d.handoffMode)
 		d.recordHandoffFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, "mode", err, result, mu)
+
 		return true
 	}
 }
@@ -82,6 +86,7 @@ func (d *SendEngine) publishShadowRows(
 	} else {
 		observeYouTubeOutboxHandoff(handoff.ModeShadow, "success", len(rows))
 	}
+
 	return false
 }
 
@@ -100,10 +105,13 @@ func (d *SendEngine) publishCutoverRows(
 	if err := d.handoff.PublishPending(ctx, roomID, payload); err != nil {
 		d.recordHandoffFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, "publish", err, result, mu)
 		observeYouTubeOutboxHandoff(handoff.ModeCutover, "failure", len(rows))
+
 		return true
 	}
+
 	d.recordHandoffSuccess(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, result, mu)
 	observeYouTubeOutboxHandoff(handoff.ModeCutover, "success", len(rows))
+
 	return true
 }
 

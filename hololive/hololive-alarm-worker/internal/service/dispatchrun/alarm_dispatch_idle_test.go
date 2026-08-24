@@ -6,13 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/park285/shared-go/v2/pkg/retry"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPGIdleWaiterConsumesWakeupAndResetsBackoff(t *testing.T) {
-	waiter := &alarmDispatchWakeupWaiter{
+	waiter := &WakeupWaiter{
 		wakeupEnabled: true,
 		pollInterval:  time.Second,
 		backoffMin:    250 * time.Millisecond,
@@ -29,7 +28,8 @@ func TestPGIdleWaiterConsumesWakeupAndResetsBackoff(t *testing.T) {
 
 func TestPGIdleWaiterIncreasesBackoffOnTimeout(t *testing.T) {
 	var timeout time.Duration
-	waiter := &alarmDispatchWakeupWaiter{
+
+	waiter := &WakeupWaiter{
 		wakeupEnabled: true,
 		pollInterval:  time.Second,
 		backoffMin:    250 * time.Millisecond,
@@ -48,7 +48,8 @@ func TestPGIdleWaiterIncreasesBackoffOnTimeout(t *testing.T) {
 
 func TestPGIdleWaiterFallsBackToPollingWhenWakeupDisabled(t *testing.T) {
 	var slept time.Duration
-	waiter := &alarmDispatchWakeupWaiter{
+
+	waiter := &WakeupWaiter{
 		wakeupEnabled: false,
 		pollInterval:  1500 * time.Millisecond,
 		sleep: func(_ context.Context, d time.Duration) bool {
@@ -63,7 +64,8 @@ func TestPGIdleWaiterFallsBackToPollingWhenWakeupDisabled(t *testing.T) {
 
 func TestPGIdleWaiterFallsBackToPollingWhenWakeupErrors(t *testing.T) {
 	var slept time.Duration
-	waiter := &alarmDispatchWakeupWaiter{
+
+	waiter := &WakeupWaiter{
 		wakeupEnabled: true,
 		pollInterval:  time.Second,
 		backoffMin:    250 * time.Millisecond,
@@ -85,7 +87,8 @@ func TestPGIdleWaiterFallsBackToPollingWhenWakeupErrors(t *testing.T) {
 
 func TestPGIdleWaiterFallsBackToPollingWhenWakeupResultUnknown(t *testing.T) {
 	var slept time.Duration
-	waiter := &alarmDispatchWakeupWaiter{
+
+	waiter := &WakeupWaiter{
 		wakeupEnabled: true,
 		pollInterval:  2 * time.Second,
 		backoffMin:    250 * time.Millisecond,
@@ -108,7 +111,8 @@ func TestPGIdleWaiterFallsBackToPollingWhenWakeupResultUnknown(t *testing.T) {
 func TestPGIdleWaiterStopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	waiter := &alarmDispatchWakeupWaiter{wakeupEnabled: true}
+
+	waiter := &WakeupWaiter{wakeupEnabled: true}
 
 	assert.False(t, waiter.Wait(ctx))
 }

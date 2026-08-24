@@ -16,25 +16,34 @@ type calendarFonts struct {
 }
 
 func loadCalendarFonts(sf float64) (calendarFonts, error) {
-	var f calendarFonts
-	var err error
+	var (
+		f   calendarFonts
+		err error
+	)
+
 	if f.title, err = fonts.CaptionFaceSized(30 * sf); err != nil {
 		return f, fmt.Errorf("load title font: %w", err)
 	}
+
 	if f.name, err = fonts.CaptionFaceSized(22 * sf); err != nil {
 		return f, fmt.Errorf("load name font: %w", err)
 	}
+
 	if f.date, err = fonts.CaptionFaceSized(16 * sf); err != nil {
 		return f, fmt.Errorf("load date font: %w", err)
 	}
+
 	if f.badge, err = fonts.CaptionFaceSized(15 * sf); err != nil {
 		return f, fmt.Errorf("load badge font: %w", err)
 	}
+
 	if f.stat, err = fonts.CaptionFaceSized(14 * sf); err != nil {
 		return f, fmt.Errorf("load stat font: %w", err)
 	}
+
 	if f.avatar, err = fonts.CaptionFaceSized(34 * sf); err != nil {
 		return f, fmt.Errorf("load avatar font: %w", err)
 	}
+
 	return f, nil
 }

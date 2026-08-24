@@ -21,7 +21,6 @@
 package durability
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,22 +30,23 @@ import (
 func TestCommandExecutionRepository(t *testing.T) {
 	pool := newDurabilityPool(t)
 	repo := NewCommandExecutionRepository(pool)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	const messageID = "message:m-1"
+	const messageID = testMessageID
 
 	t.Run("only the first claim for a message id wins", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
-		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", "token-a")
+		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", testClaimToken)
 		require.NoError(t, err)
 		assert.True(t, claimed)
 
-		claimed, err = repo.Claim(ctx, messageID, "broadcast_history", "token-a")
+		claimed, err = repo.Claim(ctx, messageID, "broadcast_history", testClaimToken)
 		require.NoError(t, err)
 		assert.False(t, claimed, "재처리 시 두 번째 claim은 0 rows여야 한다")
 
 		var count int
+
 		require.NoError(t, pool.QueryRow(ctx,
 			"SELECT count(message_id) FROM bot_command_executions WHERE message_id = $1", messageID,
 		).Scan(&count))
@@ -61,19 +61,21 @@ func TestCommandExecutionRepository(t *testing.T) {
 
 	t.Run("complete transitions a claimed execution exactly once", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
-		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", "token-a")
+
+		claimed, err := repo.Claim(ctx, messageID, "broadcast_history", testClaimToken)
 		require.NoError(t, err)
 		require.True(t, claimed)
 
-		applied, err := repo.Complete(ctx, messageID, "token-a", CommandExecutionSucceeded)
+		applied, err := repo.Complete(ctx, messageID, testClaimToken, CommandExecutionSucceeded)
 		require.NoError(t, err)
 		assert.True(t, applied)
 
-		applied, err = repo.Complete(ctx, messageID, "token-a", CommandExecutionFailed)
+		applied, err = repo.Complete(ctx, messageID, testClaimToken, CommandExecutionFailed)
 		require.NoError(t, err)
 		assert.False(t, applied, "terminal execution must not transition twice")
 
 		var status, summary string
+
 		require.NoError(t, pool.QueryRow(ctx,
 			"SELECT status, result_summary FROM bot_command_executions WHERE message_id = $1", messageID,
 		).Scan(&status, &summary))
@@ -84,12 +86,12 @@ func TestCommandExecutionRepository(t *testing.T) {
 	t.Run("complete rejects statuses outside the ledger vocabulary", func(t *testing.T) {
 		truncateDurabilityTables(ctx, t, pool)
 
-		_, err := repo.Complete(ctx, messageID, "token-a", "claimed")
+		_, err := repo.Complete(ctx, messageID, testClaimToken, "claimed")
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 
 	t.Run("blank message id is rejected before touching postgres", func(t *testing.T) {
-		_, err := repo.Claim(ctx, "  ", "broadcast_history", "token-a")
+		_, err := repo.Claim(ctx, "  ", "broadcast_history", testClaimToken)
 		require.ErrorIs(t, err, ErrInvalidArgument)
 	})
 }
@@ -97,9 +99,9 @@ func TestCommandExecutionRepository(t *testing.T) {
 func TestCommandExecutionRepositoryWithoutPool(t *testing.T) {
 	repo := NewCommandExecutionRepository(nil)
 
-	_, err := repo.Claim(context.Background(), "message:m-1", "broadcast_history", "token-a")
+	_, err := repo.Claim(t.Context(), testMessageID, "broadcast_history", testClaimToken)
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 
-	_, err = repo.State(context.Background(), "message:m-1")
+	_, err = repo.State(t.Context(), testMessageID)
 	require.ErrorIs(t, err, ErrPoolNotConfigured)
 }

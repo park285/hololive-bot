@@ -17,40 +17,59 @@ func (c *Consumer) reconcileContent(
 ) (content.Decision, ReconcileResult, error) {
 	evidence, err := evidenceFromObservation(claimed)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, err
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("evidence from observation: %w", err)
 	}
-	if err := lockContentSubject(ctx, tx, claimed.ObservationKind, claimed.SubjectKey); err != nil {
-		return content.Decision{}, ReconcileResult{}, err
+
+	if lockErr := lockContentSubject(ctx, tx, claimed.ObservationKind, claimed.SubjectKey); lockErr != nil {
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
 	}
+
 	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, err
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("load content state: %w", err)
 	}
+
 	decision, err := content.Reduce(state, evidence, c.grace)
 	if err != nil {
-		return content.Decision{}, ReconcileResult{}, err
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
+
 	if err := persistContentDecision(ctx, tx, c.writer, claimed, &decision); err != nil {
-		return content.Decision{}, ReconcileResult{}, err
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", err)
 	}
+
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
-		return content.Decision{}, ReconcileResult{}, err
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
 	}
+
 	return decision, ReconcileResult{Applications: mapContentApplications(decision.Applications)}, nil
 }
 
 func evidenceFromObservation(observation *Observation) (content.Evidence, error) {
 	if observation.ObservationKind == contract.KindShortsList {
-		return shortsEvidence(observation)
+		out, err := shortsEvidence(observation)
+		if err != nil {
+			return out, fmt.Errorf("shorts evidence: %w", err)
+		}
+
+		return out, nil
 	}
-	return videoEvidence(observation)
+
+	out, err := videoEvidence(observation)
+	if err != nil {
+		return out, fmt.Errorf("video evidence: %w", err)
+	}
+
+	return out, nil
 }
 
 func videoEvidence(observation *Observation) (content.Evidence, error) {
 	var payload contract.VideoListV1
+
 	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return content.Evidence{}, fmt.Errorf("decode video list payload: %w", err)
 	}
+
 	return content.Evidence{
 		Kind:           observation.ObservationKind,
 		ObservationID:  observation.ID,
@@ -69,9 +88,11 @@ func videoEvidence(observation *Observation) (content.Evidence, error) {
 
 func shortsEvidence(observation *Observation) (content.Evidence, error) {
 	var payload contract.ShortsListV1
+
 	if err := jsonv2.Unmarshal(observation.Payload, &payload); err != nil {
 		return content.Evidence{}, fmt.Errorf("decode shorts list payload: %w", err)
 	}
+
 	return content.Evidence{
 		Kind:           observation.ObservationKind,
 		ObservationID:  observation.ID,
@@ -100,6 +121,7 @@ func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.
 			IsShort:      shorts,
 		})
 	}
+
 	return entities
 }
 
@@ -112,5 +134,6 @@ func mapContentApplications(items []content.Application) []Application {
 			Decision:   items[i].Decision,
 		}
 	}
+
 	return applications
 }

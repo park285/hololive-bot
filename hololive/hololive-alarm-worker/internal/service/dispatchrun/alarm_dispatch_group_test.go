@@ -25,8 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestGroupAlarmDispatchEnvelopes(t *testing.T) {
@@ -44,23 +45,23 @@ func TestGroupAlarmDispatchEnvelopes(t *testing.T) {
 		{
 			name: "single envelope",
 			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeLive, 5),
+				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 5),
 			},
 			want: []alarmDispatchGroupSummary{
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 			},
 		},
 		{
 			name: "multiple envelopes grouped by key",
 			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeLive, 10),
-				alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeLive, 10),
-				alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeLive, 5),
+				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 10),
+				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 10),
+				alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 5),
 				alarmDispatchGroupTestEnvelope("room-2", domain.AlarmTypeLive, 10),
 			},
 			want: []alarmDispatchGroupSummary{
-				{roomID: "room-1", minutesUntil: 10, envelopeCount: 2, notificationCount: 2},
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 10, envelopeCount: 2, notificationCount: 2},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 				{roomID: "room-2", minutesUntil: 10, envelopeCount: 1, notificationCount: 1},
 			},
 		},
@@ -80,7 +81,7 @@ func TestGroupAlarmDispatchEnvelopes(t *testing.T) {
 func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 	t.Parallel()
 
-	firstStart := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	firstStart := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	secondStart := firstStart.Add(time.Minute)
 
 	testCases := []struct {
@@ -97,8 +98,8 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
 			want: []alarmDispatchGroupSummary{
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 			},
 		},
 		{
@@ -110,8 +111,8 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
 			want: []alarmDispatchGroupSummary{
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 			},
 		},
 		{
@@ -122,8 +123,8 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
 			want: []alarmDispatchGroupSummary{
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: "room-1", minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 			},
 		},
 	}
@@ -142,14 +143,15 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 func TestAlarmDispatchGroupKey(t *testing.T) {
 	t.Parallel()
 
-	start := time.Date(2026, 5, 14, 10, 0, 30, 0, time.FixedZone("KST", 9*60*60))
+	start := time.Date(2026, time.May, 14, 10, 0, 30, 0, time.FixedZone("KST", 9*60*60))
 	minuteBucket := start.UTC().Unix() / 60
-	youtubeOutbox := alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeShorts, 0)
+	youtubeOutbox := alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeShorts, 0)
+
 	youtubeOutbox.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	youtubeOutbox.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 		Kind:      domain.OutboxKindNewShort,
 		AlarmType: domain.AlarmTypeShorts,
-		ChannelID: "UCtest",
+		ChannelID: testAlarmChannelID,
 		Items: []domain.YouTubeOutboxItem{
 			{ContentID: "short-b", Payload: `{"video_id":"short-b"}`},
 			{ContentID: "short-a", Payload: `{"video_id":"short-a"}`},
@@ -173,7 +175,7 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 		},
 		{
 			name:     "fallback to minutes",
-			envelope: alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeLive, 15),
+			envelope: alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeLive, 15),
 			want:     "room-1|minutes|15",
 		},
 	}
@@ -190,13 +192,14 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 func TestAlarmDispatchKaringGroupKey(t *testing.T) {
 	t.Parallel()
 
-	start := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
-	youtubeOutbox := alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeCommunity, 0)
+	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
+	youtubeOutbox := alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeCommunity, 0)
+
 	youtubeOutbox.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	youtubeOutbox.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 		Kind:      domain.OutboxKindCommunityPost,
 		AlarmType: domain.AlarmTypeCommunity,
-		ChannelID: "UCtest",
+		ChannelID: testAlarmChannelID,
 		Items: []domain.YouTubeOutboxItem{{
 			ContentID: "post-1",
 			Payload:   `{"post_id":"post-1","content_text":"hello"}`,
@@ -215,7 +218,7 @@ func TestAlarmDispatchKaringGroupKey(t *testing.T) {
 		},
 		{
 			name:     "non-outbox uses karing format",
-			envelope: alarmDispatchGroupTestEnvelope("room-1", domain.AlarmTypeCommunity, 3),
+			envelope: alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeCommunity, 3),
 			want:     "room-1|karing|COMMUNITY|prelive|minutes|3",
 		},
 		{
@@ -275,13 +278,16 @@ func summarizeAlarmDispatchGroups(groups []alarmDispatchGroup) []alarmDispatchGr
 			notificationCount: len(group.notifications),
 		})
 	}
+
 	return summaries
 }
 
 func alarmDispatchGroupTestEnvelope(roomID string, alarmType domain.AlarmType, minutesUntil int) domain.AlarmQueueEnvelope {
 	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
+
 	envelope.Notification.AlarmType = alarmType
 	envelope.Notification.MinutesUntil = minutesUntil
+
 	return envelope
 }
 
@@ -290,8 +296,10 @@ func alarmDispatchGroupTestScheduledEnvelope(
 	minutesUntil int,
 	start time.Time,
 ) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope("room-1", alarmType, minutesUntil)
+	envelope := alarmDispatchGroupTestEnvelope(testAlarmRoomID, alarmType, minutesUntil)
+
 	envelope.Notification.Stream.StartScheduled = &start
+
 	return envelope
 }
 
@@ -300,7 +308,9 @@ func alarmDispatchGroupTestStartedEnvelope(
 	minutesUntil int,
 	start time.Time,
 ) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchGroupTestEnvelope("room-1", alarmType, minutesUntil)
+	envelope := alarmDispatchGroupTestEnvelope(testAlarmRoomID, alarmType, minutesUntil)
+
 	envelope.Notification.Stream.StartActual = &start
+
 	return envelope
 }

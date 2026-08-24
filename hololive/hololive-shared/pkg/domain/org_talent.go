@@ -22,12 +22,12 @@ package domain
 
 import (
 	_ "embed" // 인재 데이터 임베드용
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"net/url"
 	"path"
 	"strings"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
 
@@ -47,6 +47,7 @@ var officialTalentsJSON []byte
 
 func LoadTalents() (*Talents, error) {
 	var talents []*OfficialTalent
+
 	if err := jsonv2.Unmarshal(officialTalentsJSON, &talents); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal talents data: %w", err)
 	}

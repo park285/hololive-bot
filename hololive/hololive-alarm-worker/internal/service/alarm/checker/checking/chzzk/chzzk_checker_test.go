@@ -29,27 +29,27 @@ import (
 	"testing"
 	"time"
 
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
-func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
-	t.Parallel()
+type chzzkCheckerCheckCase struct {
+	name          string
+	statusCode    int
+	responseBody  string
+	responseDelay time.Duration
+	clientTimeout time.Duration
+	wantLen       int
+	expectSecond  bool
+	secondWantLen int
+}
 
-	tests := []struct {
-		name          string
-		statusCode    int
-		responseBody  string
-		responseDelay time.Duration
-		clientTimeout time.Duration
-		wantLen       int
-		expectSecond  bool
-		secondWantLen int
-	}{
+func chzzkCheckerCheckCases() []chzzkCheckerCheckCase {
+	return []chzzkCheckerCheckCase{
 		{
 			name:          "live OPEN이면 checker가 후보를 생성하고 dedup은 Notifier에 위임",
 			statusCode:    http.StatusOK,
@@ -79,58 +79,67 @@ func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
 			wantLen:       0,
 		},
 	}
+}
 
-	for _, tc := range tests {
+func runChzzkCheckerCheckCase(t *testing.T, tc chzzkCheckerCheckCase) {
+	t.Helper()
+
+	cache := newCheckerTestCacheClient(t)
+	ctx := t.Context()
+
+	require.NoError(t, cache.HSet(ctx, sharedalarmkeys.ChzzkChannelMapKey, "yt-1", "chzzk-1"))
+
+	_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1", "room-2"})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if tc.responseDelay > 0 {
+			time.Sleep(tc.responseDelay)
+		}
+
+		w.WriteHeader(tc.statusCode)
+
+		writeChzzkTestResponse(t, w, tc.responseBody)
+	}))
+	t.Cleanup(server.Close)
+
+	httpClient := server.Client()
+
+	if tc.clientTimeout > 0 {
+		httpClient.Timeout = tc.clientTimeout
+	}
+
+	checker, err := NewChzzkChecker(
+		cache,
+		chzzk.NewClient(httpClient, server.URL, newCheckerTestLogger()),
+		newCheckerTestLogger(),
+	)
+	require.NoError(t, err)
+
+	notifications, err := checker.Check(ctx)
+	require.NoError(t, err)
+	require.Len(t, notifications, tc.wantLen)
+
+	if tc.wantLen > 0 {
+		assert.Equal(t, "room-1", notifications[0].RoomID)
+		assert.True(t, notifications[0].Stream.IsChzzkOnly)
+		assert.Equal(t, "yt-1", notifications[0].Stream.ChannelID)
+	}
+
+	if tc.expectSecond {
+		second, secondErr := checker.Check(ctx)
+		require.NoError(t, secondErr)
+		assert.Len(t, second, tc.secondWantLen)
+	}
+}
+
+func TestChzzkCheckerCheck_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range chzzkCheckerCheckCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			cache := newCheckerTestCacheClient(t)
-			ctx := t.Context()
-
-			require.NoError(t, cache.HSet(ctx, sharedalarmkeys.ChzzkChannelMapKey, "yt-1", "chzzk-1"))
-
-			_, err := cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+"yt-1", []string{"room-1", "room-2"})
-			require.NoError(t, err)
-
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tc.responseDelay > 0 {
-					time.Sleep(tc.responseDelay)
-				}
-
-				w.WriteHeader(tc.statusCode)
-
-				writeChzzkTestResponse(t, w, tc.responseBody)
-			}))
-			t.Cleanup(server.Close)
-
-			httpClient := server.Client()
-
-			if tc.clientTimeout > 0 {
-				httpClient.Timeout = tc.clientTimeout
-			}
-
-			checker, err := NewChzzkChecker(
-				cache,
-				chzzk.NewClient(httpClient, server.URL, newCheckerTestLogger()),
-				newCheckerTestLogger(),
-			)
-			require.NoError(t, err)
-
-			notifications, err := checker.Check(ctx)
-			require.NoError(t, err)
-			require.Len(t, notifications, tc.wantLen)
-
-			if tc.wantLen > 0 {
-				assert.Equal(t, "room-1", notifications[0].RoomID)
-				assert.True(t, notifications[0].Stream.IsChzzkOnly)
-				assert.Equal(t, "yt-1", notifications[0].Stream.ChannelID)
-			}
-
-			if tc.expectSecond {
-				second, secondErr := checker.Check(ctx)
-				require.NoError(t, secondErr)
-				assert.Len(t, second, tc.secondWantLen)
-			}
+			runChzzkCheckerCheckCase(t, tc)
 		})
 	}
 }
@@ -155,7 +164,7 @@ func TestChzzkCheckerCheck_DoesNotPreclaimDedup(t *testing.T) {
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 
 		writeChzzkTestResponse(t, w, `{"code":200,"content":{"status":"OPEN"}}`)
@@ -179,7 +188,8 @@ func TestChzzkCheckerCollectNotificationsSkipsInvalidLookupJobs(t *testing.T) {
 	t.Parallel()
 
 	var liveStatusCalls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		liveStatusCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 
@@ -206,7 +216,7 @@ func TestChzzkCheckerCollectNotificationsSkipsInvalidLookupJobs(t *testing.T) {
 			"yt-empty-room": {},
 		},
 		map[string]string{"yt-valid": "라덴"},
-		time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		time.Date(2026, time.May, 22, 12, 0, 0, 0, time.UTC),
 	)
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)

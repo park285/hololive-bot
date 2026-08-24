@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -36,6 +37,7 @@ const (
 
 func (h *StreamHandler) sharedStreamHandler() *sharedserver.StreamHandler {
 	var api *Handler
+
 	if h != nil {
 		api = h.Handler
 	}

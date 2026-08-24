@@ -26,6 +26,8 @@ const (
 	officialScheduleReasonUnknown     officialScheduleReason = "unknown"
 )
 
+const officialScheduleSourceLabel = "source"
+
 var (
 	officialScheduleMetricsOnce        sync.Once
 	officialScheduleFallbackTotal      *prometheus.CounterVec
@@ -50,35 +52,35 @@ func initOfficialScheduleMetrics() {
 				Name: "hololive_official_schedule_requests_total",
 				Help: "Total official schedule API requests grouped by outcome and reason.",
 			},
-			[]string{"source", "outcome", "reason"},
+			[]string{officialScheduleSourceLabel, "outcome", "reason"},
 		)
 		officialScheduleRequestDuration = promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "hololive_official_schedule_request_duration_seconds",
 				Help: "Official schedule API request and decode latency.",
 			},
-			[]string{"source", "outcome"},
+			[]string{officialScheduleSourceLabel, "outcome"},
 		)
 		officialScheduleResponseBytes = promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "hololive_official_schedule_response_bytes",
 				Help: "Official schedule API response size in bytes.",
 			},
-			[]string{"source"},
+			[]string{officialScheduleSourceLabel},
 		)
 		officialScheduleRowsTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_official_schedule_rows_total",
 				Help: "Official schedule API video rows grouped by mapping result.",
 			},
-			[]string{"source", "result"},
+			[]string{officialScheduleSourceLabel, "result"},
 		)
 		officialScheduleLastSuccessSeconds = promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "hololive_official_schedule_last_success_timestamp_seconds",
 				Help: "Unix timestamp of the latest successful official schedule API response.",
 			},
-			[]string{"source"},
+			[]string{officialScheduleSourceLabel},
 		)
 	})
 }
@@ -111,6 +113,7 @@ func observeOfficialScheduleRowResult(result string, count int) {
 	if count <= 0 {
 		return
 	}
+
 	officialScheduleRowsTotal.WithLabelValues("api", result).Add(float64(count))
 }
 
@@ -124,18 +127,23 @@ func classifyOfficialScheduleReason(err error, matchedStreams int) officialSched
 		if matchedStreams > 0 {
 			return officialScheduleReasonMatched
 		}
+
 		return officialScheduleReasonEmpty
 	}
+
 	if IsStructureError(err) {
 		return officialScheduleReasonSchema
 	}
 
 	var sourceErr *officialScheduleSourceError
+
 	if errors.As(err, &sourceErr) && sourceErr.reason != "" {
 		return sourceErr.reason
 	}
+
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return officialScheduleReasonContext
 	}
+
 	return officialScheduleReasonUnknown
 }

@@ -2,6 +2,7 @@ package egress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,15 +27,29 @@ type irisSenderAdapter struct {
 }
 
 func (a irisSenderAdapter) SendMessage(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
-	return a.client.SendMessage(ctx, roomID, message, opts...)
+	if err := a.client.SendMessage(ctx, roomID, message, opts...); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
 }
 
 func (a irisSenderAdapter) SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return a.client.SendMarkdown(ctx, roomID, markdown, opts...)
+	out, err := a.client.SendMarkdown(ctx, roomID, markdown, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("send markdown: %w", err)
+	}
+
+	return out, nil
 }
 
 func (a irisSenderAdapter) SendKaringContentList(ctx context.Context, req *iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
-	return a.client.SendKaringContentList(ctx, *req)
+	out, err := a.client.SendKaringContentList(ctx, *req)
+	if err != nil {
+		return nil, fmt.Errorf("send karing content list: %w", err)
+	}
+
+	return out, nil
 }
 
 type RoomChat interface {
@@ -63,11 +78,13 @@ func WithRoomChat(rooms RoomChat) IrisMessageSenderOption {
 
 func NewIrisMessageSender(client any, opts ...IrisMessageSenderOption) *IrisMessageSender {
 	sender := &IrisMessageSender{client: resolveIrisSender(client)}
+
 	for _, opt := range opts {
 		if opt != nil {
 			opt(sender)
 		}
 	}
+
 	return sender
 }
 
@@ -89,12 +106,15 @@ func (s *IrisMessageSender) send(ctx context.Context, roomID, message string, op
 		if _, err := s.client.SendMarkdown(ctx, roomID, message, opts...); err != nil {
 			return fmt.Errorf("iris send message: %w", err)
 		}
+
 		return nil
 	}
+
 	message = kakaoformat.Render(message)
 	if err := s.client.SendMessage(ctx, roomID, message, opts...); err != nil {
 		return fmt.Errorf("iris send message: %w", err)
 	}
+
 	return nil
 }
 
@@ -102,6 +122,7 @@ func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool
 	if s == nil || !s.markdownReplies {
 		return false
 	}
+
 	if s.rooms == nil {
 		return false
 	}
@@ -111,30 +132,44 @@ func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool
 
 func (s *IrisMessageSender) SendMessage(ctx context.Context, roomID, message string) error {
 	if s == nil || s.client == nil {
-		return fmt.Errorf("iris message sender: client is nil")
+		return errors.New("iris message sender: client is nil")
 	}
-	return s.send(ctx, roomID, message)
+
+	if err := s.send(ctx, roomID, message); err != nil {
+		return fmt.Errorf("send: %w", err)
+	}
+
+	return nil
 }
 
 func (s *IrisMessageSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
 	if s == nil || s.client == nil {
-		return fmt.Errorf("iris message sender: client is nil")
+		return errors.New("iris message sender: client is nil")
 	}
-	return s.send(ctx, roomID, message, iris.WithClientRequestID(clientRequestID))
+
+	if err := s.send(ctx, roomID, message, iris.WithClientRequestID(clientRequestID)); err != nil {
+		return fmt.Errorf("send: %w", err)
+	}
+
+	return nil
 }
 
 func (s *IrisMessageSender) SendKaringContentList(ctx context.Context, roomID string, req *iris.KaringContentListRequest) error {
 	if s == nil || s.client == nil {
-		return fmt.Errorf("iris message sender: client is nil")
+		return errors.New("iris message sender: client is nil")
 	}
+
 	if req == nil {
-		return fmt.Errorf("iris message sender: karing request is nil")
+		return errors.New("iris message sender: karing request is nil")
 	}
+
 	if strings.TrimSpace(req.ReceiverName) == "" && req.ReceiverRoomID == 0 {
 		req.ReceiverName = roomID
 	}
+
 	if _, err := s.client.SendKaringContentList(ctx, req); err != nil {
 		return fmt.Errorf("iris send karing content list: %w", err)
 	}
+
 	return nil
 }

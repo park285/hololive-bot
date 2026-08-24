@@ -10,12 +10,15 @@ import (
 	"syscall"
 	"unicode/utf8"
 
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
-type ErrorCode = contract.CollectionErrorCode
-type FailureClass = contract.FailureClass
+type (
+	ErrorCode    = contract.CollectionErrorCode
+	FailureClass = contract.FailureClass
+)
 
 const (
 	Timeout                = contract.ErrorCollectionTimeout
@@ -58,9 +61,11 @@ func (e *Error) Error() string {
 	if e == nil {
 		return ""
 	}
+
 	if e.err == nil {
 		return string(e.code)
 	}
+
 	return e.err.Error()
 }
 
@@ -68,6 +73,7 @@ func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
 	}
+
 	return e.err
 }
 
@@ -79,6 +85,7 @@ func Wrap(code ErrorCode, class FailureClass, err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return newError(code, class, defaultRetryHint(), err)
 }
 
@@ -86,13 +93,17 @@ func WithRetry(err error, hint RetryHint) error {
 	if err == nil {
 		return nil
 	}
+
 	normalized := Normalize(err)
+
 	if hint.Validate() != nil {
 		degraded := newError(Internal, ClassInternal, defaultRetryHint(), err)
+
 		degraded.unclassified = normalized.unclassified
 
 		return degraded
 	}
+
 	return &Error{
 		code:         normalized.code,
 		class:        normalized.class,
@@ -106,19 +117,25 @@ func Normalize(err error) *Error {
 	if err == nil {
 		return nil
 	}
+
 	var typed *Error
+
 	if errors.As(err, &typed) && typed != nil {
 		return typed.normalized()
 	}
+
 	if errors.Is(err, context.DeadlineExceeded) {
 		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: err}
 	}
+
 	if errors.Is(err, context.Canceled) {
 		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: err}
 	}
+
 	if recognizedTransientNetwork(err) {
 		return &Error{code: Failed, class: ClassTransient, retry: defaultRetryHint(), err: err}
 	}
+
 	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: err, unclassified: true}
 }
 
@@ -126,6 +143,7 @@ func CodeOf(err error) ErrorCode {
 	if normalized := Normalize(err); normalized != nil {
 		return normalized.code
 	}
+
 	return Internal
 }
 
@@ -133,6 +151,7 @@ func ClassOf(err error) FailureClass {
 	if normalized := Normalize(err); normalized != nil {
 		return normalized.class
 	}
+
 	return ClassInternal
 }
 
@@ -140,6 +159,7 @@ func RetryOf(err error) RetryHint {
 	if normalized := Normalize(err); normalized != nil {
 		return normalized.retry
 	}
+
 	return defaultRetryHint()
 }
 
@@ -150,33 +170,41 @@ func DiagnosticOf(err error) contract.FailureDiagnostic {
 		if diagErr != nil {
 			return contract.FailureDiagnostic{}
 		}
+
 		return diagnostic
 	}
+
 	detail := SanitizeDetail(normalized.Error())
 	if strings.TrimSpace(detail) == "" {
 		detail = string(normalized.code)
 	}
+
 	diagnostic, diagErr := contract.NewFailureDiagnostic(normalized.code, normalized.class, detail)
 	if diagErr != nil {
 		fallback, fallbackErr := contract.NewFailureDiagnostic(Internal, ClassInternal, string(Internal))
 		if fallbackErr != nil {
 			return contract.FailureDiagnostic{}
 		}
+
 		return fallback
 	}
+
 	return diagnostic
 }
 
 func SanitizeDetail(detail string) string {
 	detail = strings.ToValidUTF8(detail, "�")
 	detail = sharedlogging.RedactDiagnostic(detail)
+
 	if len(detail) <= MaxDetailBytes {
 		return detail
 	}
+
 	cut := MaxDetailBytes
 	for cut > 0 && !utf8.RuneStart(detail[cut]) {
 		cut--
 	}
+
 	return detail[:cut]
 }
 
@@ -184,15 +212,20 @@ func FromContext(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	if errors.Is(err, context.DeadlineExceeded) {
 		return Wrap(Timeout, ClassTimeout, err)
 	}
+
 	if errors.Is(err, context.Canceled) {
 		return Wrap(Canceled, ClassCanceled, err)
 	}
+
 	if recognizedTransientNetwork(err) {
 		return Wrap(Failed, ClassTransient, err)
 	}
+
+	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return unclassifiedError(err)
 }
 
@@ -200,6 +233,7 @@ func FromContext(err error) error {
 // 진단 tuple은 Internal/ClassInternal 그대로지만, 호출자가 명시적으로 붙인 것과 구별된다.
 func unclassifiedError(err error) error {
 	typed := newError(Internal, ClassInternal, defaultRetryHint(), err)
+
 	typed.unclassified = true
 
 	return typed
@@ -219,16 +253,21 @@ func newError(code ErrorCode, class FailureClass, hint RetryHint, cause error) *
 		typed.code = Internal
 		typed.class = ClassInternal
 		typed.retry = defaultRetryHint()
+
 		return typed
 	}
+
 	if repaired, ok := repairFailureTuple(code, class); ok {
 		typed.code = repaired.code
 		typed.class = repaired.class
+
 		return typed
 	}
+
 	typed.code = Internal
 	typed.class = ClassInternal
 	typed.retry = defaultRetryHint()
+
 	return typed
 }
 
@@ -236,19 +275,24 @@ func (e *Error) normalized() *Error {
 	if e == nil {
 		return nil
 	}
+
 	hint := e.retry
 	if hint.Validate() != nil {
 		hint = defaultRetryHint()
 	}
+
 	if repaired, ok := repairFailureTuple(e.code, e.class); ok {
 		return &Error{code: repaired.code, class: repaired.class, retry: hint, err: e.err, unclassified: e.unclassified}
 	}
+
 	if errors.Is(e.err, context.DeadlineExceeded) {
 		return &Error{code: Timeout, class: ClassTimeout, retry: defaultRetryHint(), err: e.err}
 	}
+
 	if errors.Is(e.err, context.Canceled) {
 		return &Error{code: Canceled, class: ClassCanceled, retry: defaultRetryHint(), err: e.err}
 	}
+
 	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
 }
 
@@ -261,9 +305,11 @@ func repairFailureTuple(code ErrorCode, class FailureClass) (repairedFailure, bo
 	if contract.ValidDurableFailureTuple(code, class) {
 		return repairedFailure{code: code, class: class}, true
 	}
+
 	if repaired, ok := contract.DefaultFailureClass(code); ok {
 		return repairedFailure{code: code, class: repaired}, true
 	}
+
 	return repairedFailure{}, false
 }
 
@@ -271,12 +317,15 @@ func recognizedTransientNetwork(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
+
 	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		return true
 	}
+
 	return errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, syscall.EPIPE)

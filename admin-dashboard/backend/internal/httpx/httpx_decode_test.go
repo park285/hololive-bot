@@ -1,9 +1,7 @@
 package httpx
 
 import (
-	"context"
 	"encoding/json/jsontext"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,9 +16,10 @@ type decodeJSONFixture struct {
 
 func TestDecodeJSONAcceptsExactBodyLimit(t *testing.T) {
 	payload := `{"value":"ok"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(payload))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(payload))
 
 	var dst decodeJSONFixture
+
 	require.NoError(t, DecodeJSON(req, &dst, int64(len(payload))))
 	require.Equal(t, "ok", dst.Value)
 }
@@ -28,29 +27,34 @@ func TestDecodeJSONAcceptsExactBodyLimit(t *testing.T) {
 func TestDecodeJSONRejectsValidPrefixBeyondBodyLimit(t *testing.T) {
 	payload := `{"value":"ok"}`
 	req := httptest.NewRequestWithContext(
-		context.Background(),
+		t.Context(),
 		http.MethodPost,
 		"/",
 		strings.NewReader(payload+strings.Repeat(" ", 16)),
 	)
 
 	var dst decodeJSONFixture
+
 	err := DecodeJSON(req, &dst, int64(len(payload)))
 	require.ErrorContains(t, err, "body exceeds")
 }
 
 func TestDecodeJSONRejectsMultipleValues(t *testing.T) {
 	payload := `{"value":"first"}{"value":"second"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(payload))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader(payload))
 
 	var dst decodeJSONFixture
+
 	err := DecodeJSON(req, &dst, int64(len(payload)))
+
 	var syntaxErr *jsontext.SyntacticError
-	require.True(t, errors.As(err, &syntaxErr))
+
+	require.ErrorAs(t, err, &syntaxErr)
 }
 
 func TestDecodeJSONBytesRejectsUnknownField(t *testing.T) {
 	var dst decodeJSONFixture
+
 	err := DecodeJSONBytes([]byte(`{"value":"ok","extra":true}`), &dst)
 	require.Error(t, err)
 }

@@ -27,15 +27,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	membernewssvc "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
-
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 type memberNewsDigestRequest struct {
@@ -62,12 +61,14 @@ func memberNewsSubscriptionStatusHandler(service *membernewssvc.Service) gin.Han
 		roomID := trimmedRoomIDParam(c)
 		if roomID == "" {
 			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+
 			return
 		}
 
 		subscribed, err := service.IsRoomSubscribed(c.Request.Context(), roomID)
 		if err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "subscription_check_failed", nil)
+
 			return
 		}
 
@@ -84,6 +85,7 @@ func memberNewsSubscribeHandler(service *membernewssvc.Service) gin.HandlerFunc 
 
 		if err := service.SubscribeRoom(c.Request.Context(), req.RoomID, req.RoomName); err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "subscribe_failed", nil)
+
 			return
 		}
 
@@ -96,11 +98,13 @@ func memberNewsUnsubscribeHandler(service *membernewssvc.Service) gin.HandlerFun
 		roomID := trimmedRoomIDParam(c)
 		if roomID == "" {
 			sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+
 			return
 		}
 
 		if err := service.UnsubscribeRoom(c.Request.Context(), roomID); err != nil {
 			sharedserver.RespondError(c, http.StatusInternalServerError, "unsubscribe_failed", nil)
+
 			return
 		}
 
@@ -116,9 +120,11 @@ func memberNewsDigestHandler(service *membernewssvc.Service) gin.HandlerFunc {
 		}
 
 		period := membernewscontracts.NormalizePeriod(membernewscontracts.Period(req.Period))
+
 		digest, err := service.GenerateRoomDigest(c.Request.Context(), req.RoomID, model.Period(period))
 		if err != nil {
 			respondMemberNewsDigestError(c, err)
+
 			return
 		}
 
@@ -132,38 +138,51 @@ func trimmedRoomIDParam(c *gin.Context) string {
 
 func bindMemberNewsSubscribeRequest(c *gin.Context) (subscription.SubscribeRequest, bool) {
 	var req subscription.SubscribeRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
+
 		return subscription.SubscribeRequest{}, false
 	}
+
 	req.RoomID = strings.TrimSpace(req.RoomID)
 	req.RoomName = strings.TrimSpace(req.RoomName)
+
 	if req.RoomID == "" {
 		sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+
 		return subscription.SubscribeRequest{}, false
 	}
+
 	return req, true
 }
 
 func bindMemberNewsDigestRequest(c *gin.Context) (memberNewsDigestRequest, bool) {
 	var req memberNewsDigestRequest
+
 	if err := bindJSON(c, &req); err != nil {
 		sharedserver.RespondError(c, http.StatusBadRequest, "invalid_request", nil)
+
 		return memberNewsDigestRequest{}, false
 	}
+
 	req.RoomID = strings.TrimSpace(req.RoomID)
 	if req.RoomID == "" {
 		sharedserver.RespondError(c, http.StatusBadRequest, "room_id_required", nil)
+
 		return memberNewsDigestRequest{}, false
 	}
+
 	return req, true
 }
 
 func respondMemberNewsDigestError(c *gin.Context, err error) {
 	if errors.Is(err, model.ErrNoSubscribedMembers) {
 		sharedserver.RespondError(c, http.StatusNotFound, "no_subscribed_members", nil)
+
 		return
 	}
+
 	sharedserver.RespondError(c, http.StatusInternalServerError, "digest_generation_failed", nil)
 }
 

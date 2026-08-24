@@ -9,20 +9,20 @@ import (
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
-func newBenchMatcher(tb testing.TB, ctx context.Context) *Matcher {
+func newBenchMatcher(tb testing.TB) *Matcher {
 	tb.Helper()
 
 	provider := newStubMemberProvider([]*domain.Member{
 		{ChannelID: "UC-ch1", Name: "sora"},
 		{ChannelID: "UC-ch2", Name: "miko"},
 	})
-	mm := NewMatcher(ctx, provider, &cachemocks.Client{
+	mm := NewMatcher(tb.Context(), provider, &cachemocks.Client{
 		GetAllMembersFunc: func(context.Context) (map[string]string, error) {
 			return map[string]string{}, nil
 		},
 	}, nil, nil, newMatcherTestLogger())
 
-	if _, err := mm.FindBestMatch(ctx, "sora"); err != nil {
+	if _, _, err := mm.FindBestMatch(tb.Context(), "sora"); err != nil {
 		tb.Fatalf("warmup FindBestMatch: %v", err)
 	}
 
@@ -30,14 +30,14 @@ func newBenchMatcher(tb testing.TB, ctx context.Context) *Matcher {
 }
 
 func TestFindBestMatchCacheHitAllocationBudget(t *testing.T) {
-	ctx := context.Background()
-	mm := newBenchMatcher(t, ctx)
+	ctx := t.Context()
+	mm := newBenchMatcher(t)
 
 	runtime.GC()
 
 	allocs := testing.AllocsPerRun(1000, func() {
-		channel, err := mm.FindBestMatch(ctx, "sora")
-		if err != nil || channel == nil {
+		channel, found, err := mm.FindBestMatch(ctx, "sora")
+		if err != nil || !found {
 			t.Fatalf("FindBestMatch = (%v, %v), want cached channel", channel, err)
 		}
 	})
@@ -47,13 +47,14 @@ func TestFindBestMatchCacheHitAllocationBudget(t *testing.T) {
 }
 
 func BenchmarkFindBestMatchCacheHit(b *testing.B) {
-	ctx := context.Background()
-	mm := newBenchMatcher(b, ctx)
+	ctx := b.Context()
+	mm := newBenchMatcher(b)
 
 	b.ReportAllocs()
+
 	for b.Loop() {
-		channel, err := mm.FindBestMatch(ctx, "sora")
-		if err != nil || channel == nil {
+		channel, found, err := mm.FindBestMatch(ctx, "sora")
+		if err != nil || !found {
 			b.Fatalf("FindBestMatch = (%v, %v), want cached channel", channel, err)
 		}
 	}

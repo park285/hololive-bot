@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/retry"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
-
-	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 const birthdayStreamMaxPublishedPerMemberDay = 3
@@ -21,7 +21,7 @@ type BirthdayMemberRepository interface {
 	FindMembersWithBirthdayOn(ctx context.Context, month, day int) ([]*domain.Member, error)
 }
 
-type birthdayStreamSession struct {
+type BirthdayStreamSession struct {
 	VideoID        string
 	ChannelID      string
 	Title          string
@@ -66,6 +66,7 @@ func NewBirthdayStreamRunner(
 func (r *BirthdayStreamRunner) Start(ctx context.Context) error {
 	for {
 		r.logRunFailure(r.RunOnce(ctx))
+
 		if !r.effectiveSleep()(ctx, r.effectiveInterval()) {
 			return nil
 		}
@@ -76,6 +77,7 @@ func (r *BirthdayStreamRunner) logRunFailure(err error) {
 	if err == nil || r.logger == nil {
 		return
 	}
+
 	r.logger.Warn("Birthday stream runner failed", slog.Any("error", err))
 }
 
@@ -83,20 +85,24 @@ func (r *BirthdayStreamRunner) RunOnce(ctx context.Context) error {
 	now := r.effectiveNow()
 	dates := birthdayStreamEvaluationDates(now, r.effectiveInterval())
 	errs := make([]error, 0, len(dates))
+
 	for _, kstDay := range dates {
 		if err := r.runForDate(ctx, now, kstDay); err != nil {
 			errs = append(errs, err)
 		}
 	}
+
 	return errors.Join(errs...)
 }
 
 func birthdayStreamEvaluationDates(now time.Time, tickInterval time.Duration) []time.Time {
 	current := kstDayStart(now)
 	previous := kstDayStart(now.Add(-tickInterval))
+
 	if previous.Equal(current) {
 		return []time.Time{current}
 	}
+
 	return []time.Time{previous, current}
 }
 
@@ -110,6 +116,7 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, now, kstDay time.
 	if err != nil {
 		return fmt.Errorf("birthday stream runner: find birthday members: %w", err)
 	}
+
 	members = r.filterMembersWithChannel(members)
 	if len(members) == 0 {
 		return nil
@@ -123,22 +130,29 @@ func (r *BirthdayStreamRunner) runForDate(ctx context.Context, now, kstDay time.
 		now.Add(-r.effectiveFreshness()),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("find birthday sessions: %w", err)
 	}
+
 	if len(sessions) == 0 {
 		return nil
 	}
 
-	dateStr := kstDay.Format("2006-01-02")
+	dateStr := kstDay.Format(time.DateOnly)
+
 	candidates, err := r.selectPublishableSessions(ctx, members, sessions, dateStr)
 	if err != nil {
-		return err
+		return fmt.Errorf("select publishable sessions: %w", err)
 	}
+
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	return r.publishCandidates(ctx, candidates, dateStr, len(members))
+	if err := r.publishCandidates(ctx, candidates, dateStr, len(members)); err != nil {
+		return fmt.Errorf("publish candidates: %w", err)
+	}
+
+	return nil
 }
 
 func (r *BirthdayStreamRunner) publishCandidates(
@@ -148,10 +162,12 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	memberCount int,
 ) error {
 	birthdayEventKeys := birthdayGreetingEventKeys(candidates, dateStr)
+
 	roomsByEventKey, err := r.sessions.FindSentRoomsByEventKeys(ctx, birthdayEventKeys)
 	if err != nil {
 		return fmt.Errorf("birthday stream runner: find sent birthday rooms: %w", err)
 	}
+
 	if len(roomsByEventKey) == 0 {
 		return nil
 	}
@@ -160,6 +176,7 @@ func (r *BirthdayStreamRunner) publishCandidates(
 	if len(envelopes) == 0 {
 		return nil
 	}
+
 	result, err := r.publisher.PublishDispatchBatch(ctx, envelopes)
 	if err != nil {
 		return fmt.Errorf("birthday stream runner: publish dispatch batch: %w", err)
@@ -177,6 +194,7 @@ func (r *BirthdayStreamRunner) publishCandidates(
 			slog.Int("duplicate_events", result.DuplicateEvents),
 		)
 	}
+
 	return nil
 }
 
@@ -188,10 +206,13 @@ func (r *BirthdayStreamRunner) filterMembersWithChannel(members []*domain.Member
 				r.logger.Debug("Birthday stream runner skipped member without YouTube channel",
 					slog.String("member", resolveCelebrationMemberName(m)))
 			}
+
 			continue
 		}
+
 		withChannel = append(withChannel, m)
 	}
+
 	return withChannel
 }
 
@@ -200,100 +221,113 @@ func memberChannelIDs(members []*domain.Member) []string {
 	for _, m := range members {
 		channelIDs = append(channelIDs, m.ChannelID)
 	}
+
 	return channelIDs
 }
 
 type birthdayStreamCandidate struct {
 	member  *domain.Member
-	session birthdayStreamSession
+	session BirthdayStreamSession
 }
 
 func (r *BirthdayStreamRunner) selectPublishableSessions(
 	ctx context.Context,
 	members []*domain.Member,
-	sessions []birthdayStreamSession,
+	sessions []BirthdayStreamSession,
 	dateStr string,
 ) ([]birthdayStreamCandidate, error) {
-	byChannel := make(map[string][]birthdayStreamSession, len(members))
+	byChannel := make(map[string][]BirthdayStreamSession, len(members))
+
 	for _, session := range sessions {
 		byChannel[session.ChannelID] = append(byChannel[session.ChannelID], session)
 	}
 
 	candidates := make([]birthdayStreamCandidate, 0, len(sessions))
+
 	for _, m := range members {
 		channelSessions := byChannel[m.ChannelID]
 		if len(channelSessions) == 0 {
 			continue
 		}
+
 		selected, err := r.selectNewSessionsForMember(ctx, m.ChannelID, channelSessions, dateStr)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("select new sessions for member: %w", err)
 		}
+
 		for _, session := range selected {
 			candidates = append(candidates, birthdayStreamCandidate{member: m, session: session})
 		}
 	}
+
 	return candidates, nil
 }
 
 func (r *BirthdayStreamRunner) selectNewSessionsForMember(
 	ctx context.Context,
 	channelID string,
-	sessions []birthdayStreamSession,
+	sessions []BirthdayStreamSession,
 	dateStr string,
-) ([]birthdayStreamSession, error) {
+) ([]BirthdayStreamSession, error) {
 	publishedKeys, err := r.sessions.ListPublishedEventKeys(ctx, birthdayStreamEventKeyPrefix(channelID, dateStr))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list published event keys: %w", err)
 	}
 
 	published := make(map[string]struct{}, len(publishedKeys))
 	for _, key := range publishedKeys {
 		published[key] = struct{}{}
 	}
+
 	return selectBirthdayStreamSessionsWithinDailyCap(channelID, dateStr, sessions, published), nil
 }
 
 func selectBirthdayStreamSessionsWithinDailyCap(
 	channelID string,
 	dateStr string,
-	sessions []birthdayStreamSession,
+	sessions []BirthdayStreamSession,
 	published map[string]struct{},
-) []birthdayStreamSession {
+) []BirthdayStreamSession {
 	remaining := max(birthdayStreamMaxPublishedPerMemberDay-len(published), 0)
 
-	ordered := append([]birthdayStreamSession(nil), sessions...)
+	ordered := append([]BirthdayStreamSession(nil), sessions...)
 	sortBirthdayStreamSessions(ordered)
-	selected := make([]birthdayStreamSession, 0, min(len(ordered), birthdayStreamMaxPublishedPerMemberDay))
+
+	selected := make([]BirthdayStreamSession, 0, min(len(ordered), birthdayStreamMaxPublishedPerMemberDay))
 	for _, session := range ordered {
 		if _, ok := published[birthdayStreamEventKey(channelID, dateStr, session.VideoID)]; ok {
 			if len(selected) < birthdayStreamMaxPublishedPerMemberDay {
 				selected = append(selected, session)
 			}
+
 			continue
 		}
+
 		if remaining > 0 && len(selected) < birthdayStreamMaxPublishedPerMemberDay {
 			selected = append(selected, session)
 			remaining--
 		}
 	}
+
 	return selected
 }
 
-func sortBirthdayStreamSessions(sessions []birthdayStreamSession) {
+func sortBirthdayStreamSessions(sessions []BirthdayStreamSession) {
 	sort.SliceStable(sessions, func(i, j int) bool {
 		a, b := birthdayStreamEffectiveStart(&sessions[i]), birthdayStreamEffectiveStart(&sessions[j])
 		if !a.Equal(b) {
 			return a.Before(b)
 		}
+
 		return sessions[i].VideoID < sessions[j].VideoID
 	})
 }
 
-func birthdayStreamEffectiveStart(session *birthdayStreamSession) time.Time {
+func birthdayStreamEffectiveStart(session *BirthdayStreamSession) time.Time {
 	if start := util.FirstNonNilTime(session.StartedAt, session.ScheduledStart); start != nil {
 		return *start
 	}
+
 	return time.Time{}
 }
 
@@ -301,6 +335,7 @@ func (r *BirthdayStreamRunner) effectiveInterval() time.Duration {
 	if r.runInterval > 0 {
 		return r.runInterval
 	}
+
 	return 30 * time.Minute
 }
 
@@ -308,6 +343,7 @@ func (r *BirthdayStreamRunner) effectiveFreshness() time.Duration {
 	if r.sessionFreshness > 0 {
 		return r.sessionFreshness
 	}
+
 	return 30 * time.Minute
 }
 
@@ -315,6 +351,7 @@ func (r *BirthdayStreamRunner) effectiveNow() time.Time {
 	if r.now != nil {
 		return r.now()
 	}
+
 	return util.NowKST()
 }
 
@@ -322,5 +359,6 @@ func (r *BirthdayStreamRunner) effectiveSleep() func(context.Context, time.Durat
 	if r.sleep != nil {
 		return r.sleep
 	}
+
 	return retry.Sleep
 }

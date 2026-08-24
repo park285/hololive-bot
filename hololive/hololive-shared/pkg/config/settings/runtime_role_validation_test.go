@@ -8,6 +8,7 @@ import (
 
 func clearRuntimeRoleEnv(t *testing.T) {
 	t.Helper()
+
 	for _, key := range []string{
 		notificationEgressRoleEnv,
 		notificationSchedulerRoleEnv,
@@ -22,6 +23,7 @@ func clearRuntimeRoleEnv(t *testing.T) {
 
 func validRuntimeRoleConfig(t *testing.T) *Config {
 	t.Helper()
+
 	return &Config{
 		Server: ServerConfig{
 			Port:           30001,
@@ -29,7 +31,7 @@ func validRuntimeRoleConfig(t *testing.T) *Config {
 			HTTPTransports: []string{"h3"},
 			H3Addr:         ":30001",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
-			H3KeyFile:      "/run/hololive-bot/certs/hololive-h3.key",
+			H3KeyFile:      hololiveH3KeyPath,
 		},
 		Kakao: KakaoConfig{Rooms: []string{"room"}},
 		Iris: IrisConfig{
@@ -46,15 +48,15 @@ func validRuntimeRoleConfig(t *testing.T) *Config {
 				WallClockBudget: time.Second,
 			},
 		},
-		Postgres: PostgresConfig{SSLMode: "verify-full"},
+		Postgres: PostgresConfig{SSLMode: postgresSSLModeVerifyFull},
 		Scraper: ScraperConfig{
 			FetcherEngine: ScraperFetcherEngineNetHTTP,
 			Backfill:      ScraperBackfillConfig{TargetGroup: "notification"},
 		},
 		OfficialSchedule:     DefaultOfficialScheduleConfig(),
 		MaxResponseBodyBytes: DefaultMaxResponseBodyBytes,
-		Environment:          "production",
-		YouTubeCollector:     YouTubeCollectorConfig{InstanceID: "youtube-collector-c"},
+		Environment:          environmentProduction,
+		YouTubeCollector:     YouTubeCollectorConfig{InstanceID: collectorInstanceC},
 		APIWorkerProfile:     apiWorkerProfileFixture(t),
 		AlarmWorkerProfile:   alarmWorkerProfileFixture(t),
 	}
@@ -68,10 +70,10 @@ func validLLMSchedulerRuntimeConfig() *LLMSchedulerConfig {
 			HTTPTransports: []string{"h3"},
 			H3Addr:         ":30003",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
-			H3KeyFile:      "/run/hololive-bot/certs/hololive-h3.key",
+			H3KeyFile:      hololiveH3KeyPath,
 		},
-		Postgres:    PostgresConfig{SSLMode: "verify-full"},
-		Environment: "production",
+		Postgres:    PostgresConfig{SSLMode: postgresSSLModeVerifyFull},
+		Environment: environmentProduction,
 	}
 }
 
@@ -90,7 +92,7 @@ func TestValidateBotRuntimeRejectsMixedCaseNotificationEgressOwner(t *testing.T)
 	t.Setenv(notificationEgressRoleEnv, "Owner")
 
 	err := validRuntimeRoleConfig(t).ValidateBotRuntime()
-	if err == nil || err.Error() != "bot must not own proactive notification egress; NOTIFICATION_EGRESS_ROLE=owner is reserved for alarm-worker" {
+	if err == nil || err.Error() != "validate no notification egress ownership: bot must not own proactive notification egress; NOTIFICATION_EGRESS_ROLE=owner is reserved for alarm-worker" {
 		t.Fatalf("ValidateBotRuntime() error = %v, want proactive egress ownership rejection", err)
 	}
 }
@@ -109,14 +111,15 @@ func TestValidateAlarmWorkerRuntimeProductionRequiresOwnerWorkerRoles(t *testing
 	clearRuntimeRoleEnv(t)
 
 	err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
-	if err == nil || err.Error() != "alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner" {
+	if err == nil || err.Error() != "validate alarm worker ownership: alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner" {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want owner role requirement", err)
 	}
 
 	clearRuntimeRoleEnv(t)
 	t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
+
 	err = validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
-	if err == nil || err.Error() != "alarm-worker production requires NOTIFICATION_SCHEDULER_ROLE=worker|off" {
+	if err == nil || err.Error() != "validate alarm worker ownership: alarm-worker production requires NOTIFICATION_SCHEDULER_ROLE=worker|off" {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want scheduler role enumeration requirement", err)
 	}
 }
@@ -129,7 +132,7 @@ func TestValidateAlarmWorkerRuntimeProductionRejectsNonOwnerEgressRoles(t *testi
 			t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
 
 			err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
-			if err == nil || err.Error() != "alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner" {
+			if err == nil || err.Error() != "validate alarm worker ownership: alarm-worker production requires NOTIFICATION_EGRESS_ROLE=owner" {
 				t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want owner role requirement", err)
 			}
 		})
@@ -140,6 +143,7 @@ func TestValidateAlarmWorkerRuntimeNonProductionSkipsOwnershipRequirements(t *te
 	clearRuntimeRoleEnv(t)
 
 	cfg := validRuntimeRoleConfig(t)
+
 	cfg.Environment = "staging"
 
 	if err := cfg.ValidateAlarmWorkerRuntime(); err != nil {
@@ -173,7 +177,7 @@ func TestValidateAlarmWorkerRuntimeRejectsUnsupportedSchedulerRole(t *testing.T)
 	t.Setenv(notificationSchedulerRoleEnv, "bot")
 
 	err := validRuntimeRoleConfig(t).ValidateAlarmWorkerRuntime()
-	if err == nil || err.Error() != "unsupported NOTIFICATION_SCHEDULER_ROLE=bot" {
+	if err == nil || err.Error() != "validate alarm worker ownership: unsupported NOTIFICATION_SCHEDULER_ROLE=bot" {
 		t.Fatalf("ValidateAlarmWorkerRuntime() error = %v, want unsupported scheduler role rejection", err)
 	}
 }
@@ -184,8 +188,10 @@ func TestValidateAlarmWorkerRuntimeProductionRejectsDisabledProfileExecutor(t *t
 			clearRuntimeRoleEnv(t)
 			t.Setenv(notificationEgressRoleEnv, notificationEgressRoleOwner)
 			t.Setenv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker)
+
 			cfg := validRuntimeRoleConfig(t)
 			worker := cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID]
+
 			worker.Executor.Enabled = false
 			cfg.AlarmWorkerProfile.Loaded.Profile.Workers[workerID] = worker
 

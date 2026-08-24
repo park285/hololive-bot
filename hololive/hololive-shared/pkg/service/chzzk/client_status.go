@@ -22,22 +22,22 @@ package chzzk
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"net/http"
-
-	jsonv2 "encoding/json/v2"
 
 	apperrors "github.com/kapu/hololive-shared/pkg/apperrors"
 )
 
 func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStatusContent, error) {
 	if err := c.rejectIfCircuitOpen(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reject if circuit open: %w", err)
 	}
 
 	escapedChannelID, err := escapedChannelPath(channelID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("escaped channel path: %w", err)
 	}
 
 	path := fmt.Sprintf("/polling/v2/channels/%s/live-status", escapedChannelID)
@@ -49,6 +49,7 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 	}
 
 	var liveStatusResp LiveStatusResponse
+
 	if err := c.executeRequest(chzzkGetLiveStatusOp, req, "failed to read response body", func(body []byte) error {
 		if err := jsonv2.Unmarshal(body, &liveStatusResp); err != nil {
 			return fmt.Errorf("failed to unmarshal response: %w", err)
@@ -56,6 +57,7 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 
 		return nil
 	}); err != nil {
+		//nolint:wrapcheck // 상태 코드 오류에도 unmarshal 접두사가 붙어 실제로 거치지 않은 단계를 가리켰다. APIError 문자열을 그대로 둔다.
 		return nil, err
 	}
 
@@ -74,7 +76,7 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 	}
 
 	if liveStatusResp.Content == nil {
-		return nil, fmt.Errorf("chzzk live status content is nil")
+		return nil, errors.New("chzzk live status content is nil")
 	}
 
 	return liveStatusResp.Content, nil
@@ -82,12 +84,12 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 
 func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]ScheduledLive, error) {
 	if err := c.rejectIfCircuitOpen(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reject if circuit open: %w", err)
 	}
 
 	escapedChannelID, err := escapedChannelPath(channelID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("escaped channel path: %w", err)
 	}
 
 	path := fmt.Sprintf("/service/v1/channels/%s/scheduled-lives", escapedChannelID)
@@ -99,6 +101,7 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 	}
 
 	var scheduledResp ScheduledLivesResponse
+
 	if err := c.executeRequest(chzzkGetScheduledLivesOp, req, "failed to read response body", func(body []byte) error {
 		if err := jsonv2.Unmarshal(body, &scheduledResp); err != nil {
 			return fmt.Errorf("failed to unmarshal response: %w", err)
@@ -106,6 +109,7 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 
 		return nil
 	}); err != nil {
+		//nolint:wrapcheck // 상태 코드 오류에도 unmarshal 접두사가 붙어 실제로 거치지 않은 단계를 가리켰다. APIError 문자열을 그대로 둔다.
 		return nil, err
 	}
 

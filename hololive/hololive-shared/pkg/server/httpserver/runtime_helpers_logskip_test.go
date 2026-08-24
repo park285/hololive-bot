@@ -19,7 +19,9 @@ func TestNewRuntimeRouterSkipsObservabilityHeartbeatLogging(t *testing.T) {
 		"/no-such-route":                   true,
 	} {
 		var logs bytes.Buffer
+
 		logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
 		router, err := NewRuntimeRouter(t.Context(), logger, &RuntimeRouterOptions{})
 		if err != nil {
 			t.Fatalf("NewRuntimeRouter() error = %v", err)
@@ -31,6 +33,7 @@ func TestNewRuntimeRouterSkipsObservabilityHeartbeatLogging(t *testing.T) {
 		if got, want := rr.Code, http.StatusNotFound; got != want {
 			t.Fatalf("GET %q status = %d, want %d", target, got, want)
 		}
+
 		if got := strings.Contains(logs.String(), "http.request.completed"); got != wantLogged {
 			t.Fatalf("GET %q logged = %v, want %v", target, got, wantLogged)
 		}

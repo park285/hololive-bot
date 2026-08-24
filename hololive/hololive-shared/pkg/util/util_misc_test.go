@@ -33,9 +33,11 @@ func TestUnique(t *testing.T) {
 
 	got := Unique([]int{3, 1, 3, 2, 1, 4, 2})
 	want := []int{3, 1, 2, 4}
+
 	if len(got) != len(want) {
 		t.Fatalf("len(Unique()) = %d, want %d", len(got), len(want))
 	}
+
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("Unique()[%d] = %d, want %d", i, got[i], want[i])
@@ -60,6 +62,7 @@ func TestFormatKoreanNumber(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := FormatKoreanNumber(tc.in); got != tc.want {
 				t.Fatalf("FormatKoreanNumber(%d) = %q, want %q", tc.in, got, tc.want)
 			}
@@ -83,6 +86,7 @@ func TestNormalizeSuffix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := NormalizeSuffix(tc.in); got != tc.want {
 				t.Fatalf("NormalizeSuffix(%q) = %q, want %q", tc.in, got, tc.want)
 			}
@@ -95,6 +99,7 @@ func TestIsValkeyNil(t *testing.T) {
 
 	t.Run("nil error", func(t *testing.T) {
 		t.Parallel()
+
 		if IsValkeyNil(nil) {
 			t.Fatal("IsValkeyNil(nil) = true, want false")
 		}
@@ -102,6 +107,7 @@ func TestIsValkeyNil(t *testing.T) {
 
 	t.Run("direct valkey nil", func(t *testing.T) {
 		t.Parallel()
+
 		if !IsValkeyNil(valkey.Nil) {
 			t.Fatal("IsValkeyNil(valkey.Nil) = false, want true")
 		}
@@ -109,8 +115,10 @@ func TestIsValkeyNil(t *testing.T) {
 
 	t.Run("wrapped valkey nil", func(t *testing.T) {
 		t.Parallel()
+
 		wrapped := fmt.Errorf("outer: %w", valkey.Nil)
 		doubleWrapped := fmt.Errorf("outer2: %w", wrapped)
+
 		if !IsValkeyNil(doubleWrapped) {
 			t.Fatal("IsValkeyNil(doubleWrapped valkey.Nil) = false, want true")
 		}
@@ -118,6 +126,7 @@ func TestIsValkeyNil(t *testing.T) {
 
 	t.Run("non-valkey error", func(t *testing.T) {
 		t.Parallel()
+
 		if IsValkeyNil(errors.New("other")) {
 			t.Fatal("IsValkeyNil(non-valkey) = true, want false")
 		}

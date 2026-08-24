@@ -1,22 +1,22 @@
 package repository
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func TestTemplateRepository_UpsertResolvesCommittedDuplicateRow(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repository := NewTemplateRepository(pool, logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKeyOutboxCommunity
 
 	_, err := pool.Exec(ctx,
@@ -33,18 +33,18 @@ func TestTemplateRepository_UpsertResolvesCommittedDuplicateRow(t *testing.T) {
 	require.NotNil(t, tmpl)
 	assert.Equal(t, "resolved body", tmpl.Body)
 
-	found, err := repository.FindByKeyAndChannel(ctx, key, nil)
+	resolved, found, err := repository.FindByKeyAndChannel(ctx, key, nil)
 	require.NoError(t, err)
-	require.NotNil(t, found)
-	assert.Equal(t, "resolved body", found.Body)
-	assert.Equal(t, tmpl.ID, found.ID)
+	require.True(t, found)
+	assert.Equal(t, "resolved body", resolved.Body)
+	assert.Equal(t, tmpl.ID, resolved.ID)
 }
 
 func TestTemplateRepository_UpsertResolvesCommittedDuplicateOverrideRow(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repository := NewTemplateRepository(pool, logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKeyOutboxCommunity
 	channelID := "room_dup"
 
@@ -63,9 +63,9 @@ func TestTemplateRepository_UpsertResolvesCommittedDuplicateOverrideRow(t *testi
 	require.NotNil(t, tmpl.ChannelID)
 	assert.Equal(t, channelID, *tmpl.ChannelID)
 
-	found, err := repository.FindByKeyAndChannel(ctx, key, &channelID)
+	resolved, found, err := repository.FindByKeyAndChannel(ctx, key, &channelID)
 	require.NoError(t, err)
-	require.NotNil(t, found)
-	assert.Equal(t, "resolved body", found.Body)
-	assert.Equal(t, tmpl.ID, found.ID)
+	require.True(t, found)
+	assert.Equal(t, "resolved body", resolved.Body)
+	assert.Equal(t, tmpl.ID, resolved.ID)
 }

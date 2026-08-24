@@ -5,10 +5,20 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
+)
+
+const (
+	finalizeOpReleaseClaimKeys     = "ReleaseClaimKeys"
+	finalizeOpRouteFailures        = "RouteFailures"
+	finalizeOpRouteSendingFailures = "RouteSendingFailures"
+	finalizeOpRequeue              = "Requeue"
+	finalizeOpRequeuePreSend       = "RequeuePreSend"
+	finalizeOpQuarantine           = "Quarantine"
 )
 
 type finalizeFailureCall struct {
@@ -41,37 +51,40 @@ func (c *finalizeFailureRecordingConsumer) MarkDispatched(context.Context, []dom
 }
 
 func (c *finalizeFailureRecordingConsumer) ReleaseClaimKeys(_ context.Context, claimKeys []string) error {
-	c.calls = append(c.calls, finalizeFailureCall{op: "ReleaseClaimKeys", claimKeys: claimKeys})
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpReleaseClaimKeys, claimKeys: claimKeys})
 	return c.releaseClaimErr
 }
 
 func (c *finalizeFailureRecordingConsumer) RouteFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
-	c.calls = append(c.calls, finalizeFailureCall{op: "RouteFailures", retry: retryEnvelopes, dlq: dlqEnvelopes})
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRouteFailures, retry: retryEnvelopes, dlq: dlqEnvelopes})
 	return c.routeFailuresErr
 }
 
 func (c *finalizeFailureRecordingConsumer) Requeue(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.calls = append(c.calls, finalizeFailureCall{op: "Requeue", envelopes: envelopes})
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRequeue, envelopes: envelopes})
 	return c.requeueErr
 }
 
 func (c *finalizeFailureRecordingConsumer) RequeuePreSend(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	c.calls = append(c.calls, finalizeFailureCall{op: "RequeuePreSend", envelopes: envelopes})
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRequeuePreSend, envelopes: envelopes})
 	return c.requeueErr
 }
 
 func (c *finalizeFailureRecordingConsumer) RouteSendingFailures(_ context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
-	c.calls = append(c.calls, finalizeFailureCall{op: "RouteSendingFailures", retry: retryEnvelopes, dlq: dlqEnvelopes})
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpRouteSendingFailures, retry: retryEnvelopes, dlq: dlqEnvelopes})
 	if len(c.routeSendingFailuresErrs) == 0 {
 		return nil
 	}
+
 	err := c.routeSendingFailuresErrs[0]
+
 	c.routeSendingFailuresErrs = c.routeSendingFailuresErrs[1:]
+
 	return err
 }
 
-func (c *finalizeFailureRecordingConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	c.calls = append(c.calls, finalizeFailureCall{op: "Quarantine", envelopes: envelopes})
+func (c *finalizeFailureRecordingConsumer) Quarantine(_ context.Context, envelopes []domain.AlarmQueueEnvelope, _ error) error {
+	c.calls = append(c.calls, finalizeFailureCall{op: finalizeOpQuarantine, envelopes: envelopes})
 	return nil
 }
 
@@ -80,6 +93,7 @@ func finalizeFailureOps(calls []finalizeFailureCall) []string {
 	for _, call := range calls {
 		ops = append(ops, call.op)
 	}
+
 	return ops
 }
 
@@ -89,18 +103,22 @@ const (
 )
 
 func finalizeFailureRetryEnvelope() domain.AlarmQueueEnvelope {
-	roomID := "room-1"
+	roomID := testAlarmRoomID
 	env := alarmDispatchRunnerTestEnvelope(roomID, nil)
+
 	env.DispatchOutboxID = finalizeFailureRetryDeliveryID
 	env.ClaimKeys = []string{"claim:" + roomID}
+
 	return env
 }
 
 func finalizeFailureDLQEnvelope() domain.AlarmQueueEnvelope {
 	roomID := "room-2"
 	env := alarmDispatchRunnerTestEnvelope(roomID, &domain.AlarmQueueRetryMetadata{Attempt: 2})
+
 	env.DispatchOutboxID = finalizeFailureDLQDeliveryID
 	env.ClaimKeys = []string{"claim:" + roomID}
+
 	return env
 }
 
@@ -112,7 +130,7 @@ func TestPersistPreSendFailureCallSequenceHappyPath(t *testing.T) {
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
 	require.NoError(t, err)
-	require.Equal(t, []string{"RouteFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
+	require.Equal(t, []string{finalizeOpRouteFailures, finalizeOpReleaseClaimKeys}, finalizeFailureOps(consumer.calls))
 	require.Len(t, consumer.calls[0].retry, 1)
 	require.Len(t, consumer.calls[0].dlq, 1)
 	assert.Equal(t, 1, consumer.calls[0].retry[0].Retry.Attempt)
@@ -131,9 +149,9 @@ func TestPersistPreSendFailureRouteFailureFallsBackToRequeue(t *testing.T) {
 	err := runner.persistPreSendFailure(t.Context(), envelopes, errors.New("render failed"))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, routeErr)
+	require.ErrorIs(t, err, routeErr)
 	assert.Equal(t, "route alarm dispatch before send failure: route down", err.Error())
-	require.Equal(t, []string{"RouteFailures", "Requeue"}, finalizeFailureOps(consumer.calls))
+	require.Equal(t, []string{finalizeOpRouteFailures, finalizeOpRequeue}, finalizeFailureOps(consumer.calls))
 	require.Len(t, consumer.calls[1].envelopes, 2)
 	assert.Equal(t, 1, consumer.calls[1].envelopes[0].Retry.Attempt)
 	assert.Equal(t, 3, consumer.calls[1].envelopes[1].Retry.Attempt)
@@ -147,9 +165,9 @@ func TestPersistSendingRetryCallSequenceHappyPath(t *testing.T) {
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
 	require.NoError(t, err)
-	require.Equal(t, []string{"RouteSendingFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
+	require.Equal(t, []string{finalizeOpRouteSendingFailures, finalizeOpReleaseClaimKeys}, finalizeFailureOps(consumer.calls))
 	require.Len(t, consumer.calls[0].retry, 1)
-	assert.Equal(t, "room-1", consumer.calls[0].retry[0].Notification.RoomID)
+	assert.Equal(t, testAlarmRoomID, consumer.calls[0].retry[0].Notification.RoomID)
 	require.Len(t, consumer.calls[0].dlq, 1)
 	assert.Equal(t, "room-2", consumer.calls[0].dlq[0].Notification.RoomID)
 	assert.Equal(t, []string{"claim:room-2"}, consumer.calls[1].claimKeys)
@@ -164,12 +182,12 @@ func TestPersistSendingRetryInfraFailureFallsBackToSendingFenceRequeue(t *testin
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, routeErr)
+	require.ErrorIs(t, err, routeErr)
 	assert.Contains(t, err.Error(), "route alarm dispatch sending failure:")
-	require.Equal(t, []string{"RouteSendingFailures", "RouteSendingFailures"}, finalizeFailureOps(consumer.calls),
+	require.Equal(t, []string{finalizeOpRouteSendingFailures, finalizeOpRouteSendingFailures}, finalizeFailureOps(consumer.calls),
 		"sending 경로 fallback은 leased 전용 Requeue가 아니라 sending fence 전량-retry로 복원해야 한다")
 	require.Len(t, consumer.calls[1].retry, 2)
-	assert.Equal(t, "room-1", consumer.calls[1].retry[0].Notification.RoomID)
+	assert.Equal(t, testAlarmRoomID, consumer.calls[1].retry[0].Notification.RoomID)
 	assert.Equal(t, "room-2", consumer.calls[1].retry[1].Notification.RoomID)
 	assert.Empty(t, consumer.calls[1].dlq, "fallback requeue는 전량 retry로 복원한다")
 	require.NotNil(t, consumer.calls[1].retry[0].Retry)
@@ -190,10 +208,10 @@ func TestPersistSendingRetryFallbackRequeueFailureWrapPinned(t *testing.T) {
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, routeErr)
-	assert.ErrorIs(t, err, requeueErr)
+	require.ErrorIs(t, err, routeErr)
+	require.ErrorIs(t, err, requeueErr)
 	assert.Contains(t, err.Error(), "fallback requeue:")
-	require.Equal(t, []string{"RouteSendingFailures", "RouteSendingFailures"}, finalizeFailureOps(consumer.calls))
+	require.Equal(t, []string{finalizeOpRouteSendingFailures, finalizeOpRouteSendingFailures}, finalizeFailureOps(consumer.calls))
 }
 
 func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *testing.T) {
@@ -210,8 +228,8 @@ func TestPersistSendingRetryPartialRoutingSkipsRequeueAndReleasesAppliedDLQ(t *t
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, partialErr)
-	require.Equal(t, []string{"RouteSendingFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
+	require.ErrorIs(t, err, partialErr)
+	require.Equal(t, []string{finalizeOpRouteSendingFailures, finalizeOpReleaseClaimKeys}, finalizeFailureOps(consumer.calls))
 	assert.Equal(t, []string{"claim:room-2"}, consumer.calls[1].claimKeys)
 }
 
@@ -224,9 +242,9 @@ func TestPersistSendingRetryReleaseClaimKeysFailureWrapPinned(t *testing.T) {
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, releaseErr)
+	require.ErrorIs(t, err, releaseErr)
 	assert.Equal(t, "release alarm dispatch dlq claim keys: release down", err.Error())
-	require.Equal(t, []string{"RouteSendingFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
+	require.Equal(t, []string{finalizeOpRouteSendingFailures, finalizeOpReleaseClaimKeys}, finalizeFailureOps(consumer.calls))
 }
 
 func TestPersistSendingRetryNeverFallsBackToLeasedOnlyRouteFailures(t *testing.T) {
@@ -237,8 +255,8 @@ func TestPersistSendingRetryNeverFallsBackToLeasedOnlyRouteFailures(t *testing.T
 	err := runner.persistSendingRetry(t.Context(), envelopes, errors.New("502"))
 
 	require.NoError(t, err)
-	require.Equal(t, []string{"RouteSendingFailures", "ReleaseClaimKeys"}, finalizeFailureOps(consumer.calls))
+	require.Equal(t, []string{finalizeOpRouteSendingFailures, finalizeOpReleaseClaimKeys}, finalizeFailureOps(consumer.calls))
 	require.Len(t, consumer.calls[0].retry, 1)
-	assert.Equal(t, "room-1", consumer.calls[0].retry[0].Notification.RoomID)
+	assert.Equal(t, testAlarmRoomID, consumer.calls[0].retry[0].Notification.RoomID)
 	assert.Equal(t, []string{"claim:room-2"}, consumer.calls[1].claimKeys)
 }

@@ -23,8 +23,9 @@ package messaging
 import (
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (ma *MessageAdapter) trySubscriberCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -37,7 +38,7 @@ func (ma *MessageAdapter) trySubscriberCommand(command string, args []string, ra
 
 	return &ParsedCommand{
 		Type:       domain.CommandSubscriber,
-		Params:     map[string]any{"member": member},
+		Params:     map[string]any{paramMember: member},
 		RawMessage: raw,
 	}, true
 }

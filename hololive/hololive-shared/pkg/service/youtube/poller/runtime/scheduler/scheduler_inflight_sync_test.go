@@ -7,14 +7,15 @@ import (
 	"testing"
 	"time"
 
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
 func TestSchedulerSyncPollerTargetsDefersInflightJobUpdateUntilReschedule(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-live", p, PriorityNormal, time.Minute)
 
 	job := scheduler.jobMap["channel-live:videos"]
@@ -43,7 +44,7 @@ func TestSchedulerSyncPollerTargetsDefersInflightJobUpdateUntilReschedule(t *tes
 
 func TestSchedulerSyncPollerTargetsStillUpdatesQueuedJobImmediately(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-live", p, PriorityNormal, time.Minute)
 
 	job := scheduler.jobMap["channel-live:videos"]
@@ -64,7 +65,7 @@ func TestSchedulerSyncPollerTargetsStillUpdatesQueuedJobImmediately(t *testing.T
 
 func TestSchedulerClaimSkipRescheduleAppliesPendingSync(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-live", p, PriorityNormal, time.Minute)
 
 	job := scheduler.jobMap["channel-live:videos"]
@@ -89,7 +90,7 @@ func TestSchedulerClaimSkipRescheduleAppliesPendingSync(t *testing.T) {
 
 func TestSchedulerBudgetSkipRescheduleAppliesPendingSync(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-live", p, PriorityNormal, time.Minute)
 
 	job := scheduler.jobMap["channel-live:videos"]
@@ -119,6 +120,7 @@ type alwaysFailPoller struct {
 
 func (p *alwaysFailPoller) Poll(context.Context, string) error {
 	p.calls.Add(1)
+
 	return context.DeadlineExceeded
 }
 
@@ -144,15 +146,15 @@ func TestSchedulerWorkerTailDoesNotRaceWithSyncAfterPollFailure(t *testing.T) {
 		ErrorBackoffMin: time.Millisecond,
 		ErrorBackoffMax: 2 * time.Millisecond,
 		BudgetLimiter:   stubBudgetLimiter{},
-		BudgetContext:   polling.BudgetContext{Namespace: "test", InstanceID: "a", Enabled: true},
+		BudgetContext:   polling.BudgetContext{Namespace: testBudgetNamespace, InstanceID: "a", Enabled: true},
 	})
-	p := &alwaysFailPoller{name: "videos"}
+	p := &alwaysFailPoller{name: testPollerVideos}
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile(
 		"channel-race", p, PriorityNormal, time.Millisecond,
 		polling.BudgetProfile{SourceUnits: map[polling.BudgetSource]float64{polling.BudgetSourceYouTubeScraper: 1}},
 	))
 
-	scheduler.Start(context.Background())
+	scheduler.Start(t.Context())
 	t.Cleanup(scheduler.Stop)
 
 	deadline := time.Now().Add(300 * time.Millisecond)
@@ -168,6 +170,7 @@ func TestSchedulerWorkerTailDoesNotRaceWithSyncAfterPollFailure(t *testing.T) {
 		})
 		time.Sleep(100 * time.Microsecond)
 	}
+
 	require.Positive(t, p.calls.Load())
 }
 
@@ -181,10 +184,12 @@ func (p *panicOncePoller) Poll(context.Context, string) error {
 	if p.calls.Add(1) == 1 {
 		panic("poll blew up")
 	}
+
 	select {
 	case p.polled <- struct{}{}:
 	default:
 	}
+
 	return nil
 }
 
@@ -197,10 +202,10 @@ func TestSchedulerWorkerSurvivesPollPanicAndReschedulesJob(t *testing.T) {
 		ErrorBackoffMin: 10 * time.Millisecond,
 		ErrorBackoffMax: 20 * time.Millisecond,
 	})
-	p := &panicOncePoller{name: "videos", polled: make(chan struct{}, 1)}
+	p := &panicOncePoller{name: testPollerVideos, polled: make(chan struct{}, 1)}
 	scheduler.Register("channel-panic", p, PriorityNormal, 10*time.Millisecond)
 
-	scheduler.Start(context.Background())
+	scheduler.Start(t.Context())
 	t.Cleanup(scheduler.Stop)
 
 	select {
@@ -208,5 +213,6 @@ func TestSchedulerWorkerSurvivesPollPanicAndReschedulesJob(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("job was not rescheduled after a poll panic; worker likely died")
 	}
+
 	require.GreaterOrEqual(t, p.calls.Load(), int32(2))
 }

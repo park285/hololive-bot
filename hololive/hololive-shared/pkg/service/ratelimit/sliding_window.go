@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,8 +33,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 const defaultKeyPrefix = "ratelimit:sliding"
@@ -66,7 +68,7 @@ redis.call('EXPIRE', key, ttl_sec)
 return {1, count + 1, 0}
 `
 
-// Decision: 분산 슬라이딩 윈도우 판정 결과
+// Decision: 분산 슬라이딩 윈도우 판정 결과.
 type Decision struct {
 	Allowed    bool
 	Current    int
@@ -87,14 +89,17 @@ type SlidingWindowLimiter struct {
 
 func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, logger *slog.Logger) (*SlidingWindowLimiter, error) {
 	if cacheClient == nil {
-		return nil, fmt.Errorf("new sliding window limiter: cache service must not be nil")
+		return nil, errors.New("new sliding window limiter: cache service must not be nil")
 	}
+
 	if keyPrefix == "" {
 		keyPrefix = defaultKeyPrefix
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &SlidingWindowLimiter{
 		cacheClient: cacheClient,
 		keyPrefix:   keyPrefix,
@@ -106,18 +111,20 @@ func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, 
 
 func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit int, window time.Duration) (Decision, error) {
 	if bucket == "" {
-		return Decision{}, fmt.Errorf("allow: bucket must not be empty")
+		return Decision{}, errors.New("allow: bucket must not be empty")
 	}
+
 	if limit <= 0 {
-		return Decision{}, fmt.Errorf("allow: limit must be greater than zero")
+		return Decision{}, errors.New("allow: limit must be greater than zero")
 	}
+
 	if window <= 0 {
-		return Decision{}, fmt.Errorf("allow: window must be greater than zero")
+		return Decision{}, errors.New("allow: window must be greater than zero")
 	}
 
 	windowMS := window.Milliseconds()
 	if windowMS <= 0 {
-		return Decision{}, fmt.Errorf("allow: window milliseconds must be greater than zero")
+		return Decision{}, errors.New("allow: window milliseconds must be greater than zero")
 	}
 
 	key := l.buildKey(bucket)
@@ -142,6 +149,7 @@ func (l *SlidingWindowLimiter) Allow(ctx context.Context, bucket string, limit i
 	if allowed {
 		return result, nil
 	}
+
 	result.RetryAfter = retryAfter
 
 	l.logger.Debug("rate limit denied",
@@ -178,13 +186,21 @@ func (l *SlidingWindowLimiter) allowByScript(
 		).
 		Build()
 	results := l.cacheClient.DoMulti(ctx, cmd)
+
 	if len(results) != 1 {
 		return false, 0, 0, fmt.Errorf("eval allow script: unexpected result count: %d", len(results))
 	}
+
 	if results[0].Error() != nil {
 		return false, 0, 0, fmt.Errorf("eval allow script: %w", results[0].Error())
 	}
-	return parseAllowScriptResult(results[0])
+
+	out1, out2, out3, err := parseAllowScriptResult(results[0])
+	if err != nil {
+		return out1, out2, out3, fmt.Errorf("parse allow script result: %w", err)
+	}
+
+	return out1, out2, out3, nil
 }
 
 func parseAllowScriptResult(result valkey.ValkeyResult) (ok0 bool, result1 int, result2 time.Duration, err error) {
@@ -192,6 +208,7 @@ func parseAllowScriptResult(result valkey.ValkeyResult) (ok0 bool, result1 int, 
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow script result: %w", err)
 	}
+
 	if len(values) != 3 {
 		return false, 0, 0, fmt.Errorf("invalid allow script result length: %d", len(values))
 	}
@@ -200,14 +217,17 @@ func parseAllowScriptResult(result valkey.ValkeyResult) (ok0 bool, result1 int, 
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow flag: %w", err)
 	}
+
 	count, err := parseNonNegativeScriptInt(values[1], "current count", "current count result")
 	if err != nil {
-		return false, 0, 0, err
+		return false, 0, 0, fmt.Errorf("parse non negative script int: %w", err)
 	}
+
 	retryAfterMS, err := parseNonNegativeScriptInt(values[2], "retry after", "retry after result")
 	if err != nil {
-		return false, 0, 0, err
+		return false, 0, 0, fmt.Errorf("parse non negative script int: %w", err)
 	}
+
 	return flag == 1, int(count), time.Duration(retryAfterMS) * time.Millisecond, nil
 }
 
@@ -216,9 +236,11 @@ func parseNonNegativeScriptInt(message valkey.ValkeyMessage, name, resultName st
 	if err != nil {
 		return 0, fmt.Errorf("parse %s: %w", name, err)
 	}
+
 	if value < 0 {
 		return 0, fmt.Errorf("invalid %s: %d", resultName, value)
 	}
+
 	return value, nil
 }
 
@@ -226,6 +248,7 @@ func (l *SlidingWindowLimiter) nowFunc() func() time.Time {
 	if l.now == nil {
 		return time.Now
 	}
+
 	return l.now
 }
 
@@ -242,29 +265,39 @@ func resolveInstanceID() string {
 	if value := strings.TrimSpace(os.Getenv("INSTANCE_ID")); value != "" {
 		return sanitizeInstanceID(value)
 	}
+
 	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
 		return sanitizeInstanceID(host)
 	}
+
 	var raw [8]byte
+
 	if _, err := rand.Read(raw[:]); err == nil {
 		return hex.EncodeToString(raw[:])
 	}
+
 	return "local"
 }
 
 func sanitizeInstanceID(value string) string {
 	value = strings.TrimSpace(value)
+
 	var b strings.Builder
+
 	for _, r := range value {
 		if isInstanceIDRune(r) {
 			b.WriteRune(r)
+
 			continue
 		}
+
 		b.WriteByte('_')
 	}
+
 	if b.Len() == 0 {
 		return "local"
 	}
+
 	return b.String()
 }
 
@@ -281,8 +314,10 @@ func ttlSecondsFromWindow(window time.Duration) int64 {
 	if window%time.Second != 0 {
 		ttl++
 	}
+
 	if ttl < 1 {
 		return 1
 	}
+
 	return ttl
 }

@@ -52,13 +52,15 @@ func TestEventSummarizerSkipsBlockedSearchResult(t *testing.T) {
 	}
 	summarizer := NewEventSummarizer(llm, nil, searcher, testLogger(), WithPromptGuard(guard))
 
-	result := summarizer.Summarize(context.Background(), []domain.MajorEvent{{ID: 1, Title: "홀로라이브 페스티벌"}}, SummaryTypeWeekly, "2026-03-02")
+	result := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "홀로라이브 페스티벌"}}, SummaryTypeWeekly, "2026-03-02")
 	if result == "" {
 		t.Fatal("Summarize() returned empty result")
 	}
+
 	if !strings.Contains(llm.userPrompt, "정상 검색 결과") {
 		t.Fatalf("user prompt = %q, want benign search result", llm.userPrompt)
 	}
+
 	if strings.Contains(llm.userPrompt, "오염된 검색 결과") {
 		t.Fatalf("user prompt = %q, blocked search result leaked", llm.userPrompt)
 	}
@@ -69,10 +71,11 @@ func TestEventSummarizerFailsClosedWithoutSearchGuard(t *testing.T) {
 	searcher := &mockSearcher{results: []sharedmodel.SearchResult{{Title: "검색 결과", Content: "정상 본문"}}, krResults: []sharedmodel.SearchResult{}}
 	summarizer := NewEventSummarizer(llm, nil, searcher, testLogger())
 
-	result := summarizer.Summarize(context.Background(), []domain.MajorEvent{{ID: 1, Title: "홀로라이브 페스티벌"}}, SummaryTypeWeekly, "2026-03-02")
+	result := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "홀로라이브 페스티벌"}}, SummaryTypeWeekly, "2026-03-02")
 	if result != "" {
 		t.Fatalf("Summarize() = %q, want empty when guard unavailable", result)
 	}
+
 	if llm.userPrompt != "" {
 		t.Fatalf("LLM user prompt = %q, want no call when guard unavailable", llm.userPrompt)
 	}
@@ -85,5 +88,6 @@ func newMajorEventSearchGuard(t *testing.T) *promptguard.Guard {
 	if err != nil {
 		t.Fatalf("promptguard.NewGuard() error = %v", err)
 	}
+
 	return guard
 }

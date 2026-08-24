@@ -11,6 +11,7 @@ func TestParseCORSAllowedOrigins_NonProduction_EmptyReturnsDefault(t *testing.T)
 	if blocked {
 		t.Fatal("non-production should not block")
 	}
+
 	if len(origins) != 1 || origins[0] != "http://localhost:5173" {
 		t.Fatalf("origins = %v, want [http://localhost:5173]", origins)
 	}
@@ -23,6 +24,7 @@ func TestParseCORSAllowedOrigins_NonProduction_CustomOrigins(t *testing.T) {
 	if blocked {
 		t.Fatal("non-production should not block")
 	}
+
 	if len(origins) != 2 {
 		t.Fatalf("origins count = %d, want 2", len(origins))
 	}
@@ -35,6 +37,7 @@ func TestParseCORSAllowedOrigins_Production_FiltersDangerous(t *testing.T) {
 	if blocked {
 		t.Fatal("should not be blocked when safe origin remains")
 	}
+
 	if len(origins) != 1 || origins[0] != "https://safe.example.com" {
 		t.Fatalf("origins = %v, want [https://safe.example.com]", origins)
 	}

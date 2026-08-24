@@ -145,17 +145,21 @@ func initOutboxDispatchMetrics() {
 
 func observeLiveCatchupSuppression(result string) {
 	initOutboxMetrics()
+
 	if outboxLiveCatchupSuppressionTotal == nil {
 		return
 	}
+
 	outboxLiveCatchupSuppressionTotal.WithLabelValues(result).Inc()
 }
 
 func observeYouTubeOutboxHandoff(mode handoff.Mode, result string, rows int) {
 	initOutboxMetrics()
+
 	if youtubeOutboxV3HandoffTotal == nil || rows <= 0 {
 		return
 	}
+
 	youtubeOutboxV3HandoffTotal.WithLabelValues(string(mode), result).Add(float64(rows))
 }
 
@@ -191,6 +195,7 @@ func observeOutboxRevived(n int64) {
 	if outboxRevivedTotal == nil || n <= 0 {
 		return
 	}
+
 	outboxRevivedTotal.Add(float64(n))
 }
 
@@ -199,69 +204,86 @@ func observeOutboxReviveError() {
 	if outboxReviveErrorsTotal == nil {
 		return
 	}
+
 	outboxReviveErrorsTotal.Inc()
 }
 
 func observeDeliveryRetryAfterClamped() {
 	initOutboxMetrics()
+
 	if outboxDeliveryRetryAfterClampedTotal == nil {
 		return
 	}
+
 	outboxDeliveryRetryAfterClampedTotal.Inc()
 }
 
 func observeOutboxEnqueueOutboxes(result string, n int) {
 	initOutboxMetrics()
+
 	if outboxEnqueueOutboxesTotal == nil || n <= 0 {
 		return
 	}
+
 	outboxEnqueueOutboxesTotal.WithLabelValues(result).Add(float64(n))
 }
 
 func observeOutboxEnqueueTargetRooms(n int) {
 	initOutboxMetrics()
+
 	if outboxEnqueueTargetRoomsTotal == nil || n <= 0 {
 		return
 	}
+
 	outboxEnqueueTargetRoomsTotal.Add(float64(n))
 }
 
 func observeOutboxDispatchDuration(duration time.Duration) {
 	initOutboxMetrics()
+
 	if outboxDispatchDuration == nil {
 		return
 	}
+
 	outboxDispatchDuration.Observe(duration.Seconds())
 }
 
 func observeOutboxDeliveryClaimed(n int) {
 	initOutboxMetrics()
+
 	if outboxDeliveryClaimedTotal == nil || n <= 0 {
 		return
 	}
+
 	outboxDeliveryClaimedTotal.Add(float64(n))
 }
 
 func observeOutboxDispatchBatchSize(n int) {
 	initOutboxMetrics()
+
 	if outboxDispatchBatchSize == nil || n <= 0 {
 		return
 	}
+
 	outboxDispatchBatchSize.Observe(float64(n))
 }
 
 func observeOutboxDeliveryProcessed(result string, n int) {
 	initOutboxMetrics()
+
 	if outboxDeliveryProcessedTotal == nil || n <= 0 {
 		return
 	}
+
 	outboxDeliveryProcessedTotal.WithLabelValues(result).Add(float64(n))
 }
 
 func observeOutboxDispatchTouchedOutboxes(n int) {
 	initOutboxMetrics()
+
 	if outboxDispatchTouchedOutboxes == nil || n <= 0 {
 		return
 	}
+
 	outboxDispatchTouchedOutboxes.Observe(float64(n))
 }

@@ -21,22 +21,25 @@
 package cache
 
 import (
-	"context"
 	"testing"
 )
 
 func TestInitializeMemberDatabaseCanonicalFields(t *testing.T) {
 	t.Parallel()
+
 	service, _ := newTestCacheService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	members := map[string]string{"Aqua:Hololive": "UCOyYb1c43VlX9rc_lT6NKQw"}
+
 	if err := service.InitializeMemberDatabase(ctx, members); err != nil {
 		t.Fatalf("InitializeMemberDatabase() error = %v", err)
 	}
+
 	got, err := service.GetAllMembers(ctx)
 	if err != nil {
 		t.Fatalf("GetAllMembers() error = %v", err)
 	}
+
 	if got["Aqua:Hololive"] != members["Aqua:Hololive"] {
 		t.Fatalf("GetAllMembers() = %#v", got)
 	}
@@ -44,12 +47,14 @@ func TestInitializeMemberDatabaseCanonicalFields(t *testing.T) {
 
 func TestInitializeMemberDatabaseRejectsOldFieldShape(t *testing.T) {
 	t.Parallel()
+
 	service, _ := newTestCacheService(t)
 
 	err := service.InitializeMemberDatabase(t.Context(), map[string]string{"Miko": "channel"})
 	if err == nil {
 		t.Fatal("InitializeMemberDatabase() error = nil")
 	}
+
 	if got, want := err.Error(), "initialize member database: member field must use name:org format"; got != want {
 		t.Fatalf("InitializeMemberDatabase() error = %q, want %q", got, want)
 	}
@@ -57,6 +62,7 @@ func TestInitializeMemberDatabaseRejectsOldFieldShape(t *testing.T) {
 
 func TestGetAllMembersIgnoresOldOnlyField(t *testing.T) {
 	t.Parallel()
+
 	service, mini := newTestCacheService(t)
 	mini.HSet(memberHashKey, "Miko", "old-channel")
 
@@ -64,6 +70,7 @@ func TestGetAllMembersIgnoresOldOnlyField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAllMembers() error = %v", err)
 	}
+
 	if len(got) != 0 {
 		t.Fatalf("GetAllMembers() = %#v, want empty", got)
 	}
@@ -71,6 +78,7 @@ func TestGetAllMembersIgnoresOldOnlyField(t *testing.T) {
 
 func TestGetMemberChannelIDWithOrgDoesNotReadBareField(t *testing.T) {
 	t.Parallel()
+
 	service, mini := newTestCacheService(t)
 	mini.HSet(memberHashKey, "Miko", "old-channel")
 
@@ -78,6 +86,7 @@ func TestGetMemberChannelIDWithOrgDoesNotReadBareField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMemberChannelIDWithOrg() error = %v", err)
 	}
+
 	if got != "" {
 		t.Fatalf("GetMemberChannelIDWithOrg() = %q, want empty", got)
 	}
@@ -116,8 +125,9 @@ func TestGetMemberChannelIDWithOrg(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			if err := service.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
 				t.Fatalf("InitializeMemberDatabase() error = %v", err)
@@ -127,6 +137,7 @@ func TestGetMemberChannelIDWithOrg(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetMemberChannelIDWithOrg() error = %v", err)
 			}
+
 			if gotID != tt.wantID {
 				t.Errorf("GetMemberChannelIDWithOrg(%q, %q) = %q, want %q",
 					tt.lookupName, tt.lookupOrg, gotID, tt.wantID)
@@ -174,8 +185,9 @@ func TestGetMemberChannelIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			if err := service.InitializeMemberDatabase(ctx, tt.memberData); err != nil {
 				t.Fatalf("InitializeMemberDatabase() error = %v", err)
@@ -185,6 +197,7 @@ func TestGetMemberChannelIDs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetMemberChannelIDs() error = %v", err)
 			}
+
 			if len(gotIDs) != tt.wantCount {
 				t.Errorf("GetMemberChannelIDs(%q) count = %d, want %d",
 					tt.lookupName, len(gotIDs), tt.wantCount)

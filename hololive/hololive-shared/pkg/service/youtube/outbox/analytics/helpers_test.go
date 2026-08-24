@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/stretchr/testify/require"
 )
 
 func TestCloneUTCTimePtr_NilReturnsNil(t *testing.T) {
@@ -19,7 +20,7 @@ func TestCloneUTCTimePtr_NonZeroNormalizesToUTC(t *testing.T) {
 	t.Parallel()
 
 	loc := time.FixedZone("KST", 9*3600)
-	in := time.Date(2026, 6, 10, 21, 0, 0, 0, loc)
+	in := time.Date(2026, time.June, 10, 21, 0, 0, 0, loc)
 
 	got := CloneUTCTimePtr(&in)
 	require.NotNil(t, got)
@@ -43,6 +44,7 @@ func TestBuildChannelPostDeliverySummaries_ZeroDetectedAtSurfacesZeroObservedAt(
 	t.Parallel()
 
 	var zero time.Time
+
 	posts := []PostSendCount{
 		{
 			ChannelID:  "UC_alpha",

@@ -6,21 +6,21 @@ import (
 )
 
 func TestResolveEvaluationWindow_InitialObservation(t *testing.T) {
-	now := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 
 	window := ResolveEvaluationWindow(time.Time{}, now, 75*time.Second)
 	if !window.InitialObservation {
-		t.Fatalf("ResolveEvaluationWindow() initial observation = false, want true")
+		t.Fatal("ResolveEvaluationWindow() initial observation = false, want true")
 	}
 
 	recent := ResolveEvaluationWindow(now.Add(-30*time.Second), now, 75*time.Second)
 	if recent.InitialObservation {
-		t.Fatalf("ResolveEvaluationWindow() initial observation = true, want false")
+		t.Fatal("ResolveEvaluationWindow() initial observation = true, want false")
 	}
 }
 
 func TestTargetMinutePolicy_HighestCrossed_InitialCappedObservationBackfills(t *testing.T) {
-	base := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 	policy := NewTargetMinutePolicy([]int{5, 3, 1})
 	window := EvaluationWindow{
 		Start:              base.Add(-75 * time.Second),
@@ -36,7 +36,7 @@ func TestTargetMinutePolicy_HighestCrossed_InitialCappedObservationBackfills(t *
 }
 
 func TestTargetMinutePolicy_HighestCrossed_CappedAfterInitialObservationRecoversRecentCrossing(t *testing.T) {
-	base := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 	policy := NewTargetMinutePolicy([]int{5, 3, 1})
 	window := EvaluationWindow{
 		Start:              base.Add(-75 * time.Second),
@@ -52,7 +52,7 @@ func TestTargetMinutePolicy_HighestCrossed_CappedAfterInitialObservationRecovers
 }
 
 func TestTargetMinutePolicy_HighestCrossed_CappedAfterInitialObservationUsesLowerRecentFallback(t *testing.T) {
-	base := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 	policy := NewTargetMinutePolicy([]int{5, 3, 1})
 	window := EvaluationWindow{
 		Start:              base.Add(-75 * time.Second),
@@ -68,7 +68,7 @@ func TestTargetMinutePolicy_HighestCrossed_CappedAfterInitialObservationUsesLowe
 }
 
 func TestTargetMinutePolicy_HighestCrossed_PrefersHigherRecentCrossingOverCurrentLowerTarget(t *testing.T) {
-	base := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 	policy := NewTargetMinutePolicy([]int{5, 3, 1})
 	window := EvaluationWindow{
 		Start:              base.Add(-75 * time.Second),
@@ -84,7 +84,7 @@ func TestTargetMinutePolicy_HighestCrossed_PrefersHigherRecentCrossingOverCurren
 }
 
 func TestTargetMinutePolicy_HighestCrossed_CappedRecoveryThresholds(t *testing.T) {
-	base := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 	policy := NewTargetMinutePolicy([]int{5, 3, 1})
 	window := EvaluationWindow{
 		Start:              base.Add(-75 * time.Second),
@@ -141,7 +141,7 @@ func TestTargetMinutePolicy_HighestCrossed_CappedRecoveryThresholds(t *testing.T
 }
 
 func TestTargetMinutePolicy_HighestCrossed_CappedWindowDoesNotRecoverOldTarget(t *testing.T) {
-	base := time.Date(2026, 4, 14, 3, 0, 0, 0, time.UTC)
+	base := time.Date(2026, time.April, 14, 3, 0, 0, 0, time.UTC)
 	policy := NewTargetMinutePolicy([]int{5})
 	window := EvaluationWindow{
 		Start:              base.Add(-75 * time.Second),
@@ -175,7 +175,8 @@ func TestTargetMinutePolicy_Constructors(t *testing.T) {
 	if runtime.PrimaryAdvanceMinute() != 5 {
 		t.Fatalf("runtime.PrimaryAdvanceMinute() = %d, want 5", runtime.PrimaryAdvanceMinute())
 	}
+
 	if !runtime.Contains(3) || runtime.Contains(2) {
-		t.Fatalf("runtime.Contains() returned unexpected result")
+		t.Fatal("runtime.Contains() returned unexpected result")
 	}
 }

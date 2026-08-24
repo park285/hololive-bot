@@ -17,9 +17,11 @@ func (e *ParserDriftError) Error() string {
 	if e == nil {
 		return "youtube parser drift"
 	}
+
 	if e.Cause == nil {
 		return fmt.Sprintf("%s parser drift at %s", e.Operation, e.Stage)
 	}
+
 	return fmt.Sprintf("%s parser drift at %s: %v", e.Operation, e.Stage, e.Cause)
 }
 
@@ -27,6 +29,7 @@ func (e *ParserDriftError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
+
 	return errors.Join(ErrParserDrift, e.Cause)
 }
 

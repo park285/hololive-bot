@@ -21,18 +21,19 @@
 package majorevent_test
 
 import (
+	jsonv2 "encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	jsonv2 "encoding/json/v2"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 	commoncontracts "github.com/kapu/hololive-shared/pkg/contracts/common"
 	majoreventcontracts "github.com/kapu/hololive-shared/pkg/contracts/majorevent"
 	"github.com/kapu/hololive-shared/pkg/testutil"
-
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent"
 )
+
+const testBaseURL = "http://localhost:8080"
 
 const testAPIKey = "test-api-key"
 
@@ -50,28 +51,28 @@ func TestNew(t *testing.T) {
 			name:        "URL 후행 슬래시 제거",
 			inputURL:    "http://localhost:8080/",
 			inputAPIKey: testAPIKey,
-			wantBaseURL: "http://localhost:8080",
+			wantBaseURL: testBaseURL,
 			wantAPIKey:  testAPIKey,
 		},
 		{
 			name:        "URL 후행 슬래시 없는 경우 그대로 유지",
-			inputURL:    "http://localhost:8080",
+			inputURL:    testBaseURL,
 			inputAPIKey: testAPIKey,
-			wantBaseURL: "http://localhost:8080",
+			wantBaseURL: testBaseURL,
 			wantAPIKey:  testAPIKey,
 		},
 		{
 			name:        "API 키 양쪽 공백 제거",
-			inputURL:    "http://localhost:8080",
+			inputURL:    testBaseURL,
 			inputAPIKey: "  key-with-spaces  ",
-			wantBaseURL: "http://localhost:8080",
+			wantBaseURL: testBaseURL,
 			wantAPIKey:  "key-with-spaces",
 		},
 		{
 			name:        "URL과 API 키 모두 공백 처리",
 			inputURL:    "  http://localhost:8080/  ",
 			inputAPIKey: "  key  ",
-			wantBaseURL: "http://localhost:8080",
+			wantBaseURL: testBaseURL,
 			wantAPIKey:  "key",
 		},
 	}
@@ -214,6 +215,7 @@ func assertMajorEventIsSubscribed(t *testing.T, tc *majorEventIsSubscribedCase) 
 		c := majorevent.New("http://localhost:0", testAPIKey)
 		got, err := c.IsSubscribed(t.Context(), tc.roomID)
 		assertMajorEventBoolResult(t, "IsSubscribed", got, err, tc.wantResult, tc.wantErr)
+
 		return
 	}
 
@@ -232,6 +234,7 @@ func assertMajorEventBoolResult(t *testing.T, op string, got bool, err error, wa
 	if (err != nil) != wantErr {
 		t.Errorf("%s() err = %v, wantErr %v", op, err, wantErr)
 	}
+
 	if got != want {
 		t.Errorf("%s() = %v, want %v", op, got, want)
 	}
@@ -243,9 +246,11 @@ func assertMajorEventRequest(t *testing.T, r *http.Request, method, path string)
 	if r.Method != method {
 		t.Errorf("method = %q, want %s", r.Method, method)
 	}
+
 	if r.URL.Path != path {
 		t.Errorf("path = %q, want %q", r.URL.Path, path)
 	}
+
 	if r.Header.Get(commoncontracts.APIKeyHeader) != testAPIKey {
 		t.Errorf("API 키 헤더 = %q, want %q", r.Header.Get(commoncontracts.APIKeyHeader), testAPIKey)
 	}
@@ -314,11 +319,13 @@ func assertMajorEventSubscribe(t *testing.T, tc *majorEventSubscribeCase) {
 	if tc.roomID == "" {
 		c := majorevent.New("http://localhost:0", testAPIKey)
 		assertMajorEventErr(t, "Subscribe", c.Subscribe(t.Context(), tc.roomID, tc.roomName), tc.wantErr)
+
 		return
 	}
 
 	srv := testutil.NewJSONTestServer(t, tc.statusCode, nil, func(r *http.Request) {
 		assertMajorEventRequest(t, r, http.MethodPost, majoreventcontracts.SubscriptionsPath)
+
 		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", ct)
 		}
@@ -387,6 +394,7 @@ func assertMajorEventUnsubscribe(t *testing.T, tc *majorEventUnsubscribeCase) {
 	if tc.roomID == "" {
 		c := majorevent.New("http://localhost:0", testAPIKey)
 		assertMajorEventErr(t, "Unsubscribe", c.Unsubscribe(t.Context(), tc.roomID), tc.wantErr)
+
 		return
 	}
 

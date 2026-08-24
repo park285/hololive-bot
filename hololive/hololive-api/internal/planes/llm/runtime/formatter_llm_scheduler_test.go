@@ -21,15 +21,13 @@
 package runtime
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -38,8 +36,9 @@ import (
 func setupMemberNewsStore(t *testing.T) *messagestrings.Store {
 	t.Helper()
 
-	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	store := messagestrings.NewStore(dbtest.NewPool(t), slog.New(slog.DiscardHandler))
 	require.NoError(t, store.Load(t.Context()))
+
 	return store
 }
 
@@ -49,6 +48,7 @@ func setupFormatterRenderer(t *testing.T, key domain.TemplateKey, body string) *
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`)
 	require.NoError(t, err)
+
 	_, err = pool.Exec(t.Context(), `
 		INSERT INTO notification_templates(template_key, channel_id, body)
 		VALUES ($1, NULL, $2)
@@ -57,7 +57,7 @@ func setupFormatterRenderer(t *testing.T, key domain.TemplateKey, body string) *
 	`, key, body)
 	require.NoError(t, err)
 
-	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return template.NewRenderer(pool, slog.New(slog.DiscardHandler))
 }
 
 func setupFormatterRendererMulti(t *testing.T, bodies map[domain.TemplateKey]string) *template.Renderer {
@@ -66,6 +66,7 @@ func setupFormatterRendererMulti(t *testing.T, bodies map[domain.TemplateKey]str
 	pool := dbtest.NewPool(t)
 	_, err := pool.Exec(t.Context(), `DELETE FROM notification_templates`)
 	require.NoError(t, err)
+
 	for key, body := range bodies {
 		_, err = pool.Exec(t.Context(), `
 			INSERT INTO notification_templates(template_key, channel_id, body)
@@ -76,7 +77,7 @@ func setupFormatterRendererMulti(t *testing.T, bodies map[domain.TemplateKey]str
 		require.NoError(t, err)
 	}
 
-	return template.NewRenderer(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return template.NewRenderer(pool, slog.New(slog.DiscardHandler))
 }
 
 func TestNewLLMSchedulerFormatter_Defaults(t *testing.T) {
@@ -93,7 +94,7 @@ func TestNewLLMSchedulerFormatter_Defaults(t *testing.T) {
 func TestNewLLMSchedulerFormatter_UsesProvidedValues(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 	renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내\n본문")
 
 	formatter := newLLMSchedulerFormatter("?", renderer, logger, false)
@@ -111,7 +112,8 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		var formatter *llmSchedulerFormatter
-		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil)
+
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil)
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "template renderer not configured")
@@ -120,8 +122,8 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 	t.Run("nil renderer", func(t *testing.T) {
 		t.Parallel()
 
-		formatter := &llmSchedulerFormatter{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, nil)
+		formatter := &llmSchedulerFormatter{logger: slog.New(slog.DiscardHandler)}
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil)
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "template renderer not configured")
@@ -131,9 +133,9 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내\n본문: {{.name}}\n")
-		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), false)
+		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.DiscardHandler), false)
 
-		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, map[string]string{"name": "미코"})
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, map[string]string{"name": "미코"})
 		require.NoError(t, err)
 		assert.Equal(t, "안내\n본문: 미코", rendered)
 	})
@@ -142,9 +144,9 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "{{.MissingField}}")
-		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), false)
+		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.DiscardHandler), false)
 
-		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMemberNewsDigest, struct{}{})
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, struct{}{})
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "render template")
@@ -154,9 +156,9 @@ func TestLLMSchedulerFormatterRender(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, "안내")
-		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.NewTextHandler(io.Discard, nil)), false)
+		formatter := newLLMSchedulerFormatter("!", renderer, slog.New(slog.DiscardHandler), false)
 
-		rendered, err := formatter.render(context.Background(), domain.TemplateKeyCmdMajorEventWeeklySummary, nil)
+		rendered, err := formatter.render(t.Context(), domain.TemplateKeyCmdMajorEventWeeklySummary, nil)
 		require.Error(t, err)
 		assert.Empty(t, rendered)
 		assert.Contains(t, err.Error(), "get template")

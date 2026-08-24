@@ -38,9 +38,11 @@ func (r *PgxBatchRepository) resolveShortPersistedContentIDs(ctx context.Context
 
 	resolvedByCanonical, err := loadResolvedShortContentIDs(ctx, tx, aliases, canonicalIDs)
 	if err != nil {
-		return err
+		return fmt.Errorf("load resolved short content IDs: %w", err)
 	}
+
 	applyResolvedShortContentIDs(notifications, trackingRows, resolvedByCanonical)
+
 	return nil
 }
 
@@ -54,6 +56,7 @@ func collectShortIdentityAliases(
 ) (result1, result2 []string) {
 	canonicalIDs := make([]string, 0, len(notifications)+len(trackingRows))
 	aliasSet := make(map[string]struct{}, (len(notifications)+len(trackingRows))*2)
+
 	canonicalIDs = collectNotificationShortIdentityAliases(notifications, aliasSet, canonicalIDs)
 	canonicalIDs = collectTrackingShortIdentityAliases(trackingRows, aliasSet, canonicalIDs)
 	sort.Strings(canonicalIDs)
@@ -62,7 +65,9 @@ func collectShortIdentityAliases(
 	for alias := range aliasSet {
 		aliases = append(aliases, alias)
 	}
+
 	sort.Strings(aliases)
+
 	return canonicalIDs, aliases
 }
 
@@ -76,6 +81,7 @@ func collectNotificationShortIdentityAliases(
 			canonicalIDs = addShortIdentityAliases(notifications[i].Kind, notifications[i].ContentID, aliasSet, canonicalIDs)
 		}
 	}
+
 	return canonicalIDs
 }
 
@@ -89,6 +95,7 @@ func collectTrackingShortIdentityAliases(
 			canonicalIDs = addShortIdentityAliases(trackingRows[i].Kind, trackingRows[i].ContentID, aliasSet, canonicalIDs)
 		}
 	}
+
 	return canonicalIDs
 }
 
@@ -101,17 +108,22 @@ func addShortIdentityAliases(
 	if kind != domain.OutboxKindNewShort {
 		return canonicalIDs
 	}
+
 	canonicalID := normalizeContentID(kind, contentID)
 	if canonicalID == "" {
 		return canonicalIDs
 	}
+
 	if _, exists := aliasSet[canonicalID]; !exists {
 		canonicalIDs = append(canonicalIDs, canonicalID)
 	}
+
 	aliasSet[canonicalID] = struct{}{}
+
 	if rawID := normalizeShortVideoResourceID(contentID); rawID != "" {
 		aliasSet[rawID] = struct{}{}
 	}
+
 	return canonicalIDs
 }
 
@@ -123,11 +135,13 @@ func loadResolvedShortContentIDs(
 ) (map[string]string, error) {
 	resolvedByCanonical := make(map[string]string, len(canonicalIDs))
 	if err := mergeResolvedShortContentIDs(ctx, tx, "youtube_notification_outbox", aliases, resolvedByCanonical, "load existing short outbox identities"); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merge resolved short content IDs: %w", err)
 	}
+
 	if err := mergeResolvedShortContentIDs(ctx, tx, "youtube_content_alarm_tracking", aliases, resolvedByCanonical, "load existing short tracking identities"); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merge resolved short content IDs: %w", err)
 	}
+
 	return resolvedByCanonical, nil
 }
 
@@ -144,17 +158,22 @@ func mergeResolvedShortContentIDs(
 	}
 
 	var rows []shortIdentityRow
+
 	args := make([]any, 0, 1+len(aliases))
+
 	args = append(args, domain.OutboxKindNewShort)
 	args = append(args, dbx.AnyArgs(aliases)...)
+
 	if err := dbx.SelectSQL(ctx, tx, &rows, action, mustSQL("repository_batch_short_identity_0150_01.sql")+table+`
 		WHERE kind = ?
 		  AND content_id IN (`+dbx.InPlaceholders(len(aliases))+`)`, args...); err != nil {
 		return fmt.Errorf("%s: %w", action, err)
 	}
+
 	for i := range rows {
 		recordResolvedShortContentID(resolvedByCanonical, strings.TrimSpace(rows[i].ContentID))
 	}
+
 	return nil
 }
 
@@ -163,13 +182,16 @@ func recordResolvedShortContentID(resolvedByCanonical map[string]string, content
 	if canonicalID == "" {
 		return
 	}
+
 	if existing := resolvedByCanonical[canonicalID]; existing == canonicalID {
 		return
 	}
+
 	if contentID == canonicalID {
 		resolvedByCanonical[canonicalID] = canonicalID
 		return
 	}
+
 	if _, exists := resolvedByCanonical[canonicalID]; !exists {
 		resolvedByCanonical[canonicalID] = contentID
 	}
@@ -184,12 +206,15 @@ func applyResolvedShortContentIDs(
 		if notifications[i] == nil || notifications[i].Kind != domain.OutboxKindNewShort {
 			continue
 		}
+
 		notifications[i].ContentID = resolveShortPersistedContentID(notifications[i].ContentID, resolvedByCanonical)
 	}
+
 	for i := range trackingRows {
 		if trackingRows[i] == nil || trackingRows[i].Kind != domain.OutboxKindNewShort {
 			continue
 		}
+
 		trackingRows[i].ContentID = resolveShortPersistedContentID(trackingRows[i].ContentID, resolvedByCanonical)
 	}
 }
@@ -199,8 +224,10 @@ func resolveShortPersistedContentID(contentID string, resolvedByCanonical map[st
 	if canonicalID == "" {
 		return strings.TrimSpace(contentID)
 	}
+
 	if resolved := resolvedByCanonical[canonicalID]; resolved != "" {
 		return resolved
 	}
+
 	return canonicalID
 }

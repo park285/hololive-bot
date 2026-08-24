@@ -18,11 +18,17 @@ func (r *Repository) FindMembersWithCelebrationsInMonth(ctx context.Context, mon
 	}
 	defer rows.Close()
 
-	return r.collectCalendarEntriesFromRows(rows, referenceYear)
+	out, err := r.collectCalendarEntriesFromRows(rows, referenceYear)
+	if err != nil {
+		return out, fmt.Errorf("collect calendar entries from rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func scanCalendarRow(scanner memberRowScanner, kindStr *string, day *int) (memberRow, error) {
 	var row memberRow
+
 	err := scanner.Scan(
 		&row.id, &row.slug, &row.channelID,
 		&row.englishName, &row.japaneseName, &row.koreanName, &row.shortKoreanName,
@@ -31,25 +37,37 @@ func scanCalendarRow(scanner memberRowScanner, kindStr *string, day *int) (membe
 		&row.birthday, &row.debutDate,
 		kindStr, day,
 	)
-	return row, err
+	if err != nil {
+		return row, fmt.Errorf("scan calendar columns: %w", err)
+	}
+
+	return row, nil
 }
 
 func (r *Repository) collectCalendarEntriesFromRows(rows pgx.Rows, referenceYear int) ([]domain.CalendarEntry, error) {
-	return collectJoinedRows(rows, "calendar rows iteration", func(rows pgx.Rows) (domain.CalendarEntry, error) {
+	out, err := collectJoinedRows(rows, "calendar rows iteration", func(rows pgx.Rows) (domain.CalendarEntry, error) {
 		var (
 			kindStr string
 			day     int
 		)
+
 		row, err := scanCalendarRow(rows, &kindStr, &day)
 		if err != nil {
 			return domain.CalendarEntry{}, fmt.Errorf("scan calendar row: %w", err)
 		}
+
 		member, err := r.parseMemberRow(&row)
 		if err != nil {
 			return domain.CalendarEntry{}, fmt.Errorf("parse calendar member row %q: %w", row.englishName, err)
 		}
+
 		return buildCalendarEntry(kindStr, member, day, referenceYear), nil
 	})
+	if err != nil {
+		return out, fmt.Errorf("collect joined rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func buildCalendarEntry(kindStr string, member *domain.Member, day, referenceYear int) domain.CalendarEntry {
@@ -57,11 +75,13 @@ func buildCalendarEntry(kindStr string, member *domain.Member, day, referenceYea
 	if entry.Kind == domain.CelebrationKindAnniversary && member.DebutDate != nil {
 		entry.Ordinal = referenceYear - member.DebutDate.Year()
 	}
+
 	return entry
 }
 
 func scanCelebrationMemberRow(scanner memberRowScanner) (memberRow, error) {
 	var row memberRow
+
 	err := scanner.Scan(
 		&row.id, &row.slug, &row.channelID,
 		&row.englishName, &row.japaneseName, &row.koreanName, &row.shortKoreanName,
@@ -69,7 +89,11 @@ func scanCelebrationMemberRow(scanner memberRowScanner) (memberRow, error) {
 		&row.org, &row.suborg, &row.syncSource, &row.twitchUserID,
 		&row.birthday, &row.debutDate,
 	)
-	return row, err
+	if err != nil {
+		return row, fmt.Errorf("scan celebration member columns: %w", err)
+	}
+
+	return row, nil
 }
 
 const celebrationMemberColumns = `id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
@@ -85,7 +109,12 @@ func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day i
 	}
 	defer rows.Close()
 
-	return r.collectCelebrationMembersFromRows(rows)
+	out, err := r.collectCelebrationMembersFromRows(rows)
+	if err != nil {
+		return out, fmt.Errorf("collect celebration members from rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, day, referenceYear int) ([]*domain.Member, error) {
@@ -97,19 +126,31 @@ func (r *Repository) FindMembersWithAnniversaryOn(ctx context.Context, month, da
 	}
 	defer rows.Close()
 
-	return r.collectCelebrationMembersFromRows(rows)
+	out, err := r.collectCelebrationMembersFromRows(rows)
+	if err != nil {
+		return out, fmt.Errorf("collect celebration members from rows: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *Repository) collectCelebrationMembersFromRows(rows pgx.Rows) ([]*domain.Member, error) {
-	return collectJoinedRows(rows, "celebration member rows iteration", func(rows pgx.Rows) (*domain.Member, error) {
+	out, err := collectJoinedRows(rows, "celebration member rows iteration", func(rows pgx.Rows) (*domain.Member, error) {
 		row, err := scanCelebrationMemberRow(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan celebration member row: %w", err)
 		}
+
 		member, err := r.parseMemberRow(&row)
 		if err != nil {
 			return nil, fmt.Errorf("parse celebration member row %q: %w", row.englishName, err)
 		}
+
 		return member, nil
 	})
+	if err != nil {
+		return out, fmt.Errorf("collect joined rows: %w", err)
+	}
+
+	return out, nil
 }

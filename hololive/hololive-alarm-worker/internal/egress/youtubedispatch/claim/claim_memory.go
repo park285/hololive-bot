@@ -2,6 +2,7 @@ package claim
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -28,10 +29,11 @@ func NewMemoryCache() *MemoryCache {
 
 func (c *MemoryCache) Claim(ctx context.Context, key ClaimKey, holder string, ttl time.Duration) (ClaimStatus, error) {
 	if err := validateClaim(key, holder, ttl); err != nil {
-		return ClaimStatus{}, err
+		return ClaimStatus{}, fmt.Errorf("validate claim: %w", err)
 	}
+
 	if err := ctx.Err(); err != nil {
-		return ClaimStatus{}, err
+		return ClaimStatus{}, fmt.Errorf("acquire claim: %w", err)
 	}
 
 	c.mu.Lock()
@@ -54,14 +56,17 @@ func (c *MemoryCache) Claim(ctx context.Context, key ClaimKey, holder string, tt
 		AcquiredAt: now,
 		ExpiresAt:  now.Add(ttl),
 	}
+
 	c.holdings[key] = status
+
 	return status, nil
 }
 
 func (c *MemoryCache) Release(ctx context.Context, key ClaimKey, holder string) error {
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("release claim: %w", err)
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -69,10 +74,13 @@ func (c *MemoryCache) Release(ctx context.Context, key ClaimKey, holder string) 
 	if !ok {
 		return nil
 	}
+
 	if existing.Holder != holder {
 		return ErrHolderMismatch
 	}
+
 	delete(c.holdings, key)
+
 	return nil
 }
 
@@ -82,6 +90,7 @@ func (c *MemoryCache) sweepExpiredLocked(now time.Time) {
 	if now.Sub(c.lastSweepAt) < memoryClaimSweepInterval {
 		return
 	}
+
 	c.lastSweepAt = now
 
 	for key, status := range c.holdings {
@@ -95,11 +104,14 @@ func validateClaim(key ClaimKey, holder string, ttl time.Duration) error {
 	if strings.TrimSpace(key.Scope) == "" || strings.TrimSpace(key.Subject) == "" {
 		return ErrEmptyKey
 	}
+
 	if strings.TrimSpace(holder) == "" {
 		return ErrEmptyHolder
 	}
+
 	if ttl <= 0 {
 		return ErrInvalidTTL
 	}
+
 	return nil
 }

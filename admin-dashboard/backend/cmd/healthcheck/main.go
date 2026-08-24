@@ -11,5 +11,6 @@ func main() {
 	if len(args) == 1 {
 		args = append(args, "http://127.0.0.1:30190/health")
 	}
+
 	os.Exit(healthprobe.RunMain(args, os.Stdout, os.Stderr))
 }

@@ -2,12 +2,11 @@ package dispatchoutbox
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-
-	jsonv2 "encoding/json/v2"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -72,6 +71,7 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	consumer := &Consumer{
 		repository:        repository,
 		workerID:          util.InstanceID("dispatcher"),
@@ -81,34 +81,47 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 		logger:            logger,
 		now:               time.Now,
 	}
+
 	for _, opt := range opts {
 		opt(consumer)
 	}
+
 	// 그룹 발송(karing 최대 13회 순차 HTTP)이 lease를 초과할 수 있어, threshold가
 	// lease와 같으면 진행 중인 발송을 quarantine으로 회수해 버린다.
 	if consumer.quarantineThreshold <= 0 {
 		consumer.quarantineThreshold = 3 * consumer.lease
 	}
+
 	if consumer.quarantineThreshold < consumer.lease {
 		consumer.quarantineThreshold = consumer.lease
 	}
+
 	return consumer
 }
 
 func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
 	if c == nil || c.repository == nil {
-		return nil, fmt.Errorf("drain outbox batch: repository is nil")
+		return nil, errors.New("drain outbox batch: repository is nil")
 	}
+
 	c.maybeRecover(ctx)
+
 	records, err := c.claimDue(ctx, maxItems)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("claim due: %w", err)
 	}
+
 	events, err := c.repository.LoadEventsByID(ctx, distinctEventIDs(records))
 	if err != nil {
 		return nil, fmt.Errorf("drain outbox batch: load events: %w", err)
 	}
-	return c.envelopesFromRecords(ctx, records, events)
+
+	out, err := c.envelopesFromRecords(ctx, records, events)
+	if err != nil {
+		return out, fmt.Errorf("envelopes from records: %w", err)
+	}
+
+	return out, nil
 }
 
 func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, events map[int64]EventRecord) ([]domain.AlarmQueueEnvelope, error) {
@@ -116,51 +129,75 @@ func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, 
 	for _, record := range records {
 		envelope, ok, err := c.envelopeFromRecord(ctx, record, events)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("envelope from record: %w", err)
 		}
+
 		if !ok {
 			continue
 		}
+
 		envelopes = append(envelopes, envelope)
 	}
+
 	return envelopes, nil
 }
 
 func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (domain.AlarmQueueEnvelope, bool, error) {
 	payload, ok, err := c.payloadForRecord(ctx, record, events)
-	if err != nil || !ok {
-		return domain.AlarmQueueEnvelope{}, false, err
+	if err != nil {
+		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("payload for record: %w", err)
 	}
+
+	if !ok {
+		return domain.AlarmQueueEnvelope{}, false, nil
+	}
+
 	envelope, ok, err := c.decodeEnvelopePayload(ctx, record, payload)
-	if err != nil || !ok {
-		return domain.AlarmQueueEnvelope{}, false, err
+	if err != nil {
+		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("decode envelope payload: %w", err)
 	}
+
+	if !ok {
+		return domain.AlarmQueueEnvelope{}, false, nil
+	}
+
 	ok, err = c.rehydrateEnvelope(ctx, record, &envelope)
-	if err != nil || !ok {
-		return domain.AlarmQueueEnvelope{}, false, err
+	if err != nil {
+		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("rehydrate envelope: %w", err)
 	}
+
+	if !ok {
+		return domain.AlarmQueueEnvelope{}, false, nil
+	}
+
 	attachRecordMetadata(&envelope, record)
+
 	return envelope, true, nil
 }
 
 func (c *Consumer) decodeEnvelopePayload(ctx context.Context, record *Record, payload []byte) (domain.AlarmQueueEnvelope, bool, error) {
 	var envelope domain.AlarmQueueEnvelope
+
 	if err := jsonv2.Unmarshal(payload, &envelope); err != nil {
-		if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); err != nil {
-			return domain.AlarmQueueEnvelope{}, false, err
+		if dlqErr := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); dlqErr != nil {
+			return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("move record to DLQ: %w", dlqErr)
 		}
+
 		return domain.AlarmQueueEnvelope{}, false, nil
 	}
+
 	return envelope, true, nil
 }
 
 func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelope *domain.AlarmQueueEnvelope) (bool, error) {
 	if err := rehydrateDeliveryContext(envelope, record); err != nil {
-		if err := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); err != nil {
-			return false, err
+		if dlqErr := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); dlqErr != nil {
+			return false, fmt.Errorf("move record to DLQ: %w", dlqErr)
 		}
+
 		return false, nil
 	}
+
 	return true, nil
 }
 
@@ -170,6 +207,7 @@ func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
 	envelope.SendUnitID = record.SendUnitID
 	envelope.ClientRequestID = record.ClientRequestID
 	envelope.ClaimKeys = record.ClaimKeys
+
 	if record.AttemptCount > 0 {
 		envelope.Retry = &domain.AlarmQueueRetryMetadata{
 			Attempt:       record.AttemptCount,
@@ -183,13 +221,16 @@ func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events 
 	if record.EventID <= 0 {
 		return record.Payload, true, nil
 	}
+
 	event, ok := events[record.EventID]
 	if ok {
 		return event.Payload, true, nil
 	}
+
 	if err := c.moveRecordToDLQ(ctx, record.ID, "missing event payload", "move missing event to dlq"); err != nil {
-		return nil, false, err
+		return nil, false, fmt.Errorf("move record to DLQ: %w", err)
 	}
+
 	return nil, false, nil
 }
 
@@ -198,7 +239,9 @@ func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error
 	if err != nil {
 		return nil, fmt.Errorf("drain outbox batch: claim due: %w", err)
 	}
+
 	observePGClaimed(len(records))
+
 	return records, nil
 }
 
@@ -207,7 +250,9 @@ func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError,
 	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{update}, c.workerID); err != nil {
 		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
 	}
+
 	observePGDLQ(1)
+
 	return nil
 }
 
@@ -216,7 +261,9 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	if !c.lastRecoveryAt.IsZero() && c.recoveryInterval > 0 && now.Sub(c.lastRecoveryAt) < c.recoveryInterval {
 		return
 	}
+
 	c.lastRecoveryAt = now
+
 	recoveredLeased, leasedErr := c.repository.RecoverExpiredLeased(ctx, c.recoveryBatchSize)
 	if leasedErr != nil {
 		observeRecoveryFailure(recoveryTypeLeased)
@@ -224,6 +271,7 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	} else {
 		observeRecoveryRows(recoveryTypeLeased, recoveredLeased)
 	}
+
 	recoveredSending, sendingErr := c.repository.QuarantineStaleSending(ctx, c.quarantineThreshold, c.recoveryBatchSize)
 	if sendingErr != nil {
 		observeRecoveryFailure(recoveryTypeSending)
@@ -231,6 +279,7 @@ func (c *Consumer) maybeRecover(ctx context.Context) {
 	} else {
 		observeRecoveryRows(recoveryTypeSending, recoveredSending)
 	}
+
 	if leasedErr == nil && sendingErr == nil {
 		observeRecoverySuccess(now)
 	}
@@ -241,10 +290,13 @@ func (c *Consumer) MarkSending(ctx context.Context, envelopes []domain.AlarmQueu
 	if len(ids) == 0 {
 		return nil
 	}
+
 	if err := c.repository.MarkSending(ctx, ids, c.workerID, c.lease); err != nil {
 		observePGMarkSendingFailure()
-		return err
+
+		return fmt.Errorf("mark sending: %w", err)
 	}
+
 	return nil
 }
 
@@ -253,146 +305,21 @@ func (c *Consumer) MarkDispatched(ctx context.Context, envelopes []domain.AlarmQ
 	if len(ids) == 0 {
 		return nil
 	}
+
 	if err := c.repository.MarkSent(ctx, ids, c.workerID); err != nil {
 		observePGMarkSentFailure()
-		return err
+
+		return fmt.Errorf("mark sent: %w", err)
 	}
+
 	return nil
 }
 
 func (c *Consumer) RouteFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
 	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
-	return observeRoutedFailures(c.repository.RouteFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount)
-}
+	if err := observeRoutedFailures(c.repository.RouteFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount); err != nil {
+		return fmt.Errorf("observe routed failures: %w", err)
+	}
 
-func (c *Consumer) RouteSendingFailures(ctx context.Context, retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) error {
-	updates, retryCount, dlqCount := failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes)
-	return observeRoutedFailures(c.repository.RouteSendingFailures(ctx, updates, c.workerID), updates, retryCount, dlqCount)
-}
-
-func (c *Consumer) RequeuePreSend(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	updates, retryCount, _ := failureUpdatesFromEnvelopes(envelopes, nil)
-	return observeRoutedFailures(c.repository.RequeuePreSend(ctx, updates, c.workerID), updates, retryCount, 0)
-}
-
-func observeRoutedFailures(err error, updates []FailureUpdate, retryCount, dlqCount int) error {
-	if err == nil {
-		observePGRetryScheduled(retryCount)
-		observePGDLQ(dlqCount)
-		return nil
-	}
-	if partial, ok := errors.AsType[*PartialTransitionError](err); ok {
-		retryApplied, dlqApplied := appliedFailureCounts(updates, partial.UnappliedIDs)
-		observePGRetryScheduled(retryApplied)
-		observePGDLQ(dlqApplied)
-	}
-	return err
-}
-
-func appliedFailureCounts(updates []FailureUpdate, unappliedIDs []int64) (retryApplied, dlqApplied int) {
-	unapplied := make(map[int64]struct{}, len(unappliedIDs))
-	for _, id := range unappliedIDs {
-		unapplied[id] = struct{}{}
-	}
-	for i := range updates {
-		if _, ok := unapplied[updates[i].ID]; ok {
-			continue
-		}
-		if updates[i].TargetStatus == StatusRetry {
-			retryApplied++
-		} else {
-			dlqApplied++
-		}
-	}
-	return retryApplied, dlqApplied
-}
-
-func failureUpdatesFromEnvelopes(retryEnvelopes, dlqEnvelopes []domain.AlarmQueueEnvelope) (updates []FailureUpdate, retryCount, dlqCount int) {
-	now := time.Now().UTC()
-	updates = make([]FailureUpdate, 0, len(retryEnvelopes)+len(dlqEnvelopes))
-	updates = appendFailureUpdates(updates, retryEnvelopes, StatusRetry, now)
-	retryCount = len(updates)
-	updates = appendFailureUpdates(updates, dlqEnvelopes, StatusDLQ, now)
-	return updates, retryCount, len(updates) - retryCount
-}
-
-func appendFailureUpdates(updates []FailureUpdate, envelopes []domain.AlarmQueueEnvelope, target Status, now time.Time) []FailureUpdate {
-	for i := range envelopes {
-		update, ok := failureUpdateFromEnvelope(&envelopes[i], now, target)
-		if !ok {
-			continue
-		}
-		updates = append(updates, update)
-	}
-	return updates
-}
-
-func failureUpdateFromEnvelope(envelope *domain.AlarmQueueEnvelope, now time.Time, target Status) (FailureUpdate, bool) {
-	if envelope.DispatchOutboxID <= 0 {
-		return FailureUpdate{}, false
-	}
-	update := FailureUpdate{ID: envelope.DispatchOutboxID, NextAttemptAt: now, TargetStatus: target}
-	if envelope.Retry == nil {
-		return update, true
-	}
-	update.AttemptCount = envelope.Retry.Attempt
-	update.Error = sanitizeStoredError(envelope.Retry.LastError)
-	update.ErrorCode = envelope.Retry.LastErrorCode
-	if parsed, err := time.Parse(time.RFC3339Nano, envelope.Retry.NextVisibleAt); err == nil {
-		update.NextAttemptAt = parsed.UTC()
-	}
-	return update, true
-}
-
-func (c *Consumer) Requeue(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) error {
-	return c.RouteFailures(ctx, envelopes, nil)
-}
-
-func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
-	message, code := storedErrorFromCause(cause)
-	updates := make([]TerminalUpdate, 0, len(envelopes))
-	for i := range envelopes {
-		envelope := &envelopes[i]
-		if envelope.DispatchOutboxID > 0 {
-			updates = append(updates, TerminalUpdate{ID: envelope.DispatchOutboxID, Error: message, ErrorCode: code})
-		}
-	}
-	if err := c.repository.Quarantine(ctx, updates, c.workerID); err != nil {
-		return err
-	}
-	observePGQuarantined(len(updates))
-	return nil
-}
-
-type deliveryContext struct {
-	Users []string `json:"users,omitempty"`
-}
-
-func distinctEventIDs(records []*Record) []int64 {
-	seen := make(map[int64]struct{}, len(records))
-	ids := make([]int64, 0, len(records))
-	for _, record := range records {
-		if record == nil || record.EventID <= 0 {
-			continue
-		}
-		if _, ok := seen[record.EventID]; ok {
-			continue
-		}
-		seen[record.EventID] = struct{}{}
-		ids = append(ids, record.EventID)
-	}
-	return ids
-}
-
-func rehydrateDeliveryContext(envelope *domain.AlarmQueueEnvelope, record *Record) error {
-	envelope.Notification.RoomID = record.RoomID
-	if len(record.DeliveryContext) == 0 {
-		return nil
-	}
-	var deliveryCtx deliveryContext
-	if err := jsonv2.Unmarshal(record.DeliveryContext, &deliveryCtx); err != nil {
-		return err
-	}
-	envelope.Notification.Users = deliveryCtx.Users
 	return nil
 }

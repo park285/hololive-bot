@@ -28,13 +28,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-dbtest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/acl"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type bootstrapTestContextKey struct{}
@@ -43,10 +44,10 @@ func TestProvideACLServiceWrapsInitializationErrorForNilPostgres(t *testing.T) {
 	t.Parallel()
 
 	service, err := ProvideACLService(
-		context.Background(),
+		t.Context(),
 		true,
 		acl.ACLModeWhitelist,
-		[]string{"room-a"},
+		[]string{testRoomA},
 		nil,
 		cachemocks.NewLenientClient(),
 		slog.New(slog.DiscardHandler),
@@ -54,21 +55,21 @@ func TestProvideACLServiceWrapsInitializationErrorForNilPostgres(t *testing.T) {
 
 	require.Nil(t, service)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to create ACL service")
+	require.ErrorContains(t, err, "failed to create ACL service")
 	assert.ErrorContains(t, err, "postgres service is nil")
 }
 
 func TestProvideACLServicePropagatesContextToInitialCacheSync(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.WithValue(context.Background(), bootstrapTestContextKey{}, "acl-context")
+	ctx := context.WithValue(t.Context(), bootstrapTestContextKey{}, "acl-context")
 	cacheClient, observedCalls := newACLCacheSyncMock(t, "acl-context")
 
 	service, err := ProvideACLService(
 		ctx,
 		true,
 		acl.ACLModeWhitelist,
-		[]string{"room-a"},
+		[]string{testRoomA},
 		newACLPostgresMock(t),
 		cacheClient,
 		slog.New(slog.DiscardHandler),
@@ -76,7 +77,7 @@ func TestProvideACLServicePropagatesContextToInitialCacheSync(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, service)
-	assert.Greater(t, observedCalls.Load(), int64(0))
+	assert.Positive(t, observedCalls.Load())
 }
 
 func TestProvideActivityLoggerReturnsLogger(t *testing.T) {
@@ -85,6 +86,7 @@ func TestProvideActivityLoggerReturnsLogger(t *testing.T) {
 	logger := ProvideActivityLogger(slog.New(slog.DiscardHandler))
 
 	require.NotNil(t, logger)
+
 	logs, err := logger.GetRecentLogs(1)
 	require.NoError(t, err)
 	assert.Empty(t, logs)
@@ -136,6 +138,7 @@ func newACLCacheSyncMock(t *testing.T, wantContextValue string) (*cachemocks.Cli
 	t.Helper()
 
 	var observedCalls atomic.Int64
+
 	recordContext := func(ctx context.Context) {
 		assert.Equal(t, wantContextValue, ctx.Value(bootstrapTestContextKey{}))
 		observedCalls.Add(1)
@@ -144,14 +147,17 @@ func newACLCacheSyncMock(t *testing.T, wantContextValue string) (*cachemocks.Cli
 	cacheClient := &cachemocks.Client{
 		SetFunc: func(ctx context.Context, _ string, _ any, _ time.Duration) error {
 			recordContext(ctx)
+
 			return nil
 		},
 		DelFunc: func(ctx context.Context, _ string) error {
 			recordContext(ctx)
+
 			return nil
 		},
 		SAddFunc: func(ctx context.Context, _ string, members []string) (int64, error) {
 			recordContext(ctx)
+
 			return int64(len(members)), nil
 		},
 	}

@@ -15,29 +15,36 @@ func buildConfig(
 ) (*Config, error) {
 	communityShortsBigBangCutoverAt, err := loadCommunityShortsBigBangCutoverAt()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load community shorts big bang cutover at: %w", err)
 	}
+
 	irisConfig := loadIrisConfig(webhookToken, botToken)
+
 	scraperConfig, err := loadScraperConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load scraper config: %w", err)
 	}
+
 	tracingConfig, err := loadTracingConfig(options.TracingRuntime, scraperConfig.ActiveActive.InstanceID)
 	if err != nil {
 		return nil, fmt.Errorf("load tracing config: %w", err)
 	}
+
 	kakaoConfig, err := loadKakaoConfig()
 	if err != nil {
 		return nil, fmt.Errorf("load Kakao config: %w", err)
 	}
+
 	youtubeConfig, err := loadYouTubeConfig()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load youtube config: %w", err)
 	}
+
 	config, err := newBaseConfig(corsAllowedOrigins, corsMissingInProduction, options)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("base config: %w", err)
 	}
+
 	config.Iris = irisConfig
 	config.Kakao = newKakaoConfig(kakaoConfig.Rooms, kakaoConfig.ACLEnabled, kakaoConfig.ACLMode)
 	config.YouTube = youtubeConfig
@@ -45,47 +52,71 @@ func buildConfig(
 	config.Tracing = tracingConfig
 	config.Scraper = scraperConfig
 	config.Webhook = loadWebhookConfig()
+
 	if err := loadRoleWorkerProfile(config, options.WorkerProfileRole); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load role worker profile: %w", err)
 	}
+
 	return config, nil
 }
 
 func loadRoleWorkerProfile(config *Config, role string) error {
-	switch role {
-	case "":
+	if role == "" {
 		return nil
-	case "api":
-		return loadAPIWorkerProfile(config)
-	case "alarm-worker":
-		return loadAlarmWorkerProfile(config)
-	default:
+	}
+
+	loaders := map[string]func(*Config) error{
+		"api":          loadAPIWorkerProfile,
+		"alarm-worker": loadAlarmWorkerProfile,
+	}
+	loader := loaders[role]
+
+	if loader == nil {
 		return fmt.Errorf("unsupported worker profile role %q", role)
 	}
+
+	if err := loader(config); err != nil {
+		return fmt.Errorf("load %s worker profile: %w", roleWorkerProfileName(role), err)
+	}
+
+	return nil
+}
+
+func roleWorkerProfileName(role string) string {
+	if role == "api" {
+		return "API"
+	}
+
+	return "alarm"
 }
 
 func loadAPIWorkerProfile(config *Config) error {
 	profile, err := LoadAPIWorkerProfile()
 	if err != nil {
-		return err
+		return fmt.Errorf("load API worker profile: %w", err)
 	}
+
 	config.APIWorkerProfile = profile
 	applyAPIWorkerProfile(config, profile)
+
 	return nil
 }
 
 func loadAlarmWorkerProfile(config *Config) error {
 	profile, err := LoadAlarmWorkerProfile()
 	if err != nil {
-		return err
+		return fmt.Errorf("load alarm worker profile: %w", err)
 	}
+
 	config.AlarmWorkerProfile = profile
+
 	return nil
 }
 
 func applyAPIWorkerProfile(config *Config, profile *APIWorkerProfile) {
 	workers := profile.Loaded.Profile.Workers
 	inbox := workers["bot_webhook_inbox"]
+
 	config.Webhook.WorkerCount = inbox.Executor.ConfiguredWorkers
 	config.Webhook.HandlerTimeout = workerDuration(inbox.Executor.AttemptTimeout)
 	config.Webhook.MaxBodyBytes = profile.BotWebhookInbox.MaxBodyBytes
@@ -98,6 +129,7 @@ func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, op
 	if err != nil {
 		return nil, fmt.Errorf("load alarm dispatch retention config: %w", err)
 	}
+
 	return &Config{
 		Server:                 loadServerConfig(),
 		Holodex:                loadHolodexConfig(),

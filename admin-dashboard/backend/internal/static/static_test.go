@@ -1,7 +1,6 @@
 package static
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +20,7 @@ func testHandler() Handler {
 
 func TestServeIndex(t *testing.T) {
 	rec := httptest.NewRecorder()
-	testHandler().ServeIndex(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", http.NoBody))
+	testHandler().ServeIndex(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "text/html; charset=utf-8", rec.Header().Get("Content-Type"))
@@ -31,7 +30,7 @@ func TestServeIndex(t *testing.T) {
 
 func TestServeThemeInit(t *testing.T) {
 	rec := httptest.NewRecorder()
-	testHandler().ServeThemeInit(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/theme-init.js", http.NoBody))
+	testHandler().ServeThemeInit(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/theme-init.js", http.NoBody))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Header().Get("Content-Type"), "javascript")
@@ -41,7 +40,7 @@ func TestServeThemeInit(t *testing.T) {
 
 func TestServeAssetImmutableCache(t *testing.T) {
 	rec := httptest.NewRecorder()
-	testHandler().ServeAsset(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/assets/app.js", http.NoBody))
+	testHandler().ServeAsset(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/assets/app.js", http.NoBody))
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
@@ -50,7 +49,7 @@ func TestServeAssetImmutableCache(t *testing.T) {
 
 func TestServeMissingAssetIs404(t *testing.T) {
 	rec := httptest.NewRecorder()
-	testHandler().ServeAsset(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/assets/missing.js", http.NoBody))
+	testHandler().ServeAsset(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/assets/missing.js", http.NoBody))
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
@@ -63,6 +62,6 @@ func TestHasIndex(t *testing.T) {
 func TestEmbeddedHandlerServesPlaceholder(t *testing.T) {
 	handler := NewHandler()
 	rec := httptest.NewRecorder()
-	handler.ServeIndex(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", http.NoBody))
+	handler.ServeIndex(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody))
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }

@@ -12,6 +12,7 @@ func TestDurableSettlementTimeoutLeavesShutdownHeadroom(t *testing.T) {
 	if durableSettlementTimeout <= 0 {
 		t.Fatal("settlement timeout must be positive")
 	}
+
 	if durableSettlementTimeout > constants.AppTimeout.Shutdown/2 {
 		t.Fatalf("durableSettlementTimeout %s must stay within half of AppTimeout.Shutdown %s: "+
 			"Stop joins in-flight settlement via wg.Wait and every plane shares one shutdown context sequentially",

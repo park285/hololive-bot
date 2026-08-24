@@ -27,11 +27,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/lifecycle"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type lifecycleTestPostgres struct {
@@ -67,13 +68,15 @@ func (h *lifecycleTestHolodex) GetChannelSchedule(context.Context, string, int, 
 }
 
 func (h *lifecycleTestHolodex) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, nil
+	return &domain.Channel{}, nil
 }
 
 func TestBotLifecycleStartBranches(t *testing.T) {
 	t.Parallel()
 
 	t.Run("cache not configured", func(t *testing.T) {
+		t.Parallel()
+
 		botLifecycle := lifecycle.NewBotLifecycle(newBotTestLogger(), nil, &testIrisClient{}, "", make(chan struct{}), make(chan struct{}), nil, nil)
 
 		err := botLifecycle.Start(t.Context())
@@ -82,6 +85,8 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 	})
 
 	t.Run("cache readiness failure", func(t *testing.T) {
+		t.Parallel()
+
 		cacheClient := &cachemocks.Client{
 			WaitUntilReadyFunc: func(context.Context, time.Duration) error { return errors.New("down") },
 		}
@@ -93,6 +98,8 @@ func TestBotLifecycleStartBranches(t *testing.T) {
 	})
 
 	t.Run("degraded mode then stop", func(t *testing.T) {
+		t.Parallel()
+
 		cacheClient := &cachemocks.Client{
 			WaitUntilReadyFunc: func(context.Context, time.Duration) error { return nil },
 		}

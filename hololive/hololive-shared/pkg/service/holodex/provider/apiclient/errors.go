@@ -22,7 +22,7 @@ package apiclient
 
 import "fmt"
 
-// (기존 hololive-shared/pkg/errors.APIError 의존 제거를 위한 로컬 타입)
+// (기존 hololive-shared/pkg/errors.APIError 의존 제거를 위한 로컬 타입).
 type APIError struct {
 	Operation  string
 	StatusCode int
@@ -33,6 +33,7 @@ func (e *APIError) Error() string {
 	if e.Err == nil {
 		return fmt.Sprintf("holodex: api: %s: status=%d", e.Operation, e.StatusCode)
 	}
+
 	return fmt.Sprintf("holodex: api: %s: status=%d: %v", e.Operation, e.StatusCode, e.Err)
 }
 
@@ -55,6 +56,7 @@ func (e *KeyRotationError) Error() string {
 	if e.Err == nil {
 		return fmt.Sprintf("holodex: key rotation exhausted: %s: status=%d", e.Operation, e.StatusCode)
 	}
+
 	return fmt.Sprintf("holodex: key rotation exhausted: %s: status=%d: %v", e.Operation, e.StatusCode, e.Err)
 }
 

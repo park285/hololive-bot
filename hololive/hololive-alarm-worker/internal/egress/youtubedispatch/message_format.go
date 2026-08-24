@@ -15,5 +15,6 @@ func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer
 	if err != nil {
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}
+
 	return msg, nil
 }

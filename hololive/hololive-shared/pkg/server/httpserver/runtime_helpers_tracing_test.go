@@ -36,6 +36,7 @@ func (o *runtimeTracingObservation) reset() {
 
 func (o *runtimeTracingObservation) capture(_ http.ResponseWriter, r *http.Request) {
 	copiedURL := *r.URL
+
 	o.url = &copiedURL
 	o.requestURI = r.RequestURI
 	o.remoteAddr = r.RemoteAddr
@@ -63,12 +64,13 @@ func TestRuntimeHTTPServersPreserveRequestTargetAndSanitizeSpans(t *testing.T) {
 		name    string
 		handler http.Handler
 	}{
-		{name: "h2c", handler: newRuntimeH2CTracingHandler(caseData.operation, observation)},
+		{name: "http1", handler: newRuntimeHTTP1TracingHandler(caseData.operation, observation)},
 		{name: "h3", handler: newRuntimeH3TracingHandler(t, caseData.operation, observation)},
 	}
 	for _, server := range servers {
 		t.Run(server.name, func(t *testing.T) {
 			req, wantURL := newRuntimeTracingRequest(t, &caseData)
+
 			observation.reset()
 			server.handler.ServeHTTP(httptest.NewRecorder(), req)
 			assertRuntimeTracingRequest(t, observation, &wantURL, &caseData)
@@ -81,21 +83,24 @@ func TestRuntimeHTTPServersPreserveRequestTargetAndSanitizeSpans(t *testing.T) {
 func newRuntimeTracingMux(observation *runtimeTracingObservation) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/private/{userID}", observation.capture)
+
 	return mux
 }
 
-func newRuntimeH2CTracingHandler(operation string, observation *runtimeTracingObservation) http.Handler {
-	return NewH2CServer(":0", newRuntimeTracingMux(observation), operation).Handler
+func newRuntimeHTTP1TracingHandler(operation string, observation *runtimeTracingObservation) http.Handler {
+	return NewHTTPServer(":0", newRuntimeTracingMux(observation), operation).Handler
 }
 
 func newRuntimeH3TracingHandler(t *testing.T, operation string, observation *runtimeTracingObservation) http.Handler {
 	t.Helper()
 
 	certFile, keyFile := writeH3LocalhostCertificate(t)
+
 	server, err := NewH3Server(":0", newRuntimeTracingMux(observation), certFile, keyFile, operation)
 	if err != nil {
 		t.Fatalf("NewH3Server() error = %v", err)
 	}
+
 	return server.Handler
 }
 
@@ -103,6 +108,7 @@ func newRuntimeTracingRequest(t *testing.T, data *runtimeTracingCase) (*http.Req
 	t.Helper()
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, data.requestTarget, http.NoBody)
+
 	req.URL.RawPath = "/api/private/private-user-%31%32%33"
 	req.URL.ForceQuery = true
 	req.URL.Fragment = "private-fragment-789"
@@ -111,6 +117,7 @@ func newRuntimeTracingRequest(t *testing.T, data *runtimeTracingCase) (*http.Req
 	req.RemoteAddr = data.remoteAddr
 	req.Header.Set("X-Forwarded-For", data.forwardedFor)
 	req.Header.Set("User-Agent", data.userAgent)
+
 	return req, *req.URL
 }
 
@@ -120,15 +127,19 @@ func assertRuntimeTracingRequest(t *testing.T, observation *runtimeTracingObserv
 	if observation.url == nil {
 		t.Fatal("handler was not called")
 	}
+
 	if *observation.url != *wantURL {
 		t.Fatalf("handler URL = %#v, want %#v", *observation.url, *wantURL)
 	}
+
 	if observation.requestURI != data.requestTarget {
 		t.Fatalf("handler RequestURI = %q, want %q", observation.requestURI, data.requestTarget)
 	}
+
 	if observation.remoteAddr != data.remoteAddr {
 		t.Fatalf("handler RemoteAddr = %q, want %q", observation.remoteAddr, data.remoteAddr)
 	}
+
 	for key, want := range map[string]string{
 		"X-Forwarded-For": data.forwardedFor,
 		"User-Agent":      data.userAgent,
@@ -145,6 +156,7 @@ func assertRuntimeTracingSpans(t *testing.T, spans []sdktrace.ReadOnlySpan, want
 	if len(spans) != wantCount {
 		t.Fatalf("ended spans = %d, want %d", len(spans), wantCount)
 	}
+
 	for _, span := range spans {
 		assertRuntimeTracingSpan(t, span, data)
 	}
@@ -156,16 +168,19 @@ func assertRuntimeTracingSpan(t *testing.T, span sdktrace.ReadOnlySpan, data *ru
 	if got := span.Name(); got != data.operation {
 		t.Fatalf("span name = %q, want %q", got, data.operation)
 	}
+
 	forbiddenKeys := map[attribute.Key]struct{}{
 		attribute.Key("client.address"):       {},
 		attribute.Key("network.peer.address"): {},
 		attribute.Key("network.peer.port"):    {},
 		attribute.Key("user_agent.original"):  {},
 	}
+
 	for _, attr := range span.Attributes() {
 		if _, forbidden := forbiddenKeys[attr.Key]; forbidden {
 			t.Fatalf("forbidden client PII attribute %q recorded with value %q", attr.Key, attr.Value.String())
 		}
+
 		for _, sentinel := range runtimeTracingSentinels(data) {
 			if strings.Contains(attr.Value.String(), sentinel) {
 				t.Fatalf("request identifier %q recorded in span attribute %q", sentinel, attr.Key)
@@ -201,10 +216,12 @@ func TestRuntimeHTTPServersBlankOperationDoesNotCreateSpan(t *testing.T) {
 	called := 0
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called++
+
 		w.WriteHeader(http.StatusNoContent)
 	})
-	h2cServer := NewH2CServer(":0", handler, " \t\n ")
+	http1Server := NewHTTPServer(":0", handler, " \t\n ")
 	certFile, keyFile := writeH3LocalhostCertificate(t)
+
 	h3Server, err := NewH3Server(":0", handler, certFile, keyFile, " \t\n ")
 	if err != nil {
 		t.Fatalf("NewH3Server() error = %v", err)
@@ -214,7 +231,7 @@ func TestRuntimeHTTPServersBlankOperationDoesNotCreateSpan(t *testing.T) {
 		name    string
 		handler http.Handler
 	}{
-		{name: "h2c", handler: h2cServer.Handler},
+		{name: "http1", handler: http1Server.Handler},
 		{name: "h3", handler: h3Server.Handler},
 	} {
 		t.Run(server.name, func(t *testing.T) {
@@ -228,6 +245,7 @@ func TestRuntimeHTTPServersBlankOperationDoesNotCreateSpan(t *testing.T) {
 	if called != 2 {
 		t.Fatalf("handler calls = %d, want 2", called)
 	}
+
 	if got := len(recorder.Ended()); got != 0 {
 		t.Fatalf("ended spans = %d, want 0", got)
 	}
@@ -238,13 +256,17 @@ func installRuntimeOTelGlobals(t *testing.T, provider *sdktrace.TracerProvider) 
 
 	previousProvider := otel.GetTracerProvider()
 	previousPropagator := otel.GetTextMapPropagator()
+
 	otel.SetTracerProvider(provider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	t.Cleanup(func() {
 		otel.SetTracerProvider(previousProvider)
 		otel.SetTextMapPropagator(previousPropagator)
-		if err := provider.Shutdown(context.Background()); err != nil {
+
+		// t.Context()는 Cleanup 실행 직전에 취소되므로, 그대로 넘기면
+		// TracerProvider.Shutdown이 context canceled로 실패한다.
+		if err := provider.Shutdown(context.WithoutCancel(t.Context())); err != nil {
 			t.Errorf("shutdown tracer provider: %v", err)
 		}
 	})

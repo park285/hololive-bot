@@ -24,8 +24,9 @@ import (
 	"errors"
 	"testing"
 
-	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
+
+	model "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 )
 
 func TestFilterPromptCandidates(t *testing.T) {
@@ -39,6 +40,7 @@ func TestFilterPromptCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filterPromptCandidates() error = %v", err)
 	}
+
 	if len(filtered) != 1 || filtered[0].Candidate.ID != 1 {
 		t.Fatalf("filterPromptCandidates() = %#v, want only candidate 1", filtered)
 	}
@@ -54,6 +56,7 @@ func TestFilterPromptCandidatesAllowsBenignContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filterPromptCandidates() error = %v", err)
 	}
+
 	if len(filtered) != 1 {
 		t.Fatalf("filterPromptCandidates() count = %d, want 1", len(filtered))
 	}
@@ -64,6 +67,7 @@ func TestFilterPromptCandidatesFailsClosedWithoutGuard(t *testing.T) {
 	if filtered != nil {
 		t.Fatalf("filterPromptCandidates() = %#v, want nil", filtered)
 	}
+
 	if !errors.Is(err, promptguard.ErrGuardUnavailable) {
 		t.Fatalf("filterPromptCandidates() error = %v, want ErrGuardUnavailable", err)
 	}
@@ -76,5 +80,6 @@ func newMemberNewsPromptGuard(t *testing.T) *promptguard.Guard {
 	if err != nil {
 		t.Fatalf("promptguard.NewGuard() error = %v", err)
 	}
+
 	return guard
 }

@@ -1,8 +1,7 @@
 package collectorruntime
 
 import (
-	"context"
-	"io"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -16,25 +15,32 @@ import (
 func readWalkedSource(root, path string) ([]byte, error) {
 	relative, err := filepath.Rel(root, path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("rel: %w", err)
 	}
-	return fs.ReadFile(os.DirFS(root), filepath.ToSlash(relative))
+
+	out, err := fs.ReadFile(os.DirFS(root), filepath.ToSlash(relative))
+	if err != nil {
+		return out, fmt.Errorf("read file: %w", err)
+	}
+
+	return out, nil
 }
 
 func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
-	runtime, err := Build(context.Background(), &settings.YouTubeCollectorRuntimeConfig{
+	runtime, err := Build(t.Context(), &settings.YouTubeCollectorRuntimeConfig{
 		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{},
 	}, testLogger())
 	if err == nil || runtime != nil {
 		t.Fatalf("Build() = %#v, %v, want runtime disabled error", runtime, err)
 	}
+
 	if err.Error() != "youtube collector runtime disabled: set YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true on the owning host" {
 		t.Fatalf("Build() error = %q", err)
 	}
 }
 
 func TestBuildRequiresWorkerProfile(t *testing.T) {
-	runtime, err := Build(context.Background(), &settings.YouTubeCollectorRuntimeConfig{
+	runtime, err := Build(t.Context(), &settings.YouTubeCollectorRuntimeConfig{
 		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{
 			RuntimeAllowed: true,
 		},
@@ -42,6 +48,7 @@ func TestBuildRequiresWorkerProfile(t *testing.T) {
 	if err == nil || runtime != nil {
 		t.Fatalf("Build() = %#v, %v, want worker profile error", runtime, err)
 	}
+
 	if err.Error() != "youtube collector worker profile is required" {
 		t.Fatalf("Build() error = %q", err)
 	}
@@ -49,6 +56,7 @@ func TestBuildRequiresWorkerProfile(t *testing.T) {
 
 func TestCollectorProductionSourceDoesNotClaimProducerLease(t *testing.T) {
 	t.Parallel()
+
 	root := filepath.Join("..", "..", "..")
 	forbidden := []string{
 		"ingestionlease",
@@ -62,26 +70,33 @@ func TestCollectorProductionSourceDoesNotClaimProducerLease(t *testing.T) {
 		"ProcessNextReplay",
 		"RunRetentionTick",
 	}
+
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() {
 			return nil
 		}
+
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
+
 		src, readErr := readWalkedSource(root, path)
 		if readErr != nil {
-			return readErr
+			return fmt.Errorf("read walked source: %w", readErr)
 		}
+
 		body := string(src)
+
 		for _, token := range forbidden {
 			if strings.Contains(body, token) {
 				t.Errorf("%s must not contain %q", path, token)
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -91,31 +106,39 @@ func TestCollectorProductionSourceDoesNotClaimProducerLease(t *testing.T) {
 
 func TestCollectorProductionSourceDoesNotUseHolodex(t *testing.T) {
 	t.Parallel()
+
 	root := filepath.Join("..", "..", "..")
 	forbidden := []string{
 		"holodex/provider",
 		"ProvideHolodexService",
 	}
+
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() {
 			return nil
 		}
+
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
+
 		src, readErr := readWalkedSource(root, path)
 		if readErr != nil {
-			return readErr
+			return fmt.Errorf("read walked source: %w", readErr)
 		}
+
 		body := string(src)
+
 		for _, token := range forbidden {
 			if strings.Contains(body, token) {
 				t.Errorf("%s must not contain %q", path, token)
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -125,39 +148,48 @@ func TestCollectorProductionSourceDoesNotUseHolodex(t *testing.T) {
 
 func TestCollectorProductionSourceDoesNotUseHTMLGetCommunityPosts(t *testing.T) {
 	t.Parallel()
+
 	root := filepath.Join("..", "..", "..")
 	wiredYouTubeJS := false
+
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+
 		if d.IsDir() {
 			return nil
 		}
+
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
+
 		src, readErr := readWalkedSource(root, path)
 		if readErr != nil {
-			return readErr
+			return fmt.Errorf("read walked source: %w", readErr)
 		}
+
 		body := string(src)
 		if strings.Contains(body, "GetCommunityPosts") {
 			t.Errorf("%s must not call HTML GetCommunityPosts", path)
 		}
+
 		if strings.Contains(body, "hololive-youtube-collector/internal/runtime/youtubejs") {
 			wiredYouTubeJS = true
 		}
+
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk collector source: %v", err)
 	}
+
 	if !wiredYouTubeJS {
 		t.Fatal("collector production source must import the YouTube.js helper")
 	}
 }
 
 func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }

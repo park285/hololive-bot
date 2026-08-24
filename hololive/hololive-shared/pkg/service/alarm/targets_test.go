@@ -3,6 +3,7 @@ package alarm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -30,7 +31,9 @@ func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
 	t.Parallel()
 
 	var lookedUpKey string
+
 	cache := cachemocks.NewStrictClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		lookedUpKey = key
 		return []string{"room-a", "room-b"}, nil
@@ -45,6 +48,7 @@ func TestLookupChannelSubscribersByTypeUsesTypedKey(t *testing.T) {
 	if lookedUpKey != wantKey {
 		t.Fatalf("lookup key = %q, want %q", lookedUpKey, wantKey)
 	}
+
 	if len(got) != 2 || got[0] != "room-a" || got[1] != "room-b" {
 		t.Fatalf("LookupChannelSubscribersByType() = %#v", got)
 	}
@@ -55,17 +59,19 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 
 	db := newAlarmTargetLookupTestDB(t)
 	requireAlarmRecord(t, db, &domain.Alarm{
-		RoomID:     "room-db",
+		RoomID:     testDBRoomID,
 		ChannelID:  "UC_shorts",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts},
 	})
 
 	warmed := make(map[string][]string)
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_shorts", domain.AlarmTypeShorts) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
+
 		return nil, nil
 	}
 	cache.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
@@ -77,12 +83,13 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheEmpty(t *testing.T
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
-	if len(got) != 1 || got[0] != "room-db" {
+
+	if len(got) != 1 || got[0] != testDBRoomID {
 		t.Fatalf("ResolveChannelSubscribersByType() = %#v", got)
 	}
 
 	typedKey := sharedalarmkeys.BuildChannelSubscriberKey("UC_shorts", domain.AlarmTypeShorts)
-	if len(warmed[typedKey]) != 1 || warmed[typedKey][0] != "room-db" {
+	if len(warmed[typedKey]) != 1 || warmed[typedKey][0] != testDBRoomID {
 		t.Fatalf("typed cache warm = %#v", warmed[typedKey])
 	}
 }
@@ -97,13 +104,14 @@ func TestResolveChannelSubscribersByType_DoesNotPoisonOtherTypeCacheFromDBFallba
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeCommunity},
 	})
 	requireAlarmRecord(t, db, &domain.Alarm{
-		RoomID:     "room-community",
+		RoomID:     testCommunityRoomID,
 		ChannelID:  "UC_mixed_cache",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 	})
 
 	sets := make(map[string]map[string]struct{})
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		members := sets[key]
 		if len(members) == 0 {
@@ -114,15 +122,18 @@ func TestResolveChannelSubscribersByType_DoesNotPoisonOtherTypeCacheFromDBFallba
 		for member := range members {
 			result = append(result, member)
 		}
+
 		return result, nil
 	}
 	cache.SAddFunc = func(_ context.Context, key string, members []string) (int64, error) {
 		if sets[key] == nil {
 			sets[key] = make(map[string]struct{}, len(members))
 		}
+
 		for _, member := range members {
 			sets[key][member] = struct{}{}
 		}
+
 		return int64(len(members)), nil
 	}
 
@@ -132,7 +143,7 @@ func TestResolveChannelSubscribersByType_DoesNotPoisonOtherTypeCacheFromDBFallba
 
 	communitySubscribers, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_mixed_cache", domain.AlarmTypeCommunity)
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"room-both", "room-community"}, communitySubscribers)
+	require.ElementsMatch(t, []string{"room-both", testCommunityRoomID}, communitySubscribers)
 }
 
 func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.T) {
@@ -140,16 +151,18 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.
 
 	db := newAlarmTargetLookupTestDB(t)
 	requireAlarmRecord(t, db, &domain.Alarm{
-		RoomID:     "room-db",
+		RoomID:     testDBRoomID,
 		ChannelID:  "UC_community",
 		AlarmTypes: domain.AlarmTypes{domain.AlarmTypeCommunity},
 	})
 
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_community", domain.AlarmTypeCommunity) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
+
 		return nil, errors.New("cache unavailable")
 	}
 
@@ -157,7 +170,8 @@ func TestResolveChannelSubscribersByTypeFallsBackToDBWhenCacheErrors(t *testing.
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
-	if len(got) != 1 || got[0] != "room-db" {
+
+	if len(got) != 1 || got[0] != testDBRoomID {
 		t.Fatalf("ResolveChannelSubscribersByType() = %#v", got)
 	}
 }
@@ -167,10 +181,12 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 
 	db := newAlarmTargetLookupTestDB(t)
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_empty", domain.AlarmTypeLive) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
+
 		return nil, nil
 	}
 
@@ -178,6 +194,7 @@ func TestResolveChannelSubscribersByTypeReturnsAuthoritativeEmptyOnlyAfterDBFall
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() error = %v", err)
 	}
+
 	if len(got) != 0 {
 		t.Fatalf("ResolveChannelSubscribersByType() = %#v", got)
 	}
@@ -190,34 +207,42 @@ func TestResolveChannelSubscribersByTypeUsesNegativeCacheForAuthoritativeEmpty(t
 	emptyKnown := false
 
 	cache := cachemocks.NewLenientClient()
+
 	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
 		if key != sharedalarmkeys.BuildChannelSubscriberKey("UC_empty", domain.AlarmTypeLive) {
 			t.Fatalf("unexpected cache lookup key %q", key)
 		}
+
 		return nil, nil
 	}
 	cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
 		if key != emptyKey {
 			t.Fatalf("unexpected exists key %q", key)
 		}
+
 		return emptyKnown, nil
 	}
 	cache.SetFunc = func(_ context.Context, key string, value any, _ time.Duration) error {
 		if key != emptyKey {
 			t.Fatalf("unexpected set key %q", key)
 		}
+
 		if value != "1" {
 			t.Fatalf("unexpected set value %#v", value)
 		}
+
 		emptyKnown = true
+
 		return nil
 	}
 
 	db := newAlarmTargetLookupTestDB(t)
+
 	got, err := ResolveChannelSubscribersByType(t.Context(), cache, db, "UC_empty", domain.AlarmTypeLive)
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() first error = %v", err)
 	}
+
 	if len(got) != 0 {
 		t.Fatalf("ResolveChannelSubscribersByType() first = %#v", got)
 	}
@@ -226,6 +251,7 @@ func TestResolveChannelSubscribersByTypeUsesNegativeCacheForAuthoritativeEmpty(t
 	if err != nil {
 		t.Fatalf("ResolveChannelSubscribersByType() second error = %v", err)
 	}
+
 	if len(got) != 0 {
 		t.Fatalf("ResolveChannelSubscribersByType() second = %#v", got)
 	}
@@ -242,33 +268,37 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 	})
 
 	var queryCount atomic.Int32
+
 	registerAlarmQueryHook(t, db, func() {
 		queryCount.Add(1)
 		time.Sleep(50 * time.Millisecond)
 	})
 
 	start := make(chan struct{})
+
 	type result struct {
 		subscribers []string
 		err         error
 	}
 
 	const concurrentCalls = 3
+
 	results := make([]result, concurrentCalls)
+
 	var wg sync.WaitGroup
+
 	for i := range concurrentCalls {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
+		wg.Go(func() {
 			<-start
-			results[index].subscribers, results[index].err = ResolveChannelSubscribersByType(
+
+			results[i].subscribers, results[i].err = ResolveChannelSubscribersByType(
 				t.Context(),
 				nil,
 				db,
 				"UC_batch_channel",
 				domain.AlarmTypeShorts,
 			)
-		}(i)
+		})
 	}
 
 	close(start)
@@ -278,6 +308,7 @@ func TestResolveChannelSubscribersByType_SingleflightDeduplicatesConcurrentDBFal
 		if result.err != nil {
 			t.Fatalf("call %d error = %v", i, result.err)
 		}
+
 		if len(result.subscribers) != 1 || result.subscribers[0] != "room-shared" {
 			t.Fatalf("call %d subscribers = %#v", i, result.subscribers)
 		}
@@ -304,23 +335,26 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	})
 
 	start := make(chan struct{})
-	var first []*domain.Alarm
-	var second []*domain.Alarm
-	var firstErr error
-	var secondErr error
+
+	var (
+		first     []*domain.Alarm
+		second    []*domain.Alarm
+		firstErr  error
+		secondErr error
+	)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
+
+	wg.Go(func() {
 		<-start
+
 		first, firstErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel", domain.AlarmTypeLive)
-	}()
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		<-start
+
 		second, secondErr = loadChannelSubscriberAlarms(t.Context(), db, "UC_pointer_channel", domain.AlarmTypeLive)
-	}()
+	})
 
 	close(start)
 	wg.Wait()
@@ -328,9 +362,11 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	if firstErr != nil {
 		t.Fatalf("first loadChannelSubscriberAlarms() error = %v", firstErr)
 	}
+
 	if secondErr != nil {
 		t.Fatalf("second loadChannelSubscriberAlarms() error = %v", secondErr)
 	}
+
 	if len(first) != 1 || len(second) != 1 {
 		t.Fatalf("unexpected alarm lengths: first=%d second=%d", len(first), len(second))
 	}
@@ -340,9 +376,11 @@ func TestLoadChannelSubscriberAlarms_SingleflightDoesNotShareMutablePointers(t *
 	if len(second[0].AlarmTypes) != 2 {
 		t.Fatalf("second AlarmTypes length = %d, want 2", len(second[0].AlarmTypes))
 	}
+
 	if second[0].AlarmTypes[0] != domain.AlarmTypeLive {
 		t.Fatalf("second AlarmTypes[0] = %q, want %q", second[0].AlarmTypes[0], domain.AlarmTypeLive)
 	}
+
 	if second[0].AlarmTypes[1] != domain.AlarmTypeShorts {
 		t.Fatalf("second AlarmTypes[1] = %q, want %q", second[0].AlarmTypes[1], domain.AlarmTypeShorts)
 	}
@@ -353,14 +391,17 @@ func TestLoadChannelSubscriberAlarms_QueryContextIgnoresParentDeadline(t *testin
 
 	db := newAlarmTargetLookupTestDB(t)
 	deadline := time.Now().Add(200 * time.Millisecond)
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
+
 	defer cancel()
 
 	deadlines := make(chan time.Time, 1)
 	hasDeadline := make(chan bool, 1)
+
 	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
 		capturedDeadline, ok := ctx.Deadline()
 		hasDeadline <- ok
+
 		if ok {
 			deadlines <- capturedDeadline
 		}
@@ -383,15 +424,17 @@ func TestLoadChannelSubscriberAlarms_QueryContextAppliesFallbackTimeoutWithoutPa
 
 	deadlines := make(chan time.Time, 1)
 	hasDeadline := make(chan bool, 1)
+
 	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
 		capturedDeadline, ok := ctx.Deadline()
 		hasDeadline <- ok
+
 		if ok {
 			deadlines <- capturedDeadline
 		}
 	})
 
-	alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_fallback_timeout", domain.AlarmTypeLive)
+	alarms, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_fallback_timeout", domain.AlarmTypeLive)
 	require.NoError(t, err)
 	require.Nil(t, alarms)
 	require.True(t, <-hasDeadline)
@@ -412,10 +455,13 @@ func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCalle
 	})
 
 	var queryCount atomic.Int32
+
 	queryStarted := make(chan struct{})
 	releaseQuery := make(chan struct{})
+
 	registerAlarmQueryTxHook(t, db, func(ctx context.Context) {
 		queryCount.Add(1)
+
 		select {
 		case <-queryStarted:
 		default:
@@ -428,10 +474,11 @@ func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCalle
 		}
 	})
 
-	shortCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	shortCtx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	firstDone := make(chan alarmLoadResult, 1)
+
 	go func() {
 		alarms, err := loadChannelSubscriberAlarms(shortCtx, db, "UC_mixed_context", domain.AlarmTypeLive)
 		firstDone <- alarmLoadResult{alarms: alarms, err: err}
@@ -440,14 +487,15 @@ func TestLoadChannelSubscriberAlarms_SingleflightIsolatesFollowersFromFirstCalle
 	<-queryStarted
 
 	secondDone := make(chan alarmLoadResult, 1)
+
 	go func() {
-		alarms, err := loadChannelSubscriberAlarms(context.Background(), db, "UC_mixed_context", domain.AlarmTypeLive)
+		alarms, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_mixed_context", domain.AlarmTypeLive)
 		secondDone <- alarmLoadResult{alarms: alarms, err: err}
 	}()
 
 	first := waitAlarmLoadResult(t, firstDone, 250*time.Millisecond, releaseQuery, "first")
 	require.Error(t, first.err)
-	assert.ErrorContains(t, first.err, context.DeadlineExceeded.Error())
+	require.ErrorContains(t, first.err, context.DeadlineExceeded.Error())
 
 	select {
 	case <-releaseQuery:
@@ -476,20 +524,25 @@ func TestResolveChannelSubscribersByType_DBFallbackMetrics(t *testing.T) {
 	hitBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("hit"))
 	_, err := ResolveChannelSubscribersByType(t.Context(), nil, db, "UC_metric", domain.AlarmTypeLive)
 	require.NoError(t, err)
+
 	hitAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("hit"))
-	assert.Equal(t, float64(1), hitAfter-hitBefore)
+	assert.InDelta(t, float64(1), hitAfter-hitBefore, 1e-9)
 
 	missBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("miss"))
+
 	_, err = ResolveChannelSubscribersByType(t.Context(), nil, db, "UC_metric", domain.AlarmTypeCommunity)
 	require.NoError(t, err)
+
 	missAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("miss"))
-	assert.Equal(t, float64(1), missAfter-missBefore)
+	assert.InDelta(t, float64(1), missAfter-missBefore, 1e-9)
 
 	errorBefore := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("error"))
+
 	_, err = ResolveChannelSubscribersByType(t.Context(), nil, nil, "UC_metric", domain.AlarmTypeLive)
 	require.Error(t, err)
+
 	errorAfter := testutil.ToFloat64(alarmSubscriberDBFallbackTotal.WithLabelValues("error"))
-	assert.Equal(t, float64(1), errorAfter-errorBefore)
+	assert.InDelta(t, float64(1), errorAfter-errorBefore, 1e-9)
 }
 
 func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
@@ -501,27 +554,32 @@ func TestLoadChannelSubscriberAlarms_SingleflightSharedMetric(t *testing.T) {
 	})
 
 	releaseQuery := make(chan struct{})
+
 	registerAlarmQueryHook(t, db, func() {
 		<-releaseQuery
 	})
 
 	start := make(chan struct{})
 	done := make(chan error, 2)
+
 	for range 2 {
 		go func() {
 			<-start
+
 			_, err := loadChannelSubscriberAlarms(t.Context(), db, "UC_shared_metric", domain.AlarmTypeLive)
 			done <- err
 		}()
 	}
 
 	before := testutil.ToFloat64(alarmSubscriberDBSingleflightSharedTotal)
+
 	close(start)
 	time.Sleep(20 * time.Millisecond)
 	close(releaseQuery)
 
 	require.NoError(t, <-done)
 	require.NoError(t, <-done)
+
 	after := testutil.ToFloat64(alarmSubscriberDBSingleflightSharedTotal)
 	assert.Greater(t, after-before, float64(0))
 }
@@ -535,16 +593,29 @@ type alarmTargetLookupTestDB struct {
 
 func (db *alarmTargetLookupTestDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	db.mu.Lock()
+
 	onQuery := db.onQuery
 	db.mu.Unlock()
+
 	if onQuery != nil {
 		onQuery(ctx)
 	}
-	return db.Pool.Query(ctx, sql, args...)
+
+	out, err := db.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	return out, nil
 }
 
 func (db *alarmTargetLookupTestDB) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
-	return db.Pool.Exec(ctx, sql, arguments...)
+	out, err := db.Pool.Exec(ctx, sql, arguments...)
+	if err != nil {
+		return out, fmt.Errorf("exec: %w", err)
+	}
+
+	return out, nil
 }
 
 func (db *alarmTargetLookupTestDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
@@ -564,6 +635,7 @@ func requireAlarmRecord(t *testing.T, db *alarmTargetLookupTestDB, alarmRecord *
 	if err != nil {
 		t.Fatalf("encode alarm types: %v", err)
 	}
+
 	if _, err := db.Exec(t.Context(), `
 		INSERT INTO alarms (room_id, user_id, channel_id, member_name, room_name, user_name, alarm_types)
 		VALUES ($1, $2, $3, $4, $5, $6, $7::alarm_type[])
@@ -592,11 +664,13 @@ func registerAlarmQueryTxHook(t *testing.T, db *alarmTargetLookupTestDB, onQuery
 	t.Helper()
 
 	db.mu.Lock()
+
 	db.onQuery = onQuery
 	db.mu.Unlock()
 
 	t.Cleanup(func() {
 		db.mu.Lock()
+
 		db.onQuery = nil
 		db.mu.Unlock()
 	})
@@ -620,7 +694,9 @@ func waitAlarmLoadResult(
 		default:
 			close(releaseQuery)
 		}
+
 		t.Fatalf("%s loadChannelSubscriberAlarms() did not return within %s", label, timeout)
+
 		return alarmLoadResult{}
 	}
 }

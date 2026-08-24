@@ -96,6 +96,7 @@ func (s *Service) loadEnabledSetting(ctx context.Context, defaultEnabled bool) (
 		if parseErr != nil {
 			return false, fmt.Errorf("invalid ACL enabled setting: %w", parseErr)
 		}
+
 		s.enabled = enabled
 	}
 
@@ -109,16 +110,24 @@ func (s *Service) loadModeSetting(ctx context.Context, defaultMode ACLMode) erro
 	}
 
 	if !found {
-		return s.initializeModeSetting(ctx, defaultMode)
+		if err := s.initializeModeSetting(ctx, defaultMode); err != nil {
+			return fmt.Errorf("initialize mode setting: %w", err)
+		}
+
+		return nil
 	}
 
-	return s.applyModeSetting(value)
+	if err := s.applyModeSetting(value); err != nil {
+		return fmt.Errorf("apply mode setting: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) initializeModeSetting(ctx context.Context, defaultMode ACLMode) error {
 	normalizedMode, err := normalizeACLModeStrict(defaultMode)
 	if err != nil {
-		return err
+		return fmt.Errorf("normalize ACL mode strict: %w", err)
 	}
 
 	s.mode = normalizedMode
@@ -132,10 +141,11 @@ func (s *Service) initializeModeSetting(ctx context.Context, defaultMode ACLMode
 func (s *Service) applyModeSetting(value string) error {
 	mode, err := parseACLModeStrict(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse ACL mode strict: %w", err)
 	}
 
 	s.mode = mode
+
 	return nil
 }
 
@@ -144,8 +154,9 @@ func (s *Service) loadRoomsFromDatabase(ctx context.Context) ([]Room, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ACL rooms: %w", err)
 	}
+
 	if err := validateRoomListTypes(rooms); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate room list types: %w", err)
 	}
 
 	return rooms, nil

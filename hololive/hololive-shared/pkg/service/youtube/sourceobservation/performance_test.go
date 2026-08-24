@@ -1,18 +1,17 @@
 package sourceobservation
 
 import (
-	"context"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 
 func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	pool := dbtest.NewPool(b)
 	repository := NewRepository(pool)
 	consumer := NewConsumer(
@@ -21,22 +20,25 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 		nil,
 	)
 	proof := seedPublishLease(
+		b.Context(),
 		b,
-		context.Background(),
 		pool,
 		contract.ProviderYouTubeJS,
 		contract.KindCommunityPage,
-		"UC_TEST",
+		testChannelID,
 		"community_collect",
 	)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for i := range b.N {
 		if i > 0 {
 			b.StopTimer()
-			proof = advanceLease(b, context.Background(), pool, &proof, time.Minute)
+
+			proof = advanceLease(b.Context(), b, pool, &proof, time.Minute)
 			b.StartTimer()
 		}
+
 		envelope := communityEnvelope(
 			b,
 			&proof,
@@ -45,6 +47,7 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 		if _, err := repository.PublishBatch(ctx, publishInput(envelope)); err != nil {
 			b.Fatal(err)
 		}
+
 		if err := consumer.Consume(ctx, claimOptions()); err != nil {
 			b.Fatal(err)
 		}

@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/retry"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/util"
-
-	"github.com/park285/shared-go/v2/pkg/retry"
 )
 
 type MemberRepository interface {
@@ -39,31 +39,40 @@ type Runner struct {
 
 func (r *Runner) Start(ctx context.Context) error {
 	if r.checkHourKST >= 0 {
-		return r.startScheduled(ctx)
+		r.startScheduled(ctx)
+
+		return nil
 	}
 
 	for {
 		r.logRunFailure(r.RunOnce(ctx))
+
 		if !r.effectiveSleep()(ctx, r.effectiveInterval()) {
 			return nil
 		}
 	}
 }
 
-func (r *Runner) startScheduled(ctx context.Context) error {
+func (r *Runner) startScheduled(ctx context.Context) {
 	var lastScheduledAt time.Time
+
 	for {
 		now := r.effectiveNow()
+
 		var scheduledAt time.Time
+
 		if lastScheduledAt.IsZero() {
 			scheduledAt = firstCelebrationRunAt(now, r.checkHourKST)
 		} else {
 			scheduledAt = nextCelebrationRunAt(r.scheduleFrom(now, lastScheduledAt), r.checkHourKST)
 		}
+
 		if !r.effectiveSleep()(ctx, scheduledAt.Sub(now)) {
-			return nil
+			return
 		}
+
 		r.logRunFailure(r.runAt(ctx, scheduledAt))
+
 		lastScheduledAt = scheduledAt
 	}
 }
@@ -72,6 +81,7 @@ func (r *Runner) scheduleFrom(now, lastScheduledAt time.Time) time.Time {
 	if !lastScheduledAt.IsZero() && !now.After(lastScheduledAt) {
 		return lastScheduledAt.Add(time.Nanosecond)
 	}
+
 	return now
 }
 
@@ -79,6 +89,7 @@ func (r *Runner) logRunFailure(err error) {
 	if err == nil || r.logger == nil {
 		return
 	}
+
 	r.logger.Warn("Celebration runner failed", slog.Any("error", err))
 }
 
@@ -87,16 +98,21 @@ func (r *Runner) RunOnce(ctx context.Context) error {
 	if !r.shouldRunAt(now) {
 		return nil
 	}
-	return r.runAt(ctx, now)
+
+	if err := r.runAt(ctx, now); err != nil {
+		return fmt.Errorf("run at: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Runner) runAt(ctx context.Context, now time.Time) error {
 	month, day, year := int(now.Month()), now.Day(), now.Year()
-	dateStr := now.Format("2006-01-02")
+	dateStr := now.Format(time.DateOnly)
 
 	candidates, err := r.findCelebrationCandidates(ctx, month, day, year)
 	if err != nil {
-		return err
+		return fmt.Errorf("find celebration candidates: %w", err)
 	}
 
 	allRooms, err := r.alarmRepo.GetAllDistinctRoomIDs(ctx)
@@ -140,9 +156,11 @@ func (r *Runner) shouldRunAt(now time.Time) bool {
 func nextCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
 	kstNow := toKSTForSchedule(now)
 	next := time.Date(kstNow.Year(), kstNow.Month(), kstNow.Day(), checkHourKST, 0, 0, 0, kstNow.Location())
+
 	if kstNow.After(next) {
 		next = next.AddDate(0, 0, 1)
 	}
+
 	return next
 }
 
@@ -151,9 +169,11 @@ func nextCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
 func firstCelebrationRunAt(now time.Time, checkHourKST int) time.Time {
 	kstNow := toKSTForSchedule(now)
 	todayAt := time.Date(kstNow.Year(), kstNow.Month(), kstNow.Day(), checkHourKST, 0, 0, 0, kstNow.Location())
+
 	if kstNow.After(todayAt) && !kstNow.After(todayAt.Add(celebrationSameDayGrace)) {
 		return todayAt
 	}
+
 	return nextCelebrationRunAt(now, checkHourKST)
 }
 
@@ -161,6 +181,7 @@ func toKSTForSchedule(now time.Time) time.Time {
 	if _, offset := now.Zone(); offset == 9*60*60 {
 		return now
 	}
+
 	return util.ToKST(now)
 }
 
@@ -196,6 +217,7 @@ func (r *Runner) effectiveInterval() time.Duration {
 	if r.runInterval > 0 {
 		return r.runInterval
 	}
+
 	return time.Hour
 }
 
@@ -203,6 +225,7 @@ func (r *Runner) effectiveNow() time.Time {
 	if r.now != nil {
 		return r.now()
 	}
+
 	return util.NowKST()
 }
 
@@ -210,6 +233,7 @@ func (r *Runner) effectiveSleep() func(context.Context, time.Duration) bool {
 	if r.sleep != nil {
 		return r.sleep
 	}
+
 	return retry.Sleep
 }
 
@@ -219,11 +243,14 @@ func filterValidAnniversaryMembers(members []*domain.Member, currentYear int) []
 		if m.DebutDate == nil {
 			continue
 		}
+
 		if currentYear-m.DebutDate.Year() <= 0 {
 			continue
 		}
+
 		valid = append(valid, m)
 	}
+
 	return valid
 }
 
@@ -234,7 +261,9 @@ func buildCelebrationEnvelopes(
 	currentYear int,
 ) []domain.AlarmQueueEnvelope {
 	envelopes := make([]domain.AlarmQueueEnvelope, 0, (len(birthdayMembers)+len(anniversaryMembers))*len(allRooms))
+
 	envelopes = appendBirthdayCelebrationEnvelopes(envelopes, birthdayMembers, allRooms, dateStr, currentYear)
+
 	return appendAnniversaryCelebrationEnvelopes(envelopes, anniversaryMembers, allRooms, dateStr, currentYear)
 }
 
@@ -247,6 +276,7 @@ func appendBirthdayCelebrationEnvelopes(
 ) []domain.AlarmQueueEnvelope {
 	for _, m := range birthdayMembers {
 		displayName := resolveCelebrationMemberName(m)
+
 		for _, roomID := range allRooms {
 			envelopes = append(envelopes, domain.AlarmQueueEnvelope{
 				Notification: domain.AlarmNotification{
@@ -266,6 +296,7 @@ func appendBirthdayCelebrationEnvelopes(
 			})
 		}
 	}
+
 	return envelopes
 }
 
@@ -280,11 +311,14 @@ func appendAnniversaryCelebrationEnvelopes(
 		if m.DebutDate == nil {
 			continue
 		}
+
 		displayName := resolveCelebrationMemberName(m)
 		years := currentYear - m.DebutDate.Year()
+
 		if years <= 0 {
 			continue
 		}
+
 		for _, roomID := range allRooms {
 			envelopes = append(envelopes, domain.AlarmQueueEnvelope{
 				Notification: domain.AlarmNotification{
@@ -304,77 +338,6 @@ func appendAnniversaryCelebrationEnvelopes(
 			})
 		}
 	}
+
 	return envelopes
-}
-
-func birthdayCelebrationOrdinal(birthday, debutDate *time.Time, currentYear int) int {
-	if missingBirthdayOrdinalInput(birthday, debutDate, currentYear) {
-		return 0
-	}
-
-	firstYear := debutDate.Year()
-	if birthdayMonthDayBeforeDebut(birthday, debutDate) {
-		firstYear++
-	}
-	if isLeapDay(birthday) {
-		return leapDayBirthdayOrdinal(firstYear, currentYear)
-	}
-	if currentYear < firstYear {
-		return 0
-	}
-	return currentYear - firstYear + 1
-}
-
-func missingBirthdayOrdinalInput(birthday, debutDate *time.Time, currentYear int) bool {
-	return birthday == nil || debutDate == nil || currentYear <= 0
-}
-
-func birthdayMonthDayBeforeDebut(birthday, debutDate *time.Time) bool {
-	if birthday.Month() != debutDate.Month() {
-		return birthday.Month() < debutDate.Month()
-	}
-	return birthday.Day() < debutDate.Day()
-}
-
-func isLeapDay(date *time.Time) bool {
-	return date.Month() == time.February && date.Day() == 29
-}
-
-func leapDayBirthdayOrdinal(firstYear, currentYear int) int {
-	firstYear = nextLeapYear(firstYear)
-	if currentYear < firstYear {
-		return 0
-	}
-	return countLeapYears(firstYear, currentYear)
-}
-
-func nextLeapYear(year int) int {
-	for !isLeapYear(year) {
-		year++
-	}
-	return year
-}
-
-func countLeapYears(startYear, endYear int) int {
-	count := 0
-	for year := startYear; year <= endYear; year++ {
-		if isLeapYear(year) {
-			count++
-		}
-	}
-	return count
-}
-
-func isLeapYear(year int) bool {
-	return year%400 == 0 || (year%4 == 0 && year%100 != 0)
-}
-
-func resolveCelebrationMemberName(m *domain.Member) string {
-	if m.ShortKoreanName != "" {
-		return m.ShortKoreanName
-	}
-	if m.NameKo != "" {
-		return m.NameKo
-	}
-	return m.Name
 }

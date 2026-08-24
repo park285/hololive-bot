@@ -17,13 +17,17 @@ func (c *Client) captureSnapshotWithInterval(ctx context.Context, snapshot *Snap
 	if !c.shouldCaptureSnapshot(snapshot, policy) {
 		return
 	}
+
 	normalizeSnapshotPayload(snapshot, policy)
+
 	if len(snapshot.Body) == 0 {
 		return
 	}
+
 	if checkInterval && !c.allowSnapshotInterval(ctx, snapshot, policy.MinInterval) {
 		return
 	}
+
 	if err := c.snapshotSink.Capture(ctx, snapshot); err != nil {
 		slog.Warn("failed to capture youtube producer snapshot",
 			"operation", snapshot.Operation,
@@ -39,12 +43,15 @@ func normalizeSnapshotPayload(snapshot *Snapshot, policy SnapshotPolicy) *Snapsh
 	if snapshot.CapturedAt.IsZero() {
 		snapshot.CapturedAt = time.Now().UTC()
 	}
+
 	if snapshot.SchemaVersion == "" {
 		snapshot.SchemaVersion = SnapshotSchemaVersion
 	}
+
 	if policy.MaxBodyBytes > 0 && len(snapshot.Body) > policy.MaxBodyBytes {
 		snapshot.Body = snapshot.Body[:policy.MaxBodyBytes]
 	}
+
 	return snapshot
 }
 
@@ -52,6 +59,7 @@ func (c *Client) shouldCaptureSnapshot(snapshot *Snapshot, policy SnapshotPolicy
 	if c == nil || c.snapshotSink == nil {
 		return false
 	}
+
 	return policy.allows(snapshot.Reason)
 }
 
@@ -59,14 +67,19 @@ func (c *Client) allowSnapshotInterval(ctx context.Context, snapshot *Snapshot, 
 	if interval <= 0 || c == nil || c.stateStore == nil {
 		return true
 	}
+
 	key := snapshotIntervalStateKey(snapshot)
+
 	var marker bool
+
 	if err := c.stateStore.Get(ctx, key, &marker); err == nil && marker {
 		return false
 	}
+
 	if err := c.stateStore.Set(ctx, key, true, interval); err != nil {
 		slog.Warn("failed to persist youtube producer snapshot interval marker", "key", key, "error", err)
 	}
+
 	return true
 }
 

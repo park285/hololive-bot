@@ -78,6 +78,7 @@ func NewPgBroadcastHistoryRepository(postgres database.Client) handlercore.Broad
 	if postgres == nil || postgres.GetPool() == nil {
 		return nil
 	}
+
 	return &pgBroadcastHistoryRepository{pool: postgres.GetPool()}
 }
 
@@ -85,6 +86,7 @@ func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, 
 	if r == nil || (r.pool == nil && r.pageLoader == nil) {
 		return handlercore.BroadcastHistoryResult{}, errors.New("broadcast history repository not configured")
 	}
+
 	if query == nil {
 		return handlercore.BroadcastHistoryResult{}, errors.New("broadcast history query is required")
 	}
@@ -92,6 +94,7 @@ func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, 
 	limit := normalizeBroadcastHistoryLimit(query.Limit)
 	since := broadcastHistorySinceCursor(query)
 	queryCtx, cancel := context.WithTimeout(ctx, r.elapsedQueryBudget())
+
 	defer cancel()
 
 	result, err := r.collectEndedBroadcasts(queryCtx, query, since, limit)
@@ -100,8 +103,10 @@ func (r *pgBroadcastHistoryRepository) ListEndedBroadcasts(ctx context.Context, 
 			result.Truncated = true
 			return result, nil
 		}
-		return handlercore.BroadcastHistoryResult{}, err
+
+		return handlercore.BroadcastHistoryResult{}, fmt.Errorf("collect ended broadcasts: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -109,6 +114,7 @@ func (r *pgBroadcastHistoryRepository) elapsedQueryBudget() time.Duration {
 	if r.queryTimeout > 0 {
 		return r.queryTimeout
 	}
+
 	return defaultBroadcastHistoryQueryBudget
 }
 
@@ -117,12 +123,14 @@ func (r *pgBroadcastHistoryRepository) collectEndedBroadcasts(ctx context.Contex
 	for len(collector.result.Entries) < limit {
 		done, err := collector.collectNextPage(ctx, r)
 		if err != nil {
-			return collector.result, err
+			return collector.result, fmt.Errorf("collect next page: %w", err)
 		}
+
 		if done {
 			break
 		}
 	}
+
 	return collector.result, nil
 }
 
@@ -138,34 +146,44 @@ func newBroadcastHistoryCollector(query *handlercore.BroadcastHistoryQuery, sinc
 func (c *broadcastHistoryCollector) collectNextPage(ctx context.Context, repository *pgBroadcastHistoryRepository) (bool, error) {
 	page, err := repository.loadEndedBroadcastPage(ctx, c.query, c.since, c.cursorAt, c.cursorVideoID, broadcastHistoryPageSize+1)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("load ended broadcast page: %w", err)
 	}
+
 	if err := c.recordScannedPage(len(page)); err != nil {
-		return false, err
+		return false, fmt.Errorf("record scanned page: %w", err)
 	}
+
 	if len(page) == 0 {
 		return true, nil
 	}
 
 	page, hasMore := boundedBroadcastHistoryPage(page)
+
 	c.result.Entries = appendMatchingBroadcastHistoryEntries(c.result.Entries, page, c.query, c.limit)
+
 	if len(c.result.Entries) >= c.limit || !hasMore {
 		return true, nil
 	}
+
 	if c.pages >= maxBroadcastHistoryPages || c.scannedRows >= maxBroadcastHistoryScannedRows {
 		c.result.Truncated = true
 		return true, nil
 	}
+
 	c.advanceCursor(page)
+
 	return false, nil
 }
 
 func (c *broadcastHistoryCollector) recordScannedPage(rows int) error {
 	c.pages++
+
 	c.scannedRows += rows
+
 	if c.scannedRows > maxBroadcastHistoryScannedRows {
 		return fmt.Errorf("broadcast history scan budget exceeded: %d rows", c.scannedRows)
 	}
+
 	return nil
 }
 
@@ -174,12 +192,14 @@ func boundedBroadcastHistoryPage(page []handlercore.BroadcastHistoryEntry) ([]ha
 	if hasMore {
 		return page[:broadcastHistoryPageSize], true
 	}
+
 	return page, false
 }
 
 func (c *broadcastHistoryCollector) advanceCursor(page []handlercore.BroadcastHistoryEntry) {
 	last := &page[len(page)-1]
 	nextCursorAt := broadcastHistorySortTime(last)
+
 	c.cursorAt = &nextCursorAt
 	c.cursorVideoID = last.VideoID
 }
@@ -189,7 +209,9 @@ func broadcastHistorySinceCursor(query *handlercore.BroadcastHistoryQuery) *time
 		value := time.Now().AddDate(0, 0, -maxBroadcastHistoryDays).UTC()
 		return &value
 	}
+
 	value := query.Since.UTC()
+
 	return &value
 }
 
@@ -198,11 +220,13 @@ func appendMatchingBroadcastHistoryEntries(entries, page []handlercore.Broadcast
 		if !broadcastHistoryEntryMatches(query, &page[i]) {
 			continue
 		}
+
 		entries = append(entries, page[i])
 		if len(entries) >= limit {
 			break
 		}
 	}
+
 	return entries
 }
 
@@ -214,9 +238,20 @@ func (r *pgBroadcastHistoryRepository) loadEndedBroadcastPage(
 	pageLimit int,
 ) ([]handlercore.BroadcastHistoryEntry, error) {
 	if r.pageLoader != nil {
-		return r.pageLoader(ctx, query, since, cursorAt, cursorVideoID, pageLimit)
+		out, err := r.pageLoader(ctx, query, since, cursorAt, cursorVideoID, pageLimit)
+		if err != nil {
+			return out, fmt.Errorf("page loader: %w", err)
+		}
+
+		return out, nil
 	}
-	return r.listEndedBroadcastPage(ctx, query, since, cursorAt, cursorVideoID, pageLimit)
+
+	out, err := r.listEndedBroadcastPage(ctx, query, since, cursorAt, cursorVideoID, pageLimit)
+	if err != nil {
+		return out, fmt.Errorf("list ended broadcast page: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *pgBroadcastHistoryRepository) listEndedBroadcastPage(
@@ -227,6 +262,7 @@ func (r *pgBroadcastHistoryRepository) listEndedBroadcastPage(
 	pageLimit int,
 ) ([]handlercore.BroadcastHistoryEntry, error) {
 	topicFilter := broadcastHistorySQLTopicFilter(query.TopicID)
+
 	rows, err := r.pool.Query(ctx, broadcastHistoryListPageSQL,
 		query.ChannelID,
 		since,
@@ -241,13 +277,16 @@ func (r *pgBroadcastHistoryRepository) listEndedBroadcastPage(
 	defer rows.Close()
 
 	entries := make([]handlercore.BroadcastHistoryEntry, 0, pageLimit)
+
 	for rows.Next() {
 		entry, err := scanBroadcastHistoryRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan broadcast history row: %w", err)
 		}
+
 		entries = append(entries, entry)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate broadcast history rows: %w", err)
 	}
@@ -260,11 +299,13 @@ func broadcastHistorySQLTopicFilter(topicID string) string {
 	if normalized == "" || strings.Contains(normalized, ",") {
 		return ""
 	}
+
 	for _, r := range normalized {
 		if r > 127 {
 			return ""
 		}
 	}
+
 	return normalized
 }
 
@@ -272,82 +313,21 @@ func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, qu
 	if r == nil || r.pool == nil {
 		return nil, errors.New("broadcast history repository not configured")
 	}
+
 	if query.VideoID == "" {
-		return nil, nil
+		return nil, handlercore.ErrBroadcastNotFound
 	}
 
 	row := r.pool.QueryRow(ctx, broadcastHistoryGetByVideoIDSQL, query.VideoID)
 
 	entry, err := scanBroadcastHistoryRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, handlercore.ErrBroadcastNotFound
 	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan broadcast history row: %w", err)
 	}
+
 	return &entry, nil
-}
-
-var (
-	broadcastHistoryListPageSQL     = mustSQL("broadcast_history_repository_0179_01.sql")
-	broadcastHistoryGetByVideoIDSQL = mustSQL("broadcast_history_repository_0242_02.sql")
-)
-
-type broadcastHistoryScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.BroadcastHistoryEntry, error) {
-	var entry handlercore.BroadcastHistoryEntry
-	if err := row.Scan(
-		&entry.VideoID,
-		&entry.ChannelID,
-		&entry.MemberName,
-		&entry.Title,
-		&entry.TopicID,
-		&entry.ThumbnailURL,
-		&entry.ScheduledStartTime,
-		&entry.StartedAt,
-		&entry.EndedAt,
-		&entry.LastSeenAt,
-	); err != nil {
-		return handlercore.BroadcastHistoryEntry{}, fmt.Errorf("scan broadcast history row: %w", err)
-	}
-	classification := ClassifyBroadcastWithSource(entry.TopicID, entry.Title)
-	entry.BroadcastType = string(classification.Type)
-	entry.BroadcastTypeSource = classification.Source
-	return entry, nil
-}
-
-func broadcastHistoryEntryMatches(query *handlercore.BroadcastHistoryQuery, entry *handlercore.BroadcastHistoryEntry) bool {
-	if query.TopicID != "" && !broadcastTopicMatches(entry.TopicID, query.TopicID) {
-		return false
-	}
-	if query.Type != "" && entry.BroadcastType != query.Type {
-		return false
-	}
-	return true
-}
-
-func broadcastHistorySortTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
-	switch {
-	case entry.EndedAt != nil:
-		return entry.EndedAt.UTC()
-	case entry.StartedAt != nil:
-		return entry.StartedAt.UTC()
-	case entry.ScheduledStartTime != nil:
-		return entry.ScheduledStartTime.UTC()
-	default:
-		return entry.LastSeenAt.UTC()
-	}
-}
-
-func normalizeBroadcastHistoryLimit(limit int) int {
-	if limit <= 0 {
-		return defaultBroadcastHistoryLimit
-	}
-	if limit > maxBroadcastHistoryLimit {
-		return maxBroadcastHistoryLimit
-	}
-	return limit
 }

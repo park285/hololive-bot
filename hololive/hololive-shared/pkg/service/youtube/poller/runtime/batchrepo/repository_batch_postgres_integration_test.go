@@ -47,15 +47,15 @@ func TestPgxBatchRepositoryInsertNotificationsChunkPostgresDeduplicatesSameBatch
 	err = repository.insertNotificationsChunk(ctx, tx, []*domain.YouTubeNotificationOutbox{
 		{
 			Kind:      domain.OutboxKindNewVideo,
-			ChannelID: "channel-1",
-			ContentID: "video-1",
+			ChannelID: testChannelID,
+			ContentID: testVideoID,
 			Payload:   `{"video_id":"video-1","kind":"first"}`,
 			Status:    domain.OutboxStatusPending,
 		},
 		{
 			Kind:      domain.OutboxKindNewVideo,
-			ChannelID: "channel-1",
-			ContentID: "video-1",
+			ChannelID: testChannelID,
+			ContentID: testVideoID,
 			Payload:   `{"video_id":"video-1","kind":"duplicate"}`,
 			Status:    domain.OutboxStatusPending,
 		},
@@ -68,7 +68,7 @@ func TestPgxBatchRepositoryInsertNotificationsChunkPostgresDeduplicatesSameBatch
 		FROM youtube_notification_outbox
 		WHERE kind = $1 AND content_id = $2`,
 		domain.OutboxKindNewVideo,
-		"video-1",
+		testVideoID,
 	).Scan(&outboxCount)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, outboxCount)

@@ -1,34 +1,35 @@
 package auth
 
 import (
-	"context"
 	stdErrors "errors"
 	"sync"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/testutil"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+
+	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func newRefreshTestService(t *testing.T) (result0 *Service, value1 string) {
 	t.Helper()
 
 	db := newTestDB(t)
-	cacheClient := testutil.NewTestCacheService(t, context.Background())
+	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(context.Background(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
 
-	if _, err := service.Register(context.Background(), "user@example.com", "Password1", "User"); err != nil {
-		t.Fatalf("register failed: %v", err)
+	if _, registerErr := service.Register(t.Context(), "user@example.com", "Password1", "User"); registerErr != nil {
+		t.Fatalf("register failed: %v", registerErr)
 	}
 
-	session, _, err := service.Login(context.Background(), "user@example.com", "Password1", "127.0.0.1")
+	session, _, err := service.Login(t.Context(), "user@example.com", "Password1", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
+
 	return service, session.Token
 }
 
@@ -36,18 +37,20 @@ func newRefreshTestService(t *testing.T) (result0 *Service, value1 string) {
 func TestRefresh_SequentialReplayRejected(t *testing.T) {
 	service, token := newRefreshTestService(t)
 
-	first, err := service.Refresh(context.Background(), token)
+	first, err := service.Refresh(t.Context(), token)
 	if err != nil {
 		t.Fatalf("first refresh failed: %v", err)
 	}
+
 	if first == nil || first.Token == "" {
-		t.Fatalf("expected rotated session")
+		t.Fatal("expected rotated session")
 	}
 
-	_, err = service.Refresh(context.Background(), token)
+	_, err = service.Refresh(t.Context(), token)
 	if err == nil {
-		t.Fatalf("expected replay of consumed token to be rejected")
+		t.Fatal("expected replay of consumed token to be rejected")
 	}
+
 	assertAuthCode(t, err, CodeUnauthorized)
 }
 
@@ -56,6 +59,7 @@ func TestRefresh_ConcurrentRotationSingleWinner(t *testing.T) {
 	service, token := newRefreshTestService(t)
 
 	const goroutines = 8
+
 	var (
 		wg        sync.WaitGroup
 		mu        sync.Mutex
@@ -64,28 +68,36 @@ func TestRefresh_ConcurrentRotationSingleWinner(t *testing.T) {
 	)
 
 	wg.Add(goroutines)
+
 	for range goroutines {
 		go func() {
 			defer wg.Done()
-			_, err := service.Refresh(context.Background(), token)
+
+			_, err := service.Refresh(t.Context(), token)
+
 			mu.Lock()
 			defer mu.Unlock()
-			switch {
-			case err == nil:
+
+			if err == nil {
 				successes++
-			default:
-				var ae *Error
-				if stdErrors.As(err, &ae) && ae.Code == CodeUnauthorized {
-					unauth++
-				}
+
+				return
+			}
+
+			var ae *Error
+
+			if stdErrors.As(err, &ae) && ae.Code == CodeUnauthorized {
+				unauth++
 			}
 		}()
 	}
+
 	wg.Wait()
 
 	if successes != 1 {
 		t.Fatalf("expected exactly 1 successful refresh, got=%d (unauthorized=%d)", successes, unauth)
 	}
+
 	if unauth != goroutines-1 {
 		t.Fatalf("expected %d unauthorized replays, got=%d", goroutines-1, unauth)
 	}
@@ -97,15 +109,16 @@ func TestRefresh_ConsumesOldSessionKey(t *testing.T) {
 
 	oldKey := sessionKeyPrefix + sha256Hex(token)
 
-	if _, err := service.Refresh(context.Background(), token); err != nil {
+	if _, err := service.Refresh(t.Context(), token); err != nil {
 		t.Fatalf("refresh failed: %v", err)
 	}
 
-	exists, err := service.cacheClient.Exists(context.Background(), oldKey)
+	exists, err := service.cacheClient.Exists(t.Context(), oldKey)
 	if err != nil {
 		t.Fatalf("exists check failed: %v", err)
 	}
+
 	if exists {
-		t.Fatalf("expected old session key to be deleted after rotation")
+		t.Fatal("expected old session key to be deleted after rotation")
 	}
 }

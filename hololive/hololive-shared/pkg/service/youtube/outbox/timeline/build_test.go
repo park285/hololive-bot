@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var timelineBase = time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
+var timelineBase = time.Date(2026, time.April, 10, 10, 0, 0, 0, time.UTC)
 
 func TestDeriveMetrics_NilRowDoesNotPanic(t *testing.T) {
 	t.Parallel()
@@ -27,6 +27,7 @@ func TestClonePostLatencyInt64(t *testing.T) {
 	require.NotSame(t, &original, cloned)
 
 	*cloned = 99
+
 	require.Equal(t, int64(42), original)
 }
 
@@ -131,16 +132,19 @@ func TestPositiveDurationMillis(t *testing.T) {
 	require.False(t, ok)
 
 	zero := int64(0)
+
 	value, ok = positiveDurationMillis(&zero)
 	require.Equal(t, int64(0), value)
 	require.False(t, ok)
 
 	neg := int64(-5)
+
 	value, ok = positiveDurationMillis(&neg)
 	require.Equal(t, int64(0), value)
 	require.False(t, ok)
 
 	pos := int64(5)
+
 	value, ok = positiveDurationMillis(&pos)
 	require.Equal(t, int64(5), value)
 	require.True(t, ok)
@@ -271,18 +275,21 @@ func TestDeriveRetryAccumulationMillis(t *testing.T) {
 
 	t.Run("no failed attempts returns nil", func(t *testing.T) {
 		t.Parallel()
+
 		row := &PostDeliveryTimeline{FailedAttemptCount: 0, FirstAttemptFinishedAt: &finished}
 		require.Nil(t, deriveRetryAccumulationMillis(row))
 	})
 
 	t.Run("missing first attempt finished returns nil", func(t *testing.T) {
 		t.Parallel()
+
 		row := &PostDeliveryTimeline{FailedAttemptCount: 1}
 		require.Nil(t, deriveRetryAccumulationMillis(row))
 	})
 
 	t.Run("prefers alarm sent over later candidates", func(t *testing.T) {
 		t.Parallel()
+
 		alarmSent := finished.Add(10 * time.Second)
 		nextRetry := finished.Add(60 * time.Second)
 		row := &PostDeliveryTimeline{
@@ -298,6 +305,7 @@ func TestDeriveRetryAccumulationMillis(t *testing.T) {
 
 	t.Run("skips candidates not strictly after finished", func(t *testing.T) {
 		t.Parallel()
+
 		alarmBefore := finished.Add(-5 * time.Second)
 		firstSuccess := finished.Add(20 * time.Second)
 		row := &PostDeliveryTimeline{
@@ -313,6 +321,7 @@ func TestDeriveRetryAccumulationMillis(t *testing.T) {
 
 	t.Run("no candidate after finished returns nil", func(t *testing.T) {
 		t.Parallel()
+
 		before := finished.Add(-time.Second)
 		row := &PostDeliveryTimeline{
 			FailedAttemptCount:     1,
@@ -324,6 +333,7 @@ func TestDeriveRetryAccumulationMillis(t *testing.T) {
 
 	t.Run("sub-millisecond gap truncates to zero and returns nil", func(t *testing.T) {
 		t.Parallel()
+
 		justAfter := finished.Add(500 * time.Microsecond)
 		row := &PostDeliveryTimeline{
 			FailedAttemptCount:     1,
@@ -400,7 +410,7 @@ func TestBuildPostLatencyClassification_NilRow(t *testing.T) {
 	require.Equal(t, PostDelaySourceNone, result.DelaySource)
 	require.Equal(t, PostInternalDelayCauseNone, result.InternalDelayCause)
 	require.NotNil(t, result.Evidence)
-	require.Len(t, result.Evidence, 0)
+	require.Empty(t, result.Evidence)
 }
 
 func TestBuildPostLatencyClassification_CarriesRowSourcesAndDefaultsEmptyStrings(t *testing.T) {
@@ -423,7 +433,7 @@ func TestBuildPostLatencyClassification_CarriesRowSourcesAndDefaultsEmptyStrings
 func TestBuildPostLatencyClassificationEvidence(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, buildPostLatencyClassificationEvidence(nil), 0)
+	require.Empty(t, buildPostLatencyClassificationEvidence(nil))
 
 	alarm := int64(1)
 	publish := int64(2)
@@ -474,9 +484,11 @@ func TestBuildPostLatencyClassificationEvidence_InternalLatencyExceededForcesSel
 	}
 	evidence := buildPostLatencyClassificationEvidence(row)
 	byKey := make(map[PostLatencyClassificationEvidenceKey]PostLatencyClassificationEvidence, len(evidence))
+
 	for _, e := range evidence {
 		byKey[e.Key] = e
 	}
+
 	require.True(t, byKey[PostLatencyClassificationEvidenceKeyInternalLatency].Selected)
 }
 

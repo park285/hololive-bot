@@ -24,9 +24,10 @@ import (
 	"testing"
 	"time"
 
-	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	parser "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 func TestExtractPublishedAtFromHTML(t *testing.T) {

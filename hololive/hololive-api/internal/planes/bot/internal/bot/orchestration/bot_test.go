@@ -30,6 +30,15 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 )
 
+const (
+	testSenderName          = "user"
+	testRoomID              = "room-1"
+	testUserID              = "user-1"
+	testExternalCommandName = "external"
+	testHelpCommandName     = "help"
+	testDeliveryQueued      = "queued"
+)
+
 type fakeIrisClient struct {
 	failCount int
 	pingCalls int
@@ -38,21 +47,27 @@ type fakeIrisClient struct {
 func (f *fakeIrisClient) SendMessage(context.Context, string, string, ...iris.SendOption) error {
 	return nil
 }
+
 func (f *fakeIrisClient) SendMessageAccepted(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return &iris.ReplyAcceptedResponse{}, nil
 }
+
 func (f *fakeIrisClient) SendImage(context.Context, string, []byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
+
 func (f *fakeIrisClient) SendMultipleImages(context.Context, string, [][]byte, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
+
 func (f *fakeIrisClient) SendMarkdown(_ context.Context, _, _ string, _ ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	return nil, nil
+	return &iris.ReplyAcceptedResponse{}, nil
 }
+
 func (f *fakeIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.ReplyStatusSnapshot, error) {
-	return nil, nil
+	return &iris.ReplyStatusSnapshot{}, nil
 }
+
 func (f *fakeIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
 	return &iris.ConfigResponse{}, nil
 }

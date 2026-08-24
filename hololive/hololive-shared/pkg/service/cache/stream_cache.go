@@ -31,8 +31,10 @@ import (
 
 func (c *Service) GetStreams(ctx context.Context, key string) ([]*domain.Stream, bool) {
 	var streams []*domain.Stream
+
 	if err := c.Get(ctx, key, &streams); err != nil {
 		c.logger.Debug("Cache miss or error", privacylog.CacheKeyAttr(key))
+
 		return nil, false
 	}
 

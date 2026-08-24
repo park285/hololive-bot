@@ -56,9 +56,11 @@ func TestDefaultConfigProvidesUsableDispatchDefaults(t *testing.T) {
 	if !config.CleanupEnabled {
 		t.Error("DefaultConfig().CleanupEnabled = false, want true")
 	}
+
 	if !config.ReviveEnabled {
 		t.Error("DefaultConfig().ReviveEnabled = false, want true")
 	}
+
 	if config.ClaimFreshnessWindow < config.ReviveFreshnessWindow+config.ReviveInterval {
 		t.Errorf(
 			"DefaultConfig().ClaimFreshnessWindow = %v, want at least ReviveFreshnessWindow+ReviveInterval = %v",
@@ -72,29 +74,33 @@ func TestBuildChannelPostDeliverySummariesEmptyInputReturnsEmptySlice(t *testing
 	if err != nil {
 		t.Fatalf("BuildChannelPostDeliverySummaries(nil) error = %v", err)
 	}
+
 	if summaries == nil {
 		t.Fatal("BuildChannelPostDeliverySummaries(nil) = nil slice, want empty slice")
 	}
+
 	if len(summaries) != 0 {
 		t.Fatalf("BuildChannelPostDeliverySummaries(nil) len = %d, want 0", len(summaries))
 	}
 }
 
 func TestBuildChannelPostDeliverySummariesRejectsBlankChannelID(t *testing.T) {
-	detectedAt := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	detectedAt := time.Date(2026, time.July, 1, 10, 0, 0, 0, time.UTC)
+
 	_, err := analytics.BuildChannelPostDeliverySummaries([]analytics.PostSendCount{
 		{ChannelID: "   ", ContentID: "post-a", AlarmType: domain.AlarmTypeCommunity, DetectedAt: &detectedAt},
 	})
 	if err == nil {
 		t.Fatal("expected error for blank channel id, got nil")
 	}
+
 	if !strings.Contains(err.Error(), "channel id is empty") {
 		t.Fatalf("error = %q, want it to mention empty channel id", err)
 	}
 }
 
 func TestBuildChannelPostDeliverySummariesAggregatesPerChannelLatestFirst(t *testing.T) {
-	detectedA := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	detectedA := time.Date(2026, time.July, 1, 10, 0, 0, 0, time.UTC)
 	detectedB := detectedA.Add(time.Hour)
 	sentB := detectedB.Add(2 * time.Minute)
 
@@ -105,6 +111,7 @@ func TestBuildChannelPostDeliverySummariesAggregatesPerChannelLatestFirst(t *tes
 	if err != nil {
 		t.Fatalf("BuildChannelPostDeliverySummaries() error = %v", err)
 	}
+
 	if len(summaries) != 2 {
 		t.Fatalf("summaries len = %d, want 2", len(summaries))
 	}
@@ -117,6 +124,7 @@ func TestBuildChannelPostDeliverySummariesAggregatesPerChannelLatestFirst(t *tes
 	if latest.DetectedPostCount != 1 || latest.AlarmSentPostCount != 1 || latest.SuccessPostCount != 1 {
 		t.Fatalf("UC-b counts = detected %d, sent %d, success %d, want 1/1/1", latest.DetectedPostCount, latest.AlarmSentPostCount, latest.SuccessPostCount)
 	}
+
 	if latest.ShortsDetectedPostCount != 1 {
 		t.Fatalf("UC-b shorts detected = %d, want 1", latest.ShortsDetectedPostCount)
 	}
@@ -125,6 +133,7 @@ func TestBuildChannelPostDeliverySummariesAggregatesPerChannelLatestFirst(t *tes
 	if unsent.DetectedPostCount != 1 || unsent.AlarmSentPostCount != 0 || unsent.DetectedUnsentPostCount != 1 {
 		t.Fatalf("UC-a counts = detected %d, sent %d, unsent %d, want 1/0/1", unsent.DetectedPostCount, unsent.AlarmSentPostCount, unsent.DetectedUnsentPostCount)
 	}
+
 	if unsent.CommunityDetectedPostCount != 1 {
 		t.Fatalf("UC-a community detected = %d, want 1", unsent.CommunityDetectedPostCount)
 	}
@@ -136,15 +145,19 @@ func TestBuildPostLatencyClassificationWithoutRowReportsInsufficientEvidence(t *
 	if result.Status != timeline.PostLatencyClassificationStatusInsufficientEvidence {
 		t.Fatalf("Status = %q, want insufficient evidence", result.Status)
 	}
+
 	if got, want := string(result.Status), "insufficient_evidence"; got != want {
 		t.Fatalf("Status wire value = %q, want %q", got, want)
 	}
+
 	if result.DelaySource != timeline.PostDelaySourceNone {
 		t.Fatalf("DelaySource = %q, want none", result.DelaySource)
 	}
+
 	if result.InternalDelayCause != timeline.PostInternalDelayCauseNone {
 		t.Fatalf("InternalDelayCause = %q, want none", result.InternalDelayCause)
 	}
+
 	if result.ThresholdMillis <= 0 {
 		t.Fatalf("ThresholdMillis = %d, want positive", result.ThresholdMillis)
 	}
@@ -155,6 +168,7 @@ func TestBuildPostLatencyPeriodSummariesWithoutPeriodsReturnsEmptySlice(t *testi
 	if err != nil {
 		t.Fatalf("BuildPostLatencyPeriodSummaries(nil, nil) error = %v", err)
 	}
+
 	if len(summaries) != 0 {
 		t.Fatalf("summaries len = %d, want 0", len(summaries))
 	}

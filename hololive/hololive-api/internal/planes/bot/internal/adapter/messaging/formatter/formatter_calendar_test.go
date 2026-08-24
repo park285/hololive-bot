@@ -23,9 +23,10 @@ package formatter
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/stretchr/testify/assert"
 )
 
 const cmdCalendarBody = `{{if eq .Count 0}}📅 {{.Year}}년 {{.Month}}월 등록된 기념일이 없습니다.{{else}}📅 {{.Year}}년 {{.Month}}월 기념일 ({{.Count}})
@@ -41,6 +42,7 @@ func newCalendarTestFormatter(t *testing.T) *ResponseFormatter {
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdCalendar: cmdCalendarBody,
 	})
+
 	return NewResponseFormatter("!", renderer)
 }
 

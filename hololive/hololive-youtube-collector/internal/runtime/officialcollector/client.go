@@ -19,12 +19,15 @@ type Client struct {
 
 func NewClient(httpClient *providerhttp.ProviderHTTPClient, baseURL string, maxBody int64) (*Client, error) {
 	if httpClient == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule HTTP client is not configured")
 	}
+
 	parsed, err := providerhttp.ParseOfficialScheduleBaseURL(baseURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse official schedule base URL: %w", err)
 	}
+
 	return &Client{
 		http:   httpClient,
 		base:   parsed,
@@ -36,23 +39,43 @@ func (c *Client) Close() error {
 	if c == nil || c.http == nil {
 		return nil
 	}
-	return c.http.Close()
+
+	if err := c.http.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	if c == nil || c.http == nil || c.base == nil {
+		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule client is not configured")
 	}
+
 	endpoint := c.base.JoinPath("api", "list", "2")
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), http.NoBody)
 	if err != nil {
 		return nil, collecterr.Wrap(collecterr.Failed, collecterr.ClassProtocol, fmt.Errorf("build official schedule request: %w", err))
 	}
+
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; HololiveBot/1.0)")
+
 	resp, err := c.http.Do(req) //nolint:bodyclose // 응답 본문은 공통 bounded reader가 모든 경로에서 닫는다.
 	if err != nil {
-		return nil, providerhttp.MapRequestError("request official schedule", err)
+		if mapErr := providerhttp.MapRequestError("request official schedule", err); mapErr != nil {
+			return nil, fmt.Errorf("map request error: %w", mapErr)
+		}
+
+		return nil, nil
 	}
-	return providerhttp.ReadProviderJSONDocument(ctx, resp, c.policy, contract.ProviderHololiveOfficial)
+
+	out, err := providerhttp.ReadProviderJSONDocument(ctx, resp, c.policy, contract.ProviderHololiveOfficial)
+	if err != nil {
+		return out, fmt.Errorf("read provider JSON document: %w", err)
+	}
+
+	return out, nil
 }

@@ -3,8 +3,9 @@ package messaging
 import (
 	"strconv"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (ma *MessageAdapter) tryCelebrationCalendarCommand(command string, args []string, raw string) (*ParsedCommand, bool) {
@@ -13,6 +14,7 @@ func (ma *MessageAdapter) tryCelebrationCalendarCommand(command string, args []s
 	}
 
 	params := ma.parseCalendarArgs(args)
+
 	return &ParsedCommand{
 		Type:       domain.CommandCalendar,
 		Params:     params,
@@ -26,16 +28,20 @@ func (ma *MessageAdapter) isCalendarCommand(cmd string) bool {
 
 func (ma *MessageAdapter) parseCalendarArgs(args []string) map[string]any {
 	params := make(map[string]any)
+
 	if len(args) == 0 {
 		return params
 	}
+
 	arg := stringutil.Normalize(args[0])
 	if offset, ok := calendarMonthOffset(arg); ok {
 		params["monthOffset"] = offset
 	}
+
 	if month, ok := calendarMonth(arg); ok {
 		params["month"] = month
 	}
+
 	return params
 }
 
@@ -55,5 +61,6 @@ func calendarMonth(arg string) (int, bool) {
 	if err != nil || m < 1 || m > 12 {
 		return 0, false
 	}
+
 	return m, true
 }

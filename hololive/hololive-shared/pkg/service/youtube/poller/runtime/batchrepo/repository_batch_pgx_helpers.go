@@ -20,8 +20,9 @@ type batchDB interface {
 
 func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) error) error {
 	if db == nil {
-		return fmt.Errorf("pgx db is nil")
+		return errors.New("pgx db is nil")
 	}
+
 	if fn == nil {
 		return nil
 	}
@@ -33,7 +34,11 @@ func inBatchTx(ctx context.Context, db batchTxBeginner, fn func(tx batchDB) erro
 
 	defer rollbackBatchTxOnPanic(ctx, tx)
 
-	return finishBatchTx(ctx, tx, fn(tx))
+	if err := finishBatchTx(ctx, tx, fn(tx)); err != nil {
+		return fmt.Errorf("finish batch tx: %w", err)
+	}
+
+	return nil
 }
 
 func rollbackBatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
@@ -42,6 +47,7 @@ func rollbackBatchTxOnPanic(ctx context.Context, tx pgx.Tx) {
 		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			slog.Default().Warn("pgx batch transaction rollback after panic failed", slog.Any("error", rollbackErr))
 		}
+
 		panic(p)
 	}
 }
@@ -51,11 +57,13 @@ func finishBatchTx(ctx context.Context, tx pgx.Tx, fnErr error) error {
 		if rollbackErr := pgxutil.Rollback(ctx, tx); rollbackErr != nil {
 			return fmt.Errorf("pgx transaction failed and rollback failed: %w", errors.Join(fnErr, rollbackErr))
 		}
+
 		return fmt.Errorf("pgx transaction failed: %w", fnErr)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit pgx transaction: %w", err)
 	}
+
 	return nil
 }

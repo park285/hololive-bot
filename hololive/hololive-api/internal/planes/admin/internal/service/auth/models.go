@@ -54,6 +54,7 @@ func toUser(m *userModel) *User {
 	if m == nil {
 		return nil
 	}
+
 	return &User{
 		ID:          m.ID,
 		Email:       m.Email,

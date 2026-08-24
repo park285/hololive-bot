@@ -40,6 +40,7 @@ var (
 		for _, code := range allOperationCodes {
 			out[code] = struct{}{}
 		}
+
 		return out
 	}()
 )

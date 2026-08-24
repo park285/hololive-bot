@@ -16,11 +16,15 @@ func TestRunPublishBatchWithDeadlockRetry_RetriesOnceOn40P01(t *testing.T) {
 	attempts := 0
 	publishResult, err := runPublishBatchWithDeadlockRetry(&result, func() (PublishBatchResult, error) {
 		attempts++
+
 		result.InsertedEvents++
+
 		result.HashConflictEvents++
+
 		if attempts == 1 {
 			return PublishBatchResult{}, &pgconn.PgError{Code: "40P01", Message: "deadlock detected"}
 		}
+
 		return result, nil
 	})
 
@@ -59,7 +63,9 @@ func TestRunPublishBatchWithDeadlockRetry_RetriesOnlyOnce(t *testing.T) {
 	})
 
 	require.Error(t, err)
+
 	var pgErr *pgconn.PgError
+
 	require.ErrorAs(t, err, &pgErr)
 	require.NotNil(t, pgErr)
 	assert.Equal(t, "40P01", pgErr.Code)

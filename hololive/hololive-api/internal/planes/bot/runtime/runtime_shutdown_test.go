@@ -35,18 +35,28 @@ type testWebhookCloser struct {
 func TestShutdownWebhookAndDurabilityAlwaysStopsWorkersAndJoinsErrors(t *testing.T) {
 	closeErr := errors.New("webhook close failed")
 	webhookCloser := &testWebhookCloser{err: closeErr}
-	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	workerCtx, cancelWorker := context.WithCancel(t.Context())
 	durable := &durableRuntime{cancel: cancelWorker}
 	durable.wg.Add(1)
+
 	workerDone := make(chan struct{})
-	go func() { defer durable.wg.Done(); <-workerCtx.Done(); close(workerDone) }()
+
+	go func() {
+		defer durable.wg.Done()
+
+		<-workerCtx.Done()
+		close(workerDone)
+	}()
+
 	runtime := &BotRuntime{webhookHandlerCloser: webhookCloser, durable: durable}
-	shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+	shutdownCtx, cancelShutdown := context.WithCancel(t.Context())
 	cancelShutdown()
+
 	err := runtime.shutdownWebhookAndDurability(shutdownCtx)
 	if !errors.Is(err, closeErr) {
 		t.Fatalf("joined shutdown error = %v", err)
 	}
+
 	select {
 	case <-workerDone:
 	case <-time.After(time.Second):
@@ -58,21 +68,28 @@ func TestDurableStopReturnsAtDeadlineWhenWorkerDoesNotExit(t *testing.T) {
 	canceled := make(chan struct{})
 	r := &durableRuntime{cancel: func() { close(canceled) }}
 	r.wg.Add(1)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+
 	defer cancel()
+
 	started := time.Now()
 	err := r.Stop(ctx)
+
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Stop() error = %v", err)
 	}
+
 	if time.Since(started) > time.Second {
 		t.Fatal("Stop() did not honor its deadline")
 	}
+
 	select {
 	case <-canceled:
 	default:
 		t.Fatal("Stop() did not cancel before waiting")
 	}
+
 	r.wg.Done()
 }
 

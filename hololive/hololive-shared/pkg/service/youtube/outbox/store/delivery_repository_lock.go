@@ -22,6 +22,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -52,8 +53,9 @@ func (r *DeliveryRepository) MarkSendingBatchIfLocked(ctx context.Context, token
 	if len(uniqueTokens) == 0 {
 		return nil, nil
 	}
+
 	if r == nil || r.db == nil {
-		return nil, fmt.Errorf("mark delivery rows sending: db is nil")
+		return nil, errors.New("mark delivery rows sending: db is nil")
 	}
 
 	ids, lockedAts := deliveryLockTokenArrays(uniqueTokens)
@@ -62,6 +64,7 @@ func (r *DeliveryRepository) MarkSendingBatchIfLocked(ctx context.Context, token
 	}
 
 	sendingStartedAt := time.Now().UTC()
+
 	rows, err := r.db.Query(ctx, mustSQL("delivery_repository_lock_0065_01.sql"), ids, lockedAts, DeliveryStatusSending, sendingStartedAt, domain.OutboxStatusPending)
 	if err != nil {
 		return nil, fmt.Errorf("mark delivery rows sending: %w", err)
@@ -72,6 +75,7 @@ func (r *DeliveryRepository) MarkSendingBatchIfLocked(ctx context.Context, token
 	if err != nil {
 		return nil, fmt.Errorf("mark delivery rows sending: %w", err)
 	}
+
 	return updated, nil
 }
 
@@ -80,20 +84,24 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 	if len(uniqueTokens) == 0 {
 		return nil
 	}
+
 	if r == nil || r.db == nil {
-		return fmt.Errorf("mark delivery rows sent: db is nil")
+		return errors.New("mark delivery rows sent: db is nil")
 	}
 
 	sentAt := dispatchstate.CanonicalSentAtNow()
+
 	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
 		updatedIDs, err := updateSentDeliveryRowsIfLocked(ctx, tx, uniqueTokens, sentAt)
 		if err != nil {
-			return err
+			return fmt.Errorf("update sent delivery rows if locked: %w", err)
 		}
+
 		trackingMarks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, updatedIDs, sentAt, claimTokens)
 		if err != nil {
 			return fmt.Errorf("load tracking marks: %w", err)
 		}
+
 		return persistSentDeliveryTracking(ctx, tx, trackingMarks)
 	}); err != nil {
 		return fmt.Errorf("mark delivery rows sent transaction: %w", err)
@@ -105,13 +113,16 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 func deliveryLockTokenArrays(tokens []LockToken) ([]int64, []time.Time) {
 	ids := make([]int64, 0, len(tokens))
 	lockedAts := make([]time.Time, 0, len(tokens))
+
 	for i := range tokens {
 		if tokens[i].id == 0 || tokens[i].lockedAt == nil {
 			continue
 		}
+
 		ids = append(ids, tokens[i].id)
 		lockedAts = append(lockedAts, *tokens[i].lockedAt)
 	}
+
 	return ids, lockedAts
 }
 
@@ -128,16 +139,21 @@ func updateSentDeliveryRowsIfLocked(ctx context.Context, tx dbx.Querier, tokens 
 	defer rows.Close()
 
 	updatedIDs := make([]int64, 0, len(ids))
+
 	for rows.Next() {
 		var id int64
+
 		if err := rows.Scan(&id); err != nil {
 			return nil, fmt.Errorf("scan updated delivery id: %w", err)
 		}
+
 		updatedIDs = append(updatedIDs, id)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate updated delivery ids: %w", err)
 	}
+
 	return updatedIDs, nil
 }
 
@@ -186,11 +202,13 @@ func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderTh
 	if r == nil || r.db == nil || limit <= 0 {
 		return nil, 0, nil
 	}
+
 	if olderThan <= 0 {
 		olderThan = 5 * time.Minute
 	}
 
 	cutoff := time.Now().UTC().Add(-olderThan)
+
 	rows, err := r.db.Query(ctx, mustSQL("delivery_repository_lock_0255_05.sql"), DeliveryStatusSending, cutoff, limit, DeliveryStatusQuarantined, "stale sending; external send outcome unknown")
 	if err != nil {
 		return nil, 0, fmt.Errorf("quarantine stale sending delivery rows: %w", err)
@@ -208,18 +226,23 @@ func uniqueDeliveryLockTokens(tokens []LockToken) []LockToken {
 	if len(tokens) == 0 {
 		return nil
 	}
+
 	unique := make([]LockToken, 0, len(tokens))
 	seen := make(map[int64]struct{}, len(tokens))
+
 	for i := range tokens {
 		if tokens[i].id == 0 {
 			continue
 		}
+
 		if _, ok := seen[tokens[i].id]; ok {
 			continue
 		}
+
 		seen[tokens[i].id] = struct{}{}
 		unique = append(unique, tokens[i])
 	}
+
 	return unique
 }
 
@@ -228,13 +251,16 @@ func DeliveryLockTokensForIDs(rows []domain.YouTubeNotificationDelivery, ids []i
 	if len(uniqueIDs) == 0 {
 		return nil
 	}
+
 	lockedByID := make(map[int64]*time.Time, len(rows))
 	for i := range rows {
 		lockedByID[rows[i].ID] = rows[i].LockedAt
 	}
+
 	tokens := make([]LockToken, 0, len(uniqueIDs))
 	for _, id := range uniqueIDs {
 		tokens = append(tokens, LockToken{id: id, lockedAt: lockedByID[id]})
 	}
+
 	return tokens
 }

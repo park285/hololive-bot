@@ -1,7 +1,6 @@
 package api_test
 
 import (
-	"context"
 	jsonv2 "encoding/json/v2"
 	"io"
 	"log/slog"
@@ -19,12 +18,14 @@ func newAuthRouter(t *testing.T) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
-	handler := api.NewAuthHandler(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	handler := api.NewAuthHandler(nil, slog.New(slog.DiscardHandler))
 
 	router := gin.New()
 	router.POST("/api/auth/login", handler.Login)
 	router.POST("/api/auth/refresh", handler.Refresh)
 	router.GET("/api/auth/me", handler.Me)
+
 	return router
 }
 
@@ -32,16 +33,21 @@ func newAuthRequest(t *testing.T, method, path, body, authorization string) *htt
 	t.Helper()
 
 	var reader io.Reader
+
 	if body != "" {
 		reader = strings.NewReader(body)
 	}
-	req := httptest.NewRequestWithContext(context.Background(), method, path, reader)
+
+	req := httptest.NewRequestWithContext(t.Context(), method, path, reader)
+
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
+
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
+
 	return req
 }
 
@@ -52,12 +58,15 @@ func assertAuthErrorBody(t *testing.T, body []byte, wantErrorCode string) {
 		Success bool   `json:"success"`
 		Error   string `json:"error"`
 	}
+
 	if err := jsonv2.Unmarshal(body, &parsed); err != nil {
 		t.Fatalf("decode response %q: %v", body, err)
 	}
+
 	if parsed.Success {
 		t.Fatal("success = true, want false")
 	}
+
 	if parsed.Error != wantErrorCode {
 		t.Fatalf("error code = %q, want %q", parsed.Error, wantErrorCode)
 	}
@@ -114,6 +123,7 @@ func TestAuthHandlerErrorContract(t *testing.T) {
 			if recorder.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", recorder.Code, tc.wantStatus, recorder.Body.String())
 			}
+
 			assertAuthErrorBody(t, recorder.Body.Bytes(), tc.wantErrorCode)
 		})
 	}

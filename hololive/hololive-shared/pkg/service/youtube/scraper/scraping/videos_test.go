@@ -21,8 +21,7 @@
 package scraping
 
 import (
-	"context"
-	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -31,17 +30,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
+	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type videosRoundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f videosRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
 }
 
 func TestParseVideosFromInitialData_Normal(t *testing.T) {
@@ -187,7 +192,7 @@ func TestParseVideosFromInitialData_ChannelNotExist(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Nil(t, videos)
-	assert.True(t, errors.Is(err, ErrChannelNotFound))
+	assert.ErrorIs(t, err, ErrChannelNotFound)
 }
 
 func TestParseVideosFromInitialData_ChannelTerminated(t *testing.T) {
@@ -202,7 +207,7 @@ func TestParseVideosFromInitialData_ChannelTerminated(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Nil(t, videos)
-	assert.True(t, errors.Is(err, ErrChannelNotFound))
+	assert.ErrorIs(t, err, ErrChannelNotFound)
 }
 
 func TestParseVideosFromInitialData_ChannelNotFoundInSecondErrorAlert(t *testing.T) {
@@ -220,7 +225,7 @@ func TestParseVideosFromInitialData_ChannelNotFoundInSecondErrorAlert(t *testing
 
 	require.Error(t, err)
 	assert.Nil(t, videos)
-	assert.True(t, errors.Is(err, ErrChannelNotFound))
+	assert.ErrorIs(t, err, ErrChannelNotFound)
 }
 
 func TestCheckAlerts_ExtractsRunsText(t *testing.T) {
@@ -231,7 +236,7 @@ func TestCheckAlerts_ExtractsRunsText(t *testing.T) {
 
 	err := checkAlerts(&data)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrChannelNotFound))
+	require.ErrorIs(t, err, ErrChannelNotFound)
 	assert.Contains(t, err.Error(), "has been terminated")
 }
 
@@ -396,6 +401,7 @@ func TestGetWatchLiveMetadata(t *testing.T) {
 					Transport: videosRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 						assert.Equal(t, "/watch", req.URL.Path)
 						assert.Equal(t, "video-id", req.URL.Query().Get("v"))
+
 						return &http.Response{
 							StatusCode: http.StatusOK,
 							Body:       io.NopCloser(strings.NewReader(test.html)),
@@ -406,7 +412,7 @@ func TestGetWatchLiveMetadata(t *testing.T) {
 				}),
 			)
 
-			metadata, err := client.GetWatchLiveMetadata(context.Background(), "channel-id", "video-id")
+			metadata, err := client.GetWatchLiveMetadata(t.Context(), "channel-id", "video-id")
 			require.NoError(t, err)
 			assert.Equal(t, test.want, metadata.LiveContent)
 		})
@@ -420,8 +426,10 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 	htmlBody := "<script>var ytInitialData = " + string(jsonBytes) + ";</script>"
 	rssBody := `<?xml version="1.0" encoding="UTF-8"?><feed></feed>`
 
-	var videosPageCalls atomic.Int32
-	var rssCalls atomic.Int32
+	var (
+		videosPageCalls atomic.Int32
+		rssCalls        atomic.Int32
+	)
 
 	client := NewClient(
 		WithRateLimiter(ratelimiter.New(0)),
@@ -431,6 +439,7 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 				path := req.URL.Path
 				if strings.HasSuffix(path, "/videos") {
 					videosPageCalls.Add(1)
+
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Body:       io.NopCloser(strings.NewReader(htmlBody)),
@@ -438,8 +447,10 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 						Request:    req,
 					}, nil
 				}
+
 				if strings.HasSuffix(path, "/feeds/videos.xml") {
 					rssCalls.Add(1)
+
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Body:       io.NopCloser(strings.NewReader(rssBody)),
@@ -458,16 +469,18 @@ func TestGetRecentVideos_NoRSSFallbackOnEmptySuccess(t *testing.T) {
 		}),
 	)
 
-	videos, err := client.GetRecentVideos(context.Background(), "UC_TEST", 10)
+	videos, err := client.GetRecentVideos(t.Context(), "UC_TEST", 10)
 	require.NoError(t, err)
-	require.Len(t, videos, 0)
+	require.Empty(t, videos)
 	assert.Equal(t, int32(1), videosPageCalls.Load())
 	assert.Equal(t, int32(0), rssCalls.Load())
 }
 
 func TestGetRecentVideos_ReturnsErrorWhenHTMLAndRSSFail(t *testing.T) {
-	var videosPageCalls atomic.Int32
-	var rssCalls atomic.Int32
+	var (
+		videosPageCalls atomic.Int32
+		rssCalls        atomic.Int32
+	)
 
 	client := NewClient(
 		WithRateLimiter(ratelimiter.New(0)),
@@ -475,12 +488,15 @@ func TestGetRecentVideos_ReturnsErrorWhenHTMLAndRSSFail(t *testing.T) {
 			Timeout: 5 * time.Second,
 			Transport: videosRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 				var body string
+
 				switch {
 				case strings.HasSuffix(req.URL.Path, "/videos"):
 					videosPageCalls.Add(1)
+
 					body = "<html><body>missing initial data</body></html>"
 				case strings.HasSuffix(req.URL.Path, "/feeds/videos.xml"):
 					rssCalls.Add(1)
+
 					body = "<feed><entry"
 				default:
 					return &http.Response{
@@ -501,10 +517,10 @@ func TestGetRecentVideos_ReturnsErrorWhenHTMLAndRSSFail(t *testing.T) {
 		}),
 	)
 
-	videos, err := client.GetRecentVideos(context.Background(), "UC_TEST", 10)
+	videos, err := client.GetRecentVideos(t.Context(), "UC_TEST", 10)
 	require.Error(t, err)
 	require.Nil(t, videos)
-	require.True(t, errors.Is(err, parser.ErrParserDrift))
+	require.ErrorIs(t, err, parser.ErrParserDrift)
 	assert.Contains(t, err.Error(), "recent_videos parser drift at extract_yt_initial_data")
 	assert.Contains(t, err.Error(), "recent_videos_rss parser drift at parse_rss_feed")
 	assert.Equal(t, int32(1), videosPageCalls.Load())

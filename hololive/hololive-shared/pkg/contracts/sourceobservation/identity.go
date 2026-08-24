@@ -1,6 +1,7 @@
 package sourceobservation
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -35,6 +36,7 @@ func SnapshotObservationKey(
 	if err != nil {
 		return "", fmt.Errorf("build snapshot observation key: %w", err)
 	}
+
 	return SHA256Hex(canonical), nil
 }
 
@@ -51,31 +53,47 @@ func ViewerSampleObservationKey(
 	if err != nil {
 		return "", fmt.Errorf("build viewer sample observation key: %w", err)
 	}
+
 	return SHA256Hex(canonical), nil
 }
 
 func ObservationKeyForEnvelope(envelope *Envelope, canonicalScope []byte) (string, error) {
 	if envelope == nil {
-		return "", fmt.Errorf("build observation key: envelope is nil")
+		return "", errors.New("build observation key: envelope is nil")
 	}
+
 	scopeSHA256 := SHA256Hex(canonicalScope)
+
 	if envelope.ObservationKind == KindViewerSample {
 		var payload ViewerSampleV1
+
 		if err := decodeStrictJSON(envelope.Payload, &payload); err != nil {
 			return "", fmt.Errorf("build viewer sample observation key: decode payload: %w", err)
 		}
-		return ViewerSampleObservationKey(
+
+		out, err := ViewerSampleObservationKey(
 			envelope.Provider,
 			envelope.SubjectKey,
 			scopeSHA256,
 			payload.SampleWindowStart,
 		)
+		if err != nil {
+			return out, fmt.Errorf("viewer sample observation key: %w", err)
+		}
+
+		return out, nil
 	}
-	return SnapshotObservationKey(
+
+	out, err := SnapshotObservationKey(
 		envelope.Provider,
 		envelope.ObservationKind,
 		envelope.SubjectKey,
 		scopeSHA256,
 		envelope.ScheduledFor,
 	)
+	if err != nil {
+		return out, fmt.Errorf("snapshot observation key: %w", err)
+	}
+
+	return out, nil
 }

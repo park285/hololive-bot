@@ -1,21 +1,22 @@
 package apiservice
 
 import (
-	"context"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
 func newTestService(t *testing.T, channelToName map[string]string) *serviceImpl {
 	t.Helper()
+
 	if channelToName == nil {
 		channelToName = make(map[string]string)
 	}
+
 	return &serviceImpl{
-		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:        slog.New(slog.DiscardHandler),
 		channelToName: channelToName,
 	}
 }
@@ -44,6 +45,7 @@ func TestNonNegativeYouTubeCount(t *testing.T) {
 			if gotOK != tt.wantOK {
 				t.Fatalf("nonNegativeYouTubeCount(%d) ok = %v, want %v", tt.value, gotOK, tt.wantOK)
 			}
+
 			if gotCount != tt.wantCount {
 				t.Fatalf("nonNegativeYouTubeCount(%d) count = %d, want %d", tt.value, gotCount, tt.wantCount)
 			}
@@ -82,16 +84,20 @@ func assertValidatedScrapedChannelCount(t *testing.T, value int64, got uint64, e
 		if err == nil {
 			t.Fatalf("validatedScrapedChannelCount(_, _, %d) expected error, got nil", value)
 		}
+
 		for _, want := range []string{"UC_chan", "subscriber", "-5"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Fatalf("error %q missing %q", err.Error(), want)
 			}
 		}
+
 		return
 	}
+
 	if err != nil {
 		t.Fatalf("validatedScrapedChannelCount(_, _, %d) unexpected error: %v", value, err)
 	}
+
 	if got != wantCount {
 		t.Fatalf("validatedScrapedChannelCount(_, _, %d) = %d, want %d", value, got, wantCount)
 	}
@@ -140,7 +146,7 @@ func TestValidatedScrapedChannelCounts(t *testing.T) {
 			t.Parallel()
 
 			stats := tt.stats
-			sub, vid, viw, err := validatedScrapedChannelCounts("UC1", &stats)
+			sub, vid, viw, err := validatedScrapedChannelCounts(testChannelID1, &stats)
 			assertValidatedScrapedChannelCounts(t, &tt.stats, sub, vid, viw, err, tt.wantSub, tt.wantVid, tt.wantViw, tt.wantErr)
 		})
 	}
@@ -153,17 +159,22 @@ func assertValidatedScrapedChannelCounts(t *testing.T, stats *parser.ChannelStat
 		if err == nil {
 			t.Fatalf("validatedScrapedChannelCounts(%+v) expected error containing %q, got nil", *stats, wantErr)
 		}
+
 		if !strings.Contains(err.Error(), wantErr) {
 			t.Fatalf("error %q does not contain %q", err.Error(), wantErr)
 		}
+
 		if sub != 0 || vid != 0 || viw != 0 {
 			t.Fatalf("on error counts must be zeroed, got sub=%d vid=%d viw=%d", sub, vid, viw)
 		}
+
 		return
 	}
+
 	if err != nil {
 		t.Fatalf("validatedScrapedChannelCounts(%+v) unexpected error: %v", *stats, err)
 	}
+
 	if sub != wantSub || vid != wantVid || viw != wantViw {
 		t.Fatalf("counts = (%d,%d,%d), want (%d,%d,%d)", sub, vid, viw, wantSub, wantVid, wantViw)
 	}
@@ -185,12 +196,15 @@ func TestChannelStatsFromScraped_MapsFieldsAndUsesScrapedChannelID(t *testing.T)
 	if err != nil {
 		t.Fatalf("channelStatsFromScraped() unexpected error: %v", err)
 	}
+
 	if got.ChannelID != "UC_scraped" {
 		t.Fatalf("ChannelID = %q, want %q (must come from scraped stats)", got.ChannelID, "UC_scraped")
 	}
+
 	if got.SubscriberCount != 1000 || got.VideoCount != 50 || got.ViewCount != 1_000_000 {
 		t.Fatalf("counts = (%d,%d,%d), want (1000,50,1000000)", got.SubscriberCount, got.VideoCount, got.ViewCount)
 	}
+
 	if got.Timestamp.IsZero() {
 		t.Fatal("Timestamp should be set")
 	}
@@ -200,10 +214,12 @@ func TestChannelStatsFromScraped_FallsBackToHandleWhenChannelNameUnknown(t *test
 	t.Parallel()
 
 	ys := newTestService(t, nil)
+
 	got, err := ys.channelStatsFromScraped("UC_lookup", &parser.ChannelStats{Handle: "@onlyhandle"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if got.ChannelTitle != "@onlyhandle" {
 		t.Fatalf("ChannelTitle = %q, want fallback handle %q", got.ChannelTitle, "@onlyhandle")
 	}
@@ -213,10 +229,12 @@ func TestChannelStatsFromScraped_PrefersCachedMemberNameOverHandle(t *testing.T)
 	t.Parallel()
 
 	ys := newTestService(t, map[string]string{"UC_lookup": "ときのそら"})
+
 	got, err := ys.channelStatsFromScraped("UC_lookup", &parser.ChannelStats{Handle: "@handle"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	if got.ChannelTitle != "ときのそら" {
 		t.Fatalf("ChannelTitle = %q, want cached name %q", got.ChannelTitle, "ときのそら")
 	}
@@ -226,10 +244,12 @@ func TestChannelStatsFromScraped_RejectsNegativeCounts(t *testing.T) {
 	t.Parallel()
 
 	ys := newTestService(t, nil)
+
 	got, err := ys.channelStatsFromScraped("UC_lookup", &parser.ChannelStats{SubscriberCount: -1})
 	if err == nil {
 		t.Fatalf("expected error for negative subscriber count, got %+v", got)
 	}
+
 	if got != nil {
 		t.Fatalf("expected nil stats on error, got %+v", got)
 	}
@@ -247,29 +267,29 @@ func TestResolveChannelTitle(t *testing.T) {
 	}{
 		{
 			name:          "uses cached name when present",
-			channelToName: map[string]string{"UC1": "Member A"},
-			channelID:     "UC1",
-			fallbackTitle: "@fallback",
+			channelToName: map[string]string{testChannelID1: "Member A"},
+			channelID:     testChannelID1,
+			fallbackTitle: testFallbackTitle,
 			want:          "Member A",
 		},
 		{
 			name:          "uses fallback when channel not cached",
-			channelToName: map[string]string{"UC2": "Member B"},
-			channelID:     "UC1",
-			fallbackTitle: "@fallback",
-			want:          "@fallback",
+			channelToName: map[string]string{testChannelID2: "Member B"},
+			channelID:     testChannelID1,
+			fallbackTitle: testFallbackTitle,
+			want:          testFallbackTitle,
 		},
 		{
 			name:          "uses fallback when cached name is empty",
-			channelToName: map[string]string{"UC1": ""},
-			channelID:     "UC1",
-			fallbackTitle: "@fallback",
-			want:          "@fallback",
+			channelToName: map[string]string{testChannelID1: ""},
+			channelID:     testChannelID1,
+			fallbackTitle: testFallbackTitle,
+			want:          testFallbackTitle,
 		},
 		{
 			name:          "empty fallback yields empty title",
 			channelToName: map[string]string{},
-			channelID:     "UC1",
+			channelID:     testChannelID1,
 			fallbackTitle: "",
 			want:          "",
 		},
@@ -281,6 +301,7 @@ func TestResolveChannelTitle(t *testing.T) {
 
 			ys := newTestService(t, tt.channelToName)
 			got := ys.resolveChannelTitle(tt.channelID, tt.fallbackTitle)
+
 			if got != tt.want {
 				t.Fatalf("resolveChannelTitle(%q, %q) = %q, want %q", tt.channelID, tt.fallbackTitle, got, tt.want)
 			}
@@ -294,13 +315,15 @@ func TestGetChannelStatistics_EmptyChannelIDs(t *testing.T) {
 	ys := newTestService(t, nil)
 
 	for _, ids := range [][]string{nil, {}} {
-		got, err := ys.GetChannelStatistics(context.Background(), ids)
+		got, err := ys.GetChannelStatistics(t.Context(), ids)
 		if err != nil {
 			t.Fatalf("GetChannelStatistics(%v) unexpected error: %v", ids, err)
 		}
+
 		if got == nil {
 			t.Fatalf("GetChannelStatistics(%v) = nil map, want non-nil empty map", ids)
 		}
+
 		if len(got) != 0 {
 			t.Fatalf("GetChannelStatistics(%v) len = %d, want 0", ids, len(got))
 		}

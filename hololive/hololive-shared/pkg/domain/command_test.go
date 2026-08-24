@@ -55,6 +55,7 @@ func TestCommandType_IsValid(t *testing.T) {
 	for _, cmd := range validCmds {
 		t.Run(string(cmd)+"_유효", func(t *testing.T) {
 			t.Parallel()
+
 			if !cmd.IsValid() {
 				t.Errorf("IsValid() = false, want true (cmd=%q)", cmd)
 			}
@@ -75,6 +76,7 @@ func TestCommandType_IsValid(t *testing.T) {
 	for _, tt := range invalidCmds {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			if tt.cmd.IsValid() {
 				t.Errorf("IsValid() = true, want false (cmd=%q)", tt.cmd)
 			}
@@ -121,6 +123,7 @@ func TestParseResults_IsSingle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.results.IsSingle()
 			if got != tt.want {
 				t.Errorf("IsSingle() = %v, want %v", got, tt.want)
@@ -158,6 +161,7 @@ func TestParseResults_IsMultiple(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.results.IsMultiple()
 			if got != tt.want {
 				t.Errorf("IsMultiple() = %v, want %v", got, tt.want)
@@ -200,10 +204,12 @@ func TestParseResults_GetCommands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			got := tt.results.GetCommands()
 			if len(got) != tt.wantLen {
 				t.Fatalf("GetCommands() 길이 = %d, want %d", len(got), tt.wantLen)
 			}
+
 			if got[0].Command != tt.wantFirst {
 				t.Errorf("GetCommands()[0].Command = %q, want %q", got[0].Command, tt.wantFirst)
 			}

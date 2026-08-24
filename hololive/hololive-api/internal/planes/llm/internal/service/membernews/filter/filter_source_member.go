@@ -34,6 +34,7 @@ func formatMemberText(matchedMembers []string) string {
 	if len(matchedMembers) == 1 {
 		return matchedMembers[0]
 	}
+
 	return strings.Join(matchedMembers, ", ")
 }
 
@@ -51,17 +52,21 @@ func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProv
 			if normalized == "" {
 				return
 			}
+
 			tokenSet[normalized] = struct{}{}
 		}
 
 		appendToken(display)
+
 		display = enrichMemberProfile(display, membersData, appendToken)
 
 		tokens := make([]string, 0, len(tokenSet))
 		for token := range tokenSet {
 			tokens = append(tokens, token)
 		}
+
 		sort.Strings(tokens)
+
 		profiles = append(profiles, memberProfile{display: display, tokens: tokens})
 	}
 
@@ -77,6 +82,7 @@ func enrichMemberProfile(display string, membersData domain.MemberDataProvider, 
 	if member == nil {
 		member = membersData.FindMemberByAlias(display)
 	}
+
 	if member == nil {
 		return display
 	}
@@ -99,9 +105,11 @@ func appendMemberAliasTokens(member *domain.Member, appendToken func(string)) {
 	if member == nil || member.Aliases == nil {
 		return
 	}
+
 	for _, alias := range member.Aliases.Ko {
 		appendToken(alias)
 	}
+
 	for _, alias := range member.Aliases.Ja {
 		appendToken(alias)
 	}
@@ -117,6 +125,7 @@ func matchMembers(candidate *model.Candidate, profiles []memberProfile) []string
 
 	matched := make([]string, 0)
 	matchedSet := make(map[string]struct{})
+
 	for _, profile := range profiles {
 		if profileMatchesCandidate(profile, memberTokenSet, normalizedBody) {
 			matched = appendUniqueMatchedMember(matched, matchedSet, profile.display)
@@ -136,6 +145,7 @@ func profileMatchesCandidate(
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -143,8 +153,10 @@ func tokenMatchesCandidate(token string, memberTokenSet map[string]struct{}, nor
 	if token == "" {
 		return false
 	}
+
 	if _, ok := memberTokenSet[token]; ok {
 		return true
 	}
+
 	return strings.Contains(normalizedBody, token)
 }

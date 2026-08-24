@@ -25,8 +25,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Member) []string {
@@ -53,8 +54,8 @@ func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Mem
 }
 
 // orgFallbackGroups는 공식 프로필(유닛 데이터)이 없는 멤버를 org 값 기준 그룹으로
-// 분류한다. mekPark처럼 홀로라이브 정규 소속이 아니어서 official_profiles가 없는
-// 경우에 쓰이며, 매핑되지 않은 org는 nil을 반환해 "기타" 그룹으로 폴백된다.
+// 분류한다. 예를 들어 mekPark처럼 홀로라이브 정규 소속이 아니어서 official_profiles가
+// 없는 경우에 쓰이며, 매핑되지 않은 org는 nil을 반환해 "기타" 그룹으로 폴백된다.
 func orgFallbackGroups(member *domain.Member) []string {
 	if member == nil {
 		return nil
@@ -87,6 +88,7 @@ func appendMemberGroup(groups []string, seen map[string]bool, token string) []st
 	}
 
 	seen[name] = true
+
 	return append(groups, name)
 }
 
@@ -211,6 +213,7 @@ func japaneseEnglishMemberGroupSuffix(name string) (string, bool) {
 	}
 
 	suffix := strings.Trim(name[len("ホロライブEnglish -"):], "-")
+
 	return suffix, suffix != ""
 }
 
@@ -221,7 +224,9 @@ func englishMemberGroupSuffix(name string) (string, bool) {
 	}
 
 	suffix := stringutil.TrimSpace(after)
+
 	suffix = strings.Trim(suffix, "-")
+
 	return suffix, suffix != ""
 }
 

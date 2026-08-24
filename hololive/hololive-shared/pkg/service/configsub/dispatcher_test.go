@@ -21,22 +21,23 @@
 package configsub
 
 import (
-	"io"
+	jsonv2 "encoding/json/v2"
 	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	jsonv2 "encoding/json/v2"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 )
 
 func newDiscardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func TestNewApplyFn_ScraperProxy(t *testing.T) {
 	called := false
+
 	var got contractssettings.ScraperProxyPayloadV1
 
 	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
@@ -50,6 +51,7 @@ func TestNewApplyFn_ScraperProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
+
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeScraperProxy, Payload: payload})
 
 	assert.True(t, called)
@@ -58,6 +60,7 @@ func TestNewApplyFn_ScraperProxy(t *testing.T) {
 
 func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 	called := false
+
 	var got contractssettings.AlarmAdvanceMinutesPayloadV1
 
 	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
@@ -71,6 +74,7 @@ func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
+
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeAlarmAdvanceMinutes, Payload: payload})
 
 	assert.True(t, called)
@@ -80,7 +84,7 @@ func TestNewApplyFn_AlarmAdvanceMinutes(t *testing.T) {
 func TestNewApplyFn_DecodeErrorDoesNotInvokeHandler(t *testing.T) {
 	called := false
 	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
-		ScraperProxy: func(payload contractssettings.ScraperProxyPayloadV1) {
+		ScraperProxy: func(_ contractssettings.ScraperProxyPayloadV1) {
 			called = true
 		},
 	})
@@ -96,7 +100,9 @@ func TestNewApplyFn_DecodeErrorDoesNotInvokeHandler(t *testing.T) {
 func TestNewApplyFn_Unknown(t *testing.T) {
 	t.Run("custom unknown handler", func(t *testing.T) {
 		called := false
+
 		var got string
+
 		applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
 			Unknown: func(updateType string) {
 				called = true
@@ -112,6 +118,7 @@ func TestNewApplyFn_Unknown(t *testing.T) {
 
 	t.Run("default unknown logger path", func(t *testing.T) {
 		applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{})
+
 		assert.NotPanics(t, func() {
 			applyFn(contractssettings.ConfigUpdateV1{Type: "unknown"})
 		})
@@ -120,6 +127,7 @@ func TestNewApplyFn_Unknown(t *testing.T) {
 
 func TestNewApplyFn_ACL(t *testing.T) {
 	called := false
+
 	var got contractssettings.ACLPayloadV1
 
 	applyFn := NewApplyFn(newDiscardLogger(), ApplyHandlers{
@@ -130,7 +138,7 @@ func TestNewApplyFn_ACL(t *testing.T) {
 	})
 
 	payload, err := jsonv2.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add", Room: "room-1", Mode: "whitelist"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})
 
@@ -148,7 +156,7 @@ func TestNewApplyFn_ACLWithoutHandlerDoesNotFallThroughToUnknown(t *testing.T) {
 	})
 
 	payload, err := jsonv2.Marshal(contractssettings.ACLPayloadV1{Reason: "room_add"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	applyFn(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL, Payload: payload})
 

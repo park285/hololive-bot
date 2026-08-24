@@ -3,15 +3,15 @@ package streamschedule
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/streamcommon"
+	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
@@ -42,12 +42,12 @@ func NewService(
 
 func (s *Service) GetChannelSchedule(ctx context.Context, channelID string, hours int, includeLive bool) ([]*domain.Stream, error) {
 	if s.holodex == nil {
-		return nil, fmt.Errorf("get channel schedule: holodex is nil")
+		return nil, errors.New("get channel schedule: holodex is nil")
 	}
 
 	streams, err := s.holodex.GetChannelSchedule(ctx, channelID, hours, includeLive)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get channel schedule: %w", err)
 	}
 
 	chzzkStreams := s.getChzzkScheduleStreams(ctx, channelID, hours)
@@ -75,6 +75,7 @@ func (s *Service) getChzzkScheduleStreams(ctx context.Context, channelID string,
 			slog.String("chzzk_channel_id", member.ChzzkChannelID),
 			slog.Any("error", err),
 		)
+
 		return nil
 	}
 
@@ -119,6 +120,7 @@ func buildChzzkScheduleStream(
 ) *domain.Stream {
 	link := liveURL
 	org := member.GetOrg()
+
 	return &domain.Stream{
 		ID:             buildChzzkScheduleStreamID(member.ChzzkChannelID, scheduledLive.LiveTitle, startAt),
 		Title:          scheduledLive.LiveTitle,
@@ -173,6 +175,7 @@ func compareScheduleStreams(a, b *domain.Stream) int {
 	if result, ok := compareNilScheduleStreams(a, b); ok {
 		return result
 	}
+
 	if result, ok := compareLiveScheduleStreams(a, b); ok {
 		return result
 	}
@@ -184,9 +187,11 @@ func compareNilScheduleStreams(a, b *domain.Stream) (int, bool) {
 	if a == nil && b == nil {
 		return 0, true
 	}
+
 	if a == nil {
 		return 1, true
 	}
+
 	if b == nil {
 		return -1, true
 	}
@@ -199,6 +204,7 @@ func compareLiveScheduleStreams(a, b *domain.Stream) (int, bool) {
 		if a.IsLive() {
 			return -1, true
 		}
+
 		return 1, true
 	}
 
@@ -217,9 +223,11 @@ func compareNilScheduledStart(a, b *time.Time) (int, bool) {
 	if a == nil && b == nil {
 		return 0, true
 	}
+
 	if a == nil {
 		return 1, true
 	}
+
 	if b == nil {
 		return -1, true
 	}
@@ -231,9 +239,11 @@ func compareScheduledStartTime(a, b time.Time) int {
 	if a.Before(b) {
 		return -1
 	}
+
 	if a.After(b) {
 		return 1
 	}
+
 	return 0
 }
 
@@ -244,5 +254,6 @@ func buildChzzkScheduleStreamID(chzzkChannelID, title string, startAt time.Time)
 		startAt.UTC().Format(time.RFC3339),
 	}, "|")
 	sum := sha256.Sum256([]byte(seed))
+
 	return fmt.Sprintf("chzzk:%s:schedule:%x", strings.TrimSpace(chzzkChannelID), sum[:8])
 }

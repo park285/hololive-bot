@@ -74,6 +74,7 @@ func appendYouTubeChannelNotifications(
 	}
 
 	mu.Lock()
+
 	*notifications = append(*notifications, channelNotifications...)
 	mu.Unlock()
 }
@@ -123,11 +124,14 @@ func youtubeStreamChannelID(stream *domain.Stream) string {
 	if stream == nil {
 		return ""
 	}
+
 	if stream.ChannelID != "" {
 		return stream.ChannelID
 	}
+
 	if stream.Channel != nil {
 		return stream.Channel.ID
 	}
+
 	return ""
 }

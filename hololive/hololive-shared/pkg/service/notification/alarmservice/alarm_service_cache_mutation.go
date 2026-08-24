@@ -2,14 +2,16 @@ package alarmservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/valkey-io/valkey-go"
 )
 
 func (as *AlarmService) removeChannelSubscribers(ctx context.Context, channelID, registryKey string, alarmTypes domain.AlarmTypes) error {
@@ -19,6 +21,7 @@ func (as *AlarmService) removeChannelSubscribers(ctx context.Context, channelID,
 
 	builder := as.cache.Builder()
 	subscriberKeys := as.channelSubscriberKeys(channelID, alarmTypes)
+
 	if err := as.executeSubscriberTypeRemoval(ctx, builder, subscriberKeys, registryKey, alarmTypes); err != nil {
 		return fmt.Errorf("execute subscriber type removal: %w", err)
 	}
@@ -42,6 +45,7 @@ func (as *AlarmService) clearChannelSubscribersPipeline(ctx context.Context, ala
 
 	builder := as.cache.Builder()
 	channelSubsKeys := as.roomChannelSubscriberKeys(alarms)
+
 	if err := as.executeSubscriberKeyRemoval(ctx, builder, channelSubsKeys, registryKey, "clear channel subscribers"); err != nil {
 		return fmt.Errorf("execute subscriber key removal: %w", err)
 	}
@@ -66,16 +70,18 @@ func normalizeAlarmTypesStrict(input, fallback domain.AlarmTypes) (domain.AlarmT
 	valid := alarmTypeSet(domain.AllAlarmTypes)
 	seen := make(map[domain.AlarmType]struct{}, len(input))
 	normalized := make(domain.AlarmTypes, 0, len(input))
+
 	for _, alarmType := range input {
 		var err error
+
 		normalized, err = appendNormalizedAlarmType(normalized, seen, alarmType, valid)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("append normalized alarm type: %w", err)
 		}
 	}
 
 	if len(normalized) == 0 {
-		return nil, fmt.Errorf("alarm types are empty after normalization")
+		return nil, errors.New("alarm types are empty after normalization")
 	}
 
 	return normalized, nil
@@ -84,14 +90,17 @@ func normalizeAlarmTypesStrict(input, fallback domain.AlarmTypes) (domain.AlarmT
 func appendNormalizedAlarmType(normalized domain.AlarmTypes, seen map[domain.AlarmType]struct{}, alarmType domain.AlarmType, valid map[domain.AlarmType]struct{}) (domain.AlarmTypes, error) {
 	trimmed, ok, err := normalizeAlarmTypeStrict(alarmType, valid)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize alarm type strict: %w", err)
 	}
+
 	if !ok {
 		return normalized, nil
 	}
+
 	if _, ok := seen[trimmed]; ok {
 		return normalized, nil
 	}
+
 	seen[trimmed] = struct{}{}
 
 	return append(normalized, trimmed), nil
@@ -102,6 +111,7 @@ func normalizeAlarmTypeStrict(alarmType domain.AlarmType, valid map[domain.Alarm
 	if trimmed == "" {
 		return "", false, nil
 	}
+
 	if _, ok := valid[trimmed]; !ok {
 		return "", false, fmt.Errorf("unknown alarm type: %s", alarmType)
 	}
@@ -114,32 +124,40 @@ func alarmTypeSet(types domain.AlarmTypes) map[domain.AlarmType]struct{} {
 	for _, alarmType := range types {
 		result[alarmType] = struct{}{}
 	}
+
 	return result
 }
 
 func mergeAlarmTypes(existing, requested domain.AlarmTypes) domain.AlarmTypes {
 	seen := alarmTypeSet(existing)
 	merged := make(domain.AlarmTypes, 0, len(existing)+len(requested))
+
 	merged = append(merged, existing...)
+
 	for _, alarmType := range requested {
 		if _, ok := seen[alarmType]; ok {
 			continue
 		}
+
 		seen[alarmType] = struct{}{}
 		merged = append(merged, alarmType)
 	}
+
 	return merged
 }
 
 func subtractAlarmTypes(existing, remove domain.AlarmTypes) domain.AlarmTypes {
 	removeSet := alarmTypeSet(remove)
 	result := make(domain.AlarmTypes, 0, len(existing))
+
 	for _, alarmType := range existing {
 		if _, shouldRemove := removeSet[alarmType]; shouldRemove {
 			continue
 		}
+
 		result = append(result, alarmType)
 	}
+
 	return result
 }
 
@@ -147,15 +165,18 @@ func intersectAlarmTypes(existing, requested domain.AlarmTypes) domain.AlarmType
 	existingSet := alarmTypeSet(existing)
 	seen := make(map[domain.AlarmType]struct{}, len(requested))
 	result := make(domain.AlarmTypes, 0, len(requested))
+
 	for _, alarmType := range requested {
 		if _, duplicated := seen[alarmType]; duplicated {
 			continue
 		}
+
 		seen[alarmType] = struct{}{}
 		if _, ok := existingSet[alarmType]; ok {
 			result = append(result, alarmType)
 		}
 	}
+
 	return result
 }
 
@@ -253,6 +274,7 @@ func buildSubscriberScardCommands(builder valkey.Builder, subscriberKeys []strin
 func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder valkey.Builder, subscriberKeys []string, alarmTypes domain.AlarmTypes, operation string) ([]string, error) {
 	scardCommands := buildSubscriberScardCommands(builder, subscriberKeys)
 	results := as.cache.DoMulti(ctx, scardCommands...)
+
 	if len(results) != len(scardCommands) {
 		return nil, fmt.Errorf("%s: unexpected SCARD result count: %d", operation, len(results))
 	}
@@ -261,6 +283,7 @@ func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder 
 	for i, result := range results {
 		count, err := result.AsInt64()
 		if err != nil {
+			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, formatSubscriberScardError(operation, subscriberKeys, alarmTypes, i, err)
 		}
 
@@ -309,14 +332,16 @@ func (as *AlarmService) cleanupChannelRegistryIfEmpty(ctx context.Context, chann
 	allSubsKeys := as.channelSubscriberKeys(channelID, domain.AllAlarmTypes)
 	scardCmds := buildSubscriberScardCommands(builder, allSubsKeys)
 	scardResults := as.cache.DoMulti(ctx, scardCmds...)
+
 	if len(scardResults) != len(scardCmds) {
 		return fmt.Errorf("cleanup channel registry: unexpected SCARD result count: %d", len(scardResults))
 	}
 
 	hasSubscribers, err := anySubscriberKeyHasMembers(scardResults, allSubsKeys)
 	if err != nil {
-		return err
+		return fmt.Errorf("any subscriber key has members: %w", err)
 	}
+
 	if hasSubscribers {
 		return nil
 	}
@@ -334,6 +359,7 @@ func anySubscriberKeyHasMembers(results []valkey.ValkeyResult, subscriberKeys []
 		if err != nil {
 			return false, fmt.Errorf("cleanup channel registry: scard key %s: %w", subscriberKeys[i], err)
 		}
+
 		if count > 0 {
 			return true, nil
 		}

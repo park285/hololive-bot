@@ -65,6 +65,7 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 	o := &Options{
 		SchemaName: "event_summary",
 	}
+
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -92,7 +93,6 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 	}, nil
 }
 
-// Cloudflare가 Go HTTP/2 fingerprint를 차단하므로 HTTP/2를 끈 프로파일을 쓴다.
 func newLLMHTTPClient() *http.Client {
 	return httputil.NewProfiledClient(httputil.TransportProfile{
 		Timeout:               constants.LLMHTTPTimeout.Request,
@@ -100,27 +100,30 @@ func newLLMHTTPClient() *http.Client {
 		TLSHandshakeTimeout:   constants.LLMHTTPTimeout.TLSHandshake,
 		ResponseHeaderTimeout: constants.LLMHTTPTimeout.ResponseHeader,
 		IdleConnTimeout:       constants.LLMHTTPTimeout.IdleConn,
-		DisableHTTP2:          true,
 	})
 }
 
 func resolveWebSearch(o *Options) bool {
 	webSearch := true
+
 	if o.WebSearch != nil {
 		webSearch = *o.WebSearch
 	}
+
 	if o.ChatCompletions {
 		webSearch = false
 	}
+
 	return webSearch
 }
 
-// recordUsage는 provider 응답의 토큰 사용량을 cost tracker에 누적한다. tracker 미주입·토큰 0이면 no-op.
+// recordUsage는 provider 응답의 토큰 사용량을 cost tracker에 누적한다. 다만 tracker가 없거나 토큰이 0이면 no-op이다.
 // LLM 응답 경로에서 호출되므로 에러를 전파하지 않는다.
 func (c *OpenAIClient) recordUsage(ctx context.Context, tokens int64) {
 	if c == nil || c.costTracker == nil || tokens <= 0 {
 		return
 	}
+
 	c.costTracker.RecordUsage(ctx, "openai", c.model, tokens)
 }
 
@@ -132,6 +135,7 @@ func (r costTrackerUsageReporter) RecordUsage(ctx context.Context, provider, mod
 	if r.tracker == nil || usage.TotalTokens <= 0 {
 		return
 	}
+
 	r.tracker.RecordUsage(ctx, provider, model, int64(usage.TotalTokens))
 }
 
@@ -140,12 +144,15 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	if c == nil {
 		return "", errors.New("openai client is nil")
 	}
+
 	if ctx == nil {
 		return "", errors.New("openai context is nil")
 	}
+
 	if strings.TrimSpace(c.model) == "" {
 		return "", errors.New("openai model is empty")
 	}
+
 	if schema == nil {
 		return "", errors.New("json schema is nil")
 	}
@@ -153,6 +160,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	attrs := llmPromptSummaryAttrs("openai", c.model, systemPrompt, userPrompt)
 	sharedlog.Debug(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
+
 	started := time.Now()
 
 	resp, err := sharedllm.RunJSON(ctx, c.generator, sharedllm.JSONRequest{
@@ -169,14 +177,18 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	}, "openai", costTrackerUsageReporter{tracker: c.costTracker})
 	if err != nil {
 		safeErr := safeLLMProviderError(err)
+
 		failedAttrs := append([]slog.Attr{}, attrs...)
+
 		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
 		failedAttrs = append(failedAttrs, llmProviderErrorAttrs(err)...)
 		sharedlog.Error(ctx, c.logger, "llm.provider.request.failed", "llm provider request failed", failedAttrs...)
-		return "", safeErr
+
+		return "", fmt.Errorf("generate JSON: %w", safeErr)
 	}
 
 	successAttrs := append([]slog.Attr{}, attrs...)
+
 	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
 	sharedlog.Debug(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
@@ -191,9 +203,12 @@ func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []s
 		slog.String("model", strings.TrimSpace(model)),
 		slog.Int("prompt_len", len(prompt)),
 	}
+
 	if prompt != "" {
 		sum := sha256.Sum256([]byte(prompt))
+
 		attrs = append(attrs, slog.String("prompt_sha256_8", hex.EncodeToString(sum[:8])))
 	}
+
 	return attrs
 }

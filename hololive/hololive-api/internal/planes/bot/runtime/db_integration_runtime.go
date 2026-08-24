@@ -26,20 +26,20 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 type DBIntegrationRuntime struct {
+	lifecycle.Managed
+
 	Logger        *slog.Logger
 	Repository    *member.Repository
 	Cache         *member.Cache
 	MemberAdapter domain.MemberDataProvider
-
-	lifecycle.Managed
 }
 
 func BuildDBIntegrationRuntime(

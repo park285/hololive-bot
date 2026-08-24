@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
-
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
@@ -58,7 +57,7 @@ func TestNeedsSummaryAdjudication(t *testing.T) {
 				Approved:   true,
 				Confidence: 0.99,
 				Issues: []consensus.ReviewIssue{
-					{Severity: "critical"},
+					{Severity: severityCritical},
 				},
 			},
 			threshold: 0.85,
@@ -99,11 +98,11 @@ func TestNormalizeSummarySeverity(t *testing.T) {
 		in   string
 		want string
 	}{
-		{in: "critical", want: "critical"},
-		{in: " WARNING ", want: "warning"},
-		{in: "Info", want: "info"},
-		{in: "unknown", want: "info"},
-		{in: "", want: "info"},
+		{in: severityCritical, want: severityCritical},
+		{in: " WARNING ", want: severityWarning},
+		{in: "Info", want: severityInfo},
+		{in: "unknown", want: severityInfo},
+		{in: "", want: severityInfo},
 	}
 
 	for _, tt := range tests {
@@ -116,7 +115,7 @@ func TestNormalizeSummarySeverity(t *testing.T) {
 
 func TestShouldRunConsensusReview_SingleHighlightRunsReview(t *testing.T) {
 	resp := &summaryResponse{
-		Highlights: []eventHighlight{{Name: "fes"}},
+		Highlights: []eventHighlight{{Name: testFesName}},
 	}
 
 	if !shouldRunConsensusReview(resp) {
@@ -141,8 +140,9 @@ func TestEventSummarizer_RunConsensus_UsesReservedParentBudgetForReview(t *testi
 		}),
 	)
 
-	parent, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	parent, cancel := context.WithTimeout(t.Context(), 6*time.Second)
 	defer cancel()
+
 	parentDeadline, ok := parent.Deadline()
 	if !ok {
 		t.Fatal("parent deadline missing")
@@ -150,13 +150,13 @@ func TestEventSummarizer_RunConsensus_UsesReservedParentBudgetForReview(t *testi
 
 	primary := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "fes"},
+			{Name: testFesName},
 			{Name: "expo"},
 		},
 	}
 	result, used := summarizer.runConsensus(
 		parent,
-		[]domain.MajorEvent{{ID: 1, Title: "fes"}},
+		[]domain.MajorEvent{{ID: 1, Title: testFesName}},
 		SummaryTypeWeekly,
 		"2026-02-15",
 		"",
@@ -166,12 +166,15 @@ func TestEventSummarizer_RunConsensus_UsesReservedParentBudgetForReview(t *testi
 	if reviewer.callCount != 1 {
 		t.Fatalf("reviewer callCount = %d, want 1", reviewer.callCount)
 	}
+
 	if result != primary {
 		t.Fatal("runConsensus() should keep primary summary when review passes")
 	}
+
 	if used {
 		t.Fatal("runConsensus() used = true, want false")
 	}
+
 	deadlineGap := parentDeadline.Sub(reviewer.deadline)
 	if deadlineGap < 150*time.Millisecond || deadlineGap > 500*time.Millisecond {
 		t.Fatalf("reviewer deadline gap = %v, want around 250ms reserve", deadlineGap)
@@ -195,18 +198,18 @@ func TestEventSummarizer_RunConsensus_SkipsWhenReviewBudgetExhausted(t *testing.
 		}),
 	)
 
-	parent, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	parent, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 
 	primary := &summaryResponse{
 		Highlights: []eventHighlight{
-			{Name: "fes"},
+			{Name: testFesName},
 			{Name: "expo"},
 		},
 	}
 	result, used := summarizer.runConsensus(
 		parent,
-		[]domain.MajorEvent{{ID: 1, Title: "fes"}},
+		[]domain.MajorEvent{{ID: 1, Title: testFesName}},
 		SummaryTypeWeekly,
 		"2026-02-15",
 		"",
@@ -216,9 +219,11 @@ func TestEventSummarizer_RunConsensus_SkipsWhenReviewBudgetExhausted(t *testing.
 	if reviewer.callCount != 0 {
 		t.Fatalf("reviewer callCount = %d, want 0", reviewer.callCount)
 	}
+
 	if result != primary {
 		t.Fatal("runConsensus() should keep primary summary when budget is exhausted")
 	}
+
 	if used {
 		t.Fatal("runConsensus() used = true, want false")
 	}
@@ -233,9 +238,12 @@ type deadlineCapturingSummarizer struct {
 
 func (m *deadlineCapturingSummarizer) GenerateJSON(ctx context.Context, _, _ string, _ map[string]any) (string, error) {
 	m.callCount++
+
 	deadline, ok := ctx.Deadline()
+
 	if ok {
 		m.deadline = deadline
 	}
+
 	return m.jsonResponse, m.err
 }

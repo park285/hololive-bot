@@ -16,11 +16,13 @@ import (
 // /metrics만 노출하는 평문 HTTP/1.1 리스너를 분리한다(PR-P6-01 0단계).
 func NewMetricsServer(ctx context.Context, addr, apiKey string, registries ...*workercontract.Registry) *http.Server {
 	router := newReleaseModeEngine()
-	ApplyBaseMiddleware(router, ctx, nil, BaseMiddlewareOptions{
+	ApplyBaseMiddleware(ctx, router, nil, BaseMiddlewareOptions{
 		SkipLogPaths: []string{"/metrics"},
 	})
+
 	metrics := router.Group("")
 	metrics.Use(loopbackAwareAuthMiddleware(addr, apiKey))
+
 	if len(registries) == 1 && registries[0] != nil {
 		metrics.GET("/metrics", gin.WrapH(promhttp.HandlerFor(workerobservability.NewGatherer(registries[0]), promhttp.HandlerOpts{})))
 		metrics.GET("/diagnostics/workers", gin.WrapH(workerobservability.DiagnosticsHandler(registries[0])))

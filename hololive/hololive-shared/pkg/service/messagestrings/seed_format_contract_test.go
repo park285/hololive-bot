@@ -21,19 +21,18 @@
 package messagestrings_test
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-dbtest"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestSeedFormatStrings_VerbContract(t *testing.T) {
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
-	if err := store.Load(context.Background()); err != nil {
+	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
@@ -56,8 +55,10 @@ func TestSeedFormatStrings_VerbContract(t *testing.T) {
 		value := store.Get(c.namespace, c.key)
 		if value == "" {
 			t.Errorf("Get(%q, %q) is empty; seed missing", c.namespace, c.key)
+
 			continue
 		}
+
 		rendered := fmt.Sprintf(value, c.args...)
 		if strings.Contains(rendered, "%!") {
 			t.Errorf("Sprintf(%s/%s) verb mismatch: %q", c.namespace, c.key, rendered)
@@ -78,8 +79,10 @@ func TestSeedFormatStrings_VerbContract(t *testing.T) {
 		value := store.Get(messagestrings.NamespaceKaring, key)
 		if value == "" {
 			t.Errorf("Get(karing, %q) is empty; seed missing", key)
+
 			continue
 		}
+
 		if strings.Contains(value, "%") {
 			t.Errorf("static karing key %q unexpectedly contains format verb: %q", key, value)
 		}

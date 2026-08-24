@@ -47,6 +47,7 @@ func cleanRepoRel(t *testing.T, rel string) string {
 	if cleaned == "." || strings.HasPrefix(cleaned, "../") || filepath.IsAbs(cleaned) {
 		t.Fatalf("invalid repo-relative path %q", rel)
 	}
+
 	return cleaned
 }
 
@@ -77,8 +78,10 @@ func assertOptionalFileMissingToken(t *testing.T, root, rel, token string) {
 		if os.IsNotExist(err) {
 			return
 		}
+
 		t.Fatalf("read %s: %v", rel, err)
 	}
+
 	if strings.Contains(string(data), token) {
 		t.Fatalf("%s still contains %q", rel, token)
 	}
@@ -167,6 +170,7 @@ func TestSettlementMigrationsAreArchivedAndRunbookExists(t *testing.T) {
 	for _, rel := range activePaths {
 		t.Run("active-"+filepath.Base(rel), func(t *testing.T) {
 			t.Parallel()
+
 			if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
 				t.Fatalf("%s should have been archived", rel)
 			}
@@ -183,6 +187,7 @@ func TestSettlementMigrationsAreArchivedAndRunbookExists(t *testing.T) {
 	for _, rel := range requiredPaths {
 		t.Run("required-"+filepath.Base(rel), func(t *testing.T) {
 			t.Parallel()
+
 			if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 				t.Fatalf("%s missing: %v", rel, err)
 			}

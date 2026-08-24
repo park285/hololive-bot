@@ -25,11 +25,12 @@ type Entity struct {
 
 type EntityState struct {
 	Entity
+
 	Clock                     ContentEvidenceClock
 	FirstPositiveEffectiveAt  time.Time
 	LastPositiveValueSHA256   string
 	LastPositiveScopeSHA256   string
-	LastPositiveCoverage      coverageValue
+	LastPositiveCoverage      CoverageValue
 	LastNegativeReceivedAt    *time.Time
 	FirstAbsenceScheduledFor  *time.Time
 	SecondAbsenceScheduledFor *time.Time
@@ -45,10 +46,10 @@ type AbsenceSlot struct {
 	EffectiveAt    time.Time
 	ReceivedAt     time.Time
 	ScopeSHA256    string
-	Coverage       coverageValue
+	Coverage       CoverageValue
 }
 
-type coverageValue struct {
+type CoverageValue struct {
 	Videos *contract.ChannelListCoverageV1
 	Shorts *contract.ShortsListCoverageV1
 }
@@ -65,7 +66,7 @@ type Evidence struct {
 	Completeness   contract.Completeness
 	Continuity     contract.Continuity
 	Videos         []Entity
-	Coverage       coverageValue
+	Coverage       CoverageValue
 }
 
 type State struct {
@@ -113,21 +114,28 @@ type Decision struct {
 
 func (s *State) clone() State {
 	cloned := *s
+
 	cloned.Videos = make(map[string]EntityState, len(s.Videos))
+
 	for videoID := range s.Videos {
 		entity := s.Videos[videoID]
+
 		cloned.Videos[videoID] = entity.clone()
 	}
+
 	if len(s.AbsenceSlots) > 0 {
 		cloned.AbsenceSlots = make([]AbsenceSlot, len(s.AbsenceSlots))
 		for i := range s.AbsenceSlots {
 			cloned.AbsenceSlots[i] = s.AbsenceSlots[i].clone()
 		}
 	}
+
 	if s.EarliestCompleteAt != nil {
 		earliest := *s.EarliestCompleteAt
+
 		cloned.EarliestCompleteAt = &earliest
 	}
+
 	return cloned
 }
 
@@ -139,12 +147,15 @@ func (e *Evidence) clone() Evidence {
 			cloned.Videos[i] = e.Videos[i].clone()
 		}
 	}
+
 	cloned.Coverage = e.Coverage.clone()
+
 	return cloned
 }
 
 func (e *EntityState) clone() EntityState {
 	cloned := *e
+
 	cloned.Entity = e.Entity.clone()
 	cloned.Clock.LastNegativeEffectiveAt = cloneTime(e.Clock.LastNegativeEffectiveAt)
 	cloned.Clock.MissingSinceEffectiveAt = cloneTime(e.Clock.MissingSinceEffectiveAt)
@@ -153,34 +164,43 @@ func (e *EntityState) clone() EntityState {
 	cloned.FirstAbsenceScheduledFor = cloneTime(e.FirstAbsenceScheduledFor)
 	cloned.SecondAbsenceScheduledFor = cloneTime(e.SecondAbsenceScheduledFor)
 	cloned.WithdrawnAt = cloneTime(e.WithdrawnAt)
+
 	return cloned
 }
 
-func (e *Entity) clone() Entity {
-	cloned := *e
+func (e Entity) clone() Entity {
+	cloned := e
+
 	cloned.PublishedAt = cloneTime(e.PublishedAt)
 	cloned.ScheduledFor = cloneTime(e.ScheduledFor)
+
 	return cloned
 }
 
 func (s *AbsenceSlot) clone() AbsenceSlot {
 	cloned := *s
+
 	cloned.Coverage = s.Coverage.clone()
+
 	return cloned
 }
 
-func (c *coverageValue) clone() coverageValue {
-	cloned := *c
+func (c CoverageValue) clone() CoverageValue {
+	cloned := c
 	if c.Videos != nil {
 		videos := *c.Videos
+
 		videos.Filters.PublishedAfter = cloneTime(c.Videos.Filters.PublishedAfter)
 		videos.Filters.PublishedBefore = cloneTime(c.Videos.Filters.PublishedBefore)
 		cloned.Videos = &videos
 	}
+
 	if c.Shorts != nil {
 		shorts := *c.Shorts
+
 		cloned.Shorts = &shorts
 	}
+
 	return cloned
 }
 
@@ -188,22 +208,28 @@ func cloneTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
+
 	copied := *value
+
 	return &copied
 }
 
-func VideoCoverage(value *contract.ChannelListCoverageV1) coverageValue {
+func VideoCoverage(value *contract.ChannelListCoverageV1) CoverageValue {
 	if value == nil {
-		return coverageValue{}
+		return CoverageValue{}
 	}
+
 	copied := *value
-	return coverageValue{Videos: &copied}
+
+	return CoverageValue{Videos: &copied}
 }
 
-func ShortsCoverage(value *contract.ShortsListCoverageV1) coverageValue {
+func ShortsCoverage(value *contract.ShortsListCoverageV1) CoverageValue {
 	if value == nil {
-		return coverageValue{}
+		return CoverageValue{}
 	}
+
 	copied := *value
-	return coverageValue{Shorts: &copied}
+
+	return CoverageValue{Shorts: &copied}
 }

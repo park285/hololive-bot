@@ -35,6 +35,7 @@ func (c *Cache) snapshotOwnedChannelMemberLocked(
 	if cached.ChannelID != channelID {
 		return nil
 	}
+
 	return c.snapshotOwnedPointMemberLocked(cached, generation, func(current *domain.Member) bool {
 		return current.ChannelID == channelID
 	})
@@ -48,6 +49,7 @@ func (c *Cache) snapshotOwnedNameMemberLocked(
 	if cached.Name != name {
 		return nil
 	}
+
 	return c.snapshotOwnedPointMemberLocked(cached, generation, func(current *domain.Member) bool {
 		return current.Name == name
 	})
@@ -61,6 +63,7 @@ func (c *Cache) snapshotOwnedAliasMemberLocked(
 	if !memberMatchesPointAlias(cached, alias) {
 		return nil
 	}
+
 	return c.snapshotOwnedPointMemberLocked(cached, generation, func(current *domain.Member) bool {
 		return memberMatchesPointAlias(current, alias)
 	})
@@ -75,14 +78,17 @@ func (c *Cache) snapshotOwnedPointMemberLocked(
 	if !snapshotSuccessful(snap) {
 		return pointMemberWithoutSnapshot(cached, generation)
 	}
+
 	if snap.generation != generation {
 		return nil
 	}
+
 	for _, current := range snap.members {
 		if current != nil && matches(current) && samePointMemberIdentity(current, cached) {
 			return current
 		}
 	}
+
 	return nil
 }
 
@@ -90,6 +96,7 @@ func pointMemberWithoutSnapshot(cached *domain.Member, generation uint64) *domai
 	if generation != 0 {
 		return nil
 	}
+
 	return cached
 }
 
@@ -97,9 +104,11 @@ func samePointMemberIdentity(current, cached *domain.Member) bool {
 	if current.ID != 0 || cached.ID != 0 {
 		return current.ID != 0 && current.ID == cached.ID
 	}
+
 	if current.ChannelID != "" || cached.ChannelID != "" {
 		return current.ChannelID != "" && current.ChannelID == cached.ChannelID
 	}
+
 	return current.Name == cached.Name
 }
 
@@ -107,10 +116,12 @@ func memberMatchesPointAlias(member *domain.Member, alias string) bool {
 	if member == nil {
 		return false
 	}
+
 	if strings.EqualFold(member.Name, alias) ||
 		strings.EqualFold(member.NameJa, alias) ||
 		strings.EqualFold(member.NameKo, alias) {
 		return true
 	}
+
 	return slices.Contains(member.GetAllAliases(), alias)
 }

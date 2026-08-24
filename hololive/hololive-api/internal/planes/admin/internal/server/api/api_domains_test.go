@@ -32,6 +32,7 @@ func assertDomainHandlerInitialized(t *testing.T, name string, domainHandler any
 	if !value.IsValid() || value.IsNil() {
 		t.Fatalf("%s domain handler not initialized", name)
 	}
+
 	if handler := value.Elem().FieldByName("Handler"); !handler.IsValid() || handler.IsNil() {
 		t.Fatalf("%s domain handler base not initialized", name)
 	}
@@ -57,6 +58,7 @@ func TestDomainHandlers_SharedBaseHandler(t *testing.T) {
 	if domains.Member.Handler != domains.Alarm.Handler {
 		t.Fatal("domain handlers do not share the same base Handler")
 	}
+
 	if domains.Room.Handler != domains.Stats.Handler {
 		t.Fatal("domain handlers do not share the same base Handler")
 	}

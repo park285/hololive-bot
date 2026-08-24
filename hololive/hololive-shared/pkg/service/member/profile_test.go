@@ -23,7 +23,6 @@ package member
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -44,22 +43,27 @@ func newStubMemberProvider(members []*domain.Member) *stubMemberProvider {
 	byChannel := make(map[string]*domain.Member)
 	byName := make(map[string]*domain.Member)
 	byAlias := make(map[string]*domain.Member)
+
 	for _, member := range members {
 		if member == nil {
 			continue
 		}
+
 		if member.ChannelID != "" {
 			byChannel[member.ChannelID] = member
 		}
+
 		if member.Name != "" {
 			byName[member.Name] = member
 		}
+
 		for _, alias := range member.GetAllAliases() {
 			if alias != "" {
 				byAlias[alias] = member
 			}
 		}
 	}
+
 	return &stubMemberProvider{
 		members:   members,
 		byChannel: byChannel,
@@ -85,6 +89,7 @@ func (p *stubMemberProvider) GetChannelIDs() []string {
 	for id := range p.byChannel {
 		ids = append(ids, id)
 	}
+
 	return ids
 }
 
@@ -92,20 +97,21 @@ func (p *stubMemberProvider) GetAllMembers() []*domain.Member {
 	return p.members
 }
 
-func (p *stubMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+func (p *stubMemberProvider) WithContext(context.Context) domain.MemberDataProvider {
 	return p
 }
 
-func (p *stubMemberProvider) FindMembersByName(name string) []*domain.Member {
+func (p *stubMemberProvider) FindMembersByName(string) []*domain.Member {
 	return nil
 }
 
-func (p *stubMemberProvider) FindMembersByAlias(alias string) []*domain.Member {
+func (p *stubMemberProvider) FindMembersByAlias(string) []*domain.Member {
 	return nil
 }
 
 type erroringMemberProvider struct {
 	*stubMemberProvider
+
 	err error
 }
 
@@ -113,26 +119,23 @@ func (p *erroringMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
 	return nil, p.err
 }
 
-func (p *erroringMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
+func (p *erroringMemberProvider) WithContext(context.Context) domain.MemberDataProvider {
 	return p
 }
 
-func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+func chdirRepoRoot(t *testing.T) {
+	t.Helper()
 
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed to get working dir: %v", err)
 	}
-	repoRoot := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
-	if err := os.Chdir(repoRoot); err != nil {
-		t.Fatalf("failed to change dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(wd); err != nil {
-			t.Errorf("restore working dir: %v", err)
-		}
-	})
+
+	t.Chdir(filepath.Clean(filepath.Join(wd, "..", "..", "..")))
+}
+
+func firstProfileWithEnglishName(t *testing.T) *domain.TalentProfile {
+	t.Helper()
 
 	profiles, err := domain.LoadProfiles()
 	if err != nil {
@@ -143,18 +146,26 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 	for key := range profiles {
 		keys = append(keys, key)
 	}
+
 	sort.Strings(keys)
 
-	var target *domain.TalentProfile
 	for _, key := range keys {
 		if profiles[key] != nil && profiles[key].EnglishName != "" {
-			target = profiles[key]
-			break
+			return profiles[key]
 		}
 	}
-	if target == nil {
-		t.Fatalf("no profile with english name")
-	}
+
+	t.Fatal("no profile with english name")
+
+	return nil
+}
+
+func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+
+	chdirRepoRoot(t)
+
+	target := firstProfileWithEnglishName(t)
 
 	provider := newStubMemberProvider([]*domain.Member{
 		{Name: target.EnglishName, ChannelID: "channel-1"},
@@ -169,6 +180,7 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByEnglish failed: %v", err)
 	}
+
 	if profile.Slug != target.Slug {
 		t.Fatalf("unexpected slug: %s", profile.Slug)
 	}
@@ -177,48 +189,40 @@ func TestProfileService_GetByEnglishAndChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByChannel failed: %v", err)
 	}
+
 	if byChannel.Slug != target.Slug {
 		t.Fatalf("unexpected channel slug: %s", byChannel.Slug)
 	}
 
-	withTranslation, translated, err := service.GetWithTranslation(context.Background(), target.EnglishName)
+	withTranslation, translated, err := service.GetWithTranslation(t.Context(), target.EnglishName)
 	if err != nil {
 		t.Fatalf("GetWithTranslation failed: %v", err)
 	}
+
 	if withTranslation == nil || translated == nil {
-		t.Fatalf("expected profile and translation")
+		t.Fatal("expected profile and translation")
 	}
+
 	if translated.DisplayName == "" {
-		t.Fatalf("expected translated display name")
+		t.Fatal("expected translated display name")
 	}
 }
 
 func TestNewProfileService_ReturnsMemberLoadError(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get working dir: %v", err)
-	}
-	repoRoot := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
-	if err := os.Chdir(repoRoot); err != nil {
-		t.Fatalf("failed to change dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(wd); err != nil {
-			t.Errorf("restore working dir: %v", err)
-		}
-	})
+	chdirRepoRoot(t)
 
 	provider := &erroringMemberProvider{
 		stubMemberProvider: newStubMemberProvider(nil),
 		err:                errors.New("member repo down"),
 	}
 
-	_, err = NewProfileService(nil, provider, logger)
+	_, err := NewProfileService(nil, provider, logger)
 	if err == nil {
 		t.Fatal("NewProfileService() error = nil, want non-nil")
 	}
+
 	if got := err.Error(); got != "load members data: load all members: member repo down" {
 		t.Fatalf("NewProfileService() error = %q, want %q", got, "load members data: load all members: member repo down")
 	}

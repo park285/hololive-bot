@@ -21,8 +21,9 @@
 package messaging
 
 import (
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func (ma *MessageAdapter) isMajorEventCommand(cmd string) bool {
@@ -34,17 +35,18 @@ func (ma *MessageAdapter) tryMajorEventCommand(command string, args []string, ra
 		return nil, false
 	}
 
-	params := map[string]any{"action": majorEventAction(args)}
+	params := map[string]any{paramAction: majorEventAction(args)}
+
 	return &ParsedCommand{Type: domain.CommandMajorEvent, Params: params, RawMessage: raw}, true
 }
 
 var majorEventActions = map[string]string{
-	"켜기":   "on",
-	"on":   "on",
-	"구독":   "on",
-	"끄기":   "off",
-	"off":  "off",
-	"해제":   "off",
+	"켜기":   actionOn,
+	"on":   actionOn,
+	"구독":   actionOn,
+	"끄기":   actionOff,
+	"off":  actionOff,
+	"해제":   actionOff,
 	"목록":   actionStatus,
 	"list": actionStatus,
 	"상태":   actionStatus,

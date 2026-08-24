@@ -11,6 +11,7 @@ import (
 
 type recordingDispatchTx struct {
 	pgx.Tx
+
 	rollbackCtxErr      error
 	rollbackHasDeadline bool
 	rollbackErr         error
@@ -19,24 +20,30 @@ type recordingDispatchTx struct {
 func (tx *recordingDispatchTx) Rollback(ctx context.Context) error {
 	tx.rollbackCtxErr = ctx.Err()
 	_, tx.rollbackHasDeadline = ctx.Deadline()
+
 	return tx.rollbackErr
 }
 
 func TestFinishDispatchBatchRollsBackCanceledRequestOnPanic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	tx := &recordingDispatchTx{}
 	panicValue := errors.New("dispatch panic")
 
 	var recovered any
+
 	func() {
 		defer func() {
 			recovered = recover()
 		}()
+
 		var err error
+
 		defer func() {
 			err = finishDispatchBatch(ctx, tx, err, recover())
 		}()
+
 		panic(panicValue)
 	}()
 
@@ -50,14 +57,18 @@ func TestFinishDispatchBatchPreservesPanicWhenRollbackFails(t *testing.T) {
 	panicValue := errors.New("dispatch panic")
 
 	var recovered any
+
 	func() {
 		defer func() {
 			recovered = recover()
 		}()
+
 		var err error
+
 		defer func() {
-			err = finishDispatchBatch(context.Background(), tx, err, recover())
+			err = finishDispatchBatch(t.Context(), tx, err, recover())
 		}()
+
 		panic(panicValue)
 	}()
 
@@ -66,8 +77,9 @@ func TestFinishDispatchBatchPreservesPanicWhenRollbackFails(t *testing.T) {
 }
 
 func TestFinishDispatchBatchRollsBackCanceledRequestOnError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	tx := &recordingDispatchTx{}
 	want := errors.New("insert failed")
 
@@ -75,6 +87,7 @@ func TestFinishDispatchBatchRollsBackCanceledRequestOnError(t *testing.T) {
 		defer func() {
 			err = finishDispatchBatch(ctx, tx, err, recover())
 		}()
+
 		return want
 	}()
 
@@ -90,8 +103,9 @@ func TestFinishDispatchBatchJoinsRollbackError(t *testing.T) {
 
 	got := func() (err error) {
 		defer func() {
-			err = finishDispatchBatch(context.Background(), tx, err, recover())
+			err = finishDispatchBatch(t.Context(), tx, err, recover())
 		}()
+
 		return want
 	}()
 

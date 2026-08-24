@@ -25,13 +25,13 @@ import "time"
 type TemplateKey string
 
 const (
-	// OUTBOX_* : YouTube 알림 (outbox dispatcher)
+	// OUTBOX_* : YouTube 알림 (outbox dispatcher).
 	TemplateKeyOutboxShorts    TemplateKey = "OUTBOX_SHORTS"
 	TemplateKeyOutboxCommunity TemplateKey = "OUTBOX_COMMUNITY"
 	TemplateKeyOutboxVideo     TemplateKey = "OUTBOX_VIDEO"
 	TemplateKeyOutboxMilestone TemplateKey = "OUTBOX_MILESTONE"
 
-	// OUTBOX_*_GROUP : YouTube 그룹 알림 (여러 항목 묶음)
+	// OUTBOX_*_GROUP : YouTube 그룹 알림 (여러 항목 묶음).
 	TemplateKeyOutboxVideoGroup     TemplateKey = "OUTBOX_VIDEO_GROUP"
 	TemplateKeyOutboxShortsGroup    TemplateKey = "OUTBOX_SHORTS_GROUP"
 	TemplateKeyOutboxCommunityGroup TemplateKey = "OUTBOX_COMMUNITY_GROUP"
@@ -39,7 +39,7 @@ const (
 	TemplateKeyAlarmDispatchNotification      TemplateKey = "ALARM_DISPATCH_NOTIFICATION"
 	TemplateKeyAlarmDispatchNotificationGroup TemplateKey = "ALARM_DISPATCH_NOTIFICATION_GROUP"
 
-	// CMD_* : 명령어 응답 (adapter formatter)
+	// CMD_* : 명령어 응답 (adapter formatter).
 	TemplateKeyCmdAlarmList              TemplateKey = "CMD_ALARM_LIST"
 	TemplateKeyCmdAlarmNotification      TemplateKey = "CMD_ALARM_NOTIFICATION"
 	TemplateKeyCmdAlarmLiveStarted       TemplateKey = "CMD_ALARM_LIVE_STARTED"
@@ -63,7 +63,7 @@ const (
 	TemplateKeyCmdMemberNotFound         TemplateKey = "CMD_MEMBER_NOT_FOUND"
 	TemplateKeyCmdAmbiguousMember        TemplateKey = "CMD_AMBIGUOUS_MEMBER"
 
-	// CMD_MAJOR_EVENT_* : 대형 행사 알림 명령어
+	// CMD_MAJOR_EVENT_* : 대형 행사 알림 명령어.
 	TemplateKeyCmdMajorEventWeeklySummary  TemplateKey = "CMD_MAJOR_EVENT_WEEKLY_SUMMARY"
 	TemplateKeyCmdMajorEventMonthlySummary TemplateKey = "CMD_MAJOR_EVENT_MONTHLY_SUMMARY"
 	TemplateKeyCmdMajorEventSubscribed     TemplateKey = "CMD_MAJOR_EVENT_SUBSCRIBED"
@@ -77,7 +77,7 @@ const (
 	TemplateKeyCelebrationAnniversary    TemplateKey = "CELEBRATION_ANNIVERSARY"
 	TemplateKeyCelebrationBirthdayStream TemplateKey = "CELEBRATION_BIRTHDAY_STREAM"
 
-	// CMD_MEMBER_NEWS_* : 구독 멤버 뉴스
+	// CMD_MEMBER_NEWS_* : 구독 멤버 뉴스.
 	TemplateKeyCmdMemberNewsDigest       TemplateKey = "CMD_MEMBER_NEWS_DIGEST"
 	TemplateKeyCmdMemberNewsNoMembers    TemplateKey = "CMD_MEMBER_NEWS_NO_MEMBERS"
 	TemplateKeyCmdMemberNewsSubscribed   TemplateKey = "CMD_MEMBER_NEWS_SUBSCRIBED"

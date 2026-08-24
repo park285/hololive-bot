@@ -21,15 +21,14 @@
 package botruntime
 
 import (
-	"context"
 	"log/slog"
 	"testing"
-
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 func TestDBIntegrationRuntimeClose_CallsCleanupOnce(t *testing.T) {
@@ -68,7 +67,7 @@ func TestFetchProfilesRuntimeClose_CallsCleanupOnce(t *testing.T) {
 func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := BuildFetchProfilesRuntime(context.Background())
+	runtime, err := BuildFetchProfilesRuntime(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 	require.NotNil(t, runtime.Logger)
@@ -83,7 +82,7 @@ func TestBuildDBIntegrationRuntime_InitializesContextWhenNil(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.DiscardHandler)
-	runtime, err := BuildDBIntegrationRuntime(context.Background(), &settings.PostgresConfig{}, logger)
+	runtime, err := BuildDBIntegrationRuntime(t.Context(), &settings.PostgresConfig{}, logger)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Contains(t, err.Error(), "failed to initialize DB integration runtime")

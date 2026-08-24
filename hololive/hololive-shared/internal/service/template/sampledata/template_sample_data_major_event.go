@@ -26,6 +26,7 @@ func templateSampleMajorEventData() map[domain.TemplateKey]any {
 	data := map[domain.TemplateKey]any{}
 	addTemplateMajorEventSummarySamples(data)
 	addTemplateMajorEventSubscriptionSamples(data)
+
 	return data
 }
 

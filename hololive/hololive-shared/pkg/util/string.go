@@ -32,6 +32,7 @@ func FirstNonEmptyString(values ...string) string {
 			return value
 		}
 	}
+
 	return ""
 }
 

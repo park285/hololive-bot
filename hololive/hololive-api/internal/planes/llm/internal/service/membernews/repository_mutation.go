@@ -22,12 +22,13 @@ package membernews
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
 func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) error {
 	if r.pool == nil {
-		return fmt.Errorf("membernews repository pool is nil")
+		return errors.New("membernews repository pool is nil")
 	}
 
 	query := mustSQL("repository_mutation_0033_01.sql")
@@ -37,12 +38,13 @@ func (r *Repository) Subscribe(ctx context.Context, roomID, roomName string) err
 	}
 
 	r.writeThroughSubscribe(ctx, roomID, roomName)
+
 	return nil
 }
 
 func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	if r.pool == nil {
-		return fmt.Errorf("membernews repository pool is nil")
+		return errors.New("membernews repository pool is nil")
 	}
 
 	query := mustSQL("repository_mutation_0054_02.sql")
@@ -51,5 +53,6 @@ func (r *Repository) Unsubscribe(ctx context.Context, roomID string) error {
 	}
 
 	r.writeThroughUnsubscribe(ctx, roomID)
+
 	return nil
 }

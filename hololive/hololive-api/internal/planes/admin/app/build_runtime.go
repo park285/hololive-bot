@@ -6,26 +6,23 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
+	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
-
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
-
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 )
 
 type scraperHolodexProfileFoundation struct {
@@ -46,7 +43,7 @@ type alarmModeComponents struct {
 func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (_ *AdminAPIRuntime, retErr error) {
 	ctx, appConfig, err := normalizeAdminAPIRuntimeInputs(ctx, appConfig, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize admin API runtime inputs: %w", err)
 	}
 
 	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
@@ -56,25 +53,34 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 
 	foundation, err := buildScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		return cleanupAdminAPIRuntimeBuild(infra, "foundation", err)
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: foundation: %w", err)
 	}
 
 	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
+
 	alarmMode, err := buildAlarmModeComponents(ctx, appConfig, infra.Cache, foundation.HolodexService, foundation.MemberServiceAdapter, alarmRepository, logger)
 	if err != nil {
-		return cleanupAdminAPIRuntimeBuild(infra, "alarm mode", err)
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: alarm mode: %w", err)
 	}
+
 	runtimeOwnsAlarmService := false
+
 	defer func() {
 		retErr = closeUnownedAdminAlarmService(ctx, alarmMode.AlarmService, runtimeOwnsAlarmService, retErr)
 	}()
 
 	runtime, err := buildAdminAPIRuntimeAfterAlarmMode(ctx, appConfig, infra, foundation, alarmMode, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build admin API runtime after alarm mode: %w", err)
 	}
+
 	runtime.AlarmService = alarmMode.AlarmService
 	runtimeOwnsAlarmService = true
+
 	return runtime, nil
 }
 
@@ -87,9 +93,11 @@ func closeUnownedAdminAlarmService(
 	if runtimeOwnsAlarmService || alarmService == nil {
 		return buildErr
 	}
+
 	if err := alarmService.Close(ctx); err != nil {
 		return errors.Join(buildErr, fmt.Errorf("build admin api runtime: close alarm service: %w", err))
 	}
+
 	return buildErr
 }
 
@@ -101,10 +109,12 @@ func normalizeAdminAPIRuntimeInputs(
 	if appConfig == nil {
 		return nil, nil, errors.New("config must not be nil")
 	}
+
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("normalize runtime build inputs: %w", err)
 	}
+
 	return ctx, appConfig, nil
 }
 
@@ -116,17 +126,21 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) (*AdminAPIRuntime, error) {
-
 	aclService, err := buildAdminAPIACLService(ctx, appConfig, infra, logger)
 	if err != nil {
-		return cleanupAdminAPIRuntimeBuild(infra, "acl service", err)
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: acl service: %w", err)
 	}
 
 	ytStack := buildAdminAPIYouTubeStack(ctx, appConfig, infra, foundation, logger)
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
+
 	authService, err := buildAdminAPIAuthService(ctx, infra, logger)
 	if err != nil {
-		return cleanupAdminAPIRuntimeBuild(infra, "auth service", err)
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: auth service: %w", err)
 	}
 
 	settingsApplier, majorEventTriggerClient := buildAdminAPISettingsApplier(appConfig, foundation, alarmMode, ytStack, logger)
@@ -138,13 +152,16 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 		communityShortsOpsRepository, settingsApplier, systemCollector,
 		templateAdmin, majorEventTriggerClient, logger,
 	)
+
 	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build admin APIHTTP runtime: %w", err)
 	}
+
 	if appConfig.Ingestion.PhotoSyncEnabled {
 		runtime.PhotoSync = holodexprovider.NewPhotoSyncService(foundation.HolodexService, infra.MemberRepository, logger)
 	}
+
 	return runtime, nil
 }
 
@@ -158,19 +175,19 @@ func buildAdminAPIHTTPRuntime(
 ) (*AdminAPIRuntime, error) {
 	router, err := buildAdminAPIRouter(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {
-		return cleanupAdminAPIRuntimeBuild(infra, "provide api router", err)
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin api runtime: provide api router: %w", err)
 	}
 
 	runtime, err := newAdminAPIRuntime(ctx, appConfig, logger, router, infra.Cleanup)
 	if err != nil {
-		return cleanupAdminAPIRuntimeBuild(infra, "http server", err)
-	}
-	return runtime, nil
-}
+		infra.Cleanup()
 
-func cleanupAdminAPIRuntimeBuild(infra *sharedmodules.InfraModule, stage string, err error) (*AdminAPIRuntime, error) {
-	infra.Cleanup()
-	return nil, fmt.Errorf("build admin api runtime: %s: %w", stage, err)
+		return nil, fmt.Errorf("build admin api runtime: http server: %w", err)
+	}
+
+	return runtime, nil
 }
 
 func newAdminAPIRuntime(
@@ -189,6 +206,7 @@ func newAdminAPIRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("build admin api http servers: %w", err)
 	}
+
 	return &AdminAPIRuntime{
 		Config:      appConfig,
 		Logger:      logger,

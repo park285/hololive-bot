@@ -29,23 +29,26 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/repository"
 )
 
 func newTemplateRepository(t *testing.T) *repository.TemplateRepository {
 	t.Helper()
+
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+
 	return repository.NewTemplateRepository(pool, logger)
 }
 
 func TestTemplateRepository_List(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("empty when key filter has no rows", func(t *testing.T) {
 		key := domain.TemplateKey("NOT_A_TEMPLATE")
@@ -57,7 +60,9 @@ func TestTemplateRepository_List(t *testing.T) {
 	t.Run("with data and filters", func(t *testing.T) {
 		_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "default body")
 		require.NoError(t, err)
+
 		channelID := "room_123"
+
 		_, err = repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, &channelID, "override body")
 		require.NoError(t, err)
 
@@ -66,6 +71,7 @@ func TestTemplateRepository_List(t *testing.T) {
 		assert.GreaterOrEqual(t, len(templates), 2)
 
 		key := domain.TemplateKeyOutboxShorts
+
 		templates, err = repo.List(ctx, &key, nil)
 		require.NoError(t, err)
 		assert.Len(t, templates, 2)
@@ -79,7 +85,7 @@ func TestTemplateRepository_List(t *testing.T) {
 
 func TestTemplateRepository_Upsert(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("insert default", func(t *testing.T) {
 		tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "new body")
@@ -94,9 +100,10 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 		_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, nil, "updated body")
 		require.NoError(t, err)
 
-		found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
+		tmpl, found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "updated body", found.Body)
+		require.True(t, found)
+		assert.Equal(t, "updated body", tmpl.Body)
 	})
 
 	t.Run("insert override", func(t *testing.T) {
@@ -112,49 +119,59 @@ func TestTemplateRepository_Upsert(t *testing.T) {
 		_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxShorts, &channelID, "override updated")
 		require.NoError(t, err)
 
-		found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, &channelID)
+		tmpl, found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxShorts, &channelID)
 		require.NoError(t, err)
-		assert.Equal(t, "override updated", found.Body)
+		require.True(t, found)
+		assert.Equal(t, "override updated", tmpl.Body)
 	})
+}
 
-	t.Run("recover from duplicate key during create", func(t *testing.T) {
-		key := domain.TemplateKeyOutboxCommunity
+func TestTemplateRepository_Upsert_RecoversFromDuplicateKey(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := t.Context()
+	key := domain.TemplateKeyOutboxCommunity
 
-		var wg sync.WaitGroup
-		wg.Add(2)
-		results := make(chan error, 2)
-		for _, body := range []string{"racing body", "resolved body"} {
-			go func() {
-				defer wg.Done()
-				tmpl, err := repo.Upsert(ctx, key, nil, body)
-				if err != nil {
-					results <- err
-					return
-				}
-				if tmpl == nil || tmpl.Body != body {
-					results <- assert.AnError
-					return
-				}
-				results <- nil
-			}()
-		}
-		wg.Wait()
-		close(results)
+	var wg sync.WaitGroup
 
-		for err := range results {
-			require.NoError(t, err)
-		}
+	wg.Add(2)
 
-		found, err := repo.FindByKeyAndChannel(ctx, key, nil)
+	results := make(chan error, 2)
+
+	for _, body := range []string{"racing body", "resolved body"} {
+		go func() {
+			defer wg.Done()
+
+			tmpl, err := repo.Upsert(ctx, key, nil, body)
+			if err != nil {
+				results <- err
+				return
+			}
+
+			if tmpl == nil || tmpl.Body != body {
+				results <- assert.AnError
+				return
+			}
+
+			results <- nil
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	for err := range results {
 		require.NoError(t, err)
-		require.NotNil(t, found)
-		assert.Contains(t, []string{"racing body", "resolved body"}, found.Body)
-	})
+	}
+
+	tmpl, found, err := repo.FindByKeyAndChannel(ctx, key, nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Contains(t, []string{"racing body", "resolved body"}, tmpl.Body)
 }
 
 func TestTemplateRepository_DeleteOverride(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	channelID := "room_del"
 	_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxCommunity, &channelID, "to delete")
@@ -163,23 +180,25 @@ func TestTemplateRepository_DeleteOverride(t *testing.T) {
 	err = repo.DeleteOverride(ctx, domain.TemplateKeyOutboxCommunity, channelID)
 	require.NoError(t, err)
 
-	found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxCommunity, &channelID)
+	_, found, err := repo.FindByKeyAndChannel(ctx, domain.TemplateKeyOutboxCommunity, &channelID)
 	require.NoError(t, err)
-	assert.Nil(t, found)
+	assert.False(t, found)
 }
 
 func TestTemplateRepository_GetByKey(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err := repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, nil, "default video")
 	require.NoError(t, err)
 
 	ch1 := "room_1"
+
 	_, err = repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, &ch1, "override 1")
 	require.NoError(t, err)
 
 	ch2 := "room_2"
+
 	_, err = repo.Upsert(ctx, domain.TemplateKeyOutboxVideo, &ch2, "override 2")
 	require.NoError(t, err)
 
@@ -194,13 +213,14 @@ func TestTemplateRepository_GetByKey(t *testing.T) {
 
 func TestTemplateRepository_Revisions(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyOutboxMilestone, nil, "v1")
 	require.NoError(t, err)
 
 	err = repo.CreateRevision(ctx, tmpl.ID, "v0 old body")
 	require.NoError(t, err)
+
 	err = repo.CreateRevision(ctx, tmpl.ID, "v0.5 older body")
 	require.NoError(t, err)
 
@@ -208,14 +228,14 @@ func TestTemplateRepository_Revisions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, revisions, 2)
 
-	rev, err := repo.GetRevisionByID(ctx, revisions[0].ID)
+	_, found, err := repo.GetRevisionByID(ctx, revisions[0].ID)
 	require.NoError(t, err)
-	assert.NotNil(t, rev)
+	assert.True(t, found)
 }
 
 func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
 	require.NoError(t, err)
@@ -235,7 +255,7 @@ func TestTemplateRepository_PruneOldRevisions(t *testing.T) {
 
 func TestTemplateRepository_PruneOldRevisions_KeepZeroNoop(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tmpl, err := repo.Upsert(ctx, domain.TemplateKeyCmdHelp, nil, "help")
 	require.NoError(t, err)
@@ -255,14 +275,17 @@ func TestTemplateRepository_PruneOldRevisions_KeepZeroNoop(t *testing.T) {
 
 func newTemplateRepositoryWithPool(t *testing.T) (*repository.TemplateRepository, *pgxpool.Pool) {
 	t.Helper()
+
 	pool := dbtest.NewPool(t)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+
 	return repository.NewTemplateRepository(pool, logger), pool
 }
 
 func blockRevisionInserts(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	ctx := context.Background()
+
+	ctx := t.Context()
 	_, err := pool.Exec(ctx, `CREATE OR REPLACE FUNCTION test_block_revision_insert() RETURNS trigger AS $$
 BEGIN
 	RAISE EXCEPTION 'revision insert blocked by test';
@@ -276,7 +299,7 @@ $$ LANGUAGE plpgsql`)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if _, err := pool.Exec(context.Background(),
+		if _, err := pool.Exec(context.WithoutCancel(ctx),
 			`DROP TRIGGER IF EXISTS test_block_revision_insert ON notification_template_revisions`); err != nil {
 			t.Errorf("drop test trigger: %v", err)
 		}
@@ -285,7 +308,7 @@ $$ LANGUAGE plpgsql`)
 
 func TestTemplateRepository_UpsertWithRevision(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_UPSERT_WITH_REVISION")
 
 	created, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
@@ -314,7 +337,7 @@ func TestTemplateRepository_UpsertWithRevision(t *testing.T) {
 
 func TestTemplateRepository_UpsertWithRevision_IdenticalBodyRecordsNoRevision(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_UPSERT_WITH_REVISION_NOOP")
 
 	created, _, err := repo.UpsertWithRevision(ctx, key, nil, "same", 5)
@@ -344,7 +367,7 @@ func TestTemplateRepository_UpsertWithRevision_IdenticalBodyRecordsNoRevision(t 
 
 func TestTemplateRepository_UpsertWithRevision_Override(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_UPSERT_WITH_REVISION_OVERRIDE")
 	channelID := "room_i06"
 
@@ -368,7 +391,7 @@ func TestTemplateRepository_UpsertWithRevision_Override(t *testing.T) {
 
 func TestTemplateRepository_UpsertWithRevision_RollsBackWhenRevisionInsertFails(t *testing.T) {
 	repo, pool := newTemplateRepositoryWithPool(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_ROLLBACK")
 
 	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
@@ -380,12 +403,12 @@ func TestTemplateRepository_UpsertWithRevision_RollsBackWhenRevisionInsertFails(
 	require.Error(t, err)
 	assert.Nil(t, tmpl)
 	assert.Nil(t, previousBody)
-	assert.ErrorContains(t, err, "create revision")
+	require.ErrorContains(t, err, "create revision")
 
-	found, err := repo.FindByKeyAndChannel(ctx, key, nil)
+	persisted, found, err := repo.FindByKeyAndChannel(ctx, key, nil)
 	require.NoError(t, err)
-	require.NotNil(t, found)
-	assert.Equal(t, "v1", found.Body)
+	require.True(t, found)
+	assert.Equal(t, "v1", persisted.Body)
 
 	revisions, err := repo.GetRevisions(ctx, seeded.ID, 10)
 	require.NoError(t, err)
@@ -394,7 +417,7 @@ func TestTemplateRepository_UpsertWithRevision_RollsBackWhenRevisionInsertFails(
 
 func TestTemplateRepository_UpsertWithRevision_CanceledContextWritesNothing(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_CANCELED")
 
 	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
@@ -405,14 +428,14 @@ func TestTemplateRepository_UpsertWithRevision_CanceledContextWritesNothing(t *t
 
 	tmpl, previousBody, err := repo.UpsertWithRevision(canceledCtx, key, nil, "v2", 0)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, tmpl)
 	assert.Nil(t, previousBody)
 
-	found, err := repo.FindByKeyAndChannel(ctx, key, nil)
+	persisted, found, err := repo.FindByKeyAndChannel(ctx, key, nil)
 	require.NoError(t, err)
-	require.NotNil(t, found)
-	assert.Equal(t, "v1", found.Body)
+	require.True(t, found)
+	assert.Equal(t, "v1", persisted.Body)
 
 	revisions, err := repo.GetRevisions(ctx, seeded.ID, 10)
 	require.NoError(t, err)
@@ -421,7 +444,7 @@ func TestTemplateRepository_UpsertWithRevision_CanceledContextWritesNothing(t *t
 
 func TestTemplateRepository_UpsertWithRevision_PrunesInSameTransaction(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_PRUNE")
 
 	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
@@ -444,7 +467,7 @@ func TestTemplateRepository_UpsertWithRevision_PrunesInSameTransaction(t *testin
 
 func TestTemplateRepository_UpsertWithRevision_KeepZeroSkipsPrune(t *testing.T) {
 	repo := newTemplateRepository(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	key := domain.TemplateKey("I06_PRUNE_ZERO")
 
 	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "v1", 0)
@@ -462,48 +485,47 @@ func TestTemplateRepository_UpsertWithRevision_KeepZeroSkipsPrune(t *testing.T) 
 	assert.Len(t, revisions, 4)
 }
 
-// 동시 저장이 서로의 revision 사이에 끼어들면 목록이 더 오래된 본문을 최신으로
-// 보여준다. 각 호출이 돌려준 previousBody로 실제 교체 순서를 복원해 GetRevisions
-// 순서와 대조한다.
-func TestTemplateRepository_UpsertWithRevision_ConcurrentChainOrdering(t *testing.T) {
-	repo := newTemplateRepository(t)
-	ctx := context.Background()
-	key := domain.TemplateKey("I06_CONCURRENT")
+const concurrentChainWriters = 8
 
-	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "b0", 0)
-	require.NoError(t, err)
+type revisionLink struct {
+	body     string
+	previous string
+}
 
-	const writers = 8
+func concurrentUpsertLinks(t *testing.T, repo *repository.TemplateRepository, key domain.TemplateKey) map[string]revisionLink {
+	t.Helper()
 
-	type link struct {
-		body     string
-		previous string
-	}
+	ctx := t.Context()
 
 	var (
 		mu      sync.Mutex
-		links   = make(map[string]link, writers)
+		links   = make(map[string]revisionLink, concurrentChainWriters)
 		wg      sync.WaitGroup
-		failure = make(chan error, writers)
+		failure = make(chan error, concurrentChainWriters)
 	)
 
-	for i := range writers {
+	for i := range concurrentChainWriters {
 		wg.Go(func() {
 			body := fmt.Sprintf("w%d", i)
+
 			tmpl, previousBody, err := repo.UpsertWithRevision(ctx, key, nil, body, 0)
 			if err != nil {
 				failure <- fmt.Errorf("writer %d: %w", i, err)
 				return
 			}
+
 			if tmpl == nil || previousBody == nil {
 				failure <- fmt.Errorf("writer %d: missing previous body", i)
 				return
 			}
+
 			mu.Lock()
 			defer mu.Unlock()
-			links[*previousBody] = link{body: body, previous: *previousBody}
+
+			links[*previousBody] = revisionLink{body: body, previous: *previousBody}
 		})
 	}
+
 	wg.Wait()
 	close(failure)
 
@@ -511,26 +533,45 @@ func TestTemplateRepository_UpsertWithRevision_ConcurrentChainOrdering(t *testin
 		require.NoError(t, err)
 	}
 
-	require.Len(t, links, writers, "두 writer가 같은 previousBody를 봤다면 갱신이 유실된 것이다")
+	return links
+}
+
+// 동시 저장이 서로의 revision 사이에 끼어들면 목록이 더 오래된 본문을 최신으로
+// 보여준다. 각 호출이 돌려준 previousBody로 실제 교체 순서를 복원해 GetRevisions
+// 순서와 대조한다.
+func TestTemplateRepository_UpsertWithRevision_ConcurrentChainOrdering(t *testing.T) {
+	repo := newTemplateRepository(t)
+	ctx := t.Context()
+	key := domain.TemplateKey("I06_CONCURRENT")
+
+	seeded, _, err := repo.UpsertWithRevision(ctx, key, nil, "b0", 0)
+	require.NoError(t, err)
+
+	links := concurrentUpsertLinks(t, repo, key)
+	require.Len(t, links, concurrentChainWriters, "두 writer가 같은 previousBody를 봤다면 갱신이 유실된 것이다")
 
 	var expectedNewestFirst []string
+
 	for current := "b0"; ; {
 		next, ok := links[current]
 		if !ok {
 			break
 		}
+
 		expectedNewestFirst = append([]string{next.previous}, expectedNewestFirst...)
 		current = next.body
 	}
-	require.Len(t, expectedNewestFirst, writers)
+
+	require.Len(t, expectedNewestFirst, concurrentChainWriters)
 
 	revisions, err := repo.GetRevisions(ctx, seeded.ID, 100)
 	require.NoError(t, err)
-	require.Len(t, revisions, writers)
+	require.Len(t, revisions, concurrentChainWriters)
 
 	actual := make([]string, 0, len(revisions))
 	for _, revision := range revisions {
 		actual = append(actual, revision.Body)
 	}
+
 	assert.Equal(t, expectedNewestFirst, actual)
 }

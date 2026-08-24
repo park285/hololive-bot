@@ -22,8 +22,8 @@ package scraping
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"log/slog"
 	"net"
 	"net/http"
@@ -31,9 +31,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"golang.org/x/net/proxy"
 
-	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 var ytDefaults = settings.DefaultYouTubeOperationalConfig()
@@ -56,6 +57,7 @@ func (c *Client) initHTTPClients() {
 
 	if c.httpClient != nil {
 		c.activateInjectedHTTPClient()
+
 		return
 	}
 
@@ -74,8 +76,10 @@ func (c *Client) initDirectHTTPClient() {
 	if err != nil {
 		slog.Error("Failed to create direct scraper client, using fallback default transport",
 			"error", err)
+
 		directClient = httputil.NewClient(ytDefaults.ScraperHTTPTimeout)
 	}
+
 	c.directHTTPClient = directClient
 	c.directTransport = directTransport
 }
@@ -84,12 +88,15 @@ func (c *Client) initProxyHTTPClient() {
 	if c.proxyConfig.URL == "" {
 		return
 	}
+
 	proxyClient, proxyTransport, err := createHTTPClient(ProxyConfig{Enabled: true, URL: c.proxyConfig.URL})
 	if err != nil {
 		slog.Error("Failed to create proxy scraper client, proxy toggle unavailable until restart",
 			"error", err)
+
 		return
 	}
+
 	c.proxyHTTPClient = proxyClient
 	c.proxyTransport = proxyTransport
 }
@@ -98,11 +105,13 @@ func (c *Client) activateConfiguredHTTPClient() {
 	if c.proxyConfig.Enabled && c.proxyHTTPClient != nil {
 		c.activeHTTPClient.Store(c.proxyHTTPClient)
 		c.proxyEnabled.Store(true)
+
 		return
 	}
 
 	c.activeHTTPClient.Store(c.directHTTPClient)
 	c.proxyEnabled.Store(false)
+
 	if c.proxyConfig.Enabled && c.proxyHTTPClient == nil {
 		slog.Warn("Scraper proxy requested but unavailable, starting in direct mode")
 	}
@@ -118,22 +127,28 @@ func (c *Client) SetProxyEnabled(enabled bool) bool {
 	if enabled {
 		if c.proxyHTTPClient == nil {
 			c.proxyEnabled.Store(false)
+
 			if c.directHTTPClient != nil {
 				c.activeHTTPClient.Store(c.directHTTPClient)
 			}
+
 			return false
 		}
+
 		c.activeHTTPClient.Store(c.proxyHTTPClient)
 		c.proxyEnabled.Store(true)
 		c.proxyHealth.Arm()
+
 		return true
 	}
 
 	if c.directHTTPClient == nil {
 		return false
 	}
+
 	c.activeHTTPClient.Store(c.directHTTPClient)
 	c.proxyEnabled.Store(false)
+
 	return true
 }
 
@@ -145,12 +160,15 @@ func (c *Client) currentHTTPClient() *http.Client {
 	if c.httpClient != nil {
 		return c.httpClient
 	}
+
 	if active := c.activeHTTPClient.Load(); active != nil {
 		return active
 	}
+
 	if c.directHTTPClient != nil {
 		return c.directHTTPClient
 	}
+
 	return httputil.NewClient(ytDefaults.ScraperHTTPTimeout)
 }
 
@@ -169,16 +187,20 @@ func (c *Client) closeIdleConnections() {
 
 func closeIdleTransports(transports []*http.Transport) map[*http.Transport]struct{} {
 	seen := make(map[*http.Transport]struct{})
+
 	for _, transport := range transports {
 		if transport == nil {
 			continue
 		}
+
 		if _, exists := seen[transport]; exists {
 			continue
 		}
+
 		seen[transport] = struct{}{}
 		transport.CloseIdleConnections()
 	}
+
 	return seen
 }
 
@@ -192,29 +214,37 @@ func closeIdleClientTransport(seen map[*http.Transport]struct{}, client *http.Cl
 	if client == nil {
 		return
 	}
+
 	transport, ok := client.Transport.(interface{ CloseIdleConnections() })
 	if !ok || transport == nil {
 		return
 	}
+
 	httpTransport, ok := unwrapHTTPTransport(client.Transport)
 	if !ok || httpTransport == nil {
 		transport.CloseIdleConnections()
+
 		return
 	}
+
 	if _, exists := seen[httpTransport]; exists {
 		return
 	}
+
 	seen[httpTransport] = struct{}{}
+
 	transport.CloseIdleConnections()
 }
 
-// createHTTPClient: 프록시 설정에 따라 HTTP 클라이언트 생성
+// createHTTPClient: 프록시 설정에 따라 HTTP 클라이언트 생성.
 func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, error) {
-	baseTransport := newScraperTransport(true)
+	baseTransport := newScraperTransport()
 
 	if !proxyConfig.Enabled || proxyConfig.URL == "" {
 		slog.Info("Scraper using direct connection (no proxy)")
+
 		baseTransport.DialContext = newDirectDialContext()
+
 		return &http.Client{
 			Transport: baseTransport,
 			Timeout:   ytDefaults.ScraperHTTPTimeout,
@@ -225,8 +255,9 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid proxy URL: %w", err)
 	}
-	if err := validateSOCKS5ProxyURL(parsedURL); err != nil {
-		return nil, nil, err
+
+	if validateErr := validateSOCKS5ProxyURL(parsedURL); validateErr != nil {
+		return nil, nil, fmt.Errorf("validate SOCKS5 proxy URL: %w", validateErr)
 	}
 
 	auth := newProxyAuth(parsedURL)
@@ -241,7 +272,8 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 		return nil, nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
 	}
 
-	transport := newScraperTransport(false)
+	transport := newScraperTransport()
+
 	transport.DialContext = newSOCKS5DialContext(dialer)
 
 	// #nosec G706 -- proxy host는 신뢰된 런타임 설정에서 로드된다.
@@ -257,30 +289,39 @@ func createHTTPClient(proxyConfig ProxyConfig) (*http.Client, *http.Transport, e
 
 func validateSOCKS5ProxyURL(parsedURL *url.URL) error {
 	if parsedURL == nil {
-		return fmt.Errorf("proxy URL is nil")
+		return errors.New("proxy URL is nil")
 	}
+
 	if parsedURL.Scheme != "socks5" && parsedURL.Scheme != "socks5h" {
 		return fmt.Errorf("unsupported proxy scheme: %s", parsedURL.Scheme)
 	}
+
 	if strings.TrimSpace(parsedURL.Host) == "" {
-		return fmt.Errorf("proxy URL missing host")
+		return errors.New("proxy URL missing host")
 	}
+
 	host, port, err := net.SplitHostPort(parsedURL.Host)
 	if err != nil {
 		return fmt.Errorf("proxy URL host must include port: %w", err)
 	}
+
 	if strings.TrimSpace(host) == "" {
-		return fmt.Errorf("proxy URL missing host")
+		return errors.New("proxy URL missing host")
 	}
+
 	if strings.TrimSpace(port) == "" {
-		return fmt.Errorf("proxy URL missing port")
+		return errors.New("proxy URL missing port")
 	}
+
 	return nil
 }
 
-func newScraperTransport(forceHTTP2 bool) *http.Transport {
+func newScraperTransport() *http.Transport {
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+
 	return &http.Transport{
-		ForceAttemptHTTP2:     forceHTTP2,
+		Protocols:             protocols,
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
 		IdleConnTimeout:       90 * time.Second,
@@ -295,6 +336,7 @@ func newDirectDialContext() func(ctx context.Context, network, addr string) (net
 		Timeout:   ytDefaults.ScraperDialTimeout,
 		KeepAlive: 30 * time.Second,
 	}
+
 	return dialer.DialContext
 }
 
@@ -304,6 +346,7 @@ func newProxyAuth(parsedURL *url.URL) *proxy.Auth {
 	}
 
 	password, _ := parsedURL.User.Password()
+
 	return &proxy.Auth{
 		User:     parsedURL.User.Username(),
 		Password: password,
@@ -326,6 +369,7 @@ func newContextSOCKS5DialContext(contextDialer proxy.ContextDialer) func(ctx con
 		if err != nil {
 			return nil, fmt.Errorf("proxy dial failed: %w", err)
 		}
+
 		return closeProxyConnWhenCanceled(ctx, conn)
 	}
 }
@@ -334,9 +378,11 @@ func closeProxyConnWhenCanceled(ctx context.Context, conn net.Conn) (net.Conn, e
 	if ctx.Err() == nil {
 		return conn, nil
 	}
+
 	if closeErr := conn.Close(); closeErr != nil {
 		return nil, fmt.Errorf("close canceled proxy connection: %w", closeErr)
 	}
+
 	return nil, fmt.Errorf("proxy dial canceled: %w", ctx.Err())
 }
 
@@ -345,5 +391,6 @@ func unwrapHTTPTransport(roundTripper http.RoundTripper) (*http.Transport, bool)
 	if ok {
 		return transport, true
 	}
+
 	return nil, false
 }

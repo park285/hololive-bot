@@ -22,7 +22,7 @@ package scraper
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -55,17 +55,20 @@ type FeedScheduler struct {
 // NewFeedScheduler는 FeedScheduler를 생성한다.
 func NewFeedScheduler(service *Service, config FeedScheduleConfig, logger *slog.Logger) (*FeedScheduler, error) {
 	if service == nil {
-		return nil, fmt.Errorf("new feed scheduler: service is nil")
+		return nil, errors.New("new feed scheduler: service is nil")
 	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	normalized := config
 	defaults := DefaultFeedScheduleConfig()
+
 	if normalized.RunTimeout <= 0 {
 		normalized.RunTimeout = defaults.RunTimeout
 	}
+
 	if len(normalized.RetryDelays) == 0 {
 		normalized.RetryDelays = defaults.RetryDelays
 	}
@@ -84,6 +87,7 @@ func (s *FeedScheduler) Start(ctx context.Context) {
 	if s == nil {
 		return
 	}
+
 	s.wg.Add(1)
 	panicguard.Go(s.logger, "major-event-feed-scheduler", func() {
 		s.run(ctx)
@@ -95,6 +99,7 @@ func (s *FeedScheduler) Stop() {
 	if s == nil {
 		return
 	}
+
 	s.stopOnce.Do(func() {
 		close(s.stopCh)
 	})
@@ -135,10 +140,12 @@ func (s *FeedScheduler) waitUntilNextRun(
 	case <-ctx.Done():
 		timer.Stop()
 		s.logger.Info("Major event feed scheduler stopped by context")
+
 		return false
 	case <-s.stopCh:
 		timer.Stop()
 		s.logger.Info("Major event feed scheduler stopped")
+
 		return false
 	case <-timer.C:
 		return true
@@ -154,6 +161,7 @@ func (s *FeedScheduler) executeCycle(ctx context.Context, trigger scrapeTriggerT
 
 	if err != nil {
 		s.handleFailedScrape(trigger, scheduledAt, completedAt, err)
+
 		return
 	}
 
@@ -184,6 +192,7 @@ func (s *FeedScheduler) handleFailedScrape(
 			slog.String("error", scrapeErr.Error()),
 			slog.Int("remaining_retries", s.retryRunCount()),
 		)
+
 		return
 	}
 
@@ -205,8 +214,10 @@ func (s *FeedScheduler) nextRun(now time.Time) (time.Time, scrapeTriggerType) {
 
 	if !nextRetry.IsZero() && (nextRetry.Before(nextRegular) || nextRetry.Equal(nextRegular)) {
 		s.popRetryRun()
+
 		return nextRetry, scrapeTriggerRetry
 	}
+
 	return nextRegular, scrapeTriggerRegular
 }
 
@@ -214,6 +225,7 @@ func (s *FeedScheduler) now() time.Time {
 	if s.nowFn != nil {
 		return s.nowFn().UTC()
 	}
+
 	return time.Now().UTC()
 }
 
@@ -234,7 +246,9 @@ func (s *FeedScheduler) clearRetryRuns() int {
 	defer s.retryMu.Unlock()
 
 	cleared := len(s.retryRuns)
+
 	s.retryRuns = nil
+
 	return cleared
 }
 
@@ -245,6 +259,7 @@ func (s *FeedScheduler) peekRetryRun() time.Time {
 	if len(s.retryRuns) == 0 {
 		return time.Time{}
 	}
+
 	return s.retryRuns[0]
 }
 
@@ -255,11 +270,13 @@ func (s *FeedScheduler) popRetryRun() {
 	if len(s.retryRuns) == 0 {
 		return
 	}
+
 	s.retryRuns = s.retryRuns[1:]
 }
 
 func (s *FeedScheduler) retryRunCount() int {
 	s.retryMu.Lock()
 	defer s.retryMu.Unlock()
+
 	return len(s.retryRuns)
 }

@@ -8,8 +8,12 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
+)
+
+const (
+	testChzzkID1   = "cz-1"
+	testYouTubeID1 = "yt-1"
 )
 
 type stubOrgStreamSource struct {
@@ -38,6 +42,7 @@ func (s *stubMemberProvider) FindMemberByChannelID(channelID string) *domain.Mem
 			return member
 		}
 	}
+
 	return nil
 }
 
@@ -46,6 +51,7 @@ func (s *stubMemberProvider) FindMemberByAlias(string) *domain.Member { return n
 func (s *stubMemberProvider) GetChannelIDs() []string                 { return nil }
 func (s *stubMemberProvider) GetAllMembers() []*domain.Member {
 	s.getAllCalls.Add(1)
+
 	return s.members
 }
 func (s *stubMemberProvider) WithContext(context.Context) domain.MemberDataProvider { return s }
@@ -69,16 +75,20 @@ func (s *stubChzzkClient) GetLivesByChannelIDs(context.Context, []string) ([]chz
 
 func (s *stubChzzkClient) GetScheduledLives(_ context.Context, channelID string) ([]chzzk.ScheduledLive, error) {
 	s.scheduledCalls.Add(1)
+
 	current := s.inFlight.Add(1)
+
 	for {
 		maxSeen := s.maxInFlight.Load()
 		if current <= maxSeen {
 			break
 		}
+
 		if s.maxInFlight.CompareAndSwap(maxSeen, current) {
 			break
 		}
 	}
+
 	defer s.inFlight.Add(-1)
 
 	if gate := s.scheduledDelay[channelID]; gate != nil {
@@ -96,7 +106,7 @@ func TestServiceGetLiveStreamsByOrg_StelliveIncludesChzzkLive(t *testing.T) {
 		&stubChzzkClient{
 			lives: []chzzk.LiveData{
 				{
-					ChannelID:             "cz-1",
+					ChannelID:             testChzzkID1,
 					LiveTitle:             "치지직 라이브",
 					LiveThumbnailImageURL: "https://example.com/live.jpg",
 				},
@@ -105,10 +115,10 @@ func TestServiceGetLiveStreamsByOrg_StelliveIncludesChzzkLive(t *testing.T) {
 		&stubMemberProvider{
 			members: []*domain.Member{
 				{
-					ChannelID:      "yt-1",
+					ChannelID:      testYouTubeID1,
 					Name:           "유니",
 					Org:            constants.HolodexAPIParams.OrgStellive,
-					ChzzkChannelID: "cz-1",
+					ChzzkChannelID: testChzzkID1,
 				},
 			},
 		},
@@ -138,7 +148,7 @@ func TestServiceGetUpcomingStreamsByOrg_AllIncludesStelliveSchedules(t *testing.
 		&stubOrgStreamSource{},
 		&stubChzzkClient{
 			scheduledLives: map[string][]chzzk.ScheduledLive{
-				"cz-1": {
+				testChzzkID1: {
 					{
 						LiveTitle:        "치지직 예정 방송",
 						ScheduledStartAt: scheduled,
@@ -149,10 +159,10 @@ func TestServiceGetUpcomingStreamsByOrg_AllIncludesStelliveSchedules(t *testing.
 		&stubMemberProvider{
 			members: []*domain.Member{
 				{
-					ChannelID:      "yt-1",
+					ChannelID:      testYouTubeID1,
 					Name:           "유니",
 					Org:            constants.HolodexAPIParams.OrgStellive,
-					ChzzkChannelID: "cz-1",
+					ChzzkChannelID: testChzzkID1,
 				},
 			},
 		},
@@ -167,7 +177,7 @@ func TestServiceGetUpcomingStreamsByOrg_AllIncludesStelliveSchedules(t *testing.
 		t.Fatalf("len(streams) = %d, want 1", len(streams))
 	}
 
-	if streams[0].ChannelID != "yt-1" {
+	if streams[0].ChannelID != testYouTubeID1 {
 		t.Fatalf("ChannelID = %q, want yt-1", streams[0].ChannelID)
 	}
 
@@ -185,10 +195,10 @@ func TestServiceStelliveMerge_ReusesFilteredMembersAcrossRequests(t *testing.T) 
 	memberProvider := &stubMemberProvider{
 		members: []*domain.Member{
 			{
-				ChannelID:      "yt-1",
+				ChannelID:      testYouTubeID1,
 				Name:           "유니",
 				Org:            constants.HolodexAPIParams.OrgStellive,
-				ChzzkChannelID: "cz-1",
+				ChzzkChannelID: testChzzkID1,
 			},
 		},
 	}
@@ -198,13 +208,13 @@ func TestServiceStelliveMerge_ReusesFilteredMembersAcrossRequests(t *testing.T) 
 		&stubChzzkClient{
 			lives: []chzzk.LiveData{
 				{
-					ChannelID:             "cz-1",
+					ChannelID:             testChzzkID1,
 					LiveTitle:             "치지직 라이브",
 					LiveThumbnailImageURL: "https://example.com/live.jpg",
 				},
 			},
 			scheduledLives: map[string][]chzzk.ScheduledLive{
-				"cz-1": {
+				testChzzkID1: {
 					{
 						LiveTitle:        "치지직 예정 방송",
 						ScheduledStartAt: scheduled,
@@ -218,6 +228,7 @@ func TestServiceStelliveMerge_ReusesFilteredMembersAcrossRequests(t *testing.T) 
 	if _, err := service.GetLiveStreamsByOrg(t.Context(), constants.HolodexAPIParams.OrgStellive); err != nil {
 		t.Fatalf("GetLiveStreamsByOrg() error = %v", err)
 	}
+
 	if _, err := service.GetUpcomingStreamsByOrg(t.Context(), 24, constants.HolodexAPIParams.OrgStellive); err != nil {
 		t.Fatalf("GetUpcomingStreamsByOrg() error = %v", err)
 	}
@@ -236,12 +247,12 @@ func TestServiceGetUpcomingStreamsByOrg_StelliveScheduleLookupsRunConcurrently(t
 
 	chzzkClient := &stubChzzkClient{
 		scheduledLives: map[string][]chzzk.ScheduledLive{
-			"cz-1": {{LiveTitle: "방송 1", ScheduledStartAt: scheduled1}},
-			"cz-2": {{LiveTitle: "방송 2", ScheduledStartAt: scheduled2}},
+			testChzzkID1: {{LiveTitle: "방송 1", ScheduledStartAt: scheduled1}},
+			"cz-2":       {{LiveTitle: "방송 2", ScheduledStartAt: scheduled2}},
 		},
 		scheduledDelay: map[string]chan struct{}{
-			"cz-1": make(chan struct{}),
-			"cz-2": make(chan struct{}),
+			testChzzkID1: make(chan struct{}),
+			"cz-2":       make(chan struct{}),
 		},
 	}
 
@@ -251,10 +262,10 @@ func TestServiceGetUpcomingStreamsByOrg_StelliveScheduleLookupsRunConcurrently(t
 		&stubMemberProvider{
 			members: []*domain.Member{
 				{
-					ChannelID:      "yt-1",
+					ChannelID:      testYouTubeID1,
 					Name:           "유니",
 					Org:            constants.HolodexAPIParams.OrgStellive,
-					ChzzkChannelID: "cz-1",
+					ChzzkChannelID: testChzzkID1,
 				},
 				{
 					ChannelID:      "yt-2",
@@ -267,28 +278,33 @@ func TestServiceGetUpcomingStreamsByOrg_StelliveScheduleLookupsRunConcurrently(t
 	)
 
 	errCh := make(chan error, 1)
+
 	go func() {
-		_, err := service.GetUpcomingStreamsByOrg(context.Background(), 24, constants.HolodexAPIParams.OrgStellive)
+		_, err := service.GetUpcomingStreamsByOrg(t.Context(), 24, constants.HolodexAPIParams.OrgStellive)
 		errCh <- err
 	}()
 
 	deadline := time.After(200 * time.Millisecond)
+
 	for chzzkClient.scheduledCalls.Load() < 2 {
 		select {
 		case <-deadline:
-			close(chzzkClient.scheduledDelay["cz-1"])
+			close(chzzkClient.scheduledDelay[testChzzkID1])
 			close(chzzkClient.scheduledDelay["cz-2"])
+
 			if err := <-errCh; err != nil {
 				t.Fatalf("GetUpcomingStreamsByOrg error = %v", err)
 			}
+
 			t.Fatal("expected both Chzzk schedule lookups to start before the first one completed")
 		default:
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
 
-	close(chzzkClient.scheduledDelay["cz-1"])
+	close(chzzkClient.scheduledDelay[testChzzkID1])
 	close(chzzkClient.scheduledDelay["cz-2"])
+
 	if err := <-errCh; err != nil {
 		t.Fatalf("GetUpcomingStreamsByOrg error = %v", err)
 	}

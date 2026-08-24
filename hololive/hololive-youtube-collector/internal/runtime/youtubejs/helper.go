@@ -44,35 +44,45 @@ type Helper struct {
 
 func Start(ctx context.Context, config *Config) (*Helper, *RPC, error) {
 	if err := requireHelperPlatform(); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("require helper platform: %w", err)
 	}
+
 	cfg, err := resolveConfig(config)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("resolve config: %w", err)
 	}
+
 	runtimeDir, socketPath, err := createRuntimeDir(cfg.RuntimeBaseDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create runtime dir: %w", err)
 	}
+
 	helper := newHelper(runtimeDir, socketPath, &cfg)
 	if err := helper.spawn(&cfg); err != nil {
-		return nil, nil, failStart(ctx, helper, err)
+		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
 	}
+
 	startCtx, cancel := withOptionalTimeout(ctx, cfg.StartupTimeout)
+
 	defer cancel()
+
 	if err := helper.waitForSocket(startCtx); err != nil {
-		return nil, nil, failStart(ctx, helper, err)
+		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
 	}
+
 	if err := verifyHelperSocket(socketPath); err != nil {
-		return nil, nil, failStart(ctx, helper, err)
+		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
 	}
+
 	rpc := helper.attachRPC(&cfg)
 	if err := helper.bootstrapReady(startCtx, &cfg); err != nil {
-		return nil, nil, failStart(ctx, helper, err)
+		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
 	}
+
 	if err := helper.Healthy(startCtx); err != nil {
-		return nil, nil, failStart(ctx, helper, err)
+		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
 	}
+
 	return helper, rpc, nil
 }
 
@@ -95,8 +105,10 @@ func (h *Helper) Done() <-chan struct{} {
 	if h == nil {
 		closed := make(chan struct{})
 		close(closed)
+
 		return closed
 	}
+
 	return h.waited
 }
 
@@ -104,9 +116,11 @@ func (h *Helper) ProtocolVersion() int {
 	if h == nil {
 		return 0
 	}
+
 	if h.bootstrap.ProtocolVersion != 0 {
 		return int(h.bootstrap.ProtocolVersion)
 	}
+
 	return int(ProtocolVersion)
 }
 
@@ -114,6 +128,7 @@ func (h *Helper) Exited() bool {
 	if h == nil || h.waited == nil {
 		return true
 	}
+
 	select {
 	case <-h.waited:
 		return true
@@ -126,6 +141,7 @@ func (h *Helper) ExitError() error {
 	if h == nil || !h.Exited() {
 		return nil
 	}
+
 	return h.waitErr
 }
 
@@ -133,6 +149,7 @@ func (h *Helper) ForcedKillCount() int {
 	if h == nil {
 		return 0
 	}
+
 	return int(h.forcedKills.Load())
 }
 
@@ -141,7 +158,9 @@ func (h *Helper) spawn(cfg *Config) error {
 	if timeoutMS <= 0 {
 		timeoutMS = defaultHelperTimeout.Milliseconds()
 	}
+
 	args := make([]string, 0, 10+len(cfg.extraArgs))
+
 	args = append(args,
 		cfg.NodePath,
 		cfg.ScriptPath,
@@ -151,6 +170,7 @@ func (h *Helper) spawn(cfg *Config) error {
 		"--shutdown-timeout-ms", strconv.FormatInt(cfg.ShutdownTimeout.Milliseconds(), 10),
 	)
 	args = append(args, cfg.extraArgs...)
+
 	cmd := &exec.Cmd{
 		Path:   cfg.NodePath,
 		Args:   args,
@@ -158,36 +178,46 @@ func (h *Helper) spawn(cfg *Config) error {
 		Stderr: os.Stderr,
 		Env:    helperProcessEnv(os.Environ()),
 	}
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start youtube.js helper: %w", err)
 	}
+
 	h.cmd = cmd
+
 	panicguard.Go(nil, "youtubejs-helper-wait", func() {
 		defer close(h.waited)
+
 		h.waitErr = cmd.Wait()
 	})
+
 	return nil
 }
 
 func (h *Helper) attachRPC(cfg *Config) *RPC {
+	//nolint:revive // unix 소켓 전송이라 URL 호스트는 무시되며, https로 바꾸면 helper가 제공하지 않는 TLS 핸드셰이크를 시도하게 된다.
 	rpc := NewRPC(unixClient(h.socketPath, cfg.RequestTimeout), "http://youtubejs", cfg.Limiter)
 	if cfg.ResponseBodyLimit > 0 {
 		rpc.bodyLimit = cfg.ResponseBodyLimit
 	}
+
 	h.rpc = rpc
 	h.health = unixClient(h.socketPath, cfg.HealthTimeout)
 	h.endpoint = rpc.endpoint
+
 	return rpc
 }
 
 func (h *Helper) waitForSocket(ctx context.Context) error {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
+
 	for {
 		ready, err := h.waitForSocketEvent(ctx, ticker.C)
 		if err != nil {
-			return err
+			return fmt.Errorf("wait for socket event: %w", err)
 		}
+
 		if ready {
 			return nil
 		}
@@ -199,10 +229,21 @@ func (h *Helper) waitForSocketEvent(ctx context.Context, tick <-chan time.Time) 
 	case <-ctx.Done():
 		return false, fmt.Errorf("start youtube.js helper: wait for socket: %w", ctx.Err())
 	case <-h.waited:
-		return false, helperExitedBeforeReady(h.waitErr)
+		return false, fmt.Errorf("helper exited before ready: %w", helperExitedBeforeReady(h.waitErr))
 	case <-tick:
-		return helperSocketReady(h.socketPath)
+		out, err := helperSocketReadyResult(h.socketPath)
+
+		return out, errors.Join(err)
 	}
+}
+
+func helperSocketReadyResult(socketPath string) (bool, error) {
+	out, err := helperSocketReady(socketPath)
+	if err != nil {
+		return out, fmt.Errorf("helper socket ready: %w", err)
+	}
+
+	return out, nil
 }
 
 func helperSocketReady(socketPath string) (bool, error) {
@@ -211,11 +252,14 @@ func helperSocketReady(socketPath string) (bool, error) {
 		if os.IsNotExist(err) || helperStarting(err) {
 			return false, nil
 		}
+
 		return false, fmt.Errorf("start youtube.js helper: inspect socket: %w", err)
 	}
+
 	if info.Mode().Type() != os.ModeSocket && !info.Mode().IsRegular() {
-		return false, fmt.Errorf("start youtube.js helper: unexpected socket path type")
+		return false, errors.New("start youtube.js helper: unexpected socket path type")
 	}
+
 	return true, nil
 }
 
@@ -224,18 +268,22 @@ func createRuntimeDir(base string) (runtimeDir, socketPath string, resultErr err
 	if err != nil {
 		return "", "", fmt.Errorf("start youtube.js helper: create runtime dir: %w", err)
 	}
+
 	if err := finalizeRuntimeDir(dir); err != nil {
 		return "", "", errors.Join(err, removeRuntimeDir(dir))
 	}
+
 	socketPath = filepath.Join(dir, helperSocketName)
 	if _, err := os.Lstat(socketPath); err == nil {
-		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: socket path already exists"), removeRuntimeDir(dir))
+		return "", "", errors.Join(errors.New("start youtube.js helper: socket path already exists"), removeRuntimeDir(dir))
 	} else if !os.IsNotExist(err) {
 		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: inspect socket path: %w", err), removeRuntimeDir(dir))
 	}
+
 	if len(socketPath) > maxUnixSocketPathBytes {
 		return "", "", errors.Join(fmt.Errorf("start youtube.js helper: socket path exceeds %d bytes", maxUnixSocketPathBytes), removeRuntimeDir(dir))
 	}
+
 	return dir, socketPath, nil
 }
 
@@ -243,6 +291,7 @@ func removeRuntimeDir(dir string) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove youtube.js helper runtime: %w", err)
 	}
+
 	return nil
 }
 
@@ -250,13 +299,16 @@ func finalizeRuntimeDir(dir string) error {
 	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // 비공개 디렉터리 탐색에는 소유자 실행 권한이 필요하다.
 		return fmt.Errorf("start youtube.js helper: chmod runtime dir: %w", err)
 	}
+
 	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		return fmt.Errorf("start youtube.js helper: resolve runtime dir: %w", err)
 	}
+
 	if resolved != dir {
-		return fmt.Errorf("start youtube.js helper: runtime dir must not be a symlink")
+		return errors.New("start youtube.js helper: runtime dir must not be a symlink")
 	}
+
 	return nil
 }
 
@@ -264,11 +316,13 @@ func unixClient(socketPath string, timeout time.Duration) *http.Client {
 	if timeout <= 0 {
 		timeout = defaultHelperTimeout
 	}
+
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var dialer net.Dialer
+
 				return dialer.DialContext(ctx, "unix", socketPath)
 			},
 		},
@@ -281,8 +335,9 @@ func helperStarting(err error) bool {
 
 func helperExitedBeforeReady(waitErr error) error {
 	if waitErr == nil {
-		return fmt.Errorf("start youtube.js helper: process exited before ready")
+		return errors.New("start youtube.js helper: process exited before ready")
 	}
+
 	return fmt.Errorf("start youtube.js helper: process exited before ready: %w", waitErr)
 }
 
@@ -290,9 +345,11 @@ func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Co
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
 	if timeout <= 0 {
 		return context.WithCancel(ctx)
 	}
+
 	return context.WithTimeout(ctx, timeout)
 }
 

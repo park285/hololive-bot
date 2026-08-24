@@ -4,12 +4,10 @@ import (
 	"context"
 	"log/slog"
 
+	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-
-	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
@@ -33,5 +31,6 @@ func buildAdminAPICommunityShortsOpsRepository(infra *sharedmodules.InfraModule)
 	if infra.Postgres == nil || infra.Postgres.GetPool() == nil {
 		return nil
 	}
+
 	return telemetry.NewRepository(infra.Postgres.GetPool())
 }

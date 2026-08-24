@@ -1,7 +1,6 @@
 package observation
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -12,10 +11,10 @@ import (
 
 func TestRepositoryTryClaimAlarmStateReturnsFalseForAlreadySentRow(t *testing.T) {
 	repository := NewRepository(newTrackingTestDB(t))
-	ctx := context.Background()
-	detectedAt := time.Date(2026, 4, 10, 1, 4, 0, 0, time.UTC)
-	firstAuthorizedAt := time.Date(2026, 4, 10, 1, 4, 30, 0, time.UTC)
-	alarmSentAt := time.Date(2026, 4, 10, 1, 5, 0, 0, time.UTC)
+	ctx := t.Context()
+	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
+	firstAuthorizedAt := time.Date(2026, time.April, 10, 1, 4, 30, 0, time.UTC)
+	alarmSentAt := time.Date(2026, time.April, 10, 1, 5, 0, 0, time.UTC)
 	laterAuthorizedAt := firstAuthorizedAt.Add(30 * time.Second)
 
 	recordAlarmSentAt := alarmSentAt
@@ -23,7 +22,7 @@ func TestRepositoryTryClaimAlarmStateReturnsFalseForAlreadySentRow(t *testing.T)
 		Kind:         domain.OutboxKindCommunityPost,
 		PostID:       "post-claim-already-sent",
 		ContentID:    "post-claim-already-sent",
-		ChannelID:    "UC_TEST",
+		ChannelID:    testChannelID,
 		DetectedAt:   detectedAt,
 		AlarmSentAt:  &recordAlarmSentAt,
 		AuthorizedAt: &firstAuthorizedAt,
@@ -33,7 +32,7 @@ func TestRepositoryTryClaimAlarmStateReturnsFalseForAlreadySentRow(t *testing.T)
 		Kind:         domain.OutboxKindCommunityPost,
 		PostID:       "post-claim-already-sent",
 		ContentID:    "post-claim-already-sent",
-		ChannelID:    "UC_TEST",
+		ChannelID:    testChannelID,
 		DetectedAt:   detectedAt,
 		AuthorizedAt: &laterAuthorizedAt,
 	})

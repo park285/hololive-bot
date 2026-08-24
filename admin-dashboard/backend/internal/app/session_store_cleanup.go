@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/cleanupctx"
 )
@@ -14,6 +15,7 @@ func newCleanupSessionStore(store sessionStore) sessionStore {
 	if store == nil {
 		return nil
 	}
+
 	return cleanupSessionStore{sessionStore: store}
 }
 
@@ -21,5 +23,10 @@ func newCleanupSessionStore(store sessionStore) sessionStore {
 func (s cleanupSessionStore) Delete(ctx context.Context, id string) error {
 	cleanupCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
 	defer cancel()
-	return s.sessionStore.Delete(cleanupCtx, id)
+
+	if err := s.sessionStore.Delete(cleanupCtx, id); err != nil {
+		return fmt.Errorf("delete: %w", err)
+	}
+
+	return nil
 }

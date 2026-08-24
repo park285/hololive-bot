@@ -21,16 +21,16 @@
 package scraping
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 // -- parseGridPlaylistRenderer 단위 테스트 --
@@ -138,6 +138,7 @@ func TestParseGridPlaylistRenderer_VideoCountFormats(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			jsonStr := `{
 				"playlistId": "PLtest",
 				"title": {"runs": [{"text": "Test"}]},
@@ -210,7 +211,7 @@ func TestGetPlaylists_GridRenderer(t *testing.T) {
 		}),
 	)
 
-	playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", 10)
+	playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", 10)
 	require.NoError(t, err)
 	require.Len(t, playlists, 2)
 	assert.Equal(t, "PL001", playlists[0].PlaylistID)
@@ -274,27 +275,16 @@ func TestGetPlaylists_ShelfRenderer(t *testing.T) {
 		}),
 	)
 
-	playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", 10)
+	playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", 10)
 	require.NoError(t, err)
 	require.Len(t, playlists, 1)
 	assert.Equal(t, "PLshelf1", playlists[0].PlaylistID)
 }
 
-func TestGetPlaylists_MalformedPlaylistJSON_TableDriven(t *testing.T) {
-	t.Parallel()
+const (
+	malformedTruncatedPlaylistJSON = `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[`
 
-	tests := map[string]struct {
-		ytInitialData string
-		wantCount     int
-		wantErr       bool
-	}{
-		"ytInitialData가 깨진 JSON인 경우": {
-			ytInitialData: `{"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[`,
-			wantCount:     0,
-			wantErr:       true,
-		},
-		"gridPlaylistRenderer가 문자열인 경우": {
-			ytInitialData: `{
+	playlistRendererAsStringJSON = `{
 				"contents": {
 					"twoColumnBrowseResultsRenderer": {
 						"tabs": [
@@ -319,12 +309,9 @@ func TestGetPlaylists_MalformedPlaylistJSON_TableDriven(t *testing.T) {
 						]
 					}
 				}
-			}`,
-			wantCount: 0,
-			wantErr:   false,
-		},
-		"playlistId 누락 객체": {
-			ytInitialData: `{
+			}`
+
+	playlistRendererMissingIDJSON = `{
 				"contents": {
 					"twoColumnBrowseResultsRenderer": {
 						"tabs": [
@@ -349,12 +336,9 @@ func TestGetPlaylists_MalformedPlaylistJSON_TableDriven(t *testing.T) {
 						]
 					}
 				}
-			}`,
-			wantCount: 0,
-			wantErr:   false,
-		},
-		"정상/비정상 혼합": {
-			ytInitialData: `{
+			}`
+
+	playlistRendererMixedValidityJSON = `{
 				"contents": {
 					"twoColumnBrowseResultsRenderer": {
 						"tabs": [
@@ -380,22 +364,53 @@ func TestGetPlaylists_MalformedPlaylistJSON_TableDriven(t *testing.T) {
 						]
 					}
 				}
-			}`,
-			wantCount: 1,
-			wantErr:   false,
+			}`
+)
+
+func TestGetPlaylists_MalformedPlaylistJSON_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		ytInitialData string
+		wantCount     int
+		wantErr       bool
+	}{
+		"ytInitialData가 깨진 JSON인 경우": {
+			ytInitialData: malformedTruncatedPlaylistJSON,
+			wantCount:     0,
+			wantErr:       true,
+		},
+		"gridPlaylistRenderer가 문자열인 경우": {
+			ytInitialData: playlistRendererAsStringJSON,
+			wantCount:     0,
+			wantErr:       false,
+		},
+		"playlistId 누락 객체": {
+			ytInitialData: playlistRendererMissingIDJSON,
+			wantCount:     0,
+			wantErr:       false,
+		},
+		"정상/비정상 혼합": {
+			ytInitialData: playlistRendererMixedValidityJSON,
+			wantCount:     1,
+			wantErr:       false,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			client := newPlaylistMockClient("<script>var ytInitialData = " + tc.ytInitialData + ";</script>")
 
-			playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", 10)
+			playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", 10)
+
 			if tc.wantErr {
 				require.Error(t, err)
+
 				return
 			}
+
 			require.NoError(t, err)
 			require.Len(t, playlists, tc.wantCount)
 		})
@@ -433,7 +448,7 @@ func TestGetPlaylists_NoPlaylistsTab(t *testing.T) {
 		}),
 	)
 
-	playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", 10)
+	playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", 10)
 	require.NoError(t, err)
 	assert.Empty(t, playlists)
 }
@@ -488,7 +503,7 @@ func TestGetPlaylists_MaxResultsLimit(t *testing.T) {
 		}),
 	)
 
-	playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", 2)
+	playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", 2)
 	require.NoError(t, err)
 	assert.Len(t, playlists, 2)
 }
@@ -539,11 +554,13 @@ func TestGetPlaylists_PaginationEdgeCases_TableDriven(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
 			client := newPlaylistMockClient("<script>var ytInitialData = " + ytInitialData + ";</script>")
 
-			playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", tc.maxResults)
+			playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", tc.maxResults)
 			require.NoError(t, err)
 			require.Len(t, playlists, len(tc.wantIDs))
+
 			for idx, wantID := range tc.wantIDs {
 				assert.Equal(t, wantID, playlists[idx].PlaylistID)
 			}
@@ -594,7 +611,7 @@ func TestGetPlaylists_EmptyGrid(t *testing.T) {
 		}),
 	)
 
-	playlists, err := client.GetPlaylists(context.Background(), "UC_TEST", 10)
+	playlists, err := client.GetPlaylists(t.Context(), "UC_TEST", 10)
 	require.NoError(t, err)
 	assert.Empty(t, playlists)
 }
@@ -620,7 +637,7 @@ func TestGetPlaylists_ChannelNotFound(t *testing.T) {
 		}),
 	)
 
-	playlists, err := client.GetPlaylists(context.Background(), "UC_INVALID", 10)
+	playlists, err := client.GetPlaylists(t.Context(), "UC_INVALID", 10)
 	require.Error(t, err)
 	assert.Nil(t, playlists)
 	assert.ErrorIs(t, err, ErrChannelNotFound)

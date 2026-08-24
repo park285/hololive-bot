@@ -16,8 +16,9 @@ func TestNormalizeSnapshotPayload_SetsCapturedAtWhenZero(t *testing.T) {
 	after := time.Now().UTC()
 
 	if got.CapturedAt.IsZero() {
-		t.Fatalf("CapturedAt should be set when zero, got zero value")
+		t.Fatal("CapturedAt should be set when zero, got zero value")
 	}
+
 	if got.CapturedAt.Before(before) || got.CapturedAt.After(after) {
 		t.Fatalf("CapturedAt %v outside expected window [%v, %v]", got.CapturedAt, before, after)
 	}
@@ -26,7 +27,7 @@ func TestNormalizeSnapshotPayload_SetsCapturedAtWhenZero(t *testing.T) {
 func TestNormalizeSnapshotPayload_PreservesNonZeroCapturedAt(t *testing.T) {
 	t.Parallel()
 
-	captured := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	captured := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	snapshot := Snapshot{Body: []byte("payload"), CapturedAt: captured}
 
 	got := normalizeSnapshotPayload(&snapshot, SnapshotPolicy{})

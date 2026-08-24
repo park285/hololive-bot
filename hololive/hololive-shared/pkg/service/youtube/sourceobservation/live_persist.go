@@ -2,6 +2,7 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -11,12 +12,14 @@ import (
 func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision) error {
 	for i := range decision.Sessions {
 		if err := upsertLiveSession(ctx, tx, &decision.Sessions[i]); err != nil {
-			return err
+			return fmt.Errorf("upsert live session: %w", err)
 		}
+
 		if err := upsertLiveHead(ctx, tx, &decision.Sessions[i]); err != nil {
-			return err
+			return fmt.Errorf("upsert live head: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -24,6 +27,7 @@ func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionStat
 	if session.ChannelID == "" {
 		return nil
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_live_session_upsert_0047_47.sql"),
@@ -39,25 +43,33 @@ func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionStat
 	); err != nil {
 		return fmt.Errorf("upsert live session: %w", err)
 	}
+
 	return nil
 }
 
 func upsertLiveHead(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
 	if session == nil {
-		return fmt.Errorf("upsert live head: session state is nil")
+		return errors.New("upsert live head: session state is nil")
 	}
-	var kind any
-	var observationID any
-	var nextCheck any
+
+	var (
+		kind          any
+		observationID any
+		nextCheck     any
+	)
+
 	if session.Clock.EndCandidateKind != nil && session.Clock.EndCandidateObservationID != nil && session.Clock.NextEndCheckAt != nil {
 		kind = string(*session.Clock.EndCandidateKind)
 		observationID = *session.Clock.EndCandidateObservationID
 		nextCheck = *session.Clock.NextEndCheckAt
 	}
+
 	var reason any
+
 	if session.EndReason != nil {
 		reason = string(*session.EndReason)
 	}
+
 	if _, err := tx.Exec(
 		ctx,
 		mustSQL("repository_live_head_upsert_0048_48.sql"),
@@ -79,5 +91,6 @@ func upsertLiveHead(ctx context.Context, tx dbx.Tx, session *live.SessionState) 
 	); err != nil {
 		return fmt.Errorf("upsert live head: %w", err)
 	}
+
 	return nil
 }

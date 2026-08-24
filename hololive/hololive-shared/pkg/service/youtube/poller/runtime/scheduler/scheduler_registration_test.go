@@ -25,17 +25,18 @@ import (
 	"testing"
 	"time"
 
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
 func TestScheduler_SetProxyEnabled(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{RequestInterval: 0})
 	poller := &togglePollerStub{name: "toggle"}
 
-	scheduler.Register("channel-1", poller, PriorityNormal, time.Minute)
+	scheduler.Register(testChannelID, poller, PriorityNormal, time.Minute)
 	scheduler.Register("channel-2", poller, PriorityNormal, time.Minute) // 동일 poller 중복 등록
 
 	applied := scheduler.SetProxyEnabled(true)
@@ -49,7 +50,7 @@ func TestScheduler_SetProxyEnabled(t *testing.T) {
 func TestSchedulerRegisterSignalsWakeChannel(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 
-	scheduler.Register("channel-1", &togglePollerStub{name: "videos"}, PriorityNormal, time.Minute)
+	scheduler.Register(testChannelID, &togglePollerStub{name: testPollerVideos}, PriorityNormal, time.Minute)
 
 	select {
 	case <-scheduler.wakeCh:
@@ -62,63 +63,73 @@ func TestSchedulerRegistrationCreatesColdStartPollerFreshnessSeries(t *testing.T
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 	poller := &togglePollerStub{name: "cold-start-registration"}
 
-	require.NoError(t, scheduler.RegisterChecked("channel-1", poller, PriorityNormal, time.Minute))
+	require.NoError(t, scheduler.RegisterChecked(testChannelID, poller, PriorityNormal, time.Minute))
 
 	families, err := prometheus.DefaultGatherer.Gather()
 	require.NoError(t, err)
+
 	for _, family := range families {
 		if family.GetName() != "youtube_poller_last_success_timestamp_seconds" {
 			continue
 		}
+
 		for _, metric := range family.Metric {
 			for _, label := range metric.Label {
 				if label.GetName() == "poller" && label.GetValue() == poller.Name() {
 					assert.Zero(t, metric.GetGauge().GetValue())
+
 					return
 				}
 			}
 		}
 	}
+
 	t.Fatal("cold-start poller freshness series was not gathered")
 }
 
 func TestSchedulerNudgeAllJobsResetsBackoffAndWakesDispatcher(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	poller := &togglePollerStub{name: "videos"}
+	poller := &togglePollerStub{name: testPollerVideos}
 
-	require.NoError(t, scheduler.RegisterChecked("channel-1", poller, PriorityNormal, time.Minute))
+	require.NoError(t, scheduler.RegisterChecked(testChannelID, poller, PriorityNormal, time.Minute))
 	require.NoError(t, scheduler.RegisterChecked("channel-2", poller, PriorityNormal, time.Minute))
 
 	future := time.Now().Add(10 * time.Minute)
+
 	scheduler.mu.Lock()
+
 	for _, job := range scheduler.jobMap {
 		job.consecutiveFailures = 5
 		job.NextRunAt = future
 	}
+
 	select {
 	case <-scheduler.wakeCh:
 	default:
 	}
+
 	scheduler.mu.Unlock()
 
 	scheduler.NudgeAllJobs()
 
 	scheduler.mu.Lock()
 	defer scheduler.mu.Unlock()
+
 	for _, job := range scheduler.jobMap {
 		assert.Equal(t, 0, job.consecutiveFailures, "consecutive_failures must reset")
 		assert.False(t, job.NextRunAt.After(time.Now().Add(time.Second)), "NextRunAt must be due immediately")
 	}
+
 	select {
 	case <-scheduler.wakeCh:
 	default:
-		t.Fatal("dispatcher wake channel was not signalled")
+		t.Fatal("dispatcher wake channel was not signaled")
 	}
 }
 
 func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-old", p, PriorityNormal, time.Minute)
 
 	scheduler.SyncPollerTargets(&PollerTargetSync{
@@ -130,6 +141,7 @@ func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
 
 	require.NotContains(t, scheduler.jobMap, "channel-old:videos")
 	require.Contains(t, scheduler.jobMap, "channel-new:videos")
+
 	newJob, ok := scheduler.jobMap["channel-new:videos"]
 	require.True(t, ok)
 	require.NotNil(t, newJob)
@@ -139,7 +151,7 @@ func TestSchedulerSyncPollerTargetsAddsAndRemovesJobs(t *testing.T) {
 
 func TestSchedulerSyncPollerTargetsRetiresInflightJobWithoutRequeue(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-old", p, PriorityNormal, time.Minute)
 
 	job := scheduler.jobMap["channel-old:videos"]
@@ -157,19 +169,21 @@ func TestSchedulerSyncPollerTargetsRetiresInflightJobWithoutRequeue(t *testing.T
 	scheduler.rescheduleJob(job)
 
 	require.NotContains(t, scheduler.jobMap, "channel-old:videos")
-	require.Len(t, scheduler.jobs, 0)
+	require.Empty(t, scheduler.jobs)
 }
 
 func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	scheduler.Register("channel-existing", p, PriorityNormal, time.Hour)
 
 	existing := scheduler.jobMap["channel-existing:videos"]
 	require.NotNil(t, existing)
+
 	existingNextRunAt := existing.NextRunAt
 
 	before := time.Now()
+
 	scheduler.SyncPollerTargets(&PollerTargetSync{
 		Poller:                 p,
 		Priority:               PriorityHigh,
@@ -177,9 +191,11 @@ func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testi
 		ChannelIDs:             []string{"channel-existing", "channel-new"},
 		ForceImmediateFirstRun: true,
 	})
+
 	after := time.Now()
 
 	require.Contains(t, scheduler.jobMap, "channel-new:videos")
+
 	existingJob, ok := scheduler.jobMap["channel-existing:videos"]
 	require.True(t, ok)
 	require.NotNil(t, existingJob)
@@ -194,7 +210,7 @@ func TestSchedulerSyncPollerTargetsForceImmediateFirstRunOnlyForNewJobs(t *testi
 
 func TestSchedulerRegisterAndSyncPropagateBudgetProfile(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
-	p := &togglePollerStub{name: "videos"}
+	p := &togglePollerStub{name: testPollerVideos}
 	profile := testBudgetProfile()
 
 	require.NoError(t, scheduler.RegisterCheckedWithBudgetProfile("channel-direct", p, PriorityHigh, time.Hour, profile))
@@ -216,6 +232,7 @@ func TestSchedulerRegisterAndSyncPropagateBudgetProfile(t *testing.T) {
 		ChannelIDs:    []string{"channel-sync"},
 		BudgetProfile: syncProfile,
 	})
+
 	syncJob, ok := scheduler.jobMap["channel-sync:videos"]
 	require.True(t, ok)
 	require.NotNil(t, syncJob)
@@ -233,6 +250,7 @@ func TestSchedulerRegisterAndSyncPropagateBudgetProfile(t *testing.T) {
 		ChannelIDs:    []string{"channel-sync"},
 		BudgetProfile: updatedProfile,
 	})
+
 	updatedJob, ok := scheduler.jobMap["channel-sync:videos"]
 	require.True(t, ok)
 	require.NotNil(t, updatedJob)
@@ -266,8 +284,8 @@ func TestSchedulerCanRestartAfterStop(t *testing.T) {
 func TestSchedulerRegisterCheckedRejectsInvalidInput(t *testing.T) {
 	scheduler := NewScheduler(&SchedulerConfig{WorkerCount: 1, RequestInterval: 0})
 
-	require.Error(t, scheduler.RegisterChecked("", &togglePollerStub{name: "videos"}, PriorityNormal, time.Minute))
-	require.Error(t, scheduler.RegisterChecked("channel-1", nil, PriorityNormal, time.Minute))
-	require.Error(t, scheduler.RegisterChecked("channel-1", &togglePollerStub{name: "videos"}, PriorityNormal, 0))
-	require.Error(t, scheduler.RegisterChecked("channel-1", &togglePollerStub{name: "   "}, PriorityNormal, time.Minute))
+	require.Error(t, scheduler.RegisterChecked("", &togglePollerStub{name: testPollerVideos}, PriorityNormal, time.Minute))
+	require.Error(t, scheduler.RegisterChecked(testChannelID, nil, PriorityNormal, time.Minute))
+	require.Error(t, scheduler.RegisterChecked(testChannelID, &togglePollerStub{name: testPollerVideos}, PriorityNormal, 0))
+	require.Error(t, scheduler.RegisterChecked(testChannelID, &togglePollerStub{name: "   "}, PriorityNormal, time.Minute))
 }

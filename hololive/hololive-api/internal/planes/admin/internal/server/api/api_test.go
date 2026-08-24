@@ -38,14 +38,17 @@ func TestNewAPIHandler_MemberIndexLoaderNilWhenRepoNil(t *testing.T) {
 
 func TestEnsureDefaults_NilReceiver(t *testing.T) {
 	var h *Handler
+
 	got := h.ensureDefaults()
 
 	if got == nil {
 		t.Fatal("ensureDefaults on nil receiver returned nil")
 	}
+
 	if got.streamState == nil {
 		t.Fatal("streamState not created on nil receiver")
 	}
+
 	if got.startTime.IsZero() {
 		t.Fatal("startTime not set on nil receiver")
 	}
@@ -59,6 +62,7 @@ func TestEnsureDefaults_PreservesExistingFields(t *testing.T) {
 	if got.logger != logger {
 		t.Fatal("ensureDefaults overwrote existing logger")
 	}
+
 	if got.streamState == nil {
 		t.Fatal("streamState not created")
 	}
@@ -74,14 +78,17 @@ func TestEnsureDefaults_Idempotent(t *testing.T) {
 	if second.streamState != ss {
 		t.Fatal("ensureDefaults replaced existing streamState")
 	}
-	if second.startTime != st {
+
+	if !second.startTime.Equal(st) {
 		t.Fatal("ensureDefaults replaced existing startTime")
 	}
 }
 
 func TestEnsureStreamState_NilReceiver(t *testing.T) {
 	var h *Handler
+
 	ss := h.ensureStreamState()
+
 	if ss == nil {
 		t.Fatal("ensureStreamState on nil receiver returned nil")
 	}
@@ -90,6 +97,7 @@ func TestEnsureStreamState_NilReceiver(t *testing.T) {
 func TestEnsureStreamState_CreatesIfMissing(t *testing.T) {
 	h := &Handler{}
 	ss := h.ensureStreamState()
+
 	if ss == nil {
 		t.Fatal("ensureStreamState returned nil")
 	}
@@ -103,6 +111,7 @@ func TestEnsureStreamState_CreatesIfMissing(t *testing.T) {
 func TestHasCommunityShortsOpsRepository(t *testing.T) {
 	t.Run("nil receiver", func(t *testing.T) {
 		var h *Handler
+
 		if h.HasCommunityShortsOpsRepository() {
 			t.Fatal("nil receiver should return false")
 		}

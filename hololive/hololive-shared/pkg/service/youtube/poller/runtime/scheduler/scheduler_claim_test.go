@@ -23,19 +23,20 @@ package scheduler
 import (
 	"container/heap"
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
 
-	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
 func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.T) {
 	renewCtx := t.Context()
-	pollCtx, pollCancel := context.WithCancel(context.Background())
+	pollCtx, pollCancel := context.WithCancel(t.Context())
 	errCh := make(chan error, 1)
 	claim := &schedulerClaimHandleStub{}
 	done := make(chan struct{})
@@ -45,7 +46,8 @@ func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.
 
 	go func() {
 		defer close(done)
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, time.Hour, errCh, metrics, slog.Default())
+
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, testPollerVideos, time.Minute, time.Hour, errCh, metrics, slog.Default())
 	}()
 
 	select {
@@ -55,6 +57,7 @@ func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.
 	}
 
 	require.Equal(t, 0, claim.renewCalls)
+
 	select {
 	case err := <-errCh:
 		t.Fatalf("unexpected renew error: %v", err)
@@ -64,8 +67,10 @@ func TestRunJobClaimRenewLoop_StopsWhenPollContextCanceledBeforeTick(t *testing.
 
 func TestRunJobClaimRenewLoop_RenewFailureCancelsPollAndReportsError(t *testing.T) {
 	renewCtx := t.Context()
-	pollCtx, pollCancel := context.WithCancel(context.Background())
+	pollCtx, pollCancel := context.WithCancel(t.Context())
+
 	defer pollCancel()
+
 	errCh := make(chan error, 1)
 	claim := &schedulerClaimHandleStub{
 		renewFn: func(context.Context, time.Duration) (bool, error) {
@@ -77,7 +82,8 @@ func TestRunJobClaimRenewLoop_RenewFailureCancelsPollAndReportsError(t *testing.
 
 	go func() {
 		defer close(done)
-		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, "videos", time.Minute, 5*time.Millisecond, errCh, metrics, slog.Default())
+
+		runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, testPollerVideos, time.Minute, 5*time.Millisecond, errCh, metrics, slog.Default())
 	}()
 
 	select {
@@ -110,15 +116,19 @@ func TestSchedulerExecuteJobSkipsPeerOwnedWithoutPolling(t *testing.T) {
 			status: polling.JobClaimStatus{Result: polling.JobClaimPeerOwned, RetryAfter: 25 * time.Second},
 		},
 	})
-	require.NoError(t, scheduler.rateLimiter.Wait(context.Background()))
-	p := &countingPollerStub{name: "videos"}
+	require.NoError(t, scheduler.rateLimiter.Wait(t.Context()))
+
+	p := &countingPollerStub{name: testPollerVideos}
 	scheduler.Register("channel-peer", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-peer:videos"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
 	before := time.Now()
-	scheduler.executeJob(context.Background(), job, 1)
+
+	scheduler.executeJob(t.Context(), job, 1)
+
 	after := time.Now()
 
 	require.Equal(t, 0, p.calls)
@@ -136,25 +146,26 @@ func TestSchedulerExecuteJobSkipsAlreadyCompletedWithoutPolling(t *testing.T) {
 			status: polling.JobClaimStatus{Result: polling.JobClaimAlreadyCompleted, RetryAfter: time.Minute},
 		},
 	})
-	p := &countingPollerStub{name: "community"}
+	p := &countingPollerStub{name: testPollerCommunity}
 	scheduler.Register("channel-done", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-done:community"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
-	scheduler.executeJob(context.Background(), job, 1)
+	scheduler.executeJob(t.Context(), job, 1)
 
 	require.Equal(t, 0, p.calls)
 	require.Equal(t, 0, job.consecutiveFailures)
 }
 
-func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
-	claimer := newSharedSchedulerClaimState()
-	p := &blockingCountingPollerStub{
-		name:    "videos",
-		entered: make(chan struct{}),
-		release: make(chan struct{}),
-	}
+func newSharedClaimSchedulers(
+	t *testing.T,
+	claimer *sharedSchedulerClaimState,
+	poller Poller,
+) (*Scheduler, *Scheduler, *Job, *Job) {
+	t.Helper()
+
 	schedulerA := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
 		RequestInterval: 0,
@@ -165,45 +176,55 @@ func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
 		RequestInterval: 200 * time.Millisecond,
 		JobClaimer:      claimer,
 	})
-	require.NoError(t, schedulerB.rateLimiter.Wait(context.Background()))
-	schedulerA.Register("channel-shared", p, PriorityNormal, time.Minute)
-	schedulerB.Register("channel-shared", p, PriorityNormal, time.Minute)
+	require.NoError(t, schedulerB.rateLimiter.Wait(t.Context()))
+	schedulerA.Register("channel-shared", poller, PriorityNormal, time.Minute)
+	schedulerB.Register("channel-shared", poller, PriorityNormal, time.Minute)
+
 	jobA := schedulerA.jobMap["channel-shared:videos"]
 	jobB := schedulerB.jobMap["channel-shared:videos"]
+
 	require.NotNil(t, jobA)
 	require.NotNil(t, jobB)
 	heap.Remove(&schedulerA.jobs, jobA.index)
 	heap.Remove(&schedulerB.jobs, jobB.index)
 
+	return schedulerA, schedulerB, jobA, jobB
+}
+
+func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
+	claimer := newSharedSchedulerClaimState()
+	p := &blockingCountingPollerStub{
+		name:    testPollerVideos,
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	schedulerA, schedulerB, jobA, jobB := newSharedClaimSchedulers(t, claimer, p)
+
 	doneA := make(chan struct{})
+
 	go func() {
 		defer close(doneA)
-		schedulerA.executeJob(context.Background(), jobA, 1)
+
+		schedulerA.executeJob(t.Context(), jobA, 1)
 	}()
-	select {
-	case <-p.entered:
-	case <-time.After(time.Second):
-		t.Fatal("scheduler A did not start polling")
-	}
+
+	requireClosedWithin(t, p.entered, "scheduler A did not start polling")
 
 	doneB := make(chan struct{})
 	startB := time.Now()
+
 	go func() {
 		defer close(doneB)
-		schedulerB.executeJob(context.Background(), jobB, 2)
+
+		schedulerB.executeJob(t.Context(), jobB, 2)
 	}()
-	select {
-	case <-doneB:
-	case <-time.After(time.Second):
-		t.Fatal("scheduler B did not skip peer-owned claim")
-	}
+
+	requireClosedWithin(t, doneB, "scheduler B did not skip peer-owned claim")
+
 	elapsedB := time.Since(startB)
+
 	close(p.release)
-	select {
-	case <-doneA:
-	case <-time.After(time.Second):
-		t.Fatal("scheduler A did not finish polling")
-	}
+	requireClosedWithin(t, doneA, "scheduler A did not finish polling")
 
 	require.Equal(t, 1, p.callCount())
 	require.Equal(t, 1, claimer.resultCount(polling.JobClaimAcquired))
@@ -212,7 +233,7 @@ func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
 	require.Equal(t, 0, jobB.consecutiveFailures)
 	assert.Less(t, elapsedB, 100*time.Millisecond)
 
-	schedulerB.executeJob(context.Background(), jobB, 2)
+	schedulerB.executeJob(t.Context(), jobB, 2)
 
 	require.Equal(t, 1, p.callCount())
 	require.Equal(t, 1, claimer.resultCount(polling.JobClaimAlreadyCompleted))
@@ -222,7 +243,7 @@ func TestSchedulerActiveActiveSharedClaimerAllowsOnlyOnePoll(t *testing.T) {
 func TestSchedulerExecuteJobFailsClosedWhenClaimUnavailable(t *testing.T) {
 	claimer := &schedulerClaimStub{
 		status: polling.JobClaimStatus{Result: polling.JobClaimUnavailable},
-		err:    fmt.Errorf("valkey unavailable"),
+		err:    errors.New("valkey unavailable"),
 	}
 	scheduler := NewScheduler(&SchedulerConfig{
 		WorkerCount:     1,
@@ -233,11 +254,12 @@ func TestSchedulerExecuteJobFailsClosedWhenClaimUnavailable(t *testing.T) {
 	})
 	p := &countingPollerStub{name: "shorts"}
 	scheduler.Register("channel-unavailable", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-unavailable:shorts"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
-	scheduler.executeJob(context.Background(), job, 1)
+	scheduler.executeJob(t.Context(), job, 1)
 
 	require.Equal(t, 1, claimer.tryCalls)
 	require.Equal(t, 0, p.calls)
@@ -249,13 +271,14 @@ func TestSchedulerExecuteJobWithoutClaimerKeepsPolling(t *testing.T) {
 		WorkerCount:     1,
 		RequestInterval: 0,
 	})
-	p := &countingPollerStub{name: "videos"}
+	p := &countingPollerStub{name: testPollerVideos}
 	scheduler.Register("channel-legacy", p, PriorityNormal, time.Hour)
+
 	job := scheduler.jobMap["channel-legacy:videos"]
 	require.NotNil(t, job)
 	heap.Remove(&scheduler.jobs, job.index)
 
-	scheduler.executeJob(context.Background(), job, 1)
+	scheduler.executeJob(t.Context(), job, 1)
 
 	require.Equal(t, 1, p.calls)
 	require.Equal(t, 0, job.consecutiveFailures)
@@ -287,17 +310,18 @@ func TestSchedulerExecuteJobCompletesOrReleasesClaim(t *testing.T) {
 				RequestInterval: 0,
 				JobClaimer:      claimer,
 			})
-			p := &countingPollerStub{name: "videos", err: tc.pollErr}
+			p := &countingPollerStub{name: testPollerVideos, err: tc.pollErr}
 			scheduler.Register("channel-claim", p, PriorityNormal, time.Hour)
+
 			job := scheduler.jobMap["channel-claim:videos"]
 			require.NotNil(t, job)
 			heap.Remove(&scheduler.jobs, job.index)
 
-			scheduler.executeJob(context.Background(), job, 1)
+			scheduler.executeJob(t.Context(), job, 1)
 
 			require.Equal(t, 1, p.calls)
 			require.Equal(t, 1, claimer.tryCalls)
-			require.Equal(t, "videos", claimer.poller)
+			require.Equal(t, testPollerVideos, claimer.poller)
 			require.Equal(t, "channel-claim", claimer.channelID)
 			require.Equal(t, tc.wantCompleted, claim.markCompletedCalls)
 			require.Equal(t, tc.wantReleased, claim.releaseCalls)
@@ -360,10 +384,10 @@ func TestSchedulerFinishJobClaimDetachesCompletionFromCanceledParentContext(t *t
 	claim := &schedulerClaimHandleStub{}
 	job := &Job{
 		ChannelID: "channel-claim",
-		Poller:    &togglePollerStub{name: "videos"},
+		Poller:    &togglePollerStub{name: testPollerVideos},
 		Interval:  time.Minute,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	err := scheduler.finishJobClaim(ctx, job, claim, nil)

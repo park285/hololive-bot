@@ -22,6 +22,7 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -45,9 +46,13 @@ func WithDispatchHandoff(mode handoff.Mode, publisher DispatchPublisher) Reposit
 func (r *OutboxRepository) enqueueWithDispatchHandoff(ctx context.Context, items []OutboxItem) (bool, error) {
 	switch r.dispatchMode {
 	case handoff.ModeCutover:
-		return true, r.enqueueCutoverBatch(ctx, items)
+		err := r.enqueueCutoverHandoff(ctx, items)
+
+		return true, errors.Join(err)
 	case handoff.ModeShadow:
-		return true, r.enqueueShadowBatch(ctx, items)
+		err := r.enqueueShadowHandoff(ctx, items)
+
+		return true, errors.Join(err)
 	case handoff.ModeOff:
 		return false, nil
 	default:
@@ -55,33 +60,58 @@ func (r *OutboxRepository) enqueueWithDispatchHandoff(ctx context.Context, items
 	}
 }
 
+func (r *OutboxRepository) enqueueCutoverHandoff(ctx context.Context, items []OutboxItem) error {
+	if err := r.enqueueCutoverBatch(ctx, items); err != nil {
+		return fmt.Errorf("enqueue cutover batch: %w", err)
+	}
+
+	return nil
+}
+
+func (r *OutboxRepository) enqueueShadowHandoff(ctx context.Context, items []OutboxItem) error {
+	if err := r.enqueueShadowBatch(ctx, items); err != nil {
+		return fmt.Errorf("enqueue shadow batch: %w", err)
+	}
+
+	return nil
+}
+
 func (r *OutboxRepository) enqueueCutoverBatch(ctx context.Context, items []OutboxItem) error {
 	if r.dispatchPublisher == nil {
 		observeDispatchHandoff(handoff.ModeCutover, "failure", len(items))
-		return fmt.Errorf("enqueue batch: alarm dispatch publisher is required in cutover mode")
+
+		return errors.New("enqueue batch: alarm dispatch publisher is required in cutover mode")
 	}
+
 	if err := r.dispatchPublisher.PublishPending(ctx, items); err != nil {
 		observeDispatchHandoff(handoff.ModeCutover, "failure", len(items))
+
 		return fmt.Errorf("enqueue batch: publish alarm dispatch handoff: %w", err)
 	}
+
 	observeDispatchHandoff(handoff.ModeCutover, "success", len(items))
+
 	return nil
 }
 
 func (r *OutboxRepository) enqueueShadowBatch(ctx context.Context, items []OutboxItem) error {
 	if err := r.enqueueLegacyBatch(ctx, items); err != nil {
-		return err
+		return fmt.Errorf("enqueue legacy batch: %w", err)
 	}
+
 	if r.dispatchPublisher == nil {
 		r.logger.Warn("Delivery outbox shadow handoff skipped because publisher is unavailable")
 		observeDispatchHandoff(handoff.ModeShadow, "skipped", len(items))
+
 		return nil
 	}
+
 	if err := r.dispatchPublisher.PublishShadow(ctx, items); err != nil {
 		r.logger.Warn("Delivery outbox shadow handoff failed", slog.Any("error", err))
 		observeDispatchHandoff(handoff.ModeShadow, "failure", len(items))
 	} else {
 		observeDispatchHandoff(handoff.ModeShadow, "success", len(items))
 	}
+
 	return nil
 }

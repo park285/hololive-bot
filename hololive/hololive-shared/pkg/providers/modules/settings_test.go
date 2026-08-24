@@ -12,6 +12,7 @@ func TestResolvePersistedTargetMinutes_UsesRuntimeNormalizationForStoredMinute(t
 	t.Setenv("SETTINGS_DIR", t.TempDir())
 
 	logger := slog.New(slog.DiscardHandler)
+
 	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":1,"scraperProxyEnabled":false}`), 0o600); err != nil {
 		t.Fatalf("write legacy settings file: %v", err)
 	}
@@ -22,6 +23,7 @@ func TestResolvePersistedTargetMinutes_UsesRuntimeNormalizationForStoredMinute(t
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)
@@ -39,6 +41,7 @@ func TestResolvePersistedTargetMinutes_FallsBackWhenSettingsMissing(t *testing.T
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)
@@ -59,6 +62,7 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitMultiTargetWhenSettingsM
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)
@@ -70,6 +74,7 @@ func TestResolvePersistedTargetMinutes_FallsBackWhenPersistedMinuteIsInvalid(t *
 	t.Setenv("SETTINGS_DIR", t.TempDir())
 
 	logger := slog.New(slog.DiscardHandler)
+
 	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":0,"scraperProxyEnabled":false}`), 0o600); err != nil {
 		t.Fatalf("write invalid settings file: %v", err)
 	}
@@ -80,6 +85,7 @@ func TestResolvePersistedTargetMinutes_FallsBackWhenPersistedMinuteIsInvalid(t *
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)
@@ -93,7 +99,9 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 	logger := slog.New(slog.DiscardHandler)
 	service := BuildSettingsService([]int{30, 15, 5, 1}, false, logger)
 	current := service.Get()
+
 	current.ScraperProxyEnabled = true
+
 	if err := service.Update(current); err != nil {
 		t.Fatalf("update settings: %v", err)
 	}
@@ -104,6 +112,7 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)
@@ -115,6 +124,7 @@ func TestResolvePersistedTargetMinutes_HealsLegacyStoredTargetMinutes(t *testing
 	t.Setenv("SETTINGS_DIR", t.TempDir())
 
 	logger := slog.New(slog.DiscardHandler)
+
 	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
 		t.Fatalf("write legacy settings file: %v", err)
 	}
@@ -125,6 +135,7 @@ func TestResolvePersistedTargetMinutes_HealsLegacyStoredTargetMinutes(t *testing
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)
 	}
+
 	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("ResolvePersistedTargetMinutes() = %v, want %v", got, want)

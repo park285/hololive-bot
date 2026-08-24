@@ -27,10 +27,11 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/ginjson"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
 )
 
 type memberListResponse struct {
@@ -70,6 +71,7 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 	var req struct {
 		IsGraduated bool `json:"isGraduated"`
 	}
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)
@@ -145,6 +147,7 @@ func (h *MemberHandler) GetMembers(c *gin.Context) {
 
 func (h *MemberHandler) AddMember(c *gin.Context) {
 	var req domain.Member
+
 	if err := bindJSON(c, &req); err != nil {
 		h.safeLogger().Warn("Invalid request body", slog.Any("error", err))
 		sharedserver.RespondError(c, 400, "invalid request body", nil)

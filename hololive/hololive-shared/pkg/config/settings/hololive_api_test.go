@@ -17,20 +17,24 @@ func TestValidateAlarmProviderURL(t *testing.T) {
 		wantErr     string
 	}{
 		{name: "development http", environment: "development", url: "http://127.0.0.1:30007"},
-		{name: "production https", environment: "production", url: "https://hololive-alarm-worker:30007"},
-		{name: "missing", environment: "production", wantErr: "required"},
+		{name: "production https", environment: environmentProduction, url: "https://hololive-alarm-worker:30007"},
+		{name: "missing", environment: environmentProduction, wantErr: "required"},
 		{name: "missing host", environment: "development", url: "https:///alarm", wantErr: "include a host"},
-		{name: "production http", environment: "production", url: "http://hololive-alarm-worker:30007", wantErr: "must use https"},
+		{name: "production http", environment: environmentProduction, url: "http://hololive-alarm-worker:30007", wantErr: "must use https"},
 		{name: "unsupported scheme", environment: "development", url: "grpc://alarm:30007", wantErr: "scheme must be http or https"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			err := validateAlarmProviderURL(tt.environment, tt.url)
 			if tt.wantErr == "" {
 				require.NoError(t, err)
+
 				return
 			}
+
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -59,6 +63,7 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 
 	config.Admin.Server.Port = 30001
 	config.Admin.Server.H3Addr = ":30001"
+
 	err := validateHololiveAPIListenerPorts(config)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "shared by bot-h3 and admin-h3")
@@ -88,13 +93,16 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 
 	t.Run("same tcp port on distinct specific hosts is allowed", func(t *testing.T) {
 		config := newConfig("127.0.0.1:30091")
+
 		config.Bot.Server.MetricsAddr = "100.100.1.3:30091"
 		require.NoError(t, validateHololiveAPIListenerPorts(config))
 	})
 
 	t.Run("h3 address must match configured plane port", func(t *testing.T) {
 		config := newConfig(":30101")
+
 		config.LLM.Server.H3Addr = ":30004"
+
 		err := validateHololiveAPIListenerPorts(config)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "llm-h3 listener: address port 30004 must match configured port 30003")
@@ -138,6 +146,7 @@ func TestValidatePlanePool(t *testing.T) {
 func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, validateYouTubePlaneDatabaseRole("hololive_runtime"))
+
 	for _, user := range []string{postgresScraperRoleUser, "postgres_admin", ""} {
 		err := validateYouTubePlaneDatabaseRole(user)
 		require.Error(t, err)
@@ -147,10 +156,12 @@ func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {
 
 func TestHololiveAPIYouTubePlaneComposeBudgetLeavesReservedCapacity(t *testing.T) {
 	t.Parallel()
+
 	bot := 4
 	admin := 4
 	llm := 4
 	youtubeCompose := 2
+
 	if bot+admin+llm+youtubeCompose > 16 {
 		t.Fatalf("hololive-api process pool sum %d exceeds the reviewed 16-connection envelope", bot+admin+llm+youtubeCompose)
 	}

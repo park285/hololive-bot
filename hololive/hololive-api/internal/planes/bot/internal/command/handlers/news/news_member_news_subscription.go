@@ -25,11 +25,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/domain"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type MemberNewsSubscriptionCommand struct {
@@ -54,17 +53,35 @@ func (c *MemberNewsSubscriptionCommand) Execute(ctx context.Context, cmdCtx *dom
 	}
 
 	if c.Deps().MemberNews == nil {
-		return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsServiceNotInitialized)
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsServiceNotInitialized); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
 	}
 
-	switch memberNewsSubscriptionAction(params) {
-	case "on", "켜기", "구독":
-		return c.handleSubscribe(ctx, cmdCtx)
-	case "off", "끄기", "해제":
-		return c.handleUnsubscribe(ctx, cmdCtx)
-	default:
-		return c.handleStatus(ctx, cmdCtx)
+	handler := c.memberNewsSubscriptionHandler(memberNewsSubscriptionAction(params))
+	if err := handler(ctx, cmdCtx); err != nil {
+		return fmt.Errorf("handle news subscription action: %w", err)
 	}
+
+	return nil
+}
+
+func (c *MemberNewsSubscriptionCommand) memberNewsSubscriptionHandler(action string) func(context.Context, *domain.CommandContext) error {
+	handlers := map[string]func(context.Context, *domain.CommandContext) error{
+		"on":  c.handleSubscribe,
+		"켜기":  c.handleSubscribe,
+		"구독":  c.handleSubscribe,
+		"off": c.handleUnsubscribe,
+		"끄기":  c.handleUnsubscribe,
+		"해제":  c.handleUnsubscribe,
+	}
+	if handler := handlers[action]; handler != nil {
+		return handler
+	}
+
+	return c.handleStatus
 }
 
 func memberNewsSubscriptionAction(params map[string]any) string {
@@ -81,15 +98,28 @@ type memberNewsSubscriptionPort struct {
 }
 
 func (p memberNewsSubscriptionPort) IsSubscribed(ctx context.Context, roomID string) (bool, error) {
-	return p.service.IsRoomSubscribed(ctx, roomID)
+	out, err := p.service.IsRoomSubscribed(ctx, roomID)
+	if err != nil {
+		return out, fmt.Errorf("is room subscribed: %w", err)
+	}
+
+	return out, nil
 }
 
 func (p memberNewsSubscriptionPort) Subscribe(ctx context.Context, roomID, roomName string) error {
-	return p.service.SubscribeRoom(ctx, roomID, roomName)
+	if err := p.service.SubscribeRoom(ctx, roomID, roomName); err != nil {
+		return fmt.Errorf("subscribe room: %w", err)
+	}
+
+	return nil
 }
 
 func (p memberNewsSubscriptionPort) Unsubscribe(ctx context.Context, roomID string) error {
-	return p.service.UnsubscribeRoom(ctx, roomID)
+	if err := p.service.UnsubscribeRoom(ctx, roomID); err != nil {
+		return fmt.Errorf("unsubscribe room: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandContext) handlercore.SubscriptionFlow {
@@ -106,6 +136,7 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 				privacylog.RoomIDAttr(cmdCtx.Room),
 				slog.Any("error", err),
 			)
+
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnSubscribed: func(ctx context.Context) error {
@@ -119,6 +150,7 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 				privacylog.RoomIDAttr(cmdCtx.Room),
 				slog.Any("error", err),
 			)
+
 			return c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrMemberNewsSubscriptionFailed)
 		},
 		OnUnsubscribed: func(ctx context.Context) error {
@@ -131,13 +163,25 @@ func (c *MemberNewsSubscriptionCommand) subscriptionFlow(cmdCtx *domain.CommandC
 }
 
 func (c *MemberNewsSubscriptionCommand) handleSubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	return c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName)
+	if err := c.subscriptionFlow(cmdCtx).Subscribe(ctx, cmdCtx.Room, cmdCtx.RoomName); err != nil {
+		return fmt.Errorf("subscribe: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MemberNewsSubscriptionCommand) handleUnsubscribe(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	return c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room)
+	if err := c.subscriptionFlow(cmdCtx).Unsubscribe(ctx, cmdCtx.Room); err != nil {
+		return fmt.Errorf("unsubscribe: %w", err)
+	}
+
+	return nil
 }
 
 func (c *MemberNewsSubscriptionCommand) handleStatus(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	return c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room)
+	if err := c.subscriptionFlow(cmdCtx).Status(ctx, cmdCtx.Room); err != nil {
+		return fmt.Errorf("status: %w", err)
+	}
+
+	return nil
 }

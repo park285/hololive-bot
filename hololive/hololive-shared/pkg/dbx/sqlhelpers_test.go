@@ -21,6 +21,7 @@
 package dbx
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -76,17 +77,20 @@ func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 		if err != nil {
 			return err
 		}
+
 		if info.IsDir() || !strings.HasSuffix(path, ".sql") || filepath.Base(filepath.Dir(path)) != "queries" {
 			return nil
 		}
 
 		data, readErr := os.ReadFile(path) //nolint:gosec // walk 결과 경로만 읽는다.
 		if readErr != nil {
-			return readErr
+			return fmt.Errorf("read file: %w", readErr)
 		}
+
 		for _, hazard := range questionMarkHazards(string(data)) {
 			t.Errorf("%s: %s: PostgresPlaceholders would rewrite this '?'", path, hazard)
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -96,7 +100,9 @@ func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 
 func questionMarkHazards(sql string) []string {
 	var hazards []string
+
 	quoted := false
+
 	for i := range len(sql) {
 		switch {
 		case sql[i] == '\'':
@@ -108,6 +114,7 @@ func questionMarkHazards(sql string) []string {
 			hazards = append(hazards, "jsonb operator at offset "+strconv.Itoa(i))
 		}
 	}
+
 	return hazards
 }
 
@@ -136,6 +143,7 @@ func TestAnyArgs(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("AnyArgs len = %d, want 3", len(got))
 	}
+
 	for i, want := range []int64{1, 2, 3} {
 		v, ok := got[i].(int64)
 		if !ok || v != want {

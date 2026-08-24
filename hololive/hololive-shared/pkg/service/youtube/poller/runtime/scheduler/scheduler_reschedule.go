@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-// rescheduleJob: 작업 재스케줄
+// rescheduleJob: 작업 재스케줄.
 func (s *Scheduler) rescheduleJob(job *Job) {
 	s.rescheduleJobAfterPoll(job, nil)
 }
@@ -53,6 +53,7 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	if job == nil || job.retired {
 		return
 	}
+
 	current, ok := s.jobMap[job.key]
 	if !ok || current != job {
 		return
@@ -68,6 +69,7 @@ func (s *Scheduler) rescheduleJobAfterPoll(job *Job, pollErr error) {
 	} else {
 		heap.Push(&s.jobs, job)
 	}
+
 	s.notifyDispatcher()
 }
 
@@ -76,13 +78,16 @@ func (s *Scheduler) applyPendingSyncLocked(job *Job) {
 	if pending == nil {
 		return
 	}
+
 	job.pendingSync = nil
 	job.Poller = pending.Poller
 	job.Priority = pending.Priority
 	job.budgetProfile = pending.BudgetProfile
+
 	if job.Interval != pending.Interval {
 		s.resetJobScheduleForIntervalChange(job, pending.Interval)
 	}
+
 	job.Interval = pending.Interval
 }
 
@@ -93,22 +98,27 @@ func (s *Scheduler) rescheduleJobAfterClaimSkip(job *Job, retryAfter time.Durati
 	if job == nil || job.retired {
 		return
 	}
+
 	current, ok := s.jobMap[job.key]
 	if !ok || current != job {
 		return
 	}
+
 	s.applyPendingSyncLocked(job)
+
 	if retryAfter <= 0 {
 		retryAfter = s.errorBackoffMin
 	}
 
 	job.consecutiveFailures = 0
 	job.NextRunAt = time.Now().Add(retryAfter)
+
 	if job.index >= 0 {
 		heap.Fix(&s.jobs, job.index)
 	} else {
 		heap.Push(&s.jobs, job)
 	}
+
 	s.notifyDispatcher()
 }
 
@@ -119,22 +129,27 @@ func (s *Scheduler) rescheduleJobAfterBudgetSkip(job *Job, retryAfter time.Durat
 	if job == nil || job.retired {
 		return
 	}
+
 	current, ok := s.jobMap[job.key]
 	if !ok || current != job {
 		return
 	}
+
 	s.applyPendingSyncLocked(job)
+
 	if retryAfter <= 0 {
 		retryAfter = s.errorBackoffMin
 	}
 
 	job.consecutiveFailures = 0
 	job.NextRunAt = time.Now().Add(retryAfter)
+
 	if job.index >= 0 {
 		heap.Fix(&s.jobs, job.index)
 	} else {
 		heap.Push(&s.jobs, job)
 	}
+
 	s.logger.Info("Poll job rescheduled after budget skip",
 		"poller", job.Poller.Name(),
 		"channel_id", job.ChannelID,
@@ -148,13 +163,17 @@ func (s *Scheduler) updateJobNextRunAfterPoll(job *Job, pollErr error, now time.
 	if pollErr != nil {
 		if isAdmissionDeferredPollError(pollErr) {
 			s.updateJobNextRunAfterAdmissionDeferred(job, pollErr, now)
+
 			return
 		}
+
 		if !errors.Is(pollErr, context.Canceled) {
 			s.updateJobNextRunAfterFailure(job, pollErr, now)
+
 			return
 		}
 	}
+
 	s.updateJobNextRunAfterSuccess(job, now)
 }
 
@@ -162,6 +181,7 @@ func (s *Scheduler) updateJobNextRunAfterFailure(job *Job, pollErr error, now ti
 	job.consecutiveFailures++
 
 	var delayed retryDelayError
+
 	if errors.As(pollErr, &delayed) && delayed.RetryDelay() > 0 {
 		job.NextRunAt = now.Add(delayed.RetryDelay())
 	} else {
@@ -177,12 +197,15 @@ func (s *Scheduler) updateJobNextRunAfterFailure(job *Job, pollErr error, now ti
 
 func (s *Scheduler) updateJobNextRunAfterSuccess(job *Job, now time.Time) {
 	hadFailures := job.consecutiveFailures > 0
+
 	job.consecutiveFailures = 0
 
 	if job.immediateFirstRun || hadFailures {
 		job.NextRunAt = nextPollAt(now, job.Interval, job.Offset)
 		job.immediateFirstRun = false
+
 		return
 	}
+
 	job.NextRunAt = advanceNextRunAt(job.NextRunAt, job.Interval, now)
 }

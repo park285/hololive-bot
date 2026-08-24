@@ -22,13 +22,15 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
 func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool, error) {
@@ -37,9 +39,10 @@ func (s *Service) isLoginRateLimited(ctx context.Context, clientIP string) (bool
 	}
 
 	key := loginRateLimitKeyPrefix + clientIP
+
 	count, err := incrWithTTL(ctx, s.cacheClient, key, time.Minute)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("incr with TTL: %w", err)
 	}
 
 	return count > s.config.LoginRateLimitPerMinute, nil
@@ -51,9 +54,10 @@ func (s *Service) isPasswordResetRequestRateLimited(ctx context.Context, clientI
 	}
 
 	key := resetReqRateLimitPrefix + clientIP
+
 	count, err := incrWithTTL(ctx, s.cacheClient, key, time.Minute)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("incr with TTL: %w", err)
 	}
 
 	return count > s.config.PasswordResetRequestRateLimitPerMinute, nil
@@ -63,11 +67,14 @@ func (s *Service) isAccountLocked(ctx context.Context, email string) (bool, erro
 	if s.cacheClient == nil {
 		return false, nil
 	}
+
 	key := accountLockKeyPrefix + email
+
 	exists, err := s.cacheClient.Exists(ctx, key)
 	if err != nil {
 		return false, fmt.Errorf("cache exists failed: %w", err)
 	}
+
 	return exists, nil
 }
 
@@ -77,9 +84,11 @@ func (s *Service) onLoginFailed(ctx context.Context, email string) {
 	}
 
 	key := loginFailKeyPrefix + email
+
 	count, err := incrWithTTL(ctx, s.cacheClient, key, s.config.LoginFailWindow)
 	if err != nil {
 		s.logger.Warn("login_fail_increment_failed", slog.Any("error", err))
+
 		return
 	}
 
@@ -88,6 +97,7 @@ func (s *Service) onLoginFailed(ctx context.Context, email string) {
 		if err := s.cacheClient.Set(ctx, lockKey, "1", s.config.LoginLockDuration); err != nil {
 			s.logger.Warn("account_lock_set_failed", slog.Any("error", err))
 		}
+
 		if err := s.cacheClient.Del(ctx, key); err != nil {
 			s.logger.Warn("login_fail_counter_delete_failed", slog.Any("error", err))
 		}
@@ -98,9 +108,11 @@ func (s *Service) onLoginSucceeded(ctx context.Context, email string) {
 	if s.cacheClient == nil {
 		return
 	}
+
 	if err := s.cacheClient.Del(ctx, loginFailKeyPrefix+email); err != nil {
 		s.logger.Warn("login_fail_counter_delete_failed", slog.Any("error", err))
 	}
+
 	if err := s.cacheClient.Del(ctx, accountLockKeyPrefix+email); err != nil {
 		s.logger.Warn("account_lock_delete_failed", slog.Any("error", err))
 	}
@@ -113,10 +125,11 @@ func incrWithTTL(ctx context.Context, cacheClient cache.Client, key string, ttl 
 
 	results := cacheClient.DoMulti(ctx, cmds...)
 	if len(results) == 0 {
-		return 0, fmt.Errorf("increment with ttl: empty pipeline results")
+		return 0, errors.New("increment with ttl: empty pipeline results")
 	}
+
 	if err := validateIncrWithTTLResults(key, results, len(cmds), ttlSeconds > 0); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("validate incr with TTL results: %w", err)
 	}
 
 	count, err := results[0].AsInt64()
@@ -142,7 +155,9 @@ func ceilTTLSeconds(ttl time.Duration) int64 {
 
 func incrWithTTLCommands(builder valkey.Builder, key string, ttlSeconds int64) []valkey.Completed {
 	cmds := make([]valkey.Completed, 0, 2)
+
 	cmds = append(cmds, builder.Incr().Key(key).Build())
+
 	if ttlSeconds <= 0 {
 		return cmds
 	}
@@ -160,7 +175,11 @@ func validateIncrWithTTLResults(key string, results []valkey.ValkeyResult, want 
 	}
 
 	if hasTTL {
-		return validateIncrTTLExpireResult(key, results[1])
+		if err := validateIncrTTLExpireResult(key, results[1]); err != nil {
+			return fmt.Errorf("validate incr TTL expire result: %w", err)
+		}
+
+		return nil
 	}
 
 	return nil

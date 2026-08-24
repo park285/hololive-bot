@@ -34,14 +34,18 @@ func testBotLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-func callNewBotSafely(deps *Dependencies) (_ *Bot, recovered any, _ error) {
+func callNewBotSafely(deps *Dependencies) (created *Bot, recovered any, err error) {
 	defer func() {
 		recovered = recover()
 	}()
 
-	created, err := NewBot(deps)
+	created, err = NewBot(deps)
+	if err != nil {
+		//nolint:wrapcheck // NewBot의 fail-fast 오류 문구를 그대로 대조하는 헬퍼라, 여기서 감싸면 검증 대상 계약이 사라진다.
+		return nil, nil, err
+	}
 
-	return created, nil, err
+	return created, recovered, nil
 }
 
 func TestNewBot_FailFastOnNilDependencies(t *testing.T) {

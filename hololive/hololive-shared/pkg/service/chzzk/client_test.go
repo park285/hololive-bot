@@ -22,6 +22,7 @@ package chzzk
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
@@ -33,30 +34,36 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
-
-	jsonv2 "encoding/json/v2"
-
 	errors "github.com/kapu/hololive-shared/pkg/apperrors"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
-func writeJSONResponse(t testing.TB, w http.ResponseWriter, response any) {
-	t.Helper()
+const (
+	testClientSecret = "secret"
+	testChannelID1   = "target-1"
+	testChannelID2   = "target-2"
+)
+
+func writeJSONResponse(tb testing.TB, w http.ResponseWriter, response any) {
+	tb.Helper()
+
 	if err := jsonv2.MarshalWrite(w, response); err != nil {
-		t.Fatalf("write json response: %v", err)
+		tb.Fatalf("write json response: %v", err)
 	}
 }
 
-func writeBody(t testing.TB, w http.ResponseWriter, body []byte) {
-	t.Helper()
+func writeBody(tb testing.TB, w http.ResponseWriter, body []byte) {
+	tb.Helper()
+
 	if _, err := w.Write(body); err != nil {
-		t.Fatalf("write response body: %v", err)
+		tb.Fatalf("write response body: %v", err)
 	}
 }
 
-func requireGetLiveStatusError(t *testing.T, client *Client, ctx context.Context) {
+func requireGetLiveStatusError(t *testing.T, client *Client) {
 	t.Helper()
-	if _, err := client.GetLiveStatus(ctx, "test-channel"); err == nil {
+
+	if _, err := client.GetLiveStatus(t.Context(), "test-channel"); err == nil {
 		t.Fatal("GetLiveStatus() error = nil, want error")
 	}
 }
@@ -118,11 +125,13 @@ func TestClientConstructors_DefaultHTTPClientAndBaseURLWhenUnset(t *testing.T) {
 type nilResponseTransport struct{}
 
 func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, nil
+	// RoundTripper 계약을 어기는 트랜스포트를 재현하는 것이 이 테스트 대역의 목적이라, 응답과 오류를 모두 nil로 돌려줘야 한다.
+	return nil, nil //nolint:nilnil // 위 사유로 sentinel 오류로 대체할 수 없다.
 }
 
 func TestClientDoRequestNilResponse(t *testing.T) {
 	client := NewClient(&http.Client{Transport: nilResponseTransport{}}, "https://chzzk.example", nil)
+
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://chzzk.example/live", http.NoBody)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
@@ -132,6 +141,7 @@ func TestClientDoRequestNilResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nil HTTP response")
 	}
+
 	if got := err.Error(); !strings.Contains(got, "nil response") {
 		t.Fatalf("error = %q, want nil response context", got)
 	}
@@ -143,10 +153,10 @@ func TestGetLiveStatus_Success_Open(t *testing.T) {
 		Code: 200,
 		Content: &LiveStatusContent{
 			LiveTitle:           "마인크래프트 생방송",
-			Status:              "OPEN",
+			Status:              statusOpen,
 			ConcurrentUserCount: 1234,
 			LiveCategoryValue:   "게임",
-			ChatChannelId:       "chat123",
+			ChatChannelID:       "chat123",
 		},
 	}
 
@@ -175,7 +185,7 @@ func TestGetLiveStatus_Success_Open(t *testing.T) {
 		t.Fatal("Expected non-nil content")
 	}
 
-	if content.Status != "OPEN" {
+	if content.Status != statusOpen {
 		t.Errorf("Expected status OPEN, got: %s", content.Status)
 	}
 
@@ -193,11 +203,11 @@ func TestGetLiveStatus_Success_Close(t *testing.T) {
 	response := LiveStatusResponse{
 		Code: 200,
 		Content: &LiveStatusContent{
-			Status: "CLOSE",
+			Status: statusClose,
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		writeJSONResponse(t, w, response)
@@ -218,14 +228,14 @@ func TestGetLiveStatus_Success_Close(t *testing.T) {
 		t.Fatal("Expected non-nil content")
 	}
 
-	if content.Status != "CLOSE" {
+	if content.Status != statusClose {
 		t.Errorf("Expected status CLOSE, got: %s", content.Status)
 	}
 }
 
 func TestGetLiveStatus_NotFound(t *testing.T) {
 	// 404 Not Found 응답
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 
 		writeBody(t, w, []byte(`{"code":404,"message":"Channel not found"}`))
@@ -243,6 +253,7 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 	}
 
 	var apiErr *errors.APIError
+
 	if !stdErrors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T: %v", err, err)
 	}
@@ -264,7 +275,7 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 	// 429 Rate Limit 응답 - Circuit Breaker 트리거
 	callCount := 0
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -309,7 +320,7 @@ func TestGetLiveStatus_RateLimit_TriggersCircuitBreaker(t *testing.T) {
 
 func TestGetLiveStatus_ContextTimeout(t *testing.T) {
 	// 타임아웃 테스트
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(200 * time.Millisecond) // 200ms 지연
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -334,17 +345,17 @@ func TestGetScheduledLives_Success(t *testing.T) {
 		Content: &ScheduledLivesContent{
 			ScheduledLives: []ScheduledLive{
 				{
-					LiveId:           101,
+					LiveID:           101,
 					LiveTitle:        "오후 3시 잡담",
 					ScheduledStartAt: "2026-01-27 15:00:00",
 				},
 				{
-					LiveId:           102,
+					LiveID:           102,
 					LiveTitle:        "저녁 노래방",
 					ScheduledStartAt: "2026-01-27 19:00:00",
 				},
 				{
-					LiveId:           103,
+					LiveID:           103,
 					LiveTitle:        "심야 게임",
 					ScheduledStartAt: "2026-01-27 23:00:00",
 				},
@@ -381,8 +392,8 @@ func TestGetScheduledLives_Success(t *testing.T) {
 		t.Errorf("Expected first live title '오후 3시 잡담', got: %s", lives[0].LiveTitle)
 	}
 
-	if lives[2].LiveId != 103 {
-		t.Errorf("Expected last live ID 103, got: %d", lives[2].LiveId)
+	if lives[2].LiveID != 103 {
+		t.Errorf("Expected last live ID 103, got: %d", lives[2].LiveID)
 	}
 }
 
@@ -395,7 +406,7 @@ func TestGetScheduledLives_EmptyArray(t *testing.T) {
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		writeJSONResponse(t, w, response)
@@ -422,11 +433,12 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 	callCount := 0
 	forceError := true
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 
 		if forceError {
 			w.WriteHeader(http.StatusInternalServerError)
+
 			return
 		}
 
@@ -434,7 +446,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 		response := LiveStatusResponse{
 			Code: 200,
 			Content: &LiveStatusContent{
-				Status: "CLOSE",
+				Status: statusClose,
 			},
 		}
 
@@ -451,7 +463,7 @@ func TestCircuitBreaker_AutoReset(t *testing.T) {
 
 	// Step 1: 3회 연속 실패로 Circuit OPEN
 	for range 3 {
-		requireGetLiveStatusError(t, client, ctx)
+		requireGetLiveStatusError(t, client)
 	}
 
 	// Step 2: Circuit OPEN 상태 확인
@@ -487,7 +499,7 @@ func TestGetLiveStatus_ServerError_IncreasesFailureCount(t *testing.T) {
 	// 500 Internal Server Error - 실패 카운트 증가
 	callCount := 0
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 
 		w.WriteHeader(http.StatusInternalServerError)
@@ -509,8 +521,8 @@ func TestGetLiveStatus_ServerError_IncreasesFailureCount(t *testing.T) {
 
 	// 실패 카운트 확인 (내부 필드는 직접 접근 불가하므로 행동으로 검증)
 	// 2번 더 실패 시 Circuit OPEN
-	requireGetLiveStatusError(t, client, ctx)
-	requireGetLiveStatusError(t, client, ctx)
+	requireGetLiveStatusError(t, client)
+	requireGetLiveStatusError(t, client)
 
 	if !client.IsCircuitOpen() {
 		t.Error("Circuit should be open after 3 consecutive 500 errors")
@@ -524,7 +536,7 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 		Content: nil,
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		writeJSONResponse(t, w, response)
@@ -535,6 +547,7 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
 	ctx := t.Context()
+
 	lives, err := client.GetScheduledLives(ctx, "test-channel")
 	if err == nil {
 		t.Fatal("Expected API error for non-200 response, got nil")
@@ -547,7 +560,7 @@ func TestGetScheduledLives_NilContent(t *testing.T) {
 
 func TestGetLiveStatus_ContextCancellation(t *testing.T) {
 	// Context 취소 테스트
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -584,7 +597,7 @@ func TestClient_UserAgent(t *testing.T) {
 		response := LiveStatusResponse{
 			Code: 200,
 			Content: &LiveStatusContent{
-				Status: "CLOSE",
+				Status: statusClose,
 			},
 		}
 
@@ -611,7 +624,7 @@ func TestClient_UserAgent(t *testing.T) {
 
 func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 	// 잘못된 JSON 응답
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		writeBody(t, w, []byte(`{"code":200,"content":`)) // Incomplete JSON
@@ -630,7 +643,7 @@ func TestGetLiveStatus_MalformedJSON(t *testing.T) {
 }
 
 func TestNewClientWithConfig_UsesDefaultLoggerWhenNil(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer server.Close()
@@ -639,7 +652,7 @@ func TestNewClientWithConfig_UsesDefaultLoggerWhenNil(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       nil,
 	})
 
@@ -661,7 +674,7 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 
-		if r.URL.Path != "/open/v1/lives" {
+		if r.URL.Path != openAPILivesPath {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 
@@ -674,7 +687,7 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 				Content: LivesResponse{
 					Data: []LiveData{
 						{ChannelID: "other", LiveTitle: "other-live"},
-						{ChannelID: "target-1", LiveTitle: "target-live-1"},
+						{ChannelID: testChannelID1, LiveTitle: "target-live-1"},
 					},
 					Page: PageInfo{Next: "page-2"},
 				},
@@ -684,7 +697,7 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 				Code: http.StatusOK,
 				Content: LivesResponse{
 					Data: []LiveData{
-						{ChannelID: "target-2", LiveTitle: "target-live-2"},
+						{ChannelID: testChannelID2, LiveTitle: "target-live-2"},
 					},
 				},
 			}
@@ -702,13 +715,13 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 
 	client.openAPIBaseURL = server.URL
 
-	lives, err := client.GetLivesByChannelIDs(t.Context(), []string{"target-1", "target-2", "target-3", "target-4", "target-5"})
+	lives, err := client.GetLivesByChannelIDs(t.Context(), []string{testChannelID1, testChannelID2, "target-3", "target-4", "target-5"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -717,7 +730,7 @@ func TestGetLivesByChannelIDs_PaginatesAndFilters(t *testing.T) {
 		t.Fatalf("expected 2 lives, got %d", len(lives))
 	}
 
-	if lives[0].ChannelID != "target-1" || lives[1].ChannelID != "target-2" {
+	if lives[0].ChannelID != testChannelID1 || lives[1].ChannelID != testChannelID2 {
 		t.Fatalf("unexpected lives: %#v", lives)
 	}
 }
@@ -727,7 +740,8 @@ func TestGetLivesByChannelIDs_PageScanStopsOnRepeatedCursor(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pageCalls.Add(1)
-		if r.URL.Path != "/open/v1/lives" {
+
+		if r.URL.Path != openAPILivesPath {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 
@@ -748,9 +762,10 @@ func TestGetLivesByChannelIDs_PageScanStopsOnRepeatedCursor(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
@@ -760,9 +775,11 @@ func TestGetLivesByChannelIDs_PageScanStopsOnRepeatedCursor(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected repeated cursor error")
 	}
+
 	if !strings.Contains(err.Error(), "pagination cursor repeated") {
 		t.Fatalf("error = %q, want repeated cursor diagnostic", err.Error())
 	}
+
 	if got := pageCalls.Load(); got > 3 {
 		t.Fatalf("page scan calls = %d, want bounded repeated cursor detection", got)
 	}
@@ -773,7 +790,8 @@ func TestGetLivesByChannelIDs_PageScanStopsAfterPageCap(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		call := pageCalls.Add(1)
-		if r.URL.Path != "/open/v1/lives" {
+
+		if r.URL.Path != openAPILivesPath {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 
@@ -798,18 +816,21 @@ func TestGetLivesByChannelIDs_PageScanStopsAfterPageCap(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
 	_, err := client.GetLivesByChannelIDs(t.Context(), largeChzzkTargetIDs(1))
 	if err == nil {
 		t.Fatal("expected page cap error")
 	}
+
 	if !strings.Contains(err.Error(), "page scan exceeded") {
 		t.Fatalf("error = %q, want page cap diagnostic", err.Error())
 	}
+
 	if got := pageCalls.Load(); got >= 129 {
 		t.Fatalf("page scan calls = %d, want page cap before test guard", got)
 	}
@@ -818,9 +839,11 @@ func TestGetLivesByChannelIDs_PageScanStopsAfterPageCap(t *testing.T) {
 func largeChzzkTargetIDs(extra int) []string {
 	threshold := settings.DefaultChzzkOperationalConfig().BatchLookupThreshold
 	channelIDs := make([]string, 0, threshold+extra)
-	for i := 0; i < threshold+extra; i++ {
+
+	for i := range threshold + extra {
 		channelIDs = append(channelIDs, fmt.Sprintf("target-%d", i+1))
 	}
+
 	return channelIDs
 }
 
@@ -839,13 +862,13 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 			response := LiveStatusResponse{
 				Code: 200,
 				Content: &LiveStatusContent{
-					Status:    "CLOSE",
+					Status:    statusClose,
 					LiveTitle: "closed",
 				},
 			}
 
-			if channelID == "target-1" {
-				response.Content.Status = "OPEN"
+			if channelID == testChannelID1 {
+				response.Content.Status = statusOpen
 				response.Content.LiveTitle = "target-live-1"
 				response.Content.ConcurrentUserCount = 123
 			}
@@ -853,7 +876,7 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 
 			writeJSONResponse(t, w, response)
-		case r.URL.Path == "/open/v1/lives":
+		case r.URL.Path == openAPILivesPath:
 			pageCalls.Add(1)
 			t.Fatal("unexpected page scan request for small target set")
 		default:
@@ -866,13 +889,13 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 
 	client.openAPIBaseURL = server.URL
 
-	lives, err := client.GetLivesByChannelIDs(t.Context(), []string{"target-1", "target-2"})
+	lives, err := client.GetLivesByChannelIDs(t.Context(), []string{testChannelID1, testChannelID2})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -881,7 +904,7 @@ func TestGetLivesByChannelIDs_UsesStatusChecksForSmallTargetSet(t *testing.T) {
 		t.Fatalf("expected 1 live, got %d", len(lives))
 	}
 
-	if lives[0].ChannelID != "target-1" {
+	if lives[0].ChannelID != testChannelID1 {
 		t.Fatalf("unexpected live result: %#v", lives)
 	}
 
@@ -905,13 +928,13 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 		case strings.HasPrefix(r.URL.Path, "/polling/v2/channels/"):
 			liveStatusCalls.Add(1)
 			t.Fatal("unexpected live status request for large target set")
-		case r.URL.Path == "/open/v1/lives":
+		case r.URL.Path == openAPILivesPath:
 			pageCalls.Add(1)
 
 			response := OpenAPIResponse[LivesResponse]{
 				Code: http.StatusOK,
 				Content: LivesResponse{
-					Data: []LiveData{{ChannelID: "target-1", LiveTitle: "target-live-1"}},
+					Data: []LiveData{{ChannelID: testChannelID1, LiveTitle: "target-live-1"}},
 				},
 			}
 
@@ -928,7 +951,7 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 
@@ -959,13 +982,15 @@ func TestGetLivesByChannelIDs_UsesPageScanForLargeTargetSet(t *testing.T) {
 
 func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing.T) {
 	channelIDs := make([]string, 0, settings.DefaultChzzkOperationalConfig().BatchLookupThreshold+2)
-	channelIDs = append(channelIDs, "target-2", "target-1")
-	for i := 0; i < settings.DefaultChzzkOperationalConfig().BatchLookupThreshold; i++ {
+
+	channelIDs = append(channelIDs, testChannelID2, testChannelID1)
+
+	for i := range settings.DefaultChzzkOperationalConfig().BatchLookupThreshold {
 		channelIDs = append(channelIDs, fmt.Sprintf("filler-%d", i))
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/open/v1/lives" {
+		if r.URL.Path != openAPILivesPath {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 
@@ -973,8 +998,8 @@ func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing
 			Code: http.StatusOK,
 			Content: LivesResponse{
 				Data: []LiveData{
-					{ChannelID: "target-2", LiveTitle: "target-live-2"},
-					{ChannelID: "target-1", LiveTitle: "target-live-1"},
+					{ChannelID: testChannelID2, LiveTitle: "target-live-2"},
+					{ChannelID: testChannelID1, LiveTitle: "target-live-1"},
 				},
 			},
 		}
@@ -988,9 +1013,10 @@ func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
+
 	client.openAPIBaseURL = server.URL
 
 	lives, err := client.GetLivesByChannelIDs(t.Context(), channelIDs)
@@ -1002,7 +1028,7 @@ func TestGetLivesByChannelIDs_PageScanReturnsDeterministicTargetOrder(t *testing
 		t.Fatalf("expected 2 lives, got %d", len(lives))
 	}
 
-	if lives[0].ChannelID != "target-1" || lives[1].ChannelID != "target-2" {
+	if lives[0].ChannelID != testChannelID1 || lives[1].ChannelID != testChannelID2 {
 		t.Fatalf("unexpected deterministic order: %#v", lives)
 	}
 }
@@ -1012,7 +1038,7 @@ func TestGetLivesByChannelIDs_EmptyTargets(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      DefaultBaseURL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 
@@ -1027,7 +1053,7 @@ func TestGetLivesByChannelIDs_EmptyTargets(t *testing.T) {
 }
 
 func TestGetLives_HTTPError_Normalized(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer server.Close()
@@ -1036,7 +1062,7 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 		HTTPClient:   http.DefaultClient,
 		BaseURL:      server.URL,
 		ClientID:     "id",
-		ClientSecret: "secret",
+		ClientSecret: testClientSecret,
 		Logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 
@@ -1048,6 +1074,7 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 	}
 
 	var apiErr *errors.APIError
+
 	if !stdErrors.As(err, &apiErr) {
 		t.Fatalf("expected APIError, got %T: %v", err, err)
 	}
@@ -1069,8 +1096,9 @@ func TestCircuitBreaker_AfterReset_ThresholdRequiredToReopen(t *testing.T) {
 	// M3: timeout 경과 후 reset → failures=0 → 단 1회 실패로 즉시 재open 금지
 	callCount := 0
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
+
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
@@ -1078,12 +1106,11 @@ func TestCircuitBreaker_AfterReset_ThresholdRequiredToReopen(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	client := NewClient(http.DefaultClient, server.URL, logger)
 
-	ctx := t.Context()
-
 	// threshold 도달 → circuit open
 	for range 3 {
-		requireGetLiveStatusError(t, client, ctx)
+		requireGetLiveStatusError(t, client)
 	}
+
 	if !client.IsCircuitOpen() {
 		t.Fatal("circuit should be open after threshold failures")
 	}
@@ -1097,7 +1124,7 @@ func TestCircuitBreaker_AfterReset_ThresholdRequiredToReopen(t *testing.T) {
 	}
 
 	// 1회 실패 후 즉시 재open 금지
-	requireGetLiveStatusError(t, client, ctx)
+	requireGetLiveStatusError(t, client)
 
 	if client.IsCircuitOpen() {
 		t.Fatal("single failure after reset must not re-open circuit (threshold=3)")
@@ -1108,11 +1135,11 @@ func BenchmarkGetLiveStatus(b *testing.B) {
 	response := LiveStatusResponse{
 		Code: 200,
 		Content: &LiveStatusContent{
-			Status: "OPEN",
+			Status: statusOpen,
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		writeJSONResponse(b, w, response)

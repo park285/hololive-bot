@@ -1,11 +1,10 @@
 package session
 
 import (
-	"context"
+	jsonv2 "encoding/json/v2"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/require"
 
@@ -14,16 +13,19 @@ import (
 
 func newTestStore(t *testing.T) (*Store, *miniredis.Miniredis) {
 	t.Helper()
+
 	mr := miniredis.RunT(t)
 	cfg := config.DefaultSessionConfig()
-	store, err := NewStoreWithOptions(context.Background(), mr.Addr(), &cfg, Options{DisableCache: true, ForceSingleClient: true})
+	store, err := NewStoreWithOptions(t.Context(), mr.Addr(), &cfg, Options{DisableCache: true, ForceSingleClient: true})
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
+
 	return store, mr
 }
 
 func seedSession(t *testing.T, mr *miniredis.Miniredis, sess *Session) {
 	t.Helper()
+
 	data, err := jsonv2.Marshal(sess)
 	require.NoError(t, err)
 	require.NoError(t, mr.Set(sessionKey(sess.ID), string(data)))
@@ -32,16 +34,16 @@ func seedSession(t *testing.T, mr *miniredis.Miniredis, sess *Session) {
 
 func TestStoreCreateGetRoundTrip(t *testing.T) {
 	store, mr := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	created, err := store.Create(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, created.ID)
 	require.True(t, mr.Exists(sessionKey(created.ID)))
 
-	loaded, err := store.Get(ctx, created.ID)
+	loaded, ok, err := store.Get(ctx, created.ID)
 	require.NoError(t, err)
-	require.NotNil(t, loaded)
+	require.True(t, ok)
 	require.Equal(t, created.ID, loaded.ID)
 	require.WithinDuration(t, created.AbsoluteExpiresAt, loaded.AbsoluteExpiresAt, time.Second)
 }
@@ -49,9 +51,9 @@ func TestStoreCreateGetRoundTrip(t *testing.T) {
 func TestStoreGetMissing(t *testing.T) {
 	store, _ := newTestStore(t)
 
-	loaded, err := store.Get(context.Background(), "does-not-exist")
+	_, ok, err := store.Get(t.Context(), "does-not-exist")
 	require.NoError(t, err)
-	require.Nil(t, loaded)
+	require.False(t, ok)
 }
 
 func TestStoreGetDropsAbsolutelyExpired(t *testing.T) {
@@ -66,15 +68,15 @@ func TestStoreGetDropsAbsolutelyExpired(t *testing.T) {
 	}
 	seedSession(t, mr, &expired)
 
-	loaded, err := store.Get(context.Background(), expired.ID)
+	_, ok, err := store.Get(t.Context(), expired.ID)
 	require.NoError(t, err)
-	require.Nil(t, loaded)
+	require.False(t, ok)
 	require.False(t, mr.Exists(sessionKey(expired.ID)))
 }
 
 func TestStoreRefreshExtendsSession(t *testing.T) {
 	store, _ := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	created, err := store.Create(ctx)
 	require.NoError(t, err)
@@ -88,7 +90,7 @@ func TestStoreRefreshExtendsSession(t *testing.T) {
 
 func TestStoreRefreshIdleShortens(t *testing.T) {
 	store, mr := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	created, err := store.Create(ctx)
 	require.NoError(t, err)
@@ -104,26 +106,26 @@ func TestStoreRefreshIdleShortens(t *testing.T) {
 func TestStoreRefreshMissing(t *testing.T) {
 	store, _ := newTestStore(t)
 
-	result, err := store.Refresh(context.Background(), "missing", false)
+	result, err := store.Refresh(t.Context(), "missing", false)
 	require.NoError(t, err)
 	require.Equal(t, RefreshMissing, result.Kind)
 }
 
 func TestStoreRotateBeforeIntervalIsNoop(t *testing.T) {
 	store, _ := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	created, err := store.Create(ctx)
 	require.NoError(t, err)
 
-	rotated, err := store.Rotate(ctx, created.ID)
+	_, ok, err := store.Rotate(ctx, created.ID)
 	require.NoError(t, err)
-	require.Nil(t, rotated)
+	require.False(t, ok)
 }
 
 func TestStoreRotateAfterIntervalCreatesReplacement(t *testing.T) {
 	store, mr := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	now := time.Now().UTC()
 	old := Session{
 		ID:                "rotate-me",
@@ -134,15 +136,15 @@ func TestStoreRotateAfterIntervalCreatesReplacement(t *testing.T) {
 	}
 	seedSession(t, mr, &old)
 
-	rotated, err := store.Rotate(ctx, old.ID)
+	rotated, ok, err := store.Rotate(ctx, old.ID)
 	require.NoError(t, err)
-	require.NotNil(t, rotated)
+	require.True(t, ok)
 	require.NotEqual(t, old.ID, rotated.ID)
 	require.Equal(t, old.AbsoluteExpiresAt.Unix(), rotated.AbsoluteExpiresAt.Unix())
 
-	marker, err := store.Get(ctx, old.ID)
+	marker, markerOK, err := store.Get(ctx, old.ID)
 	require.NoError(t, err)
-	require.NotNil(t, marker)
+	require.True(t, markerOK)
 	require.NotNil(t, marker.RotatedTo)
 	require.Equal(t, rotated.ID, *marker.RotatedTo)
 
@@ -154,7 +156,7 @@ func TestStoreRotateAfterIntervalCreatesReplacement(t *testing.T) {
 
 func TestStoreDelete(t *testing.T) {
 	store, mr := newTestStore(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	created, err := store.Create(ctx)
 	require.NoError(t, err)

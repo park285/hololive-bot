@@ -1,15 +1,21 @@
 package summarizer
 
 import (
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	jsonv2 "encoding/json/v2"
-
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+)
+
+// JSON Schema 어휘 리터럴. 프로덕션 스키마 전용이며, golden 테스트는
+// 프로덕션 값 변경을 감지해야 하므로 이 상수를 참조하지 않는다.
+const (
+	schemaKeyType    = "type"
+	schemaTypeString = "string"
 )
 
 type promptCandidate struct {
@@ -41,7 +47,7 @@ type summaryResponseItem struct {
 
 func memberNewsSummarySchema() map[string]any {
 	return map[string]any{
-		"type":                 "object",
+		schemaKeyType:          "object",
 		"additionalProperties": false,
 		"properties":           memberNewsSummarySchemaProperties(),
 		"required":             []string{"period", "headline", "top_items", "more_summary", "omitted_count"},
@@ -51,35 +57,35 @@ func memberNewsSummarySchema() map[string]any {
 func memberNewsSummarySchemaProperties() map[string]any {
 	return map[string]any{
 		"period": map[string]any{
-			"type": "string",
-			"enum": []string{"weekly", "monthly"},
+			schemaKeyType: schemaTypeString,
+			"enum":        []string{"weekly", "monthly"},
 		},
-		"headline":      map[string]any{"type": "string"},
+		"headline":      map[string]any{schemaKeyType: schemaTypeString},
 		"top_items":     memberNewsSummaryTopItemsSchema(),
-		"more_summary":  map[string]any{"type": "string"},
-		"omitted_count": map[string]any{"type": "integer", "minimum": 0},
+		"more_summary":  map[string]any{schemaKeyType: schemaTypeString},
+		"omitted_count": map[string]any{schemaKeyType: "integer", "minimum": 0},
 	}
 }
 
 func memberNewsSummaryTopItemsSchema() map[string]any {
 	return map[string]any{
-		"type":     "array",
-		"maxItems": 5,
-		"items":    memberNewsSummaryItemSchema(),
+		schemaKeyType: "array",
+		"maxItems":    5,
+		"items":       memberNewsSummaryItemSchema(),
 	}
 }
 
 func memberNewsSummaryItemSchema() map[string]any {
 	return map[string]any{
-		"type":                 "object",
+		schemaKeyType:          "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
-			"member":     map[string]any{"type": "string"},
-			"category":   map[string]any{"type": "string"},
-			"title":      map[string]any{"type": "string"},
-			"date_text":  map[string]any{"type": "string"},
-			"summary":    map[string]any{"type": "string"},
-			"source_url": map[string]any{"type": "string"},
+			"member":     map[string]any{schemaKeyType: schemaTypeString},
+			"category":   map[string]any{schemaKeyType: schemaTypeString},
+			"title":      map[string]any{schemaKeyType: schemaTypeString},
+			"date_text":  map[string]any{schemaKeyType: schemaTypeString},
+			"summary":    map[string]any{schemaKeyType: schemaTypeString},
+			"source_url": map[string]any{schemaKeyType: schemaTypeString},
 		},
 		"required": []string{"member", "category", "title", "date_text", "summary", "source_url"},
 	}
@@ -156,21 +162,25 @@ func marshalPromptJSON(value any, fallback string) []byte {
 	if err != nil {
 		return []byte(fallback)
 	}
+
 	return data
 }
 
 func buildSearchQuery(period model.Period, roomMembers []string, now time.Time) string {
 	periodText := "weekly"
+
 	if model.NormalizePeriod(period) == model.PeriodMonthly {
 		periodText = "monthly"
 	}
 
 	members := append([]string(nil), roomMembers...)
 	sort.Strings(members)
+
 	// 검색 쿼리 노이즈 방지: 멤버 최대 5명
 	if len(members) > 5 {
 		members = members[:5]
 	}
+
 	memberPart := strings.Join(members, " ")
 	if strings.TrimSpace(memberPart) == "" {
 		memberPart = "hololive"
@@ -185,12 +195,15 @@ func formatSearchContext(results []sharedmodel.SearchResult) string {
 	}
 
 	var builder strings.Builder
+
 	for i, item := range results {
 		if i > 0 {
 			builder.WriteString("\n\n")
 		}
+
 		writeSearchContextItem(&builder, i, item)
 	}
+
 	return builder.String()
 }
 
@@ -206,6 +219,7 @@ func writeSearchContextField(builder *strings.Builder, label, value string) {
 	if trimmed == "" {
 		return
 	}
+
 	builder.WriteString("\n")
 	builder.WriteString(label)
 	builder.WriteString(trimmed)

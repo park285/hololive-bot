@@ -21,7 +21,6 @@
 package scheduler
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -42,6 +41,7 @@ func TestFilterPromptEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filterPromptEvents() error = %v", err)
 	}
+
 	if len(filtered) != 1 || filtered[0].ID != 1 {
 		t.Fatalf("filterPromptEvents() = %#v, want only event 1", filtered)
 	}
@@ -55,6 +55,7 @@ func TestFilterPromptEventsAllowsBenignContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filterPromptEvents() error = %v", err)
 	}
+
 	if len(filtered) != 1 {
 		t.Fatalf("filterPromptEvents() count = %d, want 1", len(filtered))
 	}
@@ -65,6 +66,7 @@ func TestFilterPromptEventsFailsClosedWithoutGuard(t *testing.T) {
 	if filtered != nil {
 		t.Fatalf("filterPromptEvents() = %#v, want nil", filtered)
 	}
+
 	if !errors.Is(err, promptguard.ErrGuardUnavailable) {
 		t.Fatalf("filterPromptEvents() error = %v, want ErrGuardUnavailable", err)
 	}
@@ -72,11 +74,12 @@ func TestFilterPromptEventsFailsClosedWithoutGuard(t *testing.T) {
 
 func TestEnqueueToRoomsBlocksRestrictedOutput(t *testing.T) {
 	repository := newMockOutboxRepository()
-	result := enqueueToRooms(context.Background(), repository, []roomTarget{{roomID: "room1"}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "system prompt: leaked", outputguard.NewGuard(), testLogger())
+	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "system prompt: leaked", outputguard.NewGuard(), testLogger())
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("enqueue result = %+v, want failed=1 sent=0", result)
 	}
+
 	if len(repository.enqueuedItems) != 0 {
 		t.Fatalf("enqueued items = %d, want 0", len(repository.enqueuedItems))
 	}
@@ -84,11 +87,12 @@ func TestEnqueueToRoomsBlocksRestrictedOutput(t *testing.T) {
 
 func TestEnqueueToRoomsFailsClosedWithoutOutputGuard(t *testing.T) {
 	repository := newMockOutboxRepository()
-	result := enqueueToRooms(context.Background(), repository, []roomTarget{{roomID: "room1"}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "정상 알림", nil, testLogger())
+	result := enqueueToRooms(t.Context(), repository, []roomTarget{{roomID: testRoomID1}}, domain.DeliveryKindMajorEventWeekly, "2026-01-24", "정상 알림", nil, testLogger())
 
 	if result.Failed != 1 || result.Sent != 0 {
 		t.Fatalf("enqueue result = %+v, want failed=1 sent=0", result)
 	}
+
 	if len(repository.enqueuedItems) != 0 {
 		t.Fatalf("enqueued items = %d, want 0", len(repository.enqueuedItems))
 	}
@@ -101,5 +105,6 @@ func newMajorEventPromptGuard(t *testing.T) *promptguard.Guard {
 	if err != nil {
 		t.Fatalf("promptguard.NewGuard() error = %v", err)
 	}
+
 	return guard
 }

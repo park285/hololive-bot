@@ -32,12 +32,12 @@ import (
 func (s *Service) Reload(ctx context.Context) error {
 	enabled, mode, err := s.readSettingsFromDatabase(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("read settings from database: %w", err)
 	}
 
 	rooms, err := s.loadRoomsFromDatabase(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("load rooms from database: %w", err)
 	}
 
 	s.mu.Lock()
@@ -53,6 +53,7 @@ func (s *Service) Reload(ctx context.Context) error {
 
 func (s *Service) readSettingsFromDatabase(ctx context.Context) (enabled bool, mode ACLMode, err error) {
 	s.mu.RLock()
+
 	enabled = s.enabled
 	mode = s.mode
 	s.mu.RUnlock()
@@ -61,11 +62,13 @@ func (s *Service) readSettingsFromDatabase(ctx context.Context) (enabled bool, m
 	if err != nil {
 		return false, "", fmt.Errorf("reload ACL enabled setting: %w", err)
 	}
+
 	if enabledFound {
 		parsed, parseErr := parseACLEnabledStrict(enabledValue)
 		if parseErr != nil {
 			return false, "", fmt.Errorf("reload ACL enabled setting: %w", parseErr)
 		}
+
 		enabled = parsed
 	}
 
@@ -73,11 +76,13 @@ func (s *Service) readSettingsFromDatabase(ctx context.Context) (enabled bool, m
 	if err != nil {
 		return false, "", fmt.Errorf("reload ACL mode setting: %w", err)
 	}
+
 	if modeFound {
 		parsed, parseErr := parseACLModeStrict(modeValue)
 		if parseErr != nil {
 			return false, "", fmt.Errorf("reload ACL mode setting: %w", parseErr)
 		}
+
 		mode = parsed
 	}
 

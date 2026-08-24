@@ -11,6 +11,7 @@ import (
 
 type recordingTrackingRollbackTx struct {
 	pgx.Tx
+
 	rollbackCtxErr      error
 	rollbackHasDeadline bool
 	rollbackErr         error
@@ -19,11 +20,13 @@ type recordingTrackingRollbackTx struct {
 func (tx *recordingTrackingRollbackTx) Rollback(ctx context.Context) error {
 	tx.rollbackCtxErr = ctx.Err()
 	_, tx.rollbackHasDeadline = ctx.Deadline()
+
 	return tx.rollbackErr
 }
 
 type panicTrackingBeginner struct {
 	trackingDB
+
 	tx pgx.Tx
 }
 
@@ -32,17 +35,20 @@ func (db *panicTrackingBeginner) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx
 }
 
 func TestInPgxTxPreservesPanicWhenRollbackFails(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	tx := &recordingTrackingRollbackTx{rollbackErr: errors.New("rollback failed")}
 	db := &panicTrackingBeginner{tx: tx}
 	panicValue := &struct{ message string }{message: "tracking panic"}
 
 	var recovered any
+
 	func() {
 		defer func() {
 			recovered = recover()
 		}()
+
 		require.NoError(t, inPgxTx(ctx, db, func(trackingDB) error {
 			panic(panicValue)
 		}))

@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -21,22 +22,33 @@ type runtimeIrisBaseURLResolver struct {
 
 func (r *runtimeIrisBaseURLResolver) resolve() (string, error) {
 	if r.baseURLFilePath != "" {
-		return r.resolveFromFile()
+		out, err := r.resolveFromFile()
+		if err != nil {
+			return out, fmt.Errorf("resolve from file: %w", err)
+		}
+
+		return out, nil
 	}
 
-	return validateHTTPBaseURL(r.fallbackBaseURL, r.transport)
+	out, err := validateHTTPBaseURL(r.fallbackBaseURL, r.transport)
+	if err != nil {
+		return out, fmt.Errorf("validate HTTP base URL: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
 	validateStat := shouldValidateRuntimeIrisBaseURLFileStat()
+
 	baseURLFilePath, err := normalizeRuntimeIrisBaseURLFilePath(r.baseURLFilePath, validateStat)
 	if err != nil {
 		return "", fmt.Errorf("validate IRIS_BASE_URL_FILE path: %w", err)
 	}
 
 	if validateStat {
-		if err := validateRuntimeIrisBaseURLFileStat(baseURLFilePath); err != nil {
-			return "", fmt.Errorf("validate IRIS_BASE_URL_FILE: %w", err)
+		if validateErr := validateRuntimeIrisBaseURLFileStat(baseURLFilePath); validateErr != nil {
+			return "", fmt.Errorf("validate IRIS_BASE_URL_FILE: %w", validateErr)
 		}
 	}
 
@@ -56,9 +68,15 @@ func (r *runtimeIrisBaseURLResolver) resolveFromFile() (string, error) {
 func readRuntimeIrisBaseURLFile(path string) ([]byte, error) {
 	dir, name := filepath.Split(path)
 	if name == "" || strings.ContainsRune(name, os.PathSeparator) {
-		return nil, fmt.Errorf("invalid IRIS_BASE_URL_FILE basename")
+		return nil, errors.New("invalid IRIS_BASE_URL_FILE basename")
 	}
-	return fs.ReadFile(os.DirFS(dir), name)
+
+	out, err := fs.ReadFile(os.DirFS(dir), name)
+	if err != nil {
+		return out, fmt.Errorf("read file: %w", err)
+	}
+
+	return out, nil
 }
 
 func (r *runtimeIrisBaseURLResolver) warnBaseURLHostUnvalidated(host string) {
@@ -78,23 +96,24 @@ func (r *runtimeIrisBaseURLResolver) warnBaseURLHostUnvalidated(host string) {
 func validateHTTPBaseURL(raw string, explicitTransport ...string) (string, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(raw), "/")
 	if baseURL == "" {
-		return "", fmt.Errorf("base URL is empty")
+		return "", errors.New("base URL is empty")
 	}
 
 	parsed, err := url.ParseRequestURI(baseURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse request URI: %w", err)
 	}
 
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+	if parsed.Scheme != runtimeIrisSchemeHTTP && parsed.Scheme != runtimeIrisSchemeHTTPS {
 		return "", fmt.Errorf("unsupported URL scheme: %q", parsed.Scheme)
 	}
 
 	if parsed.Host == "" {
-		return "", fmt.Errorf("base URL host is empty")
+		return "", errors.New("base URL host is empty")
 	}
+
 	if err := validateRuntimeIrisTransportScheme(runtimeIrisValidationTransport(firstRuntimeIrisTransport(explicitTransport)), parsed); err != nil {
-		return "", err
+		return "", fmt.Errorf("validate runtime iris transport scheme: %w", err)
 	}
 
 	return baseURL, nil
@@ -104,5 +123,6 @@ func firstRuntimeIrisTransport(values []string) string {
 	if len(values) == 0 {
 		return ""
 	}
+
 	return values[0]
 }

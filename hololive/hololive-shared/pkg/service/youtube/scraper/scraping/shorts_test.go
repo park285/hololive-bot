@@ -1,16 +1,16 @@
 package scraping
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 func TestGetShorts_DoesNotEagerlyEnrichPublishedAtFromRSS(t *testing.T) {
@@ -36,7 +36,7 @@ func TestGetShorts_DoesNotEagerlyEnrichPublishedAtFromRSS(t *testing.T) {
 		}),
 	)
 
-	shorts, err := client.GetShorts(context.Background(), "UC_TEST", 10)
+	shorts, err := client.GetShorts(t.Context(), "UC_TEST", 10)
 	require.NoError(t, err)
 	require.Len(t, shorts, 2)
 	assert.Zero(t, rssCalls)

@@ -22,11 +22,11 @@ package cache
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"testing"
 	"time"
 
-	jsonv2 "encoding/json/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,8 +61,9 @@ func TestCacheServiceScanKeysAdditional(t *testing.T) {
 			t.Parallel()
 
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 			seedKeys := []string{"scan:user:1", "scan:user:2", "scan:stream:1"}
+
 			for _, key := range seedKeys {
 				require.NoError(t, service.Set(ctx, key, testPayload{Name: key}, 0))
 			}
@@ -111,7 +112,8 @@ func TestCacheServiceDelManyAdditional(t *testing.T) {
 			t.Parallel()
 
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
+
 			for _, key := range tt.seedKeys {
 				require.NoError(t, service.Set(ctx, key, testPayload{Name: key}, 0))
 			}
@@ -120,11 +122,13 @@ func TestCacheServiceDelManyAdditional(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantDeleted, deleted)
+
 			for _, key := range tt.deleteKeys {
 				exists, existsErr := service.Exists(ctx, key)
 				require.NoError(t, existsErr)
 				assert.False(t, exists, "expected %s to be deleted", key)
 			}
+
 			for _, key := range tt.wantRemain {
 				exists, existsErr := service.Exists(ctx, key)
 				require.NoError(t, existsErr)
@@ -134,16 +138,16 @@ func TestCacheServiceDelManyAdditional(t *testing.T) {
 	}
 }
 
-func TestCacheServiceSetNXMultiAdditional(t *testing.T) {
-	t.Parallel()
+type setNXMultiCase struct {
+	name          string
+	existing      map[string]string
+	entries       []SetNXEntry
+	wantResults   []SetNXResult
+	wantRawValues map[string]string
+}
 
-	tests := []struct {
-		name          string
-		existing      map[string]string
-		entries       []SetNXEntry
-		wantResults   []SetNXResult
-		wantRawValues map[string]string
-	}{
+func setNXMultiAdditionalCases() []setNXMultiCase {
+	return []setNXMultiCase{
 		{
 			name: "sets all keys when none exist",
 			entries: []SetNXEntry{
@@ -197,13 +201,18 @@ func TestCacheServiceSetNXMultiAdditional(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tt := range tests {
+func TestCacheServiceSetNXMultiAdditional(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range setNXMultiAdditionalCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
+
 			for key, value := range tt.existing {
 				acquired, err := service.SetNX(ctx, key, value, 0)
 				require.NoError(t, err)
@@ -214,11 +223,13 @@ func TestCacheServiceSetNXMultiAdditional(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Len(t, got, len(tt.wantResults))
+
 			for i, want := range tt.wantResults {
 				assert.Equal(t, want.Key, got[i].Key)
 				assert.Equal(t, want.Acquired, got[i].Acquired)
-				assert.NoError(t, got[i].Err)
+				require.NoError(t, got[i].Err)
 			}
+
 			for key, want := range tt.wantRawValues {
 				gotValue, hit, getErr := service.GetString(ctx, key)
 				require.NoError(t, getErr)
@@ -273,7 +284,7 @@ func TestCacheServiceMSetMGetAdditional(t *testing.T) {
 			t.Parallel()
 
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
 			require.NoError(t, service.MSet(ctx, tt.pairs, 0))
 
 			got, err := service.MGet(ctx, tt.keys)
@@ -297,7 +308,7 @@ func TestCacheServiceExistsAdditional(t *testing.T) {
 			name: "returns true for existing key",
 			setup: func(t *testing.T, service *Service, ctx context.Context) {
 				t.Helper()
-				require.NoError(t, service.Set(ctx, "exists:present", testPayload{Name: "value"}, 0))
+				require.NoError(t, service.Set(ctx, "exists:present", testPayload{Name: testPayloadValue}, 0))
 			},
 			key:  "exists:present",
 			want: true,
@@ -314,7 +325,8 @@ func TestCacheServiceExistsAdditional(t *testing.T) {
 			t.Parallel()
 
 			service, _ := newTestCacheService(t)
-			ctx := context.Background()
+			ctx := t.Context()
+
 			if tt.setup != nil {
 				tt.setup(t, service, ctx)
 			}
@@ -334,8 +346,9 @@ func TestCacheServiceWaitUntilReadyTickAdditional(t *testing.T) {
 		t.Parallel()
 
 		service, _ := newTestCacheService(t)
-		ctx := context.Background()
+		ctx := t.Context()
 		ticks := make(chan time.Time, 1)
+
 		ticks <- time.Now()
 
 		ready, err := service.waitUntilReadyTick(ctx, ticks)
@@ -348,7 +361,7 @@ func TestCacheServiceWaitUntilReadyTickAdditional(t *testing.T) {
 		t.Parallel()
 
 		service, _ := newTestCacheService(t)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
 		ready, err := service.waitUntilReadyTick(ctx, make(chan time.Time))
@@ -363,6 +376,7 @@ func numberedKeys(prefix string, count int) []string {
 	for i := range count {
 		keys = append(keys, fmt.Sprintf("%s%d", prefix, i))
 	}
+
 	return keys
 }
 
@@ -372,8 +386,11 @@ func decodePayloadMap(t *testing.T, values map[string]string) map[string]testPay
 	decoded := make(map[string]testPayload, len(values))
 	for key, value := range values {
 		var payload testPayload
+
 		require.NoError(t, jsonv2.Unmarshal([]byte(value), &payload))
+
 		decoded[key] = payload
 	}
+
 	return decoded
 }

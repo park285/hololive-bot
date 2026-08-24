@@ -38,6 +38,7 @@ var (
 func Init(v string) {
 	initOnce.Do(func() {
 		startTime = time.Now()
+
 		if v != "" {
 			version = v
 		}
@@ -70,20 +71,24 @@ func Get() Response {
 func GetReadiness() (Response, bool) {
 	response := Get()
 	ready := true
+
 	for _, component := range response.Components {
 		if !component.Ready {
 			ready = false
 			break
 		}
 	}
+
 	if !ready {
 		response.Status = "not_ready"
 	}
+
 	return response, ready
 }
 
 func SetComponent(name string, status ComponentStatus) {
 	componentM.Lock()
+
 	components[name] = status
 	componentM.Unlock()
 }
@@ -97,11 +102,14 @@ func RemoveComponent(name string) {
 func componentSnapshot() map[string]ComponentStatus {
 	componentM.RLock()
 	defer componentM.RUnlock()
+
 	if len(components) == 0 {
 		return nil
 	}
+
 	snapshot := make(map[string]ComponentStatus, len(components))
 	maps.Copy(snapshot, components)
+
 	return snapshot
 }
 

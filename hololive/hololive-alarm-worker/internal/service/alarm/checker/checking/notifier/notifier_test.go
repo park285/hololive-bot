@@ -28,6 +28,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -37,8 +40,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type notifierBatchOutbox struct {
@@ -48,16 +49,20 @@ type notifierBatchOutbox struct {
 }
 
 func (o *notifierBatchOutbox) InsertPending(context.Context, *domain.AlarmQueueEnvelope) (*dispatchoutbox.Record, dispatchoutbox.InsertResult, error) {
-	return nil, dispatchoutbox.Inserted, nil
+	return &dispatchoutbox.Record{}, dispatchoutbox.Inserted, nil
 }
 
 func (o *notifierBatchOutbox) InsertBatch(_ context.Context, input dispatchoutbox.PublishBatchInput) (dispatchoutbox.PublishBatchResult, error) {
 	o.insertBatchCalls++
+
 	o.lastBatchInput = input
+
 	callIndex := o.insertBatchCalls - 1
+
 	if callIndex < len(o.batchErrors) && o.batchErrors[callIndex] != nil {
 		return dispatchoutbox.PublishBatchResult{}, o.batchErrors[callIndex]
 	}
+
 	return dispatchoutbox.PublishBatchResult{
 		RequestedEvents:     1,
 		InsertedEvents:      1,
@@ -142,8 +147,10 @@ func TestNotifierClaimsLiveCatchupSeparatelyAndAcrossScheduleDrift(t *testing.T)
 	require.True(t, claimed)
 
 	catchupStream := *preliveStream
+
 	catchupStream.Status = domain.StreamStatusLive
 	catchupStream.StartActual = &actualStart
+
 	catchup := &sendInput{
 		notification:   domain.NewAlarmNotification("room-catchup", nil, &catchupStream, 5, nil, ""),
 		streamID:       catchupStream.ID,
@@ -154,12 +161,14 @@ func TestNotifierClaimsLiveCatchupSeparatelyAndAcrossScheduleDrift(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, claimed)
 	require.Len(t, claimKeys, 2)
+
 	for _, key := range claimKeys {
 		assert.Contains(t, key, ":0:")
 		assert.Contains(t, key, ":live_catchup")
 	}
 
 	drifted := *catchup
+
 	drifted.startScheduled = scheduled.Add(time.Minute)
 	_, claimed, err = notifier.claimDedup(t.Context(), &drifted)
 	require.NoError(t, err)
@@ -202,6 +211,18 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 		t.Fatalf("Send() error = %v", sendErr)
 	}
 
+	assertPublishQueueOutboxState(t, result, outbox)
+
+	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
+		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
+	}
+
+	assertNotifiedHashCache(t, cacheClient, stream.ID)
+}
+
+func assertPublishQueueOutboxState(t *testing.T, result SendResult, outbox *notifierBatchOutbox) {
+	t.Helper()
+
 	if result.Sent != 1 || result.Skipped != 0 || result.Failed != 0 {
 		t.Fatalf("unexpected result: %+v", result)
 	}
@@ -209,17 +230,20 @@ func TestNotifierSend_PublishQueuePath(t *testing.T) {
 	if outbox.insertBatchCalls != 1 {
 		t.Fatalf("expected one pending outbox insert, got %d", outbox.insertBatchCalls)
 	}
+
 	if got := len(outbox.lastBatchInput.Envelopes); got != 1 {
 		t.Fatalf("expected one published envelope, got %d", got)
 	}
+
 	if outbox.lastBatchInput.Status != dispatchoutbox.StatusPending {
 		t.Fatalf("expected pending outbox status, got %q", outbox.lastBatchInput.Status)
 	}
-	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
-		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
-	}
+}
 
-	notifiedKey := "notified:" + stream.ID
+func assertNotifiedHashCache(t *testing.T, cacheClient cache.Client, streamID string) {
+	t.Helper()
+
+	notifiedKey := "notified:" + streamID
 
 	startScheduled, err := cacheClient.HGet(t.Context(), notifiedKey, "start_scheduled")
 	if err != nil {
@@ -295,6 +319,7 @@ func TestNotifierSend_PublishesNonYouTubeLiveStreams(t *testing.T) {
 	require.Equal(t, 1, outbox.insertBatchCalls)
 	assert.Len(t, outbox.lastBatchInput.Envelopes, 2)
 	assert.Equal(t, dispatchoutbox.StatusPending, outbox.lastBatchInput.Status)
+
 	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
 		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
@@ -320,8 +345,8 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	previousScheduled := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
-	currentScheduled := time.Date(2026, 4, 9, 12, 2, 0, 0, time.UTC)
+	previousScheduled := time.Date(2026, time.April, 9, 12, 0, 0, 0, time.UTC)
+	currentScheduled := time.Date(2026, time.April, 9, 12, 2, 0, 0, time.UTC)
 	stream := &domain.Stream{
 		ID:             "delayed-publish-fail",
 		Title:          "publish fail retry",
@@ -331,6 +356,7 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 		Channel:        &domain.Channel{ID: "ch-1", Name: "Channel 1"},
 	}
 	notification := domain.NewAlarmNotification("room-1", stream.Channel, stream, 5, []string{}, "일정이 늦춰졌습니다.")
+
 	notification.ScheduleChangePreviousStart = previousScheduled.Format(time.RFC3339)
 
 	_, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
@@ -351,24 +377,26 @@ func TestNotifierSend_ReleasesScheduleChangeClaimsOnPublishFailure(t *testing.T)
 func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 	t.Parallel()
 
-	cacheClient := cachemocks.NewStrictClient()
-	logBuffer := &bytes.Buffer{}
-	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, logger)
-
-	notifier, err := NewNotifier(
-		dedupService,
-		queue.NewPublisher(cacheClient, logger),
-		nil,
-		logger,
-	)
-	if err != nil {
-		t.Fatalf("NewNotifier() error = %v", err)
-	}
-
 	start := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Minute)
+
 	for _, alarmType := range []domain.AlarmType{domain.AlarmTypeCommunity, domain.AlarmTypeShorts} {
 		t.Run(string(alarmType), func(t *testing.T) {
+			t.Parallel()
+
+			cacheClient := cachemocks.NewStrictClient()
+			logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelInfo}))
+			dedupService := dedup.NewService(cacheClient, []int{5, 3, 1}, logger)
+
+			notifier, err := NewNotifier(
+				dedupService,
+				queue.NewPublisher(cacheClient, logger),
+				nil,
+				logger,
+			)
+			if err != nil {
+				t.Fatalf("NewNotifier() error = %v", err)
+			}
+
 			stream := &domain.Stream{
 				ID:             "blocked-" + string(alarmType),
 				Title:          "blocked route",
@@ -378,8 +406,8 @@ func TestNotifierSend_RejectsContentAlarmTypes(t *testing.T) {
 				Channel:        &domain.Channel{ID: "UC_BLOCKED", Name: "blocked"},
 			}
 			notification := domain.NewAlarmNotification("room-blocked", stream.Channel, stream, 5, []string{}, "")
+
 			notification.AlarmType = alarmType
-			logBuffer.Reset()
 
 			result, sendErr := notifier.Send(t.Context(), []*domain.AlarmNotification{notification})
 			require.Error(t, sendErr)
@@ -421,6 +449,7 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 			StartScheduled: &start,
 			Channel:        &domain.Channel{ID: "UC_BATCH", Name: "Batch Channel"},
 		}
+
 		return domain.NewAlarmNotification(roomID, stream.Channel, stream, 5, []string{}, "")
 	}
 
@@ -441,9 +470,11 @@ func TestNotifierSend_BatchContinuesAfterPublish(t *testing.T) {
 	if outbox.insertBatchCalls != 1 {
 		t.Fatalf("expected one pending outbox insert, got %d", outbox.insertBatchCalls)
 	}
+
 	if got := len(outbox.lastBatchInput.Envelopes); got != 2 {
 		t.Fatalf("expected two published envelopes, got %d", got)
 	}
+
 	if queueSize := readDispatchQueueSize(t, cacheClient); queueSize != 0 {
 		t.Fatalf("expected empty legacy dispatch queue under PG-only publish, got %d", queueSize)
 	}
@@ -493,9 +524,11 @@ func TestNotifierSend_UsesSinglePublishBatchForClaimedNotifications(t *testing.T
 	if result.Sent != 3 || result.Skipped != 0 || result.Failed != 0 {
 		t.Fatalf("unexpected result: %+v", result)
 	}
+
 	if outbox.insertBatchCalls != 1 {
 		t.Fatalf("InsertBatch calls = %d, want 1", outbox.insertBatchCalls)
 	}
+
 	if len(outbox.lastBatchInput.Envelopes) != 3 {
 		t.Fatalf("InsertBatch envelopes = %d, want 3", len(outbox.lastBatchInput.Envelopes))
 	}
@@ -520,7 +553,7 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 	)
 	require.NoError(t, err)
 
-	start := time.Date(2026, 5, 22, 12, 10, 0, 0, time.UTC)
+	start := time.Date(2026, time.May, 22, 12, 10, 0, 0, time.UTC)
 	stream := &domain.Stream{
 		ID:             "stream-payload-pg",
 		Title:          "Payload PG",
@@ -540,6 +573,7 @@ func TestNotifierSend_PublishBatchPayloadPreservesNotificationAndClaimKeys(t *te
 
 	envelope := outbox.lastBatchInput.Envelopes[0]
 	assert.Equal(t, contractsalarm.QueueEnvelopeVersionV1, envelope.Version)
+
 	_, err = time.Parse(time.RFC3339, envelope.EnqueuedAt)
 	require.NoError(t, err)
 
@@ -626,6 +660,7 @@ func readDispatchQueueSize(t *testing.T, cacheClient cache.Client) int64 {
 
 	client := cacheClient.GetClient()
 	require.NotNil(t, client)
+
 	resp := client.Do(t.Context(), cacheClient.B().Llen().Key(alarmkeys.DispatchQueueKey).Build())
 
 	size, err := resp.AsInt64()

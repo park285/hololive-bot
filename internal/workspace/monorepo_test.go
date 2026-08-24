@@ -14,10 +14,13 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		t.Skip("already running monorepo workspace suite")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
+
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc
+
 		ctx, cancel = context.WithDeadline(ctx, deadline)
+
 		defer cancel()
 	}
 
@@ -34,11 +37,15 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		"./hololive/hololive-alarm-worker/...",
 		"./hololive/hololive-youtube-collector/...",
 	)
+
 	cmd.Env = append(os.Environ(), "HOLOLIVE_WORKSPACE_MONOREPO_TEST=1")
+
 	_, file, _, ok := runtime.Caller(0)
+
 	if !ok {
 		t.Fatal("resolve workspace test file path")
 	}
+
 	cmd.Dir = filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

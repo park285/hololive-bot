@@ -35,6 +35,7 @@ func seenTime(value, fallback time.Time) time.Time {
 	if value.IsZero() {
 		return fallback
 	}
+
 	return value
 }
 
@@ -46,8 +47,9 @@ func (r *PgxBatchRepository) batchUpsertVideos(ctx context.Context, tx batchDB, 
 	for start := 0; start < len(videos); start += PollerBatchMaxSize {
 		end := min(start+PollerBatchMaxSize, len(videos))
 		chunk := videos[start:end]
+
 		if err := r.upsertVideosChunk(ctx, tx, chunk); err != nil {
-			return err
+			return fmt.Errorf("upsert videos chunk: %w", err)
 		}
 	}
 
@@ -57,15 +59,20 @@ func (r *PgxBatchRepository) batchUpsertVideos(ctx context.Context, tx batchDB, 
 func (r *PgxBatchRepository) upsertVideosChunk(ctx context.Context, tx batchDB, videos []*domain.YouTubeVideo) error {
 	now := time.Now()
 	args := make([]any, 0, len(videos)*12)
+
 	var sb strings.Builder
+
 	sb.WriteString(mustSQL("repository_batch_writes_0054_01.sql"))
 
 	for i, video := range videos {
 		publishedAt := yttimestamp.NormalizePtr(video.PublishedAt)
+
 		if i > 0 {
 			sb.WriteByte(',')
 		}
+
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
 		args = append(
 			args,
 			video.VideoID,
@@ -100,8 +107,9 @@ func (r *PgxBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx b
 	for start := 0; start < len(posts); start += PollerBatchMaxSize {
 		end := min(start+PollerBatchMaxSize, len(posts))
 		chunk := posts[start:end]
+
 		if err := r.upsertCommunityPostsChunk(ctx, tx, chunk); err != nil {
-			return err
+			return fmt.Errorf("upsert community posts chunk: %w", err)
 		}
 	}
 
@@ -111,15 +119,20 @@ func (r *PgxBatchRepository) batchUpsertCommunityPosts(ctx context.Context, tx b
 func (r *PgxBatchRepository) upsertCommunityPostsChunk(ctx context.Context, tx batchDB, posts []*domain.YouTubeCommunityPost) error {
 	now := time.Now()
 	args := make([]any, 0, len(posts)*13)
+
 	var sb strings.Builder
+
 	sb.WriteString(mustSQL("repository_batch_writes_0117_03.sql"))
 
 	for i, post := range posts {
 		publishedAt := yttimestamp.NormalizePtr(post.PublishedAt)
+
 		if i > 0 {
 			sb.WriteByte(',')
 		}
+
 		sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+
 		args = append(
 			args,
 			post.PostID,
@@ -155,8 +168,9 @@ func (r *PgxBatchRepository) BatchInsertNotifications(ctx context.Context, tx ba
 	for start := 0; start < len(notifications); start += PollerBatchMaxSize {
 		end := min(start+PollerBatchMaxSize, len(notifications))
 		chunk := notifications[start:end]
+
 		if err := r.insertNotificationsChunk(ctx, tx, chunk); err != nil {
-			return err
+			return fmt.Errorf("insert notifications chunk: %w", err)
 		}
 	}
 
@@ -166,7 +180,7 @@ func (r *PgxBatchRepository) BatchInsertNotifications(ctx context.Context, tx ba
 func (r *PgxBatchRepository) insertNotificationsChunk(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) error {
 	completedSentAtByIdentity, reactivationRows, err := prepareNotificationInsertChunk(ctx, tx, notifications)
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare notification insert chunk: %w", err)
 	}
 
 	activeNotifications := filterCompletedNotifications(notifications, completedSentAtByIdentity)
@@ -175,11 +189,13 @@ func (r *PgxBatchRepository) insertNotificationsChunk(ctx context.Context, tx ba
 	}
 
 	now := time.Now()
+
 	for _, chunk := range notificationChunksByKind(activeNotifications) {
 		if err := r.insertNotificationsSameKindChunk(ctx, tx, chunk, now); err != nil {
-			return err
+			return fmt.Errorf("insert notifications same kind chunk: %w", err)
 		}
 	}
+
 	if err := rearmFailedDeliveryRows(ctx, tx, collectFailedNotificationOutboxIDs(reactivationRows), now); err != nil {
 		return fmt.Errorf("rearm failed delivery rows: %w", err)
 	}
@@ -191,23 +207,30 @@ func notificationChunksByKind(notifications []*domain.YouTubeNotificationOutbox)
 	chunks := make([][]*domain.YouTubeNotificationOutbox, 0, len(notifications))
 	chunkByKind := make(map[domain.OutboxKind]int)
 	seenByIdentity := make(map[string]struct{}, len(notifications))
+
 	for _, notification := range notifications {
 		if notification == nil {
 			continue
 		}
+
 		identityKey := notificationIdentityKey(notification.Kind, notification.ContentID)
 		if _, ok := seenByIdentity[identityKey]; ok {
 			continue
 		}
+
 		seenByIdentity[identityKey] = struct{}{}
+
 		idx, ok := chunkByKind[notification.Kind]
+
 		if !ok {
 			chunkByKind[notification.Kind] = len(chunks)
 			chunks = append(chunks, make([]*domain.YouTubeNotificationOutbox, 0, 1))
 			idx = len(chunks) - 1
 		}
+
 		chunks[idx] = append(chunks[idx], notification)
 	}
+
 	return chunks
 }
 
@@ -218,7 +241,9 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 
 	kind := notifications[0].Kind
 	args := make([]any, 0, len(notifications)*8)
+
 	var sb strings.Builder
+
 	sb.WriteString(mustSQL("repository_batch_writes_0234_05.sql"))
 
 	for i, notification := range notifications {
@@ -230,8 +255,10 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 	rowsAffected, err := dbx.ExecSQL(ctx, tx, fmt.Sprintf("exec notification insert chunk (%d rows)", len(notifications)), sb.String(), args...)
 	if err != nil {
 		observeOutboxInsert(kind, "error", int64(len(notifications)))
+
 		return fmt.Errorf("exec notification insert chunk (%d rows): %w", len(notifications), err)
 	}
+
 	observeOutboxInsert(kind, "success", rowsAffected)
 	observeOutboxInsert(kind, "conflict", int64(len(notifications))-rowsAffected)
 
@@ -244,13 +271,14 @@ func prepareNotificationInsertChunk(
 	notifications []*domain.YouTubeNotificationOutbox,
 ) (map[string]time.Time, []failedNotificationOutboxRow, error) {
 	if err := validateNotificationDedupeKeys(notifications); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("validate notification dedupe keys: %w", err)
 	}
 
 	completedSentAtByIdentity, err := loadCompletedNotificationSentAtByIdentity(ctx, tx, notifications)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load completed notification sent state: %w", err)
 	}
+
 	failedRows, err := loadFailedNotificationOutboxRows(ctx, tx, notifications)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load failed outbox rows: %w", err)
@@ -260,6 +288,7 @@ func prepareNotificationInsertChunk(
 	if err := finalizeCompletedFailedNotificationRows(ctx, tx, completedFailedRows, completedSentAtByIdentity); err != nil {
 		return nil, nil, fmt.Errorf("finalize completed failed notification rows: %w", err)
 	}
+
 	return completedSentAtByIdentity, reactivationRows, nil
 }
 
@@ -269,6 +298,7 @@ func validateNotificationDedupeKeys(notifications []*domain.YouTubeNotificationO
 			return fmt.Errorf("validate notification dedupe key at index %d: %w", i, err)
 		}
 	}
+
 	return nil
 }
 
@@ -287,16 +317,19 @@ func appendNotificationInsertArgs(
 	if status == "" {
 		status = domain.OutboxStatusPending
 	}
+
 	nextAttemptAt := notification.NextAttemptAt
 	if nextAttemptAt.IsZero() {
 		nextAttemptAt = now
 	}
+
 	createdAt := notification.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = now
 	}
 
 	sb.WriteString("(?, ?, ?, ?, ?, ?, ?, ?)")
+
 	*args = append(
 		*args,
 		notification.Kind,

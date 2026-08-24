@@ -22,6 +22,7 @@ package scheduler
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -40,25 +41,32 @@ func (s *Scheduler) Register(channelID string, poller Poller, priority Priority,
 }
 
 func (s *Scheduler) RegisterChecked(channelID string, poller Poller, priority Priority, interval time.Duration) error {
-	return s.RegisterCheckedWithBudgetProfile(channelID, poller, priority, interval, polling.BudgetProfile{})
+	if err := s.RegisterCheckedWithBudgetProfile(channelID, poller, priority, interval, polling.BudgetProfile{}); err != nil {
+		return fmt.Errorf("register checked with budget profile: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Scheduler) RegisterCheckedWithBudgetProfile(channelID string, poller Poller, priority Priority, interval time.Duration, profile polling.BudgetProfile) error {
 	channelID = strings.TrimSpace(channelID)
 	if channelID == "" {
-		return fmt.Errorf("channel id is empty")
+		return errors.New("channel id is empty")
 	}
+
 	if poller == nil {
-		return fmt.Errorf("poller is nil")
+		return errors.New("poller is nil")
 	}
+
 	if interval <= 0 {
 		return fmt.Errorf("interval must be positive: %s", interval)
 	}
 
 	pollerName := strings.TrimSpace(poller.Name())
 	if pollerName == "" {
-		return fmt.Errorf("poller name is empty")
+		return errors.New("poller name is empty")
 	}
+
 	s.metrics.EnsurePollerLastSuccessTimestamp(pollerName)
 
 	s.mu.Lock()
@@ -82,9 +90,11 @@ func (s *Scheduler) RegisterCheckedWithBudgetProfile(channelID string, poller Po
 	}
 
 	heap.Push(&s.jobs, job)
+
 	s.jobMap[key] = job
 	s.metrics.SchedulerRegisteredJobs.Set(float64(len(s.jobMap)))
 	s.notifyDispatcher()
+
 	return nil
 }
 
@@ -94,6 +104,7 @@ func (s *Scheduler) UpdatePriority(channelID, pollerName string, priority Priori
 
 	key := channelID + ":" + pollerName
 	job, exists := s.jobMap[key]
+
 	if !exists {
 		return
 	}
@@ -102,10 +113,12 @@ func (s *Scheduler) UpdatePriority(channelID, pollerName string, priority Priori
 	if job.Interval != interval && interval > 0 {
 		s.resetJobScheduleForIntervalChange(job, interval)
 	}
+
 	job.Interval = interval
 	if job.index >= 0 {
 		heap.Fix(&s.jobs, job.index)
 	}
+
 	s.notifyDispatcher()
 }
 
@@ -113,6 +126,7 @@ func (s *Scheduler) SyncPollerTargets(targetSync *PollerTargetSync) {
 	if targetSync == nil {
 		return
 	}
+
 	if targetSync.Poller == nil || targetSync.Interval <= 0 {
 		return
 	}
@@ -121,6 +135,7 @@ func (s *Scheduler) SyncPollerTargets(targetSync *PollerTargetSync) {
 	if pollerName == "" {
 		return
 	}
+
 	s.metrics.EnsurePollerLastSuccessTimestamp(pollerName)
 
 	desired := desiredPollerTargetChannels(targetSync.ChannelIDs)
@@ -140,6 +155,7 @@ func (s *Scheduler) SyncPollerTargetGroups(targetSyncs []PollerTargetSync) {
 	if pollerName == "" {
 		return
 	}
+
 	s.metrics.EnsurePollerLastSuccessTimestamp(pollerName)
 
 	s.mu.Lock()
@@ -153,13 +169,17 @@ func (s *Scheduler) SyncPollerTargetGroups(targetSyncs []PollerTargetSync) {
 
 func buildGroupedPollerTargetSyncs(targetSyncs []PollerTargetSync) (result1 string, result2 map[string]PollerTargetSync) {
 	desired := make(map[string]PollerTargetSync)
+
 	var pollerName string
+
 	for _, targetSync := range targetSyncs {
 		name, ok := validPollerTargetSyncName(&targetSync, pollerName)
 		if !ok {
 			continue
 		}
+
 		pollerName = name
+
 		for _, channelID := range targetSync.ChannelIDs {
 			channelID = strings.TrimSpace(channelID)
 			if channelID != "" {
@@ -167,6 +187,7 @@ func buildGroupedPollerTargetSyncs(targetSyncs []PollerTargetSync) (result1 stri
 			}
 		}
 	}
+
 	return pollerName, desired
 }
 
@@ -174,7 +195,9 @@ func validPollerTargetSyncName(targetSync *PollerTargetSync, expected string) (s
 	if targetSync.Poller == nil || targetSync.Interval <= 0 {
 		return "", false
 	}
+
 	name := strings.TrimSpace(targetSync.Poller.Name())
+
 	return name, name != "" && (expected == "" || expected == name)
 }
 
@@ -186,6 +209,7 @@ func desiredPollerTargetChannels(channelIDs []string) map[string]struct{} {
 			desired[channelID] = struct{}{}
 		}
 	}
+
 	return desired
 }
 
@@ -194,10 +218,13 @@ func (s *Scheduler) syncExistingPollerTargetJobs(pollerName string, targetSync *
 		if !pollerTargetJobMatches(job, pollerName) {
 			continue
 		}
+
 		if _, keep := desired[job.ChannelID]; !keep {
 			s.removePollerTargetJob(key, job)
+
 			continue
 		}
+
 		s.updatePollerTargetJob(job, targetSync)
 		delete(desired, job.ChannelID)
 	}
@@ -208,11 +235,14 @@ func (s *Scheduler) syncExistingGroupedPollerTargetJobs(pollerName string, desir
 		if !pollerTargetJobMatches(job, pollerName) {
 			continue
 		}
+
 		targetSync, keep := desired[job.ChannelID]
 		if !keep {
 			s.removePollerTargetJob(key, job)
+
 			continue
 		}
+
 		s.updatePollerTargetJob(job, &targetSync)
 		delete(desired, job.ChannelID)
 	}
@@ -220,9 +250,11 @@ func (s *Scheduler) syncExistingGroupedPollerTargetJobs(pollerName string, desir
 
 func (s *Scheduler) addMissingGroupedPollerTargetJobs(pollerName string, desired map[string]PollerTargetSync) {
 	now := time.Now()
+
 	for channelID, targetSync := range desired {
 		job := newPollerTargetJob(channelID, pollerName, &targetSync, now)
 		heap.Push(&s.jobs, job)
+
 		s.jobMap[job.key] = job
 	}
 }
@@ -236,31 +268,39 @@ func (s *Scheduler) removePollerTargetJob(key string, job *Job) {
 	if job.index >= 0 {
 		heap.Remove(&s.jobs, job.index)
 	}
+
 	delete(s.jobMap, key)
 }
 
 func (s *Scheduler) updatePollerTargetJob(job *Job, targetSync *PollerTargetSync) {
 	if job.index < 0 {
 		pending := *targetSync
+
 		job.pendingSync = &pending
+
 		return
 	}
+
 	job.pendingSync = nil
 	job.Poller = targetSync.Poller
 	job.Priority = targetSync.Priority
 	job.budgetProfile = targetSync.BudgetProfile
+
 	if job.Interval != targetSync.Interval {
 		s.resetJobScheduleForIntervalChange(job, targetSync.Interval)
 	}
+
 	job.Interval = targetSync.Interval
 	heap.Fix(&s.jobs, job.index)
 }
 
 func (s *Scheduler) addMissingPollerTargetJobs(pollerName string, targetSync *PollerTargetSync, desired map[string]struct{}) {
 	now := time.Now()
+
 	for channelID := range desired {
 		job := newPollerTargetJob(channelID, pollerName, targetSync, now)
 		heap.Push(&s.jobs, job)
+
 		s.jobMap[job.key] = job
 	}
 }
@@ -269,9 +309,11 @@ func newPollerTargetJob(channelID, pollerName string, targetSync *PollerTargetSy
 	key := channelID + ":" + pollerName
 	offset := calculateOffset(key, targetSync.Interval)
 	nextRunAt := nextPollAt(now, targetSync.Interval, offset)
+
 	if targetSync.ForceImmediateFirstRun {
 		nextRunAt = now
 	}
+
 	return &Job{
 		ChannelID:         channelID,
 		Poller:            targetSync.Poller,

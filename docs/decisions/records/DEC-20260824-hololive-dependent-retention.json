@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260824-hololive-dependent-retention",
+  "title": "Hololive source observation dependent tables use bounded retention",
+  "decision_status": "accepted",
+  "delivery_status": "in_progress",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-24",
+  "summary": "source_observation_applications는 kind별 source evidence 보존 기간 이후 60일의 audit grace를 추가하고 observation_id가 NULL인 행만 삭제한다. source_collection_checkpoints는 7일 history를 유지하되 (provider, observation_kind, subject_key)별 최신 행은 보존한다. youtube_live_viewer_sample_evidence는 source_observations의 viewer_sample 행과 함께 ON DELETE CASCADE로 삭제한다. retention cadence는 120초로 운영하여 1,000행 batch가 관측된 application 유입률을 초과하도록 한다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-dbtest/dependent_retention_test.go",
+    "hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_retention_test.go"
+  ],
+  "implementation": [
+    "deploy/compose/docker-compose.prod.yml",
+    "hololive/hololive-api/internal/planes/youtube/runtime/supervisor_retention.go",
+    "hololive/hololive-api/scripts/migrations/185_source_application_orphan_retention_index.sql",
+    "hololive/hololive-api/scripts/migrations/186_source_checkpoint_retention_candidate_index.sql",
+    "hololive/hololive-api/scripts/migrations/187_youtube_dependent_retention_api.sql",
+    "hololive/hololive-shared/pkg/config/settings/config_youtube_plane_retention.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_retention.go"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "application 유입이 일 50만 행을 넘거나 retention tick이 transaction timeout의 절반을 반복적으로 초과"
+  }
+}

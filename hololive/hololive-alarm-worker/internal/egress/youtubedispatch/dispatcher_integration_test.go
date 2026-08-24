@@ -22,6 +22,7 @@ package youtubedispatch_test
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net"
@@ -31,14 +32,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-dbtest"
+	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-
-	jsonv2 "encoding/json/v2"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/stretchr/testify/require"
 )
 
 var errSendFailed = errors.New("send failed")
@@ -55,57 +55,69 @@ type sentMessage struct {
 	Message string
 }
 
-func mustMarshalPayload(t testing.TB, value any) []byte {
-	t.Helper()
+func mustMarshalPayload(tb testing.TB, value any) []byte {
+	tb.Helper()
+
 	payload, err := jsonv2.Marshal(value)
-	require.NoError(t, err)
+	require.NoError(tb, err)
+
 	return payload
 }
 
 func (f *fakeSender) SendMessage(_ context.Context, room, message string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	if f.failNext {
 		f.failNext = false
 		return errSendFailed
 	}
+
 	if len(f.failRoom) > 0 && f.failRoom[room] {
 		delete(f.failRoom, room)
+
 		return errSendFailed
 	}
+
 	f.messages = append(f.messages, sentMessage{Room: room, Message: message})
+
 	return nil
 }
 
 func (f *fakeSender) getMessages() []sentMessage {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	result := make([]sentMessage, len(f.messages))
 	copy(result, f.messages)
+
 	return result
 }
 
 func (f *fakeSender) setFailNext() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	f.failNext = true
 }
 
 func (f *fakeSender) setFailRoom(room string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	if f.failRoom == nil {
 		f.failRoom = make(map[string]bool)
 	}
+
 	f.failRoom[room] = true
 }
 
 func TestDispatcher_ProcessOnce_Success(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
+	if os.Getenv("INTEGRATION_TEST") != integrationEnvEnabled {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
@@ -126,8 +138,8 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "test123",
-		"title":    "Test Video Title",
+		payloadKeyVideoID: "test123",
+		payloadKeyTitle:   "Test Video Title",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -143,6 +155,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
+
 	t.Cleanup(func() {
 		deleteDeliveryTestRows(t, db, item)
 	})
@@ -150,6 +163,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
+
 	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
@@ -173,35 +187,14 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 }
 
 func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
+	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(1*time.Second))
 
-	ctx := context.Background()
-	db := dbtest.NewPool(t)
-	cleanupOutbox(t, db)
-
-	sender := &fakeSender{}
-	sender.setFailNext()
-
-	cacheService := setupCacheService(t)
-	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-	setupTestSubscribers(t, cacheService)
-
-	config := dispatchstate.Config{
-		BatchSize:    10,
-		LockTimeout:  1 * time.Minute,
-		PollInterval: 100 * time.Millisecond,
-		MaxRetries:   3,
-		RetryBackoff: 1 * time.Second,
-	}
-
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	env.sender.setFailNext()
+	setupTestSubscribers(t, env.cacheService)
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "retry123",
-		"title":    "Retry Test Video",
+		payloadKeyVideoID: "retry123",
+		payloadKeyTitle:   "Retry Test Video",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -213,18 +206,13 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
+	seedIntegrationOutboxItem(t, env.db, item)
 
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
-		t.Fatalf("Failed to create test outbox item: %v", err)
-	}
-	t.Cleanup(func() {
-		deleteDeliveryTestRows(t, db, item)
-	})
-
-	dispatcher.ProcessOnceForTest(ctx)
+	env.dispatcher.ProcessOnceForTest(t.Context())
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(env.db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 
@@ -236,30 +224,34 @@ func TestDispatcher_ProcessOnce_Retry(t *testing.T) {
 		t.Error("Expected locked_at to be nil after failure")
 	}
 
-	deliveries := fetchDeliveryRows(t, db, item.ID)
+	deliveries := fetchDeliveryRows(t, env.db, item.ID)
 	if len(deliveries) != 1 {
 		t.Fatalf("Expected 1 delivery row, got %d", len(deliveries))
 	}
+
 	if deliveries[0].Status != domain.OutboxStatusPending {
 		t.Errorf("Expected delivery status PENDING (for retry), got %s", deliveries[0].Status)
 	}
+
 	if deliveries[0].AttemptCount != 1 {
 		t.Errorf("Expected delivery attempt_count 1, got %d", deliveries[0].AttemptCount)
 	}
+
 	if deliveries[0].NextAttemptAt.Before(time.Now()) {
 		t.Error("Expected delivery next_attempt_at to be in the future")
 	}
+
 	if deliveries[0].LockedAt != nil {
 		t.Error("Expected delivery locked_at to be nil after failure")
 	}
 }
 
 func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
+	if os.Getenv("INTEGRATION_TEST") != integrationEnvEnabled {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
@@ -278,8 +270,8 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "nosub123",
-		"title":    "No Subscribers Test",
+		payloadKeyVideoID: "nosub123",
+		payloadKeyTitle:   "No Subscribers Test",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -295,6 +287,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
+
 	t.Cleanup(func() {
 		deleteDeliveryTestRows(t, db, item)
 	})
@@ -302,6 +295,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
+
 	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
@@ -317,34 +311,14 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 }
 
 func TestDispatcher_PerRoomMode_Success(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
+	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(50*time.Millisecond))
 
-	ctx := context.Background()
-	db := dbtest.NewPool(t)
-	cleanupOutbox(t, db)
-
-	sender := &fakeSender{}
-	cacheService := setupCacheService(t)
-	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{"roomA", "roomB"})
-	setupMemberName(t, cacheService, "UCperroom_success", "PerRoomMember")
-
-	config := dispatchstate.Config{
-		BatchSize:    10,
-		LockTimeout:  1 * time.Minute,
-		PollInterval: 100 * time.Millisecond,
-		MaxRetries:   3,
-		RetryBackoff: 50 * time.Millisecond,
-	}
-
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{"roomA", "roomB"})
+	setupMemberName(t, env.cacheService, "UCperroom_success", "PerRoomMember")
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "perroom_success_video",
-		"title":    "PerRoom Success Video",
+		payloadKeyVideoID: "perroom_success_video",
+		payloadKeyTitle:   "PerRoom Success Video",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -356,67 +330,47 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
-		t.Fatalf("Failed to create test outbox item: %v", err)
-	}
-	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
+	seedIntegrationOutboxItem(t, env.db, item)
 
-	dispatcher.ProcessOnceForTest(ctx)
+	env.dispatcher.ProcessOnceForTest(t.Context())
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(env.db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
+
 	if updated.Status != domain.OutboxStatusSent {
 		t.Fatalf("Expected status SENT, got %s", updated.Status)
 	}
 
-	deliveries := fetchDeliveryRows(t, db, item.ID)
+	deliveries := fetchDeliveryRows(t, env.db, item.ID)
 	if len(deliveries) != 2 {
 		t.Fatalf("Expected 2 delivery rows, got %d", len(deliveries))
 	}
+
 	for i := range deliveries {
 		if deliveries[i].Status != domain.OutboxStatusSent {
 			t.Fatalf("Expected delivery[%d] status SENT, got %s", i, deliveries[i].Status)
 		}
 	}
 
-	msgs := sender.getMessages()
+	msgs := env.sender.getMessages()
 	if len(msgs) != 2 {
 		t.Fatalf("Expected 2 messages sent, got %d", len(msgs))
 	}
 }
 
 func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
+	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(30*time.Millisecond))
 
-	ctx := context.Background()
-	db := dbtest.NewPool(t)
-	cleanupOutbox(t, db)
-
-	sender := &fakeSender{}
-	sender.setFailRoom("roomB")
-	cacheService := setupCacheService(t)
-	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{"roomA", "roomB"})
-	setupMemberName(t, cacheService, "UCperroom_retry", "PerRoomRetryMember")
-
-	config := dispatchstate.Config{
-		BatchSize:    10,
-		LockTimeout:  1 * time.Minute,
-		PollInterval: 100 * time.Millisecond,
-		MaxRetries:   3,
-		RetryBackoff: 30 * time.Millisecond,
-	}
-
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	env.sender.setFailRoom("roomB")
+	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{"roomA", "roomB"})
+	setupMemberName(t, env.cacheService, "UCperroom_retry", "PerRoomRetryMember")
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "perroom_retry_video",
-		"title":    "PerRoom Retry Video",
+		payloadKeyVideoID: "perroom_retry_video",
+		payloadKeyTitle:   "PerRoom Retry Video",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -428,38 +382,39 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
-		t.Fatalf("Failed to create test outbox item: %v", err)
-	}
-	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
+	seedIntegrationOutboxItem(t, env.db, item)
 
-	dispatcher.ProcessOnceForTest(ctx)
+	env.dispatcher.ProcessOnceForTest(t.Context())
 
 	var first domain.YouTubeNotificationOutbox
-	if err := firstDeliveryTestRow(db, &first, item.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(env.db, &first, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch first state: %v", err)
 	}
+
 	if first.Status != domain.OutboxStatusPending {
 		t.Fatalf("Expected outbox status PENDING after partial failure, got %s", first.Status)
 	}
 
-	deliveries := fetchDeliveryRows(t, db, item.ID)
+	deliveries := fetchDeliveryRows(t, env.db, item.ID)
 	if len(deliveries) != 2 {
 		t.Fatalf("Expected 2 delivery rows, got %d", len(deliveries))
 	}
 
 	time.Sleep(40 * time.Millisecond)
-	dispatcher.ProcessOnceForTest(ctx)
+	env.dispatcher.ProcessOnceForTest(t.Context())
 
 	var second domain.YouTubeNotificationOutbox
-	if err := firstDeliveryTestRow(db, &second, item.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(env.db, &second, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch second state: %v", err)
 	}
+
 	if second.Status != domain.OutboxStatusSent {
 		t.Fatalf("Expected outbox status SENT after retry success, got %s", second.Status)
 	}
 
-	finalDeliveries := fetchDeliveryRows(t, db, item.ID)
+	finalDeliveries := fetchDeliveryRows(t, env.db, item.ID)
 	for i := range finalDeliveries {
 		if finalDeliveries[i].Status != domain.OutboxStatusSent {
 			t.Fatalf("Expected final delivery[%d] status SENT, got %s", i, finalDeliveries[i].Status)
@@ -468,11 +423,11 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 }
 
 func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
+	if os.Getenv("INTEGRATION_TEST") != integrationEnvEnabled {
 		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := dbtest.NewPool(t)
 	cleanupOutbox(t, db)
 
@@ -491,8 +446,8 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "perroom_no_sub_video",
-		"title":    "PerRoom No Subscribers Video",
+		payloadKeyVideoID: "perroom_no_sub_video",
+		payloadKeyTitle:   "PerRoom No Subscribers Video",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -507,14 +462,17 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 	if err := insertDeliveryTestRows(db, item).Error; err != nil {
 		t.Fatalf("Failed to create test outbox item: %v", err)
 	}
+
 	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 
 	dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
+
 	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
+
 	if updated.Status != domain.OutboxStatusSent {
 		t.Fatalf("Expected status SENT, got %s", updated.Status)
 	}
@@ -531,35 +489,19 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 }
 
 func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
+	config := newIntegrationDispatchConfig(30 * time.Millisecond)
 
-	ctx := context.Background()
-	db := dbtest.NewPool(t)
-	cleanupOutbox(t, db)
+	config.MaxRetries = 1
 
-	sender := &fakeSender{}
-	sender.setFailRoom("roomB")
-	cacheService := setupCacheService(t)
-	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	env := newDispatcherIntegrationEnv(t, config)
 
-	setupChannelSubscribers(t, cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{"roomA", "roomB"})
-	setupMemberName(t, cacheService, "UCperroom_terminal_fail", "PerRoomTerminalFailMember")
-
-	config := dispatchstate.Config{
-		BatchSize:    10,
-		LockTimeout:  1 * time.Minute,
-		PollInterval: 100 * time.Millisecond,
-		MaxRetries:   1,
-		RetryBackoff: 30 * time.Millisecond,
-	}
-
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	env.sender.setFailRoom("roomB")
+	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:UCperroom_terminal_fail", []string{"roomA", "roomB"})
+	setupMemberName(t, env.cacheService, "UCperroom_terminal_fail", "PerRoomTerminalFailMember")
 
 	payload := mustMarshalPayload(t, map[string]string{
-		"video_id": "perroom_terminal_fail_video",
-		"title":    "PerRoom Terminal Fail Video",
+		payloadKeyVideoID: "perroom_terminal_fail_video",
+		payloadKeyTitle:   "PerRoom Terminal Fail Video",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
@@ -571,27 +513,28 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
-		t.Fatalf("Failed to create test outbox item: %v", err)
-	}
-	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
+	seedIntegrationOutboxItem(t, env.db, item)
 
-	dispatcher.ProcessOnceForTest(ctx)
+	env.dispatcher.ProcessOnceForTest(t.Context())
 
 	var updated domain.YouTubeNotificationOutbox
-	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
+
+	if err := firstDeliveryTestRow(env.db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated outbox: %v", err)
 	}
+
 	if updated.Status != domain.OutboxStatusFailed {
 		t.Fatalf("Expected outbox status FAILED, got %s", updated.Status)
 	}
 
-	deliveries := fetchDeliveryRows(t, db, item.ID)
+	deliveries := fetchDeliveryRows(t, env.db, item.ID)
 	if len(deliveries) != 2 {
 		t.Fatalf("Expected 2 delivery rows, got %d", len(deliveries))
 	}
+
 	failedCount := 0
 	sentCount := 0
+
 	for i := range deliveries {
 		switch deliveries[i].Status {
 		case domain.OutboxStatusPending:
@@ -601,27 +544,28 @@ func TestDispatcher_PerRoomMode_PartialTerminalFailure_MarksOutboxFailed(t *test
 			sentCount++
 		}
 	}
+
 	if failedCount != 1 || sentCount != 1 {
 		t.Fatalf("Expected 1 failed + 1 sent delivery, got failed=%d sent=%d", failedCount, sentCount)
 	}
 }
 
-func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
+type concurrentAlarmCase struct {
+	name            string
+	kind            domain.OutboxKind
+	channelID       string
+	roomID          string
+	memberName      string
+	contentPrefix   string
+	messageFragment string
+	postID          func(contentID string) string
+	payload         func(contentID string, publishedAt time.Time) string
+}
 
-	testCases := []struct {
-		name            string
-		kind            domain.OutboxKind
-		channelID       string
-		roomID          string
-		memberName      string
-		contentPrefix   string
-		messageFragment string
-		postID          func(contentID string) string
-		payload         func(contentID string, publishedAt time.Time) string
-	}{
+func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce(t *testing.T) {
+	requireIntegrationEnv(t)
+
+	testCases := []concurrentAlarmCase{
 		{
 			name:            "community post",
 			kind:            domain.OutboxKindCommunityPost,
@@ -640,6 +584,7 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 					"content_text":      "Concurrent community delivery body",
 					"published_at":      publishedAt,
 				})
+
 				return string(payload)
 			},
 		},
@@ -657,10 +602,11 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 			payload: func(contentID string, publishedAt time.Time) string {
 				payload := mustMarshalPayload(t, map[string]any{
 					"canonical_post_id": "short:" + contentID,
-					"video_id":          contentID,
-					"title":             "Concurrent short delivery title",
+					payloadKeyVideoID:   contentID,
+					payloadKeyTitle:     "Concurrent short delivery title",
 					"published_at":      publishedAt,
 				})
+
 				return string(payload)
 			},
 		},
@@ -668,122 +614,133 @@ func TestDispatcher_ProcessOnce_ConcurrentExecutionsSendCommunityShortsAlarmOnce
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			dbPrimary := dbtest.NewPool(t)
-			dbSecondary := dbtest.NewPool(t)
-			cleanupOutbox(t, dbPrimary)
-
-			sender := &fakeSender{}
-			cacheService := setupCacheService(t)
-			setupMemberName(t, cacheService, tc.channelID, tc.memberName)
-			testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-			config := dispatchstate.Config{
-				BatchSize:    10,
-				LockTimeout:  1 * time.Minute,
-				PollInterval: 100 * time.Millisecond,
-				MaxRetries:   3,
-				RetryBackoff: 30 * time.Millisecond,
-			}
-
-			dispatchers := []*youtubedispatch.Dispatcher{
-				youtubedispatch.NewDispatcher(dbPrimary, cacheService, sender, nil, testLogger, &config),
-				youtubedispatch.NewDispatcher(dbSecondary, cacheService, sender, nil, testLogger, &config),
-			}
-
-			contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
-			publishedAt := time.Date(2026, 4, 10, 1, 2, 3, 0, time.UTC)
-			postID := tc.postID(contentID)
-			item := &domain.YouTubeNotificationOutbox{
-				Kind:          tc.kind,
-				ChannelID:     tc.channelID,
-				ContentID:     contentID,
-				Payload:       tc.payload(contentID, publishedAt),
-				Status:        domain.OutboxStatusPending,
-				AttemptCount:  0,
-				NextAttemptAt: time.Now(),
-			}
-			require.NoError(t, insertDeliveryTestRows(dbPrimary, item).Error)
-
-			delivery := &domain.YouTubeNotificationDelivery{
-				OutboxID:      item.ID,
-				RoomID:        tc.roomID,
-				Status:        domain.OutboxStatusPending,
-				AttemptCount:  0,
-				NextAttemptAt: time.Now(),
-			}
-			require.NoError(t, insertDeliveryTestRows(dbPrimary, delivery).Error)
-
-			t.Cleanup(func() {
-				deleteDeliveryTestRowsWhere(dbPrimary, &domain.YouTubeCommunityShortsAlarmState{}, "kind = ? AND post_id = ?", tc.kind, postID)
-				deleteDeliveryTestRows(t, dbPrimary, delivery)
-				deleteDeliveryTestRows(t, dbPrimary, item)
-			})
-
-			start := make(chan struct{})
-			var wg sync.WaitGroup
-			for i := range dispatchers {
-				wg.Add(1)
-				go func(dispatcher *youtubedispatch.Dispatcher) {
-					defer wg.Done()
-					<-start
-					dispatcher.ProcessOnceForTest(ctx)
-				}(dispatchers[i])
-			}
-
-			close(start)
-			wg.Wait()
-
-			msgs := sender.getMessages()
-			require.Len(t, msgs, 1)
-			require.Equal(t, tc.roomID, msgs[0].Room)
-			require.Contains(t, msgs[0].Message, tc.messageFragment)
-
-			var updated domain.YouTubeNotificationOutbox
-			require.NoError(t, firstDeliveryTestRow(dbPrimary, &updated, item.ID).Error)
-			require.Equal(t, domain.OutboxStatusSent, updated.Status)
-			require.NotNil(t, updated.SentAt)
-
-			deliveries := fetchDeliveryRows(t, dbPrimary, item.ID)
-			require.Len(t, deliveries, 1)
-			require.Equal(t, domain.OutboxStatusSent, deliveries[0].Status)
-			require.NotNil(t, deliveries[0].SentAt)
-
-			var state domain.YouTubeCommunityShortsAlarmState
-			require.NoError(t, firstDeliveryTestRow(dbPrimary, &state, "kind = ? AND post_id = ?", tc.kind, postID).Error)
-			require.Equal(t, postID, state.PostID)
-			require.Equal(t, contentID, state.ContentID)
-			require.NotNil(t, state.AlarmSentAt)
-			require.Nil(t, state.AuthorizedAt)
-			require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
+			runConcurrentAlarmCase(t, tc)
 		})
 	}
 }
 
-func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != "true" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
+func runConcurrentAlarmCase(t *testing.T, tc concurrentAlarmCase) {
+	t.Helper()
 
-	ctx := context.Background()
-	db := dbtest.NewPool(t)
-	cleanupOutbox(t, db)
+	ctx := t.Context()
+	dbPrimary := dbtest.NewPool(t)
+	dbSecondary := dbtest.NewPool(t)
+
+	cleanupOutbox(t, dbPrimary)
 
 	sender := &fakeSender{}
 	cacheService := setupCacheService(t)
-	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	config := dispatchstate.Config{
-		BatchSize:      10,
-		LockTimeout:    1 * time.Minute,
-		PollInterval:   100 * time.Millisecond,
-		MaxRetries:     3,
-		RetryBackoff:   1 * time.Second,
-		CleanupAfter:   1 * time.Hour,
-		CleanupEnabled: false,
+	setupMemberName(t, cacheService, tc.channelID, tc.memberName)
+
+	config := newIntegrationDispatchConfig(30 * time.Millisecond)
+	logger := newIntegrationTestLogger()
+	dispatchers := []*youtubedispatch.Dispatcher{
+		youtubedispatch.NewDispatcher(dbPrimary, cacheService, sender, nil, logger, &config),
+		youtubedispatch.NewDispatcher(dbSecondary, cacheService, sender, nil, logger, &config),
 	}
 
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
+	publishedAt := time.Date(2026, time.April, 10, 1, 2, 3, 0, time.UTC)
+	postID := tc.postID(contentID)
+	item := seedConcurrentAlarmRows(t, dbPrimary, tc, contentID, postID, publishedAt)
+	start := make(chan struct{})
+
+	var wg sync.WaitGroup
+
+	for i := range dispatchers {
+		wg.Go(func() {
+			<-start
+			dispatchers[i].ProcessOnceForTest(ctx)
+		})
+	}
+
+	close(start)
+	wg.Wait()
+
+	msgs := sender.getMessages()
+	require.Len(t, msgs, 1)
+	require.Equal(t, tc.roomID, msgs[0].Room)
+	require.Contains(t, msgs[0].Message, tc.messageFragment)
+
+	assertConcurrentAlarmSentOnce(t, dbPrimary, tc, item, contentID, postID)
+}
+
+func seedConcurrentAlarmRows(
+	t *testing.T,
+	db *deliveryTestDB,
+	tc concurrentAlarmCase,
+	contentID, postID string,
+	publishedAt time.Time,
+) *domain.YouTubeNotificationOutbox {
+	t.Helper()
+
+	item := &domain.YouTubeNotificationOutbox{
+		Kind:          tc.kind,
+		ChannelID:     tc.channelID,
+		ContentID:     contentID,
+		Payload:       tc.payload(contentID, publishedAt),
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+	require.NoError(t, insertDeliveryTestRows(db, item).Error)
+
+	delivery := &domain.YouTubeNotificationDelivery{
+		OutboxID:      item.ID,
+		RoomID:        tc.roomID,
+		Status:        domain.OutboxStatusPending,
+		AttemptCount:  0,
+		NextAttemptAt: time.Now(),
+	}
+	require.NoError(t, insertDeliveryTestRows(db, delivery).Error)
+
+	t.Cleanup(func() {
+		deleteDeliveryTestRowsWhere(db, &domain.YouTubeCommunityShortsAlarmState{}, "kind = ? AND post_id = ?", tc.kind, postID)
+		deleteDeliveryTestRows(t, db, delivery)
+		deleteDeliveryTestRows(t, db, item)
+	})
+
+	return item
+}
+
+func assertConcurrentAlarmSentOnce(
+	t *testing.T,
+	db *deliveryTestDB,
+	tc concurrentAlarmCase,
+	item *domain.YouTubeNotificationOutbox,
+	contentID, postID string,
+) {
+	t.Helper()
+
+	var updated domain.YouTubeNotificationOutbox
+
+	require.NoError(t, firstDeliveryTestRow(db, &updated, item.ID).Error)
+	require.Equal(t, domain.OutboxStatusSent, updated.Status)
+	require.NotNil(t, updated.SentAt)
+
+	deliveries := fetchDeliveryRows(t, db, item.ID)
+	require.Len(t, deliveries, 1)
+	require.Equal(t, domain.OutboxStatusSent, deliveries[0].Status)
+	require.NotNil(t, deliveries[0].SentAt)
+
+	var state domain.YouTubeCommunityShortsAlarmState
+
+	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", tc.kind, postID).Error)
+	require.Equal(t, postID, state.PostID)
+	require.Equal(t, contentID, state.ContentID)
+	require.NotNil(t, state.AlarmSentAt)
+	require.Nil(t, state.AuthorizedAt)
+	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
+}
+
+func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
+	config := newIntegrationDispatchConfig(1 * time.Second)
+
+	config.CleanupAfter = 1 * time.Hour
+	config.CleanupEnabled = false
+
+	env := newDispatcherIntegrationEnv(t, config)
 
 	oldFailed := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewVideo,
@@ -808,27 +765,32 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		Error:         "recent failed",
 	}
 
-	if err := insertDeliveryTestRows(db, oldFailed).Error; err != nil {
+	if err := insertDeliveryTestRows(env.db, oldFailed).Error; err != nil {
 		t.Fatalf("Failed to create old failed outbox item: %v", err)
 	}
-	if err := insertDeliveryTestRows(db, recentFailed).Error; err != nil {
+
+	if err := insertDeliveryTestRows(env.db, recentFailed).Error; err != nil {
 		t.Fatalf("Failed to create recent failed outbox item: %v", err)
 	}
 
-	dispatcher.CleanupForTest(ctx)
+	env.dispatcher.CleanupForTest(t.Context())
 
 	var oldCount int64
-	if err := countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &oldCount, "id = ?", oldFailed.ID).Error; err != nil {
+
+	if err := countDeliveryTestRowsWhere(env.db, &domain.YouTubeNotificationOutbox{}, &oldCount, "id = ?", oldFailed.ID).Error; err != nil {
 		t.Fatalf("Failed to count old failed item: %v", err)
 	}
+
 	if oldCount != 0 {
-		t.Fatalf("Expected old failed item to be deleted, still exists")
+		t.Fatal("Expected old failed item to be deleted, still exists")
 	}
 
 	var recentCount int64
-	if err := countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationOutbox{}, &recentCount, "id = ?", recentFailed.ID).Error; err != nil {
+
+	if err := countDeliveryTestRowsWhere(env.db, &domain.YouTubeNotificationOutbox{}, &recentCount, "id = ?", recentFailed.ID).Error; err != nil {
 		t.Fatalf("Failed to count recent failed item: %v", err)
 	}
+
 	if recentCount != 1 {
 		t.Fatalf("Expected recent failed item to remain, count=%d", recentCount)
 	}
@@ -850,13 +812,16 @@ func setupCacheService(t *testing.T) *cache.Service {
 
 	valkeyHost := os.Getenv("TEST_VALKEY_HOST")
 	valkeyPort := 6379
+
 	if valkeyAddr := os.Getenv("TEST_VALKEY_ADDR"); valkeyAddr != "" {
 		host, port, err := net.SplitHostPort(valkeyAddr)
 		require.NoError(t, err)
+
 		valkeyHost = host
 		valkeyPort, err = strconv.Atoi(port)
 		require.NoError(t, err)
 	}
+
 	if valkeyHost == "" {
 		valkeyHost = "localhost"
 	}
@@ -869,7 +834,8 @@ func setupCacheService(t *testing.T) *cache.Service {
 	}
 
 	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	cacheService, err := cache.NewCacheService(context.Background(), config, testLogger)
+
+	cacheService, err := cache.NewCacheService(t.Context(), config, testLogger)
 	if err != nil {
 		t.Fatalf("Failed to create cache service: %v", err)
 	}
@@ -883,10 +849,12 @@ func setupCacheService(t *testing.T) *cache.Service {
 
 func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
 	t.Helper()
-	ctx := context.Background()
+
+	ctx := t.Context()
 
 	_, err := cacheService.SAdd(ctx, "alarm:channel_subscribers:SHORTS:UCtest123", []string{"testroom"})
 	require.NoError(t, err)
+
 	_, err = cacheService.SAdd(ctx, "alarm:channel_subscribers:UCtest456", []string{"testroom"})
 	require.NoError(t, err)
 	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", "UCtest123", "TestMember"))
@@ -900,7 +868,8 @@ func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
 
 func setupChannelSubscribers(t *testing.T, cacheService *cache.Service, key string, subscribers []string) {
 	t.Helper()
-	ctx := context.Background()
+
+	ctx := t.Context()
 	_, err := cacheService.SAdd(ctx, key, subscribers)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, cacheService.Del(ctx, key)) })
@@ -908,15 +877,77 @@ func setupChannelSubscribers(t *testing.T, cacheService *cache.Service, key stri
 
 func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name string) {
 	t.Helper()
-	ctx := context.Background()
+
+	ctx := t.Context()
 	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", channelID, name))
 }
 
 func fetchDeliveryRows(t *testing.T, db *deliveryTestDB, outboxID int64) []domain.YouTubeNotificationDelivery {
 	t.Helper()
+
 	var rows []domain.YouTubeNotificationDelivery
+
 	if err := findDeliveryTestRowsOrderedWhere(db, &rows, "room_id ASC", "outbox_id = ?", outboxID).Error; err != nil {
 		t.Fatalf("Failed to fetch delivery rows: %v", err)
 	}
+
 	return rows
+}
+
+type dispatcherIntegrationEnv struct {
+	db           *deliveryTestDB
+	sender       *fakeSender
+	cacheService *cache.Service
+	dispatcher   *youtubedispatch.Dispatcher
+}
+
+func requireIntegrationEnv(t *testing.T) {
+	t.Helper()
+
+	if os.Getenv("INTEGRATION_TEST") != integrationEnvEnabled {
+		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
+	}
+}
+
+func newIntegrationTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func newIntegrationDispatchConfig(retryBackoff time.Duration) dispatchstate.Config {
+	return dispatchstate.Config{
+		BatchSize:    10,
+		LockTimeout:  1 * time.Minute,
+		PollInterval: 100 * time.Millisecond,
+		MaxRetries:   3,
+		RetryBackoff: retryBackoff,
+	}
+}
+
+func newDispatcherIntegrationEnv(t *testing.T, config dispatchstate.Config) dispatcherIntegrationEnv {
+	t.Helper()
+	requireIntegrationEnv(t)
+
+	db := dbtest.NewPool(t)
+
+	cleanupOutbox(t, db)
+
+	sender := &fakeSender{}
+	cacheService := setupCacheService(t)
+
+	return dispatcherIntegrationEnv{
+		db:           db,
+		sender:       sender,
+		cacheService: cacheService,
+		dispatcher:   youtubedispatch.NewDispatcher(db, cacheService, sender, nil, newIntegrationTestLogger(), &config),
+	}
+}
+
+func seedIntegrationOutboxItem(t *testing.T, db *deliveryTestDB, item *domain.YouTubeNotificationOutbox) {
+	t.Helper()
+
+	if err := insertDeliveryTestRows(db, item).Error; err != nil {
+		t.Fatalf("Failed to create test outbox item: %v", err)
+	}
+
+	t.Cleanup(func() { deleteDeliveryTestRows(t, db, item) })
 }

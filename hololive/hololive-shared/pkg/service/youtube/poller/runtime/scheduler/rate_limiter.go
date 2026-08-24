@@ -22,6 +22,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -41,8 +42,9 @@ func NewRateLimiter(interval time.Duration) *RateLimiter {
 
 func (r *RateLimiter) Wait(ctx context.Context) error {
 	if ctx == nil {
-		return fmt.Errorf("rate limit wait: context is nil")
+		return errors.New("rate limit wait: context is nil")
 	}
+
 	if r.disabled() {
 		return nil
 	}
@@ -69,15 +71,20 @@ func (r *RateLimiter) disabled() bool {
 
 func (r *RateLimiter) reserveWaitTime(now time.Time) time.Duration {
 	r.mu.Lock()
+
 	nextAllowedAt := now
+
 	if !r.lastTime.IsZero() {
 		earliest := r.lastTime.Add(r.interval)
 		if earliest.After(now) {
 			nextAllowedAt = earliest
 		}
 	}
+
 	r.lastTime = nextAllowedAt
+
 	waitTime := time.Until(nextAllowedAt)
 	r.mu.Unlock()
+
 	return waitTime
 }

@@ -22,6 +22,7 @@ package fallback
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -47,28 +48,35 @@ type SecondaryExecution struct {
 func RunSecondary(ctx context.Context, plan SecondaryPlan) (SecondaryExecution, error) {
 	if !plan.ShouldRun {
 		ObserveExecution(plan.Service, plan.Operation, plan.Trigger, "skipped")
+
 		return SecondaryExecution{Outcome: "skipped"}, nil
 	}
+
 	if plan.Blocked {
 		ObserveExecution(plan.Service, plan.Operation, plan.Trigger, "blocked")
+
 		return SecondaryExecution{Outcome: "blocked"}, nil
 	}
+
 	if plan.Run == nil {
 		ObserveExecution(plan.Service, plan.Operation, plan.Trigger, "error")
-		return SecondaryExecution{Outcome: "error"}, fmt.Errorf("run secondary fallback: missing runner")
+
+		return SecondaryExecution{Outcome: "error"}, errors.New("run secondary fallback: missing runner")
 	}
 
 	result, err := plan.Run(ctx)
 	if err != nil {
 		ObserveExecution(plan.Service, plan.Operation, plan.Trigger, "error")
+
 		return SecondaryExecution{
 			Outcome: "error",
 			Result:  result,
-		}, err
+		}, fmt.Errorf("run secondary fallback: %w", err)
 	}
 
 	outcome := secondaryOutcome(result)
 	ObserveExecution(plan.Service, plan.Operation, plan.Trigger, outcome)
+
 	return SecondaryExecution{
 		Outcome: outcome,
 		Result:  result,

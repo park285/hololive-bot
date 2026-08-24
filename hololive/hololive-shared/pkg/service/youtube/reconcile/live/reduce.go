@@ -16,10 +16,11 @@ type reduceSession struct {
 	applications []Application
 }
 
-func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) { //nolint:gocritic // public pure reducer copies inputs before private mutation
+func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) {
 	if evidence.Kind != contract.KindLiveSnapshot {
 		return Decision{}, fmt.Errorf("live reducer received kind %q", evidence.Kind)
 	}
+
 	workingState := state.clone()
 	workingEvidence := evidence.clone()
 	session := reduceSession{
@@ -29,27 +30,36 @@ func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time
 		dbNow:    dbNow.UTC(),
 		dirty:    map[string]struct{}{},
 	}
+
 	if session.state.Sessions == nil {
 		session.state.Sessions = map[string]SessionState{}
 	}
+
 	if session.state.PendingEnds == nil {
 		session.state.PendingEnds = map[string]PendingEnd{}
 	}
+
 	applyFacts(&session)
+
 	return session.decision(), nil
 }
 
 func applyFacts(session *reduceSession) {
 	seen := map[string]SessionFact{}
+
 	for i := range session.evidence.Sessions {
 		fact := &session.evidence.Sessions[i]
+
 		seen[fact.VideoID] = *fact
 		applySessionFact(session, fact)
 	}
+
 	if scopedNegative(session.evidence) {
 		applySnapshotAbsence(session, seen)
 	}
+
 	reapplyStoredAbsences(session)
+
 	for videoID := range session.state.Sessions {
 		reapplyStoredEnds(session, videoID)
 		settleDueCandidate(session, videoID)
@@ -59,12 +69,16 @@ func applyFacts(session *reduceSession) {
 func applySessionFact(session *reduceSession, fact *SessionFact) {
 	if fact.Status == "UPCOMING" {
 		applyUpcomingPositive(session, fact)
+
 		return
 	}
+
 	if fact.Status == "LIVE" {
 		applyLivePositive(session, fact)
+
 		return
 	}
+
 	applyNegativeFact(session, fact)
 }
 
@@ -73,9 +87,11 @@ func applyNegativeFact(session *reduceSession, fact *SessionFact) {
 		pending := pendingFromFact(session, fact, EndEvidenceExplicitEnd)
 		recordPendingEnd(session, &pending)
 		reapplyStoredEnds(session, fact.VideoID)
+
 		return
 	}
-	if fact.Status == "CANCELLED" {
+
+	if fact.Status == "CANCELLED" { //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 		pending := pendingFromFact(session, fact, EndEvidenceExplicitCancel)
 		recordPendingEnd(session, &pending)
 		reapplyStoredEnds(session, fact.VideoID)
@@ -92,10 +108,12 @@ func applySnapshotAbsence(session *reduceSession, seen map[string]SessionFact) {
 	if replay {
 		return
 	}
+
 	for videoID := range session.state.Sessions {
 		if _, present := seen[videoID]; present {
 			continue
 		}
+
 		existing := session.state.Sessions[videoID]
 		applyAbsenceToSession(session, &existing, &slot)
 	}
@@ -108,6 +126,7 @@ func recordAbsenceSlot(session *reduceSession) (AbsenceSlot, bool) {
 			return session.state.AbsenceSlots[i], true
 		}
 	}
+
 	slot := AbsenceSlot{
 		ScheduledFor:   evidence.ScheduledFor,
 		ObservationID:  evidence.ObservationID,
@@ -117,7 +136,9 @@ func recordAbsenceSlot(session *reduceSession) (AbsenceSlot, bool) {
 		ScopeSHA256:    evidence.ScopeSHA256,
 		Coverage:       evidence.Coverage,
 	}
+
 	session.state.AbsenceSlots = append(session.state.AbsenceSlots, slot)
+
 	return slot, false
 }
 
@@ -128,11 +149,14 @@ func (s *reduceSession) decision() Decision {
 			sessions = append(sessions, state)
 		}
 	}
+
 	pending := make([]PendingEnd, 0, len(s.state.PendingEnds))
 	for videoID := range s.state.PendingEnds {
 		fact := s.state.PendingEnds[videoID]
+
 		pending = append(pending, fact)
 	}
+
 	return Decision{
 		Sessions:     sessions,
 		PendingEnds:  pending,
@@ -145,12 +169,14 @@ func absenceSlotOf(state *State, evidence *Evidence) *AbsenceSlot {
 	if !scopedNegative(evidence) {
 		return nil
 	}
+
 	for i := range state.AbsenceSlots {
 		if state.AbsenceSlots[i].ScheduledFor.Equal(evidence.ScheduledFor) {
 			slot := state.AbsenceSlots[i]
 			return &slot
 		}
 	}
+
 	return nil
 }
 
@@ -164,16 +190,20 @@ func FinalizeDue(state State, dbNow time.Time, grace time.Duration) Decision {
 		dbNow:    dbNow.UTC(),
 		dirty:    map[string]struct{}{},
 	}
+
 	if session.state.Sessions == nil {
 		session.state.Sessions = map[string]SessionState{}
 	}
+
 	if session.state.PendingEnds == nil {
 		session.state.PendingEnds = map[string]PendingEnd{}
 	}
+
 	for videoID := range session.state.Sessions {
 		reapplyStoredEnds(&session, videoID)
 		settleDueCandidate(&session, videoID)
 	}
+
 	return session.decision()
 }
 
@@ -181,6 +211,7 @@ func boundApplications(items []Application) []Application {
 	if len(items) <= 1000 {
 		return items
 	}
+
 	return items[:1000]
 }
 
@@ -197,6 +228,8 @@ func copyOptionalTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
 	}
+
 	copied := value.UTC()
+
 	return &copied
 }

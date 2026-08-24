@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/panicguard"
-	"golang.org/x/sync/errgroup"
 )
 
 func (s *Service) mergeStelliveLiveStreams(ctx context.Context, org string, liveStreams []*domain.Stream) []*domain.Stream {
@@ -30,6 +30,7 @@ func (s *Service) mergeStelliveLiveStreams(ctx context.Context, org string, live
 	lives, err := s.chzzk.GetLivesByChannelIDs(ctx, channelIDs)
 	if err != nil {
 		s.logger.Warn("stream feed: chzzk live lookup failed", slog.Any("error", err))
+
 		return liveStreams
 	}
 
@@ -46,20 +47,23 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 		return upcomingStreams
 	}
 
-	var chzzkStreams []*domain.Stream
 	var (
-		mu sync.Mutex
-		g  errgroup.Group
+		chzzkStreams []*domain.Stream
+		mu           sync.Mutex
+		g            errgroup.Group
 	)
 
 	g.SetLimit(settings.DefaultChzzkOperationalConfig().MaxConcurrentStatusChecks)
+
 	for _, member := range members {
 		panicguard.GoE(&g, s.logger, "stellive-upcoming-stream", func() error {
 			streams := s.fetchStelliveUpcomingStreams(ctx, member, hours)
 			appendStelliveUpcomingStreams(&mu, &chzzkStreams, streams)
+
 			return nil
 		})
 	}
+
 	if err := g.Wait(); err != nil {
 		s.logger.Warn("stream feed: chzzk upcoming merge failed", slog.Any("error", err))
 	}
@@ -83,6 +87,7 @@ func (s *Service) fetchStelliveUpcomingStreams(ctx context.Context, member *doma
 			slog.String("chzzk_channel_id", member.ChzzkChannelID),
 			slog.Any("error", err),
 		)
+
 		return nil
 	}
 
@@ -95,6 +100,7 @@ func appendStelliveUpcomingStreams(mu *sync.Mutex, streams *[]*domain.Stream, ad
 	}
 
 	mu.Lock()
+
 	*streams = append(*streams, additions...)
 	mu.Unlock()
 }
