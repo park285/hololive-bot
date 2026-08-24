@@ -1916,6 +1916,9 @@ INSERT INTO public.message_strings (id, namespace, key, value, created_at, updat
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (157, 'rankcard', 'total', '구독자 %s', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (158, 'karing', 'alarm_title_prelive_premiere', '선행공개 %d분 전 알림', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (159, 'karing', 'alarm_title_live_premiere', '선행공개 시작', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (160, 'karing', 'outbox_title_video_premiere', '%d분 후 공개 예정', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (161, 'karing', 'outbox_time_video_premiere', '%d분 후 공개', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
+INSERT INTO public.message_strings (id, namespace, key, value, created_at, updated_at) VALUES (162, 'karing', 'status_video_premiere', '최초공개', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
 
 
 --
@@ -1953,7 +1956,7 @@ INSERT INTO public.notification_templates (id, template_key, channel_id, body, c
 {{- if .URL}}
 [커뮤니티 글 보기]({{.URL}})
 {{- end}}', '2000-01-01 00:00:00+00', '2000-01-01 00:00:00+00');
-INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (7, 'OUTBOX_VIDEO', NULL, '{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}
+INSERT INTO public.notification_templates (id, template_key, channel_id, body, created_at, updated_at) VALUES (7, 'OUTBOX_VIDEO', NULL, '{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else if .IsUpcomingPremiere}}🔔 **{{mdsafe .MemberName}}** {{.MinutesUntilPremiere}}분 후 공개 예정{{else if .IsPremiere}}🔔 **{{mdsafe .MemberName}}** 최초공개{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}
 {{- if and .Title .URL}}
 [{{mdsafe (truncate 50 .Title)}}]({{.URL}})
 {{- else if .Title}}
@@ -2667,7 +2670,7 @@ SELECT pg_catalog.setval('public.members_id_seq', 18, true);
 -- Name: message_strings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.message_strings_id_seq', 159, true);
+SELECT pg_catalog.setval('public.message_strings_id_seq', 162, true);
 
 
 --

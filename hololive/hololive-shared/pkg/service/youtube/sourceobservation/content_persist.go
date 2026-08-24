@@ -88,7 +88,16 @@ func domainVideo(entity content.Entity, seenAt time.Time) *domain.YouTubeVideo {
 
 func domainNotification(intent *content.NotificationIntent) *domain.YouTubeNotificationOutbox {
 	video := domainVideo(intent.Video, time.Time{})
-	payload := polling.MustMarshalJSON(video)
+	payload := polling.MustMarshalJSON(struct {
+		*domain.YouTubeVideo
+
+		ScheduledStartAt *time.Time `json:"scheduled_start_at,omitempty"`
+		IsPremiere       *bool      `json:"is_premiere,omitempty"`
+	}{
+		YouTubeVideo:     video,
+		ScheduledStartAt: intent.Video.ScheduledFor,
+		IsPremiere:       intent.Video.IsPremiere,
+	})
 
 	if intent.Kind == domain.OutboxKindNewShort {
 		payload = polling.BuildShortNotificationPayload(video, intent.ContentID)

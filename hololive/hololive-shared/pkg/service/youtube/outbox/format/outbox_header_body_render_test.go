@@ -31,7 +31,7 @@ var outboxRenderFuncs = template.FuncMap{
 const zwsp = util.KakaoZeroWidthSpace
 
 const (
-	outboxBodyVideo = `{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}
+	outboxBodyVideo = `{{if eq .Kind "LIVE_STREAM"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else if .IsUpcomingPremiere}}🔔 **{{mdsafe .MemberName}}** {{.MinutesUntilPremiere}}분 후 공개 예정{{else if .IsPremiere}}🔔 **{{mdsafe .MemberName}}** 최초공개{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}
 {{- if and .Title .URL}}
 [{{mdsafe (truncate 50 .Title)}}]({{.URL}})
 {{- else if .Title}}
@@ -276,6 +276,45 @@ func TestOutboxHeaderBodyRenderGoldens(t *testing.T) {
 
 			if got := renderOutboxBody(t, c.body, c.data); got != c.want {
 				t.Fatalf("render mismatch\n got=%q\nwant=%q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestOutboxHeaderBodyRendersPremiereGoldens(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		data map[string]any
+		want string
+	}{
+		{
+			name: "upcoming",
+			data: map[string]any{
+				"Kind": "NEW_VIDEO", "MemberName": "아크로라", "Title": "최초공개 영상",
+				"URL": "https://youtu.be/premiere", "IsPremiere": true,
+				"IsUpcomingPremiere": true, "MinutesUntilPremiere": 30,
+			},
+			want: "🔔 **아크로라** 30분 후 공개 예정\n[최초공개 영상](https://youtu.be/premiere)",
+		},
+		{
+			name: "after schedule",
+			data: map[string]any{
+				"Kind": "NEW_VIDEO", "MemberName": "아크로라", "Title": "최초공개 영상",
+				"URL": "https://youtu.be/premiere", "IsPremiere": true,
+				"IsUpcomingPremiere": false, "MinutesUntilPremiere": -1,
+			},
+			want: "🔔 **아크로라** 최초공개\n[최초공개 영상](https://youtu.be/premiere)",
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := renderOutboxBody(t, outboxBodyVideo, test.data); got != test.want {
+				t.Fatalf("render mismatch\n got=%q\nwant=%q", got, test.want)
 			}
 		})
 	}

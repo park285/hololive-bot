@@ -10,6 +10,7 @@ type VideoListItemV1 struct {
 	Title        string     `json:"title"`
 	PublishedAt  *time.Time `json:"published_at,omitempty"`
 	ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
+	IsPremiere   *bool      `json:"is_premiere,omitempty"`
 }
 
 type VideoListV1 struct {

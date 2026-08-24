@@ -50,6 +50,7 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 			Title:        item.Title,
 			PublishedAt:  item.PublishedAt,
 			ScheduledFor: item.ScheduledFor,
+			IsPremiere:   item.IsPremiere,
 		})
 	}
 

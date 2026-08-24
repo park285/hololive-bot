@@ -2,7 +2,9 @@ package youtubedispatch
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -65,5 +67,31 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 		},
 	}); err == nil {
 		t.Fatal("expected error when renderer is nil")
+	}
+}
+
+func TestFormatYouTubeOutboxPayloadRendersPremiereCountdown(t *testing.T) {
+	t.Parallel()
+
+	db := newDeliveryPool(t)
+	renderer := template.NewRenderer(db, slog.New(slog.DiscardHandler))
+	scheduled := time.Now().UTC().Add(30 * time.Minute)
+
+	premiere, err := FormatYouTubeOutboxPayload(t.Context(), renderer, nil, &domain.YouTubeOutboxDispatchPayload{
+		OutboxIDs:  []int64{2},
+		Kind:       domain.OutboxKindNewVideo,
+		AlarmType:  domain.AlarmTypeLive,
+		ChannelID:  "UC_test",
+		MemberName: "아크로라",
+		Items: []domain.YouTubeOutboxItem{
+			{OutboxID: 2, ContentID: "premiere", Payload: `{"video_id":"premiere","title":"최초공개 영상","scheduled_start_at":"` + scheduled.Format(time.RFC3339Nano) + `","is_premiere":true}`},
+		},
+	})
+	if err != nil {
+		t.Fatalf("FormatYouTubeOutboxPayload(premiere) error = %v", err)
+	}
+
+	if !strings.HasPrefix(premiere, "🔔 **아크로라** 30분 후 공개 예정\n") {
+		t.Fatalf("premiere message = %q", premiere)
 	}
 }

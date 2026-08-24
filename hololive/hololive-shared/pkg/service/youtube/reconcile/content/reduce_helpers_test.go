@@ -276,8 +276,8 @@ func assertNotifications(t *testing.T, decision *Decision, videoIDs ...string) {
 	t.Helper()
 
 	got := make([]string, 0, len(decision.Notifications))
-	for _, note := range decision.Notifications {
-		got = append(got, note.ContentID)
+	for i := range decision.Notifications {
+		got = append(got, decision.Notifications[i].ContentID)
 	}
 
 	sort.Strings(got)

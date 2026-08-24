@@ -215,10 +215,12 @@ func TestSeedTemplates_OutboxVideoLabelLinkBranches(t *testing.T) {
 	body := seedBody(t, pool, domain.TemplateKeyOutboxVideo)
 	render := func(title, url string) string {
 		return renderSeedBody(t, domain.TemplateKeyOutboxVideo, body, map[string]any{
-			"Kind":          "NEW_VIDEO",
-			fieldMemberName: markerMember,
-			fieldTitle:      title,
-			fieldURL:        url,
+			"Kind":               "NEW_VIDEO",
+			fieldMemberName:      markerMember,
+			fieldTitle:           title,
+			fieldURL:             url,
+			"IsPremiere":         false,
+			"IsUpcomingPremiere": false,
 		})
 	}
 

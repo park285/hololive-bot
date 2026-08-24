@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type MessageFormatter struct {
@@ -100,14 +101,17 @@ func (mf *MessageFormatter) renderTemplate(ctx context.Context, templateKey doma
 }
 
 type TemplateData struct {
-	MemberName  string
-	Kind        string
-	Title       string
-	URL         string
-	ContentText string
-	Milestone   string
-	VideoID     string
-	PostID      string
+	MemberName           string
+	Kind                 string
+	Title                string
+	URL                  string
+	ContentText          string
+	Milestone            string
+	VideoID              string
+	PostID               string
+	IsPremiere           bool
+	IsUpcomingPremiere   bool
+	MinutesUntilPremiere int
 }
 
 func (mf *MessageFormatter) BuildTemplateData(memberName string, item *domain.YouTubeNotificationOutbox) (TemplateData, error) {
@@ -166,8 +170,24 @@ func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotification
 	data.Title = p.Title
 	data.VideoID = p.VideoID
 	data.URL = VideoTemplateURL(item.Kind, p.VideoID)
+	populatePremiereTemplateData(data, item.Kind, &p, time.Now())
 
 	return nil
+}
+
+func populatePremiereTemplateData(data *TemplateData, kind domain.OutboxKind, payload *VideoPayload, now time.Time) {
+	if kind != domain.OutboxKindNewVideo || payload.IsPremiere == nil || !*payload.IsPremiere {
+		return
+	}
+
+	data.IsPremiere = true
+
+	if payload.ScheduledStartAt == nil || payload.ScheduledStartAt.IsZero() {
+		return
+	}
+
+	data.MinutesUntilPremiere = util.MinutesUntilCeilPtr(payload.ScheduledStartAt, now)
+	data.IsUpcomingPremiere = data.MinutesUntilPremiere > 0
 }
 
 func VideoTemplateURL(kind domain.OutboxKind, videoID string) string {
@@ -211,6 +231,7 @@ type VideoPayload struct {
 	PublishedText    string     `json:"published_text,omitempty"`
 	PublishedAt      *time.Time `json:"published_at,omitempty"`
 	ScheduledStartAt *time.Time `json:"scheduled_start_at,omitempty"`
+	IsPremiere       *bool      `json:"is_premiere,omitempty"`
 }
 
 type CommunityPayload struct {

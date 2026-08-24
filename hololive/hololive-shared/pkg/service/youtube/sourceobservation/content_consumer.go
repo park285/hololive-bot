@@ -118,6 +118,7 @@ func entitiesFromItems(items []contract.VideoListItemV1, shorts bool) []content.
 			Title:        items[i].Title,
 			PublishedAt:  items[i].PublishedAt,
 			ScheduledFor: items[i].ScheduledFor,
+			IsPremiere:   items[i].IsPremiere,
 			IsShort:      shorts,
 		})
 	}

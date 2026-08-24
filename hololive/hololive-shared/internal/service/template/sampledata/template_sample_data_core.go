@@ -127,11 +127,14 @@ func addTemplateOutboxSingles(data map[domain.TemplateKey]any) {
 		"PostID":        "Ugkxyz123",
 	}
 	data[domain.TemplateKeyOutboxVideo] = map[string]any{
-		fieldMemberName: sampleMemberMiko,
-		fieldKind:       "NEW_VIDEO",
-		fieldTitle:      "마인크래프트 건축 배틀 #미코라이브",
-		fieldURL:        "https://youtu.be/video123xyz",
-		"VideoID":       "video123xyz",
+		fieldMemberName:        sampleMemberMiko,
+		fieldKind:              "NEW_VIDEO",
+		fieldTitle:             "마인크래프트 건축 배틀 #미코라이브",
+		fieldURL:               "https://youtu.be/video123xyz",
+		"VideoID":              "video123xyz",
+		"IsPremiere":           false,
+		"IsUpcomingPremiere":   false,
+		"MinutesUntilPremiere": 0,
 	}
 	data[domain.TemplateKeyOutboxMilestone] = map[string]any{
 		fieldMemberName: sampleMemberMiko,

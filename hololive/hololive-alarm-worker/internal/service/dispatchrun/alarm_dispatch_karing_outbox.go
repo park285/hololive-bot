@@ -21,6 +21,7 @@ type alarmDispatchKaringVideoPayload struct {
 	Thumbnail        domain.ThumbnailsJSON `json:"thumbnail,omitempty"`
 	PublishedAt      *time.Time            `json:"published_at,omitempty"`
 	ScheduledStartAt *time.Time            `json:"scheduled_start_at,omitempty"`
+	IsPremiere       *bool                 `json:"is_premiere,omitempty"`
 }
 
 type alarmDispatchKaringCommunityPayload struct {
@@ -208,6 +209,10 @@ var alarmDispatchVideoOutboxStatusByKind = map[domain.OutboxKind]alarmDispatchVi
 }
 
 func alarmDispatchVideoOutboxStatus(ctx context.Context, messageStrings *messagestrings.Store, kind domain.OutboxKind, data alarmDispatchKaringVideoPayload) iris.KaringStreamStatus {
+	if kind == domain.OutboxKindNewVideo && data.IsPremiere != nil && *data.IsPremiere {
+		return iris.KaringStreamStatus(messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "status_video_premiere", "최초공개"))
+	}
+
 	if label, ok := alarmDispatchVideoOutboxStatusByKind[kind]; ok {
 		return iris.KaringStreamStatus(messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, label.key, label.fallback))
 	}

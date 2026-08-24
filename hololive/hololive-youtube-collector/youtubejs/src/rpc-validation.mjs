@@ -423,13 +423,14 @@ function validateThumbnail(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ContentItem} */
 function validateContentItem(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["video_id", "channel_id", "title"], ["published_at", "scheduled_for"]);
+  assertResponseKeys(record, ["video_id", "channel_id", "title"], ["published_at", "scheduled_for", "is_premiere"]);
   return {
     video_id: nonemptyStringField(record, "video_id"),
     channel_id: nonemptyStringField(record, "channel_id"),
     title: stringField(record, "title"),
     ...optionalRFC3339(record, "published_at"),
     ...optionalRFC3339(record, "scheduled_for"),
+    ...optionalBoolean(record, "is_premiere"),
   };
 }
 

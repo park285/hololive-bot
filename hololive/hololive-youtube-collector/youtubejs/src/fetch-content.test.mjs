@@ -127,3 +127,89 @@ test("fetchContentFeed paginates videos from a stub channel", async () => {
   assert.equal(result.exhausted, true);
   assert.equal(result.continuity, "CONTIGUOUS");
 });
+
+test("fetchContentFeed enriches an upcoming premiere with its start timestamp", async () => {
+  const startTimestamp = "2026-08-24T14:30:00.000Z";
+  const innertube = {
+    getChannel: async () => ({
+      getVideos: async () => ({
+        videos: [{
+          type: "LockupView",
+          content_type: "VIDEO",
+          content_id: "premiere-1",
+          metadata: { title: "Premiere" },
+          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
+        }],
+      }),
+    }),
+    getInfo: async (videoId) => {
+      assert.equal(videoId, "premiere-1");
+      return {
+        basic_info: {
+          is_upcoming: true,
+          is_live_content: false,
+          start_timestamp: startTimestamp,
+        },
+      };
+    },
+  };
+
+  const result = await fetchContentFeed({
+    channelId: "UC_TEST",
+    kind: "videos",
+    innertube,
+  });
+
+  assert.equal(result.items[0].scheduled_for, startTimestamp);
+  assert.equal(result.items[0].is_premiere, true);
+});
+
+test("fetchContentFeed does not classify upcoming live content as a premiere", async () => {
+  const innertube = {
+    getChannel: async () => ({
+      getVideos: async () => ({
+        videos: [{
+          id: "live-1",
+          title: "Live",
+          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
+        }],
+      }),
+    }),
+    getInfo: async () => ({
+      basic_info: {
+        is_upcoming: true,
+        is_live_content: true,
+        start_timestamp: "2026-08-24T14:30:00.000Z",
+      },
+    }),
+  };
+
+  const result = await fetchContentFeed({
+    channelId: "UC_TEST",
+    kind: "videos",
+    innertube,
+  });
+
+  assert.equal(result.items[0].scheduled_for, undefined);
+  assert.equal(result.items[0].is_premiere, undefined);
+});
+
+test("fetchContentFeed keeps a confirmed premiere typed without a start timestamp", async () => {
+  const innertube = {
+    getChannel: async () => ({
+      getVideos: async () => ({
+        videos: [{
+          id: "premiere-1",
+          title: "Premiere",
+          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
+        }],
+      }),
+    }),
+    getInfo: async () => ({ basic_info: { is_upcoming: true, is_live_content: false } }),
+  };
+
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", innertube });
+
+  assert.equal(result.items[0].is_premiere, true);
+  assert.equal(result.items[0].scheduled_for, undefined);
+});

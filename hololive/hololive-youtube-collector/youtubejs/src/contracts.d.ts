@@ -213,6 +213,7 @@ export interface ContentItem {
   title: string;
   published_at?: string;
   scheduled_for?: string;
+  is_premiere?: boolean;
 }
 
 export interface ContentResult extends Pagination {

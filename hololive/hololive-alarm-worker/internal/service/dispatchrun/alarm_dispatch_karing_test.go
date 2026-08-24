@@ -35,6 +35,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
+const karingPremiereLabel = "최초공개"
+
 func TestAlarmDispatchClientRequestID(t *testing.T) {
 	t.Parallel()
 
@@ -200,6 +202,111 @@ func TestBuildAlarmDispatchKaringContentListRequestsLiveCatchupUsesLiveLabels(t 
 	require.Len(t, requests, 1)
 	assert.Equal(t, "라이브 시작", requests[0].ExtraArgs["alarm_title"])
 	assert.Equal(t, "지금 시작", requests[0].ExtraArgs["time_left"])
+}
+
+func TestBuildAlarmDispatchKaringContentListRequestsPremiereUsesCountdown(t *testing.T) {
+	t.Parallel()
+
+	scheduled := time.Now().UTC().Add(30 * time.Minute)
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
+	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
+	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
+		Kind:       domain.OutboxKindNewVideo,
+		AlarmType:  domain.AlarmTypeLive,
+		ChannelID:  testAlarmChannelID,
+		MemberName: "아크로라",
+		Items: []domain.YouTubeOutboxItem{{
+			OutboxID:  1,
+			ContentID: "premiere",
+			Payload:   `{"video_id":"premiere","title":"최초공개 영상","scheduled_start_at":"` + scheduled.Format(time.RFC3339Nano) + `","is_premiere":true}`,
+		}},
+	}
+
+	requests, err := buildAlarmDispatchKaringContentListRequests(t.Context(), nil, alarmDispatchGroup{
+		roomID:    testAlarmRoomID,
+		envelopes: []domain.AlarmQueueEnvelope{envelope},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "30분 후 공개 예정", requests[0].ExtraArgs["alarm_title"])
+	assert.Equal(t, "30분 후 공개", requests[0].ExtraArgs["time_left"])
+	require.Len(t, requests[0].Items, 1)
+	assert.Equal(t, iris.KaringStreamStatus(karingPremiereLabel), requests[0].Items[0].Status)
+}
+
+func TestAlarmDispatchOutboxPremiereMinutesRequiresSingleFuturePremiere(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC)
+	scheduled := now.Add(30*time.Minute + time.Second)
+	payload := &domain.YouTubeOutboxDispatchPayload{
+		Kind: domain.OutboxKindNewVideo,
+		Items: []domain.YouTubeOutboxItem{{
+			Payload: `{"scheduled_start_at":"` + scheduled.Format(time.RFC3339) + `","is_premiere":true}`,
+		}},
+	}
+
+	minutes, ok := alarmDispatchOutboxPremiereMinutes(payload, now)
+	assert.True(t, ok)
+	assert.Equal(t, 31, minutes)
+
+	payload.Items = append(payload.Items, domain.YouTubeOutboxItem{Payload: payload.Items[0].Payload})
+	_, ok = alarmDispatchOutboxPremiereMinutes(payload, now)
+	assert.False(t, ok)
+}
+
+func TestBuildAlarmDispatchOutboxKaringExtraArgsPremiereBoundaries(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC)
+	tests := map[string]struct {
+		scheduledAt *time.Time
+		wantTitle   string
+		wantTime    string
+	}{
+		"future partial minute": {
+			scheduledAt: new(now.Add(30*time.Minute + time.Second)),
+			wantTitle:   "31분 후 공개 예정",
+			wantTime:    "31분 후 공개",
+		},
+		"exact start": {
+			scheduledAt: new(now),
+			wantTitle:   karingPremiereLabel,
+			wantTime:    karingPremiereLabel,
+		},
+		"past start": {
+			scheduledAt: new(now.Add(-time.Second)),
+			wantTitle:   karingPremiereLabel,
+			wantTime:    karingPremiereLabel,
+		},
+		"missing start": {
+			wantTitle: karingPremiereLabel,
+			wantTime:  karingPremiereLabel,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			payload := `{"video_id":"premiere","is_premiere":true}`
+
+			if test.scheduledAt != nil {
+				payload = `{"video_id":"premiere","is_premiere":true,"scheduled_start_at":"` + test.scheduledAt.Format(time.RFC3339Nano) + `"}`
+			}
+
+			envelope := domain.AlarmQueueEnvelope{YouTubeOutbox: &domain.YouTubeOutboxDispatchPayload{
+				Kind:  domain.OutboxKindNewVideo,
+				Items: []domain.YouTubeOutboxItem{{Payload: payload}},
+			}}
+
+			args := buildAlarmDispatchOutboxKaringExtraArgsAt(t.Context(), nil, &envelope, 1, now)
+			assert.Equal(t, test.wantTitle, args["alarm_title"])
+			assert.Equal(t, test.wantTime, args["time_left"])
+		})
+	}
 }
 
 func TestBuildAlarmDispatchKaringExtraArgsPremiereLabels(t *testing.T) {

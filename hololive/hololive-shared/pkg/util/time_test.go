@@ -66,3 +66,31 @@ func TestMinutesUntilFloorPtr(t *testing.T) {
 		})
 	}
 }
+
+func TestMinutesUntilCeilPtr(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC)
+
+	tests := map[string]struct {
+		target *time.Time
+		want   int
+	}{
+		"nil":            {target: nil, want: -1},
+		"past":           {target: new(now.Add(-time.Second)), want: -1},
+		"now":            {target: new(now), want: -1},
+		"under minute":   {target: new(now.Add(time.Second)), want: 1},
+		"exact minutes":  {target: new(now.Add(30 * time.Minute)), want: 30},
+		"partial minute": {target: new(now.Add(30*time.Minute + time.Second)), want: 31},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := MinutesUntilCeilPtr(test.target, now); got != test.want {
+				t.Fatalf("MinutesUntilCeilPtr() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}

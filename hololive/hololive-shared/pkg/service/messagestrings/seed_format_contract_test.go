@@ -50,6 +50,8 @@ func TestSeedFormatStrings_VerbContract(t *testing.T) {
 		{messagestrings.NamespaceKaring, "alarm_title_prelive", []any{5}},
 		{messagestrings.NamespaceKaring, "time_left_prelive", []any{5}},
 		{messagestrings.NamespaceKaring, "count_suffix", []any{"방송 알림", 3}},
+		{messagestrings.NamespaceKaring, "outbox_title_video_premiere", []any{30}},
+		{messagestrings.NamespaceKaring, "outbox_time_video_premiere", []any{30}},
 	}
 	for _, c := range formatCases {
 		value := store.Get(c.namespace, c.key)
@@ -73,7 +75,7 @@ func TestSeedFormatStrings_VerbContract(t *testing.T) {
 		"outbox_title_live", "outbox_time_live",
 		"title_fallback", "time_fallback",
 		"item_title_community_fallback",
-		"status_community", "status_shorts", "status_video", "status_fallback",
+		"status_community", "status_shorts", "status_video", "status_video_premiere", "status_fallback",
 	}
 	for _, key := range staticKaringKeys {
 		value := store.Get(messagestrings.NamespaceKaring, key)

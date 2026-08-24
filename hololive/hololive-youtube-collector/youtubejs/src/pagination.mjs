@@ -187,7 +187,7 @@ export async function paginate({
   let reason = "";
   while (feed != null) {
     assertParentRequestAlive();
-    const mapped = mapPage(feed);
+    const mapped = await mapPage(feed);
     if (Array.isArray(mapped) || mapped == null || mapped.recognized_shape !== true || !Array.isArray(mapped.items)) {
       throw codedError(
         "helper_internal_invariant",

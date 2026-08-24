@@ -20,6 +20,7 @@ type Entity struct {
 	Title        string
 	PublishedAt  *time.Time
 	ScheduledFor *time.Time
+	IsPremiere   *bool
 	IsShort      bool
 }
 
@@ -173,8 +174,19 @@ func (e Entity) clone() Entity {
 
 	cloned.PublishedAt = cloneTime(e.PublishedAt)
 	cloned.ScheduledFor = cloneTime(e.ScheduledFor)
+	cloned.IsPremiere = cloneBool(e.IsPremiere)
 
 	return cloned
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+
+	cloned := *value
+
+	return &cloned
 }
 
 func (s *AbsenceSlot) clone() AbsenceSlot {

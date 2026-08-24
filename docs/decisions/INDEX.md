@@ -2,10 +2,11 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 23건: proposed 5, accepted 15, rejected 0, withdrawn 0, superseded 3
+레코드 24건: proposed 5, accepted 16, rejected 0, withdrawn 0, superseded 3
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260824-hololive-api-fx-lifecycle](records/DEC-20260824-hololive-api-fx-lifecycle.json) | hololive-api는 Fx를 process lifecycle owner로 한정하고 plane 내부 lifecycle과 다른 Go 바이너리는 유지한다 | accepted | planned | hololive-bot | 2026-08-24 | trigger | - | - |
 | [DEC-20260824-hololive-dependent-retention](records/DEC-20260824-hololive-dependent-retention.json) | Hololive source observation dependent tables use bounded retention | accepted | in_progress | hololive-bot | 2026-08-24 | trigger | - | - |
 | [DEC-20260814-hololive-youtube-three-provider-convergence-v2](records/DEC-20260814-hololive-youtube-three-provider-convergence-v2.json) | youtube three-provider convergence contract v2: immutable evidence와 mutable processing queue를 분리하고 payload별 typed coverage를 쓰며 공용 map coverage를 금지한다 | accepted | in_progress | hololive-bot | 2026-08-14 | - | - | [youtube-three-provider-convergence-contract-v2-20260814.md](../current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md) |
 | [DEC-20260730-hololive-alarm-egress-lease-removed](records/DEC-20260730-hololive-alarm-egress-lease-removed.json) | alarm egress scale-out: egress-owner lease와 ALARM_WORKER_EGRESS_LEASE_ENABLED를 삭제하고 production validator는 scheduler role만 완화한 두 profile을 열거한다 | accepted | implemented | hololive-bot | 2026-07-30 | - | - | [alarm-egress-scale-out-decisions-20260730.md](../current/architecture/alarm-egress-scale-out-decisions-20260730.md) |

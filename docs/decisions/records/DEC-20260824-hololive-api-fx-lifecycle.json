@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260824-hololive-api-fx-lifecycle",
+  "title": "hololive-api는 Fx를 process lifecycle owner로 한정하고 plane 내부 lifecycle과 다른 Go 바이너리는 유지한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-24",
+  "summary": "현재 세션과 docs/agent-workflows/plans/2026-08-24-hololive-api-fx-lifecycle.md에서 hololive-api 한정 도입을 선택했다. go.uber.org/fx v1.24.0은 hololive/hololive-api/go.mod의 직접 의존성으로만 두고 process signal, Start/Wait/Stop, lifecycle hook, runtime fatal shutdown을 소유한다. 기존 aggregate plane builder와 constructor 단계의 부분 초기화 rollback은 유지하며, 시작 순서 youtube(활성 시)→llm→admin→bot, 종료 순서 bot→admin→llm→youtube, 종료 후 idempotent resource close와 telemetry/log tail cleanup을 보존한다. plane drain은 기존 10초 예산을 유지하고 Fx process stop은 30초로 제한하여 Compose 45초 grace 안에서 tail cleanup을 마친다. shared-go, hololive-shared, alarm-worker, youtube-collector, admin-dashboard와 각 plane 내부 package는 Fx를 import하지 않는다. fx.RecoverFromPanics, service locator, dual signal owner, runtime fallback flag는 도입하지 않는다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "trigger": "hololive-api에서 startup/shutdown 회귀, cleanup 누락, runtime fatal exit-code 손실이 관측되거나 다른 바이너리로 Fx 확장을 제안할 때"
+  }
+}

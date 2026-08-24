@@ -80,3 +80,13 @@ func MinutesUntilFloorPtr(target *time.Time, reference time.Time) int {
 
 	return int(minutesUntil)
 }
+
+func MinutesUntilCeilPtr(target *time.Time, reference time.Time) int {
+	if target == nil || !target.After(reference) {
+		return -1
+	}
+
+	duration := target.Sub(reference)
+
+	return int((duration + time.Minute - 1) / time.Minute)
+}

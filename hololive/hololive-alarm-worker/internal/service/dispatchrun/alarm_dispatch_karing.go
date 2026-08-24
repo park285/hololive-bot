@@ -291,51 +291,6 @@ func buildAlarmDispatchKaringExtraArgs(ctx context.Context, store *messagestring
 	return args
 }
 
-func buildAlarmDispatchOutboxKaringExtraArgs(ctx context.Context, store *messagestrings.Store, envelope *domain.AlarmQueueEnvelope, itemCount int) iris.KaringTemplateArgs {
-	if envelope == nil || envelope.YouTubeOutbox == nil {
-		return nil
-	}
-
-	baseTitle, timeLeft := alarmDispatchOutboxKaringLabels(ctx, store, envelope.YouTubeOutbox.Kind)
-
-	return iris.KaringTemplateArgs{
-		"alarm_title": alarmDispatchKaringTitleWithCount(ctx, store, baseTitle, itemCount),
-		"time_left":   timeLeft,
-	}
-}
-
-type alarmDispatchKaringLabel struct {
-	alarmTitleKey      string
-	alarmTitleFallback string
-	timeLeftKey        string
-	timeLeftFallback   string
-}
-
-var alarmDispatchOutboxKaringLabelsByKind = map[domain.OutboxKind]alarmDispatchKaringLabel{
-	domain.OutboxKindCommunityPost: {alarmTitleKey: "outbox_title_community", alarmTitleFallback: "커뮤니티 알림", timeLeftKey: "outbox_time_community", timeLeftFallback: "새 커뮤니티"},
-	domain.OutboxKindNewShort:      {alarmTitleKey: "outbox_title_shorts", alarmTitleFallback: "쇼츠 알림", timeLeftKey: "outbox_time_shorts", timeLeftFallback: "새 쇼츠"},
-	domain.OutboxKindNewVideo:      {alarmTitleKey: "outbox_title_video", alarmTitleFallback: "새 영상", timeLeftKey: "outbox_time_video", timeLeftFallback: "새 영상"},
-	domain.OutboxKindLiveStream:    {alarmTitleKey: "outbox_title_live", alarmTitleFallback: "방송 알림", timeLeftKey: "outbox_time_live", timeLeftFallback: "방송 알림"},
-}
-
-func alarmDispatchOutboxKaringLabels(ctx context.Context, store *messagestrings.Store, kind domain.OutboxKind) (alarmTitle, timeLeft string) {
-	label, ok := alarmDispatchOutboxKaringLabelsByKind[kind]
-	if !ok {
-		label = alarmDispatchKaringLabel{alarmTitleKey: "title_fallback", alarmTitleFallback: "알림", timeLeftKey: "time_fallback", timeLeftFallback: "새 알림"}
-	}
-
-	return store.GetOrContext(ctx, messagestrings.NamespaceKaring, label.alarmTitleKey, label.alarmTitleFallback),
-		store.GetOrContext(ctx, messagestrings.NamespaceKaring, label.timeLeftKey, label.timeLeftFallback)
-}
-
-func alarmDispatchKaringTitleWithCount(ctx context.Context, store *messagestrings.Store, title string, itemCount int) string {
-	if itemCount <= 1 {
-		return title
-	}
-
-	return fmt.Sprintf(store.GetOrContext(ctx, messagestrings.NamespaceKaring, "count_suffix", "%s · %d건"), title, itemCount)
-}
-
 func resolveAlarmDispatchKaringChannelName(notification *domain.AlarmNotification, fallback string) string {
 	if notification != nil && notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelName) != "" {
 		return strings.TrimSpace(notification.Stream.ChannelName)

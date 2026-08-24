@@ -952,6 +952,30 @@
       },
       {
         "created_at": "<migration-time>",
+        "id": 160,
+        "key": "outbox_title_video_premiere",
+        "namespace": "karing",
+        "updated_at": "<migration-time>",
+        "value": "%d분 후 공개 예정"
+      },
+      {
+        "created_at": "<migration-time>",
+        "id": 161,
+        "key": "outbox_time_video_premiere",
+        "namespace": "karing",
+        "updated_at": "<migration-time>",
+        "value": "%d분 후 공개"
+      },
+      {
+        "created_at": "<migration-time>",
+        "id": 162,
+        "key": "status_video_premiere",
+        "namespace": "karing",
+        "updated_at": "<migration-time>",
+        "value": "최초공개"
+      },
+      {
+        "created_at": "<migration-time>",
         "id": 17,
         "key": "歌の再生リスト",
         "namespace": "social",
@@ -1683,7 +1707,7 @@
         "updated_at": "<migration-time>"
       },
       {
-        "body": "{{if eq .Kind \"LIVE_STREAM\"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}\n{{- if and .Title .URL}}\n[{{mdsafe (truncate 50 .Title)}}]({{.URL}})\n{{- else if .Title}}\n{{mdsafe (truncate 50 .Title)}}\n{{- else if .URL}}\n{{.URL}}\n{{- end}}",
+        "body": "{{if eq .Kind \"LIVE_STREAM\"}}🔴 **{{mdsafe .MemberName}}** 방송 시작{{else if .IsUpcomingPremiere}}🔔 **{{mdsafe .MemberName}}** {{.MinutesUntilPremiere}}분 후 공개 예정{{else if .IsPremiere}}🔔 **{{mdsafe .MemberName}}** 최초공개{{else}}🔔 **{{mdsafe .MemberName}}** 새 영상{{end}}\n{{- if and .Title .URL}}\n[{{mdsafe (truncate 50 .Title)}}]({{.URL}})\n{{- else if .Title}}\n{{mdsafe (truncate 50 .Title)}}\n{{- else if .URL}}\n{{.URL}}\n{{- end}}",
         "channel_id": null,
         "created_at": "<migration-time>",
         "id": 7,
@@ -1981,7 +2005,7 @@
       "is_called": true
     },
     "message_strings_id_seq": {
-      "last_value": "159",
+      "last_value": "162",
       "is_called": true
     },
     "notification_delivery_outbox_id_seq": {

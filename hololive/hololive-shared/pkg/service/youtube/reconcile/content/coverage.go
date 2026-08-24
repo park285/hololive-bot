@@ -42,6 +42,7 @@ func (e Entity) item() contract.VideoListItemV1 {
 		Title:        e.Title,
 		PublishedAt:  e.PublishedAt,
 		ScheduledFor: e.ScheduledFor,
+		IsPremiere:   e.IsPremiere,
 	}
 }
 
@@ -50,7 +51,8 @@ func valueDigest(entity *Entity) string {
 		Title        string     `json:"title"`
 		PublishedAt  *time.Time `json:"published_at,omitempty"`
 		ScheduledFor *time.Time `json:"scheduled_for,omitempty"`
-	}{Title: entity.Title, PublishedAt: entity.PublishedAt, ScheduledFor: entity.ScheduledFor}, jsonv2.Deterministic(true))
+		IsPremiere   *bool      `json:"is_premiere,omitempty"`
+	}{Title: entity.Title, PublishedAt: entity.PublishedAt, ScheduledFor: entity.ScheduledFor, IsPremiere: entity.IsPremiere}, jsonv2.Deterministic(true))
 	if err != nil {
 		return ""
 	}
