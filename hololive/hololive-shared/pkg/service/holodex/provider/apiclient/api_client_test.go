@@ -135,9 +135,11 @@ func TestNewHolodexHTTPClientNegotiatesHTTP2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET HTTP/2 test server: %v", err)
 	}
+
 	if response == nil {
 		t.Fatal("GET HTTP/2 test server returned a nil response")
 	}
+
 	defer response.Body.Close()
 
 	if got := response.Header.Get("X-Test-Protocol-Major"); got != "2" {
