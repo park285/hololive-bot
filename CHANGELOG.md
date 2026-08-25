@@ -26,6 +26,12 @@
   제거했습니다. 커스텀 RoundTripper 주입 계약은 변경하지 않았습니다.
 - immutable epoch2 baseline의 checksum을 운영 ledger와 다시 일치시키고, 비동기 YouTube.js 페이지
   매퍼의 선언 타입을 실제 `paginate` 계약과 정렬했습니다.
+- 호환 범위 의존성을 갱신했습니다. Go 직접 의존성은 `testify 1.12.1`, `gofeed 1.4.2`,
+  `openai-go/v3 3.52.0`으로 올렸고, tidy 결과에는 MongoDB driver `2.8.1`, logrus `1.10.1`,
+  gRPC `1.83.1`과 같은 transitive 갱신이 반영됩니다. 관리자 frontend는 TanStack Query
+  `5.102.3`, React Virtual `3.14.10`, lucide-react `1.34.0`, Node types `26.3.0`, React DOM
+  types `19.2.5`, Vite React plugin `6.1.0`, ESLint `10.9.1`, typescript-eslint `8.68.0`,
+  Vite `8.2.2`로 올렸고 YouTube.js helper도 Node types `26.3.0`으로 정렬했습니다.
 - 이번 릴리스는 root app `3.3.0`, `hololive-api` `3.0.8`, `hololive-alarm-worker` `3.0.6`으로
   올립니다. `youtube-collector` artifact version은 `hololive-api` VERSION을 따릅니다.
 
