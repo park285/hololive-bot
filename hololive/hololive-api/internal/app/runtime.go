@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-
-	sharedlifecycle "github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
+	"sync"
 
 	"github.com/kapu/hololive-api/internal/planes/admin/app"
 	botruntime2 "github.com/kapu/hololive-api/internal/planes/bot/runtime"
@@ -15,7 +13,6 @@ import (
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
 // Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
@@ -29,7 +26,14 @@ type Runtime struct {
 	LLM     *llmruntime.LLMSchedulerRuntime
 	YouTube *youtuberuntime.Runtime
 
-	group *applifecycle.GroupRuntime
+	group      runtimeGroup
+	closeOnce  sync.Once
+	closeSteps []func()
+}
+
+type runtimeGroup interface {
+	Start(context.Context, chan<- error)
+	Shutdown(context.Context) error
 }
 
 func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (*Runtime, error) {
@@ -144,6 +148,7 @@ func assembleAPIRuntime(appConfig *settings.HololiveAPIConfig, logger *slog.Logg
 	}
 
 	runtime.group = applifecycle.NewGroupRuntime(logger, apiPlaneComponents(planes)...)
+	runtime.closeSteps = apiPlaneCloseSteps(planes)
 
 	return runtime
 }
@@ -165,54 +170,63 @@ func apiPlaneComponents(planes apiPlanes) []applifecycle.GroupComponent {
 	}}, components...)
 }
 
-func (r *Runtime) Run() error {
+func apiPlaneCloseSteps(planes apiPlanes) []func() {
+	return []func(){
+		func() {
+			if planes.bot != nil {
+				planes.bot.Close()
+			}
+		},
+		func() {
+			if planes.admin != nil {
+				planes.admin.Close()
+			}
+		},
+		func() {
+			if planes.llm != nil {
+				planes.llm.Close()
+			}
+		},
+		func() {
+			if planes.youtube != nil {
+				planes.youtube.Close()
+			}
+		},
+	}
+}
+
+func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
+	if r == nil || r.group == nil {
+		return
+	}
+
+	r.group.Start(ctx, errCh)
+}
+
+func (r *Runtime) Shutdown(ctx context.Context) error {
 	if r == nil || r.group == nil {
 		return nil
 	}
 
-	err := sharedlifecycle.Run(context.Background(), sharedlifecycle.Options{
-		ShutdownTimeout: constants.AppTimeout.Shutdown,
-		Start:           r.group.Start,
-		OnSignal: func(signal os.Signal) {
-			r.Logger.Info("hololive-api shutdown signal received", slog.String("signal", signal.String()))
-		},
-		OnError: func(err error) {
-			r.Logger.Error("hololive-api runtime error", slog.Any("error", err))
-		},
-		BeforeShutdown: func() {
-			r.Logger.Info("hololive-api draining runtime planes")
-		},
-		Shutdown: r.group.Shutdown,
-	})
-	if err != nil {
-		r.Logger.Error("hololive-api shutdown completed with errors", slog.Any("error", err))
-
-		return fmt.Errorf("run hololive-api lifecycle: %w", err)
+	if err := r.group.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown runtime planes: %w", err)
 	}
 
 	return nil
 }
 
-// Close는 Run이 모든 listener와 background loop을 drain한 뒤 프로세스 자원을 해제한다.
+// Close는 lifecycle coordinator가 모든 listener와 background loop을 drain한 뒤 프로세스 자원을 해제한다.
 // 컴포넌트 cleanup은 멱등(idempotent)이라 부분 bootstrap 실패 상태에서 호출돼도 안전하다.
 func (r *Runtime) Close() {
 	if r == nil {
 		return
 	}
 
-	if r.Bot != nil {
-		r.Bot.Close()
-	}
-
-	if r.Admin != nil {
-		r.Admin.Close()
-	}
-
-	if r.LLM != nil {
-		r.LLM.Close()
-	}
-
-	if r.YouTube != nil {
-		r.YouTube.Close()
-	}
+	r.closeOnce.Do(func() {
+		for _, closeStep := range r.closeSteps {
+			if closeStep != nil {
+				closeStep()
+			}
+		}
+	})
 }

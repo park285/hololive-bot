@@ -2,7 +2,8 @@
   {
     "path": "hololive/hololive-api/cmd/hololive-api/main.go",
     "must_contain": [
-      "bootstrap.Options.Run("
+      "fxapp.New(",
+      "application.Run("
     ]
   },
   {

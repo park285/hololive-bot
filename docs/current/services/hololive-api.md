@@ -62,10 +62,13 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - PostgreSQL and Valkey availability
 - Internal API base URLs and key configuration for scheduler, trigger, and alarm services
 - CLIPROXY/LLM settings where enabled
+- Uber Fx v1.24.0 is the process lifecycle owner for this binary only. It is an implementation detail, not an operator-selectable mode, and does not change ports, routes, config keys, or dependency readiness requirements.
 
 ## Shutdown behavior
 
-- Stop HTTP/H3 ingress and scheduler workers gracefully.
+- Fx is the single process signal owner. It starts the optional YouTube plane, then llm, admin, and bot; shutdown cancels the runtime context and drains bot, admin, llm, then the optional YouTube plane.
+- Stop HTTP/H3 ingress and scheduler workers gracefully within the existing 10-second plane-drain budget. The whole Fx stop is capped at 30 seconds inside the Compose 45-second grace period.
+- A runtime fatal, plane-drain failure, or process-stop timeout remains process-fatal. Cleanup is attempted once and no legacy lifecycle fallback is selected.
 - Do not drain or mutate dispatch queues during shutdown.
 - Preserve delivery/outbox state in PostgreSQL.
 
