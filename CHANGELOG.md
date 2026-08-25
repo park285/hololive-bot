@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v3.3.0 - 2026-08-25
+
 ### 변경
 
 - Go toolchain과 builder 기준을 `1.27.0`으로, `golangci-lint`를 `v2.13.1`로, `staticcheck`를
@@ -15,6 +17,17 @@
   `slices.Backward`, 내장 필드 리터럴)을 적용했고, `apperrors.ServiceError`는 생성자·소비자와 같은
   포인터 리시버로 통일해 `%w` 포장이 Go 1.27 vet 검사를 통과합니다. request id·delivery lock
   토큰·admin 사용자 id 생성은 `github.com/google/uuid` 대신 Go 1.27 표준 `uuid`를 사용합니다.
+- YouTube 최초공개 메타데이터를 source observation, reconciliation, outbox까지 보존하고 발송 시점의
+  일정으로 남은 분을 다시 계산합니다. 예정된 최초공개는 `N분 후 공개 예정`, 시작했거나 일정이 없는
+  최초공개는 `최초공개`, 일반 업로드는 `새 영상`으로 렌더링합니다. Karing 문자열과 기본 텍스트
+  템플릿은 migration `188_youtube_premiere_notification_labels.sql`로 관리합니다.
+- Holodex API 클라이언트가 주입된 표준 HTTP transport에도 HTTP/2 전용 정책을 적용하도록 고쳐,
+  상류가 HTTP/2 SETTINGS frame을 보낼 때 HTTP/1.x malformed response로 오인하던 운영 장애를
+  제거했습니다. 커스텀 RoundTripper 주입 계약은 변경하지 않았습니다.
+- immutable epoch2 baseline의 checksum을 운영 ledger와 다시 일치시키고, 비동기 YouTube.js 페이지
+  매퍼의 선언 타입을 실제 `paginate` 계약과 정렬했습니다.
+- 이번 릴리스는 root app `3.3.0`, `hololive-api` `3.0.8`, `hololive-alarm-worker` `3.0.6`으로
+  올립니다. `youtube-collector` artifact version은 `hololive-api` VERSION을 따릅니다.
 
 ## v3.2.1 - 2026-08-21
 
