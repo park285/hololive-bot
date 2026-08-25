@@ -130,32 +130,6 @@ func PostsFromPayload(posts []contract.CommunityPostV1) []*parser.CommunityPost 
 	return mapped
 }
 
-func CollectNewPosts(
-	posts []*parser.CommunityPost,
-	watermark *domain.YouTubeContentWatermark,
-	initialized bool,
-) []*parser.CommunityPost {
-	if len(posts) == 0 {
-		return nil
-	}
-
-	newPosts := make([]*parser.CommunityPost, 0, len(posts))
-	for _, post := range posts {
-		if post == nil {
-			continue
-		}
-
-		canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
-		if initialized && watermark != nil && canonicalPostID == polling.NormalizeContentID(domain.OutboxKindCommunityPost, watermark.LastContentID) {
-			break
-		}
-
-		newPosts = append(newPosts, post)
-	}
-
-	return newPosts
-}
-
 func BuildPostArtifacts(
 	channelID string,
 	post *parser.CommunityPost,
@@ -208,12 +182,22 @@ func BuildPostArtifacts(
 func BuildBatch(
 	channelID string,
 	collected []*parser.CommunityPost,
-	newPosts []*parser.CommunityPost,
-	initialized bool,
+	notificationPosts []*parser.CommunityPost,
 	detectedAt time.Time,
 	keywords []string,
 ) Batch {
-	batch := buildPostBatch(channelID, newPosts, initialized, detectedAt, keywords)
+	batch := buildPostBatch(channelID, collected, false, detectedAt, keywords)
+
+	for i := range notificationPosts {
+		_, tracking, notification := BuildPostArtifacts(channelID, notificationPosts[i], true, detectedAt, keywords)
+		if tracking != nil {
+			batch.Tracking = append(batch.Tracking, tracking)
+		}
+
+		if notification != nil {
+			batch.Notifications = append(batch.Notifications, notification)
+		}
+	}
 
 	batch.Watermark = buildCommunityWatermark(channelID, collected)
 
@@ -222,18 +206,18 @@ func BuildBatch(
 
 func buildPostBatch(
 	channelID string,
-	newPosts []*parser.CommunityPost,
-	initialized bool,
+	posts []*parser.CommunityPost,
+	notificationsEnabled bool,
 	detectedAt time.Time,
 	keywords []string,
 ) Batch {
 	batch := Batch{
-		Posts:         make([]*domain.YouTubeCommunityPost, 0, len(newPosts)),
-		Notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(newPosts)),
-		Tracking:      make([]*domain.YouTubeContentAlarmTracking, 0, len(newPosts)),
+		Posts:         make([]*domain.YouTubeCommunityPost, 0, len(posts)),
+		Notifications: make([]*domain.YouTubeNotificationOutbox, 0, len(posts)),
+		Tracking:      make([]*domain.YouTubeContentAlarmTracking, 0, len(posts)),
 	}
-	for i := range newPosts {
-		dbPost, tracking, notification := BuildPostArtifacts(channelID, newPosts[i], initialized, detectedAt, keywords)
+	for i := range posts {
+		dbPost, tracking, notification := BuildPostArtifacts(channelID, posts[i], notificationsEnabled, detectedAt, keywords)
 		if dbPost != nil {
 			batch.Posts = append(batch.Posts, dbPost)
 		}
@@ -265,8 +249,8 @@ func buildCommunityWatermark(channelID string, collected []*parser.CommunityPost
 
 func ArtifactsFromPayload(
 	payload *contract.CommunityPayloadV1,
-	initialized bool,
-	watermark *domain.YouTubeContentWatermark,
+	notifyUnseen bool,
+	knownPostIDs map[string]struct{},
 	detectedAt time.Time,
 	keywords []string,
 ) Batch {
@@ -275,15 +259,45 @@ func ArtifactsFromPayload(
 	}
 
 	collected := polling.NormalizeCollectedCommunityPostsByCanonicalPostID(PostsFromPayload(payload.Posts))
+	notificationPosts := make([]*parser.CommunityPost, 0, len(collected))
+
+	if notifyUnseen {
+		for i := range collected {
+			canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, collected[i].PostID)
+			if _, known := knownPostIDs[canonicalPostID]; !known {
+				notificationPosts = append(notificationPosts, collected[i])
+			}
+		}
+	}
 
 	return BuildBatch(
 		payload.ChannelID,
 		collected,
-		CollectNewPosts(collected, watermark, initialized),
-		initialized,
+		notificationPosts,
 		detectedAt,
 		keywords,
 	)
+}
+
+func CanonicalPostIDs(posts []contract.CommunityPostV1) []string {
+	ids := make([]string, 0, len(posts))
+	seen := make(map[string]struct{}, len(posts))
+
+	for i := range posts {
+		canonicalPostID := polling.NormalizeContentID(domain.OutboxKindCommunityPost, posts[i].PostID)
+		if canonicalPostID == "" {
+			continue
+		}
+
+		if _, exists := seen[canonicalPostID]; exists {
+			continue
+		}
+
+		seen[canonicalPostID] = struct{}{}
+		ids = append(ids, canonicalPostID)
+	}
+
+	return ids
 }
 
 func parserThumbnails(thumbnails []contract.Thumbnail) []parser.Thumbnail {
