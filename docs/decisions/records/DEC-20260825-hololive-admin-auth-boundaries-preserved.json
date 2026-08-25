@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260825-hololive-admin-auth-boundaries-preserved",
+  "title": "hololive admin은 /api/holo API-key 경계와 사용자 session 경계를 분리해 유지한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-25",
+  "summary": "/api/holo 운영·내부 API는 API_SECRET_KEY middleware를 유지하고 로그인·me·refresh 등 사용자 인증 흐름은 session service가 소유한다. 두 경계를 하나로 합치거나 한쪽을 compatibility alias로 바꾸지 않는다. 현재 route/auth contract를 보존하며 외부 authz 요구나 credential-scope 변경 증거가 생길 때만 통합을 재검토한다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-api/internal/planes/admin/app/http/registration_ipallow_test.go",
+    "hololive/hololive-api/internal/planes/admin/internal/server/api/auth_handler_contract_test.go",
+    "hololive/hololive-api/internal/planes/admin/internal/service/auth/service_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+    "hololive/hololive-api/internal/planes/admin/internal/server/api/api_auth.go",
+    "hololive/hololive-api/internal/planes/admin/internal/service/auth/service_session.go"
+  ],
+  "supersedes": [
+    "DEC-20260719-hololive-admin-auth-unification"
+  ],
+  "review": {"trigger": "외부 admin authz 통합, credential scope 축소 또는 session/API-key 경계 변경이 요구될 때"}
+}

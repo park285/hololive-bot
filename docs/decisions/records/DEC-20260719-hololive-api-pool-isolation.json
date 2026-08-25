@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260719-hololive-api-pool-isolation",
   "title": "hololive-api의 plane별 DB pool 3중을 장애 격리 설계로 수용할지 공유 pool로 합칠지",
-  "decision_status": "proposed",
+  "decision_status": "superseded",
   "delivery_status": "unknown",
   "scope": [
     "hololive-bot"
@@ -14,8 +14,5 @@
   ],
   "evidence": [],
   "implementation": [],
-  "supersedes": [],
-  "review": {
-    "after": "2026-09-30"
-  }
+  "supersedes": []
 }

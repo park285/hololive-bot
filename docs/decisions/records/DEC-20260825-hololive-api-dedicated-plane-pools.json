@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260825-hololive-api-dedicated-plane-pools",
+  "title": "hololive-api는 bot·admin·llm·YouTube plane별 bounded PostgreSQL pool을 유지한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-25",
+  "summary": "hololive-api의 bot, admin, llm과 선택적 YouTube plane은 각각 lifecycle-owned PostgreSQL pool을 유지한다. 이는 plane별 failure isolation과 독립 drain을 보존하며 process 전체 connection 수는 versioned capacity policy와 plane별 max 4 기본값으로 제한한다. 이 결정은 DEC-20260626-hololive-api-three-runtime-consolidation의 단일-pool 초기값을 현재 4-plane 구조에 맞게 갱신하지만 그 결정의 다른 consolidation 계약은 변경하지 않는다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-shared/pkg/config/settings/config_youtube_plane_test.go",
+    "hololive/hololive-shared/pkg/config/settings/hololive_api_test.go",
+    "scripts/ci/check-postgres-capacity_test.sh"
+  ],
+  "implementation": [
+    "hololive/hololive-api/internal/app/runtime.go",
+    "hololive/hololive-api/internal/planes/admin/app/build_runtime.go",
+    "hololive/hololive-api/internal/planes/bot/runtime/bootstrap_core_tools.go",
+    "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
+    "hololive/hololive-api/internal/planes/youtube/runtime/runtime.go",
+    "hololive/hololive-shared/pkg/config/settings/hololive_api.go",
+    "scripts/ci/check-postgres-capacity.sh",
+    "scripts/ci/postgres-capacity-policy.tsv"
+  ],
+  "supersedes": [
+    "DEC-20260719-hololive-api-pool-isolation"
+  ],
+  "review": {"trigger": "connection-capacity pressure, pool starvation, cross-plane noisy-neighbor failure 또는 shared transaction requirement가 관측될 때"}
+}

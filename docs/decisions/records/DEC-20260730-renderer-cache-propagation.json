@@ -2,20 +2,17 @@
   "schema_version": 1,
   "id": "DEC-20260730-renderer-cache-propagation",
   "title": "hololive Renderer 캐시 전파(Q5-07) 설계와 max-staleness SLO",
-  "decision_status": "proposed",
-  "delivery_status": "unknown",
+  "decision_status": "withdrawn",
+  "delivery_status": "not_applicable",
   "scope": [
     "hololive-bot"
   ],
   "decided_at": "2026-07-30",
-  "summary": "허용 가능한 max-staleness SLO를 먼저 정한다. TTL 안은 그 상한과 DB load를 검증하고, cross-process 안은 template update와 durable version bump를 같은 transaction에 두며 NOTIFY는 fast path로만 쓰고 reconnect/missed notification은 version polling/reload로 복구한다. raw NOTIFY 단독은 correctness 해법으로 채택하지 않으며 rollout은 additive migration → 모든 renderer consumer → version-bump writer 순서다.",
+  "summary": "현재 Renderer는 size-bounded process-local cache와 명시적 invalidation을 사용한다. max-staleness SLO, stale-render incident, DB load 또는 cross-process invalidation 요구가 없으므로 TTL/version/NOTIFY propagation 설계는 착수하지 않는다. raw NOTIFY 단독은 correctness 해법으로 인정하지 않으며 실제 요구가 생기면 SLO와 missed-notification recovery 증거를 포함한 새 결정을 만든다.",
   "sources": [
     "iris-stack@db3927cf0ed1:docs/agent-workflows/plans/2026-07-30-stack-remediation-execution.md#결정 게이트 (사용자 결정 전 착수 금지)"
   ],
   "evidence": [],
   "implementation": [],
-  "supersedes": [],
-  "review": {
-    "after": "2026-09-30"
-  }
+  "supersedes": []
 }
