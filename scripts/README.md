@@ -22,7 +22,7 @@ PR/릴리스 전 경계 게이트와 릴리스 노트 렌더링 도구입니다.
   - `check-current-docs-root-allowlist.sh`
   - `check-go-alarm-contracts.sh`
   - `check-go-trigger-route-hardcoding.sh`
-  - `check-go-module-loc.sh`
+  - `../ci/check-structure.sh`
   - `check-deprecated-deadline.sh`
   - `check-release-governance-assets.sh`
 

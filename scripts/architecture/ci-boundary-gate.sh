@@ -118,16 +118,8 @@ bash "${ROOT_DIR}/scripts/deploy/test-postgres18-runtime-contract.sh"
 bash "${ROOT_DIR}/scripts/ops/postgres-failover_test.sh"
 echo
 
-echo "[CI] Run M4 Go module LOC gate"
-"${SCRIPT_DIR}/check-go-module-loc.sh"
-echo
-
-echo "[CI] Run M4 Go function budget gate"
-"${SCRIPT_DIR}/check-function-budget.sh"
-echo
-
-echo "[CI] Run M4 multi-language file LOC gate"
-"${SCRIPT_DIR}/check-file-loc.sh"
+echo "[CI] Run M4 hard structure gate"
+bash "${ROOT_DIR}/scripts/ci/check-structure.sh" --mode hard --format text
 echo
 
 echo "[CI] Run M6 deprecated deadline gate"

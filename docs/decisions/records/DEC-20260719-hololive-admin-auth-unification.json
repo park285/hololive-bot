@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260719-hololive-admin-auth-unification",
   "title": "hololive admin auth: /api/holo 세션 기반 authz 통합 vs API-key 단일 유지와 세션 계통 제거",
-  "decision_status": "proposed",
+  "decision_status": "superseded",
   "delivery_status": "unknown",
   "scope": [
     "hololive-bot"
@@ -14,8 +14,5 @@
   ],
   "evidence": [],
   "implementation": [],
-  "supersedes": [],
-  "review": {
-    "after": "2026-09-30"
-  }
+  "supersedes": []
 }

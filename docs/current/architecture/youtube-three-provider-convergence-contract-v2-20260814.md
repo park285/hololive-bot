@@ -2228,7 +2228,7 @@ historical document와 unrelated API vocabulary는 exact allowlist로만 제외�
 focused test를 통과한 final state에서 다음을 실행한다.
 
 ```bash
-./build-all.sh --no-bump
+./build-all.sh --build-only --no-bump
 (cd hololive/hololive-youtube-collector/youtubejs && npm test)
 PRE_PUSH_MODE=full ./scripts/ci/pre-push-gate.sh
 git diff --check
@@ -2313,14 +2313,14 @@ DB/concurrency 변경에는 `go test -race`와 실제 lease/transaction invarian
 
 ## 23. 검증 경계
 
-이 문서는 제공된 local snapshot과 그 안에 포함된 code/migration evidence를 바탕으로 작성한 replacement contract다. 현재 확인된 기존 test는 Community intermediate slice와 Node fixture 일부에 한정된다. 본 문서에서 새로 요구한 migration, fencing, target generation, source-order, channel stats, API plane, retention/replay, producer retirement test는 아직 실행됐다고 간주하지 않는다.
+이 문서는 제공된 local snapshot과 그 안에 포함된 code/migration evidence를 바탕으로 작성한 replacement contract다. 2026-08-25 final state에서 migration, fencing, target generation, source-order, channel stats, API plane, retention/replay와 producer retirement 구현을 확인했고 focused Go, Node, PostgreSQL과 producer-retirement 검증을 통과했다. 전체 local CI와 canonical pre-push gate도 통과했으며 active image는 build-only/no-bump mode로 빌드했다.
 
 현재 달성 상태는 다음과 같다.
 
 ```text
-document prepared
-implementation pending
-migration replay pending
-race/NilAway/perf/security/full pre-push pending
+document current
+implementation complete
+migration replay verified locally
+race/NilAway/perf/security/canonical pre-push verified locally
 production operations not authorized
 ```

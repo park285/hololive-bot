@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,14 +10,11 @@ import (
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
-	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
-	"github.com/park285/shared-go/v2/pkg/telemetry"
 
-	"github.com/kapu/hololive-api/internal/app"
+	"github.com/kapu/hololive-api/internal/fxapp"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/observability"
 )
 
 var Version = "dev"
@@ -54,49 +52,134 @@ func main() {
 }
 
 func runHololiveAPI(setLogCloser func(io.Closer)) int {
-	return bootstrap.Options[*settings.HololiveAPIConfig, *observability.ManagedRuntime[*app.Runtime]]{
-		Version: Version,
-		Initialize: func(version string) {
+	return runHololiveAPIWithDependencies(setLogCloser, productionStartupDependencies())
+}
+
+type hololiveAPIApplication interface {
+	Run(*slog.Logger) int
+}
+
+type loggerResult struct {
+	logger *slog.Logger
+	closer io.Closer
+}
+
+type startupDependencies struct {
+	initialize     func(string)
+	loadConfig     func() (*settings.HololiveAPIConfig, error)
+	newLogger      func(*settings.HololiveAPIConfig) (loggerResult, error)
+	newApplication func(context.Context, *settings.HololiveAPIConfig, *slog.Logger, string) (hololiveAPIApplication, error)
+	stderr         io.Writer
+}
+
+func productionStartupDependencies() startupDependencies {
+	return startupDependencies{
+		initialize: func(version string) {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             settings.LoadHololiveAPIRuntime,
-		LoadConfigErrorMessage: "Failed to load hololive-api config",
-		NewLogger: func(appConfig *settings.HololiveAPIConfig) (*slog.Logger, error) {
-			logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
-				Level:      appConfig.Logging.Level,
-				Dir:        appConfig.Logging.Dir,
-				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
-				MaxBackups: appConfig.Logging.MaxBackups,
-				MaxAgeDays: appConfig.Logging.MaxAgeDays,
-				Compress:   appConfig.Logging.Compress,
-			}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true})
-
-			setLogCloser(closer)
-
-			if err != nil {
-				return nil, fmt.Errorf("enable file logging: %w", err)
-			}
-
-			slog.SetDefault(logger)
-
-			return logger, nil
+		loadConfig: settings.LoadHololiveAPIRuntime,
+		newLogger:  newHololiveAPILogger,
+		newApplication: func(
+			ctx context.Context,
+			config *settings.HololiveAPIConfig,
+			logger *slog.Logger,
+			version string,
+		) (hololiveAPIApplication, error) {
+			return fxapp.New(ctx, config, logger, version)
 		},
-		LoggerLevel: func(appConfig *settings.HololiveAPIConfig) string {
-			return appConfig.Logging.Level
-		},
-		StartupMessage: "Hololive unified API starting...",
-		StartupFields: func(appConfig *settings.HololiveAPIConfig) []any {
-			return []any{
-				slog.Int("bot_port", appConfig.Bot.Server.Port),
-				slog.Int("admin_port", appConfig.Admin.Server.Port),
-				slog.Int("llm_port", appConfig.LLM.Server.Port),
-			}
-		},
-		BuildTimeout:      constants.AppTimeout.Build,
-		BuildRuntime:      buildHololiveAPIRuntime,
-		BuildErrorMessage: "Failed to assemble hololive-api runtime",
-	}.Run()
+		stderr: os.Stderr,
+	}
+}
+
+func runHololiveAPIWithDependencies(setLogCloser func(io.Closer), dependencies startupDependencies) int {
+	dependencies.initialize(Version)
+
+	config, err := dependencies.loadConfig()
+	if err != nil {
+		return printStartupError(dependencies.stderr, "Failed to load hololive-api config", err)
+	}
+
+	logOutput, err := dependencies.newLogger(config)
+
+	if setLogCloser != nil {
+		setLogCloser(logOutput.closer)
+	}
+
+	if err != nil {
+		return printStartupError(dependencies.stderr, "Failed to initialize logger", err)
+	}
+
+	if logOutput.logger == nil {
+		return printStartupError(dependencies.stderr, "Failed to initialize logger", errors.New("logger is nil"))
+	}
+
+	logger := logOutput.logger
+	slog.SetDefault(logger)
+	logger.Info(
+		"Hololive unified API starting...",
+		slog.String("version", Version),
+		slog.String("log_level", config.Logging.Level),
+		slog.Int("bot_port", config.Bot.Server.Port),
+		slog.Int("admin_port", config.Admin.Server.Port),
+		slog.Int("llm_port", config.LLM.Server.Port),
+	)
+
+	buildCtx, buildCancel := context.WithTimeout(context.Background(), constants.AppTimeout.Build)
+	defer buildCancel()
+
+	application, err := dependencies.newApplication(buildCtx, config, logger, Version)
+	if err != nil {
+		logger.Error(
+			"Failed to assemble hololive-api runtime",
+			slog.String("error", sharedlogging.RedactDiagnostic(err.Error())),
+		)
+
+		return 1
+	}
+
+	return application.Run(logger)
+}
+
+func newHololiveAPILogger(config *settings.HololiveAPIConfig) (loggerResult, error) {
+	logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
+		Level:      config.Logging.Level,
+		Dir:        config.Logging.Dir,
+		MaxSizeMB:  config.Logging.MaxSizeMB,
+		MaxBackups: config.Logging.MaxBackups,
+		MaxAgeDays: config.Logging.MaxAgeDays,
+		Compress:   config.Logging.Compress,
+	}, "hololive-api.log", sharedlogging.Options{AsyncStdout: true})
+	result := loggerResult{logger: logger, closer: closer}
+
+	if err != nil {
+		return result, fmt.Errorf("enable file logging: %w", err)
+	}
+
+	return result, nil
+}
+
+func printStartupError(stderr io.Writer, message string, err error) int {
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
+	safeError := "unknown error"
+
+	if err != nil {
+		safeError = sharedlogging.RedactDiagnostic(err.Error())
+	}
+
+	if _, writeErr := fmt.Fprintf(
+		stderr,
+		"%s: %s\n",
+		sharedlogging.RedactDiagnostic(message),
+		safeError,
+	); writeErr != nil {
+		return 1
+	}
+
+	return 1
 }
 
 func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (handled bool, exitCode int) {
@@ -137,33 +220,4 @@ func runConfigCheck(args []string, stderr io.Writer, load func() error) (handled
 	}
 
 	return true, 0
-}
-
-func buildHololiveAPIRuntime(
-	ctx context.Context,
-	appConfig *settings.HololiveAPIConfig,
-	logger *slog.Logger,
-) (*observability.ManagedRuntime[*app.Runtime], error) {
-	traceConfig := hololiveAPITelemetryConfig(appConfig, Version)
-
-	out, err := observability.BuildRuntime(ctx, &traceConfig, logger, func(ctx context.Context) (*app.Runtime, error) {
-		return app.BuildRuntime(ctx, appConfig, logger)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("build runtime: %w", err)
-	}
-
-	return out, nil
-}
-
-func hololiveAPITelemetryConfig(appConfig *settings.HololiveAPIConfig, version string) telemetry.Config {
-	return telemetry.Config{
-		Enabled:        appConfig.Tracing.Enabled,
-		ServiceName:    "hololive-api",
-		ServiceVersion: version,
-		Environment:    appConfig.Bot.Environment,
-		OTLPEndpoint:   appConfig.Tracing.Endpoint,
-		OTLPInsecure:   appConfig.Tracing.Insecure,
-		SampleRate:     appConfig.Tracing.SampleRate,
-	}
 }

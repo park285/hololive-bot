@@ -3,18 +3,49 @@
   "id": "DEC-20260814-hololive-youtube-three-provider-convergence-v2",
   "title": "youtube three-provider convergence contract v2: immutable evidence와 mutable processing queue를 분리하고 payload별 typed coverage를 쓰며 공용 map coverage를 금지한다",
   "decision_status": "accepted",
-  "delivery_status": "in_progress",
+  "delivery_status": "verified",
   "scope": [
     "hololive-bot"
   ],
   "decided_at": "2026-08-14",
-  "summary": "2026-08-14 observation-target 문서와 convergence 계획을 코드 수준으로 대체하는 규범 문서다. Community WIP의 legacy/shadow/authoritative 구조, 중앙 singleton collector, youtube-producer consumer 구조는 중간 WIP라 최종 branch에 남기지 않는다. coverage는 공용 map[string]any가 아니라 각 payload V1이 자신의 typed coverage(ChannelListCoverageV1, GlobalChannelCoverageV1 등)를 포함하고 contract validator는 kind별 payload를 strict JSON decode한다. 2026-08-23 기준 youtube-collector mapper에 coverage 타입이 들어가 있다.",
+  "summary": "2026-08-14 observation-target 문서와 convergence 계획을 코드 수준으로 대체하는 규범 문서다. Community WIP의 legacy/shadow/authoritative 구조, 중앙 singleton collector, youtube-producer consumer 구조는 중간 WIP라 최종 branch에 남기지 않는다. coverage는 공용 map[string]any가 아니라 각 payload V1이 자신의 typed coverage(ChannelListCoverageV1, GlobalChannelCoverageV1 등)를 포함하고 contract validator는 kind별 payload를 strict JSON decode한다. 2026-08-25 기준 typed observation, PostgreSQL fencing과 target projection, three-provider adapters, API-plane reconciliation, bounded retention/replay와 producer retirement가 구현되고 focused Go, Node, PostgreSQL 및 producer-retirement 검증을 통과했다.",
   "sources": [
     "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#근거와 신규 설계 결정의 구분",
     "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#5.1 공통 원칙"
   ],
-  "evidence": [],
+  "evidence": [
+    "hololive/hololive-api/internal/planes/youtube/runtime/runtime_test.go",
+    "hololive/hololive-api/internal/planes/youtube/targetprojection/repository_test.go",
+    "hololive/hololive-dbtest/migrations_test.go",
+    "hololive/hololive-dbtest/schema_golden_test.go",
+    "hololive/hololive-shared/pkg/contracts/sourceobservation/canonical_json_test.go",
+    "hololive/hololive-shared/pkg/contracts/sourceobservation/coverage_relation_test.go",
+    "hololive/hololive-shared/pkg/contracts/sourceobservation/envelope_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_checkpoint_mvcc_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_publish_atomic_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_test.go",
+    "hololive/hololive-youtube-collector/internal/runtime/holodexcollector/mapper_test.go",
+    "hololive/hololive-youtube-collector/internal/runtime/joblease/repository_test.go",
+    "hololive/hololive-youtube-collector/internal/runtime/officialcollector/mapper_test.go",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/runner_test.go",
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-content.test.mjs",
+    "scripts/architecture/check-youtube-producer-retirement.sh"
+  ],
   "implementation": [
+    "hololive/hololive-api/internal/planes/youtube/runtime/runtime.go",
+    "hololive/hololive-api/internal/planes/youtube/targetprojection/repository.go",
+    "hololive/hololive-api/scripts/migrations/144_source_observation_outbox.sql",
+    "hololive/hololive-api/scripts/migrations/156_source_observation_lock_api.sql",
+    "hololive/hololive-api/scripts/migrations/161_source_observation_subject_heads.sql",
+    "hololive/hololive-api/scripts/migrations/162_youtube_content_evidence_clocks.sql",
+    "hololive/hololive-api/scripts/migrations/163_youtube_live_viewer_schedule_canonical.sql",
+    "hololive/hololive-api/scripts/migrations/164_youtube_channel_stats_profile_photo_canonical.sql",
+    "hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_v1.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository.go",
+    "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/publisher.go",
+    "hololive/hololive-youtube-collector/internal/runtime/holodexcollector/mapper.go",
+    "hololive/hololive-youtube-collector/internal/runtime/joblease/repository.go",
+    "hololive/hololive-youtube-collector/internal/runtime/officialcollector/mapper.go",
     "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/mapper.go"
   ],
   "supersedes": []

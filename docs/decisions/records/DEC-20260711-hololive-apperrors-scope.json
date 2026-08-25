@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260711-hololive-apperrors-scope",
   "title": "hololive apperrors 패키지(5파일만 사용)를 확산할지 폐기할지",
-  "decision_status": "proposed",
+  "decision_status": "superseded",
   "delivery_status": "unknown",
   "scope": [
     "hololive-bot"
@@ -14,8 +14,5 @@
   ],
   "evidence": [],
   "implementation": [],
-  "supersedes": [],
-  "review": {
-    "after": "2026-09-30"
-  }
+  "supersedes": []
 }
