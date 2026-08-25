@@ -715,7 +715,9 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/job_contract_init
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_community_subject_head_0029_29.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_community_subject_head_upsert_0033_33.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_community_subject_lock_0028_28.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_community_known_posts_0085_85.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_community_watermark_0014_14.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_community_window_ready_0086_86.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_complete_0015_15.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_content_absence_slots_0038_38.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_content_absence_upsert_0039_39.sql

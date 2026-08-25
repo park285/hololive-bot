@@ -6,7 +6,6 @@ import (
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
@@ -95,15 +94,31 @@ func TestPayloadFromPostsRoundTripsParserFields(t *testing.T) {
 	}
 }
 
-func TestCollectNewPostsStopsAtCanonicalWatermark(t *testing.T) {
-	posts := []*parser.CommunityPost{
-		{PostID: "post-2"},
-		{PostID: testPostID},
+func TestArtifactsFromPayloadPersistsWholeWindowAndNotifiesOnlyUnknownPosts(t *testing.T) {
+	payload := contract.CommunityPayloadV1{
+		ChannelID: testChannelID,
+		Posts: []contract.CommunityPostV1{
+			{PostID: "pinned", ChannelID: testChannelID},
+			{PostID: "new-post", ChannelID: testChannelID},
+			{PostID: "known-post", ChannelID: testChannelID},
+		},
 	}
-	got := CollectNewPosts(posts, &domain.YouTubeContentWatermark{LastContentID: testCanonicalPostID}, true)
+	known := map[string]struct{}{
+		"community:pinned":     {},
+		"community:known-post": {},
+	}
 
-	if len(got) != 1 || got[0].PostID != "post-2" {
-		t.Fatalf("new posts = %#v, want post-2 only", got)
+	batch := ArtifactsFromPayload(&payload, true, known, time.Date(2026, time.August, 13, 8, 0, 0, 0, time.UTC), nil)
+	if len(batch.Posts) != 3 {
+		t.Fatalf("persisted posts = %d, want 3", len(batch.Posts))
+	}
+
+	if len(batch.Notifications) != 1 || batch.Notifications[0].ContentID != "community:new-post" {
+		t.Fatalf("notifications = %#v, want new-post only", batch.Notifications)
+	}
+
+	if len(batch.Tracking) != 1 || batch.Tracking[0].ContentID != "community:new-post" {
+		t.Fatalf("tracking = %#v, want new-post only", batch.Tracking)
 	}
 }
 
@@ -122,7 +137,7 @@ func TestArtifactsFromPayloadMatchPollerCanonicalRules(t *testing.T) {
 			CommentCount: 2,
 		}},
 	}
-	batch := ArtifactsFromPayload(&payload, true, &domain.YouTubeContentWatermark{LastContentID: "old-post"}, detectedAt, nil)
+	batch := ArtifactsFromPayload(&payload, true, nil, detectedAt, nil)
 
 	if len(batch.Posts) != 1 || batch.Posts[0].PostID != testCanonicalPostID {
 		t.Fatalf("posts = %#v", batch.Posts)

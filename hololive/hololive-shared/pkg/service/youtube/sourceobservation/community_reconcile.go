@@ -8,6 +8,11 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
 )
 
+const (
+	communityWindowEntityKind = "community_window"
+	communityWindowDecision   = "CANONICALIZED"
+)
+
 func (c *Consumer) reconcileCommunity(
 	ctx context.Context,
 	tx dbx.Tx,
@@ -40,10 +45,22 @@ func (c *Consumer) reconcileCommunity(
 		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("load community watermark: %w", err)
 	}
 
+	notifyUnseen, knownPostIDs, err := communityNotificationState(
+		ctx,
+		tx,
+		head.observationID,
+		payload.ChannelID,
+		watermark.Initialized,
+		community.CanonicalPostIDs(payload.Posts),
+	)
+	if err != nil {
+		return community.Batch{}, ReconcileResult{}, false, fmt.Errorf("load community notification state: %w", err)
+	}
+
 	persisted := community.ArtifactsFromPayload(
 		&payload,
-		watermark.Initialized,
-		&watermark,
+		notifyUnseen,
+		knownPostIDs,
 		claimed.EffectiveAt,
 		c.keywords,
 	)
@@ -58,14 +75,39 @@ func (c *Consumer) reconcileCommunity(
 	return persisted, ReconcileResult{Applications: communityApplications(payload.ChannelID, &persisted)}, true, nil
 }
 
-func communityApplications(channelID string, persisted *community.Batch) []Application {
-	applications := make([]Application, 0, len(persisted.Posts)+1)
+func communityNotificationState(
+	ctx context.Context,
+	tx dbx.Tx,
+	observationID int64,
+	channelID string,
+	initialized bool,
+	postIDs []string,
+) (bool, map[string]struct{}, error) {
+	windowReady, err := loadCommunityWindowReady(ctx, tx, observationID, channelID)
+	if err != nil {
+		return false, nil, fmt.Errorf("load community window state: %w", err)
+	}
 
-	applications = append(applications, Application{
-		EntityKind: "community_subject_head",
-		EntityKey:  channelID,
-		Decision:   "APPLIED",
-	})
+	if !initialized || !windowReady {
+		return false, map[string]struct{}{}, nil
+	}
+
+	knownPostIDs, err := loadKnownCommunityPostIDs(ctx, tx, channelID, postIDs)
+	if err != nil {
+		return false, nil, fmt.Errorf("load known community posts: %w", err)
+	}
+
+	return true, knownPostIDs, nil
+}
+
+func communityApplications(channelID string, persisted *community.Batch) []Application {
+	applications := make([]Application, 0, len(persisted.Posts)+2)
+
+	applications = append(
+		applications,
+		Application{EntityKind: "community_subject_head", EntityKey: channelID, Decision: "APPLIED"},
+		Application{EntityKind: communityWindowEntityKind, EntityKey: channelID, Decision: communityWindowDecision},
+	)
 
 	for i := range persisted.Posts {
 		applications = append(applications, Application{

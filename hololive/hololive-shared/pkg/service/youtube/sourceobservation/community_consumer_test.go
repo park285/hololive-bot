@@ -229,7 +229,7 @@ func consumeMixedCommunityBatch(ctx context.Context, t *testing.T, pool *pgxpool
 
 func assertMixedOutbox(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	assertMixedTableCount(ctx, t, pool, "youtube_notification_outbox", 2)
+	assertMixedTableCount(ctx, t, pool, "youtube_notification_outbox", 1)
 	assertMixedInsertedOutbox(ctx, t, pool)
 	assertMixedCollisionOutbox(ctx, t, pool)
 }
@@ -242,13 +242,25 @@ func assertMixedInsertedOutbox(ctx context.Context, t *testing.T, pool *pgxpool.
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*)
 		FROM youtube_notification_outbox
-		WHERE content_id IN ('community:post-base', 'community:post-independent')
+		WHERE content_id = 'community:post-independent'
 	`).Scan(&independentOutboxCount); err != nil {
 		t.Fatalf("count inserted-row outbox: %v", err)
 	}
 
-	if independentOutboxCount != 2 {
-		t.Fatalf("inserted-row outbox count = %d, want 2", independentOutboxCount)
+	if independentOutboxCount != 1 {
+		t.Fatalf("inserted-row outbox count = %d, want 1", independentOutboxCount)
+	}
+
+	var baselineOutboxCount int
+
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM youtube_notification_outbox WHERE content_id = 'community:post-base'
+	`).Scan(&baselineOutboxCount); err != nil {
+		t.Fatalf("count baseline-row outbox: %v", err)
+	}
+
+	if baselineOutboxCount != 0 {
+		t.Fatalf("baseline-row outbox count = %d, want 0", baselineOutboxCount)
 	}
 }
 
@@ -354,20 +366,15 @@ func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
-		VALUES ($1, 'COMMUNITY_POST', TRUE, 'old-post')
-	`, testChannelID); err != nil {
-		t.Fatalf("seed watermark: %v", err)
-	}
+	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
+	consumer := NewConsumer(repo, writer, nil)
+
+	proof = bootstrapCommunityWindow(ctx, t, pool, repo, consumer, proof)
 
 	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	consumer := NewConsumer(repo, writer, nil)
 
 	if consumeErr := consumer.Consume(ctx, claimOptions()); consumeErr != nil {
 		t.Fatalf("first consume: %v", consumeErr)
@@ -389,7 +396,7 @@ func TestConsumerReplayDoesNotDuplicateNotificationIntent(t *testing.T) {
 	}
 
 	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-	assertTableCount(t, pool, "source_observations", 1)
+	assertTableCount(t, pool, "source_observations", 2)
 }
 
 func setQueueAvailability(ctx context.Context, t *testing.T, pool *pgxpool.Pool, observationID int64, offset, action string) {

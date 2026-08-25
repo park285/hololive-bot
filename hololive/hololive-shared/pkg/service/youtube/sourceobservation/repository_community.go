@@ -105,6 +105,71 @@ func loadCommunityWatermark(
 	return watermark, nil
 }
 
+func loadCommunityWindowReady(
+	ctx context.Context,
+	q dbx.Querier,
+	observationID int64,
+	channelID string,
+) (bool, error) {
+	if observationID <= 0 {
+		return false, nil
+	}
+
+	var ready bool
+
+	if err := q.QueryRow(
+		ctx,
+		mustSQL("repository_community_window_ready_0086_86.sql"),
+		observationID,
+		communityWindowEntityKind,
+		channelID,
+		communityWindowDecision,
+	).Scan(&ready); err != nil {
+		return false, fmt.Errorf("query community window state: %w", err)
+	}
+
+	return ready, nil
+}
+
+func loadKnownCommunityPostIDs(
+	ctx context.Context,
+	q dbx.Querier,
+	channelID string,
+	postIDs []string,
+) (map[string]struct{}, error) {
+	known := make(map[string]struct{}, len(postIDs))
+	if len(postIDs) == 0 {
+		return known, nil
+	}
+
+	rows, err := q.Query(
+		ctx,
+		mustSQL("repository_community_known_posts_0085_85.sql"),
+		channelID,
+		postIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query known community posts: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var postID string
+
+		if err := rows.Scan(&postID); err != nil {
+			return nil, fmt.Errorf("scan known community post: %w", err)
+		}
+
+		known[postID] = struct{}{}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("query known community posts: %w", err)
+	}
+
+	return known, nil
+}
+
 func loadTypedWatermark(
 	ctx context.Context,
 	q dbx.Querier,

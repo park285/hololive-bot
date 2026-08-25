@@ -14,20 +14,15 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 	repo := NewRepository(pool)
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindCommunityPage, testChannelID, "community_collect")
 
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized, last_content_id)
-		VALUES ($1, 'COMMUNITY_POST', TRUE, 'old-post')
-	`, testChannelID); err != nil {
-		t.Fatalf("seed watermark: %v", err)
-	}
+	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
+	consumer := NewConsumer(repo, writer, nil)
+
+	proof = bootstrapCommunityWindow(ctx, t, pool, repo, consumer, proof)
 
 	published, err := repo.PublishBatch(ctx, publishInput(communityEnvelope(t, &proof, "post-1")))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-
-	writer := NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil))
-	consumer := NewConsumer(repo, writer, nil)
 
 	if err := consumer.Consume(ctx, claimOptions()); err != nil {
 		t.Fatalf("first consume: %v", err)
@@ -51,7 +46,7 @@ func TestReplayProcessedObservationIsIdempotent(t *testing.T) {
 	}
 
 	assertTableCount(t, pool, "youtube_notification_outbox", 1)
-	assertTableCount(t, pool, "source_observations", 1)
+	assertTableCount(t, pool, "source_observations", 2)
 	assertTableCount(t, pool, "source_observation_replay_requests", 2)
 }
 
