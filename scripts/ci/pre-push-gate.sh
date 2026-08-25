@@ -173,6 +173,13 @@ run_fingerprint() {
     'go.mod' 'go.sum' \
     'admin-dashboard/backend/go.mod' 'admin-dashboard/backend/go.sum' \
     'scripts/check-release-version.sh' \
+    'scripts/architecture/check-structure-budget.py' \
+    'scripts/architecture/check-structure-budget_test.py' \
+    'scripts/architecture/structure-budget-policy.json' \
+    'scripts/architecture/check-function-budget.py' \
+    'scripts/architecture/check-function-budget.sh' \
+    'scripts/architecture/check-file-loc.sh' \
+    'docs/architecture/file-loc-thresholds.txt' \
     'scripts/ci/*.sh' \
     'scripts/ci/pre-push-gate-profile-v1.json' | LC_ALL=C sort -u)
   if (( ${#profile_inputs[@]} == 0 )); then

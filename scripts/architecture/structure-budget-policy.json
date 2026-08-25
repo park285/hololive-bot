@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "file": {
+    "default": {"advisory": 400, "hard": 800},
+    "threshold_file": "docs/architecture/file-loc-thresholds.txt",
+    "extensions": [".go", ".rs", ".sh", ".ts", ".tsx"]
+  },
+  "functions": {
+    "lines": {"advisory": 60, "hard": 120},
+    "complexity": {"advisory": 8, "hard": 16},
+    "nesting": {"advisory": 5, "hard": 8}
+  }
+}
