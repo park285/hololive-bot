@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260825-hololive-shared-public-path-scoped-retention",
+  "title": "hololive-shared public path는 cross-runtime 계약과 진성 다중 소비자에 한정하고 단일-owner 구현은 internal로 둔다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-25",
+  "summary": "hololive-shared/pkg 전면 폐기는 cross-runtime 계약과 producer/consumer 양측 계약면을 복제하므로 채택하지 않는다. YouTube dispatcher와 poller처럼 단일 runtime이 소유하는 실행 구현은 해당 module의 internal로 물리화하고, delivery·alarmservice·scraper·outbox store/format/dispatchstate·tracking/observation 등 진성 다중 소비자 또는 shared 내부 다중-runtime 기반만 public path에 남긴다. compiler가 보장하는 internal 경계와 textual architecture gate가 보장하는 shared capability를 문서와 gate에서 구분하며, repository-ownership.allowlist는 import graph가 아니라 table owner 정본으로 유지한다.",
+  "sources": [
+    "docs/current/SERVICE_OWNERSHIP.md#Shared Package Retention",
+    "docs/current/architecture/repository-ownership.md#Compiler and Gate Guarantees",
+    "docs/current/architecture/hololive-shared-public-path-closeout.md#Decision boundary",
+    "docs/current/contracts/alarm.md#Compatibility policy"
+  ],
+  "evidence": [
+    "docs/current/architecture/hololive-shared-public-path-closeout.md"
+  ],
+  "implementation": [
+    "docs/current/SERVICE_OWNERSHIP.md",
+    "docs/current/architecture/repository-ownership.md",
+    "docs/current/contracts/alarm.md",
+    "scripts/architecture/ci-notification-egress-gate.sh",
+    "scripts/architecture/check-repository-ownership.sh"
+  ],
+  "supersedes": [
+    "DEC-20260727-hololive-shared-public-path-retired"
+  ],
+  "review": {
+    "trigger": "alarm HTTP compatibility facade 제거 또는 현재 shared 잔류 패키지의 소비자 집합이 단일 runtime으로 축소될 때"
+  }
+}

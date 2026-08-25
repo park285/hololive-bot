@@ -118,6 +118,7 @@ Queue success has no response body; delivery outcome is represented by queue mov
 - Raw payload preservation must remain in place before changing DLQ tooling.
 - HTTP provider migration must keep `hololive-api` admin-plane compatibility registration until the `hololive-api` bot/admin and dashboard paths are explicitly cut over to the `alarm-worker` provider.
 - The two staged providers must register the same `/internal/alarm/*` route set and reuse the same shared handler implementation.
+- compatibility facade 제거는 다음 조건을 모두 만족하는 별도 변경에서만 수행합니다: bot/admin/dashboard caller inventory가 alarm-worker endpoint로 수렴하고, `hololive-api`의 alarm route registration과 facade-only imports가 0건이며, alarm HTTP contract test와 architecture gate가 최종 tree에서 통과해야 합니다. 이 조건 전에는 route나 shared DTO를 선제 삭제하지 않습니다.
 
 ## Tests
 
