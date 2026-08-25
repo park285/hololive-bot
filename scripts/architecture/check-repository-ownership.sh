@@ -114,6 +114,7 @@ check_no_imports "shared-go module" \
   "../shared-go" \
   'github.com/kapu/hololive-|github.com/park285/llm-kakao-bots/hololive'
 
+# Dispatcher symbols are compiler-protected by alarm-worker/internal; shared delivery symbols still need this ownership gate.
 check_no_imports "youtube-collector direct YouTube dispatch" \
   "hololive/hololive-youtube-collector" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started'

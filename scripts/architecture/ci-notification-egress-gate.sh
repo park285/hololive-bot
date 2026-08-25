@@ -47,6 +47,7 @@ check_forbidden_global_go_hits \
   -g '!hololive/hololive-alarm-worker/internal/egress/**' \
   -g '!hololive/hololive-alarm-worker/internal/app/**'
 
+# Dispatcher symbols are compiler-protected by alarm-worker/internal; shared delivery/Iris symbols require this scoped textual gate.
 check_forbidden_scoped_go_hits \
   "youtube-collector does not own YouTube outbox dispatch or Iris egress capability" \
   'pkg/service/delivery|delivery\.NewIrisMessageSender|outbox\.NewDispatcher|OutboxDispatcher|YouTube outbox dispatcher started|ProvideIrisClient|iris\.WithBaseURL|iris\.WithBotToken|IrisClient:' \
