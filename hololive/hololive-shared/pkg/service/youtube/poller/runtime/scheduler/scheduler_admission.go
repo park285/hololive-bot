@@ -23,9 +23,7 @@ func admissionRetryAfterFromError(err error, fallback time.Duration) time.Durati
 		return retryAfter
 	}
 
-	var delayed retryDelayError
-
-	if errors.As(err, &delayed) && delayed.RetryDelay() > 0 {
+	if delayed, ok := errors.AsType[retryDelayError](err); ok && delayed.RetryDelay() > 0 {
 		return delayed.RetryDelay()
 	}
 

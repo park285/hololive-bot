@@ -33,6 +33,7 @@ func (s *Scheduler) rescheduleJob(job *Job) {
 }
 
 type retryDelayError interface {
+	error
 	RetryDelay() time.Duration
 }
 
@@ -180,9 +181,7 @@ func (s *Scheduler) updateJobNextRunAfterPoll(job *Job, pollErr error, now time.
 func (s *Scheduler) updateJobNextRunAfterFailure(job *Job, pollErr error, now time.Time) {
 	job.consecutiveFailures++
 
-	var delayed retryDelayError
-
-	if errors.As(pollErr, &delayed) && delayed.RetryDelay() > 0 {
+	if delayed, ok := errors.AsType[retryDelayError](pollErr); ok && delayed.RetryDelay() > 0 {
 		job.NextRunAt = now.Add(delayed.RetryDelay())
 	} else {
 		job.NextRunAt = nextErrorRetryAt(now, job.Interval, job.consecutiveFailures, s.errorBackoffMin, s.errorBackoffMax)

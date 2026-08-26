@@ -3,7 +3,7 @@ package summarizer
 import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -138,7 +138,7 @@ func buildMemberNewsUserPrompt(input *model.SummarizeInput, searchContext string
 	payload := marshalPromptJSON(buildPromptCandidates(input), "[]")
 
 	members := append([]string(nil), input.RoomMembers...)
-	sort.Strings(members)
+	slices.Sort(members)
 
 	base := fmt.Sprintf(`today=%s
 period=%s
@@ -174,7 +174,7 @@ func buildSearchQuery(period model.Period, roomMembers []string, now time.Time) 
 	}
 
 	members := append([]string(nil), roomMembers...)
-	sort.Strings(members)
+	slices.Sort(members)
 
 	// 검색 쿼리 노이즈 방지: 멤버 최대 5명
 	if len(members) > 5 {

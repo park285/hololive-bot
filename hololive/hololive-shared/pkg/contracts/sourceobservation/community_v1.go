@@ -1,10 +1,11 @@
 package sourceobservation
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -55,7 +56,9 @@ func (p *CommunityPayloadV1) normalizeAndValidate(subjectKey string) error {
 		return fmt.Errorf("validate community posts: %w", err)
 	}
 
-	sort.Slice(p.Posts, func(i, j int) bool { return p.Posts[i].PostID < p.Posts[j].PostID })
+	slices.SortFunc(p.Posts, func(left, right CommunityPostV1) int {
+		return cmp.Compare(left.PostID, right.PostID)
+	})
 
 	return nil
 }
@@ -205,7 +208,7 @@ func validateThumbnails(name string, thumbnails []Thumbnail) error {
 		}
 	}
 
-	sort.Slice(thumbnails, lessThumbnail(thumbnails))
+	slices.SortFunc(thumbnails, compareThumbnail)
 
 	return nil
 }
@@ -222,18 +225,12 @@ func validateThumbnail(name string, index int, thumbnail Thumbnail) error {
 	return nil
 }
 
-func lessThumbnail(thumbnails []Thumbnail) func(int, int) bool {
-	return func(i, j int) bool {
-		if thumbnails[i].URL != thumbnails[j].URL {
-			return thumbnails[i].URL < thumbnails[j].URL
-		}
-
-		if thumbnails[i].Width != thumbnails[j].Width {
-			return thumbnails[i].Width < thumbnails[j].Width
-		}
-
-		return thumbnails[i].Height < thumbnails[j].Height
-	}
+func compareThumbnail(left, right Thumbnail) int {
+	return cmp.Or(
+		cmp.Compare(left.URL, right.URL),
+		cmp.Compare(left.Width, right.Width),
+		cmp.Compare(left.Height, right.Height),
+	)
 }
 
 func validateHTTPSURL(name, value string) error {

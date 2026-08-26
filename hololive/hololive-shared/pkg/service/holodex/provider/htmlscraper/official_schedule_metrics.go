@@ -135,9 +135,7 @@ func classifyOfficialScheduleReason(err error, matchedStreams int) officialSched
 		return officialScheduleReasonSchema
 	}
 
-	var sourceErr *officialScheduleSourceError
-
-	if errors.As(err, &sourceErr) && sourceErr.reason != "" {
+	if sourceErr, ok := errors.AsType[*officialScheduleSourceError](err); ok && sourceErr.reason != "" {
 		return sourceErr.reason
 	}
 

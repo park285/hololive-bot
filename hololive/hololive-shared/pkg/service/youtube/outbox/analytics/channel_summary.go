@@ -1,8 +1,9 @@
 package analytics
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,15 +25,11 @@ func BuildChannelPostDeliverySummaries(posts []PostSendCount) ([]ChannelPostDeli
 		summaries = append(summaries, accumulator.summary)
 	}
 
-	sort.SliceStable(summaries, func(i, j int) bool {
-		left := channelPostDeliverySummarySortTime(&summaries[i])
-		right := channelPostDeliverySummarySortTime(&summaries[j])
-
-		if !left.Equal(right) {
-			return left.After(right)
-		}
-
-		return summaries[i].ChannelID < summaries[j].ChannelID
+	slices.SortStableFunc(summaries, func(left, right ChannelPostDeliverySummary) int {
+		return cmp.Or(
+			channelPostDeliverySummarySortTime(&right).Compare(channelPostDeliverySummarySortTime(&left)),
+			cmp.Compare(left.ChannelID, right.ChannelID),
+		)
 	})
 
 	return summaries, nil

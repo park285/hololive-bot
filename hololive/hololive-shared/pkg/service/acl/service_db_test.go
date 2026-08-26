@@ -25,7 +25,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -168,7 +168,7 @@ func (s *aclRoomSetCacheState) members(key string) []string {
 		members = append(members, member)
 	}
 
-	sort.Strings(members)
+	slices.Sort(members)
 
 	return members
 }
@@ -185,7 +185,7 @@ func (s *aclRoomSetCacheState) keysWithPrefix(prefix string) []string {
 		}
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }

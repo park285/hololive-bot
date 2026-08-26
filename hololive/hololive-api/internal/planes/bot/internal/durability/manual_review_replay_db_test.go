@@ -547,9 +547,8 @@ func requirePGErrorCode(t *testing.T, err error, code string) {
 	t.Helper()
 	require.Error(t, err)
 
-	var pgErr *pgconn.PgError
-
-	if !errors.As(err, &pgErr) {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok {
 		t.Fatalf("error type = %T, want *pgconn.PgError in chain", err)
 	}
 

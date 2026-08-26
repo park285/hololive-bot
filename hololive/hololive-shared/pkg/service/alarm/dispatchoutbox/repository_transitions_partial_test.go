@@ -53,9 +53,8 @@ func TestValidatePostSendRowsAffected_ReturnsTypedPartialError(t *testing.T) {
 			}
 
 			if tc.wantErr {
-				var partialErr *PartialTransitionError
-
-				if !errors.As(err, &partialErr) {
+				partialErr, ok := errors.AsType[*PartialTransitionError](err)
+				if !ok {
 					t.Fatalf("error = %T %v, want *PartialTransitionError", err, err)
 				}
 
@@ -151,9 +150,11 @@ func TestPartialTransitionErrorExposesUnappliedIDs(t *testing.T) {
 		UnappliedIDs: []int64{7, 9},
 	}
 
-	var exposed interface{ UnappliedDeliveryIDs() []int64 }
-
-	if !errors.As(error(partialErr), &exposed) {
+	exposed, ok := errors.AsType[interface {
+		error
+		UnappliedDeliveryIDs() []int64
+	}](error(partialErr))
+	if !ok {
 		t.Fatal("PartialTransitionError must expose UnappliedDeliveryIDs via errors.As")
 	}
 

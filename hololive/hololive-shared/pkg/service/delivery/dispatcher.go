@@ -283,8 +283,7 @@ func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.
 
 		item := &items[i]
 
-		wg.Add(1)
-		d.processBatchItemAsync(ctx, item, sem, &wg)
+		wg.Go(func() { d.processBatchItemAsync(ctx, item, sem) })
 	}
 
 	wg.Wait()
@@ -309,9 +308,8 @@ func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, 
 	}
 }
 
-func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.NotificationDeliveryOutbox, sem <-chan struct{}, wg *sync.WaitGroup) {
-	panicguard.Go(d.logger, "delivery-dispatch-item", func() {
-		defer wg.Done()
+func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.NotificationDeliveryOutbox, sem <-chan struct{}) {
+	panicguard.Run(d.logger, "delivery-dispatch-item", func() {
 		defer func() { <-sem }()
 
 		d.processItem(ctx, item)

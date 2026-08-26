@@ -8,7 +8,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io/fs"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"text/template"
@@ -182,7 +182,7 @@ func buildPromptAssetVersion(assets map[string][]byte) string {
 		paths = append(paths, path)
 	}
 
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	hasher := sha256.New()
 

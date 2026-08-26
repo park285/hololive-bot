@@ -153,9 +153,7 @@ func fetchPageRetryDelayOverride(err error, computed time.Duration) (time.Durati
 		return retryAfter, true
 	}
 
-	var cooldown *CooldownError
-
-	if errors.As(err, &cooldown) && cooldown.RetryDelay() > 0 {
+	if cooldown, ok := errors.AsType[*CooldownError](err); ok && cooldown.RetryDelay() > 0 {
 		return cooldown.RetryDelay(), true
 	}
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,7 +36,7 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 		return nil, map[string][]*domain.Stream{}, youtubeLiveCheckEvidence{}, map[string][]string{}, nil
 	}
 
-	sort.Strings(dueChannels)
+	slices.Sort(dueChannels)
 
 	streamsByChannel, holodexErr := c.loadHolodexStreamsByChannel(ctx, dueChannels)
 	if streamsByChannel == nil {
@@ -128,7 +128,7 @@ func mergeSortedUniqueStrings(a, b []string) []string {
 		result = append(result, value)
 	}
 
-	sort.Strings(result)
+	slices.Sort(result)
 
 	return result
 }

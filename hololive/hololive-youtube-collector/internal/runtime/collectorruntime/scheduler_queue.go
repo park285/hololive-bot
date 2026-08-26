@@ -77,8 +77,6 @@ func (s *leaseScheduler) sendQueued(ctx context.Context, spec *joblease.JobSpec)
 }
 
 func (s *leaseScheduler) worker(ctx context.Context) {
-	defer s.wg.Done()
-
 	if err := panicguard.RunE(s.logger, "youtube-collector-worker", func() error {
 		for {
 			spec, ok := s.nextSpec(ctx)

@@ -1,8 +1,9 @@
 package dispatchrun
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -49,9 +50,11 @@ func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGrou
 
 	// buildAlarmDispatchKaringContentListRequests와 같은 정렬이어야 분할 결과가 기존 chunk 경계와
 	// 일치하고, 드레인 순서가 ClientRequestID에 새지 않는다.
-	sort.SliceStable(order, func(a, b int) bool {
-		return alarmDispatchNotificationKaringItemIdentity(group, order[a]) <
-			alarmDispatchNotificationKaringItemIdentity(group, order[b])
+	slices.SortStableFunc(order, func(left, right int) int {
+		return cmp.Compare(
+			alarmDispatchNotificationKaringItemIdentity(group, left),
+			alarmDispatchNotificationKaringItemIdentity(group, right),
+		)
 	})
 
 	groups := make([]alarmDispatchGroup, 0, (len(order)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)

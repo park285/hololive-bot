@@ -15,8 +15,6 @@ import (
 )
 
 func (r *durableRuntime) runOutboxWorker(ctx context.Context) {
-	defer r.wg.Done()
-
 	idleDelay := r.outboxPollEvery
 
 	for ctx.Err() == nil {

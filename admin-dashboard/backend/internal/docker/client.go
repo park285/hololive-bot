@@ -1,12 +1,13 @@
 package docker
 
 import (
+	"cmp"
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -177,7 +178,9 @@ func (c *Client) fetchAndMapContainers(ctx context.Context) ([]Container, error)
 		}
 	}
 
-	sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
+	slices.SortFunc(containers, func(left, right Container) int {
+		return cmp.Compare(left.Name, right.Name)
+	})
 
 	return containers, nil
 }

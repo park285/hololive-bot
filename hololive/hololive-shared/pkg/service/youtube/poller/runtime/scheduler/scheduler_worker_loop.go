@@ -28,8 +28,6 @@ import (
 
 // worker: 작업 실행 워커
 func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopCh <-chan struct{}) {
-	defer s.wg.Done()
-
 	for {
 		job, ok := nextWorkerJob(ctx, jobCh, stopCh)
 		if !ok {

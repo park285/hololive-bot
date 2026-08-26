@@ -31,7 +31,9 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := range b.N {
+	i := 0
+
+	for b.Loop() {
 		if i > 0 {
 			b.StopTimer()
 
@@ -51,5 +53,7 @@ func BenchmarkPublishConsumeCommunityObservation(b *testing.B) {
 		if err := consumer.Consume(ctx, claimOptions()); err != nil {
 			b.Fatal(err)
 		}
+
+		i++
 	}
 }

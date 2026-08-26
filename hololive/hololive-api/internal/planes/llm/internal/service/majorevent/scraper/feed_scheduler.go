@@ -88,9 +88,10 @@ func (s *FeedScheduler) Start(ctx context.Context) {
 		return
 	}
 
-	s.wg.Add(1)
-	panicguard.Go(s.logger, "major-event-feed-scheduler", func() {
-		s.run(ctx)
+	s.wg.Go(func() {
+		panicguard.Run(s.logger, "major-event-feed-scheduler", func() {
+			s.run(ctx)
+		})
 	})
 }
 
@@ -107,8 +108,6 @@ func (s *FeedScheduler) Stop() {
 }
 
 func (s *FeedScheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
 	for {
 		now := s.now()
 		nextRun, trigger := s.nextRun(now)

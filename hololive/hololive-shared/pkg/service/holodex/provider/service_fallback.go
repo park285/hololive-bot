@@ -40,12 +40,11 @@ func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {
 		return true
 	}
 
-	apiErr := &apiclient.APIError{}
-	if stdErrors.As(err, &apiErr) && apiErr.StatusCode >= 500 {
+	if apiErr, ok := stdErrors.AsType[*apiclient.APIError](err); ok && apiErr != nil && apiErr.StatusCode >= 500 {
 		return true
 	}
 
-	keyRotationError := &apiclient.KeyRotationError{}
+	_, ok := stdErrors.AsType[*apiclient.KeyRotationError](err)
 
-	return stdErrors.As(err, &keyRotationError)
+	return ok
 }

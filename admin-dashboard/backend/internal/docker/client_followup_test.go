@@ -250,9 +250,8 @@ func TestMigrationContainerActionsFailClosedBeforeDockerIO(t *testing.T) {
 		t.Fatal("RestartContainer() error = nil for migration container")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusNotFound {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusNotFound {
 		t.Fatalf("RestartContainer() error = %v, want fail-closed 404", err)
 	}
 

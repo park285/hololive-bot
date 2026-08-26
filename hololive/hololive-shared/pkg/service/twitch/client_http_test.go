@@ -178,9 +178,8 @@ func TestClient_GetStreams_CoreBranches(t *testing.T) {
 
 		_, err := circuitClient.GetStreams(t.Context(), []string{"user1"})
 
-		var apiErr *appErrors.APIError
-
-		if !errors.As(err, &apiErr) {
+		apiErr, ok := errors.AsType[*appErrors.APIError](err)
+		if !ok {
 			t.Fatalf("expected APIError, got %v", err)
 		}
 
@@ -459,9 +458,8 @@ func TestClient_GetStreams_Repeated401StopsAfterSingleRefresh(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	var apiErr *appErrors.APIError
-
-	if !errors.As(err, &apiErr) {
+	apiErr, ok := errors.AsType[*appErrors.APIError](err)
+	if !ok {
 		t.Fatalf("expected APIError, got %T %v", err, err)
 	}
 
@@ -548,9 +546,8 @@ func TestClient_GetStreams_ErrorStatusBranches(t *testing.T) {
 				t.Fatal("expected error")
 			}
 
-			var apiErr *appErrors.APIError
-
-			if !errors.As(err, &apiErr) {
+			apiErr, ok := errors.AsType[*appErrors.APIError](err)
+			if !ok {
 				t.Fatalf("expected APIError, got %T %v", err, err)
 			}
 

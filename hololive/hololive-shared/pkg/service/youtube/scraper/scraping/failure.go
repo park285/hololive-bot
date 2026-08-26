@@ -82,9 +82,7 @@ func classifyAdmissionDeferredFailure(err error, detail *FailureDetail) bool {
 
 	detail.Reason = FailureReasonAdmissionDeferred
 
-	var deferred *admission.DeferredError
-
-	if errors.As(err, &deferred) && deferred != nil {
+	if deferred, ok := errors.AsType[*admission.DeferredError](err); ok && deferred != nil {
 		detail.RetryAfter = deferred.RetryDelay()
 	}
 
@@ -167,9 +165,8 @@ func classifyChannelFailure(err error, detail *FailureDetail) bool {
 }
 
 func classifyHTTPFailure(err error, detail *FailureDetail) bool {
-	var statusErr *httpStatusError
-
-	if !errors.As(err, &statusErr) {
+	statusErr, ok := errors.AsType[*httpStatusError](err)
+	if !ok {
 		return false
 	}
 
@@ -221,9 +218,8 @@ func isTimeoutFailure(err error) bool {
 }
 
 func isTimeoutURLFailure(err error) bool {
-	var urlErr *url.Error
-
-	if !errors.As(err, &urlErr) || isNilInterfaceValue(urlErr) || isNilInterfaceValue(urlErr.Err) {
+	urlErr, ok := errors.AsType[*url.Error](err)
+	if !ok || isNilInterfaceValue(urlErr) || isNilInterfaceValue(urlErr.Err) {
 		return false
 	}
 
@@ -231,15 +227,12 @@ func isTimeoutURLFailure(err error) bool {
 }
 
 func isTimeoutNetFailure(err error) bool {
-	var urlErr *url.Error
-
-	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && !isNilInterfaceValue(urlErr) {
 		return false
 	}
 
-	var netErr net.Error
-
-	if !errors.As(err, &netErr) || isNilInterfaceValue(netErr) {
+	netErr, ok := errors.AsType[net.Error](err)
+	if !ok || isNilInterfaceValue(netErr) {
 		return false
 	}
 

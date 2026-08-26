@@ -311,19 +311,18 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 	)
 
 	runSearch := func(query, warnMessage string, dst *[]sharedmodel.SearchResult) {
-		wg.Add(1)
-		panicguard.Go(s.logger, "major-event-summary-search", func() {
-			defer wg.Done()
+		wg.Go(func() {
+			panicguard.Run(s.logger, "major-event-summary-search", func() {
+				found, ok := s.searchWithTimeout(ctx, query, warnMessage)
+				if !ok {
+					return
+				}
 
-			found, ok := s.searchWithTimeout(ctx, query, warnMessage)
-			if !ok {
-				return
-			}
+				mu.Lock()
 
-			mu.Lock()
-
-			*dst = found
-			mu.Unlock()
+				*dst = found
+				mu.Unlock()
+			})
 		})
 	}
 

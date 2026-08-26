@@ -390,7 +390,7 @@ func TestLoadChannelSubscriberAlarms_QueryContextIgnoresParentDeadline(t *testin
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	deadline := time.Now().Add(200 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
 	ctx, cancel := context.WithDeadline(t.Context(), deadline)
 
 	defer cancel()

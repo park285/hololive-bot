@@ -58,15 +58,14 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	var wg sync.WaitGroup
 
 	for _, chunk := range chunks {
-		wg.Add(1)
-		panicguard.Go(c.logger, "member-cache-warmup", func() {
-			defer wg.Done()
+		wg.Go(func() {
+			panicguard.Run(c.logger, "member-cache-warmup", func() {
+				semaphore <- struct{}{}
 
-			semaphore <- struct{}{}
+				defer func() { <-semaphore }()
 
-			defer func() { <-semaphore }()
-
-			c.cacheChunk(ctx, chunk, warmupGeneration)
+				c.cacheChunk(ctx, chunk, warmupGeneration)
+			})
 		})
 	}
 

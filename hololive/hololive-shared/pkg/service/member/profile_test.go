@@ -26,7 +26,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -147,7 +147,7 @@ func firstProfileWithEnglishName(t *testing.T) *domain.TalentProfile {
 		keys = append(keys, key)
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	for _, key := range keys {
 		if profiles[key] != nil && profiles[key].EnglishName != "" {

@@ -18,8 +18,8 @@ type CelebrationDispatchPayload struct {
 	MemberName        string          `json:"member_name"`
 	ChannelID         string          `json:"channel_id"`
 	Photo             string          `json:"photo,omitempty"`
-	Ordinal           int             `json:"ordinal,omitempty"`
-	Years             int             `json:"years,omitempty"`
+	Ordinal           int             `json:"ordinal"`
+	Years             int             `json:"years"`
 	Date              string          `json:"date"`
 	VideoID           string          `json:"video_id,omitempty"`
 	StreamTitle       string          `json:"stream_title,omitempty"`
@@ -42,5 +42,5 @@ type CalendarEntry struct {
 	Kind    CelebrationKind `json:"kind"`
 	Member  *Member         `json:"member"`
 	Day     int             `json:"day"`
-	Ordinal int             `json:"ordinal,omitempty"`
+	Ordinal int             `json:"ordinal"`
 }

@@ -218,9 +218,8 @@ type partialFailureRouting interface {
 }
 
 func unappliedFailureRoutingIDs(err error) ([]int64, bool) {
-	var partial partialFailureRouting
-
-	if !errors.As(err, &partial) {
+	partial, ok := errors.AsType[partialFailureRouting](err)
+	if !ok {
 		return nil, false
 	}
 
@@ -337,9 +336,7 @@ func nextAlarmDispatchRetry(envelope *domain.AlarmQueueEnvelope, cause error) *d
 
 	retryAfter := time.Duration(retry.Attempt) * 5 * time.Second
 
-	var httpErr *iris.HTTPError
-
-	if errors.As(cause, &httpErr) && httpErr.RetryAfter > retryAfter {
+	if httpErr, ok := errors.AsType[*iris.HTTPError](cause); ok && httpErr.RetryAfter > retryAfter {
 		hint := httpErr.RetryAfter
 		if hint > maxHTTPRetryAfter {
 			hint = maxHTTPRetryAfter

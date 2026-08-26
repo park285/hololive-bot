@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -253,7 +253,7 @@ func canonicalizeChannelIDsForCache(channelIDs []string) string {
 		canonical = append(canonical, trimmed)
 	}
 
-	sort.Strings(canonical)
+	slices.Sort(canonical)
 
 	return strings.Join(canonical, ",")
 }

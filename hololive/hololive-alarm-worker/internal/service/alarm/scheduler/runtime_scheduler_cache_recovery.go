@@ -255,7 +255,6 @@ func alarmPlatformMappingSyncerFrom(alarmCRUD domain.AlarmCRUD) alarmPlatformMap
 }
 
 func isCacheFailure(err error) bool {
-	var cacheErr *cache.CacheError
-
-	return errors.As(err, &cacheErr)
+	_, ok := errors.AsType[*cache.CacheError](err)
+	return ok
 }

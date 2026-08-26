@@ -3,7 +3,7 @@ package sourceobservation
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -362,7 +362,7 @@ func normalizedUnique(values []string, maxLength int) ([]string, error) {
 		result = append(result, value)
 	}
 
-	sort.Strings(result)
+	slices.Sort(result)
 
 	return result, nil
 }

@@ -23,7 +23,7 @@ package store
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -144,7 +144,7 @@ func summarizeTerminalCommunityShortsDeliveries(deliveries []domain.YouTubeNotif
 	}
 
 	if len(reasons) > 0 {
-		sort.Strings(reasons)
+		slices.Sort(reasons)
 
 		return successfulRoomCount, failedRoomCount, strings.Join(reasons, " | ")
 	}

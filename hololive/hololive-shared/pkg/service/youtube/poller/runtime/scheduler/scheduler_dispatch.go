@@ -38,7 +38,6 @@ const (
 
 // dispatcher: 실행 대기 작업을 워커에게 전달
 func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-chan struct{}) {
-	defer s.wg.Done()
 	defer close(jobCh)
 
 	timer := time.NewTimer(0)

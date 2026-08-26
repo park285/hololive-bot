@@ -21,7 +21,7 @@
 package filter
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -65,7 +65,7 @@ func buildMemberProfiles(roomMembers []string, membersData domain.MemberDataProv
 			tokens = append(tokens, token)
 		}
 
-		sort.Strings(tokens)
+		slices.Sort(tokens)
 
 		profiles = append(profiles, memberProfile{display: display, tokens: tokens})
 	}

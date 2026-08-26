@@ -150,26 +150,25 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 			return result
 		}
 
-		wg.Add(1)
-
 		roomID := rooms[i].RoomID
 
-		panicguard.Go(nil, "member-news-digest-room", func() {
-			defer wg.Done()
-			defer func() { <-sem }()
+		wg.Go(func() {
+			panicguard.Run(nil, "member-news-digest-room", func() {
+				defer func() { <-sem }()
 
-			var roomResult delivery.SendResult
+				var roomResult delivery.SendResult
 
-			if err := panicguard.RunE(nil, "member-news-digest-room", func() error {
-				roomResult = config.processRoom(ctx, config.periodKey, roomID)
-				return nil
-			}); err != nil {
-				roomResult = delivery.SendResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
-			}
+				if err := panicguard.RunE(nil, "member-news-digest-room", func() error {
+					roomResult = config.processRoom(ctx, config.periodKey, roomID)
+					return nil
+				}); err != nil {
+					roomResult = delivery.SendResult{Attempted: 1, Failed: 1, FailedRooms: []string{roomID}}
+				}
 
-			mu.Lock()
-			result.Merge(roomResult)
-			mu.Unlock()
+				mu.Lock()
+				result.Merge(roomResult)
+				mu.Unlock()
+			})
 		})
 	}
 

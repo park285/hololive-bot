@@ -75,6 +75,7 @@ func (e *DeferredError) LiveStatusDeferred() bool {
 }
 
 type deferredMarker interface {
+	error
 	LiveStatusDeferred() bool
 }
 
@@ -87,9 +88,8 @@ func IsDeferred(err error) bool {
 		return true
 	}
 
-	var marker deferredMarker
-
-	if !errors.As(err, &marker) || marker == nil {
+	marker, ok := errors.AsType[deferredMarker](err)
+	if !ok || marker == nil {
 		return false
 	}
 
@@ -97,9 +97,7 @@ func IsDeferred(err error) bool {
 }
 
 func ReasonOf(err error) DeferredReason {
-	var deferred *DeferredError
-
-	if errors.As(err, &deferred) && deferred != nil && deferred.Reason != "" {
+	if deferred, ok := errors.AsType[*DeferredError](err); ok && deferred != nil && deferred.Reason != "" {
 		return deferred.Reason
 	}
 

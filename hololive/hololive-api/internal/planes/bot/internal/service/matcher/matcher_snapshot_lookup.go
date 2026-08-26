@@ -30,10 +30,9 @@ func appendSnapshotEntry(target map[string][]*snapshotEntry, key string, entry *
 }
 
 func splitMemberKey(key string) (name, org string) {
-	name = key
-	if idx := strings.LastIndex(key, ":"); idx > 0 {
-		name = key[:idx]
-		org = key[idx+1:]
+	name, org, found := strings.CutLast(key, ":")
+	if !found || name == "" {
+		return key, ""
 	}
 
 	return name, org

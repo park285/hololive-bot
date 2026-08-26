@@ -74,22 +74,21 @@ func (s *Sampler) sample(ctx context.Context) endpointSnapshot {
 	for i := range s.endpoints {
 		endpoint := s.endpoints[i]
 
-		wg.Add(1)
-		panicguard.Go(nil, "admin-dashboard-endpoint-sample", func() {
-			defer wg.Done()
+		wg.Go(func() {
+			panicguard.Run(nil, "admin-dashboard-endpoint-sample", func() {
+				var sample endpointSample
 
-			var sample endpointSample
+				if err := panicguard.RunE(nil, "admin-dashboard-endpoint-sample", func() error {
+					sample = s.sampleEndpoint(ctx, endpoint)
+					return nil
+				}); err != nil {
+					errText := err.Error()
 
-			if err := panicguard.RunE(nil, "admin-dashboard-endpoint-sample", func() error {
-				sample = s.sampleEndpoint(ctx, endpoint)
-				return nil
-			}); err != nil {
-				errText := err.Error()
+					sample = failedEndpointSample(endpoint.Name, errText, nil)
+				}
 
-				sample = failedEndpointSample(endpoint.Name, errText, nil)
-			}
-
-			snapshot.endpoints[i] = sample
+				snapshot.endpoints[i] = sample
+			})
 		})
 	}
 

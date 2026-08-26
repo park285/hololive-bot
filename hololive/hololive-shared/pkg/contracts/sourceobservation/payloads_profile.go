@@ -1,11 +1,12 @@
 package sourceobservation
 
 import (
+	"cmp"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -97,7 +98,7 @@ func (p *ChannelPhotoV1) normalizeAndValidate(subject string) error {
 		}
 	}
 
-	sort.Slice(p.Variants, lessPhotoVariantIndex(p.Variants))
+	slices.SortFunc(p.Variants, comparePhotoVariant)
 
 	return nil
 }
@@ -154,38 +155,15 @@ func invalidPhotoFingerprint(value string) bool {
 	return value != "" && (len(value) != 64 || !lowercaseSHA256Pattern.MatchString(value))
 }
 
-func lessPhotoVariantIndex(variants []PhotoVariantV1) func(int, int) bool {
-	return func(i, j int) bool {
-		return photoVariantLess(&variants[i], &variants[j])
-	}
-}
-
-func photoVariantLess(left, right *PhotoVariantV1) bool {
-	if left.Kind != right.Kind {
-		return left.Kind < right.Kind
-	}
-
-	if left.StableMediaID != right.StableMediaID {
-		return left.StableMediaID < right.StableMediaID
-	}
-
-	return photoVariantLessRemainder(left, right)
-}
-
-func photoVariantLessRemainder(left, right *PhotoVariantV1) bool {
-	if left.ContentFingerprint != right.ContentFingerprint {
-		return left.ContentFingerprint < right.ContentFingerprint
-	}
-
-	if left.URL != right.URL {
-		return left.URL < right.URL
-	}
-
-	if left.Width != right.Width {
-		return left.Width < right.Width
-	}
-
-	return left.Height < right.Height
+func comparePhotoVariant(left, right PhotoVariantV1) int {
+	return cmp.Or(
+		cmp.Compare(left.Kind, right.Kind),
+		cmp.Compare(left.StableMediaID, right.StableMediaID),
+		cmp.Compare(left.ContentFingerprint, right.ContentFingerprint),
+		cmp.Compare(left.URL, right.URL),
+		cmp.Compare(left.Width, right.Width),
+		cmp.Compare(left.Height, right.Height),
+	)
 }
 
 func (p *ScheduleSnapshotV1) normalizeAndValidate(subject string) error {
@@ -208,7 +186,9 @@ func (p *ScheduleSnapshotV1) normalizeAndValidate(subject string) error {
 		}
 	}
 
-	sort.Slice(p.Items, func(i, j int) bool { return p.Items[i].ExternalID < p.Items[j].ExternalID })
+	slices.SortFunc(p.Items, func(left, right ScheduleItemV1) int {
+		return cmp.Compare(left.ExternalID, right.ExternalID)
+	})
 
 	return nil
 }

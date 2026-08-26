@@ -157,12 +157,12 @@ func isProcPID(name string) bool {
 }
 
 func procPPID(stat []byte) (int, bool) {
-	end := bytes.LastIndexByte(stat, ')')
-	if end < 0 || end+2 >= len(stat) {
+	_, after, found := bytes.CutLast(stat, []byte(")"))
+	if !found || len(after) < 2 {
 		return 0, false
 	}
 
-	fields := strings.Fields(string(stat[end+2:]))
+	fields := strings.Fields(string(after[1:]))
 	if len(fields) < 2 {
 		return 0, false
 	}

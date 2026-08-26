@@ -1,6 +1,7 @@
 package dbtest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
@@ -9,7 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -288,7 +289,9 @@ func queryEpoch2TableRows(ctx context.Context, pool *pgxpool.Pool, table string,
 		return nil, fmt.Errorf("iterate data table %s: %w", table, err)
 	}
 
-	sort.Slice(values, func(i, j int) bool { return string(values[i]) < string(values[j]) })
+	slices.SortFunc(values, func(left, right jsontext.Value) int {
+		return bytes.Compare(left, right)
+	})
 
 	return values, nil
 }
@@ -466,7 +469,7 @@ func serializeEpoch2ACL(ctx context.Context, pool *pgxpool.Pool, roles epoch2Rol
 		return "", fmt.Errorf("iterate epoch-2 ACL: %w", err)
 	}
 
-	sort.Strings(lines)
+	slices.Sort(lines)
 
 	return strings.Join(lines, "\n") + "\n", nil
 }

@@ -223,24 +223,22 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 			continue
 		}
 
-		wg.Add(1)
+		wg.Go(func() {
+			panicguard.Run(nil, "system-stats-service-goroutines", func() {
+				if err := panicguard.RunE(nil, "system-stats-service-goroutines", func() error {
+					goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
 
-		panicguard.Go(nil, "system-stats-service-goroutines", func() {
-			defer wg.Done()
+					results[i] = ServiceGoroutines{
+						Name:       ep.Name,
+						Goroutines: goroutines,
+						Available:  ok,
+					}
 
-			if err := panicguard.RunE(nil, "system-stats-service-goroutines", func() error {
-				goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
-
-				results[i] = ServiceGoroutines{
-					Name:       ep.Name,
-					Goroutines: goroutines,
-					Available:  ok,
+					return nil
+				}); err != nil {
+					results[i] = ServiceGoroutines{Name: ep.Name, Available: false}
 				}
-
-				return nil
-			}); err != nil {
-				results[i] = ServiceGoroutines{Name: ep.Name, Available: false}
-			}
+			})
 		})
 	}
 

@@ -20,7 +20,11 @@
 
 package filter
 
-import "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+import (
+	"cmp"
+
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
+)
 
 var sourceTierPriority = map[model.SourceTier]int{
 	model.SourceTierOfficial:  0,
@@ -28,24 +32,11 @@ var sourceTierPriority = map[model.SourceTier]int{
 	model.SourceTierCommunity: 2,
 }
 
-func lessFilteredCandidate(left, right *model.FilteredCandidate) bool {
-	if !left.EffectiveDate.Equal(right.EffectiveDate) {
-		return left.EffectiveDate.Before(right.EffectiveDate)
-	}
-
-	leftSource := sourceTierPriority[left.SourceTier]
-	rightSource := sourceTierPriority[right.SourceTier]
-
-	if leftSource != rightSource {
-		return leftSource < rightSource
-	}
-
-	leftCategory := categoryPriority[left.Category]
-	rightCategory := categoryPriority[right.Category]
-
-	if leftCategory != rightCategory {
-		return leftCategory < rightCategory
-	}
-
-	return left.Candidate.Title < right.Candidate.Title
+func compareFilteredCandidate(left, right model.FilteredCandidate) int {
+	return cmp.Or(
+		left.EffectiveDate.Compare(right.EffectiveDate),
+		cmp.Compare(sourceTierPriority[left.SourceTier], sourceTierPriority[right.SourceTier]),
+		cmp.Compare(categoryPriority[left.Category], categoryPriority[right.Category]),
+		cmp.Compare(left.Candidate.Title, right.Candidate.Title),
+	)
 }

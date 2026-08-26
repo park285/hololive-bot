@@ -1,11 +1,12 @@
 package targetprojection
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	jsonv2 "encoding/json/v2"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -73,7 +74,7 @@ func normalizeTargets(targets []TargetSpec) ([]TargetSpec, map[targetIdentity]Ta
 		}
 	}
 
-	sort.Slice(normalized, lessTargetSpec(normalized))
+	slices.SortFunc(normalized, compareTargetSpec)
 
 	return normalized, seen, nil
 }
@@ -122,14 +123,11 @@ func invalidPollInterval(interval time.Duration) bool {
 	return interval < time.Second || interval > 24*time.Hour || interval%time.Millisecond != 0
 }
 
-func lessTargetSpec(targets []TargetSpec) func(int, int) bool {
-	return func(i, j int) bool {
-		if targets[i].SubjectKey != targets[j].SubjectKey {
-			return targets[i].SubjectKey < targets[j].SubjectKey
-		}
-
-		return targets[i].ObservationKind < targets[j].ObservationKind
-	}
+func compareTargetSpec(left, right TargetSpec) int {
+	return cmp.Or(
+		cmp.Compare(left.SubjectKey, right.SubjectKey),
+		cmp.Compare(left.ObservationKind, right.ObservationKind),
+	)
 }
 
 type reasonIdentity struct {
@@ -154,7 +152,7 @@ func normalizeReasons(reasons []TargetReason, seenTargets map[targetIdentity]Tar
 		}
 	}
 
-	sort.Slice(normalized, lessTargetReason(normalized))
+	slices.SortFunc(normalized, compareTargetReason)
 
 	return normalized, nil
 }
@@ -193,26 +191,13 @@ func invalidReasonBounds(reason TargetReason) bool {
 	return reason.ReasonKind == "" || len(reason.ReasonKind) > 128 || reason.ReasonKey == "" || len(reason.ReasonKey) > 512
 }
 
-func lessTargetReason(reasons []TargetReason) func(int, int) bool {
-	return func(i, j int) bool {
-		return targetReasonLess(reasons[i], reasons[j])
-	}
-}
-
-func targetReasonLess(left, right TargetReason) bool {
-	if left.SubjectKey != right.SubjectKey {
-		return left.SubjectKey < right.SubjectKey
-	}
-
-	if left.ObservationKind != right.ObservationKind {
-		return left.ObservationKind < right.ObservationKind
-	}
-
-	if left.ReasonKind != right.ReasonKind {
-		return left.ReasonKind < right.ReasonKind
-	}
-
-	return left.ReasonKey < right.ReasonKey
+func compareTargetReason(left, right TargetReason) int {
+	return cmp.Or(
+		cmp.Compare(left.SubjectKey, right.SubjectKey),
+		cmp.Compare(left.ObservationKind, right.ObservationKind),
+		cmp.Compare(left.ReasonKind, right.ReasonKind),
+		cmp.Compare(left.ReasonKey, right.ReasonKey),
+	)
 }
 
 func hashNormalizedTargets(targets []TargetSpec) (string, error) {

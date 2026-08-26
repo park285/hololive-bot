@@ -42,9 +42,8 @@ func TestParserDriftError_UnwrapJoinsSentinelAndCause(t *testing.T) {
 	cause := errors.New("xml error")
 	err := NewParserDriftError("rss", "unmarshal", cause)
 
-	var drift *ParserDriftError
-
-	if !errors.As(err, &drift) {
+	drift, ok := errors.AsType[*ParserDriftError](err)
+	if !ok {
 		t.Fatalf("error type = %T, want *ParserDriftError in chain", err)
 	}
 

@@ -810,9 +810,8 @@ func assertDurableRepositoryFailureSafe(t *testing.T, err error, rawID, causeTex
 		t.Fatal("expected repository failure")
 	}
 
-	var pgErr *pgconn.PgError
-
-	if !errors.As(err, &pgErr) || !strings.Contains(pgErr.Error(), rawID) {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok || !strings.Contains(pgErr.Error(), rawID) {
 		t.Fatalf("database cause chain was not preserved: %v", err)
 	}
 

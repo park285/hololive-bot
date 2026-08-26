@@ -160,9 +160,8 @@ func extractHTTPStatusCode(err error) (int, bool) {
 		return 0, false
 	}
 
-	var statusErr *httpStatusError
-
-	if !errors.As(err, &statusErr) {
+	statusErr, ok := errors.AsType[*httpStatusError](err)
+	if !ok {
 		return 0, false
 	}
 
@@ -174,9 +173,8 @@ func extractHTTPRetryAfter(err error) time.Duration {
 		return 0
 	}
 
-	var statusErr *httpStatusError
-
-	if !errors.As(err, &statusErr) {
+	statusErr, ok := errors.AsType[*httpStatusError](err)
+	if !ok {
 		return 0
 	}
 
@@ -251,9 +249,7 @@ func isRetryableTransportError(err error) bool {
 }
 
 func isRetryableDeadlineExceeded(err error) bool {
-	var urlErr *url.Error
-
-	if errors.As(err, &urlErr) && urlErr.Err != nil {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && urlErr.Err != nil {
 		return hasTransientTransportSignature(urlErr.Err.Error())
 	}
 
@@ -277,6 +273,7 @@ func isRetryableURLError(err *url.Error) bool {
 }
 
 type temporaryError interface {
+	error
 	Temporary() bool
 }
 
@@ -293,9 +290,7 @@ func isTimeoutNetError(err error) bool {
 		return false
 	}
 
-	var urlErr *url.Error
-
-	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && !isNilInterfaceValue(urlErr) {
 		if urlErr.Err == nil {
 			return false
 		}
@@ -303,9 +298,7 @@ func isTimeoutNetError(err error) bool {
 		return isTimeoutNetError(urlErr.Err)
 	}
 
-	var netErr net.Error
-
-	if errors.As(err, &netErr) && !isNilInterfaceValue(netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && !isNilInterfaceValue(netErr) && netErr.Timeout() {
 		return true
 	}
 
@@ -317,9 +310,7 @@ func isTemporaryNetError(err error) bool {
 		return false
 	}
 
-	var urlErr *url.Error
-
-	if errors.As(err, &urlErr) && !isNilInterfaceValue(urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && !isNilInterfaceValue(urlErr) {
 		if urlErr.Err == nil {
 			return false
 		}
@@ -327,9 +318,8 @@ func isTemporaryNetError(err error) bool {
 		return isTemporaryNetError(urlErr.Err)
 	}
 
-	var tempErr temporaryError
-
-	if !errors.As(err, &tempErr) {
+	tempErr, ok := errors.AsType[temporaryError](err)
+	if !ok {
 		return false
 	}
 

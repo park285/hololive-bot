@@ -118,9 +118,7 @@ func Normalize(err error) *Error {
 		return nil
 	}
 
-	var typed *Error
-
-	if errors.As(err, &typed) && typed != nil {
+	if typed, ok := errors.AsType[*Error](err); ok && typed != nil {
 		return typed.normalized()
 	}
 

@@ -173,9 +173,8 @@ func assertReplyOutboxClientRequestIDIsNeverReused(
 	assert.Contains(t, err.Error(), "message_token=anon:")
 	assert.Contains(t, err.Error(), "reason=database_operation_failed")
 
-	var pgErr *pgconn.PgError
-
-	if !errors.As(err, &pgErr) {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok {
 		t.Fatalf("error type = %T, want *pgconn.PgError in chain", err)
 	}
 

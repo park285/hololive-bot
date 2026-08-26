@@ -25,7 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -110,7 +110,7 @@ func normalizeRoomList(input []string) []string {
 		rooms = append(rooms, roomID)
 	}
 
-	sort.Strings(rooms)
+	slices.Sort(rooms)
 
 	return rooms
 }

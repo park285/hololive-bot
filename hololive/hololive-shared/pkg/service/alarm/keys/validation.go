@@ -3,7 +3,7 @@ package keys
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -28,8 +28,8 @@ func ValidateChannelContentAlarmTargetDefinitions(definitions []ChannelContentAl
 		return nil
 	}
 
-	sort.Strings(missing)
-	sort.Strings(duplicates)
+	slices.Sort(missing)
+	slices.Sort(duplicates)
 
 	issues := make([]string, 0, 2)
 

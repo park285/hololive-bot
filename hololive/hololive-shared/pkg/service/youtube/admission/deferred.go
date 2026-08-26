@@ -84,9 +84,9 @@ func IsDeferred(err error) bool {
 		return true
 	}
 
-	var deferred *DeferredError
+	_, ok := errors.AsType[*DeferredError](err)
 
-	return errors.As(err, &deferred)
+	return ok
 }
 
 func RetryAfter(err error) (time.Duration, bool) {
@@ -94,9 +94,8 @@ func RetryAfter(err error) (time.Duration, bool) {
 		return 0, false
 	}
 
-	var deferred *DeferredError
-
-	if !errors.As(err, &deferred) || deferred == nil || deferred.RetryAfter <= 0 {
+	deferred, ok := errors.AsType[*DeferredError](err)
+	if !ok || deferred == nil || deferred.RetryAfter <= 0 {
 		return 0, false
 	}
 

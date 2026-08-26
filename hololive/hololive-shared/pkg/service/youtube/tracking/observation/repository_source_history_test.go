@@ -333,16 +333,12 @@ func concurrentUpsertTracking(t *testing.T, repository *PgxRepository, records [
 
 	var wg sync.WaitGroup
 
-	wg.Add(len(records))
-
 	for _, record := range records {
-		go func(rec *domain.YouTubeContentAlarmTracking) {
-			defer wg.Done()
-
+		wg.Go(func() {
 			<-start
 
-			errCh <- repository.Upsert(ctx, rec)
-		}(record)
+			errCh <- repository.Upsert(ctx, record)
+		})
 	}
 
 	close(start)

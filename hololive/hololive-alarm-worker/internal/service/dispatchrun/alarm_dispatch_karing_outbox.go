@@ -34,8 +34,8 @@ type alarmDispatchKaringCommunityPayload struct {
 
 type alarmDispatchKaringImagePayload struct {
 	URL    string `json:"url"`
-	Width  int    `json:"width,omitempty"`
-	Height int    `json:"height,omitempty"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 func buildAlarmDispatchYouTubeOutboxKaringItems(ctx context.Context, messageStrings *messagestrings.Store, envelope *domain.AlarmQueueEnvelope) ([]alarmDispatchKaringItem, error) {

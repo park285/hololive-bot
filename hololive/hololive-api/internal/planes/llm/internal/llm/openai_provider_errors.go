@@ -132,9 +132,7 @@ func appendTrimmedStringAttr(attrs []slog.Attr, key, value string) []slog.Attr {
 }
 
 func openAIError(err error) (*openai.Error, bool) {
-	var apiErr *openai.Error
-
-	if errors.As(err, &apiErr) && apiErr != nil {
+	if apiErr, ok := errors.AsType[*openai.Error](err); ok && apiErr != nil {
 		return apiErr, true
 	}
 

@@ -23,7 +23,7 @@ package batchrepo
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -59,14 +59,14 @@ func collectShortIdentityAliases(
 
 	canonicalIDs = collectNotificationShortIdentityAliases(notifications, aliasSet, canonicalIDs)
 	canonicalIDs = collectTrackingShortIdentityAliases(trackingRows, aliasSet, canonicalIDs)
-	sort.Strings(canonicalIDs)
+	slices.Sort(canonicalIDs)
 
 	aliases := make([]string, 0, len(aliasSet))
 	for alias := range aliasSet {
 		aliases = append(aliases, alias)
 	}
 
-	sort.Strings(aliases)
+	slices.Sort(aliases)
 
 	return canonicalIDs, aliases
 }

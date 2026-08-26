@@ -30,8 +30,8 @@ type ThumbnailsJSON []ThumbnailEntry //nolint:recvcheck // sql.Scanner는 포인
 
 type ThumbnailEntry struct {
 	URL    string `json:"url"`
-	Width  int    `json:"width,omitempty"`
-	Height int    `json:"height,omitempty"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 func (t ThumbnailsJSON) Value() (driver.Value, error) {

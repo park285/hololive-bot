@@ -37,16 +37,13 @@ func TestShutdownWebhookAndDurabilityAlwaysStopsWorkersAndJoinsErrors(t *testing
 	webhookCloser := &testWebhookCloser{err: closeErr}
 	workerCtx, cancelWorker := context.WithCancel(t.Context())
 	durable := &durableRuntime{cancel: cancelWorker}
-	durable.wg.Add(1)
 
 	workerDone := make(chan struct{})
 
-	go func() {
-		defer durable.wg.Done()
-
+	durable.wg.Go(func() {
 		<-workerCtx.Done()
 		close(workerDone)
-	}()
+	})
 
 	runtime := &BotRuntime{webhookHandlerCloser: webhookCloser, durable: durable}
 	shutdownCtx, cancelShutdown := context.WithCancel(t.Context())

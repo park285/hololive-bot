@@ -1,12 +1,13 @@
 package dispatchrun
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,7 +50,9 @@ func buildAlarmDispatchKaringContentListRequests(ctx context.Context, messageStr
 
 	// 재스케줄로 그룹 구성이 바뀌어도 동일 item 조합이면 동일 ClientRequestID가 재생산되어야
 	// admission dedup이 기전송 chunk를 걸러낸다 — identity 정렬로 chunk 경계를 고정한다.
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].identity < entries[j].identity })
+	slices.SortStableFunc(entries, func(left, right alarmDispatchKaringItem) int {
+		return cmp.Compare(left.identity, right.identity)
+	})
 
 	requests := make([]iris.KaringContentListRequest, 0, (len(entries)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
 	for start := 0; start < len(entries); start += alarmDispatchKaringMaxItemsPerRequest {

@@ -279,8 +279,8 @@ func (e *StructureChangedError) Error() string {
 }
 
 func IsStructureError(err error) bool {
-	structureChangedError := &StructureChangedError{}
-	return errors.As(err, &structureChangedError)
+	_, ok := errors.AsType[*StructureChangedError](err)
+	return ok
 }
 
 func (s *Service) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {

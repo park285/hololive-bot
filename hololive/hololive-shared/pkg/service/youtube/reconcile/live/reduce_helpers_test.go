@@ -2,7 +2,7 @@ package live
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -208,7 +208,7 @@ func snapshotDecision(decision *Decision) string {
 			session.Clock.ConsecutiveAbsenceSlots, candidate, reason))
 	}
 
-	sort.Strings(parts)
+	slices.Sort(parts)
 
 	return strings.Join(parts, ";")
 }

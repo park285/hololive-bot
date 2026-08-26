@@ -38,9 +38,8 @@ func filterPromptCandidates(candidates []model.FilteredCandidate, guard *promptg
 			continue
 		}
 
-		var blocked *promptguard.BlockedError
-
-		if !errors.As(err, &blocked) {
+		blocked, ok := errors.AsType[*promptguard.BlockedError](err)
+		if !ok {
 			return nil, fmt.Errorf("check member news candidate: %w", err)
 		}
 
