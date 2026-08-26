@@ -395,7 +395,6 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> githu
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/contracts/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/domain
-github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/panicguard
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/providers/modules
 github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap -> github.com/kapu/hololive-shared/pkg/readiness

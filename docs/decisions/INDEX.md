@@ -2,10 +2,11 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 27건: proposed 0, accepted 18, rejected 0, withdrawn 2, superseded 7
+레코드 28건: proposed 0, accepted 19, rejected 0, withdrawn 2, superseded 7
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260826-hololive-youtubejs-bounded-read-retry](records/DEC-20260826-hololive-youtubejs-bounded-read-retry.json) | YouTube.js는 읽기 전용 Innertube transient failure만 한 번 재시도한다 | accepted | verified | hololive-bot | 2026-08-26 | trigger | - | [youtube-collector.md](../current/runbooks/youtube-collector.md) |
 | [DEC-20260825-hololive-admin-auth-boundaries-preserved](records/DEC-20260825-hololive-admin-auth-boundaries-preserved.json) | hololive admin은 /api/holo API-key 경계와 사용자 session 경계를 분리해 유지한다 | accepted | verified | hololive-bot | 2026-08-25 | trigger | supersedes DEC-20260719-hololive-admin-auth-unification | - |
 | [DEC-20260825-hololive-api-dedicated-plane-pools](records/DEC-20260825-hololive-api-dedicated-plane-pools.json) | hololive-api는 bot·admin·llm·YouTube plane별 bounded PostgreSQL pool을 유지한다 | accepted | verified | hololive-bot | 2026-08-25 | trigger | supersedes DEC-20260719-hololive-api-pool-isolation | - |
 | [DEC-20260825-hololive-shared-public-path-scoped-retention](records/DEC-20260825-hololive-shared-public-path-scoped-retention.json) | hololive-shared public path는 cross-runtime 계약과 진성 다중 소비자에 한정하고 단일-owner 구현은 internal로 둔다 | accepted | verified | hololive-bot | 2026-08-25 | trigger | supersedes DEC-20260711-hololive-apperrors-scope, DEC-20260727-hololive-shared-public-path-retired | [SERVICE_OWNERSHIP.md](../current/SERVICE_OWNERSHIP.md) |

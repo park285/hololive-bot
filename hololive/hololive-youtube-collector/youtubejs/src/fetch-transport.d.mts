@@ -21,6 +21,15 @@ export function createFetchTransport(options: {
   currentSignal: () => AbortSignal | undefined;
   loadUndici?: () => Promise<typeof import("undici")>;
   closeTimeoutMs?: number;
+  retryDelayMs?: number;
+  observeRetry?: (event: {
+    endpoint: "browse" | "next" | "player";
+    reason: "network" | "http_status";
+    statusCode?: number;
+    delayMs: number;
+    attempt: number;
+    maxAttempts: number;
+  }) => void;
 }): Promise<FetchTransport>;
 
 export function redactedProxyURL(raw: string): string;

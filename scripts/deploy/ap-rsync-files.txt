@@ -10,6 +10,7 @@
 ../shared-go/pkg/envutil/file.go
 ../shared-go/pkg/envutil/file_nofollow_unix.go
 ../shared-go/pkg/ginjson/ginjson.go
+../shared-go/pkg/h3/certificate_reloader.go
 ../shared-go/pkg/h3/h3.go
 ../shared-go/pkg/healthprobe/cli.go
 ../shared-go/pkg/healthprobe/healthprobe.go

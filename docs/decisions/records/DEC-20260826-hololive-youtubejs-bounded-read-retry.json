@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260826-hololive-youtubejs-bounded-read-retry",
+  "title": "YouTube.js는 읽기 전용 Innertube transient failure만 한 번 재시도한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-26",
+  "summary": "2026-08-25~26 production에서 proxy-disabled AP fleet의 YouTube.js browse/player 요청이 드문 HTTP 500/503과 transient network failure를 반환했으며, 중앙과 서울 인스턴스의 관측 실패율은 각각 약 0.013%, 0.022%였다. 성공 경로의 cadence와 concurrency는 유지하고, www.youtube.com의 읽기 전용 Innertube browse/next/player POST만 100~300ms jitter 뒤 정확히 한 번 재전송한다. 429, 다른 status·host·path·method, parser/protocol failure, 재생 불가능한 body는 재시도하지 않으며 두 번째 실패는 기존 typed failure와 PostgreSQL same-slot defer를 보존한다.",
+  "sources": [
+    "docs/current/runbooks/youtube-collector.md#YouTube.js transient recovery"
+  ],
+  "evidence": [
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-transport.test.mjs"
+  ],
+  "implementation": [
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-transport.mjs",
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-transport.d.mts",
+    "docs/current/runbooks/youtube-collector.md"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "배포 후 24시간 동안 exhausted collection_failed 비율이 감소하지 않거나 429, request timeout, upstream request volume이 증가한다."
+  }
+}

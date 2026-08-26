@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
+
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
@@ -36,7 +38,7 @@ func TestBuildBotHTTP3ServerCertReloadOutlivesBuildContext(t *testing.T) {
 
 	server, startCertReload, err := buildBotHTTP3ServerWithReloaderOptions(
 		buildCtx, appConfig, nil, nil, nil, nil,
-		reloadingTLSCertificateOptions{reloadInterval: 10 * time.Millisecond},
+		sharedh3.CertificateReloaderOptions{ReloadInterval: 10 * time.Millisecond},
 	)
 	if err != nil {
 		t.Fatalf("buildBotHTTP3ServerWithReloaderOptions() error = %v", err)

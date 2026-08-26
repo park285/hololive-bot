@@ -162,7 +162,10 @@ test("known transport errors remain explicitly transient", async () => {
   }
 });
 
-test("upstream HTTP 500 is typed transient before youtubei.js can erase status", async () => {
+test("safe Innertube HTTP 500 is retried once with the same request body", async () => {
+  const events = [];
+  const bodies = [];
+  let calls = 0;
   let canceled = 0;
   class ProxyAgent {
     async close() {}
@@ -171,13 +174,190 @@ test("upstream HTTP 500 is typed transient before youtubei.js can erase status",
   const transport = await createFetchTransport({
     proxy: { enabled: true, url: "http://proxy.test:8080" },
     currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: (event) => events.push(event),
     loadUndici: async () => ({
       ProxyAgent,
-      fetch: async () => new Response(new ReadableStream({
-        cancel() {
-          canceled += 1;
-        },
-      }), { status: 500 }),
+      fetch: async (_url, init) => {
+        calls += 1;
+        bodies.push(await new Response(init.body).text());
+        if (calls === 1) {
+          return new Response(new ReadableStream({
+            cancel() {
+              canceled += 1;
+            },
+          }), { status: 500 });
+        }
+        return new Response("ok", { status: 200 });
+      },
+    }),
+  });
+  try {
+    const response = await transport.fetch("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false", {
+      method: "POST",
+      body: JSON.stringify({ browseId: "UC-test" }),
+    });
+    assert.equal(await response.text(), "ok");
+    assert.equal(calls, 2);
+    assert.deepEqual(bodies, [
+      JSON.stringify({ browseId: "UC-test" }),
+      JSON.stringify({ browseId: "UC-test" }),
+    ]);
+    assert.equal(canceled, 1);
+    assert.deepEqual(events, [{
+      endpoint: "browse",
+      reason: "http_status",
+      statusCode: 500,
+      delayMs: 0,
+      attempt: 2,
+      maxAttempts: 2,
+    }]);
+  } finally {
+    await transport.close();
+  }
+});
+
+test("safe Innertube transient network failure is retried once", async () => {
+  const events = [];
+  let calls = 0;
+  class ProxyAgent {
+    async close() {}
+    destroy() {}
+  }
+  const failure = new TypeError("fetch failed", {
+    cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }),
+  });
+  const transport = await createFetchTransport({
+    proxy: { enabled: true, url: "http://proxy.test:8080" },
+    currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: (event) => events.push(event),
+    loadUndici: async () => ({
+      ProxyAgent,
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) throw failure;
+        return new Response("ok");
+      },
+    }),
+  });
+  try {
+    const response = await transport.fetch("https://www.youtube.com/youtubei/v1/player", {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(await response.text(), "ok");
+    assert.equal(calls, 2);
+    assert.deepEqual(events, [{
+      endpoint: "player",
+      reason: "network",
+      delayMs: 0,
+      attempt: 2,
+      maxAttempts: 2,
+    }]);
+  } finally {
+    await transport.close();
+  }
+});
+
+test("unsafe Innertube endpoint is never retried", async () => {
+  let calls = 0;
+  class ProxyAgent {
+    async close() {}
+    destroy() {}
+  }
+  const transport = await createFetchTransport({
+    proxy: { enabled: true, url: "http://proxy.test:8080" },
+    currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: () => assert.fail("unsafe endpoint scheduled a retry"),
+    loadUndici: async () => ({
+      ProxyAgent,
+      fetch: async () => {
+        calls += 1;
+        return new Response("failed", { status: 500 });
+      },
+    }),
+  });
+  try {
+    await assert.rejects(
+      transport.fetch("https://www.youtube.com/youtubei/v1/log_event", {
+        method: "POST",
+        body: "{}",
+      }),
+      (error) => error.code === "collection_failed",
+    );
+    assert.equal(calls, 1);
+  } finally {
+    await transport.close();
+  }
+});
+
+test("rate limits and non-transient 5xx statuses are never retried", async () => {
+  const statuses = [429, 501];
+  const events = [];
+  let calls = 0;
+  class ProxyAgent {
+    async close() {}
+    destroy() {}
+  }
+  const transport = await createFetchTransport({
+    proxy: { enabled: true, url: "http://proxy.test:8080" },
+    currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: (event) => events.push(event),
+    loadUndici: async () => ({
+      ProxyAgent,
+      fetch: async () => {
+        const status = statuses[calls];
+        calls += 1;
+        return new Response("failed", { status });
+      },
+    }),
+  });
+  try {
+    const limited = await transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(limited.status, 429);
+    await limited.text();
+    await assert.rejects(
+      transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
+        method: "POST",
+        body: "{}",
+      }),
+      (error) => error.code === "collection_failed",
+    );
+    assert.equal(calls, 2);
+    assert.deepEqual(events, []);
+  } finally {
+    await transport.close();
+  }
+});
+
+test("retry exhaustion preserves the typed transient failure", async () => {
+  let canceled = 0;
+  let calls = 0;
+  class ProxyAgent {
+    async close() {}
+    destroy() {}
+  }
+  const transport = await createFetchTransport({
+    proxy: { enabled: true, url: "http://proxy.test:8080" },
+    currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: () => {},
+    loadUndici: async () => ({
+      ProxyAgent,
+      fetch: async () => {
+        calls += 1;
+        return new Response(new ReadableStream({
+          cancel() {
+            canceled += 1;
+          },
+        }), { status: 500 });
+      },
     }),
   });
   try {
@@ -189,7 +369,8 @@ test("upstream HTTP 500 is typed transient before youtubei.js can erase status",
     }
     assert.equal(failure?.code, "collection_failed");
     assert.equal(failure?.failureClass, "TRANSIENT");
-    assert.equal(canceled, 1);
+    assert.equal(calls, 2);
+    assert.equal(canceled, 2);
     const result = rpcErrorResultFor(failure);
     assert.equal(result.status, 502);
     assert.equal(result.body.error.code, "collection_failed");
@@ -210,15 +391,57 @@ test("direct upstream HTTP 500 follows the same typed failure path", async () =>
   const transport = await createFetchTransport({
     proxy: { enabled: false },
     currentSignal: () => undefined,
+    retryDelayMs: 0,
+    observeRetry: () => {},
   });
   try {
     await assert.rejects(
       transport.fetch("https://www.youtube.com/youtubei/v1/browse", { method: "POST" }),
       (error) => error.code === "collection_failed" && error.failureClass === "TRANSIENT",
     );
-    assert.equal(canceled, 1);
+    assert.equal(canceled, 2);
   } finally {
     globalThis.fetch = originalFetch;
+    await transport.close();
+  }
+});
+
+test("request cancellation stops a scheduled retry before the second attempt", async () => {
+  const controller = new AbortController();
+  let scheduled;
+  let calls = 0;
+  class ProxyAgent {
+    async close() {}
+    destroy() {}
+  }
+  const transport = await createFetchTransport({
+    proxy: { enabled: true, url: "http://proxy.test:8080" },
+    currentSignal: () => controller.signal,
+    observeRetry: (event) => {
+      scheduled = event;
+      controller.abort();
+    },
+    loadUndici: async () => ({
+      ProxyAgent,
+      fetch: async () => {
+        calls += 1;
+        return new Response("failed", { status: 500 });
+      },
+    }),
+  });
+  try {
+    await assert.rejects(
+      transport.fetch("https://www.youtube.com/youtubei/v1/next", {
+        method: "POST",
+        body: "{}",
+      }),
+      (error) => error.code === "collection_canceled",
+    );
+    assert.equal(calls, 1);
+    assert.equal(scheduled.endpoint, "next");
+    assert.equal(scheduled.attempt, 2);
+    assert.ok(scheduled.delayMs >= 100 && scheduled.delayMs <= 300);
+  } finally {
     await transport.close();
   }
 });
