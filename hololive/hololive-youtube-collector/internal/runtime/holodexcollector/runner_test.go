@@ -1,12 +1,13 @@
 package holodexcollector
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"io/fs"
 	"os"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -389,12 +390,11 @@ func hashes(t *testing.T, output collectutil.RunOutput) string {
 		pairs = append(pairs, pair{envelope.ObservationKind, envelope.SubjectKey, envelope.PayloadSHA256, envelope.ScopeSHA256})
 	}
 
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].Kind != pairs[j].Kind {
-			return pairs[i].Kind < pairs[j].Kind
-		}
-
-		return pairs[i].Subject < pairs[j].Subject
+	slices.SortFunc(pairs, func(left, right pair) int {
+		return cmp.Or(
+			cmp.Compare(left.Kind, right.Kind),
+			cmp.Compare(left.Subject, right.Subject),
+		)
 	})
 
 	encoded, err := jsonv2.Marshal(pairs)

@@ -1,7 +1,7 @@
 package batchrepo
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -114,7 +114,7 @@ func sortedCommunityShortsAlarmStateKeys(rowsByKey map[string]*domain.YouTubeCom
 		keys = append(keys, key)
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }

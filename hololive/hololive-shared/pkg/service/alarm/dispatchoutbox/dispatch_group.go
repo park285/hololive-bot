@@ -1,10 +1,11 @@
 package dispatchoutbox
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -73,12 +74,12 @@ func assignSendUnits(deliveries []deliveryInsert) {
 		groupKeys = append(groupKeys, key)
 	}
 
-	sort.Strings(groupKeys)
+	slices.Sort(groupKeys)
 
 	for _, groupKey := range groupKeys {
 		indices := grouped[groupKey]
-		sort.Slice(indices, func(i, j int) bool {
-			return deliveries[indices[i]].DedupeKey < deliveries[indices[j]].DedupeKey
+		slices.SortFunc(indices, func(left, right int) int {
+			return cmp.Compare(deliveries[left].DedupeKey, deliveries[right].DedupeKey)
 		})
 
 		for start := 0; start < len(indices); start += maxDeliveriesPerSendUnit {

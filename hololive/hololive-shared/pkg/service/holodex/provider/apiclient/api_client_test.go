@@ -585,9 +585,8 @@ func TestProcessHolodexResponse_ForbiddenDoesNotRetry(t *testing.T) {
 		t.Fatal("expected 403 response to return error")
 	}
 
-	var apiErr *APIError
-
-	if !errors.As(err, &apiErr) {
+	apiErr, ok := errors.AsType[*APIError](err)
+	if !ok {
 		t.Fatalf("expected APIError, got %T", err)
 	}
 
@@ -639,9 +638,8 @@ func TestProcessHolodexResponse_RateLimitedExhaustionReturnsKeyRotationError(t *
 		t.Fatal("expected final 429 response to return error")
 	}
 
-	var rotationErr *KeyRotationError
-
-	if !errors.As(err, &rotationErr) {
+	rotationErr, ok := errors.AsType[*KeyRotationError](err)
+	if !ok {
 		t.Fatalf("expected KeyRotationError, got %T", err)
 	}
 

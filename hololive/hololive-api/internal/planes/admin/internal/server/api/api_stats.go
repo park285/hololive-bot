@@ -59,34 +59,32 @@ type statsResponse struct {
 func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Member, alarmKeys []*domain.AlarmEntry, memberErr, alarmErr error) {
 	var wg sync.WaitGroup
 
-	wg.Add(2)
+	wg.Go(func() {
+		panicguard.Run(h.safeLogger(), "admin-stats-members", func() {
+			memberErr = panicguard.RunE(h.safeLogger(), "admin-stats-members", func() error {
+				var err error
 
-	panicguard.Go(h.safeLogger(), "admin-stats-members", func() {
-		defer wg.Done()
+				members, err = h.repository.GetAllMembers(ctx)
+				if err != nil {
+					return fmt.Errorf("get all members: %w", err)
+				}
 
-		memberErr = panicguard.RunE(h.safeLogger(), "admin-stats-members", func() error {
-			var err error
-
-			members, err = h.repository.GetAllMembers(ctx)
-			if err != nil {
-				return fmt.Errorf("get all members: %w", err)
-			}
-
-			return nil
+				return nil
+			})
 		})
 	})
-	panicguard.Go(h.safeLogger(), "admin-stats-alarms", func() {
-		defer wg.Done()
+	wg.Go(func() {
+		panicguard.Run(h.safeLogger(), "admin-stats-alarms", func() {
+			alarmErr = panicguard.RunE(h.safeLogger(), "admin-stats-alarms", func() error {
+				var err error
 
-		alarmErr = panicguard.RunE(h.safeLogger(), "admin-stats-alarms", func() error {
-			var err error
+				alarmKeys, err = h.alarm.GetAllAlarmKeys(ctx)
+				if err != nil {
+					return fmt.Errorf("get all alarm keys: %w", err)
+				}
 
-			alarmKeys, err = h.alarm.GetAllAlarmKeys(ctx)
-			if err != nil {
-				return fmt.Errorf("get all alarm keys: %w", err)
-			}
-
-			return nil
+				return nil
+			})
 		})
 	})
 

@@ -39,8 +39,9 @@ func (r *durableRuntime) Start(ctx context.Context) {
 		r.inboxTracker.StartWorkers(r.inboxWorkers)
 
 		for range r.inboxWorkers {
-			r.wg.Add(1)
-			panicguard.Go(r.logger, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
+			r.wg.Go(func() {
+				panicguard.Run(r.logger, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
+			})
 		}
 	}
 
@@ -48,13 +49,15 @@ func (r *durableRuntime) Start(ctx context.Context) {
 		r.outboxTracker.StartWorkers(r.outboxWorkers)
 
 		for range r.outboxWorkers {
-			r.wg.Add(1)
-			panicguard.Go(r.logger, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
+			r.wg.Go(func() {
+				panicguard.Run(r.logger, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
+			})
 		}
 	}
 
-	r.wg.Add(1)
-	panicguard.Go(r.logger, "durable-maintenance", func() { r.runMaintenance(runCtx) })
+	r.wg.Go(func() {
+		panicguard.Run(r.logger, "durable-maintenance", func() { r.runMaintenance(runCtx) })
+	})
 }
 
 func (r *durableRuntime) Stop(ctx context.Context) error {

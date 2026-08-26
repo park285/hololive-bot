@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -42,7 +42,7 @@ func TestNoLegacyRuntimeSplitInternalImportsRemain(t *testing.T) {
 		return
 	}
 
-	sort.Strings(hits)
+	slices.Sort(hits)
 	t.Fatalf("legacy runtime split imports remain:\n%s", strings.Join(hits, "\n"))
 }
 

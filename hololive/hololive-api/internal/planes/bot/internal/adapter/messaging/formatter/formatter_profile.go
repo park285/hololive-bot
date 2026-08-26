@@ -276,17 +276,16 @@ func parseDisplayNameComponents(display string) []string {
 }
 
 func displayNameRawParts(display string) []string {
-	openIdx := strings.Index(display, "(")
-	closeIdx := strings.LastIndex(display, ")")
-
-	if openIdx == -1 || closeIdx == -1 || closeIdx <= openIdx {
+	beforeClose, afterClose, hasClose := strings.CutLast(display, ")")
+	beforeOpen, inside, hasOpen := strings.Cut(beforeClose, "(")
+	if !hasOpen || !hasClose {
 		return []string{display}
 	}
 
 	rawParts := make([]string, 0, 3)
-	appendDisplayNamePart(&rawParts, display[:openIdx])
-	appendDisplayNamePart(&rawParts, display[openIdx+1:closeIdx])
-	appendDisplayNamePart(&rawParts, display[closeIdx+1:])
+	appendDisplayNamePart(&rawParts, beforeOpen)
+	appendDisplayNamePart(&rawParts, inside)
+	appendDisplayNamePart(&rawParts, afterClose)
 
 	return rawParts
 }

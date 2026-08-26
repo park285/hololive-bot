@@ -131,18 +131,22 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 	s.done = done
 	s.state = SchedulerRunning
 	s.workerTracker.StartWorkers(s.config.WorkerCount)
-	s.wg.Add(s.config.WorkerCount + 1)
-	s.mu.Unlock()
 
 	for range s.config.WorkerCount {
-		panicguard.Go(s.logger, "youtube-collector-worker", func() {
-			s.worker(runCtx)
+		s.wg.Go(func() {
+			panicguard.Run(s.logger, "youtube-collector-worker", func() {
+				s.worker(runCtx)
+			})
 		})
 	}
 
-	panicguard.Go(s.logger, "youtube-collector-discovery", func() {
-		s.discover(runCtx)
+	s.wg.Go(func() {
+		panicguard.Run(s.logger, "youtube-collector-discovery", func() {
+			s.discover(runCtx)
+		})
 	})
+	s.mu.Unlock()
+
 	panicguard.Go(s.logger, "youtube-collector-join", func() {
 		s.join(done)
 	})
@@ -235,8 +239,6 @@ func (s *leaseScheduler) join(done chan struct{}) {
 }
 
 func (s *leaseScheduler) discover(ctx context.Context) {
-	defer s.wg.Done()
-
 	if err := panicguard.RunE(s.logger, "youtube-collector-discovery", func() error {
 		ticker := time.NewTicker(s.config.PollCadence)
 		defer ticker.Stop()

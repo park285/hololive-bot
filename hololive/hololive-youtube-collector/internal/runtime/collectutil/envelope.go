@@ -3,7 +3,7 @@ package collectutil
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -88,7 +88,7 @@ func UniqueSorted(values []string) []string {
 		result = append(result, trimmed)
 	}
 
-	sort.Strings(result)
+	slices.Sort(result)
 
 	return result
 }

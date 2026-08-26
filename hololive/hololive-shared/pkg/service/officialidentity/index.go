@@ -1,7 +1,7 @@
 package officialidentity
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -29,7 +29,7 @@ func Build(membersData domain.MemberDataProvider) Index {
 			resolved = append(resolved, channelID)
 		}
 
-		sort.Strings(resolved)
+		slices.Sort(resolved)
 
 		index[name] = resolved
 	}

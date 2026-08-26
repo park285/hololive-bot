@@ -32,14 +32,14 @@ type Aliases struct {
 }
 
 type Member struct {
-	ID              int        `json:"id,omitempty"`
+	ID              int        `json:"id"`
 	ChannelID       string     `json:"channelId"`
 	Name            string     `json:"name"`
 	Aliases         *Aliases   `json:"aliases,omitempty"`
 	NameJa          string     `json:"nameJa,omitempty"`
 	NameKo          string     `json:"nameKo,omitempty"`
 	ShortKoreanName string     `json:"shortKoreanName,omitempty"`
-	IsGraduated     bool       `json:"isGraduated,omitempty"`
+	IsGraduated     bool       `json:"isGraduated"`
 	Photo           string     `json:"photo,omitempty"`          // YouTube 프로필 이미지 URL (고화질)
 	Org             string     `json:"org,omitempty"`            // 그룹명 (Hololive, Nijisanji, VSPO, Independents)
 	Suborg          string     `json:"suborg,omitempty"`         // 서브그룹 (예: EN, JP, KR)

@@ -1,11 +1,12 @@
 package celebration
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -313,13 +314,11 @@ func selectBirthdayStreamSessionsWithinDailyCap(
 }
 
 func sortBirthdayStreamSessions(sessions []BirthdayStreamSession) {
-	sort.SliceStable(sessions, func(i, j int) bool {
-		a, b := birthdayStreamEffectiveStart(&sessions[i]), birthdayStreamEffectiveStart(&sessions[j])
-		if !a.Equal(b) {
-			return a.Before(b)
-		}
-
-		return sessions[i].VideoID < sessions[j].VideoID
+	slices.SortStableFunc(sessions, func(left, right BirthdayStreamSession) int {
+		return cmp.Or(
+			birthdayStreamEffectiveStart(&left).Compare(birthdayStreamEffectiveStart(&right)),
+			cmp.Compare(left.VideoID, right.VideoID),
+		)
 	})
 }
 

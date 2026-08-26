@@ -2,6 +2,7 @@ package privacylog
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
@@ -20,7 +21,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -270,8 +271,8 @@ func decodeScannerPackageGraph(t *testing.T, output []byte, moduleRoot string) s
 		t.Fatal("go list returned no bot-plane scanner packages")
 	}
 
-	sort.Slice(packages, func(i, j int) bool {
-		return packages[i].ImportPath < packages[j].ImportPath
+	slices.SortFunc(packages, func(left, right listedPackage) int {
+		return cmp.Compare(left.ImportPath, right.ImportPath)
 	})
 
 	return scannerPackageGraph{packages: packages, exports: exports}

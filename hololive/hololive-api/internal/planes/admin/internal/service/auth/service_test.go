@@ -148,9 +148,8 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 	t.Helper()
 
-	var ae *Error
-
-	if !stdErrors.As(err, &ae) {
+	ae, ok := stdErrors.AsType[*Error](err)
+	if !ok {
 		t.Fatalf("expected *auth.Error, got: %T (%v)", err, err)
 	}
 
@@ -644,12 +643,8 @@ func runConcurrentPasswordResets(
 		mu    sync.Mutex
 	)
 
-	wg.Add(workers)
-
 	for range workers {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			<-start
 
 			err := service.ResetPassword(ctx, resetToken, newPassword)
@@ -664,7 +659,7 @@ func runConcurrentPasswordResets(
 			}
 
 			failures = append(failures, err)
-		}()
+		})
 	}
 
 	close(start)

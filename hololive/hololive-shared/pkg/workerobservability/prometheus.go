@@ -4,7 +4,7 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
@@ -64,7 +64,7 @@ func metricFromSample(family workercontract.MetricFamily, sample workercontract.
 		labelNames = append(labelNames, name)
 	}
 
-	sort.Strings(labelNames)
+	slices.Sort(labelNames)
 
 	labelValues := make([]string, len(labelNames))
 	for index, name := range labelNames {

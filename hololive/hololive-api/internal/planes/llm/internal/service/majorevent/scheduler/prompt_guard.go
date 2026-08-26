@@ -56,9 +56,8 @@ func majorEventPromptAllowed(event *domain.MajorEvent, guard *promptguard.Guard,
 		return true, nil
 	}
 
-	var blocked *promptguard.BlockedError
-
-	if !errors.As(err, &blocked) {
+	blocked, ok := errors.AsType[*promptguard.BlockedError](err)
+	if !ok {
 		return false, fmt.Errorf("check major event: %w", err)
 	}
 

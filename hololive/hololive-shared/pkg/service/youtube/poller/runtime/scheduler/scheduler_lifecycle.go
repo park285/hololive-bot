@@ -55,6 +55,25 @@ func (s *Scheduler) Start(ctx context.Context) {
 	pollTimeout := s.pollTimeout
 	errorBackoffMin := s.errorBackoffMin
 	errorBackoffMax := s.errorBackoffMax
+
+	// 작업 채널
+	jobCh := make(chan *Job, workerCount*2)
+
+	// 워커 시작
+	for i := range workerCount {
+		s.wg.Go(func() {
+			panicguard.Run(s.logger, "youtube-poller-worker", func() {
+				s.worker(runCtx, jobCh, i, stopCh)
+			})
+		})
+	}
+
+	// 디스패처 시작
+	s.wg.Go(func() {
+		panicguard.Run(s.logger, "youtube-poller-dispatcher", func() {
+			s.dispatcher(runCtx, jobCh, stopCh)
+		})
+	})
 	s.mu.Unlock()
 
 	s.logger.Info("Scheduler starting",
@@ -63,23 +82,6 @@ func (s *Scheduler) Start(ctx context.Context) {
 		"poll_timeout", pollTimeout,
 		"error_backoff_min", errorBackoffMin,
 		"error_backoff_max", errorBackoffMax)
-
-	// 작업 채널
-	jobCh := make(chan *Job, workerCount*2)
-
-	// 워커 시작
-	for i := range workerCount {
-		s.wg.Add(1)
-		panicguard.Go(s.logger, "youtube-poller-worker", func() {
-			s.worker(runCtx, jobCh, i, stopCh)
-		})
-	}
-
-	// 디스패처 시작
-	s.wg.Add(1)
-	panicguard.Go(s.logger, "youtube-poller-dispatcher", func() {
-		s.dispatcher(runCtx, jobCh, stopCh)
-	})
 }
 
 func (s *Scheduler) Stop() {

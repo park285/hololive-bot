@@ -472,9 +472,8 @@ func assertHandleRunErrorCase(t *testing.T, test handleRunErrorCase) {
 		t.Fatalf("fatal reports = %d, want 1", len(fatal))
 	}
 
-	var runtimeErr *FatalRuntimeError
-
-	if !errors.As(fatal[0], &runtimeErr) || runtimeErr.Phase != "collection" {
+	runtimeErr, ok := errors.AsType[*FatalRuntimeError](fatal[0])
+	if !ok || runtimeErr.Phase != "collection" {
 		t.Fatalf("fatal report = %#v, want collection phase FatalRuntimeError", fatal[0])
 	}
 
@@ -674,9 +673,8 @@ func assertSupervisionFatal(t *testing.T, fatal []error, cause error, wantFatal 
 		t.Fatalf("fatal reports = %d, want 1", len(fatal))
 	}
 
-	var runtimeErr *FatalRuntimeError
-
-	if !errors.As(fatal[0], &runtimeErr) || runtimeErr.Phase != "lease_supervision" {
+	runtimeErr, ok := errors.AsType[*FatalRuntimeError](fatal[0])
+	if !ok || runtimeErr.Phase != "lease_supervision" {
 		t.Fatalf("fatal report = %#v, want lease_supervision FatalRuntimeError", fatal[0])
 	}
 

@@ -133,14 +133,10 @@ func TestTemplateRepository_Upsert_RecoversFromDuplicateKey(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(2)
-
 	results := make(chan error, 2)
 
 	for _, body := range []string{"racing body", "resolved body"} {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			tmpl, err := repo.Upsert(ctx, key, nil, body)
 			if err != nil {
 				results <- err
@@ -153,7 +149,7 @@ func TestTemplateRepository_Upsert_RecoversFromDuplicateKey(t *testing.T) {
 			}
 
 			results <- nil
-		}()
+		})
 	}
 
 	wg.Wait()

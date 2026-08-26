@@ -1,7 +1,7 @@
 package batchrepo
 
 import (
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -43,7 +43,7 @@ func TestBuildCommunityShortsAlarmStatesReturnsSortedRows(t *testing.T) {
 	}
 
 	sortedKeys := append([]string(nil), actualKeys...)
-	sort.Strings(sortedKeys)
+	slices.Sort(sortedKeys)
 	require.Equal(t, sortedKeys, actualKeys)
 	require.Equal(t, []string{
 		string(domain.OutboxKindCommunityPost) + "\x00" + normalizeContentID(domain.OutboxKindCommunityPost, "post-c"),
@@ -115,7 +115,7 @@ func TestNotificationChunksByKindDeduplicatesSameKindContentID(t *testing.T) {
 
 func sortedCopy(values []string) []string {
 	cloned := append([]string(nil), values...)
-	sort.Strings(cloned)
+	slices.Sort(cloned)
 
 	return cloned
 }

@@ -3,7 +3,7 @@ package sourceobservation
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -18,8 +18,8 @@ func canonicalObjectMembers(values map[string]any) []canonicalJSONMember {
 		})
 	}
 
-	sort.Slice(members, func(i, j int) bool {
-		return lessUTF16(members[i].order, members[j].order)
+	slices.SortFunc(members, func(left, right canonicalJSONMember) int {
+		return slices.Compare(left.order, right.order)
 	})
 
 	return members
@@ -83,17 +83,6 @@ func appendJSONControlOrRune(destination []byte, character rune) []byte {
 	}
 
 	return utf8.AppendRune(destination, character)
-}
-
-func lessUTF16(left, right []uint16) bool {
-	limit := min(len(left), len(right))
-	for index := range limit {
-		if left[index] != right[index] {
-			return left[index] < right[index]
-		}
-	}
-
-	return len(left) < len(right)
 }
 
 func canonicalizeIntegerJSONNumber(raw string) (string, error) {

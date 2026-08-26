@@ -33,7 +33,7 @@ type YouTubeChannelStatsSnapshot struct {
 	SubscriberCount int64     `json:"subscriber_count"`
 	ViewCount       int64     `json:"view_count"`
 	VideoCount      int64     `json:"video_count"`
-	JoinedDate      int64     `json:"joined_date,omitempty"` // Unix 타임스탬프
+	JoinedDate      int64     `json:"joined_date"` // Unix 타임스탬프
 	Description     string    `db:"description" json:"description,omitempty"`
 	Country         string    `db:"country" json:"country,omitempty"`
 	Handle          string    `db:"handle" json:"handle,omitempty"`
@@ -64,7 +64,7 @@ type YouTubeVideo struct {
 	PublishedAt   *time.Time     `json:"published_at,omitempty"`
 	IsShort       bool           `db:"is_short" json:"is_short"`
 	IsLiveReplay  bool           `db:"is_live_replay" json:"is_live_replay"`
-	ViewCount     int64          `json:"view_count,omitempty"`
+	ViewCount     int64          `json:"view_count"`
 	FirstSeenAt   time.Time      `db:"first_seen_at" json:"first_seen_at"`
 	LastSeenAt    time.Time      `db:"last_seen_at" json:"last_seen_at"`
 }
@@ -81,8 +81,8 @@ type YouTubeCommunityPost struct {
 	ContentText   string         `db:"content_text" json:"content_text,omitempty"`
 	PublishedText string         `db:"published_text" json:"published_text,omitempty"`
 	PublishedAt   *time.Time     `json:"published_at,omitempty"`
-	LikeCount     int64          `json:"like_count,omitempty"`
-	CommentCount  int64          `json:"comment_count,omitempty"`
+	LikeCount     int64          `json:"like_count"`
+	CommentCount  int64          `json:"comment_count"`
 	Images        ThumbnailsJSON `db:"images" json:"images,omitempty"`
 	AttachedVideo string         `db:"attached_video" json:"attached_video,omitempty"`
 	FirstSeenAt   time.Time      `db:"first_seen_at" json:"first_seen_at"`
@@ -345,8 +345,8 @@ type YouTubeStreamStats struct {
 	ChannelID            string     `db:"channel_id" json:"channel_id"`
 	StartedAt            *time.Time `json:"started_at,omitempty"`
 	EndedAt              *time.Time `db:"ended_at" json:"ended_at,omitempty"`
-	MaxConcurrentViewers int        `json:"max_concurrent_viewers,omitempty"`
-	AvgConcurrentViewers int        `json:"avg_concurrent_viewers,omitempty"`
+	MaxConcurrentViewers int        `json:"max_concurrent_viewers"`
+	AvgConcurrentViewers int        `json:"avg_concurrent_viewers"`
 	SampleCount          int        `db:"sample_count" json:"sample_count"`
 	UpdatedAt            time.Time  `db:"updated_at" json:"updated_at"`
 }

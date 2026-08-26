@@ -78,6 +78,11 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 
 	r.init()
 
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	r.mu.Lock()
 
 	if r.started {
@@ -89,17 +94,7 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 	stopCh := r.stopCh
 
 	r.started = true
-	r.wg.Add(1)
-	r.mu.Unlock()
-
-	logger := config.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-
-	go func(stopCh chan struct{}) {
-		defer r.wg.Done()
-
+	r.wg.Go(func() {
 		var reason StopReason
 
 		panicguard.Run(logger, "schedulerkit-runtime", func() {
@@ -112,7 +107,8 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 				config.OnStop(reason)
 			})
 		}
-	}(stopCh)
+	})
+	r.mu.Unlock()
 }
 
 func (r *Runtime) Stop() {

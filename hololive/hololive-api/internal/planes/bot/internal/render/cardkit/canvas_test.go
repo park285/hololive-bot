@@ -47,7 +47,7 @@ func BenchmarkDownscaleToWidth(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_ = downscaleToWidth(src, 1024)
 	}
 }
@@ -60,7 +60,7 @@ func BenchmarkDownscaleCatmullRomBaseline(b *testing.B) {
 
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		dst := image.NewRGBA(image.Rect(0, 0, 1024, 3200*1024/2480))
 		xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Src, nil)
 	}

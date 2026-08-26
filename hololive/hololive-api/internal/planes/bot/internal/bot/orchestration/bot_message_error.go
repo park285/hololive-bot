@@ -88,9 +88,7 @@ func (b *Bot) getErrorMessage(err error) string {
 		return ""
 	}
 
-	var serviceErr *appErrors.ServiceError
-
-	if errors.As(err, &serviceErr) && serviceErr.Service == serviceNameIris {
+	if serviceErr, ok := errors.AsType[*appErrors.ServiceError](err); ok && serviceErr.Service == serviceNameIris {
 		return messaging.ErrIrisConnectionFailed
 	}
 

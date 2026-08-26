@@ -24,7 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -109,7 +109,7 @@ func (r *Repository) GetRoomMembers(ctx context.Context, roomID string) ([]strin
 		return nil, fmt.Errorf("iterate room members: %w", rowsErr)
 	}
 
-	sort.Strings(members)
+	slices.Sort(members)
 
 	return members, nil
 }

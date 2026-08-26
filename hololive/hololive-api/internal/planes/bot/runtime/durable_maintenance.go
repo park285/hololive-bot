@@ -13,8 +13,6 @@ import (
 )
 
 func (r *durableRuntime) runMaintenance(ctx context.Context) {
-	defer r.wg.Done()
-
 	for waitDurable(ctx, r.maintenanceEvery) {
 		r.maintainDurability(ctx)
 	}
@@ -115,9 +113,8 @@ func logDurableError(logger *slog.Logger, message string, err error) {
 }
 
 func irisHTTPStatus(err error) (int, bool) {
-	var httpErr *iris.HTTPError
-
-	if !errors.As(err, &httpErr) {
+	httpErr, ok := errors.AsType[*iris.HTTPError](err)
+	if !ok {
 		return 0, false
 	}
 

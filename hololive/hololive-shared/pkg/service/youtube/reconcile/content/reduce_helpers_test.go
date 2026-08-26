@@ -2,7 +2,7 @@ package content
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -183,7 +183,7 @@ func snapshotDecision(decision *Decision) string {
 		))
 	}
 
-	sort.Strings(videos)
+	slices.Sort(videos)
 
 	return strings.Join(videos, ";")
 }
@@ -280,10 +280,10 @@ func assertNotifications(t *testing.T, decision *Decision, videoIDs ...string) {
 		got = append(got, decision.Notifications[i].ContentID)
 	}
 
-	sort.Strings(got)
+	slices.Sort(got)
 
 	want := append([]string{}, videoIDs...)
-	sort.Strings(want)
+	slices.Sort(want)
 
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("notifications = %v, want %v", got, want)

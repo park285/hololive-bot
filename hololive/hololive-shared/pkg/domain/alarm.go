@@ -142,7 +142,7 @@ func (a AlarmTypes) Contains(t AlarmType) bool {
 }
 
 type Alarm struct {
-	ID         int        `json:"id,omitempty"`          // DB 기본 키
+	ID         int        `json:"id"`                    // DB 기본 키
 	RoomID     string     `json:"room_id"`               // 카카오톡 방 ID
 	UserID     string     `json:"user_id"`               // 카카오톡 사용자 ID
 	ChannelID  string     `json:"channel_id"`            // YouTube 채널 ID
@@ -225,9 +225,9 @@ func validateLiveDispatchAlarmType(alarmType AlarmType) error {
 }
 
 type AlarmQueueEnvelope struct {
-	DispatchOutboxID  int64                          `json:"dispatch_outbox_id,omitempty"`
+	DispatchOutboxID  int64                          `json:"dispatch_outbox_id"`
 	DispatchGroupKey  string                         `json:"dispatch_group_key,omitempty"`
-	SendUnitID        int64                          `json:"send_unit_id,omitempty"`
+	SendUnitID        int64                          `json:"send_unit_id"`
 	ClientRequestID   string                         `json:"client_request_id,omitempty"`
 	Notification      AlarmNotification              `json:"notification"`
 	SourceKind        AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
@@ -244,8 +244,8 @@ type AlarmQueueEnvelope struct {
 }
 
 type AlarmQueueRetryMetadata struct {
-	Attempt       int    `json:"attempt,omitempty"`
-	RetryAfterMS  int64  `json:"retry_after_ms,omitempty"`
+	Attempt       int    `json:"attempt"`
+	RetryAfterMS  int64  `json:"retry_after_ms"`
 	NextVisibleAt string `json:"next_visible_at,omitempty"`
 	LastError     string `json:"last_error,omitempty"`
 	LastErrorCode string `json:"last_error_code,omitempty"`
@@ -263,7 +263,7 @@ type alarmQueueEnvelopeNotificationWire struct {
 }
 
 type alarmQueueEnvelopeWire struct {
-	DispatchOutboxID int64                              `json:"dispatch_outbox_id,omitempty"`
+	DispatchOutboxID int64                              `json:"dispatch_outbox_id"`
 	Notification     alarmQueueEnvelopeNotificationWire `json:"notification"`
 	SourceKind       AlarmDispatchSourceKind            `json:"source_kind,omitempty"`
 	YouTubeOutbox    *YouTubeOutboxDispatchPayload      `json:"youtube_outbox,omitempty"`

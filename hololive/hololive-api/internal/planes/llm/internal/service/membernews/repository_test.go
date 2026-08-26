@@ -24,7 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -120,8 +120,8 @@ func (f *fakeMemberNewsPool) Query(_ context.Context, sql string, _ ...any) (row
 		items = append(items, sub)
 	}
 
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].createdAt.Before(items[j].createdAt)
+	slices.SortFunc(items, func(left, right *fakeSubscription) int {
+		return left.createdAt.Compare(right.createdAt)
 	})
 
 	rows := make([][]any, 0, len(items))

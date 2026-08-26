@@ -82,9 +82,8 @@ func TestListContainersMaps5xxToInternal(t *testing.T) {
 		t.Fatal("ListContainers error = nil, want error for upstream 500")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok {
 		t.Fatalf("error type = %T, want httpx.AppError", err)
 	}
 
@@ -134,9 +133,8 @@ func TestRestartContainerRejectsUnmanagedBeforeRequest(t *testing.T) {
 		t.Fatal("RestartContainer on unmanaged name error = nil, want 404 gate")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusNotFound {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusNotFound {
 		t.Fatalf("error = %v (%T), want httpx.AppError 404", err, err)
 	}
 
@@ -158,9 +156,8 @@ func TestStopContainerRejectsInfraBeforeRequest(t *testing.T) {
 		t.Fatal("StopContainer on infra name error = nil, want 403 gate")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusForbidden {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusForbidden {
 		t.Fatalf("error = %v (%T), want httpx.AppError 403", err, err)
 	}
 
@@ -280,9 +277,8 @@ func TestActionTimesOutOnHungDocker(t *testing.T) {
 		t.Fatal("RestartContainer error = nil, want timeout on hung docker")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusServiceUnavailable {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusServiceUnavailable {
 		t.Fatalf("error = %v (%T), want httpx.AppError 503", err, err)
 	}
 }
@@ -297,9 +293,8 @@ func TestRestartContainerMaps404FromDocker(t *testing.T) {
 		t.Fatal("RestartContainer error = nil, want 404 mapped from docker")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusNotFound {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusNotFound {
 		t.Fatalf("error = %v (%T), want httpx.AppError 404", err, err)
 	}
 }
@@ -314,9 +309,8 @@ func TestRestartContainerMaps5xxToInternal(t *testing.T) {
 		t.Fatal("RestartContainer error = nil, want error for docker 5xx")
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusInternalServerError {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusInternalServerError {
 		t.Fatalf("error = %v (%T), want httpx.AppError 500", err, err)
 	}
 }

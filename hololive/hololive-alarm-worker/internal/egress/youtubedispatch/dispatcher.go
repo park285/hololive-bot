@@ -195,16 +195,13 @@ func (d *Dispatcher) startBackgroundLoop(
 	name string,
 	loop func(context.Context),
 ) {
-	if waitGroup != nil {
-		waitGroup.Add(1)
+	if waitGroup == nil {
+		panicguard.Go(d.logger, name, func() { loop(ctx) })
+		return
 	}
 
-	panicguard.Go(d.logger, name, func() {
-		if waitGroup != nil {
-			defer waitGroup.Done()
-		}
-
-		loop(ctx)
+	waitGroup.Go(func() {
+		panicguard.Run(d.logger, name, func() { loop(ctx) })
 	})
 }
 

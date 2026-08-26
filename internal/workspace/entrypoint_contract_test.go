@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -55,7 +55,7 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 		manifestPaths = append(manifestPaths, filepath.ToSlash(contract.Path))
 	}
 
-	sort.Strings(manifestPaths)
+	slices.Sort(manifestPaths)
 
 	discoveredPaths := make([]string, 0, len(manifestPaths))
 
@@ -84,7 +84,7 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 		t.Fatalf("command entrypoint scan 실패: %v", err)
 	}
 
-	sort.Strings(discoveredPaths)
+	slices.Sort(discoveredPaths)
 
 	if len(manifestPaths) != len(discoveredPaths) {
 		t.Fatalf("manifest count=%d discovered count=%d\nmanifest=%v\ndiscovered=%v", len(manifestPaths), len(discoveredPaths), manifestPaths, discoveredPaths)

@@ -5,7 +5,7 @@ import (
 	stdErrors "errors"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 )
@@ -23,7 +23,7 @@ func (s *Service) GetACLStatus() (enabled bool, mode ACLMode, rooms []string) {
 		rooms = append(rooms, room)
 	}
 
-	sort.Strings(rooms)
+	slices.Sort(rooms)
 
 	return s.enabled, s.mode, rooms
 }

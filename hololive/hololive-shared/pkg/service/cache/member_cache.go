@@ -145,8 +145,9 @@ func (c *Service) GetMemberChannelIDs(ctx context.Context, memberName string) ([
 }
 
 func memberNameFromField(field string) string {
-	if idx := strings.LastIndex(field, ":"); idx > 0 {
-		return field[:idx]
+	name, _, found := strings.CutLast(field, ":")
+	if found && name != "" {
+		return name
 	}
 
 	return field

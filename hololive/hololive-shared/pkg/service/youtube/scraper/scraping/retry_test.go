@@ -919,15 +919,11 @@ func TestFetchPage_ConcurrentTransientErrors_NoAmplification(t *testing.T) {
 
 	errCh := make(chan error, 2)
 
-	wg.Add(2)
-
 	for range 2 {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_, err := client.fetchPage(ctx, server.URL)
 			errCh <- err
-		}()
+		})
 	}
 
 	wg.Wait()

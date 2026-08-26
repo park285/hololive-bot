@@ -262,8 +262,6 @@ func newDurableQueueSampler(
 }
 
 func (r *durableRuntime) runInboxWorker(ctx context.Context) {
-	defer r.wg.Done()
-
 	idleDelay := r.inboxPollEvery
 
 	for ctx.Err() == nil {

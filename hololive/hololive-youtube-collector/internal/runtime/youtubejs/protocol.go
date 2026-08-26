@@ -74,7 +74,7 @@ const (
 
 type RPCRetryHint struct {
 	Kind    RPCRetryKind `json:"kind"`
-	AfterMS int64        `json:"after_ms,omitempty"`
+	AfterMS int64        `json:"after_ms"`
 	At      string       `json:"at,omitempty"`
 }
 
@@ -217,8 +217,8 @@ func jsonRuneBytes(r rune) int {
 type CommunityRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
 	ChannelID               string `json:"channel_id"`
-	MaxResults              int    `json:"max_results,omitempty"`
-	MaxPages                int    `json:"max_pages,omitempty"`
+	MaxResults              int    `json:"max_results"`
+	MaxPages                int    `json:"max_pages"`
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
@@ -227,7 +227,7 @@ type CommunityResult struct {
 	Pagination
 
 	Posts      []*parser.CommunityPost `json:"posts"`
-	MissingTab bool                    `json:"missing_tab,omitempty"`
+	MissingTab bool                    `json:"missing_tab"`
 }
 
 func (r *CommunityResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -237,8 +237,8 @@ type ContentRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
 	ChannelID               string `json:"channel_id"`
 	Kind                    string `json:"kind"`
-	MaxResults              int    `json:"max_results,omitempty"`
-	MaxPages                int    `json:"max_pages,omitempty"`
+	MaxResults              int    `json:"max_results"`
+	MaxPages                int    `json:"max_pages"`
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
@@ -256,7 +256,7 @@ type ContentResult struct {
 	Pagination
 
 	Items      []ContentItem `json:"items"`
-	MissingTab bool          `json:"missing_tab,omitempty"`
+	MissingTab bool          `json:"missing_tab"`
 }
 
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
@@ -265,7 +265,7 @@ func (r *ContentResult) pagination() Pagination         { return r.Pagination }
 type ChannelRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
 	ChannelID               string `json:"channel_id"`
-	MaxPages                int    `json:"max_pages,omitempty"`
+	MaxPages                int    `json:"max_pages"`
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
 
@@ -306,7 +306,7 @@ type ChannelResult struct {
 	Stats        ChannelStatsItem      `json:"stats"`
 	Profile      ChannelProfileItem    `json:"profile"`
 	Photo        []ChannelPhotoVariant `json:"photo"`
-	MissingTab   bool                  `json:"missing_tab,omitempty"`
+	MissingTab   bool                  `json:"missing_tab"`
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }

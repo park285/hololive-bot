@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -125,7 +125,7 @@ func updateDeliveryTestRowsWhere(pool *pgxpool.Pool, model any, values map[strin
 		keys = append(keys, key)
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	assignments := make([]string, 0, len(keys))
 	queryArgs := make([]any, 0, len(values)+len(args))

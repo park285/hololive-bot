@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -272,7 +272,7 @@ func (p *YouTubeOutboxDispatchPayload) canonicalIdentityParts() ([]string, error
 		parts = append(parts, contentID)
 	}
 
-	sort.Strings(parts)
+	slices.Sort(parts)
 
 	return parts, nil
 }

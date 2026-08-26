@@ -48,9 +48,8 @@ func TestProxyPreservesTransportCancellationCause(t *testing.T) {
 		t.Fatalf("Proxy() error = %v, want context.Canceled cause", err)
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusBadGateway {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusBadGateway {
 		t.Fatalf("Proxy() error = %v (%T), want 502 AppError", err, err)
 	}
 
@@ -76,9 +75,8 @@ func TestProxyRejectsOversizedResponseAndPreservesCause(t *testing.T) {
 		t.Fatalf("Proxy() error = %v, want httpbody.ErrTooLarge cause", err)
 	}
 
-	var appErr *httpx.AppError
-
-	if !errors.As(err, &appErr) || appErr.Status != http.StatusBadGateway {
+	appErr, ok := errors.AsType[*httpx.AppError](err)
+	if !ok || appErr.Status != http.StatusBadGateway {
 		t.Fatalf("Proxy() error = %v (%T), want 502 AppError", err, err)
 	}
 }
@@ -129,9 +127,8 @@ func TestProxyDrains5xxBodyForKeepAliveReuse(t *testing.T) {
 	for range 2 {
 		_, proxyErr := client.Proxy(t.Context(), http.MethodGet, "/status", nil, nil)
 
-		var appErr *httpx.AppError
-
-		if !errors.As(proxyErr, &appErr) || appErr.Status != http.StatusBadGateway {
+		appErr, ok := errors.AsType[*httpx.AppError](proxyErr)
+		if !ok || appErr.Status != http.StatusBadGateway {
 			t.Fatalf("Proxy() error = %v, want 502", proxyErr)
 		}
 	}

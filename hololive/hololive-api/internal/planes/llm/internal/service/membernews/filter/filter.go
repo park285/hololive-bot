@@ -21,7 +21,7 @@
 package filter
 
 import (
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
@@ -60,9 +60,7 @@ func FilterCandidates(
 		}
 	}
 
-	sort.SliceStable(result, func(i, j int) bool {
-		return lessFilteredCandidate(&result[i], &result[j])
-	})
+	slices.SortStableFunc(result, compareFilteredCandidate)
 
 	return result
 }

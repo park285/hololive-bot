@@ -952,8 +952,8 @@ func TestPgxRepositoryRouteSendingFailures_DoesNotTouchTerminalRows(t *testing.T
 		{ID: sentID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "ignored", TargetStatus: StatusRetry},
 		{ID: quarantinedID, AttemptCount: 1, NextAttemptAt: nextAttemptAt, Error: "ignored", TargetStatus: StatusRetry},
 	}, workerID)
-	var partialErr *PartialTransitionError
-	require.True(t, errors.As(err, &partialErr), "terminal rows must surface PartialTransitionError, got %v", err)
+	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+	require.True(t, partialOK, "terminal rows must surface PartialTransitionError, got %v", err)
 	require.Equal(t, int64(0), partialErr.Updated)
 	require.ElementsMatch(t, []int64{sentID, quarantinedID}, partialErr.UnappliedIDs)
 
@@ -1000,7 +1000,7 @@ func TestPgxRepositoryRouteSendingFailures_ExpiredLeaseStillTransitions(t *testi
 	require.NoError(t, err)
 
 	var statusBeforeRetry string
-	var expiresAt interface{}
+	var expiresAt any
 	require.NoError(t, pool.QueryRow(ctx, `
 		SELECT status, lock_expires_at < NOW()
 		FROM alarm_dispatch_deliveries WHERE id=$1`, id,
@@ -1099,8 +1099,8 @@ func TestPgxRepositoryMarkSent_RequiresOwner(t *testing.T) {
 	id := claimed[0].ID
 	require.NoError(t, repository.MarkSending(ctx, []int64{id}, "worker-owner", time.Minute))
 	err = repository.MarkSent(ctx, []int64{id}, "worker-intruder")
-	var partialErr *PartialTransitionError
-	require.True(t, errors.As(err, &partialErr), "non-owner MarkSent must return PartialTransitionError")
+	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+	require.True(t, partialOK, "non-owner MarkSent must return PartialTransitionError")
 	require.Equal(t, int64(0), partialErr.Updated)
 	require.Equal(t, int64(1), partialErr.Expected)
 
@@ -1143,8 +1143,8 @@ func TestPgxRepositoryMarkSent_AfterStaleSendingQuarantineReturnsPartialError(t 
 	require.Equal(t, 1, quarantined)
 
 	err = repository.MarkSent(ctx, []int64{id}, workerID)
-	var partialErr *PartialTransitionError
-	require.True(t, errors.As(err, &partialErr), "post-quarantine MarkSent must return PartialTransitionError")
+	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+	require.True(t, partialOK, "post-quarantine MarkSent must return PartialTransitionError")
 	require.Equal(t, int64(0), partialErr.Updated)
 	require.Equal(t, int64(1), partialErr.Expected)
 
@@ -1414,8 +1414,8 @@ func TestPgxRepositoryRouteFailures_AttemptCASRejectsStaleAndSkippedInputs(t *te
 		err := repository.RouteFailures(ctx, []FailureUpdate{
 			{ID: id, AttemptCount: badAttempt, NextAttemptAt: nextAttemptAt, Error: "cas mismatch", TargetStatus: StatusRetry},
 		}, workerID)
-		var partialErr *PartialTransitionError
-		require.True(t, errors.As(err, &partialErr), "attempt %d must fail CAS, got %v", badAttempt, err)
+		partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+		require.True(t, partialOK, "attempt %d must fail CAS, got %v", badAttempt, err)
 		require.Equal(t, []int64{id}, partialErr.UnappliedIDs)
 
 		var status string
@@ -1500,8 +1500,8 @@ func TestPgxRepositoryRouteFailures_PartialBatchAppliesMatchingRowsOnly(t *testi
 		{ID: staleID, AttemptCount: 3, NextAttemptAt: nextAttemptAt, Error: "stale", TargetStatus: StatusDLQ},
 	}, workerID)
 
-	var partialErr *PartialTransitionError
-	require.True(t, errors.As(err, &partialErr), "mixed CAS batch must return PartialTransitionError, got %v", err)
+	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+	require.True(t, partialOK, "mixed CAS batch must return PartialTransitionError, got %v", err)
 	require.Equal(t, int64(1), partialErr.Updated)
 	require.Equal(t, []int64{staleID}, partialErr.UnappliedIDs)
 
@@ -1527,8 +1527,8 @@ func TestPgxRepositoryRouteFailures_ExpiredLeaseRejected(t *testing.T) {
 	err = repository.RouteFailures(ctx, []FailureUpdate{
 		{ID: id, AttemptCount: 1, NextAttemptAt: time.Now().UTC(), Error: "expired", TargetStatus: StatusRetry},
 	}, workerID)
-	var partialErr *PartialTransitionError
-	require.True(t, errors.As(err, &partialErr), "pre-send variant must reject expired lease, got %v", err)
+	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+	require.True(t, partialOK, "pre-send variant must reject expired lease, got %v", err)
 	require.Equal(t, []int64{id}, partialErr.UnappliedIDs)
 
 	var status string
@@ -1578,8 +1578,8 @@ func TestPgxRepositoryRouteSendingFailures_QuarantinePreemptedRowNotOverwritten(
 	err = repository.RouteSendingFailures(ctx, []FailureUpdate{
 		{ID: id, AttemptCount: 1, NextAttemptAt: time.Now().UTC(), Error: "must not overwrite", TargetStatus: StatusRetry},
 	}, workerID)
-	var partialErr *PartialTransitionError
-	require.True(t, errors.As(err, &partialErr), "quarantine-preempted row must surface PartialTransitionError, got %v", err)
+	partialErr, partialOK := errors.AsType[*PartialTransitionError](err)
+	require.True(t, partialOK, "quarantine-preempted row must surface PartialTransitionError, got %v", err)
 	require.Equal(t, []int64{id}, partialErr.UnappliedIDs)
 
 	var status, lastError, lastErrorCode string

@@ -63,9 +63,8 @@ func FilterSearchResults(results []model.SearchResult, guard *promptguard.Guard,
 			continue
 		}
 
-		var blocked *promptguard.BlockedError
-
-		if !errors.As(err, &blocked) {
+		blocked, ok := errors.AsType[*promptguard.BlockedError](err)
+		if !ok {
 			return nil, fmt.Errorf("check search result: %w", err)
 		}
 

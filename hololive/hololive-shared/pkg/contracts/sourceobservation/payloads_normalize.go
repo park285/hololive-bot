@@ -1,9 +1,10 @@
 package sourceobservation
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -75,7 +76,9 @@ func normalizeVideos(channelID string, videos *[]VideoListItemV1) error {
 		}
 	}
 
-	sort.Slice(*videos, func(i, j int) bool { return (*videos)[i].VideoID < (*videos)[j].VideoID })
+	slices.SortFunc(*videos, func(left, right VideoListItemV1) int {
+		return cmp.Compare(left.VideoID, right.VideoID)
+	})
 
 	return nil
 }
@@ -153,7 +156,9 @@ func (p *LiveSnapshotV1) normalizeAndValidate(subject string) error {
 		}
 	}
 
-	sort.Slice(p.Sessions, func(i, j int) bool { return p.Sessions[i].VideoID < p.Sessions[j].VideoID })
+	slices.SortFunc(p.Sessions, func(left, right LiveSessionV1) int {
+		return cmp.Compare(left.VideoID, right.VideoID)
+	})
 
 	return nil
 }

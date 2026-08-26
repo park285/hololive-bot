@@ -164,13 +164,12 @@ func (h *AuthHandler) requireAuthService(c *gin.Context) bool {
 }
 
 func mapAuthErrorToHTTP(err error) (status int, code authsvc.ErrorCode) {
-	var ae *authsvc.Error
-
-	if !stdErrors.As(err, &ae) {
+	ae, ok := stdErrors.AsType[*authsvc.Error](err)
+	if !ok {
 		return http.StatusInternalServerError, authsvc.CodeInternal
 	}
 
-	status, ok := authErrorHTTPStatus[ae.Code]
+	status, ok = authErrorHTTPStatus[ae.Code]
 	if !ok {
 		return http.StatusInternalServerError, authsvc.CodeInternal
 	}

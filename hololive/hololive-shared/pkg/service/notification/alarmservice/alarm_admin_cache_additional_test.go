@@ -24,7 +24,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -117,7 +117,7 @@ func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
 
 	rooms, err := as.GetDistinctRooms(ctx)
 	require.NoError(t, err)
-	sort.Strings(rooms)
+	slices.Sort(rooms)
 	assert.Equal(t, []string{testRoomID, "room-2"}, rooms)
 
 	alarms, err := as.GetAllAlarmKeys(ctx)

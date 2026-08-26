@@ -181,23 +181,18 @@ func deliverySendOutcomeUnknown(err error) bool {
 }
 
 func deliverySendNeverLeftClient(err error) bool {
-	var opErr *net.OpError
-
-	if errors.As(err, &opErr) && opErr != nil && opErr.Op == "dial" {
+	if opErr, ok := errors.AsType[*net.OpError](err); ok && opErr != nil && opErr.Op == "dial" {
 		return true
 	}
 
-	var dnsErr *net.DNSError
-
-	return errors.As(err, &dnsErr)
+	_, ok := errors.AsType[*net.DNSError](err)
+	return ok
 }
 
 const maxDeliveryRetryAfter = 5 * time.Minute
 
 func deliveryRetryAfter(err error) time.Duration {
-	var httpErr *iris.HTTPError
-
-	if errors.As(err, &httpErr) && httpErr != nil && httpErr.RetryAfter > 0 {
+	if httpErr, ok := errors.AsType[*iris.HTTPError](err); ok && httpErr != nil && httpErr.RetryAfter > 0 {
 		if httpErr.RetryAfter > maxDeliveryRetryAfter {
 			observeDeliveryRetryAfterClamped()
 

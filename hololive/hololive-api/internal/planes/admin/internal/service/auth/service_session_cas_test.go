@@ -67,12 +67,8 @@ func TestRefresh_ConcurrentRotationSingleWinner(t *testing.T) {
 		unauth    int
 	)
 
-	wg.Add(goroutines)
-
 	for range goroutines {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_, err := service.Refresh(t.Context(), token)
 
 			mu.Lock()
@@ -84,12 +80,10 @@ func TestRefresh_ConcurrentRotationSingleWinner(t *testing.T) {
 				return
 			}
 
-			var ae *Error
-
-			if stdErrors.As(err, &ae) && ae.Code == CodeUnauthorized {
+			if ae, ok := stdErrors.AsType[*Error](err); ok && ae.Code == CodeUnauthorized {
 				unauth++
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

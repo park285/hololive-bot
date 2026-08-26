@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -616,7 +615,7 @@ func (s *scannedSources) loadTypes() error {
 		paths = append(paths, importPath)
 	}
 
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	var loadErr error
 

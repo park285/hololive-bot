@@ -79,9 +79,7 @@ func IsTimeoutError(err error) bool {
 		return true
 	}
 
-	var netErr net.Error
-
-	if stdErrors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := stdErrors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true
 	}
 

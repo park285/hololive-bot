@@ -123,8 +123,9 @@ func (ys *serviceImpl) storeChannelNameMap(memberMap map[string]string) {
 }
 
 func memberNameFromCacheKey(key string) string {
-	if idx := strings.LastIndex(key, ":"); idx > 0 {
-		return key[:idx]
+	name, _, found := strings.CutLast(key, ":")
+	if found && name != "" {
+		return name
 	}
 
 	return key

@@ -252,9 +252,8 @@ func TestGetLiveStatus_NotFound(t *testing.T) {
 		t.Fatal("Expected error for 404 response")
 	}
 
-	var apiErr *errors.APIError
-
-	if !stdErrors.As(err, &apiErr) {
+	apiErr, ok := stdErrors.AsType[*errors.APIError](err)
+	if !ok {
 		t.Fatalf("expected APIError, got %T: %v", err, err)
 	}
 
@@ -1073,9 +1072,8 @@ func TestGetLives_HTTPError_Normalized(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	var apiErr *errors.APIError
-
-	if !stdErrors.As(err, &apiErr) {
+	apiErr, ok := stdErrors.AsType[*errors.APIError](err)
+	if !ok {
 		t.Fatalf("expected APIError, got %T: %v", err, err)
 	}
 
@@ -1153,10 +1151,12 @@ func BenchmarkGetLiveStatus(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := range b.N {
+	i := 0
+	for b.Loop() {
 		_, err := client.GetLiveStatus(ctx, fmt.Sprintf("channel-%d", i))
 		if err != nil {
 			b.Fatalf("Unexpected error: %v", err)
 		}
+		i++
 	}
 }

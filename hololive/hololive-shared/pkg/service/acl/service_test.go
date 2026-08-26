@@ -22,7 +22,7 @@ package acl
 
 import (
 	"log/slog"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -347,8 +347,8 @@ func assertACLStatus(t *testing.T, service *Service, wantEnabled bool, wantMode 
 
 	wantRooms := append([]string(nil), expectedRooms...)
 
-	sort.Strings(gotRooms)
-	sort.Strings(wantRooms)
+	slices.Sort(gotRooms)
+	slices.Sort(wantRooms)
 
 	for i, room := range wantRooms {
 		if gotRooms[i] != room {
@@ -411,14 +411,10 @@ func TestIsRoomAllowed_ConcurrentRead(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(goroutines)
-
 	for range goroutines {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_ = service.IsRoomAllowed("room-concurrent", "")
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -434,14 +430,10 @@ func TestGetACLStatus_ConcurrentRead(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(goroutines)
-
 	for range goroutines {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_, _, _ = service.GetACLStatus()
-		}()
+		})
 	}
 
 	wg.Wait()
