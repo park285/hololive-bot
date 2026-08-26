@@ -186,6 +186,7 @@ func deliverySendNeverLeftClient(err error) bool {
 	}
 
 	_, ok := errors.AsType[*net.DNSError](err)
+
 	return ok
 }
 

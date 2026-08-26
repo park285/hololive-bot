@@ -278,6 +278,7 @@ func parseDisplayNameComponents(display string) []string {
 func displayNameRawParts(display string) []string {
 	beforeClose, afterClose, hasClose := strings.CutLast(display, ")")
 	beforeOpen, inside, hasOpen := strings.Cut(beforeClose, "(")
+
 	if !hasOpen || !hasClose {
 		return []string{display}
 	}

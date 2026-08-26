@@ -197,6 +197,7 @@ func (d *Dispatcher) startBackgroundLoop(
 ) {
 	if waitGroup == nil {
 		panicguard.Go(d.logger, name, func() { loop(ctx) })
+
 		return
 	}
 

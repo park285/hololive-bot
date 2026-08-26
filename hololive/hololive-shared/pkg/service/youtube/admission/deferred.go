@@ -85,6 +85,7 @@ func IsDeferred(err error) bool {
 	}
 
 	_, ok := errors.AsType[*DeferredError](err)
+
 	return ok
 }
 

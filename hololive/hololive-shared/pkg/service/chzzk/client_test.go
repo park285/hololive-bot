@@ -1152,11 +1152,13 @@ func BenchmarkGetLiveStatus(b *testing.B) {
 	b.ResetTimer()
 
 	i := 0
+
 	for b.Loop() {
 		_, err := client.GetLiveStatus(ctx, fmt.Sprintf("channel-%d", i))
 		if err != nil {
 			b.Fatalf("Unexpected error: %v", err)
 		}
+
 		i++
 	}
 }
