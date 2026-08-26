@@ -390,8 +390,6 @@ func TestLoadChannelSubscriberAlarms_QueryContextIgnoresParentDeadline(t *testin
 	t.Parallel()
 
 	db := newAlarmTargetLookupTestDB(t)
-	// Keep the parent deadline shorter than the isolated 5s query budget while
-	// leaving enough headroom for the repository-wide parallel test gate.
 	deadline := time.Now().Add(2 * time.Second)
 	ctx, cancel := context.WithDeadline(t.Context(), deadline)
 
