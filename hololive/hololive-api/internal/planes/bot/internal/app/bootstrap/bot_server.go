@@ -37,7 +37,7 @@ func BuildBotHTTP3Server(
 	logger *slog.Logger,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
-	server, startReloader, err := buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, irisRoomLister, logger, reloadingTLSCertificateOptions{}, readyProbe...)
+	server, startReloader, err := buildBotHTTP3ServerWithReloaderOptions(ctx, appConfig, webhookHandler, triggerHandler, irisRoomLister, logger, sharedh3.CertificateReloaderOptions{}, readyProbe...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build bot HTTP3 server with reloader options: %w", err)
 	}
@@ -52,7 +52,7 @@ func buildBotHTTP3ServerWithReloaderOptions(
 	triggerHandler *sharedserver.TriggerHandler,
 	irisRoomLister IrisRoomLister,
 	logger *slog.Logger,
-	reloaderOptions reloadingTLSCertificateOptions,
+	reloaderOptions sharedh3.CertificateReloaderOptions,
 	readyProbe ...*sharedreadiness.Probe,
 ) (*http3.Server, func(context.Context), error) {
 	botRouter, err := apphttp.ProvideBotRouter(ctx, appConfig, logger, webhookHandler, triggerHandler, irisRoomLister, readyProbe...)
@@ -60,7 +60,9 @@ func buildBotHTTP3ServerWithReloaderOptions(
 		return nil, nil, fmt.Errorf("build bot h3 server: provide bot router: %w", err)
 	}
 
-	certReloader, err := newReloadingTLSCertificateWithOptions(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile, logger, reloaderOptions)
+	reloaderOptions.Logger = logger
+
+	certReloader, err := sharedh3.NewCertificateReloader(appConfig.Server.H3CertFile, appConfig.Server.H3KeyFile, reloaderOptions)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load h3 certificate: %w", err)
 	}
