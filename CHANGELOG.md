@@ -8,6 +8,17 @@
 
 ## 미출시
 
+## v3.3.4 - 2026-08-26
+
+### 변경
+
+- Go 1.27 관용구 정렬과 병렬 게이트 안정화, 명령 파서 benchmark를 전 runtime 모듈의
+  검증된 source snapshot에 포함했습니다.
+- 모든 production Go 모듈의 `shared-go`·`iris-client-go` pin을 각각 `v2.0.4`·`v2.2.3`으로
+  정렬하고 security workflow도 같은 exact commit을 사용하도록 갱신했습니다.
+- 이번 릴리스는 root app `3.3.4`, `hololive-api`·`youtube-collector`·
+  `admin-dashboard` artifact `3.0.12`, `hololive-alarm-worker` artifact `3.0.8`입니다.
+
 ## v3.3.3 - 2026-08-26
 
 ### 변경
