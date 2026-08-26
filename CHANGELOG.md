@@ -8,6 +8,17 @@
 
 ## 미출시
 
+## v3.3.3 - 2026-08-26
+
+### 변경
+
+- `admin-dashboard`, `hololive-alarm-worker`, `hololive-dbtest`, `hololive-shared`,
+  `youtube-collector`의 production `shared-go` pin을 `v2.0.3`으로 정렬하고,
+  security workflow의 `shared-go`·`iris-client-go` checkout도 각각 `v2.0.3`·`v2.2.2`
+  exact commit으로 맞춰 로컬과 CI의 production dependency 경계를 일치시켰습니다.
+- 이번 릴리스는 root app `3.3.3`, `hololive-api`·`youtube-collector`·
+  `admin-dashboard` artifact `3.0.11`, `hololive-alarm-worker` artifact `3.0.7`입니다.
+
 ## v3.3.2 - 2026-08-26
 
 ### 수정
