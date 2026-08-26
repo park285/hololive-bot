@@ -121,20 +121,19 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 
 func (h *Service) startChannelFetchWorkers(ctx context.Context, workerCount int, jobs <-chan string, resultChan chan<- channelFetchResult) *sync.WaitGroup {
 	workerWG := &sync.WaitGroup{}
-	workerWG.Add(workerCount)
 
 	for range workerCount {
-		panicguard.Go(h.logger, "holodex-channel-fetch-worker", func() {
-			h.runChannelFetchWorker(ctx, jobs, resultChan, workerWG)
+		workerWG.Go(func() {
+			panicguard.Run(h.logger, "holodex-channel-fetch-worker", func() {
+				h.runChannelFetchWorker(ctx, jobs, resultChan)
+			})
 		})
 	}
 
 	return workerWG
 }
 
-func (h *Service) runChannelFetchWorker(ctx context.Context, jobs <-chan string, resultChan chan<- channelFetchResult, workerWG *sync.WaitGroup) {
-	defer workerWG.Done()
-
+func (h *Service) runChannelFetchWorker(ctx context.Context, jobs <-chan string, resultChan chan<- channelFetchResult) {
 	for channelID := range jobs {
 		if ctx.Err() != nil {
 			resultChan <- channelFetchResult{id: channelID}

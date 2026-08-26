@@ -105,9 +105,10 @@ func (s *MaintenanceScheduler) Start(ctx context.Context) {
 		return
 	}
 
-	s.wg.Add(1)
-	panicguard.Go(s.logger, "major-event-maintenance-scheduler", func() {
-		s.run(ctx)
+	s.wg.Go(func() {
+		panicguard.Run(s.logger, "major-event-maintenance-scheduler", func() {
+			s.run(ctx)
+		})
 	})
 }
 
@@ -124,8 +125,6 @@ func (s *MaintenanceScheduler) Stop() {
 }
 
 func (s *MaintenanceScheduler) run(ctx context.Context) {
-	defer s.wg.Done()
-
 	linkTicker := time.NewTicker(s.config.LinkCheckInterval)
 	defer linkTicker.Stop()
 
