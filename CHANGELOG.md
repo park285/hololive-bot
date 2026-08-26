@@ -8,6 +8,21 @@
 
 ## 미출시
 
+## v3.3.2 - 2026-08-26
+
+### 수정
+
+- YouTube.js가 알려진 transient network 오류와 안전한 Innertube read-only POST의
+  `500`·`502`·`503`·`504`만 정확히 한 번 재시도합니다. `429`, 다른 endpoint·method,
+  재생 불가능한 body, parser·protocol 오류와 두 번째 실패는 재시도하지 않습니다.
+- shared H3 인증서 reloader와 `shared-go v2.0.3`, `iris-client-go v2.2.2`를 채택해 인증서
+  재적재와 취소된 H3 resolve 경계를 최신 fail-closed 계약으로 정렬했습니다.
+
+### 변경
+
+- 이번 릴리스는 root app `3.3.2`, `hololive-api`와 `youtube-collector` artifact `3.0.10`이며
+  변경되지 않은 alarm-worker version은 유지합니다.
+
 ## v3.3.1 - 2026-08-26
 
 ### 수정
