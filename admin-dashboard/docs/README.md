@@ -12,13 +12,13 @@
 
 ## 현재 구조
 
-- 백엔드는 Go입니다 (`go 1.26` toolchain, gin router). 모듈은 `admin-dashboard/backend`이고 진입점은 `backend/cmd/admin-dashboard/main.go`입니다.
+- 백엔드는 Go입니다 (Go 1.27.0 toolchain, Gin 1.12 router on `net/http`). 모듈은 `admin-dashboard/backend`이고 진입점은 `backend/cmd/admin-dashboard/main.go`입니다.
 - 프런트엔드는 React + Vite (`admin-dashboard/frontend`)이며, generated API client는 백엔드 OpenAPI(`swagger.json`)에서 생성합니다.
 - 프런트 개발 프록시 기본 대상은 `http://localhost:30190`입니다. (실제 값은 `frontend/vite.config.ts` 확인)
 
 ## 백엔드 레이아웃
 
-- `backend/internal/app/`: gin runtime 조립.
+- `backend/internal/app/`: Gin runtime 조립.
   - `routes.go`: 라우트 테이블 — `/admin/api/*` 아래 public(login) / 인증(`r.auth()`) / CSRF(`r.csrf()`) 그룹, `/admin/docs`(Swagger UI)
   - `handlers.go`: docker / status / health / WebSocket 핸들러
   - `session_handlers.go`: auth 핸들러 (login, logout, heartbeat, session)

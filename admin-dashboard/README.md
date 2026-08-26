@@ -6,7 +6,7 @@
 
 ```text
 admin-dashboard/
-├── backend/   # Go 1.27.0 + net/http
+├── backend/   # Go 1.27.0 + Gin 1.12/net/http
 ├── frontend/  # React 19 + TypeScript + Vite
 └── docs/      # 대시보드 전용 문서
 ```
