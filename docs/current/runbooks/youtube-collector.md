@@ -75,6 +75,12 @@ Worker count, local queue capacity, acquisition cadence/batch, lease/renew/clean
 
 Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`와 `YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`는 폐기되었고, 설정되어 있어도 무시됩니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
 
+## YouTube.js transient recovery
+
+YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player}`의 `POST`만 읽기 전용 재전송 대상으로 봅니다. 알려진 transient network code 또는 HTTP `500`, `502`, `503`, `504`가 발생하면 `100`~`300ms` jitter 뒤 정확히 한 번 재시도하므로 총 시도 수는 최대 2회입니다. 재생할 수 없는 request body, 다른 host/path/method, HTTP `429`와 그 밖의 status, parser/protocol failure에는 transport retry를 적용하지 않습니다. 두 번째 시도 실패는 기존 typed failure와 scheduler defer 계약을 그대로 사용하고 complete-empty나 alternate provider로 바꾸지 않습니다.
+
+각 추가 시도는 `youtubejs_upstream_retry_scheduled` INFO event에 endpoint, trigger, delay, attempt를 기록합니다. 같은 시간대의 `YouTube collection job failed` WARN이 없으면 transport 안에서 복구된 것이며, WARN이 이어지면 bounded retry가 소진된 것입니다. 배포 후 24시간 동안 exhausted `collection_failed` 비율이 감소하지 않거나 `429`, request timeout, upstream request volume이 증가하면 이 정책을 재검토합니다.
+
 ## Logs
 
 ```bash
