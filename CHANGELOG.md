@@ -8,6 +8,21 @@
 
 ## 미출시
 
+## v3.3.1 - 2026-08-26
+
+### 수정
+
+- YouTube 커뮤니티 관측 창의 정렬이나 고정 글 변화가 기존 글 전체를 신규 글로 오인해 알림을
+  폭주시키던 문제를 고쳤습니다. canonical post ID로 신규성을 판정하고 최초 관측은 기준선만
+  생성합니다.
+
+### 변경
+
+- `hololive-api`의 production lifecycle 소유권을 Fx `v1.24.0`으로 옮겼습니다. 기존 build·start·
+  shutdown 순서, fatal 우선순위, drain timeout과 정확히 한 번의 cleanup 계약은 유지합니다.
+- Structure Gate v2를 legacy hard baseline 없이 적용했습니다. 이번 릴리스는 root app `3.3.1`,
+  `hololive-api`와 `youtube-collector` artifact `3.0.9`이며 alarm worker version은 유지합니다.
+
 ## v3.3.0 - 2026-08-25
 
 ### 변경
