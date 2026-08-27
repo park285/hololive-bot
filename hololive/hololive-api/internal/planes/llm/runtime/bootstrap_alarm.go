@@ -44,7 +44,7 @@ import (
 
 func initMemberNewsService(
 	ctx context.Context,
-	cliproxy settings.CliproxyConfig,
+	provider settings.LLMProviderConfig,
 	llmConfig *settings.LLMConfig,
 	exaConfig settings.ExaConfig,
 	postgres database.Client,
@@ -58,9 +58,9 @@ func initMemberNewsService(
 
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
 	costTracker := ProvideLLMCostTracker(cacheClient, llmConfig.MonthlyTokenCeiling, logger)
-	llmClient := guardLLMClient(ProvideMemberNewsLLMClient(cliproxy, llmConfig, costTracker, logger), guards)
-	reviewer := guardLLMClient(ProvideMemberNewsReviewerClient(cliproxy, llmConfig, costTracker, logger), guards)
-	adjudicator := guardLLMClient(ProvideMemberNewsAdjudicatorClient(cliproxy, llmConfig, costTracker, logger), guards)
+	llmClient := guardLLMClient(ProvideMemberNewsLLMClient(provider, llmConfig, costTracker, logger), guards)
+	reviewer := guardLLMClient(ProvideMemberNewsReviewerClient(provider, llmConfig, costTracker, logger), guards)
+	adjudicator := guardLLMClient(ProvideMemberNewsAdjudicatorClient(provider, llmConfig, costTracker, logger), guards)
 
 	searcher := provideExaSearcher(exaConfig, logger)
 

@@ -57,7 +57,7 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 	t.Run("basic config without consensus", func(t *testing.T) {
 		service := initMemberNewsService(
 			t.Context(),
-			settings.CliproxyConfig{},
+			cliproxyProvider(settings.CliproxyConfig{}),
 			&settings.LLMConfig{},
 			settings.ExaConfig{},
 			nil,
@@ -71,13 +71,13 @@ func TestInitMemberNewsService_BuildsServiceWithOfflineConfig(t *testing.T) {
 
 	t.Run("consensus config enabled", func(t *testing.T) {
 		apiKey := strings.Join([]string{"dummy", "api", "key"}, "-")
-		cliproxyConfig := settings.CliproxyConfig{
+		cliproxyConfig := cliproxyProvider(settings.CliproxyConfig{
 			Enabled:         true,
 			BaseURL:         "https://example.com",
 			APIKey:          apiKey,
 			Model:           "gpt-4.1",
 			ReasoningEffort: "medium",
-		}
+		})
 		llmConfig := &settings.LLMConfig{
 			MemberNewsModel: "gpt-4.1",
 			MemberNews: settings.ConsensusLLMConfig{

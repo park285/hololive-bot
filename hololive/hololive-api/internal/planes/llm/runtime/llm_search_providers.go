@@ -54,9 +54,10 @@ func provideExaSearcher(exaConfig settings.ExaConfig, logger *slog.Logger) share
 
 func buildMajorEventSummarizer(exaConfig *settings.LLMSchedulerConfig, cacheClient cache.Client, guards *llmGuards, logger *slog.Logger) *mesummarizer.EventSummarizer {
 	costTracker := ProvideLLMCostTracker(cacheClient, exaConfig.LLM.MonthlyTokenCeiling, logger)
-	majorEventLLMClient := guardLLMClient(ProvideMajorEventLLMClient(exaConfig.Cliproxy, costTracker, logger), guards)
-	majorEventReviewer := guardLLMClient(ProvideMajorEventReviewerClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger), guards)
-	majorEventAdjudicator := guardLLMClient(ProvideMajorEventAdjudicatorClient(exaConfig.Cliproxy, &exaConfig.LLM, costTracker, logger), guards)
+	provider := exaConfig.SelectedLLMProvider()
+	majorEventLLMClient := guardLLMClient(ProvideMajorEventLLMClient(provider, costTracker, logger), guards)
+	majorEventReviewer := guardLLMClient(ProvideMajorEventReviewerClient(provider, &exaConfig.LLM, costTracker, logger), guards)
+	majorEventAdjudicator := guardLLMClient(ProvideMajorEventAdjudicatorClient(provider, &exaConfig.LLM, costTracker, logger), guards)
 	exaSearcher := provideExaSearcher(exaConfig.Exa, logger)
 
 	return provideEventSummarizer(exaConfig.LLM.MajorEvent, majorEventLLMClient, majorEventReviewer, majorEventAdjudicator, cacheClient, exaSearcher, guards, logger)

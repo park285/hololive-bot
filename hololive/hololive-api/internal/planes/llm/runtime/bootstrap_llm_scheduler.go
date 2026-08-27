@@ -250,7 +250,7 @@ func buildLLMSchedulerComponents(
 	formatter.store = messagestrings.NewStore(postgresService.GetPool(), logger)
 
 	majorEventRepository := buildMajorEventRepository(postgresService, logger)
-	memberNewsService := initMemberNewsService(ctx, schedulerConfig.Cliproxy, &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
+	memberNewsService := initMemberNewsService(ctx, schedulerConfig.SelectedLLMProvider(), &schedulerConfig.LLM, schedulerConfig.Exa, postgresService, cacheService, memberDataProvider, guards, logger)
 
 	deliveryModule, err := buildLLMSchedulerDeliveryModule(cacheService, postgresService, logger)
 	if err != nil {

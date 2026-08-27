@@ -27,7 +27,7 @@
 | PostgreSQL | yes | commands, admin reads/writes, subscriptions, summaries, outbox fail |
 | Valkey | yes | cache/config/session/PubSub behavior degrades |
 | Iris | yes | Kakao ingress/reply fails |
-| cliproxy/LLM | partial | digest/summary generation fails where enabled |
+| selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
 ## Key environment variables
@@ -39,7 +39,9 @@
 | `HOLOLIVE_HTTP_TRANSPORTS` | enabled transports | yes |
 | `IRIS_*` | Iris URL/certs/tokens | yes |
 | `LLM_SCHEDULER_INTERNAL_URL` | internal scheduler/trigger API base | partial |
-| `CLIPROXY_*` | LLM proxy | partial |
+| `LLM_PROVIDER` | `cliproxy` or native `gemini` provider selection | partial |
+| `CLIPROXY_*` | CLIProxy endpoint, credential, model, and reasoning settings | required when `LLM_PROVIDER=cliproxy` |
+| `GEMINI_*` | native Gemini endpoint, credential, model, and thinking settings | required when `LLM_PROVIDER=gemini` |
 | `MAJOREVENT_*` | major event scrape/schedule config | partial |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/api` profile for `bot_webhook_inbox`, `bot_reply_outbox`, `source_observation` | yes |
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
@@ -140,7 +142,9 @@ Diagnosis:
 ```
 
 Mitigation:
-- Validate `LLM_SCHEDULER_INTERNAL_URL`, CLIPROXY, and member news/major event source state.
+- Validate `LLM_SCHEDULER_INTERNAL_URL`, the selected LLM provider, and member news/major event source state.
+- Use `LLM_PROVIDER=gemini` for Gemini native `google_search`; routing Gemini through CLIProxy does not satisfy the MajorEvent search-call contract.
+- The native Gemini path uses the beta Interactions API and fails closed on non-`completed`, malformed, empty, or non-JSON output. Use `LLM_PROVIDER=cliproxy` with the retained CLIProxy settings for rollback.
 - For `409`, wait for the active run to finish; investigate a stuck scheduler if the conflict persists.
 
 Rollback:

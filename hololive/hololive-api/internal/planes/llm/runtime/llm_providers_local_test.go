@@ -32,6 +32,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
@@ -44,12 +45,19 @@ func newUnsanitizedTestLogger(buf *bytes.Buffer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(buf, nil))
 }
 
+func cliproxyProvider(config settings.CliproxyConfig) settings.LLMProviderConfig {
+	return settings.LLMProviderConfig{
+		Name:     settings.LLMProviderCliproxy,
+		Cliproxy: config,
+	}
+}
+
 func TestProvideMajorEventLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{Enabled: false, APIKey: testProviderKey}, nil, logger)
+	client := ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{Enabled: false, APIKey: testProviderKey}), nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when disabled")
 	}
@@ -64,7 +72,7 @@ func TestProvideMajorEventLLMClient_NoAPIKey(t *testing.T) {
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{Enabled: true, APIKey: ""}, nil, logger)
+	client := ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: ""}), nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when API key missing")
 	}
@@ -75,12 +83,12 @@ func TestProvideMajorEventLLMClient_EmptyBaseURL(t *testing.T) {
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{
+	client := ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{
 		Enabled: true,
 		APIKey:  testProviderKey,
 		BaseURL: "",
 		Model:   "gpt-test",
-	}, nil, logger)
+	}), nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when baseURL empty")
 	}
@@ -95,34 +103,34 @@ func TestProvideMajorEventLLMClient_EmptyModel(t *testing.T) {
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{
+	client := ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{
 		Enabled: true,
 		APIKey:  testProviderKey,
 		BaseURL: testProviderBaseURL,
 		Model:   "",
-	}, nil, logger)
+	}), nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when model empty")
 	}
 }
 
-func TestProvideMajorEventLLMClient_InitErrorReturnsNil(t *testing.T) {
+func TestProvideMajorEventLLMClient_BlankAPIKeyReturnsNil(t *testing.T) {
 	var buf bytes.Buffer
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{
+	client := ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{
 		Enabled: true,
 		APIKey:  "   ",
 		BaseURL: testProviderBaseURL,
 		Model:   "gpt-test",
-	}, nil, logger)
+	}), nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when generator construction fails")
 	}
 
-	if !strings.Contains(buf.String(), "initialization failed") {
-		t.Error("expected error log about initialization failure")
+	if !strings.Contains(buf.String(), "disabled") {
+		t.Error("expected info log about disabled provider")
 	}
 }
 
@@ -131,12 +139,12 @@ func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMajorEventLLMClient(settings.CliproxyConfig{
+	client := ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{
 		Enabled: true,
 		APIKey:  testProviderKey,
 		BaseURL: testProviderBaseURL,
 		Model:   "gpt-test",
-	}, nil, logger)
+	}), nil, logger)
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
@@ -146,12 +154,50 @@ func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 	}
 }
 
+func TestProvideMajorEventLLMClient_GeminiNativeProvider(t *testing.T) {
+	const (
+		sensitiveKey           = "gemini-provider-key"
+		testGeminiThinkingHigh = "high"
+	)
+
+	var buf bytes.Buffer
+
+	logger := newUnsanitizedTestLogger(&buf)
+
+	client := ProvideMajorEventLLMClient(settings.LLMProviderConfig{
+		Name: settings.LLMProviderGemini,
+		Gemini: settings.GeminiConfig{
+			Enabled:       true,
+			APIKey:        sensitiveKey,
+			BaseURL:       "https://generativelanguage.googleapis.com",
+			Model:         "gemini-3.7-flash",
+			ThinkingLevel: testGeminiThinkingHigh,
+		},
+	}, nil, logger)
+	if client == nil {
+		t.Fatal("expected non-nil Gemini client")
+	}
+
+	if _, ok := client.(*llm.GeminiClient); !ok {
+		t.Fatalf("client type = %T, want *llm.GeminiClient", client)
+	}
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "provider=gemini") || !strings.Contains(logOutput, "reasoning_level=high") {
+		t.Fatalf("provider log = %s", logOutput)
+	}
+
+	if strings.Contains(logOutput, sensitiveKey) {
+		t.Fatal("provider log leaked Gemini API key")
+	}
+}
+
 func TestProvideMemberNewsLLMClient_Disabled(t *testing.T) {
 	var buf bytes.Buffer
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMemberNewsLLMClient(settings.CliproxyConfig{Enabled: false}, &settings.LLMConfig{}, nil, logger)
+	client := ProvideMemberNewsLLMClient(cliproxyProvider(settings.CliproxyConfig{Enabled: false}), &settings.LLMConfig{}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when disabled")
 	}
@@ -166,7 +212,7 @@ func TestProvideMemberNewsLLMClient_NoAPIKey(t *testing.T) {
 
 	logger := newUnsanitizedTestLogger(&buf)
 
-	client := ProvideMemberNewsLLMClient(settings.CliproxyConfig{Enabled: true, APIKey: ""}, &settings.LLMConfig{}, nil, logger)
+	client := ProvideMemberNewsLLMClient(cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: ""}), &settings.LLMConfig{}, nil, logger)
 	if client != nil {
 		t.Fatal("expected nil when API key missing")
 	}
@@ -182,11 +228,11 @@ func TestProvideMemberNewsLLMClient_EmptyBaseURL(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsLLMClient(
-		settings.CliproxyConfig{
+		cliproxyProvider(settings.CliproxyConfig{
 			Enabled: true,
 			APIKey:  testProviderKey,
 			BaseURL: "",
-		},
+		}),
 		&settings.LLMConfig{
 			MemberNewsModel: "test-model",
 		},
@@ -207,12 +253,12 @@ func TestProvideMemberNewsLLMClient_ModelFallback(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsLLMClient(
-		settings.CliproxyConfig{
+		cliproxyProvider(settings.CliproxyConfig{
 			Enabled: true,
 			APIKey:  testProviderKey,
 			BaseURL: testProviderBaseURL,
 			Model:   "default-model",
-		},
+		}),
 		&settings.LLMConfig{
 			MemberNewsModel: "", // 빈값 → Cliproxy.Model fallback
 		},
@@ -233,12 +279,12 @@ func TestProvideMemberNewsLLMClient_DeprecatedModel(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsLLMClient(
-		settings.CliproxyConfig{
+		cliproxyProvider(settings.CliproxyConfig{
 			Enabled: true,
 			APIKey:  testProviderKey,
 			BaseURL: testProviderBaseURL,
 			Model:   "default-model",
-		},
+		}),
 		&settings.LLMConfig{
 			MemberNewsModel: "old-model",
 		},
@@ -255,12 +301,12 @@ func TestProvideMemberNewsLLMClient_NewModel_NoDeprecationWarn(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsLLMClient(
-		settings.CliproxyConfig{
+		cliproxyProvider(settings.CliproxyConfig{
 			Enabled: true,
 			APIKey:  testProviderKey,
 			BaseURL: testProviderBaseURL,
 			Model:   "default-model",
-		},
+		}),
 		&settings.LLMConfig{
 			MemberNewsModel: "new-model",
 		},
@@ -285,12 +331,12 @@ func TestProvideMemberNewsLLMClient_TemperatureZero_LogShowsNotApplied(t *testin
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsLLMClient(
-		settings.CliproxyConfig{
+		cliproxyProvider(settings.CliproxyConfig{
 			Enabled: true,
 			APIKey:  testProviderKey,
 			BaseURL: testProviderBaseURL,
 			Model:   "default-model",
-		},
+		}),
 		&settings.LLMConfig{
 			MemberNewsModel:       "test-model",
 			MemberNewsTemperature: 0,
@@ -307,6 +353,43 @@ func TestProvideMemberNewsLLMClient_TemperatureZero_LogShowsNotApplied(t *testin
 	}
 }
 
+func TestAppendSupportedTemperature(t *testing.T) {
+	tests := []struct {
+		name        string
+		model       string
+		temperature float64
+		wantApplied bool
+	}{
+		{name: "OpenAI model", model: "gpt-5.4", temperature: 0.1, wantApplied: true},
+		{name: "Gemini API model", model: "gemini-3.7-flash", temperature: 0.1},
+		{name: "Gemini Antigravity tier", model: "gemini-3.7-flash-high", temperature: 0.1},
+		{name: "disabled temperature", model: "gpt-5.4", temperature: 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			opts, applied := appendSupportedTemperature(nil, test.model, test.temperature)
+			if applied != test.wantApplied {
+				t.Fatalf("appendSupportedTemperature() applied = %t, want %t", applied, test.wantApplied)
+			}
+
+			var config llm.Options
+
+			for _, opt := range opts {
+				opt(&config)
+			}
+
+			if test.wantApplied && (config.Temperature == nil || *config.Temperature != test.temperature) {
+				t.Fatalf("temperature = %v, want %v", config.Temperature, test.temperature)
+			}
+
+			if !test.wantApplied && config.Temperature != nil {
+				t.Fatalf("temperature = %v, want nil", *config.Temperature)
+			}
+		})
+	}
+}
+
 func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 	sensitiveURL := "https://secret-proxy.internal.example.com/v1"
 	sensitiveKey := "test-cliproxy-key-redacted"
@@ -316,12 +399,12 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 
 		logger := newUnsanitizedTestLogger(&buf)
 
-		ProvideMajorEventLLMClient(settings.CliproxyConfig{
+		ProvideMajorEventLLMClient(cliproxyProvider(settings.CliproxyConfig{
 			Enabled: true,
 			APIKey:  sensitiveKey,
 			BaseURL: sensitiveURL,
 			Model:   "", // 빈값 → error 경로
-		}, nil, logger)
+		}), nil, logger)
 
 		logOutput := buf.String()
 		if strings.Contains(logOutput, sensitiveURL) {
@@ -339,12 +422,12 @@ func TestProviderLogs_NoRawURLInErrorPath(t *testing.T) {
 		logger := newUnsanitizedTestLogger(&buf)
 
 		ProvideMemberNewsLLMClient(
-			settings.CliproxyConfig{
+			cliproxyProvider(settings.CliproxyConfig{
 				Enabled: true,
 				APIKey:  sensitiveKey,
 				BaseURL: sensitiveURL,
 				Model:   "",
-			},
+			}),
 			&settings.LLMConfig{
 				MemberNewsModel: "", // 빈값 + Cliproxy.Model 빈값 → error 경로
 			},
@@ -398,7 +481,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 	var buf bytes.Buffer
 
 	logger := newUnsanitizedTestLogger(&buf)
-	client := ProvideMemberNewsLLMClient(appConfig.Cliproxy, &appConfig.LLM, nil, logger)
+	client := ProvideMemberNewsLLMClient(cliproxyProvider(appConfig.Cliproxy), &appConfig.LLM, nil, logger)
 
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -493,7 +576,7 @@ func TestProvideMemberNewsReviewerClient_ConsensusDisabled(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsReviewerClient(
-		settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "m"},
+		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "m"}),
 		&settings.LLMConfig{MemberNews: settings.ConsensusLLMConfig{Enabled: false}},
 		nil, logger,
 	)
@@ -508,7 +591,7 @@ func TestProvideMemberNewsReviewerClient_Enabled(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsReviewerClient(
-		settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "default"},
+		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "default"}),
 		&settings.LLMConfig{MemberNews: settings.ConsensusLLMConfig{Enabled: true, ReviewerModel: "gpt-4.1-mini"}},
 		nil, logger,
 	)
@@ -527,7 +610,7 @@ func TestProvideMemberNewsReviewerClient_ModelFallback(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsReviewerClient(
-		settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "cliproxy-default"},
+		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "cliproxy-default"}),
 		&settings.LLMConfig{MemberNewsModel: "news-model", MemberNews: settings.ConsensusLLMConfig{Enabled: true, ReviewerModel: ""}},
 		nil, logger,
 	)
@@ -546,7 +629,7 @@ func TestProvideMemberNewsAdjudicatorClient_ConsensusDisabled(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsAdjudicatorClient(
-		settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "m"},
+		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "m"}),
 		&settings.LLMConfig{MemberNews: settings.ConsensusLLMConfig{Enabled: false}},
 		nil, logger,
 	)
@@ -561,7 +644,7 @@ func TestProvideMemberNewsAdjudicatorClient_Enabled(t *testing.T) {
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMemberNewsAdjudicatorClient(
-		settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "default"},
+		cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "default"}),
 		&settings.LLMConfig{MemberNews: settings.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: "gpt-4.1"}},
 		nil, logger,
 	)
@@ -581,7 +664,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 		logger := newUnsanitizedTestLogger(&buf)
 
 		client := ProvideMemberNewsAdjudicatorClient(
-			settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "cliproxy-default"},
+			cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "cliproxy-default"}),
 			&settings.LLMConfig{MemberNewsModel: "news-model", MemberNews: settings.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
 			nil, logger,
 		)
@@ -600,7 +683,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 		logger := newUnsanitizedTestLogger(&buf)
 
 		client := ProvideMemberNewsAdjudicatorClient(
-			settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "cliproxy-default"},
+			cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: "cliproxy-default"}),
 			&settings.LLMConfig{MemberNews: settings.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
 			nil, logger,
 		)
@@ -619,7 +702,7 @@ func TestProvideMemberNewsAdjudicatorClient_ModelFallbackChain(t *testing.T) {
 		logger := newUnsanitizedTestLogger(&buf)
 
 		client := ProvideMemberNewsAdjudicatorClient(
-			settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: ""},
+			cliproxyProvider(settings.CliproxyConfig{Enabled: true, APIKey: testProviderKey, BaseURL: testProviderBaseURL, Model: ""}),
 			&settings.LLMConfig{MemberNews: settings.ConsensusLLMConfig{Enabled: true, AdjudicatorModel: ""}},
 			nil, logger,
 		)
