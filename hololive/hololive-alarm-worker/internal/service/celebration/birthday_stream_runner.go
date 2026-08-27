@@ -173,7 +173,15 @@ func (r *BirthdayStreamRunner) publishCandidates(
 		return nil
 	}
 
-	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, dateStr)
+	publishedEvents, err := r.sessions.FindPublishedBirthdayStreamEvents(
+		ctx,
+		birthdayStreamCandidateEventKeys(candidates, dateStr),
+	)
+	if err != nil {
+		return fmt.Errorf("birthday stream runner: find published events: %w", err)
+	}
+
+	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, publishedEvents, dateStr)
 	if len(envelopes) == 0 {
 		return nil
 	}

@@ -177,7 +177,7 @@ Diagnosis:
 - `celebration:birthday:{channelID}:{date}` event와 그 delivery의 `status`, `sent_at`을 확인합니다. `sent`가 아닌 방은 의도적으로 대상이 아닙니다.
 - 같은 `channelID`의 당일 `youtube_live_sessions`가 `UPCOMING` 또는 `LIVE`이고 `last_seen_at` freshness 안에 있는지 확인합니다.
 - `Birthday stream runner failed` 로그가 있으면 audience SQL 오류를 먼저 해결합니다. 이 경로는 실패 시 전체 방으로 fallback하지 않습니다.
-- 이미 `celebration:birthday_stream:{channelID}:{date}:{videoID}` event가 있어도 현재 세션이면 다음 tick에서 재평가됩니다. 새 방 delivery만 outbox dedupe를 통과합니다.
+- 이미 `celebration:birthday_stream:{channelID}:{date}:{videoID}` event가 있어도 현재 세션이면 다음 tick에서 재평가됩니다. 이때 최초 event의 canonical payload를 재사용하므로 이후 title·photo·schedule 표시값 변경은 event payload를 바꾸지 않고, 새 방 delivery만 outbox dedupe를 통과합니다.
 
 Mitigation:
 - producer의 full-roster LIVE discovery부터 복구한 뒤 runner를 재평가합니다.
