@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -377,13 +378,13 @@ func newGeminiProviderError(raw []byte, statusCode int) geminiProviderError {
 }
 
 func finalGeminiModelOutput(steps []geminiStep) string {
-	for i := len(steps) - 1; i >= 0; i-- {
-		if steps[i].Type != "model_output" {
+	for _, step := range slices.Backward(steps) {
+		if step.Type != "model_output" {
 			continue
 		}
 
 		var output strings.Builder
-		for _, content := range steps[i].Content {
+		for _, content := range step.Content {
 			if content.Type == "text" {
 				output.WriteString(content.Text)
 			}
