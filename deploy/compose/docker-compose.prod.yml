@@ -142,12 +142,18 @@ x-hololive-h3-files-env: &hololive-h3-files-env
   HEALTHCHECK_CA_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
   HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-127.0.0.1}
 
-x-cliproxy-env: &cliproxy-env
+x-llm-provider-env: &llm-provider-env
+  LLM_PROVIDER: ${LLM_PROVIDER:-cliproxy}
   CLIPROXY_ENABLED: "true"
   CLIPROXY_BASE_URL: ${CLIPROXY_BASE_URL:-http://host.docker.internal:8787/v1}
   CLIPROXY_API_KEY: ${CLIPROXY_API_KEY:-}
   CLIPROXY_MODEL: ${CLIPROXY_MODEL:-gpt-5.4}
   CLIPROXY_REASONING_EFFORT: ${CLIPROXY_REASONING_EFFORT:-high}
+  GEMINI_ENABLED: ${GEMINI_ENABLED:-false}
+  GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
+  GEMINI_THINKING_LEVEL: ${GEMINI_THINKING_LEVEL:-high}
 
 x-go-volumes: &go-volumes
   - ../../data:/app/data
@@ -458,7 +464,7 @@ services:
     env_file:
       - ${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}
     environment:
-      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *cliproxy-env]
+      <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *llm-provider-env]
       APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
       APP_ENV: "production"
       STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/hololive-api.json

@@ -360,14 +360,48 @@ func TestOpenAIClientGenerateJSON_DelegatesToSharedGenerator(t *testing.T) {
 	}
 }
 
+func TestOpenAIClientGenerateJSON_PreservesGemini37FlashHigh(t *testing.T) {
+	generator := &fakeJSONGenerator{resp: sharedllm.JSONResponse{Text: `{"ok":true}`}}
+	client := &OpenAIClient{
+		generator:       generator,
+		model:           "gemini-3.7-flash",
+		schemaName:      "member_news_summary",
+		reasoningEffort: "high",
+		chatCompletions: true,
+		logger:          slog.New(slog.DiscardHandler),
+	}
+
+	if _, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema()); err != nil {
+		t.Fatalf("GenerateJSON() error = %v", err)
+	}
+
+	if generator.req.Model != "gemini-3.7-flash" {
+		t.Fatalf("request model = %q, want gemini-3.7-flash", generator.req.Model)
+	}
+
+	if generator.req.ReasoningEffort != "high" {
+		t.Fatalf("request reasoning effort = %q, want high", generator.req.ReasoningEffort)
+	}
+
+	if !generator.req.ChatCompletions {
+		t.Fatal("request must use Chat Completions")
+	}
+
+	if generator.req.Temperature != nil {
+		t.Fatalf("request temperature = %v, want nil", *generator.req.Temperature)
+	}
+}
+
 type fakeJSONGenerator struct {
 	called bool
+	req    sharedllm.JSONRequest
 	resp   sharedllm.JSONResponse
 	err    error
 }
 
-func (f *fakeJSONGenerator) GenerateJSON(context.Context, sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
+func (f *fakeJSONGenerator) GenerateJSON(_ context.Context, req sharedllm.JSONRequest) (sharedllm.JSONResponse, error) {
 	f.called = true
+	f.req = req
 	return f.resp, f.err
 }
 

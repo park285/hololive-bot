@@ -21,6 +21,7 @@
 package settings
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -38,7 +39,9 @@ type LLMSchedulerConfig struct {
 	Logging     LoggingConfig
 	Bot         BotConfig
 	Environment string
+	LLMProvider string
 	Cliproxy    CliproxyConfig
+	Gemini      GeminiConfig
 	LLM         LLMConfig
 	Exa         ExaConfig
 	Version     string
@@ -105,7 +108,9 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 			SelfUser: sharedenv.String("BOT_SELF_USER", "iris"),
 		},
 		Environment: loadAppEnvironment(),
+		LLMProvider: strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", LLMProviderCliproxy))),
 		Cliproxy:    loadCliproxyConfig(),
+		Gemini:      loadGeminiConfig(),
 		LLM:         loadLLMConfig(),
 		Exa:         loadExaConfig(),
 		Version:     sharedenv.String("APP_VERSION", "1.0.0-llm-scheduler"),
@@ -129,6 +134,10 @@ func (c *LLMSchedulerConfig) validate() error {
 		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
+	if err := validateLLMProvider(c.SelectedLLMProvider()); err != nil {
+		return fmt.Errorf("validate LLM provider: %w", err)
+	}
+
 	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
@@ -145,11 +154,69 @@ func (c *LLMSchedulerConfig) validateRuntime() error {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
+	if err := validateLLMProvider(c.SelectedLLMProvider()); err != nil {
+		return fmt.Errorf("validate LLM provider: %w", err)
+	}
+
 	if err := validateNoNotificationEgressOwnership(runtimeLLMScheduler); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 
 	return nil
+}
+
+func (c *LLMSchedulerConfig) SelectedLLMProvider() LLMProviderConfig {
+	if c == nil {
+		return LLMProviderConfig{}
+	}
+
+	return LLMProviderConfig{
+		Name:     c.LLMProvider,
+		Cliproxy: c.Cliproxy,
+		Gemini:   c.Gemini,
+	}
+}
+
+func validateLLMProvider(config LLMProviderConfig) error {
+	provider := cmp.Or(strings.ToLower(strings.TrimSpace(config.Name)), LLMProviderCliproxy)
+
+	switch provider {
+	case LLMProviderCliproxy:
+		return validateCliproxyProvider(config.Cliproxy)
+	case LLMProviderGemini:
+		return validateGeminiProvider(config.Gemini)
+	default:
+		return fmt.Errorf("LLM_PROVIDER must be %q or %q", LLMProviderCliproxy, LLMProviderGemini)
+	}
+}
+
+func validateCliproxyProvider(config CliproxyConfig) error {
+	if !config.Enabled {
+		return nil
+	}
+
+	if strings.TrimSpace(config.BaseURL) == "" || strings.TrimSpace(config.APIKey) == "" || strings.TrimSpace(config.Model) == "" {
+		return errors.New("selected cliproxy provider configuration is incomplete")
+	}
+
+	return nil
+}
+
+func validateGeminiProvider(config GeminiConfig) error {
+	if !config.Enabled {
+		return errors.New("selected gemini provider is disabled")
+	}
+
+	if strings.TrimSpace(config.BaseURL) == "" || strings.TrimSpace(config.APIKey) == "" || strings.TrimSpace(config.Model) == "" {
+		return errors.New("selected gemini provider configuration is incomplete")
+	}
+
+	switch strings.ToLower(strings.TrimSpace(config.ThinkingLevel)) {
+	case "low", "medium", "high":
+		return nil
+	default:
+		return errors.New("GEMINI_THINKING_LEVEL must be one of low, medium, high")
+	}
 }
 
 func (c *LLMSchedulerConfig) validateServerBasics() error {

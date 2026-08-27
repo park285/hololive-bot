@@ -20,12 +20,31 @@
 
 package settings
 
+const (
+	LLMProviderCliproxy = "cliproxy"
+	LLMProviderGemini   = "gemini"
+)
+
 type CliproxyConfig struct {
 	BaseURL         string
 	APIKey          string
 	Model           string
 	Enabled         bool
 	ReasoningEffort string
+}
+
+type GeminiConfig struct {
+	BaseURL       string
+	APIKey        string
+	Model         string
+	Enabled       bool
+	ThinkingLevel string
+}
+
+type LLMProviderConfig struct {
+	Name     string
+	Cliproxy CliproxyConfig
+	Gemini   GeminiConfig
 }
 
 type ConsensusLLMConfig struct {

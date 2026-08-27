@@ -52,6 +52,10 @@ func safeLLMProviderError(err error) error {
 		return nil
 	}
 
+	if providerErr, ok := errors.AsType[geminiProviderError](err); ok {
+		return safeProviderError{statusCode: providerErr.statusCode, code: providerErr.code, apiType: "gemini", errType: "gemini_provider_error"}
+	}
+
 	if strings.HasPrefix(err.Error(), "llm provider request failed") {
 		return errors.New(sharedllm.RedactDiagnostic(err.Error(), 1024))
 	}
@@ -84,6 +88,16 @@ func safeOpenAIProviderError(apiErr *openai.Error) safeProviderError {
 func llmProviderErrorAttrs(err error) []slog.Attr {
 	if err == nil {
 		return nil
+	}
+
+	if providerErr, ok := errors.AsType[geminiProviderError](err); ok {
+		attrs := []slog.Attr{
+			slog.String("error_type", "gemini_provider_error"),
+			slog.Bool("provider_error", true),
+		}
+		attrs = appendStatusCodeAttr(attrs, providerErr.statusCode)
+
+		return appendTrimmedStringAttr(attrs, "error_code", providerErr.code)
 	}
 
 	if errors.Is(err, errOpenAIRefusalOutput) || errors.Is(err, sharedllm.ErrOpenAIRefusalOutput) {

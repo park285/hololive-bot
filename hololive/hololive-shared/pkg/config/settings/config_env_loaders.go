@@ -212,6 +212,16 @@ func loadCliproxyConfig() CliproxyConfig {
 	}
 }
 
+func loadGeminiConfig() GeminiConfig {
+	return GeminiConfig{
+		BaseURL:       sharedenv.String("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"),
+		APIKey:        sharedenv.String("GEMINI_API_KEY", ""),
+		Model:         sharedenv.String("GEMINI_MODEL", "gemini-3.7-flash"),
+		Enabled:       sharedenv.Bool("GEMINI_ENABLED", false),
+		ThinkingLevel: sharedenv.String("GEMINI_THINKING_LEVEL", "high"),
+	}
+}
+
 // loadConsensusLLMConfig: prefix 기반 환경변수에서 ConsensusLLMConfig를 로드한다.
 func loadConsensusLLMConfig(prefix string) ConsensusLLMConfig {
 	reviewTimeout := sharedenv.Int(prefix+"_REVIEW_TIMEOUT_SEC", 30)
