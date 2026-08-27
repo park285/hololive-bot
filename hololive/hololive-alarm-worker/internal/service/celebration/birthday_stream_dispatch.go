@@ -40,6 +40,7 @@ func birthdayStreamEventKeyPrefix(channelID, dateStr string) string {
 func buildBirthdayStreamEnvelopes(
 	candidates []birthdayStreamCandidate,
 	roomsByBirthdayEventKey map[string][]string,
+	publishedEvents map[string]domain.AlarmQueueEnvelope,
 	dateStr string,
 ) []domain.AlarmQueueEnvelope {
 	var envelopes []domain.AlarmQueueEnvelope
@@ -47,8 +48,15 @@ func buildBirthdayStreamEnvelopes(
 	for _, candidate := range candidates {
 		displayName := resolveCelebrationMemberName(candidate.member)
 		rooms := roomsByBirthdayEventKey[birthdayGreetingEventKey(candidate.member.ChannelID, dateStr)]
+		published, wasPublished := publishedEvents[birthdayStreamEventKey(candidate.member.ChannelID, dateStr, candidate.session.VideoID)]
 
 		for _, roomID := range rooms {
+			if wasPublished {
+				envelopes = append(envelopes, birthdayStreamEnvelopeFromPublished(published, roomID))
+
+				continue
+			}
+
 			envelopes = append(envelopes, birthdayStreamEnvelope(&candidate, displayName, roomID, dateStr))
 		}
 	}
@@ -81,6 +89,25 @@ func birthdayStreamEnvelope(
 			ScheduledStartKST: birthdayStreamScheduledStartKST(&candidate.session),
 		},
 	}
+}
+
+func birthdayStreamEnvelopeFromPublished(
+	published domain.AlarmQueueEnvelope,
+	roomID string,
+) domain.AlarmQueueEnvelope {
+	published.Notification.RoomID = roomID
+	published.Notification.Users = nil
+
+	return published
+}
+
+func birthdayStreamCandidateEventKeys(candidates []birthdayStreamCandidate, dateStr string) []string {
+	eventKeys := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		eventKeys = append(eventKeys, birthdayStreamEventKey(candidate.member.ChannelID, dateStr, candidate.session.VideoID))
+	}
+
+	return eventKeys
 }
 
 func birthdayGreetingEventKeys(candidates []birthdayStreamCandidate, dateStr string) []string {

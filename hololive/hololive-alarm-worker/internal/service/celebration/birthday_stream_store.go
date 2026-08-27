@@ -2,16 +2,20 @@ package celebration
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 type birthdayStreamSessionStore interface {
 	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, seenSince time.Time) ([]BirthdayStreamSession, error)
 	ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error)
+	FindPublishedBirthdayStreamEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
 	FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error)
 }
 
@@ -92,6 +96,74 @@ func (s *PgxStore) ListPublishedEventKeys(ctx context.Context, keyPrefix string)
 	}
 
 	return keys, nil
+}
+
+func (s *PgxStore) FindPublishedBirthdayStreamEvents(
+	ctx context.Context,
+	eventKeys []string,
+) (map[string]domain.AlarmQueueEnvelope, error) {
+	events := make(map[string]domain.AlarmQueueEnvelope, len(eventKeys))
+	if len(eventKeys) == 0 {
+		return events, nil
+	}
+
+	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0108_04.sql"), eventKeys)
+	if err != nil {
+		return nil, fmt.Errorf("birthday stream runner: query published events: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			eventKey             string
+			payloadSchemaVersion int16
+			payload              []byte
+		)
+
+		if err := rows.Scan(&eventKey, &payloadSchemaVersion, &payload); err != nil {
+			return nil, fmt.Errorf("birthday stream runner: scan published event: %w", err)
+		}
+
+		if payloadSchemaVersion != 1 {
+			return nil, fmt.Errorf("birthday stream runner: event %q has unsupported payload schema version %d", eventKey, payloadSchemaVersion)
+		}
+
+		var envelope domain.AlarmQueueEnvelope
+
+		if err := jsonv2.Unmarshal(payload, &envelope); err != nil {
+			return nil, fmt.Errorf("birthday stream runner: decode published event %q: %w", eventKey, err)
+		}
+
+		if err := validatePublishedBirthdayStreamEvent(eventKey, &envelope); err != nil {
+			return nil, fmt.Errorf("birthday stream runner: validate published event: %w", err)
+		}
+
+		events[eventKey] = envelope
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("birthday stream runner: iterate published events: %w", err)
+	}
+
+	return events, nil
+}
+
+func validatePublishedBirthdayStreamEvent(eventKey string, envelope *domain.AlarmQueueEnvelope) error {
+	if envelope.SourceKind != domain.AlarmDispatchSourceKindCelebration {
+		return fmt.Errorf("birthday stream runner: event %q has source kind %q", eventKey, envelope.SourceKind)
+	}
+
+	payload := envelope.Celebration
+	if payload == nil || payload.Kind != domain.CelebrationKindBirthdayStream {
+		return fmt.Errorf("birthday stream runner: event %q is not a birthday stream", eventKey)
+	}
+
+	expectedKey := birthdayStreamEventKey(payload.ChannelID, payload.Date, payload.VideoID)
+	if expectedKey != eventKey {
+		return fmt.Errorf("birthday stream runner: event key mismatch: got %q, payload resolves to %q", eventKey, expectedKey)
+	}
+
+	return nil
 }
 
 func (s *PgxStore) FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error) {

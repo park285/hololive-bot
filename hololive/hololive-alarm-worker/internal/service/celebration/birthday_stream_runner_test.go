@@ -23,6 +23,7 @@ const (
 	testMemberName     = "Test"
 	testStatusUpcoming = "UPCOMING"
 	testVideoA         = "vid-a"
+	testBirthdayDate   = "2026-07-10"
 )
 
 type birthdayStreamTestMemberRepo struct {
@@ -50,6 +51,9 @@ type birthdayStreamTestStore struct {
 	sessionCalls           []birthdayStreamSessionQuery
 	publishedKeys          map[string][]string
 	listCalls              []string
+	publishedEvents        map[string]domain.AlarmQueueEnvelope
+	publishedEventsErr     error
+	publishedEventCalls    [][]string
 	defaultSentRooms       []string
 	sentRoomsByEventKey    map[string][]string
 	sentRoomsErr           error
@@ -83,6 +87,25 @@ func (s *birthdayStreamTestStore) FindBirthdaySessions(
 func (s *birthdayStreamTestStore) ListPublishedEventKeys(_ context.Context, keyPrefix string) ([]string, error) {
 	s.listCalls = append(s.listCalls, keyPrefix)
 	return s.publishedKeys[keyPrefix], nil
+}
+
+func (s *birthdayStreamTestStore) FindPublishedBirthdayStreamEvents(
+	_ context.Context,
+	eventKeys []string,
+) (map[string]domain.AlarmQueueEnvelope, error) {
+	s.publishedEventCalls = append(s.publishedEventCalls, append([]string(nil), eventKeys...))
+	if s.publishedEventsErr != nil {
+		return nil, s.publishedEventsErr
+	}
+
+	events := make(map[string]domain.AlarmQueueEnvelope, len(eventKeys))
+	for _, eventKey := range eventKeys {
+		if envelope, ok := s.publishedEvents[eventKey]; ok {
+			events[eventKey] = envelope
+		}
+	}
+
+	return events, nil
 }
 
 func (s *birthdayStreamTestStore) FindSentRoomsByEventKeys(_ context.Context, eventKeys []string) (map[string][]string, error) {
@@ -157,17 +180,17 @@ func TestBirthdayStreamEvaluationDates(t *testing.T) {
 		{
 			name: "midday tick evaluates single date",
 			now:  time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST),
-			want: []string{"2026-07-10"},
+			want: []string{testBirthdayDate},
 		},
 		{
 			name: "post-midnight tick also evaluates yesterday",
 			now:  time.Date(2026, time.July, 11, 0, 5, 0, 0, testKST),
-			want: []string{"2026-07-10", "2026-07-11"},
+			want: []string{testBirthdayDate, "2026-07-11"},
 		},
 		{
 			name: "utc input inside midnight window evaluates both kst days",
 			now:  time.Date(2026, time.July, 10, 15, 20, 0, 0, time.UTC),
-			want: []string{"2026-07-10", "2026-07-11"},
+			want: []string{testBirthdayDate, "2026-07-11"},
 		},
 		{
 			name: "utc input past midnight window evaluates single kst day",
@@ -245,7 +268,7 @@ func TestBirthdayStreamRunOnceMidnightCatchesLateFrameWithYesterdayDate(t *testi
 	envelopes := publisher.allEnvelopes()
 	require.Len(t, envelopes, 1)
 	require.NotNil(t, envelopes[0].Celebration)
-	assert.Equal(t, "2026-07-10", envelopes[0].Celebration.Date)
+	assert.Equal(t, testBirthdayDate, envelopes[0].Celebration.Date)
 	assert.Equal(t, "vid-late", envelopes[0].Celebration.VideoID)
 }
 
@@ -406,8 +429,8 @@ func TestBirthdayStreamRunOnceScopesRoomsToMatchingSentBirthday(t *testing.T) {
 			{VideoID: "vid-b", ChannelID: testChannelB, Status: testStatusUpcoming},
 		},
 		sentRoomsByEventKey: map[string][]string{
-			birthdayGreetingEventKey(testChannelA, "2026-07-10"): {"room-a"},
-			birthdayGreetingEventKey(testChannelB, "2026-07-10"): {"room-b"},
+			birthdayGreetingEventKey(testChannelA, testBirthdayDate): {"room-a"},
+			birthdayGreetingEventKey(testChannelB, testBirthdayDate): {"room-b"},
 		},
 	}
 	publisher := &birthdayStreamTestPublisher{}
@@ -445,6 +468,28 @@ func TestBirthdayStreamRunOnceAudienceLookupFailureFailsClosed(t *testing.T) {
 	assert.Empty(t, publisher.batches)
 }
 
+func TestBirthdayStreamRunOncePublishedEventLookupFailureFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
+	memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
+		{7, 10}: {{ChannelID: testChannelA, Name: "A"}},
+	}}
+	lookupErr := errors.New("published event unavailable")
+	store := &birthdayStreamTestStore{
+		sessions:           []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Status: testStatusUpcoming}},
+		publishedEventsErr: lookupErr,
+	}
+	publisher := &birthdayStreamTestPublisher{}
+	runner := newBirthdayStreamTestRunner(memberRepo, store, publisher, []string{testRoom1}, now)
+
+	err := runner.RunOnce(t.Context())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, lookupErr)
+	assert.Empty(t, publisher.batches)
+}
+
 func TestBirthdayStreamRunOnceEmptySentAudienceNoop(t *testing.T) {
 	t.Parallel()
 
@@ -460,7 +505,7 @@ func TestBirthdayStreamRunOnceEmptySentAudienceNoop(t *testing.T) {
 
 	require.NoError(t, runner.RunOnce(t.Context()))
 
-	require.Equal(t, [][]string{{birthdayGreetingEventKey(testChannelA, "2026-07-10")}}, store.sentRoomsEventKeyCalls)
+	require.Equal(t, [][]string{{birthdayGreetingEventKey(testChannelA, testBirthdayDate)}}, store.sentRoomsEventKeyCalls)
 	assert.Empty(t, publisher.batches)
 }
 
@@ -468,13 +513,13 @@ func TestBirthdayStreamRunOnceRepublishesKnownEventForLateSentRoom(t *testing.T)
 	t.Parallel()
 
 	now := time.Date(2026, time.July, 10, 12, 0, 0, 0, testKST)
-	prefix := birthdayStreamEventKeyPrefix(testChannelA, "2026-07-10")
-	greetingKey := birthdayGreetingEventKey(testChannelA, "2026-07-10")
+	prefix := birthdayStreamEventKeyPrefix(testChannelA, testBirthdayDate)
+	greetingKey := birthdayGreetingEventKey(testChannelA, testBirthdayDate)
 	memberRepo := &birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
 		{7, 10}: {{ChannelID: testChannelA, Name: "A"}},
 	}}
 	store := &birthdayStreamTestStore{
-		sessions: []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Status: testStatusUpcoming}},
+		sessions: []BirthdayStreamSession{{VideoID: testVideoA, ChannelID: testChannelA, Title: "original title", Status: testStatusUpcoming}},
 		sentRoomsByEventKey: map[string][]string{
 			greetingKey: {testRoom1},
 		},
@@ -484,8 +529,17 @@ func TestBirthdayStreamRunOnceRepublishesKnownEventForLateSentRoom(t *testing.T)
 
 	require.NoError(t, runner.RunOnce(t.Context()))
 
-	store.publishedKeys = map[string][]string{prefix: {birthdayStreamEventKey(testChannelA, "2026-07-10", testVideoA)}}
+	canonicalEnvelope := publisher.batches[0][0]
+
+	canonicalEnvelope.Notification.RoomID = ""
+	canonicalEnvelope.Notification.Users = nil
+
+	store.publishedKeys = map[string][]string{prefix: {birthdayStreamEventKey(testChannelA, testBirthdayDate, testVideoA)}}
+	store.publishedEvents = map[string]domain.AlarmQueueEnvelope{
+		birthdayStreamEventKey(testChannelA, testBirthdayDate, testVideoA): canonicalEnvelope,
+	}
 	store.sentRoomsByEventKey[greetingKey] = []string{testRoom1, testRoom2}
+	store.sessions[0].Title = "changed upstream title"
 
 	require.NoError(t, runner.RunOnce(t.Context()))
 
@@ -494,6 +548,9 @@ func TestBirthdayStreamRunOnceRepublishesKnownEventForLateSentRoom(t *testing.T)
 	require.Len(t, publisher.batches[1], 2)
 	assert.Equal(t, testRoom1, publisher.batches[1][0].Notification.RoomID)
 	assert.Equal(t, testRoom2, publisher.batches[1][1].Notification.RoomID)
+	assert.Equal(t, "original title", publisher.batches[1][0].Celebration.StreamTitle)
+	assert.Equal(t, "original title", publisher.batches[1][1].Celebration.StreamTitle)
+	assert.Equal(t, [][]string{{birthdayStreamEventKey(testChannelA, testBirthdayDate, testVideoA)}, {birthdayStreamEventKey(testChannelA, testBirthdayDate, testVideoA)}}, store.publishedEventCalls)
 }
 
 func TestBirthdayStreamRunOnceEmptyChannelIDSkipped(t *testing.T) {
@@ -588,7 +645,7 @@ func TestBirthdayStreamRunOnceEnvelopeFields(t *testing.T) {
 		assert.Equal(t, "후부키", payload.MemberName)
 		assert.Equal(t, testChannelA, payload.ChannelID)
 		assert.Equal(t, "https://example.com/a.jpg", payload.Photo)
-		assert.Equal(t, "2026-07-10", payload.Date)
+		assert.Equal(t, testBirthdayDate, payload.Date)
 		assert.Equal(t, "vid-1", payload.VideoID)
 		assert.Equal(t, "생일 방송", payload.StreamTitle)
 		assert.Equal(t, "https://youtube.com/watch?v=vid-1", payload.StreamURL)
@@ -601,10 +658,10 @@ func TestBirthdayStreamRunOnceEnvelopeFields(t *testing.T) {
 func TestBirthdayStreamEventKeyPrefixMatchesEventKey(t *testing.T) {
 	t.Parallel()
 
-	prefix := birthdayStreamEventKeyPrefix("UC_a", "2026-07-10")
+	prefix := birthdayStreamEventKeyPrefix("UC_a", testBirthdayDate)
 	assert.Equal(t, "celebration:birthday_stream:UC_a:2026-07-10:", prefix)
-	assert.Equal(t, prefix+"vid-1", birthdayStreamEventKey("UC_a", "2026-07-10", "vid-1"))
-	assert.Equal(t, "celebration:birthday:UC_a:2026-07-10", birthdayGreetingEventKey("UC_a", "2026-07-10"))
+	assert.Equal(t, prefix+"vid-1", birthdayStreamEventKey("UC_a", testBirthdayDate, "vid-1"))
+	assert.Equal(t, "celebration:birthday:UC_a:2026-07-10", birthdayGreetingEventKey("UC_a", testBirthdayDate))
 }
 
 func TestBirthdayStreamRunnerStartStopsOnContextEnd(t *testing.T) {
