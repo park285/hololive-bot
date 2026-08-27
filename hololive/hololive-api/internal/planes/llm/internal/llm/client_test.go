@@ -27,7 +27,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testDefaultSchemaName = "event_summary"
+const (
+	testDefaultSchemaName  = "event_summary"
+	testReasoningLevelHigh = "high"
+)
 
 func testObjectSchema() map[string]any {
 	return map[string]any{"type": "object"}
@@ -160,8 +163,8 @@ func TestOptionWithReasoningEffort(t *testing.T) {
 	}{
 		{
 			name:   "sets effort",
-			option: WithReasoningEffort("high"),
-			want:   "high",
+			option: WithReasoningEffort(testReasoningLevelHigh),
+			want:   testReasoningLevelHigh,
 		},
 		{
 			name:   "empty string is no-op",
@@ -192,7 +195,7 @@ func TestOptionsCompose(t *testing.T) {
 		WithTemperature(0.2),
 		WithWebSearch(false),
 		WithChatCompletions(),
-		WithReasoningEffort("high"),
+		WithReasoningEffort(testReasoningLevelHigh),
 	} {
 		option(&options)
 	}
@@ -203,5 +206,5 @@ func TestOptionsCompose(t *testing.T) {
 	assert.InDelta(t, 0.2, *options.Temperature, 0)
 	assert.False(t, *options.WebSearch)
 	assert.True(t, options.ChatCompletions)
-	assert.Equal(t, "high", options.ReasoningEffort)
+	assert.Equal(t, testReasoningLevelHigh, options.ReasoningEffort)
 }

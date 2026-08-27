@@ -155,8 +155,13 @@ func TestProvideMajorEventLLMClient_Success(t *testing.T) {
 }
 
 func TestProvideMajorEventLLMClient_GeminiNativeProvider(t *testing.T) {
-	const sensitiveKey = "gemini-provider-key"
+	const (
+		sensitiveKey           = "gemini-provider-key"
+		testGeminiThinkingHigh = "high"
+	)
+
 	var buf bytes.Buffer
+
 	logger := newUnsanitizedTestLogger(&buf)
 
 	client := ProvideMajorEventLLMClient(settings.LLMProviderConfig{
@@ -166,7 +171,7 @@ func TestProvideMajorEventLLMClient_GeminiNativeProvider(t *testing.T) {
 			APIKey:        sensitiveKey,
 			BaseURL:       "https://generativelanguage.googleapis.com",
 			Model:         "gemini-3.7-flash",
-			ThinkingLevel: "high",
+			ThinkingLevel: testGeminiThinkingHigh,
 		},
 	}, nil, logger)
 	if client == nil {
@@ -369,6 +374,7 @@ func TestAppendSupportedTemperature(t *testing.T) {
 			}
 
 			var config llm.Options
+
 			for _, opt := range opts {
 				opt(&config)
 			}

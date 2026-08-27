@@ -56,6 +56,10 @@ func safeLLMProviderError(err error) error {
 		return safeProviderError{statusCode: providerErr.statusCode, code: providerErr.code, apiType: "gemini", errType: "gemini_provider_error"}
 	}
 
+	if providerErr, ok := errors.AsType[safeProviderError](err); ok {
+		return providerErr
+	}
+
 	if strings.HasPrefix(err.Error(), "llm provider request failed") {
 		return errors.New(sharedllm.RedactDiagnostic(err.Error(), 1024))
 	}
@@ -95,9 +99,20 @@ func llmProviderErrorAttrs(err error) []slog.Attr {
 			slog.String("error_type", "gemini_provider_error"),
 			slog.Bool("provider_error", true),
 		}
+
 		attrs = appendStatusCodeAttr(attrs, providerErr.statusCode)
 
 		return appendTrimmedStringAttr(attrs, "error_code", providerErr.code)
+	}
+
+	if providerErr, ok := errors.AsType[safeProviderError](err); ok {
+		attrs := []slog.Attr{slog.String("error_type", providerErr.errType)}
+
+		attrs = appendStatusCodeAttr(attrs, providerErr.statusCode)
+		attrs = appendTrimmedStringAttr(attrs, "error_code", providerErr.code)
+		attrs = appendTrimmedStringAttr(attrs, "provider_error_type", providerErr.apiType)
+
+		return appendTrimmedStringAttr(attrs, "provider_error_param", providerErr.param)
 	}
 
 	if errors.Is(err, errOpenAIRefusalOutput) || errors.Is(err, sharedllm.ErrOpenAIRefusalOutput) {

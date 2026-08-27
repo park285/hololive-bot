@@ -182,12 +182,18 @@ func validateLLMProvider(config LLMProviderConfig) error {
 
 	switch provider {
 	case LLMProviderCliproxy:
-		return validateCliproxyProvider(config.Cliproxy)
+		if err := validateCliproxyProvider(config.Cliproxy); err != nil {
+			return fmt.Errorf("validate cliproxy provider: %w", err)
+		}
 	case LLMProviderGemini:
-		return validateGeminiProvider(config.Gemini)
+		if err := validateGeminiProvider(config.Gemini); err != nil {
+			return fmt.Errorf("validate gemini provider: %w", err)
+		}
 	default:
 		return fmt.Errorf("LLM_PROVIDER must be %q or %q", LLMProviderCliproxy, LLMProviderGemini)
 	}
+
+	return nil
 }
 
 func validateCliproxyProvider(config CliproxyConfig) error {

@@ -28,9 +28,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func mustNewGeminiClient(t *testing.T, baseURL string, opts ...Option) *GeminiClient {
@@ -42,6 +44,56 @@ func mustNewGeminiClient(t *testing.T, baseURL string, opts ...Option) *GeminiCl
 	}
 
 	return client
+}
+
+func writeGeminiTestResponse(t *testing.T, w io.Writer, response string) {
+	t.Helper()
+
+	if _, err := io.WriteString(w, response); err != nil {
+		t.Errorf("write Gemini test response: %v", err)
+	}
+}
+
+func writeGeminiTestResponsef(t *testing.T, w io.Writer, format string, args ...any) {
+	t.Helper()
+
+	if _, err := fmt.Fprintf(w, format, args...); err != nil {
+		t.Errorf("write Gemini test response: %v", err)
+	}
+}
+
+func captureGeminiInteractionRequest(t *testing.T, r *http.Request) (geminiInteractionRequest, map[string]any) {
+	t.Helper()
+
+	assert.Equal(t, http.MethodPost, r.Method)
+	assert.Equal(t, "/v1beta/interactions", r.URL.Path)
+	assert.Equal(t, "test-gemini-key", r.Header.Get("x-goog-api-key"))
+
+	var (
+		captured   geminiInteractionRequest
+		rawRequest map[string]any
+	)
+
+	raw, err := io.ReadAll(r.Body)
+	if !assert.NoError(t, err) {
+		return captured, rawRequest
+	}
+
+	assert.NoError(t, jsonv2.Unmarshal(raw, &captured))
+	assert.NoError(t, jsonv2.Unmarshal(raw, &rawRequest))
+
+	return captured, rawRequest
+}
+
+func assertGeminiGenerationConfig(t *testing.T, rawRequest map[string]any) {
+	t.Helper()
+
+	generationConfig, ok := rawRequest["generation_config"].(map[string]any)
+	require.True(t, ok, "generation_config = %#v", rawRequest["generation_config"])
+
+	for _, unsupported := range []string{"temperature", "top_p", "top_k"} {
+		assert.NotContains(t, generationConfig, unsupported)
+	}
 }
 
 func TestNewGeminiClientRejectsNonTLSRemoteBaseURL(t *testing.T) {
@@ -70,90 +122,49 @@ func TestSafeLLMProviderErrorPreservesGeminiMetadata(t *testing.T) {
 
 func TestGeminiClientGenerateJSONSendsNativeInteractionContract(t *testing.T) {
 	tracker := &fakeCostTracker{}
-	var captured geminiInteractionRequest
-	var rawRequest map[string]any
+
+	var (
+		captured   geminiInteractionRequest
+		rawRequest map[string]any
+	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1beta/interactions" {
-			t.Errorf("request = %s %s", r.Method, r.URL.Path)
-		}
-
-		if got := r.Header.Get("x-goog-api-key"); got != "test-gemini-key" {
-			t.Errorf("x-goog-api-key = %q", got)
-		}
-
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Errorf("read request: %v", err)
-		}
-
-		if err := jsonv2.Unmarshal(raw, &captured); err != nil {
-			t.Errorf("decode request: %v", err)
-		}
-
-		if err := jsonv2.Unmarshal(raw, &rawRequest); err != nil {
-			t.Errorf("decode raw request: %v", err)
-		}
+		captured, rawRequest = captureGeminiInteractionRequest(t, r)
 
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"completed","steps":[{"type":"google_search_call","arguments":{"queries":["hololive"]}},{"type":"model_output","content":[{"type":"text","text":"{\"ok\":true}"}]}],"usage":{"total_tokens":321}}`)
+		writeGeminiTestResponse(t, w, `{"status":"completed","steps":[{"type":"google_search_call","arguments":{"queries":["hololive"]}},{"type":"model_output","content":[{"type":"text","text":"{\"ok\":true}"}]}],"usage":{"total_tokens":321}}`)
 	}))
 	t.Cleanup(server.Close)
 
-	client := mustNewGeminiClient(t, server.URL, WithReasoningEffort("high"), WithWebSearch(true), WithCostTracker(tracker))
+	client := mustNewGeminiClient(t, server.URL, WithReasoningEffort(testReasoningLevelHigh), WithWebSearch(true), WithCostTracker(tracker))
+
 	got, err := client.GenerateJSON(t.Context(), "system contract", "user request", testObjectSchema())
-	if err != nil {
-		t.Fatalf("GenerateJSON() error = %v", err)
-	}
-
-	if got != `{"ok":true}` {
-		t.Fatalf("GenerateJSON() = %q", got)
-	}
-
-	if captured.Model != "gemini-3.7-flash" || captured.Input != "user request" || captured.SystemInstruction != "system contract" {
-		t.Fatalf("captured prompt contract = %#v", captured)
-	}
-
-	if captured.GenerationConfig.ThinkingLevel != "high" {
-		t.Fatalf("thinking_level = %q", captured.GenerationConfig.ThinkingLevel)
-	}
-
-	if store, exists := rawRequest["store"]; !exists || store != false {
-		t.Fatalf("store = %#v, want explicit false", store)
-	}
-
-	if len(captured.Tools) != 1 || captured.Tools[0].Type != "google_search" {
-		t.Fatalf("tools = %#v", captured.Tools)
-	}
-
-	if captured.ResponseFormat.MIMEType != "application/json" || captured.ResponseFormat.Schema == nil {
-		t.Fatalf("response_format = %#v", captured.ResponseFormat)
-	}
-
-	generationConfig, ok := rawRequest["generation_config"].(map[string]any)
-	if !ok {
-		t.Fatalf("generation_config = %#v", rawRequest["generation_config"])
-	}
-
-	for _, unsupported := range []string{"temperature", "top_p", "top_k"} {
-		if _, exists := generationConfig[unsupported]; exists {
-			t.Errorf("generation_config unexpectedly contains %q", unsupported)
-		}
-	}
-
-	if !slices.Equal(tracker.providers, []string{"gemini"}) || !slices.Equal(tracker.models, []string{"gemini-3.7-flash"}) || !slices.Equal(tracker.tokens, []int64{321}) {
-		t.Fatalf("tracked usage = providers %v models %v tokens %v", tracker.providers, tracker.models, tracker.tokens)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, `{"ok":true}`, got)
+	assert.Equal(t, "gemini-3.7-flash", captured.Model)
+	assert.Equal(t, "user request", captured.Input)
+	assert.Equal(t, "system contract", captured.SystemInstruction)
+	assert.Equal(t, testReasoningLevelHigh, captured.GenerationConfig.ThinkingLevel)
+	assert.Equal(t, false, rawRequest["store"])
+	require.Len(t, captured.Tools, 1)
+	assert.Equal(t, "google_search", captured.Tools[0].Type)
+	assert.Equal(t, "application/json", captured.ResponseFormat.MIMEType)
+	assert.NotNil(t, captured.ResponseFormat.Schema)
+	assertGeminiGenerationConfig(t, rawRequest)
+	assert.Equal(t, []string{"gemini"}, tracker.providers)
+	assert.Equal(t, []string{"gemini-3.7-flash"}, tracker.models)
+	assert.Equal(t, []int64{321}, tracker.tokens)
 }
 
 func TestGeminiClientGenerateJSONOmitsSearchWhenDisabled(t *testing.T) {
 	var captured geminiInteractionRequest
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := jsonv2.UnmarshalRead(r.Body, &captured); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
 
-		fmt.Fprint(w, `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}]}`)
+		writeGeminiTestResponse(t, w, `{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}]}`)
 	}))
 	t.Cleanup(server.Close)
 
@@ -169,11 +180,12 @@ func TestGeminiClientGenerateJSONOmitsSearchWhenDisabled(t *testing.T) {
 
 func TestGeminiClientGenerateJSONRejectsNonCompletedInteraction(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, `{"status":"incomplete","steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}]}`)
+		writeGeminiTestResponse(t, w, `{"status":"incomplete","steps":[{"type":"model_output","content":[{"type":"text","text":"{}"}]}]}`)
 	}))
 	t.Cleanup(server.Close)
 
 	client := mustNewGeminiClient(t, server.URL)
+
 	_, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema())
 	if err == nil || !strings.Contains(err.Error(), "interaction_not_completed") {
 		t.Fatalf("GenerateJSON() error = %v", err)
@@ -185,11 +197,12 @@ func TestGeminiClientGenerateJSONRedactsHTTPErrorBody(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprintf(w, `{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":%q}}`, secretMessage)
+		writeGeminiTestResponsef(t, w, `{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":%q}}`, secretMessage)
 	}))
 	t.Cleanup(server.Close)
 
 	client := mustNewGeminiClient(t, server.URL)
+
 	_, err := client.GenerateJSON(t.Context(), "system", "user", testObjectSchema())
 	if err == nil {
 		t.Fatal("GenerateJSON() error = nil")
@@ -214,7 +227,7 @@ func TestGeminiClientGenerateJSONRejectsMalformedOrEmptyOutput(t *testing.T) {
 	for name, response := range tests {
 		t.Run(name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				fmt.Fprint(w, response)
+				writeGeminiTestResponse(t, w, response)
 			}))
 			t.Cleanup(server.Close)
 

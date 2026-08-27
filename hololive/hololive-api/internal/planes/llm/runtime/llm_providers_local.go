@@ -223,7 +223,7 @@ func buildConsensusLLMClient(provider settings.LLMProviderConfig, tracker llm.Co
 func buildProviderClient(provider settings.LLMProviderConfig, tracker llm.CostTracker, logger *slog.Logger, spec providerClientSpec) (llm.Client, string, bool, error) {
 	selected, err := selectLLMProvider(provider)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, fmt.Errorf("select LLM provider: %w", err)
 	}
 
 	model := cmp.Or(strings.TrimSpace(spec.model), selected.defaultModel)
@@ -239,19 +239,29 @@ func buildProviderClient(provider settings.LLMProviderConfig, tracker llm.CostTr
 	}
 
 	if selected.name == settings.LLMProviderGemini {
-		return buildGeminiProviderClient(selected, model, logger, opts)
+		client, buildErr := buildGeminiProviderClient(selected, model, logger, opts)
+		if buildErr != nil {
+			return nil, "", false, fmt.Errorf("build gemini provider client: %w", buildErr)
+		}
+
+		return client, model, false, nil
 	}
 
-	return buildCliproxyProviderClient(selected, model, logger, opts, spec)
+	client, selectedModel, temperatureApplied, buildErr := buildCliproxyProviderClient(selected, model, logger, opts, spec)
+	if buildErr != nil {
+		return nil, "", false, fmt.Errorf("build cliproxy provider client: %w", buildErr)
+	}
+
+	return client, selectedModel, temperatureApplied, nil
 }
 
-func buildGeminiProviderClient(selected selectedLLMProvider, model string, logger *slog.Logger, opts []llm.Option) (llm.Client, string, bool, error) {
+func buildGeminiProviderClient(selected selectedLLMProvider, model string, logger *slog.Logger, opts []llm.Option) (llm.Client, error) {
 	client, err := llm.NewGeminiClient(selected.baseURL, selected.apiKey, model, logger, opts...)
 	if err != nil {
-		return nil, "", false, fmt.Errorf("initialize gemini LLM client: %w", err)
+		return nil, fmt.Errorf("initialize gemini LLM client: %w", err)
 	}
 
-	return client, model, false, nil
+	return client, nil
 }
 
 func buildCliproxyProviderClient(selected selectedLLMProvider, model string, logger *slog.Logger, opts []llm.Option, spec providerClientSpec) (llm.Client, string, bool, error) {
@@ -280,9 +290,19 @@ func buildCliproxyProviderClient(selected selectedLLMProvider, model string, log
 func selectLLMProvider(config settings.LLMProviderConfig) (selectedLLMProvider, error) {
 	switch normalizedProviderName(config.Name) {
 	case settings.LLMProviderGemini:
-		return selectGeminiProvider(config.Gemini)
+		provider, err := selectGeminiProvider(config.Gemini)
+		if err != nil {
+			return selectedLLMProvider{}, fmt.Errorf("select gemini provider: %w", err)
+		}
+
+		return provider, nil
 	case settings.LLMProviderCliproxy:
-		return selectCliproxyProvider(config.Cliproxy)
+		provider, err := selectCliproxyProvider(config.Cliproxy)
+		if err != nil {
+			return selectedLLMProvider{}, fmt.Errorf("select cliproxy provider: %w", err)
+		}
+
+		return provider, nil
 	default:
 		return selectedLLMProvider{}, errors.New("selected LLM provider is unsupported")
 	}

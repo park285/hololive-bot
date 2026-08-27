@@ -125,17 +125,18 @@ func NewGeminiClient(baseURL, apiKey, model string, logger *slog.Logger, opts ..
 
 	endpoint, err := geminiInteractionsEndpoint(baseURL, apiKey, model)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create gemini interactions endpoint: %w", err)
 	}
 
 	o := &Options{SchemaName: "event_summary"}
+
 	for _, opt := range opts {
 		opt(o)
 	}
 
 	thinkingLevel, err := normalizeGeminiThinkingLevel(o.ReasoningEffort)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize gemini thinking level: %w", err)
 	}
 
 	if logger == nil {
@@ -156,12 +157,12 @@ func NewGeminiClient(baseURL, apiKey, model string, logger *slog.Logger, opts ..
 
 func geminiInteractionsEndpoint(baseURL, apiKey, model string) (string, error) {
 	if err := validateGeminiClientInputs(apiKey, model); err != nil {
-		return "", err
+		return "", fmt.Errorf("validate gemini client inputs: %w", err)
 	}
 
 	parsedURL, err := parseGeminiBaseURL(baseURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse gemini base URL: %w", err)
 	}
 
 	return parsedURL.JoinPath("v1beta", "interactions").String(), nil
@@ -190,7 +191,7 @@ func parseGeminiBaseURL(baseURL string) (*url.URL, error) {
 	}
 
 	if err := validateGeminiBaseURL(parsedURL); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate gemini base URL: %w", err)
 	}
 
 	return parsedURL, nil
@@ -252,9 +253,11 @@ func (c *GeminiClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
 
 	started := time.Now()
+
 	text, usage, err := c.generate(ctx, systemPrompt, userPrompt, schema)
 	if err != nil {
 		failedAttrs := append([]slog.Attr{}, attrs...)
+
 		failedAttrs = append(failedAttrs, sharedlog.SinceMS(started))
 		failedAttrs = append(failedAttrs, llmProviderErrorAttrs(err)...)
 		sharedlog.Error(ctx, c.logger, "llm.provider.request.failed", "llm provider request failed", failedAttrs...)
@@ -267,6 +270,7 @@ func (c *GeminiClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	}
 
 	successAttrs := append([]slog.Attr{}, attrs...)
+
 	successAttrs = append(successAttrs, sharedlog.SinceMS(started), slog.Int("result_count", 1))
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.succeeded", "llm provider request succeeded", successAttrs...)
 	sharedlog.Debug(ctx, c.logger, "llm.result.validated", "llm result validated", successAttrs...)
@@ -277,7 +281,7 @@ func (c *GeminiClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 func (c *GeminiClient) generate(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, int64, error) {
 	req, err := c.newInteractionRequest(ctx, systemPrompt, userPrompt, schema)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("create gemini interaction request: %w", err)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -288,10 +292,15 @@ func (c *GeminiClient) generate(ctx context.Context, systemPrompt, userPrompt st
 
 	raw, err := readGeminiResponse(resp.Body)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("read gemini response: %w", err)
 	}
 
-	return decodeGeminiInteraction(raw, resp.StatusCode)
+	text, usage, err := decodeGeminiInteraction(raw, resp.StatusCode)
+	if err != nil {
+		return "", 0, fmt.Errorf("decode gemini interaction: %w", err)
+	}
+
+	return text, usage, nil
 }
 
 func (c *GeminiClient) newInteractionRequest(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (*http.Request, error) {
@@ -312,6 +321,7 @@ func (c *GeminiClient) newInteractionRequest(ctx context.Context, systemPrompt, 
 	}
 
 	var body bytes.Buffer
+
 	if err := jsonv2.MarshalWrite(&body, reqBody); err != nil {
 		return nil, fmt.Errorf("marshal gemini interaction: %w", err)
 	}
@@ -346,6 +356,7 @@ func decodeGeminiInteraction(raw []byte, statusCode int) (string, int64, error) 
 	}
 
 	var interaction geminiInteractionResponse
+
 	if err := jsonv2.Unmarshal(raw, &interaction); err != nil {
 		return "", 0, fmt.Errorf("decode gemini interaction response: %w", err)
 	}
@@ -360,6 +371,7 @@ func decodeGeminiInteraction(raw []byte, statusCode int) (string, int64, error) 
 	}
 
 	var structuredOutput any
+
 	if err := jsonv2.Unmarshal([]byte(text), &structuredOutput); err != nil {
 		return "", 0, errors.New("gemini interaction returned invalid JSON output")
 	}
@@ -369,7 +381,9 @@ func decodeGeminiInteraction(raw []byte, statusCode int) (string, int64, error) 
 
 func newGeminiProviderError(raw []byte, statusCode int) geminiProviderError {
 	providerErr := geminiProviderError{statusCode: statusCode}
+
 	var envelope geminiErrorEnvelope
+
 	if jsonv2.Unmarshal(raw, &envelope) == nil {
 		providerErr.code = strings.TrimSpace(envelope.Error.Status)
 	}
@@ -384,6 +398,7 @@ func finalGeminiModelOutput(steps []geminiStep) string {
 		}
 
 		var output strings.Builder
+
 		for _, content := range step.Content {
 			if content.Type == "text" {
 				output.WriteString(content.Text)
