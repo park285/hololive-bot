@@ -288,6 +288,11 @@ func (c *GeminiClient) generate(ctx context.Context, systemPrompt, userPrompt st
 	if err != nil {
 		return "", 0, fmt.Errorf("send gemini interaction request: %w", err)
 	}
+
+	if resp == nil {
+		return "", 0, errors.New("send gemini interaction request: HTTP client returned nil response")
+	}
+
 	defer resp.Body.Close()
 
 	raw, err := readGeminiResponse(resp.Body)
