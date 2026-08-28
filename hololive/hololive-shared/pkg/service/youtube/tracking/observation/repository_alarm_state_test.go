@@ -419,6 +419,33 @@ func TestRepositoryDuplicateAlarmMarksFinalizeOnePostLevelSentState(t *testing.T
 	requireDuplicateDeliveryFinalized(t, db, repository, firstAlarmSentAt)
 }
 
+func TestNormalizeAlarmSentMarksKeepsClaimAcrossCanonicalAliases(t *testing.T) {
+	t.Parallel()
+
+	authorizedAt := time.Date(2026, time.April, 10, 1, 4, 30, 0, time.UTC)
+	firstAlarmSentAt := authorizedAt.Add(30 * time.Second)
+	laterAlarmSentAt := firstAlarmSentAt.Add(10 * time.Second)
+
+	marks, err := normalizeAlarmSentMarks([]AlarmSentMark{
+		{
+			Kind:         domain.OutboxKindCommunityPost,
+			ContentID:    testDuplicateDeliveryPostID,
+			AuthorizedAt: &authorizedAt,
+			AlarmSentAt:  laterAlarmSentAt,
+		},
+		{
+			Kind:        domain.OutboxKindCommunityPost,
+			ContentID:   testDuplicateDeliveryCanonicalPostID,
+			AlarmSentAt: firstAlarmSentAt,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, marks, 1)
+	require.NotNil(t, marks[0].AuthorizedAt)
+	require.Equal(t, authorizedAt, *marks[0].AuthorizedAt)
+	require.Equal(t, firstAlarmSentAt, marks[0].AlarmSentAt)
+}
+
 func TestRepositoryMarkAlarmSentBatchRollsBackOnClaimAuthorizationMismatch(t *testing.T) {
 	repository := NewRepository(newTrackingTestDB(t))
 	ctx := t.Context()

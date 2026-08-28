@@ -43,7 +43,7 @@ func buildCelebrationRunnerScheduler(
 		queue.WithMaxDeliveriesPerBatch(publishConfig.MaxDeliveriesPerBatch),
 	)
 
-	return celebration.NewRunner(memberRepo, alarmRepo, publisher, logger, celebration.RunnerConfig{
+	return celebration.NewRunner(memberRepo, alarmRepo, celebration.NewPgxStore(infra.Postgres.GetPool()), publisher, logger, celebration.RunnerConfig{
 		CheckHourKST: envconfig.ParseNonNegativeInt("CELEBRATION_CHECK_HOUR_KST", 0),
 		RunInterval:  envconfig.ParsePositiveDurationMS("CELEBRATION_RUN_INTERVAL_MS", time.Hour),
 	})

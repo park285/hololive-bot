@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -157,19 +158,24 @@ func TestTargetMinutePolicy_HighestCrossed_CappedWindowDoesNotRecoverOldTarget(t
 }
 
 func TestTargetMinutePolicy_Constructors(t *testing.T) {
-	configured := NewTargetMinutePolicyFromConfigured([]int{15, 15, 5, 0})
-	if got := configured.Clone(); len(got) != 2 || got[0] != 15 || got[1] != 5 {
-		t.Fatalf("configured.Clone() = %v, want [15 5]", got)
-	}
-
 	runtime := NewTargetMinutePolicyFromRuntimeAdvance(5)
-	if got := runtime.Clone(); len(got) != 3 || got[0] != 5 || got[1] != 3 || got[2] != 1 {
-		t.Fatalf("runtime.Clone() = %v, want [5 3 1]", got)
+	tests := []struct {
+		name   string
+		policy TargetMinutePolicy
+		want   []int
+	}{
+		{name: "configured", policy: NewTargetMinutePolicyFromConfigured([]int{15, 15, 5, 0}), want: []int{15, 5}},
+		{name: "runtime", policy: runtime, want: []int{5, 3, 1}},
+		{name: "persisted", policy: NewTargetMinutePolicyFromPersisted(5, []int{5, 1}), want: []int{5, 3, 1}},
+		{name: "two-minute persisted", policy: NewTargetMinutePolicyFromPersisted(2, []int{2, 1}), want: []int{2, 1}},
 	}
 
-	persisted := NewTargetMinutePolicyFromPersisted(5, []int{5, 1})
-	if got := persisted.Clone(); len(got) != 3 || got[0] != 5 || got[1] != 3 || got[2] != 1 {
-		t.Fatalf("persisted.Clone() = %v, want [5 3 1]", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.policy.Clone(); !slices.Equal(got, tt.want) {
+				t.Fatalf("Clone() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 
 	if runtime.PrimaryAdvanceMinute() != 5 {

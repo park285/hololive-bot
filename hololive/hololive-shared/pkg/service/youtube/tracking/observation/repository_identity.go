@@ -130,10 +130,7 @@ func (r *identityRepository) UpsertBatch(ctx context.Context, records []*domain.
 	}
 
 	now := timestamp.Normalize(time.Now())
-	finalActualPublishedExpr := `CASE
-		        WHEN EXCLUDED.actual_published_at IS NULL THEN youtube_content_alarm_tracking.actual_published_at
-		        ELSE EXCLUDED.actual_published_at
-		    END`
+	finalActualPublishedExpr := `COALESCE(youtube_content_alarm_tracking.actual_published_at, EXCLUDED.actual_published_at)`
 	finalAlarmSentExpr := `CASE
 		        WHEN youtube_content_alarm_tracking.alarm_sent_at IS NULL THEN EXCLUDED.alarm_sent_at
 		        WHEN EXCLUDED.alarm_sent_at IS NULL THEN youtube_content_alarm_tracking.alarm_sent_at

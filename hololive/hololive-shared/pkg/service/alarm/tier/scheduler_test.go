@@ -61,10 +61,10 @@ func computeNextCheckAtCases(now time.Time) []computeNextCheckAtCase {
 			expectedInterval: constants.NoUpcomingInterval,
 		},
 		{
-			name:             "예정 없음, 5분 전 알림 -> Tier2Interval (recently notified)",
+			name:             "예정 없음, 5분 전 알림 -> NoUpcomingInterval",
 			nearestStart:     nil,
 			lastNotifiedAt:   &notified5m,
-			expectedInterval: constants.Tier2Interval,
+			expectedInterval: constants.NoUpcomingInterval,
 		},
 		{
 			name:             "예정 없음, 20분 전 알림 -> NoUpcomingInterval (윈도우 경과)",
@@ -256,9 +256,9 @@ func TestMarkRecentlyNotified_AffectsCompute(t *testing.T) {
 
 	ts.mu.RUnlock()
 
-	// 예정 없음 + 최근 알림 -> Tier2Interval
+	// 예정 없음 + 최근 알림도 NoUpcomingInterval보다 느려지지 않는다.
 	result := ComputeNextCheckAt(nil, lastNotified)
-	expected := time.Now().Add(constants.Tier2Interval)
+	expected := time.Now().Add(constants.NoUpcomingInterval)
 	diff := result.Sub(expected)
 
 	if diff < 0 {

@@ -8,10 +8,13 @@ import (
 	keyspkg "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
 
-// claimKeyPrefix는 dedup 마커(notified:claim:, notified:claim:event:) SSOT prefix다.
-// 이 prefix만 queue.Consumer와 동일하게 삭제 대상으로 허용해, dispatch claim 등
+// claimKeyPrefixes는 dispatch envelope에 보존되는 알림 및 일정 변경 dedup 마커의 SSOT prefix다.
+// 이 prefix만 삭제 대상으로 허용해, dispatch claim 등
 // 다른 키가 잘못 해제되는 것을 막는다.
-const claimKeyPrefix = keyspkg.NotifyClaimKeyPrefix
+var claimKeyPrefixes = [...]string{
+	keyspkg.NotifyClaimKeyPrefix,
+	keyspkg.ScheduleTransitionKeyPrefix,
+}
 
 // ClaimKeyReleaser는 Consumer가 dedup claim 키를 삭제할 때 의존하는 narrow interface다.
 // 이 interface는 cache.Client(god interface)가 그대로 만족한다. 주입값이 nil이면 ReleaseClaimKeys는 no-op로
@@ -44,7 +47,7 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 	filtered := make([]string, 0, len(claimKeys))
 	for _, key := range claimKeys {
 		trimmed := strings.TrimSpace(key)
-		if trimmed != "" && strings.HasPrefix(trimmed, claimKeyPrefix) {
+		if isReleasableClaimKey(trimmed) {
 			filtered = append(filtered, trimmed)
 		}
 	}
@@ -60,4 +63,18 @@ func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) err
 	observePGClaimReleased(len(filtered))
 
 	return nil
+}
+
+func isReleasableClaimKey(key string) bool {
+	if key == "" {
+		return false
+	}
+
+	for _, prefix := range claimKeyPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+
+	return false
 }

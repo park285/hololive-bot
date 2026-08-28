@@ -15,6 +15,7 @@ const (
 
 type CelebrationDispatchPayload struct {
 	Kind              CelebrationKind `json:"kind"`
+	MemberID          int             `json:"member_id,omitempty"`
 	MemberName        string          `json:"member_name"`
 	ChannelID         string          `json:"channel_id"`
 	Photo             string          `json:"photo,omitempty"`
@@ -28,7 +29,12 @@ type CelebrationDispatchPayload struct {
 }
 
 func (p *CelebrationDispatchPayload) Identity() string {
-	identity := fmt.Sprintf("%s:%s:%s", p.Kind, p.ChannelID, p.Date)
+	memberIdentity := p.ChannelID
+	if p.MemberID > 0 {
+		memberIdentity = fmt.Sprintf("member-%d", p.MemberID)
+	}
+
+	identity := fmt.Sprintf("%s:%s:%s", p.Kind, memberIdentity, p.Date)
 	if p.Kind == CelebrationKindBirthdayStream {
 		if videoID := strings.TrimSpace(p.VideoID); videoID != "" {
 			identity += ":" + videoID

@@ -127,6 +127,21 @@ validate_bundle_path() {
   done
 }
 
+reject_symlink_path_components() {
+  local path="$1"
+  local current="${ROOT_DIR}"
+  local index
+  local -a parts
+
+  IFS='/' read -r -a parts <<<"${path}"
+  for ((index = 0; index < ${#parts[@]} - 1; index++)); do
+    current="${current}/${parts[index]}"
+    if [[ -L "${current}" ]]; then
+      fail "unsafe source bundle path component: ${path}"
+    fi
+  done
+}
+
 append_candidate_path() {
   local path="$1"
   local source="${2:-tracked}"
@@ -134,6 +149,7 @@ append_candidate_path() {
 
   path="${path#./}"
   validate_bundle_path "${path}"
+  reject_symlink_path_components "${path}"
 
   if should_exclude_path "${path}"; then
     return

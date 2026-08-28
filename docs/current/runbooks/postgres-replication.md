@@ -145,7 +145,8 @@ docker run --rm -v hololive-bot_holo-pg-standby-data:/v --user 999:999 \
 
 # 4. 기동
 cd /home/ubuntu/hololive-bot/deploy/compose
-docker compose -p hololive-bot -f docker-compose.standby.yml \
+docker compose --env-file /etc/stack-secrets/hololive-bot/ap-compose.env \
+  -p hololive-bot -f docker-compose.standby.yml \
   up -d --no-build holo-postgres-standby
 ```
 
@@ -453,6 +454,7 @@ unfence한 뒤에만 정상 Compose lifecycle을 재개합니다.
 | primary 디스크 증가 | standby 단절 중 physical slot이 WAL 보존 | standby 복구 또는 승인 후 slot 제거. |
 | standby 기동 거부 `max_connections` | standby 설정이 primary보다 작음 | primary 이상으로 맞춥니다. |
 | `could not read password file` | pgpass 소유자가 uid 999가 아님 | `0600 999:999`로 sync합니다. |
+| local probe `100.100.1.5:5434 connection refused` | standby를 `--env-file` 없이 생성해 안전 기본값인 `127.0.0.1:5434`에만 publish함 | 데이터 볼륨을 유지하고 위 기동 명령으로 standby만 재생성한 뒤 `docker inspect`의 host binding과 `primary_healthy`를 확인합니다. |
 | `promotion_blocked reason=no_healthy_observation` | exact-lag 정상 샘플을 아직 저장하지 못함 | 복제를 정상화하고 `primary_healthy`가 기록될 때까지 승격하지 않습니다. |
 | `fence_failed` | SSH-only fence에서 구 host가 unreachable이거나 외부 fence 실패 | 구 primary 상태를 수동 확인하거나 out-of-band fence backend를 복구합니다. fencing을 우회하지 않습니다. |
 | `old_primary_still_writable_after_fence` | fence가 거짓 성공했거나 다른 endpoint를 막음 | 즉시 hook을 비활성화하고 구 primary를 실제 격리합니다. |

@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 if (( $# < 1 || $# > 2 )); then
   echo "usage: verify-full-bundle.sh <bundle.tar.gz> [trusted_manifest_or_checksum_file]" >&2
   exit 2
@@ -21,7 +23,7 @@ trap cleanup EXIT
 source "${ROOT_DIR}/scripts/architecture/lib/git_guard.sh"
 require_git_checkout "${ROOT_DIR}"
 
-python3 - "${ARCHIVE_PATH}" "${MEMBER_LIST}" <<'PY'
+"${CI_PYTHON_BIN}" - "${ARCHIVE_PATH}" "${MEMBER_LIST}" <<'PY'
 import stat
 import sys
 import tarfile
@@ -69,7 +71,7 @@ tar \
   --no-same-owner \
   --no-same-permissions
 
-python3 - "${TMP_DIR}" "${MEMBER_LIST}" "${ROOT_DIR}" "${TRUSTED_REFERENCE_PATH}" <<'PY'
+"${CI_PYTHON_BIN}" - "${TMP_DIR}" "${MEMBER_LIST}" "${ROOT_DIR}" "${TRUSTED_REFERENCE_PATH}" <<'PY'
 from __future__ import annotations
 
 import fnmatch
@@ -296,6 +298,11 @@ def current_checkout_hashes(fields: dict[str, str]) -> dict[str, str]:
     for path in git_paths("ls-files", "-z", "--cached"):
         if is_v1_excluded_path(path):
             continue
+        current = root_dir
+        for part in Path(path).parts[:-1]:
+            current /= part
+            if current.is_symlink():
+                fail(f"current checkout tracked path has a symlink component: {path}")
         source_path = root_dir / path
         if source_path.is_symlink() or not source_path.exists() or not source_path.is_file():
             fail(f"current checkout tracked file is unsafe or missing: {path}")

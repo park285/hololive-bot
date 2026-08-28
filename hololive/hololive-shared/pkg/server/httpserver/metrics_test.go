@@ -125,6 +125,30 @@ func TestNewMetricsServerRejectsMissingAndWrongAPIKey(t *testing.T) {
 	}
 }
 
+func TestNewMetricsServerRejectsAdminKeyWhenMetricsKeyDiffers(t *testing.T) {
+	server := NewMetricsServer(t.Context(), testLoopbackAddr, "metrics-key")
+
+	adminRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
+	adminRequest.Header.Set(common.APIKeyHeader, "admin-key")
+
+	adminRecorder := httptest.NewRecorder()
+	server.Handler.ServeHTTP(adminRecorder, adminRequest)
+
+	if adminRecorder.Code != http.StatusForbidden {
+		t.Fatalf("admin key status = %d, want %d", adminRecorder.Code, http.StatusForbidden)
+	}
+
+	metricsRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", http.NoBody)
+	metricsRequest.Header.Set(common.APIKeyHeader, "metrics-key")
+
+	metricsRecorder := httptest.NewRecorder()
+	server.Handler.ServeHTTP(metricsRecorder, metricsRequest)
+
+	if metricsRecorder.Code != http.StatusOK {
+		t.Fatalf("metrics key status = %d, want %d", metricsRecorder.Code, http.StatusOK)
+	}
+}
+
 func TestNewMetricsServerExposesOnlyMetricsRoute(t *testing.T) {
 	server := NewMetricsServer(t.Context(), testLoopbackAddr, "")
 

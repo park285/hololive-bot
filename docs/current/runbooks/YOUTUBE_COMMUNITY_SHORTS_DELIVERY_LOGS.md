@@ -41,7 +41,8 @@
 | `delivery_mode` | 발송 모드입니다. grouped fan-out, 복구 backfill, 최종 결과 로그를 구분합니다. | `string enum` | `grouped` |
 | `actual_published_at` | 실제 유튜브 게시 시각입니다. 내부 지연 2분 계산의 시작점입니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:10Z` |
 | `detected_at` | 스크래퍼가 게시물을 최초 감지한 시각입니다. 외부 수집 지연과 내부 지연을 분리할 때 사용합니다. | `RFC3339 timestamp string` | `2026-04-10T00:01:42Z` |
-| `sent_at` | 해당 감사 로그가 가리키는 발송 완료 또는 실패 시점입니다. 이 runbook의 조회 결과에서는 `event_at` 로 표시됩니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` || `failure_reason` | 실패 시도일 때의 축약 원인입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있을 수 있습니다. | `string` | `send message` |
+| `sent_at` | 해당 감사 로그가 가리키는 발송 완료 또는 실패 시점입니다. 이 runbook의 조회 결과에서는 `event_at` 로 표시됩니다. | `RFC3339 timestamp string` | `2026-04-10T00:02:05Z` |
+| `failure_reason` | 실패 시도일 때의 축약 원인입니다. 실패 후 재시도/최종 성공 여부를 해석할 때 사용합니다. 성공 로그에서는 비어 있을 수 있습니다. | `string` | `send message` |
 
 ### 2. 2분 SLA 판정 필드
 

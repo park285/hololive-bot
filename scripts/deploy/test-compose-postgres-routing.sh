@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 
 fail() {
     echo "[FAIL] $*" >&2
@@ -68,7 +70,7 @@ quiet default "${endpoint_root}/default.env" "${prod[@]}"
 quiet oracle "${endpoint_root}/override.env" "${prod[@]}"
 quiet main-ap "${endpoint_root}/override.env" "${main[@]}"
 
-python3 - "${endpoint_root}/default.json" "${endpoint_root}/default-live.json" "${endpoint_root}/default-main.json" "${endpoint_root}/central.json" "${endpoint_root}/live.json" "${endpoint_root}/main.json" "${endpoint_root}/a.json" "${endpoint_root}/b.json" "${endpoint_root}/d.json" "${endpoint_root}/ap-default.json" <<'PY'
+"${CI_PYTHON_BIN}" - "${endpoint_root}/default.json" "${endpoint_root}/default-live.json" "${endpoint_root}/default-main.json" "${endpoint_root}/central.json" "${endpoint_root}/live.json" "${endpoint_root}/main.json" "${endpoint_root}/a.json" "${endpoint_root}/b.json" "${endpoint_root}/d.json" "${endpoint_root}/ap-default.json" <<'PY'
 import json
 import sys
 def load(path):

@@ -3,9 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 TODAY="${1:-$(date -u +%F)}"
 
-python3 - "$TODAY" \
+"${CI_PYTHON_BIN}" - "$TODAY" \
     "${ROOT_DIR}/hololive/hololive-shared/pkg" \
     "${ROOT_DIR}/hololive/hololive-api/internal" \
     "${ROOT_DIR}/hololive/hololive-youtube-collector/internal" <<'PY'

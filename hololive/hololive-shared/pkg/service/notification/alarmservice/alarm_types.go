@@ -53,6 +53,7 @@ type AlarmService struct {
 	logger          *slog.Logger
 	targetPolicy    sharedchecker.TargetMinutePolicy
 	targetMinutesMu sync.RWMutex
+	cacheMutationMu sync.Mutex
 	cacheState      *alarmcache.State
 	platformMapper  *platformmap.Mapper
 }

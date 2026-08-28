@@ -1,7 +1,7 @@
 [Unit]
 Description=hololive-bot Docker Compose stack
-After=docker.service tailscaled.service network-online.target
-Requires=docker.service
+After=docker.service tailscaled.service network-online.target admin-dashboard-ingress-firewall.service
+Requires=docker.service admin-dashboard-ingress-firewall.service
 Wants=network-online.target
 # The remote fence writes intent before stopping the stack. Either marker blocks
 # an old primary from coming back as a writer after a crash or reboot.

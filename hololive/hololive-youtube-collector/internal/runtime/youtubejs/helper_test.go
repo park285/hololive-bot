@@ -216,6 +216,7 @@ func TestHelperProcessEnvOmitsSecrets(t *testing.T) {
 		"TZ=Asia/Seoul",
 		"POSTGRES_PASSWORD=super-secret",
 		"API_SECRET_KEY=api-secret",
+		"METRICS_API_KEY=metrics-secret",
 		"HOLODEX_API_KEY=holodex-secret",
 		"YOUTUBEJS_NODE=/usr/local/bin/node",
 		"YOUTUBEJS_SOCKET=/tmp/foreign.sock",
@@ -227,7 +228,7 @@ func TestHelperProcessEnvOmitsSecrets(t *testing.T) {
 		t.Fatalf("helper env missing required keys: %#v", got)
 	}
 
-	for _, forbidden := range []string{"POSTGRES_PASSWORD", "API_SECRET_KEY", "HOLODEX_API_KEY", "YOUTUBEJS_SOCKET"} {
+	for _, forbidden := range []string{"POSTGRES_PASSWORD", "API_SECRET_KEY", "METRICS_API_KEY", "HOLODEX_API_KEY", "YOUTUBEJS_SOCKET"} {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("helper env leaked %s: %#v", forbidden, got)
 		}

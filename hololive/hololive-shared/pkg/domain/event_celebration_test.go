@@ -100,6 +100,17 @@ func TestCelebrationDispatchPayload_IdentityBirthdayStreamEmptyVideoID(t *testin
 	}
 }
 
+func TestCelebrationDispatchPayload_IdentityUsesStableMemberID(t *testing.T) {
+	t.Parallel()
+
+	first := &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 101, ChannelID: "UC_shared", Date: testCelebrationDate}
+	second := &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: 102, ChannelID: "UC_shared", Date: testCelebrationDate}
+
+	if first.Identity() == second.Identity() {
+		t.Fatalf("shared-channel member identities collide: %q", first.Identity())
+	}
+}
+
 func TestAlarmTypeBirthday_IsValid(t *testing.T) {
 	t.Parallel()
 

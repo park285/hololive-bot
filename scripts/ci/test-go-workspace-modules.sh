@@ -2,13 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 # shellcheck source=go-workspace-modules.sh
 source "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
-expected="$(cd "${ROOT_DIR}" && go work edit -json | python3 -c '
+expected="$(cd "${ROOT_DIR}" && go work edit -json | "${CI_PYTHON_BIN}" -c '
 import json, sys
 for use in json.load(sys.stdin)["Use"]:
     path = use["DiskPath"]

@@ -47,3 +47,4 @@
 047 186_source_checkpoint_retention_candidate_index.sql
 048 187_youtube_dependent_retention_api.sql
 049 188_youtube_premiere_notification_labels.sql
+050 189_youtube_job_lease_failure_diagnostics_reconcile.sql

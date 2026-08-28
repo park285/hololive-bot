@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -219,6 +220,56 @@ func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {
 
 	require.NoError(t, as.WarmCacheFromDB(t.Context()))
 	assert.True(t, rebuildCalled)
+}
+
+func TestWarmCacheFromDBSerializesCacheMutations(t *testing.T) {
+	as := newTestAlarmService(t)
+
+	as.alarmRepository = &sharedalarm.Repository{}
+
+	original := rebuildSubscriberCacheFromRepository
+	rebuildStarted := make(chan struct{})
+	releaseRebuild := make(chan struct{})
+
+	rebuildSubscriberCacheFromRepository = func(_ context.Context, _ cache.Client, _ *sharedalarm.Repository) (sharedalarm.CacheWarmSummary, error) {
+		close(rebuildStarted)
+		<-releaseRebuild
+
+		return sharedalarm.CacheWarmSummary{}, nil
+	}
+
+	t.Cleanup(func() {
+		rebuildSubscriberCacheFromRepository = original
+	})
+
+	warmDone := make(chan error, 1)
+
+	go func() {
+		warmDone <- as.WarmCacheFromDB(t.Context())
+	}()
+
+	<-rebuildStarted
+
+	mutationStarted := make(chan struct{})
+	mutationDone := make(chan error, 1)
+
+	go func() {
+		close(mutationStarted)
+
+		mutationDone <- as.SetRoomName(t.Context(), "serialized-room", "Serialized Room")
+	}()
+
+	<-mutationStarted
+
+	select {
+	case err := <-mutationDone:
+		t.Fatalf("cache mutation completed during authoritative rebuild: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	close(releaseRebuild)
+	require.NoError(t, <-warmDone)
+	require.NoError(t, <-mutationDone)
 }
 
 func TestWarmCacheFromDB_RebuildFailureRecordsMetric(t *testing.T) {

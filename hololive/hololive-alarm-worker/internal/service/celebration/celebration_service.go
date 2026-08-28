@@ -13,6 +13,7 @@ type RunnerConfig struct {
 func NewRunner(
 	memberRepo MemberRepository,
 	alarmRepo AlarmRoomRepository,
+	eventStore publishedCelebrationStore,
 	publisher Publisher,
 	logger *slog.Logger,
 	config RunnerConfig,
@@ -20,6 +21,7 @@ func NewRunner(
 	return &Runner{
 		memberRepo:   memberRepo,
 		alarmRepo:    alarmRepo,
+		eventStore:   eventStore,
 		publisher:    publisher,
 		logger:       logger,
 		checkHourKST: config.CheckHourKST,

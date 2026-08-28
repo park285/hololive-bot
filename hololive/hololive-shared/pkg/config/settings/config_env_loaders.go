@@ -66,11 +66,19 @@ func loadPostgresConfig() PostgresConfig {
 }
 
 func loadServerConfig() ServerConfig {
+	return loadServerConfigWithAPIKey(sharedenv.String("API_SECRET_KEY", ""))
+}
+
+func loadYouTubeCollectorServerConfig() ServerConfig {
+	return loadServerConfigWithAPIKey(sharedenv.String("METRICS_API_KEY", ""))
+}
+
+func loadServerConfigWithAPIKey(apiKey string) ServerConfig {
 	port := sharedenv.Int("SERVER_PORT", 30001)
 
 	return ServerConfig{
 		Port:            port,
-		APIKey:          sharedenv.String("API_SECRET_KEY", ""),
+		APIKey:          apiKey,
 		HTTPTransports:  parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
 		H3Addr:          sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
 		H3CertFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),

@@ -178,6 +178,41 @@ func TestFetchAndLockDoesNotReclaimSendingRows(t *testing.T) {
 	require.Empty(t, rows)
 }
 
+func TestLegacyMarkFailedMethodsDoNotOverwriteSentRows(t *testing.T) {
+	methods := map[string]func(context.Context, *DeliveryRepository, int64) error{
+		"single": func(ctx context.Context, repository *DeliveryRepository, id int64) error {
+			return repository.MarkFailed(ctx, id, 3, time.Minute, "stale failure")
+		},
+		"batch": func(ctx context.Context, repository *DeliveryRepository, id int64) error {
+			return repository.MarkFailedRetryBatch(ctx, []int64{id}, 3, time.Minute, "stale failure")
+		},
+	}
+
+	for name, markFailed := range methods {
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
+			deliveryID := seedLockedDelivery(ctx, t, pool, time.Now().UTC().Add(-time.Minute))
+			sentAt := time.Now().UTC().Truncate(time.Microsecond)
+
+			_, err := pool.Exec(ctx, `
+				UPDATE youtube_notification_delivery
+				SET status = $1, sent_at = $2, locked_at = NULL
+				WHERE id = $3
+			`, domain.OutboxStatusSent, sentAt, deliveryID)
+			require.NoError(t, err)
+			require.NoError(t, markFailed(ctx, repository, deliveryID))
+
+			status, lockedAt, persistedSentAt := readDeliveryStatusAndLocks(ctx, t, pool, deliveryID)
+			require.Equal(t, domain.OutboxStatusSent, status)
+			require.Nil(t, lockedAt)
+			require.NotNil(t, persistedSentAt)
+			require.True(t, persistedSentAt.Equal(sentAt), "sent_at = %s, want %s", persistedSentAt, sentAt)
+		})
+	}
+}
+
 func TestQuarantineStaleSendingMarksTerminalAndAggregateFailed(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

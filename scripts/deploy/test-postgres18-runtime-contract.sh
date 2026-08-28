@@ -2,12 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 COMPOSE_PATH="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 BOOTSTRAP_CONTRACT_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql"
 EXTENSION_BOOTSTRAP_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/05-create-pg-stat-statements.sql"
 RUNTIME_AUDIT_PATH="${ROOT_DIR}/scripts/maintenance/pg18_runtime_contract.sql"
 
-python3 - \
+"${CI_PYTHON_BIN}" - \
   "${COMPOSE_PATH}" \
   "${BOOTSTRAP_CONTRACT_PATH}" \
   "${EXTENSION_BOOTSTRAP_PATH}" \

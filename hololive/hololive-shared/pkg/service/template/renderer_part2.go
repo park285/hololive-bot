@@ -29,6 +29,10 @@ import (
 )
 
 func formatNumberKR(v any) string {
+	if v == nil {
+		return "0"
+	}
+
 	n, ok := toInt64(v)
 	if !ok {
 		return fmt.Sprintf("%v", v)

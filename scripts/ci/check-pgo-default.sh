@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/python-runtime.sh"
+repo_python_init
 DEFAULT_POLICY_FILE="${ROOT_DIR}/scripts/ci/pgo-off-policy.tsv"
 DEFAULT_COMPOSE_FILE="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 POLICY_FILE="${DEFAULT_POLICY_FILE}"
@@ -112,7 +114,7 @@ if ! docker compose -f "${COMPOSE_FILE}" config --no-interpolate --format json >
   exit 1
 fi
 
-python3 - "${tmp_dir}/compose.json" "${entries_file}" "${COMPOSE_FILE}" "${ROOT_DIR}" <<'PY'
+"${CI_PYTHON_BIN}" - "${tmp_dir}/compose.json" "${entries_file}" "${COMPOSE_FILE}" "${ROOT_DIR}" <<'PY'
 import json
 import re
 import sys

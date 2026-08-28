@@ -158,7 +158,7 @@ func TestRepoShortLinkIngressBoundary(t *testing.T) {
 	for _, required := range []string{
 		"map $http_x_forwarded_for $shortlink_client {",
 		"limit_req_zone $shortlink_client zone=shortlink_requests:1m rate=20r/s;",
-		"limit_conn_zone $binary_remote_addr zone=shortlink_connections:1m;",
+		"limit_conn_zone $shortlink_client zone=shortlink_connections:1m;",
 		"limit_req_status 429;",
 		"limit_conn_status 429;",
 	} {
@@ -170,9 +170,23 @@ func TestRepoShortLinkIngressBoundary(t *testing.T) {
 
 func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 	publicTemplate := readRepoFile(t, "deploy/nginx/holoshi-public-shortlink.conf")
-	if count := len(regexp.MustCompile(`(?m)^\s*location\s+`).FindAllString(publicTemplate, -1)); count != 2 {
-		t.Fatalf("public ingress location count = %d, want 2", count)
+	if count := len(regexp.MustCompile(`(?m)^\s*location\s+`).FindAllString(publicTemplate, -1)); count != 3 {
+		t.Fatalf("public ingress location count = %d, want 3", count)
 	}
+
+	upstreamBlock, publicPort := publicShortLinkUpstream(t, publicTemplate)
+	centralPort := centralShortLinkPort(t)
+
+	if publicPort != centralPort {
+		t.Fatalf("public upstream port %q != central short-link listen port %q", publicPort, centralPort)
+	}
+
+	assertExactNginxDirectives(t, upstreamBlock, "keepalive", []string{"8"})
+	assertPublicShortLinkServer(t, publicTemplate)
+}
+
+func publicShortLinkUpstream(t *testing.T, publicTemplate string) (string, string) {
+	t.Helper()
 
 	upstreamBlock := nginxBlockContaining(t, publicTemplate, "upstream shortlink_backend {", "server")
 	upstreamServers := nginxDirectiveValues(upstreamBlock, "server")
@@ -190,6 +204,12 @@ func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 		t.Fatalf("public upstream host %q is not a literal IP; the public ingress is applied verbatim on the gateway", publicHost)
 	}
 
+	return upstreamBlock, publicPort
+}
+
+func centralShortLinkPort(t *testing.T) string {
+	t.Helper()
+
 	centralConfig := readRepoFile(t, "deploy/nginx/admin-dashboard-ingress.conf.template")
 	centralShortLink := nginxBlockContaining(t, centralConfig, "server {", "location ^~ "+shortlinkcontracts.YouTubePathPrefix)
 	shortLinkListen := nginxDirectiveValues(centralShortLink, "listen")
@@ -203,11 +223,11 @@ func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 		t.Fatalf("central short-link listen = %q, want %s:<port>", shortLinkListen[0], centralIngressBindPlaceholder)
 	}
 
-	if publicPort != centralPort {
-		t.Fatalf("public upstream port %q != central short-link listen port %q", publicPort, centralPort)
-	}
+	return centralPort
+}
 
-	assertExactNginxDirectives(t, upstreamBlock, "keepalive", []string{"8"})
+func assertPublicShortLinkServer(t *testing.T, publicTemplate string) {
+	t.Helper()
 
 	publicServer := nginxBlockContaining(t, publicTemplate, "server {", "server_name short.holoshi.com;")
 	assertExactNginxDirectives(t, publicServer, "server_name", []string{"short.holoshi.com"})
@@ -215,9 +235,44 @@ func TestRepoPublicIngressRoutesMatchCentralListeners(t *testing.T) {
 
 	publicShortLink := nginxBlockContaining(t, publicServer, "location ^~ "+shortlinkcontracts.YouTubePathPrefix, "proxy_pass")
 	assertExactNginxDirectives(t, publicShortLink, "proxy_pass", []string{"http://shortlink_backend"})
+	assertExactNginxDirectives(t, publicShortLink, "limit_req", []string{"zone=holoshi_shortlink_requests burst=40 nodelay"})
+	assertExactNginxDirectives(t, publicShortLink, "limit_conn", []string{"holoshi_shortlink_connections 16"})
+
+	kakaoDeepLink := nginxBlockContaining(t, publicServer, "location ^~ /k/", "return 302 $kakao_deep_link_target;")
+	assertExactNginxDirectives(t, kakaoDeepLink, "limit_req", []string{"zone=holoshi_shortlink_requests burst=40 nodelay"})
+	assertExactNginxDirectives(t, kakaoDeepLink, "limit_conn", []string{"holoshi_shortlink_connections 16"})
+
+	assertPublicKakaoDeepLinkDirectives(t, publicTemplate)
 
 	catchAll := nginxBlockContaining(t, publicServer, "location /", "return 404;")
 	assertExactNginxDirectives(t, catchAll, "return", []string{"404"})
+}
+
+func assertPublicKakaoDeepLinkDirectives(t *testing.T, publicTemplate string) {
+	t.Helper()
+
+	for _, required := range []string{
+		"map $request_uri $kakao_deep_link_target {",
+		"map $http_user_agent $kakao_deep_link_scraper {",
+		"map $http_user_agent $kakao_deep_link_in_app_user_agent {",
+		"map \"$request_method:$kakao_deep_link_in_app_user_agent\" $kakao_deep_link_in_app_get {",
+		"map $uri $shortlink_access_log_enabled {",
+		"access_log /dev/stdout ingress_json if=$shortlink_access_log_enabled;",
+		"if ($kakao_deep_link_target = \"\") {",
+		"if ($kakao_deep_link_scraper) {",
+		"if ($kakao_deep_link_in_app_get = 0) {",
+		"add_header_inherit on;",
+		"return 404;",
+		"return 403;",
+		"add_header Cache-Control \"no-store, max-age=0\" always;",
+		"add_header Referrer-Policy \"no-referrer\" always;",
+		"add_header Vary \"User-Agent\" always;",
+		"add_header X-Robots-Tag \"noindex, nofollow, noarchive, nosnippet\" always;",
+	} {
+		if !strings.Contains(publicTemplate, required) {
+			t.Fatalf("public Kakao deep-link ingress missing %q", required)
+		}
+	}
 }
 
 func nginxBlockContaining(t *testing.T, content, anchor, required string) string {
@@ -878,8 +933,12 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 
 	for _, service := range []string{runtimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
-		if _, ok := env["API_SECRET_KEY"]; !ok {
-			t.Fatalf("%s missing scoped API_SECRET_KEY mapping", service)
+		if _, ok := env["API_SECRET_KEY"]; ok {
+			t.Fatalf("%s must not receive admin API_SECRET_KEY", service)
+		}
+
+		if env["METRICS_API_KEY"] != "dummy" {
+			t.Fatalf("%s METRICS_API_KEY = %q, want scoped env_file value", service, env["METRICS_API_KEY"])
 		}
 
 		if env["HOLOLIVE_HTTP_TRANSPORTS"] != "h3" {
@@ -1511,7 +1570,11 @@ func assertMainAPLiveCompatRenderedProducer(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, key := range []string{"API_SECRET_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
+	if _, ok := env["API_SECRET_KEY"]; ok {
+		t.Fatal("youtube-collector must not receive admin API_SECRET_KEY under live overlay")
+	}
+
+	for _, key := range []string{"METRICS_API_KEY", "HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
 		if _, ok := env[key]; !ok {
 			t.Fatalf("youtube-collector missing scoped %s mapping", key)
 		}
@@ -1899,6 +1962,8 @@ func writeCentralAppEnvFile(t *testing.T) string {
 
 	return writeTempEnvFile(t, "central-app-*.env", []string{
 		"API_SECRET_KEY=dummy",
+		"IRIS_WEBHOOK_TOKEN=dummy",
+		"IRIS_BOT_TOKEN=dummy",
 	})
 }
 
@@ -1940,7 +2005,7 @@ func writeAPProducerEnvFile(t *testing.T) string {
 	t.Helper()
 
 	return writeTempEnvFile(t, "youtube-collector-*.env", []string{
-		"API_SECRET_KEY=dummy",
+		"METRICS_API_KEY=dummy",
 		"HOLODEX_API_KEY=dummy",
 		"HOLODEX_API_KEY_1=dummy",
 		"HOLODEX_API_KEY_2=dummy",

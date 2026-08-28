@@ -2,6 +2,7 @@ package celebration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -26,9 +27,14 @@ type Publisher interface {
 	PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error)
 }
 
+type publishedCelebrationStore interface {
+	FindPublishedCelebrationEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
+}
+
 type Runner struct {
 	memberRepo   MemberRepository
 	alarmRepo    AlarmRoomRepository
+	eventStore   publishedCelebrationStore
 	publisher    Publisher
 	logger       *slog.Logger
 	checkHourKST int
@@ -129,6 +135,11 @@ func (r *Runner) runAt(ctx context.Context, now time.Time) error {
 		return nil
 	}
 
+	envelopes, err = r.reuseLegacyCelebrationEvents(ctx, envelopes, dateStr)
+	if err != nil {
+		return fmt.Errorf("celebration runner: reuse legacy events: %w", err)
+	}
+
 	result, err := r.publisher.PublishDispatchBatch(ctx, envelopes)
 	if err != nil {
 		return fmt.Errorf("celebration runner: publish dispatch batch: %w", err)
@@ -147,6 +158,45 @@ func (r *Runner) runAt(ctx context.Context, now time.Time) error {
 	}
 
 	return nil
+}
+
+func (r *Runner) reuseLegacyCelebrationEvents(
+	ctx context.Context,
+	envelopes []domain.AlarmQueueEnvelope,
+	dateStr string,
+) ([]domain.AlarmQueueEnvelope, error) {
+	if !useLegacyCelebrationIdentity(dateStr) {
+		return envelopes, nil
+	}
+
+	legacyKeys := legacyCelebrationEventKeys(envelopes)
+	if len(legacyKeys) == 0 {
+		return envelopes, nil
+	}
+
+	if r.eventStore == nil {
+		return nil, errors.New("legacy identity lookup store is unavailable")
+	}
+
+	published, err := r.eventStore.FindPublishedCelebrationEvents(ctx, legacyKeys)
+	if err != nil {
+		return nil, fmt.Errorf("find published celebration events: %w", err)
+	}
+
+	for i := range envelopes {
+		current := &envelopes[i]
+		legacy, ok := published[legacyCelebrationEventKey(current.Celebration)]
+
+		if !ok || !sameCelebrationMember(legacy.Celebration, current.Celebration) {
+			continue
+		}
+
+		legacy.Notification.RoomID = current.Notification.RoomID
+		legacy.Notification.Users = nil
+		envelopes[i] = legacy
+	}
+
+	return envelopes, nil
 }
 
 func (r *Runner) shouldRunAt(now time.Time) bool {
@@ -287,6 +337,7 @@ func appendBirthdayCelebrationEnvelopes(
 				SourceKind: domain.AlarmDispatchSourceKindCelebration,
 				Celebration: &domain.CelebrationDispatchPayload{
 					Kind:       domain.CelebrationKindBirthday,
+					MemberID:   m.ID,
 					MemberName: displayName,
 					ChannelID:  m.ChannelID,
 					Photo:      m.Photo,
@@ -329,6 +380,7 @@ func appendAnniversaryCelebrationEnvelopes(
 				SourceKind: domain.AlarmDispatchSourceKindCelebration,
 				Celebration: &domain.CelebrationDispatchPayload{
 					Kind:       domain.CelebrationKindAnniversary,
+					MemberID:   m.ID,
 					MemberName: displayName,
 					ChannelID:  m.ChannelID,
 					Photo:      m.Photo,

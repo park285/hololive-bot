@@ -50,7 +50,10 @@ func profileFieldsByDisplayName(p *ChannelProfileV1) map[string]FieldValue[strin
 func validateProfileFieldValue(name string, field FieldValue[string]) error {
 	limit := 4096
 
-	if name == "handle" || name == "country" || name == "joined date" {
+	switch name {
+	case "country":
+		limit = 50
+	case "handle", "joined date":
 		limit = 256
 	}
 

@@ -79,6 +79,19 @@ changed_go_package_patterns() {
                     done < <(go_package_patterns_for_file "${file}")
                 fi
                 ;;
+            *.json|*.tmpl|*.sql|*.png|*.ttf)
+                for module in "${GO_MODULES[@]}"; do
+                    if [[ "${file}" != "${module}/"* ]]; then
+                        continue
+                    fi
+                    if is_shared_module_file "${file}"; then
+                        needs_all=true
+                    else
+                        package_patterns+=("./${module}/...")
+                    fi
+                    break
+                done
+                ;;
         esac
     done < <(changed_paths | dedupe_lines)
 

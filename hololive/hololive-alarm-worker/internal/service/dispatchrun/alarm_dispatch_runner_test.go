@@ -339,7 +339,7 @@ func TestAlarmDispatchRunnerYouTubeOutboxMilestoneUsesTextDispatchWhenKaringEnab
 	envelope.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
 	envelope.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
 		Kind:       domain.OutboxKindMilestone,
-		AlarmType:  domain.AlarmTypeCommunity,
+		AlarmType:  domain.AlarmTypeLive,
 		ChannelID:  testAlarmChannelID,
 		MemberName: "Milestone Member",
 		Items: []domain.YouTubeOutboxItem{{

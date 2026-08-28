@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
 MANIFEST="${MIGRATIONS_DIR}/manifest.txt"
 EPOCH2_BASELINE="001_schema_epoch2_baseline.sql"
@@ -12,7 +14,7 @@ EPOCH2_SUFFIX_CONTRACT="${ROOT_DIR}/scripts/architecture/epoch2_suffix_contract.
 EPOCH2_NORMALIZER="${ROOT_DIR}/scripts/architecture/normalize-epoch2-baseline.py"
 
 sql_statement_count() {
-  python3 - "$1" <<'PY'
+  "${CI_PYTHON_BIN}" - "$1" <<'PY'
 import sys
 from pathlib import Path
 
@@ -172,7 +174,7 @@ for required in "${EPOCH2_CONTRACT}" "${EPOCH2_ACL_TAIL}" "${EPOCH2_SUFFIX_CONTR
   fi
 done
 
-PYTHONDONTWRITEBYTECODE=1 python3 - "${EPOCH2_CONTRACT}" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 "${CI_PYTHON_BIN}" - "${EPOCH2_CONTRACT}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -221,9 +223,9 @@ if ! grep -qE '^-- Source commit: [0-9a-f]{40}$' "${baseline_path}" ||
   exit 1
 fi
 
-PYTHONDONTWRITEBYTECODE=1 python3 "${EPOCH2_NORMALIZER}" --check-existing "${baseline_path}"
+PYTHONDONTWRITEBYTECODE=1 "${CI_PYTHON_BIN}" "${EPOCH2_NORMALIZER}" --check-existing "${baseline_path}"
 
-PYTHONDONTWRITEBYTECODE=1 python3 - "${baseline_path}" "${EPOCH2_ACL_TAIL}" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 "${CI_PYTHON_BIN}" - "${baseline_path}" "${EPOCH2_ACL_TAIL}" <<'PY'
 import re
 import sys
 from pathlib import Path

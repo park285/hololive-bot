@@ -51,7 +51,7 @@ Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 �
 | Env | Purpose | Required |
 |---|---|---|
 | `SERVER_PORT` | per-host H3 port | yes |
-| `API_SECRET_KEY` | H3 internal routes and non-loopback `/metrics` authentication | production yes |
+| `METRICS_API_KEY` | H3 internal routes and non-loopback `/metrics` authentication | production yes |
 | `HOLOLIVE_OTLP_GRPC_ENDPOINT` | collector trace export endpoint (`host:port`, gRPC) | production yes |
 | `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true` | per-slot trace enablement (`A`/`B`/`C`/`D`) | production yes |
 | `STACK_WORKER_PROFILE_FILE` | slot-specific strict `hololive/youtube-collector` profile; `collection.executor.enabled` owns worker enablement | yes |
@@ -92,12 +92,12 @@ YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player
 ### 1. Metrics authentication or tracing config rejection
 
 Symptoms:
-- startup rejects a missing `API_SECRET_KEY`
+- startup rejects a missing `METRICS_API_KEY`
 - startup names a missing `OTEL_YOUTUBE_COLLECTOR_<slot>_ENABLED=true`
 
 Diagnosis:
 - `youtube-collector.env`의 key 이름만 확인하고 raw value를 출력하지 않습니다.
-- `API_SECRET_KEY`와 canonical collector OTEL toggle을 stack-secrets master에서 수정한 뒤 승인된 sync 절차를 사용합니다.
+- `METRICS_API_KEY`와 canonical collector OTEL toggle을 stack-secrets master에서 수정한 뒤 승인된 sync 절차를 사용합니다.
 
 Mitigation:
 - static secret sync와 collector restart/deploy를 같은 승인된 변경으로 수행하고 `/metrics` target 및 Jaeger `youtube-collector` service를 재검증합니다.

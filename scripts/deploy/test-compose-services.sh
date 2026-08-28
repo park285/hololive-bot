@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
 literal_dollar='$'
+TEST_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TEST_TMP_DIR}"' EXIT
+TEST_OUT="${TEST_TMP_DIR}/out"
+TEST_ERR="${TEST_TMP_DIR}/err"
 
 fail() {
     echo "[FAIL] $*" >&2
@@ -29,9 +33,9 @@ expect_fail() {
     local label="$1"
     shift
 
-    if "$@" >/tmp/compose-services-test.out 2>/tmp/compose-services-test.err; then
-        cat /tmp/compose-services-test.out
-        cat /tmp/compose-services-test.err >&2
+    if "$@" >"${TEST_OUT}" 2>"${TEST_ERR}"; then
+        cat "${TEST_OUT}"
+        cat "${TEST_ERR}" >&2
         fail "${label}: expected failure"
     fi
     pass "${label}"
@@ -42,12 +46,12 @@ expect_fail_contains() {
     local expected="$2"
     shift 2
 
-    if "$@" >/tmp/compose-services-test.out 2>/tmp/compose-services-test.err; then
-        cat /tmp/compose-services-test.out
-        cat /tmp/compose-services-test.err >&2
+    if "$@" >"${TEST_OUT}" 2>"${TEST_ERR}"; then
+        cat "${TEST_OUT}"
+        cat "${TEST_ERR}" >&2
         fail "${label}: expected failure"
     fi
-    grep -Fq "${expected}" /tmp/compose-services-test.err \
+    grep -Fq "${expected}" "${TEST_ERR}" \
         || fail "${label}: missing error '${expected}'"
     pass "${label}"
 }
@@ -98,9 +102,9 @@ done
 
 # KR.key는 gitignore된 로컬 배포 키라 클린 체크아웃에 없다.
 # conf 계약 검증에는 키 실체가 불필요하므로 tmp 키로 대체한다.
-SSH_KEY="$(mktemp)"
+SSH_KEY="${TEST_TMP_DIR}/ssh-key"
+: >"${SSH_KEY}"
 export SSH_KEY
-trap 'rm -f "${SSH_KEY}"' EXIT
 
 ap_host_load "${ROOT_DIR}" osaka || fail "osaka ap-host conf loads"
 expect_eq "${AP_SERVICES[*]}" "youtube-collector-a" "osaka AP services"
@@ -181,8 +185,7 @@ grep -qx "${ap_udp_lib}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active s
 pass "ap active-active verifies QUIC UDP buffer sysctls (runtime+persisted via lib)"
 
 # persisted 검증은 sysctl --system 적용 의미론(last-wins: sysctl.d lexical 순서 후 sysctl.conf 최종)을 따라야 한다.
-quic_fixture_root="$(mktemp -d)"
-trap 'rm -rf "${quic_fixture_root}"' EXIT
+quic_fixture_root="${TEST_TMP_DIR}/quic"
 mkdir -p "${quic_fixture_root}/etc/sysctl.d"
 printf 'net.core.rmem_max=2048\nnet.core.wmem_max=2048\n' > "${quic_fixture_root}/etc/sysctl.d/10-high.conf"
 printf 'net.core.rmem_max=512\nnet.core.wmem_max=512\n' > "${quic_fixture_root}/etc/sysctl.d/90-low-override.conf"
@@ -201,8 +204,6 @@ if AP_SYSCTL_ROOT="${quic_fixture_root}" bash "${ROOT_DIR}/${ap_udp_lib}" 1024 f
     fail "${ap_udp_lib} must treat /etc/sysctl.conf as the final persisted assignment (sysctl --system order)"
 fi
 pass "quic udp lib applies sysctl.conf as final override"
-rm -rf "${quic_fixture_root}"
-trap - EXIT
 for ap_compose in deploy/compose/docker-compose.osaka.yml deploy/compose/docker-compose.osaka2.yml deploy/compose/docker-compose.seoul.yml; do
     grep -qx "${ap_compose}" "${AP_ACTIVE_ACTIVE_FILES}" || fail "ap active-active syncs ${ap_compose}"
 done
@@ -263,8 +264,7 @@ if rg -n 'ap-(deploy|rollback)\.sh (osaka|osaka2)' \
 fi
 pass "current operator docs route Osaka and Osaka2 through host-native helpers"
 
-rollback_fixture_root="$(mktemp -d)"
-trap 'rm -rf "${rollback_fixture_root}"; rm -f "${SSH_KEY}"' EXIT
+rollback_fixture_root="${TEST_TMP_DIR}/rollback"
 mkdir -p "${rollback_fixture_root}/bin"
 rollback_capture="${rollback_fixture_root}/ssh-command"
 cat > "${rollback_fixture_root}/bin/ssh" <<'EOF'
@@ -300,7 +300,3 @@ grep -Fq 'sudo -n docker image inspect "$rollback_image_tag"' "${rollback_captur
 grep -Fq 'up -d --no-build --no-deps' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh" \
     || fail "seoul rollback recreates from the preserved image without a runtime-host build"
 pass "seoul rollback dry-run preserves Compose extends relative paths for .prechange backups"
-
-rm -rf "${rollback_fixture_root}"
-rm -f "${SSH_KEY}"
-trap - EXIT

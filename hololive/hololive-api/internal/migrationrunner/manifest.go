@@ -20,6 +20,13 @@ type migrationSource struct {
 	checksumPresent bool
 }
 
+const (
+	youtubeJobLeaseFailureDiagnosticsMigration  = "177_youtube_job_lease_failure_diagnostics.sql"
+	youtubeJobLeaseFailureDiagnosticsChecksum   = "37164dc07329a7d43d95058d77e7823e9dc42d8f66ae791b47d98b6522e49e9e"
+	youtubeJobLeaseFailureDiagnosticsV1Checksum = "84023e0082c8ccccc880a40486330ad5d3ab2a520c3ee9ef412903767c152a6d"
+	youtubeJobLeaseFailureDiagnosticsV2Checksum = "bad2f0359ff0bb3fbcac4bae0431780e456bf86faabdd2efdb4ed80b829dab9f"
+)
+
 func applyManifest(
 	ctx context.Context,
 	conn *pgxpool.Conn,
@@ -66,11 +73,26 @@ func loadMigrationSource(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, na
 		return migrationSource{}, fmt.Errorf("load migration checksum: %w", err)
 	}
 
-	if present && stored != checksum {
+	if present && !migrationChecksumMatches(name, stored, checksum) {
 		return migrationSource{}, fmt.Errorf("migration %s checksum mismatch: ledger=%s source=%s", name, stored, checksum)
 	}
 
 	return migrationSource{name: name, content: string(content), checksum: checksum, checksumPresent: present}, nil
+}
+
+func migrationChecksumMatches(name, stored, source string) bool {
+	if stored == source {
+		return true
+	}
+
+	if name != youtubeJobLeaseFailureDiagnosticsMigration || source != youtubeJobLeaseFailureDiagnosticsChecksum {
+		return false
+	}
+
+	// 두 hash는 migration 177이 불변이 되기 전에 배포되었습니다. 모든 지원 ledger를
+	// 감사하고 migration 189가 상태를 정규화한 뒤에만 이 예외를 제거합니다.
+	return stored == youtubeJobLeaseFailureDiagnosticsV1Checksum ||
+		stored == youtubeJobLeaseFailureDiagnosticsV2Checksum
 }
 
 func applyMigrationSource(

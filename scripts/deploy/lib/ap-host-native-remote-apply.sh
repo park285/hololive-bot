@@ -215,10 +215,13 @@ collector_readiness_validate "$ready"
 
 journal_since="${change_started_at/T/ }"
 journal_since="${journal_since%Z} UTC"
-journalctl -u "$unit" --since "$journal_since" --no-pager |
+if ! journal_output="$(journalctl -u "$unit" --since "$journal_since" --no-pager)"; then
+  echo "failed to read post-cutover logs for $unit" >&2
+  exit 1
+fi
+printf '%s\n' "$journal_output" |
   grep -E 'PostgreSQL|Valkey|active_active|ERR|panic|permission denied|x509|no such file' || true
-if journalctl -u "$unit" --since "$journal_since" --no-pager |
-   grep -E 'ERR|panic|permission denied|x509|no such file'; then
+if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output"; then
   exit 1
 fi
 trap - ERR

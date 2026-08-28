@@ -146,7 +146,7 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {
-	if d == nil {
+	if d == nil || d.claim == nil {
 		return
 	}
 
@@ -268,6 +268,10 @@ func (d *Dispatcher) processOnce(ctx context.Context) {
 }
 
 func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
+	if d == nil || d.claim == nil {
+		return
+	}
+
 	if maxRounds <= 0 {
 		maxRounds = 1
 	}
@@ -281,6 +285,10 @@ func (d *Dispatcher) processAvailable(ctx context.Context, maxRounds int) {
 }
 
 func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (processed, ok bool) {
+	if d == nil || d.claim == nil {
+		return false, false
+	}
+
 	outboxItems, err := d.claim.claimOutboxBatch(ctx)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.Any("error", err))
@@ -294,8 +302,14 @@ func (d *Dispatcher) processAvailableRound(ctx context.Context, round int) (proc
 }
 
 func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outboxItems []domain.YouTubeNotificationOutbox, round int) int {
-	attemptID := d.workerTracker.BeginAttempt(time.Now())
-	defer d.workerTracker.EndAttempt(attemptID)
+	if d == nil || d.claim == nil {
+		return 0
+	}
+
+	if d.workerTracker != nil {
+		attemptID := d.workerTracker.BeginAttempt(time.Now())
+		defer d.workerTracker.EndAttempt(attemptID)
+	}
 
 	var processed int
 
@@ -309,7 +323,7 @@ func (d *Dispatcher) processClaimedOrPendingDeliveries(ctx context.Context, outb
 		processed = d.claim.processPerRoomBatch(ctx, outboxItems)
 	}
 
-	if processed > 0 {
+	if processed > 0 && d.workerTotals != nil {
 		d.workerTotals.RecordAttempt(workercontract.AttemptSuccess)
 	}
 

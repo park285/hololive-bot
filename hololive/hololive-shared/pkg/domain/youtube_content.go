@@ -225,6 +225,12 @@ var outboxKindTemplateKeys = map[OutboxKind]TemplateKey{
 	OutboxKindMilestone:     TemplateKeyOutboxMilestone,
 }
 
+func (k OutboxKind) IsValid() bool {
+	_, ok := outboxKindTemplateKeys[k]
+
+	return ok
+}
+
 func (k OutboxKind) ToAlarmType() AlarmType {
 	switch k {
 	case OutboxKindNewVideo, OutboxKindLiveStream, OutboxKindMilestone:

@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +42,28 @@ func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
 	var missing *http.Response
 
 	return missing, nil
+}
+
+type trackingBody struct {
+	closed atomic.Bool
+}
+
+func (*trackingBody) Read([]byte) (int, error) {
+	return 0, http.ErrBodyReadAfterClose
+}
+
+func (b *trackingBody) Close() error {
+	b.closed.Store(true)
+
+	return nil
+}
+
+type fixedResponseTransport struct {
+	response *http.Response
+}
+
+func (t fixedResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return t.response, nil
 }
 
 func TestClientDoRequestNilResponse(t *testing.T) {
@@ -59,6 +82,24 @@ func TestClientDoRequestNilResponse(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil response")
+}
+
+func TestClientDoRequestClosesRejectedResponse(t *testing.T) {
+	body := &trackingBody{}
+	client := NewClient("https://alarm.example", nil)
+
+	client.httpClient.Transport = fixedResponseTransport{response: &http.Response{
+		StatusCode: http.StatusInternalServerError,
+		Status:     "500 Internal Server Error",
+		Header:     make(http.Header),
+		Body:       body,
+	}}
+
+	resp, err := client.doRequest(t.Context(), http.MethodGet, "/alarms", http.NoBody, false) //nolint:bodyclose // 오류 경로가 body를 닫고 nil response를 반환하는 계약을 검증한다.
+
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.True(t, body.closed.Load())
 }
 
 func TestClientRejectsNilAddRequest(t *testing.T) {

@@ -143,6 +143,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.closeResponseBody(resp, path)
+
 		if resp == nil {
 			err = fmt.Errorf("nil response: %w", err)
 		}
@@ -155,6 +157,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 	}
 
 	if err := c.validateResponse(path, resp); err != nil {
+		c.closeResponseBody(resp, path)
+
 		return nil, fmt.Errorf("validate response: %w", err)
 	}
 

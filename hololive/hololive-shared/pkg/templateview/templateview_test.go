@@ -25,3 +25,15 @@ func TestBuildMajorEventViews(t *testing.T) {
 		t.Fatalf("unexpected members: %q", views[0].Members)
 	}
 }
+
+func TestBuildMajorEventViewsRejectsUnsafeMarkdownLink(t *testing.T) {
+	events := []domain.MajorEvent{{
+		Title: "event",
+		Link:  "https://example.com/path) injected",
+	}}
+
+	views := BuildMajorEventViews(events)
+	if len(views) != 1 || views[0].Link != "" {
+		t.Fatalf("unsafe link survived: %+v", views)
+	}
+}

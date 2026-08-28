@@ -11,7 +11,7 @@ x-live-postgres-env: &live-postgres-env
 
 services:
   admin-dashboard-ingress:
-    image: ${NGINX_IMAGE:-nginx:1.30.4-alpine-slim@sha256:ddde39c6e51f02fde7410c2e9c234cf2d0a4c7bdbbe176aeb37d8ad7ab4eb58c}
+    image: ${NGINX_IMAGE:-nginx:1.31.4-alpine-slim@sha256:1870de6d59aafee152589b64404556d2535922cdd998e6dac1c4888c938ed8f9}
     container_name: admin-dashboard-ingress
     user: "101:101"
     restart: unless-stopped
@@ -48,7 +48,7 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
-      test: ["CMD-SHELL", "wget -q -O /dev/null -T 3 http://${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30191/health && wget -q -O /dev/null -T 3 http://${HOLOLIVE_BOT_PORT_BIND_IP:-100.100.1.3}:30192/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "-T", "3", "http://127.0.0.1:30193/healthz"]
 
   holo-postgres:
     environment:

@@ -85,9 +85,25 @@ printf 'PGSSLMODE=%s PGPASSFILE=%s PGSSLROOTCERT=%s args=%s\n' "${PGSSLMODE:-}" 
 if [[ "${FAKE_PSQL_FAIL:-0}" == 1 ]]; then
   exit 1
 fi
+if [[ "${FAKE_PSQL_FAIL_SERVICE:-0}" == 1 && "$*" == *"-h hololive-postgres.example.ts.net"* ]]; then
+  exit 1
+fi
+if [[ "${FAKE_PSQL_FAIL_SERVICE_ONCE:-0}" == 1 && "$*" == *"-h hololive-postgres.example.ts.net"* && ! -e "${FAKE_PSQL_FAIL_MARKER:?}" ]]; then
+  : >"${FAKE_PSQL_FAIL_MARKER}"
+  exit 1
+fi
 printf '%s\n' "${FAKE_PSQL_OUTPUT:-f|off}"
 FAKE_PSQL
-  chmod 0755 "${root}/bin/ssh" "${root}/bin/tailscale" "${root}/bin/ip" "${root}/bin/psql"
+  cat >"${root}/bin/sync" <<'FAKE_SYNC'
+#!/usr/bin/env bash
+set -u
+if [[ "${FAKE_SYNC_FAIL_STATE_ONCE:-0}" == 1 && "${2:-}" == "${FAKE_SYNC_STATE_FILE:?}" && ! -e "${FAKE_SYNC_FAIL_MARKER:?}" ]]; then
+  : >"${FAKE_SYNC_FAIL_MARKER}"
+  exit 1
+fi
+exec /usr/bin/sync "$@"
+FAKE_SYNC
+  chmod 0755 "${root}/bin/ssh" "${root}/bin/tailscale" "${root}/bin/ip" "${root}/bin/psql" "${root}/bin/sync"
   : >"${root}/ssh.log"
   : >"${root}/tailscale.log"
   : >"${root}/psql.log"
@@ -109,6 +125,7 @@ POSTGRES_FAILOVER_ROUTE_PSQL_PATH=${root}/bin/psql
 POSTGRES_FAILOVER_ROUTE_IP_PATH=${root}/bin/ip
 POSTGRES_FAILOVER_ROUTE_STATE_FILE=${root}/state/route.state
 POSTGRES_FAILOVER_ROUTE_JQ_PATH=/usr/bin/jq
+POSTGRES_FAILOVER_ROUTE_SYNC_PATH=${root}/bin/sync
 EOF_CONFIG
   chmod 0600 "${config}"
   printf '%s\n' "${config}"
@@ -122,6 +139,9 @@ run_helper() {
     FAKE_TAILSCALE_CONFIG="${root}/tailscale-config" \
     FAKE_TAILSCALE_ADVERTISED="${root}/tailscale-advertised" \
     FAKE_PSQL_LOG="${root}/psql.log" \
+    FAKE_PSQL_FAIL_MARKER="${root}/psql-fail-marker" \
+    FAKE_SYNC_STATE_FILE="${root}/state/route.state" \
+    FAKE_SYNC_FAIL_MARKER="${root}/sync-fail-marker" \
     /usr/bin/bash "${HELPER}" --config "${config}" 100.100.1.8 5433 100.100.1.5 5434 fence-token-1234 svc:hololive-postgres "$@"
 }
 
@@ -246,7 +266,41 @@ helper_rejects_read_only_probe() {
     return
   fi
   [[ ! -e "${root}/state/route.state" ]] || { fail "read-only probe wrote durable route state"; return; }
+  [[ ! -s "${root}/tailscale-config" ]] || { fail "helper changed the service before probing the candidate"; return; }
   pass "helper requires the exact f|off PostgreSQL probe result"
+}
+
+helper_rolls_back_failed_service_probe() {
+  local root="${TMP_DIR}/helper-rollback" config
+  new_case "${root}"
+  config="$(write_config "${root}")"
+  if FAKE_PSQL_FAIL_SERVICE_ONCE=1 run_helper "${root}" "${config}" >/dev/null 2>&1; then
+    fail "helper accepted a failed post-switch service probe"
+    return
+  fi
+  [[ "$(<"${root}/tailscale-config")" == "tcp://100.100.1.8:5433" ]] || { fail "failed service probe did not restore the old route"; return; }
+  [[ ! -e "${root}/state/route.state" ]] || { fail "failed service probe wrote durable route state"; return; }
+  [[ "$(grep -Fc -- '-h hololive-postgres.example.ts.net' "${root}/psql.log")" == 2 ]] || { fail "rollback route did not receive a writable verification probe"; return; }
+  pass "helper restores the prior route after post-switch validation failure"
+}
+
+helper_restores_state_after_publish_sync_failure() {
+  local root="${TMP_DIR}/helper-state-rollback" config
+  new_case "${root}"
+  config="$(write_config "${root}")"
+  printf 'prior-state\n' >"${root}/state/route.state"
+  chmod 0600 "${root}/state/route.state"
+
+  if FAKE_SYNC_FAIL_STATE_ONCE=1 run_helper "${root}" "${config}" >/dev/null 2>&1; then
+    fail "helper accepted a failed durable state publish sync"
+    return
+  fi
+
+  [[ "$(<"${root}/tailscale-config")" == "tcp://100.100.1.8:5433" ]] || { fail "state publish failure did not restore the old route"; return; }
+  [[ "$(<"${root}/state/route.state")" == "prior-state" ]] || { fail "state publish failure did not restore the prior durable state"; return; }
+  [[ "$(grep -Fc -- 'serve get-config --all' "${root}/tailscale.log")" -ge 3 ]] || { fail "rollback route was not re-read after restoration"; return; }
+  [[ "$(grep -Fc -- '-h hololive-postgres.example.ts.net' "${root}/psql.log")" == 2 ]] || { fail "rollback route was not verified writable"; return; }
+  pass "helper restores and verifies route plus durable state after publish sync failure"
 }
 
 helper_rejects_route_config_mismatch() {
@@ -297,6 +351,8 @@ helper_rejects_config_ownership_mode_and_symlink
 helper_rejects_wrong_local_host
 helper_rejects_tailscale_failure
 helper_rejects_read_only_probe
+helper_rolls_back_failed_service_probe
+helper_restores_state_after_publish_sync_failure
 helper_rejects_route_config_mismatch
 helper_is_idempotent_for_same_token
 

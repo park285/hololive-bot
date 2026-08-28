@@ -939,7 +939,7 @@ func TestChannelsLiveStatusFallbackDoesNotAdvanceCursorForBudgetUnattemptedChann
 	}
 }
 
-func TestChannelsLiveStatusFallbackAllDeferredIsSoft(t *testing.T) {
+func TestChannelsLiveStatusFallbackAllDeferredRemainsUnknown(t *testing.T) {
 	mockReq := &MockRequester{
 		DoRequestFunc: func(_ context.Context, _, _ string, _ url.Values) ([]byte, error) {
 			return nil, &apiclient.APIError{
@@ -982,8 +982,12 @@ func TestChannelsLiveStatusFallbackAllDeferredIsSoft(t *testing.T) {
 	}
 
 	streams, err = service.GetChannelsLiveStatus(t.Context(), channelIDs)
-	if err != nil {
-		t.Fatalf("GetChannelsLiveStatus() error = %v, want nil for deferred-only result", err)
+	if err == nil {
+		t.Fatal("GetChannelsLiveStatus() error = nil, want deferred source error")
+	}
+
+	if !livestatus.IsDeferred(err) {
+		t.Fatalf("GetChannelsLiveStatus() error = %v, want deferred error", err)
 	}
 
 	if len(streams) != 0 {

@@ -1,6 +1,23 @@
 #!/bin/sh
 set -eu
 
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "${script_dir}/../.." && pwd)
+if [ -z "${CI_PYTHON_BIN:-}" ]; then
+  CI_PYTHON_BIN=$("${repo_root}/scripts/ci/python-runner.sh" --print-interpreter)
+  CI_PYTHON_RUNTIME_ROOT=${repo_root}
+fi
+if [ "${CI_PYTHON_RUNTIME_ROOT:-}" != "${repo_root}" ] || [ ! -f "${CI_PYTHON_BIN}" ] || [ ! -x "${CI_PYTHON_BIN}" ]; then
+  echo "python-runtime: selected interpreter does not belong to this repository" >&2
+  exit 1
+fi
+actual_python_version=$("${CI_PYTHON_BIN}" -I -S -c 'import platform; print(platform.python_version())')
+if [ "${actual_python_version}" != "3.14.7" ]; then
+  echo "python-runtime: expected Python 3.14.7, got ${actual_python_version:-unknown}" >&2
+  exit 1
+fi
+export CI_PYTHON_BIN CI_PYTHON_RUNTIME_ROOT
+
 usage() {
   echo "usage: $0 <output-dir> --version <version> --revision <40-lower-hex> --goos <goos> --goarch <goarch> --goamd64 <goamd64>" >&2
   exit 2
@@ -52,7 +69,7 @@ health_meta=$(go version -m "${healthcheck}")
 collector_build_id=$(go tool buildid "${collector}")
 health_build_id=$(go tool buildid "${healthcheck}")
 
-python3 - \
+"${CI_PYTHON_BIN}" - \
   "${output_dir}" \
   "${expected_version}" "${expected_revision}" \
   "${expected_goos}" "${expected_goarch}" "${expected_goamd64}" \

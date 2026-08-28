@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 )
 
 type channelFetchResult struct {
@@ -146,25 +145,11 @@ func (h *Service) GetChannelsLiveStatus(ctx context.Context, channelIDs []string
 		return nil, fmt.Errorf("get channels live status with failures: %w", err)
 	}
 
-	if len(streams) == 0 && hasHardChannelsLiveStatusFailures(failed) {
-		return nil, fmt.Errorf("get channels live status: %w", joinChannelsLiveStatusFailures(channelIDs, failed))
+	if len(failed) > 0 {
+		return streams, fmt.Errorf("get channels live status: %w", joinChannelsLiveStatusFailures(channelIDs, failed))
 	}
 
 	return streams, nil
-}
-
-func hasHardChannelsLiveStatusFailures(failures map[string]error) bool {
-	for _, err := range failures {
-		if err == nil {
-			continue
-		}
-
-		if !livestatus.IsDeferred(err) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // failures map은 fetch 실패 채널을 "방송 없음" 채널과 구분해 live session 오종료를 막는 계약이다.

@@ -531,6 +531,18 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	}
 }
 
+func requireDispatchLedgerCounts(t *testing.T, pool *pgxpool.Pool, wantEvents, wantDeliveries, wantCollisions int) {
+	t.Helper()
+
+	var events, deliveries, collisions int
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_events").Scan(&events))
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveries))
+	require.NoError(t, pool.QueryRow(t.Context(), "SELECT count(*) FROM alarm_dispatch_event_collisions").Scan(&collisions))
+	require.Equal(t, wantEvents, events)
+	require.Equal(t, wantDeliveries, deliveries)
+	require.Equal(t, wantCollisions, collisions)
+}
+
 func TestPgxRepositoryInsertBatch_DoesNotCompareLegacyDedupeKey(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()

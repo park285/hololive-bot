@@ -196,7 +196,7 @@ func startPostgresContainer(ctx context.Context, image string) (*postgres.Postgr
 		postgres.WithUsername("dbtest"),
 		postgres.WithPassword("dbtest"),
 		testcontainers.WithEnv(map[string]string{
-			"POSTGRES_INITDB_ARGS": "--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8",
+			"POSTGRES_INITDB_ARGS": "--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8 --data-checksums",
 		}),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").

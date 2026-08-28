@@ -275,15 +275,26 @@ func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.
 	var wg sync.WaitGroup
 
 	sem := make(chan struct{}, maxConcurrent)
+	roomOrder := make([]string, 0, len(items))
+	itemsByRoom := make(map[string][]*domain.NotificationDeliveryOutbox, len(items))
 
 	for i := range items {
+		item := &items[i]
+		if _, exists := itemsByRoom[item.RoomID]; !exists {
+			roomOrder = append(roomOrder, item.RoomID)
+		}
+
+		itemsByRoom[item.RoomID] = append(itemsByRoom[item.RoomID], item)
+	}
+
+	for _, roomID := range roomOrder {
 		if !d.acquireBatchSlot(ctx, sem, &wg) {
 			return
 		}
 
-		item := &items[i]
+		roomItems := itemsByRoom[roomID]
 
-		wg.Go(func() { d.processBatchItemAsync(ctx, item, sem) })
+		wg.Go(func() { d.processRoomBatchAsync(ctx, roomItems, sem) })
 	}
 
 	wg.Wait()
@@ -308,10 +319,12 @@ func (d *Dispatcher) acquireBatchSlot(ctx context.Context, sem chan<- struct{}, 
 	}
 }
 
-func (d *Dispatcher) processBatchItemAsync(ctx context.Context, item *domain.NotificationDeliveryOutbox, sem <-chan struct{}) {
-	panicguard.Run(d.logger, "delivery-dispatch-item", func() {
-		defer func() { <-sem }()
+func (d *Dispatcher) processRoomBatchAsync(ctx context.Context, items []*domain.NotificationDeliveryOutbox, sem <-chan struct{}) {
+	defer func() { <-sem }()
 
-		d.processItem(ctx, item)
-	})
+	for _, item := range items {
+		panicguard.Run(d.logger, "delivery-dispatch-item", func() {
+			d.processItem(ctx, item)
+		})
+	}
 }

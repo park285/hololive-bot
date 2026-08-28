@@ -15,6 +15,9 @@ import (
 )
 
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	as.cacheMutationMu.Lock()
+	defer as.cacheMutationMu.Unlock()
+
 	startedAt := time.Now()
 
 	var opErr error

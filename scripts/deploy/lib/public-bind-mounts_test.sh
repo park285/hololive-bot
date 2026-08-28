@@ -59,8 +59,16 @@ if prepare_admin_dashboard_ingress_bind_mount "${tmpdir}" >/dev/null 2>&1; then
 fi
 echo "[PASS] missing bind IP fails closed"
 
+export HOLOLIVE_BOT_PORT_BIND_IP='127.0.0.1; include /tmp/injected.conf; #'
+if prepare_admin_dashboard_ingress_bind_mount "${tmpdir}" >/dev/null 2>&1; then
+    echo "[FAIL] config syntax in the bind IP was accepted" >&2
+    exit 1
+fi
+echo "[PASS] non-literal bind IP fails closed before template rendering"
+
 env_file="${tmpdir}/compose.env"
 printf 'HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.7\n' >"${env_file}"
+unset HOLOLIVE_BOT_PORT_BIND_IP
 export COMPOSE_ENV_FILE="${env_file}"
 prepare_admin_dashboard_ingress_bind_mount "${tmpdir}"
 grep -q 'listen 100.100.1.7:30191;' "${config}"

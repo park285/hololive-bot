@@ -100,7 +100,7 @@ func buildYouTubeCollectorRuntimeConfig() (*YouTubeCollectorRuntimeConfig, error
 	config := &YouTubeCollectorRuntimeConfig{
 		Environment:      loadAppEnvironment(),
 		Version:          sharedenv.String("APP_VERSION", "1.1.0-go"),
-		Server:           loadServerConfig(),
+		Server:           loadYouTubeCollectorServerConfig(),
 		Logging:          loadLoggingConfig(),
 		Tracing:          tracingConfig,
 		Postgres:         loadPostgresConfig(),
@@ -222,11 +222,19 @@ func (c *YouTubeCollectorRuntimeConfig) validateServer() error {
 		return fmt.Errorf("validate server transports: %w", err)
 	}
 
-	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
-		return fmt.Errorf("validate API secret key: %w", err)
+	if err := validateCollectorMetricsAPIKey(c.Environment, c.Server.APIKey); err != nil {
+		return fmt.Errorf("validate metrics API key: %w", err)
 	}
 
 	return nil
+}
+
+func validateCollectorMetricsAPIKey(environment, apiKey string) error {
+	if !isProductionEnvironment(environment) || strings.TrimSpace(apiKey) != "" {
+		return nil
+	}
+
+	return errors.New("METRICS_API_KEY is required in production")
 }
 
 func (c *YouTubeCollectorRuntimeConfig) validateTracing() error {

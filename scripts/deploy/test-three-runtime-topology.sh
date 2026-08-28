@@ -36,6 +36,15 @@ list_services() {
     ' "$1"
 }
 
+service_block() {
+    local service="$1"
+    awk -v service="${service}" '
+        $0 == "  " service ":" { in_service = 1; next }
+        in_service && /^  [A-Za-z0-9_.-]+:[[:space:]]*$/ { exit }
+        in_service { print }
+    ' "${PROD_FILE}"
+}
+
 for file in "${ACTIVE_COMPOSE_FILES[@]}"; do
     [[ -r "${file}" ]] || fail "active Compose file is missing: ${file}"
 done
@@ -87,8 +96,12 @@ for port in 30001 30003 30006; do
 done
 pass "hololive-api preserves the three listener ports in one service"
 
-grep -Fq 'NOTIFICATION_EGRESS_ROLE: "owner"' "${PROD_FILE}" \
+service_block hololive-alarm-worker | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "owner"' \
     || fail "alarm-worker is not configured as proactive egress owner"
+service_block hololive-api | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "producer"' \
+    || fail "hololive-api is not configured as notification producer"
+service_block youtube-collector | grep -Fq 'NOTIFICATION_EGRESS_ROLE: "off"' \
+    || fail "youtube-collector notification egress is not disabled"
 for profile in hololive-api alarm-worker youtube-collector-c; do
     grep -Fq "/run/hololive-bot/worker-profiles/${profile}.json" "${PROD_FILE}" \
         || fail "production Compose is missing ${profile} Stack Worker Profile v1"

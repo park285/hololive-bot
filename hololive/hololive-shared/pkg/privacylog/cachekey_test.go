@@ -179,6 +179,17 @@ func TestRedactCacheKeyFailsClosedOnTruncatedKeys(t *testing.T) {
 	}
 }
 
+func TestRedactCacheKeyDoesNotTreatStaticKeyPrefixAsRoomAllowlist(t *testing.T) {
+	t.Parallel()
+
+	for _, room := range []string{"registry: private room", "member_names: private room", "twitch_logins: private room"} {
+		key := "alarm:" + room
+		if got := RedactCacheKey(key); got == key || strings.Contains(got, room) {
+			t.Fatalf("RedactCacheKey(%q) = %q, room-shaped suffix was not redacted", key, got)
+		}
+	}
+}
+
 func TestRedactCacheFieldOnlyTouchesIdentifierKeyedHashes(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,8 @@
 # 공유 fixture/헬퍼 — bundle_*_security_test.sh에서 source 전용 (직접 실행하지 않음).
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -27,15 +29,22 @@ report_results() {
 setup_fixture() {
   local workdir="$1"
 
+  CI_PYTHON_RUNTIME_ROOT="${workdir}"
+  export CI_PYTHON_RUNTIME_ROOT
+
   mkdir -p \
     "${workdir}/scripts/review" \
     "${workdir}/scripts/architecture/lib" \
+    "${workdir}/scripts/ci" \
     "${workdir}/nested" \
     "${workdir}/.git/hooks-disabled"
 
   cp "${ROOT_DIR}/scripts/review/export-source-bundle.sh" "${workdir}/scripts/review/export-source-bundle.sh"
   cp "${ROOT_DIR}/scripts/review/verify-full-bundle.sh" "${workdir}/scripts/review/verify-full-bundle.sh"
   cp "${ROOT_DIR}/scripts/architecture/lib/git_guard.sh" "${workdir}/scripts/architecture/lib/git_guard.sh"
+  cp "${ROOT_DIR}/scripts/ci/python-runner.sh" "${ROOT_DIR}/scripts/ci/python-runtime.sh" \
+    "${workdir}/scripts/ci/"
+  cp "${ROOT_DIR}/.python-version" "${workdir}/.python-version"
   chmod +x "${workdir}/scripts/review/export-source-bundle.sh" "${workdir}/scripts/review/verify-full-bundle.sh"
 
   git -C "${workdir}" init -q
@@ -46,9 +55,12 @@ setup_fixture() {
   printf 'fixture readme\n' >"${workdir}/README.md"
   printf 'tracked payload\n' >"${workdir}/nested/payload.txt"
   git -C "${workdir}" add \
+    .python-version \
     README.md \
     nested/payload.txt \
     scripts/architecture/lib/git_guard.sh \
+    scripts/ci/python-runner.sh \
+    scripts/ci/python-runtime.sh \
     scripts/review/export-source-bundle.sh \
     scripts/review/verify-full-bundle.sh
   git -C "${workdir}" commit -q -m "fixture"
@@ -62,7 +74,7 @@ make_unsafe_tar() {
   local kind="$2"
   local absolute_target="${3:-/tmp/hololive-bundle-security-test-evil}"
 
-  python3 - "${archive}" "${kind}" "${absolute_target}" <<'PY'
+  "${CI_PYTHON_BIN}" - "${archive}" "${kind}" "${absolute_target}" <<'PY'
 import io
 import stat
 import sys
@@ -149,7 +161,7 @@ expect_verify_rejects_before_extract() {
 assert_manifest_hashes_match_tar() {
   local archive="$1"
 
-  python3 - "${archive}" <<'PY'
+  "${CI_PYTHON_BIN}" - "${archive}" <<'PY'
 import hashlib
 import io
 import re
@@ -207,7 +219,7 @@ make_tampered_bundle_with_matching_manifest() {
   local archive="$2"
   local trusted_manifest="${3:-}"
 
-  python3 - "${workdir}" "${archive}" "${trusted_manifest}" <<'PY'
+  "${CI_PYTHON_BIN}" - "${workdir}" "${archive}" "${trusted_manifest}" <<'PY'
 import hashlib
 import io
 import subprocess

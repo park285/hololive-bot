@@ -29,53 +29,72 @@ import (
 
 func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string) {
 	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
 
 	if c.snapshotGeneration.Load() != generation {
+		c.snapshotMu.RUnlock()
+
 		return
 	}
 
 	c.storePointMemberInMemoryLocked(member, generation)
 
 	if !c.distributedCacheUsable() {
+		c.snapshotMu.RUnlock()
+
 		return
 	}
 
-	c.cacheMemberByChannelID(ctx, member)
-	c.cacheMemberByName(ctx, member)
-	c.cacheMemberByAlias(ctx, member, alias)
-}
+	channelKey := ""
 
-func (c *Cache) cacheMemberByChannelID(ctx context.Context, member *domain.Member) {
-	if member.ChannelID == "" {
-		return
+	if member.ChannelID != "" {
+		channelKey = c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
 	}
 
-	channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
-	if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
-		c.logger.Warn("Failed to cache member by channel ID",
-			slog.String("channel_id", member.ChannelID),
-			slog.Any("error", err),
-		)
-	}
-}
-
-func (c *Cache) cacheMemberByName(ctx context.Context, member *domain.Member) {
 	nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
-	if err := c.cache.Set(ctx, nameKey, member, c.cacheTTL); err != nil {
-		c.logger.Warn("Failed to cache member by name",
-			slog.String("member", member.Name),
-			slog.Any("error", err),
-		)
+	aliasKey := ""
+
+	if alias != "" {
+		aliasKey = c.epochDataKey(memberAliasKeyPrefix + alias)
 	}
+
+	c.snapshotMu.RUnlock()
+
+	c.cacheMemberByChannelID(ctx, channelKey, member)
+	c.cacheMemberByName(ctx, nameKey, member)
+	c.cacheMemberByAlias(ctx, aliasKey, member, alias)
 }
 
-func (c *Cache) cacheMemberByAlias(ctx context.Context, member *domain.Member, alias string) {
-	if alias == "" {
+func (c *Cache) cacheMemberByChannelID(ctx context.Context, channelKey string, member *domain.Member) {
+	if channelKey == "" {
 		return
 	}
 
-	aliasKey := c.epochDataKey(memberAliasKeyPrefix + alias)
+	if err := c.cache.Set(ctx, channelKey, member, c.cacheTTL); err != nil {
+		if c.logger != nil {
+			c.logger.Warn("Failed to cache member by channel ID",
+				slog.String("channel_id", member.ChannelID),
+				slog.Any("error", err),
+			)
+		}
+	}
+}
+
+func (c *Cache) cacheMemberByName(ctx context.Context, nameKey string, member *domain.Member) {
+	if err := c.cache.Set(ctx, nameKey, member, c.cacheTTL); err != nil {
+		if c.logger != nil {
+			c.logger.Warn("Failed to cache member by name",
+				slog.String("member", member.Name),
+				slog.Any("error", err),
+			)
+		}
+	}
+}
+
+func (c *Cache) cacheMemberByAlias(ctx context.Context, aliasKey string, member *domain.Member, alias string) {
+	if aliasKey == "" {
+		return
+	}
+
 	if err := c.cache.Set(ctx, aliasKey, member, c.cacheTTL); err != nil && c.logger != nil {
 		c.logger.Warn("Failed to cache member alias",
 			slog.String("alias", alias),

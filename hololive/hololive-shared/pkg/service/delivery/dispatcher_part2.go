@@ -38,12 +38,26 @@ import (
 )
 
 func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationDeliveryOutbox) {
-	attemptID := d.workerTracker.BeginAttempt(time.Now())
+	if d == nil || item == nil {
+		return
+	}
+
+	var attemptID uint64
+
+	if d.workerTracker != nil {
+		attemptID = d.workerTracker.BeginAttempt(time.Now())
+	}
+
 	outcome := workercontract.AttemptFailed
 
 	defer func() {
-		d.workerTracker.EndAttempt(attemptID)
-		d.workerTotals.RecordAttempt(outcome)
+		if d.workerTracker != nil {
+			d.workerTracker.EndAttempt(attemptID)
+		}
+
+		if d.workerTotals != nil {
+			d.workerTotals.RecordAttempt(outcome)
+		}
 	}()
 
 	var p outboxPayload

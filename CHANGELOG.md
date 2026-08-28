@@ -8,6 +8,43 @@
 
 ## 미출시
 
+## v3.4.0 - 2026-08-29
+
+### 추가
+
+- celebration과 birthday-stream event identity에 stable `MemberID`를 포함하고, rollout 기간에는
+  legacy payload가 member name·kind·channel·date·video와 일치할 때만 audience, payload와
+  daily cap을 이관합니다. 같은 channel을 공유하는 다른 member는 legacy event를 재사용하지
+  않습니다.
+- YouTube collection lease에 bounded failure code/class/detail/timestamp를 추가하고 migration 189가
+  legacy deferred row를 5,000행씩 reconcile합니다. `shutdown_release`는 failure로 기록하지 않으며
+  constraint validation과 checksum reconciliation은 재실행에 안전합니다.
+- admin dashboard public ingress를 dedicated nftables/systemd owner와 rendered nginx allowlist에
+  결속합니다.
+
+### 수정
+
+- alarm dispatch event-hash collision은 collision ledger를 기록한 뒤 canonical winner delivery를
+  계속 처리하며, claim release와 terminal error persistence가 ownership token과 cleanup context를
+  보존합니다.
+- YouTube collector, outbox, member cache, notification cache와 template renderer의 bounded
+  cleanup·privacy key·fallback 경계를 정렬하고 invalid/ambiguous 상태를 success로 강등하지
+  않습니다.
+- bot ingress durable admission과 RSS/major-event parsing이 malformed row를 격리하면서 정상 row와
+  이미 commit된 결과를 보존합니다.
+
+### 운영
+
+- PostgreSQL TLS/HBA와 route failover rollback, central/Seoul Compose, Osaka/Osaka2 host-native AP
+  배포 계약을 정렬했습니다. AP deploy는 실제 rsync input manifest를 cutover 전에 검증하고
+  실패 시 이전 route와 artifact를 복구합니다.
+- CI ownership gate가 app workflow 전체를 module-specific SHA-256 snapshot으로 고정해 early
+  exit, folded/flow YAML, custom shell, environment injection과 필수 gate 삭제를 거부합니다.
+- GitHub Actions는 공식 `setup-python`과 고정된 `uv 0.12.7` 설치 경로를 사용하며,
+  `shared-go v2.1.0`과 `iris-client-go v2.3.1`을 채택합니다.
+- 이번 릴리스는 root app `3.4.0`, `hololive-api`·`youtube-collector`·`admin-dashboard` artifact
+  `3.1.0`, `hololive-alarm-worker` artifact `3.1.0`입니다.
+
 ## v3.3.4 - 2026-08-26
 
 ### 변경

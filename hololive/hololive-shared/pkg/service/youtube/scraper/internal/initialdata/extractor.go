@@ -49,6 +49,11 @@ var ytInitialDataPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?s)window\["ytInitialData"\]\s*=\s*(\{.+?\})\s*;`),
 }
 
+var ytInitialPlayerResponsePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?m)(?:^|[;\n])\s*(?:var\s+)?ytInitialPlayerResponse\s*=\s*`),
+	regexp.MustCompile(`(?m)(?:^|[;\n])\s*window\[["']ytInitialPlayerResponse["']\]\s*=\s*`),
+}
+
 var ytInitialDataAnchors = []string{
 	"var ytInitialData",
 	"window.ytInitialData",
@@ -76,9 +81,56 @@ func Extract(html string) (string, error) {
 
 func ExtractPlayerResponseCandidates(html string, limit int) []string {
 	collector := newYtInitialDataCandidateCollector(limit)
-	scanAnchorCandidates(html, "ytInitialPlayerResponse", collector)
+	if strings.TrimSpace(html) == "" || collector.full() {
+		return collector.values
+	}
+
+	document, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return collector.values
+	}
+
+	document.Find("script").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		return collectPlayerResponseScriptCandidates(selection.Text(), collector)
+	})
 
 	return collector.values
+}
+
+func collectPlayerResponseScriptCandidates(scriptBody string, collector *ytInitialDataCandidateCollector) bool {
+	for _, pattern := range ytInitialPlayerResponsePatterns {
+		if !collectPlayerResponsePatternCandidates(scriptBody, pattern, collector) {
+			return false
+		}
+	}
+
+	return !collector.full()
+}
+
+func collectPlayerResponsePatternCandidates(
+	scriptBody string,
+	pattern *regexp.Regexp,
+	collector *ytInitialDataCandidateCollector,
+) bool {
+	for _, match := range pattern.FindAllStringIndex(scriptBody, -1) {
+		if collector.full() {
+			return false
+		}
+
+		objectOffset := strings.IndexByte(scriptBody[match[1]:], ytJSONObjectOpen)
+		if objectOffset < 0 || objectOffset > maxYtInitialDataObjectStartScanBytes {
+			continue
+		}
+
+		objectStart := match[1] + objectOffset
+		objectEnd, ok := findJSONObjectEnd(scriptBody, objectStart)
+
+		if ok {
+			collector.add(scriptBody[objectStart : objectEnd+1])
+		}
+	}
+
+	return !collector.full()
 }
 
 func collectYtInitialDataCandidates(html string) []string {

@@ -397,6 +397,41 @@ func TestAppliedMigrationChecksumMismatchFails(t *testing.T) {
 	}
 }
 
+func TestMigrationChecksumCompatibilityIsBoundedToPublishedMigration177Sources(t *testing.T) {
+	t.Parallel()
+
+	raw, err := fs.ReadFile(migrations.FS, youtubeJobLeaseFailureDiagnosticsMigration)
+	if err != nil {
+		t.Fatalf("read migration 177: %v", err)
+	}
+
+	current := migrationChecksum(raw)
+	if current != youtubeJobLeaseFailureDiagnosticsChecksum {
+		t.Fatalf("migration 177 checksum = %s, want reviewed source %s", current, youtubeJobLeaseFailureDiagnosticsChecksum)
+	}
+
+	for _, historical := range []string{
+		youtubeJobLeaseFailureDiagnosticsV1Checksum,
+		youtubeJobLeaseFailureDiagnosticsV2Checksum,
+	} {
+		if !migrationChecksumMatches(youtubeJobLeaseFailureDiagnosticsMigration, historical, current) {
+			t.Errorf("published migration 177 checksum %s was rejected", historical)
+		}
+	}
+
+	if migrationChecksumMatches(youtubeJobLeaseFailureDiagnosticsMigration, strings.Repeat("a", 64), current) {
+		t.Fatal("unrecognized migration 177 checksum was accepted")
+	}
+
+	if migrationChecksumMatches("178_youtube_schedule_collabo_talent_names.sql", strings.Repeat("a", 64), strings.Repeat("b", 64)) {
+		t.Fatal("historical checksum exception escaped migration 177")
+	}
+
+	if migrationChecksumMatches(youtubeJobLeaseFailureDiagnosticsMigration, strings.Repeat("a", 64), "modified-source") {
+		t.Fatal("historical checksum exception accepted an unreviewed current source")
+	}
+}
+
 func TestFailedMigrationDoesNotPinBadChecksum(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	broken := fstest.MapFS{
@@ -627,6 +662,184 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 
 	if result.Applied != 0 || result.Skipped != len(entries) || result.Total != len(entries) {
 		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", result, len(entries), len(entries))
+	}
+}
+
+func TestRealManifestPublishedMigration177ChecksumsReachReconciliation(t *testing.T) {
+	for _, historical := range []string{
+		youtubeJobLeaseFailureDiagnosticsV1Checksum,
+		youtubeJobLeaseFailureDiagnosticsV2Checksum,
+	} {
+		t.Run(historical[:8], func(t *testing.T) {
+			testPublishedMigration177ChecksumReconciliation(t, historical)
+		})
+	}
+}
+
+func testPublishedMigration177ChecksumReconciliation(t *testing.T, historical string) {
+	t.Helper()
+
+	pool := dbtest.NewBlankPool(t)
+	partialCount := preparePublishedMigration177Fixture(t, pool, historical)
+	entries := manifestEntries(t)
+
+	result, runErr := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if runErr != nil {
+		t.Fatalf("Run() error = %v", runErr)
+	}
+
+	if result.Applied != len(entries)-partialCount || result.Skipped != partialCount {
+		t.Fatalf("result = %+v, want applied=%d skipped=%d", result, len(entries)-partialCount, partialCount)
+	}
+
+	assertMigrationRecorded(t, pool, "189_youtube_job_lease_failure_diagnostics_reconcile.sql", true)
+	assertConstraintValidated(t, pool, "youtube_collection_job_leases", "chk_youtube_collection_job_last_failure_shape", true)
+	assertMigration177LeaseReconciliation(t, pool)
+	assertMigration177ChecksumReconciliation(t, pool)
+
+	secondResult, secondRunErr := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+	if secondRunErr != nil {
+		t.Fatalf("Run() after checksum reconciliation error = %v", secondRunErr)
+	}
+
+	if secondResult.Applied != 0 || secondResult.Skipped != len(entries) || secondResult.Total != len(entries) {
+		t.Fatalf("second result = %+v, want applied=0 skipped=%d total=%d", secondResult, len(entries), len(entries))
+	}
+}
+
+func preparePublishedMigration177Fixture(t *testing.T, pool *pgxpool.Pool, historical string) int {
+	t.Helper()
+
+	partialFS := realManifestThrough(t, youtubeJobLeaseFailureDiagnosticsMigration)
+
+	partialEntries, manifestErr := dbmigrate.Manifest(partialFS)
+	if manifestErr != nil {
+		t.Fatalf("read partial manifest: %v", manifestErr)
+	}
+
+	runMigrations(t, pool, partialFS, "")
+
+	projectionGeneration := seedMigration177Projection(t, pool)
+	seedMigration177LegacyLeases(t, pool, projectionGeneration)
+
+	if _, updateErr := pool.Exec(t.Context(), `
+		UPDATE schema_migration_checksums
+		SET checksum_sha256 = $1
+		WHERE filename = $2`, historical, youtubeJobLeaseFailureDiagnosticsMigration); updateErr != nil {
+		t.Fatalf("seed published migration 177 checksum: %v", updateErr)
+	}
+
+	return len(partialEntries)
+}
+
+func seedMigration177Projection(t *testing.T, pool *pgxpool.Pool) int64 {
+	t.Helper()
+
+	var projectionGeneration int64
+
+	if queryErr := pool.QueryRow(t.Context(), `
+		INSERT INTO youtube_collection_projection_generations (
+			status, row_count, projection_sha256, valid_until, activated_at
+		) VALUES ('CURRENT', 5002, repeat('a', 64), clock_timestamp() + INTERVAL '1 hour', clock_timestamp())
+		RETURNING generation`).Scan(&projectionGeneration); queryErr != nil {
+		t.Fatalf("seed projection generation: %v", queryErr)
+	}
+
+	return projectionGeneration
+}
+
+func seedMigration177LegacyLeases(t *testing.T, pool *pgxpool.Pool, projectionGeneration int64) {
+	t.Helper()
+
+	if _, insertErr := pool.Exec(t.Context(), `
+		INSERT INTO youtube_collection_job_leases (
+			job_key, provider, job_class, collection_job_kind, subject_key,
+			projection_generation, poll_interval_ms, slot_state, scheduled_for,
+			next_due_at, retry_not_before, last_error_code, updated_at
+		)
+		SELECT
+			'legacy-deferred-' || ordinal::text,
+			'youtubejs',
+			'SUBJECT',
+			'youtubejs_community',
+			'channel:' || ordinal::text,
+			$1,
+			60000,
+			'DEFERRED',
+			clock_timestamp(),
+			clock_timestamp(),
+			clock_timestamp() + INTERVAL '1 minute',
+			'legacy_failure',
+			clock_timestamp() - INTERVAL '1 minute'
+		FROM generate_series(1, 5001) AS ordinal`, projectionGeneration); insertErr != nil {
+		t.Fatalf("seed legacy deferred leases across the 5000-row batch boundary: %v", insertErr)
+	}
+
+	if _, insertErr := pool.Exec(t.Context(), `
+		INSERT INTO youtube_collection_job_leases (
+			job_key, provider, job_class, collection_job_kind, subject_key,
+			projection_generation, poll_interval_ms, slot_state, scheduled_for,
+			next_due_at, retry_not_before, last_error_code
+		) VALUES (
+			'legacy-shutdown-release', 'youtubejs', 'SUBJECT', 'youtubejs_community',
+			'channel:shutdown', $1, 60000, 'DEFERRED', clock_timestamp(),
+			clock_timestamp(), clock_timestamp() + INTERVAL '1 minute', 'shutdown_release'
+		)`, projectionGeneration); insertErr != nil {
+		t.Fatalf("seed shutdown release lease: %v", insertErr)
+	}
+}
+
+func assertMigration177LeaseReconciliation(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var backfilled int
+
+	if queryErr := pool.QueryRow(t.Context(), `
+		SELECT count(*)
+		FROM youtube_collection_job_leases
+		WHERE job_key LIKE 'legacy-deferred-%'
+		  AND last_failure_code = 'legacy_failure'
+		  AND last_failure_class = 'legacy_collector'
+		  AND last_failure_detail = 'legacy_collector'
+		  AND last_failure_at = updated_at`).Scan(&backfilled); queryErr != nil {
+		t.Fatalf("count reconciled legacy leases: %v", queryErr)
+	}
+
+	if backfilled != 5001 {
+		t.Fatalf("reconciled legacy lease count = %d, want 5001", backfilled)
+	}
+
+	var shutdownDiagnosticsNull bool
+
+	if queryErr := pool.QueryRow(t.Context(), `
+		SELECT last_failure_code IS NULL
+		   AND last_failure_class IS NULL
+		   AND last_failure_detail IS NULL
+		   AND last_failure_at IS NULL
+		FROM youtube_collection_job_leases
+		WHERE job_key = 'legacy-shutdown-release'`).Scan(&shutdownDiagnosticsNull); queryErr != nil {
+		t.Fatalf("read shutdown release diagnostics: %v", queryErr)
+	}
+
+	if !shutdownDiagnosticsNull {
+		t.Fatal("shutdown release lease received failure diagnostics")
+	}
+}
+
+func assertMigration177ChecksumReconciliation(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	var reconciledChecksum string
+
+	if queryErr := pool.QueryRow(t.Context(), `
+		SELECT checksum_sha256
+		FROM schema_migration_checksums
+		WHERE filename = $1`, youtubeJobLeaseFailureDiagnosticsMigration).Scan(&reconciledChecksum); queryErr != nil {
+		t.Fatalf("read reconciled migration 177 checksum: %v", queryErr)
+	}
+
+	if reconciledChecksum != youtubeJobLeaseFailureDiagnosticsChecksum {
+		t.Fatalf("reconciled migration 177 checksum = %s, want %s", reconciledChecksum, youtubeJobLeaseFailureDiagnosticsChecksum)
 	}
 }
 

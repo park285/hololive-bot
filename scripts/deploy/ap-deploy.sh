@@ -127,10 +127,9 @@ image_archive=""
 trap 'rm -f "$preview_file" "$rsync_files_from"; [[ -z "$image_archive" ]] || rm -f "$image_archive"' EXIT
 
 build_rsync_files_from
+"$REPO_ROOT/scripts/deploy/check-ap-rsync-manifest.sh" "$FILES_FROM"
 rsync_preview | tee "$preview_file"
 validate_preview "$preview_file"
-
-"$REPO_ROOT/scripts/deploy/check-ap-rsync-manifest.sh" "$FILES_FROM"
 
 "$REPO_ROOT/scripts/deploy/ap-collector-preflight.sh" "$AP_NAME"
 

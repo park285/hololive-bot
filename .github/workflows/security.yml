@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: e56a438df6dd568d93ab238abcef317497207d3b # v2.0.4
+          ref: 937a18d4a0f5d2f03bf3b65a17b070a6074ae948 # v2.1.0
           path: shared-go
           persist-credentials: false
 
@@ -49,9 +49,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: d5845af49787c13d5bb26176460c2594d6603e45 # v2.2.3
+          ref: c3978646aedd21729307d5639977d83c1b08e0a9 # v2.3.1
           path: iris-client-go
           persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version-file: hololive-bot/.python-version
+
+      - name: Install uv
+        run: python -m pip install --disable-pip-version-check --no-deps uv==0.12.7
+
+      - name: Initialize Python runtime
+        run: |
+          interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"
+          printf 'CI_PYTHON_BIN=%s\n' "$interpreter" >>"$GITHUB_ENV"
+          printf 'CI_PYTHON_RUNTIME_ROOT=%s\n' "$GITHUB_WORKSPACE/hololive-bot" >>"$GITHUB_ENV"
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -118,7 +132,7 @@ jobs:
 
       - name: govulncheck
         run: |
-          mapfile -t modules < <(go work edit -json | python3 -c 'import json, sys; print("\n".join(use["DiskPath"] for use in json.load(sys.stdin)["Use"]))')
+          mapfile -t modules < <(go work edit -json | "$CI_PYTHON_BIN" -c 'import json, sys; print("\n".join(use["DiskPath"] for use in json.load(sys.stdin)["Use"]))')
           for module in "${modules[@]}"; do
             echo "govulncheck ${module}"
             (cd "${module}" && govulncheck ./...)

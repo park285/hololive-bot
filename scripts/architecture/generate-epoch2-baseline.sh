@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+. "${ROOT}/scripts/ci/python-runtime.sh"
+repo_python_init
 OUT="${ROOT}/hololive/hololive-api/scripts/migrations/001_schema_epoch2_baseline.sql"
 CONTRACT="${ROOT}/scripts/architecture/epoch2_legacy_contract.sha256"
 SUFFIX_CONTRACT="${ROOT}/scripts/architecture/epoch2_suffix_contract.txt"
@@ -241,7 +243,7 @@ docker exec "${NAME}" pg_dump \
   --column-inserts \
   > "${DUMP}"
 
-python3 "${NORMALIZER}" \
+"${CI_PYTHON_BIN}" "${NORMALIZER}" \
   --input "${DUMP}" \
   --output "${BASELINE_TMP}" \
   --acl-tail "${ACL_TAIL}" \

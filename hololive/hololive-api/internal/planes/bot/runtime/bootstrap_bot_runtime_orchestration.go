@@ -83,6 +83,7 @@ func buildBotRuntime(ctx context.Context, appConfig *settings.Config, logger *sl
 	webhookHandler, err := appbootstrap.BuildDurableBotWebhookHandler(appConfig, durableAdmitter{
 		inbox:  durable.inbox,
 		wake:   func() { notifyDurable(durable.inboxWake) },
+		accept: botBot.AcceptsMessage,
 		logger: logger,
 		totals: durable.inboxTotals,
 	}, runtimeViews.webhook, logger)

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "${script_dir}/../.." && pwd)"
+. "${script_dir}/python-runtime.sh"
+repo_python_init
 compose_file="${1:-${root}/deploy/compose/docker-compose.prod.yml}"
 policy_file="${2:-${root}/scripts/ci/postgres-capacity-policy.tsv}"
 target_env_file="${3:-}"
@@ -28,7 +31,7 @@ case "${mode}" in
         ;;
 esac
 
-python3 - "${tmp}" "${policy_file}" "${target_env_file}" "${mode}" "${@:5}" <<'PY'
+"${CI_PYTHON_BIN}" - "${tmp}" "${policy_file}" "${target_env_file}" "${mode}" "${@:5}" <<'PY'
 import json
 import hashlib
 import re

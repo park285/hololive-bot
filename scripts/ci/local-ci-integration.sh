@@ -67,7 +67,7 @@ provision_integration_test_database() {
         --env POSTGRES_USER="${postgres_user}" \
         --env POSTGRES_PASSWORD="${postgres_password}" \
         --env POSTGRES_DB="${postgres_database}" \
-        --env POSTGRES_INITDB_ARGS="--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8" \
+        --env POSTGRES_INITDB_ARGS="--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8 --data-checksums" \
         "${INTEGRATION_POSTGRES_IMAGE}")"
     trap cleanup_integration_test_services EXIT
 
