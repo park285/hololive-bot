@@ -41,6 +41,7 @@ REMOTE_LIBRARY_ALLOWED_RUN_LINES = frozenset(
         'echo "${unformatted}"',
         "exit 1",
         "go vet ./...",
+        "python -m pip install --disable-pip-version-check --no-cache-dir uv==0.12.7",
         "bash scripts/check-hmac-boundary.sh",
         "bash scripts/check-hmac-boundary_test.sh",
         "bash scripts/ci/go-tooling.sh golangci-lint run -c .golangci.yml ./...",
