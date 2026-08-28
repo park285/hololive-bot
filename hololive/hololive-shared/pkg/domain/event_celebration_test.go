@@ -191,9 +191,7 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 		t.Fatalf("source_kind = %v, want %q", raw["source_kind"], domain.AlarmDispatchSourceKindCelebration)
 	}
 
-	if _, ok := raw["celebration"]; !ok {
-		t.Fatal("celebration field missing from JSON")
-	}
+	assertCelebrationMemberIDOmitted(t, raw["celebration"])
 
 	var decoded domain.AlarmQueueEnvelope
 
@@ -223,6 +221,19 @@ func TestAlarmQueueEnvelope_JSONRoundtripCelebrationSource(t *testing.T) {
 
 	if decoded.Celebration.Ordinal != 2 {
 		t.Fatalf("Ordinal = %d, want 2", decoded.Celebration.Ordinal)
+	}
+}
+
+func assertCelebrationMemberIDOmitted(t *testing.T, value any) {
+	t.Helper()
+
+	celebration, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("celebration = %T, want object", value)
+	}
+
+	if _, ok := celebration["member_id"]; ok {
+		t.Fatal("zero member_id must be omitted from JSON")
 	}
 }
 

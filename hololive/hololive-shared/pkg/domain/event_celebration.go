@@ -15,7 +15,7 @@ const (
 
 type CelebrationDispatchPayload struct {
 	Kind              CelebrationKind `json:"kind"`
-	MemberID          int             `json:"member_id,omitempty"`
+	MemberID          int             `json:"member_id,omitzero"`
 	MemberName        string          `json:"member_name"`
 	ChannelID         string          `json:"channel_id"`
 	Photo             string          `json:"photo,omitempty"`
