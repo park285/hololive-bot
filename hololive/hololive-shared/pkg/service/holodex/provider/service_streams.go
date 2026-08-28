@@ -199,6 +199,9 @@ func streamOrgAliases() map[string]string {
 	return map[string]string{
 		"":     constants.HolodexAPIParams.OrgHololive,
 		"holo": constants.HolodexAPIParams.OrgHololive,
+		// "indie"는 e4dc4e710 이전 공개 query 값이다. API 소유자가 기존 호출자를
+		// 모두 "independents"로 전환할 때 제거한다.
+		"indie": constants.HolodexAPIParams.OrgIndie,
 		strings.ToLower(constants.HolodexAPIParams.OrgHololive): constants.HolodexAPIParams.OrgHololive,
 		strings.ToLower(constants.HolodexAPIParams.OrgVSpo):     constants.HolodexAPIParams.OrgVSpo,
 		strings.ToLower(constants.HolodexAPIParams.OrgStellive): constants.HolodexAPIParams.OrgStellive,

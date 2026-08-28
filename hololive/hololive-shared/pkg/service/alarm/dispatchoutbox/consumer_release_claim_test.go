@@ -48,6 +48,8 @@ func TestReleaseClaimKeysDeletesPrefixedKeysWhenReleaserSet(t *testing.T) {
 	err := consumer.ReleaseClaimKeys(t.Context(), []string{
 		" notified:claim:room-1:stream-1:100:live ",
 		"notified:claim:event:room-1:channel-1:100:fp:live",
+		"notified:schedule:transition:room:room-1:stream-1:100:200",
+		"notified:schedule:transition:event:room-1:channel-1:fp:100:200",
 	})
 	if err != nil {
 		t.Fatalf("ReleaseClaimKeys() error = %v", err)
@@ -60,6 +62,8 @@ func TestReleaseClaimKeysDeletesPrefixedKeysWhenReleaserSet(t *testing.T) {
 	want := []string{
 		"notified:claim:room-1:stream-1:100:live",
 		"notified:claim:event:room-1:channel-1:100:fp:live",
+		"notified:schedule:transition:room:room-1:stream-1:100:200",
+		"notified:schedule:transition:event:room-1:channel-1:fp:100:200",
 	}
 	if len(releaser.lastKeys) != len(want) {
 		t.Fatalf("DelMany keys = %v, want %v", releaser.lastKeys, want)

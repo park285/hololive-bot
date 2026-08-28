@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+is_admin_ingress_ipv4() {
+    local value="$1" octet
+    local -a octets
+
+    [[ "${value}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] || return 1
+    IFS=. read -r -a octets <<<"${value}"
+    [[ "${#octets[@]}" -eq 4 ]] || return 1
+
+    for octet in "${octets[@]}"; do
+        [[ "${octet}" =~ ^[0-9]{1,3}$ ]] && (( 10#${octet} <= 255 )) || return 1
+    done
+}
+
 prepare_admin_dashboard_ingress_bind_mount() {
     local root="$1"
     local template="${root}/deploy/nginx/admin-dashboard-ingress.conf.template"
@@ -11,6 +24,10 @@ prepare_admin_dashboard_ingress_bind_mount() {
     fi
     if [[ -z "${bind_ip}" ]]; then
         echo "[PREFLIGHT] HOLOLIVE_BOT_PORT_BIND_IP is required to render the public ingress config" >&2
+        return 1
+    fi
+    if ! is_admin_ingress_ipv4 "${bind_ip}"; then
+        echo "[PREFLIGHT] HOLOLIVE_BOT_PORT_BIND_IP must be a literal IPv4 address" >&2
         return 1
     fi
     if [[ -L "${template}" || ! -f "${template}" ]]; then

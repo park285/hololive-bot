@@ -130,9 +130,7 @@ x-iris-env: &iris-env
   IRIS_TRANSPORT: ${IRIS_TRANSPORT:-h3}
   IRIS_H3_CA_CERT_FILE: ${IRIS_H3_CA_CERT_FILE:-/run/hololive-bot/certs/iris-ca.pem}
   IRIS_H3_SERVER_NAME: ${IRIS_H3_SERVER_NAME:-}
-  IRIS_WEBHOOK_TOKEN: ${IRIS_WEBHOOK_TOKEN:-}
   IRIS_WEBHOOK_REQUIRE_HMAC: ${IRIS_WEBHOOK_REQUIRE_HMAC:-true}
-  IRIS_BOT_TOKEN: ${IRIS_BOT_TOKEN:-}
 
 x-hololive-h3-files-env: &hololive-h3-files-env
   HOLOLIVE_H3_CERT_FILE: ${HOLOLIVE_H3_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
@@ -278,7 +276,7 @@ services:
       HOLOLIVE_REPLICATOR_PASSWORD: ${HOLOLIVE_REPLICATOR_PASSWORD:-}
       # PG18 parent mount를 사용하되 기존 named volume의 pgdata 상대 경로는 유지한다.
       # builtin provider는 정렬을 libc에 위임하지 않아 base image가 glibc↔musl로 바뀌어도 기존 인덱스가 유효하다.
-      POSTGRES_INITDB_ARGS: "--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8"
+      POSTGRES_INITDB_ARGS: "--locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8 --data-checksums"
       PGDATA: /var/lib/postgresql/pgdata
       PGPORT: "5432"
     volumes:
@@ -394,7 +392,8 @@ services:
     # 배치 디스패치/전송 도중 SIGKILL을 피하기 위한 우아한 종료 여유(api와 동일 기준).
     stop_grace_period: 45s
     env_file:
-      - ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}
+      - path: ${HOLOLIVE_ALARM_WORKER_ENV_FILE:-/etc/stack-secrets/hololive-bot/alarm-worker.env}
+        required: false
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env]
       NOTIFICATION_EGRESS_ROLE: "owner"
@@ -462,7 +461,8 @@ services:
     container_name: hololive-api
     stop_grace_period: 45s
     env_file:
-      - ${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}
+      - path: ${HOLOLIVE_API_ENV_FILE:-/etc/stack-secrets/hololive-bot/bot.env}
+        required: false
     environment:
       <<: [*app-file-log-env, *iris-env, *hololive-h3-files-env, *cache-env, *postgres-env, *llm-provider-env]
       APP_VERSION: ${HOLO_API_VERSION:-2.0.0}
@@ -615,7 +615,6 @@ services:
       YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS: ${YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS:-2}
       HOLODEX_API_KEY: ${HOLODEX_API_KEY:-}
       HOLODEX_API_KEY_1: ${HOLODEX_API_KEY_1:-}
-      API_SECRET_KEY: ${API_SECRET_KEY:-}
       PHOTO_SYNC_ENABLED: "false"
       GOGC: "100"
       GOMEMLIMIT: "320MiB"

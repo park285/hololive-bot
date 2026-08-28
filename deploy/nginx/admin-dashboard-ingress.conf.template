@@ -18,8 +18,7 @@ http {
     }
 
     limit_req_zone $shortlink_client zone=shortlink_requests:1m rate=20r/s;
-    # 동시성 상한은 의도적으로 전역이다. ingress -> 30101 upstream 전체를 막는 backstop.
-    limit_conn_zone $binary_remote_addr zone=shortlink_connections:1m;
+    limit_conn_zone $shortlink_client zone=shortlink_connections:1m;
     limit_req_status 429;
     limit_conn_status 429;
 
@@ -36,6 +35,20 @@ http {
     map $http_x_forwarded_proto $forwarded_proto {
         "" http;
         default $http_x_forwarded_proto;
+    }
+
+    server {
+        listen 127.0.0.1:30193;
+        server_name _;
+
+        location = /healthz {
+            access_log off;
+            return 200 "ok\n";
+        }
+
+        location / {
+            return 404;
+        }
     }
 
     server {

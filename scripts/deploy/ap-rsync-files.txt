@@ -938,7 +938,6 @@ hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/mapper.g
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/validation.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/viewer.go
 scripts/build/build-youtube-collector-go.sh
-scripts/ci/check-postgres-capacity.sh
 scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf
 scripts/deploy/ap-hosts/osaka2.conf

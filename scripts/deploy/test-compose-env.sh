@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
+mkdir -p "$tmpdir/shared-go"
+export SHARED_GO_WORKSPACE_PATH="$tmpdir/shared-go"
 
 pass() {
     echo "[PASS] $*"

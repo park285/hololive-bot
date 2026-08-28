@@ -51,6 +51,16 @@ func TestWithTimeoutUsesDefaultForNonPositiveTimeout(t *testing.T) {
 	}
 }
 
+func TestWithTimeoutAcceptsNilParent(t *testing.T) {
+	//lint:ignore SA1012 nil parent를 background context로 바꾸는 명시적 계약을 검증한다.
+	ctx, cancel := WithTimeout(nil, time.Second) //nolint:staticcheck // nil parent fallback 계약을 직접 검증한다.
+	defer cancel()
+
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("cleanup context error = %v, want nil", err)
+	}
+}
+
 func TestWaitReturnsWhenDoneCloses(t *testing.T) {
 	done := make(chan struct{})
 	close(done)
@@ -73,5 +83,15 @@ func TestWaitTimesOutEvenWhenParentIsAlreadyCanceled(t *testing.T) {
 func TestWaitRejectsNilDoneChannel(t *testing.T) {
 	if err := Wait(t.Context(), time.Second, nil); !errors.Is(err, ErrNilDone) {
 		t.Fatalf("Wait(nil) error = %v, want ErrNilDone", err)
+	}
+}
+
+func TestWaitAcceptsNilParent(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+
+	//lint:ignore SA1012 nil parent를 background context로 바꾸는 명시적 계약을 검증한다.
+	if err := Wait(nil, time.Second, done); err != nil { //nolint:staticcheck // nil parent fallback 계약을 직접 검증한다.
+		t.Fatalf("Wait(nil parent) error = %v, want nil", err)
 	}
 }

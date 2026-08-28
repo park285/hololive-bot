@@ -141,12 +141,7 @@ SHARED_GO_WORKSPACE_PATH="$(resolve_required_workspace_path \
     "${ROOT_DIR}/../shared-go" \
     "${ROOT_DIR}/shared-go" \
     "shared-go")"
-IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_optional_workspace_path \
-    "${IRIS_CLIENT_GO_WORKSPACE_PATH:-}" \
-    "${ROOT_DIR}/../iris-client-go" \
-    "${ROOT_DIR}/iris-client-go" \
-    "iris-client-go")"
-export SHARED_GO_WORKSPACE_PATH IRIS_CLIENT_GO_WORKSPACE_PATH
+export SHARED_GO_WORKSPACE_PATH
 
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 case "${CONTAINER_CLI}" in
@@ -297,7 +292,7 @@ if [[ "${compose_invokes_up}" == true ]]; then
                 bind_preflight_required=true
                 gate_targets+=("${service}")
             fi
-            if [[ "${service}" == "hololive-api" || "${service}" == "admin-dashboard" ]]; then
+            if [[ "${service}" == "hololive-api" ]]; then
                 removed_runtime_cleanup_required=true
             fi
             if [[ "${service}" == "admin-dashboard-ingress" ]]; then

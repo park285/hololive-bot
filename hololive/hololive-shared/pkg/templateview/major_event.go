@@ -2,6 +2,7 @@ package templateview
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -25,12 +26,26 @@ func BuildMajorEventViews(events []domain.MajorEvent) []MajorEventView {
 			Title:    event.Title,
 			DateStr:  FormatMajorEventDatesFromDB(event.EventStartDate, event.EventEndDate),
 			Members:  strings.Join(event.Members, ", "),
-			Link:     event.Link,
+			Link:     safeMarkdownLink(event.Link),
 			HasDates: event.EventStartDate != nil,
 		})
 	}
 
 	return views
+}
+
+func safeMarkdownLink(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.ContainsAny(trimmed, " \t\r\n()[]<>\\") {
+		return ""
+	}
+
+	parsed, err := url.ParseRequestURI(trimmed)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return ""
+	}
+
+	return trimmed
 }
 
 func FormatMajorEventDatesFromDB(start, end *time.Time) string {

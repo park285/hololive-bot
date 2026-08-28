@@ -7,6 +7,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/python-runtime.sh"
+repo_python_init
 PROFILE_ID="hololive-bot-v1"
 release_checked=false
 route_resolved=false
@@ -161,13 +163,17 @@ run_fingerprint() {
     go version
     go env GOVERSION GOOS GOARCH GOTOOLCHAIN
     systemd-run --version
-    git hash-object -- scripts/ci/go-tooling.sh scripts/ci/local-ci.sh
+    uv --version
+    "${CI_PYTHON_BIN}" -I -S -c 'import platform; print(platform.python_version())'
+    git hash-object -- .python-version scripts/ci/python-runner.sh \
+      scripts/ci/python-runtime.sh scripts/ci/go-tooling.sh scripts/ci/local-ci.sh
     printf 'GOTOOLCHAIN=%s\n' "${GOTOOLCHAIN}"
     printf 'MemoryHigh=%s\n' "${PRE_PUSH_MEMORY_HIGH:-24G}"
     printf 'MemoryMax=%s\n' "${PRE_PUSH_MEMORY_MAX:-32G}"
   } | hash_stream)"
 
   mapfile -t profile_inputs < <(git ls-files -- \
+    '.python-version' \
     '.github/workflows/*.yml' \
     '.golangci.yml' \
     'go.mod' 'go.sum' \

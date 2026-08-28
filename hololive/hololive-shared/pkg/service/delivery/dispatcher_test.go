@@ -666,3 +666,58 @@ func TestProcessOnce_RespectsMaxConcurrent(t *testing.T) {
 		t.Fatalf("expected dispatcher to use configured concurrency 2, got %d", maxRunning.Load())
 	}
 }
+
+func TestProcessBatchPreservesOrderWithinRoom(t *testing.T) {
+	t.Parallel()
+
+	firstStarted := make(chan struct{})
+	otherRoomStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+
+	var reordered atomic.Bool
+
+	sender := &mockSender{sendFn: func(_ context.Context, _, message string) error {
+		switch message {
+		case "first":
+			close(firstStarted)
+			<-releaseFirst
+		case "second":
+			select {
+			case <-releaseFirst:
+			default:
+				reordered.Store(true)
+			}
+		case "other":
+			close(otherRoomStarted)
+		}
+
+		return nil
+	}}
+	dispatcher := NewDispatcher(&mockDeliveryRepository{}, sender, dispatcherLogger(), &DispatcherConfig{MaxConcurrent: 2})
+	items := []domain.NotificationDeliveryOutbox{
+		{ID: 1, RoomID: "room-a", Payload: makePayload(t, "first")},
+		{ID: 2, RoomID: "room-a", Payload: makePayload(t, "second")},
+		{ID: 3, RoomID: "room-b", Payload: makePayload(t, "other")},
+	}
+	done := make(chan struct{})
+
+	go func() {
+		dispatcher.processBatch(t.Context(), items)
+		close(done)
+	}()
+
+	<-firstStarted
+
+	select {
+	case <-otherRoomStarted:
+	case <-time.After(time.Second):
+		t.Fatal("different room did not run concurrently")
+	}
+
+	close(releaseFirst)
+	<-done
+
+	if reordered.Load() {
+		t.Fatal("second notification for a room started before the first completed")
+	}
+}

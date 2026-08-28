@@ -115,31 +115,3 @@ func logEventCollisions(logger *slog.Logger, collisions []eventCollision) {
 		)
 	}
 }
-
-func repointCollisionDeliveryEventIDs(eventIDs map[string]int64, collisions []eventCollision) {
-	for i := range collisions {
-		collision := &collisions[i]
-		if collision.ExistingEventID > 0 {
-			eventIDs[collision.Event.EventKey] = collision.ExistingEventID
-		}
-	}
-}
-
-func attachCollisionEventIDs(collisions []eventCollision, eventIDs map[string]int64) []eventCollision {
-	if len(collisions) == 0 {
-		return collisions
-	}
-
-	attached := make([]eventCollision, len(collisions))
-	for i := range collisions {
-		collision := &collisions[i]
-
-		attached[i] = *collision
-
-		if attached[i].ExistingEventID == 0 {
-			attached[i].ExistingEventID = eventIDs[collision.Event.EventKey]
-		}
-	}
-
-	return attached
-}

@@ -165,6 +165,31 @@ func TestMessageIngressPrepare_ObservesRoomChat(t *testing.T) {
 	}
 }
 
+func TestMessageIngressAcceptsHasNoRoomObservationSideEffect(t *testing.T) {
+	t.Parallel()
+
+	rooms := &recordingRooms{}
+	ingress := NewMessageIngress(
+		messaging.NewMessageAdapter("!", ""),
+		nil,
+		slog.New(slog.DiscardHandler),
+		"",
+		WithRoomObserver(rooms),
+	)
+
+	if !ingress.Accepts(t.Context(), &webhook.Message{
+		Msg:  "!help",
+		Room: "room-title",
+		JSON: &webhook.MessageJSON{ChatID: testMaxUint64RoomID},
+	}) {
+		t.Fatal("expected command to pass the admission filter")
+	}
+
+	if rooms.roomID != "" {
+		t.Fatalf("admission filter observed room %q", rooms.roomID)
+	}
+}
+
 func TestResolveRoom_NumericRoomPrefersRoomID(t *testing.T) {
 	t.Parallel()
 

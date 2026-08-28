@@ -110,7 +110,8 @@ allowed_key() {
     POSTGRES_FAILOVER_ROUTE_DB_NAME|POSTGRES_FAILOVER_ROUTE_PROBE_USER|POSTGRES_FAILOVER_ROUTE_PGPASS_FILE|\
     POSTGRES_FAILOVER_ROUTE_CA_FILE|POSTGRES_FAILOVER_ROUTE_TAILSCALE_PATH|\
     POSTGRES_FAILOVER_ROUTE_PSQL_PATH|POSTGRES_FAILOVER_ROUTE_IP_PATH|POSTGRES_FAILOVER_ROUTE_TAILSCALE_INTERFACE|\
-    POSTGRES_FAILOVER_ROUTE_PROBE_TIMEOUT_SEC|POSTGRES_FAILOVER_ROUTE_STATE_FILE|POSTGRES_FAILOVER_ROUTE_JQ_PATH) return 0 ;;
+    POSTGRES_FAILOVER_ROUTE_PROBE_TIMEOUT_SEC|POSTGRES_FAILOVER_ROUTE_STATE_FILE|POSTGRES_FAILOVER_ROUTE_JQ_PATH|\
+    POSTGRES_FAILOVER_ROUTE_SYNC_PATH) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -132,6 +133,7 @@ POSTGRES_FAILOVER_ROUTE_TAILSCALE_INTERFACE="tailscale0"
 POSTGRES_FAILOVER_ROUTE_PROBE_TIMEOUT_SEC="5"
 POSTGRES_FAILOVER_ROUTE_STATE_FILE="/var/lib/hololive-postgres-route/route.state"
 POSTGRES_FAILOVER_ROUTE_JQ_PATH="/usr/bin/jq"
+POSTGRES_FAILOVER_ROUTE_SYNC_PATH="/usr/bin/sync"
 
 declare -A seen=()
 while IFS= read -r raw || [[ -n "${raw}" ]]; do
@@ -164,6 +166,7 @@ TAILSCALE_INTERFACE="${POSTGRES_FAILOVER_ROUTE_TAILSCALE_INTERFACE}"
 PROBE_TIMEOUT_SEC="${POSTGRES_FAILOVER_ROUTE_PROBE_TIMEOUT_SEC}"
 STATE_FILE="${POSTGRES_FAILOVER_ROUTE_STATE_FILE}"
 JQ_PATH="${POSTGRES_FAILOVER_ROUTE_JQ_PATH}"
+SYNC_PATH="${POSTGRES_FAILOVER_ROUTE_SYNC_PATH}"
 
 [[ "${SERVICE}" == svc:hololive-postgres ]] || die "unexpected Tailscale service" 2
 if [[ -n "${TAILSCALE_SERVICE_ARGUMENT}" ]]; then
@@ -189,6 +192,7 @@ is_path "${TAILSCALE_PATH}" || die "invalid tailscale path" 2
 is_path "${PSQL_PATH}" || die "invalid psql path" 2
 is_path "${IP_PATH}" || die "invalid ip path" 2
 is_path "${JQ_PATH}" || die "invalid jq path" 2
+is_path "${SYNC_PATH}" || die "invalid sync path" 2
 [[ "${TAILSCALE_INTERFACE}" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid Tailscale interface" 2
 if [[ "${PROBE_TIMEOUT_SEC}" =~ ^[1-9][0-9]{0,2}$ ]]; then
   (( 10#${PROBE_TIMEOUT_SEC} <= 300 )) || die "invalid probe timeout" 2
@@ -201,6 +205,7 @@ secure_path "tailscale executable" "${TAILSCALE_PATH}" 0
 secure_path "psql executable" "${PSQL_PATH}" 0
 secure_path "ip executable" "${IP_PATH}" 0
 secure_path "jq executable" "${JQ_PATH}" 0
+secure_path "sync executable" "${SYNC_PATH}" 0
 secure_optional_state_path "${STATE_FILE}"
 
 local_ip_output="$("${IP_PATH}" -o -4 addr show dev "${TAILSCALE_INTERFACE}")" || die "could not inspect local Tailscale IP" 1
@@ -217,29 +222,113 @@ done <<<"${local_ip_output}"
 (( local_tailscale_ip == 1 )) || die "new primary host is not a local Tailscale IP" 1
 
 TARGET="tcp://${NEW_PRIMARY_HOST}:${NEW_PRIMARY_PORT}"
+OLD_TARGET="tcp://${OLD_PRIMARY_HOST}:${OLD_PRIMARY_PORT}"
 ENDPOINT="tcp:${SERVICE_PORT}"
+
+probe_postgres() {
+  local host="$1" port="$2" output
+  output="$(PGPASSFILE="${PGPASS_FILE}" PGSSLROOTCERT="${CA_FILE}" PGSSLMODE=verify-full PGCONNECT_TIMEOUT="${PROBE_TIMEOUT_SEC}" \
+    timeout "${PROBE_TIMEOUT_SEC}" "${PSQL_PATH}" -X -v ON_ERROR_STOP=1 -At \
+    -h "${host}" -p "${port}" -U "${PROBE_USER}" -d "${DB_NAME}" \
+    -c "SELECT CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END || '|' || current_setting('transaction_read_only');" 2>/dev/null)" \
+    || return 1
+  [[ "${output}" == f\|off ]]
+}
+
+service_target_matches() {
+  local expected_target="$1" config_json jq_filter
+  config_json="$("${TAILSCALE_PATH}" serve get-config --all 2>/dev/null)" || return 1
+  jq_filter="(.services[\$service].endpoints[\$endpoint] == \$target) and ((.services[\$service] | has(\"advertised\") | not) or (.services[\$service].advertised == true))"
+  "${JQ_PATH}" -e --arg service "${SERVICE}" --arg endpoint "${ENDPOINT}" --arg target "${expected_target}" \
+    "${jq_filter}" <<<"${config_json}" >/dev/null
+}
+
+# 후보 자체가 쓰기 가능하다는 사실을 서비스 라우팅 변경 전에 증명한다.
+probe_postgres "${NEW_PRIMARY_HOST}" "${NEW_PRIMARY_PORT}" || die "new primary PostgreSQL probe was not writable" 1
+
+ROLLBACK_TARGET="${OLD_TARGET}"
+if current_config_json="$("${TAILSCALE_PATH}" serve get-config --all 2>/dev/null)"; then
+  current_target="$("${JQ_PATH}" -er --arg service "${SERVICE}" --arg endpoint "${ENDPOINT}" \
+    '.services[$service].endpoints[$endpoint] // empty' <<<"${current_config_json}" 2>/dev/null || true)"
+  if [[ "${current_target}" == tcp://* ]]; then
+    ROLLBACK_TARGET="${current_target}"
+  fi
+fi
+
+route_switched=0
+route_committed=0
+state_existed=0
+state_backup="${STATE_FILE}.rollback.$$"
+state_dir="$(/usr/bin/dirname -- "${STATE_FILE}")"
+
+if [[ -e "${STATE_FILE}" ]]; then
+  /usr/bin/cp -- "${STATE_FILE}" "${state_backup}" || die "route state backup failed" 1
+  chmod 0600 "${state_backup}" || { rm -f -- "${state_backup}"; die "route state backup mode failed" 1; }
+  "${SYNC_PATH}" -f "${state_backup}" || { rm -f -- "${state_backup}"; die "route state backup sync failed" 1; }
+  state_existed=1
+fi
+
+rollback_route() {
+  local status=$? rollback_ok=1
+  if (( route_switched == 1 && route_committed == 0 )); then
+    if ! "${TAILSCALE_PATH}" serve --yes "--service=${SERVICE}" "--tcp=${SERVICE_PORT}" "${ROLLBACK_TARGET}" >/dev/null; then
+      printf '[postgres-route-tailscale] rollback to prior service target failed\n' >&2
+      rollback_ok=0
+    elif ! service_target_matches "${ROLLBACK_TARGET}"; then
+      printf '[postgres-route-tailscale] rollback service target validation failed\n' >&2
+      rollback_ok=0
+    elif ! probe_postgres "${SERVICE_DNS}" "${SERVICE_PORT}"; then
+      printf '[postgres-route-tailscale] rollback PostgreSQL writable probe failed\n' >&2
+      rollback_ok=0
+    else
+      printf '[postgres-route-tailscale] restored prior service target after failed route validation\n' >&2
+    fi
+  fi
+
+  if (( state_existed == 1 )); then
+    if [[ -e "${state_backup}" ]]; then
+      if ! mv -f -- "${state_backup}" "${STATE_FILE}" ||
+         ! "${SYNC_PATH}" -f "${STATE_FILE}" ||
+         ! "${SYNC_PATH}" -f "${state_dir}"; then
+        printf '[postgres-route-tailscale] prior route state restoration failed\n' >&2
+        rollback_ok=0
+      fi
+    else
+      printf '[postgres-route-tailscale] prior route state backup is missing\n' >&2
+      rollback_ok=0
+    fi
+  else
+    if ! rm -f -- "${STATE_FILE}" "${state_backup}" || ! "${SYNC_PATH}" -f "${state_dir}"; then
+      printf '[postgres-route-tailscale] new route state cleanup failed\n' >&2
+      rollback_ok=0
+    fi
+  fi
+
+  if (( rollback_ok == 0 )); then
+    printf '[postgres-route-tailscale] rollback verification incomplete\n' >&2
+  fi
+  exit "${status}"
+}
+trap rollback_route EXIT
+
+route_switched=1
 "${TAILSCALE_PATH}" serve --yes "--service=${SERVICE}" "--tcp=${SERVICE_PORT}" "${TARGET}" >/dev/null || die "Tailscale service configuration failed" 1
 
-config_json="$("${TAILSCALE_PATH}" serve get-config --all 2>/dev/null)" || die "Tailscale service configuration could not be read" 1
-jq_filter="(.services[\$service].endpoints[\$endpoint] == \$target) and ((.services[\$service] | has(\"advertised\") | not) or (.services[\$service].advertised == true))"
-"${JQ_PATH}" -e --arg service "${SERVICE}" --arg endpoint "${ENDPOINT}" --arg target "${TARGET}" \
-  "${jq_filter}" \
-  <<<"${config_json}" >/dev/null || die "Tailscale service advertisement does not match" 1
+service_target_matches "${TARGET}" || die "Tailscale service advertisement does not match" 1
 
-probe_output="$(PGPASSFILE="${PGPASS_FILE}" PGSSLROOTCERT="${CA_FILE}" PGSSLMODE=verify-full PGCONNECT_TIMEOUT="${PROBE_TIMEOUT_SEC}" \
-  timeout "${PROBE_TIMEOUT_SEC}" "${PSQL_PATH}" -X -v ON_ERROR_STOP=1 -At \
-  -h "${SERVICE_DNS}" -p "${SERVICE_PORT}" -U "${PROBE_USER}" -d "${DB_NAME}" \
-  -c "SELECT CASE WHEN pg_is_in_recovery() THEN 't' ELSE 'f' END || '|' || current_setting('transaction_read_only');" 2>/dev/null)" \
-  || die "Tailscale service PostgreSQL probe failed" 1
-[[ "${probe_output}" == f\|off ]] || die "Tailscale service PostgreSQL probe was not writable" 1
+probe_postgres "${SERVICE_DNS}" "${SERVICE_PORT}" || die "Tailscale service PostgreSQL probe was not writable" 1
 
 state_tmp="${STATE_FILE}.tmp.$$"
 umask 077
 printf '%s\n' "${OLD_PRIMARY_HOST}|${OLD_PRIMARY_PORT}|${NEW_PRIMARY_HOST}|${NEW_PRIMARY_PORT}|${FENCE_TOKEN}" >"${state_tmp}" || die "route state write failed" 1
 chmod 0600 "${state_tmp}" || { rm -f -- "${state_tmp}"; die "route state mode failed" 1; }
-sync -f "${state_tmp}" || { rm -f -- "${state_tmp}"; die "route state sync failed" 1; }
+"${SYNC_PATH}" -f "${state_tmp}" || { rm -f -- "${state_tmp}"; die "route state sync failed" 1; }
 mv -f -- "${state_tmp}" "${STATE_FILE}" || { rm -f -- "${state_tmp}"; die "route state publish failed" 1; }
-sync -f "${STATE_FILE}" || die "route state publish sync failed" 1
-sync -f "$(/usr/bin/dirname -- "${STATE_FILE}")" || die "route state directory sync failed" 1
+"${SYNC_PATH}" -f "${STATE_FILE}" || die "route state publish sync failed" 1
+"${SYNC_PATH}" -f "${state_dir}" || die "route state directory sync failed" 1
 
+route_committed=1
+trap - EXIT
+rm -f -- "${state_backup}" || die "route state backup cleanup failed" 1
+"${SYNC_PATH}" -f "${state_dir}" || die "route state backup cleanup sync failed" 1
 printf 'ROUTED|%s:%s|%s\n' "${NEW_PRIMARY_HOST}" "${NEW_PRIMARY_PORT}" "${FENCE_TOKEN}"

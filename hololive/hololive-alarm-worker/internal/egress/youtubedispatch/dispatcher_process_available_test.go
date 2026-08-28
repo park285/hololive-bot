@@ -97,3 +97,18 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	require.NoError(t, countDeliveryTestRowsWhere(db, &deliveryTestDeliveryModel{}, &deliveryCount, "").Error)
 	require.Zero(t, deliveryCount)
 }
+
+func TestDispatcher_ProcessAvailableAcceptsZeroValue(t *testing.T) {
+	t.Parallel()
+
+	var dispatcher Dispatcher
+
+	dispatcher.processAvailable(t.Context(), 1)
+}
+
+func TestDispatcher_ProcessAvailableWithoutWorkerInstrumentation(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := NewDispatcher(nil, nil, nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher.processClaimedOrPendingDeliveries(t.Context(), nil, 0)
+}

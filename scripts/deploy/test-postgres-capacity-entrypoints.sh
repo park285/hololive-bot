@@ -41,6 +41,11 @@ SH
 chmod +x "${tmp}/bin/docker"
 
 source "${root}/scripts/deploy/lib/postgres-capacity.sh"
+if rg -q 'python|scripts/ci/check-postgres-capacity.sh' \
+    "${root}/scripts/deploy/lib/postgres-capacity.sh"; then
+    echo "deployment PostgreSQL capacity preflight must not require the CI Python runtime" >&2
+    exit 1
+fi
 if postgres_capacity_assert_target "${root}" "${tmp}/unsafe.env" >"${tmp}/out" 2>&1; then
     echo "common PostgreSQL capacity gate accepted unsafe target overrides" >&2
     exit 1

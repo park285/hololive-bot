@@ -280,6 +280,23 @@ func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
 	return stream.GetYouTubeURL()
 }
 
+func resolveAlarmDispatchKaringURL(notification *domain.AlarmNotification) string {
+	if notification == nil || notification.Stream == nil {
+		return ""
+	}
+
+	stream := notification.Stream
+	if url, ok := resolveAlarmDispatchDirectPlatformURL(stream); ok {
+		return url
+	}
+
+	if youtubeURL := stream.GetYouTubeURL(); youtubeURL != "" {
+		return youtubeURL
+	}
+
+	return stream.GetChzzkLiveURL()
+}
+
 func resolveAlarmDispatchGroupURL(notification *domain.AlarmNotification, shortLinks shortlinkservice.YouTubeBuilder) string {
 	if notification == nil {
 		return ""

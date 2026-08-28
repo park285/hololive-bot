@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/python-runtime.sh"
+repo_python_init
 RULES_FILE="${SCRIPT_DIR}/youtube-collector-hardening-contract.tsv"
 
 usage() {
@@ -41,7 +43,7 @@ done
   exit 1
 }
 
-python3 - "${ROOT_DIR}" "${RULES_FILE}" <<'PY'
+"${CI_PYTHON_BIN}" - "${ROOT_DIR}" "${RULES_FILE}" <<'PY'
 from __future__ import annotations
 
 import fnmatch

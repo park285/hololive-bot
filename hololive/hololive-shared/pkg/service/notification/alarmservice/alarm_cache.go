@@ -40,6 +40,9 @@ func (as *AlarmService) GetChannelSubscribersByType(ctx context.Context, channel
 }
 
 func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string) error {
+	as.cacheMutationMu.Lock()
+	defer as.cacheMutationMu.Unlock()
+
 	if err := as.cacheState.SetRoomName(ctx, roomID, roomName); err != nil {
 		return fmt.Errorf("set room name: %w", err)
 	}
@@ -48,6 +51,9 @@ func (as *AlarmService) SetRoomName(ctx context.Context, roomID, roomName string
 }
 
 func (as *AlarmService) SetUserName(ctx context.Context, userID, userName string) error {
+	as.cacheMutationMu.Lock()
+	defer as.cacheMutationMu.Unlock()
+
 	if err := as.cacheState.SetUserName(ctx, userID, userName); err != nil {
 		return fmt.Errorf("set user name: %w", err)
 	}

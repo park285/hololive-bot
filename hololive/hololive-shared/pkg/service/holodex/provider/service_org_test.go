@@ -64,6 +64,11 @@ func TestResolveStreamOrg(t *testing.T) {
 			want:  constants.HolodexAPIParams.OrgIndie,
 		},
 		{
+			name:  "legacy indie org",
+			input: "indie",
+			want:  constants.HolodexAPIParams.OrgIndie,
+		},
+		{
 			name:  "all org",
 			input: "all",
 			want:  constants.HolodexAPIParams.OrgAll,

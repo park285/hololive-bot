@@ -103,6 +103,15 @@ mkdir -p "$DROPIN_DIR"
 install -m0644 -o root -g root "$STAGING"/scripts/systemd/hololive-compose.service.d/*.conf "$DROPIN_DIR/"
 log "drop-ins installed -> $DROPIN_DIR"
 
+install -m0644 -o root -g root \
+  "$STAGING/scripts/systemd/admin-dashboard-ingress-firewall.service" \
+  /etc/systemd/system/admin-dashboard-ingress-firewall.service
+mkdir -p /etc/nftables.d
+install -m0644 -o root -g root \
+  "$STAGING/scripts/systemd/admin-dashboard-ingress.nft" \
+  /etc/nftables.d/admin-dashboard-ingress.nft
+log "admin-dashboard ingress firewall installed"
+
 systemctl daemon-reload
 log "daemon-reload done"
 

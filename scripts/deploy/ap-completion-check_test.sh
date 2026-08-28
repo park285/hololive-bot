@@ -136,6 +136,9 @@ chmod +x "$fakebin/systemctl"
 cat > "$fakebin/journalctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${MOCK_JOURNAL_FAILURE:-false}" == true ]]; then
+  exit 1
+fi
 cat <<'LOG'
 Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF logging/log.go:44 ingestion runtime configured active_active_enabled=true
 Jun 30 08:14:13 host youtube-collector-wrapper[1]: 2026-06-30T08:14:13Z INF cache/service_connection.go:63 Cache store connected
@@ -176,6 +179,13 @@ if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
   fail "native completion check must reject a unit that still loads ap-compose.env"
 fi
 pass "native completion check rejects shared Compose env exposure"
+
+if PATH="$fakebin:$PATH" FAKE_REMOTE_BIN="$fakebin" REPO_ROOT="$fixture_root" \
+  MOCK_JOURNAL_FAILURE=true CHANGE_STARTED_AT=2026-06-30T08:13:49Z \
+  "$ROOT_DIR/scripts/deploy/ap-completion-check.sh" osaka >/dev/null 2>&1; then
+  fail "native completion check must reject an unreadable system journal"
+fi
+pass "native completion check fails closed when post-cutover logs cannot be read"
 
 ready_payload='{"status":"ready","helper":"ok","first_success":true,"handoff_status":"PROCESSED","handoff_processed":true,"pending_queue":0}'
 readiness_attempts="$tmp/readiness-attempts"

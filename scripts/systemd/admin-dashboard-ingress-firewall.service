@@ -1,0 +1,16 @@
+[Unit]
+Description=Hololive public ingress source firewall
+Documentation=file:/opt/hololive-bot/compose/current/docs/current/runbooks/admin-dashboard.md
+After=network-online.target tailscaled.service
+Wants=network-online.target
+Before=hololive-compose.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/sbin/nft delete table inet admin_dashboard_ingress
+ExecStart=/usr/sbin/nft -f /etc/nftables.d/admin-dashboard-ingress.nft
+ExecStop=-/usr/sbin/nft delete table inet admin_dashboard_ingress
+
+[Install]
+WantedBy=multi-user.target

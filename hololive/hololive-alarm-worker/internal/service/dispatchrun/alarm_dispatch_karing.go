@@ -246,7 +246,7 @@ func buildAlarmDispatchNotificationKaringContentItem(ctx context.Context, store 
 
 	return iris.KaringContentItem{
 		Title:        resolveAlarmDispatchTitle(ctx, store, notification),
-		URL:          resolveAlarmDispatchURL(notification),
+		URL:          resolveAlarmDispatchKaringURL(notification),
 		MemberName:   memberName,
 		ChannelName:  resolveAlarmDispatchKaringChannelName(notification, memberName),
 		Status:       "",

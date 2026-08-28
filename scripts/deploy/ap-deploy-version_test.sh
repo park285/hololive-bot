@@ -109,6 +109,11 @@ grep -Fq "[[ \\\"\\${literal_dollar}actual_revision\\\" == \\\"\\${literal_dolla
   || fail "AP completion must require an exact live image revision match"
 grep -Fq "if [[ \"\$AP_RUNTIME_MODE\" != \"compose\" ]]; then" "$deploy_script" \
   || fail "Compose AP deploy must reject non-Compose hosts before resolving the release version"
+grep -Fq 'check-ap-rsync-manifest.sh" "$FILES_FROM"' "$deploy_script" \
+  || fail "AP deploy must validate the repository-relative source manifest before path translation"
+if grep -Fq 'check-ap-rsync-manifest.sh" "$rsync_files_from"' "$deploy_script"; then
+  fail "AP deploy must not validate the remote-path-translated rsync manifest"
+fi
 
 readiness_source_count="$(grep -Fc '. scripts/deploy/lib/ap-collector-readiness.sh' "$deploy_script")"
 [[ "$readiness_source_count" -eq 1 ]] \

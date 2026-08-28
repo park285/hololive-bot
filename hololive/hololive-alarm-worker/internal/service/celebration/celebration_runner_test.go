@@ -31,6 +31,31 @@ type celebrationTestAlarmRepo struct {
 	roomsErr error
 }
 
+type celebrationTestEventStore struct {
+	events map[string]domain.AlarmQueueEnvelope
+	keys   [][]string
+	err    error
+}
+
+func (s *celebrationTestEventStore) FindPublishedCelebrationEvents(
+	_ context.Context,
+	eventKeys []string,
+) (map[string]domain.AlarmQueueEnvelope, error) {
+	s.keys = append(s.keys, append([]string(nil), eventKeys...))
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	found := make(map[string]domain.AlarmQueueEnvelope, len(eventKeys))
+	for _, eventKey := range eventKeys {
+		if envelope, ok := s.events[eventKey]; ok {
+			found[eventKey] = envelope
+		}
+	}
+
+	return found, nil
+}
+
 func (r *celebrationTestAlarmRepo) GetAllDistinctRoomIDs(context.Context) ([]string, error) {
 	return r.rooms, r.roomsErr
 }
@@ -209,6 +234,40 @@ func TestCelebrationRunnerRunOncePublishes(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, publisher.envelopes, 2)
+}
+
+func TestCelebrationRunnerRolloutReusesMatchingLegacyIdentityOnly(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 28, 12, 0, 0, 0, testKST)
+	members := []*domain.Member{
+		{ID: 101, ChannelID: testChannelA, Name: "A"},
+		{ID: 102, ChannelID: testChannelA, Name: "B"},
+	}
+	legacy := buildCelebrationEnvelopes(members[:1], nil, []string{testRoom1}, now.Format(time.DateOnly), now.Year())[0]
+
+	legacy.Celebration.MemberID = 0
+
+	legacyKey := celebrationEventKey(legacy.Celebration)
+	store := &celebrationTestEventStore{events: map[string]domain.AlarmQueueEnvelope{legacyKey: legacy}}
+	publisher := &celebrationTestPublisher{}
+	runner := &Runner{
+		memberRepo:   &celebrationTestMemberRepo{birthday: members},
+		alarmRepo:    &celebrationTestAlarmRepo{rooms: []string{testRoom1}},
+		eventStore:   store,
+		publisher:    publisher,
+		checkHourKST: -1,
+		now:          func() time.Time { return now },
+	}
+
+	require.NoError(t, runner.RunOnce(t.Context()))
+
+	require.Equal(t, [][]string{{legacyKey}}, store.keys)
+	require.Len(t, publisher.envelopes, 2)
+	assert.Equal(t, 0, publisher.envelopes[0].Celebration.MemberID)
+	assert.Equal(t, "A", publisher.envelopes[0].Celebration.MemberName)
+	assert.Equal(t, 102, publisher.envelopes[1].Celebration.MemberID)
+	assert.Equal(t, "B", publisher.envelopes[1].Celebration.MemberName)
 }
 
 func TestNextCelebrationRunAtFromLatePreviousDay(t *testing.T) {

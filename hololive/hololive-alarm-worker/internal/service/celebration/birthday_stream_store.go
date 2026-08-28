@@ -16,6 +16,7 @@ type birthdayStreamSessionStore interface {
 	FindBirthdaySessions(ctx context.Context, channelIDs []string, windowStartUTC, windowEndUTC, seenSince time.Time) ([]BirthdayStreamSession, error)
 	ListPublishedEventKeys(ctx context.Context, keyPrefix string) ([]string, error)
 	FindPublishedBirthdayStreamEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
+	FindPublishedCelebrationEvents(ctx context.Context, eventKeys []string) (map[string]domain.AlarmQueueEnvelope, error)
 	FindSentRoomsByEventKeys(ctx context.Context, eventKeys []string) (map[string][]string, error)
 }
 
@@ -102,12 +103,38 @@ func (s *PgxStore) FindPublishedBirthdayStreamEvents(
 	ctx context.Context,
 	eventKeys []string,
 ) (map[string]domain.AlarmQueueEnvelope, error) {
+	events, err := s.findPublishedCelebrationEvents(ctx, "birthday_stream_runner_0108_04.sql", eventKeys, validatePublishedBirthdayStreamEvent)
+	if err != nil {
+		return nil, fmt.Errorf("find published birthday stream events: %w", err)
+	}
+
+	return events, nil
+}
+
+func (s *PgxStore) FindPublishedCelebrationEvents(
+	ctx context.Context,
+	eventKeys []string,
+) (map[string]domain.AlarmQueueEnvelope, error) {
+	events, err := s.findPublishedCelebrationEvents(ctx, "celebration_runner_0108_01.sql", eventKeys, validatePublishedCelebrationEvent)
+	if err != nil {
+		return nil, fmt.Errorf("find published celebration events: %w", err)
+	}
+
+	return events, nil
+}
+
+func (s *PgxStore) findPublishedCelebrationEvents(
+	ctx context.Context,
+	queryName string,
+	eventKeys []string,
+	validate func(string, *domain.AlarmQueueEnvelope) error,
+) (map[string]domain.AlarmQueueEnvelope, error) {
 	events := make(map[string]domain.AlarmQueueEnvelope, len(eventKeys))
 	if len(eventKeys) == 0 {
 		return events, nil
 	}
 
-	rows, err := s.db.Query(ctx, mustSQL("birthday_stream_runner_0108_04.sql"), eventKeys)
+	rows, err := s.db.Query(ctx, mustSQL(queryName), eventKeys)
 	if err != nil {
 		return nil, fmt.Errorf("birthday stream runner: query published events: %w", err)
 	}
@@ -134,7 +161,7 @@ func (s *PgxStore) FindPublishedBirthdayStreamEvents(
 			return nil, fmt.Errorf("birthday stream runner: decode published event %q: %w", eventKey, err)
 		}
 
-		if err := validatePublishedBirthdayStreamEvent(eventKey, &envelope); err != nil {
+		if err := validate(eventKey, &envelope); err != nil {
 			return nil, fmt.Errorf("birthday stream runner: validate published event: %w", err)
 		}
 
@@ -148,6 +175,19 @@ func (s *PgxStore) FindPublishedBirthdayStreamEvents(
 	return events, nil
 }
 
+func validatePublishedCelebrationEvent(eventKey string, envelope *domain.AlarmQueueEnvelope) error {
+	if envelope.SourceKind != domain.AlarmDispatchSourceKindCelebration || envelope.Celebration == nil {
+		return fmt.Errorf("celebration runner: event %q is not a celebration", eventKey)
+	}
+
+	expectedKey := celebrationEventKey(envelope.Celebration)
+	if expectedKey != eventKey {
+		return fmt.Errorf("celebration runner: event key mismatch: got %q, payload resolves to %q", eventKey, expectedKey)
+	}
+
+	return nil
+}
+
 func validatePublishedBirthdayStreamEvent(eventKey string, envelope *domain.AlarmQueueEnvelope) error {
 	if envelope.SourceKind != domain.AlarmDispatchSourceKindCelebration {
 		return fmt.Errorf("birthday stream runner: event %q has source kind %q", eventKey, envelope.SourceKind)
@@ -158,7 +198,7 @@ func validatePublishedBirthdayStreamEvent(eventKey string, envelope *domain.Alar
 		return fmt.Errorf("birthday stream runner: event %q is not a birthday stream", eventKey)
 	}
 
-	expectedKey := birthdayStreamEventKey(payload.ChannelID, payload.Date, payload.VideoID)
+	expectedKey := birthdayStreamEventKey(payload.ChannelID, payload.Date, payload.VideoID, payload.MemberID)
 	if expectedKey != eventKey {
 		return fmt.Errorf("birthday stream runner: event key mismatch: got %q, payload resolves to %q", eventKey, expectedKey)
 	}

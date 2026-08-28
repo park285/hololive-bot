@@ -73,6 +73,11 @@ func TestSanitizeStoredError_RedactsSensitiveSpans(t *testing.T) {
 			want:  "header rejected: X-Api-Key=[redacted] tail",
 		},
 		{
+			name:  "bracketed token value",
+			input: "config invalid: auth_token=[supervalue]suffix rest",
+			want:  "config invalid: auth_token=[redacted] rest",
+		},
+		{
 			name:  "url query string",
 			input: "post https://iris.internal/reply?auth=abc&room=123 returned 500",
 			want:  "post https://iris.internal/reply?[redacted] returned 500",

@@ -105,16 +105,21 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 	}
 
 	c.snapshotMu.RLock()
-	defer c.snapshotMu.RUnlock()
 
 	if c.snapshotGeneration.Load() != generation {
+		c.snapshotMu.RUnlock()
+
 		return
 	}
 
+	c.snapshotMu.RUnlock()
+
 	if err := c.cache.MSet(ctx, pairs, c.cacheTTL); err != nil {
-		c.logger.Warn("Failed to batch cache members",
-			slog.Int("count", len(members)),
-			slog.Any("error", err))
+		if c.logger != nil {
+			c.logger.Warn("Failed to batch cache members",
+				slog.Int("count", len(members)),
+				slog.Any("error", err))
+		}
 	}
 }
 

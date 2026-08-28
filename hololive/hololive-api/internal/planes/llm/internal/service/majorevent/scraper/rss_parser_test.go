@@ -93,3 +93,15 @@ func TestParseRSSDate(t *testing.T) {
 		t.Fatal("unexpected parse success for invalid date format")
 	}
 }
+
+func TestSafeFeedLinkRejectsMarkdownDelimiterInjection(t *testing.T) {
+	t.Parallel()
+
+	if got := safeFeedLink("https://example.com/path) injected"); got != "" {
+		t.Fatalf("safeFeedLink() = %q, want empty", got)
+	}
+
+	if got := safeFeedLink("https://example.com/events/1"); got == "" {
+		t.Fatal("safe https link was rejected")
+	}
+}

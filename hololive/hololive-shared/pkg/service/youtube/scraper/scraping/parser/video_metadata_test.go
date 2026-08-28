@@ -35,6 +35,17 @@ func TestExtractWatchLiveMetadataIgnoresUnrelatedPageJSON(t *testing.T) {
 	assert.Nil(t, got.StartTimestamp)
 }
 
+func TestExtractWatchLiveMetadataIgnoresPlayerResponseTextOutsideScript(t *testing.T) {
+	html := `<title>ytInitialPlayerResponse={"videoDetails":{"isLiveContent":false}}</title>
+		<div>ytInitialPlayerResponse={"videoDetails":{"isLiveContent":false}}</div>
+		<script>var ytInitialPlayerResponse = {"videoDetails":{"isLiveContent":true}};</script>`
+
+	got := ExtractWatchLiveMetadata(html)
+	if got.LiveContent != LiveContentTrue {
+		t.Fatalf("LiveContent = %v, want authoritative script assignment", got.LiveContent)
+	}
+}
+
 func TestExtractWatchLiveMetadataAdversarialShapesFailSafe(t *testing.T) {
 	truncated := `<script>var ytInitialPlayerResponse = {"videoDetails":{"isUpcoming":true,"isLiveContent":`
 

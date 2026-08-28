@@ -109,3 +109,23 @@ func TestYouTubeOutboxIdentityRejectsOversizedOrEmptyContentID(t *testing.T) {
 		})
 	}
 }
+
+func TestYouTubeOutboxValidateRejectsKindAlarmTypeMismatch(t *testing.T) {
+	t.Parallel()
+
+	invalidKind := youtubeIdentityPayload("video-1")
+
+	invalidKind.Kind = OutboxKind("UNKNOWN")
+
+	if err := invalidKind.Validate(); err == nil || !strings.Contains(err.Error(), "kind") {
+		t.Fatalf("invalid kind Validate() error = %v, want kind error", err)
+	}
+
+	mismatch := youtubeIdentityPayload("short-1")
+
+	mismatch.Kind = OutboxKindNewShort
+
+	if err := mismatch.Validate(); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("mismatched alarm type Validate() error = %v, want mismatch error", err)
+	}
+}

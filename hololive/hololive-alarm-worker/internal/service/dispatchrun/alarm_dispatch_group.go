@@ -177,10 +177,15 @@ func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, b
 }
 
 func alarmDispatchCelebrationGroupKey(envelope *domain.AlarmQueueEnvelope) string {
+	memberIdentity := envelope.Celebration.ChannelID
+	if envelope.Celebration.MemberID > 0 {
+		memberIdentity = fmt.Sprintf("member-%d", envelope.Celebration.MemberID)
+	}
+
 	key := fmt.Sprintf("%s|celebration|%s|%s",
 		envelope.Notification.RoomID,
 		envelope.Celebration.Kind,
-		envelope.Celebration.ChannelID,
+		memberIdentity,
 	)
 	if envelope.Celebration.VideoID != "" {
 		key += "|" + envelope.Celebration.VideoID

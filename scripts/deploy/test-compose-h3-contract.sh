@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 
 # 렌더 전용 더미 env — 필수 보간 변수(:?)만 채운다. live 값과 무관.
 STUB_COMPOSE_ENV="$(mktemp)"
@@ -45,7 +47,7 @@ cat >>"${STUB_APP_ENV}" <<'EOF'
 API_SECRET_KEY=stub
 EOF
 cat >"${STUB_YOUTUBE_PRODUCER_ENV}" <<'EOF'
-API_SECRET_KEY=stub
+METRICS_API_KEY=stub
 HOLODEX_API_KEY=stub
 HOLODEX_API_KEY_1=stub
 HOLODEX_API_KEY_2=stub
@@ -101,7 +103,7 @@ osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
 MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" COLLECTOR_DISABLED_RENDER="${collector_disabled_render}" AP_RENDER="${ap_render}" \
-    OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" python3 - <<'PY'
+    OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" "${CI_PYTHON_BIN}" - <<'PY'
 import json
 import os
 import sys
@@ -215,6 +217,8 @@ if collector is not None:
     check_no_unused_scraper_env("youtube-collector", env)
     for holodex_key in ("HOLODEX_API_KEY", "HOLODEX_API_KEY_1"):
         check(f"youtube-collector receives {holodex_key}", env.get(holodex_key) == "stub")
+    check("youtube-collector receives METRICS_API_KEY", env.get("METRICS_API_KEY") == "stub")
+    check("youtube-collector does not receive API_SECRET_KEY", "API_SECRET_KEY" not in env)
 
 disabled_collector = collector_disabled.get("youtube-collector") or {}
 check(

@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
@@ -1006,5 +1007,56 @@ func TestAdmitMessageWithoutLoggerReturnsErrorWithoutPanic(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("admission must fail when the pool is not configured")
+	}
+}
+
+func TestAdmitMessageDoesNotPersistRejectedIngress(t *testing.T) {
+	totals := &workercontract.Counters{}
+	admitter := durableAdmitter{
+		inbox:  durability.NewInboxRepository(nil),
+		accept: func(context.Context, *webhook.Message) bool { return false },
+		totals: totals,
+	}
+
+	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
+		JSON: &webhook.MessageJSON{MessageID: "message:blocked", ChatID: testRoomID},
+	})
+	if err != nil {
+		t.Fatalf("rejected admission returned error: %v", err)
+	}
+
+	if got := totals.Snapshot().Admissions.Rejected; got != 1 {
+		t.Fatalf("rejected admissions = %d, want 1", got)
+	}
+}
+
+func TestAdmitMessageValidatesIdentityBeforeIngressFilter(t *testing.T) {
+	filterCalled := false
+	admitter := durableAdmitter{
+		accept: func(context.Context, *webhook.Message) bool {
+			filterCalled = true
+			return false
+		},
+	}
+
+	if err := admitter.AdmitMessage(t.Context(), nil); err == nil {
+		t.Fatal("nil message admission error = nil")
+	}
+
+	if filterCalled {
+		t.Fatal("ingress filter ran before structural identity validation")
+	}
+}
+
+func TestAdmitMessageRejectsWithoutOptionalCounters(t *testing.T) {
+	admitter := durableAdmitter{
+		accept: func(context.Context, *webhook.Message) bool { return false },
+	}
+
+	err := admitter.AdmitMessage(t.Context(), &webhook.Message{
+		JSON: &webhook.MessageJSON{MessageID: "message:blocked", ChatID: testRoomID},
+	})
+	if err != nil {
+		t.Fatalf("rejected admission returned error: %v", err)
 	}
 }

@@ -9,7 +9,7 @@
 | Check | Expected |
 |---|---|
 | Health | `http://127.0.0.1:30190/health` returns `{"status":"ok"}` |
-| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.8:30191`; 별도 `short.holoshi.com/l/*`는 `100.100.1.8:30192`를 통해 short-link listener로 전달합니다. |
+| Public ingress | Seoul Nginx proxies `admin.holoshi.com` to `100.100.1.8:30191`; `short.holoshi.com/l/*`는 `100.100.1.8:30192` short-link listener로 전달하고 고정 `/k/` Kakao navigation route는 Seoul에서 직접 처리합니다. |
 | Container | `admin-dashboard` healthy (`./bin/healthcheck` 기반 compose healthcheck) |
 | Auth | 미인증 `/admin/api/*` 호출이 401 JSON 반환 |
 | Logs | no repeated valkey/session/relay errors |
@@ -93,7 +93,8 @@ recreate만 합니다. 전체 절차와 수용 증거는 [`release.md`](release.
 `127.0.0.1:30190`으로 전달합니다.
 
 같은 Nginx가 `100.100.1.8:30192`에서 Seoul gateway source만 허용하고 `/l/*`를
-`127.0.0.1:30101` short-link listener로 전달합니다. 그 외 path는 `404`로 거부합니다.
+`127.0.0.1:30101` short-link listener로 전달합니다. `/k/`는 이 central ingress를 거치지
+않고 Seoul의 public template가 직접 처리하며, central listener의 그 외 path는 `404`로 거부합니다.
 
 source 제한은 `deploy/nginx/admin-dashboard-ingress.conf.template`가 적용합니다. 허용 source는 Seoul gateway
 `100.100.1.5`, 중앙 Tailscale 주소 `100.100.1.8`, 로컬 loopback뿐입니다. 컨테이너는 Tailscale IP가
@@ -107,9 +108,9 @@ sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
   ./scripts/deploy/compose.sh up -d --no-deps admin-dashboard-ingress
 ```
 
-기존 `admin-dashboard-ingress.socket`/`.service`와 firewall unit은 Nginx health 확인 후 한 번만
-`disable --now`하고 제거합니다. 먼저 timestamp backup을 남기고, rollback 시 Nginx를 중지한 뒤
-백업 unit과 nft 규칙을 복원합니다.
+`admin-dashboard-ingress-firewall.service`는 HTTP 파싱 전에 `30191`/`30192`의 source를
+loopback과 승인된 Tailscale peer로 제한합니다. `hololive-compose.service`가 이 unit을 필수 선행
+조건으로 사용하므로 nft 규칙을 적용하지 못하면 public ingress도 시작하지 않습니다.
 
 Seoul Nginx는 admin과 short-link public origin을 분리합니다. `admin.holoshi.com`은 기존 admin upstream
 `100.100.1.8:30191`만 유지하고, `deploy/nginx/holoshi-public-shortlink.conf`가 전용
@@ -123,9 +124,14 @@ http {
 }
 ```
 
-template는 `short.holoshi.com/l/*`를 `100.100.1.8:30192`로 전달하고 다른 short-link path는
-`404`로 닫습니다. admin traffic과 WebSocket은 이 server를 통과하지 않습니다. 적용 전후
-`nginx -t`를 통과시킨 뒤 reload합니다.
+template는 `short.holoshi.com/l/*`를 `100.100.1.8:30192`로 전달합니다. 또한 canonical positive
+decimal ID만 받는 `/k/m/<room>/<message>`, `/k/t/<room>/<thread>`,
+`/k/t/<room>/<thread>/<message>`를 고정 KakaoTalk target으로 직접 변환하고, 그 외 short-link
+path는 `404`로 닫습니다. `/k/`는 regular KakaoTalk in-app `GET`만 허용하고 scraper·`HEAD`·다른
+method·비카카오 User-Agent를 `Location` 없이 거부하며 access log를 남기지 않습니다. 이
+User-Agent 경계는 위조 가능하므로 인증이나 완전한 crawler 차단으로 간주하지 않습니다. 기존
+`/l/` method·User-Agent·logging 계약은 그대로입니다. Admin traffic과 WebSocket은 이 server를
+통과하지 않습니다. 적용 전후 `nginx -t`를 통과시킨 뒤 reload합니다.
 
 provider rollout은 `127.0.0.1:30101` listener → 중앙 `30192` ingress → Seoul template →
 `scripts/deploy/shortlink-smoke.sh` public smoke → `ALARM_SHORT_LINK_BASE_URL` consumer 활성화 순서입니다.

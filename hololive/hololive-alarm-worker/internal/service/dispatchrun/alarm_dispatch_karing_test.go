@@ -182,6 +182,21 @@ func TestBuildAlarmDispatchKaringContentItems(t *testing.T) {
 	assert.Equal(t, "05/16 22:00", entries[1].item.StartAt)
 }
 
+func TestBuildAlarmDispatchKaringContentItemUsesOneIntegratedURL(t *testing.T) {
+	t.Parallel()
+
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+	notification := &envelope.Notification
+
+	notification.Stream.IsIntegrated = true
+	notification.Stream.ChzzkLiveURL = "https://chzzk.naver.com/live/integrated"
+
+	item := buildAlarmDispatchNotificationKaringContentItem(t.Context(), nil, notification)
+
+	assert.Equal(t, notification.Stream.GetYouTubeURL(), item.URL)
+	assert.NotContains(t, item.URL, " | ")
+}
+
 func TestBuildAlarmDispatchKaringContentListRequestsLiveCatchupUsesLiveLabels(t *testing.T) {
 	t.Parallel()
 

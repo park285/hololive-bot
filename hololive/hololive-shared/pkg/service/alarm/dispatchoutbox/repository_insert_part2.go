@@ -32,20 +32,33 @@ func prepareBatchDeliveriesForInsert(
 	result *PublishBatchResult,
 	logger *slog.Logger,
 ) ([]eventCollision, []deliveryInsert, error) {
-	eventIDs, collisions, err := insertPreparedEvents(ctx, tx, eventRows, result, logger)
+	eventIDs, collisions, err := insertPreparedEvents(ctx, tx, eventRows, result)
 	if err != nil {
 		return nil, nil, fmt.Errorf("insert prepared events: %w", err)
 	}
 
 	collisions = append(preflightCollisions, collisions...)
-	collisions = attachCollisionEventIDs(collisions, eventIDs)
-	repointCollisionDeliveryEventIDs(eventIDs, collisions)
+	if len(collisions) > 0 {
+		logEventCollisions(logger, collisions)
+		bindCollisionWinners(collisions, eventIDs)
+	}
+
 	assignDeliveryEventIDs(deliveries, eventIDs)
 
 	return collisions, deliveries, nil
 }
 
-func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result *PublishBatchResult, logger *slog.Logger) (map[string]int64, []eventCollision, error) {
+func bindCollisionWinners(collisions []eventCollision, eventIDs map[string]int64) {
+	for i := range collisions {
+		if collisions[i].ExistingEventID > 0 {
+			continue
+		}
+
+		collisions[i].ExistingEventID = eventIDs[collisions[i].Event.EventKey]
+	}
+}
+
+func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result *PublishBatchResult) (map[string]int64, []eventCollision, error) {
 	existingRows, err := loadExistingEventRows(ctx, tx, eventRows)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load existing event rows: %w", err)
@@ -78,8 +91,6 @@ func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInser
 
 		collisions = append(collisions, concurrent.Collisions...)
 	}
-
-	logEventCollisions(logger, collisions)
 
 	result.InsertedEvents = insertedEvents
 	result.DuplicateEvents = len(eventRows) - insertedEvents - len(collisions)

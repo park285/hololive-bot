@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 COMPOSE_DIR="${ROOT_DIR}/deploy/compose"
 
 fail() {
@@ -29,7 +31,7 @@ assert_no_dir_mount() {
     docker compose config --no-interpolate --format json 2>/dev/null)" \
     || fail "hb06: ${label} merge failed to render"
 
-  COMPOSE_MERGE_LABEL="${label}" python3 - "${merged}" <<'PY'
+  COMPOSE_MERGE_LABEL="${label}" "${CI_PYTHON_BIN}" - "${merged}" <<'PY'
 import json, os, sys
 
 merged = json.loads(sys.argv[1])
@@ -61,7 +63,7 @@ assert_sslrootcert_mounted() {
     docker compose config --no-interpolate --format json 2>/dev/null)" \
     || fail "hb07: ${label} merge failed to render"
 
-  COMPOSE_MERGE_LABEL="${label}" python3 - "${merged}" <<'PY'
+  COMPOSE_MERGE_LABEL="${label}" "${CI_PYTHON_BIN}" - "${merged}" <<'PY'
 import json, os, re, sys
 
 merged = json.loads(sys.argv[1])
@@ -145,7 +147,7 @@ assert_postgres_not_host_networked() {
     docker compose config --no-interpolate --format json 2>/dev/null)" \
     || fail "hb08: ${label} merge failed to render"
 
-  COMPOSE_MERGE_LABEL="${label}" python3 - "${merged}" <<'PY'
+  COMPOSE_MERGE_LABEL="${label}" "${CI_PYTHON_BIN}" - "${merged}" <<'PY'
 import json, os, sys
 
 merged = json.loads(sys.argv[1])
@@ -202,7 +204,7 @@ assert_worker_profiles_mounted() {
     docker compose config --no-interpolate --format json 2>/dev/null)" \
     || fail "hb09: ${label} merge failed to render"
 
-  COMPOSE_MERGE_LABEL="${label}" python3 - "${merged}" <<'PY'
+  COMPOSE_MERGE_LABEL="${label}" "${CI_PYTHON_BIN}" - "${merged}" <<'PY'
 import json, os, sys
 
 merged = json.loads(sys.argv[1])

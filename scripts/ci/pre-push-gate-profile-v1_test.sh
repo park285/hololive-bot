@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 GATE="${ROOT_DIR}/scripts/ci/pre-push-gate.sh"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -20,6 +22,9 @@ fail() {
 fixture="${TMP_DIR}/fixture"
 mkdir -p "${fixture}/scripts/ci" "${fixture}/fake-bin"
 cp "${GATE}" "${fixture}/scripts/ci/pre-push-gate.sh"
+cp "${ROOT_DIR}/scripts/ci/python-runner.sh" "${ROOT_DIR}/scripts/ci/python-runtime.sh" \
+  "${fixture}/scripts/ci/"
+cp "${ROOT_DIR}/.python-version" "${fixture}/.python-version"
 
 cat >"${fixture}/fake-bin/bash" <<'SH'
 #!/bin/bash
@@ -46,6 +51,7 @@ run_phase() {
   shift
   : >"${TMP_DIR}/${name}.log"
   GATE_TEST_LOG="${TMP_DIR}/${name}.log" PRE_PUSH_GATE_SCOPED=1 \
+    CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
     PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" "$@" \
     >"${TMP_DIR}/${name}.out" 2>"${TMP_DIR}/${name}.err"
 }
@@ -72,6 +78,7 @@ fi
 
 : >"${TMP_DIR}/full.log"
 GATE_TEST_LOG="${TMP_DIR}/full.log" PRE_PUSH_GATE_SCOPED=1 PRE_PUSH_MODE=full \
+  CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
   PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" --phase=ambient \
   >"${TMP_DIR}/full.out" 2>"${TMP_DIR}/full.err"
 grep -Fq 'scripts/ci/public-pr-collector-helper-gate.sh' "${TMP_DIR}/full.log" || \
@@ -83,6 +90,7 @@ cmp -s "${TMP_DIR}/expected.log" "${TMP_DIR}/default.log" || fail "default order
 
 : >"${TMP_DIR}/invalid-mode.log"
 if GATE_TEST_LOG="${TMP_DIR}/invalid-mode.log" PRE_PUSH_GATE_SCOPED=1 PRE_PUSH_MODE=invalid \
+  CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
   PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" \
   >"${TMP_DIR}/invalid-mode.out" 2>"${TMP_DIR}/invalid-mode.err"; then
   fail "invalid mode was accepted"
@@ -93,11 +101,13 @@ if grep -Fq 'scripts/ci/check-workflow-secrets.sh' "${TMP_DIR}/invalid-mode.log"
   fail "workflow checks ran before route validation failed"
 fi
 
-if PRE_PUSH_GATE_SCOPED=1 PATH="${fixture}/fake-bin:${PATH}" \
+if PRE_PUSH_GATE_SCOPED=1 CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+  PATH="${fixture}/fake-bin:${PATH}" \
   /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" reusable >/dev/null 2>&1; then
   fail "positional phase alias must fail"
 fi
-if PRE_PUSH_GATE_SCOPED=1 PATH="${fixture}/fake-bin:${PATH}" \
+if PRE_PUSH_GATE_SCOPED=1 CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+  PATH="${fixture}/fake-bin:${PATH}" \
   /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" --phase reusable >/dev/null 2>&1; then
   fail "split phase argument must fail"
 fi
@@ -108,6 +118,9 @@ cp "${GATE}" "${fingerprint_fixture}/scripts/ci/pre-push-gate.sh"
 cp "${ROOT_DIR}/scripts/ci/pre-push-gate-profile-v1.json" "${fingerprint_fixture}/scripts/ci/"
 cp "${ROOT_DIR}/scripts/ci/go-tooling.sh" "${fingerprint_fixture}/scripts/ci/"
 cp "${ROOT_DIR}/scripts/ci/local-ci.sh" "${fingerprint_fixture}/scripts/ci/"
+cp "${ROOT_DIR}/scripts/ci/python-runner.sh" "${ROOT_DIR}/scripts/ci/python-runtime.sh" \
+  "${fingerprint_fixture}/scripts/ci/"
+cp "${ROOT_DIR}/.python-version" "${fingerprint_fixture}/.python-version"
 cat >"${fingerprint_fixture}/fake-bin/go" <<'SH'
 #!/bin/bash
 case "${1:-}" in
@@ -125,13 +138,14 @@ chmod +x "${fingerprint_fixture}/fake-bin/go" "${fingerprint_fixture}/fake-bin/s
 git -C "${fingerprint_fixture}" init -q
 git -C "${fingerprint_fixture}" config user.name gate-test
 git -C "${fingerprint_fixture}" config user.email gate-test@example.invalid
-git -C "${fingerprint_fixture}" add scripts/ci fake-bin
+git -C "${fingerprint_fixture}" add .python-version scripts/ci fake-bin
 git -C "${fingerprint_fixture}" commit -qm fixture
 
-PATH="${fingerprint_fixture}/fake-bin:${PATH}" \
+CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fingerprint_fixture}" \
+  PATH="${fingerprint_fixture}/fake-bin:${PATH}" \
   /bin/bash "${fingerprint_fixture}/scripts/ci/pre-push-gate.sh" --phase=fingerprint \
   >"${TMP_DIR}/fingerprint.json"
-python3 - "${TMP_DIR}/fingerprint.json" <<'PY'
+"${CI_PYTHON_BIN}" - "${TMP_DIR}/fingerprint.json" <<'PY'
 import json
 import re
 import sys
@@ -162,7 +176,8 @@ if raw != canonical:
 PY
 
 printf 'dirty\n' >"${fingerprint_fixture}/untracked"
-if PATH="${fingerprint_fixture}/fake-bin:${PATH}" \
+if CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fingerprint_fixture}" \
+  PATH="${fingerprint_fixture}/fake-bin:${PATH}" \
   /bin/bash "${fingerprint_fixture}/scripts/ci/pre-push-gate.sh" --phase=fingerprint >/dev/null 2>&1; then
   fail "dirty repository fingerprint must fail closed"
 fi

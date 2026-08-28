@@ -48,6 +48,7 @@ const (
 type durableAdmitter struct {
 	inbox  *durability.InboxRepository
 	wake   func()
+	accept func(context.Context, *webhook.Message) bool
 	logger *slog.Logger
 	totals *workercontract.Counters
 }
@@ -65,6 +66,14 @@ func (a durableAdmitter) AdmitMessage(ctx context.Context, msg *webhook.Message)
 func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error {
 	if msg == nil || msg.JSON == nil {
 		return errors.New("admit webhook: message identity is missing")
+	}
+
+	if a.accept != nil && !a.accept(ctx, msg) {
+		if a.totals != nil {
+			a.totals.RecordAdmission(workercontract.AdmissionRejected)
+		}
+
+		return nil
 	}
 
 	messageID := durability.MessageIdentity(msg.JSON.MessageID)
@@ -85,7 +94,9 @@ func (a durableAdmitter) admit(ctx context.Context, msg *webhook.Message) error 
 	result, err := a.inbox.AdmitResult(ctx, durability.InboxMessage{
 		MessageID: messageID, RoomID: roomID, OrderingKey: "room:" + roomID, Payload: payload,
 	})
-	a.totals.RecordAdmission(result)
+	if a.totals != nil {
+		a.totals.RecordAdmission(result)
+	}
 
 	if err != nil {
 		return fmt.Errorf("admit inbox message: %w", err)

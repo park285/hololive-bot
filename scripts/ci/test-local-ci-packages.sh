@@ -33,6 +33,8 @@ setup_repo() {
   printf 'package common\n' >"${workdir}/hololive/hololive-shared/pkg/common/a.go"
   printf 'package lib\n' >"${workdir}/hololive/hololive-api/internal/lib/a.go"
   printf 'package app\n' >"${workdir}/hololive/hololive-api/internal/app/a.go"
+  printf 'template\n' >"${workdir}/hololive/hololive-api/internal/app/message.tmpl"
+  printf '{}\n' >"${workdir}/hololive/hololive-shared/pkg/common/data.json"
   printf '#!/usr/bin/env bash\n' >"${workdir}/scripts/run.sh"
   printf 'services: {}\n' >"${workdir}/deploy/compose/docker-compose.prod.yml"
   printf 'APP_ENV=production\n' >"${workdir}/.env.example"
@@ -127,6 +129,14 @@ expect_scope "changed runtime library package" \
   "$(run_scope "${workdir}" changed "${base_ref}")" \
   "./hololive/hololive-api/..."
 
+workdir="${tmpdir}/app-embedded-asset"
+setup_repo "${workdir}"
+base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+printf 'changed\n' >>"${workdir}/hololive/hololive-api/internal/app/message.tmpl"
+expect_scope "changed app embedded asset" \
+  "$(run_scope "${workdir}" changed "${base_ref}")" \
+  "./hololive/hololive-api/..."
+
 workdir="${tmpdir}/root-package"
 setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
@@ -138,6 +148,12 @@ setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"
 printf 'const changed = true\n' >>"${workdir}/shared-go/pkg/lib/a.go"
 expect_scope "changed shared module" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
+
+workdir="${tmpdir}/shared-embedded-asset"
+setup_repo "${workdir}"
+base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+printf '{"changed":true}\n' >"${workdir}/hololive/hololive-shared/pkg/common/data.json"
+expect_scope "changed shared embedded asset" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
 
 workdir="${tmpdir}/go-mod"
 setup_repo "${workdir}"

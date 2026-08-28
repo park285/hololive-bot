@@ -94,6 +94,7 @@ func TestRepositoryUpsertPreservesExistingActualPublishedAt(t *testing.T) {
 	ctx := t.Context()
 	firstActualPublishedAt := time.Date(2026, time.April, 10, 1, 1, 0, 0, time.UTC)
 	laterActualPublishedAt := firstActualPublishedAt.Add(5 * time.Minute)
+	alarmSentAt := firstActualPublishedAt.Add(10 * time.Minute)
 	detectedAt := time.Date(2026, time.April, 10, 1, 4, 0, 0, time.UTC)
 
 	require.NoError(t, repository.Upsert(ctx, &domain.YouTubeContentAlarmTracking{
@@ -109,6 +110,7 @@ func TestRepositoryUpsertPreservesExistingActualPublishedAt(t *testing.T) {
 		ChannelID:         testShortChannelID,
 		ActualPublishedAt: &laterActualPublishedAt,
 		DetectedAt:        detectedAt.Add(time.Minute),
+		AlarmSentAt:       &alarmSentAt,
 	}))
 
 	record, err := repository.FindByIdentity(ctx, domain.OutboxKindNewShort, "short-stable-published-at")
@@ -116,6 +118,8 @@ func TestRepositoryUpsertPreservesExistingActualPublishedAt(t *testing.T) {
 	require.NotNil(t, record)
 	require.NotNil(t, record.ActualPublishedAt)
 	require.Equal(t, firstActualPublishedAt, record.ActualPublishedAt.UTC())
+	require.NotNil(t, record.AlarmLatencyMillis)
+	require.Equal(t, int64(10*time.Minute/time.Millisecond), *record.AlarmLatencyMillis)
 }
 
 func TestRepositoryFindByIdentitySupportsShortCanonicalAlias(t *testing.T) {

@@ -111,3 +111,17 @@ func TestCacheErrorStringNeverCarriesRoomPlaintext(t *testing.T) {
 		t.Errorf("CacheError.Key = %q, want the raw key for programmatic callers", err.Key)
 	}
 }
+
+func TestCacheErrorNilReceiverIsSafe(t *testing.T) {
+	t.Parallel()
+
+	var err *CacheError
+
+	if got := err.Error(); got != "cache: <nil>" {
+		t.Fatalf("nil CacheError.Error() = %q, want %q", got, "cache: <nil>")
+	}
+
+	if cause := err.Unwrap(); cause != nil {
+		t.Fatalf("nil CacheError.Unwrap() = %v, want nil", cause)
+	}
+}

@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/python-runtime.sh"
+repo_python_init
 
 usage() {
   echo "usage: $0 <module> <tidy|vet|test|race|test-prod|build-prod>" >&2
@@ -127,7 +129,7 @@ case "${stage}" in
       echo "failed to record default JSON test output" >&2
       exit 1
     fi
-    python3 "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
+    "${CI_PYTHON_BIN}" "${ROOT_DIR}/scripts/ci/check-go-test-json.py" \
       --input "${jsonl}" \
       --require-pass \
       --allow-skip-file "${ROOT_DIR}/scripts/ci/collector-test-skip-allowlist.txt"

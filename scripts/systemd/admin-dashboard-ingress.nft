@@ -1,0 +1,9 @@
+table inet admin_dashboard_ingress {
+	chain input {
+		type filter hook input priority -20; policy accept;
+
+		iifname "lo" tcp dport { 30191, 30192 } accept
+		iifname "tailscale0" ip saddr 100.100.1.5 tcp dport { 30191, 30192 } accept
+		tcp dport { 30191, 30192 } reject with tcp reset
+	}
+}

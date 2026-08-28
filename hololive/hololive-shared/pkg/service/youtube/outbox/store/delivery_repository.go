@@ -222,10 +222,14 @@ func persistSentDeliveryLatencyClassifications(
 }
 
 func (r *DeliveryRepository) MarkFailed(ctx context.Context, id int64, maxRetries int, backoff time.Duration, errMsg string) error {
+	if r == nil || r.db == nil {
+		return errors.New("mark delivery row failed: db is nil")
+	}
+
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
-	_, err := r.db.Exec(ctx, mustSQL("delivery_repository_0231_05.sql"), deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, id)
+	_, err := r.db.Exec(ctx, mustSQL("delivery_repository_0231_05.sql"), deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt, id, domain.OutboxStatusPending)
 	if err != nil {
 		return fmt.Errorf("mark delivery row failed: %w", err)
 	}
@@ -239,14 +243,19 @@ func (r *DeliveryRepository) MarkFailedRetryBatch(ctx context.Context, ids []int
 		return nil
 	}
 
+	if r == nil || r.db == nil {
+		return errors.New("mark delivery rows failed batch: db is nil")
+	}
+
 	now := time.Now()
 	nextAttempt := now.Add(backoff)
 
 	args := []any{deliverysql.TruncateString(errMsg, 500), maxRetries, domain.OutboxStatusFailed, domain.OutboxStatusPending, maxRetries, nextAttempt}
 
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
+	args = append(args, domain.OutboxStatusPending)
 
-	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows failed batch", mustSQL("delivery_repository_0258_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+`
+	if _, err := deliverysql.ExecDeliverySQL(ctx, r.db, "mark delivery rows failed batch", mustSQL("delivery_repository_0258_06.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
 	`, args...); err != nil {
 		return fmt.Errorf("mark delivery rows failed batch: %w", err)
 	}

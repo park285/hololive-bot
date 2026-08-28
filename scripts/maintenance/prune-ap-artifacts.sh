@@ -92,6 +92,12 @@ for name in "${ordered[@]:keep}"; do
     continue
   fi
 
+  if [[ -L "$candidate" || ! -d "$candidate" ]]; then
+    printf '  SKIP (not a real directory) %s\n' "$name" >&2
+    skipped=$((skipped + 1))
+    continue
+  fi
+
   candidate_real="$(realpath -m -- "$candidate")"
   case "$candidate_real" in
     "$artifact_root_real"/*) ;;

@@ -3,7 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-if [[ -d "${ROOT_DIR}/shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/shared-go"; else SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
+SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-}"
+if [[ -z "${SHARED_GO_DIR}" && -d "${ROOT_DIR}/shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/shared-go"; fi
+if [[ -z "${SHARED_GO_DIR}" && -d "${ROOT_DIR}/../shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
+[[ -d "${SHARED_GO_DIR}" ]] || { echo "error: active shared-go dir not found" >&2; exit 1; }
+SHARED_GO_DIR="$(cd "${SHARED_GO_DIR}" && pwd)"
 ERROR_DOC="${ROOT_DIR}/docs/current/ERROR_CONTRACT.md"
 
 echo "[CHECK] error contract coverage"
@@ -15,7 +19,6 @@ required_files=(
   docs/current/contracts/alarm.md
   hololive/hololive-shared/pkg/server/httpserver/response.go
   hololive/hololive-shared/pkg/contracts/common/errors.go
-  ../shared-go/pkg/httputil/response.go
   hololive/hololive-shared/pkg/contracts/trigger/errors.go
 )
 
@@ -39,6 +42,13 @@ for rel in "${required_files[@]}"; do
     echo "[PASS] found: ${rel}"
   fi
 done
+
+if [[ ! -f "${SHARED_GO_DIR}/pkg/httputil/response.go" ]]; then
+  echo "[FAIL] missing required shared-go file: pkg/httputil/response.go"
+  missing=1
+else
+  echo "[PASS] found shared-go file: pkg/httputil/response.go"
+fi
 
 if [[ ! -f "${ERROR_DOC}" ]]; then
   exit 1

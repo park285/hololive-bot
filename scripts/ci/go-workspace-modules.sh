@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 GO_WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${GO_WORKSPACE_ROOT}/scripts/ci/python-runtime.sh"
+repo_python_init
 
 load_go_workspace_modules() {
     local root_dir="${1:-${GO_WORKSPACE_ROOT}}"
@@ -11,7 +13,7 @@ load_go_workspace_modules() {
         return 1
     fi
 
-    WORKSPACE_JSON="${workspace_json}" python3 - "${root_dir}" <<'PY'
+    WORKSPACE_JSON="${workspace_json}" "${CI_PYTHON_BIN}" - "${root_dir}" <<'PY'
 import json
 import os
 import sys

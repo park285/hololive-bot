@@ -128,12 +128,16 @@ func (p *YouTubeOutboxDispatchPayload) Validate() error {
 }
 
 func validateYouTubeOutboxHeader(p *YouTubeOutboxDispatchPayload) error {
-	if p.Kind == "" {
-		return errors.New("youtube outbox dispatch payload kind is empty")
+	if !p.Kind.IsValid() {
+		return fmt.Errorf("youtube outbox dispatch payload kind %q is invalid", p.Kind)
 	}
 
 	if err := validateYouTubeOutboxAlarmHeader(p.AlarmType, p.ChannelID); err != nil {
 		return fmt.Errorf("validate youtube outbox alarm header: %w", err)
+	}
+
+	if want := p.Kind.ToAlarmType(); p.AlarmType != want {
+		return fmt.Errorf("youtube outbox dispatch payload alarm type %q does not match kind %q (want %q)", p.AlarmType, p.Kind, want)
 	}
 
 	if hasTemplateAndPreRenderedMessage(p) {

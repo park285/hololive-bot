@@ -54,9 +54,11 @@ var identifierKeyRules = []identifierKeyRule{
 
 var verbatimKeyPrefixes = []string{
 	"alarm:channel_registry",
+	"alarm:channel_registry:version",
 	"alarm:channel_subscribers:",
 	"alarm:channel_subscribers_empty:",
 	"alarm:chzzk_channels",
+	"alarm:chzzk_channels_empty",
 	"alarm:dispatch:",
 	"alarm:member_names",
 	"alarm:next_stream:",
@@ -64,6 +66,7 @@ var verbatimKeyPrefixes = []string{
 	"alarm:room_names",
 	"alarm:subscriber_cache_empty",
 	"alarm:twitch_channel_logins",
+	"alarm:twitch_channel_logins_empty",
 	"alarm:twitch_logins",
 	"alarm:user_names",
 }
@@ -124,7 +127,8 @@ func longestIdentifierKeyRule(key string) (identifierKeyRule, bool) {
 
 func hasVerbatimKeyPrefix(key string, longerThan int) bool {
 	for _, prefix := range verbatimKeyPrefixes {
-		if len(prefix) > longerThan && strings.HasPrefix(key, prefix) {
+		family := strings.HasSuffix(prefix, segmentSeparator)
+		if len(prefix) > longerThan && (key == prefix || family && strings.HasPrefix(key, prefix)) {
 			return true
 		}
 	}

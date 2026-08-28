@@ -285,6 +285,10 @@ func floatToInt64(f float64) (int64, bool) {
 }
 
 func formatNumber(v any) string {
+	if v == nil {
+		return "0"
+	}
+
 	n, ok := toInt64(v)
 	if !ok {
 		return fmt.Sprintf("%v", v)

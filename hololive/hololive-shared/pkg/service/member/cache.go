@@ -287,28 +287,27 @@ func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID s
 		return nil
 	}
 
-	c.snapshotMu.RLock()
+	cacheKey := c.epochDataKey(memberChannelKeyPrefix + channelID)
 
+	var member domain.Member
+
+	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
+		return nil
+	}
+
+	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 
 	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
 
-	cacheKey := c.epochDataKey(memberChannelKeyPrefix + channelID)
-
-	var member domain.Member
-
-	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
-		if owned != nil {
-			c.storePointMemberInMemoryLocked(owned, generation)
-		}
-
-		return owned
+	owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
+	if owned != nil {
+		c.storePointMemberInMemoryLocked(owned, generation)
 	}
 
-	return nil
+	return owned
 }
 
 func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, generation uint64) *domain.Member {
@@ -316,28 +315,27 @@ func (c *Cache) loadNameFromDistributedCache(ctx context.Context, name string, g
 		return nil
 	}
 
-	c.snapshotMu.RLock()
+	cacheKey := c.epochDataKey(memberNameKeyPrefix + name)
 
+	var member domain.Member
+
+	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
+		return nil
+	}
+
+	c.snapshotMu.RLock()
 	defer c.snapshotMu.RUnlock()
 
 	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
 
-	cacheKey := c.epochDataKey(memberNameKeyPrefix + name)
-
-	var member domain.Member
-
-	if err := c.cache.Get(ctx, cacheKey, &member); err == nil && member.Name != "" {
-		owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
-		if owned != nil {
-			c.storePointMemberInMemoryLocked(owned, generation)
-		}
-
-		return owned
+	owned := c.snapshotOwnedNameMemberLocked(name, &member, generation)
+	if owned != nil {
+		c.storePointMemberInMemoryLocked(owned, generation)
 	}
 
-	return nil
+	return owned
 }
 
 // 별명 조회 성공 시 해당 멤버 정보를 캐시에 등록한다.

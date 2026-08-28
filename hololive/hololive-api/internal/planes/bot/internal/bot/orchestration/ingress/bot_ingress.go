@@ -92,6 +92,18 @@ func NewMessageIngress(
 }
 
 func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) (*Envelope, bool) {
+	return i.prepare(ctx, message, true)
+}
+
+// Accepts는 observation이나 command-received 부수효과 없이 메시지가 durable inbox에
+// 들어갈 수 있는지 반환합니다. Prepare가 이 경로와 durable 처리에서 쓰는 ingress 조건을 소유합니다.
+func (i *MessageIngress) Accepts(ctx context.Context, message *webhook.Message) bool {
+	_, ok := i.prepare(ctx, message, false)
+
+	return ok
+}
+
+func (i *MessageIngress) prepare(ctx context.Context, message *webhook.Message, observe bool) (*Envelope, bool) {
 	if !i.canHandleMessage(ctx, message) {
 		return nil, false
 	}
@@ -110,7 +122,7 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 
 	roomType, roomLinkID := roomChatFromMessage(message)
 
-	if i.rooms != nil {
+	if observe && i.rooms != nil {
 		i.rooms.Observe(ctx, chatID, roomType, roomLinkID)
 	}
 
@@ -120,7 +132,10 @@ func (i *MessageIngress) Prepare(ctx context.Context, message *webhook.Message) 
 	}
 
 	commandType := parsed.Type.String()
-	i.logCommandReceived(ctx, parsed, commandType, userID, roomAttr)
+
+	if observe {
+		i.logCommandReceived(ctx, parsed, commandType, userID, roomAttr)
+	}
 
 	return &Envelope{
 		CommandType: commandType,

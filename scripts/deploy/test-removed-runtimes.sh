@@ -169,3 +169,15 @@ fi
 grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/alarm-worker.out" \
     || fail "alarm-worker-only start did not run writable bind-mount preflight"
 pass "alarm-worker-only start does not trigger API-plane cutover cleanup"
+
+: >"${MOCK_DOCKER_LOG}"
+MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
+COMPOSE_ENV_FILE="${env_file}" \
+SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
+HOLOLIVE_APP_UID="$(id -u)" \
+HOLOLIVE_APP_GID="$(id -g)" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d admin-dashboard >"${tmpdir}/dashboard.out" 2>&1
+if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
+    fail "admin-dashboard-only start must not stop retired API-plane runtimes"
+fi
+pass "admin-dashboard-only start does not trigger API-plane cutover cleanup"

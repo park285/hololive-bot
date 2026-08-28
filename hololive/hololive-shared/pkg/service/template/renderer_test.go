@@ -134,6 +134,18 @@ func TestTemplateFuncs_FormatNumber(t *testing.T) {
 	}
 }
 
+func TestTemplateFuncs_FormatNumberNilUsesZero(t *testing.T) {
+	t.Parallel()
+
+	if got := formatNumber(nil); got != "0" {
+		t.Fatalf("formatNumber(nil) = %q, want %q", got, "0")
+	}
+
+	if got := formatNumberKR(nil); got != "0" {
+		t.Fatalf("formatNumberKR(nil) = %q, want %q", got, "0")
+	}
+}
+
 func TestTemplateFuncs_FormatNumberKR(t *testing.T) {
 	tests := []struct {
 		n        int64

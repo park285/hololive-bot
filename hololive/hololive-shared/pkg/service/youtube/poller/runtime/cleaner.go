@@ -72,6 +72,10 @@ type viewerSampleConnAcquirer interface {
 }
 
 func NewViewerSampleCleaner(db any, config ViewerSampleCleanerConfig) *ViewerSampleCleaner {
+	if config.RetentionDays <= 0 {
+		config.RetentionDays = DefaultViewerSampleCleanerConfig().RetentionDays
+	}
+
 	return &ViewerSampleCleaner{
 		acquirer:    asViewerSampleConnAcquirer(db),
 		session:     asViewerSampleSession(db),

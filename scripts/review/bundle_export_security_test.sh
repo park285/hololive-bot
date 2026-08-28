@@ -134,8 +134,34 @@ test_exporter_rejects_broken_tracked_symlink() {
   pass "exporter rejects broken tracked symlink"
 }
 
+test_exporter_rejects_symlinked_parent() {
+  local workdir="${TMP_DIR}/symlink-parent-export-fixture"
+  local out_file="${TMP_DIR}/symlink-parent-export.out"
+  local err_file="${TMP_DIR}/symlink-parent-export.err"
+  setup_fixture "${workdir}"
+
+  mv "${workdir}/nested" "${workdir}/nested-real"
+  ln -s nested-real "${workdir}/nested"
+
+  if "${workdir}/scripts/review/export-source-bundle.sh" "${TMP_DIR}/symlink-parent-exported" >"${out_file}" 2>"${err_file}"; then
+    cat "${out_file}" >&2
+    cat "${err_file}" >&2
+    record_fail "exporter should reject a symlinked parent directory"
+    return
+  fi
+  if ! grep -Fq "FAIL: unsafe source bundle path component: nested/payload.txt" "${err_file}"; then
+    cat "${out_file}" >&2
+    cat "${err_file}" >&2
+    record_fail "expected symlinked parent rejection"
+    return
+  fi
+
+  pass "exporter rejects symlinked parent directories"
+}
+
 test_exporter_tracked_only_and_manifest
 test_exporter_rejects_tracked_symlink
 test_exporter_rejects_broken_tracked_symlink
+test_exporter_rejects_symlinked_parent
 
 report_results

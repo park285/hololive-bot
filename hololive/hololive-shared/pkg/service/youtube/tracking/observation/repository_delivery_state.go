@@ -122,7 +122,9 @@ func normalizeAlarmSentMark(index int, mark AlarmSentMark) (AlarmSentMark, strin
 		AuthorizedAt: normalizedAuthorizedAt,
 	}
 
-	return normalizedMark, alarmSentMarkIdentity(normalizedKind, normalizedContentID), nil
+	canonicalContentID := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+
+	return normalizedMark, alarmSentMarkIdentity(normalizedKind, canonicalContentID), nil
 }
 
 func normalizeAlarmSentAuthorizedAt(index int, authorizedAt time.Time) (*time.Time, error) {

@@ -15,6 +15,9 @@ import (
 )
 
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
+	as.cacheMutationMu.Lock()
+	defer as.cacheMutationMu.Unlock()
+
 	startedAt := time.Now()
 
 	var opErr error

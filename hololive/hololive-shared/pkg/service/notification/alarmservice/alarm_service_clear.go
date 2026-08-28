@@ -12,6 +12,9 @@ import (
 )
 
 func (as *AlarmService) ClearRoomAlarms(ctx context.Context, roomID string) (int, error) {
+	as.cacheMutationMu.Lock()
+	defer as.cacheMutationMu.Unlock()
+
 	startedAt := time.Now()
 
 	var opErr error

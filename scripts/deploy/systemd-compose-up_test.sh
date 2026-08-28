@@ -95,6 +95,25 @@ else
   pass "sync-opt-current.sh preserves runtime-config traversal after root ownership normalization"
 fi
 
+FIREWALL_UNIT="${SYSTEMD_DIR}/admin-dashboard-ingress-firewall.service"
+FIREWALL_RULES="${SYSTEMD_DIR}/admin-dashboard-ingress.nft"
+LIVE_COMPAT="${ROOT_DIR}/deploy/compose/docker-compose.live-compat.yml"
+if [[ ! -f "${FIREWALL_UNIT}" || ! -f "${FIREWALL_RULES}" ]]; then
+  record_fail "public ingress firewall unit and nft rules must be tracked"
+elif ! grep -Fq 'Requires=docker.service admin-dashboard-ingress-firewall.service' "${UNIT}"; then
+  record_fail "hololive-compose must fail closed when the ingress firewall cannot start"
+elif ! grep -Fq '$STAGING/scripts/systemd/admin-dashboard-ingress.nft' "${SYNC}"; then
+  record_fail "sync-opt-current must install nft rules from the tracked staging snapshot"
+elif ! grep -Fq 'ip saddr 100.100.1.5' "${FIREWALL_RULES}"; then
+  record_fail "ingress firewall must restrict the Tailscale source set"
+elif ! grep -A20 '^  admin-dashboard-ingress:' "${LIVE_COMPAT}" | grep -Fq 'network_mode: host'; then
+  record_fail "ingress firewall input hook requires the ingress container to remain host-networked"
+elif ! grep -Fq 'type filter hook input' "${FIREWALL_RULES}"; then
+  record_fail "host-networked ingress must be filtered on the host input hook before HTTP parsing"
+else
+  pass "host-networked public ingress is filtered on input and required before compose"
+fi
+
 if (( failures > 0 )); then
   echo "systemd compose wrapper checks failed: ${failures}" >&2
   exit 1

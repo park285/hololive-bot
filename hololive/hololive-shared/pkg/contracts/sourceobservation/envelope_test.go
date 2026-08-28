@@ -128,6 +128,26 @@ func TestEnvelopeRejectsUnknownAndDuplicatePayloadFields(t *testing.T) {
 	}
 }
 
+func TestChannelProfileCountryMatchesPersistenceByteLimit(t *testing.T) {
+	valid := mustMarshalPayload(t, ChannelProfileV1{
+		ChannelID: testChannelID,
+		Country:   FieldValue[string]{Present: true, Value: strings.Repeat("a", 50)},
+		Coverage:  ChannelProfileCoverageV1{ChannelID: testChannelID, Fields: []string{"country"}},
+	})
+	if _, err := PrepareEnvelope(newPaginatedEnvelope(t, KindChannelProfile, valid, CompletenessComplete)); err != nil {
+		t.Fatalf("50-byte country rejected: %v", err)
+	}
+
+	tooLong := mustMarshalPayload(t, ChannelProfileV1{
+		ChannelID: testChannelID,
+		Country:   FieldValue[string]{Present: true, Value: strings.Repeat("a", 51)},
+		Coverage:  ChannelProfileCoverageV1{ChannelID: testChannelID, Fields: []string{"country"}},
+	})
+	if _, err := PrepareEnvelope(newPaginatedEnvelope(t, KindChannelProfile, tooLong, CompletenessComplete)); err == nil || !strings.Contains(err.Error(), "exceeds 50 bytes") {
+		t.Fatalf("51-byte country error = %v, want contract rejection", err)
+	}
+}
+
 func TestStrictJSONRejectsNonCanonicalFieldsAtEveryContractLevel(t *testing.T) {
 	tests := []struct {
 		name string

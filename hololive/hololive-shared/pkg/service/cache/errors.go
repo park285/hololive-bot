@@ -35,6 +35,10 @@ type CacheError struct {
 // Key는 원문을 유지한다. 이 에러는 상위 plane에서 slog.Any("error", …)로 그대로 실려나가므로
 // 문자열 표현만 비식별화한다.
 func (e *CacheError) Error() string {
+	if e == nil {
+		return "cache: <nil>"
+	}
+
 	loggableKey := privacylog.RedactCacheKey(e.Key)
 
 	if e.Err == nil {
@@ -52,7 +56,13 @@ func (e *CacheError) Error() string {
 	return fmt.Sprintf("cache: %s: key=%s: %v", e.Operation, loggableKey, e.Err)
 }
 
-func (e *CacheError) Unwrap() error { return e.Err }
+func (e *CacheError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+
+	return e.Err
+}
 
 // NewCacheError는 cache 에러를 생성합니다.
 func NewCacheError(operation, key string, cause error) *CacheError {

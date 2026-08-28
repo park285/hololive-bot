@@ -159,6 +159,10 @@ func (s *ChannelHealthStore) RecordFailure(ctx context.Context, channelID string
 	health.NextAllowedAt = now.Add(delay)
 	s.persist(ctx, channelID, source, &health, "failure")
 
+	if !s.policy.Enforce {
+		return 0
+	}
+
 	return delay
 }
 

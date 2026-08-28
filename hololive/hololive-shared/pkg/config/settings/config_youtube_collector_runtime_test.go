@@ -13,7 +13,8 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Helper()
 	clearIrisAndRoomEnv(t)
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("API_SECRET_KEY", "dummy-secret")
+	t.Setenv("API_SECRET_KEY", "dummy-admin-secret")
+	t.Setenv("METRICS_API_KEY", "dummy-metrics-secret")
 	setRuntimeH3ServerEnv(t)
 	t.Setenv("POSTGRES_USER", postgresScraperRoleUser)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", collectorInstanceC)
@@ -70,7 +71,7 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *YouTubeCollectorRuntimeCo
 		Version:     "test",
 		Server: ServerConfig{
 			Port:           30025,
-			APIKey:         "test-api-key",
+			APIKey:         "test-metrics-key",
 			HTTPTransports: []string{"h3"},
 			H3Addr:         ":30025",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
@@ -124,6 +125,21 @@ func TestCFG001CollectorLoaderSucceedsWithoutCacheEnv(t *testing.T) {
 	}
 }
 
+func TestCFG001CollectorLoaderUsesOnlyDedicatedMetricsKey(t *testing.T) {
+	setYouTubeCollectorRuntimeLoadEnv(t)
+	t.Setenv("API_SECRET_KEY", "admin-only-key")
+	t.Setenv("METRICS_API_KEY", "collector-metrics-key")
+
+	cfg, err := LoadYouTubeCollectorRuntime()
+	if err != nil {
+		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
+	}
+
+	if cfg.Server.APIKey != "collector-metrics-key" {
+		t.Fatalf("Server.APIKey = %q, want dedicated metrics key", cfg.Server.APIKey)
+	}
+}
+
 func TestCFG001LeftoverCacheEnvStillLoadsYouTubeCollectorRuntime(t *testing.T) {
 	setYouTubeCollectorRuntimeLoadEnv(t)
 	t.Setenv("CACHE_HOST", "valkey-cache")
@@ -153,6 +169,8 @@ func TestCFG001CollectorLoaderSourceOmitsCacheAndUnrelatedConstructors(t *testin
 	text := string(source)
 
 	for _, forbidden := range []string{
+		"loadServerConfig()",
+		"API_SECRET_KEY",
 		"loadValkeyConfig",
 		"loadIrisConfig",
 		"loadKakaoConfig",
@@ -235,9 +253,9 @@ func collectorRuntimeServerValidateCases() []collectorRuntimeValidateCase {
 			wantSub: "SERVER_PORT",
 		},
 		{
-			name:    "api key empty",
+			name:    "metrics key empty",
 			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.APIKey = "" },
-			wantSub: "API_SECRET_KEY",
+			wantSub: "METRICS_API_KEY",
 		},
 		{
 			name:    "tracing disabled",
@@ -347,8 +365,9 @@ func TestCFG003ProductionAcceptsCompleteConfig(t *testing.T) {
 	}
 }
 
-func TestCFG003ProductionRejectsMissingAPISecret(t *testing.T) {
+func TestCFG003ProductionRejectsMissingMetricsSecretEvenWithAdminSecret(t *testing.T) {
 	clearRuntimeRoleEnv(t)
+	t.Setenv("API_SECRET_KEY", "admin-only-key")
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 
@@ -356,8 +375,8 @@ func TestCFG003ProductionRejectsMissingAPISecret(t *testing.T) {
 
 	err := cfg.Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "API_SECRET_KEY") {
-		t.Fatalf("Validate() error = %v, want API_SECRET_KEY rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "METRICS_API_KEY") {
+		t.Fatalf("Validate() error = %v, want METRICS_API_KEY rejection", err)
 	}
 }
 

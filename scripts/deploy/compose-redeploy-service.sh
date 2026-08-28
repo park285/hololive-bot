@@ -191,12 +191,7 @@ SHARED_GO_WORKSPACE_PATH="$(resolve_workspace_path \
     "${ROOT_DIR}/../shared-go" \
     "${ROOT_DIR}/shared-go" \
     "shared-go")"
-IRIS_CLIENT_GO_WORKSPACE_PATH="$(resolve_workspace_path \
-    "${IRIS_CLIENT_GO_WORKSPACE_PATH:-}" \
-    "${ROOT_DIR}/../iris-client-go" \
-    "${ROOT_DIR}/iris-client-go" \
-    "iris-client-go")"
-export SHARED_GO_WORKSPACE_PATH IRIS_CLIENT_GO_WORKSPACE_PATH
+export SHARED_GO_WORKSPACE_PATH
 
 CONTAINER_CLI="${CONTAINER_CLI:-docker}"
 case "${CONTAINER_CLI}" in
@@ -261,7 +256,6 @@ if [[ "${REVISION_ENABLED}" == true ]]; then
     echo "[INFO] REVISION=${REVISION}"
 fi
 echo "[INFO] SHARED_GO_WORKSPACE_PATH=${SHARED_GO_WORKSPACE_PATH}"
-echo "[INFO] IRIS_CLIENT_GO_WORKSPACE_PATH=${IRIS_CLIENT_GO_WORKSPACE_PATH}"
 echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" config --quiet
@@ -277,11 +271,6 @@ case "${TARGET}" in
 esac
 
 if [[ "${build_target}" == true ]]; then
-    case "${TARGET}" in
-        youtube-collector|"")
-            bash "${ROOT_DIR}/scripts/deploy/check-ap-rsync-manifest.sh"
-            ;;
-    esac
     if [[ -n "${TARGET}" ]]; then
         echo "[BUILD] ${TARGET}"
         "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" build "${TARGET}"

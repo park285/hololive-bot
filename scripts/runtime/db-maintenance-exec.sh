@@ -10,8 +10,11 @@ usage: db-maintenance-exec.sh <command> [args...]
   file-only 계약(PGSERVICE + PGPASSFILE)만으로 접속합니다.
   마운트된 migrations 디렉터리는 /migrations 입니다.
 
+  rollback artifact를 보존하려면 아직 존재하지 않는 절대 host 경로를 지정합니다.
+  DB_MAINTENANCE_OUTPUT_FILE=/var/tmp/rollback.sql db-maintenance-exec.sh \
+    bash /migrations/preflight-114-restore.sh /maintenance-output/rollback.sql
+
   db-maintenance-exec.sh bash /migrations/preflight-durable-runtime-rollback.sh --ingress-quiesced
-  db-maintenance-exec.sh bash /migrations/preflight-114-restore.sh /tmp/rollback-114.sql
   db-maintenance-exec.sh psql -w -X -v ON_ERROR_STOP=1 -c 'select 1'
 EOF
   exit 2
@@ -48,11 +51,30 @@ network="$("${DOCKER[@]}" inspect "${DB_CONTAINER}" \
   -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{break}}{{end}}')" || {
   echo "cannot resolve network from ${DB_CONTAINER}" >&2; exit 1; }
 
+OUTPUT_MOUNT=()
+if [[ -n "${DB_MAINTENANCE_OUTPUT_FILE:-}" ]]; then
+  if [[ "${DB_MAINTENANCE_OUTPUT_FILE}" != /* ]]; then
+    echo "DB_MAINTENANCE_OUTPUT_FILE must be an absolute path" >&2
+    exit 1
+  fi
+  output_parent="$(dirname -- "${DB_MAINTENANCE_OUTPUT_FILE}")"
+  output_name="$(basename -- "${DB_MAINTENANCE_OUTPUT_FILE}")"
+  if [[ ! -d "${output_parent}" || -L "${output_parent}" || -e "${DB_MAINTENANCE_OUTPUT_FILE}" || -L "${DB_MAINTENANCE_OUTPUT_FILE}" ]]; then
+    echo "DB_MAINTENANCE_OUTPUT_FILE must be a new file under an existing real directory" >&2
+    exit 1
+  fi
+  output_parent="$(realpath -e -- "${output_parent}")"
+  output_file="${output_parent}/${output_name}"
+  (set -o noclobber; umask 077; : >"${output_file}")
+  OUTPUT_MOUNT=(-v "${output_file}:/maintenance-output/rollback.sql:rw")
+fi
+
 exec "${DOCKER[@]}" run --rm --network "${network}" --user 0:0 \
   --read-only --tmpfs /tmp:size=64m \
   -v "${MIGRATIONS_DIR}:/migrations:ro" \
   -v "${SECRETS_DIR}/postgres:/run/hololive-bot/postgres:ro" \
   -v "${SECRETS_DIR}/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro" \
+  "${OUTPUT_MOUNT[@]}" \
   -e PGSERVICEFILE=/run/hololive-bot/postgres/pg_service.conf \
   -e PGSERVICE="${PG_SERVICE}" \
   -e PGPASSFILE=/run/hololive-bot/postgres/pgpass \

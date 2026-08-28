@@ -11,12 +11,7 @@ report() {
 }
 
 lexical_abs() {
-  python3 - "$1" <<'PY'
-import os
-import sys
-
-print(os.path.abspath(os.path.normpath(sys.argv[1])))
-PY
+  realpath -m -s -- "$1"
 }
 
 path_is_root_safe() {

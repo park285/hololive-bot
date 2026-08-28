@@ -173,6 +173,11 @@ func (r *BirthdayStreamRunner) publishCandidates(
 		return nil
 	}
 
+	publishedBirthdayEvents, err := r.sessions.FindPublishedCelebrationEvents(ctx, birthdayEventKeys)
+	if err != nil {
+		return fmt.Errorf("birthday stream runner: find published birthday events: %w", err)
+	}
+
 	publishedEvents, err := r.sessions.FindPublishedBirthdayStreamEvents(
 		ctx,
 		birthdayStreamCandidateEventKeys(candidates, dateStr),
@@ -181,7 +186,13 @@ func (r *BirthdayStreamRunner) publishCandidates(
 		return fmt.Errorf("birthday stream runner: find published events: %w", err)
 	}
 
-	envelopes := buildBirthdayStreamEnvelopes(candidates, roomsByEventKey, publishedEvents, dateStr)
+	envelopes := buildBirthdayStreamEnvelopes(
+		candidates,
+		roomsByEventKey,
+		publishedBirthdayEvents,
+		publishedEvents,
+		dateStr,
+	)
 	if len(envelopes) == 0 {
 		return nil
 	}
@@ -259,7 +270,7 @@ func (r *BirthdayStreamRunner) selectPublishableSessions(
 			continue
 		}
 
-		selected, err := r.selectNewSessionsForMember(ctx, m.ChannelID, channelSessions, dateStr)
+		selected, err := r.selectNewSessionsForMember(ctx, m, channelSessions, dateStr)
 		if err != nil {
 			return nil, fmt.Errorf("select new sessions for member: %w", err)
 		}
@@ -274,11 +285,15 @@ func (r *BirthdayStreamRunner) selectPublishableSessions(
 
 func (r *BirthdayStreamRunner) selectNewSessionsForMember(
 	ctx context.Context,
-	channelID string,
+	member *domain.Member,
 	sessions []BirthdayStreamSession,
 	dateStr string,
 ) ([]BirthdayStreamSession, error) {
-	publishedKeys, err := r.sessions.ListPublishedEventKeys(ctx, birthdayStreamEventKeyPrefix(channelID, dateStr))
+	memberID := member.ID
+	channelID := member.ChannelID
+	currentPrefix := birthdayStreamEventKeyPrefix(channelID, dateStr, memberID)
+
+	publishedKeys, err := r.sessions.ListPublishedEventKeys(ctx, currentPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("list published event keys: %w", err)
 	}
@@ -288,10 +303,63 @@ func (r *BirthdayStreamRunner) selectNewSessionsForMember(
 		published[key] = struct{}{}
 	}
 
-	return selectBirthdayStreamSessionsWithinDailyCap(channelID, dateStr, sessions, published), nil
+	if err := r.mergeLegacyPublishedSessionKeys(ctx, member, dateStr, currentPrefix, published); err != nil {
+		return nil, fmt.Errorf("merge legacy published session keys: %w", err)
+	}
+
+	return selectBirthdayStreamSessionsWithinDailyCap(memberID, channelID, dateStr, sessions, published), nil
+}
+
+func (r *BirthdayStreamRunner) mergeLegacyPublishedSessionKeys(
+	ctx context.Context,
+	member *domain.Member,
+	dateStr string,
+	currentPrefix string,
+	published map[string]struct{},
+) error {
+	if !useLegacyCelebrationIdentity(dateStr) || member.ID <= 0 {
+		return nil
+	}
+
+	legacyPrefix := birthdayStreamEventKeyPrefix(member.ChannelID, dateStr)
+
+	legacyKeys, err := r.sessions.ListPublishedEventKeys(ctx, legacyPrefix)
+	if err != nil {
+		return fmt.Errorf("list legacy published event keys: %w", err)
+	}
+
+	legacyEvents, err := r.sessions.FindPublishedBirthdayStreamEvents(ctx, legacyKeys)
+	if err != nil {
+		return fmt.Errorf("find legacy published events: %w", err)
+	}
+
+	for _, key := range legacyKeys {
+		videoID, ok := strings.CutPrefix(key, legacyPrefix)
+		if !ok || videoID == "" {
+			continue
+		}
+
+		legacyEvent, ok := legacyEvents[key]
+		candidate := birthdayStreamCandidate{
+			member: member,
+			session: BirthdayStreamSession{
+				ChannelID: member.ChannelID,
+				VideoID:   videoID,
+			},
+		}
+
+		if !ok || !legacyBirthdayStreamBelongsToCandidate(legacyEvent, candidate, dateStr) {
+			continue
+		}
+
+		published[currentPrefix+videoID] = struct{}{}
+	}
+
+	return nil
 }
 
 func selectBirthdayStreamSessionsWithinDailyCap(
+	memberID int,
 	channelID string,
 	dateStr string,
 	sessions []BirthdayStreamSession,
@@ -304,7 +372,7 @@ func selectBirthdayStreamSessionsWithinDailyCap(
 
 	selected := make([]BirthdayStreamSession, 0, min(len(ordered), birthdayStreamMaxPublishedPerMemberDay))
 	for _, session := range ordered {
-		if _, ok := published[birthdayStreamEventKey(channelID, dateStr, session.VideoID)]; ok {
+		if _, ok := published[birthdayStreamEventKey(channelID, dateStr, session.VideoID, memberID)]; ok {
 			if len(selected) < birthdayStreamMaxPublishedPerMemberDay {
 				selected = append(selected, session)
 			}

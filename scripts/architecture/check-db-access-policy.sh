@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ROOT_DIR="${ROOT_DIR:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 cd "${ROOT_DIR}"
 
 fail=0
@@ -20,8 +20,13 @@ patterns=(
   'github\.com/go-gorm'
 )
 
+targets=(go.mod hololive admin-dashboard scripts internal)
+while IFS= read -r root_go; do
+  targets+=("${root_go}")
+done < <(find . -maxdepth 1 -type f -name '*.go' -print)
+
 for pattern in "${patterns[@]}"; do
-  if rg -n "$pattern" --glob '*.go' --glob 'go.mod' go.mod hololive admin-dashboard scripts; then
+  if rg -n "$pattern" --glob '*.go' --glob 'go.mod' "${targets[@]}"; then
     echo "ERROR: disallowed DB framework or auto-migration token detected in active Go/module surface: $pattern" >&2
     fail=1
   fi

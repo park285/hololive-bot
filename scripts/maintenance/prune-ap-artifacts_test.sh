@@ -56,6 +56,18 @@ else
   record_fail "--apply kept the wrong set: ${remaining}"
 fi
 
+mkdir -p "${fixture_root}/20260828T010000Z" "${fixture_root}/20260828T020000Z"
+touch -d '2026-08-28 01:00:00' "${fixture_root}/20260828T010000Z"
+touch -d '2026-08-28 02:00:00' "${fixture_root}/20260828T020000Z"
+ln -s "${fixture_root}/20260828T020000Z" "${fixture_root}/20260828T000000Z"
+touch -h -d '2026-08-28 00:00:00' "${fixture_root}/20260828T000000Z"
+REPO_ROOT="${repo}" bash "${repo}/scripts/maintenance/prune-ap-artifacts.sh" --keep 1 --apply >/dev/null 2>&1 || true
+if [[ -d "${fixture_root}/20260828T020000Z" && -L "${fixture_root}/20260828T000000Z" ]]; then
+  pass "symlink candidate cannot delete its kept payload target"
+else
+  record_fail "symlink candidate altered the kept payload target"
+fi
+
 setup_fixture keepme
 mkdir -p "${fixture_root}/.escape"
 touch -d "2020-01-01" "${fixture_root}/.escape"

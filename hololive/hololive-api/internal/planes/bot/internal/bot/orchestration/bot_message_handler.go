@@ -111,6 +111,12 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 	return nil
 }
 
+// AcceptsMessage는 webhook payload를 durable inbox에 저장하기 전에 ProcessMessage와
+// 동일한 결정적 ingress 조건을 적용합니다.
+func (b *Bot) AcceptsMessage(ctx context.Context, message *webhook.Message) bool {
+	return b.ensureIngress().Accepts(ctx, message)
+}
+
 func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
 	//nolint:wrapcheck // command router가 command name과 실행 context를 소유하므로 이 위임 계층은 원인을 그대로 전달한다.
 	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)

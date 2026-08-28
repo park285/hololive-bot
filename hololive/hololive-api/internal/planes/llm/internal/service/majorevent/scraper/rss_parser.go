@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -73,7 +74,7 @@ func (p *RSSParser) Parse(data []byte, eventType domain.MajorEventType) ([]*doma
 }
 
 func mapFeedItemToEvent(item *gofeed.Item, eventType domain.MajorEventType) (*domain.MajorEvent, bool) {
-	link := strings.TrimSpace(item.Link)
+	link := safeFeedLink(item.Link)
 	externalID := strings.TrimSpace(item.GUID)
 
 	if externalID == "" {
@@ -85,7 +86,7 @@ func mapFeedItemToEvent(item *gofeed.Item, eventType domain.MajorEventType) (*do
 	}
 
 	if link == "" {
-		link = externalID
+		link = safeFeedLink(externalID)
 	}
 
 	title := strings.TrimSpace(item.Title)
@@ -118,6 +119,20 @@ func mapFeedItemToEvent(item *gofeed.Item, eventType domain.MajorEventType) (*do
 	}
 
 	return event, true
+}
+
+func safeFeedLink(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.ContainsAny(trimmed, " \t\r\n()[]<>\\") {
+		return ""
+	}
+
+	parsed, err := url.ParseRequestURI(trimmed)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return ""
+	}
+
+	return trimmed
 }
 
 func normalizeMembers(categories []string) []string {

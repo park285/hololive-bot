@@ -69,7 +69,7 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 	}
 
 	var req struct {
-		IsGraduated bool `json:"isGraduated"`
+		IsGraduated *bool `json:"isGraduated"`
 	}
 
 	if err := bindJSON(c, &req); err != nil {
@@ -79,13 +79,22 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 		return
 	}
 
+	if req.IsGraduated == nil {
+		h.safeLogger().Warn("Missing graduation status")
+		sharedserver.RespondError(c, 400, "isGraduated is required", nil)
+
+		return
+	}
+
+	isGraduated := *req.IsGraduated
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), constants.RequestTimeout.AdminRequest)
 	defer cancel()
 
-	if err := h.repository.SetGraduation(ctx, memberID, req.IsGraduated); err != nil {
+	if err := h.repository.SetGraduation(ctx, memberID, isGraduated); err != nil {
 		h.safeLogger().Error("Failed to set graduation status",
 			slog.Int("member_id", memberID),
-			slog.Bool("is_graduated", req.IsGraduated),
+			slog.Bool("is_graduated", isGraduated),
 			slog.Any("error", err),
 		)
 		sharedserver.RespondError(c, 500, "Failed to set graduation status", nil)
@@ -103,7 +112,7 @@ func (h *MemberHandler) SetGraduation(c *gin.Context) {
 
 	h.invalidateMemberIndex()
 
-	h.respondGraduationSuccess(c, memberID, req.IsGraduated)
+	h.respondGraduationSuccess(c, memberID, isGraduated)
 }
 
 func (h *MemberHandler) respondGraduationSuccess(c *gin.Context, memberID int, isGraduated bool) {

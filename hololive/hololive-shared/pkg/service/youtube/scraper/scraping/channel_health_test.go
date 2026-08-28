@@ -126,11 +126,12 @@ func TestChannelHealthStoreDryRunRecordsWithoutSkipping(t *testing.T) {
 	wait, skip := store.ShouldSkip(ctx, "UC_TEST", FailureSourceHTML, now.Add(time.Minute))
 	health, ok := store.Get(ctx, "UC_TEST", FailureSourceHTML)
 
-	require.Equal(t, 10*time.Minute, delay)
+	require.Zero(t, delay)
 	require.False(t, skip)
 	require.Zero(t, wait)
 	require.True(t, ok)
 	require.Equal(t, 1, health.ConsecutiveFailures)
+	require.Equal(t, now.Add(10*time.Minute), health.NextAllowedAt)
 }
 
 func TestChannelHealthStoreIgnoresRateLimitedGlobalFailures(t *testing.T) {
@@ -174,6 +175,7 @@ func TestRecordParserDriftReturnsRetryDelayOnFirstFailure(t *testing.T) {
 	client := NewClient(
 		WithStateStore(newChannelHealthTestStore()),
 		WithChannelHealthPolicy(&ChannelHealthPolicy{
+			Enforce:         true,
 			TTL:             time.Hour,
 			ParserDriftBase: 10 * time.Minute,
 			ParserDriftMax:  time.Hour,

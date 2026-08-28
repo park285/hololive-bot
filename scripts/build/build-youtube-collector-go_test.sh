@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/scripts/ci/python-runtime.sh"
+repo_python_init
 BUILD="${ROOT_DIR}/scripts/build/build-youtube-collector-go.sh"
 MAKEFILE="${ROOT_DIR}/hololive/hololive-youtube-collector/Makefile"
 GATE="${ROOT_DIR}/scripts/ci/public-pr-go-gate.sh"
@@ -105,7 +107,7 @@ sh "${BUILD}" \
   --revision "${revision}" \
   --goos linux --goarch amd64 --goamd64 v1
 
-python3 - "${out_dir}/manifest.json" "${revision}" <<'PY'
+"${CI_PYTHON_BIN}" - "${out_dir}/manifest.json" "${revision}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -127,7 +129,7 @@ check_artifact "${out_dir}"
 PASSED=$((PASSED + 1))
 printf 'ok - manifest, checksums, build IDs, targets, and go version -m metadata agree\n'
 
-python3 - "${out_dir}/manifest.json" "${revision}" <<'PY'
+"${CI_PYTHON_BIN}" - "${out_dir}/manifest.json" "${revision}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -143,7 +145,7 @@ printf 'ok - manifest records collector and healthcheck target identities\n'
 
 identity_fixture="${TMP_ROOT}/bad-identity"
 cp -a "${out_dir}" "${identity_fixture}"
-python3 - "${identity_fixture}/manifest.json" <<'PY'
+"${CI_PYTHON_BIN}" - "${identity_fixture}/manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -161,7 +163,7 @@ expect_artifact_failure "checker rejects manifest identity mutation" "${identity
 
 hash_fixture="${TMP_ROOT}/bad-manifest-hash"
 cp -a "${out_dir}" "${hash_fixture}"
-python3 - "${hash_fixture}/manifest.json" <<'PY'
+"${CI_PYTHON_BIN}" - "${hash_fixture}/manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -181,7 +183,7 @@ expect_artifact_failure "checker rejects sha256sums mutation" "${sums_fixture}" 
 health_fixture="${TMP_ROOT}/bad-healthcheck-target"
 cp -a "${out_dir}" "${health_fixture}"
 cp "${health_fixture}/bin/youtube-collector" "${health_fixture}/bin/healthcheck"
-python3 - "${health_fixture}" <<'PY'
+"${CI_PYTHON_BIN}" - "${health_fixture}" <<'PY'
 import hashlib
 import json
 import sys

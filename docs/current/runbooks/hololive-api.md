@@ -206,11 +206,12 @@ libpq service와 password file을 사용합니다. `PGPASSFILE`은 readable regu
 > `hololive_migrator`로 `verify-full` 접속합니다. 이 스크립트를 중앙 런타임 호스트에서 실행하십시오.
 
 ```bash
-sudo -n ./scripts/runtime/db-maintenance-exec.sh \
-  bash /migrations/preflight-114-restore.sh /tmp/migration-114-rollback.sql
+sudo -n env DB_MAINTENANCE_OUTPUT_FILE=/var/tmp/migration-114-rollback.sql \
+  ./scripts/runtime/db-maintenance-exec.sh \
+  bash /migrations/preflight-114-restore.sh /maintenance-output/rollback.sql
 ```
 
-preflight가 `MISSING`을 보고하면 migration을 적용하지 않습니다. 생성 artifact는 `BEGIN`/`COMMIT`, `CREATE INDEX IF NOT EXISTS`, 조건부 constraint 복원을 포함해 실패 후 재실행할 수 있습니다. Artifact 실행은 별도 rollback 승인이 필요합니다.
+preflight가 `MISSING`을 보고하면 migration을 적용하지 않습니다. 출력 host 파일은 기존 파일을 덮어쓰지 않으며 `0600`으로 생성됩니다. 생성 artifact는 `BEGIN`/`COMMIT`, `CREATE INDEX IF NOT EXISTS`, 조건부 constraint 복원을 포함해 실패 후 재실행할 수 있습니다. Artifact 실행은 별도 rollback 승인이 필요합니다.
 
 ### 4. Fx lifecycle startup or shutdown fails
 

@@ -1,0 +1,2075 @@
+{
+  "captured_at": "2026-08-28",
+  "source": "hololive youtube_live_sessions + youtube_videos minus session-overlapping video_ids",
+  "channel_ids": {
+    "unit-b": "UC3OH5FKQ3qtl4uRme_vZTgA",
+    "achrora": "UChpRPsAeSZn5DistGacR3iA"
+  },
+  "cases": [
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "CF2KxTyJWVc",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "?",
+      "kind": "unknown",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "8kwCq01dG8o",
+      "source": "live_session",
+      "is_short": false,
+      "status": "UPCOMING",
+      "title": "【#久我山栞の死様手帖 #1】こわい😭けど…登場人物が美少女すぎる😳⁉️ホラー系ミステリー🩸⚠️※ネタバレあり #琉海垣りらら #りららだいびんぐ",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "rlifRBgiUjc",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【#宵凪ネオン】UNIT_Bのネオンちゃんです🔊今日はよろしくね、ありがとう【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [
+        "yoinagi-neon"
+      ]
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "8WwBihwbKoY",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【#玲銘ミラ】UNIT_Bから玲銘さん家のミラちゃんが来てくれたよ🩹ミラちゃん、よろしくね【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [
+        "reimei-mira"
+      ]
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "vwSVp1nTfdA",
+      "source": "live_session",
+      "is_short": false,
+      "status": "UPCOMING",
+      "title": "【#琉海垣りらら】残り3回!りららと一緒に~?ストレッチ~🐳【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "collab",
+      "hosts": [
+        "rumigaki-rirara",
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "591lOuOu0_4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【#由比河ひなみ】お誕生日おめでとう!!!🐣🐣🐣じゃあストレッチしようか!【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "collab",
+      "hosts": [
+        "sumishio-sayana",
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "qcV9EZN_3K0",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【#由比河ひなみ生誕祭2026】誕生日、屋上で待っています。【#由比河ひなみ】#ACHRORA",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "WsznkSFiDU4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ASMR】恥ずかしくなったら消します #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "yqkHpAiOWAg",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ASMR作業音 】手元カメラあり!さやな初めてのパンチニードル😉女子力あげてこ #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "FBKm4XO_Ltw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【JSP3】怖くないので部屋の電気消してやる😉かかってこい😉 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "lR_H1GmRnjQ",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【Morning routine】さやなの1日はストレッチから始まる【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "rDubkv-yaC8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【Overcooked! 2】うちらの仲の良さなら忙しい店舗も3人で余裕だよね!? #ACHRORA  #ACHRORAコラボ",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "BYmGH1F2Ers",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【R.E.P.O. 】ホラーゲームなんも怖くない🥳みんなでやるの楽しみだな💪【さやな視点】#あくろらREPO #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "hsI6mAF1ZeA",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【R.E.P.O. 】初見プレイ‼️かなりの怖がり大爆泣き😭たすけて~😨【りらら視点】#あくろらREPO #琉海垣りらら #りららだいびんぐ",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "cNFKTkM66gM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【R.E.P.O. 】怖いけど･･･それでも仲間を守り抜く。絶対に。【ひなみ視点】#あくろらREPO #由比河ひなみ #ひなみ通信",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "UsC-yxK-ztU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【UNDERTALE】2周目は絶対に誰も傷つけない!全員とお友達になるぞ~🥳 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "0FuGE1U7_HM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【UNDERTALE】Nルートクリア😭初見プレイ!攻撃よけるの難しすぎ😭でも負けません💪 #3 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "-VVj9Ffo6LY",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【UNDERTALE】アンダインと親友になった私っ!これからどうなっちゃうの!?🥺🥺 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "FM2TsTFhfao",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【UNDERTALE】初見プレイ!敵を倒さなくていいってマジ!?どんなゲームなの🥺#1 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "oV9l5DJ0CqU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【UNDERTALE】初見プレイ!牢屋の隙間広すぎやろ!パピルス家から無事脱走💪冒険再開するわよ~ #2 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "S__zql4vkT0",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【お母さん】ママよ。今日はゆっくりストレッチして朝ごはんまで食べていきなさいね【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "F_6czhcvQ7I",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【お母さん】ママよ🥺また来たわ。さぁ、ストレッチしましょう【#あさやなストレッチ夏】",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "A8ke2JFzZpQ",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【お父さん】今日でちょうど2週間🖤一緒にストレッチしよう【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "FvCPGBdAauo",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【さやな監修!】ストレッチも残り7回!う~ん、これは肩にききますねぇ【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "GYaCZzEo2nI",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ひなみ生誕前記念】リベンジ配信同時視聴&愛を叫ぶ‼️📺🍿成功してなかったら、怒るよ(^_^) ♡【#墨汐さやな × #琉海垣りらら 】",
+      "kind": "collab",
+      "hosts": [
+        "rumigaki-rirara",
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "HkbpWm-rAh4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "UPCOMING",
+      "title": "【カオスまとめ】神引き×ストゼロ×ジャングル!?ACHRORA個性が大渋滞!【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "gP25pZeZjwg",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ストレッチ】運動してたらお腹すいちゃう🥳ストレッチ終わったら朝ごはん食べよ【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "9gbzkd4oxJ4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【パワプロ2026】ミリしら監督が大谷選手を引き当て甲子園目指す!栄冠ナイン#01【指示大歓迎】#ひなみ通信 #ACHRORA",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "SH2CMfcUxcM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【パワプロ2026】人生初パワプロ!ミリしら監督、初の県大会へ!栄冠ナイン #2【指示大歓迎】#由比河ひなみ #ひなみ通信 #ACHRORA",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "olt8Jrty4eA",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【パワプロ2026】何も知らない初心者監督、甲子園まであと2勝…!? 栄冠ナイン #3【指示大歓迎】#ACHRORA #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "8Szb6v6VJfs",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【リズム天国 ミラクルスターズ #2】大発狂⁉️叫び散らかす「最高」評価縛り🏅 #琉海垣りらら #りららだいびんぐ",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "yowk28fAe3I",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【リズム天国 ミラクルスターズ #3】「最高」達成でストゼロ乾杯🥰飲酒する程、上手くなっちゃうな〜❓🥴🍻 #琉海垣りらら #りららだいびんぐ",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "FhMhSl-0IzQ",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【リズム天国 ミラクルスターズ】人生初のリズ天🕺✨リズム感の有無、今日バレます。 #琉海垣りらら #りららだいびんぐ",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "Z1j08npjxm8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【初ASMR】何が出るかはお楽しみ♡睡眠ルーレットASMR【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "UJxJNETw-Hk",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【初コラボ】7日目!今日はひなみが一緒にストレッチしてくれるよ🥹ありがとう【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "FBrm51cQ04c",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【初コラボ】勝ったらご褒美⁉️🥰世界のアソビ大全51 で UNIT Bの赤たんを教育🍼🌟【#玲銘ミラ × #琉海垣りらら 】",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": [
+        "reimei-mira"
+      ]
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "BYWh_jmrUiU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【方言縛り】8日目、土曜の朝。たまには地元だしてストレッチ【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "pbdt7PolPOs",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【方言縛り】方言しかしゃべってはいけないストレッチ配信【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "MV03q9s3y7A",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【最高の朝】5日目！朝の始まりはストレッチから！だよね😉【#あさやなストレッチ夏】 #朝活 ＃墨汐さやな ＃さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "407Yx3t7114",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【朝のスッキリ習慣】10日目！習慣にしてえらすぎる私たちのストレッチ【#あさやなストレッチ夏】＃墨汐さやな ＃さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "iUfoBUB1Q-M",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【朝の体操】9日目!明日もスマホを触るため。身体をほぐしていくよ!【#あさやなストレッチ夏】 #朝活 #墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "XxLmfYZLKwY",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【朝の運動】18日目!継続は力なり🥳今日もストレッチ~【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "BTXHLo-01G8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【朝専用】6日目！?おはよう🥺毎日早起きしてえらすぎる【#あさやなストレッチ夏】#朝活 ＃墨汐さやな ＃さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "ciGdUgRdz5k",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【朝時間】今日から1部種目アップデート🥳進化したストレッチで気持ちのいい朝に🤩【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "vWiOojTr-Gc",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【毎日すっきり】まだまだ暑いけど、残り6回!一緒に肩こりなおそ😉【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "Xi7K5mdnXCY",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【毎朝これ!】残り4回。全身がほぐれるかも!?ストレッチ【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "QybUaMd67QU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【毎朝ストレッチ】さやなです!しっかり身体伸ばして今日も一日すっきり過ごそう【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "8_GswlX9j8k",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【気合が足りてない🔥】甘えるな!土曜もストレッチをしなさい【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "nfVAQZ3L_mQ",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【爆盛食堂】いらっしゃいませ💗お昼の爆盛りランチ開店です🍴【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "aWoYag4w0MA",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【真剣投票】次は何を開放する?ひなみの生誕祭の振り返りもするよ🎂【#8月のあくろら定例会議】#ACHRORA",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "j28lEdTtPec",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【立ったままできる】残り5回しかないの!?あっという間!8月終わっちゃう【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "T0BD0bxsECQ",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【緊急】ぽかぽか時間をお休みしてしまった件について【謝罪会見】#由比河ひなみ #ひなみ通信",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "af6GdH-Fxt8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【解禁の末路】ゲーム配信を解禁された途端、ゲームばっかりしてる件【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "9Jk_PubGql4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【誕生日カウントダウン】神引きして最高の誕生日を迎えたい!!!🎂【ホロドリ】#ひなみ通信 #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "v4irI2MxmVc",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【誰でも簡単】あ!ストレッチだ!【#あさやなストレッチ夏】#墨汐さやな #さやな時間",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "WJzT4PsnmQo",
+      "source": "live_session",
+      "is_short": false,
+      "status": "UPCOMING",
+      "title": "【配信振り返り】生誕祭準備の裏で…コラボ祭りが開催されていました🥳【#ひなみ通信】",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "ZANPASFJUSM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【重大告知あり】しっかり反省するので、今日は絶対PONしません。【反省会→リベンジ】#琉海垣りらら #由比河ひなみ #ACHRORA",
+      "kind": "collab",
+      "hosts": [
+        "rumigaki-rirara",
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "O9vsuW6Yu8o",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【ASMR】どの音が好き？🐣 #ACHRORA #mekpark #由比河ひなみ #ASMR",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "S8oLbcMYdO8",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【スマホ依存】さやな爆速フリック入力の理由 #ACHRORA #墨汐さやな #shorts #切り抜き #さやなカット",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "PtAy3wK_jGw",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【ティザーPV】🫧ACHRORA活動開始！🫧【 #ACHRORA 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "eIi0TDttG6s",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【初配信】🐣ひなみパート🐣【 #ひなみ通信 】",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "ncSoCbdvn_Y",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【初配信】🐳りららパート🐳【#りららだいびんぐ】",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "yKA3rkgO9Wk",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【初配信】🖤さやなパート🖤【#さやな時間】",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "ekw-iURufr8",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【初配信】🫧ユニットパート🫧【 #ACHRORA初配信 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "61fflA6Ebj8",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【岩キャラ】琉海垣イワワ誕生の瞬間 #ACHRORA #琉海垣りらら #shorts #切り抜き #きりとりらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "oWRi49nEbJs",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【最後まで必ず見てください】グミッツェル美味しすぎた【食レポ】#ACHRORA #由比河ひなみ#ACHRORA #mekpark",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "YICNyssXBwk",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "あさやなストレッチ夏って知ってる？#ACHRORA #mekpark",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "V6yhNv9nPHY",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "いつだってハラハラさせてくれるひなみ🐣 #ACHRORA #mekpark #由比河ひなみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "MI1Pc6Mw1I8",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "さやなのmekParkオーディション雑学！#ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "fVhkhKKsB3Q",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "りららのおつまみドラフト🍺 #ACHRORA #mekpark #琉海垣りらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "9qP6TemmEnU",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "動画編集難しすぎない！？ #ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "LEJLwTj3Rdg",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "夏っぽいイラスト描いてみた！‪✍🏻🎨 #ACHRORA #mekpark #琉海垣りらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "5QW1gIibWt0",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "夏風邪ひいちゃった😭 #ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "XjidtHgdlCk",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "夢の国で紙を食べてしまうACHRORA🙈 🫧 #ACHRORA #mekpark #shorts #あくろら観測記録",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "2QAaLqh9AKA",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "小学生の夏休みはサバイバル！！ #ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "BWDrVrewCOc",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "恋人が異性と二人きり‼️アリ？ナシ？ #ACHRORA #由比河ひなみ #shorts #切り抜き #ぴよつまみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "yyOnWZvurVw",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "挨拶でコーレスしたいさやな🖤  #ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "uG8BwCz8Xp8",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "消費者表示とは…🤔 #ACHRORA #mekpark #琉海垣りらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "B0P7j7Y7YaI",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "漫画の発売日事情😭 #ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "zgfo7i52rk4",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "田舎あるあるで共感を得る？ #ACHRORA #墨汐さやな #shorts #さやなカット #切り抜き",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "pnYOBdqGqAI",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "職業体験後にイキるりらら🐳 #ACHRORA #琉海垣りらら #shorts #きりとりらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "uBWP6IEudfQ",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "自分の誤字で大爆笑するひなみ🐣 #ACHRORA #由比河ひなみ #shorts #ぴよつまみ",
+      "kind": "solo",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "qXgwPoBqKuQ",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "質問欲しい～～！！🥳 #ACHRORA #mekpark #墨汐さやな",
+      "kind": "solo",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "1qBaW-bpJsE",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "運動会の障害物競争で…🍞#ACHRORA #mekpark #琉海垣りらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "achrora",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "video_id": "4BcYjCxJbfc",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "驚きの治療歴👩‍⚕️#ACHRORA #mekpark #琉海垣りらら",
+      "kind": "solo",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "7-yyZCoQFrI",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "EXフルコンチャレンジ！5曲達成で歌います。【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "6lLGeBNvrcM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "iPadが壊れてしまったので歌います【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "a36hcV0tZ8g",
+      "source": "live_session",
+      "is_short": false,
+      "status": "LIVE",
+      "title": "【ぷよテト2】弱者2人に教えます。【 #UNIT_B 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "RYjq66Ijl4g",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ぷよテト2】強いヤツに会いに行く!【 #UNIT_B / #清澄ライラ 】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "dg0ymFIETb0",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ほの暮しの庭】村の掟を破ったら、どうなる…?/ネタバレあり【 #UNIT_B / #清澄ライラ 】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "Go5UVyFp-uM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ほの暮らしの庭】朝までスローライフだ〜!!/ネタバレあり【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "CSQJa03wBRc",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【コラボ】画伯なんていない!!【 #UNIT_B /#ACHRORA 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "5C7wY8L-OKU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ピアノで弾いてみる】J-POPの名曲を練習!【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "jIlkf70vFYw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ホロドリ】ストーリー進めながらホロライブへの愛を語ります!【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "-ppAHpmL8us",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ホロドリ】ピアノバージョン聴きたいよね!?【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "PfNimgMdpgY",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【ホロドリ】作曲家が激ムズ譜面作りに挑戦!【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "Ic530zfm7tM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【メン限】おやすみ前にお話ししよ!【#UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "dCEbATyuSbw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【リズム天国】うんたんうんたん【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "euI8nloNdfo",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【丸裸】オタク遍歴全部見せます!【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "CqpMpPa-_Vs",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【今後の話】10万人達成したし、これからの話をしよう！【 #UNIT_B】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "mA9GuNIO0OE",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【元気に】爽やか曲で暑さを吹き飛ばそう🎐【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "ydMK3hE3Q4o",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【初凸待ち】誕生日パーティーだ〜!みんな集合!【 #UNIT_B / #宵凪ネオン 】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "07aed_zYljQ",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【告白】意外ですが、私はPONです。【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "LLSl_OG2cH4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【完結】今日クリアします！！！【 #UNIT_B / #玲銘ミラ 】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "saaJBWSP7xE",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【延長戦】りらら×ミラのアソビ大全!!【 #UNIT_B / #ACHRORA 】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": [
+        "rumigaki-rirara"
+      ]
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "6XpGolpQrWM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【弾き語り】ホロ楽曲にも挑戦!【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "vQJtgRdP4b4",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【当たり前】ピアニストは音ゲーも得意に決まってます。【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "v0DtV8rzJFM",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【当然】エキスパートもフルコンです。【 #UNIT_B / #玲銘ミラ 】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "cwSTRInJKxs",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【懐古】あの夏を語る会【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "CtQ_15HfY_M",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【挑戦】今日こそは絶対フルコン！！【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "O8h_-YB2Xv8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【最高縛り耐久】音楽家なら1日で全クリできるよね!!?【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "cOQJ0UFMm2Q",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【最高縛り耐久】音楽家なら1日で全クリできるよね！！？【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "lo5d9pS-KMw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【本業】ピアノレディの演奏を聴きませんか?【 #UNIT_B / #玲銘ミラ 】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "qBhKDicu9Jc",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【歌枠】夏に聞きたい曲歌うよ~🎐【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "tj_Tv0TTOMw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【歌枠】暑い夏も吹っ飛ばしてこ??👊🍉【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "1ryHugzR3_M",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【無理】最恐ホラゲーでギャン泣き。【 #雪葬 】",
+      "kind": "unknown",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "aaCm0nsCPUU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【確認】私のこと忘れた人いる?いねぇよなぁ!?【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "YU5qyDjC4NA",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【祝】メンバーシップ解禁します!【 #UNIT_B 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "0HRLFvI_rtw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【絆はあるのか】一致するまで終われまテン!!【 #UNIT_B 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "T6BtvGmH44Q",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【絶望】事故物件しかない。【 #UNIT_B / #宵凪ネオン 】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "TpOf5Nclaxw",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【豪運ギャル】100連引けば全員揃うよね?【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "KkEDo07cDuE",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【雑談】旅行レポ！ミラがお外に？！【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "LI62pKibK-c",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "【願望】不憫なネオンと誕生日を一緒に迎えて欲しい!!【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "-R7lkrSwbew",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "これはパリピ天国【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "ku_ZK4Hj9H8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "ソナタ 6番に挑戦!練習方法も大公開!【 #UNIT_B / # 玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "IaNTNFWrtD8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "メン限トーク【 #UNIT_B / #宵凪ネオン 】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "2Danwap7QaA",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "レゾナンス / UNIT B【demo】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "zbUKdkY8fp8",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "ロキ / みきとP(cover)宵凪ネオン×清澄ライラ【歌ってみた】",
+      "kind": "collab",
+      "hosts": [
+        "kiyosumi-lyra",
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "o4aNQu3KI1o",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "ヴァンパイア / DECO*27(cover)宵凪ネオン【歌ってみた】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "U37GB7ab51I",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "今日のピアノ、光るらしいよ！！【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "FEhn3AuzpNU",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "作曲家がどーぱみん大放出譜面作る！【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "kC7umwCzt0U",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "本気の難曲チャレンジ！弾き語りじゃ歌えなかった曲歌います。【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "IN5cKWGsU20",
+      "source": "live_session",
+      "is_short": false,
+      "status": "ENDED",
+      "title": "赤たん、リズム天国得意かもしれません。【 #UNIT_B / #玲銘ミラ】",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "-zGWdZRDG_k",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "#クラシック #ピアノ #ワルトシュタイン #弾いてみた #玲銘ミラ #UNIT_B",
+      "kind": "solo",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "km9LqHKAtcg",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "#夜の踊り子 #サカナクション #歌ってみた #弾いてみた #UNIT_B",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "fQFd70UMZvM",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "#夜明けと蛍 #n-buna #歌ってみた #一発撮り #宵凪ネオン",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "tNERfmR5jRo",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【#弾き語り】アイネクライネ / 米津玄師【#UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "tQZpNVjAaA8",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【#弾き語り】ノーチラス / ヨルシカ【#UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "wcBJ6Ltlc1k",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【#弾き語り】本能 / 椎名林檎【#UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "rsWHRjB4utQ",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【demo】フレアグランス【UNIT B/オリジナル曲】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "cstM1Fl_rW4",
+      "source": "video",
+      "is_short": false,
+      "status": null,
+      "title": "【ティザー映像】UNIT B（Pre-Debut）【 #UNIT_B 】",
+      "kind": "unit",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "C5GAyKlGcBo",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【ホロドリ】EXフルコン出来ると思ったら？",
+      "kind": "unknown",
+      "hosts": [],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "oKzG_UWQiHk",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "【目と耳でわかる】編曲って何？【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "rfxFxQsGw8g",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "ネオン'sセッション（When mom isn't house)【 #UNIT_B / #宵凪ネオン】",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "Hkcqzgkwn-w",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "フルコンしたことに気付かないライラ→弾き語り~美少女無罪♡パイレーツ編~【 #UNIT_B / #清澄ライラ】",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "DVlIpYGGJu8",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "メンバーとギスって逆切れするギャル【 #UNIT_B / #宵凪ネオン】#リズム天国 #リズム天国ミラクルスターズ #shorts",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "3MsM3eBGqPQ",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "作編曲家がドパれる譜面つくってみた【 #UNIT_B / #清澄ライラ】 #ホロドリ #ホロライブドリームス",
+      "kind": "solo",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "rAttUch2tEU",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "水着ガチャで大フィーバー？！【 #UNIT_B / #宵凪ネオン】 #ホロドリ #ホロライブドリームス",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    },
+    {
+      "unit": "unit-b",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "video_id": "hWjwnc5kNCE",
+      "source": "video",
+      "is_short": true,
+      "status": null,
+      "title": "騒がしすぎるギャルリズム天国【 #UNIT_B / #宵凪ネオン】#リズム天国 #リズム天国ミラクルスターズ#shorts",
+      "kind": "solo",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": []
+    }
+  ]
+}

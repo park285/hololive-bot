@@ -233,7 +233,7 @@ func TestCacheWarmUp_UsesBoundedCanonicalSnapshotOnce(t *testing.T) {
 	}
 }
 
-func TestCachePointLookup_SerializesWithSnapshotRefresh(t *testing.T) {
+func TestCachePointLookup_DoesNotBlockSnapshotRefresh(t *testing.T) {
 	lookupStarted := make(chan struct{})
 	releaseLookup := make(chan struct{})
 	cacheClient := cachemocks.NewLenientClient()
@@ -257,11 +257,10 @@ func TestCachePointLookup_SerializesWithSnapshotRefresh(t *testing.T) {
 		logger: slog.New(slog.DiscardHandler),
 	}
 
-	lookupDone := make(chan error, 1)
+	lookupDone := make(chan *domain.Member, 1)
 
 	go func() {
-		_, err := c.GetByName(t.Context(), "Stale")
-		lookupDone <- err
+		lookupDone <- c.loadNameFromDistributedCache(t.Context(), "Stale", 0)
 	}()
 
 	<-lookupStarted
@@ -273,14 +272,19 @@ func TestCachePointLookup_SerializesWithSnapshotRefresh(t *testing.T) {
 		refreshDone <- c.storeAllMembersSnapshot(nil, generation, []*domain.Member{{ChannelID: "fresh-channel", Name: "Fresh"}})
 	}()
 
-	close(releaseLookup)
-
-	if err := <-lookupDone; err != nil {
-		t.Fatalf("GetByName() error = %v", err)
+	select {
+	case refreshed := <-refreshDone:
+		if !refreshed {
+			t.Fatal("snapshot refresh was not published")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("snapshot refresh blocked on distributed cache I/O")
 	}
 
-	if !<-refreshDone {
-		t.Fatal("snapshot refresh was not published")
+	close(releaseLookup)
+
+	if member := <-lookupDone; member != nil {
+		t.Fatalf("stale lookup result = %+v, want nil", member)
 	}
 
 	if _, ok := c.byName.Load("Stale"); ok {

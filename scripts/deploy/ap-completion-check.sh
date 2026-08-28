@@ -94,8 +94,11 @@ if [[ -n "$change_started_at" ]]; then
 else
   journal_since="10 minutes ago"
 fi
-if journalctl -u "$unit" --since "$journal_since" --no-pager |
-   grep -E 'ERR|panic|permission denied|x509|no such file'; then
+if ! journal_output="$(journalctl -u "$unit" --since "$journal_since" --no-pager)"; then
+  echo "failed to read completion logs for $unit" >&2
+  exit 1
+fi
+if grep -E 'ERR|panic|permission denied|x509|no such file' <<<"$journal_output"; then
   exit 1
 fi
 

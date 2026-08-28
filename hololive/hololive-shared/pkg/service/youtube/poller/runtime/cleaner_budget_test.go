@@ -26,6 +26,12 @@ func TestViewerSampleCleanerClampsWorkBudgets(t *testing.T) {
 	require.Equal(t, viewerSampleCleanupMaxDuration, cleaner.effectiveMaxDuration())
 }
 
+func TestViewerSampleCleanerDefaultsNonPositiveRetention(t *testing.T) {
+	cleaner := NewViewerSampleCleaner(nil, ViewerSampleCleanerConfig{})
+
+	require.Equal(t, DefaultViewerSampleCleanerConfig().RetentionDays, cleaner.config.RetentionDays)
+}
+
 func TestViewerSampleCleanerCleanupContinuesAfterShortSessionBatch(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

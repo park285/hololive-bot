@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/python-runtime.sh"
+repo_python_init
 export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.0+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
@@ -280,7 +282,7 @@ check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
 run_step "PGO default policy tests" ./scripts/ci/check-pgo-default_test.sh
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
-run_step "collector go-test-json parser tests" python3 ./scripts/ci/check-go-test-json_test.py
+run_step "collector go-test-json parser tests" "${CI_PYTHON_BIN}" ./scripts/ci/check-go-test-json_test.py
 run_step "collector hardening-contract parser tests" ./scripts/ci/check-youtube-collector-hardening-contract_test.sh
 run_step "collector hardening-contract gate" ./scripts/ci/check-youtube-collector-hardening-contract.sh
 run_step "collector production build entrypoint tests" ./scripts/build/build-youtube-collector-go_test.sh

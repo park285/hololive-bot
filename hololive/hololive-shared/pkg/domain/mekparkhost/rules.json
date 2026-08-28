@@ -1,0 +1,249 @@
+{
+  "version": "2026-08-28.2",
+  "status": "review",
+  "corpus": {
+    "captured_at": "2026-08-28",
+    "unique_titles": 149,
+    "live_sessions": 105,
+    "videos_not_in_sessions": 44,
+    "shorts": 37,
+    "channels": {
+      "unit-b": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "achrora": "UChpRPsAeSZn5DistGacR3iA"
+    },
+    "note": "youtube_live_sessions includes demo/cover rows, not only live talk/game streams. Scores below split live_session vs video"
+  },
+  "policy": {
+    "fail_closed": true,
+    "match_after_normalize": true,
+    "normalize": [
+      "NFKC",
+      "strip_zero_width",
+      "ascii_lowercase",
+      "fold_fullwidth_hash",
+      "collapse_hash_then_space"
+    ],
+    "channel_selects_unit": true,
+    "given_names_match": "roles_and_pairs_only",
+    "guest_includes_other_unit_only_current": true,
+    "kinds_current": {
+      "solo": "local member 1, guests optional",
+      "collab": "local members >= 2",
+      "unit": "no local member, unit token present",
+      "unknown": "no local member, no unit token"
+    }
+  },
+  "ignore_in_titles": ["#shorts", "#切り抜き", "#mekpark", "#朝活", "#弾き語り", "#弾いてみた", "#歌ってみた"],
+  "do_not_match": {
+    "bare_given_names_in_prose": ["ネオン", "ミラ", "ライラ", "さやな", "りらら", "ひなみ"],
+    "shared_words": ["PON"],
+    "reasons": [
+      "ミラ is a substring of ミラクル. リズム天国ミラクルスターズ would false-hit Mira (3 live rirara titles + 2 neon shorts)",
+      "ひなみ in ひなみの生誕祭 / ひなみ生誕前記念 / ひなみが一緒 talks about Hinami, not a host tag",
+      "PON is used by both Kiyosumi Lyra and Yuikawa Hinami"
+    ]
+  },
+  "units": {
+    "unit-b": {
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "tokens": {
+        "strong": ["#UNIT_B", "#UNITB", "UNIT B"]
+      },
+      "token_notes": [
+        "After normalize, #UNIT_B and UNIT_B both contain unit_b. UNIT B (space) is required for レゾナンス / UNIT B【demo】 and the teaser",
+        "#UNITB is wiki-only; not in this corpus",
+        "UNIT Bの赤たん on an ACHRORA title must not flip the ACHRORA stream into unit-b"
+      ],
+      "canonical_title_shape": "【 #UNIT_B / #<full_name> 】",
+      "members": ["yoinagi-neon", "reimei-mira", "kiyosumi-lyra"]
+    },
+    "achrora": {
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "tokens": {
+        "strong": ["#ACHRORA", "ACHRORA", "あくろら", "ユニットパート"]
+      },
+      "token_notes": [
+        "ACHRORA and #ACHRORA overlap after substring match",
+        "あくろら covers 定例会議 / 観測記録 / REPO series prefix; person tags still win when present",
+        "ユニットパート is the debut unit-part video only"
+      ],
+      "members": ["sumishio-sayana", "rumigaki-rirara", "yuikawa-hinami"]
+    }
+  },
+  "members": {
+    "yoinagi-neon": {
+      "unit": "unit-b",
+      "full_name": "宵凪ネオン",
+      "host_tokens": ["宵凪ネオン"],
+      "given_names": ["ネオン"],
+      "notes": "Canonical 【 #UNIT_B / #宵凪ネオン 】. Cover ヴァンパイア keeps the full name without a hash"
+    },
+    "reimei-mira": {
+      "unit": "unit-b",
+      "full_name": "玲銘ミラ",
+      "host_tokens": ["玲銘ミラ"],
+      "nicknames_not_host": ["赤たん"],
+      "given_names": ["ミラ"],
+      "notes": "赤たん always co-occurred with 玲銘ミラ. Do not substring-match ミラ. Hash-space title 【 #UNIT_B / # 玲銘ミラ】 needs collapse_hash_then_space"
+    },
+    "kiyosumi-lyra": {
+      "unit": "unit-b",
+      "full_name": "清澄ライラ",
+      "host_tokens": ["清澄ライラ"],
+      "given_names": ["ライラ"]
+    },
+    "sumishio-sayana": {
+      "unit": "achrora",
+      "full_name": "墨汐さやな",
+      "host_tokens": ["墨汐さやな", "さやな時間"],
+      "series_owner_tokens": ["あさやな"],
+      "given_names": ["さやな"],
+      "notes": "あさやな is the series detector, not a second copy of さやな時間. Two titles have only the series tag. Fullwidth ＃墨汐さやな appears three times"
+    },
+    "rumigaki-rirara": {
+      "unit": "achrora",
+      "full_name": "琉海垣りらら",
+      "host_tokens": ["琉海垣りらら", "りららだいびんぐ"],
+      "given_names": ["りらら"]
+    },
+    "yuikawa-hinami": {
+      "unit": "achrora",
+      "full_name": "由比河ひなみ",
+      "host_tokens": ["由比河ひなみ", "ひなみ通信"],
+      "given_names": ["ひなみ"]
+    }
+  },
+  "structured_given_name": {
+    "roles": ["視点", "の枠", "パート"],
+    "pair_separator": "×",
+    "load_bearing_pair": "りらら×ミラ",
+    "attested_in_corpus": {
+      "視点": ["さやな視点", "りらら視点", "ひなみ視点"],
+      "パート": ["さやなパート", "りららパート", "ひなみパート"],
+      "×": ["りらら×ミラ", "宵凪ネオン×清澄ライラ", "#墨汐さやな × #琉海垣りらら", "#玲銘ミラ × #琉海垣りらら"]
+    },
+    "attested_in_wiki_not_corpus": ["ネオンの枠", "ミラの枠", "ライラの枠"],
+    "notes": [
+      "視点/パート never appeared as the only evidence; full name or stream tag was always present",
+      "ASCII x is not a separator; it would hit English words",
+      "The one live title that needs × is 【延長戦】りらら×ミラのアソビ大全!!【 #UNIT_B / #ACHRORA 】. Without the pair it falls to unit"
+    ]
+  },
+  "clip_tags_not_host_evidence": {
+    "tokens": ["さやなカット", "きりとりらら", "ぴよつまみ"],
+    "reason": "Official 切り抜き tags. In this corpus they always co-occur with the full name"
+  },
+  "review_findings": {
+    "critical": [
+      {
+        "id": "same-unit-guest-kind-bug",
+        "summary": "Identical stretch-guest situation gets different kinds by guest unit",
+        "detail": "Sayana series + Neon/Mira (other unit) is solo+guest. Sayana series + Rirara/Hinami (same unit) is collab. Both are Sayana's series with a guest. Current kind uses local-member count, so same-unit guests inflate collab"
+      },
+      {
+        "id": "unknown-vs-channel-unit",
+        "summary": "channel_selects_unit=true makes kind=unknown on a known channel contradictory",
+        "detail": "? and 【 #雪葬 】 still belong to ACHRORA / UNIT B via channel_id. unknown should mean foreign/unmapped channel, not missing title tokens"
+      },
+      {
+        "id": "given-name-field-hazard",
+        "summary": "members.given_names must never be substring-matched",
+        "detail": "The field looks like extra host tokens. Substring ミラ false-hits ミラクルスターズ. Policy given_names_match=roles_and_pairs_only is mandatory"
+      }
+    ],
+    "important": [
+      {
+        "id": "unit-kind-is-a-drawer",
+        "summary": "kind=unit mixes group collab, unspecified host, and non-stream",
+        "split": {
+          "group": ["#ACHRORAコラボ 3人 Overcooked", "#UNIT_B /#ACHRORA 画伯", "あくろら定例会議"],
+          "unspecified": ["#UNIT_B membership / 10万人話 / 終われまテン / ぷよテト弱者2人"],
+          "non_stream": ["レゾナンス demo already stored as live_session", "teasers", "original-song demo"]
+        }
+      },
+      {
+        "id": "series-token-moved-out-of-host-tokens",
+        "summary": "あさやな must not sit in host_tokens beside さやな時間",
+        "detail": "あさやな is a substring of #あさやなストレッチ夏. Keeping both as host_tokens hid the series-owner rule. series_owner_tokens is the owner detector; host_tokens stay 墨汐さやな and さやな時間"
+      },
+      {
+        "id": "score-mixes-non-broadcast",
+        "summary": "95/105 person-identified uses live_session rows that include a demo song",
+        "detail": "Broadcast questions should score live talk/game/collab rows, or keep a non_stream bucket"
+      }
+    ],
+    "minor": [
+      "Wiki-only: ネオンの枠, #UNITB, #ゆにびーリレー, #あくろら24. Keep as future tokens, not current coverage",
+      "Nicknames 赤たん and clip tags add zero extra corpus hits",
+      "Fan marks 🔊🩹🌫️🖤🐳🐣 appear as decoration on guest titles; do not use",
+      "Episode hashes #1 #2 #3 #01 are not identity"
+    ]
+  },
+  "recommended_kind_model": {
+    "unit": "always from channel_id for these two channels",
+    "primary": "series owner if series_owner_tokens hit, else the single local member, else empty",
+    "guests": "every other identified member, same unit or not",
+    "kind": {
+      "solo": "primary set, no other local member except those listed as guests",
+      "collab": "two or more locals and no series owner, or explicit × of two locals without series",
+      "unspecified": "no person tokens, unit token present, not an obvious group/non_stream",
+      "group": "explicit unit collab/meeting/3-person wording without person tags",
+      "non_stream": "demo/teaser/original-song without a person tag"
+    },
+    "stretch_guest_examples_become": [
+      "【#琉海垣りらら】...【#あさやなストレッチ夏】#墨汐さやな → primary=sayana guests=[rirara] kind=solo",
+      "【#由比河ひなみ】...【#あさやなストレッチ夏】#墨汐さやな → primary=sayana guests=[hinami] kind=solo",
+      "【#宵凪ネオン】...【#あさやなストレッチ夏】#墨汐さやな → primary=sayana guests=[neon] kind=solo (unchanged)"
+    ],
+    "true_collabs_stay": [
+      "【#墨汐さやな × #琉海垣りらら 】",
+      "#琉海垣りらら #由比河ひなみ 反省会",
+      "宵凪ネオン×清澄ライラ cover"
+    ]
+  },
+  "live_session_residuals": {
+    "unspecified": [
+      "【ぷよテト2】弱者2人に教えます。【 #UNIT_B 】",
+      "【絆はあるのか】一致するまで終われまテン!!【 #UNIT_B 】",
+      "【祝】メンバーシップ解禁します!【 #UNIT_B 】",
+      "【今後の話】10万人達成したし、これからの話をしよう！【 #UNIT_B】",
+      "【無理】最恐ホラゲーでギャン泣き。【 #雪葬 】",
+      "?"
+    ],
+    "group": [
+      "【コラボ】画伯なんていない!!【 #UNIT_B /#ACHRORA 】",
+      "【Overcooked! 2】うちらの仲の良さなら忙しい店舗も3人で余裕だよね!? #ACHRORA  #ACHRORAコラボ",
+      "【真剣投票】次は何を開放する?ひなみの生誕祭の振り返りもするよ🎂【#8月のあくろら定例会議】#ACHRORA"
+    ],
+    "non_stream": [
+      "レゾナンス / UNIT B【demo】"
+    ]
+  },
+  "video_residuals": {
+    "unspecified": [
+      "【ホロドリ】EXフルコン出来ると思ったら？"
+    ],
+    "group": [
+      "【初配信】🫧ユニットパート🫧【 #ACHRORA初配信 】",
+      "夢の国で紙を食べてしまうACHRORA #ACHRORA #あくろら観測記録"
+    ],
+    "non_stream": [
+      "【ティザーPV】ACHRORA活動開始 【 #ACHRORA 】",
+      "【ティザー映像】UNIT B（Pre-Debut）【 #UNIT_B 】",
+      "【demo】フレアグランス【UNIT B/オリジナル曲】",
+      "#夜の踊り子 #サカナクション #歌ってみた #弾いてみた #UNIT_B"
+    ]
+  },
+  "known_miss": {
+    "prose_guest": "【初コラボ】7日目!今日はひなみが一緒にストレッチしてくれるよ ... #あさやなストレッチ夏 #墨汐さやな #さやな時間 → Hinami has no tag; keep fail-closed"
+  },
+  "live_session_score_current_model": {
+    "titles": 105,
+    "solo": 90,
+    "collab": 5,
+    "unit": 8,
+    "unknown": 2,
+    "person_identified": "95/105",
+    "note": "If stretch same-unit guests move to guests, collab becomes 3 and solo becomes 92. unknown 2 should merge into unspecified once channel owns unit"
+  }
+}
