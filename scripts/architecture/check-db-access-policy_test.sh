@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+CHECKER="${ROOT_DIR}/scripts/architecture/check-db-access-policy.sh"
 TEST_TMP_DIR="$(mktemp -d)"
 trap 'rm -rf -- "${TEST_TMP_DIR}"' EXIT
 
@@ -14,7 +15,7 @@ fixture="${TEST_TMP_DIR}/fixture"
 mkdir -p "${fixture}/hololive" "${fixture}/admin-dashboard" "${fixture}/scripts" "${fixture}/internal"
 : >"${fixture}/go.mod"
 
-ROOT_DIR="${fixture}" "${ROOT_DIR}/scripts/architecture/check-db-access-policy.sh" \
+ROOT_DIR="${fixture}" "${CHECKER}" \
   >"${TEST_TMP_DIR}/clean.out" 2>&1 \
   || fail "clean fixture was rejected"
 
@@ -23,7 +24,7 @@ package internal
 
 func forbidden() { gorm.Open() }
 EOF
-if ROOT_DIR="${fixture}" "${ROOT_DIR}/scripts/architecture/check-db-access-policy.sh" \
+if ROOT_DIR="${fixture}" "${CHECKER}" \
   >"${TEST_TMP_DIR}/internal.out" 2>&1; then
   fail "disallowed DB token under internal/ was not detected"
 fi
@@ -36,7 +37,7 @@ package fixture
 
 const forbidden = "entgo.io/ent"
 EOF
-if ROOT_DIR="${fixture}" "${ROOT_DIR}/scripts/architecture/check-db-access-policy.sh" \
+if ROOT_DIR="${fixture}" "${CHECKER}" \
   >"${TEST_TMP_DIR}/root.out" 2>&1; then
   fail "disallowed DB token in a root Go file was not detected"
 fi
