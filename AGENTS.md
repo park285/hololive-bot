@@ -6,7 +6,7 @@ Keep this file limited to always-needed project rules across runtimes.
 ## Project Identity
 
 This repository is a Go monorepo with central and AP-host deployments.
-It includes the unified `hololive-api` runtime (bot/admin/llm planes in one process), the alarm worker, the YouTube collector module (`hololive/hololive-youtube-collector`, binary `youtube-collector`; fetch uses collector-owned Holodex, Official Schedule, and YouTube.js helpers), shared libraries, and the admin dashboard. The collector runs as a four-member AP fleet: Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`. There is no standalone `youtube-producer`.
+It includes the unified `hololive-api` runtime (bot/admin/llm planes in one process), the alarm worker, the YouTube collector module (`hololive/hololive-youtube-collector`, binary `youtube-collector`; fetch uses collector-owned Holodex, Official Schedule, and YouTube.js helpers), shared libraries, and the admin dashboard. The collector runs as a four-member AP fleet: Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`. External fetch, normalization, lease/checkpoint, and source-observation publishing remain collector-owned.
 
 The central runtime host is `hololive-osaka` (`aarch64`); builds, images, and tests stay on the `kapu` workstation, which also hosts CLIProxy and the observability stack. Central bind addresses are owned by each host's `compose.env`, not by Compose defaults.
 
