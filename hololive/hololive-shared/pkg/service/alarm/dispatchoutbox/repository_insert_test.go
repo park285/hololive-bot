@@ -129,7 +129,7 @@ func TestClassifyEventPreflight_SplitsNewDuplicateAndConflict(t *testing.T) {
 	classified := classifyEventPreflight([]eventInsert{newEvent, duplicateEvent, conflictEvent}, existing)
 
 	require.Equal(t, []eventInsert{newEvent}, classified.InsertEvents)
-	require.Equal(t, map[string]int64{"duplicate": 11}, classified.EventIDs)
+	require.Equal(t, map[string]int64{"duplicate": 11, "conflict": 12}, classified.EventIDs)
 	require.Len(t, classified.Collisions, 1)
 	require.Equal(t, conflictEvent, classified.Collisions[0].Event)
 	require.Equal(t, int64(12), classified.Collisions[0].ExistingEventID)
