@@ -122,7 +122,7 @@ BUNDLE_MANIFEST.txt
 *.backup
 *.backup-*
 *.bak-*
-AGENTS.md
+!AGENTS.md
 .plan/
 .PLAN/
 CLAUDE.md
