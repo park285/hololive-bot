@@ -38,11 +38,28 @@ func (c *Consumer) reconcileContent(
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", err)
 	}
 
+	premiereApplications, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
+	if err != nil {
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
+	}
+
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
 	}
 
-	return decision, ReconcileResult{Applications: mapContentApplications(decision.Applications)}, nil
+	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
+
+	return decision, ReconcileResult{Applications: applications}, nil
+}
+
+func mergeContentApplications(contentApplications, premiereApplications []Application) []Application {
+	premiereCount := min(len(premiereApplications), maxFinalizeApplicationCount)
+	contentCount := min(len(contentApplications), maxFinalizeApplicationCount-premiereCount)
+	applications := make([]Application, 0, contentCount+premiereCount)
+	applications = append(applications, contentApplications[:contentCount]...)
+	applications = append(applications, premiereApplications[:premiereCount]...)
+
+	return applications
 }
 
 func evidenceFromObservation(observation *Observation) (content.Evidence, error) {

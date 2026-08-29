@@ -121,6 +121,36 @@ func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 	}
 }
 
+func TestLiveConsumerPreservesPremiereClassification(t *testing.T) {
+	tests := []struct {
+		name       string
+		isPremiere bool
+	}{
+		{name: "confirmed Premiere", isPremiere: true},
+		{name: "confirmed non-Premiere", isPremiere: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pool, repo, consumer, proof := startLivePersist(t)
+			ctx := t.Context()
+			seen := time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC)
+
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO youtube_live_sessions (
+					video_id, channel_id, status, title, last_seen_at, is_premiere
+				) VALUES ($1, $2, 'UPCOMING', 'Keep classification', $3, $4)
+			`, testVideoID, testChannelID, seen, test.isPremiere); err != nil {
+				t.Fatalf("seed classified session: %v", err)
+			}
+
+			publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+
+			assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(test.isPremiere))
+		})
+	}
+}
+
 func TestLiveConsumerStaleEpochCannotCreateEndEvidence(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
@@ -332,11 +362,17 @@ func TestLiveEndFinalizerMissRequeuesOrClearsDueRow(t *testing.T) {
 	}
 }
 
-func TestLiveEndFinalizerEndsAfterGraceWithoutNewObservation(t *testing.T) {
+func TestFinalizerPreservesPremiereWhenEndingAfterGraceWithoutNewObservation(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	if _, err := pool.Exec(ctx, `
+		UPDATE youtube_live_sessions SET is_premiere = TRUE WHERE video_id = $1
+	`, testVideoID); err != nil {
+		t.Fatalf("classify Premiere session: %v", err)
+	}
+
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
@@ -361,6 +397,7 @@ func TestLiveEndFinalizerEndsAfterGraceWithoutNewObservation(t *testing.T) {
 		t.Fatal("due finalizer must end after grace")
 	}
 
+	assertLiveSessionPremiere(t, pool, domain.LiveStatusEnded, new(true))
 	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 }
 

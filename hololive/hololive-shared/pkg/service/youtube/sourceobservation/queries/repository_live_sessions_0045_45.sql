@@ -1,5 +1,6 @@
 SELECT video_id, channel_id, status, title, topic_id, thumbnail_url,
-       scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at
+       scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at,
+       is_premiere
 FROM youtube_live_sessions
 WHERE channel_id = ANY($1::text[])
    OR video_id = ANY($2::text[])

@@ -1484,6 +1484,15 @@ type ContentEvidenceClock struct {
 7. `POSITIVE_ONLY` kind는 `missing_since`도 갱신하지 않는다.
 8. 이미 생성된 notification intent를 list absence만으로 삭제하지 않는다.
 
+`video_list`의 `is_premiere=true`는 이미 확정된 최초공개(Premiere) positive fact이며, 같은 observation finalize transaction에서 기존 live projection에도 병합한다. 이 교차 projection은 다음 경계를 따른다.
+
+- `youtube_live_sessions.is_premiere`가 live alarm이 읽는 단일 canonical classification이다. `NULL`은 미확정, `true`와 `false`는 각각 확정 최초공개와 확정 일반 방송이다.
+- content canonical write와 notification intent를 저장한 뒤 content subject lock에서 같은 channel의 live subject lock 순서로 진입하고, 해당 video ID row만 `FOR UPDATE`로 읽는다. 반대 lock 순서나 별도 writer를 추가하지 않는다.
+- live row가 없으면 `UPCOMING`, content channel/title/scheduled time, observation `received_at`, `is_premiere=true`로 생성하되 live reconciliation head는 만들지 않는다. 조회 뒤 다른 writer가 row를 먼저 생성한 conflict에서는 content write mode가 기존 field를 모두 보존하고 classification만 병합한다.
+- 기존 row는 `is_premiere=NULL`일 때만 `true`로 채운다. status, metadata, scheduled/started/ended time, `live_first_seen_at`, `last_seen_at`과 live head는 content evidence로 변경하지 않는다.
+- 기존 `true`는 replay no-op이고, 기존 `false`와 새 `true`는 기존 값을 유지하면서 `source_reconciliation_conflicts`에 `is_premiere`/`KEEP_EXISTING`을 기록한다. 필드 부재와 `false` content는 live row를 만들거나 변경하지 않는다.
+- live snapshot, schedule merge와 due-finalizer가 사용하는 공용 live-session upsert는 `COALESCE(existing.is_premiere, incoming.is_premiere)`로 최초 non-`NULL`을 보존한다. 추가 YouTube 조회, 새 schema/table, alarm-side join이나 renderer 변경은 이 병합에 포함하지 않는다.
+
 ### 13.3 Live state
 
 상태는 video/session identity별로 단조 전진한다.

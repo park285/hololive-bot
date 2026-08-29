@@ -86,7 +86,7 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 		&session.VideoID, &session.ChannelID, &status, &session.Title,
 		&session.TopicID, &session.ThumbnailURL,
 		&session.ScheduledStartTime, &session.StartedAt, &session.EndedAt,
-		&session.LiveFirstSeenAt, &session.LastSeenAt,
+		&session.LiveFirstSeenAt, &session.LastSeenAt, &session.IsPremiere,
 	); err != nil {
 		return live.SessionState{}, fmt.Errorf("scan live session: %w", err)
 	}

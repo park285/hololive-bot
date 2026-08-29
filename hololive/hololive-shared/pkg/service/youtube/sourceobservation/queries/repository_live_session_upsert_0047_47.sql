@@ -1,50 +1,79 @@
 INSERT INTO youtube_live_sessions (
     video_id, channel_id, status, title, topic_id, thumbnail_url,
-    scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at,
+    is_premiere
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (video_id) DO UPDATE SET
     status = CASE
+        WHEN $13::boolean THEN youtube_live_sessions.status
         WHEN youtube_live_sessions.status = 'ENDED' THEN youtube_live_sessions.status
         WHEN youtube_live_sessions.status = 'LIVE' AND excluded.status = 'UPCOMING' THEN youtube_live_sessions.status
         ELSE excluded.status
     END,
     title = CASE
-        WHEN excluded.title = '' THEN youtube_live_sessions.title
+        WHEN $13::boolean OR excluded.title = '' THEN youtube_live_sessions.title
         ELSE excluded.title
     END,
     topic_id = CASE
-        WHEN excluded.topic_id = '' THEN youtube_live_sessions.topic_id
+        WHEN $13::boolean OR excluded.topic_id = '' THEN youtube_live_sessions.topic_id
         ELSE excluded.topic_id
     END,
     thumbnail_url = CASE
-        WHEN excluded.thumbnail_url = '' THEN youtube_live_sessions.thumbnail_url
+        WHEN $13::boolean OR excluded.thumbnail_url = '' THEN youtube_live_sessions.thumbnail_url
         ELSE excluded.thumbnail_url
     END,
-    scheduled_start_time = COALESCE(excluded.scheduled_start_time, youtube_live_sessions.scheduled_start_time),
-    started_at = COALESCE(youtube_live_sessions.started_at, excluded.started_at),
-    ended_at = COALESCE(youtube_live_sessions.ended_at, excluded.ended_at),
-    live_first_seen_at = COALESCE(youtube_live_sessions.live_first_seen_at, excluded.live_first_seen_at),
-    last_seen_at = GREATEST(youtube_live_sessions.last_seen_at, excluded.last_seen_at)
+    scheduled_start_time = CASE
+        WHEN $13::boolean THEN youtube_live_sessions.scheduled_start_time
+        ELSE COALESCE(excluded.scheduled_start_time, youtube_live_sessions.scheduled_start_time)
+    END,
+    started_at = CASE
+        WHEN $13::boolean THEN youtube_live_sessions.started_at
+        ELSE COALESCE(youtube_live_sessions.started_at, excluded.started_at)
+    END,
+    ended_at = CASE
+        WHEN $13::boolean THEN youtube_live_sessions.ended_at
+        ELSE COALESCE(youtube_live_sessions.ended_at, excluded.ended_at)
+    END,
+    live_first_seen_at = CASE
+        WHEN $13::boolean THEN youtube_live_sessions.live_first_seen_at
+        ELSE COALESCE(youtube_live_sessions.live_first_seen_at, excluded.live_first_seen_at)
+    END,
+    last_seen_at = CASE
+        WHEN $13::boolean THEN youtube_live_sessions.last_seen_at
+        ELSE GREATEST(youtube_live_sessions.last_seen_at, excluded.last_seen_at)
+    END,
+    is_premiere = COALESCE(youtube_live_sessions.is_premiere, excluded.is_premiere)
 WHERE
-    CASE
-        WHEN youtube_live_sessions.status = 'ENDED' THEN youtube_live_sessions.status
-        WHEN youtube_live_sessions.status = 'LIVE' AND excluded.status = 'UPCOMING' THEN youtube_live_sessions.status
-        ELSE excluded.status
-    END IS DISTINCT FROM youtube_live_sessions.status
-    OR (
-        excluded.title <> ''
-        AND excluded.title IS DISTINCT FROM youtube_live_sessions.title
+    (
+        $13::boolean
+        AND youtube_live_sessions.is_premiere IS NULL
+        AND excluded.is_premiere IS NOT NULL
     )
     OR (
-        excluded.topic_id <> ''
-        AND excluded.topic_id IS DISTINCT FROM youtube_live_sessions.topic_id
+        NOT $13::boolean
+        AND (
+            CASE
+                WHEN youtube_live_sessions.status = 'ENDED' THEN youtube_live_sessions.status
+                WHEN youtube_live_sessions.status = 'LIVE' AND excluded.status = 'UPCOMING' THEN youtube_live_sessions.status
+                ELSE excluded.status
+            END IS DISTINCT FROM youtube_live_sessions.status
+            OR (
+                excluded.title <> ''
+                AND excluded.title IS DISTINCT FROM youtube_live_sessions.title
+            )
+            OR (
+                excluded.topic_id <> ''
+                AND excluded.topic_id IS DISTINCT FROM youtube_live_sessions.topic_id
+            )
+            OR (
+                excluded.thumbnail_url <> ''
+                AND excluded.thumbnail_url IS DISTINCT FROM youtube_live_sessions.thumbnail_url
+            )
+            OR excluded.scheduled_start_time IS DISTINCT FROM youtube_live_sessions.scheduled_start_time
+            OR (youtube_live_sessions.started_at IS NULL AND excluded.started_at IS NOT NULL)
+            OR (youtube_live_sessions.ended_at IS NULL AND excluded.ended_at IS NOT NULL)
+            OR (youtube_live_sessions.live_first_seen_at IS NULL AND excluded.live_first_seen_at IS NOT NULL)
+            OR excluded.last_seen_at IS DISTINCT FROM youtube_live_sessions.last_seen_at
+            OR (youtube_live_sessions.is_premiere IS NULL AND excluded.is_premiere IS NOT NULL)
+        )
     )
-    OR (
-        excluded.thumbnail_url <> ''
-        AND excluded.thumbnail_url IS DISTINCT FROM youtube_live_sessions.thumbnail_url
-    )
-    OR excluded.scheduled_start_time IS DISTINCT FROM youtube_live_sessions.scheduled_start_time
-    OR (youtube_live_sessions.started_at IS NULL AND excluded.started_at IS NOT NULL)
-    OR (youtube_live_sessions.ended_at IS NULL AND excluded.ended_at IS NOT NULL)
-    OR (youtube_live_sessions.live_first_seen_at IS NULL AND excluded.live_first_seen_at IS NOT NULL)
-    OR excluded.last_seen_at IS DISTINCT FROM youtube_live_sessions.last_seen_at

@@ -77,14 +77,14 @@ func TestScheduleConsumerPersistsOfficialCollaboTalentNames(t *testing.T) {
 	}
 }
 
-func TestScheduleConsumerDoesNotAdvanceLiveLastSeenAt(t *testing.T) {
+func TestScheduleConsumerPreservesPremiereAndDoesNotAdvanceLiveLastSeenAt(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seen := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at)
-		VALUES ('vid-a', 'UC_TEST', 'LIVE', 'Keep', $1)
+		INSERT INTO youtube_live_sessions (video_id, channel_id, status, title, last_seen_at, is_premiere)
+		VALUES ('vid-a', 'UC_TEST', 'LIVE', 'Keep', $1, TRUE)
 	`, seen); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
@@ -111,6 +111,8 @@ func TestScheduleConsumerDoesNotAdvanceLiveLastSeenAt(t *testing.T) {
 	if !liveLastSeen(t, pool).Equal(seen) {
 		t.Fatalf("schedule consume advanced last_seen_at: %s", liveLastSeen(t, pool))
 	}
+
+	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(true))
 }
 
 func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
