@@ -70,8 +70,9 @@ func classifyEventPreflight(events []eventInsert, existing map[string]insertedEv
 			continue
 		}
 
+		classified.EventIDs[event.EventKey] = row.ID
+
 		if row.PayloadHash == event.PayloadHash {
-			classified.EventIDs[event.EventKey] = row.ID
 			continue
 		}
 

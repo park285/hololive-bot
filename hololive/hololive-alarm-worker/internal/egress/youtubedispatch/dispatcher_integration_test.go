@@ -861,8 +861,11 @@ func setupTestSubscribers(t *testing.T, cacheService *cache.Service) {
 	require.NoError(t, cacheService.HSet(ctx, "alarm:member_names", "UCtest456", "TestMember2"))
 
 	t.Cleanup(func() {
-		require.NoError(t, cacheService.Del(ctx, "alarm:channel_subscribers:SHORTS:UCtest123"))
-		require.NoError(t, cacheService.Del(ctx, "alarm:channel_subscribers:UCtest456"))
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
+		defer cancel()
+
+		require.NoError(t, cacheService.Del(cleanupCtx, "alarm:channel_subscribers:SHORTS:UCtest123"))
+		require.NoError(t, cacheService.Del(cleanupCtx, "alarm:channel_subscribers:UCtest456"))
 	})
 }
 
@@ -872,7 +875,12 @@ func setupChannelSubscribers(t *testing.T, cacheService *cache.Service, key stri
 	ctx := t.Context()
 	_, err := cacheService.SAdd(ctx, key, subscribers)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, cacheService.Del(ctx, key)) })
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
+		defer cancel()
+
+		require.NoError(t, cacheService.Del(cleanupCtx, key))
+	})
 }
 
 func setupMemberName(t *testing.T, cacheService *cache.Service, channelID, name string) {
