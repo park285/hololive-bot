@@ -1,7 +1,7 @@
 import { Utils } from "youtubei.js";
 
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
-import { isVideoLockup, lockupBadgeTexts, videoIDOf } from "./map-lockup.mjs";
+import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 import { assertResponseBudget, encodedSize, paginationResult } from "./pagination.mjs";
 
 const responseReserveBytes = encodedSize({
@@ -90,10 +90,15 @@ export function mapLiveSessions(feed, channelId) {
       err.code = "parser_drift";
       throw err;
     }
+    const title = videoTitleOf(row);
+    const thumbnail = firstThumbnail(row?.thumbnails || row?.thumbnail || row?.content_image);
+    const thumbnailURL = optionalHTTPSURL(thumbnail?.url);
     sessions.push({
       video_id: videoId,
       channel_id: textOf(row?.author?.id || channelId).trim() || channelId,
       status,
+      ...(title === "" ? {} : { title }),
+      ...(thumbnailURL === "" ? {} : { thumbnail_url: thumbnailURL }),
       scheduled_at: optionalTime(row?.scheduled || row?.upcoming),
       started_at: optionalTime(row?.start_time || row?.started),
       ended_at: optionalTime(row?.end_time || row?.ended),
@@ -186,4 +191,16 @@ function optionalTime(value) {
     return undefined;
   }
   return new Date(parsed).toISOString();
+}
+
+function optionalHTTPSURL(value) {
+  try {
+    const parsed = new URL(String(value ?? "").trim());
+    if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
 }

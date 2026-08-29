@@ -144,9 +144,25 @@ func (r *Runner) channelEnvelopes(input *collectutil.RunInput, byChannel map[str
 }
 
 func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
-	envelopes, err := r.appendChannelKind(input, nil, contract.KindLiveSnapshot, channelID, livePayload(channelID, sessions), true)
-	if err != nil {
-		return nil, fmt.Errorf("append channel kind: %w", err)
+	var envelopes []contract.Envelope
+
+	if input.Job().Emits(contract.KindLiveSnapshot) {
+		liveGeneration, err := input.Generation(contract.KindLiveSnapshot)
+		if err != nil {
+			return nil, fmt.Errorf("live snapshot generation: %w", err)
+		}
+
+		envelopes, err = r.appendChannelKind(
+			input,
+			envelopes,
+			contract.KindLiveSnapshot,
+			channelID,
+			livePayload(channelID, sessions, liveGeneration == contract.LiveSnapshotMetadataContractGeneration),
+			true,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("append channel kind: %w", err)
+		}
 	}
 
 	stats, ok, err := statsPayload(channelID, sessions)

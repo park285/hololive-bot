@@ -6,4 +6,6 @@ const (
 	testReplayOperator  = "test-operator"
 	testMutatedValue    = "mutated"
 	testSlotStateActive = "ACTIVE"
+	testStatusLive      = "LIVE"
+	testHolodexLiveKey  = "global:holodex_live"
 )

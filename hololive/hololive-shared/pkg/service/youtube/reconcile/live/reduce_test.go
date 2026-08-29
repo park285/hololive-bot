@@ -49,6 +49,37 @@ func TestReduceUpcomingLiveEndedNormalPath(t *testing.T) {
 	}
 }
 
+func TestReduceSparsePositivePreservesLiveMetadata(t *testing.T) {
+	t.Parallel()
+
+	metadata := sessionFact("UPCOMING")
+
+	metadata.Title = "Minecraft live"
+	metadata.TopicID = "minecraft"
+	metadata.ThumbnailURL = "https://i.ytimg.com/vi/vid-a/maxresdefault.jpg"
+
+	first := liveEvidence(
+		1,
+		time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC),
+		contract.CompletenessComplete,
+		contract.ContinuityContiguous,
+		metadata,
+	)
+	second := liveEvidence(
+		2,
+		time.Date(2026, time.August, 14, 2, 0, 0, 0, time.UTC),
+		contract.CompletenessComplete,
+		contract.ContinuityContiguous,
+		sessionFact(testLiveStatus),
+	)
+
+	session := sessionOf(mustReduceAll(t, emptyState(), []Evidence{first, second}, 0))
+	if session.Title != metadata.Title || session.TopicID != metadata.TopicID ||
+		session.ThumbnailURL != metadata.ThumbnailURL {
+		t.Fatalf("metadata after sparse positive = %#v", session)
+	}
+}
+
 func TestReducePartialGapTimeoutCannotEnd(t *testing.T) {
 	t.Parallel()
 
@@ -168,7 +199,7 @@ func TestReduceLiveOnlySnapshotDoesNotAbsentUpcoming(t *testing.T) {
 
 	liveOnly := firstAbsence()
 
-	liveOnly.Coverage.Filters.Statuses = []string{"LIVE"}
+	liveOnly.Coverage.Filters.Statuses = []string{testLiveStatus}
 
 	got := mustReduceAll(t, emptyState(), []Evidence{upcomingA(), liveOnly}, 0)
 

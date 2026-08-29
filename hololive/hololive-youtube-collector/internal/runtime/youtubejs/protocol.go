@@ -270,12 +270,14 @@ type ChannelRequest struct {
 }
 
 type LiveSessionItem struct {
-	VideoID     string     `json:"video_id"`
-	ChannelID   string     `json:"channel_id"`
-	Status      string     `json:"status"`
-	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	EndedAt     *time.Time `json:"ended_at,omitempty"`
+	VideoID      string     `json:"video_id"`
+	ChannelID    string     `json:"channel_id"`
+	Status       string     `json:"status"`
+	Title        string     `json:"title,omitempty"`
+	ThumbnailURL string     `json:"thumbnail_url,omitempty"`
+	ScheduledAt  *time.Time `json:"scheduled_at,omitempty"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	EndedAt      *time.Time `json:"ended_at,omitempty"`
 }
 
 type ChannelStatsItem struct {

@@ -18,7 +18,7 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 	ctx := t.Context()
 
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "UPCOMING"))
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
 
 	if status := liveSessionStatus(t, pool); status != string(domain.LiveStatusEnded) {
@@ -27,6 +27,60 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 
 	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 	assertTableCount(t, pool, "youtube_live_sessions", 1)
+}
+
+func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *testing.T) {
+	pool, repo, consumer, proof := startLivePersist(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE observation_contract_generations
+		SET current_generation = $1
+		WHERE provider = 'youtubejs' AND observation_kind = 'live_snapshot'
+	`, contract.LiveSnapshotMetadataContractGeneration); err != nil {
+		t.Fatalf("bump live snapshot contract: %v", err)
+	}
+
+	metadata := liveSession(testVideoID, "UPCOMING")
+
+	metadata.Title = "Minecraft live"
+	metadata.TopicID = "minecraft"
+	metadata.ThumbnailURL = "https://i.ytimg.com/vi/vid-a/maxresdefault.jpg"
+
+	proof = publishConsumeLiveAtGeneration(
+		ctx,
+		t,
+		pool,
+		repo,
+		consumer,
+		&proof,
+		contract.LiveSnapshotMetadataContractGeneration,
+		metadata,
+	)
+	publishConsumeLiveAtGeneration(
+		ctx,
+		t,
+		pool,
+		repo,
+		consumer,
+		&proof,
+		contract.LiveSnapshotMetadataContractGeneration,
+		liveSession(testVideoID, testStatusLive),
+	)
+
+	var title, topicID, thumbnailURL string
+
+	if err := pool.QueryRow(ctx, `
+		SELECT title, topic_id, thumbnail_url
+		FROM youtube_live_sessions
+		WHERE video_id = $1
+	`, testVideoID).Scan(&title, &topicID, &thumbnailURL); err != nil {
+		t.Fatalf("load live metadata: %v", err)
+	}
+
+	if title != metadata.Title || topicID != metadata.TopicID || thumbnailURL != metadata.ThumbnailURL {
+		t.Fatalf("persisted metadata = {%q, %q, %q}", title, topicID, thumbnailURL)
+	}
 }
 
 func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
@@ -45,7 +99,7 @@ func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindLiveSnapshot, testChannelID, "youtubejs_channel_live")
 	consumer := newLiveTestConsumer(pool, repo, 0)
 
-	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &proof, liveSession("vid-new", "LIVE")))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &proof, liveSession("vid-new", testStatusLive)))); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 
@@ -67,11 +121,41 @@ func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 	}
 }
 
+func TestLiveConsumerPreservesPremiereClassification(t *testing.T) {
+	tests := []struct {
+		name       string
+		isPremiere bool
+	}{
+		{name: "confirmed Premiere", isPremiere: true},
+		{name: "confirmed non-Premiere", isPremiere: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pool, repo, consumer, proof := startLivePersist(t)
+			ctx := t.Context()
+			seen := time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC)
+
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO youtube_live_sessions (
+					video_id, channel_id, status, title, last_seen_at, is_premiere
+				) VALUES ($1, $2, 'UPCOMING', 'Keep classification', $3, $4)
+			`, testVideoID, testChannelID, seen, test.isPremiere); err != nil {
+				t.Fatalf("seed classified session: %v", err)
+			}
+
+			publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
+
+			assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(test.isPremiere))
+		})
+	}
+}
+
 func TestLiveConsumerStaleEpochCannotCreateEndEvidence(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 
 	stale := proof
 
@@ -91,7 +175,7 @@ func TestLiveConsumerStaleEpochCannotCreateEndEvidence(t *testing.T) {
 func TestLiveConsumerFutureSkewedSourceEventUsesScheduledSlot(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
-	envelope := liveSnapshotEnvelope(t, &proof, liveSession(testVideoID, "LIVE"))
+	envelope := liveSnapshotEnvelope(t, &proof, liveSession(testVideoID, testStatusLive))
 	future := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 
 	envelope.SourceEventAt = &future
@@ -133,7 +217,7 @@ func TestLiveConsumerTwoScopedAbsenceSlotsAfterGraceEnd(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof)
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof)
 
@@ -146,7 +230,7 @@ func TestLiveConsumerOneScopedAbsenceDoesNotEnd(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof)
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
@@ -175,11 +259,11 @@ func TestLiveConsumerAlreadyEndedLateLiveStaysEnded(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersist(t)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
 
 	seen := liveLastSeen(t, pool)
-	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusEnded) {
 		t.Fatal("already ENDED session must stay ENDED")
@@ -194,7 +278,7 @@ func TestLiveConsumerDoesNotStubOverwriteExistingLiveHead(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 
 	var liveAt time.Time
 
@@ -205,7 +289,7 @@ func TestLiveConsumerDoesNotStubOverwriteExistingLiveHead(t *testing.T) {
 	}
 
 	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
-	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession("vid-new", "LIVE"))
+	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession("vid-new", testStatusLive))
 
 	var (
 		status string
@@ -231,7 +315,7 @@ func TestLiveEndFinalizerMissRequeuesOrClearsDueRow(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
@@ -278,11 +362,17 @@ func TestLiveEndFinalizerMissRequeuesOrClearsDueRow(t *testing.T) {
 	}
 }
 
-func TestLiveEndFinalizerEndsAfterGraceWithoutNewObservation(t *testing.T) {
+func TestFinalizerPreservesPremiereWhenEndingAfterGraceWithoutNewObservation(t *testing.T) {
 	pool, repo, consumer, proof := startLivePersistGrace(t, time.Hour)
 	ctx := t.Context()
 
-	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "LIVE"))
+	proof = publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, testStatusLive))
+	if _, err := pool.Exec(ctx, `
+		UPDATE youtube_live_sessions SET is_premiere = TRUE WHERE video_id = $1
+	`, testVideoID); err != nil {
+		t.Fatalf("classify Premiere session: %v", err)
+	}
+
 	publishConsumeLive(ctx, t, pool, repo, consumer, &proof, liveSession(testVideoID, "ENDED"))
 
 	if liveSessionStatus(t, pool) != string(domain.LiveStatusLive) {
@@ -307,6 +397,7 @@ func TestLiveEndFinalizerEndsAfterGraceWithoutNewObservation(t *testing.T) {
 		t.Fatal("due finalizer must end after grace")
 	}
 
+	assertLiveSessionPremiere(t, pool, domain.LiveStatusEnded, new(true))
 	assertTableCount(t, pool, "youtube_notification_outbox", 0)
 }
 
@@ -347,6 +438,37 @@ func liveSession(videoID, status string) contract.LiveSessionV1 {
 func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...contract.LiveSessionV1) *contract.Envelope {
 	t.Helper()
 
+	return liveSnapshotEnvelopeAtGeneration(t, proof, 1, sessions...)
+}
+
+func liveSnapshotEnvelopeAtGeneration(
+	t *testing.T,
+	proof *contract.LeaseProof,
+	generation int64,
+	sessions ...contract.LiveSessionV1,
+) *contract.Envelope {
+	t.Helper()
+
+	return liveSnapshotEnvelopeFromProviderAtGeneration(
+		t,
+		proof,
+		generation,
+		contract.ProviderYouTubeJS,
+		testChannelID,
+		sessions...,
+	)
+}
+
+func liveSnapshotEnvelopeFromProviderAtGeneration(
+	t *testing.T,
+	proof *contract.LeaseProof,
+	generation int64,
+	provider contract.Provider,
+	subjectKey string,
+	sessions ...contract.LiveSessionV1,
+) *contract.Envelope {
+	t.Helper()
+
 	statuses := make([]string, 0, len(sessions))
 	seen := map[string]struct{}{}
 
@@ -360,7 +482,7 @@ func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...
 	}
 
 	if len(statuses) == 0 {
-		statuses = []string{"LIVE", "UPCOMING", "ENDED", "CANCELLED"} //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
+		statuses = []string{testStatusLive, "UPCOMING", "ENDED", "CANCELLED"} //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 	}
 
 	payload, err := contract.MarshalPayloadV1(contract.LiveSnapshotV1{
@@ -375,8 +497,8 @@ func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...
 	}
 
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider: contract.ProviderYouTubeJS, ObservationKind: contract.KindLiveSnapshot, SubjectKey: testChannelID,
-		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
+		Provider: provider, ObservationKind: contract.KindLiveSnapshot, SubjectKey: subjectKey,
+		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: generation,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
 		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
@@ -386,6 +508,32 @@ func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...
 	}
 
 	return &envelope
+}
+
+func publishConsumeLiveFromProvider(
+	ctx context.Context,
+	t *testing.T,
+	repo *Repository,
+	consumer *Consumer,
+	proof *contract.LeaseProof,
+	provider contract.Provider,
+	subjectKey string,
+	sessions ...contract.LiveSessionV1,
+) int64 {
+	t.Helper()
+
+	envelope := liveSnapshotEnvelopeFromProviderAtGeneration(t, proof, 1, provider, subjectKey, sessions...)
+
+	published, err := repo.PublishBatch(ctx, publishInput(envelope))
+	if err != nil {
+		t.Fatalf("publish %s live: %v", provider, err)
+	}
+
+	if err := consumer.Consume(ctx, liveClaimOptions()); err != nil {
+		t.Fatalf("consume %s live: %v", provider, err)
+	}
+
+	return published.Results[0].ObservationID
 }
 
 func publishConsumeLive(
@@ -399,7 +547,22 @@ func publishConsumeLive(
 ) contract.LeaseProof {
 	t.Helper()
 
-	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, proof, sessions...))); err != nil {
+	return publishConsumeLiveAtGeneration(ctx, t, pool, repo, consumer, proof, 1, sessions...)
+}
+
+func publishConsumeLiveAtGeneration(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *Repository,
+	consumer *Consumer,
+	proof *contract.LeaseProof,
+	generation int64,
+	sessions ...contract.LiveSessionV1,
+) contract.LeaseProof {
+	t.Helper()
+
+	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelopeAtGeneration(t, proof, generation, sessions...))); err != nil {
 		t.Fatalf("publish live: %v", err)
 	}
 

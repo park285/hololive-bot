@@ -852,6 +852,14 @@ type SupportedContractSet interface {
 
 이것은 payload drain 계약이며 provider authority/dual writer 호환층이 아니다. consumer가 지원하지 않는 version만 `unsupported_contract` permanent failure로 DLQ 처리한다.
 
+`live_snapshot` generation `2`는 generation `1`의 identity/status/time 필드에 다음 optional metadata를 추가한다.
+
+- `title`
+- `topic_id`
+- `thumbnail_url`
+
+generation `1` decoder는 이 필드를 unknown member로 계속 거부한다. generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. API의 supported set은 두 generation을 동시에 유지하고 collector는 DB의 provider/kind별 current generation이 `2`일 때만 새 필드를 발행한다.
+
 ### 9.2 Collection checkpoint
 
 ```sql
@@ -1476,7 +1484,42 @@ type ContentEvidenceClock struct {
 7. `POSITIVE_ONLY` kind는 `missing_since`도 갱신하지 않는다.
 8. 이미 생성된 notification intent를 list absence만으로 삭제하지 않는다.
 
+`video_list`의 `is_premiere=true`는 이미 확정된 최초공개(Premiere) positive fact이며, 같은 observation finalize transaction에서 기존 live projection에도 병합한다. 이 교차 projection은 다음 경계를 따른다.
+
+- `youtube_live_sessions.is_premiere`가 live alarm이 읽는 단일 canonical classification이다. `NULL`은 미확정, `true`와 `false`는 각각 확정 최초공개와 확정 일반 방송이다.
+- content canonical write와 notification intent를 저장한 뒤 content subject lock에서 같은 channel의 live subject lock 순서로 진입하고, 해당 video ID row만 `FOR UPDATE`로 읽는다. 반대 lock 순서나 별도 writer를 추가하지 않는다.
+- live row가 없으면 `UPCOMING`, content channel/title/scheduled time, observation `received_at`, `is_premiere=true`로 생성하되 live reconciliation head는 만들지 않는다. 조회 뒤 다른 writer가 row를 먼저 생성한 conflict에서는 content write mode가 기존 field를 모두 보존하고 classification만 병합한다.
+- 기존 row는 `is_premiere=NULL`일 때만 `true`로 채운다. status, metadata, scheduled/started/ended time, `live_first_seen_at`, `last_seen_at`과 live head는 content evidence로 변경하지 않는다.
+- 기존 `true`는 replay no-op이고, 기존 `false`와 새 `true`는 기존 값을 유지하면서 `source_reconciliation_conflicts`에 `is_premiere`/`KEEP_EXISTING`을 기록한다. 필드 부재와 `false` content는 live row를 만들거나 변경하지 않는다.
+- live snapshot, schedule merge와 due-finalizer가 사용하는 공용 live-session upsert는 `COALESCE(existing.is_premiere, incoming.is_premiere)`로 최초 non-`NULL`을 보존한다. 추가 YouTube 조회, 새 schema/table, alarm-side join이나 renderer 변경은 이 병합에 포함하지 않는다.
+
 ### 13.3 Live state
+
+#### LIVE 시작 증거 입장 정책
+
+`LIVE` status는 session이 목록에 존재한다는 사실과 실제 방송 시작을 구분해 입장시킨다.
+source-observation adapter는 provider별 upstream 의미를 source-neutral
+`LiveStartConfirmed` fact로 정규화하고 reducer는 provider 이름을 보지 않는다.
+
+- YouTube.js가 직접 확인한 `LIVE` status는 시작 확정 증거다.
+- Holodex `LIVE`는 `start_actual`이 함께 있을 때만 시작 확정 증거다. Holodex API가
+  `status=live`와 nullable `start_actual`을 함께 허용하므로 `start_actual=NULL`인 행은
+  session 존재 증거지만 시작 증거는 아니다.
+- 미확정 `LIVE`는 새 session을 만들 때 `UPCOMING`으로 보존하고 기존 session에서는
+  status, `started_at`, `live_first_seen_at`과 live-positive clock을 전진시키지 않는다.
+  Metadata, `last_seen_at`, presence와 더 최신 positive가 해제하는 end candidate는 정상
+  positive와 같이 보존한다.
+- 이미 `LIVE` 또는 `ENDED`인 session은 미확정 `LIVE` 때문에 역행하지 않는다. 이후
+  YouTube.js `LIVE` 또는 `start_actual`이 있는 Holodex `LIVE`가 오면 기존 단조 전이를
+  그대로 수행한다.
+- 미확정 입장은 `LIVE_START_UNCONFIRMED` application decision으로 기록한다. 새 조회,
+  provider 재시도, timer, schema/table, renderer 분기 또는 alarm-side join을 추가하지 않는다.
+
+2026-08-29 운영 24시간 표본에서 Holodex `LIVE`/`start_actual=NULL`은 28개 video, 83개
+fact였다. 정상 27개는 YouTube.js `LIVE`와 Holodex non-NULL `start_actual`로 모두 후속
+확인됐고 확인 지연은 중앙값 85초, 최대 537초였다. 나머지 1개는 두 provider가
+`UPCOMING`으로 정정한 대기방이었으므로 단일 nullable Holodex 신호를 즉시 시작으로
+승격하는 기존 동작은 실제 오탐과 독립적인 정상 표본 모두에 비추어 안전하지 않다.
 
 상태는 video/session identity별로 단조 전진한다.
 

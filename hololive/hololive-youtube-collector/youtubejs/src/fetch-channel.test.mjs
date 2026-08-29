@@ -28,7 +28,11 @@ test("mapLiveSessions maps current YouTube.js LockupView rows", () => {
           type: "LockupView",
           content_type: "VIDEO",
           content_id: "upcoming-1",
-          content_image: { overlays: [{ badges: [{ text: "Upcoming" }] }] },
+          metadata: { title: "Upcoming title" },
+          content_image: {
+            sources: [{ url: "https://i.ytimg.com/vi/upcoming-1/maxresdefault.jpg", width: 1280, height: 720 }],
+            overlays: [{ badges: [{ text: "Upcoming" }] }],
+          },
         },
         { type: "LockupView", content_type: "VIDEO", content_id: "ended-1", content_image: { overlays: [] } },
       ],
@@ -39,6 +43,8 @@ test("mapLiveSessions maps current YouTube.js LockupView rows", () => {
     ["upcoming-1", "UPCOMING"],
     ["ended-1", "ENDED"],
   ]);
+  assert.equal(sessions[0].title, "Upcoming title");
+  assert.equal(sessions[0].thumbnail_url, "https://i.ytimg.com/vi/upcoming-1/maxresdefault.jpg");
 });
 
 test("fetchChannelFeed fail-closes when live rows lack status", async () => {

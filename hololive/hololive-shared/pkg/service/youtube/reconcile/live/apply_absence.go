@@ -30,14 +30,33 @@ func recordPendingEnd(session *reduceSession, pending *PendingEnd) {
 	session.state.PendingEnds[pending.VideoID] = *pending
 }
 
-func reapplyStoredAbsences(session *reduceSession) {
+func reapplyStoredAbsences(session *reduceSession, seen map[string]SessionFact) {
 	for i := range session.state.AbsenceSlots {
 		slot := &session.state.AbsenceSlots[i]
 		for videoID := range session.state.Sessions {
+			if seenInCurrentSlot(session, slot, videoID, seen) {
+				continue
+			}
+
 			existing := session.state.Sessions[videoID]
 			applyAbsenceToSession(session, &existing, slot)
 		}
 	}
+}
+
+func seenInCurrentSlot(
+	session *reduceSession,
+	slot *AbsenceSlot,
+	videoID string,
+	seen map[string]SessionFact,
+) bool {
+	if !slot.ScheduledFor.Equal(session.evidence.ScheduledFor) {
+		return false
+	}
+
+	_, present := seen[videoID]
+
+	return present
 }
 
 func applyAbsenceToSession(session *reduceSession, existing *SessionState, slot *AbsenceSlot) {

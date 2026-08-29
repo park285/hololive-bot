@@ -24,6 +24,27 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision
 }
 
 func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
+	if err := executeLiveSessionUpsert(ctx, tx, session, false); err != nil {
+		return fmt.Errorf("execute live session upsert: %w", err)
+	}
+
+	return nil
+}
+
+func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
+	if err := executeLiveSessionUpsert(ctx, tx, session, true); err != nil {
+		return fmt.Errorf("execute confirmed Premiere session upsert: %w", err)
+	}
+
+	return nil
+}
+
+func executeLiveSessionUpsert(
+	ctx context.Context,
+	tx dbx.Tx,
+	session *live.SessionState,
+	classificationOnlyOnConflict bool,
+) error {
 	if session.ChannelID == "" {
 		return nil
 	}
@@ -35,11 +56,15 @@ func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionStat
 		session.ChannelID,
 		string(session.Status),
 		session.Title,
+		session.TopicID,
+		session.ThumbnailURL,
 		session.ScheduledStartTime,
 		session.StartedAt,
 		session.EndedAt,
 		session.LiveFirstSeenAt,
 		session.LastSeenAt,
+		session.IsPremiere,
+		classificationOnlyOnConflict,
 	); err != nil {
 		return fmt.Errorf("upsert live session: %w", err)
 	}

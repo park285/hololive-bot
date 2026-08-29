@@ -226,6 +226,8 @@ export interface LiveSessionItem {
   video_id: string;
   channel_id: string;
   status: LiveStatus;
+  title?: string;
+  thumbnail_url?: string;
   scheduled_at?: string;
   started_at?: string;
   ended_at?: string;

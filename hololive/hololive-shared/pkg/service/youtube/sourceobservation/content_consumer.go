@@ -34,15 +34,38 @@ func (c *Consumer) reconcileContent(
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
-	if err := persistContentDecision(ctx, tx, c.writer, claimed, &decision); err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", err)
+	if persistErr := persistContentDecision(ctx, tx, c.writer, claimed, &decision); persistErr != nil {
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
+	}
+
+	premiereApplications, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
+	if err != nil {
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("merge content Premieres: %w", err)
 	}
 
 	if err := saveCommunitySubjectHead(ctx, tx, claimed); err != nil {
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("save community subject head: %w", err)
 	}
 
-	return decision, ReconcileResult{Applications: mapContentApplications(decision.Applications)}, nil
+	applications := mergeContentApplications(mapContentApplications(decision.Applications), premiereApplications)
+
+	return decision, ReconcileResult{Applications: applications}, nil
+}
+
+func mergeContentApplications(contentApplications, premiereApplications []Application) []Application {
+	premiereCount := min(len(premiereApplications), maxFinalizeApplicationCount)
+	contentCount := min(len(contentApplications), maxFinalizeApplicationCount-premiereCount)
+	applications := make([]Application, 0, contentCount+premiereCount)
+
+	if contentCount > 0 {
+		applications = append(applications, contentApplications[:contentCount]...)
+	}
+
+	if premiereCount > 0 {
+		applications = append(applications, premiereApplications[:premiereCount]...)
+	}
+
+	return applications
 }
 
 func evidenceFromObservation(observation *Observation) (content.Evidence, error) {

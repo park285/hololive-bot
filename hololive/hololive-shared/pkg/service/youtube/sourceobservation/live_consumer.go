@@ -51,12 +51,16 @@ func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error
 	facts := make([]live.SessionFact, 0, len(payload.Sessions))
 	for i := range payload.Sessions {
 		facts = append(facts, live.SessionFact{
-			VideoID:     payload.Sessions[i].VideoID,
-			ChannelID:   payload.Sessions[i].ChannelID,
-			Status:      payload.Sessions[i].Status,
-			ScheduledAt: payload.Sessions[i].ScheduledAt,
-			StartedAt:   payload.Sessions[i].StartedAt,
-			EndedAt:     payload.Sessions[i].EndedAt,
+			VideoID:            payload.Sessions[i].VideoID,
+			ChannelID:          payload.Sessions[i].ChannelID,
+			Status:             payload.Sessions[i].Status,
+			Title:              payload.Sessions[i].Title,
+			TopicID:            payload.Sessions[i].TopicID,
+			ThumbnailURL:       payload.Sessions[i].ThumbnailURL,
+			ScheduledAt:        payload.Sessions[i].ScheduledAt,
+			StartedAt:          payload.Sessions[i].StartedAt,
+			EndedAt:            payload.Sessions[i].EndedAt,
+			LiveStartConfirmed: liveStartConfirmed(observation.Provider, &payload.Sessions[i]),
 		})
 	}
 
@@ -74,6 +78,23 @@ func liveEvidenceFromObservation(observation *Observation) (live.Evidence, error
 		Sessions:       facts,
 		Coverage:       payload.Coverage,
 	}, nil
+}
+
+func liveStartConfirmed(provider contract.Provider, session *contract.LiveSessionV1) bool {
+	if session.Status != "LIVE" {
+		return false
+	}
+
+	switch provider {
+	case contract.ProviderYouTubeJS:
+		return true
+	case contract.ProviderHolodex:
+		return session.StartedAt != nil
+	case contract.ProviderHololiveOfficial:
+		return false
+	}
+
+	return false
 }
 
 func videoIDsOf(evidence *live.Evidence) []string {

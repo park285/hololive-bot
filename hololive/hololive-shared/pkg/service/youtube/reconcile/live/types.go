@@ -56,12 +56,16 @@ type EndEvidence struct {
 }
 
 type SessionFact struct {
-	VideoID     string
-	ChannelID   string
-	Status      string
-	ScheduledAt *time.Time
-	StartedAt   *time.Time
-	EndedAt     *time.Time
+	VideoID            string
+	ChannelID          string
+	Status             string
+	Title              string
+	TopicID            string
+	ThumbnailURL       string
+	ScheduledAt        *time.Time
+	StartedAt          *time.Time
+	EndedAt            *time.Time
+	LiveStartConfirmed bool
 }
 
 type SessionState struct {
@@ -69,11 +73,14 @@ type SessionState struct {
 	ChannelID                  string
 	Status                     Status
 	Title                      string
+	TopicID                    string
+	ThumbnailURL               string
 	ScheduledStartTime         *time.Time
 	StartedAt                  *time.Time
 	EndedAt                    *time.Time
 	LiveFirstSeenAt            *time.Time
 	LastSeenAt                 time.Time
+	IsPremiere                 *bool
 	Clock                      LiveEvidenceClock
 	EndReason                  *EndReason
 	FirstAbsenceScheduledFor   *time.Time
@@ -200,6 +207,7 @@ func (s *SessionState) clone() SessionState {
 	cloned.StartedAt = copyOptionalTime(s.StartedAt)
 	cloned.EndedAt = copyOptionalTime(s.EndedAt)
 	cloned.LiveFirstSeenAt = copyOptionalTime(s.LiveFirstSeenAt)
+	cloned.IsPremiere = cloneBool(s.IsPremiere)
 	cloned.Clock.LastUpcomingPositiveAt = copyOptionalTime(s.Clock.LastUpcomingPositiveAt)
 	cloned.Clock.LastUpcomingPositiveSeenAt = copyOptionalTime(s.Clock.LastUpcomingPositiveSeenAt)
 	cloned.Clock.LastLivePositiveAt = copyOptionalTime(s.Clock.LastLivePositiveAt)
@@ -272,4 +280,12 @@ func cloneInt64(value *int64) *int64 {
 	cloned := *value
 
 	return &cloned
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+
+	return new(*value)
 }

@@ -437,11 +437,17 @@ function validateContentItem(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").LiveSessionItem} */
 function validateLiveSession(value) {
   const record = responseRecord(value);
-  assertResponseKeys(record, ["video_id", "channel_id", "status"], ["scheduled_at", "started_at", "ended_at"]);
+  assertResponseKeys(
+    record,
+    ["video_id", "channel_id", "status"],
+    ["title", "thumbnail_url", "scheduled_at", "started_at", "ended_at"],
+  );
   return {
     video_id: nonemptyStringField(record, "video_id"),
     channel_id: nonemptyStringField(record, "channel_id"),
     status: validateLiveStatus(record),
+    ...optionalResponseString(record, "title"),
+    ...optionalResponseString(record, "thumbnail_url"),
     ...optionalRFC3339(record, "scheduled_at"),
     ...optionalRFC3339(record, "started_at"),
     ...optionalRFC3339(record, "ended_at"),

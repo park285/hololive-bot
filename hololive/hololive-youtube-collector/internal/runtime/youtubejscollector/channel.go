@@ -181,7 +181,22 @@ func (r *ChannelRunner) appendLiveEnvelope(
 		return nil
 	}
 
-	live, err := r.envelope(input, contract.KindLiveSnapshot, completeness, continuity, liveSnapshotPayload(input.Spec().SubjectKey, result.LiveSessions))
+	liveGeneration, err := input.Generation(contract.KindLiveSnapshot)
+	if err != nil {
+		return fmt.Errorf("live snapshot generation: %w", err)
+	}
+
+	live, err := r.envelope(
+		input,
+		contract.KindLiveSnapshot,
+		completeness,
+		continuity,
+		liveSnapshotPayload(
+			input.Spec().SubjectKey,
+			result.LiveSessions,
+			liveGeneration == contract.LiveSnapshotMetadataContractGeneration,
+		),
+	)
 	if err != nil {
 		return fmt.Errorf("envelope: %w", err)
 	}

@@ -12,6 +12,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
+const maxFinalizeApplicationCount = 1000
+
 type ReconcileWrite func(context.Context, dbx.Tx, *Observation) (ReconcileResult, error)
 
 func (r *Repository) EnsureClaimBudget(
@@ -179,7 +181,7 @@ func unsupportedFinalizeResult(observation *Observation) ReconcileResult {
 }
 
 func writeFinalizeApplications(ctx context.Context, tx dbx.Tx, observation *Observation, applications []Application) error {
-	if len(applications) > 1000 {
+	if len(applications) > maxFinalizeApplicationCount {
 		return errors.New("finalize source observation: application count exceeds 1000")
 	}
 

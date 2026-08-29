@@ -58,7 +58,7 @@ func applyFacts(session *reduceSession) {
 		applySnapshotAbsence(session, seen)
 	}
 
-	reapplyStoredAbsences(session)
+	reapplyStoredAbsences(session, seen)
 
 	for videoID := range session.state.Sessions {
 		reapplyStoredEnds(session, videoID)

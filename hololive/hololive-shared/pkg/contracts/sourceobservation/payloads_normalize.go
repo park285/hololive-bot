@@ -192,6 +192,10 @@ func normalizeLiveSession(
 		return fmt.Errorf("validate live session identity: %w", err)
 	}
 
+	if err := validateLiveSessionMetadata(session); err != nil {
+		return fmt.Errorf("validate live session metadata: %w", err)
+	}
+
 	if err := normalizeLiveSessionTimes(session); err != nil {
 		return fmt.Errorf("normalize live session times: %w", err)
 	}
@@ -201,6 +205,24 @@ func normalizeLiveSession(
 	}
 
 	seen[session.VideoID] = struct{}{}
+
+	return nil
+}
+
+func validateLiveSessionMetadata(session *LiveSessionV1) error {
+	if err := validateOptionalText("live title", session.Title, 4096); err != nil {
+		return fmt.Errorf("validate optional text: %w", err)
+	}
+
+	if err := validateOptionalText("live topic id", session.TopicID, 512); err != nil {
+		return fmt.Errorf("validate optional text: %w", err)
+	}
+
+	if session.ThumbnailURL != "" {
+		if err := validateHTTPSURL("live thumbnail URL", session.ThumbnailURL); err != nil {
+			return fmt.Errorf("validate HTTPS URL: %w", err)
+		}
+	}
 
 	return nil
 }

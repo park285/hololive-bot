@@ -81,20 +81,28 @@ func videoListPayload(channelID string, items []youtubejs.ContentItem, maxResult
 	}, contract.ShortsListV1{}
 }
 
-func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem) contract.LiveSnapshotV1 {
+func liveSnapshotPayload(channelID string, sessions []youtubejs.LiveSessionItem, includeMetadata bool) contract.LiveSnapshotV1 {
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
 	statuses := make([]string, 0, 4)
 	seenStatus := make(map[string]struct{}, 4)
 
 	for _, session := range sessions {
-		mapped = append(mapped, contract.LiveSessionV1{
+		item := contract.LiveSessionV1{
 			VideoID:     session.VideoID,
 			ChannelID:   channelID,
 			Status:      session.Status,
 			ScheduledAt: session.ScheduledAt,
 			StartedAt:   session.StartedAt,
 			EndedAt:     session.EndedAt,
-		})
+		}
+
+		if includeMetadata {
+			item.Title = session.Title
+			item.ThumbnailURL = session.ThumbnailURL
+		}
+
+		mapped = append(mapped, item)
+
 		if _, ok := seenStatus[session.Status]; ok {
 			continue
 		}
