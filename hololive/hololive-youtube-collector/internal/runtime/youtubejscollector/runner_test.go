@@ -253,6 +253,43 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 	}
 }
 
+func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
+	t.Parallel()
+
+	var result youtubejs.ChannelResult
+
+	loadJSON(t, "channel.json", &result)
+
+	input := youtubeInputWithLiveGeneration(
+		t,
+		"UC_TEST",
+		"youtubejs_channel_live",
+		contract.LiveSnapshotMetadataContractGeneration,
+		contract.KindLiveSnapshot,
+	)
+
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	observations := output.Output().Observations()
+	if len(observations) != 1 {
+		t.Fatalf("live observations = %#v", observations)
+	}
+
+	var payload contract.LiveSnapshotV1
+
+	if err := jsonv2.Unmarshal(observations[0].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(payload.Sessions) != 2 || payload.Sessions[0].Title == "" || payload.Sessions[1].Title == "" ||
+		payload.Sessions[0].ThumbnailURL != "https://i.ytimg.com/vi/live-a/maxresdefault.jpg" {
+		t.Fatalf("live metadata = %#v", payload.Sessions)
+	}
+}
+
 func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -572,9 +609,24 @@ func mustCollectCommunity(t *testing.T, result *youtubejs.CommunityResult) contr
 func youtubeInput(tb testing.TB, subject, jobKind string, kinds ...contract.ObservationKind) *collectutil.RunInput {
 	tb.Helper()
 
+	return youtubeInputWithLiveGeneration(tb, subject, jobKind, 1, kinds...)
+}
+
+func youtubeInputWithLiveGeneration(
+	tb testing.TB,
+	subject string,
+	jobKind string,
+	liveGeneration int64,
+	kinds ...contract.ObservationKind,
+) *collectutil.RunInput {
+	tb.Helper()
+
 	generations := make(map[contract.ObservationKind]int64, len(kinds))
 	for _, kind := range kinds {
 		generations[kind] = 1
+		if kind == contract.KindLiveSnapshot {
+			generations[kind] = liveGeneration
+		}
 	}
 
 	spec := joblease.JobSpec{

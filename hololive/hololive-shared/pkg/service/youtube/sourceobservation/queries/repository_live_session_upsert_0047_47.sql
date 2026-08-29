@@ -1,6 +1,7 @@
 INSERT INTO youtube_live_sessions (
-    video_id, channel_id, status, title, scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    video_id, channel_id, status, title, topic_id, thumbnail_url,
+    scheduled_start_time, started_at, ended_at, live_first_seen_at, last_seen_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (video_id) DO UPDATE SET
     status = CASE
         WHEN youtube_live_sessions.status = 'ENDED' THEN youtube_live_sessions.status
@@ -10,6 +11,14 @@ ON CONFLICT (video_id) DO UPDATE SET
     title = CASE
         WHEN excluded.title = '' THEN youtube_live_sessions.title
         ELSE excluded.title
+    END,
+    topic_id = CASE
+        WHEN excluded.topic_id = '' THEN youtube_live_sessions.topic_id
+        ELSE excluded.topic_id
+    END,
+    thumbnail_url = CASE
+        WHEN excluded.thumbnail_url = '' THEN youtube_live_sessions.thumbnail_url
+        ELSE excluded.thumbnail_url
     END,
     scheduled_start_time = COALESCE(excluded.scheduled_start_time, youtube_live_sessions.scheduled_start_time),
     started_at = COALESCE(youtube_live_sessions.started_at, excluded.started_at),
@@ -25,6 +34,14 @@ WHERE
     OR (
         excluded.title <> ''
         AND excluded.title IS DISTINCT FROM youtube_live_sessions.title
+    )
+    OR (
+        excluded.topic_id <> ''
+        AND excluded.topic_id IS DISTINCT FROM youtube_live_sessions.topic_id
+    )
+    OR (
+        excluded.thumbnail_url <> ''
+        AND excluded.thumbnail_url IS DISTINCT FROM youtube_live_sessions.thumbnail_url
     )
     OR excluded.scheduled_start_time IS DISTINCT FROM youtube_live_sessions.scheduled_start_time
     OR (youtube_live_sessions.started_at IS NULL AND excluded.started_at IS NOT NULL)

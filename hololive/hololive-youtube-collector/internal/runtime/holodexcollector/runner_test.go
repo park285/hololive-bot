@@ -57,6 +57,49 @@ func TestRunnerBuildsOneBatchFromLiveFixture(t *testing.T) {
 	}
 }
 
+func TestRunnerPublishesLiveMetadataWithGenerationTwo(t *testing.T) {
+	t.Parallel()
+
+	input := holodexInputWithLiveGeneration(
+		t,
+		"holodex_live",
+		[]string{channelA, channelB},
+		contract.LiveSnapshotMetadataContractGeneration,
+	)
+
+	result, err := NewLiveRunner(&staticFetcher{body: testdata(t, "live.json")}).Collect(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, envelope := range result.Output().Observations() {
+		if envelope.ObservationKind != contract.KindLiveSnapshot || envelope.SubjectKey != channelA {
+			continue
+		}
+
+		var payload contract.LiveSnapshotV1
+
+		if err := jsonv2.Unmarshal(envelope.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+
+		for i := range payload.Sessions {
+			if payload.Sessions[i].VideoID != "vidLive01" {
+				continue
+			}
+
+			if payload.Sessions[i].Title != "Live now" || payload.Sessions[i].TopicID != "minecraft" ||
+				payload.Sessions[i].ThumbnailURL != "https://i.ytimg.com/vi/vidLive01/maxresdefault.jpg" {
+				t.Fatalf("live metadata = %#v", payload.Sessions[i])
+			}
+
+			return
+		}
+	}
+
+	t.Fatal("generation two live metadata was not published")
+}
+
 func TestRunnerSameSlotRetryKeepsViewerSampleIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -414,6 +457,17 @@ func holodexInput(tb testing.TB, requested []string) *collectutil.RunInput {
 func holodexInputFor(tb testing.TB, jobKind string, requested []string) *collectutil.RunInput {
 	tb.Helper()
 
+	return holodexInputWithLiveGeneration(tb, jobKind, requested, 1)
+}
+
+func holodexInputWithLiveGeneration(
+	tb testing.TB,
+	jobKind string,
+	requested []string,
+	liveGeneration int64,
+) *collectutil.RunInput {
+	tb.Helper()
+
 	enabled := map[contract.ObservationKind][]string{
 		contract.KindLiveSnapshot:   requested,
 		contract.KindChannelStats:   requested,
@@ -438,6 +492,9 @@ func holodexInputFor(tb testing.TB, jobKind string, requested []string) *collect
 
 	for _, kind := range job.Emissions() {
 		generations[kind] = 1
+		if kind == contract.KindLiveSnapshot {
+			generations[kind] = liveGeneration
+		}
 	}
 
 	snapshot, err := collectutil.NewContractSnapshot(job.Emissions(), generations)

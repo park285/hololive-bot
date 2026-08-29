@@ -139,6 +139,7 @@ func PrepareEnvelope(envelope Envelope) (Envelope, error) {
 		envelope.ObservationKind,
 		envelope.SubjectKey,
 		envelope.Completeness,
+		envelope.ContractGeneration,
 		envelope.Payload,
 	)
 	if err != nil {
@@ -289,7 +290,13 @@ func validateEnvelopeSHA256s(e *Envelope) error {
 }
 
 func (e *Envelope) verifyCanonicalPayload() ([]byte, error) {
-	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(e.ObservationKind, e.SubjectKey, e.Completeness, e.Payload)
+	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(
+		e.ObservationKind,
+		e.SubjectKey,
+		e.Completeness,
+		e.ContractGeneration,
+		e.Payload,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("validate source observation envelope: %w", err)
 	}

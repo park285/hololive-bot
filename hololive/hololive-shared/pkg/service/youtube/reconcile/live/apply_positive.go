@@ -93,6 +93,9 @@ func newSession(fact *SessionFact, status Status, evidence *Evidence) SessionSta
 		VideoID:            fact.VideoID,
 		ChannelID:          fact.ChannelID,
 		Status:             status,
+		Title:              fact.Title,
+		TopicID:            fact.TopicID,
+		ThumbnailURL:       fact.ThumbnailURL,
 		ScheduledStartTime: copyOptionalTime(fact.ScheduledAt),
 		LastSeenAt:         evidence.ReceivedAt.UTC(),
 		Present:            true,
@@ -104,6 +107,18 @@ func mergePositiveFields(existing *SessionState, fact *SessionFact, evidence *Ev
 
 	if fact.ChannelID != "" {
 		merged.ChannelID = fact.ChannelID
+	}
+
+	if fact.Title != "" {
+		merged.Title = fact.Title
+	}
+
+	if fact.TopicID != "" {
+		merged.TopicID = fact.TopicID
+	}
+
+	if fact.ThumbnailURL != "" {
+		merged.ThumbnailURL = fact.ThumbnailURL
 	}
 
 	if fact.ScheduledAt != nil {

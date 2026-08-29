@@ -29,6 +29,60 @@ func TestLiveConsumerUpcomingLiveEndedPersistsOnce(t *testing.T) {
 	assertTableCount(t, pool, "youtube_live_sessions", 1)
 }
 
+func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *testing.T) {
+	pool, repo, consumer, proof := startLivePersist(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE observation_contract_generations
+		SET current_generation = $1
+		WHERE provider = 'youtubejs' AND observation_kind = 'live_snapshot'
+	`, contract.LiveSnapshotMetadataContractGeneration); err != nil {
+		t.Fatalf("bump live snapshot contract: %v", err)
+	}
+
+	metadata := liveSession(testVideoID, "UPCOMING")
+
+	metadata.Title = "Minecraft live"
+	metadata.TopicID = "minecraft"
+	metadata.ThumbnailURL = "https://i.ytimg.com/vi/vid-a/maxresdefault.jpg"
+
+	proof = publishConsumeLiveAtGeneration(
+		ctx,
+		t,
+		pool,
+		repo,
+		consumer,
+		&proof,
+		contract.LiveSnapshotMetadataContractGeneration,
+		metadata,
+	)
+	publishConsumeLiveAtGeneration(
+		ctx,
+		t,
+		pool,
+		repo,
+		consumer,
+		&proof,
+		contract.LiveSnapshotMetadataContractGeneration,
+		liveSession(testVideoID, "LIVE"),
+	)
+
+	var title, topicID, thumbnailURL string
+
+	if err := pool.QueryRow(ctx, `
+		SELECT title, topic_id, thumbnail_url
+		FROM youtube_live_sessions
+		WHERE video_id = $1
+	`, testVideoID).Scan(&title, &topicID, &thumbnailURL); err != nil {
+		t.Fatalf("load live metadata: %v", err)
+	}
+
+	if title != metadata.Title || topicID != metadata.TopicID || thumbnailURL != metadata.ThumbnailURL {
+		t.Fatalf("persisted metadata = {%q, %q, %q}", title, topicID, thumbnailURL)
+	}
+}
+
 func TestLiveConsumerDoesNotRewriteUntouchedSession(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -347,6 +401,17 @@ func liveSession(videoID, status string) contract.LiveSessionV1 {
 func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...contract.LiveSessionV1) *contract.Envelope {
 	t.Helper()
 
+	return liveSnapshotEnvelopeAtGeneration(t, proof, 1, sessions...)
+}
+
+func liveSnapshotEnvelopeAtGeneration(
+	t *testing.T,
+	proof *contract.LeaseProof,
+	generation int64,
+	sessions ...contract.LiveSessionV1,
+) *contract.Envelope {
+	t.Helper()
+
 	statuses := make([]string, 0, len(sessions))
 	seen := map[string]struct{}{}
 
@@ -376,7 +441,7 @@ func liveSnapshotEnvelope(t *testing.T, proof *contract.LeaseProof, sessions ...
 
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider: contract.ProviderYouTubeJS, ObservationKind: contract.KindLiveSnapshot, SubjectKey: testChannelID,
-		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: 1,
+		SchemaVersion: contract.SchemaVersionV1, ContractGeneration: generation,
 		ScheduledFor: proof.ScheduledFor, ObservedAt: proof.ScheduledFor.Add(time.Second),
 		Completeness: contract.CompletenessComplete, Continuity: contract.ContinuityContiguous,
 		Payload: payload, CollectorInstance: proof.OwnerInstance, Lease: *proof,
@@ -399,7 +464,22 @@ func publishConsumeLive(
 ) contract.LeaseProof {
 	t.Helper()
 
-	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, proof, sessions...))); err != nil {
+	return publishConsumeLiveAtGeneration(ctx, t, pool, repo, consumer, proof, 1, sessions...)
+}
+
+func publishConsumeLiveAtGeneration(
+	ctx context.Context,
+	t *testing.T,
+	pool *pgxpool.Pool,
+	repo *Repository,
+	consumer *Consumer,
+	proof *contract.LeaseProof,
+	generation int64,
+	sessions ...contract.LiveSessionV1,
+) contract.LeaseProof {
+	t.Helper()
+
+	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelopeAtGeneration(t, proof, generation, sessions...))); err != nil {
 		t.Fatalf("publish live: %v", err)
 	}
 

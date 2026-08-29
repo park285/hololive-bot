@@ -48,6 +48,10 @@ func TestClassifyBroadcastObservedTopics(t *testing.T) {
 		{name: "observed other topic", topic: "Vlog", want: broadcasttype.Other},
 		{name: "observed outfit reveal topic", topic: "Outfit_Reveal", want: broadcasttype.Event},
 		{name: "observed instrument topic", topic: "Musical_Instrument", want: broadcasttype.Singing},
+		{name: "observed puyo topic", topic: "Puyo_Puyo_Tetris", want: broadcasttype.Game},
+		{name: "observed study topic", topic: "Co-Working_&_Studying", want: broadcasttype.Other},
+		{name: "observed hololive dreams topic", topic: "Hololive_Dreams", want: broadcasttype.Event},
+		{name: "observed horse racing topic", topic: "Horse_Racing", want: broadcasttype.HorseRacing},
 		{name: "ambiguous announce topic falls through to title", topic: "announce", title: "【緊急ゲリラ】ガチャガチャ屋さんの店長になりました【Gacha Capsule Shop Simulator - Akihabara】", want: broadcasttype.Game},
 		{name: "ambiguous drawing topic falls through to title", topic: "drawing", title: "【めっちゃカメレオン】自分を塗って景色に溶け込むお絵描きかくれんぼゲーム!", want: broadcasttype.Game},
 		{name: "unknown topic falls through to title", topic: "endurance", title: "【めっちゃカメレオン】参加型", want: broadcasttype.Game},
@@ -91,8 +95,12 @@ func TestClassifyBroadcastTitleFallbackPriorities(t *testing.T) {
 
 	runBroadcastTitleFallbackCases(t, []broadcastTitleFallbackCase{
 		{name: "membership has access priority", title: "【Members Only】 yuru camp △ s1 ep.7-12 ゆるキャン", want: broadcasttype.Membership},
+		{name: "apostrophe membership marker", title: "【member's only】we do be hanging out", want: broadcasttype.Membership},
 		{name: "watchalong beats asmr", title: "【同時視聴】脳がとろける♡「ゼットンの甘々ASMR」みんなで観よ♩", want: broadcasttype.Watchalong},
+		{name: "sports co-watch support phrase", title: "【MLBxhololive】ドジャース戦をGamedayで一緒に応援しよう！", want: broadcasttype.Watchalong},
 		{name: "3d karaoke is singing", title: "【 3Dカラオケ】お子様バッテリー1周年記念にカラオケき~たよ", want: broadcasttype.Singing},
+		{name: "multilingual singing phrase", title: "🎶歌うよ！I'm gonna sing! 노래할게!🎤", want: broadcasttype.Singing},
+		{name: "outfit introduction is event", title: "【衣装紹介】自分の衣装を見ていこう♪", want: broadcasttype.Event},
 		{name: "horse racing race name", title: "【 大阪杯 】強豪揃いの大阪杯…‼的中したいぜ！！！！！！！【鷹嶺ルイ/ホロライブ】", want: broadcasttype.HorseRacing},
 		{name: "horse racing challenge event", title: "【ホロライブ 的中チャレンジバトル】DAY1チームトップバッター行きます‼ #ホロ的中バトル", want: broadcasttype.HorseRacing},
 		{name: "jra g1 full race name", title: "【有馬記念】今年最後のG1をみんなで予想する", want: broadcasttype.HorseRacing},
@@ -153,6 +161,9 @@ func TestClassifyBroadcastTitleFallbackGameMarkers(t *testing.T) {
 		{name: "gta with digit keeps game keyword", title: "【GTA5│NEW TOWN】Day2 街ブラ散歩", want: broadcasttype.Game},
 		{name: "ascii keyword adjacent to kana matches", title: "【PUBGモバイル】PUBGモバイルに余が参戦・・・！？", want: broadcasttype.Game},
 		{name: "ascii keyword after kana matches", title: "おひさしR.E.P.O", want: broadcasttype.Game},
+		{name: "post-cutover garden game title", title: "#7【ほの暮しの庭】最後の神器を集めにいこう!", want: broadcasttype.Game},
+		{name: "post-cutover baseball game project", title: "【#ホロ甲2026】育成スタート！1年目の春", want: broadcasttype.Game},
+		{name: "post-cutover collab game title", title: "【Moo Who?】動物声真似でかくれんぼ！？", want: broadcasttype.Game},
 	})
 }
 
@@ -175,6 +186,9 @@ func TestClassifyBroadcastTitleFallbackFormatKeywords(t *testing.T) {
 		{name: "fes aftertalk is talk", title: "7th fesお疲れ様でした!! アフタートーク🎤✨", want: broadcasttype.Talk},
 		{name: "instrument performance is singing", title: "ウクレレを弾くだけの配信", want: broadcasttype.Singing},
 		{name: "sponsored tag last resort is other", title: "【DISM】肌のキャラ対してる！？メディスキンケア！ #ad", want: broadcasttype.Other},
+		{name: "study room series is other", title: "【らでん自習室】一緒に集中して勉強しよう", want: broadcasttype.Other},
+		{name: "morning stretch is other", title: "【毎朝これ!】一緒にストレッチしよう", want: broadcasttype.Other},
+		{name: "variety series is other", title: "【ポルカの伝説】ちょっと変わった趣味ってあるやん？", want: broadcasttype.Other},
 		{name: "announcement last resort is news", title: "【告知】あのグッズ、復刻します！！！", want: broadcasttype.News},
 		{name: "appended notice keeps event classification", title: "【告知あり】ドキドキ凸待ちしてみる…！", want: broadcasttype.Event},
 		{name: "appended notice in body is not news", title: "【ぐだぐだ】今後について、告知ありです", want: broadcasttype.Unknown},

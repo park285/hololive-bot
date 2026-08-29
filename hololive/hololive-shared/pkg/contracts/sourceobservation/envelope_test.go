@@ -315,6 +315,52 @@ func TestTypedPayloadTimesCanonicalizeToUTC(t *testing.T) {
 	}
 }
 
+func TestLiveSnapshotMetadataRequiresGenerationTwo(t *testing.T) {
+	payload := mustMarshalPayload(t, LiveSnapshotV1{
+		Sessions: []LiveSessionV1{{
+			VideoID:      testVideoID,
+			ChannelID:    testChannelID,
+			Status:       testStatusLive,
+			Title:        "Minecraft live",
+			TopicID:      "minecraft",
+			ThumbnailURL: "https://i.ytimg.com/vi/video-a/maxresdefault.jpg",
+		}},
+		Coverage: GlobalChannelCoverageV1{
+			RequestedChannelIDs: []string{testChannelID},
+			Filters:             LiveFiltersV1{Statuses: []string{testStatusLive}},
+		},
+	})
+	envelope := newPaginatedEnvelope(t, KindLiveSnapshot, payload, CompletenessComplete)
+
+	if _, err := PrepareEnvelope(envelope); err == nil {
+		t.Fatal("generation one must reject live metadata fields")
+	}
+
+	envelope.ContractGeneration = LiveSnapshotMetadataContractGeneration
+
+	prepared, err := PrepareEnvelope(envelope)
+	if err != nil {
+		t.Fatalf("prepare generation two live metadata: %v", err)
+	}
+
+	var decoded LiveSnapshotV1
+
+	if err := decodeStrictJSON(prepared.Payload, &decoded); err != nil {
+		t.Fatalf("decode generation two live metadata: %v", err)
+	}
+
+	if len(decoded.Sessions) != 1 || decoded.Sessions[0].Title != "Minecraft live" ||
+		decoded.Sessions[0].TopicID != "minecraft" ||
+		decoded.Sessions[0].ThumbnailURL != "https://i.ytimg.com/vi/video-a/maxresdefault.jpg" {
+		t.Fatalf("generation two metadata = %#v", decoded.Sessions)
+	}
+
+	envelope.ContractGeneration++
+	if _, err := PrepareEnvelope(envelope); err == nil {
+		t.Fatal("unknown live snapshot generation must be rejected")
+	}
+}
+
 func TestTypedPayloadRejectsNonNilZeroTimes(t *testing.T) {
 	zero := time.Time{}
 	tests := []struct {

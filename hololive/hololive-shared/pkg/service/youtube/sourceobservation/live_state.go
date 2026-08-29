@@ -84,6 +84,7 @@ func scanLiveSession(rows pgx.Rows) (live.SessionState, error) {
 
 	if err := rows.Scan(
 		&session.VideoID, &session.ChannelID, &status, &session.Title,
+		&session.TopicID, &session.ThumbnailURL,
 		&session.ScheduledStartTime, &session.StartedAt, &session.EndedAt,
 		&session.LiveFirstSeenAt, &session.LastSeenAt,
 	); err != nil {

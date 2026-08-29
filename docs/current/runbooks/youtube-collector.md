@@ -46,6 +46,17 @@ Scheduler는 `COMPLETE` output을 `PublishBatch`로 terminal complete하고, `PA
 
 Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다. fatal은 first-wins이며 runner panic, result invariant, cleanup timeout, impossible queue/lease state만 process fatal입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다.
 
+## Live metadata contract activation
+
+`live_snapshot` generation `1`은 identity/status/time만 허용하고 generation `2`는 optional `title`, `topic_id`, `thumbnail_url`을 추가합니다. 활성화는 다음 순서를 지킵니다.
+
+1. generation `1`과 `2`를 모두 지원하는 `hololive-api`를 먼저 배포하고 readiness 및 live consumer 처리를 확인합니다.
+2. 승인된 internal operation으로 Holodex와 YouTube.js의 `live_snapshot` current generation을 `2`로 전환합니다.
+3. 새 collector fleet을 배포하고 각 slot의 readiness, generation `2` observation 발행, canonical metadata 저장을 확인합니다.
+4. generation `1` queue가 비고 replay 필요가 없음을 확인할 때까지 API의 generation `1` decoder를 유지합니다.
+
+DB generation 전환은 일반 collector 배포에 포함하지 않으며 별도 운영 승인이 필요합니다. API-first 순서를 지키지 않으면 새 payload가 구 API의 strict decoder에서 거부됩니다.
+
 ## Key environment variables
 
 | Env | Purpose | Required |

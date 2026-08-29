@@ -19,6 +19,8 @@ const officialScheduleSubject = "global:hololive-schedule"
 type liveRow struct {
 	ID             string         `json:"id"`
 	Title          string         `json:"title"`
+	TopicID        string         `json:"topic_id"`
+	Thumbnail      string         `json:"thumbnail"`
 	ChannelID      string         `json:"channel_id"`
 	Status         string         `json:"status"`
 	StartScheduled string         `json:"start_scheduled"`
@@ -281,7 +283,7 @@ func httpsURL(raw string) (string, bool) {
 	return parsed.String(), true
 }
 
-func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV1 {
+func livePayload(channelID string, sessions []parsedLive, includeMetadata bool) contract.LiveSnapshotV1 {
 	mapped := make([]contract.LiveSessionV1, 0, len(sessions))
 	statuses := make([]string, 0, 4)
 	seen := make(map[string]struct{}, 4)
@@ -289,14 +291,22 @@ func livePayload(channelID string, sessions []parsedLive) contract.LiveSnapshotV
 	for i := range sessions {
 		session := &sessions[i]
 
-		mapped = append(mapped, contract.LiveSessionV1{
+		item := contract.LiveSessionV1{
 			VideoID:     session.row.ID,
 			ChannelID:   channelID,
 			Status:      session.status,
 			ScheduledAt: session.scheduled,
 			StartedAt:   session.started,
 			EndedAt:     session.ended,
-		})
+		}
+
+		if includeMetadata {
+			item.Title = strings.TrimSpace(session.row.Title)
+			item.TopicID = strings.TrimSpace(session.row.TopicID)
+			item.ThumbnailURL, _ = httpsURL(session.row.Thumbnail)
+		}
+
+		mapped = append(mapped, item)
 
 		if _, ok := seen[session.status]; ok {
 			continue

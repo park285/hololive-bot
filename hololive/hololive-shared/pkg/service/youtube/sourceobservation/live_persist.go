@@ -35,6 +35,8 @@ func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionStat
 		session.ChannelID,
 		string(session.Status),
 		session.Title,
+		session.TopicID,
+		session.ThumbnailURL,
 		session.ScheduledStartTime,
 		session.StartedAt,
 		session.EndedAt,

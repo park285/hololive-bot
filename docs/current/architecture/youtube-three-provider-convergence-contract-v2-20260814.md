@@ -852,6 +852,14 @@ type SupportedContractSet interface {
 
 이것은 payload drain 계약이며 provider authority/dual writer 호환층이 아니다. consumer가 지원하지 않는 version만 `unsupported_contract` permanent failure로 DLQ 처리한다.
 
+`live_snapshot` generation `2`는 generation `1`의 identity/status/time 필드에 다음 optional metadata를 추가한다.
+
+- `title`
+- `topic_id`
+- `thumbnail_url`
+
+generation `1` decoder는 이 필드를 unknown member로 계속 거부한다. generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. API의 supported set은 두 generation을 동시에 유지하고 collector는 DB의 provider/kind별 current generation이 `2`일 때만 새 필드를 발행한다.
+
 ### 9.2 Collection checkpoint
 
 ```sql

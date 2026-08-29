@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+const LiveSnapshotMetadataContractGeneration int64 = 2
+
 type VideoListItemV1 struct {
 	VideoID      string     `json:"video_id"`
 	ChannelID    string     `json:"channel_id"`
@@ -26,12 +28,15 @@ type ShortsListV1 struct {
 }
 
 type LiveSessionV1 struct {
-	VideoID     string     `json:"video_id"`
-	ChannelID   string     `json:"channel_id"`
-	Status      string     `json:"status"`
-	ScheduledAt *time.Time `json:"scheduled_at,omitempty"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	EndedAt     *time.Time `json:"ended_at,omitempty"`
+	VideoID      string     `json:"video_id"`
+	ChannelID    string     `json:"channel_id"`
+	Status       string     `json:"status"`
+	Title        string     `json:"title,omitempty"`
+	TopicID      string     `json:"topic_id,omitempty"`
+	ThumbnailURL string     `json:"thumbnail_url,omitempty"`
+	ScheduledAt  *time.Time `json:"scheduled_at,omitempty"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	EndedAt      *time.Time `json:"ended_at,omitempty"`
 }
 
 type LiveSnapshotV1 struct {
