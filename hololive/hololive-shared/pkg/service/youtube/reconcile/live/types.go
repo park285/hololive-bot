@@ -56,15 +56,16 @@ type EndEvidence struct {
 }
 
 type SessionFact struct {
-	VideoID      string
-	ChannelID    string
-	Status       string
-	Title        string
-	TopicID      string
-	ThumbnailURL string
-	ScheduledAt  *time.Time
-	StartedAt    *time.Time
-	EndedAt      *time.Time
+	VideoID            string
+	ChannelID          string
+	Status             string
+	Title              string
+	TopicID            string
+	ThumbnailURL       string
+	ScheduledAt        *time.Time
+	StartedAt          *time.Time
+	EndedAt            *time.Time
+	LiveStartConfirmed bool
 }
 
 type SessionState struct {

@@ -39,6 +39,12 @@ func applyLivePositive(session *reduceSession, fact *SessionFact) {
 		return
 	}
 
+	if !fact.LiveStartConfirmed {
+		applyUnconfirmedLive(session, fact, &existing, ok)
+
+		return
+	}
+
 	if !ok {
 		created := newLiveSession(fact, session.evidence)
 		storeAppliedSession(session, fact.VideoID, &created)
@@ -55,6 +61,31 @@ func applyLivePositive(session *reduceSession, fact *SessionFact) {
 
 	merged := mergeLiveSession(&existing, fact, session.evidence)
 	storePositiveAfterMerge(session, fact.VideoID, &merged)
+}
+
+func applyUnconfirmedLive(session *reduceSession, fact *SessionFact, existing *SessionState, ok bool) {
+	if !ok {
+		created := newSession(fact, StatusUpcoming, session.evidence)
+		storeUnconfirmedLive(session, fact.VideoID, &created)
+
+		return
+	}
+
+	merged := mergePositiveFields(existing, fact, session.evidence)
+
+	merged.StartedAt = copyOptionalTime(existing.StartedAt)
+	storeUnconfirmedLive(session, fact.VideoID, &merged)
+}
+
+func storeUnconfirmedLive(session *reduceSession, videoID string, state *SessionState) {
+	if shouldClearEnd(state, session.evidence.EffectiveAt) {
+		clearEndCandidate(state)
+		delete(session.state.PendingEnds, videoID)
+	}
+
+	session.state.Sessions[videoID] = *state
+	markDirty(session, videoID)
+	recordApplication(session, videoID, "LIVE_START_UNCONFIRMED")
 }
 
 func newLiveSession(fact *SessionFact, evidence *Evidence) SessionState {

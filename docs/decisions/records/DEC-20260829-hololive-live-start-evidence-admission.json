@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260829-hololive-live-start-evidence-admission",
+  "title": "Holodex LIVE는 start_actual이 있을 때만 방송 시작 증거로 입장시킨다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-29",
+  "summary": "source-observation adapter는 YouTube.js의 직접 LIVE status와 start_actual이 있는 Holodex LIVE만 source-neutral LiveStartConfirmed fact로 만든다. Holodex LIVE/start_actual=NULL은 session presence와 metadata freshness만 보존하고 UPCOMING을 LIVE로 전진시키지 않으며 LIVE_START_UNCONFIRMED application으로 기록한다. 2026-08-29 운영 24시간 표본 28개 중 정상 27개는 두 확정 신호로 후속 확인됐고 유일한 미확정 1개는 UPCOMING으로 정정된 실제 오탐이었다.",
+  "sources": [
+    "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#LIVE 시작 증거 입장 정책"
+  ],
+  "evidence": [
+    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/live_start_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_start_admission_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_start_persist_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply_absence.go",
+    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply_positive.go",
+    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/types.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_consumer.go"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "Holodex가 status=live와 start_actual의 결합을 non-null 보장으로 문서화하거나, confirmed 시작 지연 최대 537초가 제품 SLO를 위반하는 독립 운영 증거가 생길 때"
+  }
+}

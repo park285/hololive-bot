@@ -10,6 +10,11 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
+const (
+	testLiveStatus = "LIVE"
+	testVideoID    = "vid-a"
+)
+
 func emptyState() *State {
 	return &State{Sessions: map[string]SessionState{}, PendingEnds: map[string]PendingEnd{}}
 }
@@ -17,12 +22,15 @@ func emptyState() *State {
 func channelCoverage() contract.GlobalChannelCoverageV1 {
 	return contract.GlobalChannelCoverageV1{
 		RequestedChannelIDs: []string{"UC_TEST"},
-		Filters:             contract.LiveFiltersV1{Statuses: []string{"UPCOMING", "LIVE", "ENDED", "CANCELLED"}}, //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
+		Filters:             contract.LiveFiltersV1{Statuses: []string{"UPCOMING", testLiveStatus, "ENDED", "CANCELLED"}}, //nolint:misspell // YouTube 방송 상태 계약값이 영국식 CANCELLED라, canceled로 바꾸면 상태 판정이 어긋난다.
 	}
 }
 
 func sessionFact(status string) SessionFact {
-	return SessionFact{VideoID: "vid-a", ChannelID: "UC_TEST", Status: status}
+	return SessionFact{
+		VideoID: testVideoID, ChannelID: "UC_TEST", Status: status,
+		LiveStartConfirmed: status == testLiveStatus,
+	}
 }
 
 func liveEvidence(id int64, at time.Time, completeness contract.Completeness, continuity contract.Continuity, facts ...SessionFact) Evidence {
@@ -46,7 +54,7 @@ func upcomingA() Evidence {
 }
 
 func liveA() Evidence {
-	return liveEvidence(2, time.Date(2026, time.August, 14, 2, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("LIVE"))
+	return liveEvidence(2, time.Date(2026, time.August, 14, 2, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact(testLiveStatus))
 }
 
 func endA() Evidence {
@@ -83,11 +91,11 @@ func gapAbsence() Evidence {
 }
 
 func lateLiveA() Evidence {
-	return liveEvidence(9, time.Date(2026, time.August, 14, 5, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("LIVE"))
+	return liveEvidence(9, time.Date(2026, time.August, 14, 5, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact(testLiveStatus))
 }
 
 func sameTimeLiveA() Evidence {
-	return liveEvidence(10, time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact("LIVE"))
+	return liveEvidence(10, time.Date(2026, time.August, 14, 3, 0, 0, 0, time.UTC), contract.CompletenessComplete, contract.ContinuityContiguous, sessionFact(testLiveStatus))
 }
 
 func mustReduceAll(t *testing.T, state *State, evidence []Evidence, grace time.Duration) *Decision {
@@ -179,7 +187,7 @@ func stateFromDecision(previous *State, decision *Decision) State {
 
 func sessionOf(decision *Decision) SessionState {
 	for i := range decision.Sessions {
-		if decision.Sessions[i].VideoID == "vid-a" {
+		if decision.Sessions[i].VideoID == testVideoID {
 			return decision.Sessions[i]
 		}
 	}

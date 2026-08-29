@@ -70,7 +70,7 @@ func TestReduceSparsePositivePreservesLiveMetadata(t *testing.T) {
 		time.Date(2026, time.August, 14, 2, 0, 0, 0, time.UTC),
 		contract.CompletenessComplete,
 		contract.ContinuityContiguous,
-		sessionFact("LIVE"),
+		sessionFact(testLiveStatus),
 	)
 
 	session := sessionOf(mustReduceAll(t, emptyState(), []Evidence{first, second}, 0))
@@ -199,7 +199,7 @@ func TestReduceLiveOnlySnapshotDoesNotAbsentUpcoming(t *testing.T) {
 
 	liveOnly := firstAbsence()
 
-	liveOnly.Coverage.Filters.Statuses = []string{"LIVE"}
+	liveOnly.Coverage.Filters.Statuses = []string{testLiveStatus}
 
 	got := mustReduceAll(t, emptyState(), []Evidence{upcomingA(), liveOnly}, 0)
 

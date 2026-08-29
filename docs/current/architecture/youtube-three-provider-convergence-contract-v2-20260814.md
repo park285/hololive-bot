@@ -1495,6 +1495,32 @@ type ContentEvidenceClock struct {
 
 ### 13.3 Live state
 
+#### LIVE 시작 증거 입장 정책
+
+`LIVE` status는 session이 목록에 존재한다는 사실과 실제 방송 시작을 구분해 입장시킨다.
+source-observation adapter는 provider별 upstream 의미를 source-neutral
+`LiveStartConfirmed` fact로 정규화하고 reducer는 provider 이름을 보지 않는다.
+
+- YouTube.js가 직접 확인한 `LIVE` status는 시작 확정 증거다.
+- Holodex `LIVE`는 `start_actual`이 함께 있을 때만 시작 확정 증거다. Holodex API가
+  `status=live`와 nullable `start_actual`을 함께 허용하므로 `start_actual=NULL`인 행은
+  session 존재 증거지만 시작 증거는 아니다.
+- 미확정 `LIVE`는 새 session을 만들 때 `UPCOMING`으로 보존하고 기존 session에서는
+  status, `started_at`, `live_first_seen_at`과 live-positive clock을 전진시키지 않는다.
+  Metadata, `last_seen_at`, presence와 더 최신 positive가 해제하는 end candidate는 정상
+  positive와 같이 보존한다.
+- 이미 `LIVE` 또는 `ENDED`인 session은 미확정 `LIVE` 때문에 역행하지 않는다. 이후
+  YouTube.js `LIVE` 또는 `start_actual`이 있는 Holodex `LIVE`가 오면 기존 단조 전이를
+  그대로 수행한다.
+- 미확정 입장은 `LIVE_START_UNCONFIRMED` application decision으로 기록한다. 새 조회,
+  provider 재시도, timer, schema/table, renderer 분기 또는 alarm-side join을 추가하지 않는다.
+
+2026-08-29 운영 24시간 표본에서 Holodex `LIVE`/`start_actual=NULL`은 28개 video, 83개
+fact였다. 정상 27개는 YouTube.js `LIVE`와 Holodex non-NULL `start_actual`로 모두 후속
+확인됐고 확인 지연은 중앙값 85초, 최대 537초였다. 나머지 1개는 두 provider가
+`UPCOMING`으로 정정한 대기방이었으므로 단일 nullable Holodex 신호를 즉시 시작으로
+승격하는 기존 동작은 실제 오탐과 독립적인 정상 표본 모두에 비추어 안전하지 않다.
+
 상태는 video/session identity별로 단조 전진한다.
 
 ```text
