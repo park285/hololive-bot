@@ -1,4 +1,5 @@
-name: ci
+name: GPT Pro PR Verification
+run-name: GPT Pro PR Verification · ${{ github.event.pull_request.head.sha || github.sha }}
 
 # PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·frontend 검증은
 # GitHub Actions에서 독립적으로 증적을 남기고, 운영·배포·대용량 분석은 로컬 pre-push와
@@ -33,7 +34,17 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Show verification context
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
+            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
+          test "${actual_sha}" = "${EXPECTED_SHA}"
 
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -56,6 +67,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+
+      - name: Show Go environment
+        run: |
+          go version
+          go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
 
       - name: Workflow PR boundary and gate ownership
         run: bash scripts/ci/check-workflow-secrets.sh
@@ -95,7 +111,17 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Show verification context
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
+            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
+          test "${actual_sha}" = "${EXPECTED_SHA}"
 
       - name: Setup Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -117,6 +143,11 @@ jobs:
           go-version-file: go.mod
           # leg별 캐시 키 분리 — 목록 공유 시 7개 leg가 같은 키를 놓고 경쟁해 6개가 영구 캐시 미스가 된다.
           cache-dependency-path: ${{ matrix.module == '.' && 'go.sum' || format('{0}/go.sum', matrix.module) }}
+
+      - name: Show Go environment
+        run: |
+          go version
+          go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
 
       - name: Setup Node for collector helper integration tests
         if: matrix.module == 'hololive/hololive-youtube-collector'
@@ -187,13 +218,28 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Show verification context
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
+            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
+          test "${actual_sha}" = "${EXPECTED_SHA}"
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: admin-dashboard/backend/go.sum
+
+      - name: Show Go environment
+        run: |
+          go version
+          go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -219,7 +265,17 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      - name: Show verification context
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
+            "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
+          test "${actual_sha}" = "${EXPECTED_SHA}"
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
