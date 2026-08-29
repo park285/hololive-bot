@@ -619,6 +619,7 @@ hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply.go
 hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply_absence.go
 hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply_positive.go
 hololive/hololive-shared/pkg/service/youtube/reconcile/live/canend.go
+hololive/hololive-shared/pkg/service/youtube/reconcile/live/premiere.go
 hololive/hololive-shared/pkg/service/youtube/reconcile/live/reduce.go
 hololive/hololive-shared/pkg/service/youtube/reconcile/live/types.go
 hololive/hololive-shared/pkg/service/youtube/reconcile/photo/reduce.go
@@ -697,6 +698,7 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/community_reconci
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_clock_write.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_consumer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_persist.go
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_premiere.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_scan.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_state.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_consumer.go
