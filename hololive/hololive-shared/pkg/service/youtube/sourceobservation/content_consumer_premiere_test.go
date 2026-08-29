@@ -2,11 +2,13 @@ package sourceobservation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	dbtest "github.com/kapu/hololive-dbtest"
@@ -33,8 +35,8 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 		t.Fatalf("publish content: %v", err)
 	}
 
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume content: %v", err)
+	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
+		t.Fatalf("consume content: %v", consumeErr)
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusUpcoming, new(true))
@@ -59,6 +61,7 @@ func TestContentConsumerPremiereConvergesContentThenLive(t *testing.T) {
 	assertTableCount(t, pool, "source_reconciliation_conflicts", 0)
 
 	live := liveSession(testVideoID, "LIVE")
+
 	live.ScheduledAt = &scheduled
 
 	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &liveProof, live))); err != nil {
@@ -84,6 +87,7 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 	live := liveSession(testVideoID, "LIVE")
+
 	live.ScheduledAt = &scheduled
 
 	if _, err := repo.PublishBatch(ctx, publishInput(liveSnapshotEnvelope(t, &liveProof, live))); err != nil {
@@ -95,6 +99,7 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, nil)
+
 	beforeSession, beforeHead := premiereProjectionSnapshots(t, pool)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(premiereVideoListEnvelope(t, &contentProof, scheduled))); err != nil {
@@ -106,6 +111,7 @@ func TestContentConsumerPremiereConvergesLiveThenContent(t *testing.T) {
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(true))
+
 	afterSession, afterHead := premiereProjectionSnapshots(t, pool)
 	if afterSession != beforeSession {
 		t.Fatalf("content merge changed live-owned session fields\n before: %s\n  after: %s", beforeSession, afterSession)
@@ -155,6 +161,7 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedContentWatermark(t, pool)
+
 	seen := time.Date(2026, time.August, 29, 1, 2, 3, 0, time.UTC)
 
 	if _, err := pool.Exec(ctx, `
@@ -176,11 +183,12 @@ func TestContentConsumerPremiereConflictKeepsFalseAndRecordsOnce(t *testing.T) {
 		t.Fatalf("publish content: %v", err)
 	}
 
-	if err := consumer.Consume(ctx, contentClaimOptions()); err != nil {
-		t.Fatalf("consume content: %v", err)
+	if consumeErr := consumer.Consume(ctx, contentClaimOptions()); consumeErr != nil {
+		t.Fatalf("consume content: %v", consumeErr)
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(false))
+
 	if afterSession := premiereSessionSnapshot(t, pool); afterSession != beforeSession {
 		t.Fatalf("conflict changed live session\n before: %s\n  after: %s", beforeSession, afterSession)
 	}
@@ -275,7 +283,12 @@ func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin Premiere persistence: %v", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+
+	defer func() {
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback Premiere persistence: %v", rollbackErr)
+		}
+	}()
 
 	if err := persistPremiereDecision(ctx, tx, &Observation{}, &decision); err != nil {
 		t.Fatalf("persist Premiere decision: %v", err)
@@ -286,6 +299,7 @@ func TestContentPremierePersistencePreservesRowCreatedAfterRead(t *testing.T) {
 	}
 
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusUpcoming, new(true))
+
 	if after := premiereSessionSnapshot(t, pool); after != before {
 		t.Fatalf("Premiere conflict changed concurrently created session\n before: %s\n  after: %s", before, after)
 	}
@@ -311,6 +325,7 @@ func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.
 	}
 
 	var applicationCount int
+
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*)
 		FROM source_observation_applications
@@ -324,6 +339,7 @@ func TestContentConsumerPremiereKeepsApplicationsWithinFinalizeLimit(t *testing.
 	}
 
 	var projected bool
+
 	if err := pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1
@@ -373,6 +389,7 @@ func classifiedVideoListEnvelope(
 	t.Helper()
 
 	published := scheduled.Add(-24 * time.Hour)
+
 	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
 		ChannelID: testChannelID,
 		Videos: []contract.VideoListItemV1{{
@@ -424,6 +441,7 @@ func largePremiereVideoListEnvelope(
 
 	published := scheduled.Add(-24 * time.Hour)
 	videos := make([]contract.VideoListItemV1, count)
+
 	for i := range count {
 		videos[i] = contract.VideoListItemV1{
 			VideoID:     fmt.Sprintf("vid-%04d", i),
@@ -435,6 +453,7 @@ func largePremiereVideoListEnvelope(
 
 	videos[0].ScheduledFor = &scheduled
 	videos[0].IsPremiere = new(true)
+
 	payload, err := contract.MarshalPayloadV1(contract.VideoListV1{
 		ChannelID: testChannelID,
 		Videos:    videos,
@@ -552,6 +571,7 @@ func premiereSessionSnapshot(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 
 	var snapshot string
+
 	if err := pool.QueryRow(t.Context(), `
 		SELECT (to_jsonb(session) - 'is_premiere')::text
 		FROM youtube_live_sessions AS session
@@ -567,6 +587,7 @@ func premiereHeadSnapshot(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 
 	var snapshot string
+
 	if err := pool.QueryRow(t.Context(), `
 		SELECT to_jsonb(head)::text
 		FROM youtube_live_reconciliation_heads AS head

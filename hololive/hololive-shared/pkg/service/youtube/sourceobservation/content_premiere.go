@@ -44,6 +44,7 @@ func mergeContentPremieres(
 
 func confirmedPremiereFacts(evidence *content.Evidence) []live.ConfirmedPremiereFact {
 	facts := make([]live.ConfirmedPremiereFact, 0)
+
 	for i := range evidence.Videos {
 		video := &evidence.Videos[i]
 		if video.IsPremiere == nil || !*video.IsPremiere {

@@ -34,8 +34,8 @@ func (c *Consumer) reconcileContent(
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
-	if err := persistContentDecision(ctx, tx, c.writer, claimed, &decision); err != nil {
-		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", err)
+	if persistErr := persistContentDecision(ctx, tx, c.writer, claimed, &decision); persistErr != nil {
+		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
 	}
 
 	premiereApplications, err := mergeContentPremieres(ctx, tx, claimed, &evidence)
@@ -56,6 +56,7 @@ func mergeContentApplications(contentApplications, premiereApplications []Applic
 	premiereCount := min(len(premiereApplications), maxFinalizeApplicationCount)
 	contentCount := min(len(contentApplications), maxFinalizeApplicationCount-premiereCount)
 	applications := make([]Application, 0, contentCount+premiereCount)
+
 	applications = append(applications, contentApplications[:contentCount]...)
 	applications = append(applications, premiereApplications[:premiereCount]...)
 

@@ -8,12 +8,14 @@ import (
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
+const premiereTestVideoID = "premiere"
+
 func TestMergeConfirmedPremieresCreatesUpcomingSession(t *testing.T) {
 	scheduled := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 	received := scheduled.Add(-time.Hour)
 
 	decision := MergeConfirmedPremieres(State{}, []ConfirmedPremiereFact{{
-		VideoID:     "premiere",
+		VideoID:     premiereTestVideoID,
 		ChannelID:   "UC_PREMIERE",
 		Title:       "Premiere title",
 		ScheduledAt: &scheduled,
@@ -25,7 +27,7 @@ func TestMergeConfirmedPremieresCreatesUpcomingSession(t *testing.T) {
 	}
 
 	got := decision.Sessions[0]
-	if got.VideoID != "premiere" || got.ChannelID != "UC_PREMIERE" || got.Status != StatusUpcoming {
+	if got.VideoID != premiereTestVideoID || got.ChannelID != "UC_PREMIERE" || got.Status != StatusUpcoming {
 		t.Fatalf("created session identity = %#v", got)
 	}
 
@@ -48,7 +50,7 @@ func TestMergeConfirmedPremieresOnlyFillsUnknownClassification(t *testing.T) {
 	ended := started.Add(time.Hour)
 	seen := ended.Add(time.Minute)
 	existing := SessionState{
-		VideoID:            "premiere",
+		VideoID:            premiereTestVideoID,
 		ChannelID:          "UC_PREMIERE",
 		Status:             StatusEnded,
 		Title:              "Live-owned title",
@@ -67,10 +69,11 @@ func TestMergeConfirmedPremieresOnlyFillsUnknownClassification(t *testing.T) {
 		Present: true,
 	}
 	want := existing.clone()
+
 	want.IsPremiere = new(true)
 
-	decision := MergeConfirmedPremieres(State{Sessions: map[string]SessionState{"premiere": existing}}, []ConfirmedPremiereFact{{
-		VideoID:     "premiere",
+	decision := MergeConfirmedPremieres(State{Sessions: map[string]SessionState{premiereTestVideoID: existing}}, []ConfirmedPremiereFact{{
+		VideoID:     premiereTestVideoID,
 		ChannelID:   "UC_OTHER",
 		Title:       "Content title",
 		ScheduledAt: new(scheduled.Add(24 * time.Hour)),
@@ -96,13 +99,13 @@ func TestMergeConfirmedPremieresReplayAndConflict(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			decision := MergeConfirmedPremieres(State{Sessions: map[string]SessionState{
-				"premiere": {
-					VideoID:    "premiere",
+				premiereTestVideoID: {
+					VideoID:    premiereTestVideoID,
 					ChannelID:  "UC_PREMIERE",
 					Status:     StatusLive,
 					IsPremiere: new(test.existing),
 				},
-			}}, []ConfirmedPremiereFact{{VideoID: "premiere"}})
+			}}, []ConfirmedPremiereFact{{VideoID: premiereTestVideoID}})
 
 			if len(decision.Sessions) != 0 {
 				t.Fatalf("sessions = %#v, want no write", decision.Sessions)

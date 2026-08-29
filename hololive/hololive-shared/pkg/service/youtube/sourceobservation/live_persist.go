@@ -24,11 +24,19 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision
 }
 
 func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
-	return executeLiveSessionUpsert(ctx, tx, session, false)
+	if err := executeLiveSessionUpsert(ctx, tx, session, false); err != nil {
+		return fmt.Errorf("execute live session upsert: %w", err)
+	}
+
+	return nil
 }
 
 func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *live.SessionState) error {
-	return executeLiveSessionUpsert(ctx, tx, session, true)
+	if err := executeLiveSessionUpsert(ctx, tx, session, true); err != nil {
+		return fmt.Errorf("execute confirmed Premiere session upsert: %w", err)
+	}
+
+	return nil
 }
 
 func executeLiveSessionUpsert(
