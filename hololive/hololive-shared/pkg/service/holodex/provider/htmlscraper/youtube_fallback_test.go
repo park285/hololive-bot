@@ -61,6 +61,7 @@ func TestFetchYouTubeScheduleWaitAdmissionUsesInjectedFetcherInTests(t *testing.
 
 func TestFetchYouTubeScheduleWaitAdmissionUsesScraperBlockingAdmission(t *testing.T) {
 	limiter := ratelimiter.New(25 * time.Millisecond)
+	started := time.Now()
 	decision, err := limiter.TryReserve(t.Context())
 	require.NoError(t, err)
 	require.True(t, decision.Allowed)
@@ -85,8 +86,6 @@ func TestFetchYouTubeScheduleWaitAdmissionUsesScraperBlockingAdmission(t *testin
 
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
-
-	started := time.Now()
 
 	_, err = service.FetchYouTubeScheduleWaitAdmission(ctx, "UCtest")
 
