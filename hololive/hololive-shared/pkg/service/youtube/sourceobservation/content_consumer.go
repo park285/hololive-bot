@@ -57,8 +57,13 @@ func mergeContentApplications(contentApplications, premiereApplications []Applic
 	contentCount := min(len(contentApplications), maxFinalizeApplicationCount-premiereCount)
 	applications := make([]Application, 0, contentCount+premiereCount)
 
-	applications = append(applications, contentApplications[:contentCount]...)
-	applications = append(applications, premiereApplications[:premiereCount]...)
+	if contentCount > 0 {
+		applications = append(applications, contentApplications[:contentCount]...)
+	}
+
+	if premiereCount > 0 {
+		applications = append(applications, premiereApplications[:premiereCount]...)
+	}
 
 	return applications
 }

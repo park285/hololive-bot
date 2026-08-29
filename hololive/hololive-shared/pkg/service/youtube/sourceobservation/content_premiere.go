@@ -17,12 +17,12 @@ func mergeContentPremieres(
 	evidence *content.Evidence,
 ) ([]Application, error) {
 	if evidence.Kind != contract.KindVideoList {
-		return nil, nil
+		return []Application{}, nil
 	}
 
 	facts := confirmedPremiereFacts(evidence)
 	if len(facts) == 0 {
-		return nil, nil
+		return []Application{}, nil
 	}
 
 	if err := lockLiveSubject(ctx, tx, observation.SubjectKey); err != nil {
