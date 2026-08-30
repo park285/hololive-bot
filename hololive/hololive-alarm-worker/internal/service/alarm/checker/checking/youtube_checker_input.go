@@ -55,6 +55,11 @@ func (c *YouTubeChecker) loadDueYouTubeCheckInputs(
 
 	liveEvidence.observedAtByStreamID = mergePersistedLiveSessionStreams(streamsByChannel, persistedSessions)
 
+	err = c.applyConfirmedPremiereClassification(ctx, streamsByChannel)
+	if err != nil {
+		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: classify confirmed premieres: %w", err)
+	}
+
 	memberNames, err := LoadMemberNamesByChannel(ctx, c.cacheClient, dueChannels)
 	if err != nil {
 		return nil, nil, youtubeLiveCheckEvidence{}, nil, fmt.Errorf("check youtube streams: load member names: %w", err)

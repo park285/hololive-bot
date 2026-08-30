@@ -43,6 +43,8 @@ import (
 type fakeYouTubeLiveSessionSource struct {
 	sessions              []PersistedYouTubeLiveSession
 	recentLiveChannelIDs  []string
+	confirmedPremiereIDs  map[string]struct{}
+	confirmedPremiereErr  error
 	recentDispatch        map[string]bool
 	recentSentRooms       map[string][]string
 	recentSentRoomsErr    error
@@ -64,6 +66,25 @@ func (s *fakeYouTubeLiveSessionSource) LoadRecentLiveChannelIDs(
 	_ time.Time,
 ) ([]string, error) {
 	return s.recentLiveChannelIDs, nil
+}
+
+func (s *fakeYouTubeLiveSessionSource) LoadConfirmedPremiereIDs(
+	_ context.Context,
+	videoIDs []string,
+) (map[string]struct{}, error) {
+	if s.confirmedPremiereErr != nil {
+		return nil, s.confirmedPremiereErr
+	}
+
+	result := make(map[string]struct{})
+
+	for _, videoID := range videoIDs {
+		if _, ok := s.confirmedPremiereIDs[videoID]; ok {
+			result[videoID] = struct{}{}
+		}
+	}
+
+	return result, nil
 }
 
 func (s *fakeYouTubeLiveSessionSource) RecentlyDispatchedStreamIDs(
@@ -609,6 +630,68 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 	require.NoError(t, err)
 	require.Len(t, notifications, 1)
 	assert.Equal(t, streamID, notifications[0].Stream.ID)
+}
+
+func TestYouTubeCheckerCheck_SkipsHolodexUpcomingWhenConfirmedPremiere(t *testing.T) {
+	t.Parallel()
+
+	notifications := checkYouTubeUpcomingWithConfirmedPremieres(t, map[string]struct{}{"stream-confirmed-premiere": {}})
+	assert.Empty(t, notifications)
+}
+
+func TestYouTubeCheckerCheck_KeepsHolodexUpcomingWithoutConfirmedPremiere(t *testing.T) {
+	t.Parallel()
+
+	notifications := checkYouTubeUpcomingWithConfirmedPremieres(t, map[string]struct{}{})
+	require.Len(t, notifications, 1)
+	assert.Equal(t, 5, notifications[0].MinutesUntil)
+}
+
+func checkYouTubeUpcomingWithConfirmedPremieres(t *testing.T, confirmedPremiereIDs map[string]struct{}) []*domain.AlarmNotification {
+	t.Helper()
+
+	const (
+		channelID = "UC_TEST_CHANNEL"
+		roomID    = testRoomID1
+		streamID  = "stream-confirmed-premiere"
+	)
+
+	startScheduled := time.Now().UTC().Truncate(time.Second).Add(5*time.Minute + 10*time.Second)
+	server := newYouTubeCheckerScenarioServer(t, "ok", channelID, streamID, startScheduled)
+
+	defer server.Close()
+
+	cache := newCheckerTestCacheClient(t)
+	logger := newCheckerTestLogger()
+	dedupService := dedup.NewService(cache, []int{5, 3, 1}, logger)
+	tierSched := tier.NewTieredScheduler(logger)
+	holodexService, err := holodexprovider.NewHolodexService(server.URL, "test-key", cache, nil, logger)
+	require.NoError(t, err)
+
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(
+		cache,
+		holodexService,
+		tierSched,
+		dedupService,
+		[]int{5, 3, 1},
+		0,
+		&fakeYouTubeLiveSessionSource{confirmedPremiereIDs: confirmedPremiereIDs},
+		logger,
+	)
+	require.NoError(t, err)
+
+	ctx := t.Context()
+
+	_, err = cache.SAdd(ctx, sharedalarmkeys.AlarmChannelRegistryKey, []string{channelID})
+	require.NoError(t, err)
+
+	_, err = cache.SAdd(ctx, sharedalarmkeys.ChannelSubscribersKeyPrefix+channelID, []string{roomID})
+	require.NoError(t, err)
+
+	notifications, err := checker.Check(ctx)
+	require.NoError(t, err)
+
+	return notifications
 }
 
 func TestYouTubeChecker_RecoversRecentCappedFiveMinuteAlarm(t *testing.T) {

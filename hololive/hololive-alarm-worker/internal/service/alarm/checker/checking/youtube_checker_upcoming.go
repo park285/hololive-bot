@@ -36,6 +36,12 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 	subscriberRooms []string,
 	window sharedchecker.EvaluationWindow,
 ) ([]*domain.AlarmNotification, error) {
+	if stream != nil && stream.IsPremiere {
+		observeYouTubeUpcomingNoMinuteDecision("premiere_content_owned", window)
+
+		return nil, nil
+	}
+
 	if !isUpcomingNotificationCandidate(stream, window) {
 		return nil, nil
 	}
@@ -69,7 +75,7 @@ func (c *YouTubeChecker) buildUpcomingNotifications(
 }
 
 func isUpcomingNotificationCandidate(stream *domain.Stream, window sharedchecker.EvaluationWindow) bool {
-	return stream != nil && stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(window.End)
+	return stream != nil && !stream.IsPremiere && stream.IsUpcoming() && stream.StartScheduled != nil && stream.StartScheduled.After(window.End)
 }
 
 type youtubeUpcomingSelection struct {

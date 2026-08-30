@@ -278,6 +278,35 @@ func sentLiveStreamRoomsByStreamID(rows []sentLiveStreamRoomRow) map[string]map[
 	return result
 }
 
+func (s *PgYouTubeLiveSessionSource) LoadConfirmedPremiereIDs(
+	ctx context.Context,
+	videoIDs []string,
+) (map[string]struct{}, error) {
+	result := make(map[string]struct{})
+	videoIDs, ok := s.normalizedStreamIDs(videoIDs)
+
+	if !ok {
+		return result, nil
+	}
+
+	var rows []string
+
+	if err := pgxscan.Select(ctx, s.pool, &rows, mustSQL("youtube_live_session_source_0293_05.sql"), videoIDs); err != nil {
+		return nil, fmt.Errorf("select confirmed premiere ids: %w", err)
+	}
+
+	for _, row := range rows {
+		videoID := strings.TrimSpace(row)
+		if videoID == "" {
+			continue
+		}
+
+		result[videoID] = struct{}{}
+	}
+
+	return result, nil
+}
+
 func streamFromYouTubeLiveSession(row *domain.YouTubeLiveSession) *domain.Stream {
 	videoID := strings.TrimSpace(row.VideoID)
 	channelID := strings.TrimSpace(row.ChannelID)

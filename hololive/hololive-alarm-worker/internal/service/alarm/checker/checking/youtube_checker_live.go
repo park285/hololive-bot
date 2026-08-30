@@ -22,6 +22,12 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 	sentRooms map[string]struct{},
 	observedAt ...*time.Time,
 ) ([]*domain.AlarmNotification, error) {
+	if stream != nil && stream.IsLive() && stream.IsPremiere {
+		observeYouTubeLiveCatchup("premiere_content_owned")
+
+		return nil, nil
+	}
+
 	if !isLiveCatchupCandidate(stream) {
 		return nil, nil
 	}
@@ -47,7 +53,7 @@ func (c *YouTubeChecker) buildLiveCatchupNotifications(
 }
 
 func isLiveCatchupCandidate(stream *domain.Stream) bool {
-	return stream != nil && stream.IsLive()
+	return stream != nil && stream.IsLive() && !stream.IsPremiere
 }
 
 func resolveEligibleLiveCatchupStart(stream *domain.Stream, now time.Time, observedAt ...*time.Time) (*time.Time, bool) {

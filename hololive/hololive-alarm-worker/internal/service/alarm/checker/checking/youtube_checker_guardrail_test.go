@@ -57,6 +57,13 @@ func (s *guardrailEvidenceSource) LoadRecentLiveChannelIDs(
 	return nil, nil
 }
 
+func (s *guardrailEvidenceSource) LoadConfirmedPremiereIDs(
+	context.Context,
+	[]string,
+) (map[string]struct{}, error) {
+	return map[string]struct{}{}, nil
+}
+
 func (s *guardrailEvidenceSource) RecentlyDispatchedStreamIDs(
 	context.Context,
 	[]string,

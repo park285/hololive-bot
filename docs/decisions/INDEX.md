@@ -2,10 +2,11 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 29건: proposed 0, accepted 20, rejected 0, withdrawn 2, superseded 7
+레코드 30건: proposed 0, accepted 21, rejected 0, withdrawn 2, superseded 7
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260830-hololive-premiere-content-owned-notifications](records/DEC-20260830-hololive-premiere-content-owned-notifications.json) | YouTube 최초공개 구독자 알림은 NEW_VIDEO outbox만 소유하고 live upcoming/catchup은 is_premiere=true를 제외한다 | accepted | verified | hololive-bot | 2026-08-30 | trigger | - | [youtube-three-provider-convergence-contract-v2-20260814.md](../current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md) |
 | [DEC-20260829-hololive-live-start-evidence-admission](records/DEC-20260829-hololive-live-start-evidence-admission.json) | Holodex LIVE는 start_actual이 있을 때만 방송 시작 증거로 입장시킨다 | accepted | verified | hololive-bot | 2026-08-29 | trigger | - | [youtube-three-provider-convergence-contract-v2-20260814.md](../current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md) |
 | [DEC-20260826-hololive-youtubejs-bounded-read-retry](records/DEC-20260826-hololive-youtubejs-bounded-read-retry.json) | YouTube.js는 읽기 전용 Innertube transient failure만 한 번 재시도한다 | accepted | verified | hololive-bot | 2026-08-26 | trigger | - | [youtube-collector.md](../current/runbooks/youtube-collector.md) |
 | [DEC-20260825-hololive-admin-auth-boundaries-preserved](records/DEC-20260825-hololive-admin-auth-boundaries-preserved.json) | hololive admin은 /api/holo API-key 경계와 사용자 session 경계를 분리해 유지한다 | accepted | verified | hololive-bot | 2026-08-25 | trigger | supersedes DEC-20260719-hololive-admin-auth-unification | - |
