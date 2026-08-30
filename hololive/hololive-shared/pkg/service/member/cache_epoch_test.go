@@ -681,9 +681,15 @@ func TestCacheEpoch_UnexpectedDisconnectStillWarns(t *testing.T) {
 
 	authority.disconnects <- errors.New("connection lost")
 
-	assertEventually(t, func() bool {
-		return strings.Contains(logs.String(), `"level":"WARN"`)
-	})
+	select {
+	case <-authority.subscribed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("subscriber did not reconnect after unexpected disconnect")
+	}
+
+	if !strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Fatalf("unexpected disconnect did not log a warning: %s", logs.String())
+	}
 }
 
 func TestParseMemberEpoch(t *testing.T) {
