@@ -177,7 +177,7 @@ func (c *Cache) runEpochSubscription(ctx context.Context, triggers chan<- string
 		c.handleEpochNotification(payload)
 		signalEpochReconcile(triggers, epochReconcileSubscription)
 	})
-	if ctx.Err() != nil {
+	if epochSubscriptionStopped(ctx, err) {
 		return true
 	}
 
@@ -188,6 +188,10 @@ func (c *Cache) runEpochSubscription(ctx context.Context, triggers chan<- string
 	signalEpochReconcile(triggers, epochReconcileReconnect)
 
 	return false
+}
+
+func epochSubscriptionStopped(ctx context.Context, err error) bool {
+	return ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, valkey.ErrClosing)
 }
 
 func waitForEpochReconnect(ctx context.Context) bool {

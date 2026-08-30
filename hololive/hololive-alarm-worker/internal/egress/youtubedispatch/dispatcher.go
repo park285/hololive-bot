@@ -229,7 +229,7 @@ func (d *Dispatcher) aggregateSyncLoop(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		d.logger.Warn("Aggregate sync loop stopped with error", slog.Any("error", err))
+		logTickerStop(d.logger, "Aggregate sync loop stopped with error", err)
 	}
 }
 
@@ -255,7 +255,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		d.logger.Warn("Outbox dispatcher loop stopped with error", slog.Any("error", err))
+		logTickerStop(d.logger, "Outbox dispatcher loop stopped with error", err)
 	}
 
 	d.logger.Info("Outbox dispatcher stopped")
@@ -338,7 +338,7 @@ func (d *Dispatcher) reviveLoop(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		d.logger.Warn("Outbox revive loop stopped with error", slog.Any("error", err))
+		logTickerStop(d.logger, "Outbox revive loop stopped with error", err)
 	}
 }
 
@@ -369,7 +369,7 @@ func (d *Dispatcher) cleanupLoop(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		d.logger.Warn("Outbox cleanup loop stopped with error", slog.Any("error", err))
+		logTickerStop(d.logger, "Outbox cleanup loop stopped with error", err)
 	}
 }
 
@@ -391,4 +391,12 @@ func (d *Dispatcher) cleanup(ctx context.Context) {
 // 의존하므로 _test.go로 격리할 수 없어 production 빌드에 노출된다. 부수효과는 없다.
 func (d *Dispatcher) ProcessOnceForTest(ctx context.Context) {
 	d.processOnce(ctx)
+}
+
+func logTickerStop(logger *slog.Logger, msg string, err error) {
+	if logger == nil || err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+
+	logger.Warn(msg, slog.Any("error", err))
 }

@@ -21,18 +21,21 @@
 package member
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/testredis"
 	"github.com/kapu/hololive-shared/internal/testutil"
@@ -564,6 +567,128 @@ func TestValkeyMemberEpochAuthorityRejectsOverflowAndCorruption(t *testing.T) {
 
 	if _, err := authority.Current(t.Context()); err == nil {
 		t.Fatal("Current() accepted the saturated epoch left by overflow")
+	}
+}
+
+func TestCacheEpoch_ClientClosingStopsWithoutWarn(t *testing.T) {
+	authority := &fakeMemberEpochAuthority{
+		epoch:       1,
+		subscribed:  make(chan struct{}, 2),
+		messages:    make(chan string),
+		disconnects: make(chan error, 1),
+	}
+
+	var logs bytes.Buffer
+
+	c := newEpochTestCache(authority)
+
+	c.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	c.epochReconcileInterval = time.Hour
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	done := make(chan struct{})
+
+	go func() {
+		c.runEpochReconciliation(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-authority.subscribed:
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not start")
+	}
+
+	authority.disconnects <- valkey.ErrClosing
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("epoch subscription did not stop after client close")
+	}
+
+	select {
+	case <-authority.subscribed:
+		t.Fatal("epoch subscription resubscribed after client close")
+	default:
+	}
+
+	if strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Fatalf("client close logged a warning: %s", logs.String())
+	}
+}
+
+func TestCacheEpoch_CanceledSubscribeDoesNotWarn(t *testing.T) {
+	authority := &fakeMemberEpochAuthority{
+		epoch:       1,
+		subscribed:  make(chan struct{}, 1),
+		messages:    make(chan string),
+		disconnects: make(chan error),
+	}
+
+	var logs bytes.Buffer
+
+	c := newEpochTestCache(authority)
+
+	c.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	go c.runEpochReconciliation(ctx)
+
+	select {
+	case <-authority.subscribed:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("subscriber did not start")
+	}
+
+	cancel()
+	time.Sleep(20 * time.Millisecond)
+
+	if strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Fatalf("canceled subscribe logged a warning: %s", logs.String())
+	}
+}
+
+func TestCacheEpoch_UnexpectedDisconnectStillWarns(t *testing.T) {
+	authority := &fakeMemberEpochAuthority{
+		epoch:       1,
+		subscribed:  make(chan struct{}, 2),
+		messages:    make(chan string),
+		disconnects: make(chan error, 1),
+	}
+
+	var logs bytes.Buffer
+
+	c := newEpochTestCache(authority)
+
+	c.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	c.epochReconcileInterval = time.Hour
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go c.runEpochReconciliation(ctx)
+
+	select {
+	case <-authority.subscribed:
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not start")
+	}
+
+	authority.disconnects <- errors.New("connection lost")
+
+	select {
+	case <-authority.subscribed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("subscriber did not reconnect after unexpected disconnect")
+	}
+
+	if !strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Fatalf("unexpected disconnect did not log a warning: %s", logs.String())
 	}
 }
 

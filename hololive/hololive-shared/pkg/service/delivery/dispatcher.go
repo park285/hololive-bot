@@ -22,6 +22,7 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -172,7 +173,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 		d.processOnce(ctx)
 
 		return nil
-	}); err != nil {
+	}); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		d.logger.Warn("Delivery dispatcher ticker stopped with error", slog.String("error", err.Error()))
 	}
 
