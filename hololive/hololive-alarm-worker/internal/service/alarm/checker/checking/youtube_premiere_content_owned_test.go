@@ -43,13 +43,14 @@ func TestApplyConfirmedPremiereClassificationMarksHolodexStream(t *testing.T) {
 	t.Parallel()
 
 	streamID := "holodex-premiere"
+	stream := &domain.Stream{
+		ID:         streamID,
+		ChannelID:  testChID1,
+		Status:     domain.StreamStatusUpcoming,
+		IsPremiere: false,
+	}
 	streamsByChannel := map[string][]*domain.Stream{
-		testChID1: {{
-			ID:         streamID,
-			ChannelID:  testChID1,
-			Status:     domain.StreamStatusUpcoming,
-			IsPremiere: false,
-		}},
+		testChID1: {stream},
 	}
 
 	checker := &YouTubeChecker{
@@ -59,7 +60,7 @@ func TestApplyConfirmedPremiereClassificationMarksHolodexStream(t *testing.T) {
 	}
 
 	require.NoError(t, checker.applyConfirmedPremiereClassification(t.Context(), streamsByChannel))
-	assert.True(t, streamsByChannel[testChID1][0].IsPremiere)
+	assert.True(t, stream.IsPremiere)
 }
 
 func TestApplyConfirmedPremiereClassificationFailsClosedOnLookupError(t *testing.T) {
