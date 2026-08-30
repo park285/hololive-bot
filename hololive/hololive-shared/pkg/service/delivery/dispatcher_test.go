@@ -561,9 +561,12 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 
 func TestDispatcher_RunDoesNotWarnWhenContextCanceled(t *testing.T) {
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	config := DefaultDispatcherConfig()
+
 	config.PollInterval = time.Hour
+
 	ctx, cancel := context.WithCancel(t.Context())
 	d := NewDispatcher(&mockDeliveryRepository{}, &mockSender{}, logger, &config)
 	done := make(chan struct{})

@@ -577,8 +577,11 @@ func TestCacheEpoch_ClientClosingStopsWithoutWarn(t *testing.T) {
 		messages:    make(chan string),
 		disconnects: make(chan error, 1),
 	}
+
 	var logs bytes.Buffer
+
 	c := newEpochTestCache(authority)
+
 	c.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	c.epochReconcileInterval = time.Hour
 
@@ -624,8 +627,11 @@ func TestCacheEpoch_CanceledSubscribeDoesNotWarn(t *testing.T) {
 		messages:    make(chan string),
 		disconnects: make(chan error),
 	}
+
 	var logs bytes.Buffer
+
 	c := newEpochTestCache(authority)
+
 	c.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -654,8 +660,11 @@ func TestCacheEpoch_UnexpectedDisconnectStillWarns(t *testing.T) {
 		messages:    make(chan string),
 		disconnects: make(chan error, 1),
 	}
+
 	var logs bytes.Buffer
+
 	c := newEpochTestCache(authority)
+
 	c.logger = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	c.epochReconcileInterval = time.Hour
 

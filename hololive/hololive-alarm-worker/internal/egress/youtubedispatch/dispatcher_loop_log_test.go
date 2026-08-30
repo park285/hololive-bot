@@ -17,10 +17,11 @@ func TestLogTickerStopOmitsContextStop(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	logTickerStop(logger, "Outbox dispatcher loop stopped with error", context.Canceled)
-	logTickerStop(logger, "Outbox dispatcher loop stopped with error", tickerDeadlineErr())
+	logTickerStop(logger, "Outbox dispatcher loop stopped with error", context.DeadlineExceeded)
 	logTickerStop(logger, "Outbox dispatcher loop stopped with error", nil)
 
 	if logs.Len() != 0 {
@@ -32,6 +33,7 @@ func TestLogTickerStopWarnsOnUnexpectedError(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	logTickerStop(logger, "Outbox dispatcher loop stopped with error", errors.New("tick failed"))
@@ -69,9 +71,11 @@ func TestDispatcherAggregateSyncLoopDoesNotWarnWhenContextCanceled(t *testing.T)
 	t.Parallel()
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	dispatcher := newCanceledTickerDispatcher(t, logger)
 	started := make(chan struct{})
+
 	dispatcher.setOnAggregateSync(func() {
 		select {
 		case <-started:
@@ -103,9 +107,12 @@ func TestDispatcherTelemetryLoopDoesNotWarnWhenContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	dispatcher := newCanceledTickerDispatcher(t, logger)
+
 	dispatcher.telemetry.telemetry = nil
+
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 
@@ -116,14 +123,6 @@ func TestDispatcherTelemetryLoopDoesNotWarnWhenContextCanceled(t *testing.T) {
 
 	cancel()
 	waitLoopStopWithoutWarn(t, done, &logs)
-}
-
-func tickerDeadlineErr() error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-	defer cancel()
-	<-ctx.Done()
-
-	return ctx.Err()
 }
 
 func newCanceledTickerDispatcher(t *testing.T, logger *slog.Logger) *Dispatcher {
@@ -149,6 +148,7 @@ func assertLoopCancelHasNoWarn(t *testing.T, run func(context.Context, *Dispatch
 	t.Helper()
 
 	var logs bytes.Buffer
+
 	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	dispatcher := newCanceledTickerDispatcher(t, logger)
 	ctx, cancel := context.WithCancel(t.Context())
