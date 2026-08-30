@@ -38,6 +38,27 @@ func (r *trackingReadCloser) Close() error {
 	return r.closeErr
 }
 
+func TestNewFeedFetcherDefaultClientKeepsHTTP1OnlyALPN(t *testing.T) {
+	fetcher := NewFeedFetcher(nil, DefaultFeedFetcherConfig())
+	require.NotNil(t, fetcher)
+	require.NotNil(t, fetcher.client)
+
+	transport, ok := fetcher.client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.NotNil(t, transport.Protocols)
+	require.Equal(t, "{HTTP1}", transport.Protocols.String())
+
+	if transport.TLSClientConfig == nil {
+		return
+	}
+
+	for _, proto := range transport.TLSClientConfig.NextProtos {
+		if proto != "http/1.1" {
+			t.Fatalf("ALPN contains %q, want empty or only http/1.1", proto)
+		}
+	}
+}
+
 func TestFeedFetcherReadResponseBodyAcceptsExactLimit(t *testing.T) {
 	body := newTrackingReadCloser("1234")
 	fetcher := &FeedFetcher{maxBodyLen: 4}
