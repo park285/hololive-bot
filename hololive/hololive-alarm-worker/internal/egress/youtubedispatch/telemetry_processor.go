@@ -71,7 +71,7 @@ func (tp *TelemetryProcessor) telemetryLoop(ctx context.Context) {
 
 		return nil
 	}); err != nil {
-		tp.logger.Warn("Delivery telemetry loop stopped with error", slog.Any("error", err))
+		logTickerStop(tp.logger, "Delivery telemetry loop stopped with error", err)
 	}
 }
 

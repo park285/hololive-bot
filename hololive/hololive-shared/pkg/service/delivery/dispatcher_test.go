@@ -21,6 +21,7 @@
 package delivery
 
 import (
+	"bytes"
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
@@ -555,6 +556,33 @@ func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(250 * time.Millisecond):
 		t.Fatal("dispatcher run loop did not stop after context cancellation")
+	}
+}
+
+func TestDispatcher_RunDoesNotWarnWhenContextCanceled(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	config := DefaultDispatcherConfig()
+	config.PollInterval = time.Hour
+	ctx, cancel := context.WithCancel(t.Context())
+	d := NewDispatcher(&mockDeliveryRepository{}, &mockSender{}, logger, &config)
+	done := make(chan struct{})
+
+	go func() {
+		d.run(ctx)
+		close(done)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("dispatcher run loop did not stop after context cancellation")
+	}
+
+	if strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Fatalf("canceled ticker logged a warning: %s", logs.String())
 	}
 }
 
