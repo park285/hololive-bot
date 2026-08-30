@@ -178,6 +178,76 @@ func TestPgYouTubeLiveSessionSourceLoadRecentLiveChannelIDs(t *testing.T) {
 	assert.Equal(t, []string{testChID1}, channels)
 }
 
+func TestPgYouTubeLiveSessionSourceLoadConfirmedPremiereIDsIncludesStaleUpcoming(t *testing.T) {
+	t.Parallel()
+
+	pool := dbtest.NewPool(t)
+	now := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
+	upcomingStart := now.Add(4 * time.Minute)
+	oldSeen := now.Add(-(defaultPersistedLiveSessionRecentWindow + time.Second))
+	recentSeen := now.Add(-time.Minute)
+	isPremiere := true
+	isNotPremiere := false
+
+	insertLiveSessions(t, pool, []domain.YouTubeLiveSession{
+		{
+			VideoID:            "stale-prem-up",
+			ChannelID:          testChID1,
+			Status:             domain.LiveStatusUpcoming,
+			ScheduledStartTime: &upcomingStart,
+			LastSeenAt:         oldSeen,
+			IsPremiere:         &isPremiere,
+		},
+		{
+			VideoID:            "stale-ord-up",
+			ChannelID:          testChID1,
+			Status:             domain.LiveStatusUpcoming,
+			ScheduledStartTime: &upcomingStart,
+			LastSeenAt:         oldSeen,
+			IsPremiere:         &isNotPremiere,
+		},
+		{
+			VideoID:            "recent-null",
+			ChannelID:          testChID1,
+			Status:             domain.LiveStatusUpcoming,
+			ScheduledStartTime: &upcomingStart,
+			LastSeenAt:         recentSeen,
+		},
+		{
+			VideoID:    "recent-live-p",
+			ChannelID:  testChID1,
+			Status:     domain.LiveStatusLive,
+			LastSeenAt: recentSeen,
+			IsPremiere: &isPremiere,
+		},
+	})
+
+	source := &PgYouTubeLiveSessionSource{pool: pool}
+
+	recent, err := source.LoadRecentSessions(t.Context(), []string{testChID1}, now)
+	require.NoError(t, err)
+
+	recentIDs := make([]string, 0, len(recent))
+	for _, session := range recent {
+		recentIDs = append(recentIDs, session.Stream.ID)
+	}
+
+	assert.NotContains(t, recentIDs, "stale-prem-up")
+
+	premiereIDs, err := source.LoadConfirmedPremiereIDs(t.Context(), []string{
+		"stale-prem-up",
+		"stale-ord-up",
+		"recent-null",
+		"recent-live-p",
+		"missing-video",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]struct{}{
+		"stale-prem-up": {},
+		"recent-live-p": {},
+	}, premiereIDs)
+}
+
 func TestPgYouTubeLiveSessionSourceLiveRecentWindowIndependentFromCatchupWindow(t *testing.T) {
 	t.Parallel()
 

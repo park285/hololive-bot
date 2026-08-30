@@ -23,6 +23,7 @@ type PersistedYouTubeLiveSession struct {
 type YouTubeLiveSessionSource interface {
 	LoadRecentSessions(ctx context.Context, channelIDs []string, now time.Time) ([]PersistedYouTubeLiveSession, error)
 	LoadRecentLiveChannelIDs(ctx context.Context, channelIDs []string, now time.Time) ([]string, error)
+	LoadConfirmedPremiereIDs(ctx context.Context, videoIDs []string) (map[string]struct{}, error)
 	RecentlyDispatchedStreamIDs(ctx context.Context, streamIDs []string, since time.Time) (map[string]struct{}, error)
 	RecentlySentLiveStreamRooms(ctx context.Context, streamIDs []string, since time.Time) (map[string]map[string]struct{}, error)
 }
@@ -181,6 +182,8 @@ func fillMissingYouTubeStreamScalarFields(dst, src *domain.Stream) {
 	if dst.Status == "" {
 		dst.Status = src.Status
 	}
+
+	dst.IsPremiere = dst.IsPremiere || src.IsPremiere
 }
 
 func fillMissingYouTubeStreamTimeFields(dst, src *domain.Stream) {
@@ -237,4 +240,61 @@ func liveObservedAt(stream *domain.Stream, observedMaps ...map[string]time.Time)
 	observedAt = observedAt.UTC()
 
 	return &observedAt
+}
+
+func (c *YouTubeChecker) applyConfirmedPremiereClassification(
+	ctx context.Context,
+	streamsByChannel map[string][]*domain.Stream,
+) error {
+	if c == nil || c.persistedLiveSource == nil {
+		return nil
+	}
+
+	videoIDs := collectYouTubeStreamIDs(streamsByChannel)
+	if len(videoIDs) == 0 {
+		return nil
+	}
+
+	premiereIDs, err := c.persistedLiveSource.LoadConfirmedPremiereIDs(ctx, videoIDs)
+	if err != nil {
+		return fmt.Errorf("load confirmed premiere ids: %w", err)
+	}
+
+	applyConfirmedPremiereIDs(streamsByChannel, premiereIDs)
+
+	return nil
+}
+
+func collectYouTubeStreamIDs(streamsByChannel map[string][]*domain.Stream) []string {
+	ids := make([]string, 0)
+
+	for _, streams := range streamsByChannel {
+		for _, stream := range streams {
+			if stream == nil || stream.ID == "" {
+				continue
+			}
+
+			ids = append(ids, stream.ID)
+		}
+	}
+
+	return UniqueStrings(ids)
+}
+
+func applyConfirmedPremiereIDs(streamsByChannel map[string][]*domain.Stream, premiereIDs map[string]struct{}) {
+	if len(premiereIDs) == 0 {
+		return
+	}
+
+	for _, streams := range streamsByChannel {
+		for _, stream := range streams {
+			if stream == nil {
+				continue
+			}
+
+			if _, ok := premiereIDs[stream.ID]; ok {
+				stream.IsPremiere = true
+			}
+		}
+	}
 }

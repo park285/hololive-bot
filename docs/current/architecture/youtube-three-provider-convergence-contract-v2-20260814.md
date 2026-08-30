@@ -1493,6 +1493,10 @@ type ContentEvidenceClock struct {
 - 기존 `true`는 replay no-op이고, 기존 `false`와 새 `true`는 기존 값을 유지하면서 `source_reconciliation_conflicts`에 `is_premiere`/`KEEP_EXISTING`을 기록한다. 필드 부재와 `false` content는 live row를 만들거나 변경하지 않는다.
 - live snapshot, schedule merge와 due-finalizer가 사용하는 공용 live-session upsert는 `COALESCE(existing.is_premiere, incoming.is_premiere)`로 최초 non-`NULL`을 보존한다. 추가 YouTube 조회, 새 schema/table, alarm-side join이나 renderer 변경은 이 병합에 포함하지 않는다.
 
+#### 최초공개 알림 소유권
+
+`DEC-20260830-hololive-premiere-content-owned-notifications`가 live alarm의 읽기 경로를 연다. `youtube_live_sessions.is_premiere=true`는 구독자 live upcoming과 live catchup 후보에서 제외하는 분류다. 구독자 최초공개 알림은 `NEW_VIDEO` outbox가 소유한다. content→live premiere 병합은 계속 새 schema/table을 만들지 않으며, 그 병합 범위에는 alarm-side join을 넣지 않는다는 기존 경계를 유지한다. live alarm은 이번 틱의 video_id 집합으로 확정 최초공개 여부를 직접 읽고, `LoadRecentSessions`의 `last_seen` 창에 의존하지 않는다.
+
 ### 13.3 Live state
 
 #### LIVE 시작 증거 입장 정책

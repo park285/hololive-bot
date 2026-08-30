@@ -206,6 +206,23 @@ Mitigation:
 Rollback:
 - 수정 전 image로 rollback하면 같은 증상이 다시 열리므로, 이 결함만으로는 rollback하지 않고 current revision을 fix-forward한다.
 
+### 6. 최초공개 `공개 예정` 뒤에 같은 영상의 `방송 5분 전`이 다시 나감
+
+Symptoms:
+- `youtube_notification_outbox`에 해당 `video_id`의 `NEW_VIDEO`가 있고 문구는 `N분 후 공개 예정` 또는 `최초공개`다.
+- 같은 `stream_id`의 `alarm_dispatch_events`에 `alarm_type=LIVE` upcoming 5분 전 또는 live catchup이 있다.
+
+Diagnosis:
+- `youtube_live_sessions.is_premiere`가 `true`인데도 live checker가 후보로 삼았는지 본다.
+- Holodex live 목록만 보고 `LoadConfirmedPremiereIDs` 분류를 건너뛴 revision이면 이 계약 위반이다.
+- `DEC-20260830-hololive-premiere-content-owned-notifications`
+
+Mitigation:
+- 현재 alarm-worker revision에서 확정 최초공개 video_id는 upcoming과 live catchup 후보에서 빠지는지 확인한다.
+
+Rollback:
+- 수정 전 image로 rollback하면 같은 영상에 영상 알림과 라이브 5분 전이 다시 겹치므로, 이 결함만으로는 rollback하지 않고 current revision을 fix-forward한다.
+
 ## Smoke test
 
 ```bash
