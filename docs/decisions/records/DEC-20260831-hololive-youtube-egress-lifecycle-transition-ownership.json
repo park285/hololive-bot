@@ -8,10 +8,12 @@
     "hololive-bot"
   ],
   "decided_at": "2026-08-31",
-  "summary": "YouTube notification delivery의 전이 정책은 alarm-worker 내부의 순수 typed lifecycle policy가 한 번만 계산하고 PostgreSQL은 durable state, delivery row_version fencing, expected state/version/attempt/lock CAS, success tracking transaction과 outbox aggregate projection을 집행한다. Provider 호출 전 preparation과 SENDING 이후 send outcome을 분리하며, outcome unknown은 즉시 상태를 쓰거나 claim을 release하지 않고 stale-sending sweeper가 QUARANTINED로 격리한다. Provider operation member는 BeginSending과 grouped finalization에서 all-or-none이다. SENT와 QUARANTINED는 자동 terminal이고, child가 생긴 outbox 상태는 aggregate projector만 계산한다. Worker 전용 store는 alarm-worker internal로 회수하며 범용 FSM 라이브러리와 generic mutation DSL은 도입하지 않는다.",
+  "summary": "YouTube notification delivery의 전이 정책은 alarm-worker 내부의 순수 typed lifecycle policy가 한 번만 계산하고 PostgreSQL은 durable state, delivery row_version fencing, expected state/version/attempt/lock CAS, success tracking transaction과 outbox aggregate projection을 집행한다. Provider 호출 전 preparation과 SENDING 이후 send outcome을 분리하며 outcome unknown은 즉시 상태를 쓰거나 claim을 release하지 않고 stale-sending sweeper가 QUARANTINED로 격리한다. Provider operation member는 BeginSending과 grouped finalization에서 all-or-none이고, DB commit 응답이 불명확하면 primary exact read-back으로 Applied/Conflict/Missing/Indeterminate를 판정하며 외부 send를 자동 재실행하지 않는다. SENT와 QUARANTINED는 자동 terminal이고 child가 생긴 outbox 상태는 aggregate projector만 계산한다. Worker 전용 store는 alarm-worker internal로 회수하며 범용 FSM 라이브러리와 generic mutation DSL은 도입하지 않는다.",
   "sources": [
     "docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#결정",
     "docs/current/architecture/youtube-egress-lifecycle-contract-20260831.md#핵심-불변식",
+    "docs/current/architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md#공통-규칙",
+    "docs/current/architecture/youtube-egress-lifecycle-library-review-20260831.md#최종-판정",
     "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#최종-acceptance"
   ],
   "evidence": [],
