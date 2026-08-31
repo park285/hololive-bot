@@ -9,105 +9,133 @@ Commit 판정: [`../architecture/youtube-egress-lifecycle-commit-adjudication-20
 
 ## 목적
 
-이 계획은 현재 YouTube egress 상태 변경 경로를 typed lifecycle policy와 version-fenced transition store로 교체합니다. 구현자는 이 문서의 PR 경계와 acceptance를 순서대로 수행합니다. 같은 row를 old/new writer가 동시에 변경하는 dual-write 기간은 만들지 않습니다.
+현재 YouTube egress의 상태 변경 경로를 typed lifecycle policy와 version-fenced transition store로 교체합니다. 구현자는 이 문서의 PR 순서와 acceptance를 따르며, 같은 row를 legacy writer와 새 writer가 동시에 변경하는 dual-write 기간을 만들지 않습니다.
+
+이번 작업은 단순한 `status` enum 정리가 아닙니다. 다음 네 경계를 함께 확정합니다.
+
+1. Physical delivery row와 사용자 관점의 logical delivery를 분리합니다.
+2. Provider 호출 전 preparation과 `SENDING` 이후 outcome을 분리합니다.
+3. DB commit 응답 불명확성을 `Indeterminate`로 처리합니다.
+4. Worker 전용 persistence 구현을 alarm-worker `internal`로 회수합니다.
 
 ## 목표 상태
 
 ```text
-SendEngine
-    -> typed preparation result / provider outcome
-    -> lifecycle policy
+ClaimPending
+    -> PreparationLease
+    -> logical-delivery coalescing / durable sibling gate
+    -> typed preparation result
+    -> pure lifecycle policy
     -> intent-specific transition command
-    -> alarm-worker internal transition store
-    -> PostgreSQL state/version CAS
+    -> operation-level BeginSending
+    -> provider call
+    -> typed provider outcome
+    -> operation-level finalization
+    -> PostgreSQL exact CAS / tracking transaction / aggregate projection
 ```
 
-Outbox는 다음 writer 경계를 가집니다.
+Outbox writer는 다음과 같이 분리합니다.
 
 ```text
-pre-fanout: OutboxFanoutService
-post-fanout: atomic aggregate projector
+pre-fanout intent: OutboxFanoutService
+post-fanout status: atomic aggregate projector
 ```
 
 ## 작업 원칙
 
 1. 각 PR은 독립적으로 build/test 가능해야 합니다.
 2. Schema는 writer cutover 전에 additive하게 배포합니다.
-3. Inactive code를 추가하는 것은 허용하지만, 같은 상태를 두 경로가 함께 쓰는 것은 금지합니다.
-4. Retry 알고리즘과 product semantics는 책임 분리 과정에서 변경하지 않습니다.
-5. Provider outcome unknown의 hold/quarantine 의미를 바꾸지 않습니다.
-6. Grouped send와 community/shorts alarm-once 동작은 characterization test로 먼저 고정합니다.
-7. Worker 전용 store 이동은 `git mv`를 우선하여 history를 보존합니다.
-8. Generated decision index와 schema snapshot은 해당 canonical tool로 갱신합니다.
-9. Effect 인접 DB command는 commit 오류를 곧바로 non-commit으로 해석하지 않고 primary exact read-back으로 판정합니다.
-10. Provider call이 시작된 뒤에는 어떤 DB retry도 provider send를 자동 재실행하지 않습니다.
+3. Inactive code는 허용하지만 같은 상태의 old/new dual write는 금지합니다.
+4. Retry 알고리즘과 제품 동작은 책임 분리 과정에서 변경하지 않습니다.
+5. Outcome unknown의 hold/quarantine 의미를 유지합니다.
+6. Grouped send와 Community/Shorts alarm-once 동작은 먼저 characterization합니다.
+7. Worker 전용 package 이동은 `git mv`를 우선합니다.
+8. Generated decision index와 schema snapshot은 canonical tool로 갱신합니다.
+9. Commit 오류를 non-commit으로 단정하지 않고 primary exact read-back으로 판정합니다.
+10. Provider call 이후 어떤 DB retry도 provider send를 자동 재실행하지 않습니다.
+11. Community/Shorts logical identity는 `(kind, canonical_post_id, room_id)` 하나를 모든 계층이 공유합니다.
+12. Post-level decision cache는 room-level logical-delivery gate를 생략하는 권한이 아닙니다.
+13. Logical key와 raw room/request ID는 metric label에 넣지 않습니다.
+14. Alarm-worker replica는 이 작업 전체에서 1을 유지합니다.
 
-## Phase 0. 현재 동작 characterization
+## Phase 0. 현재 동작 characterization과 위험 지도
 
 ### 목표
 
-리팩터링 전에 현재 안전 속성과 의도된 동작을 테스트로 고정합니다. 이미 있는 테스트는 재사용하고 빠진 crash/operation 경계만 추가합니다.
+현재 안전 속성과 의도된 동작을 테스트로 고정하고, 리팩터링에서 제거할 unsafe recovery와 logical-dedupe gap을 명시합니다.
 
 ### 대상
 
 ```text
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/
 hololive/hololive-shared/pkg/service/youtube/outbox/store/
+hololive/hololive-shared/pkg/service/youtube/tracking/observation/
 ```
 
-### 반드시 고정할 동작
+### 유지할 동작
 
 - stale `locked_at` token은 500 microsecond 차이도 거부합니다.
 - `SENDING` row는 primary claim이 다시 가져가지 않습니다.
-- timeout/outcome unknown은 failure bucket과 success bucket에 들어가지 않습니다.
-- stale `SENDING`은 `QUARANTINED`가 되고 aggregate는 `FAILED`로 수렴합니다.
-- `SENT` row는 legacy failure writer가 덮어쓰지 않습니다.
-- delivery success와 community/shorts tracking은 같은 transaction입니다.
-- grouped outcome unknown 뒤 individual fallback을 실행하지 않습니다.
-- claim defer는 attempt를 소비하지 않습니다.
-- already-satisfied room은 provider 호출 없이 delivery를 terminal 처리합니다.
-- partial delivery revive는 `FAILED` child만 reset하고 `SENT` child를 보존합니다.
-- all-quarantined outbox는 revive하지 않습니다.
+- Outcome unknown은 failure/success bucket에 들어가지 않습니다.
+- Stale `SENDING`은 `QUARANTINED`, outbox는 `FAILED`로 수렴합니다.
+- `SENT` row는 stale failure writer가 덮어쓰지 않습니다.
+- Delivery success와 Community/Shorts tracking은 같은 transaction입니다.
+- Grouped outcome unknown 뒤 individual fallback을 실행하지 않습니다.
+- Claim defer는 attempt를 소비하지 않습니다.
+- 이미 받은 room은 provider 호출 없이 terminal 처리합니다.
+- Revive는 `FAILED` child만 reset하고 `SENT`/`QUARANTINED`를 보존합니다.
+- All-quarantined outbox는 revive하지 않습니다.
 
-### 추가할 테스트
+### 제거할 현재 위험
+
+- `recoverSuccessfulCommunityShortsSentState`의 ID-only `SENDING -> SENT` recovery
+- Failure reason 문자열과 SQL `CASE`에 분산된 retry/permanent 정책
+- Post-level cached `Proceed`가 room-level sibling resolution을 건너뛸 수 있는 구조
+- 같은 batch의 동일 post/room row가 별도 provider operation이 될 수 있는 구조
+- Per-room sibling gate가 `SENT`만 보고 `SENDING`/`QUARANTINED`를 보지 않는 구조
+
+### 추가할 characterization test
 
 ```text
 TestOutcomeUnknownDoesNotReleaseAlarmClaim
 TestGroupedOutcomeUnknownDoesNotFallback
 TestAlreadySatisfiedDoesNotInvokeProvider
 TestClaimDeferredDoesNotConsumeAttempt
+TestStaleSendingQuarantinePreservesUnknownOutcomeMeaning
 ```
 
-ID-only success recovery는 현재 behavior를 정당화하는 characterization test를 추가하지 않습니다. PR 5의 새 fenced finalization cutover에서 제거되고, provider success 이후 재전송이 없다는 fault-injection test로 대체합니다.
+Unsafe recovery를 정당화하는 characterization test는 추가하지 않습니다. PR 5에서 recovery 제거와 DB-only finalization adjudication test를 함께 도입합니다.
 
 ### 검증
 
 ```bash
 go test ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch/...
 go test ./hololive/hololive-shared/pkg/service/youtube/outbox/store/...
+go test ./hololive/hololive-shared/pkg/service/youtube/tracking/observation/...
 ```
 
 ### 완료 조건
 
-- 현재 의도된 behavior가 테스트 이름으로 발견 가능합니다.
-- Outcome unknown과 tracking transaction 테스트가 provider 호출 횟수까지 단언합니다.
-- Flaky sleep 대신 injected clock, channel, DB state를 사용합니다.
+- 유지할 behavior가 테스트 이름으로 발견 가능합니다.
+- Outcome unknown과 grouped fallback 테스트가 provider 호출 횟수를 단언합니다.
+- `time.Sleep` 기반 race test 대신 injected clock, channel, DB state를 사용합니다.
+- 제거 대상 함수와 SQL call site가 PR 5/7 작업표에 연결됩니다.
 
 ## PR 1. Additive delivery fencing schema
 
 ### 목표
 
-Runtime behavior를 바꾸기 전에 `youtube_notification_delivery.row_version`을 추가하고 모든 row scanner가 읽을 수 있게 합니다.
+Runtime behavior를 바꾸기 전에 `youtube_notification_delivery.row_version`을 추가하고 모든 delivery scanner가 읽을 수 있게 합니다.
 
-### migration
+### Migration
 
-현재 manifest의 마지막 migration이 `189_youtube_job_lease_failure_diagnostics_reconcile.sql`이므로 제안 파일명은 다음입니다.
+현재 manifest의 마지막 migration은 `189_youtube_job_lease_failure_diagnostics_reconcile.sql`입니다. 제안 파일은 다음입니다.
 
 ```text
 hololive/hololive-api/scripts/migrations/190_youtube_delivery_row_version.sql
 ```
 
-병렬 branch가 먼저 번호를 사용하면 migration 규약에 따라 merge 시점의 `max+1`로 재번호합니다. Manifest의 왼쪽 sequence는 현재 마지막 값 `050`의 다음 값으로 갱신합니다.
+병렬 branch가 번호를 먼저 사용하면 merge 시점의 `max+1`로 재번호합니다. Manifest sequence는 현재 `050` 다음인 `051`을 사용합니다.
 
 ```sql
 ALTER TABLE youtube_notification_delivery
@@ -131,7 +159,7 @@ ALTER TABLE youtube_notification_delivery
     VALIDATE CONSTRAINT chk_youtube_notification_delivery_row_version_nonnegative;
 ```
 
-Constant default를 사용하고 index를 만들지 않습니다.
+Constant default를 사용하고 `row_version` index를 만들지 않습니다.
 
 ### 수정 파일
 
@@ -142,10 +170,10 @@ hololive/hololive-shared/pkg/domain/youtube_delivery.go
 hololive/hololive-shared/pkg/service/youtube/outbox/deliverysql/pgx.go
 hololive/hololive-shared/pkg/service/youtube/outbox/store/queries/*.sql
 hololive/hololive-dbtest/testdata/schema_snapshot.golden.sql
-관련 DB fixtures/tests
+관련 fixtures/tests
 ```
 
-모든 delivery `SELECT`/`RETURNING` column order를 검색하여 scanner와 일치시킵니다.
+모든 `SELECT`/`RETURNING` column order를 scanner와 대조합니다.
 
 ```bash
 rg -n "RETURNING .*attempt_count|SELECT .*attempt_count" \
@@ -153,11 +181,11 @@ rg -n "RETURNING .*attempt_count|SELECT .*attempt_count" \
   hololive/hololive-alarm-worker/internal/egress/youtubedispatch
 ```
 
-### runtime behavior
+### Runtime behavior
 
-- 기존 writer는 계속 active입니다.
-- 기존 writer가 `row_version`을 증가시키지 않아도 이 PR 단계에서는 새 CAS가 active가 아니므로 허용합니다.
-- 새 struct field는 조회·fixture compatibility만 제공합니다.
+- 기존 writer가 계속 active입니다.
+- 새 CAS는 아직 production에 연결하지 않습니다.
+- 기존 writer가 version을 증가시키지 않아도 이 단계에서는 허용합니다.
 
 ### 검증
 
@@ -169,24 +197,22 @@ go test ./hololive/hololive-shared/pkg/domain/...
 go test ./hololive/hololive-shared/pkg/service/youtube/outbox/...
 ```
 
-Snapshot update 명령을 실행한 뒤 update flag 없이 다시 실행해 golden이 안정적인지 확인합니다.
+### Rollback
 
-### rollback
-
-Binary rollback만 수행하고 additive column은 유지합니다. Migration file을 되돌려 production column을 drop하지 않습니다.
+Binary만 rollback하고 additive column은 유지합니다. Production column을 drop하지 않습니다.
 
 ### 완료 조건
 
-- Fresh bootstrap과 existing DB migration이 모두 성공합니다.
-- Row scanner가 version을 반환합니다.
-- Schema snapshot에 column과 constraint가 있습니다.
+- Fresh bootstrap과 existing DB migration이 성공합니다.
+- 모든 scanner와 fixture가 version을 보존합니다.
+- Golden snapshot에 column과 constraint가 있습니다.
 - `row_version` index가 없습니다.
 
-## PR 2. Typed lifecycle vocabulary와 pure policy
+## PR 2. Typed lifecycle vocabulary, logical identity, pure policy
 
 ### 목표
 
-DB write 경로를 바꾸지 않고 state/event/failure/decision policy를 alarm-worker internal에 추가합니다.
+DB write를 바꾸지 않고 상태·이벤트·logical identity·failure·decision policy를 alarm-worker internal에 추가합니다.
 
 ### 새 package
 
@@ -195,6 +221,7 @@ hololive/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle/
 ├── status.go
 ├── event.go
 ├── failure.go
+├── logical_delivery.go
 ├── snapshot.go
 ├── decision.go
 ├── delivery_policy.go
@@ -204,13 +231,36 @@ hololive/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle/
 └── *_test.go
 ```
 
-### delivery event
+### Logical identity
 
-초기 event vocabulary는 다음으로 제한합니다.
+```go
+type LogicalDeliveryKey struct {
+    Kind            DeliveryKind
+    CanonicalPostID string
+    RoomID          string
+    OutboxID        int64
+}
+```
+
+Constructor는 kind에 따라 다음 identity를 만듭니다.
+
+```text
+Community/Shorts: kind + canonical_post_id + room_id
+기타 kind:       outbox_id + room_id
+```
+
+Community/Shorts canonical post ID는 telemetry/claim/sibling query와 같은 resolver를 사용합니다. Empty 또는 ambiguous identity는 전송 진행이 아니라 typed preparation failure입니다.
+
+`String()` 또는 log method가 raw room ID를 반환하지 않게 하고, 관측에는 hash를 사용합니다.
+
+### Event vocabulary
 
 ```text
 AlreadySatisfied
 ClaimDeferred
+DuplicateFollowerDeferred
+EquivalentDeliveryInFlight
+EquivalentDeliveryUnresolved
 PreparationRetryableFailure
 PreparationPermanentFailure
 BeginSend
@@ -221,9 +271,23 @@ SendingLeaseExpired
 ReviveFailed
 ```
 
-`OutcomeUnknown`은 immediate transition event로 등록하지 않습니다. Send application disposition으로 처리하며 DB write가 없습니다.
+`OutcomeUnknown`은 immediate transition event가 아니라 no-write application disposition입니다.
 
-### policy API
+### Decision vocabulary
+
+```text
+BeginSendDecision
+SentDecision
+AlreadySatisfiedDecision
+DeferDecision
+RetryDecision
+FailDecision
+QuarantinePropagationDecision
+```
+
+Concrete constructor는 invalid field combination을 만들 수 없게 합니다.
+
+### Policy API
 
 ```go
 type DeliveryPlanner interface {
@@ -236,26 +300,32 @@ type DeliveryPlanner interface {
 }
 ```
 
-실제 decision은 concrete sealed type으로 구현합니다. 하나의 struct에 nullable patch field를 몰아넣지 않습니다.
+Policy는 DB, pgx, slog, provider SDK, `time.Now()`를 사용하지 않습니다.
 
-### adapter
+### Adapter
 
-기존 `domain.OutboxStatus` row를 lifecycle `DeliveryStatus`로 변환하는 explicit adapter를 둡니다. 알 수 없는 DB status는 zero value로 조용히 변환하지 않고 오류를 반환합니다.
+- Existing DB row status를 lifecycle status로 explicit 변환합니다.
+- Unknown status는 오류입니다.
+- Existing post resolver를 lifecycle logical-key constructor에서 재사용하거나 한 semantic owner로 이동합니다.
 
-### contract tests
+### Contract tests
 
-- state/event 전체 matrix
-- retry 경계
-- attempt semantics
-- `SENT`, `QUARANTINED` terminal
-- `ClaimDeferred`, `AlreadySatisfied` no-attempt
-- explicit clock purity
-- invalid decision construction 방지
-- unknown DB vocabulary 거부
+```text
+TestLogicalDeliveryKeyCommunityUsesCanonicalPostAndRoom
+TestLogicalDeliveryKeyNonPostUsesOutboxAndRoom
+TestLogicalDeliveryKeyRejectsEmptyCanonicalPost
+TestPlannerHandlesEveryStateEventPair
+TestPlannerRetryBoundary
+TestPlannerTerminalStates
+TestPlannerDuplicateFollowerDoesNotConsumeAttempt
+TestPlannerEquivalentInFlightDoesNotConsumeAttempt
+TestPlannerEquivalentUnknownPropagatesQuarantineWithoutAttempt
+TestPlannerUsesExplicitTimeOnly
+```
 
-### runtime behavior
+### Runtime behavior
 
-기존 writer와 dispatcher flow를 그대로 사용합니다. 이 PR에서는 policy를 production DB write에 연결하지 않습니다.
+기존 dispatcher/writer는 그대로입니다. 새 policy는 production DB write에 연결하지 않습니다.
 
 ### 검증
 
@@ -264,22 +334,22 @@ go test ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch/lifecyc
 go test -race ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle/...
 ```
 
-### rollback
+### Rollback
 
 Inactive package만 제거합니다.
 
 ### 완료 조건
 
-- Policy test는 DB 없이 실행됩니다.
-- Policy package가 store, pgx, slog, provider SDK를 import하지 않습니다.
-- `time.Now()` 호출이 없습니다.
-- `go list -deps`에서 lifecycle package가 alarm-worker internal과 표준 라이브러리 외 실행 구현에 의존하지 않습니다.
+- Policy가 순수합니다.
+- Community/Shorts logical identity resolver가 하나입니다.
+- Outcome unknown이 transition decision을 만들지 않습니다.
+- Terminal, attempt, logical-sibling 규칙이 DB 없는 contract test로 고정됩니다.
 
-## PR 3. Typed preparation result와 provider outcome
+## PR 3. Typed preparation coordinator와 provider outcome
 
 ### 목표
 
-`DispatchResult.FailureBuckets map[string][]int64`와 reason 문자열 기반 permanent 분류를 typed result로 교체합니다. 상태 write는 아직 legacy repository를 사용하되 application mapping은 typed 결과를 기준으로 합니다.
+Raw failure bucket을 제거하고, provider 호출 전에 batch coalescing과 durable sibling gate를 수행하는 typed preparation coordinator를 도입합니다. DB status writer는 아직 legacy adapter를 사용할 수 있습니다.
 
 ### 새 타입
 
@@ -288,10 +358,17 @@ type PreparationResultKind uint8
 
 type ProviderOutcomeKind uint8
 
+type PreparedCandidate struct {
+    Delivery      ClaimedDelivery
+    LogicalKey    lifecycle.LogicalDeliveryKey
+    Preparation   PreparationLease
+}
+
 type DeliveryOutcome struct {
     DeliveryID  int64
     OutboxID    int64
     OperationID string
+    LogicalKey  lifecycle.LogicalDeliveryKey
     Kind        ProviderOutcomeKind
     FailureCode lifecycle.FailureCode
     Message     string
@@ -306,12 +383,53 @@ type DeliveryOutcome struct {
 DispatchResult.FailureBuckets
 DispatchResult.FailureRetryAfter
 deliveryFailureReasonIsPermanent
-reason 문자열을 map key로 사용하는 metric recorder
+reason 문자열 기반 metric bucket
 ```
 
-### transport classifier
+### Batch coalescing
 
-Provider SDK/HTTP 오류를 다음으로 분류하는 adapter를 한 위치에 둡니다.
+Claimed candidate를 logical key로 묶습니다.
+
+- Leader는 `(created_at, delivery_id)` 오름차순 첫 row입니다.
+- Follower는 provider request에 들어가지 않습니다.
+- Follower는 `DuplicateFollowerDeferred`로 attempt 없이 due를 이동합니다.
+- 다른 room은 다른 logical key이므로 독립적으로 처리합니다.
+
+```text
+claimed rows
+-> logical key 생성
+-> deterministic leader/follower partition
+-> follower defer decisions
+-> leader만 durable sibling gate와 alarm claim 수행
+```
+
+### Durable sibling gate
+
+Leader마다 same logical delivery sibling을 조회합니다.
+
+```text
+SENT        -> AlreadySatisfied
+SENDING     -> EquivalentDeliveryInFlight, no-attempt defer
+QUARANTINED -> EquivalentDeliveryUnresolved, no-attempt quarantine propagation
+없음/FAILED/PENDING -> normal alarm claim/preparation
+```
+
+`SENT`와 `QUARANTINED`가 함께 있으면 `SENT`가 우선합니다.
+
+Post-level decision cache가 `Proceed`를 반환한 cache hit여도 room-level sibling gate를 다시 실행합니다. Cache는 post-level claim 계산만 재사용합니다.
+
+### Query 성능
+
+Sibling query는 다음 조건을 만족해야 합니다.
+
+- `room_id`, relevant status, kind를 먼저 제한합니다.
+- Candidate outbox의 payload/content를 existing canonical resolver로 비교합니다.
+- Unbounded full-table scan을 허용하지 않습니다.
+- `EXPLAIN (ANALYZE, BUFFERS)` evidence 없이 새 expression index를 추가하지 않습니다.
+
+### Transport classifier
+
+SDK/HTTP outcome을 다음으로 분류합니다.
 
 ```text
 Delivered
@@ -322,16 +440,31 @@ OutcomeUnknown
 
 Timeout과 connection reset은 provider 계약이 반대로 증명하지 않는 한 `OutcomeUnknown`입니다.
 
-### grouped send
+### Grouped send
 
+- Group member logical key는 모두 달라야 합니다.
 - Outcome unknown이면 fallback하지 않습니다.
-- Known-not-accepted이며 `fallback_allowed`일 때만 individual fallback을 허용합니다.
+- Known-not-accepted + `fallback_allowed=true`일 때만 individual fallback을 허용합니다.
 - Fallback 자체는 attempt를 소비하지 않습니다.
-- Provider call count와 member delivery 집합을 테스트합니다.
 
-### legacy writer bridge
+### Legacy writer bridge
 
-이 PR에서 legacy writer를 호출해야 한다면 typed outcome을 legacy method로 변환하는 adapter는 application service 한 파일에만 둡니다. Repository가 raw provider error를 받지 않게 합니다.
+Typed result를 legacy method로 변환해야 한다면 application service 한 파일에만 둡니다. Repository는 raw provider error를 받지 않습니다.
+
+### 테스트
+
+```text
+TestSameBatchSamePostRoomSelectsOneLeader
+TestSameBatchSamePostDifferentRoomsRemainIndependent
+TestProceedCacheHitStillRunsRoomSiblingGate
+TestSentSiblingBecomesAlreadySatisfied
+TestSendingSiblingDefersWithoutAttempt
+TestQuarantinedSiblingPropagatesQuarantineWithoutAttempt
+TestSentSiblingWinsOverQuarantinedSibling
+TestGroupedOperationRejectsDuplicateLogicalKeys
+TestGroupedOutcomeUnknownDoesNotFallback
+TestTransportTimeoutIsOutcomeUnknown
+```
 
 ### 검증
 
@@ -340,51 +473,46 @@ go test ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch/...
 go test -race ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch/...
 ```
 
-### rollback
+### Rollback
 
-Typed result commit 전체를 revert합니다. DB schema 변화는 없습니다.
+Typed coordinator/outcome commit을 revert합니다. DB schema 변화는 없습니다.
 
 ### 완료 조건
 
 - Production code에 failure reason map이 없습니다.
-- Permanent/retry 정책은 raw 문자열을 비교하지 않습니다.
-- Outcome unknown path는 상태 writer와 claim release를 호출하지 않습니다.
-- Grouped unknown test에서 provider call은 정확히 1회입니다.
+- Same batch logical delivery의 provider candidate가 하나입니다.
+- `Proceed` cache hit가 room-level gate를 생략하지 않습니다.
+- `SENDING`/`QUARANTINED` sibling이 same-room resend를 차단합니다.
+- Outcome unknown은 writer, claim release, fallback을 호출하지 않습니다.
 
-## PR 4. Internal transition store와 operation-level CAS
+## PR 4. Internal transition store, sibling query, operation-level CAS
 
 ### 목표
 
-Worker 전용 store를 alarm-worker internal로 이동하고 row-version aware 의도별 API를 추가합니다. 새 API는 아직 production dispatcher에 연결하지 않을 수 있지만 contract integration test를 통과해야 합니다.
+Worker 전용 store를 alarm-worker internal로 이동하고, logical sibling 조회와 version-aware intent-specific command를 구현합니다. Production writer cutover 전 contract/integration/fault-injection test를 통과해야 합니다.
 
-### package 이동
+### Package 이동
 
 ```text
 FROM hololive/hololive-shared/pkg/service/youtube/outbox/store
 TO   hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store
 ```
 
-`git mv`를 사용하고 alarm-worker import를 같은 PR에서 수정합니다. 다른 production runtime import가 없음을 architecture gate와 `go list`로 확인합니다.
+`git mv`와 import cutover를 같은 PR에서 수행합니다. 다른 production runtime importer가 없는지 `go list`와 ownership gate로 확인합니다.
 
-### worker 전용 row model
+### Worker-owned row model
 
-Internal store는 `store.DeliveryRow` 또는 동등한 worker-owned row DTO를 정의합니다. 다음 타입에 production code가 더 이상 의존하지 않게 합니다.
+Internal store는 `DeliveryRow`, `OutboxRow`, `LogicalSibling` 또는 동등한 DTO를 소유합니다. Final cleanup에서 production consumer가 alarm-worker 하나뿐이면 `domain.YouTubeNotificationDelivery`를 삭제합니다. Cross-runtime outbox intent 타입은 별도 검토 없이 옮기지 않습니다.
 
-```text
-hololive-shared/pkg/domain.YouTubeNotificationDelivery
-```
-
-PR 4에서는 adapter를 둘 수 있지만 final cleanup에서 실제 소비자 검색 결과가 alarm-worker 하나이면 shared row type을 삭제합니다. Cross-runtime outbox intent 타입은 별도 검토 없이 옮기지 않습니다.
-
-`deliverysql` helper는 이 PR에서 무리하게 모두 옮기지 않아도 되지만, production 소비자가 alarm-worker 하나로 확인된 helper는 최종 cleanup PR에서 internal로 회수합니다.
-
-### transition API
+### Store API
 
 ```text
 ClaimPending
+FindLogicalDeliverySiblings
 BeginSending
 CompleteAlreadySatisfied
 DeferClaim
+PropagateQuarantine
 ScheduleRetryBatch
 FailBatch
 CompleteSent
@@ -393,42 +521,63 @@ ReviveFailedOutboxes
 UpdateOutboxAggregateStatuses
 ```
 
-Generic `UpdateStatus`, nullable patch DSL은 만들지 않습니다.
+Generic `UpdateStatus` 또는 nullable patch DSL은 만들지 않습니다.
 
-### version CAS
+### Sibling query contract
 
-Claim과 모든 mutation에서 `row_version=row_version+1`을 적용합니다. `status`, version, attempt, `locked_at`을 모두 expected predicate에 포함합니다.
+- Current row와 current batch leader/follower ID를 제외합니다.
+- Community/Shorts는 kind, room, candidate status로 DB candidate를 제한하고 canonical resolver로 post ID를 비교합니다.
+- Status priority는 `SENT > SENDING > QUARANTINED`입니다.
+- Query result는 current snapshot 이후 stale해질 수 있으므로 후속 mutation도 current row fencing을 검사합니다.
+- Replica>1의 same-logical-key race를 해결했다고 주장하지 않습니다.
 
-### operation-level atomicity
+### Version CAS
 
-`BeginSending`과 grouped finalization은 exact provider operation member 전체를 transaction에서 검사합니다. 일부 member conflict 시 전체 rollback합니다.
+Claim과 모든 mutation에서 `row_version=row_version+1`을 적용합니다. Expected predicate는 status, version, attempt, `locked_at`을 포함합니다.
 
-### commit adjudication
+`PropagateQuarantine`은 다음 semantics입니다.
 
-Store는 effect 인접 operation에서 `Applied`, `Conflict`, `Missing`, `Indeterminate`를 구분합니다.
+```text
+PENDING leased -> QUARANTINED
+attempt_count 유지
+locked_at = NULL
+row_version + 1
+source sibling evidence를 audit reason으로 보존
+```
 
-- `BeginSending` commit 오류 후 primary exact read-back으로 post-state를 확인하기 전 provider를 호출하지 않습니다.
-- Exact pre-state가 확인될 때만 같은 immutable DB command를 재시도합니다.
-- Grouped member 일부만 pre/post-state이면 atomicity breach입니다.
-- Store는 callback을 자동 반복하지 않습니다.
+### Operation atomicity
 
-### success transaction
+`BeginSending`, grouped success, grouped known failure는 exact operation member 전체를 transaction에서 검사합니다. 한 member라도 conflict/missing이면 전체 rollback합니다.
 
-`CompleteSent`는 member delivery와 tracking을 같은 transaction에서 commit합니다. CAS에 성공하지 않은 member를 tracking에 포함하지 않습니다.
+### Commit adjudication
 
-### unsafe recovery 제거 준비
+Store는 `Applied`, `Conflict`, `Missing`, `Indeterminate`를 구분합니다.
 
-ID-only로 `SENDING -> SENT`를 쓰는 recovery API를 새 store에 구현하지 않습니다. Legacy 경로는 PR 5 cutover와 동시에 제거합니다.
+- Begin commit 오류는 primary exact read-back 완료 전 provider 호출 권한을 만들지 않습니다.
+- Exact pre-state에서만 같은 immutable DB command를 retry합니다.
+- Mixed member는 atomicity breach입니다.
+- Store는 transition callback을 자동 반복하지 않습니다.
 
-### integration/fault-injection tests
+### Success transaction
+
+`CompleteSent`는 delivery member와 exact alarm claim token, tracking, latency classification을 같은 transaction에서 commit합니다.
+
+### Unsafe recovery
+
+ID-only `SENDING -> SENT` API를 새 store에 구현하지 않습니다. Legacy recovery는 PR 5에서 제거합니다.
+
+### Integration/fault-injection tests
 
 ```text
 TestClaimPendingIncrementsVersion
+TestFindLogicalSiblingUsesCanonicalPostIdentity
+TestFindLogicalSiblingStatusPriority
+TestPropagateQuarantineDoesNotConsumeAttempt
 TestBeginSendingRejectsStalePreparationLease
 TestBeginSendingRollsBackWholeOperationOnOneConflict
-TestBeginSendingCommitResponseLostConfirmsByReadBackBeforeSend
+TestBeginSendingCommitResponseLostConfirmsBeforeSend
 TestBeginSendingIndeterminateNeverCallsProvider
-TestCompleteSentRollsBackWholeOperationOnOneConflict
+TestCompleteSentRollsBackOnAlarmClaimConflict
 TestCompleteSentPersistsTrackingForCommittedMembers
 TestCompleteSentCommitResponseLostConfirmsTracking
 TestCompleteSentConfirmedNotCommittedRetriesDBOnly
@@ -450,23 +599,23 @@ RUN_INTEGRATION_TESTS=true go test -tags=integration \
 ./scripts/architecture/check-repository-ownership.sh
 ```
 
-### rollback
+### Rollback
 
-Import/package move commit을 revert합니다. Schema column은 유지합니다.
+Package/import move를 revert합니다. Additive schema는 유지합니다.
 
 ### 완료 조건
 
-- Store package의 production importer는 alarm-worker internal뿐입니다.
-- 모든 transition SQL은 version을 검사하고 증가시킵니다.
+- Store의 production importer는 alarm-worker internal뿐입니다.
+- Logical sibling query가 canonical identity와 status priority를 지킵니다.
+- 모든 mutation이 version을 검사하고 증가시킵니다.
 - Repository method가 `MaxRetries`를 받지 않습니다.
-- Grouped operation partial CAS가 transaction rollback됩니다.
-- Commit response loss와 `Indeterminate` fault-injection test가 통과합니다.
+- Grouped partial CAS와 commit ambiguity test가 통과합니다.
 
 ## PR 5. Runtime writer cutover와 preparation-before-SENDING
 
 ### 목표
 
-Dispatcher의 active write path를 새 lifecycle/transition service로 한 번에 교체합니다. 이 PR이 실제 behavior cutover입니다.
+Dispatcher의 active write path를 새 coordinator, lifecycle policy, transition store로 한 번에 교체합니다.
 
 ### 기존 순서
 
@@ -482,14 +631,16 @@ FetchAndLock
 
 ```text
 ClaimPending -> PreparationLease
--> outbox load
--> validation / rendering
--> alarm-once claim / already-satisfied check
--> request와 ClientRequestID 확정
+-> outbox load / validation
+-> logical key 생성
+-> in-batch leader/follower coalescing
+-> durable SENT/SENDING/QUARANTINED sibling gate
+-> post-level alarm claim
+-> rendering / route / ClientRequestID 확정
 -> PreparedSendOperation 생성
 -> operation-level BeginSending
 -> BeginSending commit adjudication
--> provider send
+-> provider call
 -> typed outcome
 -> policy decision
 -> operation-level finalization
@@ -501,72 +652,75 @@ ClaimPending -> PreparationLease
 ```text
 claim_manager_pipeline.go
 claim_manager_gate.go
+claim_manager_acquire.go
 send_engine*.go
 metrics_recorder*.go
 delivery_transition_service.go
-outbox 관련 adapter
+preparation_coordinator.go
 Dispatcher wiring/tests
 ```
 
-### AlreadySatisfied
+### Logical coordinator
 
-Pre-send check에서 해당 room의 delivery가 이미 충족됐으면 `CompleteAlreadySatisfied`를 호출하고 provider를 호출하지 않습니다. 새 tracking mark를 추정해서 만들지 않습니다.
+- Coalescing은 post-level claim 획득 전에 수행합니다.
+- Same logical key follower는 attempt 없이 defer합니다.
+- Cache hit `Proceed`도 room-level sibling gate를 실행합니다.
+- `SENT` sibling은 provider 없이 current row를 `SENT`로 처리합니다.
+- `SENDING` sibling은 attempt 없이 defer합니다.
+- `QUARANTINED` sibling은 provider 없이 current row를 `QUARANTINED`로 전이합니다.
 
-### ClaimDeferred
+### BeginSending adjudication
 
-다른 실행이 alarm claim을 보유하면 `DeferClaim`으로 due를 이동하고 attempt는 유지합니다.
-
-### BeginSending commit adjudication
-
-- `Applied`: exact Send fence를 사용해 provider를 한 번 호출합니다.
-- Exact pre-state: 동일 DB command만 재시도합니다.
+- `Applied`: exact Send fence로 provider를 한 번 호출합니다.
+- Exact pre-state: 동일 DB command만 retry합니다.
 - `Conflict`/`Missing`: provider를 호출하지 않습니다.
 - `Indeterminate`: provider를 호출하지 않고 critical evidence를 기록합니다.
 
-### provider success finalization
+### Provider success finalization
 
-Provider 성공 뒤 DB finalization 오류가 나면 primary exact read-back을 먼저 수행합니다.
+- Exact post-state와 tracking: 성공으로 수렴합니다.
+- Exact `SENDING + SendFence` pre-state: 같은 DB finalization만 bounded retry합니다.
+- Conflict, tracking mismatch, `Indeterminate`: provider 재호출과 ID-only recovery를 금지합니다.
+- Durable result가 확인되지 않으면 row는 quarantine될 수 있습니다.
 
-- Exact post-state와 tracking이면 성공으로 수렴합니다.
-- Exact `SENDING + SendFence` pre-state면 같은 immutable `SentOperation`의 DB finalization만 bounded retry합니다.
-- `Conflict`, tracking mismatch, `Indeterminate`에서는 provider를 재호출하거나 ID-only recovery를 실행하지 않습니다.
-- Durable result가 확인되지 않으면 row는 이후 quarantine될 수 있습니다.
-
-### send lease budget
-
-Config validation에 다음을 추가합니다.
+### Send lease budget
 
 ```text
 SendingFinalizeGrace = max(2*PollInterval, 5s)
 LockTimeout >= DeliverySendTimeout + SendingFinalizeGrace
 ```
 
-Provider call을 시작하기 전에 remaining lease budget을 검사합니다.
+Provider call 전 remaining lease budget을 검사합니다.
 
-### old writer 제거
-
-새 path를 연결하는 같은 PR에서 다음 production call site를 제거합니다.
+### 제거할 active call site
 
 ```text
 MarkSendingBatchIfLocked direct call
 MarkFailedRetryBatchIfLocked direct call
 MarkPermanentFailureBatchIfLocked direct call
-markDispatchResult legacy bucket loop
-recoverSuccessfulCommunityShortsSentState ID-only path
+markDispatchResult failure bucket loop
+recoverSuccessfulCommunityShortsSentState
+markRecoveredSentDeliveryRows
 ```
 
-Compatibility wrapper가 필요하면 test-only 또는 unexported adapter로 한정하고 production call graph에는 남기지 않습니다.
+Compatibility wrapper가 필요하면 test-only 또는 unexported inactive adapter로 제한합니다.
 
 ### 테스트
 
-- Preparation failure는 `SENDING`을 만들지 않습니다.
-- BeginSending conflict/indeterminate operation은 provider call 0회입니다.
-- Success finalization DB transient non-commit에서 provider call 1회입니다.
-- Success finalization commit response loss에서 provider call 1회입니다.
-- Success finalization conflict/indeterminate에서 unsafe recovery call 0회입니다.
-- Unknown outcome에서 state writer와 claim release 0회입니다.
-- Stale sending sweeper와 live send가 config invariant 아래에서 경합하지 않습니다.
-- Grouped begin/finalize all-or-none입니다.
+```text
+TestSameLogicalDeliveryBatchCallsProviderOnce
+TestProceedCacheHitCannotBypassRoomGate
+TestSendingSiblingPreventsProviderCallWithoutAttempt
+TestQuarantinedSiblingPreventsProviderCallAndPropagatesState
+TestPreparationFailureNeverCreatesSending
+TestBeginSendingConflictNeverCallsProvider
+TestBeginSendingIndeterminateNeverCallsProvider
+TestSuccessFinalizationNonCommitRetriesDBOnly
+TestSuccessFinalizationResponseLossCallsProviderOnce
+TestSuccessConflictNeverCallsUnsafeRecovery
+TestOutcomeUnknownWritesNothingAndKeepsClaim
+TestGroupedBeginAndFinalizeAreAllOrNone
+```
 
 ### 검증
 
@@ -578,9 +732,9 @@ RUN_INTEGRATION_TESTS=true go test -tags=integration \
 go test ./hololive/hololive-shared/pkg/service/youtube/tracking/observation/...
 ```
 
-### rollout preflight
+### Rollout preflight
 
-Cutover 배포 전에 `SENDING`을 모두 drain 또는 quarantine하고 0건인지 확인합니다.
+Cutover 전에 `SENDING`을 모두 drain 또는 quarantine합니다.
 
 ```sql
 SELECT count(*) AS sending_count,
@@ -590,34 +744,48 @@ FROM youtube_notification_delivery
 WHERE status = 'SENDING';
 ```
 
-0이 아니면 새 binary로 교체하지 않습니다. Graceful drain과 기존 quarantine loop를 먼저 완료합니다.
+0이 아니면 교체하지 않습니다.
 
-### deployment
+추가 audit:
 
-- Alarm-worker 단일 인스턴스 replacement로 배포합니다.
+```sql
+SELECT o.kind, d.room_id, count(*)
+FROM youtube_notification_delivery d
+JOIN youtube_notification_outbox o ON o.id = d.outbox_id
+WHERE o.kind IN ('COMMUNITY_POST', 'NEW_SHORT')
+  AND d.status IN ('SENDING', 'QUARANTINED')
+GROUP BY o.kind, d.room_id
+HAVING count(*) > 1;
+```
+
+이 query는 canonical post identity를 완전히 표현하지 않으므로 탐색용입니다. 실제 동일-post 여부는 migration 전 audit tool에서 canonical resolver로 판정합니다.
+
+### Deployment
+
+- Alarm-worker 단일 인스턴스 replacement입니다.
 - Old/new egress owner를 동시에 실행하지 않습니다.
-- Migration이 먼저 적용됐는지 확인합니다.
-- 배포 직후 finalization conflict/indeterminate, `SENDING` age, quarantine 증가를 확인합니다.
+- Migration 적용을 확인합니다.
+- 배포 직후 finalization conflict/indeterminate, logical coalesce, sibling gate, `SENDING` age, quarantine을 확인합니다.
 
-### immediate rollback trigger
+### Immediate rollback trigger
 
-다음 중 하나면 새 binary를 rollback합니다.
+- Provider success finalization conflict 또는 `Indeterminate` 발생
+- Same logical key의 provider call 중복
+- `SENT`와 tracking 불일치
+- Terminal row의 active lock
+- Child aggregate 불수렴
+- Grouped member mixed state
+- Sibling gate가 `SENT`보다 `QUARANTINED`를 우선하는 관측
 
-- Provider success finalization conflict 또는 `Indeterminate`가 1건이라도 발생합니다.
-- Provider call count가 contract test/trace와 다르게 중복됩니다.
-- `SENT`와 tracking state가 불일치합니다.
-- Terminal row가 active lock을 보유합니다.
-- Aggregate가 child 상태와 수렴하지 않습니다.
-- Grouped member가 mixed state로 관측됩니다.
-
-Additive `row_version` column은 rollback하지 않습니다.
+Additive `row_version`은 rollback하지 않습니다.
 
 ### 완료 조건
 
-- Production delivery writer는 새 transition service 하나입니다.
-- Preparation failure는 provider-effect phase와 분리됩니다.
-- Outcome unknown safety behavior가 기존과 동일합니다.
-- External send 재호출 없는 finalization adjudication이 검증됩니다.
+- Production writer는 새 transition service 하나입니다.
+- Preparation과 provider-effect phase가 분리됩니다.
+- Same logical delivery의 same-batch send leader가 하나입니다.
+- Durable `SENDING`/`QUARANTINED` sibling이 resend를 차단합니다.
+- Provider 재호출 없는 commit adjudication이 검증됩니다.
 
 ## PR 6. Outbox fanout writer 경계와 revive 정렬
 
@@ -626,8 +794,6 @@ Additive `row_version` column은 rollback하지 않습니다.
 Pre-fanout direct writer와 post-fanout aggregate writer를 물리적으로 분리합니다.
 
 ### OutboxFanoutService
-
-다음 operation을 제공합니다.
 
 ```text
 CompleteWithoutTargets
@@ -641,27 +807,28 @@ MaterializeFanout
 
 ```text
 outbox claim 검증
--> canonical target room dedupe
+-> target room canonicalize/dedupe
 -> delivery INSERT ... ON CONFLICT (outbox_id, room_id) DO NOTHING
 -> outbox lock clear
 -> commit
 ```
 
-Child 일부 insert 후 outbox lock release가 실패하는 partial state를 허용하지 않습니다.
+Commit response loss는 canonical target 전체의 child와 lock clear를 primary read-back합니다. Child 일부만 존재하면 atomicity breach입니다.
 
-Commit response loss에서는 canonical target 전체의 child와 outbox lock 해제를 primary read-back합니다. Child 일부만 존재하면 atomicity breach로 처리합니다.
+### Direct writer guard
 
-### direct writer guard
+Pre-fanout finalization은 transaction 안에서 `NOT EXISTS child delivery`를 검사합니다. Child가 있으면 conflict이고 aggregate projector가 소유합니다.
 
-Pre-fanout finalization SQL은 transaction 안에서 `NOT EXISTS child delivery`를 검사합니다. Child가 있으면 conflict로 반환하고 aggregate projector에 맡깁니다.
+### Revive
 
-### revive
-
-- Child가 있으면 `FAILED` child만 reset합니다.
+- Child가 있으면 `FAILED`만 reset합니다.
+- `SENT`/`QUARANTINED`는 보존합니다.
 - 같은 transaction에서 표준 aggregate projector를 실행합니다.
-- Child가 없을 때만 outbox status를 직접 reset합니다.
-- All-quarantined outbox는 제외합니다.
-- Commit result가 `Indeterminate`면 stale selected ID set을 그대로 반복하지 않고 eligibility selection부터 다시 수행합니다.
+- Child가 없을 때만 outbox를 직접 reset합니다.
+- All-quarantined outbox를 제외합니다.
+- Commit `Indeterminate`면 stale ID set을 반복하지 않고 eligibility selection부터 다시 수행합니다.
+
+Logical duplicate로 quarantine가 전파된 child도 revive 대상이 아닙니다.
 
 ### 테스트
 
@@ -673,6 +840,7 @@ TestCompleteWithoutTargetsRejectsExistingChild
 TestFanoutFailureRejectsExistingChild
 TestReviveChildOutboxUsesAggregateProjection
 TestReviveDoesNotResetQuarantinedChild
+TestReviveDoesNotResetPropagatedQuarantine
 TestReviveCommitUnknownRestartsEligibilitySelection
 TestConcurrentFanoutAndDirectFinalizeCannotBothCommit
 ```
@@ -685,16 +853,16 @@ RUN_INTEGRATION_TESTS=true go test -tags=integration \
   ./hololive/hololive-alarm-worker/internal/egress/youtubedispatch/...
 ```
 
-### rollback
+### Rollback
 
-새 binary를 이전 writer-cutover binary로 rollback합니다. Delivery schema는 유지합니다.
+이전 writer-cutover binary로 rollback합니다. Delivery schema는 유지합니다.
 
 ### 완료 조건
 
 - Child outbox direct writer call site가 없습니다.
 - Fanout materialization과 lock clear가 한 transaction입니다.
 - Revive가 aggregate 계산을 복제하지 않습니다.
-- Fanout/revive commit ambiguity가 exact read-back contract를 따릅니다.
+- Propagated quarantine가 자동 revive되지 않습니다.
 
 ## PR 7. Constraints, observability, architecture gate, legacy cleanup
 
@@ -703,8 +871,6 @@ RUN_INTEGRATION_TESTS=true go test -tags=integration \
 우회 writer와 stale shared implementation을 제거하고 운영 검증을 완결합니다.
 
 ### DB audit
-
-다음 query가 0건인지 확인하고 필요한 data repair를 별도 migration으로 수행합니다.
 
 ```sql
 SELECT id, status, attempt_count, locked_at, sent_at
@@ -716,41 +882,44 @@ WHERE status NOT IN ('PENDING', 'SENDING', 'SENT', 'FAILED', 'QUARANTINED')
    OR (status IN ('SENT', 'FAILED', 'QUARANTINED') AND locked_at IS NOT NULL);
 ```
 
-이미 동일 constraint가 있으면 중복 생성하지 않습니다. 새 constraint는 migration 규약에 따라 `NOT VALID`와 `VALIDATE` 순서를 사용합니다.
+기존 status vocabulary constraint는 중복 생성하지 않습니다. 새 state-shape constraint가 필요하면 `NOT VALID`, audit/repair, `VALIDATE` 순서를 따릅니다.
 
 ### 제거 대상
 
 ```text
 legacy MarkSent/MarkFailed/MarkFailedRetry methods
-reason bucket helpers
+failure reason bucket helper
 ID-only success recovery
 shared store package 잔여 implementation
 unused SQL files
 status alias facade
+중복 canonical post resolver
 ```
 
-`domain.YouTubeNotificationDelivery`, `deliverysql` 등 후보의 production 소비자 집합을 다시 검색합니다. Alarm-worker 하나뿐이면 internal row/helper로 이동하고 shared symbol을 삭제합니다. Cross-runtime 계약 또는 shared 내부 진성 다중 소비자가 확인되면 남기는 이유를 코드맵과 ownership 문서에 기록합니다.
+`domain.YouTubeNotificationDelivery`, `deliverysql` 등 후보의 production consumer를 다시 검색합니다. Alarm-worker 하나뿐이면 internal row/helper로 이동합니다. 남기는 shared symbol에는 실제 다중 소비 근거를 ownership 문서에 기록합니다.
 
-### architecture gate
+### Architecture gate
 
-새 gate 또는 기존 ownership gate에 다음을 추가합니다.
-
-- 허용된 internal store 밖의 `UPDATE youtube_notification_delivery ... status` 금지
-- repository API에서 `MaxRetries` 금지
+- 허용된 internal store 밖의 delivery status update 금지
+- Repository API의 `MaxRetries` 금지
 - `FailureBuckets`, `deliveryFailureReasonIsPermanent` 재도입 금지
-- `QUARANTINED`를 primary claim/revive 대상에 넣는 SQL 금지
-- `SENT`를 source로 하는 transition SQL 금지
-- alarm-worker 밖의 YouTube transition store import 금지
-- ID-only `SENDING -> SENT` recovery SQL 금지
-- provider send callback의 automatic store retry 금지
+- Primary claim/revive의 `QUARANTINED` 포함 금지
+- `SENT` source transition 금지
+- Alarm-worker 밖 transition store import 금지
+- ID-only `SENDING -> SENT` SQL 금지
+- Store callback의 provider send/automatic retry 금지
+- Post-level cache result만으로 room-level gate를 생략하는 call path 금지
+- Community/Shorts canonical post resolver 복제 금지
 
-SQL fixtures와 migrations는 allowlist로 구분합니다. 광범위한 디렉터리 제외는 사용하지 않습니다.
+SQL fixture와 migration은 좁은 allowlist로 구분합니다.
 
-### metrics
+### Metrics
 
 ```text
 youtube_delivery_transition_total
 youtube_delivery_transition_conflict_total
+youtube_delivery_logical_coalesce_total
+youtube_delivery_sibling_gate_total
 youtube_delivery_outcome_unknown_total
 youtube_delivery_quarantine_total
 youtube_delivery_finalization_retry_total
@@ -762,23 +931,17 @@ youtube_outbox_aggregate_transition_total
 youtube_outbox_aggregate_lag_seconds
 ```
 
-Raw IDs와 오류 문자열을 label로 사용하지 않습니다.
+Raw IDs, logical key, 오류 문자열은 label로 사용하지 않습니다.
 
-### 결정 evidence 갱신
-
-구현이 merge되면 decision record를 다음 순서로 갱신합니다.
+### Decision evidence
 
 ```text
-planned -> in_progress
-in_progress -> implemented
-implemented -> verified
+planned -> in_progress -> implemented -> verified
 ```
 
-`implementation`에는 실제 package/migration/gate 경로를, `evidence`에는 contract/integration/crash-window/fault-injection test 경로를 넣습니다. `docs/decisions/INDEX.md`는 iris-stack canonical renderer로 다시 생성합니다.
+`implementation`에는 package/migration/gate, `evidence`에는 contract/integration/logical-dedupe/crash/fault-injection test 경로를 기록합니다. `INDEX.md`는 iris-stack canonical renderer로 생성합니다.
 
 ### 전체 검증
-
-루트 `AGENTS.md`의 검증 집합을 그대로 수행합니다.
 
 ```bash
 ./scripts/architecture/check-repository-ownership.sh
@@ -812,61 +975,62 @@ RUN_INTEGRATION_TESTS=true go test -tags=integration \
 ./scripts/ci/pre-push-gate.sh
 ```
 
-Local pre-push gate의 race, NilAway, static analysis 결과도 우회 없이 통과해야 합니다.
-
 ### 완료 조건
 
-- 우회 status writer를 architecture gate가 차단합니다.
-- Shared public path에는 cross-runtime 또는 진성 다중 소비자만 남습니다.
-- Decision record가 `verified`이고 evidence path가 실제 존재합니다.
-- 운영 dashboard에서 unknown, quarantine, conflict, `Indeterminate`, atomicity breach, aggregate lag를 확인할 수 있습니다.
+- Architecture gate가 우회 writer와 cache-bypass 회귀를 차단합니다.
+- Shared에는 cross-runtime 또는 진성 다중 소비자만 남습니다.
+- Decision record가 `verified`이고 evidence가 존재합니다.
+- Dashboard에서 logical coalesce, sibling gate, unknown, quarantine, conflict, `Indeterminate`, atomicity breach, aggregate lag를 확인할 수 있습니다.
 
 ## 운영 검증
 
 ### 배포 전
 
-- Schema migration ledger에 row-version migration이 있습니다.
+- Row-version migration이 ledger에 있습니다.
 - Invalid-state audit가 0건입니다.
-- `SENDING`이 모두 drain 또는 quarantine됐습니다.
+- `SENDING`이 모두 drain/quarantine됐습니다.
 - Alarm-worker replica가 1입니다.
-- Old/new egress binary 동시 실행 계획이 없습니다.
+- Old/new egress 동시 실행 계획이 없습니다.
+- Logical duplicate audit 결과와 처리 결정을 기록합니다.
 
 ### 배포 직후
 
-- `BeginSend` conflict가 정상적인 stale claim 범위인지 확인합니다.
-- Provider success finalization conflict와 `Indeterminate`는 0이어야 합니다.
-- Quarantine rate가 기존 baseline 대비 비정상 증가하지 않아야 합니다.
-- Aggregate lag가 `AggregateSyncInterval`의 합리적 배수 안에서 수렴해야 합니다.
-- Community/shorts sent tracking과 delivery `SENT`가 일치해야 합니다.
-- Grouped member mixed-state metric은 0이어야 합니다.
+- Provider success finalization conflict/`Indeterminate`는 0입니다.
+- Same logical key provider duplicate는 0입니다.
+- Logical coalesce follower와 sibling gate metric이 예상 범위입니다.
+- `SENT`/tracking이 일치합니다.
+- Grouped mixed-state와 tracking mismatch는 0입니다.
+- Aggregate lag와 quarantine rate가 baseline 범위입니다.
 
 ### 장기 확인
 
-- `QUARANTINED` backlog와 처리 정책을 운영자가 볼 수 있습니다.
-- Retry exhausted와 permanent failure가 stable failure code로 분리됩니다.
-- `SENDING` oldest age가 `LockTimeout`을 지속적으로 넘지 않습니다.
-- Revive가 all-quarantined outbox를 flap시키지 않습니다.
-- Commit adjudication의 `Indeterminate`가 반복되면 DB/network fault를 별도 장애로 조사합니다.
+- `QUARANTINED` backlog를 운영자가 확인할 수 있습니다.
+- Retry exhausted와 permanent failure가 stable code로 분리됩니다.
+- `SENDING` oldest age가 `LockTimeout`을 지속 초과하지 않습니다.
+- All-quarantined outbox가 revive flap을 만들지 않습니다.
+- `Indeterminate` 반복은 DB/network 장애로 조사합니다.
 
 ## 최종 acceptance
 
-이 계획은 다음 조건을 모두 만족할 때 완료됩니다.
-
 1. `youtube_notification_delivery.row_version`이 production schema와 row model에 있습니다.
 2. Claim과 모든 delivery mutation이 version을 증가시킵니다.
-3. Transition policy는 alarm-worker internal의 pure package입니다.
-4. Failure policy가 raw 문자열과 SQL `CASE`에 분산되지 않습니다.
-5. Provider outcome unknown은 즉시 DB write, claim release, fallback, resend를 하지 않습니다.
-6. Provider operation member는 begin/finalization에서 all-or-none입니다.
-7. `BeginSending` commit ambiguity가 해결되기 전 provider call은 0회입니다.
-8. Provider success 후 모든 DB 오류에서 provider 재호출은 0회입니다.
-9. Effect 인접 store 결과가 `Applied`, `Conflict`, `Missing`, `Indeterminate`를 구분합니다.
-10. ID-only success recovery가 없습니다.
-11. Child outbox status는 aggregate projector만 계산합니다.
-12. Worker 전용 store와 row model이 alarm-worker internal에 있습니다.
-13. Legacy writer와 SQL이 제거되고 architecture gate가 재도입을 차단합니다.
-14. Contract, integration, crash-window, commit fault-injection, race test가 모두 통과합니다.
-15. Decision record가 `verified`로 갱신됩니다.
+3. Transition policy는 alarm-worker internal pure package입니다.
+4. Community/Shorts canonical logical identity resolver가 하나입니다.
+5. Same logical key의 same-batch send leader는 하나입니다.
+6. Post-level cache hit도 room-level sibling gate를 실행합니다.
+7. Durable `SENDING`/`QUARANTINED` sibling이 same-room resend를 차단합니다.
+8. Failure policy가 raw 문자열과 SQL `CASE`에 분산되지 않습니다.
+9. Outcome unknown은 DB write, claim release, fallback, resend를 하지 않습니다.
+10. Provider operation begin/finalization은 all-or-none입니다.
+11. Begin commit 판정 전 provider call은 0회입니다.
+12. Provider success 후 모든 DB 오류에서 provider 재호출은 0회입니다.
+13. Store가 `Applied`, `Conflict`, `Missing`, `Indeterminate`를 구분합니다.
+14. ID-only success recovery가 없습니다.
+15. Child outbox status는 aggregate projector만 계산합니다.
+16. Worker 전용 store와 row model이 alarm-worker internal에 있습니다.
+17. Legacy writer/SQL이 제거되고 architecture gate가 재도입을 차단합니다.
+18. Contract, logical-dedupe, integration, crash-window, commit fault-injection, race test가 통과합니다.
+19. Decision record가 `verified`로 갱신됩니다.
 
 ## 비목표
 
