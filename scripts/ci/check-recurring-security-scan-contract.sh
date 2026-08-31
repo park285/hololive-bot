@@ -133,6 +133,12 @@ grep -Fq "actual_platform=\"\$(docker image inspect --format '{{.Os}}/{{.Archite
   fail "both recurring scan jobs must install the exact Python runtime"
 [[ "$(grep -Fc 'uv==0.12.7' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must install the exact uv release"
+[[ "$(grep -Fc 'interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"' "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must initialize the exact Python interpreter"
+[[ "$(grep -Fc "CI_PYTHON_BIN=%s" "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must export the exact Python interpreter"
+[[ "$(grep -Fc "CI_PYTHON_RUNTIME_ROOT=%s" "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must export the Python runtime root"
 
 if grep -Fq 'uses: aquasecurity/' "$workflow"; then
   fail "security workflow must not use actions blocked by the repository allowlist"
