@@ -78,12 +78,12 @@ func (as *AlarmService) loadRoomAlarmChannels(ctx context.Context, registryKeys 
 		roomIDs = append(roomIDs, roomID)
 	}
 
+	roomChannels := make([][]string, len(roomIDs))
 	if len(roomIDs) == 0 {
-		return roomIDs, nil
+		return roomIDs, roomChannels
 	}
 
 	builder := as.cache.B()
-	roomChannels := make([][]string, len(roomIDs))
 
 	for batchStart := 0; batchStart < len(roomIDs); batchStart += alarmRoomMembershipBatchSize {
 		batchEnd := min(batchStart+alarmRoomMembershipBatchSize, len(roomIDs))
