@@ -1,1098 +1,372 @@
-# YouTube egress lifecycle 전이 소유권 및 구현 설계
+# YouTube egress lifecycle 전이 소유권
 
 작성일: 2026-08-31 KST  
 결정 ID: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
 대상 런타임: `hololive-alarm-worker`  
-대상 저장소: `park285/hololive-bot`  
-상태: 결정 승인, 구현 예정
+결정 상태 정본: [`docs/decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json`](../../decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json)
 
----
+## 목적
 
-## 이 문서의 목적
+이 문서는 `youtube_notification_outbox`와 `youtube_notification_delivery`의 상태 변경 책임을 어디에 둘지 확정합니다. 상태와 이벤트의 세부 규약은 [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md), 실제 작업 순서는 [`2026-08-31-youtube-egress-lifecycle-implementation.md`](../plans/2026-08-31-youtube-egress-lifecycle-implementation.md)가 정본입니다.
 
-`youtube_notification_outbox`와 `youtube_notification_delivery`의 상태 변경 규칙이 Go 서비스, repository 메서드, SQL 조건식에 나뉘어 있는 현재 구조를 명시적인 lifecycle 경계로 재구성합니다. 이 문서는 구현자가 추가 설계 결정을 하지 않고 작업을 시작할 수 있도록 다음 사항을 고정합니다.
-
-- 상태와 이벤트의 의미
-- Go와 PostgreSQL 사이의 책임 경계
-- 허용 전이와 금지 전이
-- retry, permanent failure, outcome-unknown, quarantine, revive 정책
-- outbox intent와 delivery aggregate의 쓰기 소유권
-- target package/API/SQL 구조
-- 단계별 구현 순서와 rollback 경계
-- 테스트, 관측성, 완료 조건
-- 외부 FSM 라이브러리를 사용하지 않는 이유와 재검토 조건
-
-이 문서는 YouTube notification egress lifecycle의 current-layer SSOT입니다. 구현 중 상충하는 기존 주석이나 메서드명이 있으면 이 문서와 결정 레코드를 우선합니다. 단, 기존 외부 알림 계약과 DB 데이터 의미를 임의로 바꾸는 권한은 부여하지 않습니다.
-
----
+현재 코드는 PostgreSQL의 행 상태와 잠금 조건을 이용해 중복 발송을 방어하고 있지만, 전이의 의미는 Go 서비스와 repository, SQL 조건식에 분산되어 있습니다. 이 문서의 목표는 DB의 원자성과 복구 능력을 제거하는 것이 아니라, **정책 결정과 전이 집행을 분리하고 각 writer의 권한을 명시하는 것**입니다.
 
 ## 결정
 
-### D-001. 상태 전이 정책은 alarm-worker 내부의 typed planner가 소유한다
+### D-001. alarm-worker 내부의 typed lifecycle policy가 전이를 결정한다
 
-`hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle`에 도메인 전용 planner를 둡니다.
+YouTube egress delivery의 허용 전이, retry 소진 판단, preparation 실패와 send 실패의 구분, revive 허용 조건은 `hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle`이 소유합니다.
 
 ```text
-DeliverySnapshot + DeliveryEvent + DeliveryPolicy
-    -> DeliveryDecision
+현재 snapshot + typed event + policy + 명시적 시각
+    -> typed decision 또는 명시적 거부
 ```
 
-planner는 순수 함수입니다. DB, network, logger, metric, 전역 clock에 접근하지 않으며 입력을 변경하지 않습니다. 상태와 이벤트를 범용화한 사내 FSM framework를 만들지 않습니다.
+policy는 다음 제약을 지킵니다.
+
+- DB, network, logger, metric에 접근하지 않습니다.
+- `time.Now()`를 직접 호출하지 않습니다.
+- 입력 구조체를 변경하지 않습니다.
+- 오류 메시지 문자열을 전이 분류 키로 사용하지 않습니다.
+- 범용 사내 FSM framework를 만들지 않습니다.
 
 ### D-002. PostgreSQL은 durable state와 전이 집행을 소유한다
 
-planner는 전이를 **결정**하고 repository는 전이를 **집행**합니다. repository는 다음 조건을 원자적으로 검증합니다.
+PostgreSQL은 다음 항목의 원본입니다.
+
+- delivery/outbox의 현재 상태
+- attempt와 due 시각
+- active claim 시각
+- delivery의 fencing version
+- 성공 tracking과 aggregate projection
+
+repository는 policy가 만든 decision을 임의로 재해석하지 않고, expected state와 fencing token이 여전히 유효할 때만 적용합니다.
 
 ```text
-entity ID
-expected status
-expected row version
-expected attempt count
-필요한 경우 active claim token
+policy: 어디로 가야 하는가
+repository: 아직 그 전제를 만족하는가
+PostgreSQL: 적용과 transaction을 원자적으로 완료할 수 있는가
 ```
 
-DB 갱신 결과는 `Applied`, `Conflict`, `Missing`으로 구분합니다. 0 rows affected를 성공으로 숨기지 않습니다.
+### D-003. delivery에는 `row_version`을 도입하고 outbox에는 이번 범위에서 도입하지 않는다
 
-### D-003. 외부 메시지 발송은 planner와 DB transaction callback 밖에 둔다
+`youtube_notification_delivery.row_version BIGINT NOT NULL DEFAULT 0`을 추가합니다. claim과 모든 delivery 상태 변경은 version을 1 증가시키며, 후속 writer는 이전 단계가 반환한 version을 expected value로 사용합니다.
 
-Iris/Kakao 호출은 PostgreSQL rollback으로 취소할 수 없습니다. 따라서 transition callback이나 state entry action 안에 외부 send를 넣지 않습니다.
+`locked_at`은 다음 책임을 계속 가집니다.
+
+- claim 또는 `SENDING` phase의 시작 시각
+- stale 판단과 운영 관측
+- 전환 기간의 보조 fencing 조건
+
+`row_version`은 stale writer를 차단하는 주 fencing token입니다. version은 인덱싱하지 않습니다. 모든 상태 변경에서 갱신되는 값을 인덱싱하면 HOT update 가능성을 낮추고 쓰기 증폭만 늘기 때문입니다.
+
+Outbox는 이번 변경에서 `row_version`을 추가하지 않습니다. pre-fanout outbox는 기존 `status + locked_at` claim token과 transaction으로 보호하고, child가 생긴 뒤에는 aggregate projector가 상태를 계산합니다. outbox version까지 추가하는 것은 현재 문제 해결에 필수적이지 않으며 aggregate writer와의 의미만 복잡하게 만듭니다.
+
+### D-004. 외부 발송은 상태머신 effect나 DB transaction callback 안에서 실행하지 않는다
+
+Iris/Kakao 발송은 PostgreSQL rollback으로 취소할 수 없습니다. 따라서 lifecycle policy, repository callback, state entry/exit hook 안에 provider 호출을 넣지 않습니다.
 
 ```text
-local preparation
--> PENDING to SENDING CAS
--> external send
--> typed outcome
--> SENDING to final state CAS
+local preparation 완료
+-> PENDING에서 SENDING으로 fenced CAS
+-> 외부 provider 호출
+-> typed outcome 분류
+-> 확정 가능한 outcome만 후속 fenced CAS
 ```
 
-외부 발송 결과가 불명확하면 자동 retry하지 않고 `SENDING`을 유지한 뒤 stale-sending sweeper가 `QUARANTINED`로 격리합니다.
+`SENDING`은 “provider 호출을 시작할 수 있도록 send intent가 durable하게 확정되었다”는 뜻입니다. 실제 socket write가 일어났다는 증거는 아닙니다. `SENDING` commit 직후 process가 죽으면 실제 호출 전이더라도 보수적으로 `QUARANTINED`가 될 수 있습니다. 자동 중복 발송 방지를 위해 이 좁은 false-positive quarantine을 허용합니다.
 
-### D-004. 범용 FSM 라이브러리는 현재 도입하지 않는다
+### D-005. outcome unknown은 즉시 상태 전이가 아니다
 
-조사한 라이브러리 중 caller-owned state와 순수 transition selection에 가장 가까운 후보는 `open-ships/statemachine`이었습니다. 그러나 현재 API는 목적 상태를 중심으로 반환하며, 홀로봇에 필요한 attempt, backoff, error code, sent timestamp, tracking mutation, expected version을 포함한 완전한 `DeliveryDecision`은 별도로 작성해야 합니다.
+provider가 메시지를 처리했는지 증명할 수 없는 timeout, connection reset, process failure는 `OutcomeUnknown`으로 분류합니다.
 
-상태 선택과 decision builder에 동일 정책을 중복시키거나 mutable guard를 사용하지 않기 위해 직접 planner를 채택합니다. 라이브러리 교체 가능성은 `DeliveryPlanner` 인터페이스와 contract test로 보존합니다.
+`OutcomeUnknown`을 받은 application service는 delivery를 `PENDING`, `FAILED`, `QUARANTINED`로 즉시 쓰지 않습니다. 행은 `SENDING` 상태로 남습니다. 이후 stale-sending sweeper가 `SendingLeaseExpired`를 집행해 `QUARANTINED`로 이동시킵니다.
 
-### D-005. 하나의 거대 상태머신을 만들지 않는다
+이 규칙은 다음 두 문제를 피합니다.
 
-세 가지 lifecycle을 분리합니다.
+1. timeout을 retry로 오판해 이미 전달된 메시지를 다시 보내는 문제
+2. 실제 provider 결과를 알 수 없는데도 즉시 terminal 판정을 만드는 문제
 
-1. **Outbox intent lifecycle**: 방별 delivery가 생성되기 전 fan-out 의도와 실패를 관리합니다.
-2. **Per-room delivery lifecycle**: 외부 발송, retry, quarantine, reconciliation을 관리합니다.
-3. **Community/Shorts alarm state**: `authorized_at`, `alarm_sent_at` 사실에서 상태를 계산하는 projection으로 유지합니다.
+### D-006. generic mutation DSL 대신 의도별 transition command를 사용한다
 
-Outbox aggregate는 child delivery 상태에서 계산하는 projection이므로 Go FSM으로 옮기지 않습니다.
+repository에 임의의 `nextStatus`, nullable patch map, generic `ApplyTransition`을 노출하지 않습니다. 그런 API는 상태머신 책임을 repository 호출자에게 다시 확산시킵니다.
 
-### D-006. delivery가 존재한 뒤 outbox status의 writer는 aggregate projector뿐이다
+application service는 policy decision을 종류별 command로 변환하여 다음과 같은 의도별 API를 호출합니다.
 
-- delivery가 없는 outbox는 `OutboxIntentTransitionService`가 직접 전이할 수 있습니다.
-- delivery가 하나라도 존재하면 `UpdateOutboxAggregateStatuses`만 outbox `status`, `sent_at`, aggregate error를 갱신할 수 있습니다.
-- 직접 outbox 전이 SQL에는 `NOT EXISTS (delivery ...)` 가드를 둡니다.
+- `BeginSendingBatch`
+- `ScheduleRetryBatch`
+- `FailBatch`
+- `CompleteSentBatch`
+- `QuarantineStaleSending`
+- `ReviveFailedOutboxes`
 
-### D-007. `SENT`는 자동 경로의 절대 terminal이며 `QUARANTINED`는 자동 revive하지 않는다
+각 command constructor가 source state, required token, timestamp shape를 검증합니다. repository SQL은 해당 command의 expected state와 version만 집행합니다.
 
-- `SENT -> *` 자동 전이는 금지합니다.
-- `QUARANTINED -> PENDING` 자동 전이는 금지합니다.
-- `QUARANTINED`는 provider 증거를 가진 명시적 reconciliation만 `SENT`, `PENDING`, `FAILED`로 이동시킬 수 있습니다.
-- 기존 `FAILED -> PENDING` revive는 freshness와 never-sent 및 reset 가능한 FAILED child 조건을 계속 요구합니다.
+### D-007. preparation과 send의 실패 의미를 분리한다
 
-### D-008. 이번 작업은 alarm-worker replica 확대 승인이 아니다
+`PENDING + active claim` 상태에서 발생한 실패는 provider 호출 전 실패입니다.
 
-행 단위 lifecycle을 더 명확하게 만들어도 canonical group claim, background loop 조율, local fallback 등 replica>1 게이트는 별개입니다. `hololive-alarm-worker`는 `alarm-egress-scale-out-decisions-20260730.md`의 결정대로 단일 인스턴스를 유지합니다.
+- payload/outbox load, formatting, request construction 실패
+- provider 호출 전에 확인된 context cancellation
+- local dependency 실패
 
----
+`SENDING` 이후 발생한 실패는 provider 호출 결과입니다.
 
-## 현재 구조와 변경 이유
+- provider가 요청을 받지 않았다고 확정한 retryable/permanent 오류
+- provider 성공
+- 처리 여부 불명
+
+두 phase는 같은 `RetrySafeFailure` 이벤트로 뭉치지 않습니다. 전이 이름과 failure code가 source phase를 드러내야 운영자가 “외부 부수효과 가능성이 있었는가”를 판단할 수 있습니다.
+
+### D-008. delivery 생성 후 outbox 상태 writer는 aggregate projector뿐이다
+
+Outbox에는 두 단계가 있습니다.
+
+```text
+pre-fanout intent
+    delivery row가 아직 없음
+
+post-fanout aggregate
+    delivery row가 하나 이상 있음
+```
+
+pre-fanout 단계에서는 `OutboxFanoutService`만 다음 작업을 수행할 수 있습니다.
+
+- 대상 방이 없으면 `PENDING -> SENT`
+- fanout 준비 실패면 retry 또는 `FAILED`
+- 대상 방이 있으면 delivery 생성과 claim 해제를 한 transaction으로 수행
+
+child delivery가 하나라도 생긴 뒤에는 outbox `status`, aggregate error, aggregate `sent_at`을 atomic aggregate SQL만 변경합니다. 직접 outbox finalization SQL은 active outbox claim token을 검사하고 같은 transaction에서 `NOT EXISTS (child delivery)`를 확인해야 합니다.
+
+### D-009. worker 전용 persistence 구현을 alarm-worker 내부로 회수한다
+
+현재 `hololive-shared/pkg/service/youtube/outbox/store`의 production 소비자는 alarm-worker 하나입니다. `DEC-20260825-hololive-shared-public-path-scoped-retention`에 따라 single-owner 실행 구현은 다음 위치로 단계적으로 이동합니다.
+
+```text
+hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store
+```
+
+다음 항목만 shared에 남길 수 있습니다.
+
+- 실제 cross-runtime row 계약
+- shared 내부의 진성 다중 소비자 타입
+- 범용 pgx/db helper
+
+worker 전용 claim, transition SQL, aggregate sync, tracking transaction 구현은 internal owner가 소유합니다. 이동은 단일 PR에서 package copy와 dual implementation을 만들지 않고, import cutover와 기존 package 삭제를 같은 변경 묶음에서 수행합니다.
+
+### D-010. 범용 FSM 라이브러리를 현재 도입하지 않는다
+
+조사한 후보 중 `open-ships/statemachine`의 immutable `Machine.Next` 모델이 가장 가까웠습니다. 그러나 홀로봇이 필요한 결과는 목적 상태 하나가 아니라 다음을 포함한 complete mutation decision입니다.
+
+- 선택된 rule identity
+- expected state/version/attempt
+- next attempt와 due 시각
+- claim 해제 또는 유지
+- success tracking mutation
+- failure classification
+
+목적 상태 선택과 mutation plan 생성에 같은 정책을 두 번 표현하거나, guard가 mutable side channel을 사용해야 한다면 라이브러리 도입 이득이 사라집니다. 성숙한 `qmuntal/stateless`와 `looplab/fsm`은 state-owning/callback 실행 모델이 PostgreSQL source-of-truth와 맞지 않았고, structured transition과 PostgreSQL CAS를 가장 잘 제공한 다른 후보는 archived 상태였습니다.
+
+따라서 도메인 전용 policy를 직접 구현하되 다음 조건으로 재검토합니다.
+
+- caller-owned state를 지원합니다.
+- 순수 planning 결과에 transition ID와 structured metadata가 포함됩니다.
+- persistence가 optimistic conflict를 일급 결과로 표현합니다.
+- 다중 maintainer와 production adoption이 확인됩니다.
+- adapter를 포함한 net policy code가 직접 구현보다 실질적으로 줄어듭니다.
+- 동일 contract test를 변경 없이 통과합니다.
+
+### D-011. 이번 결정은 alarm-worker 수평확장 승인이 아니다
+
+Delivery row fencing을 강화해도 canonical group claim, background loop 조율, local fallback 등 replica>1 게이트는 별개입니다. `hololive-alarm-worker`는 [`alarm-egress-scale-out-decisions-20260730.md`](alarm-egress-scale-out-decisions-20260730.md)의 결정대로 단일 인스턴스를 유지합니다.
+
+## 현재 코드에서 확인된 문제
 
 ### 전이 정책이 여러 층에 분산되어 있다
 
-- `internal/egress/youtubedispatch/status_updater.go`는 outbox를 읽고 attempt를 증가시키며 retry와 permanent failure를 직접 선택합니다.
-- `pkg/service/youtube/outbox/store/delivery_repository_lock.go`는 delivery 전송 상태를 변경합니다.
-- `delivery_repository_lock_0190_03.sql`은 `attempt_count + 1 >= maxRetries`를 평가해 `PENDING`과 `FAILED`를 직접 선택합니다.
-- `claim_manager_pipeline.go`는 failure reason 문자열을 다시 해석해 permanent/retry repository 메서드를 선택합니다.
-- `claim_manager_revive.go`는 freshness, sent 여부, lock 만료, FAILED child 존재 여부를 조합해 revive를 결정합니다.
+현재 전이 의미는 다음 위치에 나뉘어 있습니다.
 
-각 로직은 개별적으로 합리적이지만, 전체 허용 전이를 확인하려면 여러 Go 파일과 SQL을 함께 읽어야 합니다.
+- `status_updater.go`: outbox attempt 증가와 retry/FAILED 선택
+- `claim_manager_pipeline.go`: failure reason 문자열을 permanent/retry로 재분류
+- `delivery_repository_lock.go`: `PENDING`, `SENDING`, `SENT`, `FAILED`, `QUARANTINED` 상태 변경
+- `delivery_repository_lock_0190_03.sql`: max retry 판단과 목적 상태 선택
+- `claim_manager_revive.go`: freshness, never-sent, child 상태를 이용한 revive 판단
 
-### 현재 동시성 불변식은 보존해야 한다
+SQL의 `CASE`가 retry policy를 결정하고 Go가 다시 failure 종류를 선택하기 때문에 전체 transition table을 한 파일에서 검토할 수 없습니다.
 
-현재 구현은 `status + locked_at` exact match로 stale worker를 막습니다. microsecond 단위로 다른 stale token이 전이를 수행하지 못하는 통합 테스트도 있습니다. 이 방어선은 planner 추출 과정에서 약화하면 안 됩니다.
+### 현재 동시성 방어는 보존해야 한다
 
-### outcome-unknown 경계는 이미 올바른 방향이다
+현재 delivery writer는 `status + locked_at` exact match를 사용합니다. microsecond 단위로 다른 stale token이 후속 상태를 덮어쓰지 못하는 통합 테스트와, 실제 CAS에 성공한 delivery만 tracking을 갱신하는 transaction test가 있습니다.
 
-`send_engine_support.go`는 timeout 또는 외부 결과 불명 오류를 일반 failure bucket에 넣지 않고 `SENDING + locked` 상태로 남깁니다. 이후 `QuarantineStaleSending`이 `QUARANTINED`로 격리합니다. 이 정책을 typed outcome과 명시적 transition rule로 승격합니다.
+리팩터링은 이 방어를 없애는 작업이 아닙니다. `row_version`을 추가하여 token identity를 시간값 하나에만 의존하지 않게 하고, 기존 exact lock predicate는 전환 기간의 이중 방어로 유지합니다.
+
+### outcome-unknown 경계는 보존하고 명시화해야 한다
+
+현재 SendEngine은 outcome unknown 오류를 일반 failure bucket에 넣지 않고 `SENDING + locked`로 남겨 stale sweeper가 격리하게 합니다. 이 동작은 중복 방지를 위한 핵심 안전 속성입니다. typed outcome으로 바꾸더라도 의미는 바뀌지 않아야 합니다.
 
 ### aggregate SQL은 원자적으로 유지해야 한다
 
-`delivery_repository_aggregate_sync.sql`은 active child, failed/quarantined child, sent child 순으로 outbox 상태를 계산합니다. 과거 count 후 update 방식의 lost update를 방지하기 위한 원자적 projection이므로 Go planner로 이전하지 않습니다.
+Outbox aggregate는 child 상태를 한 SQL statement에서 계산하고 갱신합니다. active child가 있으면 `PENDING`, active child가 없고 `FAILED` 또는 `QUARANTINED`가 있으면 `FAILED`, 모두 완료됐으면 `SENT`로 계산합니다.
 
----
+이를 Go에서 count한 뒤 별도 update로 바꾸면 동시 갱신 사이에 stale aggregate가 상태를 되돌릴 수 있습니다. aggregate 의미는 문서와 테스트로 고정하되 집행은 atomic SQL에 남깁니다.
 
-## 책임 경계
+## 목표 아키텍처
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ Send preparation / transport adapter                        │
+│                                                             │
+│ local preparation result or typed provider outcome          │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ typed event
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ alarm-worker/internal/.../youtubedispatch/lifecycle         │
+│                                                             │
+│ snapshot + event + policy + now -> typed decision           │
+│ no DB, no network, no logging, no mutable guard              │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ intent-specific command
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ DeliveryTransitionService / OutboxFanoutService             │
+│                                                             │
+│ partitions decisions, emits metrics, owns orchestration      │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ command batch
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ alarm-worker/internal/.../youtubedispatch/store             │
+│                                                             │
+│ status + row_version + locked_at CAS                         │
+│ success tracking transaction                                │
+│ atomic outbox aggregate projection                          │
+└───────────────────────────┬─────────────────────────────────┘
+                            ▼
+                       PostgreSQL
+```
+
+## 책임 행렬
 
 | 책임 | 소유자 | 금지 사항 |
 |---|---|---|
-| 상태·이벤트·실패 코드 정의 | lifecycle/domain types | 오류 문자열을 상태 분류 키로 사용하지 않음 |
-| 허용 전이와 retry/revive 정책 | `DeliveryPlanner`, `OutboxIntentPlanner` | DB 조회, I/O, `time.Now()` 호출 금지 |
-| 현재 상태와 claim 조회 | PostgreSQL repository | 정책 판단 금지 |
-| expected state/version CAS | PostgreSQL repository | unconditional status update 금지 |
-| 외부 메시지 발송 | `SendEngine` | DB transaction 안에서 provider 호출 금지 |
-| success tracking 원자성 | delivery repository transaction | delivery 적용 실패 ID의 tracking 변경 금지 |
-| outbox aggregate 계산 | atomic aggregate SQL | Go에서 child count 후 별도 update 금지 |
-| stale `SENDING` 격리 | sweeper + planner/store | outcome unknown을 일반 retry로 변경 금지 |
-| 운영 로그와 metric | transition service | planner 내부 side effect 금지 |
+| state/event/failure vocabulary | lifecycle package | raw error 문자열을 정책 key로 사용하지 않음 |
+| transition/retry/revive 결정 | lifecycle policy | DB 조회, I/O, clock 직접 호출 금지 |
+| provider error 분류 | transport adapter | planner가 SDK error 문자열을 해석하지 않음 |
+| claim 대상 선정 | internal store | planner가 `FOR UPDATE SKIP LOCKED`를 모델링하지 않음 |
+| state/version CAS | internal store | unconditional status update 금지 |
+| 외부 발송 | SendEngine | DB transaction 안에서 provider 호출 금지 |
+| tracking 원자성 | `CompleteSentBatch` transaction | 적용 실패 ID의 tracking 변경 금지 |
+| aggregate 계산 | atomic SQL projector | Go count 후 별도 update 금지 |
+| transition metric/log | transition service | policy 내부 side effect 금지 |
 
----
+## 안전성과 가용성 선택
 
-## 상태 타입
+이 설계는 외부 provider와 PostgreSQL 사이에 분산 transaction이 없다는 사실을 숨기지 않습니다.
 
-DB 문자열 값은 변경하지 않되 Go 타입을 분리합니다.
+### 보장하는 안전 속성
 
-```go
-type YouTubeOutboxStatus string
+1. stale worker는 새 version의 row를 finalize할 수 없습니다.
+2. `SENT`는 자동 경로에서 다른 상태로 되돌아가지 않습니다.
+3. outcome unknown은 자동 retry되지 않습니다.
+4. success tracking은 실제 `SENDING -> SENT` CAS에 성공한 delivery만 변경합니다.
+5. child가 생성된 outbox는 직접 writer가 상태를 변경하지 않습니다.
+6. retry 소진 판단은 lifecycle policy 한 곳에서만 수행합니다.
 
-type YouTubeDeliveryStatus string
+### 의도적으로 포기하는 자동 가용성
 
-const (
-    YouTubeOutboxPending YouTubeOutboxStatus = "PENDING"
-    YouTubeOutboxSent    YouTubeOutboxStatus = "SENT"
-    YouTubeOutboxFailed  YouTubeOutboxStatus = "FAILED"
-)
+provider 결과가 불명확하면 중복 방지와 자동 복구를 동시에 보장할 수 없습니다. 이 경우 자동 재발송을 포기하고 `QUARANTINED`에 남깁니다. 수동 replay 또는 provider reconciliation을 추가하려면 duplicate-risk acknowledgement와 immutable audit를 포함한 별도 결정이 필요합니다.
 
-const (
-    YouTubeDeliveryPending     YouTubeDeliveryStatus = "PENDING"
-    YouTubeDeliverySending     YouTubeDeliveryStatus = "SENDING"
-    YouTubeDeliverySent        YouTubeDeliveryStatus = "SENT"
-    YouTubeDeliveryFailed      YouTubeDeliveryStatus = "FAILED"
-    YouTubeDeliveryQuarantined YouTubeDeliveryStatus = "QUARANTINED"
-)
-```
+## package 경계
 
-`SENDING`과 `QUARANTINED`를 store 로컬 상수로 두지 않습니다. outbox와 delivery가 같은 status 타입을 공유하지 않게 하여 잘못된 상태 대입을 컴파일 단계에서 막습니다.
-
----
-
-## Per-room delivery lifecycle
-
-### 상태 의미
-
-| 상태 | 의미 | 자동 claim 대상 |
-|---|---|---:|
-| `PENDING` | 발송 전 또는 안전한 retry 대기. `locked_at`이 있으면 현재 worker가 준비 중 | lock이 없거나 만료되고 due일 때만 |
-| `SENDING` | 외부 provider 호출을 시작할 수 있는 준비가 끝났고, 호출 결과가 확정되기 전 | 아니오 |
-| `SENT` | provider 성공 결과를 로컬 transaction으로 확정 | 아니오 |
-| `FAILED` | permanent failure 또는 retry 소진 | 아니오. guarded revive만 가능 |
-| `QUARANTINED` | provider가 처리했는지 로컬에서 증명할 수 없음 | 아니오. 명시적 reconciliation만 가능 |
-
-### claim은 lifecycle status가 아니라 concurrency protocol이다
-
-`FetchAndLock`은 `PENDING -> PENDING` 상태 전이가 아니라 작업 lease 획득입니다. planner가 claim 대상을 고르지 않습니다. repository가 due/lock 조건과 `FOR UPDATE SKIP LOCKED`로 claim하고 `ClaimToken`을 반환합니다.
-
-```go
-type DeliveryClaimToken struct {
-    DeliveryID int64
-    LockedAt   time.Time
-    RowVersion int64
-}
-```
-
-`locked_at`은 TTL과 운영 관측에 사용하고, `row_version`은 stale writer fencing에 사용합니다.
-
-### 이벤트
-
-```go
-type DeliveryEventKind uint8
-
-const (
-    DeliveryEventBeginSend DeliveryEventKind = iota + 1
-    DeliveryEventRetrySafeFailure
-    DeliveryEventPermanentFailure
-    DeliveryEventDelivered
-    DeliveryEventOutcomeUnknown
-    DeliveryEventSendingLeaseExpired
-    DeliveryEventRevive
-    DeliveryEventReconcileDelivered
-    DeliveryEventReconcileNotDelivered
-)
-```
-
-### typed outcome
-
-SendEngine은 문자열 bucket 대신 delivery별 outcome을 반환합니다.
-
-```go
-type DeliveryOutcomeKind uint8
-
-const (
-    DeliveryOutcomeDelivered DeliveryOutcomeKind = iota + 1
-    DeliveryOutcomeRetrySafe
-    DeliveryOutcomePermanentFailure
-    DeliveryOutcomeUnknown
-)
-
-type DeliveryOutcome struct {
-    DeliveryID int64
-    OutboxID   int64
-    Kind       DeliveryOutcomeKind
-    Code       DeliveryFailureCode
-    Message    string
-    RetryAfter time.Duration
-    ClaimToken DeliveryClaimToken
-    ClaimMarks []dispatchstate.ClaimToken
-}
-```
-
-`Message`는 로그와 운영 진단용입니다. planner는 `Kind`와 `Code`를 사용하며 문자열 비교를 하지 않습니다.
-
-### retry-safe의 정의
-
-다음 중 하나를 증명할 수 있을 때만 `DeliveryOutcomeRetrySafe`입니다.
-
-1. provider 호출이 시작되기 전에 실패했습니다.
-2. provider가 요청을 수락하지 않았다고 명시적으로 응답했습니다.
-3. 동일한 stable client request ID 재사용 시 provider가 중복 부수효과를 차단한다는 계약이 있습니다.
-
-timeout, connection reset, 프로세스 종료 등 provider 처리 여부를 증명하지 못하면 `DeliveryOutcomeUnknown`입니다.
-
-### 허용 전이표
-
-| From | Event | To/Action | 핵심 조건 | attempt 변화 |
-|---|---|---|---|---:|
-| `PENDING` | `BeginSend` | `SENDING` | active claim, request 준비 완료 | 유지 |
-| `PENDING` | `RetrySafeFailure` | `PENDING` | 다음 attempt가 max 미만 | +1 |
-| `PENDING` | `RetrySafeFailure` | `FAILED` | 다음 attempt가 max 이상 | +1 |
-| `PENDING` | `PermanentFailure` | `FAILED` | payload/target 등 재시도 불가능 | +1 |
-| `SENDING` | `Delivered` | `SENT` | active send token | 유지 |
-| `SENDING` | `RetrySafeFailure` | `PENDING` | 안전한 retry 증거, retry 잔여 | +1 |
-| `SENDING` | `RetrySafeFailure` | `FAILED` | 안전한 retry 증거, retry 소진 | +1 |
-| `SENDING` | `PermanentFailure` | `FAILED` | provider permanent rejection | +1 |
-| `SENDING` | `OutcomeUnknown` | hold `SENDING` | 자동 DB mutation 없음 | 유지 |
-| `SENDING` | `SendingLeaseExpired` | `QUARANTINED` | `locked_at < cutoff` | +1 |
-| `FAILED` | `Revive` | `PENDING` | revive guard 충족 | 0으로 reset |
-| `QUARANTINED` | `ReconcileDelivered` | `SENT` | provider 성공 증거 | 유지 |
-| `QUARANTINED` | `ReconcileNotDelivered` | `PENDING` 또는 `FAILED` | provider 미처리 증거와 retry 정책 | 정책에 따름 |
-
-표에 없는 조합은 모두 거부합니다. 특히 다음은 금지합니다.
-
-```text
-SENT + any automatic event
-QUARANTINED + Revive
-PENDING + Delivered
-FAILED + BeginSend
-```
-
-### outcome unknown의 적용 방식
-
-`OutcomeUnknown`은 성공한 DB 전이가 아닙니다. planner는 `Hold` 결정을 반환하고 transition service는 metric과 warning log만 기록합니다.
-
-```go
-type DeliveryDecisionAction uint8
-
-const (
-    DeliveryDecisionApply DeliveryDecisionAction = iota + 1
-    DeliveryDecisionHold
-)
-```
-
-`Hold`에서는 status, version, attempt, lock을 바꾸지 않습니다. stale-sending sweeper가 별도의 `SendingLeaseExpired` 이벤트를 만들어 `QUARANTINED`를 적용합니다.
-
----
-
-## Outbox intent lifecycle
-
-### 쓰기 소유권 분기
-
-```text
-child delivery 0개
-    -> OutboxIntentTransitionService가 직접 status 전이 가능
-
-child delivery 1개 이상
-    -> OutboxAggregateProjector만 status 전이 가능
-```
-
-### pre-fanout 이벤트
-
-| From | Event | To | 설명 |
-|---|---|---|---|
-| `PENDING` | `NoTargets` | `SENT` | 전송 대상이 없으므로 정상 완료 |
-| `PENDING` | `FanoutRetrySafeFailure` | `PENDING` | subscriber 조회 또는 enqueue 일시 실패 |
-| `PENDING` | `FanoutRetrySafeFailure` | `FAILED` | retry 소진 |
-| `PENDING` | `FanoutPermanentFailure` | `FAILED` | 복구 불가능한 intent/payload 오류 |
-| `PENDING` | `FanoutMaterialized` | `PENDING` | child delivery 생성 후 lock 해제, 이후 aggregate-owned |
-
-`FanoutMaterialized`는 다음 작업을 한 transaction에 묶습니다.
-
-1. outbox claim token 검증
-2. room delivery `INSERT ... ON CONFLICT DO NOTHING`
-3. outbox lock 해제
-4. outbox row version 증가
-
-### aggregate projection
-
-기존 atomic SQL의 의미를 유지합니다.
-
-| child 상태 | outbox projection |
-|---|---|
-| `PENDING` 또는 `SENDING`이 하나 이상 | `PENDING` |
-| active child가 없고 `FAILED` 또는 `QUARANTINED`가 하나 이상 | `FAILED` |
-| active/failed child가 없고 `SENT`가 하나 이상 | `SENT` |
-| child가 없음 | `PENDING` |
-
-`QUARANTINED`는 delivery 원본에서는 별도 상태로 보존하지만 outbox aggregate에서는 `FAILED`로 투영합니다.
-
----
-
-## Community/Shorts alarm state
-
-`DETECTED`, `ENQUEUED`, `SENT`를 독립 writable FSM으로 만들지 않습니다.
-
-```text
-alarm_sent_at != nil  -> SENT
-authorized_at != nil  -> ENQUEUED
-그 외                 -> DETECTED
-```
-
-`delivery_status` 컬럼을 유지한다면 timestamp 사실과 일치하는 CHECK 또는 repository invariant를 둡니다. authoritative fact는 `authorized_at`, `alarm_sent_at`입니다.
-
----
-
-## Planner API
-
-### snapshot
-
-```go
-type DeliverySnapshot struct {
-    ID            int64
-    OutboxID      int64
-    Status        domain.YouTubeDeliveryStatus
-    AttemptCount  int
-    NextAttemptAt time.Time
-    LockedAt      *time.Time
-    SentAt        *time.Time
-    RowVersion    int64
-}
-```
-
-### event와 failure
-
-```go
-type DeliveryFailure struct {
-    Code       DeliveryFailureCode
-    Message    string
-    RetryAfter time.Duration
-}
-
-type DeliveryEvent struct {
-    Kind    DeliveryEventKind
-    At      time.Time
-    Failure *DeliveryFailure
-}
-```
-
-`At`은 transition service가 주입한 canonical UTC time입니다. planner 내부에서 `time.Now()`를 호출하지 않습니다.
-
-### decision
-
-```go
-type DeliveryDecision struct {
-    RuleID DeliveryRuleID
-    Action DeliveryDecisionAction
-    Event  DeliveryEventKind
-
-    DeliveryID int64
-    OutboxID   int64
-
-    ExpectedStatus       domain.YouTubeDeliveryStatus
-    ExpectedRowVersion   int64
-    ExpectedAttemptCount int
-    ExpectedLockedAt     *time.Time
-
-    NextStatus       domain.YouTubeDeliveryStatus
-    NextRowVersion   int64
-    NextAttemptCount int
-    NextAttemptAt    *time.Time
-    SentAt           *time.Time
-
-    ErrorCode DeliveryFailureCode
-    ErrorText string
-}
-```
-
-`RuleID`는 metric과 audit log의 안정적인 분류 키입니다. 예시는 다음과 같습니다.
-
-```text
-delivery.begin-send
-delivery.delivered
-delivery.retry-scheduled
-delivery.retry-exhausted
-delivery.permanent-failure
-delivery.outcome-unknown-held
-delivery.sending-quarantined
-delivery.revived
-delivery.reconciled-delivered
-delivery.reconciled-not-delivered
-```
-
-### planner interface
-
-```go
-type DeliveryPlanner interface {
-    Plan(
-        context.Context,
-        DeliverySnapshot,
-        DeliveryEvent,
-        DeliveryPolicy,
-    ) (DeliveryDecision, error)
-}
-```
-
-planner는 context value에 의존하지 않습니다. context는 cancellation을 인식하는 순수 guard가 필요할 경우에만 전달합니다.
-
-### apply result
-
-```go
-type ApplyOutcome uint8
-
-const (
-    ApplyApplied ApplyOutcome = iota + 1
-    ApplyConflict
-    ApplyMissing
-)
-
-type ApplyResult struct {
-    DeliveryID int64
-    Outcome    ApplyOutcome
-    RowVersion int64
-}
-```
-
-`ApplyConflict`는 DB 장애가 아니라 정상적인 concurrency 결과입니다. 로그 수준은 상황별로 조절하되 metric은 기록합니다.
-
----
-
-## target package 구조
+최종 목표 구조는 다음과 같습니다.
 
 ```text
 hololive/hololive-alarm-worker/internal/egress/youtubedispatch/
 ├── lifecycle/
-│   ├── delivery_types.go
-│   ├── delivery_planner.go
-│   ├── delivery_planner_test.go
-│   ├── outbox_types.go
-│   ├── outbox_planner.go
-│   ├── outbox_planner_test.go
-│   ├── retry_policy.go
-│   ├── revive_policy.go
-│   └── rule_catalog.go
+│   ├── status.go
+│   ├── event.go
+│   ├── failure.go
+│   ├── delivery_policy.go
+│   ├── outbox_policy.go
+│   ├── decision.go
+│   └── *_test.go
+├── store/
+│   ├── delivery_claim.go
+│   ├── delivery_transition.go
+│   ├── delivery_sent_tx.go
+│   ├── outbox_fanout.go
+│   ├── outbox_aggregate.go
+│   ├── revive.go
+│   ├── queries/
+│   └── *_test.go
 ├── delivery_transition_service.go
-├── outbox_intent_transition_service.go
-└── transition_observability.go
-
-hololive/hololive-shared/pkg/service/youtube/outbox/store/
-├── delivery_repository.go
-├── delivery_repository_lock.go
-├── delivery_transition_store.go
-├── outbox_intent_store.go
-└── queries/
+├── outbox_fanout_service.go
+├── send_outcome.go
+└── transition_metrics.go
 ```
 
-lifecycle policy는 alarm-worker 단일 runtime 소유입니다. cross-runtime 계약이 아닌 실행 정책을 `hololive-shared` public path로 옮기지 않습니다. shared store는 PostgreSQL 접근과 cross-runtime domain row type이 필요한 범위만 유지합니다.
+`hololive-shared/pkg/domain`의 현재 row 구조체와 status 타입을 한 번에 모두 제거하지는 않습니다. 구현 plan은 먼저 typed lifecycle을 도입하고, production 소비자가 하나뿐인 store 구현을 internal로 옮긴 뒤, 실제 cross-runtime 계약만 shared에 남기는 순서로 진행합니다.
 
----
+## 스키마 범위
 
-## 실행 흐름
-
-### 정상 발송
-
-```text
-1. DeliveryRepository.FetchAndLock
-   - PENDING due row claim
-   - locked_at 설정
-   - row_version 증가
-   - DeliveryClaimToken 반환
-
-2. local preparation
-   - outbox load
-   - payload validation
-   - message formatting
-   - provider request와 stable ClientRequestID 생성
-   - community/shorts alarm-once claim
-
-3. DeliveryPlanner.Plan(BeginSend)
-   - PENDING + active claim -> SENDING decision
-
-4. DeliveryTransitionStore.Apply
-   - expected PENDING/version/locked_at CAS
-   - SENDING, send_started locked_at, version 증가
-
-5. SendEngine provider 호출
-
-6. typed outcome 생성
-
-7. DeliveryPlanner.Plan(Delivered)
-
-8. DeliveryTransitionStore.ApplySentInTx
-   - expected SENDING/version CAS
-   - delivery SENT
-   - 적용된 delivery에 대해서만 tracking/latency state 갱신
-
-9. aggregate projector 실행
-```
-
-현재처럼 outbox load 전에 전체 row를 `SENDING`으로 만들지 않습니다. provider request를 만들기 전에 발생한 로컬 오류는 `PENDING` leased 상태에서 안전하게 retry 또는 permanent failure 처리합니다.
-
-### retry-safe failure
-
-```text
-DeliveryOutcomeRetrySafe
--> planner가 attempt + 1 계산
--> maxRetries 경계에서 PENDING/FAILED 선택
--> retry 예정이면 max(policy backoff, provider Retry-After) 계산
--> repository가 expected state/version으로 적용
-```
-
-SQL은 `maxRetries`를 받지 않으며 `CASE`로 목적 상태를 선택하지 않습니다.
-
-### outcome unknown
-
-```text
-provider 호출 결과 불명
--> DeliveryOutcomeUnknown
--> planner Hold
--> SENDING/lock/version 유지
--> stale-sending sweeper
--> SendingLeaseExpired decision
--> QUARANTINED
-```
-
-이 경로에서 claim release, failure bucket 삽입, 자동 retry를 하지 않습니다.
-
-### revive
-
-기존 revive 선정 조건을 보존합니다.
-
-```text
-outbox.status == FAILED
-outbox.sent_at == nil
-created_at >= freshness cutoff
-active outbox lock 없음
-FAILED delivery가 1개 이상이거나 delivery가 전혀 없음
-```
-
-적용은 한 transaction입니다.
-
-```text
-FAILED delivery -> PENDING, attempt_count=0, sent_at=NULL, error clear
-SENT delivery -> 유지
-QUARANTINED delivery -> 유지
-outbox FAILED -> PENDING
-```
-
-전량 `QUARANTINED`인 outbox는 자동 revive하지 않습니다.
-
----
-
-## PostgreSQL 계약
-
-### schema 추가
-
-다음 컬럼을 additive migration으로 추가합니다. migration 번호는 구현 시점의 다음 가용 번호를 사용합니다.
+이번 결정에서 필수인 schema 변경은 다음 하나입니다.
 
 ```sql
 ALTER TABLE youtube_notification_delivery
-    ADD COLUMN row_version bigint NOT NULL DEFAULT 0,
-    ADD COLUMN error_code text NOT NULL DEFAULT '',
-    ADD COLUMN state_changed_at timestamptz NOT NULL DEFAULT now();
-
-ALTER TABLE youtube_notification_outbox
-    ADD COLUMN row_version bigint NOT NULL DEFAULT 0;
+ADD COLUMN IF NOT EXISTS row_version bigint NOT NULL DEFAULT 0;
 ```
 
-`locked_at`은 TTL과 stale 판정에 계속 사용합니다. `row_version`은 monotonic fencing token입니다.
-
-### claim
-
-```sql
-UPDATE youtube_notification_delivery d
-SET locked_at = $claim_at,
-    row_version = row_version + 1
-FROM claim
-WHERE d.id = claim.id
-RETURNING ..., d.row_version;
-```
+추가 migration은 repository의 migration 규약을 따릅니다.
 
-### transition CAS
+- 새 migration 번호와 `manifest.txt`를 갱신합니다.
+- constant default를 사용하고 `row_version` index를 만들지 않습니다.
+- schema snapshot golden을 갱신합니다.
+- production writer cutover 전에 모든 scanner와 test fixture가 column을 읽도록 합니다.
 
-```sql
-UPDATE youtube_notification_delivery
-SET status = $next_status,
-    row_version = row_version + 1,
-    attempt_count = $next_attempt_count,
-    next_attempt_at = $next_attempt_at,
-    sent_at = $sent_at,
-    locked_at = $next_locked_at,
-    error_code = $error_code,
-    error = $error_text,
-    state_changed_at = $changed_at
-WHERE id = $id
-  AND status = $expected_status
-  AND row_version = $expected_row_version
-  AND attempt_count = $expected_attempt_count
-  AND locked_at IS NOT DISTINCT FROM $expected_locked_at
-RETURNING row_version;
-```
+다음 컬럼은 이번 책임 분리에 필수적이지 않으므로 추가하지 않습니다.
 
-`locked_at`과 `row_version`을 병행 검사하는 전환 기간을 거친 뒤에도 둘 다 유지합니다. timestamp는 stale-time 의미, version은 writer identity 의미를 담당합니다.
+- outbox `row_version`
+- delivery/outbox `state_changed_at`
+- 별도 `error_code`
+- 별도 `send_started_at`
 
-### batch 적용
+운영 근거가 생기면 독립 결정과 migration으로 검토합니다.
 
-`ApplyBatch`는 heterogeneous decision을 입력받을 수 있습니다. store는 성능을 위해 `RuleID` 또는 mutation shape별로 partition할 수 있지만 목적 상태나 attempt를 다시 계산하면 안 됩니다.
+## 배포 호환성
 
-batch 결과는 입력 delivery별로 반환합니다. 일부 row가 conflict여도 다른 row의 적용 결과를 잃지 않습니다.
+| 단계 | schema | 실행 binary | 허용 여부 |
+|---|---|---|---|
+| migration 전 | row_version 없음 | 기존 binary | 허용 |
+| migration 후 | row_version 기본 0 | 기존 binary | 허용. 기존 binary는 column을 무시함 |
+| cutover 후 | row_version 사용 | 새 binary 단일 인스턴스 | 목표 상태 |
+| rollback | row_version 잔존 | 기존 binary 단일 인스턴스 | 허용. column은 additive |
+| old/new 동시 writer | 어느 schema든 | 두 binary 동시 egress | 금지 |
 
-### success transaction
+현재 Compose는 alarm-worker 단일 인스턴스이므로 배포는 replacement 방식으로 수행합니다. schema rollback을 위해 column을 즉시 삭제하지 않습니다. 새 binary rollback 후에도 additive column은 유지합니다.
 
-`SENDING -> SENT`와 다음 항목은 동일 transaction입니다.
+## 구현 및 검증 정본
 
-- community/shorts `alarm_sent_at`
-- `authorized_at` 해제
-- delivery 기반 sent tracking
-- latency classification
+구체적인 state/event/attempt/token/CAS 규약:
 
-CAS에 성공한 delivery ID만 후속 tracking 대상입니다.
+- [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)
 
-### outbox direct update guard
+PR 순서, 파일 단위 작업, acceptance와 rollback:
 
-pre-fanout 직접 update는 다음 조건을 포함합니다.
+- [`2026-08-31-youtube-egress-lifecycle-implementation.md`](../plans/2026-08-31-youtube-egress-lifecycle-implementation.md)
 
-```sql
-AND NOT EXISTS (
-    SELECT 1
-    FROM youtube_notification_delivery d
-    WHERE d.outbox_id = o.id
-)
-```
+관련 운영 경계:
 
-child가 존재하는 outbox는 aggregate SQL 외 경로에서 status를 바꾸지 않습니다.
+- [`alarm-egress-scale-out-decisions-20260730.md`](alarm-egress-scale-out-decisions-20260730.md)
+- [`repository-ownership.md`](repository-ownership.md)
+- [`../services/alarm-worker.md`](../services/alarm-worker.md)
 
-### constraint 도입
+## 재검토 조건
 
-데이터 감사를 먼저 수행한 뒤 `NOT VALID`로 추가하고 별도 단계에서 validate합니다.
+다음 중 하나가 발생하면 이 결정을 다시 검토합니다.
 
-```sql
-CHECK (attempt_count >= 0)
-CHECK (row_version >= 0)
-CHECK (status <> 'SENDING' OR locked_at IS NOT NULL)
-CHECK (status <> 'SENT' OR sent_at IS NOT NULL)
-CHECK (status IN ('PENDING', 'SENDING') OR locked_at IS NULL)
-CHECK (status IN ('PENDING', 'SENDING', 'SENT', 'FAILED', 'QUARANTINED'))
-```
-
----
-
-## 직접 구현과 라이브러리 검토 결론
-
-### 직접 planner가 대체하는 범위
-
-- From/Event 허용 조합
-- guarded 목적 상태 선택
-- attempt와 retry 경계
-- backoff 계산
-- error code와 audit rule
-- complete DB mutation plan
-
-### 라이브러리를 사용해도 남는 범위
-
-- expected version과 claim token
-- attempt와 retry timestamp patch
-- tracking transaction
-- batch partial success
-- aggregate projection
-- external outcome unknown
-- quarantine/revive recovery
-- 기존 schema adapter
-
-현재 상태 5개와 핵심 이벤트 9개 규모에서는 library adapter가 줄이는 코드보다 추가하는 경계가 더 큽니다.
-
-### 재검토 trigger
-
-다음 조건이 함께 성립하면 외부 library를 다시 평가합니다.
-
-1. 선택된 transition ID와 structured metadata/effect plan을 순수 결과로 반환합니다.
-2. caller-owned state와 persistence adapter를 분리합니다.
-3. optimistic concurrency conflict를 일급 개념으로 지원합니다.
-4. 기존 `youtube_notification_delivery` schema를 강제 교체하지 않습니다.
-5. production adoption과 다중 maintainer 및 API 안정성이 충분히 축적됩니다.
-6. 동일 contract test에서 직접 planner와 동등하고, adapter 포함 net policy code가 실질적으로 감소합니다.
-
-library를 도입하더라도 domain과 repository API에는 외부 타입을 노출하지 않습니다.
-
----
-
-## 구현 순서
-
-각 단계는 독립 PR로 수행합니다. production writer를 두 개 두는 dual-write는 금지합니다.
-
-### PR 1. 상태 타입과 순수 planner
-
-범위:
-
-- outbox와 delivery status Go 타입 분리
-- `lifecycle` package 생성
-- delivery/outbox snapshot, event, decision, policy, rule ID 정의
-- 기존 동작을 재현하는 retry/revive policy 작성
-- 모든 state/event 조합 table test
-- runtime wiring 없음
-
-완료 조건:
-
-- planner test가 DB 없이 실행됩니다.
-- `SENT` terminal, `QUARANTINED` no-auto-revive가 고정됩니다.
-- 현재 max retry 경계와 linear backoff 동작을 그대로 재현합니다.
-
-rollback:
-
-- runtime 경로를 건드리지 않으므로 파일 제거만으로 복구됩니다.
-
-### PR 2. typed delivery outcome
-
-범위:
-
-- `DispatchResult.FailureBuckets`와 `FailureRetryAfter` 제거
-- `[]DeliveryOutcome` 도입
-- SendEngine에서 retry-safe, permanent, unknown을 구조화
-- failure code registry 도입
-- 기존 repository mutator를 outcome 종류에 따라 호출하여 동작 유지
-
-완료 조건:
-
-- 상태 정책에서 오류 문자열 비교가 사라집니다.
-- outcome unknown은 계속 failure/claim-release 경로에 들어가지 않습니다.
-- grouped/per-room path가 동일 outcome contract를 사용합니다.
-
-rollback:
-
-- DB schema 변화가 없으므로 코드 revert로 복구됩니다.
-
-### PR 3. transition service와 single writer
-
-범위:
-
-- `DeliveryTransitionService`와 `OutboxIntentTransitionService` 추가
-- outcome을 planner decision으로 변환
-- repository `ApplyBatch`와 `ApplySentInTx` 추가
-- SQL에서 `maxRetries`와 상태 선택 `CASE` 제거
-- legacy `MarkFailed*`, `MarkPermanentFailure*`, direct `MarkSent*` 호출 제거
-- per-decision `Applied/Conflict/Missing` 결과와 metric 추가
-
-완료 조건:
-
-- delivery status를 변경하는 production entry point가 transition store로 제한됩니다.
-- repository가 policy config를 받지 않습니다.
-- partial batch conflict 테스트가 통과합니다.
-
-rollback:
-
-- 기존 mutator 삭제는 이 PR 마지막 commit에서 수행합니다. rollback용 release branch가 필요하면 한 릴리스 동안 deprecated wrapper를 내부에 유지하되 writer는 하나만 사용합니다.
-
-### PR 4. preparation-before-SENDING와 row fencing
-
-범위:
-
-- outbox load, payload validation, formatting, request build를 `BeginSend`보다 앞으로 이동
-- additive `row_version`, `error_code`, `state_changed_at` migration
-- claim과 모든 transition에서 version 증가
-- `DeliveryClaimToken`에 version 포함
-- `locked_at + row_version` CAS
-- stale version integration test
-
-완료 조건:
-
-- `SENDING` 진입 시 provider request와 stable ClientRequestID가 준비되어 있습니다.
-- outbox load/format/build 실패는 `PENDING` leased 상태에서 처리됩니다.
-- stale worker는 status가 같아도 version이 다르면 적용하지 못합니다.
-
-rollback:
-
-- 신규 컬럼은 additive이며 old binary가 무시할 수 있습니다. rollback 시 컬럼을 즉시 drop하지 않습니다.
-
-### PR 5. outbox intent와 aggregate writer 경계
-
-범위:
-
-- `MaterializeFanout` transaction 도입
-- child 존재 시 direct outbox status update 거부
-- `StatusUpdater`를 pre-fanout intent 전용으로 대체하거나 제거
-- aggregate SQL을 유일한 post-fanout writer로 고정
-- revive planner와 existing transaction 연결
-
-완료 조건:
-
-- child가 있는 outbox를 direct mutator가 변경하지 못하는 integration test가 통과합니다.
-- delivery aggregate의 기존 atomic semantics가 유지됩니다.
-- FAILED revive가 SENT와 QUARANTINED child를 보존합니다.
-
-rollback:
-
-- schema 변경이 없고 query guard 중심이므로 코드 revert가 가능합니다.
-
-### PR 6. 관측성과 architecture gate 및 정리
-
-범위:
-
-- transition metric/log 완성
-- direct status SQL 금지 gate 추가
-- deprecated mutator와 문자열 failure bucket 완전 삭제
-- constraint audit 후 `VALIDATE CONSTRAINT`
-- 문서의 delivery status를 `implemented`, 검증 완료 후 `verified`로 갱신
-
-완료 조건:
-
-- 허용된 store query 외 `youtube_notification_delivery.status` 직접 update가 CI에서 차단됩니다.
-- 기존 retry/restart/exact-once/partial-failure 테스트가 모두 유지됩니다.
-- 결정 레코드 implementation/evidence가 실제 파일과 테스트를 가리킵니다.
-
----
-
-## 테스트 계약
-
-### planner unit test
-
-모든 state/event 조합을 table-driven test로 고정합니다.
-
-```text
-PENDING + BeginSend -> SENDING
-PENDING + Delivered -> invalid
-SENDING + Delivered -> SENT
-SENDING + RetrySafe -> PENDING 또는 FAILED
-SENDING + OutcomeUnknown -> Hold
-SENDING + LeaseExpired -> QUARANTINED
-SENT + automatic event -> invalid
-FAILED + eligible Revive -> PENDING
-QUARANTINED + Revive -> invalid
-```
-
-경계값:
-
-```text
-attempt=MaxRetries-2 + failure -> PENDING
-attempt=MaxRetries-1 + failure -> FAILED
-provider Retry-After > local backoff -> provider 값 사용
-provider Retry-After <= local backoff -> local 값 사용
-```
-
-### repository integration test
-
-- stale `locked_at` 거부
-- stale `row_version` 거부
-- expected attempt mismatch 거부
-- batch 일부만 적용되는 경우 result 정합성
-- `SENT` row를 failure가 덮어쓰지 못함
-- 성공 CAS에 포함되지 않은 delivery의 tracking은 변경하지 않음
-- delivery SENT와 tracking transaction rollback 원자성
-- `QUARANTINED`는 normal claim 대상이 아님
-- child가 있는 outbox direct update 거부
-- aggregate priority와 `sent_at` 단조성
-
-### crash-window test
-
-| crash 위치 | 기대 복구 |
-|---|---|
-| claim 직후 | lock 만료 뒤 재claim |
-| local preparation 중 | `PENDING` 유지, 안전한 재claim |
-| `SENDING` commit 직후 provider 호출 전 | conservative quarantine 가능, 자동 중복 없음 |
-| provider 성공 후 `SENT` commit 전 | `QUARANTINED`, 자동 재발송 없음 |
-| `SENT` commit 후 aggregate 전 | reconcile loop가 outbox 수렴 |
-| delivery success와 tracking 중간 오류 | transaction rollback, 부분 기록 없음 |
-
-### sequence/fuzz invariant
-
-임의 이벤트 순서에서 다음을 검사합니다.
-
-- attempt count는 revive 외에는 감소하지 않습니다.
-- `SENT`는 자동 이벤트로 벗어나지 않습니다.
-- `QUARANTINED`는 자동 retry되지 않습니다.
-- stale version은 현재 version을 덮어쓰지 못합니다.
-- `DeliveryOutcomeUnknown`은 failure retry decision을 만들지 않습니다.
-- tracking `SENT`는 실제 적용된 delivery success와 함께 존재합니다.
-
-### 기존 회귀 테스트
-
-다음 범주의 기존 테스트는 삭제하거나 약화하지 않습니다.
-
-- delivery lock token
-- sending state
-- quarantine and aggregate failure
-- retry exact-once integration
-- selective retry send
-- partial failure
-- restart recovery
-- community/shorts alarm-once claim
-- canonical `sent_at`
-
----
-
-## 관측성
-
-### metric
-
-```text
-hololive_youtube_delivery_transition_total{
-    rule,
-    from,
-    to,
-    result
-}
-
-hololive_youtube_delivery_transition_conflict_total{
-    rule,
-    reason
-}
-
-hololive_youtube_delivery_outcome_unknown_total{
-    provider,
-    code
-}
-
-hololive_youtube_delivery_quarantine_total{
-    cause
-}
-
-hololive_youtube_delivery_sending_age_seconds
-hololive_youtube_outbox_aggregate_lag_seconds
-```
-
-ID, room ID, error text를 metric label로 사용하지 않습니다.
-
-### structured log
-
-```text
-entity=delivery|outbox
-rule_id
-event
-from_state
-to_state
-action=apply|hold
-apply_outcome=applied|conflict|missing
-attempt_count
-row_version
-delivery_id
-outbox_id
-failure_code
-claim_age_ms
-client_request_id_hash
-```
-
-room ID와 provider payload는 기존 민감정보 마스킹 규칙을 따릅니다.
-
-### alert 후보
-
-- 단일 replica에서 transition conflict가 지속 증가
-- stale `SENDING` age가 lock timeout을 크게 초과
-- quarantine 증가
-- delivery `SENT`와 tracking mismatch
-- aggregate lag 증가
-
-threshold는 구현 후 baseline을 수집해 별도 운영 결정으로 정합니다. 이 문서는 임의 수치를 고정하지 않습니다.
-
----
-
-## rollout
-
-### 원칙
-
-- production dual-write를 사용하지 않습니다.
-- DB migration은 additive-first입니다.
-- 기존 상태 문자열은 바꾸지 않습니다.
-- 각 PR은 이전 단계의 테스트를 포함한 채 독립 배포 가능해야 합니다.
-- 새 planner가 선택한 결과와 legacy 결과를 비교해야 하면 test 또는 read-only shadow 계산만 허용합니다. shadow 계산은 DB mutation을 하지 않습니다.
-
-### 배포 순서
-
-1. PR 1과 PR 2를 배포해 타입과 outcome contract를 안정화합니다.
-2. PR 3에서 single writer를 전환합니다.
-3. transition conflict, retry, sent tracking을 확인합니다.
-4. PR 4 additive migration과 pipeline ordering을 배포합니다.
-5. PR 5 outbox writer 경계를 적용합니다.
-6. 한 번 이상의 retry, quarantine fault injection, aggregate reconcile 검증 후 PR 6 cleanup을 수행합니다.
-
-### 즉시 rollback 조건
-
-- `SENT -> PENDING/FAILED` 회귀
-- outcome unknown이 자동 retry로 들어감
-- stale token/version이 적용됨
-- delivery success와 tracking이 불일치
-- child가 있는 outbox가 direct writer로 변경됨
-- aggregate가 terminal 상태에서 `PENDING`으로 잘못 회귀
-
-### rollback 방법
-
-- code path를 이전 단일 writer로 되돌립니다.
-- additive 컬럼과 `NOT VALID` constraint는 유지합니다.
-- 새 컬럼 drop은 별도 검증 후 수행하며 emergency rollback에 포함하지 않습니다.
-- 이미 `QUARANTINED`된 row를 자동으로 `PENDING`으로 되돌리지 않습니다.
-- provider 중복 여부가 불명확한 row는 운영 reconciliation 전까지 보존합니다.
-
----
-
-## architecture gate
-
-최종 단계에서 다음 규칙을 정적 검사합니다.
-
-1. 허용된 store query 외부에서 `youtube_notification_delivery`의 `status`를 직접 update하지 않습니다.
-2. `DeliveryRepository` 공개 메서드는 `maxRetries`나 backoff 정책값을 받지 않습니다.
-3. lifecycle package는 DB, slog, prometheus, provider client를 import하지 않습니다.
-4. failure reason 문자열로 permanent/retry를 선택하지 않습니다.
-5. `SENT` tracking 변경은 적용된 delivery ID에서만 시작합니다.
-6. aggregate SQL은 count-then-update 형태로 분리하지 않습니다.
-
-초기 gate는 정확한 allowlist로 시작하고, generic grep 예외를 넓게 허용하지 않습니다.
-
----
-
-## 완료 조건
-
-다음 항목을 모두 충족하면 구현을 `implemented`로 변경합니다.
-
-- [ ] outbox와 delivery status 타입이 분리되어 있습니다.
-- [ ] `DeliveryPlanner`와 `OutboxIntentPlanner`가 순수 함수로 존재합니다.
-- [ ] SendEngine이 typed outcome을 반환합니다.
-- [ ] failure 문자열 비교가 lifecycle 정책에서 제거되었습니다.
-- [ ] delivery status production writer가 transition store 하나로 제한됩니다.
-- [ ] repository SQL이 max retry와 목적 상태를 결정하지 않습니다.
-- [ ] 모든 transition이 expected status/version/attempt를 검사합니다.
-- [ ] `SENDING`은 provider request 준비 완료 후 진입합니다.
-- [ ] outcome unknown은 hold 후 quarantine 경로만 사용합니다.
-- [ ] `QUARANTINED`는 자동 revive되지 않습니다.
-- [ ] delivery `SENT`와 tracking이 한 transaction입니다.
-- [ ] child delivery가 있는 outbox는 aggregate projector만 status를 씁니다.
-- [ ] aggregate atomic SQL semantics가 유지됩니다.
-- [ ] revive가 SENT/QUARANTINED child를 보존합니다.
-- [ ] stale writer, partial batch, crash-window 통합 테스트가 통과합니다.
-- [ ] direct status update architecture gate가 적용됩니다.
-- [ ] alarm-worker replica는 별도 결정 전까지 1입니다.
-
-다음 검증까지 완료하면 `verified`로 변경합니다.
-
-- [ ] production 또는 production-equivalent 환경에서 retry 경로가 정상 수렴했습니다.
-- [ ] outcome-unknown fault injection이 중복 자동 발송 없이 quarantine으로 수렴했습니다.
-- [ ] aggregate reconcile이 crash 이후 수렴했습니다.
-- [ ] transition conflict와 tracking mismatch에 비정상 증가가 없습니다.
-- [ ] 결정 레코드의 `implementation`과 `evidence`가 실제 코드·테스트를 가리킵니다.
-
----
-
-## 구현자가 유지해야 하는 비목표
-
-이번 작업에서 다음 변경은 하지 않습니다.
-
-- event sourcing 전환
-- Temporal, Cadence 등 외부 workflow engine 도입
-- provider 호출을 DB transaction 안으로 이동
-- outbox aggregate를 Go에서 재계산
-- `QUARANTINED` 자동 retry
-- alarm-worker replica 확대
-- retry 알고리즘 자체의 제품 정책 변경
-- current DB status 문자열 변경
-
-retry 알고리즘을 linear backoff에서 exponential backoff로 바꾸는 작업은 lifecycle 책임 분리가 완료된 뒤 별도 결정으로 수행합니다.
+1. provider가 request ID 기반 결과 조회 또는 명시적 idempotent replay 계약을 제공합니다.
+2. `QUARANTINED` 수동 처리 요구가 반복되어 audited reconciliation workflow가 필요해집니다.
+3. lifecycle 상태와 이벤트가 크게 늘어 직접 policy보다 검증된 FSM library adapter가 작아집니다.
+4. YouTube delivery store에 두 번째 production runtime 소비자가 생깁니다.
+5. alarm-worker replica>1 게이트가 별도 결정으로 모두 해소됩니다.
