@@ -1,5 +1,9 @@
 # YouTube Producer 운영 Runbook
 
+> Historical document. `youtube-producer` is retired. Current ownership and operations
+> are defined by `docs/current/PROJECT_MAP.md` and
+> `docs/current/runbooks/youtube-collector.md`.
+
 > 실제 tailnet 주소/호스트는 private ops evidence 참조.
 
 > 마지막 업데이트: 2026-07-11
@@ -165,7 +169,7 @@ rollback도 한 번에 한 호스트만 수행합니다. 토폴로지/순서 기
 
 ## 8) 관련 문서
 
-- `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
+- `docs/history/runbooks/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_ROUTE_USAGE_LAST_24H.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_SEND_COUNTS_LAST_24H.md`
 - `docs/current/runbooks/YOUTUBE_COMMUNITY_SHORTS_DELIVERY_LOGS.md`

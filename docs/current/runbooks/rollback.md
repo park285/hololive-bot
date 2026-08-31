@@ -178,4 +178,3 @@ export한 임시 compose 파일은 운영 산출물이므로 commit하지 않습
 - `release.md`
 - `../CONTRACT_MAP.md`
 - `../QUEUE_AND_PUBSUB_CONTRACTS.md`
-- `../../runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`

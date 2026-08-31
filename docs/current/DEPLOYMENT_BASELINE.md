@@ -2,7 +2,7 @@
 
 ## Scope
 
-현재 production baseline은 단일 호스트 `deploy/compose/docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준입니다. 서비스별 현재 절차는 `docs/current/runbooks/`를 따릅니다. `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`는 historical Compose 절차이며 `youtube-producer` 표기는 retired name입니다.
+현재 production baseline은 단일 호스트 `deploy/compose/docker-compose.prod.yml`입니다. 이 문서는 runtime/infra 구성의 요약 기준입니다. 서비스별 현재 절차는 `docs/current/runbooks/`를 따릅니다.
 
 ## Non-Goals
 
@@ -116,4 +116,3 @@ domain socket monitor connection remained outside the TCP TLS scope.
 - `deploy/compose/docker-compose.standby.yml`
 - `docs/current/PROJECT_MAP.md`
 - `docs/current/runbooks/postgres-replication.md`
-- `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`

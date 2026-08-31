@@ -31,7 +31,12 @@ artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습�
 어떤 빌드도 돌리지 않습니다 — 이미지는 빌드 호스트에서 만들어 전송하고, 런타임
 호스트는 이미 적재된 이미지로 recreate만 합니다.
 
-`scripts/deploy/compose-redeploy-service.sh`는 cutover 전에 `compose build`를
+모든 build·deploy·restart는 `hololive-bot-ops`로 라우팅하고 각각 필요한 승인을
+확인합니다. 검증된 clean revision의 전체 image build-only 진입점은
+`./build-all.sh --no-bump --build-only`이고, 개별 중앙 service의 build와 cutover
+진입점은 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
+
+`./scripts/deploy/compose-redeploy-service.sh`는 cutover 전에 `compose build`를
 수행하므로 **빌드 호스트 전용**입니다. 런타임 호스트에서 실행하면 그 호스트에서
 컴파일이 돌고, `/opt/hololive-bot/compose/current`에는 `.git`이 없어
 `org.opencontainers.image.revision`이 `unknown`으로 찍힙니다.
@@ -223,4 +228,3 @@ COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-co
 - `../DEPLOYMENT_BASELINE.md`
 - `pgo.md`
 - `rollback.md`
-- `../../runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`

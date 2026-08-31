@@ -1,7 +1,7 @@
 # OpenBao Runtime Env Minimization
 
 Iris 제외(Hololive Bot 계열 + ChatBotGo Kakao) 운영 ENV 계약 변경의 cross-repo 상위 계획.
-ChatBotGo 세부 계약은 `/home/kapu/work/iris-stack/chat-bot-go-kakao/docs/current/architecture/openbao-env-minimization.md`가 소유한다.
+ChatBotGo historical 세부 기록은 `/home/kapu/work/iris-stack/chat-bot-go-kakao/docs/archive/openbao-env-minimization.md`에 보존한다.
 
 ## Goal
 

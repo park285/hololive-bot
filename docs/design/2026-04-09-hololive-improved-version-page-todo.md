@@ -106,7 +106,7 @@ Actual dashboard route entrypoints:
 - Owning seam: deploy/config boundary
 - Boundary:
   `docker-compose.prod.yml`
-  `docs/runbook_execution/YOUTUBE_PRODUCER_RUNBOOK.md`
+  `docs/history/youtube/YOUTUBE_PRODUCER_RUNBOOK.md`
 - Contract risk: 코드에서만 설정 가능하고 운영 compose에는 드러나지 않으면 runtime tuning 계약이 깨진다.
 - TODO:
   `SCRAPER_VIDEOS_SECONDS`

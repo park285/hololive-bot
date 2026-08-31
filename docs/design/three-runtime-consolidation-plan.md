@@ -1,6 +1,6 @@
 # Three Runtime Consolidation Plan
 
-> 완료됨 (2026-06-27 cutover) — `docs/runbook_execution/THREE_RUNTIME_CUTOVER_20260627.md` 참조. 아래 본문은 계획 당시(5-runtime 기준) 기록입니다.
+> 완료됨 (2026-06-27 cutover) — `docs/history/runtime-split/THREE_RUNTIME_CUTOVER_20260627.md` 참조. 아래 본문은 계획 당시(5-runtime 기준) 기록입니다.
 
 ## 상태
 

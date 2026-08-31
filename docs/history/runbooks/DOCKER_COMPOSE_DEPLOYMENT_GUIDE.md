@@ -1,5 +1,9 @@
 # Hololive Docker Compose Deployment Guide
 
+> Historical document. Do not use as the current source of truth. Current deployment,
+> release, rollback, and runtime procedures live under `docs/current/runbooks/` and must
+> be executed through `hololive-bot-ops`.
+
 ## 목적
 
 단일 호스트 `docker compose` 기반으로 hololive runtime을 운영하기 위한 기본 절차입니다.
@@ -19,7 +23,7 @@
 - 프로덕션 배포 진입점은 `./build-all.sh --no-bump` 또는 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
 - 인자 없는 `./build-all.sh`는 live deploy로 해석되므로 거부됩니다. 프로덕션은 반드시 clean tree에서 `--no-bump`를 사용하며, local/dev image build는 `./build-all.sh --build-only` 또는 `./build-all.sh <service>`를 사용합니다.
 - 직접 Compose 명령이 필요하면 raw `docker compose` 대신 `./scripts/deploy/compose.sh`를 사용합니다. 이 wrapper는 OpenBao env preflight와 shell shadowing 차단을 먼저 수행합니다.
-- OpenBao env 전환 후 운영 호스트의 local `.env` 파일과 shell profile export 잔재는 [OpenBao Env Cleanup Runbook](./OPENBAO_ENV_CLEANUP_RUNBOOK.md) 기준으로 정리합니다.
+- 당시 env 전환 정리 기록은 [Env Cleanup Runbook](../openbao/OPENBAO_ENV_CLEANUP_RUNBOOK.md)에 보존합니다.
 - 상태/장애 1차 확인은 `./scripts/deploy/compose.sh -f docker-compose.prod.yml ps`, `./scripts/deploy/compose.sh ... logs`, `/health`, `/ready` 기준으로 수행합니다.
 - k8s/k3s 시절 절차나 매니페스트가 저장소에 남아 있더라도, 현재 운영 SSOT로 간주하지 않습니다.
 - 앱 이미지는 distroless에서 UID/GID `1000:1000`으로 실행하고 `/etc/passwd`의 `app` 사용자와 `USER=app`, `HOME=/tmp`를 함께 제공합니다.
@@ -307,7 +311,7 @@ override를 지정하지 않은 모든 경로는 기본값 `false`로 plain inde
 
 ## 관련 런북
 
-- `docs/runbook_execution/YOUTUBE_PRODUCER_RUNBOOK.md`
+- `docs/history/youtube/YOUTUBE_PRODUCER_RUNBOOK.md`
 - `hololive/hololive-kakao-bot-go/docs/STREAM_INGESTER_RUNBOOK.md`
 
 ## 정지 / 재기동
