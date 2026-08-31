@@ -72,8 +72,8 @@ grep -Fq 'stale_rollback_tags=' "$deploy_script" \
   || fail "AP cutover must collect superseded rollback image tags for pruning"
 grep -Fq '  "$image_archive"' "$deploy_script" \
   || fail "AP cutover must transfer the image archive to the AP host"
-grep -Fq '"ubuntu@$AP_SSH_HOST:~/$image_remote_path"' "$deploy_script" \
-  || fail "AP cutover must transfer the image archive into the remote backup workspace"
+grep -Fq '"$(ap_rsync_target "./$image_remote_path")"' "$deploy_script" \
+  || fail "AP cutover must transfer the image archive through the canonical AP transport owner"
 grep -Fq "image_archive='\$backup_dir/hololive-youtube-collector-prod.tar'" "$deploy_script" \
   || fail "AP cutover must load the image archive from the remote backup workspace"
 grep -Fq 'docker load --input' "$deploy_script" \

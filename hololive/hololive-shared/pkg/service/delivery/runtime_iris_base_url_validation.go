@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 const (
@@ -69,19 +71,16 @@ func validateRuntimeIrisBaseURLWithOptions(raw string, opts runtimeIrisBaseURLVa
 		return "", fmt.Errorf("validate runtime iris transport scheme: %w", err)
 	}
 
-	return normalizeRuntimeIrisBaseURL(baseURL, parsed), nil
+	return baseURL, nil
 }
 
 func parseRuntimeIrisBaseURL(raw string) (string, *url.URL, error) {
-	baseURL := strings.TrimSpace(raw)
-	if baseURL == "" {
-		return "", nil, errors.New("base URL is empty")
+	parsed, err := iris.ParseBaseEndpoint(raw)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse canonical Iris base endpoint: %w", err)
 	}
 
-	parsed, err := url.ParseRequestURI(baseURL)
-	if err != nil {
-		return "", nil, fmt.Errorf("parse request URI: %w", err)
-	}
+	baseURL := parsed.String()
 
 	return baseURL, parsed, nil
 }
@@ -107,8 +106,8 @@ func validateRuntimeIrisBaseURLShape(parsed *url.URL, opts runtimeIrisBaseURLVal
 		return fmt.Errorf("validate runtime iris base URL port: %w", err)
 	}
 
-	if parsed.Path != "" && parsed.Path != "/" {
-		return errors.New("IRIS_BASE_URL_FILE URL path must be empty")
+	if runtimeIrisBaseURLHasDotSegment(parsed.Path) {
+		return errors.New("IRIS_BASE_URL_FILE URL path must not contain dot segments")
 	}
 
 	if parsed.RawQuery != "" {
@@ -124,6 +123,16 @@ func validateRuntimeIrisBaseURLShape(parsed *url.URL, opts runtimeIrisBaseURLVal
 	}
 
 	return nil
+}
+
+func runtimeIrisBaseURLHasDotSegment(path string) bool {
+	for segment := range strings.SplitSeq(path, "/") {
+		if segment == "." || segment == ".." {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validateRuntimeIrisBaseURLPort(parsed *url.URL) error {
@@ -144,14 +153,6 @@ func runtimeIrisBaseURLHostHasPortSeparator(host string) bool {
 	}
 
 	return strings.Contains(host, ":")
-}
-
-func normalizeRuntimeIrisBaseURL(baseURL string, parsed *url.URL) string {
-	if parsed.Path == "/" {
-		return strings.TrimSuffix(baseURL, "/")
-	}
-
-	return baseURL
 }
 
 func validateRuntimeIrisBaseURLHost(host string, opts runtimeIrisBaseURLValidationOptions) error {

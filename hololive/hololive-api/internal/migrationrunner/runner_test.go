@@ -397,41 +397,6 @@ func TestAppliedMigrationChecksumMismatchFails(t *testing.T) {
 	}
 }
 
-func TestMigrationChecksumCompatibilityIsBoundedToPublishedMigration177Sources(t *testing.T) {
-	t.Parallel()
-
-	raw, err := fs.ReadFile(migrations.FS, youtubeJobLeaseFailureDiagnosticsMigration)
-	if err != nil {
-		t.Fatalf("read migration 177: %v", err)
-	}
-
-	current := migrationChecksum(raw)
-	if current != youtubeJobLeaseFailureDiagnosticsChecksum {
-		t.Fatalf("migration 177 checksum = %s, want reviewed source %s", current, youtubeJobLeaseFailureDiagnosticsChecksum)
-	}
-
-	for _, historical := range []string{
-		youtubeJobLeaseFailureDiagnosticsV1Checksum,
-		youtubeJobLeaseFailureDiagnosticsV2Checksum,
-	} {
-		if !migrationChecksumMatches(youtubeJobLeaseFailureDiagnosticsMigration, historical, current) {
-			t.Errorf("published migration 177 checksum %s was rejected", historical)
-		}
-	}
-
-	if migrationChecksumMatches(youtubeJobLeaseFailureDiagnosticsMigration, strings.Repeat("a", 64), current) {
-		t.Fatal("unrecognized migration 177 checksum was accepted")
-	}
-
-	if migrationChecksumMatches("178_youtube_schedule_collabo_talent_names.sql", strings.Repeat("a", 64), strings.Repeat("b", 64)) {
-		t.Fatal("historical checksum exception escaped migration 177")
-	}
-
-	if migrationChecksumMatches(youtubeJobLeaseFailureDiagnosticsMigration, strings.Repeat("a", 64), "modified-source") {
-		t.Fatal("historical checksum exception accepted an unreviewed current source")
-	}
-}
-
 func TestFailedMigrationDoesNotPinBadChecksum(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
 	broken := fstest.MapFS{
@@ -665,22 +630,9 @@ func TestRealManifestFullReplayOnBlankDB(t *testing.T) {
 	}
 }
 
-func TestRealManifestPublishedMigration177ChecksumsReachReconciliation(t *testing.T) {
-	for _, historical := range []string{
-		youtubeJobLeaseFailureDiagnosticsV1Checksum,
-		youtubeJobLeaseFailureDiagnosticsV2Checksum,
-	} {
-		t.Run(historical[:8], func(t *testing.T) {
-			testPublishedMigration177ChecksumReconciliation(t, historical)
-		})
-	}
-}
-
-func testPublishedMigration177ChecksumReconciliation(t *testing.T, historical string) {
-	t.Helper()
-
+func TestRealManifestCurrentMigration177ChecksumReachesReconciliation(t *testing.T) {
 	pool := dbtest.NewBlankPool(t)
-	partialCount := preparePublishedMigration177Fixture(t, pool, historical)
+	partialCount := prepareCurrentMigration177Fixture(t, pool)
 	entries := manifestEntries(t)
 
 	result, runErr := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
@@ -707,10 +659,48 @@ func testPublishedMigration177ChecksumReconciliation(t *testing.T, historical st
 	}
 }
 
-func preparePublishedMigration177Fixture(t *testing.T, pool *pgxpool.Pool, historical string) int {
+func TestRealManifestMigration177NonCurrentChecksumsFailBeforeApply(t *testing.T) {
+	const migration177 = "177_youtube_job_lease_failure_diagnostics.sql"
+
+	testCases := []struct {
+		name     string
+		checksum string
+	}{
+		{name: "legacy-v1", checksum: "84023e0082c8ccccc880a40486330ad5d3ab2a520c3ee9ef412903767c152a6d"},
+		{name: "legacy-v2", checksum: "bad2f0359ff0bb3fbcac4bae0431780e456bf86faabdd2efdb4ed80b829dab9f"},
+		{name: "unknown", checksum: strings.Repeat("a", 64)},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			pool := dbtest.NewBlankPool(t)
+			partialFS := realManifestThrough(t, migration177)
+			runMigrations(t, pool, partialFS, "")
+
+			if _, err := pool.Exec(t.Context(), `
+				UPDATE schema_migration_checksums
+				SET checksum_sha256 = $1
+				WHERE filename = $2`, testCase.checksum, migration177); err != nil {
+				t.Fatalf("seed non-current migration 177 checksum: %v", err)
+			}
+
+			result, err := Run(t.Context(), pool, migrations.FS, Config{Logf: t.Logf})
+			if err == nil || !strings.Contains(err.Error(), migration177+" checksum mismatch") {
+				t.Fatalf("Run() result=%+v error=%v, want migration 177 checksum mismatch", result, err)
+			}
+
+			assertMigrationRecorded(t, pool, "178_youtube_schedule_collabo_talent_names.sql", false)
+			assertMigrationRecorded(t, pool, "189_youtube_job_lease_failure_diagnostics_reconcile.sql", false)
+		})
+	}
+}
+
+func prepareCurrentMigration177Fixture(t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
 
-	partialFS := realManifestThrough(t, youtubeJobLeaseFailureDiagnosticsMigration)
+	const migration177 = "177_youtube_job_lease_failure_diagnostics.sql"
+
+	partialFS := realManifestThrough(t, migration177)
 
 	partialEntries, manifestErr := dbmigrate.Manifest(partialFS)
 	if manifestErr != nil {
@@ -721,13 +711,6 @@ func preparePublishedMigration177Fixture(t *testing.T, pool *pgxpool.Pool, histo
 
 	projectionGeneration := seedMigration177Projection(t, pool)
 	seedMigration177LegacyLeases(t, pool, projectionGeneration)
-
-	if _, updateErr := pool.Exec(t.Context(), `
-		UPDATE schema_migration_checksums
-		SET checksum_sha256 = $1
-		WHERE filename = $2`, historical, youtubeJobLeaseFailureDiagnosticsMigration); updateErr != nil {
-		t.Fatalf("seed published migration 177 checksum: %v", updateErr)
-	}
 
 	return len(partialEntries)
 }
@@ -829,17 +812,25 @@ func assertMigration177LeaseReconciliation(t *testing.T, pool *pgxpool.Pool) {
 func assertMigration177ChecksumReconciliation(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
+	const migration177 = "177_youtube_job_lease_failure_diagnostics.sql"
+
 	var reconciledChecksum string
 
 	if queryErr := pool.QueryRow(t.Context(), `
 		SELECT checksum_sha256
 		FROM schema_migration_checksums
-		WHERE filename = $1`, youtubeJobLeaseFailureDiagnosticsMigration).Scan(&reconciledChecksum); queryErr != nil {
+		WHERE filename = $1`, migration177).Scan(&reconciledChecksum); queryErr != nil {
 		t.Fatalf("read reconciled migration 177 checksum: %v", queryErr)
 	}
 
-	if reconciledChecksum != youtubeJobLeaseFailureDiagnosticsChecksum {
-		t.Fatalf("reconciled migration 177 checksum = %s, want %s", reconciledChecksum, youtubeJobLeaseFailureDiagnosticsChecksum)
+	raw, err := fs.ReadFile(migrations.FS, migration177)
+	if err != nil {
+		t.Fatalf("read current migration 177: %v", err)
+	}
+
+	wantChecksum := migrationChecksum(raw)
+	if reconciledChecksum != wantChecksum {
+		t.Fatalf("reconciled migration 177 checksum = %s, want %s", reconciledChecksum, wantChecksum)
 	}
 }
 

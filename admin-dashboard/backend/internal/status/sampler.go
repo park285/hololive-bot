@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 const defaultEndpointSampleTTL = 2 * time.Second
@@ -75,10 +75,10 @@ func (s *Sampler) sample(ctx context.Context) endpointSnapshot {
 		endpoint := s.endpoints[i]
 
 		wg.Go(func() {
-			panicguard.Run(nil, "admin-dashboard-endpoint-sample", func() {
+			panicguard.Run(nil, panicguard.BackgroundTask, "admin-dashboard-endpoint-sample", func() {
 				var sample endpointSample
 
-				if err := panicguard.RunE(nil, "admin-dashboard-endpoint-sample", func() error {
+				if err := panicguard.RunE(nil, panicguard.BackgroundTask, "admin-dashboard-endpoint-sample", func() error {
 					sample = s.sampleEndpoint(ctx, endpoint)
 					return nil
 				}); err != nil {

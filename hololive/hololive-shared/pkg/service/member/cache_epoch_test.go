@@ -627,7 +627,6 @@ func TestCacheEpoch_CanceledSubscribeDoesNotWarn(t *testing.T) {
 		messages:    make(chan string),
 		disconnects: make(chan error),
 	}
-
 	var logs bytes.Buffer
 
 	c := newEpochTestCache(authority)
@@ -660,7 +659,6 @@ func TestCacheEpoch_UnexpectedDisconnectStillWarns(t *testing.T) {
 		messages:    make(chan string),
 		disconnects: make(chan error, 1),
 	}
-
 	var logs bytes.Buffer
 
 	c := newEpochTestCache(authority)

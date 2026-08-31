@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type RunFunc func(ctx context.Context, proof contract.LeaseProof) error
@@ -39,8 +40,8 @@ func (r *Repository) Run(ctx context.Context, lease Lease, run RunFunc) LeaseRun
 
 	result := make(chan error, 1)
 
-	panicguard.Go(nil, "collection-job-run", func() {
-		result <- panicguard.RunE(nil, "collection-job-run", func() error {
+	go panicguard.Run(nil, panicguard.BackgroundTask, "collection-job-run", func() {
+		result <- panicguard.RunE(nil, panicguard.BackgroundTask, "collection-job-run", func() error {
 			return run(runCtx, lease.Proof())
 		})
 	})

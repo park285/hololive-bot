@@ -1,7 +1,7 @@
 # 생일 방송 알람 v3 설계
 
 작성: 2026-08-08
-대체 대상: `2026-07-10-birthday-stream-alarm.md`의 discovery·audience 설계
+대체 대상: [`2026-07-10-birthday-stream-alarm.md`](../../history/plans/2026-07-10-birthday-stream-alarm.md)의 discovery·audience 설계
 
 ## 목적
 

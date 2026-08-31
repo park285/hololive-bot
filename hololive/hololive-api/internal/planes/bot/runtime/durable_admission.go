@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -22,7 +23,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const (
@@ -350,7 +350,7 @@ func (r *durableRuntime) processInboxClaim(ctx context.Context, claim *durabilit
 	heartbeatCtx, stopHeartbeat := context.WithCancel(commandCtx)
 	heartbeatDone := make(chan struct{})
 
-	panicguard.Go(r.logger, "durable-claim-heartbeat", func() {
+	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-claim-heartbeat", func() {
 		defer close(heartbeatDone)
 
 		r.runClaimHeartbeat(heartbeatCtx, claim.MessageID, token, claim.LeaseUntil, cancelCommand)

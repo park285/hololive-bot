@@ -7,6 +7,7 @@ cd "${ROOT_DIR}"
 export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
@@ -244,9 +245,7 @@ case "${TARGET}" in
         ;;
 esac
 
-HOLO_API_VERSION="$(xargs <hololive/hololive-api/VERSION 2>/dev/null || printf '%s' dev)"
-HOLO_ALARM_WORKER_VERSION="$(xargs <hololive/hololive-alarm-worker/VERSION 2>/dev/null || printf '%s' "${HOLO_API_VERSION}")"
-export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
+compose_export_release_versions "${ROOT_DIR}"
 
 echo "[INFO] COMPOSE_MODE=${COMPOSE_MODE}"
 echo "[INFO] COMPOSE_FILE=${COMPOSE_FILE}"

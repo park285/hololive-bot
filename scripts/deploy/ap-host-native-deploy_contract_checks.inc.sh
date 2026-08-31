@@ -43,14 +43,12 @@ else
   pass "ap-host-native generated env has 0 CACHE lines"
 fi
 
-write_unit_fn="$(awk '/^write_unit\(\) \{/,/^}$/' "${DEPLOY}")"
-if grep -Fq 'EnvironmentFile=/etc/stack-secrets/hololive-bot/ap-compose.env' <<<"${write_unit_fn}"; then
-  record_fail "host-native collector unit must not load the shared AP Compose env"
-elif ! grep -Fq 'EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env' <<<"${write_unit_fn}" ||
-     ! grep -Fq 'EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env' <<<"${write_unit_fn}"; then
-  record_fail "host-native collector unit must load only its scoped secret and generated host env files"
+if grep -Fq 'write_unit()' "${DEPLOY}" || grep -Fq 'cat > "$dest"' "${DEPLOY}"; then
+  record_fail "host-native deploy must not duplicate the checked-in systemd unit owner"
+elif ! grep -Fq 'cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"' "${DEPLOY}"; then
+  record_fail "host-native deploy must copy the checked-in systemd unit byte-identically"
 else
-  pass "host-native collector unit excludes ap-compose.env and preserves scoped env files"
+  pass "host-native deploy packages the single checked-in systemd unit owner"
 fi
 
 if grep -Eq 'EnvironmentFile=-?/etc/stack-secrets/hololive-bot/(ap-)?compose\.env' "${UNIT_TEMPLATE}"; then

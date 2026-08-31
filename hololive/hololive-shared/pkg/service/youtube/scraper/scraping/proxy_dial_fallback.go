@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/net/proxy"
-
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type dialResult struct {
@@ -36,8 +35,8 @@ func dialSOCKS5WithContextFallback(ctx context.Context, dialer proxy.Dialer, net
 }
 
 func startSOCKS5Dial(ctx context.Context, dialer proxy.Dialer, network, addr string, done chan<- dialResult) {
-	panicguard.Go(nil, "socks5-dial", func() {
-		err := panicguard.RunE(nil, "socks5-dial", func() error {
+	go panicguard.Run(nil, panicguard.BackgroundTask, "socks5-dial", func() {
+		err := panicguard.RunE(nil, panicguard.BackgroundTask, "socks5-dial", func() error {
 			runSOCKS5Dial(ctx, dialer, network, addr, done)
 
 			return nil

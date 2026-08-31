@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 // Run은 dispatcher loop를 caller goroutine에서 실행해 종료와 panic 결과를 lifecycle owner에 반환합니다.
@@ -13,7 +13,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		return nil
 	}
 
-	if err := panicguard.RunE(d.logger, "delivery-dispatcher", func() error {
+	if err := panicguard.RunE(d.logger, panicguard.BackgroundTask, "delivery-dispatcher", func() error {
 		d.run(ctx)
 
 		return nil

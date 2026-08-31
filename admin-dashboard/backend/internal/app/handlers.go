@@ -11,11 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/admin-dashboard/internal/httpx"
 	"github.com/kapu/admin-dashboard/internal/session"
 	"github.com/kapu/admin-dashboard/internal/status"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const wsSessionRevocationPoll = time.Second
@@ -189,7 +189,7 @@ func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID st
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	panicguard.Go(r.logger, "admin-dashboard-websocket-session-revocation", func() {
+	go panicguard.Run(r.logger, panicguard.BackgroundTask, "admin-dashboard-websocket-session-revocation", func() {
 		r.pollSessionFamilyRevocation(ctx, conn, checker, familyID)
 	})
 
@@ -294,7 +294,8 @@ func watchPeer(conn *websocket.Conn, pongWait time.Duration) <-chan struct{} {
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
-	panicguard.Go(nil, "admin-dashboard-websocket-peer", func() {
+
+	go panicguard.Run(nil, panicguard.BackgroundTask, "admin-dashboard-websocket-peer", func() {
 		defer close(gone)
 
 		for {

@@ -29,12 +29,12 @@ import (
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/outputguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/schedulerkit"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
@@ -153,12 +153,12 @@ func dispatchDigestRooms(ctx context.Context, rooms []model.SubscribedRoom, conf
 		roomID := rooms[i].RoomID
 
 		wg.Go(func() {
-			panicguard.Run(nil, "member-news-digest-room", func() {
+			panicguard.Run(nil, panicguard.BackgroundTask, "member-news-digest-room", func() {
 				defer func() { <-sem }()
 
 				var roomResult delivery.SendResult
 
-				if err := panicguard.RunE(nil, "member-news-digest-room", func() error {
+				if err := panicguard.RunE(nil, panicguard.BackgroundTask, "member-news-digest-room", func() error {
 					roomResult = config.processRoom(ctx, config.periodKey, roomID)
 					return nil
 				}); err != nil {

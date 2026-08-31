@@ -84,11 +84,27 @@ ap_host_load() {
         return 1
     fi
 
-    AP_SSH=(ssh -F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o SetEnv=LC_ALL=C -o SetEnv=LANG=C)
+    AP_SSH_USER="ubuntu"
+    AP_SSH_OPTIONS=(-F /dev/null -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o SetEnv=LC_ALL=C -o SetEnv=LANG=C)
     if [[ -n "$AP_SSH_HOST_KEY_ALIAS" ]]; then
-        AP_SSH+=(-o HostKeyAlias="$AP_SSH_HOST_KEY_ALIAS")
+        AP_SSH_OPTIONS+=(-o HostKeyAlias="$AP_SSH_HOST_KEY_ALIAS")
     fi
-    AP_SSH+=("ubuntu@$AP_SSH_HOST")
+    AP_SSH=(ssh "${AP_SSH_OPTIONS[@]}" "${AP_SSH_USER}@${AP_SSH_HOST}")
+}
+
+ap_rsync_rsh() {
+    local arg
+
+    printf 'ssh'
+    for arg in "${AP_SSH_OPTIONS[@]}"; do
+        printf ' %q' "$arg"
+    done
+}
+
+ap_rsync_target() {
+    local path="$1"
+
+    printf '%s@%s:%s' "$AP_SSH_USER" "$AP_SSH_HOST" "$path"
 }
 
 # 인자를 %q로 인용한다: ssh가 원격 argv를 공백으로 재조립·재파싱하므로, 인용 없이 bash -s -- "$@"로 넘기면 값의 셸 메타문자가 원격에서 실행된다.

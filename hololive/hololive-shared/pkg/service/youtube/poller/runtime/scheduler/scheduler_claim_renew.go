@@ -28,10 +28,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/cleanupctx"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	polling "github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime"
 )
 
@@ -105,10 +105,11 @@ func (s *Scheduler) startJobClaimRenewLoop(ctx context.Context, pollerName strin
 
 	metrics := s.metrics
 	logger := s.logger
-	panicguard.Go(logger, "youtube-poller-claim-renew", func() {
+
+	go panicguard.Run(logger, panicguard.BackgroundTask, "youtube-poller-claim-renew", func() {
 		defer close(done)
 
-		err := panicguard.RunE(logger, "youtube-poller-claim-renew", func() error {
+		err := panicguard.RunE(logger, panicguard.BackgroundTask, "youtube-poller-claim-renew", func() error {
 			runJobClaimRenewLoop(renewCtx, pollCtx, pollCancel, claim, pollerName, ttl, interval, errCh, metrics, logger)
 
 			return nil

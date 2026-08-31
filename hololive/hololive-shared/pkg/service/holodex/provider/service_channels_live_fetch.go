@@ -10,9 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
@@ -102,11 +103,11 @@ func (h *Service) fetchChannelsIndividually(ctx context.Context, channelIDs []st
 	resultChan := make(chan channelFetchResult, len(missedIDs))
 	workerWG := h.startChannelFetchWorkers(ctx, workerCount, jobs, resultChan)
 
-	panicguard.Go(h.logger, "holodex-channel-fetch-enqueue", func() {
+	go panicguard.Run(h.logger, panicguard.BackgroundTask, "holodex-channel-fetch-enqueue", func() {
 		enqueueChannelFetchJobs(ctx, jobs, missedIDs)
 	})
 
-	panicguard.Go(h.logger, "holodex-channel-fetch-close", func() {
+	go panicguard.Run(h.logger, panicguard.BackgroundTask, "holodex-channel-fetch-close", func() {
 		workerWG.Wait()
 		close(resultChan)
 	})
@@ -124,7 +125,7 @@ func (h *Service) startChannelFetchWorkers(ctx context.Context, workerCount int,
 
 	for range workerCount {
 		workerWG.Go(func() {
-			panicguard.Run(h.logger, "holodex-channel-fetch-worker", func() {
+			panicguard.Run(h.logger, panicguard.BackgroundTask, "holodex-channel-fetch-worker", func() {
 				h.runChannelFetchWorker(ctx, jobs, resultChan)
 			})
 		})

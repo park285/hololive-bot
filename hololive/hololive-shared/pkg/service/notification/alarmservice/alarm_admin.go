@@ -25,9 +25,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 )
+
+const alarmRoomMembershipBatchSize = 100
 
 func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEntry, error) {
 	registryKeys, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmRegistryKey)
@@ -45,7 +49,8 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 		roomNamesMap = map[string]string{}
 	}
 
-	alarms, channelIDsForNames := as.collectAlarmEntries(ctx, registryKeys, roomNamesMap)
+	roomIDs, roomChannels := as.loadRoomAlarmChannels(ctx, registryKeys)
+	alarms, channelIDsForNames := collectAlarmEntries(roomIDs, roomChannels, roomNamesMap)
 
 	memberNames, err := as.getMemberNamesBatch(ctx, channelIDsForNames)
 	if err != nil {
@@ -63,26 +68,59 @@ func (as *AlarmService) GetAllAlarmKeys(ctx context.Context) ([]*domain.AlarmEnt
 	return alarms, nil
 }
 
-func (as *AlarmService) collectAlarmEntries(
-	ctx context.Context,
-	registryKeys []string,
-	roomNamesMap map[string]string,
-) (result0 []*domain.AlarmEntry, result1 []string) {
-	alarms := make([]*domain.AlarmEntry, 0)
-	channelIDsForNames := make([]string, 0)
-
+func (as *AlarmService) loadRoomAlarmChannels(ctx context.Context, registryKeys []string) ([]string, [][]string) {
+	roomIDs := make([]string, 0, len(registryKeys))
 	for _, roomID := range registryKeys {
 		if roomID == "" {
 			continue
 		}
 
-		alarmKey := as.getAlarmKey(roomID)
+		roomIDs = append(roomIDs, roomID)
+	}
 
-		channelIDs, err := as.cache.SMembers(ctx, alarmKey)
-		if err != nil {
-			continue
+	if len(roomIDs) == 0 {
+		return roomIDs, nil
+	}
+
+	builder := as.cache.B()
+	roomChannels := make([][]string, len(roomIDs))
+
+	for batchStart := 0; batchStart < len(roomIDs); batchStart += alarmRoomMembershipBatchSize {
+		batchEnd := min(batchStart+alarmRoomMembershipBatchSize, len(roomIDs))
+		commands := make([]valkey.Completed, batchEnd-batchStart)
+
+		for index, roomID := range roomIDs[batchStart:batchEnd] {
+			commands[index] = builder.Smembers().Key(as.getAlarmKey(roomID)).Build()
 		}
 
+		results := as.cache.DoMulti(ctx, commands...)
+		for index, result := range results {
+			if index >= len(commands) {
+				break
+			}
+
+			channelIDs, err := result.AsStrSlice()
+			if err != nil {
+				continue
+			}
+
+			roomChannels[batchStart+index] = channelIDs
+		}
+	}
+
+	return roomIDs, roomChannels
+}
+
+func collectAlarmEntries(
+	roomIDs []string,
+	roomChannels [][]string,
+	roomNamesMap map[string]string,
+) (result0 []*domain.AlarmEntry, result1 []string) {
+	alarms := make([]*domain.AlarmEntry, 0)
+	channelIDsForNames := make([]string, 0)
+
+	for index, roomID := range roomIDs {
+		channelIDs := roomChannels[index]
 		roomAlarms := buildRoomAlarmEntries(roomID, roomNamesMap[roomID], channelIDs)
 
 		channelIDsForNames = append(channelIDsForNames, channelIDs...)

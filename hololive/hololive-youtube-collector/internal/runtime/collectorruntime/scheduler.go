@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -134,20 +134,20 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 
 	for range s.config.WorkerCount {
 		s.wg.Go(func() {
-			panicguard.Run(s.logger, "youtube-collector-worker", func() {
+			panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() {
 				s.worker(runCtx)
 			})
 		})
 	}
 
 	s.wg.Go(func() {
-		panicguard.Run(s.logger, "youtube-collector-discovery", func() {
+		panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() {
 			s.discover(runCtx)
 		})
 	})
 	s.mu.Unlock()
 
-	panicguard.Go(s.logger, "youtube-collector-join", func() {
+	go panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-join", func() {
 		s.join(done)
 	})
 
@@ -239,7 +239,7 @@ func (s *leaseScheduler) join(done chan struct{}) {
 }
 
 func (s *leaseScheduler) discover(ctx context.Context) {
-	if err := panicguard.RunE(s.logger, "youtube-collector-discovery", func() error {
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() error {
 		ticker := time.NewTicker(s.config.PollCadence)
 		defer ticker.Stop()
 
@@ -256,7 +256,7 @@ func (s *leaseScheduler) discover(ctx context.Context) {
 }
 
 func (s *leaseScheduler) pollGuarded(ctx context.Context) {
-	if err := panicguard.RunE(s.logger, "youtube-collector-poll", func() error {
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-poll", func() error {
 		s.pollOnce(ctx)
 
 		return nil

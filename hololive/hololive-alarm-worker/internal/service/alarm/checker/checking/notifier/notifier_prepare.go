@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -43,24 +43,26 @@ func (n *Notifier) prepareOutcomes(ctx context.Context, notifications []*domain.
 	for i := range notifications {
 		notification := notifications[i]
 
-		panicguard.GoE(eg, n.logger, "alarm-notifier-prepare", func() error {
-			if err := egCtx.Err(); err != nil {
-				// ctx 취소: claim 미수행이므로 발송 대상에서 제외(누락 아님). zero-value outcome 으로 어떤 카운터에도 넣지 않는다.
-				outcomes[i] = prepareOutcome{notification: notification}
-				return fmt.Errorf("prepare notification: %w", err)
-			}
+		eg.Go(func() error {
+			return panicguard.RunE(n.logger, panicguard.BackgroundTask, "alarm-notifier-prepare", func() error {
+				if err := egCtx.Err(); err != nil {
+					// ctx 취소: claim 미수행이므로 발송 대상에서 제외(누락 아님). zero-value outcome 으로 어떤 카운터에도 넣지 않는다.
+					outcomes[i] = prepareOutcome{notification: notification}
+					return fmt.Errorf("prepare notification: %w", err)
+				}
 
-			prepared, err := n.prepareOne(egCtx, notification)
+				prepared, err := n.prepareOne(egCtx, notification)
 
-			outcomes[i] = prepareOutcome{
-				notification: notification,
-				payload:      prepared.payload,
-				claimKeys:    prepared.claimKeys,
-				outcome:      prepared.outcome,
-				err:          err,
-			}
+				outcomes[i] = prepareOutcome{
+					notification: notification,
+					payload:      prepared.payload,
+					claimKeys:    prepared.claimKeys,
+					outcome:      prepared.outcome,
+					err:          err,
+				}
 
-			return nil
+				return nil
+			})
 		})
 	}
 

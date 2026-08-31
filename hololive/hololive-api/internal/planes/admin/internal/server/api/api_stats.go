@@ -32,12 +32,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -60,8 +60,8 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Memb
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		panicguard.Run(h.safeLogger(), "admin-stats-members", func() {
-			memberErr = panicguard.RunE(h.safeLogger(), "admin-stats-members", func() error {
+		panicguard.Run(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() {
+			memberErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-members", func() error {
 				var err error
 
 				members, err = h.repository.GetAllMembers(ctx)
@@ -74,8 +74,8 @@ func (h *StatsHandler) collectStats(ctx context.Context) (members []*domain.Memb
 		})
 	})
 	wg.Go(func() {
-		panicguard.Run(h.safeLogger(), "admin-stats-alarms", func() {
-			alarmErr = panicguard.RunE(h.safeLogger(), "admin-stats-alarms", func() error {
+		panicguard.Run(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() {
+			alarmErr = panicguard.RunE(h.safeLogger(), panicguard.BackgroundTask, "admin-stats-alarms", func() error {
 				var err error
 
 				alarmKeys, err = h.alarm.GetAllAlarmKeys(ctx)

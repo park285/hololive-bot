@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 const historyCap = 30
@@ -64,7 +64,7 @@ func (h *Hub) StartContext(ctx context.Context) {
 	h.started = true
 	h.lifecycleMu.Unlock()
 
-	panicguard.Go(nil, "admin-dashboard-status-hub", func() {
+	go panicguard.Run(nil, panicguard.BackgroundTask, "admin-dashboard-status-hub", func() {
 		h.run(ctx)
 	})
 }

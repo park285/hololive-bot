@@ -254,13 +254,12 @@ func assertPublicKakaoDeepLinkDirectives(t *testing.T, publicTemplate string) {
 	for _, required := range []string{
 		"map $request_uri $kakao_deep_link_target {",
 		"map $http_user_agent $kakao_deep_link_scraper {",
-		"map $http_user_agent $kakao_deep_link_in_app_user_agent {",
-		"map \"$request_method:$kakao_deep_link_in_app_user_agent\" $kakao_deep_link_in_app_get {",
+		"map $request_method $kakao_deep_link_get {",
 		"map $uri $shortlink_access_log_enabled {",
 		"access_log /dev/stdout ingress_json if=$shortlink_access_log_enabled;",
 		"if ($kakao_deep_link_target = \"\") {",
 		"if ($kakao_deep_link_scraper) {",
-		"if ($kakao_deep_link_in_app_get = 0) {",
+		"if ($kakao_deep_link_get = 0) {",
 		"add_header_inherit on;",
 		"return 404;",
 		"return 403;",
@@ -271,6 +270,15 @@ func assertPublicKakaoDeepLinkDirectives(t *testing.T, publicTemplate string) {
 	} {
 		if !strings.Contains(publicTemplate, required) {
 			t.Fatalf("public Kakao deep-link ingress missing %q", required)
+		}
+	}
+
+	for _, forbidden := range []string{
+		"$kakao_deep_link_in_app_user_agent",
+		"$kakao_deep_link_in_app_get",
+	} {
+		if strings.Contains(publicTemplate, forbidden) {
+			t.Fatalf("public Kakao deep-link ingress retains browser-denying classifier %q", forbidden)
 		}
 	}
 }

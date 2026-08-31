@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -60,5 +60,5 @@ func (r *BotRuntime) startWorkerProfileChecker(ctx context.Context) {
 		return
 	}
 
-	panicguard.Go(r.Logger, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
+	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "stack-worker-profile-checker", func() { r.workerProfileChecker.Run(ctx) })
 }

@@ -14,7 +14,7 @@ implement. Phase 1만 구현한다. Phase 2(live batch), Phase 3(source cooldown
 
 ## SSOT (기준 문서)
 
-`docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md`
+`docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md`
 
 - 구현 범위: §6 "Phase 1. Source-aware budget과 lease 안전화" (파일맵 + 작업 체크리스트 15항목)
 - 설계 근거: D-001~D-005, D-010~D-013, §7 코드 스케치, §8.1~8.3/8.5 테스트 결정

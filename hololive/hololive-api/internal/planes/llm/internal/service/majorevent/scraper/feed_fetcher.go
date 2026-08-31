@@ -111,22 +111,13 @@ func (f *FeedFetcher) validateResponseBody(resp *http.Response) error {
 }
 
 func (f *FeedFetcher) readAndCloseBody(responseBody io.ReadCloser) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(responseBody, f.maxBodyLen+1))
+	body, err := httputil.ReadAllAndCloseWithDrainLimit(responseBody, f.maxBodyLen, 64<<10)
 	if err != nil {
-		if closeErr := responseBody.Close(); closeErr != nil {
-			err = fmt.Errorf("%w; close response body: %w", err, closeErr)
+		if errors.Is(err, httputil.ErrResponseBodyTooLarge) {
+			return nil, fmt.Errorf("fetch feed: body exceeds %d bytes: %w", f.maxBodyLen, err)
 		}
 
-		return nil, fmt.Errorf("fetch feed: read body: %w", err)
-	}
-
-	if int64(len(body)) > f.maxBodyLen {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
-		return nil, f.closeOversizedBody(responseBody)
-	}
-
-	if closeErr := responseBody.Close(); closeErr != nil {
-		return nil, fmt.Errorf("fetch feed: close response body: %w", closeErr)
+		return nil, fmt.Errorf("fetch feed: read or close body: %w", err)
 	}
 
 	return body, nil

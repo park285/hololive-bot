@@ -28,10 +28,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
@@ -206,24 +206,26 @@ func (c *YouTubeChecker) startYouTubeChannelWorker(
 	mu *sync.Mutex,
 	notifications *[]*domain.AlarmNotification,
 ) {
-	panicguard.GoE(eg, c.logger, "youtube-channel-check", func() error {
-		channelNotifications, err := c.buildChannelNotifications(
-			ctx,
-			work.channelID,
-			work.subscriberRooms,
-			work.streams,
-			work.window,
-			now,
-			sentRoomsByStreamID,
-			liveObservedAtByStreamID,
-		)
-		if err != nil {
-			return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
-		}
+	eg.Go(func() error {
+		return panicguard.RunE(c.logger, panicguard.BackgroundTask, "youtube-channel-check", func() error {
+			channelNotifications, err := c.buildChannelNotifications(
+				ctx,
+				work.channelID,
+				work.subscriberRooms,
+				work.streams,
+				work.window,
+				now,
+				sentRoomsByStreamID,
+				liveObservedAtByStreamID,
+			)
+			if err != nil {
+				return fmt.Errorf("check youtube streams: build channel notifications for %s: %w", work.channelID, err)
+			}
 
-		appendYouTubeChannelNotifications(mu, notifications, channelNotifications)
+			appendYouTubeChannelNotifications(mu, notifications, channelNotifications)
 
-		return nil
+			return nil
+		})
 	})
 }
 

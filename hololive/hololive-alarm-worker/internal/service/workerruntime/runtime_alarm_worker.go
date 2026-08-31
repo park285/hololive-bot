@@ -26,12 +26,12 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 )
@@ -160,13 +160,15 @@ func (r notificationEgressRunner) handleRunnerGroupResult(err error) error {
 func (r notificationEgressRunner) startRunnerGroup(ctx context.Context, runners []NamedScheduler) <-chan error {
 	ch := make(chan error, 1)
 
-	panicguard.Go(r.logger, "notification-egress-runner-group", func() {
-		ch <- panicguard.RunE(r.logger, "notification-egress-runner-group", func() error {
+	go panicguard.Run(r.logger, panicguard.BackgroundTask, "notification-egress-runner-group", func() {
+		ch <- panicguard.RunE(r.logger, panicguard.BackgroundTask, "notification-egress-runner-group", func() error {
 			eg, egCtx := errgroup.WithContext(ctx)
 
 			for _, runner := range runners {
-				panicguard.GoE(eg, r.logger, "notification-egress-"+runner.Name, func() error {
-					return runner.Scheduler.Start(egCtx)
+				eg.Go(func() error {
+					return panicguard.RunE(r.logger, panicguard.BackgroundTask, "notification-egress-"+runner.Name, func() error {
+						return runner.Scheduler.Start(egCtx)
+					})
 				})
 			}
 

@@ -8,18 +8,22 @@ import {
 	isValidBadgeVariant,
 } from "./badge-variants";
 
-export interface BadgeProps
-	extends React.HTMLAttributes<HTMLDivElement>,
-		VariantProps<typeof badgeVariants> {
-	color?: BadgeVariant;
-	onRemove?: () => void;
-}
+type BadgeRemovalProps =
+	| { onRemove: () => void; removeAriaLabel: string }
+	| { onRemove?: undefined; removeAriaLabel?: never };
+
+export type BadgeProps = React.HTMLAttributes<HTMLDivElement> &
+	VariantProps<typeof badgeVariants> &
+	BadgeRemovalProps & {
+		color?: BadgeVariant;
+	};
 
 function Badge({
 	className,
 	variant,
 	color,
 	onRemove,
+	removeAriaLabel,
 	children,
 	...props
 }: BadgeProps) {
@@ -44,7 +48,7 @@ function Badge({
 					}}
 					className="ml-1 group rounded-full p-0.5 hover:bg-black/5 transition-colors"
 					type="button"
-					aria-label="삭제"
+					aria-label={removeAriaLabel}
 				>
 					<X
 						size={12}

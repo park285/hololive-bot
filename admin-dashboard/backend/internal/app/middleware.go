@@ -130,7 +130,7 @@ func (r *Runtime) csrfTokenValid(req *http.Request, sessionID string) bool {
 	}
 
 	cookie, err := req.Cookie(auth.CSRFCookieName)
-	if err != nil || cookie.Value != headerToken {
+	if err != nil || cookie.Value == "" || !httputil.ConstantTimeStringEqual(cookie.Value, headerToken) {
 		return false
 	}
 

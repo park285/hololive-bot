@@ -71,7 +71,7 @@ if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_tes
   exit 1
 fi
 
-RSYNC_RSH="ssh -F /dev/null -i $SSH_KEY -o IdentitiesOnly=yes"
+RSYNC_RSH="$(ap_rsync_rsh)"
 
 if [[ "$MODE" == "--apply" && "${!AP_APPROVE_DEPLOY_VAR:-}" != "true" ]]; then
   echo "Refusing apply without $AP_APPROVE_DEPLOY_VAR=true" >&2
@@ -106,7 +106,7 @@ rsync_preview() {
     --exclude-from="$EXCLUDES" \
     "$WORKSPACE_ROOT"/ \
     -e "$RSYNC_RSH" \
-    "ubuntu@$AP_SSH_HOST:~/"
+    "$(ap_rsync_target './')"
 }
 
 validate_preview() {
@@ -237,13 +237,13 @@ rsync -ai \
   --exclude-from="$EXCLUDES" \
   "$WORKSPACE_ROOT"/ \
   -e "$RSYNC_RSH" \
-  "ubuntu@$AP_SSH_HOST:~/"
+  "$(ap_rsync_target './')"
 
 image_remote_path="$REMOTE_REPO_DIR/$backup_dir/hololive-youtube-collector-prod.tar"
 rsync -ai \
   "$image_archive" \
   -e "$RSYNC_RSH" \
-  "ubuntu@$AP_SSH_HOST:~/$image_remote_path"
+  "$(ap_rsync_target "./$image_remote_path")"
 
 remote "set -euo pipefail
 cd ~/hololive-bot

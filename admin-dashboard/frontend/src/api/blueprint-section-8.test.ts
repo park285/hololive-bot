@@ -139,3 +139,38 @@ test("large frontend lists route through the shared VirtualList helper", () => {
 		assert.match(source, /<VirtualList/);
 	}
 });
+
+test("repeated destructive controls have contextual accessible names", () => {
+	const badgeSource = readSource("../components/ui/Badge.tsx");
+	const memberCardSource = readSource("../components/MemberCard.tsx");
+
+	assert.equal(badgeSource.includes('aria-label="삭제"'), false);
+	assert.match(badgeSource, /aria-label=\{removeAriaLabel\}/);
+	assert.match(
+		memberCardSource,
+		/removeAriaLabel=\{`\$\{member\.name\} 한국어 별명 \$\{alias\} 제거`\}/,
+	);
+	assert.match(
+		memberCardSource,
+		/removeAriaLabel=\{`\$\{member\.name\} 일본어 별명 \$\{alias\} 제거`\}/,
+	);
+});
+
+test("alarm group disclosure and edit controls have separate native action owners", () => {
+	const source = readSource("../features/alarms/components/AlarmGroups.tsx");
+
+	assert.equal(source.includes('role="button"'), false);
+	assert.equal(source.includes("tabIndex={0}"), false);
+	assert.equal(source.includes("onKeyDown={(event)"), false);
+	assert.match(
+		source,
+		/<button\s+type="button"\s+aria-expanded=\{isExpanded\}/,
+	);
+	assert.match(
+		source,
+		/aria-label=\{`\$\{group\.roomName\} \$\{group\.userName\} 알람 그룹 \$\{isExpanded \? "접기" : "펼치기"\}`\}/,
+	);
+	assert.match(source, /<\/button>\s+<div className="space-y-2">/);
+	assert.match(source, /aria-label=\{`\$\{group\.roomName\} 방 이름 수정`\}/);
+	assert.match(source, /aria-label=\{`\$\{group\.userName\} 유저 이름 수정`\}/);
+});

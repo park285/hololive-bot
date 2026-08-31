@@ -25,7 +25,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 type dispatcherSignal int
@@ -70,7 +70,7 @@ func (s *Scheduler) dispatcher(ctx context.Context, jobCh chan<- *Job, stopCh <-
 func dispatcherDoneChannel(ctx context.Context, stopCh <-chan struct{}) (<-chan struct{}, context.CancelFunc) {
 	dispatchCtx, cancel := context.WithCancel(ctx)
 
-	panicguard.Go(nil, "youtube-poller-dispatch-cancel", func() {
+	go panicguard.Run(nil, panicguard.BackgroundTask, "youtube-poller-dispatch-cancel", func() {
 		select {
 		case <-stopCh:
 			cancel()

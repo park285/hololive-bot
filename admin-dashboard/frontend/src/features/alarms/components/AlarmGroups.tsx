@@ -106,23 +106,17 @@ export const AlarmGroups = ({
 									role="listitem"
 									className="relative flex flex-col bg-card border border-border/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:border-sky-200/50 transition-all duration-300 focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500"
 								>
-								<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-sky-400 z-10" />
-									<div
-										role="button"
-										tabIndex={0}
-										aria-expanded={isExpanded}
-										onClick={() => {
-											onToggleGroup(groupKey);
-										}}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" || event.key === " ") {
-												event.preventDefault();
+									<div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-sky-400 z-10" />
+									<div className="bg-muted/50 px-5 py-4 border-b border-border-subtle">
+										<button
+											type="button"
+											aria-expanded={isExpanded}
+											aria-label={`${group.roomName} ${group.userName} 알람 그룹 ${isExpanded ? "접기" : "펼치기"}`}
+											onClick={() => {
 												onToggleGroup(groupKey);
-											}
-										}}
-										className="group bg-muted/50 px-5 py-4 cursor-pointer hover:bg-sky-50/50 transition-colors border-b border-border-subtle outline-none focus-visible:bg-sky-50"
-									>
-										<div className="flex items-center justify-between mb-3">
+											}}
+											className="group mb-3 flex w-full items-center justify-between rounded-lg outline-none transition-colors hover:bg-sky-50/50 focus-visible:ring-2 focus-visible:ring-sky-500"
+										>
 											<div className="flex items-center gap-3">
 												<div className="flex items-center justify-center w-8 h-8 rounded-full bg-linear-to-br from-indigo-400 to-indigo-500 text-white font-black text-sm ring-2 ring-white shadow-sm shadow-indigo-200/50">
 													{group.roomName.charAt(0) || "?"}
@@ -138,7 +132,7 @@ export const AlarmGroups = ({
 													<ChevronDown size={18} aria-hidden="true" />
 												)}
 											</div>
-										</div>
+										</button>
 
 										<div className="space-y-2">
 											<div className="flex items-center justify-between gap-2 group/edit">
@@ -146,7 +140,7 @@ export const AlarmGroups = ({
 													variant="outline"
 													className="bg-sky-50 text-sky-700 border-sky-200/60 gap-1.5 py-1 font-semibold flex-1 justify-start truncate"
 												>
-													<MapPin size={14} className="text-sky-500" aria-hidden="true" />
+											<MapPin size={14} className="text-sky-500" aria-hidden="true" />
 													<span className="truncate">{group.roomName}</span>
 												</Badge>
 												<Button
@@ -168,7 +162,7 @@ export const AlarmGroups = ({
 													variant="outline"
 													className="bg-indigo-50 text-indigo-700 border-indigo-200/60 gap-1.5 py-1 font-semibold flex-1 justify-start truncate"
 												>
-													<User size={14} className="text-indigo-500" aria-hidden="true" />
+											<User size={14} className="text-indigo-500" aria-hidden="true" />
 													<span className="truncate">{group.userName}</span>
 												</Badge>
 												<Button

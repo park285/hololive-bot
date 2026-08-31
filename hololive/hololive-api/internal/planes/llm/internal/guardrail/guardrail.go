@@ -31,7 +31,7 @@ func CheckExternalContent(guard *promptguard.Guard, parts ...string) (promptguar
 	out, err := guard.Check(promptguard.CheckRequest{
 		Text:        promptguard.JoinParts(parts...),
 		Source:      promptguard.SourceWebSearchResult,
-		Enforcement: promptguard.EnforcementInteractive,
+		Enforcement: promptguard.EnforcementPersistent,
 	})
 	if err != nil {
 		return out, fmt.Errorf("check: %w", err)

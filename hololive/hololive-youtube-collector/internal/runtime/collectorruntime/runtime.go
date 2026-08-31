@@ -9,12 +9,12 @@ import (
 	"sync"
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
@@ -204,7 +204,7 @@ func (r *Runtime) Run() error {
 
 func (r *Runtime) start(ctx context.Context, errCh chan<- error) {
 	if r.profileChecker != nil {
-		panicguard.Go(r.Logger, "youtube-collector-profile-checker", func() {
+		go panicguard.Run(r.Logger, panicguard.BackgroundTask, "youtube-collector-profile-checker", func() {
 			r.profileChecker.Run(ctx)
 		})
 	}
@@ -228,7 +228,7 @@ func (r *Runtime) watchSchedulerFatal(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	panicguard.Go(r.Logger, "youtube-collector-scheduler-fatal", func() {
+	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "youtube-collector-scheduler-fatal", func() {
 		err := receiveSchedulerFatal(ctx, fatal)
 		if err != nil {
 			forwardRuntimeError(ctx, errCh, err)
@@ -257,7 +257,7 @@ func (r *Runtime) watchHelper(ctx context.Context, errCh chan<- error) {
 		return
 	}
 
-	panicguard.Go(r.Logger, "youtubejs-helper-exit", func() {
+	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "youtubejs-helper-exit", func() {
 		r.forwardHelperExit(ctx, errCh)
 	})
 }

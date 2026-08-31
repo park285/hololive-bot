@@ -90,7 +90,7 @@ members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
 
 인덱스가 많은 테이블의 대량 DELETE는 힙 N + 인덱스 엔트리 N×인덱스수 + vacuum 후불이다.
 주기 삭제는 배치 루프(위 keyset)로, 대량·정기 보존은 파티셔닝(파티션 DROP은 O(1))을 검토한다
-— `docs/current/architecture/outbox-v3-convergence-roadmap-20260703.md`의 Phase 3 참고.
+— `docs/history/architecture/outbox-v3-convergence-roadmap-20260703.md`의 Phase 3 참고.
 
 ## 스키마 문서
 

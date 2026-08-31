@@ -24,6 +24,7 @@ RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
 READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
+UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-collector.service"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
@@ -109,38 +110,6 @@ write_wrapper() {
   chmod 0755 "$dest"
 }
 
-write_unit() {
-  local dest="$1"
-  cat > "$dest" <<'EOF'
-[Unit]
-Description=Hololive youtube-collector AP (%i)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=hololive
-Group=opc
-WorkingDirectory=/opt/hololive-bot/youtube-collector/current
-EnvironmentFile=/etc/stack-secrets/hololive-bot/youtube-collector.env
-EnvironmentFile=/etc/hololive-bot/youtube-collector-host.env
-ExecStart=/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper
-Restart=always
-RestartSec=5s
-TimeoutStopSec=30s
-MemoryMax=768M
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectHome=true
-ProtectSystem=strict
-ReadWritePaths=/var/log/hololive-bot /tmp
-ReadWritePaths=/var/lib/hololive-bot
-
-[Install]
-WantedBy=multi-user.target
-EOF
-}
-
 mkdir -p "$artifact_dir/bin" "$artifact_dir/internal/domain"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
@@ -174,20 +143,17 @@ rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
   npm ci --omit=dev --no-audit --no-fund
 )
 write_host_env "$artifact_dir/youtube-collector-host.env"
-write_unit "$artifact_dir/hololive-youtube-collector@.service"
+cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
 
-RSYNC_RSH="ssh -F /dev/null -i $SSH_KEY -o IdentitiesOnly=yes"
-if [[ -n "$AP_SSH_HOST_KEY_ALIAS" ]]; then
-  RSYNC_RSH+=" -o HostKeyAlias=$AP_SSH_HOST_KEY_ALIAS"
-fi
+RSYNC_RSH="$(ap_rsync_rsh)"
 
 if [[ "$MODE" == "--dry-run" ]]; then
-  rsync -ani --delete "$artifact_dir/" -e "$RSYNC_RSH" "ubuntu@$AP_SSH_HOST:~/$payload_name/"
+  rsync -ani --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
   echo "[DRY-RUN] Built $artifact_dir; no remote files or services changed."
   exit 0
 fi
 
-rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "ubuntu@$AP_SSH_HOST:~/$payload_name/"
+rsync -ai --delete "$artifact_dir/" -e "$RSYNC_RSH" "$(ap_rsync_target "./$payload_name/")"
 change_started_at="$(ap_remote_bash <<'REMOTE'
 date -u +%Y-%m-%dT%H:%M:%SZ
 REMOTE

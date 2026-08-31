@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type alarmWorkerRegistryState struct {
@@ -105,10 +105,10 @@ func (s *alarmWorkerRegistryState) Start(ctx context.Context) {
 		return
 	}
 
-	panicguard.Go(nil, "alarm-worker-profile-checker", func() { s.checker.Run(ctx) })
+	go panicguard.Run(nil, panicguard.BackgroundTask, "alarm-worker-profile-checker", func() { s.checker.Run(ctx) })
 
 	for workerID, sampler := range s.samplers {
-		panicguard.Go(nil, "alarm-worker-queue-sampler-"+workerID, func() { sampler.Run(ctx) })
+		go panicguard.Run(nil, panicguard.BackgroundTask, "alarm-worker-queue-sampler-"+workerID, func() { sampler.Run(ctx) })
 	}
 }
 

@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/park285/iris-client-go/v2/iris"
 )
 
 type runtimeIrisBaseURLResolver struct {
@@ -94,29 +95,16 @@ func (r *runtimeIrisBaseURLResolver) warnBaseURLHostUnvalidated(host string) {
 }
 
 func validateHTTPBaseURL(raw string, explicitTransport ...string) (string, error) {
-	baseURL := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if baseURL == "" {
-		return "", errors.New("base URL is empty")
-	}
-
-	parsed, err := url.ParseRequestURI(baseURL)
+	parsed, err := iris.ParseBaseEndpoint(raw)
 	if err != nil {
-		return "", fmt.Errorf("parse request URI: %w", err)
-	}
-
-	if parsed.Scheme != runtimeIrisSchemeHTTP && parsed.Scheme != runtimeIrisSchemeHTTPS {
-		return "", fmt.Errorf("unsupported URL scheme: %q", parsed.Scheme)
-	}
-
-	if parsed.Host == "" {
-		return "", errors.New("base URL host is empty")
+		return "", fmt.Errorf("parse canonical Iris base endpoint: %w", err)
 	}
 
 	if err := validateRuntimeIrisTransportScheme(runtimeIrisValidationTransport(firstRuntimeIrisTransport(explicitTransport)), parsed); err != nil {
 		return "", fmt.Errorf("validate runtime iris transport scheme: %w", err)
 	}
 
-	return baseURL, nil
+	return parsed.String(), nil
 }
 
 func firstRuntimeIrisTransport(values []string) string {

@@ -290,6 +290,7 @@ run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-g
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "production Go workspace gate tests" ./scripts/ci/check-production-go-workspace_test.sh
+run_step "AP rsync manifest gate tests" ./scripts/deploy/check-ap-rsync-manifest_test.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
 run_step "PostgreSQL capacity gate tests" ./scripts/ci/check-postgres-capacity_test.sh

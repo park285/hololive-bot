@@ -27,11 +27,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
@@ -66,10 +66,12 @@ func (d *SendEngine) dispatchDeliveryRows(
 	for i := range groups {
 		group := &groups[i]
 
-		panicguard.GoE(eg, d.logger, "youtube-outbox-delivery-group", func() error {
-			d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result, &mu)
+		eg.Go(func() error {
+			return panicguard.RunE(d.logger, panicguard.BackgroundTask, "youtube-outbox-delivery-group", func() error {
+				d.dispatchGroup(egCtx, group, formattedMessages, formatFailures, reuseCache, &result, &mu)
 
-			return nil
+				return nil
+			})
 		})
 	}
 

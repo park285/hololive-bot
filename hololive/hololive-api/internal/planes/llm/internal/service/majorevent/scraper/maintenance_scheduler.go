@@ -27,8 +27,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 type maintenanceRepository interface {
@@ -106,7 +107,7 @@ func (s *MaintenanceScheduler) Start(ctx context.Context) {
 	}
 
 	s.wg.Go(func() {
-		panicguard.Run(s.logger, "major-event-maintenance-scheduler", func() {
+		panicguard.Run(s.logger, panicguard.BackgroundTask, "major-event-maintenance-scheduler", func() {
 			s.run(ctx)
 		})
 	})

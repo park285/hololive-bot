@@ -30,11 +30,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -156,7 +156,7 @@ func (d *Dispatcher) Start(ctx context.Context) {
 		return
 	}
 
-	panicguard.Go(d.logger, "youtube-outbox-dispatcher", func() {
+	go panicguard.Run(d.logger, panicguard.BackgroundTask, "youtube-outbox-dispatcher", func() {
 		defer d.started.Store(false)
 
 		d.runJoined(ctx)
@@ -196,13 +196,13 @@ func (d *Dispatcher) startBackgroundLoop(
 	loop func(context.Context),
 ) {
 	if waitGroup == nil {
-		panicguard.Go(d.logger, name, func() { loop(ctx) })
+		go panicguard.Run(d.logger, panicguard.BackgroundTask, name, func() { loop(ctx) })
 
 		return
 	}
 
 	waitGroup.Go(func() {
-		panicguard.Run(d.logger, name, func() { loop(ctx) })
+		panicguard.Run(d.logger, panicguard.BackgroundTask, name, func() { loop(ctx) })
 	})
 }
 
