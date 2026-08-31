@@ -1,12 +1,12 @@
 # YouTube egress lifecycle contract
 
-작성일: 2026-08-31 KST  
-적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
-적용 런타임: `hololive-alarm-worker`  
-상위 아키텍처: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)  
-Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
-Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)  
-구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
+- 작성일: 2026-08-31 KST
+- 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
+- 적용 런타임: `hololive-alarm-worker`
+- 상위 아키텍처: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)
+- Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
+- Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)
+- 구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
 
 ## 규범 용어
 

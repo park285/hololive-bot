@@ -1,13 +1,13 @@
 # YouTube egress lifecycle 구현 계획
 
-작성일: 2026-08-31 KST  
-상태: proposed
-**Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing)
-아키텍처 정본: [`../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`](../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md)  
-규범 계약: [`../architecture/youtube-egress-lifecycle-contract-20260831.md`](../architecture/youtube-egress-lifecycle-contract-20260831.md)  
-Logical ledger: [`../architecture/youtube-egress-logical-delivery-ledger-20260831.md`](../architecture/youtube-egress-logical-delivery-ledger-20260831.md)
-Commit 판정: [`../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`](../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md)  
-Library 검토: [`../architecture/youtube-egress-lifecycle-library-review-20260831.md`](../architecture/youtube-egress-lifecycle-library-review-20260831.md)
+- 작성일: 2026-08-31 KST
+- 상태: proposed
+- **Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing)
+- 아키텍처 정본: [`../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`](../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md)
+- 규범 계약: [`../architecture/youtube-egress-lifecycle-contract-20260831.md`](../architecture/youtube-egress-lifecycle-contract-20260831.md)
+- Logical ledger: [`../architecture/youtube-egress-logical-delivery-ledger-20260831.md`](../architecture/youtube-egress-logical-delivery-ledger-20260831.md)
+- Commit 판정: [`../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`](../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md)
+- Library 검토: [`../architecture/youtube-egress-lifecycle-library-review-20260831.md`](../architecture/youtube-egress-lifecycle-library-review-20260831.md)
 
 ## 목적
 

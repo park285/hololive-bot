@@ -1,8 +1,8 @@
 # YouTube egress lifecycle 직접 구현과 FSM 라이브러리 리뷰
 
-검토일: 2026-08-31 KST  
-적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
-상위 문서: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)
+- 검토일: 2026-08-31 KST
+- 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
+- 상위 문서: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)
 
 ## 질문
 

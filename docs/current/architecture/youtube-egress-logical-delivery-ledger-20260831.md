@@ -1,8 +1,8 @@
 # YouTube logical delivery ledger 계약
 
-작성일: 2026-08-31 KST  
-적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
-상위 계약: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)
+- 작성일: 2026-08-31 KST
+- 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
+- 상위 계약: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)
 
 ## 목적
 

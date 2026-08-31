@@ -1,9 +1,9 @@
 # YouTube egress lifecycle 전이 소유권
 
-작성일: 2026-08-31 KST  
-결정 ID: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
-대상 런타임: `hololive-alarm-worker`  
-결정 상태 정본: [`docs/decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json`](../../decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json)
+- 작성일: 2026-08-31 KST
+- 결정 ID: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
+- 대상 런타임: `hololive-alarm-worker`
+- 결정 상태 정본: [`docs/decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json`](../../decisions/records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json)
 
 ## 목적
 

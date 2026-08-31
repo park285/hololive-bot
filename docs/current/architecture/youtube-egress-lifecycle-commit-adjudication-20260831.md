@@ -1,9 +1,9 @@
 # YouTube egress lifecycle DB commit adjudication
 
-작성일: 2026-08-31 KST  
-적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
-규범 위치: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)의 transaction 오류 해석 부록
-Ledger 계약: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
+- 작성일: 2026-08-31 KST
+- 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`
+- 규범 위치: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)의 transaction 오류 해석 부록
+- Ledger 계약: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 
 ## 목적
 
