@@ -8,6 +8,10 @@
 
 ## 미출시
 
+### 수정
+
+- hololive-api artifact `3.1.1`이 `shared-go v2.1.1`을 사용해 major-event RSS HTTP/1.1 ALPN 불일치를 해소합니다.
+
 ## v3.4.0 - 2026-08-29
 
 ### 추가
