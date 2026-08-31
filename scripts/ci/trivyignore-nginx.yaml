@@ -1,0 +1,10 @@
+vulnerabilities:
+  - id: CVE-2026-14456
+    purls:
+      - pkg:apk/alpine/libcrypto3@3.5.7-r0
+      - pkg:apk/alpine/libssl3@3.5.7-r0
+    statement: >-
+      Owner: hololive-bot. The exact admin-dashboard ingress image has no TLS or QUIC listener;
+      OpenSSL classifies this as a QUIC-server-only Low-severity denial of service. Remove this
+      exception when the official multi-arch Nginx image contains OpenSSL 3.5.8-r0 or later.
+    expired_at: 2026-09-14
