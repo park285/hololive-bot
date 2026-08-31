@@ -129,6 +129,10 @@ grep -Fq "actual_platform=\"\$(docker image inspect --format '{{.Os}}/{{.Archite
 
 [[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v2.39.4' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must install the exact Docker Compose release"
+[[ "$(grep -Fc 'python-version-file: hololive-bot/.python-version' "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must install the exact Python runtime"
+[[ "$(grep -Fc 'uv==0.12.7' "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must install the exact uv release"
 
 if grep -Fq 'uses: aquasecurity/' "$workflow"; then
   fail "security workflow must not use actions blocked by the repository allowlist"
