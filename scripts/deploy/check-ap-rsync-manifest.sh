@@ -21,8 +21,8 @@ fi
 
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
-  if [[ ! -e "$ROOT_DIR/$path" ]]; then
-    echo "[FAIL] ap-rsync-files.txt contains missing local path: $path" >&2
+  if [[ ! -f "$ROOT_DIR/$path" || -L "$ROOT_DIR/$path" ]]; then
+    echo "[FAIL] ap-rsync-files.txt entry must be a regular non-symlink file: $path" >&2
     exit 1
   fi
 done < "$MANIFEST"

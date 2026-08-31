@@ -66,7 +66,8 @@ while IFS= read -r path; do
   esac
 done < "$FILES_FROM"
 
-if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM"; then
+if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM" \
+  | rg -v 'hololive/hololive-alarm-worker/VERSION$'; then
   echo "files-from list contains forbidden deployment scope" >&2
   exit 1
 fi
@@ -111,10 +112,7 @@ rsync_preview() {
 
 validate_preview() {
   local preview_file="$1"
-  if rg -n '(\.env|\.key|\.pem|hololive-alarm-worker|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file"; then
-    echo "rsync preview contains forbidden deployment scope" >&2
-    exit 1
-  fi
+  "$REPO_ROOT/scripts/deploy/check-ap-rsync-preview.sh" "$preview_file" "$REMOTE_REPO_DIR"
   if rg -n '(^|/)data/' "$preview_file" | rg -v 'hololive/hololive-shared/pkg/domain/internal/model/data/'; then
     echo "rsync preview contains unapproved data path" >&2
     exit 1
@@ -218,7 +216,7 @@ sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
 prechange_config_err=\$(mktemp)
-if ! sudo -n env HOLO_API_VERSION='$HOLO_API_VERSION' COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
+if ! sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
   if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/etc/stack-secrets/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
     echo 'AP prechange compose config skipped: token-free ap-compose.env is incompatible with pre-rsync compose; post-rsync config remains required' >&2
   else

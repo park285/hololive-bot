@@ -230,7 +230,8 @@ while IFS= read -r path; do
 done < "${AP_ACTIVE_ACTIVE_FILES}"
 pass "ap active-active files list paths exist"
 
-if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${AP_ACTIVE_ACTIVE_FILES}"; then
+if grep -En '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "${AP_ACTIVE_ACTIVE_FILES}" \
+    | grep -Ev 'hololive/hololive-alarm-worker/VERSION$'; then
     fail "ap active-active files list excludes forbidden deployment scope"
 fi
 pass "ap active-active files list excludes forbidden deployment scope"

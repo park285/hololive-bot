@@ -1,0 +1,141 @@
+# This file is selected only for the exact image digest in run-final-image-scan.sh.
+vulnerabilities:
+  - id: CVE-2025-61726
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2025-61729
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2025-68121
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-14456
+    purls:
+      - "pkg:apk/alpine/libcrypto3@3.5.7-r0"
+      - "pkg:apk/alpine/libssl3@3.5.7-r0"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-25679
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-27145
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-32280
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-32281
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-32283
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-33811
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-33814
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-33818
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39820
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39821
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39822
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39836
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-42499
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-42504
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56853
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56858
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56859
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56860
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56862
+    purls:
+      - "pkg:golang/stdlib@v1.24.6"
+    statement: >-
+      Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean official image rebuild.
+    expired_at: 2026-09-14

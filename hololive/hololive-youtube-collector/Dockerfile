@@ -17,12 +17,16 @@ ARG GO_VERSION=1.27.0
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS youtubejs
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS youtubejs-build
 WORKDIR /app/youtubejs
 COPY hololive/hololive-youtube-collector/youtubejs/package.json hololive/hololive-youtube-collector/youtubejs/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm corepack npm ci --omit=dev --no-audit --no-fund
 COPY hololive/hololive-youtube-collector/youtubejs/src ./src
 RUN rm -f ./src/*.test.mjs
+
+# Keep build-time npm execution native, but source the shipped Node binary and libraries from the
+# target platform. This makes x86_64-hosted linux/arm64 release builds architecture-correct.
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS youtubejs-runtime
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
 
@@ -92,13 +96,13 @@ WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=youtubejs --link /lib/ld-musl-*.so.1 /lib/
-COPY --from=youtubejs --link /usr/lib/libgcc_s.so.1 /usr/lib/
-COPY --from=youtubejs --link /usr/lib/libstdc++.so.6* /usr/lib/
-COPY --from=youtubejs --link /usr/local/bin/node /usr/local/bin/node
-COPY --from=youtubejs --link --chmod=1777 /tmp /tmp
+COPY --from=youtubejs-runtime --link /lib/ld-musl-*.so.1 /lib/
+COPY --from=youtubejs-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
+COPY --from=youtubejs-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=youtubejs-runtime --link /usr/local/bin/node /usr/local/bin/node
+COPY --from=youtubejs-runtime --link --chmod=1777 /tmp /tmp
 COPY --from=builder --link --chown=1000:1000 /dist ./
-COPY --from=youtubejs --chown=1000:1000 /app/youtubejs ./youtubejs
+COPY --from=youtubejs-build --chown=1000:1000 /app/youtubejs ./youtubejs
 
 ENV GOGC=100 \
     GOMEMLIMIT=320MiB \

@@ -34,9 +34,22 @@ printf 'release-2.0.46\n' > "$fixture_root/hololive/hololive-api/VERSION"
 expect_failure "invalid runtime VERSION must fail closed" ap_compose_release_version "$fixture_root"
 
 deploy_script="$ROOT_DIR/scripts/deploy/ap-deploy.sh"
+rsync_manifest="$ROOT_DIR/scripts/deploy/ap-rsync-files.txt"
+preview_checker="$ROOT_DIR/scripts/deploy/check-ap-rsync-preview.sh"
 literal_dollar='$'
-[[ "$(grep -Fc "sudo -n env HOLO_API_VERSION='\$HOLO_API_VERSION'" "$deploy_script")" -eq 3 ]] \
-  || fail "every remote sudo Compose config/up invocation must propagate HOLO_API_VERSION"
+grep -Fxq 'hololive/hololive-api/VERSION' "$rsync_manifest" \
+  || fail "AP source transfer must include the API release version"
+grep -Fxq 'hololive/hololive-alarm-worker/VERSION' "$rsync_manifest" \
+  || fail "AP source transfer must include the alarm worker release version"
+[[ "$(grep -Ec '^hololive/hololive-alarm-worker/' "$rsync_manifest")" -eq 1 ]] \
+  || fail "AP source transfer must limit alarm worker scope to its release version"
+[[ "$(grep -Fc "sudo -n env HOLO_API_VERSION='\$HOLO_API_VERSION'" "$deploy_script")" -eq 2 ]] \
+  || fail "post-rsync remote Compose config/up must propagate HOLO_API_VERSION"
+prechange_config_line="$(grep -F 'if ! sudo -n env ' "$deploy_script" | grep -F 'prechange_config_err')"
+[[ "$prechange_config_line" == *'COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env'* ]] \
+  || fail "pre-rsync Compose validation must use the canonical AP environment"
+[[ "$prechange_config_line" != *HOLO_API_VERSION* ]] \
+  || fail "pre-rsync Compose validation must resolve the version from the remote prechange tree"
 [[ "$(grep -Fc "HOLO_API_VERSION='\$HOLO_API_VERSION' REVISION='\$REVISION'" "$deploy_script")" -eq 2 ]] \
   || fail "post-rsync Compose config/up must propagate the exact source revision"
 if grep -Eq 'compose\.sh .* build( |$)' "$deploy_script"; then
@@ -111,9 +124,34 @@ grep -Fq "if [[ \"\$AP_RUNTIME_MODE\" != \"compose\" ]]; then" "$deploy_script" 
   || fail "Compose AP deploy must reject non-Compose hosts before resolving the release version"
 grep -Fq 'check-ap-rsync-manifest.sh" "$FILES_FROM"' "$deploy_script" \
   || fail "AP deploy must validate the repository-relative source manifest before path translation"
+grep -Fq 'check-ap-rsync-preview.sh" "$preview_file" "$REMOTE_REPO_DIR"' "$deploy_script" \
+  || fail "AP deploy must validate itemized rsync records with the exact preview scope checker"
 if grep -Fq 'check-ap-rsync-manifest.sh" "$rsync_files_from"' "$deploy_script"; then
   fail "AP deploy must not validate the remote-path-translated rsync manifest"
 fi
+
+allowed_preview="$fixture_root/allowed-preview.txt"
+printf '%s\n' \
+  '.d..t...... hololive-bot/hololive/hololive-alarm-worker/' \
+  '<f.st...... hololive-bot/hololive/hololive-alarm-worker/VERSION' \
+  >"$allowed_preview"
+"$preview_checker" "$allowed_preview"
+
+forbidden_preview="$fixture_root/forbidden-preview.txt"
+printf '%s\n' \
+  'cL+++++++++ hololive-bot/hololive/hololive-alarm-worker/VERSION -> ../shadow/hololive/hololive-alarm-worker/VERSION' \
+  >"$forbidden_preview"
+expect_failure "AP preview must reject a VERSION symlink record" "$preview_checker" "$forbidden_preview"
+
+printf '%s\n' \
+  '>f+++++++++ hololive-bot/shadow/hololive/hololive-alarm-worker/VERSION' \
+  >"$forbidden_preview"
+expect_failure "AP preview must reject a suffix-matching nested path" "$preview_checker" "$forbidden_preview"
+
+printf '%s\n' \
+  '>f+++++++++ hololive-bot/hololive/hololive-alarm-worker/secret.go' \
+  >"$forbidden_preview"
+expect_failure "AP preview must reject any other alarm worker child" "$preview_checker" "$forbidden_preview"
 
 readiness_source_count="$(grep -Fc '. scripts/deploy/lib/ap-collector-readiness.sh' "$deploy_script")"
 [[ "$readiness_source_count" -eq 1 ]] \
