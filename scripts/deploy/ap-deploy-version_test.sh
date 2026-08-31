@@ -40,6 +40,8 @@ grep -Fxq 'hololive/hololive-api/VERSION' "$rsync_manifest" \
   || fail "AP source transfer must include the API release version"
 grep -Fxq 'hololive/hololive-alarm-worker/VERSION' "$rsync_manifest" \
   || fail "AP source transfer must include the alarm worker release version"
+[[ "$(grep -Ec '^hololive/hololive-alarm-worker/' "$rsync_manifest")" -eq 1 ]] \
+  || fail "AP source transfer must limit alarm worker scope to its release version"
 [[ "$(grep -Fc "sudo -n env HOLO_API_VERSION='\$HOLO_API_VERSION'" "$deploy_script")" -eq 3 ]] \
   || fail "every remote sudo Compose config/up invocation must propagate HOLO_API_VERSION"
 [[ "$(grep -Fc "HOLO_API_VERSION='\$HOLO_API_VERSION' REVISION='\$REVISION'" "$deploy_script")" -eq 2 ]] \

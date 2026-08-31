@@ -66,7 +66,8 @@ while IFS= read -r path; do
   esac
 done < "$FILES_FROM"
 
-if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM"; then
+if rg -n '(^|/)(\.env[^/]*|[^/]*\.key|[^/]*\.pem|hololive-alarm-worker|[^/]*_test\.go|docs|logs|runtime-config|backups|artifacts)(/|$)' "$FILES_FROM" \
+  | rg -v 'hololive/hololive-alarm-worker/VERSION$'; then
   echo "files-from list contains forbidden deployment scope" >&2
   exit 1
 fi
@@ -111,7 +112,8 @@ rsync_preview() {
 
 validate_preview() {
   local preview_file="$1"
-  if rg -n '(\.env|\.key|\.pem|hololive-alarm-worker|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file"; then
+  if rg -n '(\.env|\.key|\.pem|hololive-alarm-worker|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file" \
+    | rg -v 'hololive/hololive-alarm-worker/VERSION$'; then
     echo "rsync preview contains forbidden deployment scope" >&2
     exit 1
   fi
