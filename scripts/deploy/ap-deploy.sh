@@ -112,11 +112,7 @@ rsync_preview() {
 
 validate_preview() {
   local preview_file="$1"
-  if rg -n '(\.env|\.key|\.pem|hololive-alarm-worker|_test\.go|docs/|/logs/|/runtime-config/|/backups/|artifacts/)' "$preview_file" \
-    | rg -v 'hololive/hololive-alarm-worker/VERSION$'; then
-    echo "rsync preview contains forbidden deployment scope" >&2
-    exit 1
-  fi
+  "$REPO_ROOT/scripts/deploy/check-ap-rsync-preview.sh" "$preview_file" "$REMOTE_REPO_DIR"
   if rg -n '(^|/)data/' "$preview_file" | rg -v 'hololive/hololive-shared/pkg/domain/internal/model/data/'; then
     echo "rsync preview contains unapproved data path" >&2
     exit 1

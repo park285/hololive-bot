@@ -35,6 +35,7 @@ expect_failure "invalid runtime VERSION must fail closed" ap_compose_release_ver
 
 deploy_script="$ROOT_DIR/scripts/deploy/ap-deploy.sh"
 rsync_manifest="$ROOT_DIR/scripts/deploy/ap-rsync-files.txt"
+preview_checker="$ROOT_DIR/scripts/deploy/check-ap-rsync-preview.sh"
 literal_dollar='$'
 grep -Fxq 'hololive/hololive-api/VERSION' "$rsync_manifest" \
   || fail "AP source transfer must include the API release version"
@@ -118,9 +119,34 @@ grep -Fq "if [[ \"\$AP_RUNTIME_MODE\" != \"compose\" ]]; then" "$deploy_script" 
   || fail "Compose AP deploy must reject non-Compose hosts before resolving the release version"
 grep -Fq 'check-ap-rsync-manifest.sh" "$FILES_FROM"' "$deploy_script" \
   || fail "AP deploy must validate the repository-relative source manifest before path translation"
+grep -Fq 'check-ap-rsync-preview.sh" "$preview_file" "$REMOTE_REPO_DIR"' "$deploy_script" \
+  || fail "AP deploy must validate itemized rsync records with the exact preview scope checker"
 if grep -Fq 'check-ap-rsync-manifest.sh" "$rsync_files_from"' "$deploy_script"; then
   fail "AP deploy must not validate the remote-path-translated rsync manifest"
 fi
+
+allowed_preview="$fixture_root/allowed-preview.txt"
+printf '%s\n' \
+  '.d..t...... hololive-bot/hololive/hololive-alarm-worker/' \
+  '<f.st...... hololive-bot/hololive/hololive-alarm-worker/VERSION' \
+  >"$allowed_preview"
+"$preview_checker" "$allowed_preview"
+
+forbidden_preview="$fixture_root/forbidden-preview.txt"
+printf '%s\n' \
+  'cL+++++++++ hololive-bot/hololive/hololive-alarm-worker/VERSION -> ../shadow/hololive/hololive-alarm-worker/VERSION' \
+  >"$forbidden_preview"
+expect_failure "AP preview must reject a VERSION symlink record" "$preview_checker" "$forbidden_preview"
+
+printf '%s\n' \
+  '>f+++++++++ hololive-bot/shadow/hololive/hololive-alarm-worker/VERSION' \
+  >"$forbidden_preview"
+expect_failure "AP preview must reject a suffix-matching nested path" "$preview_checker" "$forbidden_preview"
+
+printf '%s\n' \
+  '>f+++++++++ hololive-bot/hololive/hololive-alarm-worker/secret.go' \
+  >"$forbidden_preview"
+expect_failure "AP preview must reject any other alarm worker child" "$preview_checker" "$forbidden_preview"
 
 readiness_source_count="$(grep -Fc '. scripts/deploy/lib/ap-collector-readiness.sh' "$deploy_script")"
 [[ "$readiness_source_count" -eq 1 ]] \
