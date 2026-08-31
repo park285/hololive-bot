@@ -3,7 +3,9 @@
 작성일: 2026-08-31 KST  
 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
 적용 런타임: `hololive-alarm-worker`  
-상위 아키텍처: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)
+상위 아키텍처: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)  
+Commit 판정 부록: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)  
+구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
 
 ## 규범 용어
 
@@ -31,23 +33,23 @@
 
 ### I-001. PostgreSQL source of truth
 
-현재 상태, attempt, due 시각, lock 시각, delivery version은 PostgreSQL 값이 정본입니다. process memory의 state object는 정본이 될 수 없습니다.
+현재 상태, attempt, due 시각, lock 시각, delivery version은 PostgreSQL 값이 정본입니다. Process memory의 state object는 정본이 될 수 없습니다.
 
 ### I-002. 단일 정책 평가
 
-retry 소진, preparation/send failure 종류, revive 허용 여부는 lifecycle policy에서 한 번만 계산합니다. SQL `CASE`나 repository가 `MaxRetries`를 다시 평가해서는 안 됩니다.
+Retry 소진, preparation/send failure 종류, revive 허용 여부는 lifecycle policy에서 한 번만 계산합니다. SQL `CASE`나 repository가 `MaxRetries`를 다시 평가해서는 안 됩니다.
 
 ### I-003. fenced transition
 
-claim 이후 모든 delivery mutation은 `id + expected status + expected row_version + expected locked_at`을 검사해야 합니다. expected attempt도 함께 검사합니다.
+Claim 이후 모든 delivery mutation은 `id + expected status + expected row_version + expected locked_at`을 검사해야 합니다. Expected attempt도 함께 검사합니다.
 
 ### I-004. external-effect ordering
 
-provider 호출은 `PENDING -> SENDING` commit 이후에만 시작할 수 있습니다. provider 호출을 시작한 뒤 `PENDING`으로 간주해서는 안 됩니다.
+Provider 호출은 `PENDING -> SENDING` commit 이후에만 시작할 수 있습니다. Provider 호출을 시작한 뒤 `PENDING`으로 간주해서는 안 됩니다.
 
 ### I-005. outcome unknown hold
 
-provider 처리 여부가 불명확하면 즉시 DB mutation을 하지 않습니다. delivery는 `SENDING`에 남고 stale-sending sweeper만 `QUARANTINED`로 이동시킬 수 있습니다.
+Provider 처리 여부가 불명확하면 즉시 DB mutation을 하지 않습니다. Delivery는 `SENDING`에 남고 stale-sending sweeper만 `QUARANTINED`로 이동시킬 수 있습니다.
 
 ### I-006. no automatic quarantine exit
 
@@ -55,19 +57,23 @@ provider 처리 여부가 불명확하면 즉시 DB mutation을 하지 않습니
 
 ### I-007. sent terminal
 
-`SENT`는 자동 경로에서 절대 terminal입니다. stale failure, revive, cleanup 전 단계가 `SENT`를 다른 상태로 덮어쓰면 안 됩니다.
+`SENT`는 자동 경로에서 절대 terminal입니다. Stale failure, revive, cleanup 전 단계가 `SENT`를 다른 상태로 덮어쓰면 안 됩니다.
 
 ### I-008. tracking follows committed success
 
-community/shorts tracking mutation은 실제 delivery success transaction 안에서, CAS에 성공한 row에 대해서만 실행합니다. transition conflict가 난 row의 tracking을 변경해서는 안 됩니다.
+Community/shorts tracking mutation은 실제 delivery success transaction 안에서, CAS에 성공한 row에 대해서만 실행합니다. Transition conflict가 난 row의 tracking을 변경해서는 안 됩니다.
 
 ### I-009. aggregate writer ownership
 
-child delivery가 존재하는 outbox의 `status`, aggregate `error`, aggregate `sent_at`은 aggregate projector만 계산합니다. revive는 child를 변경한 뒤 동일 aggregate projector를 같은 transaction에서 호출합니다.
+Child delivery가 존재하는 outbox의 `status`, aggregate `error`, aggregate `sent_at`은 aggregate projector만 계산합니다. Revive는 child를 변경한 뒤 동일 aggregate projector를 같은 transaction에서 호출합니다.
 
 ### I-010. no dual write
 
-같은 delivery에 legacy writer와 새 transition writer를 동시에 적용하는 기간을 만들지 않습니다. shadow mode는 decision 비교만 허용하고 DB write는 한 경로만 수행합니다.
+같은 delivery에 legacy writer와 새 transition writer를 동시에 적용하는 기간을 만들지 않습니다. Shadow mode는 decision 비교만 허용하고 DB write는 한 경로만 수행합니다.
+
+### I-011. commit ambiguity is first-class
+
+DB client가 `COMMIT` 오류를 받았다는 사실만으로 transaction이 rollback됐다고 간주하지 않습니다. Effect 인접 operation은 primary exact read-back으로 `Applied`, `Conflict`, `Missing`, `Indeterminate`를 판정합니다. 판정 전에 transition callback이나 provider send를 자동 재실행해서는 안 됩니다.
 
 ## 상태와 저장 필드
 
@@ -100,20 +106,20 @@ QUARANTINED
 
 | 상태 | 규범 의미 |
 |---|---|
-| `PENDING` | provider 호출 전이거나, known-not-delivered retry를 기다립니다. `locked_at`이 있으면 preparation lease를 보유 중입니다. |
-| `SENDING` | exact send intent가 DB에 commit됐고 provider 호출이 시작될 수 있습니다. 실제 provider 수신을 증명하지는 않습니다. |
-| `SENT` | provider 성공 또는 이미 충족된 delivery를 local transaction으로 terminal 처리했습니다. |
-| `FAILED` | retry 소진 또는 permanent known failure입니다. guarded revive만 허용합니다. |
-| `QUARANTINED` | provider 처리 여부를 증명할 수 없습니다. 자동 retry와 revive를 금지합니다. |
+| `PENDING` | Provider 호출 전이거나, known-not-delivered retry를 기다립니다. `locked_at`이 있으면 preparation lease를 보유 중입니다. |
+| `SENDING` | Exact send intent가 DB에 commit됐고 provider 호출이 시작될 수 있습니다. 실제 provider 수신을 증명하지는 않습니다. |
+| `SENT` | Provider 성공 또는 이미 충족된 delivery를 local transaction으로 terminal 처리했습니다. |
+| `FAILED` | Retry 소진 또는 permanent known failure입니다. Guarded revive만 허용합니다. |
+| `QUARANTINED` | Provider 처리 여부를 증명할 수 없습니다. 자동 retry와 revive를 금지합니다. |
 
 ### `sent_at` 의미
 
 `sent_at`은 delivery가 `SENT`로 local commit된 시각입니다. 다음 두 경우를 포함합니다.
 
-1. provider 성공 응답 후 `CompleteSent`가 commit된 경우
-2. pre-send alarm-once 확인에서 해당 room delivery가 이미 충족되었다고 판정해 `AlreadySatisfied`가 commit된 경우
+1. Provider 성공 응답 후 `CompleteSent`가 commit된 경우
+2. Pre-send alarm-once 확인에서 해당 room delivery가 이미 충족되었다고 판정해 `AlreadySatisfied`가 commit된 경우
 
-따라서 `sent_at`은 항상 provider response timestamp라는 뜻이 아닙니다. transport latency가 필요하면 별도 telemetry evidence를 사용합니다.
+따라서 `sent_at`은 항상 provider response timestamp라는 뜻이 아닙니다. Transport latency가 필요하면 별도 telemetry evidence를 사용합니다.
 
 ### `attempt_count` 의미
 
@@ -136,7 +142,7 @@ QUARANTINED
 - known-not-delivered permanent send failure
 - stale `SENDING -> QUARANTINED`
 
-revive는 기존 동작과 동일하게 `attempt_count=0`으로 재설정합니다.
+Revive는 기존 동작과 동일하게 `attempt_count=0`으로 재설정합니다.
 
 ### `row_version`
 
@@ -159,7 +165,7 @@ row_version bigint NOT NULL DEFAULT 0 CHECK (row_version >= 0)
 
 ### 시간 정규화
 
-application service는 operation 또는 batch 시작 시각을 한 번 읽고 repository 경계에서 UTC microsecond precision으로 정규화합니다. 하나의 atomic operation 안에서는 서로 다른 `time.Now()` 값을 혼용하지 않습니다.
+Application service는 operation 또는 batch 시작 시각을 한 번 읽고 repository 경계에서 UTC microsecond precision으로 정규화합니다. 하나의 atomic operation 안에서는 서로 다른 `time.Now()` 값을 혼용하지 않습니다.
 
 ## token 계약
 
@@ -167,27 +173,27 @@ application service는 operation 또는 batch 시작 시각을 한 번 읽고 re
 
 ```go
 type PreparationLease struct {
-    DeliveryID  int64
-    RowVersion  int64
-    LockedAt    time.Time
+    DeliveryID int64
+    RowVersion int64
+    LockedAt   time.Time
 }
 ```
 
-Preparation lease는 `PENDING + locked_at` row만 나타냅니다. payload load, formatting, request construction, alarm-once claim이 이 lease 아래에서 수행됩니다.
+Preparation lease는 `PENDING + locked_at` row만 나타냅니다. Payload load, formatting, request construction, alarm-once claim이 이 lease 아래에서 수행됩니다.
 
 ### Send fence
 
 ```go
 type SendFence struct {
-    DeliveryID  int64
-    RowVersion  int64
-    LockedAt    time.Time
+    DeliveryID int64
+    RowVersion int64
+    LockedAt   time.Time
 }
 ```
 
 Send fence는 `SENDING + locked_at` row만 나타냅니다. `BeginSending`이 성공한 뒤 반환하며 success/failure finalization에서 사용합니다.
 
-Preparation lease와 Send fence는 구조가 비슷하더라도 별도 Go type이어야 합니다. preparation token으로 `SENDING` finalization을 호출하거나 Send fence로 preparation failure를 적용하는 코드는 컴파일되지 않아야 합니다.
+Preparation lease와 Send fence는 구조가 비슷하더라도 별도 Go type이어야 합니다. Preparation token으로 `SENDING` finalization을 호출하거나 Send fence로 preparation failure를 적용하는 코드는 컴파일되지 않아야 합니다.
 
 ### Alarm claim token
 
@@ -201,10 +207,11 @@ type AlarmClaimToken struct {
 }
 ```
 
-- preparation 실패 또는 provider가 수락하지 않았다고 확정한 실패에서는 새로 획득한 claim을 release합니다.
-- success에서는 delivery `SENT`와 tracking mark를 같은 transaction에서 commit합니다.
-- outcome unknown에서는 claim을 즉시 release하지 않습니다. release하면 provider가 실제 성공했을 때 다른 실행이 중복 발송할 수 있습니다.
+- Preparation 실패 또는 provider가 수락하지 않았다고 확정한 실패에서는 새로 획득한 claim을 release합니다.
+- Success에서는 delivery `SENT`와 tracking mark를 같은 transaction에서 commit합니다.
+- Outcome unknown에서는 claim을 즉시 release하지 않습니다. Release하면 provider가 실제 성공했을 때 다른 실행이 중복 발송할 수 있습니다.
 - `QUARANTINED` 처리도 alarm sent를 추정해서 기록하지 않습니다.
+- DB commit 결과가 불명확하면 durable failure/success가 확인될 때까지 claim release 여부를 추정하지 않습니다.
 
 ## claim protocol
 
@@ -218,7 +225,7 @@ next_attempt_at <= now
 locked_at IS NULL OR locked_at < now - LockTimeout
 ```
 
-claim SQL은 `FOR UPDATE SKIP LOCKED`로 row를 고르고 다음을 수행합니다.
+Claim SQL은 `FOR UPDATE SKIP LOCKED`로 row를 고르고 다음을 수행합니다.
 
 ```sql
 SET locked_at = $now,
@@ -227,7 +234,9 @@ SET locked_at = $now,
 
 반환 row의 새 version과 `locked_at`이 Preparation lease가 됩니다.
 
-Claim은 `attempt_count`를 증가시키지 않습니다. claim 자체가 사용자에게 관측되는 외부 시도는 아니기 때문입니다.
+Claim은 `attempt_count`를 증가시키지 않습니다. Claim 자체가 사용자에게 관측되는 외부 시도는 아니기 때문입니다.
+
+Claim statement 결과를 받지 못하면 caller는 lease를 소유하지 않습니다. ID만 추정해 preparation을 시작해서는 안 됩니다.
 
 ## preparation 결과
 
@@ -245,7 +254,7 @@ Preparation 결과는 다음 중 하나여야 합니다.
 
 ### `ReadyToSend`
 
-provider 호출에 필요한 값이 모두 immutable하게 확정됐습니다. `BeginSending` 대상입니다.
+Provider 호출에 필요한 값이 모두 immutable하게 확정됐습니다. `BeginSending` 대상입니다.
 
 ### `AlreadySatisfied`
 
@@ -255,7 +264,6 @@ provider 호출에 필요한 값이 모두 immutable하게 확정됐습니다. `
 PENDING leased -> SENT
 attempt_count 유지
 provider 호출 없음
-새 alarm tracking mutation 없음
 ```
 
 이 transition은 active Preparation lease를 검사합니다.
@@ -272,7 +280,7 @@ next_attempt_at = now + RetryBackoff
 
 ### `PreparationRetryableFailure`
 
-provider 호출 전 일시적인 local failure입니다.
+Provider 호출 전 일시적인 local failure입니다.
 
 ```text
 nextAttempt = attempt_count + 1
@@ -282,7 +290,7 @@ nextAttempt >= MaxRetries -> FAILED
 
 ### `PreparationPermanentFailure`
 
-payload invariant, 지원하지 않는 target 등 동일 입력으로 다시 시도해도 성공할 수 없는 local failure입니다.
+Payload invariant, 지원하지 않는 target 등 동일 입력으로 다시 시도해도 성공할 수 없는 local failure입니다.
 
 ```text
 PENDING leased -> FAILED
@@ -307,7 +315,7 @@ type PreparedSendOperation struct {
 
 `OperationID`는 process-local tracing identity이고 `ClientRequestID`는 provider idempotency 계약에 사용하는 stable identity입니다. 둘을 혼용하지 않습니다.
 
-개별 메시지는 delivery 한 건을 포함하고, grouped 메시지는 동일 provider 요청에 포함되는 delivery 집합을 가집니다. operation membership과 request payload는 `BeginSending` 이후 변경할 수 없습니다.
+개별 메시지는 delivery 한 건을 포함하고, grouped 메시지는 동일 provider 요청에 포함되는 delivery 집합을 가집니다. Operation membership과 request payload는 `BeginSending` 이후 변경할 수 없습니다.
 
 ### all-or-none begin
 
@@ -330,9 +338,11 @@ WHERE id = $id
   AND locked_at = $expected_locked_at
 ```
 
+Commit 응답이 실패하면 provider를 호출하기 전에 primary exact read-back으로 operation member 전체가 post-state인지 확인합니다. Exact post-state면 `Applied`, exact pre-state면 동일 DB command만 재시도할 수 있으며, 판정할 수 없으면 `Indeterminate`로 중단합니다.
+
 ### send lease budget
 
-stale sweeper가 실행 중인 provider call을 quarantine하지 않도록 다음 derived margin을 사용합니다.
+Stale sweeper가 실행 중인 provider call을 quarantine하지 않도록 다음 derived margin을 사용합니다.
 
 ```text
 SendingFinalizeGrace = max(2 * PollInterval, 5 seconds)
@@ -352,7 +362,7 @@ send fence expiry - now >= DeliverySendTimeout + SendingFinalizeGrace
 
 시간이 부족하면 provider를 호출하지 않고 해당 row를 known-not-sent retryable failure로 처리합니다.
 
-Provider call context deadline은 configured send timeout과 send-fence deadline 중 더 이른 값으로 제한합니다. deadline 이후 반환된 timeout은 provider 처리 여부를 증명하지 못하므로 outcome unknown입니다.
+Provider call context deadline은 configured send timeout과 send-fence deadline 중 더 이른 값으로 제한합니다. Deadline 이후 반환된 timeout은 provider 처리 여부를 증명하지 못하므로 outcome unknown입니다.
 
 ## provider outcome taxonomy
 
@@ -371,21 +381,21 @@ const (
 
 ### `ProviderDelivered`
 
-provider가 성공을 확정했습니다.
+Provider가 성공을 확정했습니다.
 
 ### `ProviderKnownNotDeliveredRetryable`
 
-provider가 요청을 수락하지 않았고 같은 logical delivery를 다시 시도해도 안전하다는 증거가 있습니다.
+Provider가 요청을 수락하지 않았고 같은 logical delivery를 다시 시도해도 안전하다는 증거가 있습니다.
 
 ### `ProviderKnownNotDeliveredPermanent`
 
-provider가 요청을 수락하지 않았고 같은 입력으로 재시도해도 성공할 수 없습니다.
+Provider가 요청을 수락하지 않았고 같은 입력으로 재시도해도 성공할 수 없습니다.
 
 ### `ProviderOutcomeUnknown`
 
-provider가 처리했는지 증명할 수 없습니다. timeout과 connection reset은 provider 계약이 반대로 증명하지 않는 한 이 범주입니다.
+Provider가 처리했는지 증명할 수 없습니다. Timeout과 connection reset은 provider 계약이 반대로 증명하지 않는 한 이 범주입니다.
 
-Stable client request ID가 존재한다는 사실만으로 retry-safe가 되지는 않습니다. provider가 동일 ID replay를 실제로 deduplicate한다는 계약이나 결과 조회 기능이 있어야 합니다.
+Stable client request ID가 존재한다는 사실만으로 retry-safe가 되지는 않습니다. Provider가 동일 ID replay를 실제로 deduplicate한다는 계약이나 결과 조회 기능이 있어야 합니다.
 
 `Message`는 진단용이고 policy 입력으로 사용하지 않습니다. 상태 결정은 `Kind`와 stable failure code만 사용합니다.
 
@@ -425,13 +435,13 @@ nextAttemptAt = eventAt + retryDelay
 한 grouped provider request는 정확한 delivery member 집합을 가집니다.
 
 1. `BeginSending`은 member 전체에 all-or-none입니다.
-2. grouped request가 성공하면 member 전체를 한 success transaction으로 finalize합니다.
-3. grouped request가 outcome unknown이면 member 전체를 `SENDING`에 유지하고 fallback하지 않습니다.
-4. fallback은 provider가 grouped request를 수락하지 않았다고 확정하고 adapter가 `fallback_allowed=true`를 반환한 경우에만 허용합니다.
-5. fallback 자체는 attempt를 소비하지 않습니다.
-6. individual fallback call을 시작하기 전에 각 row의 send lease budget을 확인합니다.
-7. budget이 부족해 call을 시작하지 않은 row는 known-not-delivered retryable로 처리합니다.
-8. individual fallback outcome은 row별 operation으로 finalize합니다.
+2. Grouped request가 성공하면 member 전체를 한 success transaction으로 finalize합니다.
+3. Grouped request가 outcome unknown이면 member 전체를 `SENDING`에 유지하고 fallback하지 않습니다.
+4. Fallback은 provider가 grouped request를 수락하지 않았다고 확정하고 adapter가 `fallback_allowed=true`를 반환한 경우에만 허용합니다.
+5. Fallback 자체는 attempt를 소비하지 않습니다.
+6. Individual fallback call을 시작하기 전에 각 row의 send lease budget을 확인합니다.
+7. Budget이 부족해 call을 시작하지 않은 row는 provider 미호출 known-not-delivered retryable로 처리합니다.
+8. Individual fallback outcome은 row별 operation으로 finalize합니다.
 
 Outcome unknown 이후 individual fallback을 실행하면 grouped request와 individual request가 모두 전달될 수 있으므로 절대 금지합니다.
 
@@ -460,18 +470,18 @@ type BeginSendDecision struct {
 }
 
 type RetryDecision struct {
-    Common             DecisionContext
-    NextAttemptCount   int
-    NextAttemptAt      time.Time
-    FailureCode        FailureCode
-    SanitizedMessage   string
+    Common           DecisionContext
+    NextAttemptCount int
+    NextAttemptAt    time.Time
+    FailureCode      FailureCode
+    SanitizedMessage string
 }
 
 type FailDecision struct {
-    Common             DecisionContext
-    NextAttemptCount   int
-    FailureCode        FailureCode
-    SanitizedMessage   string
+    Common           DecisionContext
+    NextAttemptCount int
+    FailureCode      FailureCode
+    SanitizedMessage string
 }
 
 type SentDecision struct {
@@ -480,22 +490,22 @@ type SentDecision struct {
 }
 
 type AlreadySatisfiedDecision struct {
-    Common DecisionContext
+    Common      DecisionContext
     SatisfiedAt time.Time
 }
 
 type DeferDecision struct {
-    Common DecisionContext
+    Common        DecisionContext
     NextAttemptAt time.Time
 }
 ```
 
 Go 구현은 concrete type이나 동등한 sealed representation을 사용할 수 있지만 다음 조건을 만족해야 합니다.
 
-- invalid field combination을 public struct literal로 만들 수 없어야 합니다.
+- Invalid field combination을 public struct literal로 만들 수 없어야 합니다.
 - `RetryDecision`에 `NextAttemptAt` 누락이 불가능해야 합니다.
 - `SentDecision`에 failure payload가 들어갈 수 없어야 합니다.
-- policy가 선택한 `RuleID`가 metric과 audit까지 전달되어야 합니다.
+- Policy가 선택한 `RuleID`가 metric과 audit까지 전달되어야 합니다.
 
 ## repository command API
 
@@ -503,12 +513,12 @@ Transition service는 decision을 검증된 command로 변환합니다.
 
 ```go
 type TransitionStore interface {
-    BeginSending(context.Context, PreparedSendOperation) (StartedSendOperation, ApplyOutcome, error)
-    CompleteAlreadySatisfied(context.Context, AlreadySatisfiedCommand) (ApplyOutcome, error)
-    DeferClaim(context.Context, DeferCommand) (ApplyOutcome, error)
+    BeginSending(context.Context, PreparedSendOperation) (StartedSendOperation, ApplyResult, error)
+    CompleteAlreadySatisfied(context.Context, AlreadySatisfiedCommand) (ApplyResult, error)
+    DeferClaim(context.Context, DeferCommand) (ApplyResult, error)
     ScheduleRetryBatch(context.Context, []RetryCommand) ([]ApplyResult, error)
     FailBatch(context.Context, []FailCommand) ([]ApplyResult, error)
-    CompleteSent(context.Context, SentOperation) (ApplyOutcome, error)
+    CompleteSent(context.Context, SentOperation) (ApplyResult, error)
     QuarantineStaleSending(context.Context, time.Time, int) ([]int64, int, error)
     ReviveFailedOutboxes(context.Context, ReviveRequest) (int64, error)
 }
@@ -524,19 +534,27 @@ type TransitionStore interface {
 
 ## apply outcome
 
-CAS 결과는 다음 중 하나입니다.
+CAS와 commit 판정 결과는 다음 중 하나입니다.
 
-```text
-Applied
-Conflict
-Missing
+```go
+type ApplyOutcome uint8
+
+const (
+    ApplyApplied ApplyOutcome = iota + 1
+    ApplyConflict
+    ApplyMissing
+    ApplyIndeterminate
+)
 ```
 
-- `Applied`: expected state와 token을 만족하여 commit됐습니다.
-- `Conflict`: row는 존재하지만 state/version/attempt/lock이 달라졌습니다.
+- `Applied`: expected state와 token을 만족하여 commit됐거나 primary exact read-back으로 post-state가 확인됐습니다.
+- `Conflict`: row는 존재하지만 state/version/attempt/lock이 다르며 read-back으로 판정됐습니다.
 - `Missing`: row가 존재하지 않습니다.
+- `Indeterminate`: commit/read-back 결과만으로 pre-state, exact post-state, coherent conflict 어느 쪽인지 판정할 수 없습니다.
 
-`Conflict`는 정상적인 동시성 결과이며 DB 오류와 구분합니다. 그러나 provider 성공 후 finalization conflict는 일반 경쟁이 아니라 안전 불변식 위반 후보이므로 critical metric과 error log를 남깁니다.
+`Conflict`는 일반적으로 정상적인 동시성 결과이며 DB 오류와 구분합니다. 그러나 provider 성공 후 finalization conflict, grouped member mixed state, delivery/tracking mismatch는 안전 불변식 위반 후보이므로 critical metric과 error log를 남깁니다.
+
+`Indeterminate`는 retryable transition refusal로 축약하지 않습니다. Operation별 read-back과 허용 retry 규칙은 commit 판정 부록을 따릅니다.
 
 ## operation atomicity
 
@@ -548,20 +566,29 @@ Missing
 
 독립적인 provider operation 사이에는 partial success가 허용됩니다. Batch API는 operation 단위 결과를 반환해야 하며, 일부 operation conflict를 전체 성공으로 숨기면 안 됩니다.
 
+Grouped member 일부만 post-state인 경우는 partial success가 아니라 atomicity breach입니다.
+
 ## success transaction
 
 `CompleteSent` transaction은 다음 순서를 지킵니다.
 
-1. operation member 전체가 `SENDING + SendFence`를 만족하는지 확인합니다.
-2. member 전체를 `SENT`, `sent_at`, `locked_at=NULL`, `row_version+1`로 변경합니다.
+1. Operation member 전체가 `SENDING + SendFence`를 만족하는지 확인합니다.
+2. Member 전체를 `SENT`, `sent_at`, `locked_at=NULL`, `row_version+1`로 변경합니다.
 3. 적용된 member에서만 alarm tracking mark를 계산합니다.
-4. community/shorts `authorized_at`을 해제하고 `alarm_sent_at`을 기록합니다.
-5. latency classification을 기록합니다.
-6. commit합니다.
+4. Community/shorts `authorized_at`을 해제하고 `alarm_sent_at`을 기록합니다.
+5. Latency classification을 기록합니다.
+6. Commit합니다.
 
-한 member라도 conflict면 transaction을 rollback합니다. provider 호출은 다시 하지 않습니다.
+한 member라도 conflict면 transaction을 rollback합니다. Provider 호출은 다시 하지 않습니다.
 
-Provider success 후 DB error가 발생하면 같은 immutable `SentOperation`과 Send fence로 local finalization만 재시도할 수 있습니다. 외부 send를 재실행해서는 안 됩니다. process가 success를 commit하기 전에 종료되면 row는 stale `SENDING`으로 남아 quarantine됩니다.
+Provider 성공 후 DB error가 발생하면 primary exact read-back을 먼저 수행합니다.
+
+- Exact post-state와 tracking이 확인되면 `Applied`입니다.
+- Exact `SENDING + SendFence` pre-state가 확인되면 동일 immutable `SentOperation`의 DB finalization만 재시도할 수 있습니다.
+- Provider send는 어떤 경우에도 재실행하지 않습니다.
+- Delivery와 tracking이 서로 다른 commit 상태면 `Indeterminate`이자 atomicity breach입니다.
+
+Process가 success를 commit하기 전에 종료되면 row는 stale `SENDING`으로 남아 quarantine됩니다.
 
 기존의 token을 우회해 delivery ID만으로 `SENDING -> SENT`를 복구하는 경로는 제거해야 합니다. 성공을 알고 있다는 application memory만으로 stale DB row를 덮어쓸 수 없습니다.
 
@@ -569,10 +596,12 @@ Provider success 후 DB error가 발생하면 같은 immutable `SentOperation`�
 
 Known-not-delivered failure만 `ScheduleRetryBatch` 또는 `FailBatch`를 호출할 수 있습니다.
 
-- 새로 획득한 alarm claim은 failure commit 이후 release합니다.
-- claim release 실패는 delivery 상태를 되돌리지 않지만 metric과 warning을 남깁니다.
-- failure message는 민감한 payload, token, room 원문을 포함하지 않도록 sanitize합니다.
-- raw SDK error 문자열은 metric label로 사용하지 않습니다.
+- 새로 획득한 alarm claim은 durable failure commit이 확인된 뒤 release합니다.
+- Claim release 실패는 delivery 상태를 되돌리지 않지만 metric과 warning을 남깁니다.
+- Failure message는 민감한 payload, token, room 원문을 포함하지 않도록 sanitize합니다.
+- Raw SDK error 문자열은 metric label로 사용하지 않습니다.
+- Commit 응답이 실패하면 exact post-state를 확인하거나 exact pre-state에서 같은 DB command만 재시도합니다. Provider를 다시 호출하지 않습니다.
+- `Indeterminate`에서 claim release 여부를 추정하지 않습니다.
 
 ## outcome unknown 처리
 
@@ -612,6 +641,8 @@ error = stable sanitized unknown-outcome message
 
 Quarantine 후 같은 transaction 또는 commit 직후 aggregate projector를 실행합니다. `QUARANTINED` child는 outbox aggregate에서 failure로 투영합니다.
 
+Commit 결과가 불명확하면 exact pre/post read-back을 수행합니다. Source predicate가 `SENDING`이므로 이미 `QUARANTINED`인 row를 다시 attempt 증가시켜서는 안 됩니다.
+
 ## revive
 
 Revive 대상 outbox는 다음 조건을 모두 만족해야 합니다.
@@ -627,10 +658,12 @@ Child가 있는 경우:
 
 1. `FAILED` delivery만 `PENDING`으로 reset합니다.
 2. `SENT`와 `QUARANTINED`는 그대로 둡니다.
-3. reset row의 attempt를 0으로, due를 now로, lock과 error를 clear하고 version을 증가시킵니다.
+3. Reset row의 attempt를 0으로, due를 now로, lock과 error를 clear하고 version을 증가시킵니다.
 4. 같은 transaction에서 표준 aggregate projector를 실행합니다.
 
 Child가 없는 pre-fanout failure인 경우에만 outbox를 직접 `PENDING`으로 reset합니다.
+
+Commit 결과가 불명확하고 exact non-commit이 확인되지 않으면 같은 stale ID 집합을 그대로 재실행하지 않습니다. Eligibility selection부터 다시 수행합니다.
 
 ## outbox fanout contract
 
@@ -646,17 +679,21 @@ child delivery가 없음
 
 성공하면 `SENT`, canonical `sent_at`, lock clear를 적용합니다.
 
+Commit 결과가 불명확하면 outbox exact post-state와 child 부재를 primary read-back으로 확인합니다.
+
 ### `MaterializeFanout`
 
 다음 작업을 한 transaction에서 수행합니다.
 
-1. active outbox claim token을 확인합니다.
-2. target room 집합을 canonicalize하고 중복 제거합니다.
+1. Active outbox claim token을 확인합니다.
+2. Target room 집합을 canonicalize하고 중복 제거합니다.
 3. `(outbox_id, room_id)` unique key로 delivery를 idempotent insert합니다.
-4. outbox lock을 해제합니다.
-5. outbox status는 `PENDING`으로 유지합니다.
+4. Outbox lock을 해제합니다.
+5. Outbox status는 `PENDING`으로 유지합니다.
 
 Transaction 중간 실패 시 child 일부만 남아서는 안 됩니다.
+
+Commit 응답이 불명확하면 canonical target 전체의 child 존재와 outbox lock 해제를 read-back합니다. Child 일부만 존재하면 일반 conflict가 아니라 atomicity breach입니다.
 
 ### fanout failure
 
@@ -685,6 +722,8 @@ child 없음
 ```
 
 계산과 update는 하나의 SQL statement로 유지합니다. `SENT` projection에서 outbox `sent_at`은 NULL일 때만 설정하여 최초 terminal 시각을 보존합니다.
+
+Aggregate projector는 current child state에서 target을 다시 계산하는 idempotent operation이어야 합니다. Commit 오류 후 stale 계산 결과를 재사용하지 않고 projector SQL 자체를 다시 실행할 수 있습니다.
 
 ## 금지 전이
 
@@ -729,6 +768,10 @@ youtube_delivery_transition_conflict_total{rule,phase}
 youtube_delivery_outcome_unknown_total{transport}
 youtube_delivery_quarantine_total{reason}
 youtube_delivery_finalization_retry_total{result}
+youtube_delivery_commit_adjudication_total{operation,result}
+youtube_delivery_commit_indeterminate_total{operation,phase}
+youtube_delivery_atomicity_breach_total{operation}
+youtube_delivery_tracking_mismatch_total{operation}
 youtube_outbox_aggregate_transition_total{from,to}
 youtube_outbox_aggregate_lag_seconds
 ```
@@ -750,6 +793,8 @@ operation_id
 client_request_id_hash
 failure_code
 apply_outcome
+provider_effect_started
+provider_effect_confirmed
 ```
 
 Room ID와 request ID 원문은 민감도 규칙에 따라 mask/hash합니다.
@@ -779,7 +824,7 @@ ClaimFreshnessWindow >= ReviveFreshnessWindow + ReviveInterval
 - 모든 state/event 조합의 허용 또는 명시적 거부
 - retry 경계 `attempt+1 == MaxRetries`
 - `AlreadySatisfied`와 `ClaimDeferred`의 attempt 불변
-- outcome unknown이 decision을 만들지 않음
+- outcome unknown이 transition decision을 만들지 않음
 - `QUARANTINED`와 `SENT` terminal
 - explicit time 외 전역 clock 미사용
 
@@ -792,6 +837,15 @@ ClaimFreshnessWindow >= ReviveFreshnessWindow + ReviveInterval
 - conflict row의 tracking 미변경
 - grouped success의 tracking 원자성
 - claim/version 증가 단조성
+
+### Commit adjudication
+
+- `BeginSending` commit response loss에서 exact post-state 확인 전 provider 미호출
+- `BeginSending` `Indeterminate`에서 provider 미호출
+- `CompleteSent` commit response loss에서 delivery와 tracking exact post-state 확인
+- exact pre-state일 때 DB finalization만 재시도하고 provider 재호출 없음
+- delivery/tracking mixed state를 atomicity breach로 분류
+- fanout canonical child 일부만 존재하면 atomicity breach
 
 ### Crash windows
 
@@ -813,13 +867,14 @@ ClaimFreshnessWindow >= ReviveFreshnessWindow + ReviveInterval
 
 이 계약의 구현은 다음 조건을 모두 만족해야 합니다.
 
-1. transition policy와 repository가 `MaxRetries`를 중복 계산하지 않습니다.
-2. production delivery status write가 의도별 transition store 한 경로를 통합니다.
-3. provider outcome unknown에서 DB mutation과 resend가 없습니다.
+1. Transition policy와 repository가 `MaxRetries`를 중복 계산하지 않습니다.
+2. Production delivery status write가 의도별 transition store 한 경로를 통합니다.
+3. Provider outcome unknown에서 DB mutation과 resend가 없습니다.
 4. `row_version`이 claim과 모든 mutation에서 증가합니다.
-5. success tracking은 operation-level CAS transaction 안에 있습니다.
-6. child가 존재하는 outbox status는 aggregate projector만 계산합니다.
-7. stale legacy status writer와 ID-only success recovery 경로가 제거됩니다.
-8. worker 전용 store 구현이 alarm-worker `internal` 소유권으로 이동합니다.
-9. contract, integration, crash-window 테스트가 통과합니다.
-10. 결정 레코드의 delivery status를 `verified`로 올릴 evidence가 저장소에 남습니다.
+5. Success tracking은 operation-level CAS transaction 안에 있습니다.
+6. Child가 존재하는 outbox status는 aggregate projector만 계산합니다.
+7. Stale legacy status writer와 ID-only success recovery 경로가 제거됩니다.
+8. Worker 전용 store 구현이 alarm-worker `internal` 소유권으로 이동합니다.
+9. Effect 인접 transaction이 `Indeterminate`를 표현하고 provider를 자동 재호출하지 않습니다.
+10. Contract, integration, crash-window, commit fault-injection test가 통과합니다.
+11. 결정 레코드의 delivery status를 `verified`로 올릴 evidence가 저장소에 남습니다.
