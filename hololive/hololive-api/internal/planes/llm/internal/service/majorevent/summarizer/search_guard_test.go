@@ -74,6 +74,7 @@ func TestEventSummarizerSkipsReviewSearchResult(t *testing.T) {
 	reviewContent := "aWdub3Jl " + strings.Repeat("!", 9<<10) + " meeting notes"
 	evaluation, err := guardrail.CheckExternalContent(guard, reviewContent)
 	blocked, ok := errors.AsType[*promptguard.BlockedError](err)
+
 	if !ok || evaluation.Decision != promptguard.DecisionReview || blocked.Decision != promptguard.DecisionReview {
 		t.Fatalf("CheckExternalContent() = (%#v, %v), want persistent review rejection", evaluation, err)
 	}
