@@ -43,6 +43,9 @@ for required in \
   grep -Fq "$required" "$workflow" || fail "security workflow is missing: $required"
 done
 
+grep -Fq 'corepack "$npm_package_manager" audit --package-lock-only --audit-level=high' scripts/ci/run-npm-audit.sh ||
+  fail "npm audit must use the exact integrity-bound packageManager"
+
 [[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v2.39.4' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must install the exact Docker Compose release"
 
