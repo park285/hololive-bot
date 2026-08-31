@@ -191,6 +191,22 @@ fi
 
 : >"${docker_log}"
 env "${common_env[@]}" FAKE_REVISION_LABEL=unknown \
+    bash "${repo}/build-all.sh" --no-bump --build-only --security-scan --skip-local-ci >/dev/null \
+    || fail "security scan build-only mode must succeed"
+grep -Eq ' compose .* -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.security-scan.yml build( |$)' "${docker_log}" \
+    || fail "security scan mode must apply the attestation-free scan overlay"
+
+if env "${common_env[@]}" \
+    bash "${repo}/build-all.sh" --no-bump --security-scan --skip-local-ci >/dev/null 2>&1; then
+    fail "security scan mode must reject a live build invocation"
+fi
+if env "${common_env[@]}" \
+    bash "${repo}/build-all.sh" --no-bump --build-only --security-scan --skip-local-ci hololive-api >/dev/null 2>&1; then
+    fail "security scan mode must reject a partial target build"
+fi
+
+: >"${docker_log}"
+env "${common_env[@]}" FAKE_REVISION_LABEL=unknown \
     bash "${repo}/build-all.sh" --no-bump --skip-local-ci hololive-api >/dev/null \
     || fail "dirty target build must retain the unknown local/dev fallback"
 grep -Eq 'revision=unknown compose .* build hololive-api' "${docker_log}" \

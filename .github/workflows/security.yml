@@ -174,7 +174,7 @@ jobs:
 
       - name: Build final production images
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: ./build-all.sh --no-bump --build-only --skip-local-ci
+        run: ./build-all.sh --no-bump --build-only --security-scan --skip-local-ci
 
       - name: Scan every final production image
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

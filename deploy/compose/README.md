@@ -108,6 +108,10 @@ verified TLS and the CA bundle above.
 
 - Docker Compose v2.24.4+ — 오버레이의 `!override` YAML 태그가 이 버전부터 지원된다.
   build `provenance`/`sbom` 속성도 지원해야 한다.
+- Scheduled/manual final-image scanning uses `docker-compose.security-scan.yml` only to disable
+  attestations that the hosted runner's disposable Docker image store cannot retain. The scanned
+  runtime layers and image tags remain the production build targets; ordinary production builds
+  keep `provenance: mode=max` and `sbom: true`.
 - BuildKit 활성 Docker Engine — Dockerfile들의 `# syntax=docker/dockerfile:1.24.0@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89`
   (cache mount, `COPY --link`, per-Dockerfile `.dockerignore`) 전제.
 - production Go build는 `GOWORK=off`로 각 `go.mod`의 stable published external pin만 사용한다.

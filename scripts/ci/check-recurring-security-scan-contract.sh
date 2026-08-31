@@ -27,11 +27,27 @@ cmp -s scripts/ci/npm-audit-manifest.txt "$tmp_dir/npm-locks" ||
 cmp -s scripts/ci/final-image-scan-manifest.txt "$tmp_dir/final-images" ||
   fail "final image manifest does not cover the exact current production Compose corpus"
 
+LIVE_LOGS_PATH=/tmp LIVE_DB_BACKUP_PATH=/tmp \
+  docker compose --env-file deploy/compose/build-only.env.sample \
+    -f deploy/compose/docker-compose.prod.yml build --print >"$tmp_dir/production-bake.json"
+grep -Fq '"type=provenance,mode=max"' "$tmp_dir/production-bake.json" ||
+  fail "production builds must retain maximum provenance attestations"
+grep -Fq '"type=sbom"' "$tmp_dir/production-bake.json" ||
+  fail "production builds must retain SBOM attestations"
+
+LIVE_LOGS_PATH=/tmp LIVE_DB_BACKUP_PATH=/tmp \
+  docker compose --env-file deploy/compose/build-only.env.sample \
+    -f deploy/compose/docker-compose.prod.yml \
+    -f deploy/compose/docker-compose.security-scan.yml build --print >"$tmp_dir/security-scan-bake.json"
+if grep -Fq '"attest"' "$tmp_dir/security-scan-bake.json"; then
+  fail "disposable local-image scan builds must not request unsupported attestations"
+fi
+
 workflow=.github/workflows/security.yml
 for required in \
   'bash scripts/ci/check-recurring-security-scan-contract.sh' \
   'bash scripts/ci/run-npm-audit.sh' \
-  './build-all.sh --no-bump --build-only --skip-local-ci' \
+  './build-all.sh --no-bump --build-only --security-scan --skip-local-ci' \
   'bash scripts/ci/run-final-image-scan.sh' \
   'TRIVY_VERSION: "0.74.0"' \
   'TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a' \
