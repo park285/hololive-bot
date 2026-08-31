@@ -33,10 +33,16 @@ for required in \
   'bash scripts/ci/run-npm-audit.sh' \
   './build-all.sh --no-bump --build-only --skip-local-ci' \
   'bash scripts/ci/run-final-image-scan.sh' \
-  'aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514' \
-  'version: v0.74.0'; do
+  'TRIVY_VERSION: "0.74.0"' \
+  'TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a' \
+  'https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz' \
+  'sha256sum --check -'; do
   grep -Fq "$required" "$workflow" || fail "security workflow is missing: $required"
 done
+
+if grep -Fq 'uses: aquasecurity/' "$workflow"; then
+  fail "security workflow must not use actions blocked by the repository allowlist"
+fi
 
 [[ "$(grep -Fc "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" "$workflow")" -eq 3 ]] ||
   fail "all three final image setup/build/scan steps must be restricted to scheduled or explicit dispatch runs"
