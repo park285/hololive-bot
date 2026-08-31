@@ -43,8 +43,13 @@ grep -Fxq 'hololive/hololive-alarm-worker/VERSION' "$rsync_manifest" \
   || fail "AP source transfer must include the alarm worker release version"
 [[ "$(grep -Ec '^hololive/hololive-alarm-worker/' "$rsync_manifest")" -eq 1 ]] \
   || fail "AP source transfer must limit alarm worker scope to its release version"
-[[ "$(grep -Fc "sudo -n env HOLO_API_VERSION='\$HOLO_API_VERSION'" "$deploy_script")" -eq 3 ]] \
-  || fail "every remote sudo Compose config/up invocation must propagate HOLO_API_VERSION"
+[[ "$(grep -Fc "sudo -n env HOLO_API_VERSION='\$HOLO_API_VERSION'" "$deploy_script")" -eq 2 ]] \
+  || fail "post-rsync remote Compose config/up must propagate HOLO_API_VERSION"
+prechange_config_line="$(grep -F 'if ! sudo -n env ' "$deploy_script" | grep -F 'prechange_config_err')"
+[[ "$prechange_config_line" == *'COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env'* ]] \
+  || fail "pre-rsync Compose validation must use the canonical AP environment"
+[[ "$prechange_config_line" != *HOLO_API_VERSION* ]] \
+  || fail "pre-rsync Compose validation must resolve the version from the remote prechange tree"
 [[ "$(grep -Fc "HOLO_API_VERSION='\$HOLO_API_VERSION' REVISION='\$REVISION'" "$deploy_script")" -eq 2 ]] \
   || fail "post-rsync Compose config/up must propagate the exact source revision"
 if grep -Eq 'compose\.sh .* build( |$)' "$deploy_script"; then
