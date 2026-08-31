@@ -3,6 +3,7 @@
 작성일: 2026-08-31 KST  
 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
 규범 위치: [`youtube-egress-lifecycle-contract-20260831.md`](youtube-egress-lifecycle-contract-20260831.md)의 transaction 오류 해석 부록
+Ledger 계약: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 
 ## 목적
 
@@ -56,6 +57,7 @@ logical owner ID와 follower ID 집합
 각 row의 expected pre-state/version/attempt/lock
 각 row의 exact expected post-state/version/attempt/lock/timestamp
 tracking requirement와 canonical post identity
+logical ledger key와 exact expected pre/post state
 provider effect started/confirmed 여부
 ```
 
@@ -63,7 +65,9 @@ Command 실행 뒤 member나 expected timestamp를 다시 계산하지 않습니
 
 ### A-003. Group-complete evidence
 
-Logical group operation은 owner만 확인해서는 안 됩니다. Command가 변경하기로 한 follower projection과 touched tracking state까지 exact post-state에 포함합니다.
+Logical group operation은 owner만 확인해서는 안 됩니다. Command가 변경하기로 한 follower projection, tracking state, logical ledger state까지 exact post-state에 포함합니다.
+
+Outbox aggregate와 `terminal_at` projection은 terminal envelope와 별도 transaction입니다. Aggregate는 provider-adjacent commit 판정의 pre/post state에 포함하지 않습니다.
 
 ### A-004. No callback replay
 
@@ -79,7 +83,7 @@ Tracking requirement가 exact claim token을 요구하더라도 primary state가
 
 ### A-007. Mixed state is not partial success
 
-Provider operation owner, logical follower projection, tracking state 중 일부만 exact post-state이면 atomicity breach입니다. 일반 partial success나 conflict로 숨기지 않습니다.
+Provider operation owner, logical follower projection, tracking state, ledger state 중 일부만 exact post-state이면 atomicity breach입니다. 일반 partial success나 conflict로 숨기지 않습니다.
 
 ### A-008. No inferred ownership
 
@@ -135,7 +139,7 @@ version + 1
 sent_at = canonical reconciliationAt
 ```
 
-일부 follower만 `SENT`면 atomicity breach입니다. Provider call은 없습니다.
+Envelope의 same-key ledger가 `SENT`인지 같은 transaction과 read-back에서 확인합니다. 일부 follower만 `SENT`거나 ledger evidence가 다르면 atomicity breach입니다. Provider call은 없습니다.
 
 ### Unresolved propagation
 
@@ -149,6 +153,8 @@ version + 1
 ```
 
 Existing quarantined owner의 attempt/version을 command가 변경하지 않았다면 read-back post-set에 포함하지 않습니다.
+
+Envelope의 same-key ledger `QUARANTINED`를 같은 transaction과 read-back에서 확인합니다. Ledger가 `SENT`로 강화됐으면 unresolved propagation을 계속하지 않고 fulfilled reconciliation으로 전환합니다.
 
 ### Failed-owner propagation
 
@@ -208,6 +214,7 @@ Success command는 다음을 포함합니다.
 - Same-logical follower projection ID와 pre-state
 - Canonical `sentAt`
 - Canonical post별 deduplicated tracking requirement
+- `(kind, logical_id, room_id)` ledger key와 expected pre-state
 - Expected latency/tracking identities
 
 ### Exact post-state
@@ -242,15 +249,27 @@ RequireAlreadySent
 
 여러 room success가 같은 token을 공유할 때 첫 transaction만 token을 소비하고 후속 transaction은 already-sent로 수용할 수 있습니다.
 
+#### Logical ledger
+
+각 logical key가 다음을 만족해야 합니다.
+
+```text
+status = SENT
+sent_at = canonical sentAt
+source_delivery_id = envelope의 owner 또는 지정된 evidence delivery
+```
+
+Existing `SENT`의 최초 `sent_at`과 source reference를 보존하는 monotonic upsert인 경우 envelope는 그 보존값을 exact post-state로 기록합니다.
+
 ### Commit 오류 후 판정
 
 #### Confirmed committed
 
-Owner/follower 전체와 tracking requirement가 exact post-state입니다. `Applied`입니다.
+Owner/follower 전체, tracking requirement, ledger `SENT`가 exact post-state입니다. `Applied`입니다.
 
 #### Confirmed not committed
 
-Owner/follower/tracking이 command의 exact pre-state입니다. 같은 immutable DB finalization만 retry할 수 있습니다. Provider send는 재호출하지 않습니다.
+Owner/follower/tracking/ledger가 command의 exact pre-state입니다. 같은 immutable DB finalization만 retry할 수 있습니다. Provider send는 재호출하지 않습니다.
 
 Tracking pre-state는 requirement에 따라 다음을 포함합니다.
 
@@ -273,6 +292,16 @@ Tracking이 already-sent였던 requirement는 pre/post 양쪽에서 sent일 수 
 - Same logical group follower 일부만 `SENT`
 
 Unsafe repair update를 실행하지 않고 `Indeterminate`로 보고합니다.
+
+#### Ledger mismatch
+
+다음은 atomicity breach입니다.
+
+- Delivery/tracking은 exact post-state인데 ledger가 absent 또는 `QUARANTINED`
+- Delivery는 exact pre-state인데 이 command만 만들 수 있는 ledger `SENT`만 존재
+- Ledger key가 envelope의 canonical identity와 다름
+
+Unsafe ledger 보정이나 provider 재호출을 실행하지 않고 `Indeterminate`로 보고합니다.
 
 #### Conflict 또는 Indeterminate
 
@@ -370,22 +399,30 @@ version = pre + 1 when changed
 lock clear
 ```
 
+Ledger exact post-state:
+
+```text
+(kind, logical_id, room_id) = envelope key
+status = QUARANTINED
+quarantined_at = canonical quarantineAt
+```
+
 ### 판정
 
-- Owner/follower 전체 exact post-state: `Applied`
-- 전체 exact stale pre-state: same quarantine DB command retry 가능
+- Owner/follower와 ledger 전체 exact post-state: `Applied`
+- Owner/follower/ledger 전체 exact stale pre-state: same quarantine DB command retry 가능
 - 일부만 changed: atomicity breach
-- Existing `SENT` evidence가 read-back에서 나타나면 quarantine를 계속하지 않고 logical fulfilled reconciliation 후보로 넘깁니다.
+- Ledger `SENT`가 read-back에서 나타나면 quarantine를 계속하지 않고 logical fulfilled reconciliation 후보로 넘깁니다.
 
 Quarantined source row를 다시 attempt 증가시키지 않도록 source predicate를 유지합니다.
 
 ## Logical fulfilled reconciliation ambiguity
 
-Same-logical `SENT` evidence를 근거로 `FAILED/QUARANTINED/PENDING` follower를 `SENT`로 바꾸는 operation입니다.
+Same-logical ledger `SENT` evidence를 근거로 `FAILED/QUARANTINED/PENDING` follower를 `SENT`로 바꾸는 operation입니다.
 
-- Evidence row ID/state/version을 envelope에 기록합니다.
-- Evidence `SENT` row는 변경하지 않습니다.
-- Evidence row가 read-back에서 더 이상 `SENT`가 아니면 불변식 위반입니다. `SENT`는 terminal이므로 일반 conflict로 숨기지 않습니다.
+- Ledger key/state/timestamp를 envelope에 기록합니다.
+- Ledger `SENT` row는 변경하지 않습니다.
+- Ledger가 read-back에서 더 이상 `SENT`가 아니면 불변식 위반입니다. `SENT`는 terminal이므로 일반 conflict로 숨기지 않습니다.
 - Follower 일부만 `SENT`면 atomicity breach입니다.
 - Provider call과 tracking mutation은 없습니다.
 
@@ -403,14 +440,16 @@ lock/error clear
 next_attempt_at = canonical reviveAt
 ```
 
-Touched outbox aggregate도 current child state와 일치해야 합니다.
+Selection transaction은 같은 logical key의 ledger가 absent임을 확인합니다. Ledger `SENT/QUARANTINED`가 있으면 revive 대상이 아닙니다.
 
 Commit 오류 후:
 
-- Entire group + aggregate exact post-state: `Applied`
+- Entire group exact post-state와 ledger absent 재확인: `Applied`
 - Entire group exact pre-state: stale selected ID set을 바로 replay하지 않고 eligibility selection부터 다시 수행
 - Mixed group: atomicity breach
-- `SENT`/`QUARANTINED` evidence 등장: revive conflict, no retry
+- Ledger `SENT`/`QUARANTINED` 등장: revive conflict, no retry
+
+Touched outbox aggregate는 revive commit 뒤 별도 projector가 계산합니다. Aggregate failure는 revive transaction의 commit 판정에 포함하지 않습니다.
 
 ## Fanout ambiguity
 
@@ -421,6 +460,7 @@ Exact post-state:
 - Canonical target room 전체의 `(outbox_id,room_id)` child 존재
 - Outbox claim lock clear
 - Outbox status `PENDING`
+- Outbox `terminal_at IS NULL`
 
 Exact pre-state:
 
@@ -435,6 +475,7 @@ Exact post-state:
 
 - Outbox `SENT`
 - Canonical `sent_at`
+- `terminal_at = canonical sent_at`
 - Lock clear
 - Child 없음
 
@@ -444,15 +485,18 @@ Child가 생겼으면 direct writer conflict이며 aggregate projector가 소유
 
 Aggregate projector는 current child state에서 target을 다시 계산하는 idempotent SQL이어야 합니다. Commit 오류 후 stale target 값을 재사용하지 않고 projector SQL 자체를 다시 실행할 수 있습니다.
 
-Projector에는 provider effect나 transition callback이 없으므로 safe replay가 가능합니다.
+Projector는 outbox 상태 변경과 `terminal_at` 갱신을 같은 transaction에서 수행합니다. 동일 terminal 상태 replay는 기존 `terminal_at`을 보존하고, `FAILED -> SENT`는 새 terminal 시각을 기록하며, revive로 `PENDING`이 되면 `terminal_at`을 비웁니다.
+
+Projector에는 provider effect나 transition callback이 없으므로 safe replay가 가능합니다. Delivery/tracking/ledger terminal envelope는 aggregate read-back 대상이 아닙니다.
 
 ## Cleanup ambiguity
 
-Cleanup은 logical terminal evidence를 삭제하므로 일반 idempotent delete로 취급하지 않습니다.
+Cleanup은 ledger가 보호할 physical terminal evidence를 삭제하므로 일반 idempotent delete로 취급하지 않습니다. Logical ledger 자체는 삭제하지 않습니다.
 
-- Delete candidate마다 same-logical nonterminal follower 부재를 transaction에서 확인합니다.
-- Terminal retention envelope를 만족하는 cutoff를 command에 기록합니다.
-- Commit response loss 후 row가 없으면 delete committed로 볼 수 있지만, sibling guard가 같은 transaction에 있었는지 migration/query identity를 audit log에 남깁니다.
+- 지원하는 ledger schema version과 completed backfill marker를 먼저 확인합니다.
+- Delete candidate마다 non-null expected `terminal_at`, child terminal ledger evidence, same-logical nonterminal follower 부재를 transaction에서 확인합니다.
+- Terminal retention envelope를 만족하는 fixed cutoff를 command에 기록합니다.
+- Commit response loss 후 row가 없으면 delete committed로 볼 수 있지만, ledger/sibling guard가 같은 transaction에 있었는지 migration/query identity를 audit log에 남깁니다.
 - Cleanup retry가 retention cutoff를 새로 앞당기면 안 됩니다.
 
 ## Error API
@@ -480,6 +524,7 @@ youtube_delivery_commit_adjudication_total{operation,result}
 youtube_delivery_commit_indeterminate_total{operation,phase}
 youtube_delivery_atomicity_breach_total{operation}
 youtube_delivery_tracking_resolution_total{requirement,result}
+youtube_delivery_ledger_operation_total{operation,result}
 youtube_delivery_logical_projection_mismatch_total{operation}
 ```
 
@@ -494,6 +539,7 @@ logical_key_hash
 owner_count
 follower_count
 tracking_requirement_count
+ledger_key_count
 expected_state
 expected_version_range
 adjudication_result
@@ -512,23 +558,27 @@ provider_effect_confirmed
 5. Owner/follower 한 건의 concurrent mutation
 6. Exact claim token이 다른 room success로 먼저 소비됨
 7. Tracking write 오류
-8. Logical follower projection 일부 누락
+8. Ledger write 오류 또는 wrong-key write
+9. Logical follower projection 일부 누락
+10. Aggregate projection 오류
 
 필수 테스트:
 
 ```text
 TestBeginSendingResponseLostConfirmsBeforeProviderCall
 TestBeginSendingIndeterminateNeverCallsProvider
-TestCompleteSentResponseLostConfirmsOwnerFollowersAndTracking
+TestCompleteSentResponseLostConfirmsOwnerFollowersTrackingAndLedger
 TestCompleteSentAcceptsTrackingAlreadySentByAnotherRoom
 TestCompleteSentConfirmedNonCommitRetriesDBOnly
 TestCompleteSentIndeterminateNeverResends
+TestCompleteSentLedgerMismatchIsBreach
 TestRetryResponseLostConfirmsOwnerAndFollowerDue
-TestQuarantineResponseLostConfirmsWholeLogicalGroup
+TestQuarantineResponseLostConfirmsWholeLogicalGroupAndLedger
 TestFulfilledReconciliationPartialFollowersIsBreach
 TestFanoutResponseLostConfirmsCanonicalChildren
 TestFanoutPartialChildrenIsBreach
-TestReviveUnknownRestartsEligibilitySelection
+TestReviveUnknownRestartsEligibilitySelectionAndChecksLedger
+TestAggregateFailureDoesNotChangeTerminalAdjudication
 TestCleanupUnknownDoesNotShortenRetentionCutoff
 ```
 
@@ -543,6 +593,8 @@ Store가 callback/provider를 자동 반복
 Read replica로 commit 여부 판정
 Owner만 post-state이면 group success 처리
 일부 follower만 mirror된 상태를 partial success 처리
+Delivery terminal인데 ledger mismatch를 best-effort repair
+Aggregate failure 때문에 provider operation rollback 또는 resend
 ```
 
 ## 완료 조건
@@ -550,7 +602,8 @@ Owner만 post-state이면 group success 처리
 1. Effect 인접 store 결과가 `Indeterminate`를 표현합니다.
 2. `BeginSending` exact post-state 확인 전 provider call은 0회입니다.
 3. Provider success 이후 어떤 DB 오류에서도 provider 재호출은 0회입니다.
-4. Owner, follower, tracking requirement를 함께 read-back합니다.
+4. Owner, follower, tracking requirement, ledger를 함께 read-back합니다.
 5. 다른 room이 claim token을 먼저 소비한 already-sent tracking을 정상 terminal로 수용합니다.
-6. Mixed logical projection과 tracking mismatch를 atomicity breach로 분류합니다.
-7. Primary read-back fault-injection test가 통과합니다.
+6. Mixed logical projection, tracking mismatch, ledger mismatch를 atomicity breach로 분류합니다.
+7. Aggregate projection은 terminal envelope와 분리되며 실패해도 provider를 재호출하지 않습니다.
+8. Primary read-back fault-injection test가 통과합니다.

@@ -4,6 +4,7 @@
 적용 결정: `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership`  
 적용 런타임: `hololive-alarm-worker`  
 상위 아키텍처: [`youtube-egress-lifecycle-transition-ownership-20260831.md`](youtube-egress-lifecycle-transition-ownership-20260831.md)  
+Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)  
 구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
 
@@ -17,11 +18,13 @@ Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](yout
 
 - `youtube_notification_outbox` pre-fanout intent
 - `youtube_notification_delivery` claim, preparation, send, retry, terminal 처리
-- Community/Shorts logical delivery 중복 방지
+- 모든 kind의 logical delivery 중복 방지와 Community/Shorts canonical identity
 - Post-level alarm claim과 per-room delivery success 결합
 - Stale `SENDING` quarantine과 logical group reconciliation
 - `FAILED` revive
 - Child delivery 기반 outbox aggregate projection
+- Logical `SENT|QUARANTINED` ledger와 fixed-high-water backfill
+- `terminal_at` 기반 full-row cleanup
 
 다음은 비범위입니다.
 
@@ -45,12 +48,24 @@ Community/Shorts:
 (kind, canonical_post_id, room_id)
 
 그 밖의 YouTube kind:
-(outbox_id, room_id)
+(kind, outbox.content_id, room_id)
 ```
 
 Community/Shorts의 `canonical_post_id`는 claim, telemetry, sibling 조회가 같은 resolver를 사용해야 합니다. Payload와 `content_id` 해석을 package별로 복제해서는 안 됩니다.
 
-`(outbox_id, room_id)` unique index는 physical duplicate만 막습니다. 서로 다른 outbox/content ID가 같은 canonical post를 표현할 수 있으므로 logical duplicate 방어를 대체하지 않습니다.
+`(outbox_id, room_id)` unique index는 physical duplicate만 막습니다. Community/Shorts에서는 서로 다른 outbox/content ID가 같은 canonical post를 표현할 수 있고, 모든 kind에서 cleanup 뒤 같은 content의 outbox ID가 달라질 수 있으므로 logical duplicate 방어를 대체하지 않습니다.
+
+Canonical resolver는 Community/Shorts의 alias를 하나의 `canonical_post_id`로 정규화하고, 그 밖의 kind는 trim된 non-empty `content_id`를 사용합니다. Invalid payload/identity를 raw ID로 대체하지 않고 preparation 또는 backfill을 fail closed합니다.
+
+### Logical delivery ledger
+
+`youtube_notification_delivery_ledger`는 `(kind, logical_id, room_id)`별 terminal evidence의 정본입니다.
+
+```text
+SENT > QUARANTINED > absent
+```
+
+`QUARANTINED -> SENT`만 강화 전이로 허용하고 ledger row 삭제와 `SENT` downgrade를 금지합니다. Full outbox/delivery cleanup 뒤에도 ledger는 남습니다.
 
 ### Logical delivery group
 
@@ -60,7 +75,7 @@ Retained physical row 중 logical key가 같은 집합입니다. 그룹 안에�
 owner = 최소 (created_at, delivery_id)
 ```
 
-Durable `SENT`, `QUARANTINED`, `SENDING` evidence는 owner의 현재 `PENDING/FAILED`보다 우선합니다. Impossible mixed state는 우선순위로 숨기지 않고 invariant breach로 분류합니다.
+Ledger `SENT/QUARANTINED`가 retained physical state보다 우선합니다. Ledger가 absent일 때 retained `SENDING`이 owner의 현재 `PENDING/FAILED`보다 우선합니다. Impossible mixed state는 우선순위로 숨기지 않고 invariant breach로 분류합니다.
 
 ### Provider operation
 
@@ -109,6 +124,8 @@ FAILED
 |---|---|---|
 | pre-fanout | subscriber lookup과 delivery materialization 대기 | `OutboxFanoutService` |
 | post-fanout | child delivery 집계 | aggregate projector |
+
+`terminal_at`은 outbox가 현재 terminal 상태에 들어간 시각입니다. `PENDING`이면 NULL이고 `SENT/FAILED`이면 non-NULL입니다. Idempotent terminal projection은 최초 값을 보존하고, `FAILED -> SENT`는 새 terminal transition 시각으로 갱신하며, revive로 `PENDING`이 되면 NULL로 지웁니다.
 
 ### Delivery 상태
 
@@ -197,7 +214,7 @@ Claim 이후 mutation은 `id + expected status + expected version + expected att
 
 ### I-006. Durable logical gate
 
-Post-level cached `Proceed`를 포함한 모든 candidate는 durable logical group resolution을 수행해야 합니다.
+Post-level cached `Proceed`를 포함한 모든 candidate는 ledger를 먼저 읽고 retained logical group resolution을 수행해야 합니다.
 
 ### I-007. External-effect ordering
 
@@ -209,7 +226,7 @@ Provider 처리 여부가 불명확하면 즉시 state write, claim release, fal
 
 ### I-009. Monotonic fulfillment reconciliation
 
-Same-logical `SENT` evidence가 생기면 `PENDING`, `FAILED`, `QUARANTINED` follower를 provider 호출 없이 `SENT`로 reconcile할 수 있습니다. 이는 resend가 아니라 logical fulfillment의 단조 수렴입니다.
+Same-logical ledger `SENT` evidence가 생기면 `PENDING`, `FAILED`, `QUARANTINED` follower를 provider 호출 없이 `SENT`로 reconcile할 수 있습니다. 이는 resend가 아니라 logical fulfillment의 단조 수렴입니다.
 
 `SENT -> *`는 존재하지 않습니다. `QUARANTINED -> PENDING/FAILED`와 `FAILED -> PENDING` 일반 전이는 금지합니다.
 
@@ -223,7 +240,7 @@ Provider operation의 `BeginSending`, grouped success, grouped known failure는 
 
 ### I-012. Aggregate writer ownership
 
-Child가 존재하는 outbox status는 aggregate projector만 계산합니다.
+Child가 존재하는 outbox status와 `terminal_at`은 aggregate projector만 계산합니다.
 
 ### I-013. Commit ambiguity is first-class
 
@@ -233,9 +250,15 @@ DB commit 오류를 rollback 증거로 간주하지 않습니다. Primary exact 
 
 Legacy writer와 새 transition writer가 같은 row를 동시에 변경하는 기간을 만들지 않습니다.
 
+Compatibility/backfill 구간에도 poller가 delivery/outbox lifecycle field를 직접 `PENDING/SENT`로 바꾸지 않습니다. High-water 이후 terminal event는 compatibility alarm-worker가 ledger와 같은 transaction에 기록해야 합니다.
+
 ### I-015. Safety before automatic liveness
 
 Outcome unknown, logical unresolved, commit indeterminate에서는 자동 resend와 unsafe overwrite보다 중복 방지와 stale-write 방지를 우선합니다.
+
+### I-016. Terminal evidence atomicity
+
+Provider success의 delivery/tracking과 ledger `SENT`, stale outcome unknown의 delivery group과 ledger `QUARANTINED`는 각각 같은 transaction입니다. Aggregate projection은 이 transaction 밖의 별도 recoverable projection이며 transition commit 판정에 포함하지 않습니다.
 
 ## Token 계약
 
@@ -301,12 +324,13 @@ SET locked_at = $now,
 
 ### Candidate loading
 
-Current claimed row와 same logical key인 retained physical row를 bounded batch query로 로드합니다.
+Current claimed row의 logical key를 만든 뒤 ledger를 batch load하고, ledger가 absent인 key의 retained physical row를 bounded batch query로 로드합니다.
 
 - Community/Shorts는 kind, room, relevant status를 SQL에서 제한하고 canonical resolver로 post ID를 비교합니다.
-- 기타 kind는 `(outbox_id, room_id)`로 조회합니다.
+- 기타 kind는 outbox join으로 `(kind, outbox.content_id, room_id)`를 조회합니다.
 - Current batch member는 한 번에 resolve합니다. Per-row N+1 query를 기본 구현으로 사용하지 않습니다.
 - Overflow는 fail-closed preparation error이며 provider를 호출하지 않습니다.
+- Ledger schema version과 backfill completion marker가 지원되지 않거나 미완료이면 새 writer는 시작하지 않습니다.
 
 ### Impossible mixed states
 
@@ -317,27 +341,29 @@ SENT 없이 QUARANTINED와 SENDING 동시 존재
 SENT 없이 SENDING 두 건 이상 존재
 동일 physical row가 서로 다른 canonical logical key로 해석됨
 같은 operation에 동일 logical key owner 중복
+ledger QUARANTINED와 retained SENDING 동시 존재
+cutover 뒤 retained physical SENT/QUARANTINED에 대응하는 ledger evidence 누락
 ```
 
 Invariant breach에서는 provider를 호출하거나 follower를 임의 상태로 mirror하지 않습니다. Critical metric과 audit evidence를 남기고 operator 조사에 맡깁니다.
 
-`SENT` evidence가 하나라도 있으면 confirmed fulfillment가 unknown/in-flight를 해소하므로 `LogicalFulfilled`가 우선합니다.
+Ledger `SENT` evidence가 있으면 confirmed fulfillment가 unknown/in-flight를 해소하므로 `LogicalFulfilled`가 우선합니다.
 
 ### Resolution priority
 
 Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 
 ```text
-1. SENT evidence 존재
+1. Ledger SENT
    -> LogicalFulfilled
 
-2. QUARANTINED evidence 존재
+2. Ledger QUARANTINED
    -> LogicalUnresolved
 
-3. SENDING evidence 1건 존재
+3. Ledger absent + retained SENDING 1건
    -> LogicalInFlight
 
-4. PENDING/FAILED 중 최소 (created_at,id) owner 선택
+4. Ledger absent + PENDING/FAILED 중 최소 (created_at,id) owner 선택
    owner=PENDING -> LogicalActive
    owner=FAILED  -> LogicalFailed
 ```
@@ -347,7 +373,7 @@ Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 #### `LogicalFulfilled`
 
 - Provider를 호출하지 않습니다.
-- Current/follower `PENDING`, `FAILED`, `QUARANTINED`를 `SENT`로 reconcile합니다.
+- Ledger `SENT`를 transaction 안에서 다시 확인하고 current/follower `PENDING`, `FAILED`, `QUARANTINED`를 `SENT`로 reconcile합니다.
 - Attempt는 유지합니다.
 - `sent_at`은 reconciliation 시각입니다.
 - Tracking을 새로 추정하지 않습니다.
@@ -355,7 +381,7 @@ Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 #### `LogicalUnresolved`
 
 - Provider를 호출하지 않습니다.
-- Current/follower `PENDING`, `FAILED`를 `QUARANTINED`로 mirror합니다.
+- Ledger `QUARANTINED`를 transaction 안에서 다시 확인하고 current/follower `PENDING`, `FAILED`를 `QUARANTINED`로 mirror합니다.
 - Follower attempt는 유지합니다.
 - Existing quarantined owner attempt는 다시 증가시키지 않습니다.
 
@@ -426,6 +452,7 @@ type PreparedSendOperation struct {
     OperationID     string
     ClientRequestID string
     Owners          []PreparedOwner
+    LedgerKeys      []LogicalDeliveryKey
     Tracking        []TrackingRequirement
     Request         ImmutableSendRequest
 }
@@ -515,13 +542,16 @@ Success transaction:
 4. Tracking requirement를 canonical post별로 deduplicate
 5. `RequireClaimOrAlreadySent`는 exact token으로 mark-sent를 시도하고, 이미 sent면 수용
 6. `RequireAlreadySent`는 durable sent를 확인
-7. Latency classification과 tracking mutation commit
+7. Owner logical key마다 ledger `RecordSent`
+8. Latency classification과 tracking mutation commit
 
 Tracking이 neither exact-token nor already-sent이면 rollback합니다. Provider는 다시 호출하지 않습니다.
 
+Transaction은 touched outbox ID를 반환합니다. Commit이 확인된 뒤 aggregate projector를 즉시 실행하고 background projector가 current child state에서 재수렴합니다. Aggregate 실패는 committed delivery/tracking/ledger를 rollback하지 않습니다.
+
 ### Already-fulfilled reconciliation
 
-Provider call 전 `SENT` evidence가 있으면 tracking mutation 없이 follower만 `SENT`로 reconcile합니다.
+Provider call 전 ledger `SENT` evidence가 있으면 tracking mutation 없이 follower만 `SENT`로 reconcile합니다. Ledger key/state는 transaction 안에서 다시 확인합니다.
 
 ## Decision model
 
@@ -598,7 +628,7 @@ Indeterminate
 - `Missing`: row 없음
 - `Indeterminate`: exact pre/post/coherent conflict 판정 불가
 
-Group member mixed state와 delivery/tracking mismatch는 일반 conflict가 아니라 atomicity breach입니다.
+Group member mixed state와 delivery/tracking/ledger mismatch는 일반 conflict가 아니라 atomicity breach입니다.
 
 ## Outcome unknown
 
@@ -616,7 +646,7 @@ Group member mixed state와 delivery/tracking mismatch는 일반 conflict가 아
 - grouped fallback
 - external resend
 
-Stale sweeper가 owner와 follower group을 quarantine합니다.
+Stale sweeper가 owner와 follower group을 quarantine하고 같은 transaction에서 ledger `QUARANTINED`를 기록합니다.
 
 ## Revive
 
@@ -624,7 +654,7 @@ Revive는 logical group 단위로 판정합니다.
 
 허용 조건:
 
-- `SENT`/`QUARANTINED` evidence 없음
+- Ledger row 없음
 - deterministic owner가 `FAILED`
 - 관련 outbox never-sent이며 freshness window 안
 - active group lock 없음
@@ -633,7 +663,7 @@ Revive는 logical group 단위로 판정합니다.
 적용:
 
 - Owner/follower: `PENDING`, attempt 0, due 정렬, lock/error clear, version +1
-- Touched outbox: 표준 aggregate projector
+- Commit 뒤 touched outbox: 표준 aggregate projector
 
 Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eligibility selection부터 다시 수행합니다.
 
@@ -641,7 +671,7 @@ Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eli
 
 ### `CompleteWithoutTargets`
 
-Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `SENT`, canonical `sent_at`, lock clear를 적용합니다.
+Active outbox claim과 child 부재를 같은 transaction에서 확인한 뒤 `SENT`, canonical `sent_at`, 같은 시각의 `terminal_at`, lock clear를 적용합니다.
 
 ### `MaterializeFanout`
 
@@ -679,18 +709,29 @@ child 없음
 
 Logical group transition은 touched outbox ID 전체를 반환하고 projector가 모두 수렴시켜야 합니다.
 
+`terminal_at` projection:
+
+```text
+next=PENDING              -> NULL
+PENDING -> SENT/FAILED    -> canonical projectionAt
+FAILED -> SENT            -> canonical projectionAt
+terminal -> same terminal -> existing terminal_at 보존
+```
+
+Aggregate transaction과 delivery/tracking/ledger transaction은 분리합니다. Projector failure는 telemetry와 background convergence 대상이며 provider 또는 lifecycle command를 재실행하지 않습니다.
+
 ## Cleanup과 retention
 
-Per-room terminal row는 logical dedupe evidence입니다.
+Full outbox/delivery row와 compact terminal evidence의 retention을 분리합니다.
 
+- Ledger schema version과 backfill completion marker 없이는 cleanup을 실행하지 않습니다.
+- `terminal_at < fixed cutoff`인 terminal outbox만 후보입니다.
+- Active outbox lock 또는 `PENDING/SENDING` child가 있으면 삭제하지 않습니다.
+- `SENT/QUARANTINED` child마다 ledger에 동일하거나 더 강한 evidence가 있어야 합니다.
 - Same-logical nonterminal row가 있으면 terminal owner/follower를 삭제하지 않습니다.
-- 기존 `CleanupAfter`가 terminal evidence retention을 소유합니다.
-- `CleanupSafetyMargin = max(outboxCleanupLoopInterval, 2 * AggregateSyncInterval)`입니다.
-- `CleanupAfter >= ClaimFreshnessWindow + ReviveFreshnessWindow + CleanupSafetyMargin`이어야 합니다.
 - Cleanup retry가 cutoff를 더 최신 시각으로 앞당기면 안 됩니다.
-- Cleanup 뒤 source가 같은 old post를 다시 enqueue할 수 있는 기간이 남아 있으면 안 됩니다.
-
-Persisted logical key/receipt ledger는 이번 범위에 추가하지 않습니다. Query/retention evidence가 computed group의 안전 또는 성능 한계를 보여 줄 때 별도 결정으로 검토합니다.
+- Candidate selection, ledger verification, sibling guard, delete는 bounded transaction입니다.
+- Ledger는 초기 범위에서 자동 삭제하지 않습니다.
 
 ## 금지 전이
 
@@ -722,6 +763,9 @@ LockTimeout >= DeliverySendTimeout + max(2*PollInterval, 5s)
 ReviveFreshnessWindow > 0 when revive enabled
 ClaimFreshnessWindow >= ReviveFreshnessWindow + ReviveInterval
 CleanupAfter >= ClaimFreshnessWindow + ReviveFreshnessWindow + CleanupSafetyMargin
+SupportedLedgerSchemaVersion = persisted schema_version
+LedgerBackfillCompleted = true before writer/cleanup cutover
+ExternalLifecycleWriterCount = 0 before high-water capture
 ```
 
 Production invalid config는 startup에서 거부합니다.
@@ -740,6 +784,9 @@ youtube_delivery_commit_indeterminate_total{operation,phase}
 youtube_delivery_atomicity_breach_total{operation}
 youtube_delivery_tracking_resolution_total{requirement,result}
 youtube_delivery_quarantine_total{reason}
+youtube_delivery_ledger_operation_total{operation,result}
+youtube_delivery_ledger_backfill_total{phase,result}
+youtube_delivery_cleanup_guard_total{reason,result}
 youtube_outbox_aggregate_transition_total{from,to}
 youtube_outbox_aggregate_lag_seconds
 ```
@@ -763,6 +810,8 @@ tracking_requirement
 apply_outcome
 provider_effect_started
 provider_effect_confirmed
+ledger_schema_version
+ledger_backfill_completed
 ```
 
 ## Contract tests
@@ -782,6 +831,9 @@ TestQuarantineAndSendingMixedStateIsBreach
 TestMultipleSendingRowsIsBreach
 TestProceedCacheHitStillResolvesLogicalGroup
 TestLogicalGroupOverflowFailsClosed
+TestInvalidLogicalIdentityFailsBeforeProviderCall
+TestLedgerSentEvidenceReconcilesCleanedPhysicalRows
+TestLedgerQuarantineEvidenceBlocksProviderCall
 ```
 
 ### Tracking
@@ -804,6 +856,9 @@ TestCompleteSentUpdatesOwnerFollowersAndTrackingAtomically
 TestCompleteSentConfirmedNonCommitRetriesDBOnly
 TestCompleteSentIndeterminateNeverResends
 TestMixedGroupStateIsAtomicityBreach
+TestSuccessEnvelopeCommitsDeliveryTrackingAndLedgerAtomically
+TestQuarantineEnvelopeCommitsDeliveryAndLedgerAtomically
+TestLedgerReadBackMismatchIsAtomicityBreach
 ```
 
 ### Outcome/crash
@@ -814,6 +869,7 @@ TestGroupedUnknownNeverFallsBack
 TestCrashAfterSendingCommitQuarantinesLogicalGroup
 TestCrashAfterProviderSuccessNeverGuessesTracking
 TestAggregateReconcilesAfterDeliveryCommitCrash
+TestAggregateFailureDoesNotRollBackTerminalEnvelope
 ```
 
 ### Revive/cleanup
@@ -821,8 +877,22 @@ TestAggregateReconcilesAfterDeliveryCommitCrash
 ```text
 TestReviveResetsLogicalOwnerAndFollowers
 TestReviveRejectsSentOrQuarantinedGroup
+TestReviveRejectsLogicalKeyPresentInLedger
 TestCleanupRetainsTerminalEvidenceWhileFollowerNonterminal
+TestCleanupRequiresCompletedLedgerBackfill
+TestCleanupRequiresLedgerEvidenceForEverySentOrQuarantinedDelivery
+TestTerminalAtUsesLatestTerminalEvidence
 TestCleanupAfterExceedsFreshnessEnvelope
+```
+
+### Backfill
+
+```text
+TestBackfillCapturesFixedDeliveryAndOutboxHighWater
+TestBackfillResumeUsesDurableCursor
+TestBackfillUpsertIsMonotonic
+TestBackfillCompletionRequiresCanonicalAntiJoinZero
+TestBackfillCompletionRejectsUnprovenHistoricalCoverage
 ```
 
 ## 완료 판정
@@ -841,6 +911,10 @@ TestCleanupAfterExceedsFreshnessEnvelope
 12. ID-only success recovery가 없습니다.
 13. Child outbox status는 aggregate projector만 계산합니다.
 14. Worker 전용 store/row model이 alarm-worker internal에 있습니다.
-15. CleanupAfter가 logical terminal evidence를 freshness envelope보다 오래 보존합니다.
-16. Contract, logical-owner, tracking, integration, crash, commit fault-injection, race test가 통과합니다.
-17. Decision record를 `verified`로 올릴 evidence가 저장소에 남습니다.
+15. 모든 confirmed-success와 outcome-unknown terminal transition이 같은 transaction에서 logical ledger evidence를 남깁니다.
+16. 고정 high-water backfill이 durable cursor로 재개되고 canonical anti-join 0건으로 완료됩니다.
+17. 삭제된 과거 row까지 포함한 `legacy_coverage_start_at`이 모든 replay/freshness 경계보다 앞선다는 근거가 없으면 cutover를 차단합니다.
+18. Cleanup은 `terminal_at`과 completed ledger gate를 사용하고, logical terminal evidence를 freshness envelope보다 오래 보존합니다.
+19. Poller와 API를 포함한 모든 lifecycle 직접 writer가 제거되거나 새 transition owner로 전환됩니다.
+20. Contract, logical-owner, tracking, ledger backfill, integration, crash, commit fault-injection, race test가 통과합니다.
+21. Decision record를 `verified`로 올릴 evidence가 저장소에 남습니다.

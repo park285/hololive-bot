@@ -28,7 +28,7 @@ YouTube per-room delivery lifecycle의 전이 정책을 다음 중 어떤 방식
 | G-04 | expected state/version conflict를 persistence 계층이 일급 결과로 표현할 수 있어야 합니다. |
 | G-05 | selected transition identity와 complete mutation plan을 만들 수 있어야 합니다. |
 | G-06 | provider send를 transaction callback이나 entry/exit action에 넣도록 강제하지 않아야 합니다. |
-| G-07 | 기존 `youtube_notification_delivery`, tracking, aggregate schema를 유지할 수 있어야 합니다. |
+| G-07 | 기존 delivery/tracking/outbox schema를 additive version/terminal/ledger 확장으로 유지할 수 있어야 합니다. |
 | G-08 | grouped operation all-or-none와 partial batch result를 애플리케이션이 통제할 수 있어야 합니다. |
 | G-09 | `OutcomeUnknown`에서 아무 상태도 즉시 쓰지 않는 선택을 표현할 수 있어야 합니다. |
 | G-10 | 라이브러리 제거가 domain/repository public contract를 바꾸지 않아야 합니다. |
@@ -62,7 +62,19 @@ operation atomicity unit
 | `qmuntal/stateless` | v1.8.0 | UML-style state machine, external storage callback, actions/guards |
 | `looplab/fsm` | v1.0.4 | string state/event, state-owning FSM, callbacks |
 | `faustbrian/golib/pkg/state-machine` | archived | structured transition/effect result, PostgreSQL CAS/history/outbox |
-| `modernice/goes` | active framework | event sourcing, CQRS, projection, saga |
+| `modernice/goes` | v0.9.0, active framework | event sourcing, CQRS, projection, saga |
+
+재현 가능한 upstream snapshot:
+
+| 후보 | 검토 ref | peeled commit |
+|---|---|---|
+| `open-ships/statemachine` | `v1.3.2` | `953865075bde6c51427d19b9de4cb7b6bcd7d3f6` |
+| `qmuntal/stateless` | `v1.8.0` | `baed0e505321437ea631845ab7d67ea3cddc9647` |
+| `looplab/fsm` | `v1.0.4` | `b45606994edbcf2b560e89f2c92a622ee76f9b26` |
+| `faustbrian/golib` | archived `main` | `e8da5e4d7f83ee3526f4ccd504a1ecb2d7fa727a` |
+| `modernice/goes` | `v0.9.0` | `cc74dee59121da141e3055ae2239258c66795ec0` |
+
+Version/tag, repository archived state, source API는 2026-09-01에 각 upstream repository와 release/tag source에서 다시 확인했습니다.
 
 Upstream 링크:
 

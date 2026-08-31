@@ -16,6 +16,7 @@
 - `alarm-egress-scale-out-decisions-20260730.md` - alarm-worker egress lease removal, production role profiles, and the replica>1 gate list
 - `youtube-egress-lifecycle-transition-ownership-20260831.md` - YouTube outbox/delivery 전이 정책과 PostgreSQL 집행의 소유권, package·schema 경계
 - `youtube-egress-lifecycle-contract-20260831.md` - delivery/outbox 상태, token, attempt, operation atomicity, CAS, quarantine/revive의 규범 계약
+- `youtube-egress-logical-delivery-ledger-20260831.md` - physical cleanup과 분리된 logical terminal evidence, fixed-high-water backfill, completion gate
 - `youtube-egress-lifecycle-commit-adjudication-20260831.md` - effect 인접 transaction의 commit ambiguity, primary read-back과 금지 retry 규약
 - `youtube-egress-lifecycle-library-review-20260831.md` - 직접 planner와 Go FSM/persistence 후보의 hard gate, 비용, 재검토 조건
 

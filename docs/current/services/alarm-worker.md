@@ -85,6 +85,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Runbook: `../runbooks/alarm-worker.md`
 - YouTube egress lifecycle ownership decision (planned): `../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`
 - YouTube egress lifecycle normative contract (planned): `../architecture/youtube-egress-lifecycle-contract-20260831.md`
+- YouTube egress logical delivery ledger and backfill gate: `../architecture/youtube-egress-logical-delivery-ledger-20260831.md`
 - YouTube egress DB commit adjudication: `../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`
 - YouTube egress direct-versus-library review: `../architecture/youtube-egress-lifecycle-library-review-20260831.md`
 - YouTube egress lifecycle implementation plan: `../plans/2026-08-31-youtube-egress-lifecycle-implementation.md`
