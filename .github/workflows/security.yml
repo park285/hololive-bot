@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 937a18d4a0f5d2f03bf3b65a17b070a6074ae948 # v2.1.0
+          ref: 14d793af4cc0f56c416e4be996621e9d63a94764 # v2.2.0
           path: shared-go
           persist-credentials: false
 
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: c3978646aedd21729307d5639977d83c1b08e0a9 # v2.3.1
+          ref: a83f4d976b7d26ad07f2114aacd293b6fd81f44d # v2.4.0
           path: iris-client-go
           persist-credentials: false
 
@@ -137,3 +137,77 @@ jobs:
             echo "govulncheck ${module}"
             (cd "${module}" && govulncheck ./...)
           done
+
+  npm-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: hololive-bot
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            hololive-bot/admin-dashboard/frontend/package-lock.json
+            hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json
+
+      - name: Validate recurring scan inventory
+        run: bash scripts/ci/check-recurring-security-scan-contract.sh
+
+      - name: Audit all npm lockfiles
+        run: bash scripts/ci/run-npm-audit.sh
+
+  final-image-security:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: hololive-bot
+    steps:
+      - name: Checkout hololive-bot
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: hololive-bot
+          persist-credentials: false
+
+      - name: Checkout shared-go
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: park285/shared-go
+          ref: 14d793af4cc0f56c416e4be996621e9d63a94764 # v2.2.0
+          path: shared-go
+          persist-credentials: false
+
+      - name: Checkout iris-client-go
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: park285/iris-client-go
+          ref: a83f4d976b7d26ad07f2114aacd293b6fd81f44d # v2.4.0
+          path: iris-client-go
+          persist-credentials: false
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: v0.74.0
+
+      - name: Validate recurring scan inventory
+        run: bash scripts/ci/check-recurring-security-scan-contract.sh
+
+      - name: Build final production images
+        run: ./build-all.sh --no-bump --build-only --skip-local-ci
+
+      - name: Scan every final production image
+        run: bash scripts/ci/run-final-image-scan.sh

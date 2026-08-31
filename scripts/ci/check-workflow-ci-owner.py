@@ -29,6 +29,8 @@ REMOTE_LIBRARY_ALLOWED_RUN_LINES = frozenset(
         '\"$CI_PYTHON_BIN\" scripts/ci/check-workflow-ci-owner_test.py',
         '\"$CI_PYTHON_BIN\" scripts/ci/check-fast-gate-contract_test.py',
         "bash scripts/ci/check-release-provenance.sh",
+        "bash scripts/ci/check-readme-package-catalog_test.sh",
+        "bash scripts/ci/check-docs-contract_test.sh",
         "bash scripts/ci/check-crosscutting-boundaries.sh",
         "bash scripts/check-sql-ownership.sh",
         "bash scripts/ci/check-structure.sh --mode hard --format text",
@@ -58,18 +60,30 @@ REMOTE_LIBRARY_ALLOWED_RUN_LINES = frozenset(
     }
 )
 REMOTE_LIBRARY_CANONICAL_WORKFLOW_SHA256 = {
-    "github.com/park285/iris-client-go/v2": "a7e3cc8323af96571cdc397ff9881437f9fb09c502a22f80b92b1abced0998bb",
-    "github.com/park285/shared-go/v2": "8157b41ac46092f27717f8094c2ace33e7435823eb4d8c6a4cca387dfdf75370",
+    "github.com/park285/iris-client-go/v2": "57efba63e478a3771e9be90d8c2505ad5945d099642f044d0b3b34329050cd30",
+    "github.com/park285/shared-go/v2": "5df96c0064b2739d68d1e61eb9b3e09229ab0759be32d5f4bcbf67e1302c067e",
 }
 REMOTE_LIBRARY_FIXTURE_MODULE = "example.invalid/workflow-ci-owner-fixture"
 REMOTE_LIBRARY_FIXTURE_WORKFLOW_SHA256 = "132a3046c47792056c3253f2d0c1f42c084afba13368e8ff9eaa507c471ba973"
 APP_CANONICAL_WORKFLOW_SHA256 = {
     "github.com/kapu/chat-bot-go-kakao": "408fd3ffd058a4daaf3b6e9826c1c739e6aec267d9c2d9c43c49835d55a07dfe",
-    "github.com/park285/twentyq-bot": "ddd83e0b6cf49bf4572664ccf1f640ad174b51359e4bbc0bae8ca8046b6d721e",
+    "github.com/park285/twentyq-bot": "11640e6a0c9dc995c5f7d74b0aa482a35e46782b9ea333f4e2face5878072dc8",
     "github.com/kapu/hololive-bot-workspace": "831a78239b6b62d9c3d1a531c831d79668f32984c3a39a951ceda2a6dbeb1130",
 }
+LOCAL_DURABLE_FAST_APP_MODULES = frozenset(
+    {
+        "github.com/park285/twentyq-bot",
+        "example.invalid/workflow-ci-owner-local-durable-fast-app-fixture",
+    }
+)
 LOCAL_APP_FIXTURE_MODULE = "example.invalid/workflow-ci-owner-local-app-fixture"
 LOCAL_APP_FIXTURE_WORKFLOW_SHA256 = "6f937654a6c5204be51d19d4242e65d6a022f07b54780ac37e2b59c40de4fe86"
+LOCAL_DURABLE_FAST_APP_FIXTURE_MODULE = (
+    "example.invalid/workflow-ci-owner-local-durable-fast-app-fixture"
+)
+LOCAL_DURABLE_FAST_APP_FIXTURE_WORKFLOW_SHA256 = (
+    "44ca325ed2759e51b66d5c7a81533fa78ad9f25b086c84cc496a153036cceabe"
+)
 REMOTE_APP_FIXTURE_MODULE = "example.invalid/workflow-ci-owner-remote-app-fixture"
 REMOTE_APP_FIXTURE_WORKFLOW_SHA256 = "2d35debf1a90023b08a6c598268a9e47635d6358d593ee4eb7780beb3c26a13e"
 
@@ -345,6 +359,8 @@ def expected_app_workflow_sha256(root: Path, owner: str) -> str:
     if os.environ.get("WORKFLOW_CI_OWNER_CONTRACT_FIXTURE") == "1":
         if module == LOCAL_APP_FIXTURE_MODULE and owner == "local":
             return LOCAL_APP_FIXTURE_WORKFLOW_SHA256
+        if module == LOCAL_DURABLE_FAST_APP_FIXTURE_MODULE and owner == "local":
+            return LOCAL_DURABLE_FAST_APP_FIXTURE_WORKFLOW_SHA256
         if module == REMOTE_APP_FIXTURE_MODULE and owner == "remote":
             return REMOTE_APP_FIXTURE_WORKFLOW_SHA256
     raise ContractError(f"{owner} app module has no canonical workflow snapshot: {module}")
@@ -370,6 +386,7 @@ def validate(root: Path) -> tuple[str, str, list[str]]:
     primary = read_workflow(root, PRIMARY_PATH)
     security_path, security = find_security_workflow(root)
     run_scripts = workflow_run_scripts(primary)
+    module = module_path(root)
 
     failures: list[str] = []
     try:
@@ -403,7 +420,11 @@ def validate(root: Path) -> tuple[str, str, list[str]]:
                 )
 
     if owner == "local":
-        expected_primary = {"workflow_dispatch"}
+        expected_primary = (
+            {"pull_request", "push", "workflow_dispatch"}
+            if module in LOCAL_DURABLE_FAST_APP_MODULES
+            else {"workflow_dispatch"}
+        )
         expected_security = {"workflow_dispatch"}
         if primary_events != expected_primary:
             failures.append(

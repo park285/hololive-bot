@@ -85,9 +85,9 @@ resolve_route() {
       ;;
   esac
 
-  # security.yml 을 dispatch-only 로 내리면서 주기 보안 스캔이 사라져, push 시점 govulncheck 가
-  # 유일한 의존성 취약점 방어선이 됐다. fast push 라도 코드 변경이 섞이면 강제하고 docs 전용
-  # push 만 면제한다. offline push 는 RUN_DEPENDENCY_HYGIENE=false 로 우회한다.
+  # 주기 security workflow는 merge 전 검증을 대신하지 않는다. fast push라도 코드 변경이
+  # 섞이면 dependency hygiene을 강제하고 docs 전용 push만 면제한다. offline push는
+  # RUN_DEPENDENCY_HYGIENE=false로 우회한다.
   # grep -qv 회피: ugrep 는 quiet+invert 조합 exit 코드가 GNU grep 과 달라 필터 결과로 판정한다.
   non_doc_changes="$(grep -vE '^docs/|\.md$' <<<"${changed_files}" || true)"
   if [[ "${dependency_hygiene_default}" == "false" && -n "${non_doc_changes}" ]]; then
@@ -206,6 +206,9 @@ run_reusable() {
   echo "[pre-push] workflow boundary / gate ownership"
   bash scripts/ci/check-workflow-secrets.sh
   bash scripts/ci/check-workflow-secrets_test.sh
+  "${CI_PYTHON_BIN}" scripts/ci/check-workflow-ci-owner.py
+  "${CI_PYTHON_BIN}" scripts/ci/check-workflow-ci-owner_test.py
+  bash scripts/ci/check-recurring-security-scan-contract.sh
   if [[ "${PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE:-false}" != "true" ]]; then
     PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE=true \
       bash scripts/ci/pre-push-gate-profile-v1_test.sh
