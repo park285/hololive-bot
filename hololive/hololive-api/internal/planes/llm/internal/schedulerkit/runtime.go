@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 type StopReason int
@@ -97,13 +97,13 @@ func (r *Runtime) Start(ctx context.Context, config *Config) {
 	r.wg.Go(func() {
 		var reason StopReason
 
-		panicguard.Run(logger, "schedulerkit-runtime", func() {
+		panicguard.Run(logger, panicguard.BackgroundTask, "schedulerkit-runtime", func() {
 			reason = r.run(ctx, config, logger, stopCh)
 		})
 		r.finishRun(stopCh)
 
 		if config.OnStop != nil {
-			panicguard.Run(logger, "schedulerkit-onstop", func() {
+			panicguard.Run(logger, panicguard.BackgroundTask, "schedulerkit-onstop", func() {
 				config.OnStop(reason)
 			})
 		}
@@ -146,7 +146,7 @@ func (r *Runtime) run(ctx context.Context, config *Config, logger *slog.Logger, 
 			return reason
 		}
 
-		panicguard.Run(logger, "schedulerkit-tick", func() {
+		panicguard.Run(logger, panicguard.BackgroundTask, "schedulerkit-tick", func() {
 			config.OnTick(ctx)
 		})
 	}

@@ -25,7 +25,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 func (s *Scheduler) Start(ctx context.Context) {
@@ -62,7 +62,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// 워커 시작
 	for i := range workerCount {
 		s.wg.Go(func() {
-			panicguard.Run(s.logger, "youtube-poller-worker", func() {
+			panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-poller-worker", func() {
 				s.worker(runCtx, jobCh, i, stopCh)
 			})
 		})
@@ -70,7 +70,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 	// 디스패처 시작
 	s.wg.Go(func() {
-		panicguard.Run(s.logger, "youtube-poller-dispatcher", func() {
+		panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-poller-dispatcher", func() {
 			s.dispatcher(runCtx, jobCh, stopCh)
 		})
 	})

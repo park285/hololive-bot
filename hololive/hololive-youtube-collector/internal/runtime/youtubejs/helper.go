@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 var (
@@ -185,7 +185,7 @@ func (h *Helper) spawn(cfg *Config) error {
 
 	h.cmd = cmd
 
-	panicguard.Go(nil, "youtubejs-helper-wait", func() {
+	go panicguard.Run(nil, panicguard.BackgroundTask, "youtubejs-helper-wait", func() {
 		defer close(h.waited)
 
 		h.waitErr = cmd.Wait()

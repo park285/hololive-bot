@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -270,7 +270,7 @@ func (r *Runtime) Start(ctx context.Context, errCh chan<- error) {
 	runCtx, cancel := context.WithCancel(ctx)
 
 	r.runCancel = cancel
-	panicguard.Go(r.Logger, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
+	go panicguard.Run(r.Logger, panicguard.BackgroundTask, "source-observation-queue-sampler", func() { r.workerSampler.Run(runCtx) })
 
 	if !r.Config.Enabled {
 		return

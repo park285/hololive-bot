@@ -41,6 +41,7 @@
 ../shared-go/pkg/logging/sanitize_handler.go
 ../shared-go/pkg/netguard/doc.go
 ../shared-go/pkg/netguard/netguard.go
+../shared-go/pkg/panicguard/panicguard.go
 ../shared-go/pkg/reflectutil/nil.go
 ../shared-go/pkg/retry/doc.go
 ../shared-go/pkg/retry/retry.go
@@ -342,9 +343,7 @@ hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go
 hololive/hololive-shared/pkg/domain/youtube_delivery_telemetry.go
 hololive/hololive-shared/pkg/health/health.go
-hololive/hololive-shared/pkg/httpbody/body.go
 hololive/hololive-shared/pkg/observability/runtime.go
-hololive/hololive-shared/pkg/panicguard/panicguard.go
 hololive/hololive-shared/pkg/pgxutil/rollback.go
 hololive/hololive-shared/pkg/privacylog/cachekey.go
 hololive/hololive-shared/pkg/privacylog/privacylog.go
@@ -948,6 +947,7 @@ scripts/deploy/ap-collector-preflight.sh
 scripts/deploy/ap-rsync-files.txt
 scripts/deploy/compose.sh
 scripts/deploy/lib/ap-collector-readiness.sh
+scripts/deploy/lib/ap-compose-version.sh
 scripts/deploy/lib/ap-host.sh
 scripts/deploy/lib/compose-env.sh
 scripts/deploy/lib/compose-paths.sh

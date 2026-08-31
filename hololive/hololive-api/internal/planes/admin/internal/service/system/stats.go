@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
@@ -224,8 +224,8 @@ func (c *Collector) fetchServiceGoroutines(ctx context.Context) []ServiceGorouti
 		}
 
 		wg.Go(func() {
-			panicguard.Run(nil, "system-stats-service-goroutines", func() {
-				if err := panicguard.RunE(nil, "system-stats-service-goroutines", func() error {
+			panicguard.Run(nil, panicguard.BackgroundTask, "system-stats-service-goroutines", func() {
+				if err := panicguard.RunE(nil, panicguard.BackgroundTask, "system-stats-service-goroutines", func() error {
 					goroutines, ok := c.fetchGoroutineCount(ctx, ep.URL)
 
 					results[i] = ServiceGoroutines{

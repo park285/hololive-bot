@@ -59,17 +59,39 @@ else
   pass "ap-host-native does not create unused collector settings dir"
 fi
 
-if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${DEPLOY}"; then
+if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${UNIT_TEMPLATE}"; then
   pass "ap-host-native keeps /var/lib/hololive-bot writable under systemd hardening"
 else
   record_fail "ap-host-native must keep /var/lib/hololive-bot writable"
 fi
 
-if grep -q '^ReadWritePaths=.*stack-secrets' "${DEPLOY}"; then
+if grep -q '^ReadWritePaths=.*stack-secrets' "${UNIT_TEMPLATE}"; then
   record_fail "ap-host-native must not grant write access to the static secret directory"
 else
   pass "ap-host-native keeps /etc/stack-secrets read-only under ProtectSystem=strict"
 fi
+
+unit_copy_dir="$(mktemp -d)"
+mkdir -p "${unit_copy_dir}/etc/systemd/system" \
+  "${unit_copy_dir}/opt/hololive-bot/youtube-collector/current/bin"
+cp "${UNIT_TEMPLATE}" "${unit_copy_dir}/etc/systemd/system/hololive-youtube-collector@.service"
+printf '#!/bin/sh\nexit 0\n' >"${unit_copy_dir}/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper"
+chmod +x "${unit_copy_dir}/opt/hololive-bot/youtube-collector/current/bin/youtube-collector-wrapper"
+for fixture_target in sysinit.target basic.target network-online.target shutdown.target sockets.target paths.target; do
+  printf '[Unit]\nDescription=fixture\n' >"${unit_copy_dir}/etc/systemd/system/${fixture_target}"
+done
+if systemd-analyze verify --root="${unit_copy_dir}" /etc/systemd/system/hololive-youtube-collector@.service; then
+  pass "canonical host-native systemd unit passes systemd-analyze verify"
+else
+  record_fail "canonical host-native systemd unit must pass systemd-analyze verify"
+fi
+
+if cmp -s "${UNIT_TEMPLATE}" "${unit_copy_dir}/etc/systemd/system/hololive-youtube-collector@.service"; then
+  pass "packaged host-native unit is byte-identical to its canonical template"
+else
+  record_fail "packaged host-native unit must remain byte-identical to its canonical template"
+fi
+rm -rf "${unit_copy_dir}"
 
 if grep -Fq 'rollback_contract_dir="$old_target/rollback-contract"' "${REMOTE_APPLY}" &&
    grep -Fq '"$host_env" "$rollback_contract_dir/youtube-collector-host.env"' "${REMOTE_APPLY}" &&

@@ -12,8 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/admin-dashboard/internal/httpx"
-	"github.com/kapu/hololive-shared/pkg/httpbody"
 )
 
 type holoRoundTripperFunc func(*http.Request) (*http.Response, error)
@@ -71,8 +72,8 @@ func TestProxyRejectsOversizedResponseAndPreservesCause(t *testing.T) {
 	}
 
 	_, err := client.Proxy(t.Context(), http.MethodGet, "/status", nil, nil)
-	if !errors.Is(err, httpbody.ErrTooLarge) {
-		t.Fatalf("Proxy() error = %v, want httpbody.ErrTooLarge cause", err)
+	if !errors.Is(err, httputil.ErrResponseBodyTooLarge) {
+		t.Fatalf("Proxy() error = %v, want httputil.ErrResponseBodyTooLarge cause", err)
 	}
 
 	appErr, ok := errors.AsType[*httpx.AppError](err)

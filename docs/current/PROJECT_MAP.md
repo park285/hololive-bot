@@ -2,6 +2,8 @@
 
 Module and runtime inventory for the `hololive-bot` workspace.
 
+This file is the current runtime ownership authority. Completed handoffs, incident reports, historical architecture snapshots, and verification captures belong under `docs/history/` and must not define current procedures.
+
 ## Module Inventory
 
 | Module | Language | Path | Role | Port |
@@ -49,6 +51,9 @@ Module and runtime inventory for the `hololive-bot` workspace.
 
 ## Maintenance
 
+- Non-secret host addresses are owned by `deploy/topology/hosts.conf`. Explicit AP, Compose, Nginx,
+  nftables, and PostgreSQL HBA consumers are checked by `scripts/architecture/check-topology-parity.sh`;
+  update the owner and every affected consumer in one change.
 - Keep Go module entries aligned with `go.work`.
 - Keep runtime binary and Docker Compose service entries aligned with `deploy/compose/docker-compose.prod.yml`.
 - Keep service docs and runbook links valid for all 3 runtime rows.

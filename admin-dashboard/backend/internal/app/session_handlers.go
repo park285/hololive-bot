@@ -18,7 +18,6 @@ import (
 
 	"github.com/kapu/admin-dashboard/internal/auth"
 	"github.com/kapu/admin-dashboard/internal/httpx"
-	"github.com/kapu/hololive-shared/pkg/httpbody"
 )
 
 type loginRequest struct {
@@ -283,9 +282,9 @@ func parseHeartbeat(req *http.Request) (heartbeatRequest, error) {
 }
 
 func readHeartbeatBody(req *http.Request) ([]byte, error) {
-	body, err := httpbody.ReadAllAndClose(req.Body, maxHeartbeatBodyBytes)
+	body, err := httputil.ReadAllAndCloseWithDrainLimit(req.Body, maxHeartbeatBodyBytes, 64<<10)
 	if err != nil {
-		if errors.Is(err, httpbody.ErrTooLarge) {
+		if errors.Is(err, httputil.ErrResponseBodyTooLarge) {
 			return nil, fmt.Errorf("heartbeat body exceeds %d bytes", maxHeartbeatBodyBytes)
 		}
 

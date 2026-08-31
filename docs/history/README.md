@@ -32,5 +32,13 @@
 - `youtube/YOUTUBE_SCRAPER_ALARM_HARDENING_20260421.md` - YouTube scraper and alarm delivery hardening record
 - `youtube/YOUTUBE_SCRAPER_DELAY_REVIEW.md` - YouTube scraper delay review and applied-change record
 
+### Architecture and handoffs
+- `architecture/` - superseded architecture snapshots and retired runtime plans
+- `architecture/DEDUP_REMEDIATION_PLAN.md` - superseded 2026-05-23 dedup remediation proposal
+- `plans/2026-07-10-birthday-stream-alarm.md` - superseded birthday stream alarm v2 plan
+- `youtube-convergence/handoffs/` - completed YouTube convergence implementation handoffs
+- `runbooks/` - completed incident and operational review records
+- `hardening-evidence/` - historical PR hardening command and result captures
+
 ### Plan kits
 - `plan-kits/README.md` - legacy plan-kit bundle index

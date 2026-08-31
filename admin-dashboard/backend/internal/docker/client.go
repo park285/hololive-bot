@@ -12,8 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/admin-dashboard/internal/httpx"
-	"github.com/kapu/hololive-shared/pkg/httpbody"
 )
 
 type Container struct {
@@ -38,6 +39,7 @@ type PortMapping struct {
 const (
 	stopGraceSeconds           = 30
 	maxDockerListResponseBytes = 8 << 20
+	responseBodyDrainLimit     = 64 << 10
 )
 
 type Client struct {
@@ -94,7 +96,7 @@ func (c *Client) Available(ctx context.Context) bool {
 	}
 
 	available := resp.StatusCode >= 200 && resp.StatusCode < 300
-	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
+	if err := httputil.DrainAndClose(resp.Body, responseBodyDrainLimit); err != nil {
 		return false
 	}
 
@@ -203,7 +205,7 @@ func (c *Client) fetchContainerSummaries(ctx context.Context) ([]containerSummar
 		return nil, dockerUnavailableError("list containers", nil)
 	}
 
-	body, err := httpbody.ReadAllAndClose(resp.Body, maxDockerListResponseBytes)
+	body, err := httputil.ReadAllAndCloseWithDrainLimit(resp.Body, maxDockerListResponseBytes, responseBodyDrainLimit)
 	if err != nil {
 		return nil, httpx.Internal(fmt.Errorf("read docker list containers response: %w", err))
 	}
@@ -331,7 +333,7 @@ func (c *Client) action(ctx context.Context, name, action string, timeout time.D
 		return dockerUnavailableError(action+" "+name, nil)
 	}
 
-	if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
+	if err := httputil.DrainAndClose(resp.Body, responseBodyDrainLimit); err != nil {
 		return httpx.Internal(fmt.Errorf("close docker %s response: %w", action, err))
 	}
 

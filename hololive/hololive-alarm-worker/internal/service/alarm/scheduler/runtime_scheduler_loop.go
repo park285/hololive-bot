@@ -8,10 +8,10 @@ import (
 	"time"
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 // Start는 3개 플랫폼 루프를 병렬 실행하고 context 취소 시 종료한다.
@@ -25,15 +25,21 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	panicguard.GoE(eg, s.logger, "alarm-scheduler-youtube", func() error {
-		return s.runLoop(egCtx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
+	eg.Go(func() error {
+		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-youtube", func() error {
+			return s.runLoop(egCtx, "youtube", s.youtubeInterval, s.youtubeTimeout, false, s.runYouTubeIteration)
+		})
 	})
-	panicguard.GoE(eg, s.logger, "alarm-scheduler-chzzk", func() error {
-		return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
+	eg.Go(func() error {
+		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-chzzk", func() error {
+			return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
+		})
 	})
 	s.startTwitchLoop(egCtx, eg)
-	panicguard.GoE(eg, s.logger, "alarm-scheduler-cache-recovery", func() error {
-		return s.runAlarmCacheRecoveryLoop(egCtx)
+	eg.Go(func() error {
+		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-cache-recovery", func() error {
+			return s.runAlarmCacheRecoveryLoop(egCtx)
+		})
 	})
 
 	if err := eg.Wait(); err != nil {

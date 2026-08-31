@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/health"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 func (r *Runtime) startGuarded(ctx context.Context, errCh chan<- error, name string, run func()) {
-	panicguard.Go(r.Logger, name, func() {
-		if err := panicguard.RunE(r.Logger, name, func() error {
+	go panicguard.Run(r.Logger, panicguard.BackgroundTask, name, func() {
+		if err := panicguard.RunE(r.Logger, panicguard.BackgroundTask, name, func() error {
 			run()
 
 			return nil

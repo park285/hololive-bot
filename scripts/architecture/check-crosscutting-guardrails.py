@@ -54,6 +54,9 @@ GOROUTINE_RECOVERY_TOKENS = (
     "panicguard.Run",
 )
 
+DIRECT_GO_RECOVERY_TARGETS = frozenset({"panicguard.Run"})
+SHARED_PANICGUARD_IMPORT = "github.com/park285/shared-go/v2/pkg/panicguard"
+
 RUST_JNI_BOUNDARY_TOKENS = (
     "catch_unwind",
     "recover(",
@@ -369,6 +372,93 @@ def function_block_for_target(source: SourceView, target: str) -> str | None:
     return extract_brace_block(source.code_lines, start)
 
 
+def go_lexical_tokens(text: str) -> list[tuple[str, str]]:
+    tokens: list[tuple[str, str]] = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            newline = text.find("\n", i + 2)
+            i = len(text) if newline < 0 else newline + 1
+            continue
+        if ch == "/" and nxt == "*":
+            end = text.find("*/", i + 2)
+            i = len(text) if end < 0 else end + 2
+            continue
+        if ch == '"':
+            start = i
+            i += 1
+            while i < len(text):
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                i += 1
+                if text[i - 1] == '"':
+                    break
+            tokens.append(("string", text[start + 1 : i - 1]))
+            continue
+        if ch == "`":
+            start = i
+            end = text.find("`", i + 1)
+            i = len(text) if end < 0 else end + 1
+            tokens.append(("string", text[start + 1 : end if end >= 0 else len(text)]))
+            continue
+        if ch == "'":
+            i += 1
+            while i < len(text):
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                i += 1
+                if text[i - 1] == "'":
+                    break
+            continue
+        if ch.isalpha() or ch == "_":
+            start = i
+            i += 1
+            while i < len(text) and (text[i].isalnum() or text[i] == "_"):
+                i += 1
+            tokens.append(("identifier", text[start:i]))
+            continue
+        tokens.append(("punctuation", ch))
+        i += 1
+    return tokens
+
+
+def has_unaliased_shared_panicguard_import(source: SourceView) -> bool:
+    tokens = go_lexical_tokens(source.text)
+    for i, token in enumerate(tokens):
+        if token != ("identifier", "import") or i + 1 >= len(tokens):
+            continue
+        next_token = tokens[i + 1]
+        if next_token == ("string", SHARED_PANICGUARD_IMPORT):
+            return True
+        if next_token != ("punctuation", "("):
+            continue
+        j = i + 2
+        while j < len(tokens) and tokens[j] != ("punctuation", ")"):
+            if tokens[j] == ("string", SHARED_PANICGUARD_IMPORT):
+                previous = tokens[j - 1] if j > i + 2 else ("punctuation", "(")
+                if previous[0] == "string" or previous in {
+                    ("punctuation", "("),
+                    ("punctuation", ";"),
+                }:
+                    return True
+            j += 1
+    return False
+
+
+def has_possible_panicguard_shadow(source: SourceView) -> bool:
+    for match in re.finditer(r"\bpanicguard\b", source.code):
+        if not re.match(r"\s*\.", source.code[match.end() :]):
+            return True
+    return False
+
+
 def check_go_goroutine_boundaries(root: Path, findings: list[Finding]) -> None:
     go_func_re = re.compile(r"\bgo\s+func\s*\(")
     group_go_re = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.Go\s*\(\s*func\s*\(")
@@ -396,12 +486,32 @@ def check_go_goroutine_boundaries(root: Path, findings: list[Finding]) -> None:
                 source.allow_lines,
             )
 
-        for match in direct_go_re.finditer(source.code):
+        direct_matches = list(direct_go_re.finditer(source.code))
+        has_direct_recovery_target = any(
+            match.group("target") in DIRECT_GO_RECOVERY_TARGETS for match in direct_matches
+        )
+        direct_recovery_target_allowed = has_direct_recovery_target and (
+            has_unaliased_shared_panicguard_import(source) and not has_possible_panicguard_shadow(source)
+        )
+        for match in direct_matches:
             start = line_no(source.code, match.start()) - 1
-            target = match.group("target").split(".")[-1]
-            line = source.code_lines[start] if start < len(source.code_lines) else ""
-            block = function_block_for_target(source, target) or line
-            if any(token in block for token in GOROUTINE_RECOVERY_TOKENS):
+            direct_target = match.group("target")
+            if direct_target in DIRECT_GO_RECOVERY_TARGETS:
+                if direct_recovery_target_allowed:
+                    continue
+                add(
+                    findings,
+                    "warning",
+                    root,
+                    path,
+                    start + 1,
+                    "background goroutine has no visible panic recovery wrapper; use RecoverLogged/runtimekit.Go or add an allowlist comment",
+                    source.allow_lines,
+                )
+                continue
+            target = direct_target.split(".")[-1]
+            block = function_block_for_target(source, target)
+            if block is not None and any(token in block for token in GOROUTINE_RECOVERY_TOKENS):
                 continue
             add(
                 findings,

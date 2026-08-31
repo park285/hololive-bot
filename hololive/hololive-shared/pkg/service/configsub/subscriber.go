@@ -26,10 +26,10 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/valkey-io/valkey-go"
 
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const defaultChannel = contractssettings.PubSubChannelV1
@@ -89,7 +89,7 @@ func (s *Subscriber) handleMessage(msg valkey.PubSubMessage) {
 		slog.String("type", update.Type),
 		slog.String("channel", s.channel),
 	)
-	panicguard.Run(s.logger, "config-subscriber-apply", func() {
+	panicguard.Run(s.logger, panicguard.BackgroundTask, "config-subscriber-apply", func() {
 		s.applyFn(update)
 	})
 }

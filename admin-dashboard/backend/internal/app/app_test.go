@@ -513,6 +513,50 @@ func TestCSRFEnforcement(t *testing.T) {
 	require.Equal(t, http.StatusOK, doRequest(handler, req).Code)
 }
 
+func TestCSRFTokenValidRequiresConstantTimeCookieHeaderMatch(t *testing.T) {
+	validToken, err := auth.NewCSRFToken("csrf-session", testSecret)
+	require.NoError(t, err)
+
+	otherSessionToken, err := auth.NewCSRFToken("other-session", testSecret)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		headerToken string
+		cookieToken string
+		hasCookie   bool
+		want        bool
+	}{
+		{name: "missing header", cookieToken: validToken, hasCookie: true},
+		{name: "missing cookie", headerToken: validToken},
+		{name: "empty cookie", headerToken: validToken, hasCookie: true},
+		{name: "mismatched public tokens", headerToken: validToken, cookieToken: otherSessionToken, hasCookie: true},
+		{name: "matching token for another session", headerToken: otherSessionToken, cookieToken: otherSessionToken, hasCookie: true},
+		{name: "valid", headerToken: validToken, cookieToken: validToken, hasCookie: true, want: true},
+	}
+
+	runtime := &Runtime{cfg: config.Config{SessionSecret: testSecret}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", http.NoBody)
+			req.Header.Set("X-CSRF-Token", tt.headerToken)
+
+			if tt.hasCookie {
+				req.AddCookie(&http.Cookie{
+					Name:     auth.CSRFCookieName,
+					Value:    tt.cookieToken,
+					Secure:   true,
+					HttpOnly: true,
+					SameSite: http.SameSiteStrictMode,
+				})
+			}
+
+			require.Equal(t, tt.want, runtime.csrfTokenValid(req, "csrf-session"))
+		})
+	}
+}
+
 func TestCSRFMonitorModeAllows(t *testing.T) {
 	sess := liveSession("monitor-session")
 	rt := newTestRuntime(t, storeWith(sess), func(cfg *config.Config) {

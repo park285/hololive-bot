@@ -10,12 +10,12 @@
   "decided_at": "2026-06-04",
   "summary": "단일 숫자 WorstCaseRequestUnitsPerRun을 source(youtube_scraper, holodex_live, browser_snapshot, proxy, postgres_write)별 단위·burst class·priority를 갖는 BudgetProfile로 확장한다. scheduler reschedule은 claim skip(peer_owned, already_completed)과 budget skip(budget_exhausted, source_cooldown)을 구분한다. JobRunGuard invariant 테스트는 반드시 유지하고, SCRAPER_SCHEDULER_WORKER_COUNT=2(AP당)를 유지하며 YOUTUBE_PRODUCER_AP_WORKER_COUNT는 만들지 않는다(2026-08-02 scraper env 단일화로 SCRAPER_WORKER_COUNT alias는 제거). 각 phase는 YOUTUBE_PRODUCER_GLOBAL_BUDGET_ENABLED, YOUTUBE_PRODUCER_LIVE_BATCH_ENABLED 같은 플래그로 독립 rollback이 가능해야 한다.",
   "sources": [
-    "docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#결정",
-    "docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#5. 결정사항",
-    "docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#D-012. scheduler reschedule 정책을 claim skip과 budget skip으로 분리한다",
-    "docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#8. 테스트 결정사항",
-    "docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#9. 운영 설정 결정사항",
-    "docs/current/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#10. 롤백 결정사항"
+    "docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#결정",
+    "docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#5. 결정사항",
+    "docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#D-012. scheduler reschedule 정책을 claim skip과 budget skip으로 분리한다",
+    "docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#8. 테스트 결정사항",
+    "docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#9. 운영 설정 결정사항",
+    "docs/history/architecture/youtube-producer-multi-worker-optimization-decisions-20260604.md#10. 롤백 결정사항"
   ],
   "evidence": [],
   "implementation": [

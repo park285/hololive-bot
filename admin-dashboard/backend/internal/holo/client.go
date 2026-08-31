@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/admin-dashboard/internal/httpx"
-	"github.com/kapu/hololive-shared/pkg/httpbody"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
 )
 
@@ -108,6 +109,8 @@ func (c *Client) Close() error {
 
 const maxProxyBodyBytes = 8 << 20
 
+const responseBodyDrainLimit int64 = 64 << 10
+
 func (c *Client) Proxy(ctx context.Context, method, path string, query url.Values, body []byte) (ProxyResponse, error) {
 	req, err := c.buildRequest(ctx, method, path, query, body)
 	if err != nil {
@@ -133,14 +136,14 @@ func (c *Client) Proxy(ctx context.Context, method, path string, query url.Value
 
 func proxyResponseFromHTTP(resp *http.Response) (ProxyResponse, error) {
 	if resp.StatusCode >= http.StatusInternalServerError {
-		if err := httpbody.DrainAndClose(resp.Body, httpbody.DefaultDrainLimit); err != nil {
+		if err := httputil.DrainAndClose(resp.Body, responseBodyDrainLimit); err != nil {
 			return ProxyResponse{}, proxyBadGateway(fmt.Errorf("holo admin api returned status %d: drain response body: %w", resp.StatusCode, err))
 		}
 
 		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("holo admin api returned status %d", resp.StatusCode))
 	}
 
-	respBody, err := httpbody.ReadAllAndClose(resp.Body, maxProxyBodyBytes)
+	respBody, err := httputil.ReadAllAndCloseWithDrainLimit(resp.Body, maxProxyBodyBytes, responseBodyDrainLimit)
 	if err != nil {
 		return ProxyResponse{}, proxyBadGateway(fmt.Errorf("read holo admin api response body: %w", err))
 	}

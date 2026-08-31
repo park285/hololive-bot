@@ -254,13 +254,12 @@ func assertPublicKakaoDeepLinkDirectives(t *testing.T, publicTemplate string) {
 	for _, required := range []string{
 		"map $request_uri $kakao_deep_link_target {",
 		"map $http_user_agent $kakao_deep_link_scraper {",
-		"map $http_user_agent $kakao_deep_link_in_app_user_agent {",
-		"map \"$request_method:$kakao_deep_link_in_app_user_agent\" $kakao_deep_link_in_app_get {",
+		"map $request_method $kakao_deep_link_get {",
 		"map $uri $shortlink_access_log_enabled {",
 		"access_log /dev/stdout ingress_json if=$shortlink_access_log_enabled;",
 		"if ($kakao_deep_link_target = \"\") {",
 		"if ($kakao_deep_link_scraper) {",
-		"if ($kakao_deep_link_in_app_get = 0) {",
+		"if ($kakao_deep_link_get = 0) {",
 		"add_header_inherit on;",
 		"return 404;",
 		"return 403;",
@@ -271,6 +270,15 @@ func assertPublicKakaoDeepLinkDirectives(t *testing.T, publicTemplate string) {
 	} {
 		if !strings.Contains(publicTemplate, required) {
 			t.Fatalf("public Kakao deep-link ingress missing %q", required)
+		}
+	}
+
+	for _, forbidden := range []string{
+		"$kakao_deep_link_in_app_user_agent",
+		"$kakao_deep_link_in_app_get",
+	} {
+		if strings.Contains(publicTemplate, forbidden) {
+			t.Fatalf("public Kakao deep-link ingress retains browser-denying classifier %q", forbidden)
 		}
 	}
 }
@@ -1793,6 +1801,8 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"SESSION_SECRET=dummy",
 		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
 		"HOLOLIVE_RUNTIME_GID=1002",
+		"HOLO_API_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-api/VERSION")),
+		"HOLO_ALARM_WORKER_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-alarm-worker/VERSION")),
 	)
 
 	for key, value := range overrides {
@@ -1898,6 +1908,8 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 		"CLIPROXY_BASE_URL=https://cliproxy.invalid",
 		"SEOUL_METRICS_BIND_IP=100.100.1.5",
 		"HOLOLIVE_RUNTIME_GID=1002",
+		"HOLO_API_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-api/VERSION")),
+		"HOLO_ALARM_WORKER_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-alarm-worker/VERSION")),
 	)
 
 	output, err := cmd.CombinedOutput()

@@ -115,6 +115,39 @@ func TestRuntimeIrisClient_SendMessage_UsesBaseURLFileOverrideAndReloads(t *test
 	assertRuntimeIrisReplyCalls(t, second, 1, "second calls after reload")
 }
 
+func TestRuntimeIrisClient_SendMessagePreservesBaseURLFileDeploymentPrefix(t *testing.T) {
+	t.Setenv("IRIS_TRANSPORT", "http1")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/tenant/iris/reply"; got != want {
+			t.Fatalf("request path = %q, want %q", got, want)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	baseURLFilePath := writeRuntimeIrisBaseURLFile(t, server.URL+"/tenant/iris///")
+	client := NewRuntimeIrisClient(
+		server.URL,
+		testBotToken,
+		baseURLFilePath,
+		nil,
+		iris.WithHTTPClient(server.Client()),
+		iris.WithTransport("http1"),
+	)
+
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	})
+
+	if err := client.SendMessage(t.Context(), testRoomID, "hello"); err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+}
+
 func TestRuntimeIrisClientRejectsDialOutsideInitialBaseURLAllowset(t *testing.T) {
 	client := NewRuntimeIrisClient("https://192.0.2.10:3001", testBotToken, "", nil)
 

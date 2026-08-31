@@ -127,11 +127,12 @@ http {
 template는 `short.holoshi.com/l/*`를 `100.100.1.8:30192`로 전달합니다. 또한 canonical positive
 decimal ID만 받는 `/k/m/<room>/<message>`, `/k/t/<room>/<thread>`,
 `/k/t/<room>/<thread>/<message>`를 고정 KakaoTalk target으로 직접 변환하고, 그 외 short-link
-path는 `404`로 닫습니다. `/k/`는 regular KakaoTalk in-app `GET`만 허용하고 scraper·`HEAD`·다른
-method·비카카오 User-Agent를 `Location` 없이 거부하며 access log를 남기지 않습니다. 이
-User-Agent 경계는 위조 가능하므로 인증이나 완전한 crawler 차단으로 간주하지 않습니다. 기존
-`/l/` method·User-Agent·logging 계약은 그대로입니다. Admin traffic과 WebSocket은 이 server를
-통과하지 않습니다. 적용 전후 `nginx -t`를 통과시킨 뒤 reload합니다.
+path는 `404`로 닫습니다. `/k/`는 유효한 경로의 `GET`을 User-Agent와 무관하게 고정 KakaoTalk
+target으로 전달합니다. 알려진 Kakao scraper는 먼저 거부하고, `HEAD`와 다른 method도
+`Location` 없이 거부하며 access log를 남기지 않습니다. User-Agent 판정은 preview 억제일 뿐
+인증이나 완전한 crawler 차단으로 간주하지 않습니다. 기존 `/l/` method·User-Agent·logging
+계약은 그대로입니다. Admin traffic과 WebSocket은 이 server를 통과하지 않습니다. 적용 전후
+`nginx -t`를 통과시킨 뒤 reload합니다.
 
 provider rollout은 `127.0.0.1:30101` listener → 중앙 `30192` ingress → Seoul template →
 `scripts/deploy/shortlink-smoke.sh` public smoke → `ALARM_SHORT_LINK_BASE_URL` consumer 활성화 순서입니다.

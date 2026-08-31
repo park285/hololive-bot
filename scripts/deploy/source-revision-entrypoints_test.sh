@@ -25,6 +25,7 @@ mkdir -p \
 cp "${ROOT_DIR}/build-all.sh" "${repo}/build-all.sh"
 cp "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" "${repo}/scripts/deploy/compose-redeploy-service.sh"
 cp "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh" "${repo}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
+cp "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh" "${repo}/scripts/deploy/lib/ap-compose-version.sh"
 cp "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh" "${repo}/scripts/deploy/lib/source-revision.sh"
 printf 'services: {}\n' >"${repo}/deploy/compose/docker-compose.prod.yml"
 printf 'fixture=1\n' >"${repo}/deploy/compose/build-only.env.sample"

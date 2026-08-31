@@ -60,7 +60,7 @@ services:
       - /var/lib/hololive-postgres-failover:/run/hololive-bot/postgres-failover:ro
     ports:
       # Keep loopback by default. Automatic routing requires an explicit tailnet bind in
-      # ap-compose.env, e.g. HOLOLIVE_STANDBY_POSTGRES_BIND_IP=100.100.1.5.
+      # ap-compose.env, e.g. HOLOLIVE_STANDBY_POSTGRES_BIND_IP=<tailnet-seoul>.
       - "${HOLOLIVE_STANDBY_POSTGRES_BIND_IP:-127.0.0.1}:${HOLOLIVE_STANDBY_POSTGRES_PORT:-5434}:5432"
     tmpfs:
       - /tmp:size=64m,mode=1777

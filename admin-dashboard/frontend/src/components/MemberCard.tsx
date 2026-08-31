@@ -179,6 +179,7 @@ const MemberCard = memo(
 									onRemove={() => {
 										onRemoveAlias(member.id, "ko", alias);
 									}}
+									removeAriaLabel={`${member.name} 한국어 별명 ${alias} 제거`}
 									aria-label={`${alias} 별명 제거`}
 									role="listitem"
 								>
@@ -243,6 +244,7 @@ const MemberCard = memo(
 									onRemove={() => {
 										onRemoveAlias(member.id, "ja", alias);
 									}}
+									removeAriaLabel={`${member.name} 일본어 별명 ${alias} 제거`}
 									aria-label={`${alias} 별명 제거`}
 									role="listitem"
 								>

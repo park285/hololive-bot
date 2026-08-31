@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260830-hololive-birthday-stream-sent-audience",
+  "title": "생일 방송은 operational roster에서 발견하고 sent 생일 축하 delivery 방에만 보낸다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-30",
+  "summary": "collector의 LIVE/UPCOMING discovery audience는 enabled operational roster 전체이며, alarm-worker는 해당 멤버·일자 birthday greeting event의 alarm_dispatch_deliveries 중 status='sent' AND sent_at IS NOT NULL인 방만 birthday stream audience로 사용한다. audience 조회 실패는 fail-closed이며 전체 방이나 일반 알람 방으로 fallback하지 않는다. 기존 per-video identity와 멤버·일자당 신규 event 3개 상한은 유지한다.",
+  "sources": [
+    "docs/current/plans/2026-08-08-birthday-stream-alarm-v3.md#핵심 계약",
+    "docs/current/PROJECT_MAP.md#Cross-Runtime Contracts"
+  ],
+  "evidence": [
+    "hololive/hololive-alarm-worker/internal/service/celebration/birthday_stream_store_test.go",
+    "hololive/hololive-alarm-worker/internal/service/celebration/birthday_stream_runner_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-alarm-worker/internal/service/celebration/birthday_stream_store.go",
+    "hololive/hololive-alarm-worker/internal/service/celebration/birthday_stream_dispatch.go",
+    "hololive/hololive-alarm-worker/internal/service/celebration/birthday_stream_runner.go"
+  ],
+  "supersedes": [
+    "DEC-20260710-hololive-birthday-stream-alarm"
+  ]
+}

@@ -20,6 +20,14 @@ if [[ ! -r "$MANIFEST" ]]; then
 fi
 
 while IFS= read -r path; do
+  [[ -n "$path" ]] || continue
+  if [[ ! -e "$ROOT_DIR/$path" ]]; then
+    echo "[FAIL] ap-rsync-files.txt contains missing local path: $path" >&2
+    exit 1
+  fi
+done < "$MANIFEST"
+
+while IFS= read -r path; do
   if ! grep -qxF "$path" "$MANIFEST"; then
     echo "[FAIL] ap-rsync-files.txt missing Compose wrapper dependency: $path" >&2
     exit 1

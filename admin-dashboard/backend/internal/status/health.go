@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/httpbody"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
 const maxHealthResponseBodyBytes int64 = 64 << 10
@@ -44,7 +44,7 @@ func doHealthGET(ctx context.Context, ec endpointClient, endpoint ServiceEndpoin
 
 	latency := elapsedMillis(start)
 
-	body, err := httpbody.ReadAllAndClose(resp.Body, maxHealthResponseBodyBytes)
+	body, err := httputil.ReadAllAndCloseWithDrainLimit(resp.Body, maxHealthResponseBodyBytes, 64<<10)
 	if err != nil {
 		return healthResult{latencyMS: latency, measured: true, errMsg: "read health response body: " + err.Error()}
 	}

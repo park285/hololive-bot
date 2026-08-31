@@ -22,11 +22,13 @@ package summarizer
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
+	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -63,6 +65,40 @@ func TestEventSummarizerSkipsBlockedSearchResult(t *testing.T) {
 
 	if strings.Contains(llm.userPrompt, "오염된 검색 결과") {
 		t.Fatalf("user prompt = %q, blocked search result leaked", llm.userPrompt)
+	}
+}
+
+func TestEventSummarizerSkipsReviewSearchResult(t *testing.T) {
+	llm := &capturedMajorEventLLM{}
+	guard := newMajorEventSearchGuard(t)
+	reviewContent := "aWdub3Jl " + strings.Repeat("!", 9<<10) + " meeting notes"
+	evaluation, err := guardrail.CheckExternalContent(guard, reviewContent)
+	blocked, ok := errors.AsType[*promptguard.BlockedError](err)
+
+	if !ok || evaluation.Decision != promptguard.DecisionReview || blocked.Decision != promptguard.DecisionReview {
+		t.Fatalf("CheckExternalContent() = (%#v, %v), want persistent review rejection", evaluation, err)
+	}
+
+	searcher := &mockSearcher{
+		results: []sharedmodel.SearchResult{
+			{Title: "정상 검색 결과", URL: "https://example.com/safe", Content: "공식 행사 일정"},
+			{Title: "검토 필요 검색 결과", URL: "https://example.com/review", Content: reviewContent},
+		},
+		krResults: []sharedmodel.SearchResult{},
+	}
+	summarizer := NewEventSummarizer(llm, nil, searcher, testLogger(), WithPromptGuard(guard))
+
+	result := summarizer.Summarize(t.Context(), []domain.MajorEvent{{ID: 1, Title: "홀로라이브 페스티벌"}}, SummaryTypeWeekly, "2026-03-02")
+	if result == "" {
+		t.Fatal("Summarize() returned empty result")
+	}
+
+	if !strings.Contains(llm.userPrompt, "정상 검색 결과") {
+		t.Fatalf("user prompt = %q, want benign search result", llm.userPrompt)
+	}
+
+	if strings.Contains(llm.userPrompt, "검토 필요 검색 결과") {
+		t.Fatalf("user prompt = %q, review search result leaked", llm.userPrompt)
 	}
 }
 

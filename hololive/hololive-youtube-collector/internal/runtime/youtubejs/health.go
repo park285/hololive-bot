@@ -9,7 +9,8 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/kapu/hololive-shared/pkg/httpbody"
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 )
 
@@ -186,11 +187,11 @@ func readControlBody(resp *http.Response) ([]byte, error) {
 		return nil, errors.Join(collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "youtube.js helper control content type is invalid"), closeErr)
 	}
 
-	payload, readErr := httpbody.ReadAllAndDrain(resp.Body, helperControlBodyLimit)
+	payload, readErr := httputil.ReadAllAndDrain(resp.Body, helperControlBodyLimit, 64<<10)
 	closeErr := resp.Body.Close()
 
 	if err := errors.Join(readErr, closeErr); err != nil {
-		if errors.Is(err, httpbody.ErrTooLarge) {
+		if errors.Is(err, httputil.ErrResponseBodyTooLarge) {
 			return nil, errors.Join(collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper control response exceeds body limit"), err)
 		}
 

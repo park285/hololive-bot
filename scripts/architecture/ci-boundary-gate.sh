@@ -21,6 +21,10 @@ echo "[M0] generic Go internal package name check"
 "${SCRIPT_DIR}/check-go-generic-internal-package-names.sh"
 echo
 
+echo "[M0] cross-cutting boundary guardrail tests"
+"${SCRIPT_DIR}/check-crosscutting-guardrails_test.sh"
+echo
+
 echo "[M0] cross-cutting boundary guardrail check"
 "${SCRIPT_DIR}/check-crosscutting-guardrails.sh"
 echo
@@ -61,6 +65,7 @@ echo
 echo "[CI] Run M2 document contract gate"
 echo "[M2] current docs historical body check"
 "${SCRIPT_DIR}/check-current-docs-no-historical-body.sh"
+"${SCRIPT_DIR}/check-current-docs-no-historical-body_test.sh"
 echo
 
 echo "[M2] current docs root allowlist check"
@@ -111,6 +116,7 @@ bash "${ROOT_DIR}/scripts/ci/shell-syntax-sweep.sh"
 bash "${ROOT_DIR}/scripts/deploy/test-postgres18-runtime-contract.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-services.sh"
 "${ROOT_DIR}/scripts/deploy/test-three-runtime-topology.sh"
+"${ROOT_DIR}/scripts/architecture/check-topology-parity_test.sh"
 "${ROOT_DIR}/scripts/deploy/test-compose-h3-contract.sh"
 "${ROOT_DIR}/scripts/deploy/test-live-compat-cert-mount-scope.sh"
 "${ROOT_DIR}/scripts/deploy/test-removed-runtimes.sh"

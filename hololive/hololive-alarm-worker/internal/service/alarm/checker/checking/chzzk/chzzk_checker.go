@@ -30,11 +30,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
@@ -117,18 +117,20 @@ func (c *ChzzkChecker) collectChzzkNotifications(
 			continue
 		}
 
-		panicguard.GoE(eg, c.logger, "chzzk-channel-check", func() error {
-			channelNotifications := c.lookupChzzkNotifications(egCtx, job, memberNames, now)
-			if len(channelNotifications) == 0 {
+		eg.Go(func() error {
+			return panicguard.RunE(c.logger, panicguard.BackgroundTask, "chzzk-channel-check", func() error {
+				channelNotifications := c.lookupChzzkNotifications(egCtx, job, memberNames, now)
+				if len(channelNotifications) == 0 {
+					return nil
+				}
+
+				mu.Lock()
+
+				notifications = append(notifications, channelNotifications...)
+				mu.Unlock()
+
 				return nil
-			}
-
-			mu.Lock()
-
-			notifications = append(notifications, channelNotifications...)
-			mu.Unlock()
-
-			return nil
+			})
 		})
 	}
 

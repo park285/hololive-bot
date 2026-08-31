@@ -25,11 +25,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
 	twitch2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/twitch"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
@@ -52,7 +52,9 @@ func (s *RuntimeScheduler) startTwitchLoop(ctx context.Context, eg *errgroup.Gro
 		return
 	}
 
-	panicguard.GoE(eg, s.logger, "alarm-scheduler-twitch", func() error {
-		return s.runLoop(ctx, runtimeSchedulerLoopNameTwitch, s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
+	eg.Go(func() error {
+		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-twitch", func() error {
+			return s.runLoop(ctx, runtimeSchedulerLoopNameTwitch, s.twitchInterval, s.twitchTimeout, true, s.runTwitchIteration)
+		})
 	})
 }

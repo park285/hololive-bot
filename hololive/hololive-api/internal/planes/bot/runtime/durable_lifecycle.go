@@ -7,8 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const (
@@ -32,15 +33,15 @@ func (r *durableRuntime) Start(ctx context.Context) {
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 
 	r.cancel = cancel
-	panicguard.Go(r.logger, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
-	panicguard.Go(r.logger, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
+	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-inbox-queue-sampler", func() { r.inboxSampler.Run(runCtx) })
+	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-queue-sampler", func() { r.outboxSampler.Run(runCtx) })
 
 	if r.inboxEnabled {
 		r.inboxTracker.StartWorkers(r.inboxWorkers)
 
 		for range r.inboxWorkers {
 			r.wg.Go(func() {
-				panicguard.Run(r.logger, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
+				panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-inbox-worker", func() { r.runInboxWorker(runCtx) })
 			})
 		}
 	}
@@ -50,13 +51,13 @@ func (r *durableRuntime) Start(ctx context.Context) {
 
 		for range r.outboxWorkers {
 			r.wg.Go(func() {
-				panicguard.Run(r.logger, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
+				panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-outbox-worker", func() { r.runOutboxWorker(runCtx) })
 			})
 		}
 	}
 
 	r.wg.Go(func() {
-		panicguard.Run(r.logger, "durable-maintenance", func() { r.runMaintenance(runCtx) })
+		panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-maintenance", func() { r.runMaintenance(runCtx) })
 	})
 }
 
@@ -69,7 +70,7 @@ func (r *durableRuntime) Stop(ctx context.Context) error {
 
 	done := make(chan struct{})
 
-	panicguard.Go(r.logger, "durable-stop-wait", func() { r.wg.Wait(); close(done) })
+	go panicguard.Run(r.logger, panicguard.BackgroundTask, "durable-stop-wait", func() { r.wg.Wait(); close(done) })
 
 	if err := waitForDurableStop(ctx, done); err != nil {
 		return fmt.Errorf("%w", err)

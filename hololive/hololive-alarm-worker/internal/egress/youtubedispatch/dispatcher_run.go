@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 func (d *Dispatcher) Run(ctx context.Context) error {
@@ -20,7 +20,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 
 	defer d.started.Store(false)
 
-	if err := panicguard.RunE(d.logger, "youtube-outbox-dispatcher", func() error {
+	if err := panicguard.RunE(d.logger, panicguard.BackgroundTask, "youtube-outbox-dispatcher", func() error {
 		d.runJoined(ctx)
 
 		return nil

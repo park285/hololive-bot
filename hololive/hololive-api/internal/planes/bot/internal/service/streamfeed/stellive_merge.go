@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 func (s *Service) mergeStelliveLiveStreams(ctx context.Context, org string, liveStreams []*domain.Stream) []*domain.Stream {
@@ -56,11 +56,13 @@ func (s *Service) mergeStelliveUpcomingStreams(ctx context.Context, org string, 
 	g.SetLimit(settings.DefaultChzzkOperationalConfig().MaxConcurrentStatusChecks)
 
 	for _, member := range members {
-		panicguard.GoE(&g, s.logger, "stellive-upcoming-stream", func() error {
-			streams := s.fetchStelliveUpcomingStreams(ctx, member, hours)
-			appendStelliveUpcomingStreams(&mu, &chzzkStreams, streams)
+		g.Go(func() error {
+			return panicguard.RunE(s.logger, panicguard.BackgroundTask, "stellive-upcoming-stream", func() error {
+				streams := s.fetchStelliveUpcomingStreams(ctx, member, hours)
+				appendStelliveUpcomingStreams(&mu, &chzzkStreams, streams)
 
-			return nil
+				return nil
+			})
 		})
 	}
 

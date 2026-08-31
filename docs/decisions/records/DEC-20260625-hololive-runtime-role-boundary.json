@@ -10,7 +10,7 @@
   "decided_at": "2026-06-25",
   "summary": "bot 바이너리는 LoadBotRuntime, alarm-worker는 LoadAlarmWorkerRuntime을 쓰고 일반 Load는 호환용으로만 남긴다. non-egress runtime은 시작 시 proactive egress ownership과 dispatcher activation을 거부한다. 이후 DEC-20260730-hololive-alarm-egress-lease-removed가 scheduler role 축만 완화했고, hololive-api 통합(DEC-20260626-hololive-api-three-runtime-consolidation)이 LoadHololiveAPIRuntime을 추가했다.",
   "sources": [
-    "docs/current/architecture/runtime-role-boundary-analysis-20260625.md#Code decision in this PR"
+    "docs/history/architecture/runtime-role-boundary-analysis-20260625.md#Code decision in this PR"
   ],
   "evidence": [],
   "implementation": [

@@ -27,6 +27,7 @@ REMOTE_LIBRARY_ALLOWED_RUN_LINES = frozenset(
         "printf 'CI_PYTHON_RUNTIME_ROOT=%s\\n' \"$GITHUB_WORKSPACE\" >>\"$GITHUB_ENV\"",
         '\"$CI_PYTHON_BIN\" scripts/ci/check-workflow-ci-owner.py',
         '\"$CI_PYTHON_BIN\" scripts/ci/check-workflow-ci-owner_test.py',
+        '\"$CI_PYTHON_BIN\" scripts/ci/check-fast-gate-contract_test.py',
         "bash scripts/ci/check-release-provenance.sh",
         "bash scripts/ci/check-crosscutting-boundaries.sh",
         "bash scripts/check-sql-ownership.sh",
@@ -49,6 +50,8 @@ REMOTE_LIBRARY_ALLOWED_RUN_LINES = frozenset(
         "go test -race",
         "go test -race -count=1 ./...",
         "go mod tidy -diff",
+        "GOWORK=off go mod tidy -diff",
+        "GOWORK=off go run ./pkg/internal/guardtext/genconfusables.go -confusables-source ./pkg/internal/guardtext/testdata/confusables-17.0.0.txt.gz -unicode-data-baseline-source ./pkg/internal/guardtext/testdata/UnicodeData-15.0.0.txt.gz -unicode-data-source ./pkg/internal/guardtext/testdata/UnicodeData-17.0.0.txt.gz -output ./pkg/internal/guardtext/confusables_table_generated.go -check",
         "IRIS_CLIENT_VALKEY_TEST_ADDR=127.0.0.1:6379 go test -race -count=1 -v ./internal/dedup/",
         "go test -count=1 -run '^TestPromptGuardAllocationCeilings$' ./pkg/promptguard",
         "go test -count=1 -run '^TestLoggingAllocationCeilings$' ./pkg/logging",
@@ -56,7 +59,7 @@ REMOTE_LIBRARY_ALLOWED_RUN_LINES = frozenset(
 )
 REMOTE_LIBRARY_CANONICAL_WORKFLOW_SHA256 = {
     "github.com/park285/iris-client-go/v2": "a7e3cc8323af96571cdc397ff9881437f9fb09c502a22f80b92b1abced0998bb",
-    "github.com/park285/shared-go/v2": "51a7efbf7365ce8ae17ef369d28b4256795c80e585e591882012d08ebe726269",
+    "github.com/park285/shared-go/v2": "8157b41ac46092f27717f8094c2ace33e7435823eb4d8c6a4cca387dfdf75370",
 }
 REMOTE_LIBRARY_FIXTURE_MODULE = "example.invalid/workflow-ci-owner-fixture"
 REMOTE_LIBRARY_FIXTURE_WORKFLOW_SHA256 = "132a3046c47792056c3253f2d0c1f42c084afba13368e8ff9eaa507c471ba973"

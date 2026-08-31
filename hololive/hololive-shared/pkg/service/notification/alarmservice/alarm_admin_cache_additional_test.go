@@ -23,6 +23,7 @@ package alarmservice
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"testing"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
@@ -138,6 +140,103 @@ func TestGetDistinctRoomsAndAllAlarmKeys(t *testing.T) {
 
 	require.Len(t, byRoom["room-2"], 1)
 	assert.Equal(t, "room-2", byRoom["room-2"][0].RoomName)
+}
+
+func TestGetAllAlarmKeysBatchesRoomMembershipRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	oneRoomRoundTrips, oneRoomMaxBatch := alarmAdminRoundTrips(t, 1)
+	hundredRoomRoundTrips, hundredRoomMaxBatch := alarmAdminRoundTrips(t, 100)
+	hundredOneRoomRoundTrips, hundredOneRoomMaxBatch := alarmAdminRoundTrips(t, 101)
+
+	assert.Equal(t, 4, oneRoomRoundTrips)
+	assert.Equal(t, oneRoomRoundTrips, hundredRoomRoundTrips)
+	assert.Equal(t, 5, hundredOneRoomRoundTrips)
+	assert.Equal(t, 1, oneRoomMaxBatch)
+	assert.Equal(t, alarmRoomMembershipBatchSize, hundredRoomMaxBatch)
+	assert.Equal(t, alarmRoomMembershipBatchSize, hundredOneRoomMaxBatch)
+}
+
+func TestGetAllAlarmKeysSkipsOnlyFailedRoomMembershipResult(t *testing.T) {
+	t.Parallel()
+
+	service := newTestAlarmService(t)
+	ctx := t.Context()
+	failedRoomID := "room-failed"
+	healthyRoomID := "room-healthy"
+	healthyChannelID := "channel-healthy"
+
+	_, err := service.cache.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, []string{failedRoomID, healthyRoomID})
+	require.NoError(t, err)
+	require.NoError(t, service.cache.Set(ctx, service.getAlarmKey(failedRoomID), "wrong-type", 0))
+
+	_, err = service.cache.SAdd(ctx, service.getAlarmKey(healthyRoomID), []string{healthyChannelID})
+	require.NoError(t, err)
+
+	alarms, err := service.GetAllAlarmKeys(ctx)
+	require.NoError(t, err)
+	require.Len(t, alarms, 1)
+	assert.Equal(t, healthyRoomID, alarms[0].RoomID)
+	assert.Equal(t, healthyChannelID, alarms[0].ChannelID)
+}
+
+func alarmAdminRoundTrips(t *testing.T, roomCount int) (int, int) {
+	t.Helper()
+
+	service := newTestAlarmService(t)
+	cacheClient := service.cache
+	ctx := t.Context()
+	roomIDs := make([]string, roomCount)
+
+	for index := range roomCount {
+		roomID := fmt.Sprintf("room-%03d", index)
+		channelID := fmt.Sprintf("channel-%03d", index)
+
+		roomIDs[index] = roomID
+
+		_, err := cacheClient.SAdd(ctx, service.getAlarmKey(roomID), []string{channelID})
+		require.NoError(t, err)
+		require.NoError(t, cacheClient.HSet(ctx, sharedalarmkeys.MemberNameKey, channelID, channelID))
+	}
+
+	_, err := cacheClient.SAdd(ctx, sharedalarmkeys.AlarmRegistryKey, roomIDs)
+	require.NoError(t, err)
+
+	roundTrips := 0
+	maxDoMultiCommands := 0
+	countingCache := &cachemocks.Client{
+		SMembersFunc: func(ctx context.Context, key string) ([]string, error) {
+			roundTrips++
+			return cacheClient.SMembers(ctx, key)
+		},
+		HGetAllFunc: func(ctx context.Context, key string) (map[string]string, error) {
+			roundTrips++
+			return cacheClient.HGetAll(ctx, key)
+		},
+		BatchHGetFunc: func(ctx context.Context, key string, fields []string) (map[string]string, error) {
+			roundTrips++
+			return cacheClient.BatchHGet(ctx, key, fields)
+		},
+		BFunc: func() valkey.Builder {
+			return cacheClient.B()
+		},
+		DoMultiFunc: func(ctx context.Context, commands ...valkey.Completed) []valkey.ValkeyResult {
+			roundTrips++
+
+			maxDoMultiCommands = max(maxDoMultiCommands, len(commands))
+
+			return cacheClient.DoMulti(ctx, commands...)
+		},
+	}
+
+	service.cache = countingCache
+	service.cacheState = alarmcache.NewState(countingCache, func() domain.MemberDataProvider { return service.memberData }, service.logger)
+
+	alarms, err := service.GetAllAlarmKeys(ctx)
+	require.NoError(t, err)
+	require.Len(t, alarms, roomCount)
+
+	return roundTrips, maxDoMultiCommands
 }
 
 func TestAlarmAdminCacheErrorBranches(t *testing.T) {

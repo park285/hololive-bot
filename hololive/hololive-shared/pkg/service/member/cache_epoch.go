@@ -31,9 +31,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/valkey-io/valkey-go"
-
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 const (
@@ -155,7 +154,7 @@ func parseMemberEpoch(value string) (uint64, error) {
 func (c *Cache) runEpochReconciliation(ctx context.Context) {
 	triggers := make(chan string, 1)
 
-	panicguard.Go(c.logger, "member-cache-epoch-reconciler", func() {
+	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-reconciler", func() {
 		c.runEpochReconcileWorker(ctx, triggers)
 	})
 

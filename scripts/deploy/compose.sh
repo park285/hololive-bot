@@ -7,11 +7,14 @@ cd "${ROOT_DIR}"
 export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/compose-paths.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
+
+compose_export_release_versions "${ROOT_DIR}"
 
 compose_args=()
 compose_files=()

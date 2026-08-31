@@ -25,6 +25,8 @@ done
 cat >"${endpoint_root}/override.env" <<EOF
 CACHE_PASSWORD=fixture
 DB_PASSWORD=fixture
+HOLO_API_VERSION=fixture
+HOLO_ALARM_WORKER_VERSION=fixture
 LIVE_LOGS_PATH=/srv/hololive-logs-fixture
 HOLOLIVE_API_ENV_FILE=${endpoint_root}/app.env
 HOLOLIVE_ALARM_WORKER_ENV_FILE=${endpoint_root}/alarm-worker.env

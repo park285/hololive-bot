@@ -29,11 +29,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -167,7 +167,7 @@ func (c *Cache) configureEpoch(ctx context.Context, cacheService cache.KeyValueC
 		c.logger.Warn("member cache epoch unavailable at startup; cache bypass enabled", slog.Any("error", err))
 	}
 
-	panicguard.Go(c.logger, "member-cache-epoch-subscription", func() {
+	go panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-epoch-subscription", func() {
 		c.runEpochReconciliation(memberEpochRuntimeContext(ctx))
 	})
 

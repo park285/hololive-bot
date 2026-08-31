@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/backoff"
 	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
 
@@ -72,7 +71,7 @@ func (ps *PhotoSyncService) Start(ctx context.Context) {
 		return
 	}
 
-	ps.syncWithRetry(ctx, 3)
+	ps.syncWithRetry(ctx, photoSyncRetryOptions())
 	ps.runPeriodicSync(ctx)
 }
 
@@ -89,7 +88,7 @@ func (ps *PhotoSyncService) waitBeforeInitialSync(ctx context.Context) bool {
 
 func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
 	if err := lifecycle.RunTickerLoop(ctx, ps.syncInterval, func(ctx context.Context) error {
-		ps.syncWithRetry(ctx, 3)
+		ps.syncWithRetry(ctx, photoSyncRetryOptions())
 
 		return nil
 	}); err != nil && ctx.Err() != nil {
@@ -97,28 +96,42 @@ func (ps *PhotoSyncService) runPeriodicSync(ctx context.Context) {
 	}
 }
 
-func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, maxRetries int) {
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := ps.doSync(ctx, false)
-		if err == nil {
-			return
-		}
+func photoSyncRetryOptions() retry.RetryOptions {
+	return retry.RetryOptions{
+		MaxAttempts: 3,
+		BaseDelay:   5 * time.Second,
+		Jitter:      2 * time.Second,
+	}
+}
 
+func (ps *PhotoSyncService) syncWithRetry(ctx context.Context, options retry.RetryOptions) {
+	attempt := 0
+
+	options.OnRetry = func(attempt int, err error, _ time.Duration) {
 		ps.logger.Warn("Photo sync failed, will retry",
 			slog.Any("error", err),
 			slog.Int("attempt", attempt),
-			slog.Int("max_retries", maxRetries),
+			slog.Int("max_retries", options.MaxAttempts),
 		)
-
-		if attempt < maxRetries {
-			delay := backoff.ComputeExponentialBackoff(attempt-1, 5*time.Second, 0, 2*time.Second)
-			if !retry.Sleep(ctx, delay) {
-				return
-			}
-		}
 	}
 
-	ps.logger.Error("Photo sync failed after all retries", slog.Int("max_retries", maxRetries))
+	lastErr := retry.WithRetry(ctx, options, func(ctx context.Context) error {
+		attempt++
+
+		return ps.doSync(ctx, false)
+	})
+	if lastErr == nil {
+		return
+	}
+
+	if attempt == options.MaxAttempts {
+		ps.logger.Warn("Photo sync failed, will retry",
+			slog.Any("error", lastErr),
+			slog.Int("attempt", attempt),
+			slog.Int("max_retries", options.MaxAttempts),
+		)
+		ps.logger.Error("Photo sync failed after all retries", slog.Int("max_retries", options.MaxAttempts))
+	}
 }
 
 func (ps *PhotoSyncService) SyncAll(ctx context.Context) error {

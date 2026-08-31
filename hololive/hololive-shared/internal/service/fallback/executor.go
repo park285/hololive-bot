@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 type Trigger string
@@ -166,7 +166,7 @@ func (plan FetchPlan[K, V]) executeParallel(ctx context.Context, failed []bool) 
 		wg.Go(func() {
 			defer func() { <-limiter }()
 
-			if err := panicguard.RunE(nil, "fallback-fetch", func() error {
+			if err := panicguard.RunE(nil, panicguard.BackgroundTask, "fallback-fetch", func() error {
 				return plan.fetchParallelTarget(ctx, key, &result)
 			}); err != nil {
 				result.markFailed(i)

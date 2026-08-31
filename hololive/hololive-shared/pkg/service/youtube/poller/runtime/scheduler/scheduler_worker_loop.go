@@ -23,7 +23,7 @@ package scheduler
 import (
 	"context"
 
-	"github.com/kapu/hololive-shared/pkg/panicguard"
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 )
 
 // worker: 작업 실행 워커
@@ -41,7 +41,7 @@ func (s *Scheduler) worker(ctx context.Context, jobCh <-chan *Job, id int, stopC
 // Poll panic이 여기서 recover되지 않으면 워커 goroutine이 영구 소실되고, heap에서
 // pop된 이 job은 다시는 재등록되지 않는다 — recover를 오류로 바꿔 둘 다 살린다.
 func (s *Scheduler) executeJobGuarded(ctx context.Context, job *Job, workerID int) {
-	if err := panicguard.RunE(s.logger, "youtube-poll-job", func() error {
+	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-poll-job", func() error {
 		s.executeJob(ctx, job, workerID)
 
 		return nil

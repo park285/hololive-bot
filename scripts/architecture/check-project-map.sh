@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 WORK_FILE="${ROOT_DIR}/go.work"
 MAP_FILE="${ROOT_DIR}/docs/current/PROJECT_MAP.md"
 
+"${SCRIPT_DIR}/check-go-toolchain-parity.sh"
+
 normalize_path() {
   local raw="${1}"
   raw="${raw#./}"

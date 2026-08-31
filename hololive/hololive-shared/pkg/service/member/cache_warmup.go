@@ -27,8 +27,9 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
+
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/panicguard"
 )
 
 // 병렬 처리를 통해 대량의 데이터도 빠르게 처리한다.
@@ -59,7 +60,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 
 	for _, chunk := range chunks {
 		wg.Go(func() {
-			panicguard.Run(c.logger, "member-cache-warmup", func() {
+			panicguard.Run(c.logger, panicguard.BackgroundTask, "member-cache-warmup", func() {
 				semaphore <- struct{}{}
 
 				defer func() { <-semaphore }()
