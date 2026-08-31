@@ -1,0 +1,174 @@
+# This file is selected only for the exact image digest in run-final-image-scan.sh.
+vulnerabilities:
+  - id: CVE-2025-61726
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2025-68121
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-25679
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-25681
+    purls:
+      - "pkg:golang/golang.org/x/net@v0.47.0"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-27136
+    purls:
+      - "pkg:golang/golang.org/x/net@v0.47.0"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-27145
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-29181
+    purls:
+      - "pkg:golang/go.opentelemetry.io/otel@v1.39.0"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-32280
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-32281
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-32283
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-33811
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-33814
+    purls:
+      - "pkg:golang/golang.org/x/net@v0.47.0"
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-33818
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-34040
+    purls:
+      - "pkg:golang/github.com/moby/moby@v28.5.2%2Bincompatible"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39820
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39821
+    purls:
+      - "pkg:golang/golang.org/x/net@v0.47.0"
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39822
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39836
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-41567
+    purls:
+      - "pkg:golang/github.com/docker/docker@v28.5.2%2Bincompatible"
+      - "pkg:golang/github.com/moby/moby@v28.5.2%2Bincompatible"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-42306
+    purls:
+      - "pkg:golang/github.com/docker/docker@v28.5.2%2Bincompatible"
+      - "pkg:golang/github.com/moby/moby@v28.5.2%2Bincompatible"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-42499
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-42504
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-46600
+    purls:
+      - "pkg:golang/golang.org/x/net@v0.47.0"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56853
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56858
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56859
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56860
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56862
+    purls:
+      - "pkg:golang/stdlib@v1.25.5"
+    statement: >-
+      Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths absent from this client-only runtime. Remove on a clean upstream rebuild.
+    expired_at: 2026-09-14

@@ -1,0 +1,50 @@
+# This file is selected only for the exact image digest in run-final-image-scan.sh.
+vulnerabilities:
+  - id: CVE-2026-33818
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-39821
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-46600
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56853
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56858
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56859
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56860
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
+  - id: CVE-2026-56862
+    purls:
+      - "pkg:golang/stdlib@v1.26.5"
+    statement: >-
+      Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release built with a fixed Go toolchain.
+    expired_at: 2026-09-14
