@@ -35,16 +35,22 @@ for required in \
   'bash scripts/ci/run-final-image-scan.sh' \
   'TRIVY_VERSION: "0.74.0"' \
   'TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a' \
+  'DOCKER_COMPOSE_VERSION: v2.39.4' \
+  'DOCKER_COMPOSE_LINUX_X86_64_SHA256: 7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4' \
+  'https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64' \
   'https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz' \
   'sha256sum --check -'; do
   grep -Fq "$required" "$workflow" || fail "security workflow is missing: $required"
 done
 
+[[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v2.39.4' "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must install the exact Docker Compose release"
+
 if grep -Fq 'uses: aquasecurity/' "$workflow"; then
   fail "security workflow must not use actions blocked by the repository allowlist"
 fi
 
-[[ "$(grep -Fc "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" "$workflow")" -eq 3 ]] ||
-  fail "all three final image setup/build/scan steps must be restricted to scheduled or explicit dispatch runs"
+[[ "$(grep -Fc "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" "$workflow")" -eq 4 ]] ||
+  fail "all four final image install/setup/build/scan steps must be restricted to scheduled or explicit dispatch runs"
 
 echo "recurring npm and final-image security scan contract passed"

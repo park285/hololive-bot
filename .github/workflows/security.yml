@@ -138,6 +138,23 @@ jobs:
             (cd "${module}" && govulncheck ./...)
           done
 
+      - name: Install exact Docker Compose
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          DOCKER_COMPOSE_VERSION: v2.39.4
+          DOCKER_COMPOSE_LINUX_X86_64_SHA256: 7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4
+        run: |
+          compose_dir="${HOME}/.docker/cli-plugins"
+          compose_bin="${compose_dir}/docker-compose"
+          download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
+          mkdir -p "${compose_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+            --output "${download}"
+          printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
+          install -m 0755 "${download}" "${compose_bin}"
+          test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"
+
       - name: Install exact Trivy
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
@@ -185,6 +202,22 @@ jobs:
           cache-dependency-path: |
             hololive-bot/admin-dashboard/frontend/package-lock.json
             hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json
+
+      - name: Install exact Docker Compose
+        env:
+          DOCKER_COMPOSE_VERSION: v2.39.4
+          DOCKER_COMPOSE_LINUX_X86_64_SHA256: 7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4
+        run: |
+          compose_dir="${HOME}/.docker/cli-plugins"
+          compose_bin="${compose_dir}/docker-compose"
+          download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
+          mkdir -p "${compose_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+            --output "${download}"
+          printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
+          install -m 0755 "${download}" "${compose_bin}"
+          test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"
 
       - name: Validate recurring scan inventory
         run: bash scripts/ci/check-recurring-security-scan-contract.sh
