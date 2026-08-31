@@ -46,6 +46,8 @@
 - `architecture/review-bundles.md`
 - `architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`
 - `architecture/youtube-egress-lifecycle-contract-20260831.md`
+- `architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`
+- `architecture/youtube-egress-lifecycle-library-review-20260831.md`
 
 ## Active Implementation Plans
 
