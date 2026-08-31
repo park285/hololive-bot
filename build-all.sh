@@ -4,6 +4,7 @@
 # Usage:
 #   ./build-all.sh --no-bump            # production build + deploy
 #   ./build-all.sh --build-only
+#   ./build-all.sh --build-only --security-scan
 #   ./build-all.sh --no-bump --remote-cache
 #   ./build-all.sh --build-only --skip-local-ci
 #   ./build-all.sh hololive-api
@@ -108,6 +109,7 @@ NO_BUMP=false
 BUILD_ONLY=false
 REMOTE_CACHE=false
 SKIP_LOCAL_CI=false
+SECURITY_SCAN=false
 TARGET_SERVICES=()
 
 while [[ $# -gt 0 ]]; do
@@ -123,6 +125,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-local-ci)
             SKIP_LOCAL_CI=true
+            ;;
+        --security-scan)
+            SECURITY_SCAN=true
             ;;
         --help|-h)
             usage
@@ -152,6 +157,10 @@ if [[ "${LIVE_DEPLOY_MODE}" == true && "${NO_BUMP}" == false ]]; then
     echo "[ERROR] Live deployment requires --no-bump so VERSION and source revision remain immutable" >&2
     echo "        Use --build-only or a service target for local/dev image builds." >&2
     usage >&2
+    exit 2
+fi
+if [[ "${SECURITY_SCAN}" == true && ( "${BUILD_ONLY}" != true || ${#TARGET_SERVICES[@]} -ne 0 ) ]]; then
+    echo "[ERROR] --security-scan requires an all-service --build-only invocation" >&2
     exit 2
 fi
 
@@ -201,6 +210,10 @@ declare -A VERSION_DIR_BY_SERVICE=(
 
 COMPOSE_FILE_PATHS=(deploy/compose/docker-compose.prod.yml)
 COMPOSE_FILES=(-f deploy/compose/docker-compose.prod.yml)
+if [[ "${SECURITY_SCAN}" == true ]]; then
+    COMPOSE_FILE_PATHS+=(deploy/compose/docker-compose.security-scan.yml)
+    COMPOSE_FILES+=(-f deploy/compose/docker-compose.security-scan.yml)
+fi
 if [[ "${REMOTE_CACHE}" == true ]]; then
     if [[ -z "${REMOTE_CACHE_PREFIX:-}" ]]; then
         echo "[ERROR] --remote-cache requires REMOTE_CACHE_PREFIX" >&2

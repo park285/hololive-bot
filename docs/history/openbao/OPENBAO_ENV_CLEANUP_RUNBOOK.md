@@ -1,5 +1,9 @@
 # OpenBao Env Cleanup Runbook
 
+> Historical document. OpenBao was retired on 2026-08-08. Do not execute this cleanup
+> procedure. Current secrets come from the `/etc/stack-secrets/hololive-bot` host mirror
+> and all live operations route through `hololive-bot-ops`.
+
 ## 목적
 
 OpenBao Agent가 렌더링한 split env를 운영 Compose/env_file 정본으로 고정하기 위해, 운영 호스트에 남은 local `.env` 파일과 shell profile export 잔재를 정리합니다. 중앙 Compose 입력은 `/run/hololive-bot/compose.env`, AP Compose 입력은 `/run/hololive-bot/ap-compose.env`입니다. legacy `/run/hololive-bot/env`는 전환 기간 rollback용 병행 렌더입니다.

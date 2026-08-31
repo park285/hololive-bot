@@ -1,5 +1,9 @@
 # Three-Runtime Cutover 실행 기록 — 2026-06-27
 
+> Historical document. This completed production cutover is not a current procedure.
+> Current runtime ownership and runbooks live under `docs/current/` and live operations
+> route through `hololive-bot-ops`.
+
 5→3 runtime 통합의 **production 컷오버** 한 건에 대한 전체 범위 기록.
 리뷰어가 준비·실행·장애·수정·복구·검증·git 반영을 완전히 재구성할 수 있도록 작성한다.
 

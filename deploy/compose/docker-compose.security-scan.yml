@@ -1,0 +1,21 @@
+services:
+  admin-dashboard:
+    build:
+      provenance: false
+      sbom: false
+  hololive-alarm-worker:
+    build:
+      provenance: false
+      sbom: false
+  hololive-api:
+    build:
+      provenance: false
+      sbom: false
+  hololive-db-migrate:
+    build:
+      provenance: false
+      sbom: false
+  youtube-collector:
+    build:
+      provenance: false
+      sbom: false

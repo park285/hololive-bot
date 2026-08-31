@@ -94,7 +94,7 @@ Required follow-up:
 
 ### 3. Docker Compose deployment guide still contains stale operations
 
-`docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` still contains
+`docs/history/runbooks/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` still contains
 stale operational instructions:
 
 - retired split runtime names such as `hololive-bot`,
@@ -125,7 +125,7 @@ Before marking the broader H3 smoke/ops alignment as complete:
       rollback verification.
 - [x] Extend `scripts/deploy/test-compose-h3-contract.sh` so rollback health
       verification cannot regress to HTTP.
-- [x] Update `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` for
+- [x] Update `docs/history/runbooks/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md` for
       current `hololive-api` service naming and H3 health verification.
 - [x] Re-run:
 
@@ -149,7 +149,7 @@ explicit scoped approval.
 
 - `scripts/deploy/ap-rollback.sh`: AP 롤백 health 검증을 host-side HTTP `curl`에서 컨테이너 `./bin/healthcheck` H3 probe로 전환(컨테이너 health/StartedAt/에러 마커 검사는 유지).
 - `scripts/deploy/test-compose-h3-contract.sh`: AP H3-only 스캔에 `ap-rollback.sh`를 추가하고, 롤백 health가 HTTP로 회귀하지 못하도록 H3 healthcheck positive assertion을 추가.
-- `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`: retired split 서비스명(`hololive-bot`/`hololive-admin-api`/`llm-scheduler`)을 통합 `hololive-api` plane 네이밍으로 정리, 내부 HTTP health 예시를 H3 `./bin/healthcheck`로 교체, Iris webhook URL을 외부 HTTP/H3 경계로 명시.
+- `docs/history/runbooks/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`: retired split 서비스명(`hololive-bot`/`hololive-admin-api`/`llm-scheduler`)을 통합 `hololive-api` plane 네이밍으로 정리, 내부 HTTP health 예시를 H3 `./bin/healthcheck`로 교체, Iris webhook URL을 외부 HTTP/H3 경계로 명시.
 
 재검증(`test-compose-h3-contract.sh`, `smoke-compose-config.sh`, `smoke-runtime-health.sh`, `check-runbook-coverage.sh`, `check-doc-links-no-local-paths.sh`, `git diff --check`) 통과.
 
@@ -161,4 +161,3 @@ All five reviewers converged after rebuttal:
 - The central `smoke-runtime-health.sh` fix is correct.
 - The overall proposition remains false because AP rollback and deployment
   guide surfaces are still out of sync with the H3-only runtime contract.
-

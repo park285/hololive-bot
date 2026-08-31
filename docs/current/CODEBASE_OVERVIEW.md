@@ -113,7 +113,6 @@ The production baseline is Docker Compose, not Kubernetes. The main files are:
 - `scripts/deploy/`: deployment and compose validation helpers;
 - `scripts/logs/`: status and smoke-check helpers;
 - `docs/current/runbooks/`: current service runbooks (`youtube-collector.md` is the YouTube collect runtime);
-- `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`: historical Compose procedure (retired `youtube-producer` names may remain there).
 
 Live deploy, restart, rollback, secret writes, and production config mutation require explicit operator approval.
 
@@ -135,7 +134,7 @@ Current operational details live in `docs/current/services/youtube-collector.md`
 | Find runtime ownership | `docs/current/SERVICE_OWNERSHIP.md` |
 | Find module/service inventory | `docs/current/PROJECT_MAP.md` |
 | Change deploy shape | `deploy/compose/docker-compose.prod.yml`, `deploy/compose/docker-compose.seoul.yml`, `docs/current/DEPLOYMENT_BASELINE.md` |
-| Release, rollback, or deploy | `docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md`, `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
+| Release, rollback, or deploy | `docs/current/runbooks/release.md`, `docs/current/runbooks/rollback.md` |
 | Change a runtime API contract | `docs/current/CONTRACT_MAP.md`, `docs/current/contracts/`, `hololive/hololive-shared/pkg/contracts/` |
 | Change YouTube collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |
 | Change Community collection | `hololive/hololive-youtube-collector/`, `docs/current/services/youtube-collector.md`, `docs/current/runbooks/youtube-collector.md` |

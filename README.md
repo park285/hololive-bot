@@ -4,7 +4,7 @@
 
 카카오톡(KakaoTalk) 챗봇으로 실시간 방송 알림, 방송 스트리밍 상태 조회, 멤버 소식 제공, 시스템 원격 관리 기능을 처리합니다.
 
-본 문서는 저장소의 메인 가이드라인입니다. 시스템 설계 및 모듈 간 아키텍처 상세 사양은 [PROJECT_MAP.md](docs/current/PROJECT_MAP.md) 문서를, 상세 서비스 배포 절차는 [DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md) 가이드를 최우선 사양(SSOT)으로 삼습니다.
+본 문서는 저장소의 메인 가이드라인입니다. 시스템 설계 및 모듈 간 아키텍처 상세 사양은 [PROJECT_MAP.md](docs/current/PROJECT_MAP.md)를, 서비스별 배포·복구 절차는 [Current Runbooks](docs/current/runbooks/README.md)를 최우선 사양(SSOT)으로 삼습니다.
 
 ---
 
@@ -97,7 +97,7 @@ go test ../shared-go/... \
 ./scripts/deploy/compose-redeploy-service.sh youtube-collector
 ```
 
-원격 인프라 노드(`youtube-collector-b`) 배포 매뉴얼은 [DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md](docs/runbook_execution/DOCKER_COMPOSE_DEPLOYMENT_GUIDE.md) 내부의 `./scripts/deploy/ap-deploy.sh <host>` 운영 절차를 준수해 주십시오.
+원격 인프라 노드(`youtube-collector-b`) 작업은 [youtube-collector runbook](docs/current/runbooks/youtube-collector.md)을 `hololive-bot-ops`로 라우팅하십시오.
 
 ---
 
