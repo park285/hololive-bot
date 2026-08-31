@@ -22,7 +22,6 @@ docs/decisions/records/DEC-20260814-hololive-youtube-three-provider-convergence-
 docs/design/2026-04-09-hololive-improved-version-page-todo.md
 docs/design/2026-04-09-page14-shared-cleanup-inventory.md
 docs/design/2026-05-15-repo-structure-refactor-worklog.md
-docs/design/2026-06-21-osaka-tiny-vps-runtime-handoff.md
 docs/design/three-runtime-consolidation-plan.md
 docs/handoff/p2-reports-split.md
 docs/handoff/youtube-producer-multi-worker-phase1.md

@@ -1,5 +1,10 @@
 # Osaka Tiny VPS Runtime Handoff
 
+> Historical handoff. The host-native runtime decision and supporting deploy/rollback path are
+> complete. Do not use the unresolved options or live commands below as an operational procedure.
+> Current ownership is [`youtube-collector.md`](../../current/runbooks/youtube-collector.md) via
+> `hololive-bot-ops`.
+
 > 실제 tailnet 주소/호스트는 private ops evidence 참조.
 
 ## Goal
