@@ -83,4 +83,6 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Project Map: `../PROJECT_MAP.md`
 - Contract Map: `../CONTRACT_MAP.md`
 - Runbook: `../runbooks/alarm-worker.md`
-- YouTube egress lifecycle transition ownership and implementation design: `../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`
+- YouTube egress lifecycle ownership decision (planned): `../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`
+- YouTube egress lifecycle normative contract (planned): `../architecture/youtube-egress-lifecycle-contract-20260831.md`
+- YouTube egress lifecycle implementation plan: `../plans/2026-08-31-youtube-egress-lifecycle-implementation.md`
