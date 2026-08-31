@@ -1801,6 +1801,8 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"SESSION_SECRET=dummy",
 		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
 		"HOLOLIVE_RUNTIME_GID=1002",
+		"HOLO_API_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-api/VERSION")),
+		"HOLO_ALARM_WORKER_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-alarm-worker/VERSION")),
 	)
 
 	for key, value := range overrides {
@@ -1906,6 +1908,8 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 		"CLIPROXY_BASE_URL=https://cliproxy.invalid",
 		"SEOUL_METRICS_BIND_IP=100.100.1.5",
 		"HOLOLIVE_RUNTIME_GID=1002",
+		"HOLO_API_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-api/VERSION")),
+		"HOLO_ALARM_WORKER_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-alarm-worker/VERSION")),
 	)
 
 	output, err := cmd.CombinedOutput()
