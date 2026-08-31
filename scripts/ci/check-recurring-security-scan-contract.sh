@@ -38,7 +38,7 @@ for required in \
   grep -Fq "$required" "$workflow" || fail "security workflow is missing: $required"
 done
 
-[[ "$(grep -Fc "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" "$workflow")" -eq 1 ]] ||
-  fail "final image scan must be restricted to scheduled or explicit dispatch runs"
+[[ "$(grep -Fc "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" "$workflow")" -eq 3 ]] ||
+  fail "all three final image setup/build/scan steps must be restricted to scheduled or explicit dispatch runs"
 
 echo "recurring npm and final-image security scan contract passed"
