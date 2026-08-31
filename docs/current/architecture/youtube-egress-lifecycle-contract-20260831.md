@@ -60,7 +60,7 @@ Retained physical row 중 logical key가 같은 집합입니다. 그룹 안에�
 owner = 최소 (created_at, delivery_id)
 ```
 
-단, durable `SENT`, `QUARANTINED`, `SENDING` evidence는 owner의 현재 `PENDING/FAILED`보다 우선합니다. 자세한 우선순위는 logical resolution 절을 따릅니다.
+Durable `SENT`, `QUARANTINED`, `SENDING` evidence는 owner의 현재 `PENDING/FAILED`보다 우선합니다. Impossible mixed state는 우선순위로 숨기지 않고 invariant breach로 분류합니다.
 
 ### Provider operation
 
@@ -308,9 +308,24 @@ Current claimed row와 same logical key인 retained physical row를 bounded batc
 - Current batch member는 한 번에 resolve합니다. Per-row N+1 query를 기본 구현으로 사용하지 않습니다.
 - Overflow는 fail-closed preparation error이며 provider를 호출하지 않습니다.
 
+### Impossible mixed states
+
+다음은 정상 priority로 수용하지 않고 `LogicalInvariantBreach`입니다.
+
+```text
+SENT 없이 QUARANTINED와 SENDING 동시 존재
+SENT 없이 SENDING 두 건 이상 존재
+동일 physical row가 서로 다른 canonical logical key로 해석됨
+같은 operation에 동일 logical key owner 중복
+```
+
+Invariant breach에서는 provider를 호출하거나 follower를 임의 상태로 mirror하지 않습니다. Critical metric과 audit evidence를 남기고 operator 조사에 맡깁니다.
+
+`SENT` evidence가 하나라도 있으면 confirmed fulfillment가 unknown/in-flight를 해소하므로 `LogicalFulfilled`가 우선합니다.
+
 ### Resolution priority
 
-Group snapshot을 다음 순서로 판정합니다.
+Impossible mixed state가 없을 때 다음 순서로 판정합니다.
 
 ```text
 1. SENT evidence 존재
@@ -319,15 +334,13 @@ Group snapshot을 다음 순서로 판정합니다.
 2. QUARANTINED evidence 존재
    -> LogicalUnresolved
 
-3. SENDING evidence 존재
+3. SENDING evidence 1건 존재
    -> LogicalInFlight
 
 4. PENDING/FAILED 중 최소 (created_at,id) owner 선택
    owner=PENDING -> LogicalActive
    owner=FAILED  -> LogicalFailed
 ```
-
-`SENT`는 `QUARANTINED`보다 우선합니다. Confirmed fulfillment가 unknown을 해소하기 때문입니다.
 
 ### Resolution actions
 
@@ -382,6 +395,7 @@ LogicalUnresolved
 LogicalInFlight
 LogicalOwnerPendingElsewhere
 LogicalFailed
+LogicalInvariantBreach
 ClaimDeferred
 PreparationRetryableFailure
 PreparationPermanentFailure
@@ -475,11 +489,9 @@ Stable request ID의 존재만으로 retry-safe가 되지는 않습니다. Provi
 
 ### Owner retry
 
-Transaction 또는 일관된 command batch에서:
-
 - Owner: `SENDING/PENDING leased -> PENDING`, attempt +1, due 설정, lock clear, version +1
 - Follower `PENDING`: attempt 유지, due owner와 정렬, lock clear, version +1
-- Follower가 terminal/in-flight mixed state면 conflict/atomicity breach
+- Terminal/in-flight mixed follower는 conflict 또는 invariant breach
 
 ### Owner terminal failure
 
@@ -489,15 +501,13 @@ Transaction 또는 일관된 command batch에서:
 
 ### Owner quarantine
 
-Stale owner `SENDING`:
-
-- Owner: `QUARANTINED`, attempt +1, lock clear, version +1
+- Stale owner: `QUARANTINED`, attempt +1, lock clear, version +1
 - Follower `PENDING/FAILED`: `QUARANTINED`, attempt 유지, lock clear, version +1
-- Existing `SENT` evidence가 발견되면 quarantine보다 fulfilled reconciliation이 우선합니다.
+- Existing `SENT` evidence가 발견되면 fulfilled reconciliation이 우선합니다.
 
 ### Owner success
 
-Success transaction은 다음을 수행합니다.
+Success transaction:
 
 1. Operation owner 전체 exact `SENDING + SendFence` 확인
 2. Owner를 `SENT`, canonical `sent_at`, lock clear, version +1
@@ -507,11 +517,11 @@ Success transaction은 다음을 수행합니다.
 6. `RequireAlreadySent`는 durable sent를 확인
 7. Latency classification과 tracking mutation commit
 
-Tracking이 neither exact-token nor already-sent이면 transaction을 rollback합니다. Provider를 다시 호출하지 않습니다.
+Tracking이 neither exact-token nor already-sent이면 rollback합니다. Provider는 다시 호출하지 않습니다.
 
 ### Already-fulfilled reconciliation
 
-Provider call 전 `SENT` evidence가 있으면 success tracking을 새로 만들지 않고 group follower만 `SENT`로 reconcile합니다.
+Provider call 전 `SENT` evidence가 있으면 tracking mutation 없이 follower만 `SENT`로 reconcile합니다.
 
 ## Decision model
 
@@ -610,21 +620,20 @@ Stale sweeper가 owner와 follower group을 quarantine합니다.
 
 ## Revive
 
-Revive는 outbox row가 아니라 logical group 단위로 판정합니다.
+Revive는 logical group 단위로 판정합니다.
 
 허용 조건:
 
 - `SENT`/`QUARANTINED` evidence 없음
 - deterministic owner가 `FAILED`
-- 관련 outbox가 never-sent이며 freshness window 안
-- active owner/follower lock 없음
+- 관련 outbox never-sent이며 freshness window 안
+- active group lock 없음
 - revive policy와 batch limit 충족
 
 적용:
 
-- Owner: `PENDING`, attempt 0, due now, lock/error clear, version +1
-- Follower `FAILED`: `PENDING`, attempt 0, due owner와 정렬, lock/error clear, version +1
-- 모든 touched outbox는 표준 aggregate projector로 갱신
+- Owner/follower: `PENDING`, attempt 0, due 정렬, lock/error clear, version +1
+- Touched outbox: 표준 aggregate projector
 
 Commit `Indeterminate`에서는 stale selected ID set을 반복하지 않고 eligibility selection부터 다시 수행합니다.
 
@@ -672,12 +681,14 @@ Logical group transition은 touched outbox ID 전체를 반환하고 projector�
 
 ## Cleanup과 retention
 
-Per-room terminal row는 logical dedupe evidence입니다. Cleanup은 다음을 지켜야 합니다.
+Per-room terminal row는 logical dedupe evidence입니다.
 
-- 같은 logical group에 nonterminal row가 있으면 terminal owner/follower를 삭제하지 않습니다.
-- Terminal evidence retention은 `ClaimFreshnessWindow + ReviveFreshnessWindow + CleanupSafetyMargin`보다 길어야 합니다.
+- Same-logical nonterminal row가 있으면 terminal owner/follower를 삭제하지 않습니다.
+- 기존 `CleanupAfter`가 terminal evidence retention을 소유합니다.
+- `CleanupSafetyMargin = max(outboxCleanupLoopInterval, 2 * AggregateSyncInterval)`입니다.
+- `CleanupAfter >= ClaimFreshnessWindow + ReviveFreshnessWindow + CleanupSafetyMargin`이어야 합니다.
+- Cleanup retry가 cutoff를 더 최신 시각으로 앞당기면 안 됩니다.
 - Cleanup 뒤 source가 같은 old post를 다시 enqueue할 수 있는 기간이 남아 있으면 안 됩니다.
-- Retention 변경은 same-room duplicate risk를 검토해야 합니다.
 
 Persisted logical key/receipt ledger는 이번 범위에 추가하지 않습니다. Query/retention evidence가 computed group의 안전 또는 성능 한계를 보여 줄 때 별도 결정으로 검토합니다.
 
@@ -710,7 +721,7 @@ DeliverySendTimeout > 0
 LockTimeout >= DeliverySendTimeout + max(2*PollInterval, 5s)
 ReviveFreshnessWindow > 0 when revive enabled
 ClaimFreshnessWindow >= ReviveFreshnessWindow + ReviveInterval
-TerminalRetention >= ClaimFreshnessWindow + ReviveFreshnessWindow + CleanupSafetyMargin
+CleanupAfter >= ClaimFreshnessWindow + ReviveFreshnessWindow + CleanupSafetyMargin
 ```
 
 Production invalid config는 startup에서 거부합니다.
@@ -767,6 +778,8 @@ TestFailedOwnerMirrorsFollowerFailed
 TestSentEvidenceReconcilesFailedAndQuarantinedFollowers
 TestQuarantinedEvidenceBlocksProviderCall
 TestSendingEvidenceDefersProviderCall
+TestQuarantineAndSendingMixedStateIsBreach
+TestMultipleSendingRowsIsBreach
 TestProceedCacheHitStillResolvesLogicalGroup
 TestLogicalGroupOverflowFailsClosed
 ```
@@ -809,7 +822,7 @@ TestAggregateReconcilesAfterDeliveryCommitCrash
 TestReviveResetsLogicalOwnerAndFollowers
 TestReviveRejectsSentOrQuarantinedGroup
 TestCleanupRetainsTerminalEvidenceWhileFollowerNonterminal
-TestCleanupRetentionExceedsFreshnessEnvelope
+TestCleanupAfterExceedsFreshnessEnvelope
 ```
 
 ## 완료 판정
@@ -818,7 +831,7 @@ TestCleanupRetentionExceedsFreshnessEnvelope
 2. Community/Shorts canonical logical key resolver가 하나입니다.
 3. Logical group의 provider/attempt owner가 하나입니다.
 4. Follower가 owner retry budget을 우회하지 않습니다.
-5. Durable `SENT/SENDING/QUARANTINED/FAILED/PENDING` state가 같은 규칙으로 해석됩니다.
+5. Durable state와 impossible mixed state를 같은 규칙으로 해석합니다.
 6. Post-level cache가 room-level logical resolution을 생략하지 않습니다.
 7. Outcome unknown은 write, release, fallback, resend를 하지 않습니다.
 8. Claim과 모든 mutation이 version을 증가시킵니다.
@@ -828,6 +841,6 @@ TestCleanupRetentionExceedsFreshnessEnvelope
 12. ID-only success recovery가 없습니다.
 13. Child outbox status는 aggregate projector만 계산합니다.
 14. Worker 전용 store/row model이 alarm-worker internal에 있습니다.
-15. Cleanup이 logical terminal evidence를 freshness envelope보다 오래 보존합니다.
+15. CleanupAfter가 logical terminal evidence를 freshness envelope보다 오래 보존합니다.
 16. Contract, logical-owner, tracking, integration, crash, commit fault-injection, race test가 통과합니다.
 17. Decision record를 `verified`로 올릴 evidence가 저장소에 남습니다.
