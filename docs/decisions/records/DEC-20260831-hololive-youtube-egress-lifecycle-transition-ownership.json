@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership",
+  "title": "YouTube egress lifecycle은 typed planner가 전이를 결정하고 PostgreSQL이 fenced CAS로 집행한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-08-31",
+  "summary": "YouTube notification outbox와 per-room delivery의 전이 정책을 alarm-worker 내부의 순수 typed planner로 모으고 PostgreSQL은 durable state, claim fencing, expected state/version CAS, transaction과 aggregate projection을 소유한다. SendEngine은 문자열 failure bucket 대신 typed outcome을 반환하며 outcome unknown은 SENDING을 유지한 뒤 QUARANTINED로 격리한다. SENT는 자동 terminal이고 QUARANTINED는 자동 revive하지 않는다. child delivery가 생긴 뒤 outbox status는 atomic aggregate SQL만 갱신한다. 범용 FSM 라이브러리는 structured mutation decision과 기존 schema 통합 이득이 부족해 현재 도입하지 않는다.",
+  "sources": [
+    "docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#결정",
+    "docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#구현-순서",
+    "docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#완료-조건"
+  ],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "trigger": "선택된 transition ID와 complete structured mutation plan, caller-owned state, optimistic concurrency seam을 제공하는 다중-maintainer FSM library가 production 성숙도를 확보하고 동일 contract test에서 adapter 포함 net policy code를 실질적으로 줄일 때"
+  }
+}
