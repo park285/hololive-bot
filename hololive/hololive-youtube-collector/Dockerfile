@@ -72,7 +72,7 @@ RUN \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
 
-FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
+FROM scratch
 
 ARG VERSION=dev
 ARG REVISION=unknown
@@ -92,6 +92,11 @@ WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=youtubejs --link /lib/ld-musl-*.so.1 /lib/
+COPY --from=youtubejs --link /usr/lib/libgcc_s.so.1 /usr/lib/
+COPY --from=youtubejs --link /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=youtubejs --link /usr/local/bin/node /usr/local/bin/node
+COPY --from=youtubejs --link --chmod=1777 /tmp /tmp
 COPY --from=builder --link --chown=1000:1000 /dist ./
 COPY --from=youtubejs --chown=1000:1000 /app/youtubejs ./youtubejs
 
