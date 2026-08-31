@@ -38,12 +38,20 @@ case "$*" in
   *) exit 1 ;;
 esac
 SH
+cat >"${fixture}/fake-bin/python" <<'SH'
+#!/bin/bash
+if [[ "$*" == *'import platform; print(platform.python_version())'* ]]; then
+  echo '3.14.7'
+  exit 0
+fi
+printf 'python %s\n' "$*" >>"${GATE_TEST_LOG}"
+SH
 cat >"${fixture}/scripts/ci/local-ci.sh" <<'SH'
 #!/bin/bash
 printf 'local-ci scope=%s base=%s dependency=%s\n' \
   "${LOCAL_CI_GO_SCOPE}" "${BASE_REF}" "${RUN_DEPENDENCY_HYGIENE}" >>"${GATE_TEST_LOG}"
 SH
-chmod +x "${fixture}/fake-bin/bash" "${fixture}/fake-bin/git" \
+chmod +x "${fixture}/fake-bin/bash" "${fixture}/fake-bin/git" "${fixture}/fake-bin/python" \
   "${fixture}/scripts/ci/local-ci.sh"
 
 run_phase() {
@@ -51,7 +59,7 @@ run_phase() {
   shift
   : >"${TMP_DIR}/${name}.log"
   GATE_TEST_LOG="${TMP_DIR}/${name}.log" PRE_PUSH_GATE_SCOPED=1 \
-    CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+    CI_PYTHON_BIN="${fixture}/fake-bin/python" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
     PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" "$@" \
     >"${TMP_DIR}/${name}.out" 2>"${TMP_DIR}/${name}.err"
 }
@@ -78,7 +86,7 @@ fi
 
 : >"${TMP_DIR}/full.log"
 GATE_TEST_LOG="${TMP_DIR}/full.log" PRE_PUSH_GATE_SCOPED=1 PRE_PUSH_MODE=full \
-  CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+  CI_PYTHON_BIN="${fixture}/fake-bin/python" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
   PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" --phase=ambient \
   >"${TMP_DIR}/full.out" 2>"${TMP_DIR}/full.err"
 grep -Fq 'scripts/ci/public-pr-collector-helper-gate.sh' "${TMP_DIR}/full.log" || \
@@ -90,7 +98,7 @@ cmp -s "${TMP_DIR}/expected.log" "${TMP_DIR}/default.log" || fail "default order
 
 : >"${TMP_DIR}/invalid-mode.log"
 if GATE_TEST_LOG="${TMP_DIR}/invalid-mode.log" PRE_PUSH_GATE_SCOPED=1 PRE_PUSH_MODE=invalid \
-  CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+  CI_PYTHON_BIN="${fixture}/fake-bin/python" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
   PATH="${fixture}/fake-bin:${PATH}" /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" \
   >"${TMP_DIR}/invalid-mode.out" 2>"${TMP_DIR}/invalid-mode.err"; then
   fail "invalid mode was accepted"
@@ -101,12 +109,12 @@ if grep -Fq 'scripts/ci/check-workflow-secrets.sh' "${TMP_DIR}/invalid-mode.log"
   fail "workflow checks ran before route validation failed"
 fi
 
-if PRE_PUSH_GATE_SCOPED=1 CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+if PRE_PUSH_GATE_SCOPED=1 CI_PYTHON_BIN="${fixture}/fake-bin/python" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
   PATH="${fixture}/fake-bin:${PATH}" \
   /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" reusable >/dev/null 2>&1; then
   fail "positional phase alias must fail"
 fi
-if PRE_PUSH_GATE_SCOPED=1 CI_PYTHON_BIN="${CI_PYTHON_BIN}" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
+if PRE_PUSH_GATE_SCOPED=1 CI_PYTHON_BIN="${fixture}/fake-bin/python" CI_PYTHON_RUNTIME_ROOT="${fixture}" \
   PATH="${fixture}/fake-bin:${PATH}" \
   /bin/bash "${fixture}/scripts/ci/pre-push-gate.sh" --phase reusable >/dev/null 2>&1; then
   fail "split phase argument must fail"
