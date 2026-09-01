@@ -131,18 +131,18 @@ func (s *leaseScheduler) acceptDequeued(ctx context.Context, spec *joblease.JobS
 		return joblease.JobSpec{}, false
 	}
 
-	s.mu.Lock()
+	s.queueMu.Lock()
 	delete(s.queuedAt, spec.JobKey)
-	s.mu.Unlock()
+	s.queueMu.Unlock()
 
 	return *spec, true
 }
 
 func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
-	s.mu.Lock()
+	s.queueMu.Lock()
 
 	if _, exists := s.queued[jobKey]; exists {
-		s.mu.Unlock()
+		s.queueMu.Unlock()
 
 		return EnqueueDeduped, false
 	}
@@ -165,7 +165,7 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 		delete(s.queuedAt, jobKey)
 	}
 
-	s.mu.Unlock()
+	s.queueMu.Unlock()
 
 	if overflow {
 		s.reportFatal(collecterr.New(collecterr.Internal, collecterr.ClassInternal, "lease scheduler queued set exceeded queue capacity"))
@@ -177,10 +177,10 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 }
 
 func (s *leaseScheduler) unmarkQueued(jobKey string) {
-	s.mu.Lock()
+	s.queueMu.Lock()
 	delete(s.queued, jobKey)
 	delete(s.queuedAt, jobKey)
-	s.mu.Unlock()
+	s.queueMu.Unlock()
 }
 
 func (s *leaseScheduler) drainQueue() {
@@ -195,9 +195,9 @@ func (s *leaseScheduler) drainQueue() {
 }
 
 func (s *leaseScheduler) resetQueued() {
-	s.mu.Lock()
+	s.queueMu.Lock()
 
 	s.queued = make(map[string]struct{})
 	s.queuedAt = make(map[string]time.Time)
-	s.mu.Unlock()
+	s.queueMu.Unlock()
 }

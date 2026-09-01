@@ -30,8 +30,8 @@ func (s *leaseScheduler) emitFatal(err error) {
 }
 
 func (s *leaseScheduler) cancelDiscoveryAndWorkers() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 
 	if s.lifecycleState() == SchedulerRunning {
 		s.state = SchedulerStopping
@@ -47,8 +47,12 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 		return SchedulerSnapshot{}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lifecycleMu.Lock()
+
+	state := s.lifecycleState()
+	s.lifecycleMu.Unlock()
+
+	s.queueMu.Lock()
 
 	depth := 0
 	oldestQueueAge := time.Duration(0)
@@ -66,8 +70,13 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 		}
 	}
 
+	s.queueMu.Unlock()
+
+	s.cycleMu.Lock()
+	defer s.cycleMu.Unlock()
+
 	return SchedulerSnapshot{
-		State:                  s.lifecycleState(),
+		State:                  state,
 		QueueDepth:             depth,
 		QueueCapacity:          s.config.QueueCapacity,
 		Discovered:             s.discovered,
