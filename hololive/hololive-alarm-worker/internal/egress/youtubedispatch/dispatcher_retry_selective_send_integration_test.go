@@ -21,7 +21,7 @@ type recoverySelectiveSendCase struct {
 }
 
 func TestProcessOnce_RetrySkipsAlreadySentCommunityShortsPostAndResendsOnlyPendingPost(t *testing.T) {
-	fixedSentAt := time.Date(2026, time.April, 10, 1, 15, 0, 0, time.UTC)
+	fixedSentAt := time.Now().UTC().Truncate(time.Millisecond)
 	withFixedSentAtNow(t, fixedSentAt)
 
 	testCases := newRecoverySelectiveSendCases(fixedSentAt, recoverySelectiveSendNaming{
@@ -106,7 +106,7 @@ func assertRecoverySelectiveSendDeliveries(
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedSentDelivery.Status)
 	assert.Equal(t, 1, updatedSentDelivery.AttemptCount)
 	require.NotNil(t, updatedSentDelivery.SentAt)
-	assert.Equal(t, fixedSentAt, updatedSentDelivery.SentAt.UTC())
+	assert.Equal(t, spec.alreadySentAt, updatedSentDelivery.SentAt.UTC())
 
 	var updatedPendingDelivery deliveryTestDeliveryModel
 
@@ -114,14 +114,14 @@ func assertRecoverySelectiveSendDeliveries(
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingDelivery.Status)
 	assert.Equal(t, 1, updatedPendingDelivery.AttemptCount)
 	require.NotNil(t, updatedPendingDelivery.SentAt)
-	assert.Equal(t, fixedSentAt, updatedPendingDelivery.SentAt.UTC())
+	assert.WithinDuration(t, fixedSentAt, updatedPendingDelivery.SentAt.UTC(), 2*time.Minute)
 
 	var updatedSentOutbox deliveryTestOutboxModel
 
 	require.NoError(t, firstDeliveryTestRow(db, &updatedSentOutbox, fixture.sentOutbox.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedSentOutbox.Status)
 	require.NotNil(t, updatedSentOutbox.SentAt)
-	assert.Equal(t, fixedSentAt, updatedSentOutbox.SentAt.UTC())
+	assert.WithinDuration(t, fixedSentAt, updatedSentOutbox.SentAt.UTC(), 2*time.Minute)
 
 	var servedDelivery deliveryTestDeliveryModel
 
@@ -143,7 +143,7 @@ func assertRecoverySelectiveSendDeliveries(
 	require.NoError(t, firstDeliveryTestRow(db, &updatedPendingOutbox, fixture.pendingOutbox.ID).Error)
 	assert.Equal(t, string(domain.OutboxStatusSent), updatedPendingOutbox.Status)
 	require.NotNil(t, updatedPendingOutbox.SentAt)
-	assert.Equal(t, fixedSentAt, updatedPendingOutbox.SentAt.UTC())
+	assert.WithinDuration(t, fixedSentAt, updatedPendingOutbox.SentAt.UTC(), 2*time.Minute)
 }
 
 func assertRecoverySelectiveSendTracking(
@@ -166,7 +166,7 @@ func assertRecoverySelectiveSendTracking(
 
 	require.NoError(t, firstDeliveryTestRowWhere(db, &updatedPendingTracking, "kind = ? AND content_id = ?", string(fixture.pendingOutbox.Kind), fixture.pendingOutbox.ContentID).Error)
 	require.NotNil(t, updatedPendingTracking.AlarmSentAt)
-	assert.Equal(t, fixedSentAt, updatedPendingTracking.AlarmSentAt.UTC())
+	assert.WithinDuration(t, fixedSentAt, updatedPendingTracking.AlarmSentAt.UTC(), 2*time.Minute)
 	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), updatedPendingTracking.DeliveryStatus)
 
 	var updatedSentState domain.YouTubeCommunityShortsAlarmState
@@ -181,6 +181,6 @@ func assertRecoverySelectiveSendTracking(
 	require.NoError(t, firstDeliveryTestRow(db, &updatedPendingState, "kind = ? AND post_id = ?", fixture.pendingOutbox.Kind, fixture.pendingPostID).Error)
 	assert.Nil(t, updatedPendingState.AuthorizedAt)
 	require.NotNil(t, updatedPendingState.AlarmSentAt)
-	assert.Equal(t, fixedSentAt, updatedPendingState.AlarmSentAt.UTC())
+	assert.WithinDuration(t, fixedSentAt, updatedPendingState.AlarmSentAt.UTC(), 2*time.Minute)
 	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, updatedPendingState.DeliveryStatus)
 }

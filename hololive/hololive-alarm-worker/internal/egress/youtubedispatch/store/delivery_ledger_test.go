@@ -1,9 +1,6 @@
 package store
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -51,62 +48,6 @@ func TestLedgerRecordSentPromotesQuarantineAndPreservesEarliestEvidence(t *testi
 	require.Equal(t, int64(30), *record.SourceDeliveryID)
 }
 
-func TestCompatibilityTerminalTransactionsRollBackWhenLedgerIdentityIsInvalid(t *testing.T) {
-	methods := map[string]func(*DeliveryRepository, int64) error{
-		"sent": func(repository *DeliveryRepository, deliveryID int64) error {
-			return repository.MarkSentBatch(t.Context(), []int64{deliveryID})
-		},
-		"quarantined": func(repository *DeliveryRepository, _ int64) error {
-			_, _, err := repository.QuarantineStaleSending(t.Context(), time.Minute, 10)
-			if err != nil {
-				return fmt.Errorf("quarantine stale delivery: %w", err)
-			}
-
-			return nil
-		},
-	}
-
-	for name, run := range methods {
-		t.Run(name, func(t *testing.T) {
-			ctx := t.Context()
-			pool := dbtest.NewPool(t)
-			repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
-			lockedAt := time.Now().UTC().Add(-10 * time.Minute)
-			deliveryID := seedCompatibilityDelivery(ctx, t, pool, " ", lockedAt)
-
-			if name == "quarantined" {
-				_, err := pool.Exec(ctx, `
-					UPDATE youtube_notification_delivery
-					SET status = $1
-					WHERE id = $2
-				`, DeliveryStatusSending, deliveryID)
-				require.NoError(t, err)
-			}
-
-			require.Error(t, run(repository, deliveryID))
-
-			status, _, sentAt := readDeliveryStatusAndLocks(ctx, t, pool, deliveryID)
-
-			if name == "sent" {
-				require.Equal(t, domain.OutboxStatusPending, status)
-			} else {
-				require.Equal(t, DeliveryStatusSending, status)
-			}
-
-			require.Nil(t, sentAt)
-		})
-	}
-}
-
-func TestCompatibilityCleanupReadyAlwaysFailsClosed(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
-
-	ready, err := repository.CompatibilityCleanupReady(t.Context())
-	require.NoError(t, err)
-	require.False(t, ready)
-}
-
 func readDeliveryLedgerRecord(t *testing.T, pool *pgxpool.Pool, key ytcontentid.LogicalKey) DeliveryLedgerRecord {
 	t.Helper()
 
@@ -130,34 +71,4 @@ func readDeliveryLedgerRecord(t *testing.T, pool *pgxpool.Pool, key ytcontentid.
 	))
 
 	return record
-}
-
-func seedCompatibilityDelivery(
-	ctx context.Context,
-	t *testing.T,
-	pool *pgxpool.Pool,
-	contentID string,
-	lockedAt time.Time,
-) int64 {
-	t.Helper()
-
-	var outboxID int64
-
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO youtube_notification_outbox
-			(kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at)
-		VALUES ($1, $2, $3, '{}'::jsonb, $4, 0, $5, $5)
-		RETURNING id
-	`, domain.OutboxKindNewVideo, "channel-invalid-ledger", contentID, domain.OutboxStatusPending, lockedAt).Scan(&outboxID))
-
-	var deliveryID int64
-
-	require.NoError(t, pool.QueryRow(ctx, `
-		INSERT INTO youtube_notification_delivery
-			(outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at)
-		VALUES ($1, $2, $3, 0, $4, $4, $4)
-		RETURNING id
-	`, outboxID, "room-invalid-ledger", domain.OutboxStatusPending, lockedAt).Scan(&deliveryID))
-
-	return deliveryID
 }

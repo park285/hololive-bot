@@ -3,8 +3,6 @@ package youtubedispatch
 import (
 	"context"
 	"log/slog"
-	"sync"
-	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
@@ -19,7 +17,6 @@ type DeliveryExecutor interface {
 
 type ClaimResolver interface {
 	selectClaimedDeliveries(ctx context.Context, rows []domain.YouTubeNotificationDelivery, outboxes []domain.YouTubeNotificationOutbox, reuseCache claim.DecisionCache) deliveryClaimSelection
-	applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection *deliveryClaimSelection)
 	releaseDeliveryClaims(ctx context.Context, claims []dispatchstate.ClaimToken) error
 	releaseDeliveryClaimsWithWarning(ctx context.Context, claims []dispatchstate.ClaimToken, message string, attrs ...any)
 }
@@ -29,8 +26,10 @@ type ClaimManager struct {
 	config      dispatchstate.Config
 	logger      *slog.Logger
 	delivery    *store.DeliveryRepository
+	transition  *store.TransitionStore
+	fanout      *OutboxFanoutService
+	projector   *OutboxAggregateProjector
 	executor    DeliveryExecutor
-	status      *StatusUpdater
 	metrics     *MetricsRecorder
 	grouper     *OutboxGrouper
 	auditLogger *AuditLogger
@@ -41,8 +40,8 @@ func newClaimManager(
 	logger *slog.Logger,
 	config *dispatchstate.Config,
 	deliveryRepo *store.DeliveryRepository,
+	transitionStore *store.TransitionStore,
 	executor DeliveryExecutor,
-	status *StatusUpdater,
 	grouper *OutboxGrouper,
 	auditLogger *AuditLogger,
 ) *ClaimManager {
@@ -50,16 +49,21 @@ func newClaimManager(
 		logger = slog.Default()
 	}
 
-	return &ClaimManager{
+	manager := &ClaimManager{
 		db:          db,
 		config:      *config,
 		logger:      logger,
 		delivery:    deliveryRepo,
+		transition:  transitionStore,
 		executor:    executor,
-		status:      status,
 		grouper:     grouper,
 		auditLogger: auditLogger,
 	}
+
+	manager.fanout = newOutboxFanoutService(transitionStore, grouper, logger, config)
+	manager.projector = newOutboxAggregateProjector(deliveryRepo)
+
+	return manager
 }
 
 func (d *ClaimManager) setExecutor(executor DeliveryExecutor) {
@@ -72,26 +76,6 @@ func (d *ClaimManager) setMetricsRecorder(metrics *MetricsRecorder) {
 	if d != nil {
 		d.metrics = metrics
 	}
-}
-
-func (d *ClaimManager) markSent(ctx context.Context, id int64, lockedAt *time.Time) {
-	d.status.markSentIfLocked(ctx, id, lockedAt)
-}
-
-func (d *ClaimManager) markFailed(ctx context.Context, id int64, lockedAt *time.Time, errMsg string) {
-	d.status.markFailedIfLocked(ctx, id, lockedAt, errMsg)
-}
-
-func (d *ClaimManager) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
-	return d.grouper.collectRoomsByChannel(ctx, items)
-}
-
-func (d *ClaimManager) filterLiveCatchupSuppressedRooms(
-	ctx context.Context,
-	item *domain.YouTubeNotificationOutbox,
-	rooms map[string]bool,
-) map[string]bool {
-	return d.grouper.filterLiveCatchupSuppressedRooms(ctx, item, rooms)
 }
 
 func (d *ClaimManager) dispatchDeliveryRows(
@@ -109,25 +93,4 @@ func (d *ClaimManager) dispatchDeliveryRows(
 	}
 
 	return d.executor.dispatchDeliveryRows(ctx, rows, outboxByID)
-}
-
-func (d *ClaimManager) recordDeliveryFailure(
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
-	reason string,
-	deliveryID, outboxID int64,
-) {
-	if d != nil && d.metrics != nil {
-		d.metrics.recordDeliveryFailure(result, mu, reason, deliveryID, outboxID)
-
-		return
-	}
-
-	mu.Lock()
-
-	result.FailedDeliveries++
-
-	result.FailureBuckets[reason] = append(result.FailureBuckets[reason], deliveryID)
-	result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, outboxID)
-	mu.Unlock()
 }

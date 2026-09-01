@@ -333,24 +333,43 @@ BEGIN;
 SET LOCAL statement_timeout = '5s';
 EXPLAIN (ANALYZE, BUFFERS)
 WITH claim AS (
-    SELECT o.id
-    FROM youtube_notification_outbox o
-    WHERE o.status = 'PENDING'
-      AND (o.locked_at IS NULL OR o.locked_at < NOW() - INTERVAL '5 minutes')
-      AND o.next_attempt_at <= NOW()
-      AND o.created_at >= NOW() - INTERVAL '2 hours'
+    SELECT outbox.id
+    FROM youtube_notification_outbox AS outbox
+    WHERE outbox.status = 'PENDING'
+      AND (outbox.locked_at IS NULL OR outbox.locked_at < NOW() - INTERVAL '5 minutes')
+      AND outbox.next_attempt_at <= NOW()
+      AND outbox.created_at >= NOW() - INTERVAL '2 hours'
       AND NOT EXISTS (
-        SELECT 1
-        FROM youtube_notification_delivery d
-        WHERE d.outbox_id = o.id
+          SELECT 1
+          FROM youtube_notification_delivery AS delivery
+          WHERE delivery.outbox_id = outbox.id
       )
-    ORDER BY o.next_attempt_at ASC, o.created_at ASC, o.id ASC
+    ORDER BY outbox.next_attempt_at, outbox.created_at, outbox.id
     LIMIT 50
-    FOR UPDATE SKIP LOCKED
+    FOR UPDATE OF outbox SKIP LOCKED
+), updated AS (
+    UPDATE youtube_notification_outbox AS outbox
+    SET locked_at = NOW()
+    FROM claim
+    WHERE outbox.id = claim.id
+      AND outbox.status = 'PENDING'
+    RETURNING outbox.id,
+              outbox.kind,
+              outbox.channel_id,
+              outbox.content_id,
+              outbox.payload::text AS payload,
+              outbox.status,
+              outbox.attempt_count,
+              outbox.next_attempt_at,
+              outbox.created_at,
+              outbox.locked_at,
+              outbox.sent_at,
+              COALESCE(outbox.error, '') AS error
 )
-SELECT id
-FROM claim
-ORDER BY id;
+SELECT id, kind, channel_id, content_id, payload, status, attempt_count,
+       next_attempt_at, created_at, locked_at, sent_at, error
+FROM updated
+ORDER BY next_attempt_at, created_at, id;
 ROLLBACK;
 SQL
 }

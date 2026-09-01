@@ -10,7 +10,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | Check | Expected |
 |---|---|
 | Health | `https://127.0.0.1:30007/health` returns success over H3 |
-| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; authenticated `/diagnostics/workers` reports the exact three-worker registry |
+| Ready | `https://127.0.0.1:30007/ready` returns `status=ready`; authenticated `http://127.0.0.1:30097/diagnostics/workers` reports the exact three-worker registry |
 | Logs | scheduler/checker loops run without repeated DB/cache errors |
 | Queue | publishes to and consumes due rows from `alarm_dispatch_deliveries`; Valkey wakeup tokens are only a polling optimization |
 | Delivery outbox | consumes `notification_delivery_outbox` rows for major event/member news proactive sends |
@@ -73,9 +73,10 @@ ALARM_DISPATCH_KARING_ENABLED=false
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/ready
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY https://127.0.0.1:30007/internal/ready
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30097/diagnostics/workers
 ```
 
-`/ready` fails closed when PostgreSQL or Valkey is unavailable. Worker enablement and effective executor/queue state are reported by authenticated `/diagnostics/workers`; production requires all three profile executors enabled.
+`/ready` fails closed when PostgreSQL or Valkey is unavailable. Worker enablement and effective executor/queue state are reported by the authenticated metrics-plane `/diagnostics/workers`; production requires all three profile executors enabled.
 
 ## Metrics
 
@@ -106,7 +107,7 @@ Symptoms:
 Diagnosis:
 ```bash
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=300 hololive-alarm-worker
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --api-key-env API_SECRET_KEY --body https://127.0.0.1:30007/diagnostics/workers
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck --body-api-key-env API_SECRET_KEY http://127.0.0.1:30097/diagnostics/workers
 ```
 
 Mitigation:

@@ -56,10 +56,10 @@ require "lock_expires_at[[:space:]]*=[[:space:]]*NOW"
 require "RETURNING[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id"
 require "d[.]claim_keys"
 require "d[.]delivery_context"
-require "UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+o[[:space:]]+SET[[:space:]]+locked_at"
-require "FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+o[.]id"
-require "RETURNING[[:space:]]+o[.]id[[:space:]]*,[[:space:]]*o[.]kind"
-require "o[.]payload::text[[:space:]]+AS[[:space:]]+payload"
+require "UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at"
+require "FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id"
+require "RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind"
+require "outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload"
 
 if [[ "${sql}" == *"mean_exec_time"* ]]; then
   echo "printed SQL must evaluate interval deltas, not the cumulative lifetime mean" >&2
@@ -85,7 +85,7 @@ compact_sql_file() {
 }
 
 alarm_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_claim_0053_02.sql")"
-youtube_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/queries/dispatcher_claim_0050_01.sql")"
+youtube_claim_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries/fanout_claim.sql")"
 
 if (( ${#alarm_claim_source} <= 500 || ${#youtube_claim_source} <= 500 )); then
   echo "runtime claim fixtures must retain their full post-500-character structure" >&2
@@ -123,11 +123,11 @@ done
 for fragment in \
   "WITH claim AS (" \
   "), updated AS (" \
-  "UPDATE youtube_notification_outbox o" \
+  "UPDATE youtube_notification_outbox AS outbox" \
   "SET locked_at" \
-  "FROM claim WHERE o.id = claim.id" \
-  "RETURNING o.id, o.kind, o.channel_id, o.content_id" \
-  "o.payload::text AS payload" \
+  "FROM claim WHERE outbox.id = claim.id" \
+  "RETURNING outbox.id, outbox.kind, outbox.channel_id, outbox.content_id" \
+  "outbox.payload::text AS payload" \
   "FROM updated"; do
   if [[ "${youtube_claim_source}" != *"${fragment}"* ]]; then
     echo "youtube runtime claim no longer matches fingerprint fragment: ${fragment}" >&2
@@ -148,10 +148,10 @@ for non_claim_source_path in \
   fi
 done
 
-youtube_revive_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/queries/dispatcher_claim_revive_0109_01.sql")"
+youtube_revive_source="$(compact_sql_file "${ROOT_DIR}/hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries/fanout_revive_failed.sql")"
 if [[ "${youtube_revive_source}" == *"), updated AS ("* \
-  || "${youtube_revive_source}" == *"UPDATE youtube_notification_outbox o"* \
-  || "${youtube_revive_source}" == *"RETURNING o.id, o.kind, o.channel_id, o.content_id"* ]]; then
+  && "${youtube_revive_source}" == *"UPDATE youtube_notification_outbox AS outbox"* \
+  && "${youtube_revive_source}" == *"RETURNING outbox.id, outbox.kind, outbox.channel_id, outbox.content_id"* ]]; then
   echo "youtube revive SQL must not satisfy the runtime claim fingerprint" >&2
   exit 1
 fi
@@ -308,7 +308,7 @@ if [[ -n "$out_file" ]]; then
       fi
       ;;
     *youtube-outbox*)
-      printf '%s\n' 'Index Scan using idx_yno_status_created' > "$out_file"
+      printf '%s\n' 'Index Scan using idx_yno_pending_due_created_id' > "$out_file"
       ;;
     *) : > "$out_file" ;;
   esac

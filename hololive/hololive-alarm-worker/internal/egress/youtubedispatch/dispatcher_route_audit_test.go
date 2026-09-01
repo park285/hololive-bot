@@ -182,25 +182,17 @@ func TestContentAlarmRouteAudit_CoversAllOperationalCommunityShortsTargetsViaTyp
 		DeliveryParallelism: 1,
 	})
 
-	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(ctx, items)
-	dispatcher.claim.enqueueDeliveries(ctx, items, roomsByChannel)
+	claimed, err := dispatcher.claim.fanout.Claim(ctx)
+	require.NoError(t, err)
+	require.Len(t, claimed, len(items))
+	dispatcher.claim.fanout.materialize(ctx, claimed)
 
 	var deliveryRows []domain.YouTubeNotificationDelivery
 
 	require.NoError(t, findDeliveryTestRowsOrdered(db, &deliveryRows, "id ASC").Error)
 	require.Len(t, deliveryRows, totalRouteAuditDeliveries(expectedTargets))
 
-	outboxByID := make(map[int64]domain.YouTubeNotificationOutbox, len(items))
-	for _, item := range items {
-		outboxByID[item.ID] = item
-	}
-
-	result := dispatcher.send.dispatchDeliveryRows(ctx, deliveryRows, outboxByID)
-	require.Zerof(t, result.FailedDeliveries, "failure buckets: %+v", result.FailureBuckets)
-	require.Emptyf(t, result.FailureBuckets, "failure buckets: %+v", result.FailureBuckets)
-	require.Len(t, result.SuccessDeliveryIDs, totalRouteAuditDeliveries(expectedTargets))
-	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.SuccessDeliveryIDs))
-	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.TouchedOutboxIDs))
+	require.Equal(t, totalRouteAuditDeliveries(expectedTargets), dispatcher.claim.processPendingDeliveries(ctx))
 
 	require.ElementsMatch(t, expectedRouteAuditLookupKeys(expectedTargets), cacheStore.lookupKeys())
 	require.NotContains(t, cacheStore.lookupKeys(), sharedalarmkeys.BuildChannelSubscriberKey("UC_LIVE_ONLY", domain.AlarmTypeLive))

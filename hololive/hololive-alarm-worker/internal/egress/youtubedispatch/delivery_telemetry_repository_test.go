@@ -347,11 +347,13 @@ func TestDispatcher_Cleanup_RemovesOnlyLoggedTelemetryOlderThanRetention(t *test
 
 	require.NoError(t, insertDeliveryTestRows(db, &rows).Error)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
-		CleanupAfter:       7 * 24 * time.Hour,
-		CleanupEnabled:     false,
-		TelemetryRetention: 24 * time.Hour,
-	})
+	config := dispatchstate.DefaultConfig()
+
+	config.CleanupAfter = 7 * 24 * time.Hour
+	config.CleanupEnabled = false
+	config.TelemetryRetention = 24 * time.Hour
+
+	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &config)
 	dispatcher.CleanupForTest(ctx)
 
 	var remaining []deliveryTelemetryTestBufferModel

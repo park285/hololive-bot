@@ -44,6 +44,18 @@ func newDeliveryPool(tb testing.TB) *pgxpool.Pool {
 		}
 	}
 
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if _, err := pool.Exec(tb.Context(), `
+		INSERT INTO youtube_notification_delivery_ledger_state (
+			singleton, schema_version, delivery_high_water_id, outbox_high_water_id,
+			delivery_cursor_id, delivery_verify_cursor_id, outbox_cursor_id,
+			legacy_coverage_start_at, coverage_verified_at, started_at, completed_at, updated_at
+		) VALUES (true, $1, 0, 0, 0, 0, 0, $2, $2, $2, $2, $2)
+		ON CONFLICT (singleton) DO NOTHING
+	`, store.LedgerSchemaVersion, now); err != nil {
+		tb.Fatalf("delivery test db: seed completed ledger state: %v", err)
+	}
+
 	return pool
 }
 

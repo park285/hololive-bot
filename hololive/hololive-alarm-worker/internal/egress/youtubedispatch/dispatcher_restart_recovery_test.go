@@ -146,10 +146,10 @@ type restartAlreadySentCase struct {
 }
 
 func TestProcessOnce_DoesNotResendAlreadySentCommunityShortsPostAfterDispatcherRestart(t *testing.T) {
-	fixedSentAt := time.Date(2026, time.April, 10, 1, 15, 0, 0, time.UTC)
+	fixedSentAt := time.Now().UTC().Truncate(time.Millisecond)
 	withFixedSentAtNow(t, fixedSentAt)
 
-	detectedAt := time.Date(2026, time.April, 10, 1, 12, 30, 0, time.UTC)
+	detectedAt := fixedSentAt.Add(-time.Minute)
 	publishedAt := time.Date(2026, time.April, 10, 1, 12, 0, 0, time.UTC)
 	testCases := []restartAlreadySentCase{
 		{
@@ -280,7 +280,7 @@ func seedRestartAlreadySentFixture(
 }
 
 func TestProcessOnce_RestartRecoveryResendsOnlyPendingCommunityShortsPostExactlyOnce(t *testing.T) {
-	fixedSentAt := time.Date(2026, time.April, 10, 1, 15, 0, 0, time.UTC)
+	fixedSentAt := time.Now().UTC().Truncate(time.Millisecond)
 	withFixedSentAtNow(t, fixedSentAt)
 
 	testCases := newRecoverySelectiveSendCases(fixedSentAt, recoverySelectiveSendNaming{

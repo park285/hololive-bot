@@ -123,6 +123,27 @@ const (
 	LogicalInvariantBreach
 )
 
+func (k ResolutionKind) String() string {
+	switch k {
+	case LogicalActive:
+		return "active"
+	case LogicalFulfilled:
+		return "fulfilled"
+	case LogicalUnresolved:
+		return "unresolved"
+	case LogicalInFlight:
+		return "in_flight"
+	case LogicalOwnerPendingElsewhere:
+		return "owner_pending_elsewhere"
+	case LogicalFailed:
+		return "failed"
+	case LogicalInvariantBreach:
+		return "invariant_breach"
+	default:
+		return "invalid"
+	}
+}
+
 type InvariantReason string
 
 const (
@@ -426,7 +447,7 @@ func (r Resolver) groupInvariant(
 		return &invalid
 	}
 
-	if r.config.RequireTerminalLedger && (counts[lifecycle.StatusSent] > 0 || counts[lifecycle.StatusQuarantined] > 0) {
+	if r.config.RequireTerminalLedger && ledger.Status == "" && (counts[lifecycle.StatusSent] > 0 || counts[lifecycle.StatusQuarantined] > 0) {
 		invalid := breach(key, members, InvariantTerminalLedgerMissing, "retained terminal row has no ledger evidence")
 
 		return &invalid
