@@ -57,7 +57,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 
 	postgres := config.Postgres
 
-	postgres.PoolMinConns = 0
+	postgres.PoolMinConns = 1
 	postgres.PoolMaxConns = 1
 
 	activationContext, cancel := context.WithTimeout(ctx, activationTimeout)
