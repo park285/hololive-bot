@@ -53,6 +53,7 @@ func TestMarkSendingBatchIfLockedRejectsStaleRelockWithinOneMillisecond(t *testi
 	require.Equal(t, domain.OutboxStatusSent, status)
 	require.Nil(t, lockedAt)
 	require.NotNil(t, sentAt)
+	requireDeliveryLedgerStatus(ctx, t, pool, domain.OutboxKindNewVideo, "video-lock-race", "room-lock-race", LedgerStatusSent)
 }
 
 const (
@@ -251,11 +252,32 @@ func TestQuarantineStaleSendingMarksTerminalAndAggregateFailed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, attemptCount)
 	require.Equal(t, "stale sending; external send outcome unknown", errMsg)
+	requireDeliveryLedgerStatus(ctx, t, pool, domain.OutboxKindNewVideo, "video-lock-race", "room-lock-race", LedgerStatusQuarantined)
 
 	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, outboxIDs))
 
 	outboxStatus := readOutboxStatus(ctx, t, pool, outboxID)
 	require.Equal(t, domain.OutboxStatusFailed, outboxStatus)
+}
+
+func requireDeliveryLedgerStatus(
+	ctx context.Context,
+	t *testing.T,
+	db *pgxpool.Pool,
+	kind domain.OutboxKind,
+	logicalID string,
+	roomID string,
+	want LedgerStatus,
+) {
+	t.Helper()
+
+	var got LedgerStatus
+	require.NoError(t, db.QueryRow(ctx, `
+		SELECT status
+		FROM youtube_notification_delivery_ledger
+		WHERE kind = $1 AND logical_id = $2 AND room_id = $3
+	`, kind, logicalID, roomID).Scan(&got))
+	require.Equal(t, want, got)
 }
 
 func seedLockedDelivery(ctx context.Context, t *testing.T, db *pgxpool.Pool, lockedAt time.Time) int64 {

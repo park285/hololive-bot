@@ -34,10 +34,13 @@ import (
 )
 
 func cleanupTestClaimManager(db *deliveryTestDB, cfg *dispatchstate.Config) *ClaimManager {
+	logger := slog.Default()
+
 	return &ClaimManager{
-		db:     store.AsDeliveryDB(db),
-		config: *cfg,
-		logger: slog.Default(),
+		db:       store.AsDeliveryDB(db),
+		config:   *cfg,
+		logger:   logger,
+		delivery: store.NewDeliveryRepository(db, logger),
 	}
 }
 
@@ -51,7 +54,7 @@ func outboxRowCount(t *testing.T, db *deliveryTestDB, id int64) int64 {
 	return count
 }
 
-func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
+func TestCompatibilityCleanupPreservesOutboxWhileLedgerStateIsIncomplete(t *testing.T) {
 	db := newDeliveryPool(t)
 	cm := cleanupTestClaimManager(db, &dispatchstate.Config{
 		CleanupAfter:         7 * 24 * time.Hour,
@@ -87,10 +90,10 @@ func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
 
 	cm.cleanupOutbox(ctx)
 
-	assert.Equal(t, int64(0), outboxRowCount(t, db, orphan.ID), "freshness window 초과 미발송 orphan PENDING은 삭제")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, freshPending.ID), "최근 PENDING(claim 가능)은 보존")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, lockedOrphan.ID), "락 살아있는 PENDING은 보존")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, orphanWithDelivery.ID), "delivery 행 있는 PENDING은 보존")
+	assert.Equal(t, int64(1), outboxRowCount(t, db, orphan.ID), "incomplete ledger에서는 orphan cleanup도 동결")
+	assert.Equal(t, int64(1), outboxRowCount(t, db, freshPending.ID), "incomplete ledger에서는 최근 PENDING도 보존")
+	assert.Equal(t, int64(1), outboxRowCount(t, db, lockedOrphan.ID), "incomplete ledger에서는 lock 상태와 무관하게 보존")
+	assert.Equal(t, int64(1), outboxRowCount(t, db, orphanWithDelivery.ID), "incomplete ledger에서는 delivery가 있는 PENDING도 보존")
 
 	var deliveryCount int64
 
@@ -98,7 +101,7 @@ func TestCleanupOutbox_PurgesOrphanPendingAndPreservesClaimable(t *testing.T) {
 	assert.Equal(t, int64(1), deliveryCount, "보존된 PENDING의 delivery 행도 CASCADE로 삭제되지 않음")
 }
 
-func TestCleanupOutbox_UsesMaxOfCleanupAfterAndFreshnessWindow(t *testing.T) {
+func TestCompatibilityCleanupRemainsFrozenWithCompletedLedgerState(t *testing.T) {
 	db := newDeliveryPool(t)
 	cm := cleanupTestClaimManager(db, &dispatchstate.Config{
 		CleanupAfter:         1 * time.Hour,
@@ -108,6 +111,15 @@ func TestCleanupOutbox_UsesMaxOfCleanupAfterAndFreshnessWindow(t *testing.T) {
 	ctx := t.Context()
 
 	now := time.Now().UTC()
+	_, err := db.Exec(ctx, `
+		INSERT INTO youtube_notification_delivery_ledger_state (
+			singleton, schema_version, delivery_high_water_id, outbox_high_water_id,
+			delivery_cursor_id, delivery_verify_cursor_id, outbox_cursor_id,
+			legacy_coverage_start_at, coverage_verified_at, started_at, completed_at, updated_at
+		) VALUES (true, $1, 0, 0, 0, 0, 0, $2, $3, $4, $5, $6)
+	`, store.LedgerSchemaVersion, now, now, now, now, now)
+	require.NoError(t, err)
+
 	betweenCutoffs := now.Add(-90 * time.Minute)
 	beyondFreshness := now.Add(-3 * time.Hour)
 
@@ -128,7 +140,7 @@ func TestCleanupOutbox_UsesMaxOfCleanupAfterAndFreshnessWindow(t *testing.T) {
 	cm.cleanupOutbox(ctx)
 
 	assert.Equal(t, int64(1), outboxRowCount(t, db, stillClaimable.ID),
-		"CleanupAfter는 넘겼지만 freshness window 안이라 claim 가능 → max() 하한으로 보존")
-	assert.Equal(t, int64(0), outboxRowCount(t, db, pastFreshness.ID),
-		"freshness window 초과 → claim 불가, 삭제")
+		"compatibility binary는 completed state가 있어도 cleanup을 활성화하지 않음")
+	assert.Equal(t, int64(1), outboxRowCount(t, db, pastFreshness.ID),
+		"compatibility binary는 T08 ledger-aware cleanup 전까지 모든 outbox cleanup을 동결")
 }

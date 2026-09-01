@@ -2,6 +2,11 @@ UPDATE youtube_notification_outbox o
 		SET status = agg.next_status,
 		    locked_at = NULL,
 		    sent_at = CASE WHEN agg.next_status = $6::text AND o.sent_at IS NULL THEN $7 ELSE o.sent_at END,
+		    terminal_at = CASE
+		        WHEN agg.next_status NOT IN ($4::text, $6::text) THEN NULL
+		        WHEN o.status IS DISTINCT FROM agg.next_status THEN $7
+		        ELSE o.terminal_at
+		    END,
 		    error = CASE WHEN agg.next_status = $4::text THEN $8::text ELSE '' END
 		FROM (
 		    SELECT ids.id,

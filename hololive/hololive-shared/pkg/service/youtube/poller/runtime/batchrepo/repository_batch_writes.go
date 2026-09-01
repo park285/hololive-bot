@@ -178,26 +178,16 @@ func (r *PgxBatchRepository) BatchInsertNotifications(ctx context.Context, tx ba
 }
 
 func (r *PgxBatchRepository) insertNotificationsChunk(ctx context.Context, tx batchDB, notifications []*domain.YouTubeNotificationOutbox) error {
-	completedSentAtByIdentity, reactivationRows, err := prepareNotificationInsertChunk(ctx, tx, notifications)
-	if err != nil {
-		return fmt.Errorf("prepare notification insert chunk: %w", err)
-	}
-
-	activeNotifications := filterCompletedNotifications(notifications, completedSentAtByIdentity)
-	if len(activeNotifications) == 0 {
-		return nil
+	if err := validateNotificationDedupeKeys(notifications); err != nil {
+		return fmt.Errorf("validate notification dedupe keys: %w", err)
 	}
 
 	now := time.Now()
 
-	for _, chunk := range notificationChunksByKind(activeNotifications) {
+	for _, chunk := range notificationChunksByKind(notifications) {
 		if err := r.insertNotificationsSameKindChunk(ctx, tx, chunk, now); err != nil {
 			return fmt.Errorf("insert notifications same kind chunk: %w", err)
 		}
-	}
-
-	if err := rearmFailedDeliveryRows(ctx, tx, collectFailedNotificationOutboxIDs(reactivationRows), now); err != nil {
-		return fmt.Errorf("rearm failed delivery rows: %w", err)
 	}
 
 	return nil
@@ -265,33 +255,6 @@ func (r *PgxBatchRepository) insertNotificationsSameKindChunk(ctx context.Contex
 	return nil
 }
 
-func prepareNotificationInsertChunk(
-	ctx context.Context,
-	tx batchDB,
-	notifications []*domain.YouTubeNotificationOutbox,
-) (map[string]time.Time, []failedNotificationOutboxRow, error) {
-	if err := validateNotificationDedupeKeys(notifications); err != nil {
-		return nil, nil, fmt.Errorf("validate notification dedupe keys: %w", err)
-	}
-
-	completedSentAtByIdentity, err := loadCompletedNotificationSentAtByIdentity(ctx, tx, notifications)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load completed notification sent state: %w", err)
-	}
-
-	failedRows, err := loadFailedNotificationOutboxRows(ctx, tx, notifications)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load failed outbox rows: %w", err)
-	}
-
-	completedFailedRows, reactivationRows := partitionFailedNotificationOutboxRows(failedRows, completedSentAtByIdentity)
-	if err := finalizeCompletedFailedNotificationRows(ctx, tx, completedFailedRows, completedSentAtByIdentity); err != nil {
-		return nil, nil, fmt.Errorf("finalize completed failed notification rows: %w", err)
-	}
-
-	return completedSentAtByIdentity, reactivationRows, nil
-}
-
 func validateNotificationDedupeKeys(notifications []*domain.YouTubeNotificationOutbox) error {
 	for i, notification := range notifications {
 		if _, err := notification.DedupeKey(); err != nil {
@@ -300,6 +263,10 @@ func validateNotificationDedupeKeys(notifications []*domain.YouTubeNotificationO
 	}
 
 	return nil
+}
+
+func notificationIdentityKey(kind domain.OutboxKind, contentID string) string {
+	return fmt.Sprintf("%s::%s", kind, strings.TrimSpace(contentID))
 }
 
 func appendNotificationInsertArgs(

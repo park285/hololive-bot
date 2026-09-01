@@ -1211,12 +1211,52 @@ TABLE youtube_notification_delivery
   COLUMN locked_at timestamp with time zone
   COLUMN sent_at timestamp with time zone
   COLUMN error text
+  COLUMN row_version bigint NOT NULL DEFAULT 0
+  CONSTRAINT chk_youtube_notification_delivery_row_version CHECK (((row_version IS NOT NULL) AND (row_version >= 0)))
   CONSTRAINT chk_youtube_notification_delivery_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text, ('QUARANTINED'::character varying)::text])))
   CONSTRAINT youtube_notification_delivery_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES youtube_notification_outbox(id) ON DELETE CASCADE
   CONSTRAINT youtube_notification_delivery_pkey PRIMARY KEY (id)
   INDEX CREATE UNIQUE INDEX idx_ynd_outbox_room ON public.youtube_notification_delivery USING btree (outbox_id, room_id)
   INDEX CREATE INDEX idx_ynd_pending_due_created_id ON public.youtube_notification_delivery USING btree (next_attempt_at, created_at, id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_ynd_sending_stale ON public.youtube_notification_delivery USING btree (locked_at, id) WHERE (status = 'SENDING'::text)
+
+TABLE youtube_notification_delivery_ledger
+  COLUMN kind text NOT NULL
+  COLUMN logical_id character varying(50) NOT NULL
+  COLUMN room_id character varying(100) NOT NULL
+  COLUMN status text NOT NULL
+  COLUMN first_recorded_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL
+  COLUMN sent_at timestamp with time zone
+  COLUMN quarantined_at timestamp with time zone
+  COLUMN source_delivery_id bigint
+  CONSTRAINT chk_youtube_notification_delivery_ledger_identity CHECK (((length(btrim((logical_id)::text)) > 0) AND (length(btrim((room_id)::text)) > 0) AND ((logical_id)::text = btrim((logical_id)::text)) AND ((room_id)::text = btrim((room_id)::text))))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text, 'MILESTONE'::text])))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_shape CHECK ((((status = 'SENT'::text) AND (sent_at IS NOT NULL)) OR ((status = 'QUARANTINED'::text) AND (sent_at IS NULL) AND (quarantined_at IS NOT NULL))))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_source CHECK (((source_delivery_id IS NULL) OR (source_delivery_id > 0)))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_status CHECK ((status = ANY (ARRAY['SENT'::text, 'QUARANTINED'::text])))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_time_order CHECK (((updated_at >= first_recorded_at) AND ((sent_at IS NULL) OR (sent_at >= first_recorded_at)) AND ((quarantined_at IS NULL) OR (quarantined_at >= first_recorded_at))))
+  CONSTRAINT youtube_notification_delivery_ledger_pkey PRIMARY KEY (kind, logical_id, room_id)
+
+TABLE youtube_notification_delivery_ledger_state
+  COLUMN singleton boolean NOT NULL DEFAULT true
+  COLUMN schema_version integer NOT NULL
+  COLUMN delivery_high_water_id bigint NOT NULL
+  COLUMN outbox_high_water_id bigint NOT NULL
+  COLUMN delivery_cursor_id bigint NOT NULL DEFAULT 0
+  COLUMN delivery_verify_cursor_id bigint NOT NULL DEFAULT 0
+  COLUMN outbox_cursor_id bigint NOT NULL DEFAULT 0
+  COLUMN legacy_coverage_start_at timestamp with time zone
+  COLUMN coverage_verified_at timestamp with time zone
+  COLUMN started_at timestamp with time zone NOT NULL
+  COLUMN completed_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL
+  CONSTRAINT chk_youtube_notification_delivery_ledger_state_completion CHECK (((completed_at IS NULL) OR ((delivery_cursor_id = delivery_high_water_id) AND (delivery_verify_cursor_id = delivery_high_water_id) AND (outbox_cursor_id = outbox_high_water_id) AND (legacy_coverage_start_at IS NOT NULL) AND (coverage_verified_at IS NOT NULL))))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_state_cursors CHECK (((delivery_high_water_id >= 0) AND (outbox_high_water_id >= 0) AND ((delivery_cursor_id >= 0) AND (delivery_cursor_id <= delivery_high_water_id)) AND ((delivery_verify_cursor_id >= 0) AND (delivery_verify_cursor_id <= delivery_high_water_id)) AND ((outbox_cursor_id >= 0) AND (outbox_cursor_id <= outbox_high_water_id))))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_state_singleton CHECK (singleton)
+  CONSTRAINT chk_youtube_notification_delivery_ledger_state_time_order CHECK (((updated_at >= started_at) AND (((legacy_coverage_start_at IS NULL) AND (coverage_verified_at IS NULL)) OR ((legacy_coverage_start_at IS NOT NULL) AND (coverage_verified_at IS NOT NULL) AND (legacy_coverage_start_at <= coverage_verified_at) AND (coverage_verified_at <= updated_at))) AND ((completed_at IS NULL) OR ((completed_at >= coverage_verified_at) AND (completed_at <= updated_at)))))
+  CONSTRAINT chk_youtube_notification_delivery_ledger_state_version CHECK ((schema_version > 0))
+  CONSTRAINT youtube_notification_delivery_ledger_state_pkey PRIMARY KEY (singleton)
 
 TABLE youtube_notification_delivery_telemetry
   OPTIONS autovacuum_analyze_scale_factor=0.02,autovacuum_analyze_threshold=50,autovacuum_vacuum_scale_factor=0.02,autovacuum_vacuum_threshold=50
@@ -1267,6 +1307,7 @@ TABLE youtube_notification_outbox
   COLUMN error text
   COLUMN attempt_count integer NOT NULL DEFAULT 0
   COLUMN next_attempt_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN terminal_at timestamp with time zone
   CONSTRAINT chk_youtube_notification_outbox_kind_vocab CHECK ((kind = ANY (ARRAY['NEW_VIDEO'::text, 'NEW_SHORT'::text, 'LIVE_STREAM'::text, 'COMMUNITY_POST'::text, 'MILESTONE'::text])))
   CONSTRAINT chk_youtube_notification_outbox_status_vocab CHECK ((status = ANY (ARRAY[('PENDING'::character varying)::text, ('SENT'::character varying)::text, ('FAILED'::character varying)::text])))
   CONSTRAINT youtube_notification_outbox_pkey PRIMARY KEY (id)

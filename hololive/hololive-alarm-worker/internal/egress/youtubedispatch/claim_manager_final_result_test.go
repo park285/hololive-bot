@@ -103,7 +103,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_final_success",
 		ContentID:     "short-final-success",
-		Payload:       `{"video_id":"short-final-success","title":"short title"}`,
+		Payload:       `{"canonical_post_id":"short:short-final-success","video_id":"short-final-success","title":"short title"}`,
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
@@ -135,7 +135,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalSuccessResult(t *testi
 
 	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "short-final-success")
-	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "short-final-success")
+	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "short:short-final-success")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
 	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
 	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
@@ -170,7 +170,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_final_community_success",
 		ContentID:     "post-final-community-success",
-		Payload:       `{"canonical_post_id":"post-final-community-success","post_id":"post-resource","content_text":"community title"}`,
+		Payload:       `{"canonical_post_id":"community:post-final-community-success","post_id":"post-resource","content_text":"community title"}`,
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
@@ -202,7 +202,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalCommunitySuccessResult
 
 	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-community-success")
-	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "post-final-community-success")
+	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "community:post-final-community-success")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultSuccess)
 	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
@@ -236,7 +236,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalExternalDelayReasonCod
 		Kind:          string(domain.OutboxKindNewShort),
 		ChannelID:     "UC_final_external_delay",
 		ContentID:     "short-final-external-delay",
-		Payload:       `{"video_id":"short-final-external-delay","title":"short title"}`,
+		Payload:       `{"canonical_post_id":"short:short-final-external-delay","video_id":"short-final-external-delay","title":"short title"}`,
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
@@ -287,7 +287,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 		Kind:          string(domain.OutboxKindCommunityPost),
 		ChannelID:     "UC_final_failure",
 		ContentID:     "post-final-failure",
-		Payload:       `{"canonical_post_id":"post-final-failure","post_id":"post-resource","content_text":"community title"}`,
+		Payload:       `{"canonical_post_id":"community:post-final-failure","post_id":"post-resource","content_text":"community title"}`,
 		Status:        string(domain.OutboxStatusPending),
 		NextAttemptAt: now,
 	}
@@ -319,7 +319,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 
 	entry := findOutboxFinalResultAuditLogEntry(t, logBuffer)
 	assertLogStringField(t, entry, deliveryAuditContentIDLogField, "post-final-failure")
-	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "post-final-failure")
+	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "community:post-final-failure")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
 	assertLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)

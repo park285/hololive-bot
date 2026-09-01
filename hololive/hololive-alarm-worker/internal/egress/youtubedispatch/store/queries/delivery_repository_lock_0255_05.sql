@@ -16,7 +16,6 @@
 			    error = $5
 			FROM picked
 			WHERE d.id = picked.id
-			RETURNING d.outbox_id
+			RETURNING d.id, d.outbox_id
 		)
-		SELECT outbox_id FROM updated
-	
+		SELECT id, outbox_id FROM updated

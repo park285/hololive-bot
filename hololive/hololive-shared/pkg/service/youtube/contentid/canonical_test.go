@@ -230,6 +230,16 @@ func TestResolveDeliveryKeyUsesValidatedCanonicalPayload(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, ErrorReasonMismatch, identityErr.Reason)
 
+	_, err = ResolveDeliveryKey(
+		domain.OutboxKindNewShort,
+		testShortCanonicalID,
+		`{"video_id":"AbC123xyZ89"}`,
+		"room-1",
+	)
+	identityErr, ok = errors.AsType[*Error](err)
+	require.True(t, ok)
+	require.Equal(t, ErrorReasonEmpty, identityErr.Reason)
+
 	_, err = ResolveDeliveryKey(domain.OutboxKindNewShort, testShortCanonicalID, `{`, "room-1")
 	identityErr, ok = errors.AsType[*Error](err)
 	require.True(t, ok)

@@ -73,7 +73,7 @@ func TestDispatcherShadowHandoffPreservesDirectKaringSend(t *testing.T) {
 
 	rows := []domain.YouTubeNotificationDelivery{{ID: 31, OutboxID: 301, RoomID: testRoomOne}}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		301: {ID: 301, ChannelID: "UCcommunity", Kind: domain.OutboxKindCommunityPost, ContentID: "post:1", Payload: `{"post_id":"1","content_text":"hello"}`},
+		301: {ID: 301, ChannelID: "UCcommunity", Kind: domain.OutboxKindCommunityPost, ContentID: "1", Payload: `{"canonical_post_id":"community:1","post_id":"1","content_text":"hello"}`},
 	}
 
 	result := dispatcher.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)

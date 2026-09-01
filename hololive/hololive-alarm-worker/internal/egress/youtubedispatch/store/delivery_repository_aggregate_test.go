@@ -59,6 +59,16 @@ func readOutboxAggregateRow(ctx context.Context, t *testing.T, db *pgxpool.Pool,
 	return status, sentAt, lockedAt, errText
 }
 
+func readOutboxTerminalAt(ctx context.Context, t *testing.T, db *pgxpool.Pool, outboxID int64) *time.Time {
+	t.Helper()
+
+	var terminalAt *time.Time
+	require.NoError(t, db.QueryRow(ctx,
+		"SELECT terminal_at FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&terminalAt))
+
+	return terminalAt
+}
+
 func TestUpdateOutboxAggregateStatuses_AllSentMarksSentOnce(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -73,6 +83,12 @@ func TestUpdateOutboxAggregateStatuses_AllSentMarksSentOnce(t *testing.T) {
 	require.NotNil(t, sentAt)
 	require.Nil(t, lockedAt)
 	require.Empty(t, errText)
+
+	terminalAt := readOutboxTerminalAt(ctx, t, pool, outboxID)
+	require.NotNil(t, terminalAt)
+
+	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
+	require.Equal(t, terminalAt, readOutboxTerminalAt(ctx, t, pool, outboxID))
 }
 
 func TestUpdateOutboxAggregateStatuses_DoesNotRewriteExistingSentAt(t *testing.T) {
@@ -121,6 +137,27 @@ func TestUpdateOutboxAggregateStatuses_PendingDeliveryKeepsOutboxPending(t *test
 
 	status, _, _, _ := readOutboxAggregateRow(ctx, t, pool, outboxID)
 	require.Equal(t, domain.OutboxStatusPending, status)
+	require.Nil(t, readOutboxTerminalAt(ctx, t, pool, outboxID))
+}
+
+func TestUpdateOutboxAggregateStatuses_TerminalTransitionRefreshesTerminalAt(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
+	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-terminal-transition", domain.OutboxStatusSent,
+		[]domain.OutboxStatus{domain.OutboxStatusFailed})
+	oldTerminalAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := pool.Exec(ctx,
+		"UPDATE youtube_notification_outbox SET terminal_at = $1 WHERE id = $2", oldTerminalAt, outboxID)
+	require.NoError(t, err)
+	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
+
+	status, _, _, _ := readOutboxAggregateRow(ctx, t, pool, outboxID)
+	require.Equal(t, domain.OutboxStatusFailed, status)
+	terminalAt := readOutboxTerminalAt(ctx, t, pool, outboxID)
+	require.NotNil(t, terminalAt)
+	require.True(t, terminalAt.After(oldTerminalAt))
 }
 
 func TestUpdateOutboxAggregateStatuses_NoDeliveriesDefaultsToPending(t *testing.T) {

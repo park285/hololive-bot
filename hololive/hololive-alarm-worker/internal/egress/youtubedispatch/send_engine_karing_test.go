@@ -58,8 +58,8 @@ func TestDispatcherUsesKaringForSupportedYouTubeOutboxKind(t *testing.T) {
 		{ID: 12, OutboxID: 102, RoomID: testRoomOne},
 	}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		101: {ID: 101, ChannelID: "UCshorts", Kind: domain.OutboxKindNewShort, ContentID: "shorts:a", Payload: `{"video_id":"a","title":"short a"}`},
-		102: {ID: 102, ChannelID: "UCshorts", Kind: domain.OutboxKindNewShort, ContentID: "shorts:b", Payload: `{"video_id":"b","title":"short b"}`},
+		101: {ID: 101, ChannelID: "UCshorts", Kind: domain.OutboxKindNewShort, ContentID: "a", Payload: `{"canonical_post_id":"short:a","video_id":"a","title":"short a"}`},
+		102: {ID: 102, ChannelID: "UCshorts", Kind: domain.OutboxKindNewShort, ContentID: "b", Payload: `{"canonical_post_id":"short:b","video_id":"b","title":"short b"}`},
 	}
 
 	result := dispatcher.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
@@ -128,7 +128,7 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 	})
 	rows := []domain.YouTubeNotificationDelivery{{ID: 31, OutboxID: 301, RoomID: testRoomOne}}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		301: {ID: 301, ChannelID: "UCcommunity", Kind: domain.OutboxKindCommunityPost, ContentID: "post:1", Payload: `{"post_id":"1","content_text":"hello"}`},
+		301: {ID: 301, ChannelID: "UCcommunity", Kind: domain.OutboxKindCommunityPost, ContentID: "1", Payload: `{"canonical_post_id":"community:1","post_id":"1","content_text":"hello"}`},
 	}
 
 	result := dispatcher.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
@@ -158,7 +158,7 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 	}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
 		401: {ID: 401, ChannelID: "UCvideo", Kind: domain.OutboxKindNewVideo, ContentID: "video:1", Payload: `{"video_id":"v1","title":"video 1"}`},
-		402: {ID: 402, ChannelID: "UCshort", Kind: domain.OutboxKindNewShort, ContentID: "short:1", Payload: `{"video_id":"s1","title":"short 1"}`},
+		402: {ID: 402, ChannelID: "UCshort", Kind: domain.OutboxKindNewShort, ContentID: "s1", Payload: `{"canonical_post_id":"short:s1","video_id":"s1","title":"short 1"}`},
 	}
 
 	done := make(chan dispatchstate.DispatchResult, 1)

@@ -102,7 +102,15 @@ func (r *DeliveryRepository) MarkSentBatchIfLocked(ctx context.Context, tokens [
 			return fmt.Errorf("load tracking marks: %w", err)
 		}
 
-		return persistSentDeliveryTracking(ctx, tx, trackingMarks)
+		if err := persistSentDeliveryTracking(ctx, tx, trackingMarks); err != nil {
+			return fmt.Errorf("persist sent delivery tracking: %w", err)
+		}
+
+		if err := recordSentLedgerForDeliveryIDs(ctx, tx, updatedIDs, sentAt); err != nil {
+			return fmt.Errorf("record sent delivery ledger: %w", err)
+		}
+
+		return nil
 	}); err != nil {
 		return fmt.Errorf("mark delivery rows sent transaction: %w", err)
 	}
@@ -207,19 +215,43 @@ func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderTh
 		olderThan = 5 * time.Minute
 	}
 
-	cutoff := time.Now().UTC().Add(-olderThan)
+	quarantinedAt := time.Now().UTC()
+	cutoff := quarantinedAt.Add(-olderThan)
 
-	rows, err := r.db.Query(ctx, mustSQL("delivery_repository_lock_0255_05.sql"), DeliveryStatusSending, cutoff, limit, DeliveryStatusQuarantined, "stale sending; external send outcome unknown")
-	if err != nil {
-		return nil, 0, fmt.Errorf("quarantine stale sending delivery rows: %w", err)
+	if err := deliverysql.InDeliveryTx(ctx, r.db, func(tx dbx.Querier) error {
+		rows, err := tx.Query(ctx, mustSQL("delivery_repository_lock_0255_05.sql"), DeliveryStatusSending, cutoff, limit, DeliveryStatusQuarantined, "stale sending; external send outcome unknown")
+		if err != nil {
+			return fmt.Errorf("quarantine stale sending delivery rows: %w", err)
+		}
+		defer rows.Close()
+
+		var deliveryIDs []int64
+		for rows.Next() {
+			var deliveryID, outboxID int64
+			if err := rows.Scan(&deliveryID, &outboxID); err != nil {
+				return fmt.Errorf("scan quarantined delivery row: %w", err)
+			}
+
+			deliveryIDs = append(deliveryIDs, deliveryID)
+			outboxIDs = append(outboxIDs, outboxID)
+		}
+
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate quarantined delivery rows: %w", err)
+		}
+
+		if err := recordQuarantinedLedgerForDeliveryIDs(ctx, tx, deliveryIDs, quarantinedAt); err != nil {
+			return fmt.Errorf("record quarantined delivery ledger: %w", err)
+		}
+
+		quarantined = len(deliveryIDs)
+
+		return nil
+	}); err != nil {
+		return nil, 0, fmt.Errorf("quarantine stale sending transaction: %w", err)
 	}
 
-	outboxIDs, err = pgx.CollectRows(rows, pgx.RowTo[int64])
-	if err != nil {
-		return nil, 0, fmt.Errorf("collect quarantined delivery outbox ids: %w", err)
-	}
-
-	return deliverysql.UniqueInt64s(outboxIDs), len(outboxIDs), nil
+	return deliverysql.UniqueInt64s(outboxIDs), quarantined, nil
 }
 
 func uniqueDeliveryLockTokens(tokens []LockToken) []LockToken {

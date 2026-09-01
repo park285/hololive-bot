@@ -37,7 +37,7 @@ func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *tes
 			channelID:             "UC_retry_exact_once_community",
 			contentID:             "post-retry-exact-once",
 			roomID:                testRoomCommunity,
-			payload:               `{"post_id":"post-retry-exact-once","content_text":"community retry body","published_at":"2026-04-10T01:11:12Z"}`,
+			payload:               `{"canonical_post_id":"community:post-retry-exact-once","post_id":"post-retry-exact-once","content_text":"community retry body","published_at":"2026-04-10T01:11:12Z"}`,
 			expectedMessageMarker: "community retry body",
 		},
 		{
@@ -46,7 +46,7 @@ func TestProcessOnce_RetryAfterCommunityShortsSendFailureSendsExactlyOnce(t *tes
 			channelID:             "UC_retry_exact_once_shorts",
 			contentID:             "short-retry-exact-once",
 			roomID:                testRoomShorts,
-			payload:               `{"video_id":"short-retry-exact-once","title":"short retry title","published_at":"2026-04-10T01:11:12Z"}`,
+			payload:               `{"canonical_post_id":"short:short-retry-exact-once","video_id":"short-retry-exact-once","title":"short retry title","published_at":"2026-04-10T01:11:12Z"}`,
 			expectedMessageMarker: "short retry title",
 		},
 	}

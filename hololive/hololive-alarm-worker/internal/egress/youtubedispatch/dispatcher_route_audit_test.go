@@ -320,9 +320,9 @@ func buildRouteAuditOutboxItems(targets map[routeAuditTarget][]string) []domain.
 
 		switch target.alarmType {
 		case domain.AlarmTypeShorts:
-			item.Payload = fmt.Sprintf(`{"video_id":%q,"title":"short-%s"}`, contentID, target.channelID)
+			item.Payload = fmt.Sprintf(`{"canonical_post_id":%q,"video_id":%q,"title":"short-%s"}`, "short:"+contentID, contentID, target.channelID)
 		case domain.AlarmTypeCommunity:
-			item.Payload = fmt.Sprintf(`{"post_id":%q,"content_text":"community-%s"}`, contentID, target.channelID)
+			item.Payload = fmt.Sprintf(`{"canonical_post_id":%q,"post_id":%q,"content_text":"community-%s"}`, "community:"+contentID, contentID, target.channelID)
 		case domain.AlarmTypeLive, domain.AlarmTypeBirthday, domain.AlarmTypeAnniversary:
 		}
 

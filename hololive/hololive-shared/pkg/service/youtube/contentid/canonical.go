@@ -106,22 +106,12 @@ func ResolveDeliveryKey(kind domain.OutboxKind, contentID, payload, roomID strin
 		return LogicalKey{}, fmt.Errorf("resolve outbox content id: %w", err)
 	}
 
-	payloadResourceID := payloadIdentity.VideoID
-	if kind == domain.OutboxKindCommunityPost {
-		payloadResourceID = payloadIdentity.PostID
-	}
-
-	payloadLogicalID, err := ForOutboxKind(kind, payloadResourceID)
-	if err != nil {
-		return LogicalKey{}, fmt.Errorf("resolve payload resource id: %w", err)
-	}
-
 	canonicalPostID, err := ForOutboxKind(kind, payloadIdentity.CanonicalPostID)
 	if err != nil {
 		return LogicalKey{}, fmt.Errorf("resolve payload canonical post id: %w", err)
 	}
 
-	if contentLogicalID != payloadLogicalID || contentLogicalID != canonicalPostID {
+	if contentLogicalID != canonicalPostID {
 		return LogicalKey{}, &Error{Kind: kind, Field: "payload identity", Reason: ErrorReasonMismatch}
 	}
 

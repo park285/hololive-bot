@@ -159,7 +159,8 @@ func markSentBatchTx(
 		return fmt.Errorf("load tracking marks: %w", err)
 	}
 
-	if err := updateSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
+	updatedIDs, err := updateSentDeliveryRows(ctx, tx, uniqueIDs, sentAt)
+	if err != nil {
 		return fmt.Errorf("update sent delivery rows: %w", err)
 	}
 
@@ -167,21 +168,33 @@ func markSentBatchTx(
 		return fmt.Errorf("persist sent delivery tracking: %w", err)
 	}
 
+	if err := recordSentLedgerForDeliveryIDs(ctx, tx, updatedIDs, sentAt); err != nil {
+		return fmt.Errorf("record sent delivery ledger: %w", err)
+	}
+
 	return nil
 }
 
-func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
+func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) ([]int64, error) {
 	args := []any{domain.OutboxStatusSent, sentAt}
 
 	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
 	args = append(args, domain.OutboxStatusPending)
 
-	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "update delivery rows", mustSQL("delivery_repository_0188_04.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
-	`, args...); err != nil {
-		return fmt.Errorf("update delivery rows: %w", err)
+	query := mustSQL("delivery_repository_0188_04.sql") + deliverysql.DeliveryInClause("id", len(uniqueIDs)) + ` AND status = ? RETURNING id
+	`
+	rows, err := tx.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
+	if err != nil {
+		return nil, fmt.Errorf("update delivery rows: %w", err)
+	}
+	defer rows.Close()
+
+	updatedIDs, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return nil, fmt.Errorf("collect updated delivery ids: %w", err)
 	}
 
-	return nil
+	return updatedIDs, nil
 }
 
 func persistSentDeliveryTracking(
