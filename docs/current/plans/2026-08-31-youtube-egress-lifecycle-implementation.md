@@ -454,10 +454,10 @@ go -C hololive/hololive-alarm-worker test ./cmd/... ./internal/egress/youtubedis
 ### V09 — Backfill artifact
 
 ```bash
-./build-all.sh alarm-worker
+./build-all.sh --no-bump alarm-worker
 ```
 
-Image build script/tag는 구현 시 owning runbook의 current command로 확인하며 production transfer/deploy는 실행하지 않습니다.
+Image build script/tag는 구현 시 owning runbook의 current command로 확인하고, clean source의 full revision label 검증까지 통과해야 합니다. Production transfer/deploy는 실행하지 않습니다.
 
 ### V10 — Lifecycle rules and preparation
 

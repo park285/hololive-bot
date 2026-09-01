@@ -230,6 +230,29 @@ revision="$(git -C "${repo}" rev-parse HEAD)"
 
 : >"${docker_log}"
 if env "${common_env[@]}" FAKE_REVISION_LABEL=unknown \
+    bash "${repo}/build-all.sh" --no-bump --skip-local-ci hololive-api >/dev/null 2>&1; then
+    fail "clean target build must reject an unknown built image revision"
+fi
+grep -Eq "revision=${revision} compose .* build hololive-api" "${docker_log}" \
+    || fail "clean target build must inject the full source revision"
+grep -Eq "revision=${revision} image inspect .*hololive-api:prod" "${docker_log}" \
+    || fail "clean target build must inspect the built image revision"
+if grep -Eq ' compose .* up ' "${docker_log}"; then
+    fail "clean target build must never cut over live services"
+fi
+
+: >"${docker_log}"
+env "${common_env[@]}" FAKE_REVISION_LABEL="${revision}" \
+    bash "${repo}/build-all.sh" --no-bump --skip-local-ci hololive-api >/dev/null \
+    || fail "clean target build must accept an exact built image revision"
+grep -Eq "revision=${revision} image inspect .*hololive-api:prod" "${docker_log}" \
+    || fail "clean target build must preserve exact revision verification"
+if grep -Eq ' compose .* up ' "${docker_log}"; then
+    fail "exact target build must never cut over live services"
+fi
+
+: >"${docker_log}"
+if env "${common_env[@]}" FAKE_REVISION_LABEL=unknown \
     bash "${repo}/build-all.sh" --no-bump --skip-local-ci >/dev/null 2>&1; then
     fail "build-all live mode must reject unknown built image revisions"
 fi

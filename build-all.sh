@@ -322,6 +322,13 @@ HOLO_ALARM_WORKER_VERSION="$(read_version hololive/hololive-alarm-worker "${HOLO
 REVISION=unknown
 if [[ "${LIVE_DEPLOY_MODE}" == true ]]; then
     REVISION="$(deploy_source_revision "${REPO_ROOT}")"
+elif build_worktree_state="$(git -C "${REPO_ROOT}" status --porcelain=v1 --untracked-files=all)"; then
+    if [[ -z "${build_worktree_state}" ]]; then
+        REVISION="$(deploy_source_revision "${REPO_ROOT}")"
+    fi
+else
+    echo "[ERROR] Failed to inspect build source worktree" >&2
+    exit 1
 fi
 export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION REVISION
 
@@ -348,10 +355,16 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     echo "[BUILD] Targets: ${TARGET_SERVICES[*]}"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build "${TARGET_SERVICES[@]}"
+    if [[ "${REVISION}" != unknown ]]; then
+        verify_build_services
+    fi
     echo "[DONE] Target image build complete"
 elif [[ "${BUILD_ONLY}" == true ]]; then
     echo "[BUILD] All active buildable services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" build
+    if [[ "${REVISION}" != unknown ]]; then
+        verify_build_services
+    fi
     echo "[DONE] Image build complete"
 else
     compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
