@@ -162,6 +162,21 @@ func TestUpdateOutboxAggregateStatuses_TerminalTransitionRefreshesTerminalAt(t *
 	require.True(t, terminalAt.After(oldTerminalAt))
 }
 
+func TestUpdateOutboxAggregateStatuses_BackfillsMissingTerminalAtWithoutStatusChange(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repository := NewDeliveryRepository(pool, slog.New(slog.DiscardHandler))
+	outboxID := seedAggregateOutbox(ctx, t, pool, "agg-terminal-at-missing", domain.OutboxStatusFailed,
+		[]domain.OutboxStatus{domain.OutboxStatusFailed})
+
+	require.Nil(t, readOutboxTerminalAt(ctx, t, pool, outboxID))
+	require.NoError(t, repository.UpdateOutboxAggregateStatuses(ctx, []int64{outboxID}))
+
+	status, _, _, _ := readOutboxAggregateRow(ctx, t, pool, outboxID)
+	require.Equal(t, domain.OutboxStatusFailed, status)
+	require.NotNil(t, readOutboxTerminalAt(ctx, t, pool, outboxID))
+}
+
 func TestUpdateOutboxAggregateStatuses_NoDeliveriesDefaultsToPending(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

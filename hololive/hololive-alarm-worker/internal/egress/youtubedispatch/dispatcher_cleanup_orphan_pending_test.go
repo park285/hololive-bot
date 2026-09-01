@@ -33,14 +33,33 @@ import (
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
-func cleanupTestClaimManager(db *deliveryTestDB, cfg *dispatchstate.Config) *ClaimManager {
+func cleanupTestClaimManager(t *testing.T, db *deliveryTestDB, cfg *dispatchstate.Config) *ClaimManager {
+	t.Helper()
+
 	logger := slog.Default()
+	lockTimeout := cfg.LockTimeout
+
+	if lockTimeout <= 0 {
+		lockTimeout = time.Minute
+	}
+
+	claimFreshnessWindow := cfg.ClaimFreshnessWindow
+	if claimFreshnessWindow <= 0 {
+		claimFreshnessWindow = 2 * time.Hour
+	}
+
+	transition, err := store.NewTransitionStore(db, logger, store.TransitionConfig{
+		MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: lockTimeout,
+		ClaimFreshnessWindow: claimFreshnessWindow, LogicalGroupLimit: 100,
+	})
+	require.NoError(t, err)
 
 	return &ClaimManager{
-		db:       store.AsDeliveryDB(db),
-		config:   *cfg,
-		logger:   logger,
-		delivery: store.NewDeliveryRepository(db, logger),
+		db:         store.AsDeliveryDB(db),
+		config:     *cfg,
+		logger:     logger,
+		delivery:   store.NewDeliveryRepository(db, logger),
+		transition: transition,
 	}
 }
 
@@ -56,12 +75,14 @@ func outboxRowCount(t *testing.T, db *deliveryTestDB, id int64) int64 {
 
 func TestCompatibilityCleanupPreservesOutboxWhileLedgerStateIsIncomplete(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := cleanupTestClaimManager(db, &dispatchstate.Config{
+	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
 		CleanupAfter:         7 * 24 * time.Hour,
 		ClaimFreshnessWindow: 2 * time.Hour,
 		LockTimeout:          5 * time.Minute,
 	})
 	ctx := t.Context()
+	_, err := db.Exec(ctx, `DELETE FROM youtube_notification_delivery_ledger_state`)
+	require.NoError(t, err)
 
 	now := time.Now().UTC()
 	veryOld := now.Add(-30 * 24 * time.Hour)
@@ -101,9 +122,9 @@ func TestCompatibilityCleanupPreservesOutboxWhileLedgerStateIsIncomplete(t *test
 	assert.Equal(t, int64(1), deliveryCount, "보존된 PENDING의 delivery 행도 CASCADE로 삭제되지 않음")
 }
 
-func TestCompatibilityCleanupRemainsFrozenWithCompletedLedgerState(t *testing.T) {
+func TestLifecycleCleanupRemovesOnlyUnclaimableOrphanWithCompletedLedgerState(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := cleanupTestClaimManager(db, &dispatchstate.Config{
+	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
 		CleanupAfter:         1 * time.Hour,
 		ClaimFreshnessWindow: 2 * time.Hour,
 		LockTimeout:          5 * time.Minute,
@@ -111,15 +132,6 @@ func TestCompatibilityCleanupRemainsFrozenWithCompletedLedgerState(t *testing.T)
 	ctx := t.Context()
 
 	now := time.Now().UTC()
-	_, err := db.Exec(ctx, `
-		INSERT INTO youtube_notification_delivery_ledger_state (
-			singleton, schema_version, delivery_high_water_id, outbox_high_water_id,
-			delivery_cursor_id, delivery_verify_cursor_id, outbox_cursor_id,
-			legacy_coverage_start_at, coverage_verified_at, started_at, completed_at, updated_at
-		) VALUES (true, $1, 0, 0, 0, 0, 0, $2, $3, $4, $5, $6)
-	`, store.LedgerSchemaVersion, now, now, now, now, now)
-	require.NoError(t, err)
-
 	betweenCutoffs := now.Add(-90 * time.Minute)
 	beyondFreshness := now.Add(-3 * time.Hour)
 
@@ -140,7 +152,7 @@ func TestCompatibilityCleanupRemainsFrozenWithCompletedLedgerState(t *testing.T)
 	cm.cleanupOutbox(ctx)
 
 	assert.Equal(t, int64(1), outboxRowCount(t, db, stillClaimable.ID),
-		"compatibility binary는 completed state가 있어도 cleanup을 활성화하지 않음")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, pastFreshness.ID),
-		"compatibility binary는 T08 ledger-aware cleanup 전까지 모든 outbox cleanup을 동결")
+		"primary freshness window 안의 PENDING outbox는 보존")
+	assert.Equal(t, int64(0), outboxRowCount(t, db, pastFreshness.ID),
+		"primary가 다시 claim할 수 없는 delivery 없는 PENDING outbox는 정리")
 }

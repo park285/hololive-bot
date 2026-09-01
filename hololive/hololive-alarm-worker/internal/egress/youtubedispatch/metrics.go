@@ -21,12 +21,15 @@
 package youtubedispatch
 
 import (
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 )
 
@@ -49,9 +52,22 @@ var (
 	outboxDeliveryRetryAfterClampedTotal prometheus.Counter
 	youtubeOutboxV3HandoffTotal          *prometheus.CounterVec
 	outboxLiveCatchupSuppressionTotal    *prometheus.CounterVec
+
+	youtubeDeliveryTransitionTotal      *prometheus.CounterVec
+	youtubeDeliveryRuleTotal            *prometheus.CounterVec
+	youtubeDeliveryLogicalGroupTotal    *prometheus.CounterVec
+	youtubeDeliveryOutcomeUnknownTotal  *prometheus.CounterVec
+	youtubeDeliveryCommitAdjudication   *prometheus.CounterVec
+	youtubeDeliveryAtomicityBreachTotal *prometheus.CounterVec
+	youtubeDeliveryLedgerOperationTotal *prometheus.CounterVec
+	youtubeDeliveryCleanupGuardTotal    *prometheus.CounterVec
+	youtubeOutboxFanoutTotal            *prometheus.CounterVec
+	youtubeOutboxAggregateProjection    *prometheus.CounterVec
+	youtubeOutboxAggregateLag           prometheus.Histogram
 )
 
 const (
+	metricLabelResult                         = "result"
 	liveCatchupSuppressionResultSuppressed    = "suppressed"
 	liveCatchupSuppressionResultCacheError    = "cache_error"
 	liveCatchupSuppressionResultInvalidMarker = "invalid_marker"
@@ -70,7 +86,7 @@ func initOutboxEnqueueMetrics() {
 			Name: "hololive_youtube_outbox_enqueue_outboxes_total",
 			Help: "Total YouTube outbox enqueue outcomes by result.",
 		},
-		[]string{"result"},
+		[]string{metricLabelResult},
 	)
 
 	outboxEnqueueTargetRoomsTotal = promauto.NewCounter(
@@ -102,7 +118,7 @@ func initOutboxDispatchMetrics() {
 			Name: "hololive_youtube_outbox_delivery_processed_total",
 			Help: "Total processed YouTube outbox delivery rows by result.",
 		},
-		[]string{"result"},
+		[]string{metricLabelResult},
 	)
 
 	initOutboxDispatchHistograms()
@@ -132,15 +148,65 @@ func initOutboxDispatchMetrics() {
 			Name: "hololive_youtube_outbox_v3_handoff_total",
 			Help: "YouTube outbox delivery rows handed to the v3 ledger by mode and result.",
 		},
-		[]string{"mode", "result"},
+		[]string{"mode", metricLabelResult},
 	)
 	outboxLiveCatchupSuppressionTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "hololive_youtube_outbox_live_catchup_suppression_total",
 			Help: "YouTube outbox live catch-up suppression marker lookups by result (suppressed, cache_error, invalid_marker).",
 		},
-		[]string{"result"},
+		[]string{metricLabelResult},
 	)
+
+	initOutboxLifecycleMetrics()
+}
+
+func initOutboxLifecycleMetrics() {
+	youtubeDeliveryTransitionTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_transition_total",
+		Help: "Version-fenced YouTube delivery lifecycle operations by operation and durable outcome.",
+	}, []string{"operation", metricLabelResult})
+	youtubeDeliveryRuleTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_rule_total",
+		Help: "Applied YouTube delivery lifecycle policy decisions by stable rule ID.",
+	}, []string{"rule", metricLabelResult})
+	youtubeDeliveryLogicalGroupTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_logical_group_total",
+		Help: "Ledger-first YouTube logical delivery group resolutions.",
+	}, []string{"resolution", metricLabelResult})
+	youtubeDeliveryOutcomeUnknownTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_outcome_unknown_total",
+		Help: "YouTube provider effects whose delivery outcome must remain unknown.",
+	}, []string{"transport"})
+	youtubeDeliveryCommitAdjudication = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_commit_adjudication_total",
+		Help: "Primary read-back results after an ambiguous lifecycle commit response.",
+	}, []string{"operation", metricLabelResult})
+	youtubeDeliveryAtomicityBreachTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_atomicity_breach_total",
+		Help: "Detected mixed lifecycle command envelopes by bounded operation name.",
+	}, []string{"operation"})
+	youtubeDeliveryLedgerOperationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_ledger_operation_total",
+		Help: "Logical delivery ledger operations by operation and durable result.",
+	}, []string{"operation", metricLabelResult})
+	youtubeDeliveryCleanupGuardTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_delivery_cleanup_guard_total",
+		Help: "Terminal outbox cleanup decisions by bounded guard reason and result.",
+	}, []string{"reason", metricLabelResult})
+	youtubeOutboxFanoutTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_outbox_fanout_total",
+		Help: "Canonical YouTube outbox fanout materialization outcomes.",
+	}, []string{metricLabelResult})
+	youtubeOutboxAggregateProjection = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "hololive_youtube_outbox_aggregate_projection_total",
+		Help: "YouTube outbox aggregate projection outcomes.",
+	}, []string{metricLabelResult})
+	youtubeOutboxAggregateLag = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "hololive_youtube_outbox_aggregate_lag_seconds",
+		Help:    "Observed delay from a terminal envelope projection attempt to aggregate convergence.",
+		Buckets: prometheus.DefBuckets,
+	})
 }
 
 func observeLiveCatchupSuppression(result string) {
@@ -286,4 +352,87 @@ func observeOutboxDispatchTouchedOutboxes(n int) {
 	}
 
 	outboxDispatchTouchedOutboxes.Observe(float64(n))
+}
+
+func observeLifecycleApply(operation string, result store.ApplyResult, err error, count int) {
+	initOutboxMetrics()
+
+	if count <= 0 {
+		count = 1
+	}
+
+	outcome := result.Outcome.String()
+	if result.Outcome == 0 {
+		outcome = "error"
+	}
+
+	youtubeDeliveryTransitionTotal.WithLabelValues(operation, outcome).Add(float64(count))
+
+	for _, rule := range result.Rules {
+		youtubeDeliveryRuleTotal.WithLabelValues(string(rule), outcome).Inc()
+	}
+
+	if result.CommitAdjudication != "" {
+		youtubeDeliveryCommitAdjudication.WithLabelValues(operation, string(result.CommitAdjudication)).Inc()
+	}
+
+	if _, ok := errors.AsType[*store.AtomicityBreachError](err); ok {
+		youtubeDeliveryAtomicityBreachTotal.WithLabelValues(operation).Inc()
+	}
+}
+
+func observeLogicalResolutions(kinds []preparation.ResolutionKind) {
+	initOutboxMetrics()
+
+	for _, kind := range kinds {
+		result := "resolved"
+
+		if kind == preparation.LogicalInvariantBreach {
+			result = "blocked"
+		}
+
+		youtubeDeliveryLogicalGroupTotal.WithLabelValues(kind.String(), result).Inc()
+	}
+}
+
+func observeDeliveryOutcomeUnknown(transport string) {
+	initOutboxMetrics()
+	youtubeDeliveryOutcomeUnknownTotal.WithLabelValues(transport).Inc()
+}
+
+func observeLedgerOperation(operation string, result store.ApplyResult, count int) {
+	initOutboxMetrics()
+
+	if count <= 0 {
+		return
+	}
+
+	youtubeDeliveryLedgerOperationTotal.WithLabelValues(operation, result.Outcome.String()).Add(float64(count))
+}
+
+func observeCleanupResult(result store.CleanupResult) {
+	initOutboxMetrics()
+
+	if result.DeletedOutboxes > 0 {
+		youtubeDeliveryCleanupGuardTotal.WithLabelValues("ledger_backed", "deleted").Add(float64(result.DeletedOutboxes))
+	}
+
+	for reason, count := range result.Guards {
+		youtubeDeliveryCleanupGuardTotal.WithLabelValues(string(reason), "guarded").Add(float64(count))
+	}
+}
+
+func observeFanoutResult(result store.FanoutResult, err error) {
+	initOutboxMetrics()
+	observeLifecycleApply("materialize_fanout", result.ApplyResult, err, 1)
+	youtubeOutboxFanoutTotal.WithLabelValues(result.Outcome.String()).Inc()
+}
+
+func observeAggregateProjection(result string, lag time.Duration) {
+	initOutboxMetrics()
+	youtubeOutboxAggregateProjection.WithLabelValues(result).Inc()
+
+	if result == "applied" && youtubeOutboxAggregateLag != nil {
+		youtubeOutboxAggregateLag.Observe(lag.Seconds())
+	}
 }

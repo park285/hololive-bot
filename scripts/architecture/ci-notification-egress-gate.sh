@@ -6,6 +6,9 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 echo "[CHECK] notification egress ownership gate"
 
+"${SCRIPT_DIR}/check-youtube-egress-lifecycle-ownership_test.sh"
+"${SCRIPT_DIR}/check-youtube-egress-lifecycle-ownership.sh"
+
 fail=0
 
 report_hits() {

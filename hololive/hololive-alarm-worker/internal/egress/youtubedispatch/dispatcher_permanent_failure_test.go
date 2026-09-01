@@ -11,7 +11,6 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
@@ -122,61 +121,6 @@ func TestDispatcherFlowKeepsRetryableSentinelsInRetryBucket(t *testing.T) {
 	}
 }
 
-func TestRepository_MarkPermanentFailureBatch_ImmediatelySetsFAILED(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	now := time.Now().Truncate(time.Microsecond)
-	nextAttemptAt := now.Add(30 * time.Minute)
-	lockedAt := now
-	row := deliveryTestDeliveryModel{
-		OutboxID:      1,
-		RoomID:        "room-permanent",
-		Status:        string(domain.OutboxStatusPending),
-		AttemptCount:  0,
-		NextAttemptAt: nextAttemptAt,
-		CreatedAt:     now,
-		LockedAt:      &lockedAt,
-	}
-
-	if err := insertDeliveryTestRows(db, &row).Error; err != nil {
-		t.Fatalf("create delivery row: %v", err)
-	}
-
-	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
-	if err := repository.MarkPermanentFailureBatch(ctx, []int64{row.ID}, 3, "auth"); err != nil {
-		t.Fatalf("MarkPermanentFailureBatch() error = %v", err)
-	}
-
-	var updated deliveryTestDeliveryModel
-
-	if err := firstDeliveryTestRow(db, &updated, row.ID).Error; err != nil {
-		t.Fatalf("load updated delivery row: %v", err)
-	}
-
-	if updated.Status != string(domain.OutboxStatusFailed) {
-		t.Fatalf("status = %q, want %q", updated.Status, domain.OutboxStatusFailed)
-	}
-
-	if updated.AttemptCount != 3 {
-		t.Fatalf("attempt_count = %d, want 3", updated.AttemptCount)
-	}
-
-	if updated.LockedAt != nil {
-		t.Fatalf("locked_at = %v, want nil", updated.LockedAt)
-	}
-
-	if updated.Error != "auth" {
-		t.Fatalf("error = %q, want auth", updated.Error)
-	}
-
-	if !updated.NextAttemptAt.Equal(nextAttemptAt) {
-		t.Fatalf("next_attempt_at = %s, want unchanged %s", updated.NextAttemptAt, nextAttemptAt)
-	}
-}
-
 func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	t.Parallel()
 
@@ -255,8 +199,8 @@ func assertAuthSentinelRowsFailed(t *testing.T, db *deliveryTestDB, outboxID, de
 		t.Fatalf("delivery status = %q, want %q", updatedDelivery.Status, domain.OutboxStatusFailed)
 	}
 
-	if updatedDelivery.AttemptCount != 3 {
-		t.Fatalf("delivery attempt_count = %d, want 3", updatedDelivery.AttemptCount)
+	if updatedDelivery.AttemptCount != 1 {
+		t.Fatalf("delivery attempt_count = %d, want 1", updatedDelivery.AttemptCount)
 	}
 
 	if updatedDelivery.LockedAt != nil {

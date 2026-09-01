@@ -221,7 +221,7 @@ func validateFailureGroup(owner RowSnapshot, followers []RowSnapshot) error {
 			return fmt.Errorf("follower[%d]: %w", i, err)
 		}
 
-		if followers[i].Status != StatusPending {
+		if followers[i].Status != StatusPending && followers[i].Status != StatusFailed {
 			return fmt.Errorf("follower[%d] status %q is not mutable", i, followers[i].Status)
 		}
 

@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
@@ -92,6 +91,7 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 	)
 
 	dispatcher.telemetry = nil
+	dispatcher.send.transition = nil
 
 	return dispatcher, db
 }
@@ -132,6 +132,7 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *
 	)
 
 	dispatcher.telemetry = nil
+	dispatcher.send.transition = nil
 
 	return dispatcher
 }
@@ -718,6 +719,9 @@ func TestProcessPendingDeliveriesSendsPostToEveryRoomAcrossBatches(t *testing.T)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
 	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{BatchSize: 1, DeliveryParallelism: 1})
+
+	dispatcher.send.transition = dispatcher.claim.transition
+
 	outbox, postID := newTwoRoomClaimGateOutbox(t, db, "cross-batch", now.Add(-time.Minute))
 
 	rooms := []string{"room-batch-a", "room-batch-b"}
@@ -766,156 +770,6 @@ func TestProcessPendingDeliveriesSendsPostToEveryRoomAcrossBatches(t *testing.T)
 	require.Equal(t, 2, sender.messageCount())
 }
 
-func TestDispatchDeliveryRowsContendingWorkerDefersRoomWithoutConsumingAttempt(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	sender := &claimGateTestSender{failRoom: map[string]bool{}}
-	db := newSharedClaimGateTestDB(t, 8)
-	config := func() *dispatchstate.Config {
-		return &dispatchstate.Config{BatchSize: 1, DeliveryParallelism: 1, RetryBackoff: time.Minute}
-	}
-	dispatchers := []*Dispatcher{
-		newClaimGateTestDispatcherWithDB(t, db, sender, config()),
-		newClaimGateTestDispatcherWithDB(t, db, sender, config()),
-	}
-	outbox, postID := newTwoRoomClaimGateOutbox(t, db, "contend", now.Add(-time.Minute))
-	rooms := []string{"room-contend-a", "room-contend-b"}
-	rows := seedContendingClaimGateRows(t, db, outbox.ID, rooms, now)
-	outboxByID := map[int64]domain.YouTubeNotificationOutbox{outbox.ID: outbox}
-	results := runContendingDispatchers(ctx, dispatchers, rows, outboxByID)
-
-	require.Equal(t, 1, sender.messageCount())
-
-	winner, loser := resolveContendingDispatchOutcome(t, results)
-	require.Equal(t, []int64{rows[winner].ID}, results[winner].SuccessDeliveryIDs)
-	require.Len(t, results[winner].SuccessClaimTokens, 1)
-
-	deferred := loadClaimGateDeliveryRow(t, db, rows[loser].ID)
-	require.Equal(t, string(domain.OutboxStatusPending), deferred.Status)
-	require.Zero(t, deferred.AttemptCount, "pre-send claim contention must not consume an attempt")
-	require.Nil(t, deferred.LockedAt)
-	require.True(t, deferred.NextAttemptAt.After(now), "deferred row must wait for the claim owner before retrying")
-
-	inFlight := loadClaimGateDeliveryRow(t, db, rows[winner].ID)
-	require.Equal(t, string(store.DeliveryStatusSending), inFlight.Status)
-
-	dispatchers[winner].claim.markDispatchResult(ctx, []domain.YouTubeNotificationDelivery{rows[winner]}, &results[winner])
-	require.Equal(t, string(domain.OutboxStatusSent), loadClaimGateDeliveryRow(t, db, rows[winner].ID).Status)
-
-	var state domain.YouTubeCommunityShortsAlarmState
-
-	require.NoError(t, firstDeliveryTestRow(db, &state, "kind = ? AND post_id = ?", outbox.Kind, postID).Error)
-	require.NotNil(t, state.AlarmSentAt)
-
-	retryAt := time.Now().UTC().Add(-time.Second)
-	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{"next_attempt_at": retryAt}, "id = ?", rows[loser].ID).Error)
-	require.Equal(t, 1, dispatchers[loser].claim.processPendingDeliveries(ctx))
-	require.Equal(t, 2, sender.messageCount())
-
-	assertContendingRoomsDelivered(t, db, sender, rooms, rows[loser].ID)
-}
-
-func seedContendingClaimGateRows(
-	t *testing.T,
-	db *deliveryTestDB,
-	outboxID int64,
-	rooms []string,
-	now time.Time,
-) []domain.YouTubeNotificationDelivery {
-	t.Helper()
-
-	lockedAt := now
-	rows := make([]domain.YouTubeNotificationDelivery, 0, len(rooms))
-
-	for _, roomID := range rooms {
-		delivery := domain.YouTubeNotificationDelivery{
-			OutboxID:      outboxID,
-			RoomID:        roomID,
-			Status:        store.DeliveryStatusSending,
-			NextAttemptAt: now.Add(-time.Minute),
-			CreatedAt:     now.Add(-time.Minute),
-			LockedAt:      &lockedAt,
-		}
-		require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
-
-		rows = append(rows, delivery)
-	}
-
-	return rows
-}
-
-func runContendingDispatchers(
-	ctx context.Context,
-	dispatchers []*Dispatcher,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxByID map[int64]domain.YouTubeNotificationOutbox,
-) []dispatchstate.DispatchResult {
-	results := make([]dispatchstate.DispatchResult, len(dispatchers))
-	start := make(chan struct{})
-
-	var wg sync.WaitGroup
-
-	for i := range dispatchers {
-		wg.Go(func() {
-			<-start
-
-			results[i] = dispatchers[i].send.dispatchDeliveryRows(ctx, []domain.YouTubeNotificationDelivery{rows[i]}, outboxByID)
-		})
-	}
-
-	close(start)
-	wg.Wait()
-
-	return results
-}
-
-func resolveContendingDispatchOutcome(t *testing.T, results []dispatchstate.DispatchResult) (int, int) {
-	t.Helper()
-
-	winner, loser := -1, -1
-
-	for i := range results {
-		require.Zero(t, results[i].FailedDeliveries, "contention must not be accounted as a delivery failure")
-		require.Empty(t, results[i].FailureBuckets[deliveryFailureReasonPreSendClaim])
-
-		if len(results[i].SuccessDeliveryIDs) == 1 {
-			winner = i
-		} else {
-			loser = i
-		}
-	}
-
-	require.NotEqual(t, -1, winner)
-	require.NotEqual(t, -1, loser)
-
-	return winner, loser
-}
-
-func assertContendingRoomsDelivered(
-	t *testing.T,
-	db *deliveryTestDB,
-	sender *claimGateTestSender,
-	rooms []string,
-	loserDeliveryID int64,
-) {
-	t.Helper()
-
-	sentRooms := make([]string, 0, len(rooms))
-
-	for _, message := range sender.allMessages() {
-		sentRooms = append(sentRooms, message[:len("room-contend-x")])
-	}
-
-	require.ElementsMatch(t, rooms, sentRooms)
-
-	delivered := loadClaimGateDeliveryRow(t, db, loserDeliveryID)
-	require.Equal(t, string(domain.OutboxStatusSent), delivered.Status)
-	require.NotNil(t, delivered.SentAt)
-	require.Zero(t, delivered.AttemptCount)
-}
-
 func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefersPersistedRow(t *testing.T) {
 	t.Parallel()
 
@@ -937,11 +791,15 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 
 	lockedAt := now
 
-	row.Status = store.DeliveryStatusSending
+	row.Status = domain.OutboxStatusPending
 	row.LockedAt = &lockedAt
 	row.NextAttemptAt = now.Add(-time.Minute)
 	row.AttemptCount = 1
+	row.RowVersion = 1
 	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
+	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
+		"row_version": 1,
+	}, "id = ?", row.ID).Error)
 
 	selection := dispatcher.claim.selectClaimedDeliveries(ctx, []domain.YouTubeNotificationDelivery{row}, []domain.YouTubeNotificationOutbox{outbox}, claim.NewMemoryDecisionCache())
 

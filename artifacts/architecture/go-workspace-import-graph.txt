@@ -97,6 +97,8 @@ github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/park285/iris
 github.com/kapu/hololive-alarm-worker/internal/egress -> github.com/park285/shared-go/v2/pkg/kakaoformat
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim
+github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle
+github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-shared/pkg/constants
@@ -138,6 +140,8 @@ github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle 
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation -> github.com/kapu/hololive-shared/pkg/service/youtube/contentid
+github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle
+github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store -> github.com/kapu/hololive-shared/pkg/dbx
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store -> github.com/kapu/hololive-shared/pkg/domain

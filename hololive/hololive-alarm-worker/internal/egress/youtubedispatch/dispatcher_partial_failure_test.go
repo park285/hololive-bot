@@ -42,6 +42,7 @@ import (
 type testSender struct {
 	mu               sync.Mutex
 	failRoom         map[string]bool
+	failErr          error
 	messages         []string
 	clientRequestIDs []string
 }
@@ -93,6 +94,10 @@ func (s *testSender) SendMessage(_ context.Context, roomID, message string) erro
 	defer s.mu.Unlock()
 
 	if s.failRoom[roomID] {
+		if s.failErr != nil {
+			return s.failErr
+		}
+
 		return assert.AnError
 	}
 
@@ -106,6 +111,10 @@ func (s *testSender) SendMessageWithClientRequestID(_ context.Context, roomID, m
 	defer s.mu.Unlock()
 
 	if s.failRoom[roomID] {
+		if s.failErr != nil {
+			return s.failErr
+		}
+
 		return assert.AnError
 	}
 
@@ -137,7 +146,7 @@ func (s *failFirstSendTestSender) messageCount() int {
 	return len(s.messages)
 }
 
-func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testing.T) {
+func TestFanoutMaterialization_SubscriberLookupFailureSchedulesRetryBackoff(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -152,7 +161,6 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
-		LockedAt:      &now,
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
@@ -166,7 +174,10 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{})
+	claimed, err := dispatcher.claim.fanout.Claim(ctx)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	dispatcher.claim.fanout.materializeOne(ctx, &claimed[0], map[string]channelAlarmRoomTargets{})
 
 	var updated domain.YouTubeNotificationOutbox
 
@@ -178,7 +189,7 @@ func TestEnqueueDeliveries_SubscriberLookupFailureSchedulesRetryBackoff(t *testi
 	assert.Equal(t, "subscriber lookup failed", updated.Error)
 }
 
-func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
+func TestFanoutMaterialization_NoSubscribersMarksSent(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -193,7 +204,6 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
-		LockedAt:      &now,
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
@@ -207,7 +217,10 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{item}, map[string]channelAlarmRoomTargets{
+	claimed, err := dispatcher.claim.fanout.Claim(ctx)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	dispatcher.claim.fanout.materializeOne(ctx, &claimed[0], map[string]channelAlarmRoomTargets{
 		item.ChannelID: {
 			domain.AlarmTypeLive: {},
 		},
@@ -219,7 +232,7 @@ func TestEnqueueDeliveries_NoSubscribersMarksSent(t *testing.T) {
 	assert.Equal(t, domain.OutboxStatusSent, updated.Status)
 }
 
-func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T) {
+func TestFanoutMaterialization_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -234,7 +247,6 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
-		LockedAt:      &now,
 	}
 	communityItem := domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindCommunityPost,
@@ -244,7 +256,6 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
-		LockedAt:      &now,
 	}
 
 	require.NoError(t, insertDeliveryTestRows(db, &shortsItem).Error)
@@ -260,12 +271,19 @@ func TestEnqueueDeliveries_UsesAlarmTypeSpecificRoomsForSameChannel(t *testing.T
 		DeliveryParallelism: 2,
 	})
 
-	dispatcher.claim.enqueueDeliveries(ctx, []domain.YouTubeNotificationOutbox{shortsItem, communityItem}, map[string]channelAlarmRoomTargets{
+	roomsByChannel := map[string]channelAlarmRoomTargets{
 		shortsItem.ChannelID: {
 			domain.AlarmTypeShorts:    {testRoomShorts: true},
 			domain.AlarmTypeCommunity: {testRoomCommunity: true},
 		},
-	})
+	}
+	claimed, err := dispatcher.claim.fanout.Claim(ctx)
+	require.NoError(t, err)
+	require.Len(t, claimed, 2)
+
+	for i := range claimed {
+		dispatcher.claim.fanout.materializeOne(ctx, &claimed[i], roomsByChannel)
+	}
 
 	var rows []deliveryTestDeliveryModel
 
@@ -322,13 +340,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		DeliveryParallelism: 1,
 	})
 
-	result := dispatcher.send.dispatchDeliveryRows(ctx, []domain.YouTubeNotificationDelivery{delivery}, map[int64]domain.YouTubeNotificationOutbox{
-		item.ID: item,
-	})
-	require.Equal(t, []int64{delivery.ID}, result.SuccessDeliveryIDs)
-	require.Equal(t, []int64{item.ID}, result.TouchedOutboxIDs)
-	require.NoError(t, dispatcher.claim.delivery.MarkSentBatch(ctx, result.SuccessDeliveryIDs))
-	require.NoError(t, dispatcher.claim.delivery.UpdateOutboxAggregateStatuses(ctx, result.TouchedOutboxIDs))
+	require.Equal(t, 1, dispatcher.claim.processPendingDeliveries(ctx))
 
 	var updatedDelivery deliveryTestDeliveryModel
 
