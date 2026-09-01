@@ -61,7 +61,7 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 
 	require.NoError(t, firstDeliveryTestRow(db, &gotDelivery, delivery.ID).Error)
 	require.Equal(t, string(store.DeliveryStatusQuarantined), gotDelivery.Status)
-	require.Equal(t, 1, gotDelivery.AttemptCount)
+	require.Equal(t, 0, gotDelivery.AttemptCount, "outcome-unknown quarantine must not spend a retry attempt")
 	require.Nil(t, gotDelivery.LockedAt)
 	require.Equal(t, "stale sending; external send outcome unknown", gotDelivery.Error)
 

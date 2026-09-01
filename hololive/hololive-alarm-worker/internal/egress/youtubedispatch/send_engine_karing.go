@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
@@ -28,12 +31,8 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	sender, ok := d.sender.(YouTubeOutboxKaringSender)
-	if !ok {
-		return false
-	}
-
-	if !isYouTubeOutboxKaringKind(kind) {
+	sender, supported := d.karingSender(kind)
+	if !supported {
 		return false
 	}
 
@@ -41,32 +40,163 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 		return true
 	}
 
-	payload, err := d.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
-	if err != nil {
-		d.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
+	d.dispatchClaimedKaring(
+		ctx, sender, roomID, channelID, kind, rows, outboxes, claimTokens, mode, result, mu,
+	)
 
-		return true
+	return true
+}
+
+func (d *SendEngine) karingSender(kind domain.OutboxKind) (YouTubeOutboxKaringSender, bool) {
+	sender, ok := d.sender.(YouTubeOutboxKaringSender)
+
+	return sender, ok && isYouTubeOutboxKaringKind(kind)
+}
+
+func (d *SendEngine) dispatchClaimedKaring(
+	ctx context.Context,
+	sender YouTubeOutboxKaringSender,
+	roomID string,
+	channelID string,
+	kind domain.OutboxKind,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	claimTokens []dispatchstate.ClaimToken,
+	mode string,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) {
+	payload, sendReq, prepared := d.prepareKaringDispatch(
+		ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, result, mu,
+	)
+	if !prepared {
+		return
 	}
 
-	sendReq, err := buildDeliveryKaringSendRequest(roomID, outboxes)
-	if err != nil {
-		d.recordKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
-
-		return true
+	operation, begun := d.beginLifecycleOperation(ctx, rows, outboxes, result, mu)
+	if !begun {
+		return
 	}
 
 	attemptStartedAt := time.Now().UTC()
 	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, mode)
 
 	if err := d.sendYouTubeOutboxKaring(ctx, sender, roomID, &payload); err != nil {
-		d.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
+		d.handleKaringSendFailure(
+			ctx, operation, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu,
+		)
 
-		return true
+		return
+	}
+
+	if !d.completeLifecycleSent(ctx, operation, claimTokens, result, mu) {
+		return
 	}
 
 	d.recordKaringSuccess(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, result, mu)
+}
 
-	return true
+func (d *SendEngine) prepareKaringDispatch(
+	ctx context.Context,
+	roomID string,
+	channelID string,
+	kind domain.OutboxKind,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	claimTokens []dispatchstate.ClaimToken,
+	mode string,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) (domain.YouTubeOutboxDispatchPayload, deliverySendRequest, bool) {
+	payload, err := d.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
+	if err != nil {
+		d.handleKaringRequestBuildFailure(
+			ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu,
+		)
+
+		return domain.YouTubeOutboxDispatchPayload{}, deliverySendRequest{}, false
+	}
+
+	sendReq, err := buildDeliveryKaringSendRequest(roomID, outboxes)
+	if err != nil {
+		d.handleKaringRequestBuildFailure(
+			ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu,
+		)
+
+		return domain.YouTubeOutboxDispatchPayload{}, deliverySendRequest{}, false
+	}
+
+	return payload, sendReq, true
+}
+
+func (d *SendEngine) handleKaringRequestBuildFailure(
+	ctx context.Context,
+	roomID string,
+	channelID string,
+	kind domain.OutboxKind,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	claimTokens []dispatchstate.ClaimToken,
+	mode string,
+	err error,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) {
+	if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailurePermanent, lifecycleReasonRequest, result, mu) {
+		d.recordKaringRequestBuildFailure(
+			ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu,
+		)
+	}
+}
+
+func (d *SendEngine) handleKaringSendFailure(
+	ctx context.Context,
+	operation store.StartedOperation,
+	roomID string,
+	channelID string,
+	kind domain.OutboxKind,
+	rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox,
+	sendReq deliverySendRequest,
+	claimTokens []dispatchstate.ClaimToken,
+	mode string,
+	err error,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) {
+	if d.transition != nil && !d.applyKaringLifecycleFailure(ctx, operation, roomID, channelID, kind, rows, err, result, mu) {
+		return
+	}
+
+	d.recordKaringSendFailure(
+		ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu,
+	)
+}
+
+func (d *SendEngine) applyKaringLifecycleFailure(
+	ctx context.Context,
+	operation store.StartedOperation,
+	roomID string,
+	channelID string,
+	kind domain.OutboxKind,
+	rows []domain.YouTubeNotificationDelivery,
+	err error,
+	result *dispatchstate.DispatchResult,
+	mu *sync.Mutex,
+) bool {
+	failureKind, reason, retryAfter := lifecycleProviderFailure(err, lifecycleReasonKaring)
+	if failureKind == lifecycle.FailureOutcomeUnknown {
+		d.logger.Warn("Karing delivery outcome unknown, preserving SENDING logical groups",
+			slog.String("room_id", roomID),
+			slog.String("channel_id", channelID),
+			slog.String("kind", string(kind)),
+			slog.Int("count", len(rows)),
+			slog.Any("error", err))
+
+		return false
+	}
+
+	return d.applyStartedLifecycleFailure(ctx, operation, failureKind, reason, retryAfter, result, mu)
 }
 
 func isYouTubeOutboxKaringKind(kind domain.OutboxKind) bool {
@@ -114,7 +244,11 @@ func (d *SendEngine) karingSendContext(ctx context.Context) (context.Context, co
 
 func (d *SendEngine) wrapKaringTimeoutError(ctx context.Context, action string, err error) error {
 	if errors.Is(context.Cause(ctx), errDeliverySendTimeout) {
-		return fmt.Errorf("%s timed out after %s: %w", action, d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
+		return fmt.Errorf("%s timed out after %s: %w", action, d.config.DeliverySendTimeout, errors.Join(errDeliverySendOutcomeUnknown, errDeliverySendTimeout, err))
+	}
+
+	if deliverySendOutcomeUnknown(err) {
+		return fmt.Errorf("%s: %w", action, errors.Join(errDeliverySendOutcomeUnknown, err))
 	}
 
 	return fmt.Errorf("%s: %w", action, err)

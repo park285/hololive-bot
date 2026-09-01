@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
@@ -15,77 +16,54 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
-func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt *time.Time) {
-	query := mustSQL("dispatcher_claim_release_0019_01.sql")
-	args := []any{id, domain.OutboxStatusPending}
-
-	if lockedAt != nil {
-		query += " AND locked_at = ?"
-
-		args = append(args, *lockedAt)
-	}
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, d.db, "release outbox lock", query, args...); err != nil {
-		d.logger.Warn("Failed to release outbox lock",
-			slog.Int64("id", id),
-			slog.Any("error", err))
-	}
-}
-
 const outboxCleanupBatchSize = 1000
 
 func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
-	if d == nil || d.db == nil || d.delivery == nil {
-		return
-	}
-
-	ready, err := d.delivery.CompatibilityCleanupReady(ctx)
-	if err != nil {
-		d.logger.Warn("Outbox cleanup remains frozen because ledger state is unavailable", slog.Any("error", err))
-
-		return
-	}
-
-	if !ready {
+	if d == nil || d.db == nil || d.transition == nil {
 		return
 	}
 
 	outboxCutoff := time.Now().UTC().Add(-d.config.CleanupAfter)
 
-	deleted, err := d.deleteTerminalOutboxBatches(ctx, outboxCutoff, outboxCleanupBatchSize)
-	if err != nil {
-		d.logger.Warn("Failed to cleanup old outbox items", slog.Any("error", err))
-
-		return
-	}
-
-	if deleted > 0 {
-		d.logger.Info("Cleaned up old outbox items", slog.Int64("deleted", deleted))
-	}
-
-	d.cleanupOrphanPendingOutbox(ctx)
-}
-
-// 무제한 단문 DELETE는 youtube_notification_delivery ON DELETE CASCADE 증폭으로
-// 락 보유 시간이 길어진다 — picked LIMIT 배치 루프(retention.go 패턴)를 유지할 것.
-func (d *ClaimManager) deleteTerminalOutboxBatches(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
-	var total int64
+	var (
+		cursor  store.CleanupCursor
+		deleted int
+		guarded int
+	)
 
 	for {
-		deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup old outbox items", mustSQL("dispatcher_claim_release_0042_02.sql"), domain.OutboxStatusSent, domain.OutboxStatusFailed, cutoff, batchSize)
+		result, err := d.transition.CleanupTerminalOutboxes(ctx, outboxCutoff, cursor, outboxCleanupBatchSize)
 		if err != nil {
-			return total, fmt.Errorf("exec delivery SQL: %w", err)
+			d.logger.Warn("Failed to cleanup ledger-backed terminal outbox items", slog.Any("error", err))
+
+			return
 		}
 
-		total += deleted
-		if deleted < int64(batchSize) {
-			return total, nil
+		observeCleanupResult(result)
+
+		deleted += result.DeletedOutboxes
+		guarded += result.GuardedOutboxes
+
+		if result.ExaminedOutboxes < outboxCleanupBatchSize {
+			break
 		}
+
+		cursor = result.NextCursor
 
 		if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
-			return total, fmt.Errorf("yield between delete batches: %w", err)
+			d.logger.Warn("Failed to yield between terminal outbox cleanup batches", slog.Any("error", err))
+
+			return
 		}
 	}
+
+	if deleted > 0 || guarded > 0 {
+		d.logger.Info("Completed ledger-backed terminal outbox cleanup scan",
+			slog.Int("deleted", deleted),
+			slog.Int("guarded", guarded))
+	}
+
+	d.cleanupExpiredFanoutOutboxes(ctx)
 }
 
 // cutoff가 max(CleanupAfter, ClaimFreshnessWindow)인 이유: CleanupAfter >= ClaimFreshnessWindow가
@@ -93,7 +71,7 @@ func (d *ClaimManager) deleteTerminalOutboxBatches(ctx context.Context, cutoff t
 // 묶어 primary claim(dispatcher_claim.go의 created_at >= now-ClaimFreshnessWindow)에서 다시 claim될 수
 // 없음을 보장한다. ClaimFreshnessWindow<=0이면 claim에 신선도 하한이 없어 안전한 cutoff가 없으므로 skip.
 // NOT EXISTS delivery 가드는 ON DELETE CASCADE로 인한 delivery/telemetry 동반 삭제를 막는다.
-func (d *ClaimManager) cleanupOrphanPendingOutbox(ctx context.Context) {
+func (d *ClaimManager) cleanupExpiredFanoutOutboxes(ctx context.Context) {
 	if d.config.ClaimFreshnessWindow <= 0 {
 		return
 	}
@@ -102,15 +80,30 @@ func (d *ClaimManager) cleanupOrphanPendingOutbox(ctx context.Context) {
 	pendingCutoff := now.Add(-d.orphanPendingCutoff())
 	lockExpiry := now.Add(-d.config.LockTimeout)
 
-	deleted, err := deliverysql.ExecDeliverySQL(ctx, d.db, "cleanup orphan pending outbox items", mustSQL("dispatcher_claim_release_0072_03.sql"), domain.OutboxStatusPending, pendingCutoff, lockExpiry)
-	if err != nil {
-		d.logger.Warn("Failed to cleanup orphan pending outbox items", slog.Any("error", err))
+	var total int
 
-		return
+	for {
+		deleted, err := d.transition.CleanupExpiredFanoutOutboxes(ctx, pendingCutoff, lockExpiry, outboxCleanupBatchSize)
+		if err != nil {
+			d.logger.Warn("Failed to cleanup expired fanout outbox items", slog.Any("error", err))
+
+			return
+		}
+
+		total += deleted
+		if deleted < outboxCleanupBatchSize {
+			break
+		}
+
+		if err := deliverysql.YieldBetweenDeleteBatches(ctx); err != nil {
+			d.logger.Warn("Failed to yield between expired fanout cleanup batches", slog.Any("error", err))
+
+			return
+		}
 	}
 
-	if deleted > 0 {
-		d.logger.Info("Cleaned up orphan pending outbox items", slog.Int64("deleted", deleted))
+	if total > 0 {
+		d.logger.Info("Cleaned up expired fanout outbox items", slog.Int("deleted", total))
 	}
 }
 
@@ -119,34 +112,48 @@ func (d *ClaimManager) orphanPendingCutoff() time.Duration {
 }
 
 func (d *ClaimManager) quarantineStaleSendingDeliveries(ctx context.Context) {
-	if d == nil || d.delivery == nil {
+	if d == nil || d.transition == nil {
 		return
 	}
 
-	outboxIDs, quarantined, err := d.delivery.QuarantineStaleSending(ctx, d.config.LockTimeout, d.config.BatchSize)
+	d.quarantineStaleLogicalGroups(ctx)
+}
+
+func (d *ClaimManager) quarantineStaleLogicalGroups(ctx context.Context) {
+	result, err := d.transition.QuarantineStaleLogicalGroups(ctx, d.config.BatchSize)
+	observeLifecycleApply("quarantine_logical_group", result.ApplyResult, err, max(result.QuarantinedDeliveries, 1))
+
 	if err != nil {
-		d.logger.Warn("Failed to quarantine stale sending delivery rows", slog.Any("error", err))
+		d.logger.Warn("Failed to quarantine stale logical delivery groups", slog.Any("error", err))
 
 		return
 	}
 
-	if quarantined == 0 {
+	for i := range result.Blocked {
+		d.logger.Error("Blocked stale logical delivery group quarantine",
+			slog.String("logical_key_hash", result.Blocked[i].KeyHash),
+			slog.String("invariant_reason", string(result.Blocked[i].Reason)))
+	}
+
+	if result.Outcome != store.ApplyApplied || result.QuarantinedDeliveries == 0 {
 		return
 	}
 
-	if err := d.delivery.UpdateOutboxAggregateStatuses(ctx, outboxIDs); err != nil {
-		d.logger.Warn("Failed to update outbox statuses after stale sending quarantine", slog.Any("error", err))
+	observeLedgerOperation("record_quarantined", result.ApplyResult, result.QuarantinedDeliveries)
+
+	if err := d.projector.Project(ctx, result.TouchedOutboxIDs); err != nil {
+		d.logger.Warn("Failed to update outbox statuses after logical group quarantine", slog.Any("error", err))
 
 		return
 	}
 
-	if err := d.logFinalizedCommunityShortsOutboxResults(ctx, outboxIDs); err != nil {
-		d.logger.Warn("Failed to log finalized community/shorts outbox results after stale sending quarantine", slog.Any("error", err))
+	if err := d.logFinalizedCommunityShortsOutboxResults(ctx, result.TouchedOutboxIDs); err != nil {
+		d.logger.Warn("Failed to log finalized community/shorts outbox results after logical group quarantine", slog.Any("error", err))
 	}
 
-	d.logger.Warn("Quarantined stale sending delivery rows",
-		slog.Int("delivery_count", quarantined),
-		slog.Int("outbox_count", len(outboxIDs)),
+	d.logger.Warn("Quarantined stale logical delivery groups",
+		slog.Int("delivery_count", result.QuarantinedDeliveries),
+		slog.Int("outbox_count", len(result.TouchedOutboxIDs)),
 		slog.Duration("older_than", d.config.LockTimeout))
 }
 

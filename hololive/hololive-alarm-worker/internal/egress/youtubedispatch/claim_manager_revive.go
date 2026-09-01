@@ -23,38 +23,18 @@ package youtubedispatch
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"slices"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
 
-// reviveStaleFailedOutbox는 전송 실패로 한 번도 발송 못 한 채 영구 FAILED된 알람을 PENDING으로 되살려
-// 디스패처가 재전송하도록 한다. 여기서 poll-persist의 ON CONFLICT rearm은 재발견(re-poll)된 행에만 도달하지만
-// NEW_VIDEO/LIVE_STREAM은 poll-persist rearm 대상이 아니므로, 폴링과 무관하게 FAILED를 되살리는
-// 경로는 이것뿐이다(community/shorts 포함 전 kind).
-//
-// 대상 선정 predicate:
-//   - status='FAILED': aggregate FAILED는 pending room이 없음을 함의(delivery_repository_aggregate_sync.sql) = 재시도 소진.
-//   - sent_at IS NULL: aggregate가 한 번도 SENT에 도달 안 함 = 사용자에게 전달된 적 없음(중복 방지 가드).
-//     community/shorts는 한 room이라도 보내면 alarm-once로 aggregate가 SENT가 되어 이 가드가 제외한다.
-//     dispatch의 alarm-once 게이트(alarm_sent_at)는 (post, room) 단위로 판정하므로, 이미 SENT delivery 행이 있는
-//     room만 건너뛰고 전송된 적 없는 room 행은 보낸다(claim_manager_gate.go resolveRoomDeliveryDecision).
-//   - created_at >= now-freshnessWindow: 콘텐츠가 아직 신선할 때만(철 지난 알림 스팸 방지). created_at은
-//     poller가 콘텐츠를 감지한 시각 ≈ 발행 직후라 freshness proxy로 적합하다.
-//   - locked_at 만료: 처리 중(in-flight) 행은 건드리지 않음.
-//   - 리셋 가능성: FAILED delivery가 1개 이상이거나(재전송 대상 존재) delivery가 전무할 때(fan-out 전 실패)만
-//     선택한다. 전량 QUARANTINED로 FAILED가 0개인 outbox를 넣으면 resetFailedDeliveryRows가 리셋할 행이 없어
-//     aggregate sync가 즉시 FAILED로 되돌리고 revive 메트릭만 오르는 무한 flap이 되므로 제외한다.
-//
-// freshness window가 재시도 횟수를 자연 bound한다.
-//
-// 중복 방지는 per-room 단위로도 보장한다: 되살릴 때 FAILED delivery 행만 PENDING으로 리셋하고 SENT 행은
-// 그대로 둔다(부분 전달 시 이미 받은 room에 재발송하지 않음). 전체를 하나의 트랜잭션으로 처리하고
-// FOR UPDATE SKIP LOCKED로 동시 sweeper(HA) 간 경합을 회피한다.
+// reviveStaleFailedOutbox revives a whole logical group only when the ledger is
+// absent, every physical member is eligible, and no active lock or sent outbox
+// evidence exists. Zero-child fanout failures use the same freshness bound.
 func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWindow time.Duration, batchSize int) (int64, error) {
-	if d == nil || d.db == nil {
+	if d == nil || d.transition == nil {
 		return 0, nil
 	}
 
@@ -66,91 +46,66 @@ func (d *ClaimManager) reviveStaleFailedOutbox(ctx context.Context, freshnessWin
 		batchSize = d.config.BatchSize
 	}
 
-	now := time.Now().UTC()
-	freshCutoff := now.Add(-freshnessWindow)
-	lockCutoff := now.Add(-d.deliveryClaimTimeout())
-
-	var revived int64
-
-	err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
-		return reviveStaleFailedOutboxTx(ctx, tx, freshCutoff, lockCutoff, batchSize, now, &revived)
-	})
+	revived, err := d.reviveFailedLifecycleGroups(ctx, freshnessWindow, batchSize)
 	if err != nil {
-		observeOutboxReviveError()
-
 		return 0, fmt.Errorf("revive stale failed outbox: %w", err)
-	}
-
-	if revived > 0 {
-		observeOutboxRevived(revived)
 	}
 
 	return revived, nil
 }
 
-func reviveStaleFailedOutboxTx(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int, now time.Time, revived *int64) error {
-	ids, err := selectStaleFailedOutboxIDs(ctx, tx, freshCutoff, lockCutoff, batchSize)
+func (d *ClaimManager) reviveFailedLifecycleGroups(
+	ctx context.Context,
+	freshnessWindow time.Duration,
+	batchSize int,
+) (int64, error) {
+	deliveryResult, err := d.transition.ReviveFailedLogicalGroups(ctx, freshnessWindow, batchSize)
+	observeLifecycleApply("revive_logical_group", deliveryResult.ApplyResult, err, max(deliveryResult.RevivedLogicalGroups, 1))
+
 	if err != nil {
-		return fmt.Errorf("select stale failed outbox IDs: %w", err)
+		observeOutboxReviveError()
+
+		return 0, fmt.Errorf("revive failed lifecycle groups: %w", err)
 	}
 
-	if len(ids) == 0 {
-		return nil
+	for i := range deliveryResult.Blocked {
+		d.logger.Error("Blocked failed logical delivery group revive",
+			slog.String("logical_key_hash", deliveryResult.Blocked[i].KeyHash),
+			slog.String("invariant_reason", string(deliveryResult.Blocked[i].Reason)))
 	}
 
-	err = resetFailedDeliveryRows(ctx, tx, ids, now)
+	if deliveryResult.Outcome != store.ApplyApplied {
+		return 0, fmt.Errorf("revive failed lifecycle groups: outcome %s", deliveryResult.Outcome)
+	}
+
+	fanoutResult, fanoutCount, err := d.transition.ReviveFailedFanoutOutboxes(ctx, freshnessWindow, batchSize)
+	observeLifecycleApply("revive_fanout", fanoutResult, err, max(fanoutCount, 1))
+
 	if err != nil {
-		return fmt.Errorf("reset failed delivery rows: %w", err)
+		observeOutboxReviveError()
+
+		return 0, fmt.Errorf("revive failed fanout outboxes: %w", err)
 	}
 
-	affected, err := resetFailedOutboxRows(ctx, tx, ids, now)
-	if err != nil {
-		return fmt.Errorf("reset failed outbox rows: %w", err)
+	if fanoutResult.Outcome != store.ApplyApplied {
+		return 0, fmt.Errorf("revive failed fanout outboxes: outcome %s", fanoutResult.Outcome)
 	}
 
-	*revived = affected
+	touched := slices.Concat(deliveryResult.TouchedOutboxIDs, fanoutResult.TouchedOutboxIDs)
+	projector := d.projector
 
-	return nil
-}
-
-func selectStaleFailedOutboxIDs(ctx context.Context, tx dbx.Querier, freshCutoff, lockCutoff time.Time, batchSize int) ([]int64, error) {
-	var ids []int64
-
-	if err := deliverysql.SelectDeliverySQL(ctx, tx, &ids, "revive: select stale failed outbox", mustSQL("dispatcher_claim_revive_0109_01.sql"), string(domain.OutboxStatusFailed), freshCutoff, lockCutoff, string(domain.OutboxStatusFailed), batchSize); err != nil {
-		return nil, fmt.Errorf("revive: select stale failed outbox: %w", err)
+	if projector == nil {
+		projector = newOutboxAggregateProjector(d.delivery)
 	}
 
-	return ids, nil
-}
-
-// per-room dedup: FAILED delivery 행만 재시도 대상으로 리셋, SENT 행은 불변.
-func resetFailedDeliveryRows(ctx context.Context, tx dbx.Querier, ids []int64, now time.Time) error {
-	deliveryArgs := []any{now}
-
-	deliveryArgs = deliverysql.AppendDeliveryInt64Args(deliveryArgs, ids)
-	deliveryArgs = append(deliveryArgs, string(domain.OutboxStatusFailed))
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset failed delivery rows", mustSQL("dispatcher_claim_revive_0141_02.sql")+deliverysql.DeliveryInClause("outbox_id", len(ids))+`
-		  AND status = ?
-	`, deliveryArgs...); err != nil {
-		return fmt.Errorf("revive: reset failed delivery rows: %w", err)
+	if err := projector.Project(ctx, touched); err != nil {
+		d.logger.Warn("Immediate aggregate projection failed after logical group revive", slog.Any("error", err))
 	}
 
-	return nil
-}
-
-func resetFailedOutboxRows(ctx context.Context, tx dbx.Querier, ids []int64, now time.Time) (int64, error) {
-	outboxArgs := []any{now}
-
-	outboxArgs = deliverysql.AppendDeliveryInt64Args(outboxArgs, ids)
-	outboxArgs = append(outboxArgs, string(domain.OutboxStatusFailed))
-
-	affected, err := deliverysql.ExecDeliverySQL(ctx, tx, "revive: reset outbox rows", mustSQL("dispatcher_claim_revive_0156_03.sql")+deliverysql.DeliveryInClause("id", len(ids))+`
-		  AND status = ?
-	`, outboxArgs...)
-	if err != nil {
-		return 0, fmt.Errorf("revive: reset outbox rows: %w", err)
+	revived := int64(deliveryResult.RevivedLogicalGroups + fanoutCount)
+	if revived > 0 {
+		observeOutboxRevived(revived)
 	}
 
-	return affected, nil
+	return revived, nil
 }

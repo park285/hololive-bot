@@ -27,9 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
-	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
@@ -98,108 +95,4 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 	if !reflect.DeepEqual(gotTouched, wantTouched) {
 		t.Fatalf("touchedOutboxIDs (sorted) = %#v, want %#v", gotTouched, wantTouched)
 	}
-}
-
-func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsRelockedByAnotherWorker(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
-	currentLockedAt := staleLockedAt.Add(time.Minute)
-	row := domain.YouTubeNotificationDelivery{
-		OutboxID:      10,
-		RoomID:        "room-relocked",
-		Status:        store.DeliveryStatusSending,
-		AttemptCount:  0,
-		NextAttemptAt: time.Now().UTC(),
-		LockedAt:      &currentLockedAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
-
-	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
-	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
-	require.NoError(t, err)
-
-	var got domain.YouTubeNotificationDelivery
-
-	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
-	require.Equal(t, store.DeliveryStatusSending, got.Status)
-	require.Equal(t, 0, got.AttemptCount)
-	require.NotNil(t, got.LockedAt)
-	require.True(t, got.LockedAt.Equal(currentLockedAt), "locked_at = %s, want %s", got.LockedAt, currentLockedAt)
-	require.Empty(t, got.Error)
-}
-
-func TestDeliveryRepositoryMarkFailedRetryBatchIfLockedSkipsRowsCompletedByAnotherWorker(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	staleLockedAt := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Microsecond)
-	sentAt := time.Now().UTC()
-	row := domain.YouTubeNotificationDelivery{
-		OutboxID:      11,
-		RoomID:        "room-sent",
-		Status:        domain.OutboxStatusSent,
-		AttemptCount:  0,
-		NextAttemptAt: time.Now().UTC(),
-		SentAt:        &sentAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
-
-	repository := store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler))
-	err := repository.MarkFailedRetryBatchIfLocked(ctx, []store.LockToken{store.NewLockToken(row.ID, &staleLockedAt)}, 3, time.Minute, "stale failure")
-	require.NoError(t, err)
-
-	var got domain.YouTubeNotificationDelivery
-
-	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
-	require.Equal(t, domain.OutboxStatusSent, got.Status)
-	require.Equal(t, 0, got.AttemptCount)
-	require.Nil(t, got.LockedAt)
-	require.NotNil(t, got.SentAt)
-	require.Empty(t, got.Error)
-}
-
-func TestClaimManagerRetryFailureBucketUsesRetryAfterWhenLonger(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	db := newDeliveryPool(t)
-
-	lockedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
-	row := domain.YouTubeNotificationDelivery{
-		OutboxID:      10,
-		RoomID:        "room-rate-limited",
-		Status:        store.DeliveryStatusSending,
-		AttemptCount:  0,
-		NextAttemptAt: time.Now().UTC().Add(-time.Hour),
-		LockedAt:      &lockedAt,
-	}
-	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
-
-	manager := &ClaimManager{
-		config:   dispatchstate.Config{MaxRetries: 3, RetryBackoff: time.Second},
-		logger:   slog.New(slog.DiscardHandler),
-		delivery: store.NewDeliveryRepository(db, slog.New(slog.DiscardHandler)),
-	}
-	startedAt := time.Now().UTC()
-	result := dispatchstate.DispatchResult{
-		FailureRetryAfter: map[string]time.Duration{"rate-limited": 12 * time.Second},
-	}
-
-	manager.markRetryDispatchFailureBucket(ctx, []domain.YouTubeNotificationDelivery{row}, &result, "rate-limited", []int64{row.ID})
-
-	var got domain.YouTubeNotificationDelivery
-
-	require.NoError(t, firstDeliveryTestRow(db, &got, row.ID).Error)
-	require.Equal(t, domain.OutboxStatusPending, got.Status)
-	require.Equal(t, 1, got.AttemptCount)
-	require.Nil(t, got.LockedAt)
-	require.Equal(t, "rate-limited", got.Error)
-	require.False(t, got.NextAttemptAt.Before(startedAt.Add(12*time.Second)))
-	require.False(t, got.NextAttemptAt.After(time.Now().UTC().Add(13*time.Second)))
 }

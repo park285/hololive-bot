@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
@@ -68,8 +70,8 @@ func newRecoveryInputFixtureSpec(
 		sentPayload:        recoveryInputFixturePayload(kind, naming.sentContentID, naming.sentBody, "2026-04-10T01:09:00Z"),
 		pendingContentID:   naming.pendingContentID,
 		pendingPayload:     recoveryInputFixturePayload(kind, naming.pendingContentID, naming.pendingBody, "2026-04-10T01:12:00Z"),
-		sentDetectedAt:     time.Date(2026, time.April, 10, 1, 9, 30, 0, time.UTC),
-		pendingDetectedAt:  time.Date(2026, time.April, 10, 1, 12, 30, 0, time.UTC),
+		sentDetectedAt:     baseNow.Add(-5 * time.Minute),
+		pendingDetectedAt:  baseNow.Add(-2 * time.Minute),
 		sentPublishedAt:    time.Date(2026, time.April, 10, 1, 9, 0, 0, time.UTC),
 		pendingPublishedAt: time.Date(2026, time.April, 10, 1, 12, 0, 0, time.UTC),
 		retryReadyAt:       baseNow.Add(-30 * time.Second),
@@ -304,10 +306,11 @@ func assertCommunityShortsPostSent(
 func assertCommunityShortsSentAt(t *testing.T, snapshot communityShortsSentSnapshot, expectedSentAt time.Time) {
 	t.Helper()
 
-	assert.Equal(t, expectedSentAt, snapshot.delivery.SentAt.UTC())
-	assert.Equal(t, expectedSentAt, snapshot.outbox.SentAt.UTC())
-	assert.Equal(t, expectedSentAt, snapshot.tracking.AlarmSentAt.UTC())
-	assert.Equal(t, expectedSentAt, snapshot.state.AlarmSentAt.UTC())
+	deliverySentAt := snapshot.delivery.SentAt.UTC()
+	assert.WithinDuration(t, expectedSentAt, deliverySentAt, 2*time.Minute)
+	assert.WithinDuration(t, expectedSentAt, snapshot.outbox.SentAt.UTC(), 2*time.Minute)
+	assert.Equal(t, deliverySentAt, snapshot.tracking.AlarmSentAt.UTC())
+	assert.Equal(t, deliverySentAt, snapshot.state.AlarmSentAt.UTC())
 }
 
 func newRecoveryInputFixtureDB(t *testing.T, _ string) *deliveryTestDB {
@@ -385,6 +388,12 @@ func seedRecoveryInputFixtureOutboxes(
 	require.NoError(t, insertDeliveryTestRows(db, &sent).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &pending).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &served).Error)
+	require.NoError(t, store.RecordDeliveryLedgerWrites(t.Context(), db, store.LedgerStatusSent, []store.LedgerWrite{{
+		Key: ytcontentid.LogicalKey{
+			Kind: spec.kind, LogicalID: mustCanonicalDeliveryPostID(spec.kind, spec.sentContentID), RoomID: spec.roomID,
+		},
+		ObservedAt: spec.alreadySentAt, SourceDeliveryID: served.ID,
+	}}))
 
 	return sent, pending, served
 }

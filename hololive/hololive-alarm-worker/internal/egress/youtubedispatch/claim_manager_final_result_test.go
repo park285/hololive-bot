@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -18,7 +19,7 @@ import (
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 
-var errFinalResultSendFailed = errors.New(testSendFailedMessage)
+var errFinalResultSendFailed = errors.Join(errors.New(testSendFailedMessage), iris.ErrPermanent)
 
 type finalResultTestSender struct {
 	failRoom map[string]bool
@@ -322,7 +323,7 @@ func TestProcessPendingDeliveries_LogsCommunityShortsFinalFailureReason(t *testi
 	assertLogStringField(t, entry, deliveryAuditPostIDLogField, "community:post-final-failure")
 	assertLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 	assertLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
-	assertLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)
+	assertLogStringField(t, entry, deliveryAuditFailureReasonLogField, string(lifecycleReasonPermanent))
 	assertLogStringField(t, entry, deliveryAuditModeLogField, logschema.DeliveryModeFinalResult)
 	assertLogTimeField(t, entry, logschema.FieldActualPublishedAt, actualPublishedAt)
 	assertLogIntField(t, entry, logschema.FieldTargetRoomCount, 1)

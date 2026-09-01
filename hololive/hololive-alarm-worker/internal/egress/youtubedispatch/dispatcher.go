@@ -35,6 +35,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -48,6 +49,8 @@ import (
 
 var outboxCleanupLoopInterval = 1 * time.Hour
 
+const defaultLogicalGroupScanLimit = 100
+
 type Dispatcher struct {
 	claim         *ClaimManager
 	send          *SendEngine
@@ -55,7 +58,6 @@ type Dispatcher struct {
 	audit         *AuditLogger
 	metrics       *MetricsRecorder
 	grouper       *OutboxGrouper
-	status        *StatusUpdater
 	logger        *slog.Logger
 	config        dispatchstate.Config
 	started       atomic.Bool
@@ -92,14 +94,49 @@ func (d *Dispatcher) ConfigureHandoff(mode handoff.Mode, publisher YouTubeOutbox
 func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSender, renderer *template.Renderer, logger *slog.Logger, config *dispatchstate.Config) *Dispatcher {
 	initOutboxMetrics()
 
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = dispatcherLogger(logger)
 
-	normalizedConfig := dispatchstate.NormalizeDispatcherConfig(config)
+	normalizedConfig := normalizedDispatcherConfig(config)
 	querier := deliverysql.AsQuerier(db)
 	deliveryDB := store.AsDeliveryDB(db)
+	renderer, messageStrings := dispatcherMessageDependencies(db, renderer, logger)
+	telemetryRepository := newDispatcherTelemetryRepository(querier)
+	transitionStore := newDispatcherTransitionStore(deliveryDB, logger, normalizedConfig)
 
+	return assembleDispatcher(
+		cacheClient, sender, renderer, logger, normalizedConfig, querier, deliveryDB,
+		messageStrings, telemetryRepository, transitionStore,
+	)
+}
+
+func dispatcherLogger(logger *slog.Logger) *slog.Logger {
+	if logger != nil {
+		return logger
+	}
+
+	return slog.Default()
+}
+
+func normalizedDispatcherConfig(config *dispatchstate.Config) dispatchstate.Config {
+	normalized := dispatchstate.NormalizeDispatcherConfig(config)
+	defaults := dispatchstate.DefaultConfig()
+
+	if normalized.MaxRetries <= 0 {
+		normalized.MaxRetries = defaults.MaxRetries
+	}
+
+	if normalized.RetryBackoff <= 0 {
+		normalized.RetryBackoff = defaults.RetryBackoff
+	}
+
+	return normalized
+}
+
+func dispatcherMessageDependencies(
+	db any,
+	renderer *template.Renderer,
+	logger *slog.Logger,
+) (*template.Renderer, *messagestrings.Store) {
 	pool, hasPool := db.(*pgxpool.Pool)
 	if renderer == nil && hasPool && pool != nil {
 		renderer = template.NewRenderer(pool, logger)
@@ -111,38 +148,83 @@ func NewDispatcher(db any, cacheClient cache.Client, sender delivery.MessageSend
 		messageStrings = messagestrings.NewStore(pool, logger)
 	}
 
-	var telemetryRepository *telemetry.Repository
+	return renderer, messageStrings
+}
 
-	if querier != nil {
-		telemetryRepository = telemetry.NewRepository(querier)
+func newDispatcherTelemetryRepository(querier dbx.Querier) *telemetry.Repository {
+	if querier == nil {
+		return nil
 	}
 
+	return telemetry.NewRepository(querier)
+}
+
+func newDispatcherTransitionStore(
+	db deliverysql.DeliveryDB,
+	logger *slog.Logger,
+	config dispatchstate.Config,
+) *store.TransitionStore {
+	if db == nil {
+		return nil
+	}
+
+	transitionStore, err := store.NewTransitionStore(db, logger, store.TransitionConfig{
+		MaxRetries: config.MaxRetries, RetryBackoff: config.RetryBackoff,
+		LockTimeout: config.LockTimeout, ClaimFreshnessWindow: config.ClaimFreshnessWindow,
+		LogicalGroupLimit: defaultLogicalGroupScanLimit,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("initialize youtube delivery transition store: %v", err))
+	}
+
+	return transitionStore
+}
+
+func assembleDispatcher(
+	cacheClient cache.Client,
+	sender delivery.MessageSender,
+	renderer *template.Renderer,
+	logger *slog.Logger,
+	config dispatchstate.Config,
+	querier dbx.Querier,
+	deliveryDB deliverysql.DeliveryDB,
+	messageStrings *messagestrings.Store,
+	telemetryRepository *telemetry.Repository,
+	transitionStore *store.TransitionStore,
+) *Dispatcher {
 	deliveryRepo := store.NewDeliveryRepository(deliveryDB, logger)
-	tp := newTelemetryProcessor(telemetryRepository, logger, &normalizedConfig)
-	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &normalizedConfig, tp)
-	grouper := newOutboxGrouper(querier, cacheClient, logger, &normalizedConfig)
-	status := newStatusUpdater(querier, logger, &normalizedConfig)
+
+	tp := newTelemetryProcessor(telemetryRepository, logger, &config)
+	al := newAuditLogger(telemetryRepository, deliveryRepo, logger, &config, tp)
+	grouper := newOutboxGrouper(querier, cacheClient, logger, &config)
 	formatter := newMessageFormatter(renderer, cacheClient, logger, messageStrings)
 
-	claimManager := newClaimManager(deliveryDB, logger, &normalizedConfig, deliveryRepo, nil, status, grouper, al)
+	claimManager := newClaimManager(deliveryDB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
-	sendEngine := newSendEngine(sender, formatter, logger, &normalizedConfig, claimManager, al, metricsRecorder)
+	sendEngine := newSendEngine(
+		sender, formatter, logger, &config, claimManager, al, metricsRecorder, dispatcherTransitions(transitionStore)...,
+	)
 	claimManager.setExecutor(sendEngine)
 	claimManager.setMetricsRecorder(metricsRecorder)
 
-	d := &Dispatcher{
+	return &Dispatcher{
 		claim:     claimManager,
 		send:      sendEngine,
 		telemetry: tp,
 		audit:     al,
 		metrics:   metricsRecorder,
 		grouper:   grouper,
-		status:    status,
 		logger:    logger,
-		config:    normalizedConfig,
+		config:    config,
+	}
+}
+
+func dispatcherTransitions(transitionStore *store.TransitionStore) []deliveryTransition {
+	if transitionStore == nil {
+		return nil
 	}
 
-	return d
+	return []deliveryTransition{transitionStore}
 }
 
 func (d *Dispatcher) Start(ctx context.Context) {

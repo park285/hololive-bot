@@ -157,7 +157,7 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 		{ID: 42, OutboxID: 402, RoomID: "room-2"},
 	}
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		401: {ID: 401, ChannelID: "UCvideo", Kind: domain.OutboxKindNewVideo, ContentID: "video:1", Payload: `{"video_id":"v1","title":"video 1"}`},
+		401: {ID: 401, ChannelID: "UCvideo", Kind: domain.OutboxKindNewVideo, ContentID: "v1", Payload: `{"video_id":"v1","title":"video 1"}`},
 		402: {ID: 402, ChannelID: "UCshort", Kind: domain.OutboxKindNewShort, ContentID: "s1", Payload: `{"canonical_post_id":"short:s1","video_id":"s1","title":"short 1"}`},
 	}
 
@@ -167,7 +167,13 @@ func TestDispatcherSerializesKaringSends(t *testing.T) {
 		done <- dispatcher.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
 	}()
 
-	sender.awaitEntered(t)
+	select {
+	case <-sender.entered:
+	case result := <-done:
+		t.Fatalf("dispatch completed before first Karing send: %+v", result)
+	case <-time.After(time.Second):
+		t.Fatal("first Karing send did not start")
+	}
 
 	select {
 	case <-sender.entered:
@@ -271,16 +277,6 @@ func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ st
 	}
 
 	return nil
-}
-
-func (s *blockingKaringSender) awaitEntered(t *testing.T) {
-	t.Helper()
-
-	select {
-	case <-s.entered:
-	case <-time.After(time.Second):
-		t.Fatal("first Karing send did not start")
-	}
 }
 
 func (s *blockingKaringSender) releaseFirst() {

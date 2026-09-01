@@ -1784,9 +1784,6 @@ func (s *outcomeUnknownClaimSpy) selectClaimedDeliveries(_ context.Context, rows
 	return selection
 }
 
-func (s *outcomeUnknownClaimSpy) applyClaimSelection(*dispatchstate.DispatchResult, *sync.Mutex, *deliveryClaimSelection) {
-}
-
 func (s *outcomeUnknownClaimSpy) releaseDeliveryClaims(context.Context, []dispatchstate.ClaimToken) error {
 	return nil
 }

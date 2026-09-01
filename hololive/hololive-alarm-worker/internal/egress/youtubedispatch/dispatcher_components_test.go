@@ -22,7 +22,6 @@ func TestDispatcherWiresClaimManagerAndSendEngine(t *testing.T) {
 
 	require.NotNil(t, dispatcher.claim)
 	require.NotNil(t, dispatcher.send)
-	require.Same(t, dispatcher.status, dispatcher.claim.status)
 	require.Same(t, dispatcher.grouper, dispatcher.claim.grouper)
 	require.Same(t, dispatcher.send, dispatcher.claim.executor)
 	require.Same(t, dispatcher.claim, dispatcher.send.claims)

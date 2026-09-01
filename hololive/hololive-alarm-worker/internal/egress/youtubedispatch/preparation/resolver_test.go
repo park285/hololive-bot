@@ -118,6 +118,21 @@ func TestQuarantinedEvidenceBlocksProviderCall(t *testing.T) {
 	require.False(t, result[0].ProviderAllowed())
 }
 
+func TestQuarantinedEvidenceAcceptsRetainedQuarantinedRow(t *testing.T) {
+	t.Parallel()
+
+	row := testDelivery(t, 1, lifecycle.StatusQuarantined, resolverTestNow, false)
+	key := mustKey(t, row)
+	result := testResolver(t, 10).ResolveGroups(
+		[]DeliverySnapshot{row},
+		[]LedgerEvidence{{Key: key, Status: lifecycle.LedgerQuarantined}},
+		nil,
+		resolverTestNow,
+	)
+	require.Equal(t, LogicalUnresolved, result[0].Kind())
+	require.False(t, result[0].ProviderAllowed())
+}
+
 func TestSendingEvidenceDefersProviderCall(t *testing.T) {
 	t.Parallel()
 

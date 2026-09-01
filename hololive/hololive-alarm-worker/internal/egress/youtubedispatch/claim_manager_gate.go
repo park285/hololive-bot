@@ -5,19 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
 const (
@@ -40,8 +34,12 @@ type deliveryClaimSelection struct {
 	rowClaimTokens         [][]dispatchstate.ClaimToken
 	alreadySentDeliveryIDs []int64
 	alreadySentOutboxIDs   []int64
+	alreadySentRows        []domain.YouTubeNotificationDelivery
+	alreadySentOutboxes    []domain.YouTubeNotificationOutbox
 	retryDeliveryIDs       []int64
 	retryOutboxIDs         []int64
+	retryRows              []domain.YouTubeNotificationDelivery
+	retryOutboxes          []domain.YouTubeNotificationOutbox
 	deferredDeliveryIDs    []int64
 }
 
@@ -200,6 +198,8 @@ func (d *ClaimManager) retryDeliveryClaimSelection(
 
 	selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
 	selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+	selection.retryRows = append(selection.retryRows, *row)
+	selection.retryOutboxes = append(selection.retryOutboxes, *outbox)
 }
 
 func (d *ClaimManager) applyDeliveryClaimDecision(
@@ -219,6 +219,8 @@ func (d *ClaimManager) applyDeliveryClaimDecision(
 
 		selection.alreadySentDeliveryIDs = append(selection.alreadySentDeliveryIDs, row.ID)
 		selection.alreadySentOutboxIDs = append(selection.alreadySentOutboxIDs, outbox.ID)
+		selection.alreadySentRows = append(selection.alreadySentRows, *row)
+		selection.alreadySentOutboxes = append(selection.alreadySentOutboxes, *outbox)
 	case deliveryClaimDecisionRetryLater:
 		d.applyRetryLaterDeliveryClaim(ctx, selection, row, outbox)
 	}
@@ -240,6 +242,8 @@ func (d *ClaimManager) applyRetryLaterDeliveryClaim(
 	if !deferred {
 		selection.retryDeliveryIDs = append(selection.retryDeliveryIDs, row.ID)
 		selection.retryOutboxIDs = append(selection.retryOutboxIDs, outbox.ID)
+		selection.retryRows = append(selection.retryRows, *row)
+		selection.retryOutboxes = append(selection.retryOutboxes, *outbox)
 
 		return
 	}
@@ -248,7 +252,7 @@ func (d *ClaimManager) applyRetryLaterDeliveryClaim(
 }
 
 func (d *ClaimManager) deferDeliveryClaim(ctx context.Context, row *domain.YouTubeNotificationDelivery) (bool, error) {
-	if d == nil || deliverysql.IsNilDB(d.db) || row == nil {
+	if d == nil || d.transition == nil || row == nil {
 		return false, nil
 	}
 
@@ -258,21 +262,16 @@ func (d *ClaimManager) deferDeliveryClaim(ctx context.Context, row *domain.YouTu
 		nextAttemptAt = nextAttemptAt.Add(d.config.RetryBackoff)
 	}
 
-	query := mustSQL("dispatcher_claim_gate_0195_02.sql")
-	args := []any{domain.OutboxStatusPending, nextAttemptAt, row.ID, store.DeliveryStatusSending}
+	result, err := d.transition.DeferFollower(ctx, store.DeferCommand{
+		Delivery: *row, NextAttemptAt: nextAttemptAt,
+	})
+	observeLifecycleApply("defer_follower", result, err, 1)
 
-	if row.LockedAt != nil {
-		query += " AND locked_at = ?"
-
-		args = append(args, *row.LockedAt)
-	}
-
-	affected, err := deliverysql.ExecDeliverySQL(ctx, d.db, "defer delivery claim", query, args...)
 	if err != nil {
-		return false, fmt.Errorf("defer delivery claim: %w", err)
+		return false, fmt.Errorf("defer version-fenced delivery claim: %w", err)
 	}
 
-	return affected > 0, nil
+	return result.Outcome == store.ApplyApplied, nil
 }
 
 func appendProceedingDeliveryClaim(
@@ -294,93 +293,4 @@ func appendProceedingDeliveryClaim(
 	selection.sendRows = append(selection.sendRows, *row)
 	selection.sendOutboxes = append(selection.sendOutboxes, *outbox)
 	selection.rowClaimTokens = append(selection.rowClaimTokens, rowClaimTokens)
-}
-
-func (d *ClaimManager) applyClaimSelection(result *dispatchstate.DispatchResult, mu *sync.Mutex, selection *deliveryClaimSelection) {
-	if len(selection.alreadySentDeliveryIDs) > 0 {
-		mu.Lock()
-
-		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)
-		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, selection.alreadySentOutboxIDs...)
-		mu.Unlock()
-	}
-
-	for i := range selection.retryDeliveryIDs {
-		outboxID := int64(0)
-
-		if i < len(selection.retryOutboxIDs) {
-			outboxID = selection.retryOutboxIDs[i]
-		}
-
-		d.recordDeliveryFailure(result, mu, deliveryFailureReasonPreSendClaim, selection.retryDeliveryIDs[i], outboxID)
-	}
-}
-
-func (d *ClaimManager) recoverSuccessfulCommunityShortsSentState(ctx context.Context, deliveryIDs []int64) error {
-	uniqueIDs := deliverysql.UniqueInt64s(deliveryIDs)
-	if d == nil || d.db == nil || len(uniqueIDs) == 0 {
-		return nil
-	}
-
-	sentAt := dispatchstate.CanonicalSentAtNow()
-
-	if err := deliverysql.InDeliveryTx(ctx, d.db, func(tx dbx.Querier) error {
-		return recoverSuccessfulCommunityShortsSentStateTx(ctx, tx, uniqueIDs, sentAt)
-	}); err != nil {
-		return fmt.Errorf("recover successful community/shorts sent state transaction: %w", err)
-	}
-
-	return nil
-}
-
-func recoverSuccessfulCommunityShortsSentStateTx(
-	ctx context.Context,
-	tx dbx.Querier,
-	uniqueIDs []int64,
-	sentAt time.Time,
-) error {
-	marks, err := store.LoadAlarmSentMarksForDeliveryIDs(ctx, tx, uniqueIDs, sentAt, nil)
-	if err != nil {
-		return fmt.Errorf("load sent-state recovery marks: %w", err)
-	}
-
-	if len(marks) > 0 {
-		if err := observation.NewRepositoryContext(ctx, tx).MarkAlarmSentBatch(ctx, marks); err != nil {
-			return fmt.Errorf("persist sent-state recovery marks: %w", err)
-		}
-
-		identities := alarmSentMarkIdentities(marks)
-		if err := telemetry.NewRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
-			return fmt.Errorf("persist sent-state recovery latency classifications: %w", err)
-		}
-	}
-
-	if err := markRecoveredSentDeliveryRows(ctx, tx, uniqueIDs, sentAt); err != nil {
-		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
-	}
-
-	return nil
-}
-
-func markRecoveredSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int64, sentAt time.Time) error {
-	args := []any{domain.OutboxStatusSent, sentAt}
-
-	args = deliverysql.AppendDeliveryInt64Args(args, uniqueIDs)
-	args = append(args, store.DeliveryStatusSending)
-
-	if _, err := deliverysql.ExecDeliverySQL(ctx, tx, "mark recovered sent delivery rows", mustSQL("dispatcher_claim_gate_0230_01.sql")+deliverysql.DeliveryInClause("id", len(uniqueIDs))+` AND status = ?
-	`, args...); err != nil {
-		return fmt.Errorf("mark recovered sent delivery rows: %w", err)
-	}
-
-	return nil
-}
-
-func alarmSentMarkIdentities(marks []observation.AlarmSentMark) []timeline.PostTrackingIdentity {
-	identities := make([]timeline.PostTrackingIdentity, 0, len(marks))
-	for i := range marks {
-		identities = append(identities, timeline.PostTrackingIdentity{Kind: marks[i].Kind, ContentID: marks[i].ContentID})
-	}
-
-	return identities
 }

@@ -1,12 +1,8 @@
 package store
 
 import (
-	"cmp"
 	"context"
-	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
@@ -15,10 +11,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
-const (
-	LedgerSchemaVersion         = 1
-	compatibilityCleanupEnabled = false
-)
+const LedgerSchemaVersion = 1
 
 // LedgerStatus is the monotonic terminal status stored for a logical delivery.
 type LedgerStatus string
@@ -41,141 +34,11 @@ type DeliveryLedgerRecord struct {
 	SourceDeliveryID *int64            `db:"source_delivery_id"`
 }
 
-type deliveryLedgerTarget struct {
-	DeliveryID int64             `db:"delivery_id"`
-	Kind       domain.OutboxKind `db:"kind"`
-	ContentID  string            `db:"content_id"`
-	Payload    string            `db:"payload"`
-	RoomID     string            `db:"room_id"`
-}
-
 // LedgerWrite records one observed terminal physical delivery for a logical key.
 type LedgerWrite struct {
 	Key              ytcontentid.LogicalKey
 	ObservedAt       time.Time
 	SourceDeliveryID int64
-}
-
-func (r *DeliveryRepository) CompatibilityCleanupReady(ctx context.Context) (bool, error) {
-	if r == nil || r.db == nil {
-		return false, errors.New("compatibility cleanup ready: db is nil")
-	}
-
-	var ready bool
-
-	if err := r.db.QueryRow(ctx, mustSQL("delivery_ledger_cleanup_ready.sql"), LedgerSchemaVersion).Scan(&ready); err != nil {
-		return false, fmt.Errorf("compatibility cleanup ready: %w", err)
-	}
-
-	return compatibilityCleanupEnabled && ready, nil
-}
-
-func recordSentLedgerForDeliveryIDs(
-	ctx context.Context,
-	tx dbx.Querier,
-	deliveryIDs []int64,
-	observedAt time.Time,
-) error {
-	writes, err := loadDeliveryLedgerWrites(ctx, tx, deliveryIDs, domain.OutboxStatusSent, observedAt)
-	if err != nil {
-		return fmt.Errorf("load sent ledger writes: %w", err)
-	}
-
-	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusSent, writes); err != nil {
-		return fmt.Errorf("record sent ledger writes: %w", err)
-	}
-
-	return nil
-}
-
-func recordQuarantinedLedgerForDeliveryIDs(
-	ctx context.Context,
-	tx dbx.Querier,
-	deliveryIDs []int64,
-	observedAt time.Time,
-) error {
-	writes, err := loadDeliveryLedgerWrites(ctx, tx, deliveryIDs, DeliveryStatusQuarantined, observedAt)
-	if err != nil {
-		return fmt.Errorf("load quarantined ledger writes: %w", err)
-	}
-
-	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
-		return fmt.Errorf("record quarantined ledger writes: %w", err)
-	}
-
-	return nil
-}
-
-func loadDeliveryLedgerWrites(
-	ctx context.Context,
-	tx dbx.Querier,
-	deliveryIDs []int64,
-	status domain.OutboxStatus,
-	observedAt time.Time,
-) ([]LedgerWrite, error) {
-	uniqueIDs := deliverysql.UniqueInt64s(deliveryIDs)
-	if len(uniqueIDs) == 0 {
-		return nil, nil
-	}
-
-	args := deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)
-
-	args = append(args, status)
-
-	var targets []deliveryLedgerTarget
-
-	if err := deliverysql.SelectDeliverySQL(
-		ctx,
-		tx,
-		&targets,
-		"load delivery ledger targets",
-		mustSQL("delivery_ledger_targets.sql")+deliverysql.DeliveryInClause("d.id", len(uniqueIDs))+" AND d.status = ? ORDER BY d.id ASC",
-		args...,
-	); err != nil {
-		return nil, fmt.Errorf("select delivery ledger targets: %w", err)
-	}
-
-	if len(targets) != len(uniqueIDs) {
-		return nil, fmt.Errorf("delivery ledger target count mismatch: got %d want %d", len(targets), len(uniqueIDs))
-	}
-
-	writesByKey := make(map[ytcontentid.LogicalKey]LedgerWrite, len(targets))
-	for i := range targets {
-		key, err := ytcontentid.ResolveDeliveryKey(
-			targets[i].Kind,
-			targets[i].ContentID,
-			targets[i].Payload,
-			targets[i].RoomID,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("resolve delivery ledger target at index %d: %w", i, err)
-		}
-
-		write := LedgerWrite{
-			Key:              key,
-			ObservedAt:       observedAt.UTC(),
-			SourceDeliveryID: targets[i].DeliveryID,
-		}
-		if current, ok := writesByKey[key]; !ok || write.SourceDeliveryID < current.SourceDeliveryID {
-			writesByKey[key] = write
-		}
-	}
-
-	writes := slices.Collect(maps.Values(writesByKey))
-
-	slices.SortFunc(writes, func(a, b LedgerWrite) int {
-		if byKind := cmp.Compare(a.Key.Kind, b.Key.Kind); byKind != 0 {
-			return byKind
-		}
-
-		if byLogicalID := cmp.Compare(a.Key.LogicalID, b.Key.LogicalID); byLogicalID != 0 {
-			return byLogicalID
-		}
-
-		return cmp.Compare(a.Key.RoomID, b.Key.RoomID)
-	})
-
-	return writes, nil
 }
 
 // RecordDeliveryLedgerWrites applies monotonic logical delivery evidence in one batch.

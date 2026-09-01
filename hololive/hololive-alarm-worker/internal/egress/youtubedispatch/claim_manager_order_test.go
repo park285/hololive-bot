@@ -8,73 +8,55 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
-	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
-func TestFetchAndLockForPerRoomReturnsByNextAttemptBeforeCreated(t *testing.T) {
+func TestClaimOutboxesForFanoutReturnsByNextAttemptBeforeCreated(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	pool := dbtest.NewPool(t)
+	pool := newDeliveryPool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	createdFirstID := insertClaimOrderOutboxForDispatch(t, pool, "created-first", now.Add(-20*time.Minute), now.Add(-1*time.Minute))
 	dueFirstID := insertClaimOrderOutboxForDispatch(t, pool, "due-first", now.Add(-5*time.Minute), now.Add(-10*time.Minute))
 
-	manager := &ClaimManager{
-		db:       pool,
-		config:   dispatchstate.Config{BatchSize: 1, LockTimeout: time.Minute},
-		delivery: store.NewDeliveryRepository(pool, nil),
-	}
-	rows, err := manager.fetchAndLockForPerRoom(ctx)
+	transition := claimOrderTransitionStore(t, pool)
+	rows, err := transition.ClaimOutboxesForFanout(ctx, 1)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, dueFirstID, rows[0].ID)
 	require.NotEqual(t, createdFirstID, rows[0].ID)
 }
 
-func TestFetchAndLockForPerRoomSkipsStaleByClaimFreshnessWindow(t *testing.T) {
+func TestClaimOutboxesForFanoutSkipsStaleByClaimFreshnessWindow(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	pool := dbtest.NewPool(t)
+	pool := newDeliveryPool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	freshID := insertClaimOrderOutboxForDispatch(t, pool, "fresh-within-window", now.Add(-30*time.Minute), now.Add(-1*time.Minute))
 	staleID := insertClaimOrderOutboxForDispatch(t, pool, "stale-beyond-window", now.Add(-3*time.Hour), now.Add(-1*time.Minute))
 
-	manager := &ClaimManager{
-		db:       pool,
-		config:   dispatchstate.Config{BatchSize: 10, LockTimeout: time.Minute, ClaimFreshnessWindow: 2 * time.Hour},
-		delivery: store.NewDeliveryRepository(pool, nil),
-	}
-	rows, err := manager.fetchAndLockForPerRoom(ctx)
+	transition := claimOrderTransitionStore(t, pool)
+	rows, err := transition.ClaimOutboxesForFanout(ctx, 10)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, freshID, rows[0].ID)
 	require.NotEqual(t, staleID, rows[0].ID)
 }
 
-func TestFetchAndLockForPerRoomClaimsStaleWhenFreshnessWindowDisabled(t *testing.T) {
-	t.Parallel()
+func claimOrderTransitionStore(t *testing.T, pool *pgxpool.Pool) *store.TransitionStore {
+	t.Helper()
 
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	now := time.Now().UTC().Truncate(time.Microsecond)
-
-	staleID := insertClaimOrderOutboxForDispatch(t, pool, "stale-no-window", now.Add(-72*time.Hour), now.Add(-1*time.Minute))
-
-	manager := &ClaimManager{
-		db:       pool,
-		config:   dispatchstate.Config{BatchSize: 10, LockTimeout: time.Minute},
-		delivery: store.NewDeliveryRepository(pool, nil),
-	}
-	rows, err := manager.fetchAndLockForPerRoom(ctx)
+	transition, err := store.NewTransitionStore(pool, nil, store.TransitionConfig{
+		MaxRetries: 3, RetryBackoff: time.Minute, LockTimeout: time.Minute,
+		ClaimFreshnessWindow: 2 * time.Hour, LogicalGroupLimit: 100,
+	})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, staleID, rows[0].ID)
+
+	return transition
 }
 
 func insertClaimOrderOutboxForDispatch(t *testing.T, pool *pgxpool.Pool, contentID string, createdAt, nextAttemptAt time.Time) int64 {

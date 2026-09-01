@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
@@ -66,7 +68,7 @@ func runRetryExactOnceCase(t *testing.T, tc retryFinalizeOnceTestCase) {
 	db := newDeliveryPool(t)
 	item, delivery, postID := seedRetryExactOnceFixture(t, db, tc)
 
-	sender := &testSender{failRoom: map[string]bool{tc.roomID: true}}
+	sender := &testSender{failRoom: map[string]bool{tc.roomID: true}, failErr: iris.ErrRateLimited}
 	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
@@ -228,7 +230,7 @@ func (s *postSendFinalizeFailureSender) hookError() error {
 	return s.afterSendErr
 }
 
-func TestProcessOnce_RetryAfterCommunityShortsPostSendFinalizeFailureKeepsSingleDeliveredAlarm(t *testing.T) {
+func TestProcessOnce_PostSendFinalizeConflictHoldsSendingWithoutDuplicate(t *testing.T) {
 	t.Parallel()
 
 	testCases := []retryFinalizeOnceTestCase{
@@ -255,12 +257,12 @@ func TestProcessOnce_RetryAfterCommunityShortsPostSendFinalizeFailureKeepsSingle
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(t, &tc)
+			runPostSendFinalizeConflictHoldsSending(t, &tc)
 		})
 	}
 }
 
-func runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(
+func runPostSendFinalizeConflictHoldsSending(
 	t *testing.T,
 	tc *retryFinalizeOnceTestCase,
 ) {
@@ -287,11 +289,11 @@ func runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(
 	require.NoError(t, sender.hookError())
 	require.Len(t, sender.sentMessages(), 1)
 
-	assertRetryFinalizeOnceSentState(t, db, &item, delivery.ID, postID)
+	assertRetryFinalizeConflictHeld(t, db, &item, delivery.ID, postID)
 
 	dispatcher.ProcessOnceForTest(ctx)
 
-	assertRetryFinalizeOnceSentState(t, db, &item, delivery.ID, postID)
+	assertRetryFinalizeConflictHeld(t, db, &item, delivery.ID, postID)
 	assertRetryFinalizeOnceMessages(t, sender, tc)
 }
 
@@ -387,7 +389,7 @@ func staleRetryFinalizeOnceClaim(
 	}
 }
 
-func assertRetryFinalizeOnceSentState(
+func assertRetryFinalizeConflictHeld(
 	t *testing.T,
 	db *pgxpool.Pool,
 	item *domain.YouTubeNotificationOutbox,
@@ -396,30 +398,31 @@ func assertRetryFinalizeOnceSentState(
 ) {
 	t.Helper()
 
-	var sentDelivery deliveryTestDeliveryModel
+	var heldDelivery deliveryTestDeliveryModel
 
-	require.NoError(t, firstDeliveryTestRow(db, &sentDelivery, deliveryID).Error)
-	assert.Equal(t, string(domain.OutboxStatusSent), sentDelivery.Status)
-	require.NotNil(t, sentDelivery.SentAt)
+	require.NoError(t, firstDeliveryTestRow(db, &heldDelivery, deliveryID).Error)
+	assert.Equal(t, string(store.DeliveryStatusSending), heldDelivery.Status)
+	require.NotNil(t, heldDelivery.LockedAt)
+	require.Nil(t, heldDelivery.SentAt)
 
-	var sentOutbox deliveryTestOutboxModel
+	var pendingOutbox deliveryTestOutboxModel
 
-	require.NoError(t, firstDeliveryTestRow(db, &sentOutbox, item.ID).Error)
-	assert.Equal(t, string(domain.OutboxStatusSent), sentOutbox.Status)
-	require.NotNil(t, sentOutbox.SentAt)
+	require.NoError(t, firstDeliveryTestRow(db, &pendingOutbox, item.ID).Error)
+	assert.Equal(t, string(domain.OutboxStatusPending), pendingOutbox.Status)
+	require.Nil(t, pendingOutbox.SentAt)
 
-	var sentTracking deliveryTestTrackingModel
+	var pendingTracking deliveryTestTrackingModel
 
-	require.NoError(t, firstDeliveryTestRowWhere(db, &sentTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
-	require.NotNil(t, sentTracking.AlarmSentAt)
-	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusSent), sentTracking.DeliveryStatus)
+	require.NoError(t, firstDeliveryTestRowWhere(db, &pendingTracking, "kind = ? AND content_id = ?", string(item.Kind), item.ContentID).Error)
+	require.Nil(t, pendingTracking.AlarmSentAt)
+	assert.Equal(t, string(domain.YouTubeContentAlarmDeliveryStatusPending), pendingTracking.DeliveryStatus)
 
-	var sentState domain.YouTubeCommunityShortsAlarmState
+	var claimedState domain.YouTubeCommunityShortsAlarmState
 
-	require.NoError(t, firstDeliveryTestRow(db, &sentState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
-	assert.Nil(t, sentState.AuthorizedAt)
-	require.NotNil(t, sentState.AlarmSentAt)
-	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, sentState.DeliveryStatus)
+	require.NoError(t, firstDeliveryTestRow(db, &claimedState, "kind = ? AND post_id = ?", item.Kind, postID).Error)
+	require.NotNil(t, claimedState.AuthorizedAt)
+	require.Nil(t, claimedState.AlarmSentAt)
+	assert.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusEnqueued, claimedState.DeliveryStatus)
 
 	var deliveryRows []deliveryTestDeliveryModel
 

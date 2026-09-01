@@ -32,18 +32,14 @@ import (
 	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
-func LoadAlarmSentMarksForPendingDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]observation.AlarmSentMark, error) {
-	status := domain.OutboxStatusPending
-
-	out, err := loadAlarmSentMarksForDeliveryIDsWithStatus(ctx, db, ids, sentAt, claimTokens, &status)
-	if err != nil {
-		return out, fmt.Errorf("load alarm sent marks for delivery IDs with status: %w", err)
-	}
-
-	return out, nil
+type deliveryAlarmSentTarget struct {
+	Kind      domain.OutboxKind `db:"kind"`
+	ContentID string            `db:"content_id"`
 }
 
 func LoadAlarmSentMarksForDeliveryIDs(ctx context.Context, db dbx.Querier, ids []int64, sentAt time.Time, claimTokens []dispatchstate.ClaimToken) ([]observation.AlarmSentMark, error) {
@@ -193,4 +189,31 @@ func UniqueStrings(values []string) []string {
 	}
 
 	return unique
+}
+
+func persistSentDeliveryTracking(
+	ctx context.Context,
+	tx dbx.Querier,
+	trackingMarks []observation.AlarmSentMark,
+) error {
+	if err := observation.NewRepositoryContext(ctx, tx).MarkAlarmSentBatch(ctx, trackingMarks); err != nil {
+		return fmt.Errorf("update tracking rows: %w", err)
+	}
+
+	if len(trackingMarks) == 0 {
+		return nil
+	}
+
+	identities := make([]timeline.PostTrackingIdentity, 0, len(trackingMarks))
+	for i := range trackingMarks {
+		identities = append(identities, timeline.PostTrackingIdentity{
+			Kind: trackingMarks[i].Kind, ContentID: trackingMarks[i].ContentID,
+		})
+	}
+
+	if err := telemetry.NewRepository(tx).PersistPostLatencyClassificationsByIdentities(ctx, identities); err != nil {
+		return fmt.Errorf("persist tracking latency classifications: %w", err)
+	}
+
+	return nil
 }
