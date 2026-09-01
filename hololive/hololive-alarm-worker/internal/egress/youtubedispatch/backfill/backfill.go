@@ -17,8 +17,14 @@ const (
 	maxBatchSize     = 5000
 )
 
-// ErrCoverageConfirmationRequired reports inconsistent historical coverage options.
-var ErrCoverageConfirmationRequired = errors.New("ledger backfill coverage confirmation is required")
+var (
+	// ErrCoverageConfirmationRequired reports inconsistent historical coverage options.
+	ErrCoverageConfirmationRequired = errors.New("ledger backfill coverage confirmation is required")
+	// ErrReplayEpochInactive reports that no durable source replay boundary exists.
+	ErrReplayEpochInactive = errors.New("source observation replay epoch is not active")
+	// ErrReplayEpochMismatch reports that operator evidence does not match the durable boundary.
+	ErrReplayEpochMismatch = errors.New("ledger backfill coverage start does not match source observation replay epoch")
+)
 
 // Options configures a bounded, resumable delivery ledger backfill.
 type Options struct {

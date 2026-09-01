@@ -71,5 +71,11 @@
     "must_contain": [
       "migrationrunner.Run("
     ]
+  },
+  {
+    "path": "hololive/hololive-api/cmd/source-observation-replay-epoch/main.go",
+    "must_contain": [
+      "sourceobservation.NewRepository("
+    ]
   }
 ]

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260901-hololive-source-observation-replay-epoch",
+  "title": "Source observation replay는 immutable DB 수신 epoch로 제한한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-01",
+  "summary": "Source observation historical replay의 경계는 source event 시각이 아니라 PostgreSQL이 원 observation에 기록한 received_at으로 정한다. 별도 승인된 activation transaction이 최대 한 행인 immutable cutoff_received_at을 DB 시각으로 기록하며, epoch 부재는 명시적인 inactive 상태이고 historical coverage evidence가 아니다. 활성 epoch보다 먼저 수신된 due 또는 lease-expired queue row는 claim batch limit 안에서 replay_epoch_expired로 dead-letter하고, 이미 claim된 row는 canonical write callback 직전의 동일 transaction에서 다시 차단한다. Operator RequestReplay와 pending replay processor도 같은 경계로 audit-reject한다. Epoch 조회 실패를 inactive로 바꾸지 않으며 retry, fallback, compatibility alias를 추가하지 않는다. Migration과 epoch-aware binary는 inactive 상태로 먼저 배포·관찰하고, 별도 activation 창에서 collector publish와 source consumer를 quiesce한 뒤 epoch를 기록한다. 이후 rollback floor는 사전 관찰한 epoch-aware binary다. 이 cutoff와 production 차단 evidence가 확보된 뒤에만 ledger backfill의 legacy_coverage_start_at으로 사용할 수 있다.",
+  "sources": [
+    "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#T10 — Source observation replay epoch를 고정하고 pre-epoch 재처리를 차단"
+  ],
+  "evidence": [
+    "hololive/hololive-api/cmd/source-observation-replay-epoch/main_test.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/backfill_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_epoch_test.go",
+    "hololive/hololive-dbtest/migrations_p1_test.go",
+    "internal/workspace/entrypoint_contract_test.go",
+    "scripts/deploy/check-ap-rsync-manifest_test.sh"
+  ],
+  "implementation": [
+    "hololive/hololive-api/scripts/migrations/191_source_observation_replay_epoch.sql",
+    "hololive/hololive-api/cmd/source-observation-replay-epoch/main.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/state.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_epoch.go",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_claim_0012_12.sql",
+    "docs/current/runbooks/hololive-api.md"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "Source observation replay를 보존하면서도 더 좁은 logical event 경계를 안전하게 증명하는 독립 production evidence와 rollback-safe enforcement가 확보될 때"
+  }
+}

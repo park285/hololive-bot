@@ -1,0 +1,3 @@
+SELECT cutoff_received_at, activated_by, reason
+FROM source_observation_replay_epoch
+WHERE singleton

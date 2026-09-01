@@ -607,6 +607,15 @@ TABLE source_observation_queue
   INDEX CREATE INDEX idx_source_observation_queue_lease_recovery ON public.source_observation_queue USING btree (lease_expires_at, observation_id) WHERE (status = 'PROCESSING'::text)
   INDEX CREATE INDEX idx_source_observation_queue_terminal_retention ON public.source_observation_queue USING btree (status, updated_at, observation_id) WHERE (status = ANY (ARRAY['PROCESSED'::text, 'DEAD_LETTER'::text]))
 
+TABLE source_observation_replay_epoch
+  COLUMN singleton boolean NOT NULL DEFAULT true
+  COLUMN cutoff_received_at timestamp with time zone NOT NULL
+  COLUMN activated_by text NOT NULL
+  COLUMN reason text NOT NULL
+  CONSTRAINT chk_source_observation_replay_epoch_attribution CHECK ((((length(btrim(activated_by)) >= 1) AND (length(btrim(activated_by)) <= 128)) AND (activated_by = btrim(activated_by)) AND ((length(btrim(reason)) >= 1) AND (length(btrim(reason)) <= 1024)) AND (reason = btrim(reason))))
+  CONSTRAINT chk_source_observation_replay_epoch_singleton CHECK (singleton)
+  CONSTRAINT source_observation_replay_epoch_pkey PRIMARY KEY (singleton)
+
 TABLE source_observation_replay_requests
   COLUMN id bigint NOT NULL DEFAULT nextval('source_observation_replay_requests_id_seq'::regclass)
   COLUMN observation_id bigint

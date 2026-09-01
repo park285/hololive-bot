@@ -19,6 +19,7 @@ type replayObservation struct {
 	schemaVersion      int16
 	contractGeneration int64
 	evidenceSHA256     string
+	epochRejected      bool
 }
 
 type replayQueueState struct {
@@ -160,7 +161,7 @@ func (r *Repository) applyReplayDecision(
 		Generation: observation.contractGeneration,
 	}
 
-	if reason := replayRejectionReason(r.supported.Supports(version), queue); reason != "" {
+	if reason := replayRejectionReason(r.supported.Supports(version), observation.epochRejected, queue); reason != "" {
 		out, rejectErr := rejectReplayResult(ctx, tx, result, reason)
 
 		return out, errors.Join(rejectErr)
@@ -184,7 +185,11 @@ func (r *Repository) applyReplayDecision(
 	return result, nil
 }
 
-func replayRejectionReason(supported bool, queue replayQueueState) string {
+func replayRejectionReason(supported, epochRejected bool, queue replayQueueState) string {
+	if epochRejected {
+		return replayEpochExpiredCode
+	}
+
 	if !supported {
 		return "unsupported_contract"
 	}
@@ -245,6 +250,7 @@ func loadReplayObservation(ctx context.Context, tx dbx.Tx, observationID int64) 
 		&observation.schemaVersion,
 		&observation.contractGeneration,
 		&observation.evidenceSHA256,
+		&observation.epochRejected,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {

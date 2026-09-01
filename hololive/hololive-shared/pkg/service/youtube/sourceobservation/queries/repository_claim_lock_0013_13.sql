@@ -23,7 +23,13 @@ SELECT observation.id,
        queue.attempt_count,
        queue.lease_owner,
        queue.lease_token,
-       queue.lease_expires_at
+       queue.lease_expires_at,
+       EXISTS (
+           SELECT 1
+           FROM source_observation_replay_epoch AS epoch
+           WHERE epoch.singleton
+             AND observation.received_at < epoch.cutoff_received_at
+       ) AS replay_epoch_rejected
 FROM source_observation_queue AS queue
 JOIN source_observations AS observation
   ON observation.id = queue.observation_id

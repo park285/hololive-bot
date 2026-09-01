@@ -63,6 +63,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /dist/bin/db-migrate ./cmd/db-migrate && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+      -o /dist/bin/source-observation-replay-epoch ./cmd/source-observation-replay-epoch && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
       -o /dist/bin/healthcheck ./cmd/healthcheck && \
     mkdir -p /dist/internal/domain && \
     cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/

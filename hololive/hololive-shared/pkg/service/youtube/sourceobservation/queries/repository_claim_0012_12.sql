@@ -1,10 +1,49 @@
-WITH exhausted_candidates AS MATERIALIZED (
+WITH replay_epoch AS MATERIALIZED (
+    SELECT cutoff_received_at
+    FROM source_observation_replay_epoch
+    WHERE singleton
+), replay_expired_candidates AS MATERIALIZED (
+    SELECT queue.observation_id
+    FROM source_observation_queue AS queue
+    JOIN source_observations AS observation
+      ON observation.id = queue.observation_id
+    JOIN replay_epoch AS epoch
+      ON observation.received_at < epoch.cutoff_received_at
+    WHERE observation.observation_kind = ANY($1::text[])
+      AND (
+          (queue.status = 'PENDING' AND queue.available_at <= NOW())
+          OR
+          (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW())
+      )
+    ORDER BY queue.available_at, queue.observation_id
+    LIMIT $2
+    FOR UPDATE OF queue SKIP LOCKED
+), replay_expired AS (
+    UPDATE source_observation_queue AS queue
+    SET status = 'DEAD_LETTER',
+        lease_owner = NULL,
+        lease_token = NULL,
+        lease_expires_at = NULL,
+        processed_at = NULL,
+        dead_lettered_at = NOW(),
+        last_error_code = 'replay_epoch_expired',
+        last_error_detail = NULL,
+        updated_at = NOW()
+    FROM replay_expired_candidates
+    WHERE queue.observation_id = replay_expired_candidates.observation_id
+    RETURNING queue.observation_id
+), exhausted_candidates AS MATERIALIZED (
     SELECT queue.observation_id
     FROM source_observation_queue AS queue
     JOIN source_observations AS observation
       ON observation.id = queue.observation_id
     WHERE observation.observation_kind = ANY($1::text[])
       AND queue.attempt_count >= $6
+      AND NOT EXISTS (
+          SELECT 1
+          FROM replay_epoch AS epoch
+          WHERE observation.received_at < epoch.cutoff_received_at
+      )
       AND (
           (queue.status = 'PENDING' AND queue.available_at <= NOW())
           OR
@@ -39,6 +78,11 @@ WITH exhausted_candidates AS MATERIALIZED (
           (queue.status = 'PROCESSING' AND queue.lease_expires_at <= NOW())
       )
       AND queue.attempt_count < $6
+      AND NOT EXISTS (
+          SELECT 1
+          FROM replay_epoch AS epoch
+          WHERE observation.received_at < epoch.cutoff_received_at
+      )
     ORDER BY queue.available_at, queue.observation_id
     LIMIT $2
     FOR UPDATE OF queue SKIP LOCKED
