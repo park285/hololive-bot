@@ -92,6 +92,16 @@ YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player
 
 각 추가 시도는 `youtubejs_upstream_retry_scheduled` INFO event에 endpoint, trigger, delay, attempt를 기록합니다. 같은 시간대의 `YouTube collection job failed` WARN이 없으면 transport 안에서 복구된 것이며, WARN이 이어지면 bounded retry가 소진된 것입니다. 배포 후 24시간 동안 exhausted `collection_failed` 비율이 감소하지 않거나 `429`, request timeout, upstream request volume이 증가하면 이 정책을 재검토합니다.
 
+## YouTube.js live schedule metadata
+
+Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
+
+로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean, RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`만 해석합니다. 표시 문자열은 사용하지 않습니다. Content 목록의 premiere 분류도 같은 raw adapter를 사용하며 `isUpcoming=true`와 `isLiveContent=false`일 때만 content-owned premiere로 유지합니다.
+
+32개 후보 초과, identity/schema/time drift 또는 보강 뒤에도 시각이 없는 `UPCOMING`은 terminal `parser_drift`입니다. 해당 collection은 live observation과 checkpoint를 저장하지 않고 partial/empty success나 다른 provider로 전환하지 않습니다. `youtube_collection_attempts_total{provider="youtubejs",kind="live_snapshot",result=...}`와 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
+
+`youtubei.js@18.0.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, 전체 helper test, typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260901-hololive-youtube-live-metadata-adapter-ownership`의 review trigger가 충족될 때만 다시 결정합니다.
+
 ## Logs
 
 ```bash

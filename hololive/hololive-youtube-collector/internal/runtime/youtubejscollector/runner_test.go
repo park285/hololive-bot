@@ -285,8 +285,50 @@ func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
 	}
 
 	if len(payload.Sessions) != 2 || payload.Sessions[0].Title == "" || payload.Sessions[1].Title == "" ||
-		payload.Sessions[0].ThumbnailURL != "https://i.ytimg.com/vi/live-a/maxresdefault.jpg" {
+		payload.Sessions[0].ThumbnailURL != "https://i.ytimg.com/vi/live-a/maxresdefault.jpg" ||
+		payload.Sessions[1].ScheduledAt == nil ||
+		!payload.Sessions[1].ScheduledAt.Equal(time.Date(2026, time.September, 1, 11, 0, 0, 0, time.UTC)) {
 		t.Fatalf("live metadata = %#v", payload.Sessions)
+	}
+}
+
+func TestChannelLiveRunnerRejectsIncompleteUpcomingWithoutOutput(t *testing.T) {
+	t.Parallel()
+
+	var result youtubejs.ChannelResult
+
+	loadJSON(t, "channel.json", &result)
+
+	result.LiveSessions[0].ScheduledAt = nil
+
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(
+		t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot),
+	)
+
+	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
+		t.Fatalf("error=%v output=%#v", err, output)
+	}
+}
+
+func TestChannelMetadataRunnerDoesNotRequireLiveSchedule(t *testing.T) {
+	t.Parallel()
+
+	var result youtubejs.ChannelResult
+
+	loadJSON(t, "channel.json", &result)
+
+	result.LiveSessions[0].ScheduledAt = nil
+
+	output, err := NewChannelMetadataRunner(&channelFake{result: result}).Collect(
+		t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_channel_metadata",
+			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(output.Output().Observations()) != 3 {
+		t.Fatalf("metadata observations = %#v", output.Output().Observations())
 	}
 }
 

@@ -23,6 +23,7 @@
     "src/response-encoding.d.mts",
     "src/request-context.mjs",
     "src/real-fetchers.mjs",
+    "src/live-metadata.d.mts",
     "src/upstream-feeds.d.ts",
     "src/fetch-community.d.mts",
     "src/fetch-content.d.mts",

@@ -42,10 +42,12 @@ func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *te
 	}
 
 	metadata := liveSession(testVideoID, "UPCOMING")
+	scheduledAt := time.Date(2026, time.September, 1, 11, 0, 0, 0, time.UTC)
 
 	metadata.Title = "Minecraft live"
 	metadata.TopicID = "minecraft"
 	metadata.ThumbnailURL = "https://i.ytimg.com/vi/vid-a/maxresdefault.jpg"
+	metadata.ScheduledAt = &scheduledAt
 
 	proof = publishConsumeLiveAtGeneration(
 		ctx,
@@ -68,18 +70,22 @@ func TestLiveConsumerPersistsGenerationTwoMetadataAndPreservesSparseFields(t *te
 		liveSession(testVideoID, testStatusLive),
 	)
 
-	var title, topicID, thumbnailURL string
+	var (
+		title, topicID, thumbnailURL string
+		persistedScheduledAt         time.Time
+	)
 
 	if err := pool.QueryRow(ctx, `
-		SELECT title, topic_id, thumbnail_url
+		SELECT title, topic_id, thumbnail_url, scheduled_start_time
 		FROM youtube_live_sessions
 		WHERE video_id = $1
-	`, testVideoID).Scan(&title, &topicID, &thumbnailURL); err != nil {
+	`, testVideoID).Scan(&title, &topicID, &thumbnailURL, &persistedScheduledAt); err != nil {
 		t.Fatalf("load live metadata: %v", err)
 	}
 
-	if title != metadata.Title || topicID != metadata.TopicID || thumbnailURL != metadata.ThumbnailURL {
-		t.Fatalf("persisted metadata = {%q, %q, %q}", title, topicID, thumbnailURL)
+	if title != metadata.Title || topicID != metadata.TopicID || thumbnailURL != metadata.ThumbnailURL ||
+		!persistedScheduledAt.Equal(scheduledAt) {
+		t.Fatalf("persisted metadata = {%q, %q, %q, %s}", title, topicID, thumbnailURL, persistedScheduledAt)
 	}
 }
 
