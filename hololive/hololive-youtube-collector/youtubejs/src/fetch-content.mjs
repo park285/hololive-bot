@@ -6,6 +6,7 @@ import {
 } from "./pagination.mjs";
 import { textOf } from "./map-posts.mjs";
 import { lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+import { fetchLiveMetadata } from "./live-metadata.mjs";
 
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, items: [] });
 
@@ -115,14 +116,8 @@ async function mapContentPage(feed, channelId, innertube) {
     if (!isUpcomingContentRow(rows[index])) {
       continue;
     }
-    if (typeof innertube.getInfo !== "function") {
-      const error = new Error("upcoming content metadata lookup is unavailable");
-      error.code = "parser_drift";
-      throw error;
-    }
-
-    const info = await innertube.getInfo(items[index].video_id);
-    const premiere = premiereMetadata(info);
+    const metadata = await fetchLiveMetadata(innertube, items[index].video_id);
+    const premiere = premiereMetadata(metadata);
     if (premiere != null) {
       items[index].is_premiere = true;
       if (premiere.scheduledFor != null) {
@@ -140,16 +135,12 @@ function isUpcomingContentRow(row) {
     lockupBadgeTexts(row).includes("upcoming");
 }
 
-function premiereMetadata(info) {
-  const basic = info?.basic_info ?? info?.basicInfo ?? {};
-  const isUpcoming = basic.is_upcoming === true || basic.isUpcoming === true;
-  const isLiveContent = basic.is_live_content ?? basic.isLiveContent;
-  if (!isUpcoming || isLiveContent !== false) {
+function premiereMetadata(metadata) {
+  if (metadata.isUpcoming !== true || metadata.isLiveContent !== false) {
     return undefined;
   }
 
-  const scheduledFor = optionalTime(basic.start_timestamp ?? basic.startTimestamp);
-  return { scheduledFor };
+  return { scheduledFor: metadata.startTimestamp };
 }
 
 function optionalTime(value) {

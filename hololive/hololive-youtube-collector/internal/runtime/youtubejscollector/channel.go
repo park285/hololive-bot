@@ -69,6 +69,12 @@ func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput
 		return collectutil.CollectResult{}, fmt.Errorf("fetch channel page: %w", err)
 	}
 
+	if enabled[contract.KindLiveSnapshot] {
+		if validateErr := validateLiveSchedules(result.LiveSessions); validateErr != nil {
+			return collectutil.CollectResult{}, fmt.Errorf("validate live schedules: %w", validateErr)
+		}
+	}
+
 	envelopes, err := r.channelEnvelopes(input, &result, enabled, completeness, continuity)
 	if err != nil {
 		return collectutil.CollectResult{}, fmt.Errorf("channel envelopes: %w", err)

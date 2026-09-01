@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260901-hololive-youtube-live-metadata-adapter-ownership",
+  "title": "YouTube 방송 예정 시각 계약은 collector 로컬 adapter가 소유하고 youtubei.js는 Innertube 기반층으로 유지한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-01",
+  "summary": "YouTube.js 목록의 UPCOMING 행에 기계가독 예정 시각이 없으면 collector-owned helper가 같은 영상의 raw /player 응답을 조회하고 video identity와 liveBroadcastDetails.startTimestamp를 로컬 코드로 검증·정규화한다. 보강 뒤에도 scheduled_at이 없으면 parser_drift로 종료하여 live observation과 checkpoint를 발행하지 않는다. 목록 표시 문자열은 파싱하지 않고, 처음부터 LIVE로만 관측된 방송은 기존 live-start evidence와 정상 catch-up 계약을 유지한다. youtubei.js 전체를 vendoring하거나 fork하지 않으며 pinned Innertube session, request context, browse/next/player transport와 범용 parser 기반층으로 유지한다. 제품 핵심 live/premiere 의미론과 raw fixture는 로컬 adapter가 소유하고 upstream 변경은 선택적으로 검토·포팅한다.",
+  "sources": [
+    "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#15.1 Scheduling",
+    "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#15.2 Provider failure",
+    "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#Task 3 — Three-provider collector adapters"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-youtube-collector/youtubejs/src/live-metadata.mjs",
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs",
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-content.mjs",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/validation.go",
+    "docs/current/runbooks/youtube-collector.md"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "youtubei.js가 raw Actions 접근을 제거하거나 pinned dependency 때문에 incident 수정이 차단될 때, 또는 로컬 adapter 밖의 upstream parser 지연이 독립적인 제품 결함으로 두 번 확인될 때 전체 fork 또는 더 넓은 vendoring을 재검토한다"
+  }
+}

@@ -142,16 +142,10 @@ test("fetchContentFeed enriches an upcoming premiere with its start timestamp", 
         }],
       }),
     }),
-    getInfo: async (videoId) => {
+    actions: { execute: async (_endpoint, { videoId }) => {
       assert.equal(videoId, "premiere-1");
-      return {
-        basic_info: {
-          is_upcoming: true,
-          is_live_content: false,
-          start_timestamp: startTimestamp,
-        },
-      };
-    },
+      return rawPlayerResponse(videoId, { isLiveContent: false, startTimestamp });
+    } },
   };
 
   const result = await fetchContentFeed({
@@ -175,13 +169,10 @@ test("fetchContentFeed does not classify upcoming live content as a premiere", a
         }],
       }),
     }),
-    getInfo: async () => ({
-      basic_info: {
-        is_upcoming: true,
-        is_live_content: true,
-        start_timestamp: "2026-08-24T14:30:00.000Z",
-      },
-    }),
+    actions: { execute: async (_endpoint, { videoId }) => rawPlayerResponse(videoId, {
+      isLiveContent: true,
+      startTimestamp: "2026-08-24T14:30:00.000Z",
+    }) },
   };
 
   const result = await fetchContentFeed({
@@ -205,7 +196,10 @@ test("fetchContentFeed keeps a confirmed premiere typed without a start timestam
         }],
       }),
     }),
-    getInfo: async () => ({ basic_info: { is_upcoming: true, is_live_content: false } }),
+    actions: { execute: async (_endpoint, { videoId }) => rawPlayerResponse(videoId, {
+      isLiveContent: false,
+      startTimestamp: undefined,
+    }) },
   };
 
   const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", innertube });
@@ -213,3 +207,25 @@ test("fetchContentFeed keeps a confirmed premiere typed without a start timestam
   assert.equal(result.items[0].is_premiere, true);
   assert.equal(result.items[0].scheduled_for, undefined);
 });
+
+function rawPlayerResponse(videoId, { isLiveContent, startTimestamp }) {
+  return {
+    success: true,
+    status_code: 200,
+    data: {
+      videoDetails: {
+        videoId,
+        isLive: false,
+        isLiveContent,
+        isUpcoming: true,
+      },
+      microformat: {
+        playerMicroformatRenderer: {
+          liveBroadcastDetails: {
+            ...(startTimestamp == null ? {} : { startTimestamp }),
+          },
+        },
+      },
+    },
+  };
+}
