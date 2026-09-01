@@ -35,15 +35,23 @@ func TestPreparedOperationFreezesFencesMembershipAndRequest(t *testing.T) {
 		resolverTestNow.Add(999*time.Nanosecond),
 	)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), operation.Owners()[0].DeliveryID())
-	require.Equal(t, []int64{2}, operation.Owners()[0].FollowerIDs())
-	require.Equal(t, ownerRow.RowVersion, operation.Owners()[0].ExpectedVersion())
-	require.Equal(t, ownerRow.RowVersion+1, operation.Owners()[0].NextVersion())
-	require.Equal(t, lifecycle.StatusPending, operation.Owners()[0].ExpectedStatus())
-	require.Equal(t, lifecycle.StatusSending, operation.Owners()[0].NextStatus())
+
+	owners := operation.Owners()
+	ledgerKeys := operation.LedgerKeys()
+
+	if len(owners) != 1 || len(ledgerKeys) != 1 {
+		t.Fatalf("operation membership = owners:%d ledger keys:%d, want 1 each", len(owners), len(ledgerKeys))
+	}
+
+	require.Equal(t, int64(1), owners[0].DeliveryID())
+	require.Equal(t, []int64{2}, owners[0].FollowerIDs())
+	require.Equal(t, ownerRow.RowVersion, owners[0].ExpectedVersion())
+	require.Equal(t, ownerRow.RowVersion+1, owners[0].NextVersion())
+	require.Equal(t, lifecycle.StatusPending, owners[0].ExpectedStatus())
+	require.Equal(t, lifecycle.StatusSending, owners[0].NextStatus())
 	require.Equal(t, []string{"delivery:1"}, operation.Request().DedupeKeys())
 	require.Equal(t, resolverTestNow, operation.PreparedAt())
-	require.Equal(t, operation.Owners()[0].Key(), operation.LedgerKeys()[0])
+	require.Equal(t, owners[0].Key(), ledgerKeys[0])
 }
 
 func TestPreparedOperationRejectsDuplicateLogicalOwner(t *testing.T) {

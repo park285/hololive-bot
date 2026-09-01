@@ -54,9 +54,15 @@ func TestFailurePolicyExhaustsOwnerAndMirrorsFollower(t *testing.T) {
 	failed, ok := decision.(FailLogicalGroupDecision)
 	require.True(t, ok)
 	require.Equal(t, RuleRetryExhausted, failed.RuleID())
-	require.Equal(t, StatusFailed, failed.Mutations()[0].NextStatus())
-	require.Equal(t, StatusFailed, failed.Mutations()[1].NextStatus())
-	require.Equal(t, 0, failed.Mutations()[1].NextAttempt())
+
+	mutations := failed.Mutations()
+	if len(mutations) != 2 {
+		t.Fatalf("mutation count = %d, want 2", len(mutations))
+	}
+
+	require.Equal(t, StatusFailed, mutations[0].NextStatus())
+	require.Equal(t, StatusFailed, mutations[1].NextStatus())
+	require.Equal(t, 0, mutations[1].NextAttempt())
 }
 
 func TestOutcomeUnknownProducesNoStateDecision(t *testing.T) {

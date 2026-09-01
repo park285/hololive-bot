@@ -383,12 +383,10 @@ func (r Resolver) resolveGroup(
 		return *terminal
 	}
 
-	if sendingIndex := slices.IndexFunc(members, func(member DeliverySnapshot) bool {
-		return member.Status == lifecycle.StatusSending
-	}); sendingIndex >= 0 {
-		due := maxTime(at.Add(r.config.RetryBackoff), members[sendingIndex].LockedAt.Add(r.config.LockTimeout))
+	if sending, sendingIndex, ok := findDeliveryStatus(members, lifecycle.StatusSending); ok {
+		due := maxTime(at.Add(r.config.RetryBackoff), sending.LockedAt.Add(r.config.LockTimeout))
 
-		return newResolution(key, LogicalInFlight, members[sendingIndex], followersOf(members, sendingIndex), due)
+		return newResolution(key, LogicalInFlight, sending, followersOf(members, sendingIndex), due)
 	}
 
 	return resolveActiveOwner(key, members)
@@ -459,14 +457,11 @@ func retainedTerminalResolution(
 }
 
 func resolveActiveOwner(key ytcontentid.LogicalKey, members []DeliverySnapshot) Resolution {
-	ownerIndex := slices.IndexFunc(members, func(member DeliverySnapshot) bool {
-		return member.Status == lifecycle.StatusPending || member.Status == lifecycle.StatusFailed
-	})
-	if ownerIndex < 0 {
+	owner, ownerIndex, ok := findActiveOwner(members)
+	if !ok {
 		return breach(key, members, InvariantNoResolvableOwner, "logical group has no active or terminal evidence")
 	}
 
-	owner := members[ownerIndex]
 	followers := followersOf(members, ownerIndex)
 
 	if owner.Status == lifecycle.StatusFailed {
@@ -478,6 +473,26 @@ func resolveActiveOwner(key ytcontentid.LogicalKey, members []DeliverySnapshot) 
 	}
 
 	return newResolution(key, LogicalActive, owner, followers, owner.NextAttemptAt)
+}
+
+func findDeliveryStatus(members []DeliverySnapshot, status lifecycle.DeliveryStatus) (DeliverySnapshot, int, bool) {
+	for i := range members {
+		if members[i].Status == status {
+			return members[i], i, true
+		}
+	}
+
+	return DeliverySnapshot{}, 0, false
+}
+
+func findActiveOwner(members []DeliverySnapshot) (DeliverySnapshot, int, bool) {
+	for i := range members {
+		if members[i].Status == lifecycle.StatusPending || members[i].Status == lifecycle.StatusFailed {
+			return members[i], i, true
+		}
+	}
+
+	return DeliverySnapshot{}, 0, false
 }
 
 func newResolution(key ytcontentid.LogicalKey, kind ResolutionKind, owner DeliverySnapshot, followers []DeliverySnapshot, due time.Time) Resolution {
