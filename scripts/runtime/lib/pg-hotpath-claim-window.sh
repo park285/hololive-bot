@@ -48,10 +48,10 @@ start_claims AS MATERIALIZED (
             AND statements.query ~* 'FROM[[:space:]]+updated' AS is_alarm,
             statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
-            AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+o[[:space:]]+SET[[:space:]]+locked_at'
-            AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+o[.]id[[:space:]]*=[[:space:]]*claim[.]id'
-            AND statements.query ~* 'RETURNING[[:space:]]+o[.]id[[:space:]]*,[[:space:]]*o[.]kind[[:space:]]*,[[:space:]]*o[.]channel_id[[:space:]]*,[[:space:]]*o[.]content_id'
-            AND statements.query ~* 'o[.]payload::text[[:space:]]+AS[[:space:]]+payload'
+            AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
+            AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id'
+            AND statements.query ~* 'RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id'
+            AND statements.query ~* 'outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload'
             AND statements.query ~* 'FROM[[:space:]]+updated' AS is_youtube
     ) AS fingerprint
     WHERE start_info.stats_reset IS NOT NULL
@@ -114,10 +114,10 @@ finish_claims AS MATERIALIZED (
             AND statements.query ~* 'FROM[[:space:]]+updated' AS is_alarm,
             statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
-            AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+o[[:space:]]+SET[[:space:]]+locked_at'
-            AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+o[.]id[[:space:]]*=[[:space:]]*claim[.]id'
-            AND statements.query ~* 'RETURNING[[:space:]]+o[.]id[[:space:]]*,[[:space:]]*o[.]kind[[:space:]]*,[[:space:]]*o[.]channel_id[[:space:]]*,[[:space:]]*o[.]content_id'
-            AND statements.query ~* 'o[.]payload::text[[:space:]]+AS[[:space:]]+payload'
+            AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
+            AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id'
+            AND statements.query ~* 'RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id'
+            AND statements.query ~* 'outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload'
             AND statements.query ~* 'FROM[[:space:]]+updated' AS is_youtube
     ) AS fingerprint
     WHERE wait_for_window.claim_count >= 0
@@ -321,12 +321,12 @@ claim_query_matches_target() {
       query_matches_all_patterns "${normalized_query}" \
         'with[[:space:]]+claim[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+as[[:space:]]*[(]' \
-        'update[[:space:]]+youtube_notification_outbox[[:space:]]+o[[:space:]]+set[[:space:]]+locked_at' \
-        'from[[:space:]]+claim[[:space:]]+where[[:space:]]+o[.]id[[:space:]]*=[[:space:]]*claim[.]id' \
-        'returning[[:space:]]+o[.]id[[:space:]]*,[[:space:]]*o[.]kind[[:space:]]*,[[:space:]]*o[.]channel_id[[:space:]]*,[[:space:]]*o[.]content_id' \
-        'o[.]payload::text[[:space:]]+as[[:space:]]+payload' \
+        'update[[:space:]]+youtube_notification_outbox[[:space:]]+as[[:space:]]+outbox[[:space:]]+set[[:space:]]+locked_at' \
+        'from[[:space:]]+claim[[:space:]]+where[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id' \
+        'returning[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id' \
+        'outbox[.]payload::text[[:space:]]+as[[:space:]]+payload' \
         'from[[:space:]]+updated' \
-        'for[[:space:]]+update[[:space:]]+skip[[:space:]]+locked'
+        'for[[:space:]]+update[[:space:]]+of[[:space:]]+outbox[[:space:]]+skip[[:space:]]+locked'
       ;;
     *)
       return 1
