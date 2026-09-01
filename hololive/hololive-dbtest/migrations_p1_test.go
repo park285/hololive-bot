@@ -71,6 +71,7 @@ var sourceObservationReplayMigrations = []string{
 	"161_source_observation_subject_heads.sql",
 	"162_youtube_content_evidence_clocks.sql",
 	"163_youtube_live_viewer_schedule_canonical.sql",
+	"191_source_observation_replay_epoch.sql",
 }
 
 func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.T) {
@@ -188,6 +189,7 @@ var observationGrantMigrationFiles = []string{
 	"187_youtube_dependent_retention_api.sql",
 	"176_youtube_projection_retention_revoke_delete.sql",
 	"178_youtube_schedule_collabo_talent_names.sql",
+	"191_source_observation_replay_epoch.sql",
 }
 
 func readObservationGrantMigrations(t *testing.T, dir string) string {
@@ -425,6 +427,7 @@ var sourceObservationTables = []string{
 	"source_observation_collisions",
 	"source_observation_consumer_offsets",
 	"source_observation_replay_requests",
+	"source_observation_replay_epoch",
 	"source_observation_applications",
 	"source_observation_subject_heads",
 	"source_reconciliation_conflicts",
@@ -471,6 +474,7 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_collisions":             observationPrivileges("SELECT", "DELETE"),
 			"source_observation_consumer_offsets":       observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_observation_replay_requests":        observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
+			"source_observation_replay_epoch":           observationPrivileges("SELECT", "INSERT"),
 			"source_observation_applications":           observationPrivileges("SELECT", "INSERT", "DELETE"),
 			"source_observation_subject_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_reconciliation_conflicts":           observationPrivileges("SELECT", "INSERT", "DELETE"),
@@ -575,6 +579,8 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 			{name: "repository_observation_identity_0006_06.sql", args: []any{"youtubejs", communityPageKind, "missing", "missing", int16(1), int64(1)}},
 		},
 		roles.runtime: {
+			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
+			{name: "repository_replay_epoch_load_0086_86.sql"},
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_observation_lock_0051_51.sql", args: []any{int64(0)}},

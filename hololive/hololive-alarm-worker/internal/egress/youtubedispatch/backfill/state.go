@@ -251,6 +251,15 @@ func completeInTx(ctx context.Context, tx dbx.Querier, coverageStart time.Time) 
 		return state, nil
 	}
 
+	replayEpochCutoff, err := loadReplayEpochCutoff(ctx, tx)
+	if err != nil {
+		return State{}, fmt.Errorf("load source observation replay epoch: %w", err)
+	}
+
+	if !replayEpochCutoff.Equal(coverageStart) {
+		return State{}, ErrReplayEpochMismatch
+	}
+
 	if validationErr := validateCompletionState(state, coverageStart); validationErr != nil {
 		return State{}, fmt.Errorf("validate ledger backfill completion: %w", validationErr)
 	}
@@ -266,6 +275,20 @@ func completeInTx(ctx context.Context, tx dbx.Querier, coverageStart time.Time) 
 	}
 
 	return completed, nil
+}
+
+func loadReplayEpochCutoff(ctx context.Context, tx dbx.Querier) (time.Time, error) {
+	var cutoff time.Time
+
+	if err := tx.QueryRow(ctx, mustSQL("replay_epoch_load.sql")).Scan(&cutoff); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return time.Time{}, ErrReplayEpochInactive
+		}
+
+		return time.Time{}, fmt.Errorf("query source observation replay epoch: %w", err)
+	}
+
+	return cutoff.UTC(), nil
 }
 
 func validateCompletionState(state State, coverageStart time.Time) error {

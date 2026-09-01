@@ -132,6 +132,7 @@ github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill -
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill -> github.com/kapu/hololive-shared/pkg/service/youtube/contentid
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql
+github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill -> github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/preparation -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle
@@ -266,6 +267,9 @@ github.com/kapu/hololive-api/cmd/hololive-api -> github.com/kapu/hololive-shared
 github.com/kapu/hololive-api/cmd/hololive-api -> github.com/kapu/hololive-shared/pkg/health
 github.com/kapu/hololive-api/cmd/hololive-api -> github.com/park285/shared-go/v2/pkg/logging
 github.com/kapu/hololive-api/cmd/hololive-api -> github.com/park285/shared-go/v2/pkg/runtime/automaxprocs
+github.com/kapu/hololive-api/cmd/source-observation-replay-epoch -> github.com/kapu/hololive-shared/pkg/config/settings
+github.com/kapu/hololive-api/cmd/source-observation-replay-epoch -> github.com/kapu/hololive-shared/pkg/providers
+github.com/kapu/hololive-api/cmd/source-observation-replay-epoch -> github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation
 github.com/kapu/hololive-api/internal/app -> github.com/kapu/hololive-api/internal/planes/admin/app
 github.com/kapu/hololive-api/internal/app -> github.com/kapu/hololive-api/internal/planes/bot/runtime
 github.com/kapu/hololive-api/internal/app -> github.com/kapu/hololive-api/internal/planes/llm/runtime

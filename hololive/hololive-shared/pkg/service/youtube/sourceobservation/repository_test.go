@@ -931,6 +931,16 @@ func TestClaimSQLUsesBoundedSkipLockedWithoutGenerationFilter(t *testing.T) {
 		t.Fatal("claim query must not filter immutable evidence by current generation")
 	}
 
+	for _, required := range []string{
+		"source_observation_replay_epoch",
+		"observation.received_at < epoch.cutoff_received_at",
+		"last_error_code = 'replay_epoch_expired'",
+	} {
+		if !strings.Contains(query, required) {
+			t.Fatalf("claim query is missing replay epoch fence %q", required)
+		}
+	}
+
 	for _, forbidden := range []string{"observation.payload", "payload_sha256", "evidence_sha256", "contract_generation"} {
 		if strings.Contains(query, forbidden) {
 			t.Fatalf("claim query returns non-work field %q", forbidden)

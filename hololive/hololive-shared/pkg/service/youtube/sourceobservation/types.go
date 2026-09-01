@@ -155,6 +155,7 @@ type Observation struct {
 	LeaseExpiresAt       time.Time
 	EffectiveAt          time.Time
 	SourceEventFallback  bool
+	replayEpochRejected  bool
 }
 
 func (o *Observation) ContractVersion() ContractVersion {
@@ -255,6 +256,22 @@ type ReplayResult struct {
 	RequestID     int64
 	Applied       bool
 	RejectionCode string
+}
+
+type ReplayEpochInput struct {
+	ActivatedBy string
+	Reason      string
+}
+
+type ReplayEpoch struct {
+	CutoffReceivedAt time.Time
+	ActivatedBy      string
+	Reason           string
+}
+
+type ReplayEpochActivation struct {
+	Epoch     ReplayEpoch
+	Activated bool
 }
 
 type RetentionQuery struct {

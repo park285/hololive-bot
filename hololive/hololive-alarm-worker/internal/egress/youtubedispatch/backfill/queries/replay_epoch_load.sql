@@ -1,0 +1,4 @@
+SELECT cutoff_received_at
+FROM source_observation_replay_epoch
+WHERE singleton
+FOR SHARE

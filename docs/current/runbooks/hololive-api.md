@@ -30,6 +30,34 @@
 | selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
+## Source observation replay epoch activation
+
+Migration 191과 epoch-aware `hololive-api`/`hololive-alarm-worker` image를 epoch 부재 상태로 먼저 배포하고 normal health, source observation 처리, delivery compatibility writer를 관찰합니다. 이 단계에서는 historical coverage가 성립하지 않으며 ledger completion one-shot을 실행하지 않습니다.
+
+Epoch activation은 irreversible production data write이고 통합 `hololive-api` 중지와 central/AP collector publish quiesce를 동반합니다. 현재 승인에 정확한 대상 host·collector fleet·중지·epoch insert·재시작이 모두 포함된 경우에만 다음 순서를 실행합니다.
+
+1. 모든 collector publish를 quiesce하고 API가 이미 claim한 observation을 drain합니다. active claim과 current queue 상태를 read-only로 감사합니다.
+2. `hololive-api`를 중지하고 epoch-aware image revision이 사전 관찰한 revision과 같은지 다시 확인합니다. `hololive-alarm-worker` compatibility writer는 계속 실행합니다.
+3. 아래 one-shot을 한 번 실행합니다. `activated-by`와 `reason`에는 계정/변경 ticket처럼 비밀이 아닌 bounded audit metadata만 넣습니다.
+
+```bash
+export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
+./scripts/deploy/compose.sh \
+  -f deploy/compose/docker-compose.prod.yml \
+  -f deploy/compose/docker-compose.live-compat.yml \
+  run --rm --no-deps \
+  --entrypoint ./bin/source-observation-replay-epoch \
+  hololive-api \
+  --activated-by='<operator-handle>' \
+  --reason='<approved-change-ticket>'
+```
+
+4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
+5. 같은 epoch-aware `hololive-api`를 `--no-build --no-deps`로 시작하고 health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
+6. Active epoch의 exact `cutoff_received_at`만 delivery ledger backfill의 `--legacy-coverage-start-at`에 사용할 수 있습니다. Backfill과 completion marker는 별도 production data-write 승인이 필요합니다.
+
+Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
+
 ## Key environment variables
 
 | Env | Purpose | Required |

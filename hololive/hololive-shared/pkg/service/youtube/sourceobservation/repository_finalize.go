@@ -128,6 +128,17 @@ func rejectFinalizeObservation(
 	supported SupportedContractSet,
 	observation *Observation,
 ) (bool, ReconcileResult, error) {
+	if observation.replayEpochRejected {
+		if err := deadLetterReplayEpochExpired(ctx, tx, observation); err != nil {
+			return true, ReconcileResult{}, fmt.Errorf("dead letter replay epoch expired: %w", err)
+		}
+
+		return true, ReconcileResult{
+			EffectiveAt:         observation.EffectiveAt,
+			SourceEventFallback: observation.SourceEventFallback,
+		}, nil
+	}
+
 	if !supported.Supports(observation.ContractVersion()) {
 		if err := deadLetterUnsupported(ctx, tx, observation); err != nil {
 			return true, ReconcileResult{}, fmt.Errorf("dead letter unsupported: %w", err)
@@ -151,6 +162,18 @@ func rejectFinalizeObservation(
 	}
 
 	return false, ReconcileResult{}, nil
+}
+
+func deadLetterReplayEpochExpired(ctx context.Context, tx dbx.Tx, observation *Observation) error {
+	if err := deadLetterTx(ctx, tx, DeadLetterInput{
+		ObservationID: observation.ID,
+		LeaseToken:    observation.LeaseToken,
+		ErrorCode:     replayEpochExpiredCode,
+	}); err != nil {
+		return fmt.Errorf("dead letter tx: %w", err)
+	}
+
+	return nil
 }
 
 func deadLetterUnsupported(ctx context.Context, tx dbx.Tx, observation *Observation) error {
@@ -314,6 +337,7 @@ func scanLockedObservation(row pgx.Row) (Observation, error) {
 		&observation.LeaseOwner,
 		&observation.LeaseToken,
 		&observation.LeaseExpiresAt,
+		&observation.replayEpochRejected,
 	); err != nil {
 		return Observation{}, fmt.Errorf("claim source observations: scan row: %w", err)
 	}

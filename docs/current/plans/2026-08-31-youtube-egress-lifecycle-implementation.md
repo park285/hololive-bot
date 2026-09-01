@@ -7,7 +7,7 @@
 - Commit 판정: [`../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`](../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - Library 검토: [`../architecture/youtube-egress-lifecycle-library-review-20260831.md`](../architecture/youtube-egress-lifecycle-library-review-20260831.md)
 
-**Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing)
+**Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing), `DEC-20260901-hololive-source-observation-replay-epoch` (constraint)
 
 ## 목적
 
@@ -90,11 +90,12 @@ Remote host는 build하지 않습니다. Alarm-worker image와 one-shot binary�
 | T02 | PR 1 | T01 writer inventory | public fail-closed canonical resolver |
 | T03 | PR 2 | T02 | alarm-worker internal store |
 | T04 | PR 3 | T02, T03 | additive schema, sole compatibility writer, poller direct-writer 제거 |
-| T05 | PR 4 + 승인된 one-shot | T04 production compatibility writer | fixed-high-water backfill과 completion state |
+| T05 | PR 4 + 승인된 one-shot | T04 production compatibility writer, T10 production epoch activation | fixed-high-water backfill과 completion state |
 | T06 | PR 5 | T02 | typed policy와 inactive preparation seam |
 | T07 | PR 6 + 승인된 cutover | T05 completion, T06 | version-fenced transition writer |
 | T08 | PR 7 | T07 | fanout/revive/projector/cleanup 단일 ownership |
 | T09 | PR 8 | T08 | architecture gate, legacy removal, verification evidence |
+| T10 | PR 4a + 승인된 activation | T04 production compatibility writer | bounded source observation replay epoch |
 
 T06 code review는 T04/T05와 병행할 수 있지만 production activation은 T05 completion 뒤 T07에서만 수행합니다.
 
@@ -127,7 +128,7 @@ revive는 SENT/QUARANTINED evidence를 보존
 중단 조건:
 
 - Writer ownership을 모두 식별하지 못하면 T04 이후로 진행하지 않습니다.
-- Replay 경로 하나라도 unbounded/unknown이면 compatibility writer까지는 구현할 수 있지만 T05 completion, T07 writer cutover, T08 cleanup enablement는 진행하지 않습니다.
+- Replay 경로 하나라도 unbounded/unknown이면 compatibility writer와 T10 epoch code까지는 구현할 수 있지만 T05 completion, T07 writer cutover, T08 cleanup enablement는 진행하지 않습니다.
 - Unsafe ID-only recovery를 보존하기 위한 test는 추가하지 않습니다.
 
 검증: V01, V02
@@ -239,7 +240,8 @@ Rollback은 additive schema를 유지한 채 compatibility-aware binary로만 �
 - Restart는 persisted cursor를 재사용하고 high-water를 재설정하지 않습니다.
 - Verification pass는 canonical source key와 ledger를 fixed range 전체에서 anti-join하고 mismatch 0건인 batch만 verify cursor를 전진시킵니다.
 - Invalid identity를 skip하거나 repair로 추정하지 않습니다.
-- T01의 모든 `replay_floor_at`에 대해 `legacy_coverage_start_at <= replay_floor_at`을 증명한 경우에만 coverage/completion timestamps를 기록합니다.
+- T10의 immutable `cutoff_received_at` activation과 pre-epoch replay 차단을 production evidence로 확인한 뒤 그 cutoff를 `legacy_coverage_start_at`으로 사용합니다.
+- T01의 나머지 모든 `replay_floor_at`에 대해 `legacy_coverage_start_at <= replay_floor_at`을 증명한 경우에만 coverage/completion timestamps를 기록합니다.
 
 승인 경계:
 
@@ -357,6 +359,32 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 검증: V15, V16
 완료 기준: AC14, AC15
 
+### T10 — Source observation replay epoch를 고정하고 pre-epoch 재처리를 차단
+
+목표는 activation 전에 DB에 수신된 source observation이 automatic queue recovery나 operator replay로 다시 canonical outbox를 만들지 못하게 하여 historical coverage의 고정된 시작 경계를 제공하는 것입니다.
+
+구현:
+
+- Source observation domain에 최대 한 행인 immutable replay epoch를 additive migration으로 추가합니다. Epoch 부재는 명시적인 inactive 상태이며 coverage evidence가 아닙니다.
+- Epoch의 `cutoff_received_at`은 activation transaction의 PostgreSQL 시각으로 한 번만 기록하고 수정·삭제 runtime 권한을 부여하지 않습니다.
+- Claim transaction은 `received_at < cutoff_received_at`인 due 또는 lease-expired queue row를 기존 claim batch limit 안에서 `replay_epoch_expired`로 dead-letter하고 현재 epoch row만 claim합니다.
+- Activation과 경합한 이미 claim된 row는 `Finalize`의 canonical write callback 직전에 같은 transaction에서 epoch를 다시 읽고 `replay_epoch_expired`로 dead-letter합니다.
+- `RequestReplay`와 pending request processor는 pre-epoch observation을 `replay_epoch_expired`로 audit-reject하고 queue를 재활성화하지 않습니다.
+- T05 completion transaction은 operator가 제시한 `legacy_coverage_start_at`이 active epoch의 exact cutoff와 일치하는지 row lock 아래 확인합니다.
+- Epoch 조회 오류는 inactive로 바꾸지 않고 operation failure로 보존합니다. Retry, fallback, old-name compatibility path는 추가하지 않습니다.
+- API image에 explicit operator와 reason을 요구하는 idempotent one-shot activation command를 포함합니다. 이미 활성화된 epoch는 원래 cutoff와 attribution을 그대로 반환합니다.
+
+승인 경계:
+
+- Schema, repository, command, test 구현은 local change 범위입니다.
+- Production migration, API stop/restart, epoch row insert는 별도 production deploy/data-write 승인이 필요합니다.
+- Production migration과 epoch-aware API/alarm-worker 배포를 먼저 inactive 상태로 관찰합니다. 별도 activation 창에서는 collector publish quiesce → queue drain audit → API stop → epoch-aware one-shot activation → 같은 API와 collector restart 순서를 지킵니다.
+- Activation 뒤 rollback floor는 사전 관찰한 T10 binary이며 pre-epoch binary를 시작하거나 epoch row를 삭제하지 않습니다.
+- Production activation과 bounded queue/read-only audit 전에는 T05 completion marker를 기록하지 않습니다.
+
+검증: V17
+완료 기준: AC16
+
 ## Acceptance criteria
 
 ### AC01 — 모든 outbox/delivery writer와 runtime owner가 경로별로 분류되어 있습니다.
@@ -388,6 +416,8 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 ### AC14 — CI architecture gate가 old store import와 worker 밖 lifecycle update를 거부합니다.
 
 ### AC15 — Focused unit/integration/fault-injection/race/schema tests와 승인된 rollout observation이 governing DEC의 verification evidence로 연결됩니다.
+
+### AC16 — Immutable source replay epoch가 pre-epoch claim/finalize/manual replay를 차단하고 inactive 상태를 historical coverage로 오인하지 않습니다.
 
 ## Validation
 
@@ -512,15 +542,27 @@ bash scripts/ci/local-ci.sh
 
 Broad suite와 production build는 publish/deploy gate에서만 실행합니다. Production DB audit는 owning runbook의 guarded read 절차를 사용합니다.
 
+### V17 — Source observation replay epoch
+
+```bash
+go -C hololive/hololive-shared test ./pkg/service/youtube/sourceobservation/... -run 'ReplayEpoch|Replay|Finalize|Claim'
+go -C hololive/hololive-api test ./cmd/source-observation-replay-epoch/...
+bash scripts/architecture/check-migration-manifest.sh
+go -C hololive/hololive-dbtest test -run 'TestSchemaSnapshotGolden' ./...
+```
+
+Integration test는 inactive passthrough, single immutable activation, bounded automatic dead-letter, already-claimed finalize fence, manual/pending replay rejection, post-epoch success를 검증합니다.
+
 ## Rollout과 rollback
 
 1. T02와 T03은 behavior-preserving code change로 먼저 배포할 수 있습니다.
 2. T04 schema/compatibility rollout은 worker stop → additive migration → compatibility worker start 순서이며 별도 승인이 필요합니다.
-3. T05 one-shot은 fixed high-water를 한 번만 잡고 persisted cursor로 재개합니다. 실패 시 state를 incomplete로 남기고 cleanup을 frozen 상태로 유지합니다.
-4. T07 cutover는 completed ledger state와 focused fault-injection evidence가 있을 때만 승인 요청합니다.
-5. T07 이후 rollback target은 T04 compatibility writer입니다. Ledger/state/`terminal_at`을 삭제하거나 과거 binary로 되돌리지 않습니다.
-6. Immediate rollback trigger는 provider duplicate evidence, ledger/delivery mismatch, mixed group, commit indeterminate 급증, aggregate lag의 bounded threshold 초과입니다.
-7. Rollback 뒤에도 outcome-unknown과 quarantine evidence를 success/failure로 추정하지 않습니다.
+3. T10 schema와 epoch-aware API/alarm-worker는 epoch가 inactive인 상태로 먼저 배포·관찰합니다. 별도 승인된 activation은 collector publish quiesce → queue drain audit → API stop → immutable epoch insert → 같은 API와 collector restart 순서입니다. Activation 전 epoch 부재는 coverage로 인정하지 않습니다.
+4. T05 one-shot은 fixed high-water를 한 번만 잡고 persisted cursor로 재개합니다. 실패 시 state를 incomplete로 남기고 cleanup을 frozen 상태로 유지합니다.
+5. T07 cutover는 completed ledger state와 focused fault-injection evidence가 있을 때만 승인 요청합니다.
+6. T10 activation 전 rollback target은 T04 compatibility writer이고, activation 뒤 rollback target은 T10 epoch-aware compatibility writer입니다. Ledger/state/epoch/`terminal_at`을 삭제하거나 더 오래된 binary로 되돌리지 않습니다.
+7. Immediate rollback trigger는 provider duplicate evidence, ledger/delivery mismatch, mixed group, commit indeterminate 급증, aggregate lag의 bounded threshold 초과입니다.
+8. Rollback 뒤에도 outcome-unknown과 quarantine evidence를 success/failure로 추정하지 않습니다.
 
 ## 비목표
 
@@ -536,6 +578,6 @@ Broad suite와 production build는 publish/deploy gate에서만 실행합니다.
 **Goal:** YouTube egress를 ledger-first logical lifecycle과 단일 alarm-worker transition owner로 교체합니다.
 **Context:** Governing DEC와 네 architecture 문서, current schema/store/poller writer inventory를 정본으로 사용합니다.
 **Constraints:** Canonical identity는 fail closed이고 dual writer, provider resend, unbounded migration backfill, incomplete-ledger cleanup을 금지합니다.
-**Evidence:** T01 writer/coverage audit, fixed-high-water canonical anti-join, commit fault injection, architecture gate를 남깁니다.
-**Success:** AC01부터 AC15까지 충족하고 지원 schema version의 durable ledger completion marker가 존재합니다.
-**Output:** T02부터 T09까지 순차 PR, 승인된 rollout 기록, governing DEC verification evidence를 제출합니다.
+**Evidence:** T01 writer/coverage audit, T10 replay epoch fence, fixed-high-water canonical anti-join, commit fault injection, architecture gate를 남깁니다.
+**Success:** AC01부터 AC16까지 충족하고 지원 schema version의 durable ledger completion marker가 존재합니다.
+**Output:** T02부터 T10까지의 reviewable PR, 승인된 rollout 기록, governing DEC verification evidence를 제출합니다.

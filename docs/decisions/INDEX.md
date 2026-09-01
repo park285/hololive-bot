@@ -2,10 +2,11 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 32건: proposed 0, accepted 22, rejected 0, withdrawn 2, superseded 8
+레코드 33건: proposed 0, accepted 23, rejected 0, withdrawn 2, superseded 8
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260901-hololive-source-observation-replay-epoch](records/DEC-20260901-hololive-source-observation-replay-epoch.json) | Source observation replay는 immutable DB 수신 epoch로 제한한다 | accepted | implemented | hololive-bot | 2026-09-01 | trigger | - | [2026-08-31-youtube-egress-lifecycle-implementation.md](../current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md) |
 | [DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership](records/DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership.json) | YouTube egress lifecycle은 typed planner가 전이를 결정하고 PostgreSQL이 fenced CAS로 집행한다 | accepted | planned | hololive-bot | 2026-08-31 | trigger | - | [youtube-egress-lifecycle-transition-ownership-20260831.md](../current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md) |
 | [DEC-20260830-hololive-birthday-stream-sent-audience](records/DEC-20260830-hololive-birthday-stream-sent-audience.json) | 생일 방송은 operational roster에서 발견하고 sent 생일 축하 delivery 방에만 보낸다 | accepted | verified | hololive-bot | 2026-08-30 | - | supersedes DEC-20260710-hololive-birthday-stream-alarm | [2026-08-08-birthday-stream-alarm-v3.md](../current/plans/2026-08-08-birthday-stream-alarm-v3.md) |
 | [DEC-20260830-hololive-premiere-content-owned-notifications](records/DEC-20260830-hololive-premiere-content-owned-notifications.json) | YouTube 최초공개 구독자 알림은 NEW_VIDEO outbox만 소유하고 live upcoming/catchup은 is_premiere=true를 제외한다 | accepted | verified | hololive-bot | 2026-08-30 | trigger | - | [youtube-three-provider-convergence-contract-v2-20260814.md](../current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md) |

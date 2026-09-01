@@ -12,6 +12,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 
 func TestBackfillFixedHighWaterAndResume(t *testing.T) {
@@ -233,7 +234,33 @@ func TestBackfillCoverageCompletionRequiresExplicitEvidence(t *testing.T) {
 	require.Nil(t, result.State.LegacyCoverageStartAt)
 	require.Nil(t, result.State.CoverageVerifiedAt)
 
-	coverageStart := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
+	unauthorizedCoverageStart := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
+	inactive, err := New(pool, Options{
+		LegacyCoverageStartAt:     &unauthorizedCoverageStart,
+		HistoricalCoverageChecked: true,
+	})
+	require.NoError(t, err)
+
+	_, err = inactive.Run(ctx)
+	require.ErrorIs(t, err, ErrReplayEpochInactive)
+
+	activation, err := sourceobservation.NewRepository(pool).ActivateReplayEpoch(ctx, sourceobservation.ReplayEpochInput{
+		ActivatedBy: "backfill-test",
+		Reason:      "establish exact historical coverage boundary",
+	})
+	require.NoError(t, err)
+	require.True(t, activation.Activated)
+
+	mismatch, err := New(pool, Options{
+		LegacyCoverageStartAt:     &unauthorizedCoverageStart,
+		HistoricalCoverageChecked: true,
+	})
+	require.NoError(t, err)
+
+	_, err = mismatch.Run(ctx)
+	require.ErrorIs(t, err, ErrReplayEpochMismatch)
+
+	coverageStart := activation.Epoch.CutoffReceivedAt
 	confirmed, err := New(pool, Options{
 		LegacyCoverageStartAt:     &coverageStart,
 		HistoricalCoverageChecked: true,
