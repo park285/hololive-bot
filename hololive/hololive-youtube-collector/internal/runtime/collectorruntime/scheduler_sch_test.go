@@ -320,17 +320,17 @@ func TestSCH012StopDrainsQueueAndQueuedSet(t *testing.T) {
 		t.Fatalf("snapshot = %+v", snap)
 	}
 
-	scheduler.mu.Lock()
+	scheduler.queueMu.Lock()
 
 	queued := len(scheduler.queued)
-	scheduler.mu.Unlock()
+	scheduler.queueMu.Unlock()
 
 	if queued != 0 {
 		t.Fatalf("queued set = %d", queued)
 	}
 }
 
-func TestSCH013SnapshotIsConsistentUnderOneLock(t *testing.T) {
+func TestSCH013SnapshotKeepsCycleFieldsConsistent(t *testing.T) {
 	t.Parallel()
 
 	scheduler := newLifecycleScheduler(t)
@@ -339,11 +339,11 @@ func TestSCH013SnapshotIsConsistentUnderOneLock(t *testing.T) {
 
 	wg.Go(func() {
 		for i := range 1000 {
-			scheduler.mu.Lock()
+			scheduler.cycleMu.Lock()
 
 			scheduler.discovered = i
 			scheduler.enqueued = i
-			scheduler.mu.Unlock()
+			scheduler.cycleMu.Unlock()
 		}
 	})
 	wg.Go(func() {

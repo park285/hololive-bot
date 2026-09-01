@@ -41,6 +41,7 @@ func buildScheduler(
 	appConfig *settings.YouTubeCollectorRuntimeConfig,
 	infra *collectorInfrastructure,
 	logger *slog.Logger,
+	tracker *readinessTracker,
 ) (*leaseScheduler, error) {
 	if err := requireSchedulerDeps(appConfig, infra); err != nil {
 		return nil, fmt.Errorf("require scheduler deps: %w", err)
@@ -56,7 +57,7 @@ func buildScheduler(
 		return nil, fmt.Errorf("build youtube collector: lease config: %w", err)
 	}
 
-	out, err := newLeaseScheduler(infra, logger, &collector, &leaseConfig, appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout)
+	out, err := newLeaseScheduler(infra, logger, &collector, &leaseConfig, tracker, appConfig.Holodex.Transport.Timeout, appConfig.OfficialSchedule.Transport.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("lease scheduler: %w", err)
 	}
@@ -81,6 +82,7 @@ func newLeaseScheduler(
 	logger *slog.Logger,
 	collector *settings.YouTubeCollectorConfig,
 	leaseConfig *joblease.Config,
+	tracker *readinessTracker,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
 ) (*leaseScheduler, error) {
@@ -98,8 +100,6 @@ func newLeaseScheduler(
 	if err != nil {
 		return nil, fmt.Errorf("collector owner: %w", err)
 	}
-
-	tracker := &readinessTracker{}
 
 	return &leaseScheduler{
 		repository:    repository,

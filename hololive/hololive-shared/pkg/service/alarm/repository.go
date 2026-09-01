@@ -27,14 +27,14 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type Repository struct {
-	pool   *pgxpool.Pool
+	pool   dbx.Querier
 	logger *slog.Logger
 }
 
@@ -43,6 +43,10 @@ func NewRepository(postgres database.Client, logger *slog.Logger) *Repository {
 		pool:   postgres.GetPool(),
 		logger: logger,
 	}
+}
+
+func newRepositoryWithQuerier(querier dbx.Querier) *Repository {
+	return &Repository{pool: querier}
 }
 
 // 방 기반 시스템이므로 room_id + channel_id 기준으로 unique하다.

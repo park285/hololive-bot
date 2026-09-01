@@ -29,7 +29,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
 // outboxItemGroup: Outbox 알림 그룹 (동일 Room + Channel + Kind 묶음).
@@ -179,7 +178,7 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 }
 
 func (g *OutboxGrouper) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {
-	members, err := sharedalarm.ResolveChannelSubscribersByType(ctx, g.cache, g.db, entry.channelID, entry.alarmType)
+	members, err := g.lookupSubscribers(ctx, entry.channelID, entry.alarmType)
 	if err != nil {
 		g.logger.Warn("Failed to get subscribers for channel",
 			slog.String("channel_id", entry.channelID),
