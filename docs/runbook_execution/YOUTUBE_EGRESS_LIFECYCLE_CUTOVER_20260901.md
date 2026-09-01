@@ -38,11 +38,21 @@
 - Ledger state: one singleton row, schema version 1, `completed_at` present, and delivery, verification, and outbox cursors equal to their fixed high-water marks.
 - Retained state counts at observation: 45 delivery rows, 43 outbox rows, and 37 logical ledger rows.
 - Delivery shape violations, ledger shape violations, terminal deliveries without ledger evidence, ledger/source mismatches, impossible mixed logical groups, outbox terminal-shape violations, and aggregate projection mismatches were all zero.
-- Three retained `COMMUNITY_POST` rows from `2026-05-17` lack the current canonical payload field. They are nonterminal, unlocked, attempt 2, and explicitly parked until `2099-01-01`; due, locked, active-send, and terminal-invalid counts are zero. They were not rewritten or reclassified during this cutover and are not treated as success evidence.
+- The cutover initially retained three `COMMUNITY_POST` rows from `2026-05-17` that lacked the current canonical payload field. They were nonterminal, unlocked, and explicitly parked until `2099-01-01`; due, locked, active-send, and terminal-invalid counts were zero. They were not rewritten or reclassified during the cutover. The separately approved cleanup below removed this residue, so the current retained count is zero.
 - Aggregate TLS state reported 27 network sessions using TLS 1.3, one local inspection session, and no plaintext TCP session.
+
+## Approved post-cutover legacy cleanup
+
+- A read-only audit identified exactly three parked outboxes, their three `PENDING` delivery children, and three matching `DETECTED` alarm-state rows as test residue. The rows had no telemetry, terminal ledger, tracking, authorization, successful-send, active-lock, or downstream-dispatch evidence.
+- The source `youtube_community_posts` rows referenced by the stale payloads had different channels and were deliberately excluded from the cleanup. No canonical source, observation, tracking, telemetry, or ledger row was changed.
+- After explicit approval of the exact target and irreversible no-backup operation, one guarded PostgreSQL transaction deleted the three alarm-state rows and three outboxes. The outbox foreign key cascaded deletion to exactly three delivery rows. Expected-count, state-shape, and no-terminal-evidence guards ran under row locks; any mismatch would have rolled back the transaction.
+- The observed cleanup window was `2026-09-01T13:40:27Z` through `2026-09-01T13:42:22Z`. The transaction committed with `deleted_alarm_states=3` and `deleted_outboxes=3`.
+- Postconditions reported zero legacy test outboxes, zero pending Community rows missing `canonical_post_id`, zero matching legacy alarm states, zero orphan deliveries, zero invalid current identities, zero delivery/ledger/outbox shape violations, zero terminal deliveries without ledger evidence, and zero impossible mixed logical groups. The retained totals were 40 outboxes, 42 deliveries, and 37 ledger rows; the completed ledger high-water state remained intact.
+- H3 `/health`, public `/ready`, authenticated `/internal/ready`, and authenticated worker diagnostics passed. All three queues, in-flight counts, and `outcomeUnknown` totals were zero. The alarm-worker remained on image `sha256:8e36703cbdea111f1ff2b617ceff30c26939540026effc1238901d5115673aa1`, `running/healthy`, with `RestartCount=0`; filtered risk-log matches since the cleanup start were zero.
+- The follow-up inspection used a read-only session and observed 19 TLS 1.3 network sessions, one local inspection session, and no plaintext TCP session. No service restart, deploy, migration, secret change, or fallback path was introduced.
 
 ## Result
 
-The reviewed lifecycle owner is live on the single production alarm-worker instance. All publish, runtime, readiness, ledger, projection, and no-resend ambiguity checks passed. The rollback image and prior deploy tree remain available.
+The reviewed lifecycle owner is live on the single production alarm-worker instance, and the invalid parked test residue has been removed. All publish, runtime, readiness, ledger, projection, cleanup, and no-resend ambiguity checks passed. The rollback image and prior deploy tree remain available.
 
 Fallback delta: none.
