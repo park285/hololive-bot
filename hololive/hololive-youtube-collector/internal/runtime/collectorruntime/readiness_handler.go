@@ -43,7 +43,6 @@ type readinessResponse struct {
 }
 
 func (r *collectorReadiness) configure(opts *sharedserver.RuntimeRouterOptions) {
-	r.tracker = r.scheduler.readinessTrackerRef()
 	opts.EnableGzip = true
 	opts.ReadyResponder = r.respond
 }

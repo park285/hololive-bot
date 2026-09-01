@@ -385,6 +385,7 @@ hololive/hololive-shared/pkg/server/middleware/security.go
 hololive/hololive-shared/pkg/service/alarm/api.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm_data.go
+hololive/hololive-shared/pkg/service/alarm/cache_warm_targets.go
 hololive/hololive-shared/pkg/service/alarm/cache_warm_write.go
 hololive/hololive-shared/pkg/service/alarm/checker/helpers.go
 hololive/hololive-shared/pkg/service/alarm/checker/target_policy.go
@@ -410,6 +411,7 @@ hololive/hololive-shared/pkg/service/alarm/queries/repository_rooms_0009_01.sql
 hololive/hololive-shared/pkg/service/alarm/queries/targets_0188_01.sql
 hololive/hololive-shared/pkg/service/alarm/repository.go
 hololive/hololive-shared/pkg/service/alarm/repository_rooms.go
+hololive/hololive-shared/pkg/service/alarm/repository_targets.go
 hololive/hololive-shared/pkg/service/alarm/routes.go
 hololive/hololive-shared/pkg/service/alarm/sql.go
 hololive/hololive-shared/pkg/service/alarm/targets.go

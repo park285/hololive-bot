@@ -11,10 +11,15 @@
   "summary": "YouTube notification delivery의 전이 정책은 alarm-worker 내부의 순수 typed lifecycle policy가 한 번만 계산하고 PostgreSQL은 durable state, delivery row_version fencing, expected state/version/attempt/lock CAS와 logical terminal ledger를 집행한다. Logical key는 Community/Shorts에서 (kind, canonical_post_id, room_id), 그 밖의 kind에서 (kind, outbox.content_id, room_id)이며 retained group의 최소 (created_at, delivery_id) row 하나만 provider 호출과 attempt 증가 권한을 가진다. Ledger SENT와 QUARANTINED가 physical terminal row보다 우선하고 follower는 owner retry due와 terminal 상태를 mirror하여 독립 retry budget을 사용할 수 없다. Provider 호출 전 preparation과 SENDING 이후 outcome을 분리하며 outcome unknown은 즉시 state write, claim release, fallback, resend를 하지 않고 stale sweeper가 logical group과 ledger를 atomic하게 quarantine한다. Multi-room success는 exact alarm claim token 또는 durable already-sent tracking 중 하나로 idempotent하게 충족한다. Provider success transaction은 owner, follower, tracking, ledger를 all-or-none으로 기록하고 commit 응답이 불명확하면 이 전체 envelope를 primary exact read-back하여 Applied, Conflict, Missing, Indeterminate를 판정한다. Provider send와 transition callback은 자동 재실행하지 않는다. Outbox aggregate와 terminal_at projection은 terminal envelope 뒤 별도 projector가 계산하며 실패해도 provider 성공을 rollback하지 않는다. Additive schema 뒤 compatibility writer를 먼저 가동하고 모든 terminal kind를 fixed-high-water와 durable cursor로 backfill하며 canonical anti-join과 historical replay coverage가 증명된 경우에만 writer와 ledger-guarded cleanup을 cutover한다. Worker 전용 store와 row model은 alarm-worker internal로 회수하고 poller의 direct lifecycle writer를 제거한다. 범용 FSM 라이브러리와 generic mutation DSL은 도입하지 않는다.",
   "sources": [
     "docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#결정",
+    "docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#D-001. alarm-worker 내부 typed policy가 전이를 결정한다",
     "docs/current/architecture/youtube-egress-lifecycle-contract-20260831.md#핵심 불변식",
+    "docs/current/architecture/youtube-egress-lifecycle-contract-20260831.md#I-002. Single policy evaluation",
+    "docs/current/architecture/youtube-egress-lifecycle-contract-20260831.md#Decision model",
     "docs/current/architecture/youtube-egress-logical-delivery-ledger-20260831.md#결정",
     "docs/current/architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md#공통 규칙",
+    "docs/current/architecture/youtube-egress-lifecycle-library-review-20260831.md#Complete decision 요구",
     "docs/current/architecture/youtube-egress-lifecycle-library-review-20260831.md#최종 판정",
+    "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#작업 원칙",
     "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#Acceptance criteria"
   ],
   "evidence": [],

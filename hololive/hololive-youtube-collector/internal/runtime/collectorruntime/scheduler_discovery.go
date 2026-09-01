@@ -111,8 +111,7 @@ func (s *leaseScheduler) discoveryRunners() []RegisteredRunner {
 }
 
 func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, startCursor int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.queueMu.Lock()
 
 	queued := len(s.queued)
 
@@ -123,13 +122,20 @@ func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, start
 		excluded = append(excluded, key)
 	}
 
+	s.queueMu.Unlock()
+
+	s.cycleMu.Lock()
+
+	startCursor = s.rotationCursor
+	s.cycleMu.Unlock()
+
 	slices.Sort(excluded)
 
-	return free, excluded, s.rotationCursor
+	return free, excluded, startCursor
 }
 
 func (s *leaseScheduler) beginCycle(started time.Time, queueFull bool) {
-	s.mu.Lock()
+	s.cycleMu.Lock()
 
 	s.cycleStartedAt = started
 	s.discovered = 0
@@ -138,14 +144,14 @@ func (s *leaseScheduler) beginCycle(started time.Time, queueFull bool) {
 	s.queueFull = queueFull
 	s.discoveryTruncated = false
 	s.lastCycleOperationCode = ""
-	s.mu.Unlock()
+	s.cycleMu.Unlock()
 }
 
 func (s *leaseScheduler) setProjection(generation int64) {
-	s.mu.Lock()
+	s.cycleMu.Lock()
 
 	s.projection = generation
-	s.mu.Unlock()
+	s.cycleMu.Unlock()
 }
 
 func (s *leaseScheduler) recordCycle(
@@ -155,7 +161,7 @@ func (s *leaseScheduler) recordCycle(
 	completed bool,
 	start, total int,
 ) {
-	s.mu.Lock()
+	s.cycleMu.Lock()
 
 	s.cycleStartedAt = started
 	s.projection = generation
@@ -176,11 +182,11 @@ func (s *leaseScheduler) recordCycle(
 		s.rotationCursor = nextRotationCursor(start, total, outcome)
 	}
 
-	s.mu.Unlock()
+	s.cycleMu.Unlock()
 }
 
 func (s *leaseScheduler) finishCycle(started time.Time, code collecterr.OperationCode, rotate bool) {
-	s.mu.Lock()
+	s.cycleMu.Lock()
 
 	s.cycleStartedAt = started
 	s.lastCycleCompletedAt = time.Now().UTC()
@@ -198,16 +204,16 @@ func (s *leaseScheduler) finishCycle(started time.Time, code collecterr.Operatio
 		}
 	}
 
-	s.mu.Unlock()
+	s.cycleMu.Unlock()
 }
 
 func (s *leaseScheduler) failCycle(started time.Time, err error) {
-	s.mu.Lock()
+	s.cycleMu.Lock()
 
 	s.cycleStartedAt = started
 	s.lastCycleCompletedAt = time.Now().UTC()
 	s.lastCycleOperationCode = collecterr.OperationCandidateLoadFailed
-	s.mu.Unlock()
+	s.cycleMu.Unlock()
 	s.logDiscoveryFailure(err)
 }
 

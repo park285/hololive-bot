@@ -7,9 +7,9 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
-func TestConfigureCapturesSchedulerTracker(t *testing.T) {
+func TestConfigurePreservesInjectedTracker(t *testing.T) {
 	tracker := &readinessTracker{}
-	readiness := &collectorReadiness{scheduler: &leaseScheduler{readiness: tracker}}
+	readiness := &collectorReadiness{scheduler: &leaseScheduler{readiness: tracker}, tracker: tracker}
 	opts := &sharedserver.RuntimeRouterOptions{}
 
 	readiness.configure(opts)
@@ -23,9 +23,9 @@ func TestConfigureCapturesSchedulerTracker(t *testing.T) {
 	}
 }
 
-func TestConfigureFeedsCapturedTrackerIntoReadinessEvaluation(t *testing.T) {
+func TestConfigureFeedsInjectedTrackerIntoReadinessEvaluation(t *testing.T) {
 	scheduler := &leaseScheduler{readiness: &readinessTracker{}, state: SchedulerRunning}
-	readiness := &collectorReadiness{scheduler: scheduler}
+	readiness := &collectorReadiness{scheduler: scheduler, tracker: scheduler.readiness}
 	readiness.configure(&sharedserver.RuntimeRouterOptions{})
 
 	cfg := settings.DefaultYouTubeCollectorConfig()

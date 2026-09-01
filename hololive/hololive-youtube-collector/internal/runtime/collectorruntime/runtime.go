@@ -131,7 +131,9 @@ func assembleRuntime(
 	logger *slog.Logger,
 	infra *collectorInfrastructure,
 ) (*Runtime, error) {
-	sched, err := buildScheduler(appConfig, infra, logger)
+	tracker := &readinessTracker{}
+
+	sched, err := buildScheduler(appConfig, infra, logger, tracker)
 	if err != nil {
 		return nil, fmt.Errorf("build scheduler: %w", err)
 	}
@@ -141,7 +143,7 @@ func assembleRuntime(
 		return nil, fmt.Errorf("collector worker registry: %w", err)
 	}
 
-	readiness := &collectorReadiness{appConfig: appConfig, infra: infra, scheduler: sched}
+	readiness := &collectorReadiness{appConfig: appConfig, infra: infra, scheduler: sched, tracker: tracker}
 
 	router, err := sharedserver.NewHealthOnlyRuntimeRouter(
 		ctx,

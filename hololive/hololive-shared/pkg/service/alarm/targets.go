@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"golang.org/x/sync/singleflight"
 
@@ -13,11 +12,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-)
-
-const (
-	emptyChannelSubscriberCacheTTL = 30 * time.Second
-	channelSubscriberLoadTimeout   = 5 * time.Second
 )
 
 var channelSubscriberLoadGroup singleflight.Group
@@ -164,33 +158,6 @@ func resolveChannelSubscribersFromDB(
 	return subscribers, nil
 }
 
-func markEmptyChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, channelID string, alarmType domain.AlarmType) {
-	if cacheClient == nil {
-		return
-	}
-
-	if err := cacheClient.Set(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType), "1", emptyChannelSubscriberCacheTTL); err != nil {
-		observeAlarmSubscriberCacheError("mark_empty")
-	}
-}
-
-func warmChannelSubscriberCache(ctx context.Context, cacheClient cache.Client, alarms []*domain.Alarm, channelID string, alarmType domain.AlarmType) {
-	if cacheClient == nil {
-		return
-	}
-
-	subscribers := extractSubscriberIDsByType(alarms, alarmType)
-	key := sharedalarmkeys.BuildChannelSubscriberKey(channelID, alarmType)
-
-	if err := writeWarmSet(ctx, cacheClient, key, subscribers, "channel subscribers"); err != nil {
-		observeAlarmSubscriberCacheError("warm")
-	}
-
-	if err := cacheClient.Del(ctx, sharedalarmkeys.BuildChannelSubscriberEmptyKey(channelID, alarmType)); err != nil {
-		observeAlarmSubscriberCacheError("clear_empty")
-	}
-}
-
 func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
 	if db == nil {
 		return nil, errors.New("load channel subscriber alarms: database is nil")
@@ -202,8 +169,9 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 
 	normalizedChannelID := strings.TrimSpace(channelID)
 	loadKey := normalizedChannelID + "\x00" + string(alarmType)
+	repository := newRepositoryWithQuerier(db)
 	resultCh := channelSubscriberLoadGroup.DoChan(loadKey, func() (any, error) {
-		return queryChannelSubscriberAlarms(ctx, db, normalizedChannelID, alarmType)
+		return repository.loadChannelSubscriberAlarms(ctx, normalizedChannelID, alarmType)
 	})
 
 	out, err := waitForChannelSubscriberAlarms(ctx, resultCh)
@@ -212,37 +180,6 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 	}
 
 	return out, nil
-}
-
-func queryChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID string, alarmType domain.AlarmType) ([]*domain.Alarm, error) {
-	// singleflight 공유 쿼리를 최초 호출자의 deadline에 결합하면 촉박한 호출자가
-	// follower 전원의 실패를 유발하고, 긴 deadline은 5s 상한을 무효화한다 — 항상 고정
-	// 상한으로 격리한다.
-	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelSubscriberLoadTimeout)
-	defer cancel()
-
-	rows, err := db.Query(queryCtx, mustSQL("targets_0188_01.sql"), channelID, string(alarmType))
-	if err != nil {
-		return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
-	}
-	defer rows.Close()
-
-	alarms := make([]*domain.Alarm, 0)
-
-	for rows.Next() {
-		alarmRecord, err := scanAlarmRow(rows)
-		if err != nil {
-			return nil, fmt.Errorf("load channel subscriber alarms: %w", err)
-		}
-
-		alarms = append(alarms, alarmRecord)
-	}
-
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, fmt.Errorf("load channel subscriber alarms: %w", rowsErr)
-	}
-
-	return alarms, nil
 }
 
 func waitForChannelSubscriberAlarms(ctx context.Context, resultCh <-chan singleflight.Result) ([]*domain.Alarm, error) {

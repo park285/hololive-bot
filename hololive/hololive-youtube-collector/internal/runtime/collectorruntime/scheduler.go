@@ -76,7 +76,9 @@ type leaseScheduler struct {
 	collector  settings.YouTubeCollectorConfig
 	gates      map[contract.Provider]chan struct{}
 
-	mu                     sync.Mutex
+	lifecycleMu            sync.Mutex
+	queueMu                sync.Mutex
+	cycleMu                sync.Mutex
 	state                  SchedulerState
 	queued                 map[string]struct{}
 	queuedAt               map[string]time.Time
@@ -101,24 +103,16 @@ type leaseScheduler struct {
 	workerTotals           *workercontract.Counters
 }
 
-func (s *leaseScheduler) readinessTrackerRef() *readinessTracker {
-	if s == nil {
-		return nil
-	}
-
-	return s.readiness
-}
-
 func (s *leaseScheduler) Start(parent context.Context) error {
 	if s == nil || s.repository == nil || s.registry == nil {
 		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: scheduler is not configured")
 	}
 
-	s.mu.Lock()
+	s.lifecycleMu.Lock()
 
 	if s.lifecycleState() != SchedulerNew {
-		s.mu.Unlock()
+		s.lifecycleMu.Unlock()
 
 		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: instance is not NEW")
@@ -145,7 +139,7 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 			s.discover(runCtx)
 		})
 	})
-	s.mu.Unlock()
+	s.lifecycleMu.Unlock()
 
 	go panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-join", func() {
 		s.join(done)
@@ -186,8 +180,8 @@ type schedulerStopPlan struct {
 }
 
 func (s *leaseScheduler) prepareStop() (schedulerStopPlan, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 
 	state := s.lifecycleState()
 	if state == SchedulerNew {
@@ -231,10 +225,10 @@ func (s *leaseScheduler) join(done chan struct{}) {
 	s.wg.Wait()
 	s.workerTracker.StopWorkers(s.config.WorkerCount)
 	s.drainQueue()
-	s.mu.Lock()
+	s.lifecycleMu.Lock()
 
 	s.state = SchedulerStopped
-	s.mu.Unlock()
+	s.lifecycleMu.Unlock()
 	close(done)
 }
 

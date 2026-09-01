@@ -242,21 +242,3 @@ func loadProfilePhotoStability(config, defaults *YouTubePlaneConfig) error {
 
 	return nil
 }
-
-func strictDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
-	value, err := sharedenv.Int64E(key, int64(fallback/unit))
-	if err != nil {
-		return 0, fmt.Errorf("int64 e: %w", err)
-	}
-
-	const (
-		maxDuration = time.Duration(1<<63 - 1)
-		minDuration = time.Duration(-1 << 63)
-	)
-
-	if value > int64(maxDuration/unit) || value < int64(minDuration/unit) {
-		return 0, fmt.Errorf("parse environment variable %s as duration: value is out of range", key)
-	}
-
-	return time.Duration(value) * unit, nil
-}
