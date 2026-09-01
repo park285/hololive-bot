@@ -533,9 +533,9 @@ Broad suite와 production build는 publish/deploy gate에서만 실행합니다.
 - Production migration, backfill, deploy, restart를 이 계획 승인으로 간주
 
 ## Execution capsule
-Goal: YouTube egress를 ledger-first logical lifecycle과 단일 alarm-worker transition owner로 교체합니다.
-Context: Governing DEC와 네 architecture 문서, current schema/store/poller writer inventory를 정본으로 사용합니다.
-Constraints: Canonical identity는 fail closed이고 dual writer, provider resend, unbounded migration backfill, incomplete-ledger cleanup을 금지합니다.
-Evidence: T01 writer/coverage audit, fixed-high-water canonical anti-join, commit fault injection, architecture gate를 남깁니다.
-Success: AC01부터 AC15까지 충족하고 지원 schema version의 durable ledger completion marker가 존재합니다.
-Output: T02부터 T09까지 순차 PR, 승인된 rollout 기록, governing DEC verification evidence를 제출합니다.
+**Goal:** YouTube egress를 ledger-first logical lifecycle과 단일 alarm-worker transition owner로 교체합니다.
+**Context:** Governing DEC와 네 architecture 문서, current schema/store/poller writer inventory를 정본으로 사용합니다.
+**Constraints:** Canonical identity는 fail closed이고 dual writer, provider resend, unbounded migration backfill, incomplete-ledger cleanup을 금지합니다.
+**Evidence:** T01 writer/coverage audit, fixed-high-water canonical anti-join, commit fault injection, architecture gate를 남깁니다.
+**Success:** AC01부터 AC15까지 충족하고 지원 schema version의 durable ledger completion marker가 존재합니다.
+**Output:** T02부터 T09까지 순차 PR, 승인된 rollout 기록, governing DEC verification evidence를 제출합니다.
