@@ -1,6 +1,6 @@
 {
   "live_sessions": [
-    {"video_id": "live-b", "channel_id": "UC_TEST", "status": "UPCOMING", "title": "Upcoming stream"},
+    {"video_id": "live-b", "channel_id": "UC_TEST", "status": "UPCOMING", "title": "Upcoming stream", "scheduled_at": "2026-09-01T11:00:00Z"},
     {"video_id": "live-a", "channel_id": "UC_TEST", "status": "LIVE", "title": "Live stream", "thumbnail_url": "https://i.ytimg.com/vi/live-a/maxresdefault.jpg"}
   ],
   "stats": {"subscriber_count": 12, "video_count": 4},

@@ -38,6 +38,18 @@ func validateLiveIdentity(requestedChannelID string, sessions []youtubejs.LiveSe
 	return nil
 }
 
+func validateLiveSchedules(sessions []youtubejs.LiveSessionItem) error {
+	for i := range sessions {
+		if sessions[i].Status == "UPCOMING" &&
+			(sessions[i].ScheduledAt == nil || sessions[i].ScheduledAt.IsZero()) {
+			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
+			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js upcoming live response is missing scheduled time")
+		}
+	}
+
+	return nil
+}
+
 func validateCommunityRows(posts []*parser.CommunityPost) error {
 	for _, post := range posts {
 		if post == nil {

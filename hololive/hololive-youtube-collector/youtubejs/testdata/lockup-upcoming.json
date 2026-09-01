@@ -1,0 +1,39 @@
+{
+  "videos": [
+    {
+      "type": "LockupView",
+      "content_type": "VIDEO",
+      "content_id": "upcoming-fixture",
+      "metadata": {
+        "title": "Fixture waiting room",
+        "metadata_rows": [
+          {
+            "metadata_parts": [
+              {
+                "text": "9월 1일 오후 8:00"
+              }
+            ]
+          }
+        ]
+      },
+      "content_image": {
+        "sources": [
+          {
+            "url": "https://i.ytimg.com/vi/upcoming-fixture/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        ],
+        "overlays": [
+          {
+            "badges": [
+              {
+                "text": "Upcoming"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

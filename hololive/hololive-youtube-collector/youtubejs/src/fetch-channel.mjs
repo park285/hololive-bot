@@ -2,7 +2,11 @@ import { Utils } from "youtubei.js";
 
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
+import { fetchLiveMetadata } from "./live-metadata.mjs";
 import { assertResponseBudget, encodedSize, paginationResult } from "./pagination.mjs";
+
+const maxScheduleMetadataLookups = 32;
+const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 const responseReserveBytes = encodedSize({
   protocol_version: 1,
@@ -47,8 +51,10 @@ export async function fetchChannelFeed({
   } else {
     missingTab = true;
   }
+  const liveSessions = mapLiveSessions(liveFeed, id);
+  await enrichUpcomingSchedules(liveSessions, innertube);
   return {
-    live_sessions: mapLiveSessions(liveFeed, id),
+    live_sessions: liveSessions,
     stats: mapStats(channel, about),
     profile: mapProfile(channel, about),
     photo: mapPhoto(channel, about),
@@ -59,6 +65,53 @@ export async function fetchChannelFeed({
     }),
     ...(missingTab ? { missing_tab: true } : {}),
   };
+}
+
+async function enrichUpcomingSchedules(sessions, innertube) {
+  const candidateIds = [];
+  const seen = new Set();
+  for (const session of sessions) {
+    if (session.status !== "UPCOMING" || session.scheduled_at != null || seen.has(session.video_id)) {
+      continue;
+    }
+    seen.add(session.video_id);
+    candidateIds.push(session.video_id);
+  }
+  if (candidateIds.length > maxScheduleMetadataLookups) {
+    const error = new Error("upcoming schedule metadata lookup limit exceeded");
+    error.code = "parser_drift";
+    throw error;
+  }
+
+  const metadataByID = new Map();
+  for (const videoId of candidateIds) {
+    metadataByID.set(videoId, await fetchLiveMetadata(innertube, videoId));
+  }
+  for (const session of sessions) {
+    const metadata = metadataByID.get(session.video_id);
+    if (session.status !== "UPCOMING" || session.scheduled_at != null || metadata == null) {
+      continue;
+    }
+    if (metadata.isLive === true && metadata.isUpcoming !== true) {
+      session.status = "LIVE";
+      if (metadata.startTimestamp != null) {
+        session.started_at = metadata.startTimestamp;
+      }
+      continue;
+    }
+    if (metadata.isUpcoming === false || metadata.startTimestamp == null) {
+      const error = new Error("upcoming live session has no machine-readable schedule");
+      error.code = "parser_drift";
+      throw error;
+    }
+    session.scheduled_at = metadata.startTimestamp;
+  }
+
+  if (sessions.some((session) => session.status === "UPCOMING" && session.scheduled_at == null)) {
+    const error = new Error("upcoming live session remains incomplete");
+    error.code = "parser_drift";
+    throw error;
+  }
 }
 
 function isMissingStreamsTab(err) {
@@ -182,8 +235,14 @@ function firstThumbnail(value) {
 }
 
 function optionalTime(value) {
-  const text = textOf(value).trim();
-  if (text === "") {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const text = value.trim();
+  if (!rfc3339Pattern.test(text)) {
     return undefined;
   }
   const parsed = Date.parse(text);

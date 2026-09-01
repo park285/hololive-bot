@@ -1872,6 +1872,7 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 - 한 instance의 global job과 YouTube.js worker가 공유하는 total concurrency는 bounded semaphore 하나가 소유한다.
 - provider별 request budget과 total worker limit을 모두 통과해야 외부 호출을 시작한다.
 - local queue는 bounded channel 또는 scheduler-owned bounded set을 사용한다. target 전체를 무제한 goroutine으로 펼치지 않는다.
+- YouTube.js channel 목록에서 `UPCOMING`이지만 기계가독 `scheduled_at`이 없는 고유 video ID만 raw `/player`로 순차 보강한다. 한 channel collection의 상세 조회 후보는 최대 32개이며, 목록이 이미 시각을 제공하거나 상태가 `LIVE`/`ENDED`/`CANCELLED`이면 상세 조회하지 않는다.
 - convergence 구현 동안 collector는 Go로 유지한다. 8개 YouTube.js kind가 실제 활성화된 뒤 helper RPC call 수·latency·CPU 또는 failure amplification이 동일 workload 측정에서 material bottleneck일 때만 TypeScript collector를 검토한다.
 - TypeScript 검토의 선행 조건은 Go와 TypeScript 양쪽이 `source-observation-canonical-json-v1` fixture를 통과하는 것이다. fixture conformance 없이 runtime 언어를 바꾸지 않는다.
 
@@ -1882,7 +1883,15 @@ Global process readiness를 자동 실패시키지 않고 `degraded`로 노출�
 - retry budget은 기존 provider policy를 재사용하고 신규 무제한 retry를 만들지 않는다.
 - rate limit/429는 bounded retry-after를 존중한다.
 - parser drift는 permanent collection error로 metric을 남기고 complete-empty를 publish하지 않는다.
+- YouTube.js raw player 보강의 32개 상한 초과, video identity 불일치, 잘못된 boolean/시각 shape 또는 끝까지 시각이 없는 `UPCOMING`은 `parser_drift`다. 해당 collection은 live observation과 checkpoint를 만들지 않으며 다른 provider 호출, 표시 문자열 파싱, partial success로 전환하지 않는다.
+- 목록과 player 조회 사이에 실제 `LIVE`로 전환된 행은 예정 시각을 발명하지 않고 `LIVE`로 반영해 기존 catch-up admission에 맡긴다. 처음부터 `LIVE`인 목록 행도 상세 조회 없이 같은 경로를 유지한다.
 - circuit cooldown 동안 provider/kind freshness와 skip reason을 구분해 노출한다.
+
+### 15.2.1 YouTube.js raw metadata ownership
+
+Collector 로컬 adapter가 raw `/player`의 `videoDetails.videoId`, `isLive`, `isUpcoming`, `isLiveContent`와 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp` 해석을 소유한다. live schedule 보강과 content-owned premiere 판정은 같은 adapter와 sanitized fixture를 사용한다. `youtubei.js@18.0.0`은 Innertube session, request context, browse/transport와 범용 parser 기반층으로 유지하며 upstream 전체 source를 복사하지 않는다.
+
+Dependency upgrade 때는 upstream release note와 로컬 사용 surface만 검토하고 raw fixture, 전체 helper test와 typecheck를 통과시킨다. 사용 field의 parser 변경만 로컬 adapter에 선택적으로 반영한다. raw Actions 접근 제거로 incident 수정이 막히거나 adapter 밖 upstream parser 지연이 독립적으로 두 번 확인되기 전에는 전체 fork나 더 넓은 vendoring을 검토하지 않는다.
 
 ### 15.3 AP failover
 

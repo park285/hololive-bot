@@ -1,0 +1,15 @@
+{
+  "videoDetails": {
+    "videoId": "upcoming-fixture",
+    "isLive": false,
+    "isLiveContent": true,
+    "isUpcoming": true
+  },
+  "microformat": {
+    "playerMicroformatRenderer": {
+      "liveBroadcastDetails": {
+        "startTimestamp": "2026-09-01T11:00:00+00:00"
+      }
+    }
+  }
+}
