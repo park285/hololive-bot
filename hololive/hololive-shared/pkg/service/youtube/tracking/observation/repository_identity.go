@@ -22,8 +22,15 @@ func (r *identityRepository) FindByIdentity(ctx context.Context, kind domain.Out
 		return nil, fmt.Errorf("find tracking by identity: %w", err)
 	}
 
-	candidates := trackingIdentityCandidates(normalizedKind, normalizedContentID)
-	preferredContentID := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	candidates, err := trackingIdentityCandidates(normalizedKind, normalizedContentID)
+	if err != nil {
+		return nil, fmt.Errorf("find tracking by identity: candidates: %w", err)
+	}
+
+	preferredContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	if err != nil {
+		return nil, fmt.Errorf("find tracking by identity: canonical identity: %w", err)
+	}
 
 	records, err := r.findByIdentityRecords(ctx, normalizedKind, preferredContentID, candidates)
 	if err != nil {

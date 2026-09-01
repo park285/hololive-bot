@@ -35,7 +35,18 @@ func (d *ClaimManager) releaseOutboxLock(ctx context.Context, id int64, lockedAt
 const outboxCleanupBatchSize = 1000
 
 func (d *ClaimManager) cleanupOutbox(ctx context.Context) {
-	if d == nil || d.db == nil {
+	if d == nil || d.db == nil || d.delivery == nil {
+		return
+	}
+
+	ready, err := d.delivery.CompatibilityCleanupReady(ctx)
+	if err != nil {
+		d.logger.Warn("Outbox cleanup remains frozen because ledger state is unavailable", slog.Any("error", err))
+
+		return
+	}
+
+	if !ready {
 		return
 	}
 

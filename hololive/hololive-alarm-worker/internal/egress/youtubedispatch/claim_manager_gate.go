@@ -2,17 +2,19 @@ package youtubedispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
@@ -81,6 +83,12 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 	outbox *domain.YouTubeNotificationOutbox,
 	reuseCache claim.DecisionCache,
 ) {
+	if err := validateDeliveryLogicalIdentity(row, outbox); err != nil {
+		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve delivery logical identity before send", err)
+
+		return
+	}
+
 	claimIdentity, err := deliveryClaimIdentityForOutbox(outbox)
 	if err != nil {
 		d.retryDeliveryClaimSelection(selection, row, outbox, "Failed to resolve community/shorts delivery claim identity before send", err)
@@ -116,6 +124,25 @@ func (d *ClaimManager) applyDeliveryClaimSelection(
 	}
 
 	d.applyDeliveryClaimDecision(ctx, selection, row, outbox, decision, cr.claimToken, result.Hit)
+}
+
+func validateDeliveryLogicalIdentity(
+	row *domain.YouTubeNotificationDelivery,
+	outbox *domain.YouTubeNotificationOutbox,
+) error {
+	if row == nil {
+		return errors.New("delivery row is nil")
+	}
+
+	if outbox == nil {
+		return errors.New("outbox row is nil")
+	}
+
+	if _, err := ytcontentid.ResolveDeliveryKey(outbox.Kind, outbox.ContentID, outbox.Payload, row.RoomID); err != nil {
+		return fmt.Errorf("resolve delivery key: %w", err)
+	}
+
+	return nil
 }
 
 type claimResult struct {

@@ -89,7 +89,7 @@ hololive/hololive-shared/internal/service/youtube/apiservice/interfaces.go
 hololive/hololive-shared/internal/service/youtube/apiservice/service.go
 hololive/hololive-shared/internal/service/youtube/apiservice/service_channel_statistics.go
 hololive/hololive-shared/internal/service/youtube/apiservice/service_read.go
-hololive/hololive-shared/internal/service/youtube/contentid/canonical.go
+hololive/hololive-shared/pkg/service/youtube/contentid/canonical.go
 hololive/hololive-shared/pkg/cleanupctx/context.go
 hololive/hololive-shared/pkg/config/settings/config.go
 hololive/hololive-shared/pkg/config/settings/config_alarm_dispatch.go
@@ -555,12 +555,6 @@ hololive/hololive-shared/pkg/service/youtube/livestatus/deferred.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/helpers.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/latency_persister.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/metrics.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_completed_finalize_0088_01.sql
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_completed_finalize_0111_02.sql
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_completed_state_0130_01.sql
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_completed_state_0174_02.sql
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_delivery_state_0063_01.sql
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_delivery_state_0198_02.sql
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_new_short_dedup_0048_01.sql
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_new_short_dedup_0082_02.sql
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_new_video_dedup_0048_01.sql
@@ -576,9 +570,6 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/re
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/queries/repository_batch_writes_0347_07.sql
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_alarm_state.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_completed_finalize.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_completed_state.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_delivery_state.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_new_short_dedup.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_new_video_dedup.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_persisted_state.go

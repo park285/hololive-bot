@@ -734,7 +734,7 @@ func assertConcurrentAlarmSentOnce(
 	require.Equal(t, domain.YouTubeCommunityShortsAlarmStateStatusSent, state.DeliveryStatus)
 }
 
-func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
+func TestDispatcher_CompatibilityCleanupPreservesOldFailedRows(t *testing.T) {
 	config := newIntegrationDispatchConfig(1 * time.Second)
 
 	config.CleanupAfter = 1 * time.Hour
@@ -781,8 +781,8 @@ func TestDispatcher_Cleanup_RemovesOldFailedRows(t *testing.T) {
 		t.Fatalf("Failed to count old failed item: %v", err)
 	}
 
-	if oldCount != 0 {
-		t.Fatal("Expected old failed item to be deleted, still exists")
+	if oldCount != 1 {
+		t.Fatalf("Expected compatibility cleanup to preserve old failed item, count=%d", oldCount)
 	}
 
 	var recentCount int64

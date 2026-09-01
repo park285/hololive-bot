@@ -272,6 +272,7 @@ type YouTubeNotificationOutbox struct {
 	CreatedAt     time.Time    `db:"created_at" json:"created_at"`
 	LockedAt      *time.Time   `json:"locked_at,omitempty"`
 	SentAt        *time.Time   `json:"sent_at,omitempty"`
+	TerminalAt    *time.Time   `json:"terminal_at,omitempty"`
 	Error         string       `db:"error" json:"error,omitempty"`
 }
 

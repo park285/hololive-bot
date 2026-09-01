@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
@@ -123,9 +123,9 @@ func normalizeSourcePostIdentity(kind domain.OutboxKind, postID string) (domain.
 	}
 
 	canonicalPostID, err := ytcontentid.ForOutboxKind(normalizedKind, normalizedPostID)
-	if err == nil && strings.TrimSpace(canonicalPostID) != "" {
-		return normalizedKind, canonicalPostID, nil
+	if err != nil {
+		return "", "", fmt.Errorf("canonicalize source post identity: %w", err)
 	}
 
-	return normalizedKind, strings.TrimSpace(normalizedPostID), nil
+	return normalizedKind, canonicalPostID, nil
 }

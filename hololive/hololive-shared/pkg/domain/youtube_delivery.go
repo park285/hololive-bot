@@ -33,6 +33,7 @@ type YouTubeNotificationDelivery struct {
 	LockedAt      *time.Time   `json:"locked_at,omitempty"`
 	SentAt        *time.Time   `json:"sent_at,omitempty"`
 	Error         string       `db:"error" json:"error,omitempty"`
+	RowVersion    int64        `db:"row_version" json:"row_version"`
 }
 
 func (YouTubeNotificationDelivery) TableName() string {

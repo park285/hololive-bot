@@ -26,8 +26,8 @@ import (
 	"strconv"
 	"strings"
 
-	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 
@@ -81,34 +81,25 @@ type communityNotificationPayload struct {
 func normalizeNotificationCanonicalPostID(kind domain.OutboxKind, id string) string {
 	canonicalID, err := ytcontentid.ForOutboxKind(kind, id)
 	if err != nil {
-		return strings.TrimSpace(id)
+		return ""
 	}
 
 	return canonicalID
 }
 
 func NormalizeContentID(kind domain.OutboxKind, id string) string {
-	trimmed := strings.TrimSpace(id)
-
-	switch kind {
-	case domain.OutboxKindNewShort, domain.OutboxKindCommunityPost:
-		normalized, err := ytcontentid.ForOutboxKind(kind, trimmed)
-		if err != nil {
-			return trimmed
-		}
-
-		return normalized
-	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
-		return trimmed
-	default:
-		return trimmed
+	normalized, err := ytcontentid.ForOutboxKind(kind, id)
+	if err != nil {
+		return ""
 	}
+
+	return normalized
 }
 
 func NormalizeShortVideoResourceID(id string) string {
 	normalized, err := ytcontentid.NormalizeShortVideoID(id)
 	if err != nil {
-		return strings.TrimSpace(id)
+		return ""
 	}
 
 	return normalized
@@ -117,7 +108,7 @@ func NormalizeShortVideoResourceID(id string) string {
 func NormalizeCommunityResourceID(id string) string {
 	normalized, err := ytcontentid.NormalizeCommunityPostID(id)
 	if err != nil {
-		return strings.TrimSpace(id)
+		return ""
 	}
 
 	return normalized
@@ -138,10 +129,6 @@ func NormalizeCollectedShortsByCanonicalPostID(shorts []*parser.Short) []*parser
 
 		canonicalPostID := NormalizeContentID(domain.OutboxKindNewShort, short.VideoID)
 		if canonicalPostID == "" {
-			copyShort := *short
-
-			normalized = append(normalized, &copyShort)
-
 			continue
 		}
 
@@ -207,10 +194,6 @@ func NormalizeCollectedCommunityPostsByCanonicalPostID(posts []*parser.Community
 
 		canonicalPostID := NormalizeContentID(domain.OutboxKindCommunityPost, post.PostID)
 		if canonicalPostID == "" {
-			copyPost := *post
-
-			normalized = append(normalized, &copyPost)
-
 			continue
 		}
 

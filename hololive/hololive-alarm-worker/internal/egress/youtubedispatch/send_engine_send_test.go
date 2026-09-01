@@ -664,9 +664,9 @@ func TestDispatchDeliveryRows_PayloadValidationEjection(t *testing.T) {
 	d := newTestDispatcherForSend(t, sender)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: `{"video_id":"s1","title":"ok"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortOne, Payload: `{"canonical_post_id":"short:short-1","video_id":"s1","title":"ok"}`},
 		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: testShortTwo, Payload: `{broken json`},
-		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: "short-3", Payload: `{"video_id":"s3","title":"ok"}`},
+		3: {ID: 3, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewShort, ContentID: "short-3", Payload: `{"canonical_post_id":"short:short-3","video_id":"s3","title":"ok"}`},
 	}
 
 	rows := []domain.YouTubeNotificationDelivery{
@@ -857,7 +857,7 @@ func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testi
 	}
 }
 
-func TestDispatchDeliveryRows_EmptyDedupeKeyFailsWithoutSending(t *testing.T) {
+func TestDispatchDeliveryRows_InvalidLogicalIdentityFailsBeforeSending(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
@@ -877,7 +877,7 @@ func TestDispatchDeliveryRows_EmptyDedupeKeyFailsWithoutSending(t *testing.T) {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	if ids, ok := result.FailureBuckets["dedupe key"]; !ok || len(ids) != 1 || ids[0] != 101 {
+	if ids, ok := result.FailureBuckets[deliveryFailureReasonPreSendClaim]; !ok || len(ids) != 1 || ids[0] != 101 {
 		t.Fatalf("unexpected failure buckets: %+v", result.FailureBuckets)
 	}
 
@@ -968,7 +968,7 @@ func TestDispatchDeliveryRows_GroupedSendFailureLogsDedupeKey(t *testing.T) {
 	})
 }
 
-func TestDispatchDeliveryRows_PerRoomBuildFailureLogsDedupeKey(t *testing.T) {
+func TestDispatchDeliveryRows_InvalidLogicalIdentityLogsPreSendFailure(t *testing.T) {
 	t.Parallel()
 
 	sender := &testSender{failRoom: map[string]bool{}}
@@ -985,8 +985,8 @@ func TestDispatchDeliveryRows_PerRoomBuildFailureLogsDedupeKey(t *testing.T) {
 		t.Fatalf("failedDeliveries = %d, want 1", result.FailedDeliveries)
 	}
 
-	entry := findLogEntryByMessage(t, logBuffer, "Failed to build per-room delivery request")
-	assertLogDedupeKeys(t, entry, []string{"invalid:NEW_SHORT:"})
+	entry := findLogEntryByMessage(t, logBuffer, "Failed to resolve delivery logical identity before send")
+	assertSendLogStringField(t, entry, deliveryAuditContentIDLogField, "")
 }
 
 func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t *testing.T) {
@@ -1009,7 +1009,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAttemptStarted(t 
 
 	entry := findLogEntryByMessage(t, logBuffer, deliveryAttemptStartedLogMessage)
 	assertSendLogStringField(t, entry, deliveryAuditContentIDLogField, testShortOne)
-	assertSendLogStringField(t, entry, deliveryAuditPostIDLogField, testShortOne)
+	assertSendLogStringField(t, entry, deliveryAuditPostIDLogField, "short:"+testShortOne)
 	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
 	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
@@ -1032,8 +1032,8 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAttemptStarted(t 
 
 	lockedAt := time.Date(2026, time.April, 10, 2, 0, 0, 0, time.UTC)
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
-		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostTwo, Payload: `{"post_id":"post-2","content_text":"커뮤니티2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"canonical_post_id":"community:post-1","post_id":"post-1","content_text":"커뮤니티1"}`},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostTwo, Payload: `{"canonical_post_id":"community:post-2","post_id":"post-2","content_text":"커뮤니티2"}`},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
 		{ID: 101, OutboxID: 1, RoomID: testRoom1, AttemptCount: 1, LockedAt: &lockedAt},
@@ -1083,7 +1083,7 @@ func assertGroupedAttemptStartedEntries(t *testing.T, entries []map[string]any, 
 		t.Fatalf("attempt start content IDs = %#v", contentIDs)
 	}
 
-	if !sameStrings(postIDs, []string{testPostOne, testPostTwo}) {
+	if !sameStrings(postIDs, []string{"community:" + testPostOne, "community:" + testPostTwo}) {
 		t.Fatalf("attempt start post IDs = %#v", postIDs)
 	}
 
@@ -1167,7 +1167,7 @@ func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, nil)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"canonical_post_id":"community:post-1","post_id":"post-1","content_text":"커뮤니티1"}`},
 	}
 	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
 
@@ -1240,7 +1240,7 @@ func TestDispatchDeliveryRows_PerRoomSuccessLogsCommunityShortsAudit(t *testing.
 	}
 
 	assertSendLogStringField(t, entries[0], deliveryAuditContentIDLogField, testShortOne)
-	assertSendLogStringField(t, entries[0], deliveryAuditPostIDLogField, testShortOne)
+	assertSendLogStringField(t, entries[0], deliveryAuditPostIDLogField, "short:"+testShortOne)
 	assertSendLogStringField(t, entries[0], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeShorts))
 	assertSendLogStringField(t, entries[0], deliveryAuditSendResultLogField, sendResultSuccess)
 	assertSendLogStringField(t, entries[0], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
@@ -1291,8 +1291,8 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 	d, logBuffer := newLoggedTestDispatcherForSend(t, sender, renderer)
 
 	outboxByID := map[int64]domain.YouTubeNotificationOutbox{
-		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"post_id":"post-1","content_text":"커뮤니티1"}`},
-		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostTwo, Payload: `{"post_id":"post-2","content_text":"커뮤니티2"}`},
+		1: {ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostOne, Payload: `{"canonical_post_id":"community:post-1","post_id":"post-1","content_text":"커뮤니티1"}`},
+		2: {ID: 2, ChannelID: testChannelCh1, Kind: domain.OutboxKindCommunityPost, ContentID: testPostTwo, Payload: `{"canonical_post_id":"community:post-2","post_id":"post-2","content_text":"커뮤니티2"}`},
 	}
 	rows := []domain.YouTubeNotificationDelivery{
 		{ID: 101, OutboxID: 1, RoomID: testRoom1},
@@ -1331,7 +1331,7 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 		t.Fatalf("audit content IDs = %#v", contentIDs)
 	}
 
-	if !sameStrings(postIDs, []string{testPostOne, testPostTwo}) {
+	if !sameStrings(postIDs, []string{"community:" + testPostOne, "community:" + testPostTwo}) {
 		t.Fatalf("audit post IDs = %#v", postIDs)
 	}
 }

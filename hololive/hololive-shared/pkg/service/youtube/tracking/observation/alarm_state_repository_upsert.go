@@ -133,7 +133,11 @@ func normalizeAlarmStateClaim(record *domain.YouTubeCommunityShortsAlarmState) (
 		return nil, fmt.Errorf("normalize alarm state: %w", err)
 	}
 
-	expectedPostID := canonicalTrackingIdentity(normalizedRecord.Kind, normalizedRecord.ContentID)
+	expectedPostID, err := canonicalTrackingIdentity(normalizedRecord.Kind, normalizedRecord.ContentID)
+	if err != nil {
+		return nil, fmt.Errorf("canonical tracking identity: %w", err)
+	}
+
 	if expectedPostID != normalizedRecord.PostID {
 		return nil, errors.New("post id/content id mismatch")
 	}

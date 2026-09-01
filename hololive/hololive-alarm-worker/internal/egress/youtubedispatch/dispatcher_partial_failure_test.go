@@ -290,7 +290,7 @@ func TestDispatchDeliveryRows_CommunitySuccessSetsSentAtOnDeliveryAndOutbox(t *t
 		Kind:          domain.OutboxKindCommunityPost,
 		ChannelID:     "UC_community_sent_at",
 		ContentID:     "post-community-sent-at",
-		Payload:       `{"post_id":"post-community-sent-at","content_text":"community-title","published_at":"2026-04-10T01:11:12Z"}`,
+		Payload:       `{"canonical_post_id":"community:post-community-sent-at","post_id":"post-community-sent-at","content_text":"community-title","published_at":"2026-04-10T01:11:12Z"}`,
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,

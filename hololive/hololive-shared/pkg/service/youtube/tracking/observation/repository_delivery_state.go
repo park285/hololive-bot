@@ -82,7 +82,7 @@ func normalizeAlarmSentMarks(marks []AlarmSentMark) ([]AlarmSentMark, error) {
 		}
 
 		if existingIndex, ok := indexByIdentity[identity]; ok {
-			if err := mergeAlarmSentMark(&normalized[existingIndex], normalizedMark, identity, i); err != nil {
+			if err := mergeAlarmSentMark(&normalized[existingIndex], normalizedMark, i); err != nil {
 				return nil, fmt.Errorf("merge alarm sent mark: %w", err)
 			}
 
@@ -122,7 +122,10 @@ func normalizeAlarmSentMark(index int, mark AlarmSentMark) (AlarmSentMark, strin
 		AuthorizedAt: normalizedAuthorizedAt,
 	}
 
-	canonicalContentID := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	canonicalContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	if err != nil {
+		return AlarmSentMark{}, "", fmt.Errorf("canonical tracking identity: %w", err)
+	}
 
 	return normalizedMark, alarmSentMarkIdentity(normalizedKind, canonicalContentID), nil
 }
@@ -141,7 +144,7 @@ func alarmSentMarkIdentity(kind domain.OutboxKind, contentID string) string {
 	return string(kind) + "\x00" + contentID
 }
 
-func mergeAlarmSentMark(existing *AlarmSentMark, next AlarmSentMark, identity string, index int) error {
+func mergeAlarmSentMark(existing *AlarmSentMark, next AlarmSentMark, index int) error {
 	if next.AlarmSentAt.Before(existing.AlarmSentAt) {
 		existing.AlarmSentAt = next.AlarmSentAt
 	}
@@ -156,7 +159,7 @@ func mergeAlarmSentMark(existing *AlarmSentMark, next AlarmSentMark, identity st
 	}
 
 	if !existing.AuthorizedAt.Equal(*next.AuthorizedAt) {
-		return fmt.Errorf("normalize mark at index %d: conflicting authorized_at for %s", index, identity)
+		return fmt.Errorf("normalize mark at index %d: conflicting authorized_at for logical identity", index)
 	}
 
 	return nil

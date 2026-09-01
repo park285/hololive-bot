@@ -6,8 +6,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 )
 
 const (
@@ -82,7 +82,7 @@ func buildCommunityNotificationPayload(post *domain.YouTubeCommunityPost, canoni
 func normalizeNotificationCanonicalPostID(kind domain.OutboxKind, id string) string {
 	canonicalID, err := ytcontentid.ForOutboxKind(kind, id)
 	if err != nil {
-		return strings.TrimSpace(id)
+		return ""
 	}
 
 	return canonicalID

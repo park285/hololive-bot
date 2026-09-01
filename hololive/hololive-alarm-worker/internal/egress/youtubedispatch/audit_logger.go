@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	deliverytimeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )

@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 )
 
 func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.T) {
@@ -25,7 +24,7 @@ func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.
 		Kind:          domain.OutboxKindNewShort,
 		ChannelID:     "UC_restart_retry",
 		ContentID:     "short-restart-retry",
-		Payload:       `{"video_id":"short-restart-retry","title":"restart title","published_at":"2026-04-10T01:11:12Z"}`,
+		Payload:       `{"canonical_post_id":"short:short-restart-retry","video_id":"short-restart-retry","title":"restart title","published_at":"2026-04-10T01:11:12Z"}`,
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
@@ -92,7 +91,7 @@ func TestProcessOnce_ReconcilesOutboxStatusFromPersistedDeliveryRows(t *testing.
 		Kind:          domain.OutboxKindCommunityPost,
 		ChannelID:     "UC_restart_reconcile",
 		ContentID:     "post-restart-reconcile",
-		Payload:       `{"post_id":"post-restart-reconcile","content_text":"community body","published_at":"2026-04-10T01:11:12Z"}`,
+		Payload:       `{"canonical_post_id":"community:post-restart-reconcile","post_id":"post-restart-reconcile","content_text":"community body","published_at":"2026-04-10T01:11:12Z"}`,
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: now,
@@ -256,7 +255,7 @@ func seedRestartAlreadySentFixture(
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
+	postID := mustCanonicalDeliveryPostID(item.Kind, item.ContentID)
 	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,

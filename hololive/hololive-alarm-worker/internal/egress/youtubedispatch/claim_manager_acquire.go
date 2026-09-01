@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
