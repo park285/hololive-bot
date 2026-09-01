@@ -3,7 +3,7 @@
   "id": "DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership",
   "title": "YouTube egress lifecycle은 typed planner가 전이를 결정하고 PostgreSQL이 fenced CAS로 집행한다",
   "decision_status": "accepted",
-  "delivery_status": "planned",
+  "delivery_status": "verified",
   "scope": [
     "hololive-bot"
   ],
@@ -22,8 +22,25 @@
     "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#작업 원칙",
     "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#Acceptance criteria"
   ],
-  "evidence": [],
-  "implementation": [],
+  "evidence": [
+    "docs/runbook_execution/YOUTUBE_EGRESS_LIFECYCLE_CUTOVER_20260901.md",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle/policy_test.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/preparation/operation_test.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/transition_store_test.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/dispatcher_partial_failure_test.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store_ownership_test.go",
+    "hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_lifecycle_ownership_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle/policy.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/preparation/operation.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/transition_store.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/send_engine_lifecycle.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/outbox_fanout_service.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/outbox_aggregate_projector.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/metrics.go",
+    "scripts/architecture/ci-notification-egress-gate.sh"
+  ],
   "supersedes": [],
   "review": {
     "trigger": "선택된 transition ID와 complete structured mutation plan, caller-owned state, optimistic concurrency seam을 제공하는 다중-maintainer FSM library가 production 성숙도를 확보하고 동일 contract test에서 adapter 포함 net policy code를 실질적으로 줄일 때"
