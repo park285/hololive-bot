@@ -44,6 +44,15 @@
 - `architecture/hololive-api-trust-domain.md`
 - `architecture/non-secret-history-risk-decisions-20260713.md`
 - `architecture/review-bundles.md`
+- `architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`
+- `architecture/youtube-egress-lifecycle-contract-20260831.md`
+- `architecture/youtube-egress-logical-delivery-ledger-20260831.md`
+- `architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`
+- `architecture/youtube-egress-lifecycle-library-review-20260831.md`
+
+## Active Implementation Plans
+
+- `plans/2026-08-31-youtube-egress-lifecycle-implementation.md` - canonical identity, internal transition store, ledger backfill, writer/cleanup cutover와 검증 순서
 
 ## Compatibility Bridges
 
