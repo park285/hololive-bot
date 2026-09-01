@@ -28,9 +28,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 )
 
 func cleanupTestClaimManager(db *deliveryTestDB, cfg *dispatchstate.Config) *ClaimManager {

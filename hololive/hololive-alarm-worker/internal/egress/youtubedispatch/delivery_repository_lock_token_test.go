@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 )
 
 func TestDeliveryRepositoryMarkPermanentFailureBatchIfLockedSkipsRowsRelockedByAnotherWorker(t *testing.T) {

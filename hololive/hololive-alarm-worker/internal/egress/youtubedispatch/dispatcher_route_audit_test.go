@@ -12,12 +12,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 )
 
 type routeAuditTarget struct {

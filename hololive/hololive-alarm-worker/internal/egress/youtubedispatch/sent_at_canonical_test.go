@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
