@@ -596,7 +596,12 @@ func insertDomainTracking(ctx context.Context, pool *pgxpool.Pool, row *domain.Y
 	row.AlarmSentAt = normalizeTimePtr(row.AlarmSentAt)
 
 	if row.CanonicalContentID == "" {
-		row.CanonicalContentID = store.CanonicalDeliveryPostID(row.Kind, row.ContentID)
+		canonicalContentID, err := store.CanonicalDeliveryPostID(row.Kind, row.ContentID)
+		if err != nil {
+			return 0, fmt.Errorf("canonical delivery post id: %w", err)
+		}
+
+		row.CanonicalContentID = canonicalContentID
 	}
 
 	if row.DeliveryStatus == "" {
@@ -971,13 +976,22 @@ func deliveryTestApplyIdentityCreateDefaults(v reflect.Value) {
 		canonicalContentID.CanSet() && canonicalContentID.String() == "" {
 		kind := v.FieldByName("Kind")
 		if kind.IsValid() && kind.Kind() == reflect.String {
-			canonicalContentID.SetString(store.CanonicalDeliveryPostID(domain.OutboxKind(kind.String()), contentID.String()))
+			canonicalContentID.SetString(mustCanonicalDeliveryPostID(domain.OutboxKind(kind.String()), contentID.String()))
 
 			return
 		}
 
 		canonicalContentID.SetString(contentID.String())
 	}
+}
+
+func mustCanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
+	canonicalPostID, err := store.CanonicalDeliveryPostID(kind, contentID)
+	if err != nil {
+		panic(err)
+	}
+
+	return canonicalPostID
 }
 
 func deliveryTestApplyStatusCreateDefaults(v reflect.Value) {

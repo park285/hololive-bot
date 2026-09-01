@@ -22,13 +22,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
@@ -94,7 +95,12 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 			ContentID:   targets[i].ContentID,
 			AlarmSentAt: sentAt,
 		}
-		claimIdentity := DeliveryClaimIdentityKey(targets[i].Kind, CanonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID))
+		canonicalPostID, err := CanonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID)
+		if err != nil {
+			return nil, fmt.Errorf("canonical delivery post id: %w", err)
+		}
+
+		claimIdentity := DeliveryClaimIdentityKey(targets[i].Kind, canonicalPostID)
 
 		if authorizedAt, ok := claimTokensByIdentity[claimIdentity]; ok {
 			authorizedAtCopy := authorizedAt
@@ -149,7 +155,7 @@ func collectClaimTokenAuthorizedAt(collected map[string]time.Time, identity stri
 	}
 
 	if !existingAuthorizedAt.Equal(authorizedAt) {
-		return fmt.Errorf("collect claim tokens: conflicting authorized_at for %s", identity)
+		return errors.New("collect claim tokens: conflicting authorized_at for logical identity")
 	}
 
 	return nil
@@ -159,15 +165,13 @@ func DeliveryClaimIdentityKey(kind domain.OutboxKind, postID string) string {
 	return string(kind) + "\x00" + strings.TrimSpace(postID)
 }
 
-func CanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) string {
-	normalizedContentID := strings.TrimSpace(contentID)
-
-	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, normalizedContentID)
+func CanonicalDeliveryPostID(kind domain.OutboxKind, contentID string) (string, error) {
+	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, contentID)
 	if err != nil {
-		return normalizedContentID
+		return "", fmt.Errorf("canonicalize delivery content id: %w", err)
 	}
 
-	return canonicalContentID
+	return canonicalContentID, nil
 }
 
 func UniqueStrings(values []string) []string {

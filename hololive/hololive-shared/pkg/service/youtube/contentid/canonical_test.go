@@ -1,6 +1,8 @@
 package contentid
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +32,7 @@ func TestForShort(t *testing.T) {
 		{name: "canonical suffix trim", input: "short:  AbC123xyZ89  ", want: testShortCanonicalID},
 		{name: "wrong prefix", input: "community:UgkxPost", wantErr: "prefix mismatch"},
 		{name: "empty", input: "   ", wantErr: "is empty"},
+		{name: "too long", input: strings.Repeat("s", MaxLogicalIDLength), wantErr: "too long"},
 	}
 
 	for _, tt := range tests {
@@ -158,14 +161,100 @@ func TestForCommunity(t *testing.T) {
 func TestForOutboxKind(t *testing.T) {
 	t.Parallel()
 
-	shortID, err := ForOutboxKind(domain.OutboxKindNewShort, testShortVideoID)
-	require.NoError(t, err)
-	require.Equal(t, testShortCanonicalID, shortID)
+	tests := []struct {
+		name       string
+		kind       domain.OutboxKind
+		resourceID string
+		want       string
+	}{
+		{name: "short", kind: domain.OutboxKindNewShort, resourceID: testShortVideoID, want: testShortCanonicalID},
+		{name: "community", kind: domain.OutboxKindCommunityPost, resourceID: "/post/UgkxPost123?lc=1", want: testCommunityCanonicalID},
+		{name: "video", kind: domain.OutboxKindNewVideo, resourceID: " video-1 ", want: "video-1"},
+		{name: "live", kind: domain.OutboxKindLiveStream, resourceID: " live-1 ", want: "live-1"},
+		{name: "milestone", kind: domain.OutboxKindMilestone, resourceID: " milestone-1 ", want: "milestone-1"},
+	}
 
-	communityID, err := ForOutboxKind(domain.OutboxKindCommunityPost, "/post/UgkxPost123?lc=1")
-	require.NoError(t, err)
-	require.Equal(t, testCommunityCanonicalID, communityID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	_, err = ForOutboxKind(domain.OutboxKindNewVideo, "video-1")
-	require.ErrorContains(t, err, "unsupported outbox kind")
+			got, err := ForOutboxKind(tt.kind, tt.resourceID)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveLogicalKeyValidatesSchemaBounds(t *testing.T) {
+	t.Parallel()
+
+	key, err := ResolveLogicalKey(domain.OutboxKindCommunityPost, "/post/UgkxPost123?lc=1", " room-1 ")
+	require.NoError(t, err)
+	require.Equal(t, LogicalKey{
+		Kind:      domain.OutboxKindCommunityPost,
+		LogicalID: testCommunityCanonicalID,
+		RoomID:    "room-1",
+	}, key)
+	require.Len(t, key.Hash(), 32)
+
+	_, err = ResolveLogicalKey(domain.OutboxKindNewVideo, "video-1", strings.Repeat("r", MaxRoomIDLength+1))
+	require.Error(t, err)
+
+	identityErr, ok := errors.AsType[*Error](err)
+	require.True(t, ok)
+	require.Equal(t, ErrorReasonTooLong, identityErr.Reason)
+	require.Equal(t, "room id", identityErr.Field)
+}
+
+func TestResolveDeliveryKeyUsesValidatedCanonicalPayload(t *testing.T) {
+	t.Parallel()
+
+	key, err := ResolveDeliveryKey(
+		domain.OutboxKindCommunityPost,
+		testCommunityCanonicalID,
+		`{"post_id":"UgkxPost123","canonical_post_id":"community:UgkxPost123"}`,
+		"room-1",
+	)
+	require.NoError(t, err)
+	require.Equal(t, testCommunityCanonicalID, key.LogicalID)
+
+	_, err = ResolveDeliveryKey(
+		domain.OutboxKindNewShort,
+		testShortCanonicalID,
+		`{"video_id":"different","canonical_post_id":"short:different"}`,
+		"room-1",
+	)
+	require.Error(t, err)
+
+	identityErr, ok := errors.AsType[*Error](err)
+	require.True(t, ok)
+	require.Equal(t, ErrorReasonMismatch, identityErr.Reason)
+
+	_, err = ResolveDeliveryKey(domain.OutboxKindNewShort, testShortCanonicalID, `{`, "room-1")
+	identityErr, ok = errors.AsType[*Error](err)
+	require.True(t, ok)
+	require.Equal(t, ErrorReasonInvalidPayload, identityErr.Reason)
+
+	key, err = ResolveDeliveryKey(domain.OutboxKindNewVideo, " video-1 ", "not-json", "room-1")
+	require.NoError(t, err)
+	require.Equal(t, "video-1", key.LogicalID)
+}
+
+func TestInvalidIdentityReturnsTypedRedactedError(t *testing.T) {
+	t.Parallel()
+
+	secretValue := strings.Repeat("x", MaxLogicalIDLength+1)
+	_, err := ForOutboxKind(domain.OutboxKindNewVideo, secretValue)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), secretValue)
+
+	identityErr, ok := errors.AsType[*Error](err)
+	require.True(t, ok)
+	require.Equal(t, domain.OutboxKindNewVideo, identityErr.Kind)
+	require.Equal(t, ErrorReasonTooLong, identityErr.Reason)
+
+	_, err = ForOutboxKind(domain.OutboxKind("UNKNOWN"), "id")
+	identityErr, ok = errors.AsType[*Error](err)
+	require.True(t, ok)
+	require.Equal(t, ErrorReasonUnsupportedKind, identityErr.Reason)
 }

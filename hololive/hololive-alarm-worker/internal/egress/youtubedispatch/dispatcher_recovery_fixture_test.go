@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
@@ -323,8 +322,8 @@ func seedCommunityShortsRecoveryInputFixture(t *testing.T, db *deliveryTestDB, s
 	t.Helper()
 
 	sentItem, pendingItem, servedItem := seedRecoveryInputFixtureOutboxes(t, db, spec)
-	sentPostID := store.CanonicalDeliveryPostID(spec.kind, sentItem.ContentID)
-	pendingPostID := store.CanonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
+	sentPostID := mustCanonicalDeliveryPostID(spec.kind, sentItem.ContentID)
+	pendingPostID := mustCanonicalDeliveryPostID(spec.kind, pendingItem.ContentID)
 
 	seedRecoveryInputFixtureTracking(t, db, spec, sentPostID, pendingPostID)
 

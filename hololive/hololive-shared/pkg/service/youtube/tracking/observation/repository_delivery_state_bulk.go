@@ -2,7 +2,6 @@ package observation
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -43,29 +42,39 @@ func appendBulkAlarmSentMarkInput(inputs *bulkAlarmSentMarkInputs, index int, ma
 		return fmt.Errorf("bulk mark alarm sent: alarm sent at is empty at index %d", index)
 	}
 
-	canonicalContentID := canonicalTrackingIdentity(mark.Kind, mark.ContentID)
-	if strings.TrimSpace(canonicalContentID) == "" {
-		return fmt.Errorf("bulk mark alarm sent: canonical content id is empty at index %d", index)
+	canonicalContentID, err := canonicalTrackingIdentity(mark.Kind, mark.ContentID)
+	if err != nil {
+		return fmt.Errorf("bulk mark alarm sent: canonical content id at index %d: %w", index, err)
+	}
+
+	rawContentID, err := rawAlarmSentContentID(mark, canonicalContentID)
+	if err != nil {
+		return fmt.Errorf("bulk mark alarm sent: raw content id at index %d: %w", index, err)
 	}
 
 	inputs.kinds = append(inputs.kinds, string(mark.Kind))
 	inputs.contentIDs = append(inputs.contentIDs, mark.ContentID)
 	inputs.canonicalContentIDs = append(inputs.canonicalContentIDs, canonicalContentID)
-	inputs.rawContentIDs = append(inputs.rawContentIDs, rawAlarmSentContentID(mark))
+	inputs.rawContentIDs = append(inputs.rawContentIDs, rawContentID)
 	inputs.alarmSentAts = append(inputs.alarmSentAts, mark.AlarmSentAt)
 	inputs.authorizedAts = append(inputs.authorizedAts, alarmSentAuthorizedAtValue(mark.AuthorizedAt))
 
 	return nil
 }
 
-func rawAlarmSentContentID(mark AlarmSentMark) string {
-	for _, candidate := range trackingIdentityCandidates(mark.Kind, mark.ContentID) {
-		if candidate != canonicalTrackingIdentity(mark.Kind, mark.ContentID) {
-			return candidate
+func rawAlarmSentContentID(mark AlarmSentMark, canonicalContentID string) (string, error) {
+	candidates, err := trackingIdentityCandidates(mark.Kind, mark.ContentID)
+	if err != nil {
+		return "", fmt.Errorf("tracking identity candidates: %w", err)
+	}
+
+	for _, candidate := range candidates {
+		if candidate != canonicalContentID {
+			return candidate, nil
 		}
 	}
 
-	return mark.ContentID
+	return canonicalContentID, nil
 }
 
 func alarmSentAuthorizedAtValue(authorizedAt *time.Time) pgtype.Timestamptz {

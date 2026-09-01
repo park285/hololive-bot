@@ -15,7 +15,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 )
 
 type retryFinalizeOnceTestCase struct {
@@ -130,7 +129,7 @@ func seedRetryExactOnceFixture(
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
+	postID := mustCanonicalDeliveryPostID(item.Kind, item.ContentID)
 	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,
@@ -273,7 +272,7 @@ func runRetryAfterPostSendFinalizeFailureKeepsSingleDeliveredAlarm(
 	now := time.Now().UTC()
 	item, delivery := insertRetryFinalizeOnceRows(t, db, tc, now)
 
-	postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
+	postID := mustCanonicalDeliveryPostID(item.Kind, item.ContentID)
 	sender := newPostSendFinalizeFailureSender(db, item.Kind, postID, now.Add(-10*time.Minute))
 	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
@@ -317,7 +316,7 @@ func insertRetryFinalizeOnceRows(
 	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,
-		CanonicalContentID: store.CanonicalDeliveryPostID(item.Kind, item.ContentID),
+		CanonicalContentID: mustCanonicalDeliveryPostID(item.Kind, item.ContentID),
 		ChannelID:          item.ChannelID,
 		DetectedAt:         now,
 	}).Error)

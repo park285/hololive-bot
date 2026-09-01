@@ -11,7 +11,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/store"
 )
 
 func TestProcessOnce_RetriesPersistedDeliveriesWithoutNewOutboxClaim(t *testing.T) {
@@ -256,7 +255,7 @@ func seedRestartAlreadySentFixture(
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &item).Error)
 
-	postID := store.CanonicalDeliveryPostID(item.Kind, item.ContentID)
+	postID := mustCanonicalDeliveryPostID(item.Kind, item.ContentID)
 	require.NoError(t, insertDeliveryTestRows(db, &deliveryTestTrackingModel{
 		Kind:               string(item.Kind),
 		ContentID:          item.ContentID,

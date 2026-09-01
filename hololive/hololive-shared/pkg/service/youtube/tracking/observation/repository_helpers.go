@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	ytcontentid "github.com/kapu/hololive-shared/internal/service/youtube/contentid"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming"
+	ytcontentid "github.com/kapu/hololive-shared/pkg/service/youtube/contentid"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 )
 
@@ -43,7 +43,10 @@ func normalizeRecord(record *domain.YouTubeContentAlarmTracking) (*domain.YouTub
 	alarmSentAt := timing.AlarmSentAt
 	latencyMillis := timing.AlarmLatencyMillis
 	latencyExceeded := timing.AlarmLatencyExceeded
-	canonicalContentID := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	canonicalContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
+	if err != nil {
+		return nil, fmt.Errorf("canonical tracking identity: %w", err)
+	}
 
 	return &domain.YouTubeContentAlarmTracking{
 		Kind:                 normalizedKind,
@@ -142,48 +145,52 @@ func normalizeIdentity(kind domain.OutboxKind, contentID string) (domain.OutboxK
 	}
 }
 
-func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) []string {
+func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) ([]string, error) {
 	normalizedContentID := strings.TrimSpace(contentID)
+	canonicalContentID, err := canonicalTrackingIdentity(kind, normalizedContentID)
+	if err != nil {
+		return nil, fmt.Errorf("canonical tracking identity: %w", err)
+	}
 
 	switch kind {
 	case domain.OutboxKindNewShort:
-		canonicalContentID := canonicalTrackingIdentity(kind, normalizedContentID)
 		rawContentID, err := ytcontentid.NormalizeShortVideoID(normalizedContentID)
 
 		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
 	case domain.OutboxKindCommunityPost:
-		canonicalContentID := canonicalTrackingIdentity(kind, normalizedContentID)
 		rawContentID, err := ytcontentid.NormalizeCommunityPostID(normalizedContentID)
 
 		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
 	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
-		return []string{normalizedContentID}
+		return []string{canonicalContentID}, nil
 	default:
-		return []string{normalizedContentID}
+		return nil, fmt.Errorf("tracking identity candidates: unsupported kind %s", kind)
 	}
 }
 
-func trackingIdentityCandidatePair(canonicalContentID, rawContentID string, err error) []string {
-	if err != nil || strings.TrimSpace(rawContentID) == "" {
-		return []string{canonicalContentID}
+func trackingIdentityCandidatePair(canonicalContentID, rawContentID string, err error) ([]string, error) {
+	if err != nil {
+		return nil, fmt.Errorf("normalize raw tracking identity: %w", err)
+	}
+
+	if strings.TrimSpace(rawContentID) == "" {
+		return nil, errors.New("normalize raw tracking identity: result is empty")
 	}
 
 	if canonicalContentID == rawContentID {
-		return []string{canonicalContentID}
+		return []string{canonicalContentID}, nil
 	}
 
-	return []string{canonicalContentID, rawContentID}
+	return []string{canonicalContentID, rawContentID}, nil
 }
 
-func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) string {
-	normalizedContentID := strings.TrimSpace(contentID)
-
-	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, normalizedContentID)
+func canonicalTrackingIdentity(kind domain.OutboxKind, contentID string) (string, error) {
+	canonicalContentID, err := ytcontentid.ForOutboxKind(kind, contentID)
 	if err != nil {
-		return normalizedContentID
+		return "", fmt.Errorf("canonicalize tracking content id: %w", err)
 	}
 
-	return canonicalContentID
+	return canonicalContentID, nil
 }
 
 func buildLatencyMillisExpr(startExpr, endExpr string) string {
