@@ -1,13 +1,13 @@
 # YouTube egress lifecycle 구현 계획
 
 - 작성일: 2026-08-31 KST
-- 상태: proposed
-- **Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing)
 - 아키텍처 정본: [`../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md`](../architecture/youtube-egress-lifecycle-transition-ownership-20260831.md)
 - 규범 계약: [`../architecture/youtube-egress-lifecycle-contract-20260831.md`](../architecture/youtube-egress-lifecycle-contract-20260831.md)
 - Logical ledger: [`../architecture/youtube-egress-logical-delivery-ledger-20260831.md`](../architecture/youtube-egress-logical-delivery-ledger-20260831.md)
 - Commit 판정: [`../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md`](../architecture/youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - Library 검토: [`../architecture/youtube-egress-lifecycle-library-review-20260831.md`](../architecture/youtube-egress-lifecycle-library-review-20260831.md)
+
+**Decisions:** `DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership` (governing)
 
 ## 목적
 
@@ -100,7 +100,7 @@ T06 code review는 T04/T05와 병행할 수 있지만 production activation은 T
 
 ## 구현 작업
 
-### T01. Characterization, writer inventory, historical coverage audit
+### T01 — Characterization, writer inventory, historical coverage audit
 
 목표는 보존할 안전 속성, 제거할 위험, backfill 가능 범위를 구현 전에 고정하는 것입니다.
 
@@ -133,7 +133,7 @@ revive는 SENT/QUARANTINED evidence를 보존
 검증: V01, V02
 완료 기준: AC01, AC02
 
-### T02. Canonical logical identity를 cross-runtime public contract로 승격
+### T02 — Canonical logical identity를 cross-runtime public contract로 승격
 
 목표는 store 이동과 ledger writer보다 먼저 모든 runtime이 같은 fail-closed logical identity를 사용하게 하는 것입니다.
 
@@ -156,7 +156,7 @@ to:   hololive/hololive-shared/pkg/service/youtube/contentid
 검증: V03
 완료 기준: AC03
 
-### T03. Worker persistence를 alarm-worker internal로 이동
+### T03 — Worker persistence를 alarm-worker internal로 이동
 
 목표는 behavior를 바꾸지 않고 worker lifecycle store의 ownership을 runtime과 일치시키는 것입니다.
 
@@ -179,7 +179,7 @@ to:   hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store
 검증: V04
 완료 기준: AC04
 
-### T04. Additive schema와 compatibility terminal writer
+### T04 — Additive schema와 compatibility terminal writer
 
 목표는 old lifecycle behavior를 유지하면서 이후 backfill과 cutover에 필요한 durable evidence를 새 terminal event부터 기록하는 것입니다.
 
@@ -223,7 +223,7 @@ Rollback은 additive schema를 유지한 채 compatibility-aware binary로만 �
 검증: V05, V06, V07
 완료 기준: AC05, AC06
 
-### T05. Fixed-high-water ledger와 `terminal_at` backfill
+### T05 — Fixed-high-water ledger와 `terminal_at` backfill
 
 목표는 retained terminal evidence를 전부 이관하고, 삭제된 historical evidence의 coverage까지 검증한 뒤 durable completion marker를 기록하는 것입니다.
 
@@ -250,7 +250,7 @@ Rollback은 additive schema를 유지한 채 compatibility-aware binary로만 �
 검증: V08, V09
 완료 기준: AC07, AC08
 
-### T06. Typed policy와 preparation coordinator
+### T06 — Typed lifecycle rules와 preparation coordinator
 
 목표는 DB writer cutover 전 pure policy와 provider operation preparation을 완성하는 것입니다.
 
@@ -276,7 +276,7 @@ hololive/hololive-alarm-worker/internal/egress/youtubedispatch/preparation/
 검증: V10
 완료 기준: AC09
 
-### T07. Version-fenced transition store와 runtime writer cutover
+### T07 — Version-fenced transition store와 runtime writer cutover
 
 목표는 terminal delivery writer를 새 alarm-worker transition owner 하나로 원자적으로 전환하는 것입니다.
 
@@ -321,7 +321,7 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 검증: V11, V12
 완료 기준: AC10, AC11
 
-### T08. Outbox fanout, revive, poller writers, cleanup 정렬
+### T08 — Outbox fanout, revive, poller writers, cleanup 정렬
 
 목표는 pre/post-fanout ownership과 retention을 alarm-worker lifecycle에 맞추고 cross-runtime direct writer를 제거하는 것입니다.
 
@@ -340,7 +340,7 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 검증: V13, V14
 완료 기준: AC12, AC13
 
-### T09. Constraint validation, observability, architecture gate, legacy 제거
+### T09 — Constraint validation, observability, architecture gate, legacy 제거
 
 목표는 임시 compatibility 경로를 제거하고 ownership drift를 CI와 운영 증거로 차단하는 것입니다.
 
@@ -359,60 +359,60 @@ Rollback은 ledger-aware T04 compatibility binary로만 수행하며 schema/stat
 
 ## Acceptance criteria
 
-### AC01. 모든 outbox/delivery writer와 runtime owner가 경로별로 분류되어 있습니다.
+### AC01 — 모든 outbox/delivery writer와 runtime owner가 경로별로 분류되어 있습니다.
 
-### AC02. 모든 producer/revive/repair/manual replay path에 bounded `replay_floor_at` evidence가 있거나 cutover가 명시적으로 차단됩니다.
+### AC02 — 모든 producer/revive/repair/manual replay path에 bounded `replay_floor_at` evidence가 있거나 cutover가 명시적으로 차단됩니다.
 
-### AC03. 하나의 public canonical resolver가 모든 caller에 사용되고 invalid identity는 provider 호출 전에 실패합니다.
+### AC03 — 하나의 public canonical resolver가 모든 caller에 사용되고 invalid identity는 provider 호출 전에 실패합니다.
 
-### AC04. Worker lifecycle store와 DTO/SQL/test가 alarm-worker internal에 있고 old shared store import가 없습니다.
+### AC04 — Worker lifecycle store와 DTO/SQL/test가 alarm-worker internal에 있고 old shared store import가 없습니다.
 
-### AC05. Additive schema에 delivery version, outbox `terminal_at`, ledger, ledger state가 있으며 migration 안에 unbounded data backfill이 없습니다.
+### AC05 — Additive schema에 delivery version, outbox `terminal_at`, ledger, ledger state가 있으며 migration 안에 unbounded data backfill이 없습니다.
 
-### AC06. Compatibility success/quarantine writer가 ledger를 terminal transaction에 기록하고, poller direct lifecycle writer가 0건이며, incomplete ledger state에서 cleanup이 실행되지 않습니다.
+### AC06 — Compatibility success/quarantine writer가 ledger를 terminal transaction에 기록하고, poller direct lifecycle writer가 0건이며, incomplete ledger state에서 cleanup이 실행되지 않습니다.
 
-### AC07. 모든 terminal kind가 fixed-high-water와 durable cursor로 backfill되며 canonical anti-join mismatch와 invalid identity가 0건입니다.
+### AC07 — 모든 terminal kind가 fixed-high-water와 durable cursor로 backfill되며 canonical anti-join mismatch와 invalid identity가 0건입니다.
 
-### AC08. Historical coverage가 모든 replay floor보다 충분할 때만 durable completion marker가 기록됩니다.
+### AC08 — Historical coverage가 모든 replay floor보다 충분할 때만 durable completion marker가 기록됩니다.
 
-### AC09. Ledger-first logical resolution, deterministic owner, shared attempt budget, typed tracking/outcome policy가 pure tests로 고정됩니다.
+### AC09 — Ledger-first logical resolution, deterministic owner, shared attempt budget, typed tracking/outcome 규칙이 pure tests로 고정됩니다.
 
-### AC10. 모든 lifecycle mutation이 exact fence와 version increment를 사용하며 group transition은 all-or-none입니다.
+### AC10 — 모든 lifecycle mutation이 exact fence와 version increment를 사용하며 group transition은 all-or-none입니다.
 
-### AC11. Provider success 이후 DB 오류에서 provider 재호출은 0회이고 owner/follower/tracking/ledger read-back mismatch는 atomicity breach입니다.
+### AC11 — Provider success 이후 DB 오류에서 provider 재호출은 0회이고 owner/follower/tracking/ledger read-back mismatch는 atomicity breach입니다.
 
-### AC12. Poller/API source-only 경계가 CI로 고정되고 alarm-worker fanout/revive/aggregate owner만 남습니다.
+### AC12 — Poller/API source-only 경계가 CI로 고정되고 alarm-worker fanout/revive/aggregate owner만 남습니다.
 
-### AC13. Cleanup이 completed ledger state와 `terminal_at`을 사용하고 full row 삭제 뒤에도 logical terminal evidence가 남습니다.
+### AC13 — Cleanup이 completed ledger state와 `terminal_at`을 사용하고 full row 삭제 뒤에도 logical terminal evidence가 남습니다.
 
-### AC14. CI architecture gate가 old store import와 worker 밖 lifecycle update를 거부합니다.
+### AC14 — CI architecture gate가 old store import와 worker 밖 lifecycle update를 거부합니다.
 
-### AC15. Focused unit/integration/fault-injection/race/schema tests와 승인된 rollout observation이 governing decision의 verification evidence로 연결됩니다.
+### AC15 — Focused unit/integration/fault-injection/race/schema tests와 승인된 rollout observation이 governing DEC의 verification evidence로 연결됩니다.
 
 ## Validation
 
-### V01. Writer와 fallback inventory
+### V01 — Writer와 fallback inventory
 
 ```bash
 rg -n "UPDATE youtube_notification_(outbox|delivery)|DELETE FROM youtube_notification_outbox|ON CONFLICT|status[[:space:]]*=|attempt_count[[:space:]]*=|sent_at[[:space:]]*=" hololive/hololive-alarm-worker/internal/egress/youtubedispatch hololive/hololive-shared/pkg/service/youtube/outbox hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 rg -n "recoverSuccessfulCommunityShortsSentState|markRecoveredSentDeliveryRows" hololive/hololive-alarm-worker hololive/hololive-shared
 ```
 
-### V02. Current behavior characterization
+### V02 — Current behavior characterization
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/...
 go -C hololive/hololive-shared test ./pkg/service/youtube/poller/runtime/batchrepo/... ./pkg/service/youtube/tracking/observation/...
 ```
 
-### V03. Canonical identity contract
+### V03 — Canonical identity contract
 
 ```bash
 go -C hololive/hololive-shared test ./pkg/service/youtube/contentid/... ./pkg/service/youtube/poller/runtime/batchrepo/... ./pkg/service/youtube/tracking/observation/...
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/...
 ```
 
-### V04. Store ownership move
+### V04 — Store ownership move
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/store/... ./internal/egress/youtubedispatch/...
@@ -420,7 +420,7 @@ go -C hololive/hololive-shared test ./pkg/service/youtube/outbox/...
 bash scripts/architecture/check-shared-go-boundary.sh
 ```
 
-### V05. Migration manifest and schema snapshot
+### V05 — Migration manifest and schema snapshot
 
 ```bash
 bash scripts/architecture/check-migration-manifest.sh
@@ -428,14 +428,14 @@ SCHEMA_SNAPSHOT_UPDATE=1 go -C hololive/hololive-dbtest test -run TestSchemaSnap
 go -C hololive/hololive-dbtest test -run TestSchemaSnapshotGolden ./...
 ```
 
-### V06. Ledger schema/store
+### V06 — Ledger schema/store
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/store/... -run 'Ledger|TerminalAt|Compatibility'
 go -C hololive/hololive-dbtest test ./... -run 'Ledger|SchemaSnapshot'
 ```
 
-### V07. Compatibility cleanup gate
+### V07 — Compatibility cleanup gate
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/... -run 'Compatibility|Cleanup|CommitReadBack'
@@ -445,13 +445,13 @@ rg -n "UPDATE youtube_notification_(outbox|delivery)|ON CONFLICT|status[[:space:
 
 마지막 `rg`는 diagnostic inventory입니다. 새 architecture test가 delivery update와 existing outbox의 status/attempt/due/lock/sent/error assignment를 금지하며, high-water capture 전 그 결과를 writer audit evidence로 보존합니다.
 
-### V08. Backfill unit/integration
+### V08 — Backfill unit/integration
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./cmd/... ./internal/egress/youtubedispatch/... -run 'Backfill|HighWater|Coverage|AntiJoin'
 ```
 
-### V09. Backfill artifact
+### V09 — Backfill artifact
 
 ```bash
 ./build-all.sh alarm-worker
@@ -459,33 +459,33 @@ go -C hololive/hololive-alarm-worker test ./cmd/... ./internal/egress/youtubedis
 
 Image build script/tag는 구현 시 owning runbook의 current command로 확인하며 production transfer/deploy는 실행하지 않습니다.
 
-### V10. Policy and preparation
+### V10 — Lifecycle rules and preparation
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/lifecycle/... ./internal/egress/youtubedispatch/preparation/...
 go -C hololive/hololive-alarm-worker test -race ./internal/egress/youtubedispatch/lifecycle/... ./internal/egress/youtubedispatch/preparation/...
 ```
 
-### V11. Transition store
+### V11 — Transition store
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/store/... -run 'Transition|LogicalGroup|Tracking|Ledger|Adjudication'
 ```
 
-### V12. Runtime and fault injection
+### V12 — Runtime and fault injection
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/... -run 'Dispatcher|ResponseLost|Indeterminate|Atomicity|OutcomeUnknown'
 go -C hololive/hololive-alarm-worker test -race ./internal/egress/youtubedispatch/...
 ```
 
-### V13. Fanout, revive, aggregate, cleanup
+### V13 — Fanout, revive, aggregate, cleanup
 
 ```bash
 go -C hololive/hololive-alarm-worker test ./internal/egress/youtubedispatch/... -run 'Fanout|Revive|Aggregate|Cleanup'
 ```
 
-### V14. Poller writer removal
+### V14 — Poller writer removal
 
 ```bash
 go -C hololive/hololive-shared test ./pkg/service/youtube/poller/runtime/batchrepo/...
@@ -495,7 +495,7 @@ rg -n "UPDATE youtube_notification_(outbox|delivery)|ON CONFLICT|status[[:space:
 
 마지막 `rg`는 diagnostic inventory이며 test allowlist와 대조합니다. Source observation과 새 outbox insert만 허용합니다.
 
-### V15. Architecture and repository gates
+### V15 — Architecture and repository gates
 
 ```bash
 bash scripts/architecture/ci-notification-egress-gate.sh
@@ -503,7 +503,7 @@ bash scripts/architecture/ci-boundary-gate.sh
 bash scripts/architecture/check-file-loc.sh
 ```
 
-### V16. Publish gate
+### V16 — Publish gate
 
 ```bash
 bash scripts/ci/local-ci.sh
