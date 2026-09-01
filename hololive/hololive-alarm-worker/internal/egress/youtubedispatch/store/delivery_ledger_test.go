@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -25,16 +26,16 @@ func TestLedgerRecordSentPromotesQuarantineAndPreservesEarliestEvidence(t *testi
 	firstObservedAt := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
 	laterObservedAt := firstObservedAt.Add(2 * time.Minute)
 
-	require.NoError(t, recordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []deliveryLedgerWrite{{
+	require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []LedgerWrite{{
 		Key: key, ObservedAt: laterObservedAt, SourceDeliveryID: 20,
 	}}))
-	require.NoError(t, recordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []deliveryLedgerWrite{{
+	require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []LedgerWrite{{
 		Key: key, ObservedAt: firstObservedAt, SourceDeliveryID: 10,
 	}}))
-	require.NoError(t, recordDeliveryLedgerWrites(ctx, pool, LedgerStatusSent, []deliveryLedgerWrite{{
+	require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusSent, []LedgerWrite{{
 		Key: key, ObservedAt: firstObservedAt.Add(time.Minute), SourceDeliveryID: 30,
 	}}))
-	require.NoError(t, recordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []deliveryLedgerWrite{{
+	require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusQuarantined, []LedgerWrite{{
 		Key: key, ObservedAt: laterObservedAt.Add(time.Minute), SourceDeliveryID: 40,
 	}}))
 
@@ -57,8 +58,11 @@ func TestCompatibilityTerminalTransactionsRollBackWhenLedgerIdentityIsInvalid(t 
 		},
 		"quarantined": func(repository *DeliveryRepository, _ int64) error {
 			_, _, err := repository.QuarantineStaleSending(t.Context(), time.Minute, 10)
+			if err != nil {
+				return fmt.Errorf("quarantine stale delivery: %w", err)
+			}
 
-			return err
+			return nil
 		},
 	}
 
@@ -82,11 +86,13 @@ func TestCompatibilityTerminalTransactionsRollBackWhenLedgerIdentityIsInvalid(t 
 			require.Error(t, run(repository, deliveryID))
 
 			status, _, sentAt := readDeliveryStatusAndLocks(ctx, t, pool, deliveryID)
+
 			if name == "sent" {
 				require.Equal(t, domain.OutboxStatusPending, status)
 			} else {
 				require.Equal(t, DeliveryStatusSending, status)
 			}
+
 			require.Nil(t, sentAt)
 		})
 	}
@@ -105,6 +111,7 @@ func readDeliveryLedgerRecord(t *testing.T, pool *pgxpool.Pool, key ytcontentid.
 	t.Helper()
 
 	var record DeliveryLedgerRecord
+
 	require.NoError(t, pool.QueryRow(t.Context(), `
 		SELECT kind, logical_id, room_id, status, first_recorded_at, updated_at,
 		       sent_at, quarantined_at, source_delivery_id
@@ -135,6 +142,7 @@ func seedCompatibilityDelivery(
 	t.Helper()
 
 	var outboxID int64
+
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO youtube_notification_outbox
 			(kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at)
@@ -143,6 +151,7 @@ func seedCompatibilityDelivery(
 	`, domain.OutboxKindNewVideo, "channel-invalid-ledger", contentID, domain.OutboxStatusPending, lockedAt).Scan(&outboxID))
 
 	var deliveryID int64
+
 	require.NoError(t, pool.QueryRow(ctx, `
 		INSERT INTO youtube_notification_delivery
 			(outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, locked_at)

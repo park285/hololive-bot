@@ -95,6 +95,7 @@ func loadAlarmSentMarksForDeliveryIDsWithStatus(ctx context.Context, db dbx.Quer
 			ContentID:   targets[i].ContentID,
 			AlarmSentAt: sentAt,
 		}
+
 		canonicalPostID, err := CanonicalDeliveryPostID(targets[i].Kind, targets[i].ContentID)
 		if err != nil {
 			return nil, fmt.Errorf("canonical delivery post id: %w", err)

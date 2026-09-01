@@ -43,6 +43,7 @@ func normalizeRecord(record *domain.YouTubeContentAlarmTracking) (*domain.YouTub
 	alarmSentAt := timing.AlarmSentAt
 	latencyMillis := timing.AlarmLatencyMillis
 	latencyExceeded := timing.AlarmLatencyExceeded
+
 	canonicalContentID, err := canonicalTrackingIdentity(normalizedKind, normalizedContentID)
 	if err != nil {
 		return nil, fmt.Errorf("canonical tracking identity: %w", err)
@@ -147,6 +148,7 @@ func normalizeIdentity(kind domain.OutboxKind, contentID string) (domain.OutboxK
 
 func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) ([]string, error) {
 	normalizedContentID := strings.TrimSpace(contentID)
+
 	canonicalContentID, err := canonicalTrackingIdentity(kind, normalizedContentID)
 	if err != nil {
 		return nil, fmt.Errorf("canonical tracking identity: %w", err)
@@ -156,11 +158,21 @@ func trackingIdentityCandidates(kind domain.OutboxKind, contentID string) ([]str
 	case domain.OutboxKindNewShort:
 		rawContentID, err := ytcontentid.NormalizeShortVideoID(normalizedContentID)
 
-		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
+		candidates, err := trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
+		if err != nil {
+			return nil, fmt.Errorf("build short tracking identity candidates: %w", err)
+		}
+
+		return candidates, nil
 	case domain.OutboxKindCommunityPost:
 		rawContentID, err := ytcontentid.NormalizeCommunityPostID(normalizedContentID)
 
-		return trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
+		candidates, err := trackingIdentityCandidatePair(canonicalContentID, rawContentID, err)
+		if err != nil {
+			return nil, fmt.Errorf("build community tracking identity candidates: %w", err)
+		}
+
+		return candidates, nil
 	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
 		return []string{canonicalContentID}, nil
 	default:

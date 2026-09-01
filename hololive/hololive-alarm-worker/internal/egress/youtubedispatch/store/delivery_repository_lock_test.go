@@ -272,6 +272,7 @@ func requireDeliveryLedgerStatus(
 	t.Helper()
 
 	var got LedgerStatus
+
 	require.NoError(t, db.QueryRow(ctx, `
 		SELECT status
 		FROM youtube_notification_delivery_ledger

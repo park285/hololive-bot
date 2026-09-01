@@ -63,6 +63,7 @@ func readOutboxTerminalAt(ctx context.Context, t *testing.T, db *pgxpool.Pool, o
 	t.Helper()
 
 	var terminalAt *time.Time
+
 	require.NoError(t, db.QueryRow(ctx,
 		"SELECT terminal_at FROM youtube_notification_outbox WHERE id = $1", outboxID).Scan(&terminalAt))
 
@@ -155,6 +156,7 @@ func TestUpdateOutboxAggregateStatuses_TerminalTransitionRefreshesTerminalAt(t *
 
 	status, _, _, _ := readOutboxAggregateRow(ctx, t, pool, outboxID)
 	require.Equal(t, domain.OutboxStatusFailed, status)
+
 	terminalAt := readOutboxTerminalAt(ctx, t, pool, outboxID)
 	require.NotNil(t, terminalAt)
 	require.True(t, terminalAt.After(oldTerminalAt))

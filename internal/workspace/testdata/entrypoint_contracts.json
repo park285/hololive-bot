@@ -25,6 +25,12 @@
     ]
   },
   {
+    "path": "hololive/hololive-alarm-worker/cmd/youtube-delivery-ledger-backfill/main.go",
+    "must_contain": [
+      "backfill.New("
+    ]
+  },
+  {
     "path": "hololive/hololive-api/internal/planes/bot/cmd/test_db_integration/main.go",
     "must_contain": [
       "botruntime.BuildDBIntegrationRuntime("

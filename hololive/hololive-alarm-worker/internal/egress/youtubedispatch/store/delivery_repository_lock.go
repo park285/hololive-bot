@@ -226,8 +226,10 @@ func (r *DeliveryRepository) QuarantineStaleSending(ctx context.Context, olderTh
 		defer rows.Close()
 
 		var deliveryIDs []int64
+
 		for rows.Next() {
 			var deliveryID, outboxID int64
+
 			if err := rows.Scan(&deliveryID, &outboxID); err != nil {
 				return fmt.Errorf("scan quarantined delivery row: %w", err)
 			}

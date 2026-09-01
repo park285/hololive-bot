@@ -25,15 +25,6 @@ func normalizeShortVideoResourceID(id string) string {
 	return normalized
 }
 
-func normalizeCommunityPostResourceID(id string) string {
-	normalized, err := ytcontentid.NormalizeCommunityPostID(id)
-	if err != nil {
-		return ""
-	}
-
-	return normalized
-}
-
 func appendValuesPlaceholders(sb *strings.Builder, rowCount, columnCount int) {
 	for i := range rowCount {
 		if i > 0 {

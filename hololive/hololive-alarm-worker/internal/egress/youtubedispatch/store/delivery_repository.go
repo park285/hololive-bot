@@ -183,6 +183,7 @@ func updateSentDeliveryRows(ctx context.Context, tx dbx.Querier, uniqueIDs []int
 
 	query := mustSQL("delivery_repository_0188_04.sql") + deliverysql.DeliveryInClause("id", len(uniqueIDs)) + ` AND status = ? RETURNING id
 	`
+
 	rows, err := tx.Query(ctx, deliverysql.PostgresPlaceholders(query), args...)
 	if err != nil {
 		return nil, fmt.Errorf("update delivery rows: %w", err)

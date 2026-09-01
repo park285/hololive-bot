@@ -93,12 +93,17 @@ type notificationPayloadIdentity struct {
 // Community/Shorts payload identity before any provider call.
 func ResolveDeliveryKey(kind domain.OutboxKind, contentID, payload, roomID string) (LogicalKey, error) {
 	if kind != domain.OutboxKindNewShort && kind != domain.OutboxKindCommunityPost {
-		return ResolveLogicalKey(kind, contentID, roomID)
+		key, err := ResolveLogicalKey(kind, contentID, roomID)
+		if err != nil {
+			return LogicalKey{}, fmt.Errorf("resolve delivery key: %w", err)
+		}
+
+		return key, nil
 	}
 
 	payloadIdentity, err := parseNotificationPayloadIdentity(kind, payload)
 	if err != nil {
-		return LogicalKey{}, err
+		return LogicalKey{}, fmt.Errorf("resolve delivery payload identity: %w", err)
 	}
 
 	contentLogicalID, err := ForOutboxKind(kind, contentID)
@@ -115,7 +120,12 @@ func ResolveDeliveryKey(kind domain.OutboxKind, contentID, payload, roomID strin
 		return LogicalKey{}, &Error{Kind: kind, Field: "payload identity", Reason: ErrorReasonMismatch}
 	}
 
-	return ResolveLogicalKey(kind, canonicalPostID, roomID)
+	key, err := ResolveLogicalKey(kind, canonicalPostID, roomID)
+	if err != nil {
+		return LogicalKey{}, fmt.Errorf("resolve canonical delivery key: %w", err)
+	}
+
+	return key, nil
 }
 
 func parseNotificationPayloadIdentity(kind domain.OutboxKind, payload string) (notificationPayloadIdentity, error) {
@@ -124,6 +134,7 @@ func parseNotificationPayloadIdentity(kind domain.OutboxKind, payload string) (n
 	}
 
 	var identity notificationPayloadIdentity
+
 	if err := jsonv2.Unmarshal([]byte(payload), &identity); err != nil {
 		return notificationPayloadIdentity{}, &Error{
 			Kind: kind, Field: "payload", Reason: ErrorReasonInvalidPayload, Cause: err,
@@ -156,7 +167,7 @@ func ForShort(videoID string) (string, error) {
 
 	logicalID := shortPrefix + normalized
 	if err := validateBounded(domain.OutboxKindNewShort, "logical id", logicalID, MaxLogicalIDLength); err != nil {
-		return "", err
+		return "", fmt.Errorf("validate short logical ID: %w", err)
 	}
 
 	return logicalID, nil
@@ -170,7 +181,7 @@ func ForCommunity(postID string) (string, error) {
 
 	logicalID := communityPrefix + normalized
 	if err := validateBounded(domain.OutboxKindCommunityPost, "logical id", logicalID, MaxLogicalIDLength); err != nil {
-		return "", err
+		return "", fmt.Errorf("validate community logical ID: %w", err)
 	}
 
 	return logicalID, nil
@@ -180,13 +191,23 @@ func ForCommunity(postID string) (string, error) {
 func ForOutboxKind(kind domain.OutboxKind, resourceID string) (string, error) {
 	switch kind {
 	case domain.OutboxKindNewShort:
-		return ForShort(resourceID)
+		logicalID, err := ForShort(resourceID)
+		if err != nil {
+			return "", fmt.Errorf("canonicalize short outbox ID: %w", err)
+		}
+
+		return logicalID, nil
 	case domain.OutboxKindCommunityPost:
-		return ForCommunity(resourceID)
+		logicalID, err := ForCommunity(resourceID)
+		if err != nil {
+			return "", fmt.Errorf("canonicalize community outbox ID: %w", err)
+		}
+
+		return logicalID, nil
 	case domain.OutboxKindNewVideo, domain.OutboxKindLiveStream, domain.OutboxKindMilestone:
 		logicalID := strings.TrimSpace(resourceID)
 		if err := validateBounded(kind, "logical id", logicalID, MaxLogicalIDLength); err != nil {
-			return "", err
+			return "", fmt.Errorf("validate outbox logical ID: %w", err)
 		}
 
 		return logicalID, nil

@@ -20,6 +20,7 @@ const (
 	compatibilityCleanupEnabled = false
 )
 
+// LedgerStatus is the monotonic terminal status stored for a logical delivery.
 type LedgerStatus string
 
 const (
@@ -27,6 +28,7 @@ const (
 	LedgerStatusQuarantined LedgerStatus = "QUARANTINED"
 )
 
+// DeliveryLedgerRecord is a canonical logical delivery ledger row.
 type DeliveryLedgerRecord struct {
 	Kind             domain.OutboxKind `db:"kind"`
 	LogicalID        string            `db:"logical_id"`
@@ -47,7 +49,8 @@ type deliveryLedgerTarget struct {
 	RoomID     string            `db:"room_id"`
 }
 
-type deliveryLedgerWrite struct {
+// LedgerWrite records one observed terminal physical delivery for a logical key.
+type LedgerWrite struct {
 	Key              ytcontentid.LogicalKey
 	ObservedAt       time.Time
 	SourceDeliveryID int64
@@ -59,6 +62,7 @@ func (r *DeliveryRepository) CompatibilityCleanupReady(ctx context.Context) (boo
 	}
 
 	var ready bool
+
 	if err := r.db.QueryRow(ctx, mustSQL("delivery_ledger_cleanup_ready.sql"), LedgerSchemaVersion).Scan(&ready); err != nil {
 		return false, fmt.Errorf("compatibility cleanup ready: %w", err)
 	}
@@ -77,7 +81,7 @@ func recordSentLedgerForDeliveryIDs(
 		return fmt.Errorf("load sent ledger writes: %w", err)
 	}
 
-	if err := recordDeliveryLedgerWrites(ctx, tx, LedgerStatusSent, writes); err != nil {
+	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusSent, writes); err != nil {
 		return fmt.Errorf("record sent ledger writes: %w", err)
 	}
 
@@ -95,7 +99,7 @@ func recordQuarantinedLedgerForDeliveryIDs(
 		return fmt.Errorf("load quarantined ledger writes: %w", err)
 	}
 
-	if err := recordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
+	if err := RecordDeliveryLedgerWrites(ctx, tx, LedgerStatusQuarantined, writes); err != nil {
 		return fmt.Errorf("record quarantined ledger writes: %w", err)
 	}
 
@@ -108,16 +112,18 @@ func loadDeliveryLedgerWrites(
 	deliveryIDs []int64,
 	status domain.OutboxStatus,
 	observedAt time.Time,
-) ([]deliveryLedgerWrite, error) {
+) ([]LedgerWrite, error) {
 	uniqueIDs := deliverysql.UniqueInt64s(deliveryIDs)
 	if len(uniqueIDs) == 0 {
 		return nil, nil
 	}
 
 	args := deliverysql.AppendDeliveryInt64Args(nil, uniqueIDs)
+
 	args = append(args, status)
 
 	var targets []deliveryLedgerTarget
+
 	if err := deliverysql.SelectDeliverySQL(
 		ctx,
 		tx,
@@ -133,7 +139,7 @@ func loadDeliveryLedgerWrites(
 		return nil, fmt.Errorf("delivery ledger target count mismatch: got %d want %d", len(targets), len(uniqueIDs))
 	}
 
-	writesByKey := make(map[ytcontentid.LogicalKey]deliveryLedgerWrite, len(targets))
+	writesByKey := make(map[ytcontentid.LogicalKey]LedgerWrite, len(targets))
 	for i := range targets {
 		key, err := ytcontentid.ResolveDeliveryKey(
 			targets[i].Kind,
@@ -145,7 +151,7 @@ func loadDeliveryLedgerWrites(
 			return nil, fmt.Errorf("resolve delivery ledger target at index %d: %w", i, err)
 		}
 
-		write := deliveryLedgerWrite{
+		write := LedgerWrite{
 			Key:              key,
 			ObservedAt:       observedAt.UTC(),
 			SourceDeliveryID: targets[i].DeliveryID,
@@ -157,27 +163,34 @@ func loadDeliveryLedgerWrites(
 
 	writes := slices.Collect(maps.Values(writesByKey))
 
-	slices.SortFunc(writes, func(a, b deliveryLedgerWrite) int {
+	slices.SortFunc(writes, func(a, b LedgerWrite) int {
 		if byKind := cmp.Compare(a.Key.Kind, b.Key.Kind); byKind != 0 {
 			return byKind
 		}
+
 		if byLogicalID := cmp.Compare(a.Key.LogicalID, b.Key.LogicalID); byLogicalID != 0 {
 			return byLogicalID
 		}
+
 		return cmp.Compare(a.Key.RoomID, b.Key.RoomID)
 	})
 
 	return writes, nil
 }
 
-func recordDeliveryLedgerWrites(
+// RecordDeliveryLedgerWrites applies monotonic logical delivery evidence in one batch.
+func RecordDeliveryLedgerWrites(
 	ctx context.Context,
 	tx dbx.Querier,
 	status LedgerStatus,
-	writes []deliveryLedgerWrite,
+	writes []LedgerWrite,
 ) error {
 	if len(writes) == 0 {
 		return nil
+	}
+
+	if status != LedgerStatusSent && status != LedgerStatusQuarantined {
+		return fmt.Errorf("record delivery ledger writes: unsupported status %q", status)
 	}
 
 	kinds := make([]string, 0, len(writes))
@@ -195,11 +208,13 @@ func recordDeliveryLedgerWrites(
 	}
 
 	queryName := "delivery_ledger_record_sent.sql"
+
 	if status == LedgerStatusQuarantined {
 		queryName = "delivery_ledger_record_quarantined.sql"
 	}
 
 	var recorded []DeliveryLedgerRecord
+
 	if err := deliverysql.SelectDeliverySQL(
 		ctx,
 		tx,
@@ -220,7 +235,7 @@ func recordDeliveryLedgerWrites(
 	}
 
 	for i := range recorded {
-		if recorded[i].Status != status && !(status == LedgerStatusQuarantined && recorded[i].Status == LedgerStatusSent) {
+		if recorded[i].Status != status && (status != LedgerStatusQuarantined || recorded[i].Status != LedgerStatusSent) {
 			return fmt.Errorf("delivery ledger state conflict at index %d: got %s want %s", i, recorded[i].Status, status)
 		}
 	}

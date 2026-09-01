@@ -21,6 +21,7 @@ func TestPollerBatchRepositoryDoesNotMutateDeliveryLifecycle(t *testing.T) {
 	}
 
 	packageDir := filepath.Dir(file)
+
 	violations, err := findPollerLifecycleMutations(packageDir)
 	if err != nil {
 		t.Fatalf("scan poller lifecycle mutations: %v", err)
@@ -52,6 +53,8 @@ func findPollerLifecycleMutations(packageDir string) ([]string, error) {
 			return nil
 		}
 
+		// The path is yielded by WalkDir from the fixed test package root.
+		//nolint:gosec // This test neither accepts external paths nor follows a mutable production tree.
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
