@@ -19,3 +19,6 @@ docs/history/architecture/outbox-v3-convergence-roadmap-20260703.md#Phase 3 — 
 docs/current/architecture/hololive-shared-alarm-youtube-code-map-20260707.md#4.4 target minute 정책
 docs/current/architecture/h3-runtime-smoke-cross-debate-20260630.md#Decision
 docs/current/architecture/review-bundles.md#Full bundle policy
+
+# 현행 YouTube egress lifecycle 문서의 문제 목록 제목. 채택된 전이 정책은 DEC-20260831-hololive-youtube-egress-lifecycle-transition-ownership이 소유한다.
+docs/current/architecture/youtube-egress-lifecycle-transition-ownership-20260831.md#Policy 분산
