@@ -121,20 +121,8 @@ func NewPreparedSendOperation(
 	request ImmutableSendRequest,
 	preparedAt time.Time,
 ) (PreparedSendOperation, error) {
-	if strings.TrimSpace(operationID) == "" {
-		return PreparedSendOperation{}, errors.New("new prepared send operation: operation id is empty")
-	}
-
-	if strings.TrimSpace(clientRequestID) == "" {
-		return PreparedSendOperation{}, errors.New("new prepared send operation: client request id is empty")
-	}
-
-	if len(owners) == 0 {
-		return PreparedSendOperation{}, errors.New("new prepared send operation: owners are empty")
-	}
-
-	if request.roomID == "" || len(request.dedupeKeys) == 0 {
-		return PreparedSendOperation{}, errors.New("new prepared send operation: request is invalid")
+	if err := validateOperationEnvelope(operationID, clientRequestID, owners, request); err != nil {
+		return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: validate envelope: %w", err)
 	}
 
 	canonicalPreparedAt, err := lifecycle.CanonicalTime(preparedAt)
@@ -142,30 +130,9 @@ func NewPreparedSendOperation(
 		return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: prepared at: %w", err)
 	}
 
-	ownerIDs := make(map[int64]struct{}, len(owners))
-	ledgerKeys := make([]ytcontentid.LogicalKey, 0, len(owners))
-	keySet := make(map[ytcontentid.LogicalKey]struct{}, len(owners))
-
-	for i := range owners {
-		if owners[i].deliveryID <= 0 || !owners[i].lease.Valid() {
-			return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: owner[%d] is invalid", i)
-		}
-
-		if owners[i].key.RoomID != request.roomID {
-			return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: owner[%d] room does not match request", i)
-		}
-
-		if _, ok := ownerIDs[owners[i].deliveryID]; ok {
-			return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: duplicate owner id %d", owners[i].deliveryID)
-		}
-
-		ownerIDs[owners[i].deliveryID] = struct{}{}
-		if _, ok := keySet[owners[i].key]; ok {
-			return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: duplicate logical key %s", owners[i].key.Hash())
-		}
-
-		keySet[owners[i].key] = struct{}{}
-		ledgerKeys = append(ledgerKeys, owners[i].key)
+	ledgerKeys, err := validateOperationOwners(owners, request)
+	if err != nil {
+		return PreparedSendOperation{}, fmt.Errorf("new prepared send operation: validate owners: %w", err)
 	}
 
 	deduplicatedTracking, err := DeduplicateTrackingRequirements(tracking)
@@ -178,6 +145,61 @@ func NewPreparedSendOperation(
 		owners: slices.Clone(owners), ledgerKeys: ledgerKeys, tracking: deduplicatedTracking,
 		request: request, preparedAt: canonicalPreparedAt,
 	}, nil
+}
+
+func validateOperationEnvelope(
+	operationID string,
+	clientRequestID string,
+	owners []PreparedOwner,
+	request ImmutableSendRequest,
+) error {
+	if strings.TrimSpace(operationID) == "" {
+		return errors.New("new prepared send operation: operation id is empty")
+	}
+
+	if strings.TrimSpace(clientRequestID) == "" {
+		return errors.New("new prepared send operation: client request id is empty")
+	}
+
+	if len(owners) == 0 {
+		return errors.New("new prepared send operation: owners are empty")
+	}
+
+	if request.roomID == "" || len(request.dedupeKeys) == 0 {
+		return errors.New("new prepared send operation: request is invalid")
+	}
+
+	return nil
+}
+
+func validateOperationOwners(owners []PreparedOwner, request ImmutableSendRequest) ([]ytcontentid.LogicalKey, error) {
+	ownerIDs := make(map[int64]struct{}, len(owners))
+	ledgerKeys := make([]ytcontentid.LogicalKey, 0, len(owners))
+	keySet := make(map[ytcontentid.LogicalKey]struct{}, len(owners))
+
+	for i := range owners {
+		if owners[i].deliveryID <= 0 || !owners[i].lease.Valid() {
+			return nil, fmt.Errorf("new prepared send operation: owner[%d] is invalid", i)
+		}
+
+		if owners[i].key.RoomID != request.roomID {
+			return nil, fmt.Errorf("new prepared send operation: owner[%d] room does not match request", i)
+		}
+
+		if _, ok := ownerIDs[owners[i].deliveryID]; ok {
+			return nil, fmt.Errorf("new prepared send operation: duplicate owner id %d", owners[i].deliveryID)
+		}
+
+		ownerIDs[owners[i].deliveryID] = struct{}{}
+		if _, ok := keySet[owners[i].key]; ok {
+			return nil, fmt.Errorf("new prepared send operation: duplicate logical key %s", owners[i].key.Hash())
+		}
+
+		keySet[owners[i].key] = struct{}{}
+		ledgerKeys = append(ledgerKeys, owners[i].key)
+	}
+
+	return ledgerKeys, nil
 }
 
 func (o PreparedSendOperation) OperationID() string     { return o.operationID }

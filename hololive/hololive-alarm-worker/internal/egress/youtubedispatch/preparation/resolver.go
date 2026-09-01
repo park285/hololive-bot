@@ -35,6 +35,24 @@ type DeliverySnapshot struct {
 }
 
 func (d DeliverySnapshot) validate() error {
+	if err := d.validateFields(); err != nil {
+		return fmt.Errorf("validate delivery snapshot fields: %w", err)
+	}
+
+	if d.Status == lifecycle.StatusSending && d.LockedAt.IsZero() {
+		return errors.New("sending delivery is missing locked at")
+	}
+
+	if d.InCurrentBatch {
+		if err := d.validateCurrentLease(); err != nil {
+			return fmt.Errorf("validate current delivery lease: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (d DeliverySnapshot) validateFields() error {
 	if d.DeliveryID <= 0 {
 		return errors.New("delivery id must be positive")
 	}
@@ -59,22 +77,20 @@ func (d DeliverySnapshot) validate() error {
 		return errors.New("created at is zero")
 	}
 
-	if d.Status == lifecycle.StatusSending && d.LockedAt.IsZero() {
-		return errors.New("sending delivery is missing locked at")
+	return nil
+}
+
+func (d DeliverySnapshot) validateCurrentLease() error {
+	if !d.Lease.Valid() {
+		return errors.New("current batch delivery is missing preparation lease")
 	}
 
-	if d.InCurrentBatch {
-		if !d.Lease.Valid() {
-			return errors.New("current batch delivery is missing preparation lease")
-		}
+	if d.Lease.DeliveryID() != d.DeliveryID || d.Lease.RowVersion() != d.RowVersion || !d.Lease.LockedAt().Equal(d.LockedAt) {
+		return errors.New("current batch preparation lease does not match snapshot")
+	}
 
-		if d.Lease.DeliveryID() != d.DeliveryID || d.Lease.RowVersion() != d.RowVersion || !d.Lease.LockedAt().Equal(d.LockedAt) {
-			return errors.New("current batch preparation lease does not match snapshot")
-		}
-
-		if d.Status != lifecycle.StatusPending {
-			return errors.New("current batch delivery is not pending")
-		}
+	if d.Status != lifecycle.StatusPending {
+		return errors.New("current batch delivery is not pending")
 	}
 
 	return nil
