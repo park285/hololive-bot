@@ -547,6 +547,7 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/tran
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/park285/iris-client-go/v2/iris
+github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/park285/shared-go/v2/pkg/irisdurable
 github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport -> github.com/park285/shared-go/v2/pkg/kakaoformat
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent
 github.com/kapu/hololive-api/internal/planes/bot/internal/client/majorevent -> github.com/kapu/hololive-api/internal/service/subscriptionclient
@@ -615,7 +616,11 @@ github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news 
 github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport
 github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog
 github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/kapu/hololive-dbtest
+github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/kapu/hololive-shared/pkg/sqlassets
+github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/park285/iris-client-go/v2/iris
+github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/park285/shared-go/v2/pkg/irisdurable
+github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/park285/shared-go/v2/pkg/irisdurable/contracttest
 github.com/kapu/hololive-api/internal/planes/bot/internal/durability -> github.com/park285/shared-go/v2/pkg/workercontract
 github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog -> github.com/kapu/hololive-shared/pkg/privacylog
 github.com/kapu/hololive-api/internal/planes/bot/internal/render -> github.com/kapu/hololive-api/internal/planes/bot/internal/assets/fonts
@@ -1123,10 +1128,6 @@ github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/s
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/park285/iris-client-go/v2/iris
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/park285/shared-go/v2/pkg/kakaoformat
-github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/privacylog
-github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/service/cache
-github.com/kapu/hololive-shared/pkg/service/lease -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
-github.com/kapu/hololive-shared/pkg/service/lease -> github.com/park285/shared-go/v2/pkg/retry
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/internal/testredis
 github.com/kapu/hololive-shared/pkg/service/member -> github.com/kapu/hololive-shared/internal/testutil
@@ -1395,6 +1396,11 @@ github.com/park285/shared-go/v2/pkg/healthprobe -> github.com/park285/shared-go/
 github.com/park285/shared-go/v2/pkg/healthprobe -> github.com/park285/shared-go/v2/pkg/internal/testsupport
 github.com/park285/shared-go/v2/pkg/healthprobe -> github.com/park285/shared-go/v2/pkg/netguard
 github.com/park285/shared-go/v2/pkg/httputil -> github.com/park285/shared-go/v2/pkg/internal/testsupport
+github.com/park285/shared-go/v2/pkg/irisdurable -> github.com/park285/shared-go/v2/pkg/irisdurable
+github.com/park285/shared-go/v2/pkg/irisdurable -> github.com/park285/shared-go/v2/pkg/workercontract
+github.com/park285/shared-go/v2/pkg/irisdurable/contracttest -> github.com/park285/shared-go/v2/pkg/irisdurable
+github.com/park285/shared-go/v2/pkg/irisdurable/contracttest -> github.com/park285/shared-go/v2/pkg/irisdurable/contracttest
+github.com/park285/shared-go/v2/pkg/irisdurable/contracttest -> github.com/park285/shared-go/v2/pkg/workercontract
 github.com/park285/shared-go/v2/pkg/jsonutil -> github.com/park285/shared-go/v2/pkg/httputil
 github.com/park285/shared-go/v2/pkg/llm -> github.com/park285/shared-go/v2/pkg/internal/testsupport
 github.com/park285/shared-go/v2/pkg/llm -> github.com/park285/shared-go/v2/pkg/jsonutil
