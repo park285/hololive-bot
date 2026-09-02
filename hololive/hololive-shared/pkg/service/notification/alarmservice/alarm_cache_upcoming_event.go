@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
 )
 
 func resolveStreamChannelID(stream *domain.Stream, defaultChannelID string) string {

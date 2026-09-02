@@ -103,7 +103,6 @@ func projectionSnapshotSubjects(
 
 		total += len(values)
 		if total > maxRows {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, collecterr.New(collecterr.TargetRosterTooLarge, collecterr.ClassResourceLimit, "target roster exceeds configured limit")
 		}
 
@@ -174,7 +173,6 @@ func validateSnapshotKinds(kinds []contract.ObservationKind) error {
 }
 
 func snapshotInvariant(message string) error {
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return collecterr.New(collecterr.Internal, collecterr.ClassInternal, message)
 }
 

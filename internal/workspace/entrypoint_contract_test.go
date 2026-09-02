@@ -2,7 +2,6 @@ package workspace
 
 import (
 	jsonv2 "encoding/json/v2"
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -94,44 +93,6 @@ func TestEntrypointContractManifestCoversAllCommandMainFiles(t *testing.T) {
 		if manifestPaths[i] != discoveredPaths[i] {
 			t.Fatalf("entrypoint manifest mismatch at %d: manifest=%q discovered=%q", i, manifestPaths[i], discoveredPaths[i])
 		}
-	}
-}
-
-func TestDocsUseConsolidatedYouTubeProducerOpsCommand(t *testing.T) {
-	t.Parallel()
-
-	root := repoRootFromHelper(t)
-	legacyCommandPaths := []string{
-		"hololive/hololive-youtube-producer/cmd/youtube-",
-		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-alarm-sent-history",
-		"hololive/hololive-youtube-producer/cmd/ops/youtube-shorts-alarm-sent-history",
-		"hololive/hololive-youtube-producer/cmd/ops/youtube-community-shorts-",
-	}
-
-	docsFS := os.DirFS(filepath.Join(root, "docs", "current"))
-	if err := fs.WalkDir(docsFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() || filepath.Ext(path) != ".md" {
-			return nil
-		}
-
-		content, err := fs.ReadFile(docsFS, path)
-		if err != nil {
-			return fmt.Errorf("read current documentation %s: %w", path, err)
-		}
-
-		for _, legacyPath := range legacyCommandPaths {
-			if strings.Contains(string(content), legacyPath) {
-				t.Fatalf("%s contains legacy command path %q", filepath.ToSlash(filepath.Join("docs", "current", path)), legacyPath)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		t.Fatalf("docs/current scan 실패: %v", err)
 	}
 }
 

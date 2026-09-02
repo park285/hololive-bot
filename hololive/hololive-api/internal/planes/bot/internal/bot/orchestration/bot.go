@@ -39,9 +39,9 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
@@ -95,7 +95,6 @@ type Bot struct {
 func NewBot(deps *Dependencies) (*Bot, error) {
 	holodexRuntime, err := validateBotDependencies(deps)
 	if err != nil {
-		//nolint:wrapcheck // 생성자 중간 계층은 leaf dependency 오류에 새 정보를 추가하지 않는다.
 		return nil, err
 	}
 

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -56,13 +57,11 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 
 	for {
 		if c.cacheBypassRequired("all_members") {
-			//nolint:wrapcheck // loadAllMembersBypass가 모든 실패 경로에 이미 문맥을 붙이므로, 여기서 다시 감싸면 같은 말만 한 겹 늘어난다.
 			return c.loadAllMembersBypass(ctx)
 		}
 
 		snap, generation := c.allMembersView()
 		if members, ready, snapErr := c.snapshotResultAt(snap, time.Now()); ready {
-			//nolint:wrapcheck // snapErr는 스냅샷에 보관된 원본 오류다. 감싸면 backoff 재시도가 첫 오류와 다른 값을 돌려줘 errors.Is 비교가 깨진다.
 			return cloneAllMembersResult(members, snapErr)
 		}
 
@@ -71,7 +70,6 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 			continue
 		}
 
-		//nolint:wrapcheck // loadAllMembersResult가 넘긴 오류에는 이미 문맥이 붙어 있고, cloneAllMembersResult는 그 값을 그대로 통과시킨다.
 		return cloneAllMembersResult(members, err)
 	}
 }
@@ -79,7 +77,6 @@ func (c *Cache) AllMembers(ctx context.Context) ([]*domain.Member, error) {
 func (c *Cache) loadAllMembersBypass(ctx context.Context) ([]*domain.Member, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
-		//nolint:wrapcheck // allMembersLoader의 오류는 그 자체로 원인을 다 말한다.
 		return nil, err
 	}
 
@@ -126,7 +123,6 @@ func (c *Cache) loadAllMembersResult(
 		return stale, false, nil
 	}
 
-	//nolint:wrapcheck // loadAllMembersSnapshot이 모든 오류 경로에 이미 문맥을 붙여 반환하므로, 여기서 다시 감싸면 체인만 길어진다.
 	return nil, false, err
 }
 
@@ -183,7 +179,6 @@ func (*Cache) snapshotReloadDeferred(snap *allMembersState, now time.Time) bool 
 func (c *Cache) loadAllMembersSnapshot(ctx context.Context, _ *allMembersState, generation uint64) ([]*domain.Member, error) {
 	loader, err := c.allMembersLoader()
 	if err != nil {
-		//nolint:wrapcheck // allMembersLoader의 오류는 그 자체로 원인을 다 말한다.
 		return nil, err
 	}
 
@@ -193,7 +188,6 @@ func (c *Cache) loadAllMembersSnapshot(ctx context.Context, _ *allMembersState, 
 		return c.reloadAllMembersSnapshot(ctx, loader, generation)
 	})
 	if err != nil {
-		//nolint:wrapcheck // singleflight는 reloadAllMembersSnapshot의 오류를 그대로 돌려준다. 감싸면 스냅샷에 저장된 오류와 값이 달라진다.
 		return nil, err
 	}
 
@@ -239,7 +233,6 @@ func (c *Cache) reloadAllMembersSnapshot(
 	members, err := loader(loadCtx)
 	if err != nil {
 		if failureErr := c.handleAllMembersLoadFailure(loadCtx, current, generation, err); failureErr != nil {
-			//nolint:wrapcheck // 반환값은 스냅샷에 저장한 loadErr 그 자체다. 감싸면 backoff 재시도가 첫 오류와 다른 값을 돌려준다.
 			return nil, failureErr
 		}
 
@@ -319,4 +312,90 @@ func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation 
 	}
 
 	return retryScheduled
+}
+
+func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount int) {
+	if snap == nil || snap.retryAfter.IsZero() || c.logger == nil {
+		return
+	}
+
+	c.logger.Info("member_snapshot_reload_recovered", slog.Int("member_count", memberCount))
+}
+
+func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) bool {
+	snapshot, channelIDs := prepareAllMembersSnapshot(members)
+
+	c.snapshotMu.Lock()
+	defer c.snapshotMu.Unlock()
+
+	if c.snapshotGeneration.Load() != generation || c.allMembersSnapshot.Load() != previous {
+		return false
+	}
+
+	nextGeneration := generation + 1
+	c.replaceMemberSnapshotIndexes(snapshot, generation, nextGeneration)
+	c.allMembers.Store(allChannelIDsKey, channelIDs)
+	c.snapshotGeneration.Store(nextGeneration)
+	c.allMembersSnapshot.Store(&allMembersState{
+		members:       snapshot,
+		loadedAt:      time.Now(),
+		generation:    nextGeneration,
+		hasSuccessful: true,
+	})
+
+	return true
+}
+
+func prepareAllMembersSnapshot(members []*domain.Member) (snapshot []*domain.Member, channelIDs []string) {
+	snapshot = make([]*domain.Member, 0, len(members))
+	channelIDs = make([]string, 0, len(members))
+
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+
+		snapshot = append(snapshot, member)
+		if member.ChannelID != "" {
+			channelIDs = append(channelIDs, member.ChannelID)
+		}
+	}
+
+	return snapshot, channelIDs
+}
+
+func (c *Cache) replaceMemberSnapshotIndexes(members []*domain.Member, generation, nextGeneration uint64) {
+	deleteMemberGeneration(&c.byChannelID, generation)
+	deleteMemberGeneration(&c.byName, generation)
+
+	for _, member := range members {
+		entry := &memoryMember{member: member, generation: nextGeneration}
+		if member.ChannelID != "" {
+			c.byChannelID.Store(member.ChannelID, entry)
+		}
+
+		c.byName.Store(member.Name, entry)
+	}
+}
+
+func deleteMemberGeneration(index *sync.Map, generation uint64) {
+	index.Range(func(key, value any) bool {
+		entry, ok := value.(*memoryMember)
+		if ok && entry.generation == generation {
+			index.CompareAndDelete(key, value)
+		}
+
+		return true
+	})
+}
+
+func (c *Cache) allMembersView() (snapshot *allMembersState, generation uint64) {
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+
+	return c.allMembersSnapshot.Load(), c.snapshotGeneration.Load()
+}
+
+func snapshotSuccessful(snap *allMembersState) bool {
+	return snap != nil && (snap.hasSuccessful || !snap.loadedAt.IsZero())
 }

@@ -24,9 +24,9 @@ import (
 	"context"
 	"strings"
 
+	templateview "github.com/kapu/hololive-api/internal/templateview"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	templateview "github.com/kapu/hololive-shared/pkg/templateview"
 )
 
 type majorEventWeeklySummaryData struct {

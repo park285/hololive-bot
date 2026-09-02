@@ -103,7 +103,7 @@ func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {
 }
 
 func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin)
+	shortLinkBaseURL := alarmShortLinkOrigin
 
 	renderer, store := newAlarmDispatchTestRendering(t)
 	group := alarmDispatchGroup{
@@ -114,7 +114,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, shortLinkBaseURL, group)
 
 	require.NoError(t, err)
 	assert.Contains(t, message, alarmShortLinkOrigin+"/l/dQw4w9WgXcQ")
@@ -123,7 +123,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesConfiguredShortLinks(t *testing
 }
 
 func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, "http://go.example.com")
+	shortLinkBaseURL := "http://go.example.com"
 
 	renderer, store := newAlarmDispatchTestRendering(t)
 	group := alarmDispatchGroup{
@@ -134,7 +134,7 @@ func TestRenderAlarmDispatchNotificationGroupRejectsInvalidShortLinkConfig(t *te
 		},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, shortLinkBaseURL, group)
 
 	require.Error(t, err)
 	assert.Empty(t, message)

@@ -11,8 +11,8 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 type YouTubeOutboxKaringSender interface {
@@ -220,14 +220,12 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 	defer cancel()
 
 	if err := d.karingMu.LockContext(sendCtx); err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return d.wrapKaringTimeoutError(sendCtx, "wait for youtube outbox karing send slot", err)
 	}
 
 	defer d.karingMu.Unlock()
 
 	if err := sender.SendYouTubeOutboxKaring(sendCtx, roomID, payload); err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return d.wrapKaringTimeoutError(sendCtx, "send youtube outbox karing", err)
 	}
 

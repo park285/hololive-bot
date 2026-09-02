@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/park285/shared-go/v2/pkg/health"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
 

@@ -49,23 +49,25 @@ type Config struct {
 	Bot                    BotConfig
 	Services               ServicesConfig
 	Environment            string
-	Scraper                ScraperConfig
-	YouTubeCollector       YouTubeCollectorConfig
-	Webhook                WebhookConfig
-	WorkerPool             WorkerPoolConfig
-	APIWorkerProfile       *APIWorkerProfile
-	AlarmWorkerProfile     *AlarmWorkerProfile
-	CORS                   CORSConfig
-	Cliproxy               CliproxyConfig
-	LLM                    LLMConfig
-	Exa                    ExaConfig
-	OfficialSchedule       OfficialScheduleConfig
-	OfficialProfile        OfficialProfileConfig
-	MaxResponseBodyBytes   int64
-	LLMSchedulerURL        string
-	AlarmServiceURL        string
-	BotInternalURL         string
-	Version                string
+	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
+	SettingsFilePath     string
+	Scraper              ScraperConfig
+	YouTubeCollector     YouTubeCollectorConfig
+	Webhook              WebhookConfig
+	WorkerPool           WorkerPoolConfig
+	APIWorkerProfile     *APIWorkerProfile
+	AlarmWorkerProfile   *AlarmWorkerProfile
+	CORS                 CORSConfig
+	Cliproxy             CliproxyConfig
+	LLM                  LLMConfig
+	Exa                  ExaConfig
+	OfficialSchedule     OfficialScheduleConfig
+	OfficialProfile      OfficialProfileConfig
+	MaxResponseBodyBytes int64
+	LLMSchedulerURL      string
+	AlarmServiceURL      string
+	BotInternalURL       string
+	Version              string
 }
 
 type configLoadOptions struct {

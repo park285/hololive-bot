@@ -29,36 +29,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func TestParseOrigins(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want []string
-	}{
-		{name: "empty string", raw: "", want: nil},
-		{name: "whitespace only", raw: "   ", want: nil},
-		{name: "single origin", raw: "https://example.com", want: []string{"https://example.com"}},
-		{name: "multiple origins", raw: "https://a.com,https://b.com", want: []string{"https://a.com", "https://b.com"}},
-		{name: "trim whitespace", raw: " https://a.com , https://b.com ", want: []string{"https://a.com", "https://b.com"}},
-		{name: "skip empty parts", raw: "https://a.com,,https://b.com,", want: []string{"https://a.com", "https://b.com"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := parseOrigins(tt.raw)
-			if len(got) != len(tt.want) {
-				t.Fatalf("parseOrigins(%q) len = %d, want %d", tt.raw, len(got), len(tt.want))
-			}
-
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("parseOrigins(%q)[%d] = %q, want %q", tt.raw, i, got[i], tt.want[i])
-				}
-			}
-		})
-	}
-}
-
 const testAllowedOrigin = "https://bot.example.com"
 
 func TestCheckOrigin(t *testing.T) {
@@ -135,9 +105,7 @@ func TestCheckOrigin(t *testing.T) {
 }
 
 func TestInitWSUpgrader(t *testing.T) {
-	t.Setenv("WEBSOCKET_ALLOWED_ORIGINS", "https://a.com,https://b.com")
-
-	InitWSUpgrader()
+	InitWSUpgrader([]string{"https://a.com", "https://b.com"})
 
 	origins := allowedWSOrigins()
 	if len(origins) != 2 {
@@ -154,9 +122,7 @@ func TestInitWSUpgrader(t *testing.T) {
 }
 
 func TestInitWSUpgrader_EmptyDeniesAll(t *testing.T) {
-	t.Setenv("WEBSOCKET_ALLOWED_ORIGINS", "")
-
-	InitWSUpgrader()
+	InitWSUpgrader(nil)
 
 	if origins := allowedWSOrigins(); len(origins) != 0 {
 		t.Fatalf("allowedWSOrigins() should be empty, got %d", len(origins))
@@ -170,13 +136,12 @@ func TestInitWSUpgrader_EmptyDeniesAll(t *testing.T) {
 	r.Header.Set("Origin", "https://anything.com")
 
 	if checkOrigin(r) {
-		t.Error("checkOrigin should deny when WEBSOCKET_ALLOWED_ORIGINS is empty")
+		t.Error("checkOrigin should deny when allowed origins are empty")
 	}
 }
 
 func TestWSUpgrader_DisallowedOriginReturns403(t *testing.T) {
-	t.Setenv("WEBSOCKET_ALLOWED_ORIGINS", "https://allowed.example.com")
-	InitWSUpgrader()
+	InitWSUpgrader([]string{"https://allowed.example.com"})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {

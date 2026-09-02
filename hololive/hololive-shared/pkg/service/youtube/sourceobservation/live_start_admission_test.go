@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/live"
 )
 
 func TestLiveEvidenceHolodexLiveWithoutActualStartDoesNotAdvance(t *testing.T) {

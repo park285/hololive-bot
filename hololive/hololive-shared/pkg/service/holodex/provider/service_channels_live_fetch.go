@@ -12,9 +12,9 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
 func (h *Service) fetchHololiveChannelList(ctx context.Context) ([]*domain.Channel, error) {

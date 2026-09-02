@@ -12,10 +12,10 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
+	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
-	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	timeline "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 

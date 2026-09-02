@@ -23,6 +23,7 @@ package botruntime
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,12 +35,12 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-api/internal/service/acl"
+	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
@@ -212,6 +213,7 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	deps, err := initAlarmDependencies(
 		configsettings.ChzzkConfig{},
 		&configsettings.TwitchConfig{},
+		filepath.Join(t.TempDir(), "settings.json"),
 		[]int{5},
 		false,
 		cachemocks.NewLenientClient(),

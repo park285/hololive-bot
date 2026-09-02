@@ -47,7 +47,6 @@ func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output 
 func (e *collectionExecutor) acquireProvider(ctx context.Context, provider contract.Provider) error {
 	gate := e.gates[provider]
 	if gate == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider gate is not configured")
 	}
 

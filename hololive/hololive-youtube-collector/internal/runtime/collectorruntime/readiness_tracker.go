@@ -75,7 +75,6 @@ func (t *readinessTracker) Snapshot() readinessTrackerSnapshot {
 
 func (t *readinessTracker) ApplyHandoff(snap readinessTrackerSnapshot, statuses []handoffStatus) (HandoffState, error) {
 	if t == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return HandoffNone, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "apply observation handoff: tracker is nil")
 	}
 
@@ -195,13 +194,11 @@ func (t *handoffTracker) retainHandoffCandidates(keep map[int64]bool) {
 
 func requireHandoffShape(ids []int64, statuses []handoffStatus) error {
 	if len(statuses) != len(ids) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status row count is invalid")
 	}
 
 	for i, item := range statuses {
 		if item.ObservationID != ids[i] {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status order is invalid")
 		}
 	}
@@ -231,7 +228,6 @@ func classifyHandoffRow(item handoffStatus) (HandoffState, bool, error) {
 		return HandoffProcessing, false, nil
 	}
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return HandoffNone, false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status is unknown")
 }
 

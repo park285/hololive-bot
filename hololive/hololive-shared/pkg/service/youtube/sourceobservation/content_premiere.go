@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/content"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/live"
 )
 
 func mergeContentPremieres(

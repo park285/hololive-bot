@@ -88,16 +88,30 @@ func TestReissuedReplyClientRequestID(t *testing.T) {
 
 	const base = "hololive:v1:message:m-1:reply:0"
 
-	assert.Equal(t, base, reissuedReplyClientRequestID(base, 0))
-	assert.Equal(t, base+":r1", reissuedReplyClientRequestID(base, 1))
-	assert.Equal(t, base+":r2", reissuedReplyClientRequestID(base, 2))
-	assert.Empty(t, reissuedReplyClientRequestID("", 1))
+	gen0, err := replyReissueLadder.ClientRequestID(base, 0)
+	require.NoError(t, err)
+	assert.Equal(t, base, gen0)
+
+	first, err := reissuedReplyClientRequestID(base, 1)
+	require.NoError(t, err)
+	assert.Equal(t, base+":r1", first)
+
+	second, err := reissuedReplyClientRequestID(base, 2)
+	require.NoError(t, err)
+	assert.Equal(t, base+":r2", second)
+
+	_, err = reissuedReplyClientRequestID("", 1)
+	require.Error(t, err)
 
 	maxBase := strings.Repeat("a", replyClientRequestIDMaxLen)
-	oversized := reissuedReplyClientRequestID(maxBase, 1)
+	oversized, err := reissuedReplyClientRequestID(maxBase, 1)
+	require.NoError(t, err)
 	assert.True(t, isValidReplyClientRequestID(oversized))
 	assert.True(t, strings.HasSuffix(oversized, ":r1"))
-	assert.Equal(t, oversized, reissuedReplyClientRequestID(maxBase, 1))
+
+	again, err := reissuedReplyClientRequestID(maxBase, 1)
+	require.NoError(t, err)
+	assert.Equal(t, oversized, again)
 }
 
 func TestReplyClientRequestIDIgnoresBody(t *testing.T) {

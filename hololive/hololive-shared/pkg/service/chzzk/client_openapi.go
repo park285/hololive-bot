@@ -109,7 +109,6 @@ func (c *Client) getOpenAPIContent[T any](ctx context.Context, op, reqURL string
 	var apiResp OpenAPIResponse[T]
 
 	if err := c.executeRequest(op, req, "read response body", apiResp.decode); err != nil {
-		//nolint:wrapcheck // executeRequest가 APIError를 그대로 넘겨주므로 정규화된 문자열을 유지한다.
 		return nil, err
 	}
 

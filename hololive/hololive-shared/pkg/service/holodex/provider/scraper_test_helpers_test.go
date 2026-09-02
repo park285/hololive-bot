@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 

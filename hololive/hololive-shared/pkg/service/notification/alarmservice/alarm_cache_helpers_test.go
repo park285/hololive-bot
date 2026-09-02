@@ -31,9 +31,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
 )
 
 func TestChannelSubscribersKeyByType(t *testing.T) {

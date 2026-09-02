@@ -32,11 +32,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/tier"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 

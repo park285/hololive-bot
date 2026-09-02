@@ -28,7 +28,7 @@ Structured allowlist: `repository-ownership.allowlist`.
 - The `hololive-api` bot plane must not import `hololive-alarm-worker/internal`; cross-runtime access uses documented internal HTTP/queue contracts.
 - `shared-go` must not import any `hololive/*` module.
 - The `hololive-api` bot and admin planes must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
-- `youtube-collector` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 read 소비자는 `pkg/service/alarmread`의 `Reader`를 `ProvideAlarmReader`로 주입받는다. `pkg/service/alarm/keys`는 제외 대상이 아니다.
+- `youtube-collector` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 read 소비자는 `internal/service/alarmread`의 `Reader`를 `pkg/providers.ProvideAlarmReader`로 주입받는다. `pkg/service/alarm/keys`는 제외 대상이 아니다.
 - Shared data ownership changes must update `repository-ownership.allowlist`.
 
 ## YouTube Runtime Role Separation

@@ -114,7 +114,6 @@ func (h RetryHint) validateAt() error {
 func CooldownUntil(message string, retryAt time.Time) error {
 	hint, err := NewRetryAtHint(retryAt)
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return New(Cooldown, ClassCooldown, message)
 	}
 

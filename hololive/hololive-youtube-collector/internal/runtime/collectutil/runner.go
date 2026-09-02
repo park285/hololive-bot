@@ -52,7 +52,6 @@ func NewContractSnapshot(required []contract.ObservationKind, values map[contrac
 func (s ContractSnapshot) Generation(kind contract.ObservationKind) (int64, error) {
 	generation := s.generations[kind]
 	if generation <= 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return 0, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation contract generation is missing")
 	}
 
@@ -105,7 +104,6 @@ func NewRunInput(
 	job sourceobservation.JobContract,
 ) (RunInput, error) {
 	if spec == nil || lease == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return RunInput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is invalid")
 	}
 
@@ -118,7 +116,6 @@ func NewRunInput(
 	}
 
 	if targets.Generation() != lease.ProjectionGeneration || targets.Membership() != job.Membership() {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return RunInput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection target snapshot identity does not match")
 	}
 
@@ -158,7 +155,6 @@ func validateRunInputIdentity(
 }
 
 func invalidRunInputError() error {
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is invalid")
 }
 
@@ -188,7 +184,6 @@ func (i *RunInput) Job() sourceobservation.JobContract {
 
 func (i *RunInput) Generation(kind contract.ObservationKind) (int64, error) {
 	if i == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return 0, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
@@ -202,12 +197,10 @@ func (i *RunInput) Generation(kind contract.ObservationKind) (int64, error) {
 
 func (i *RunInput) Allows(kind contract.ObservationKind, subject string) (bool, error) {
 	if i == nil || !kind.Valid() || subject == "" {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection target lookup is invalid")
 	}
 
 	if !i.job.Emits(kind) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return false, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "runner requested non-emission kind")
 	}
 
@@ -221,12 +214,10 @@ func (i *RunInput) Allows(kind contract.ObservationKind, subject string) (bool, 
 
 func (i *RunInput) Roster(kind contract.ObservationKind) ([]string, error) {
 	if i == nil || !kind.Valid() {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection roster lookup is invalid")
 	}
 
 	if !i.job.UsesRoster(kind) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "runner requested non-roster kind")
 	}
 
@@ -260,12 +251,10 @@ func NewRunOutput(
 	latency time.Duration,
 ) (RunOutput, error) {
 	if len(observations) > sourceobservation.MaxPublishBatchSize {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return RunOutput{}, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "observation batch exceeds publish limit")
 	}
 
 	if len(observations) != len(checkpoints) || latency < 0 || latency > sourceobservation.MaxCollectionLatency {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return RunOutput{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection output is invalid")
 	}
 
@@ -349,7 +338,6 @@ func cloneCheckpoints(values []sourceobservation.CheckpointEntry) []sourceobserv
 
 func PaginationOf(page *youtubejs.Pagination) (contract.Completeness, contract.Continuity, error) {
 	if page == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", "", collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pagination is nil")
 	}
 

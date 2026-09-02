@@ -41,7 +41,6 @@ func callNewBotSafely(deps *Dependencies) (created *Bot, recovered any, err erro
 
 	created, err = NewBot(deps)
 	if err != nil {
-		//nolint:wrapcheck // NewBot의 fail-fast 오류 문구를 그대로 대조하는 헬퍼라, 여기서 감싸면 검증 대상 계약이 사라진다.
 		return nil, nil, err
 	}
 

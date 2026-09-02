@@ -33,8 +33,8 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 func (d *SendEngine) dispatchDeliveryRows(

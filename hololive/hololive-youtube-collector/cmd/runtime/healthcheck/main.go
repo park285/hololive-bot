@@ -1,122 +1,54 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 	_ "time/tzdata"
 
 	"github.com/park285/shared-go/v2/pkg/healthprobe"
-
-	"github.com/kapu/hololive-shared/pkg/contracts/common"
 )
 
 const externalSmokeURL = "https://www.google.com/generate_204"
 
+// --smoke는 collector 이미지 계약이라 여기서 소유한다: 시간대 데이터와 함께 내부 CA override를 걷어낸
+// 시스템 CA 번들로 외부 HTTPS를 검증한다. 나머지 모드는 shared-go healthprobe CLI를 그대로 쓴다.
 func main() {
-	args := os.Args[1:]
-	if len(args) == 2 && args[0] == "--body" {
-		runBody(args[1])
-
-		return
+	if len(os.Args) == 2 && os.Args[1] == "--smoke" {
+		os.Exit(runSmoke())
 	}
 
-	if len(args) == 3 && args[0] == "--body-api-key-env" {
-		runBodyWithAPIKeyEnv(args[1], args[2])
-
-		return
-	}
-
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: healthcheck <url>|--body <url>|--body-api-key-env <env> <url>|--smoke")
-		os.Exit(2)
-	}
-
-	if args[0] == "--smoke" {
-		runSmoke()
-
-		return
-	}
-
-	runCheck(args[0])
+	os.Exit(healthprobe.RunMain(os.Args, os.Stdout, os.Stderr))
 }
 
-func runBody(url string) {
-	body, err := healthprobe.FetchURLInternal(url)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	if _, err := os.Stdout.Write(body); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func runBodyWithAPIKeyEnv(envName, url string) {
-	body, err := fetchBodyWithAPIKeyEnv(envName, url)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	if _, err := os.Stdout.Write(body); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func fetchBodyWithAPIKeyEnv(envName, url string) ([]byte, error) {
-	envName = strings.TrimSpace(envName)
-	if envName == "" {
-		return nil, errors.New("api key env name must not be empty")
-	}
-
-	apiKey := os.Getenv(envName)
-	if strings.TrimSpace(apiKey) == "" {
-		return nil, fmt.Errorf("%s is empty or not set", envName)
-	}
-
-	out, err := healthprobe.FetchURLWithHeadersInternal(url, map[string]string{common.APIKeyHeader: apiKey})
-	if err != nil {
-		return out, fmt.Errorf("fetch URL with headers internal: %w", err)
-	}
-
-	return out, nil
-}
-
-func runCheck(url string) {
-	if err := healthprobe.CheckURLInternal(url); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func runSmoke() {
+func runSmoke() int {
 	for _, name := range []string{"Asia/Seoul", "Asia/Tokyo", "UTC"} {
 		if _, err := time.LoadLocation(name); err != nil {
 			fmt.Fprintf(os.Stderr, "load location %s: %v\n", name, err)
-			os.Exit(1)
+
+			return 1
 		}
 	}
 
 	if err := clearInternalTLSOverrides(); err != nil {
 		fmt.Fprintf(os.Stderr, "https ca smoke: %v\n", err)
-		os.Exit(1)
+
+		return 1
 	}
 
 	if err := healthprobe.CheckURL(externalSmokeURL); err != nil {
 		fmt.Fprintf(os.Stderr, "https ca smoke: %v\n", err)
-		os.Exit(1)
+
+		return 1
 	}
 
 	if _, err := fmt.Fprintln(os.Stdout, "smoke ok"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+
+		return 1
 	}
+
+	return 0
 }
 
 func clearInternalTLSOverrides() error {

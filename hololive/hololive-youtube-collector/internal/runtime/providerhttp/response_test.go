@@ -393,7 +393,6 @@ func (c *countingReadCloser) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.reads.Add(int64(n))
 
-	//nolint:wrapcheck // 검사 대상 reader가 io.EOF 등가 비교에 의존하므로 센티널을 그대로 돌려준다.
 	return n, err
 }
 

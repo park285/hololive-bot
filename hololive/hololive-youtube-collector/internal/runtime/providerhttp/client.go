@@ -29,7 +29,6 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "http.DefaultTransport is not *http.Transport")
 	}
 
@@ -57,7 +56,6 @@ func NewProviderHTTPClient(cfg ProviderTransportConfig) (*ProviderHTTPClient, er
 
 func WrapProviderHTTPDoer(doer HTTPDoer) (*ProviderHTTPClient, error) {
 	if doer == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP doer is nil")
 	}
 
@@ -78,12 +76,10 @@ func rejectRedirect(_ *http.Request, _ []*http.Request) error {
 
 func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if c == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP client is not configured")
 	}
 
 	if req == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "provider HTTP request is nil")
 	}
 
@@ -97,7 +93,6 @@ func (c *ProviderHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	if c.client == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider HTTP client is not configured")
 	}
 

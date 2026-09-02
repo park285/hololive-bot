@@ -36,13 +36,13 @@ import (
 	"testing"
 	"time"
 
+	apiclient "github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
+	htmlscraper "github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
+	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	apiclient "github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient"
-	htmlscraper "github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	ytscraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )

@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
 func verifyLiveEndpointRequest(method, path, org, wantStatus string, params url.Values) error {

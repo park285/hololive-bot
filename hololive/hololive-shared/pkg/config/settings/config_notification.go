@@ -25,4 +25,6 @@ import "time"
 type NotificationConfig struct {
 	AdvanceMinutes []int
 	CheckInterval  time.Duration
+	// AlarmShortLinkBaseURL: 알람 dispatch 본문의 YouTube short link origin(ALARM_SHORT_LINK_BASE_URL). 비어 있으면 short link를 쓰지 않는다.
+	AlarmShortLinkBaseURL string
 }

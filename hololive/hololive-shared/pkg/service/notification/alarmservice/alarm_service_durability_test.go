@@ -13,14 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
+	"github.com/kapu/hololive-shared/internal/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/pkg/service/notification/platformmap"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
@@ -481,8 +481,8 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			},
 			wantEvent:    "sync platform alarm mapping after add.failed",
 			wantMessage:  "Failed to sync platform alarm mapping after add",
-			wantErrorTyp: "errorString",
-			wantErrorMsg: "member data provider not configured",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 		{
 			name: "after_remove_sync_platform_mapping",
@@ -493,8 +493,8 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			},
 			wantEvent:    "sync platform alarm mapping after remove.failed",
 			wantMessage:  "Failed to sync platform alarm mapping after remove",
-			wantErrorTyp: "errorString",
-			wantErrorMsg: "member data provider not configured",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 		{
 			name: "clear_room_cleanup_channel_registry",
@@ -519,8 +519,8 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			},
 			wantEvent:    "sync platform alarm mapping after clear.failed",
 			wantMessage:  "Failed to sync platform alarm mapping after clear",
-			wantErrorTyp: "errorString",
-			wantErrorMsg: "member data provider not configured",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 	}
 }

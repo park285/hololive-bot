@@ -32,8 +32,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
+	sharedserver "github.com/kapu/hololive-api/internal/server/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedserver "github.com/kapu/hololive-shared/pkg/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"
 )

@@ -25,7 +25,7 @@ class StructureBudgetTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def write_policy(self) -> None:
+    def write_policy(self, *, forbid_partition_files: bool = False) -> None:
         self.policy.write_text(
             json.dumps(
                 {
@@ -40,6 +40,7 @@ class StructureBudgetTest(unittest.TestCase):
                         "complexity": {"advisory": 8, "hard": 16},
                         "nesting": {"advisory": 5, "hard": 8},
                     },
+                    "forbid_partition_files": forbid_partition_files,
                 }
             ),
             encoding="utf-8",
@@ -141,6 +142,16 @@ class StructureBudgetTest(unittest.TestCase):
         line_finding = next(item for item in findings if item["rule"] == "function_lines")
         self.assertEqual(line_finding["id"], "function_lines:long.go:Huge")
 
+
+    def test_partition_file_suffix_is_hard_invariant(self) -> None:
+        self.write_lines("internal/a_part2.go", 3)
+        self.assertEqual(self.run_analyzer("hard", component="files").returncode, 0)
+        self.write_policy(forbid_partition_files=True)
+        report = self.run_analyzer("hard", component="files")
+        self.assertEqual(report.returncode, 1)
+        finding = json.loads(report.stdout)["findings"][0]
+        self.assertEqual(finding["id"], "partition_file:internal/a_part2.go")
+        self.assertEqual(finding["level"], "hard_invariant")
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	settingssvc "github.com/kapu/hololive-shared/pkg/service/settings"
 )
 

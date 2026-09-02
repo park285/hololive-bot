@@ -25,10 +25,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
 	iris "github.com/park285/iris-client-go/v2/iris"
+	"github.com/park285/shared-go/v2/pkg/irisdurable"
 )
 
 const (
@@ -42,6 +44,13 @@ const (
 	replyClientRequestIDMinLen = 8
 	replyClientRequestIDMaxLen = 160
 )
+
+// replyReissueLadder는 스택 공통 bounded reissue 사다리다. 세대 상한과 :rN 규칙은 iris-client-go가
+// 소유하고, hololive는 base가 길이 제약으로 :rN을 못 붙일 때의 hashed base 파생만 더한다.
+var replyReissueLadder = irisdurable.ReissueLadder{
+	MaxGenerations: iris.ReplyReissueMaxGenerations,
+	Derive:         reissuedReplyClientRequestID,
+}
 
 func nextReplyClientRequestID(ctx context.Context) string {
 	identity, ordinal, ok := nextReplyEmission(ctx)
@@ -76,35 +85,30 @@ func formatReplyClientRequestID(token string, ordinal uint64) string {
 	}, ":")
 }
 
-func reissuedReplyClientRequestID(clientRequestID string, generation int) string {
+// reissuedReplyClientRequestID는 replyReissueLadder의 Derive다. 범위 밖 세대, 이미 재발급된 base,
+// 빈 base는 오류로 남겨 clientRequestId 없이 재전송되는 일이 없게 한다.
+func reissuedReplyClientRequestID(clientRequestID string, generation int) (string, error) {
 	clientRequestID = strings.TrimSpace(clientRequestID)
-
-	if generation <= 0 {
-		return clientRequestID
-	}
-
-	if clientRequestID == "" {
-		return ""
-	}
 
 	candidate, err := iris.ReissuedClientRequestID(clientRequestID, generation)
 	if err == nil {
-		return candidate
+		return candidate, nil
 	}
 
-	if errors.Is(err, iris.ErrReplyReissueGenerationOutOfRange) ||
+	if clientRequestID == "" ||
+		errors.Is(err, iris.ErrReplyReissueGenerationOutOfRange) ||
 		errors.Is(err, iris.ErrReplyReissueBaseAlreadyReissued) {
-		return ""
+		return "", fmt.Errorf("reissue reply clientRequestId: %w", err)
 	}
 
 	fallbackBase := formatReplyClientRequestID(hashedReplyIDToken(clientRequestID), 0)
 
 	candidate, err = iris.ReissuedClientRequestID(fallbackBase, generation)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("reissue hashed reply clientRequestId: %w", err)
 	}
 
-	return candidate
+	return candidate, nil
 }
 
 func hashedReplyIDToken(messageID string) string {

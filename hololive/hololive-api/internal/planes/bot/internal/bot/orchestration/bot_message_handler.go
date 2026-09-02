@@ -98,13 +98,12 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 
 	reqCtx = transport.WithRoomChat(reqCtx, envelope.RoomType, envelope.RoomLinkID)
 
-	if err := b.executeCommand(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
+	if err := b.ensureCommandExecutor().Execute(reqCtx, cmdCtx, envelope.Parsed.Type, envelope.Parsed.Params); err != nil {
 		responseErr := b.handleCommandExecutionError(reqCtx, envelope.ChatID, commandType, err)
 		if responseErr != nil {
 			return commandOutcomeUnknownError{cause: errors.Join(err, responseErr)}
 		}
 
-		//nolint:wrapcheck // command outcome 분류 결과는 이미 최종 오류 계약이며 중간 접두사를 추가하지 않는다.
 		return commandOutcome(err)
 	}
 
@@ -115,11 +114,6 @@ func (b *Bot) ProcessMessage(ctx context.Context, message *webhook.Message) (res
 // 동일한 결정적 ingress 조건을 적용합니다.
 func (b *Bot) AcceptsMessage(ctx context.Context, message *webhook.Message) bool {
 	return b.ensureIngress().Accepts(ctx, message)
-}
-
-func (b *Bot) executeCommand(ctx context.Context, cmdCtx *domain.CommandContext, cmdType domain.CommandType, params map[string]any) error {
-	//nolint:wrapcheck // command router가 command name과 실행 context를 소유하므로 이 위임 계층은 원인을 그대로 전달한다.
-	return b.ensureCommandExecutor().Execute(ctx, cmdCtx, cmdType, params)
 }
 
 func newCommandContextFromIngress(envelope *ingress.Envelope) *domain.CommandContext {
@@ -196,7 +190,6 @@ func (b *Bot) handleCommandExecutionError(ctx context.Context, chatID, commandTy
 		attrs = append(attrs, errorAttrs...)
 		sharedlog.Error(ctx, b.logger, EventBotCommandErrorResponseFailed, "failed to send command error response", attrs...)
 
-		//nolint:wrapcheck // sendError의 redacted transport 오류는 이 계층에서 추가할 정보가 없다.
 		return sendErr
 	}
 

@@ -24,7 +24,7 @@ import (
 	"context"
 	stdErrors "errors"
 
-	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient"
+	"github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
 )
 
 func (h *Service) shouldUseFallback(ctx context.Context, err error) bool {

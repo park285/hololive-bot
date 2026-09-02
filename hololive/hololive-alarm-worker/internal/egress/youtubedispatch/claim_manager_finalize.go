@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 	format "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
 	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"

@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/live"
 )
 
 func (r *Repository) FinalizeNextDueLiveEnd(ctx context.Context, grace time.Duration) (bool, error) {

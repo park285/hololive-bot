@@ -33,10 +33,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedalarmkeys "github.com/kapu/hololive-shared/pkg/service/alarm/keys"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
 )
 
 func newDiscardAlarmLogger() *slog.Logger {

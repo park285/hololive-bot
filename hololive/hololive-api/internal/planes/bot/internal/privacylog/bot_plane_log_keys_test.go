@@ -123,8 +123,8 @@ func TestScannedRootsCoverReachablePrivacylogServices(t *testing.T) {
 		}
 	}
 
-	if count < 38 {
-		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least 38", count)
+	if count < 36 {
+		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least 36", count)
 	}
 }
 

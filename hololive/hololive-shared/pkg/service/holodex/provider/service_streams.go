@@ -31,9 +31,9 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
 func SupportedStreamOrgParams() []string {

@@ -6,7 +6,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -14,6 +13,7 @@ import (
 
 func TargetSnapshot(
 	tb testing.TB,
+	pool *pgxpool.Pool,
 	spec *joblease.JobSpec,
 	job sourceobservation.JobContract,
 	subjects map[contract.ObservationKind][]string,
@@ -21,7 +21,6 @@ func TargetSnapshot(
 	tb.Helper()
 
 	ctx := tb.Context()
-	pool := dbtest.NewPool(tb)
 
 	var generation int64
 

@@ -200,7 +200,6 @@ func (r *exactTargetRows) add(kind contract.ObservationKind, enabled bool) error
 
 	r.enabledCount++
 	if r.enabledCount > r.maxRosterRows {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.TargetRosterTooLarge, collecterr.ClassResourceLimit, "target roster exceeds configured limit")
 	}
 

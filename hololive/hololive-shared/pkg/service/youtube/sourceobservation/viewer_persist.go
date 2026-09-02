@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/viewer"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/viewer"
 )
 
 func lockViewerSubject(ctx context.Context, tx dbx.Tx, videoID string) error {

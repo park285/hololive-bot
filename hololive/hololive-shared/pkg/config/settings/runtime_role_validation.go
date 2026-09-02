@@ -103,12 +103,10 @@ func validateProductionAlarmExecutors(profile *AlarmWorkerProfile) error {
 
 func validateNoNotificationEgressOwnership(runtime string) error {
 	if err := validateNotificationRoleEnvValues(); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
 	if err := rejectReservedEgressRoles(runtime); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
@@ -117,12 +115,10 @@ func validateNoNotificationEgressOwnership(runtime string) error {
 
 func validateNotificationRoleEnvValues() error {
 	if err := validateKnownNotificationRoleEnv(notificationEgressRoleEnv, notificationEgressRoleOwner, notificationEgressRoleProducer, notificationEgressRoleOff); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
 	if err := validateKnownNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker, notificationSchedulerRoleOff); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
@@ -143,7 +139,6 @@ func rejectReservedEgressRoles(runtime string) error {
 
 func validateAlarmWorkerOwnership(environment string) error {
 	if err := validateNotificationRoleEnvValues(); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
@@ -152,7 +147,6 @@ func validateAlarmWorkerOwnership(environment string) error {
 	}
 
 	if err := validateProductionAlarmWorkerOwnership(); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
@@ -161,12 +155,10 @@ func validateAlarmWorkerOwnership(environment string) error {
 
 func validateProductionAlarmWorkerOwnership() error {
 	if err := requireNotificationRoleEnv(notificationEgressRoleEnv, notificationEgressRoleOwner); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 
 	if err := requireNotificationRoleEnv(notificationSchedulerRoleEnv, notificationSchedulerRoleWorker, notificationSchedulerRoleOff); err != nil {
-		//nolint:wrapcheck // 하위 검증 함수가 어떤 환경변수가 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return err
 	}
 

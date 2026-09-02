@@ -26,6 +26,7 @@ func InitBotInfrastructure(ctx context.Context, appConfig *settings.Config, logg
 	}
 
 	irisClient, err := providers.ProvideIrisClient(
+		&appConfig.Iris,
 		logger,
 		iris.WithBaseURL(appConfig.Iris.BaseURL),
 		iris.WithBotToken(appConfig.Iris.BotToken),

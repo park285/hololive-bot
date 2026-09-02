@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -195,7 +196,7 @@ func officialInput(tb testing.TB) *collectutil.RunInput {
 		tb.Fatal(err)
 	}
 
-	targets := testutil.TargetSnapshot(tb, &spec, job, map[contract.ObservationKind][]string{
+	targets := testutil.TargetSnapshot(tb, dbtest.NewPool(tb), &spec, job, map[contract.ObservationKind][]string{
 		contract.KindSchedule: {officialScheduleSubject},
 	})
 

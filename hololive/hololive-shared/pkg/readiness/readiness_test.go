@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/kapu/hololive-shared/pkg/health"
+	"github.com/park285/shared-go/v2/pkg/health"
 )
 
 func okCheck(name string) Check {

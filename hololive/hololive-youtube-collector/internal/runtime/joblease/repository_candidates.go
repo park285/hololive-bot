@@ -92,7 +92,6 @@ func (r *Repository) validateCandidateRequest(generation int64, job sourceobserv
 	}
 
 	if !r.isCanonicalJob(job) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: job contract is not canonical")
 	}
 
@@ -216,7 +215,6 @@ func collectCandidatePage(
 	}
 
 	if !sawRow {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return CandidatePage{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: candidate page is missing projection status")
 	}
 
@@ -270,12 +268,10 @@ func scanCandidateRow(rows interface{ Scan(dest ...any) error }) (candidateRow, 
 
 func specFromCandidateRow(job sourceobservation.JobContract, row candidateRow) (JobSpec, error) {
 	if row.minMS <= 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has no poll interval")
 	}
 
 	if row.minMS != row.maxMS {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return JobSpec{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: target bundle has mixed poll intervals")
 	}
 
@@ -297,7 +293,6 @@ func specFromCandidateRow(job sourceobservation.JobContract, row candidateRow) (
 func cadenceKindValues(job sourceobservation.JobContract) ([]string, error) {
 	kinds := job.CadenceKinds()
 	if len(kinds) == 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "list collection job candidates: cadence kinds are empty")
 	}
 

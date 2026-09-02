@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-api/internal/service/subscriptionclient"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/service/internalhttp"
-	"github.com/kapu/hololive-shared/pkg/service/subscriptionclient"
 )
 
 type Client struct {

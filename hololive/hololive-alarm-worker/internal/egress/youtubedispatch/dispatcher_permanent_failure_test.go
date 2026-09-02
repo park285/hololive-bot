@@ -11,8 +11,8 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
+	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 type sentinelFailureSender struct {

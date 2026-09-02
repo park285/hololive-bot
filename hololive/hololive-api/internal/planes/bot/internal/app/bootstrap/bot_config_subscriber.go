@@ -4,9 +4,9 @@ import (
 	"context"
 	"log/slog"
 
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/scheduler"

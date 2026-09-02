@@ -3,21 +3,22 @@ package modules
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 )
 
 func TestResolvePersistedTargetMinutes_UsesRuntimeNormalizationForStoredMinute(t *testing.T) {
-	t.Setenv("SETTINGS_DIR", t.TempDir())
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 
 	logger := slog.New(slog.DiscardHandler)
 
-	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":1,"scraperProxyEnabled":false}`), 0o600); err != nil {
+	if err := os.WriteFile(settingsPath, []byte(`{"alarmAdvanceMinutes":1,"scraperProxyEnabled":false}`), 0o600); err != nil {
 		t.Fatalf("write legacy settings file: %v", err)
 	}
 
-	got := ResolvePersistedTargetMinutes([]int{9, 5, 1}, false, logger)
+	got := ResolvePersistedTargetMinutes(settingsPath, []int{9, 5, 1}, false, logger)
 	want := sharedchecker.BuildRuntimeTargetMinutes(1)
 
 	if len(got) != len(want) {
@@ -33,9 +34,9 @@ func TestResolvePersistedTargetMinutes_UsesRuntimeNormalizationForStoredMinute(t
 
 func TestResolvePersistedTargetMinutes_FallsBackWhenSettingsMissing(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("SETTINGS_DIR", dir)
+	settingsPath := filepath.Join(dir, "settings.json")
 
-	got := ResolvePersistedTargetMinutes([]int{5}, false, nil)
+	got := ResolvePersistedTargetMinutes(settingsPath, []int{5}, false, nil)
 	want := []int{5, 3, 1}
 
 	if len(got) != len(want) {
@@ -54,9 +55,9 @@ func TestResolvePersistedTargetMinutes_FallsBackWhenSettingsMissing(t *testing.T
 }
 
 func TestResolvePersistedTargetMinutes_PreservesExplicitMultiTargetWhenSettingsMissing(t *testing.T) {
-	t.Setenv("SETTINGS_DIR", t.TempDir())
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 
-	got := ResolvePersistedTargetMinutes([]int{30, 15, 5, 1}, false, nil)
+	got := ResolvePersistedTargetMinutes(settingsPath, []int{30, 15, 5, 1}, false, nil)
 	want := []int{30, 15, 5, 1}
 
 	if len(got) != len(want) {
@@ -71,15 +72,15 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitMultiTargetWhenSettingsM
 }
 
 func TestResolvePersistedTargetMinutes_FallsBackWhenPersistedMinuteIsInvalid(t *testing.T) {
-	t.Setenv("SETTINGS_DIR", t.TempDir())
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 
 	logger := slog.New(slog.DiscardHandler)
 
-	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":0,"scraperProxyEnabled":false}`), 0o600); err != nil {
+	if err := os.WriteFile(settingsPath, []byte(`{"alarmAdvanceMinutes":0,"scraperProxyEnabled":false}`), 0o600); err != nil {
 		t.Fatalf("write invalid settings file: %v", err)
 	}
 
-	got := ResolvePersistedTargetMinutes([]int{30, 15, 5, 1}, false, logger)
+	got := ResolvePersistedTargetMinutes(settingsPath, []int{30, 15, 5, 1}, false, logger)
 	want := []int{30, 15, 5, 1}
 
 	if len(got) != len(want) {
@@ -94,10 +95,10 @@ func TestResolvePersistedTargetMinutes_FallsBackWhenPersistedMinuteIsInvalid(t *
 }
 
 func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUpdate(t *testing.T) {
-	t.Setenv("SETTINGS_DIR", t.TempDir())
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 
 	logger := slog.New(slog.DiscardHandler)
-	service := BuildSettingsService([]int{30, 15, 5, 1}, false, logger)
+	service := BuildSettingsService(settingsPath, []int{30, 15, 5, 1}, false, logger)
 	current := service.Get()
 
 	current.ScraperProxyEnabled = true
@@ -106,7 +107,7 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 		t.Fatalf("update settings: %v", err)
 	}
 
-	got := ResolvePersistedTargetMinutes([]int{30, 15, 5, 1}, false, logger)
+	got := ResolvePersistedTargetMinutes(settingsPath, []int{30, 15, 5, 1}, false, logger)
 	want := []int{30, 15, 5, 1}
 
 	if len(got) != len(want) {
@@ -121,15 +122,15 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 }
 
 func TestResolvePersistedTargetMinutes_HealsLegacyStoredTargetMinutes(t *testing.T) {
-	t.Setenv("SETTINGS_DIR", t.TempDir())
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 
 	logger := slog.New(slog.DiscardHandler)
 
-	if err := os.WriteFile(resolveSettingsFilePath(), []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
+	if err := os.WriteFile(settingsPath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
 		t.Fatalf("write legacy settings file: %v", err)
 	}
 
-	got := ResolvePersistedTargetMinutes([]int{9, 5, 1}, false, logger)
+	got := ResolvePersistedTargetMinutes(settingsPath, []int{9, 5, 1}, false, logger)
 	want := []int{5, 3, 1}
 
 	if len(got) != len(want) {

@@ -15,8 +15,7 @@ func (as *AlarmService) SyncPlatformMappings(ctx context.Context) error {
 
 func (as *AlarmService) syncPlatformMappingForChannel(ctx context.Context, channelID string) error {
 	if err := as.platformMapper.SyncForChannel(ctx, channelID); err != nil {
-		//nolint:wrapcheck // background warning telemetry pins the mapper error's concrete type and exact text.
-		return err
+		return fmt.Errorf("sync platform mapping for channel: %w", err)
 	}
 
 	return nil

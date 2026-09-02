@@ -62,7 +62,6 @@ func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagn
 	}
 
 	if classification, ok := fixedProviderStatuses[status]; ok {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(classification.code, classification.class, message)
 	}
 
@@ -71,18 +70,15 @@ func mapProviderStatus(provider contract.Provider, status int, retryAfter, diagn
 
 func mapUnknownProviderStatus(status int, message string) error {
 	if status >= 500 && status < 600 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassTransient, message)
 	}
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, message)
 }
 
 func mapServiceUnavailable(message, retryAfter string) error {
 	hint := collecterr.ParseRetryAfter(retryAfter, time.Time{})
 	if hint.Kind() == collecterr.RetryDefault {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassTransient, message)
 	}
 
@@ -134,7 +130,6 @@ func MapRequestError(action string, err error, secrets ...string) error {
 	}
 
 	if collecterr.IsUnclassified(normalized) {
-		//nolint:wrapcheck // 미분류 오류의 전체 텍스트가 계약이라 접두어를 덧붙이면 안 된다.
 		return unclassifiedRedacted(cause)
 	}
 
@@ -170,7 +165,6 @@ func RedactError(err error, secrets ...string) error {
 // collecterr는 미분류 생성자를 노출하지 않는다. 평문 문자열 오류는 context/transient 판정에
 // 걸리지 않으므로 FromContext가 항상 기본 버킷(Internal, unclassified)으로 떨어뜨린다.
 func unclassifiedRedacted(redactedErr error) error {
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return collecterr.FromContext(redactedErr)
 }
 

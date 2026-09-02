@@ -22,6 +22,7 @@ package summarizer
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -354,4 +355,48 @@ func (s *EventSummarizer) runDualSearch(ctx context.Context, summaryType Summary
 	}
 
 	return "", nil
+}
+
+func (s *EventSummarizer) buildSummaryResponse(
+	ctx context.Context,
+	events []domain.MajorEvent,
+	summaryType SummaryType,
+	periodKey, searchContext string,
+) (*summaryResponse, error) {
+	sysPrompt, err := getSystemPrompt(summaryType)
+	if err != nil {
+		return nil, fmt.Errorf("get system prompt: %w", err)
+	}
+
+	userPrompt := buildUserPrompt(events, summaryType, periodKey, searchContext)
+	schema := summaryResponseSchema()
+
+	rawJSON, err := s.llm.GenerateJSON(ctx, sysPrompt, userPrompt, schema)
+	if err != nil {
+		return nil, fmt.Errorf("generate summary json: %w", err)
+	}
+
+	var resp summaryResponse
+
+	if err := jsonv2.Unmarshal([]byte(rawJSON), &resp); err != nil {
+		return nil, fmt.Errorf("parse summary json: %w", err)
+	}
+
+	return &resp, nil
+}
+
+func filterTrustedDiscoveredEvents(input []discoveredEvent) []discoveredEvent {
+	if len(input) == 0 {
+		return input
+	}
+
+	filtered := make([]discoveredEvent, 0, len(input))
+	for i := range input {
+		item := input[i]
+		if isTrustedDiscoveredSource(item.Source) {
+			filtered = append(filtered, item)
+		}
+	}
+
+	return filtered
 }

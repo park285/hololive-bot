@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/stats"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/stats"
 )
 
 func loadStatsState(ctx context.Context, tx dbx.Tx, channelID string, scheduledFor time.Time) (stats.State, error) {

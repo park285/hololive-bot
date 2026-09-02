@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 type youtubeOutboxKaringTestSender struct {

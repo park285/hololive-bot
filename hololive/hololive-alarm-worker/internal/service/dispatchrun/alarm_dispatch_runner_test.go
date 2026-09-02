@@ -937,7 +937,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	group := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{first, second})[0]
 
-	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, group)
+	message, err := renderAlarmDispatchGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## ⏰ 방송 1분 전\n\n"+
@@ -967,7 +967,7 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## 🔴 방송 시작\n\n"+
@@ -997,7 +997,7 @@ func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader
 		notifications: []domain.AlarmNotification{first.Notification, second.Notification},
 	}
 
-	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, group)
+	message, err := renderAlarmDispatchNotificationGroup(t.Context(), newAlarmDispatchTestRenderer(t), nil, nil, "", group)
 
 	require.NoError(t, err)
 	assert.Equal(t, "## ⏰ 방송 5분 전\n\n"+

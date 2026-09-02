@@ -31,6 +31,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/irisdurable"
 )
 
 var (
@@ -74,8 +75,9 @@ const (
 	replyOutboxStatusSubmitting = "submitting"
 	replyOutboxStatusAccepted   = "accepted"
 
-	ReplyOutboxMaxAttempts            = int32(5)
-	ReplyOutboxAutomaticReplayHorizon = 144 * time.Hour
+	ReplyOutboxMaxAttempts = int32(5)
+	// 자동 replay 지평은 스택 공통 irisdurable 상수가 소유한다(Iris 수용 보존 168h - 24h 여유).
+	ReplyOutboxAutomaticReplayHorizon = irisdurable.AutomaticReplayHorizon
 )
 
 const (
@@ -207,7 +209,6 @@ func (r *ReplyOutboxRepository) Insert(ctx context.Context, entry *ReplyOutboxEn
 		normalized.ClientRequestID,
 	)
 	if err != nil {
-		//nolint:wrapcheck // sanitizer가 operation과 익명 message token을 이미 소유하므로 중간 repository context를 추가하지 않는다.
 		return ReplyOutboxInserted, safeMessageRepositoryError("insert reply outbox row", normalized.MessageID, err)
 	}
 
@@ -232,7 +233,6 @@ func (r *ReplyOutboxRepository) classifyRecordedPayload(ctx context.Context, ent
 	err := r.pool.QueryRow(ctx, replyOutboxConflictSQL, entry.MessageID, entry.Phase, entry.Ordinal).
 		Scan(&recordedHash, &recordedClientRequestID)
 	if err != nil {
-		//nolint:wrapcheck // sanitizer가 operation과 익명 message token을 이미 소유하므로 중간 repository context를 추가하지 않는다.
 		return ReplyOutboxAlreadyRecorded,
 			safeMessageRepositoryError("inspect reply outbox row", entry.MessageID, err)
 	}

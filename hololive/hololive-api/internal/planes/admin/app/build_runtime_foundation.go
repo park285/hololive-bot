@@ -104,7 +104,7 @@ func buildAlarmModeComponents(
 		}, nil
 	}
 
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
+	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 
 	alarmService, err := alarmservice.NewAlarmService(cacheClient, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {

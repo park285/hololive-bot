@@ -6,9 +6,9 @@ import (
 
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 )
 
 func buildAdminAPISettingsApplier(

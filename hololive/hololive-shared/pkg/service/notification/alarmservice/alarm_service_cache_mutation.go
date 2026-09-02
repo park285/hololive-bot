@@ -283,7 +283,6 @@ func (as *AlarmService) collectEmptySubscriberKeys(ctx context.Context, builder 
 	for i, result := range results {
 		count, err := result.AsInt64()
 		if err != nil {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, formatSubscriberScardError(operation, subscriberKeys, alarmTypes, i, err)
 		}
 

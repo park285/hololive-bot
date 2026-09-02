@@ -32,6 +32,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/workercontract"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/llm"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
@@ -471,7 +473,7 @@ func TestProvideMemberNewsLLMClient_NewEnvEndToEnd(t *testing.T) {
 		t.Fatalf("resolve API worker profile fixture: %v", err)
 	}
 
-	t.Setenv(settings.StackWorkerProfileFileEnv, workerProfile)
+	t.Setenv(workercontract.ProfileFileEnv, workerProfile)
 
 	appConfig, err := settings.LoadBotRuntime()
 	if err != nil {

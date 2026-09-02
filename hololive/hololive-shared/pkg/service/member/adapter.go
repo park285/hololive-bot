@@ -117,7 +117,6 @@ func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 
 	members, err := a.cache.AllMembers(memberAdapterContext(a.ctx))
 	if err != nil {
-		//nolint:wrapcheck // Cache.AllMembers가 이미 완결된 오류를 만든다. 여기서 감싸면 같은 말이 한 겹 더 붙는다.
 		return nil, err
 	}
 

@@ -31,18 +31,15 @@ func (r *ViewerRunner) JobID() sourceobservation.JobID {
 
 func (r *ViewerRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if invalidViewerRunner(r) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js viewer client is not configured")
 	}
 
 	if input == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "collection run input is nil")
 	}
 
 	spec := input.Spec()
 	if looksLikeYouTubeChannelID(spec.SubjectKey) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "viewer_sample subject must be a video id")
 	}
 

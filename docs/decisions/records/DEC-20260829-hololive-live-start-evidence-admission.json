@@ -13,14 +13,14 @@
     "docs/current/architecture/youtube-three-provider-convergence-contract-v2-20260814.md#LIVE 시작 증거 입장 정책"
   ],
   "evidence": [
-    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/live_start_test.go",
+    "hololive/hololive-shared/internal/service/youtube/reconcile/live/live_start_test.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_start_admission_test.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_start_persist_test.go"
   ],
   "implementation": [
-    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply_absence.go",
-    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/apply_positive.go",
-    "hololive/hololive-shared/pkg/service/youtube/reconcile/live/types.go",
+    "hololive/hololive-shared/internal/service/youtube/reconcile/live/apply_absence.go",
+    "hololive/hololive-shared/internal/service/youtube/reconcile/live/apply_positive.go",
+    "hololive/hololive-shared/internal/service/youtube/reconcile/live/types.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_consumer.go"
   ],
   "supersedes": [],

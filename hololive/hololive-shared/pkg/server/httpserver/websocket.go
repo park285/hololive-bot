@@ -22,24 +22,20 @@ package httpserver
 
 import (
 	"net/http"
-	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
 )
 
-// wsAllowedOrigins: 환경변수 WEBSOCKET_ALLOWED_ORIGINS에서 로드된 허용 오리진 목록.
+// wsAllowedOrigins: 설정(ServerConfig.WebSocketAllowedOrigins)이 넘긴 허용 오리진 목록.
 var wsAllowedOrigins atomic.Pointer[[]string]
 
-func init() {
-	InitWSUpgrader()
-}
-
-// 비어있으면 모든 WebSocket 연결을 거부합니다 (secure default).
-func InitWSUpgrader() {
-	origins := parseOrigins(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
-	wsAllowedOrigins.Store(&origins)
+// InitWSUpgrader는 허용 오리진을 저장한다. 비어 있으면 모든 WebSocket 연결을 거부한다(secure default).
+func InitWSUpgrader(origins []string) {
+	copied := slices.Clone(origins)
+	wsAllowedOrigins.Store(&copied)
 }
 
 func allowedWSOrigins() []string {
@@ -48,25 +44,6 @@ func allowedWSOrigins() []string {
 	}
 
 	return nil
-}
-
-// parseOrigins: 쉼표 구분 문자열을 파싱하여 공백 제거 후 오리진 슬라이스 반환.
-func parseOrigins(raw string) []string {
-	if strings.TrimSpace(raw) == "" {
-		return nil
-	}
-
-	parts := strings.Split(raw, ",")
-	origins := make([]string, 0, len(parts))
-
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
-		if trimmed != "" {
-			origins = append(origins, trimmed)
-		}
-	}
-
-	return origins
 }
 
 // checkOrigin: 요청의 Origin 헤더가 허용 목록에 있는지 검증합니다.

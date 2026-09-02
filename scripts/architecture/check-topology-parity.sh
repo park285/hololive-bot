@@ -74,7 +74,7 @@ cp "$tmpdir/distinct" "$tmpdir/owner-addresses"
 
 LC_ALL=C sort -u "$manifest" >"$tmpdir/sorted-manifest"
 cmp -s "$manifest" "$tmpdir/sorted-manifest" || fail "consumer manifest must be sorted and duplicate-free"
-LC_ALL=C cut -f1 "$manifest" | sort -u >"$tmpdir/registered"
+LC_ALL=C cut -f1 "$manifest" | LC_ALL=C sort -u >"$tmpdir/registered"
 (
   cd "$root_dir"
   shopt -s nullglob

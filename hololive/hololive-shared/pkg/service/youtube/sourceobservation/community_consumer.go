@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/community"
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/content"
 )
 
 type CanonicalWriter interface {

@@ -10,6 +10,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
 )
@@ -29,10 +29,11 @@ var (
 
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
-		_, err := settings.LoadYouTubeCollectorWorkerProfile()
+		if _, err := settings.LoadYouTubeCollectorWorkerProfile(); err != nil {
+			return fmt.Errorf("load youtube collector worker profile: %w", err)
+		}
 
-		//nolint:wrapcheck // runWorkerProfileCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
-		return err
+		return nil
 	}); handled {
 		os.Exit(exitCode)
 	}

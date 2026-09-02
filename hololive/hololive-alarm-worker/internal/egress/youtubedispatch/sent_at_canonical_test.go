@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
+	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
 // withFixedSentAtNow remains shared by tests for the upstream claim-state clock.

@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
 func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {
@@ -198,7 +198,6 @@ func (r *contextDeadlineReadCloser) Read([]byte) (int, error) {
 	<-r.ctx.Done()
 
 	if err := r.ctx.Err(); err != nil {
-		//nolint:wrapcheck // io.Reader 소비자가 취소 센티널을 등가 비교할 수 있으므로 그대로 돌려준다.
 		return 0, err
 	}
 

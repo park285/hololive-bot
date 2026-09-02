@@ -72,7 +72,6 @@ func validateBoundGeneratedOutput(guard *outputguard.Guard, systemPrompt, text s
 
 	guardrail.RecordBlock("output", "provider_response")
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return generatedOutputError(evaluation.Decision, evaluation.ReasonCodes, evaluation.RuleIDs, outputguard.ErrRestrictedGeneratedText)
 }
 
@@ -107,7 +106,6 @@ func validateGeneratedText(guard *outputguard.Guard, text string) error {
 		return nil
 	}
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return generatedOutputError(evaluation.Decision, evaluation.ReasonCodes, evaluation.RuleIDs, err)
 }
 

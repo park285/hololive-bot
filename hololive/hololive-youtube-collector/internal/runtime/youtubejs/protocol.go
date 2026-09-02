@@ -104,17 +104,14 @@ func (p Pagination) Validate() error {
 		return errors.New("validate pagination: page_count must be between 1 and 100")
 	}
 
-	//nolint:wrapcheck // validateCursor가 이미 validate pagination 접두사를 붙인 완결된 메시지를 만든다.
 	if err := validateCursor("cursor_start", p.CursorStart); err != nil {
 		return err
 	}
 
-	//nolint:wrapcheck // validateCursor가 이미 validate pagination 접두사를 붙인 완결된 메시지를 만든다.
 	if err := validateCursor("cursor_end", p.CursorEnd); err != nil {
 		return err
 	}
 
-	//nolint:wrapcheck // validatePaginationTermination이 이미 완결된 메시지를 만든다.
 	return validatePaginationTermination(p)
 }
 
@@ -133,7 +130,6 @@ func validatePaginationTermination(p Pagination) error {
 		return errors.New("validate pagination: termination_reason is invalid")
 	}
 
-	//nolint:wrapcheck // 각 검증 함수가 이미 validate pagination 접두사를 붙인 완결된 메시지를 만든다.
 	return validate(p)
 }
 
@@ -171,7 +167,6 @@ func validateInterruptedPagination(p Pagination) error {
 
 func (p Pagination) Quality() (contract.Completeness, contract.Continuity, error) {
 	if err := p.Validate(); err != nil {
-		//nolint:wrapcheck // Validate가 이미 어떤 필드가 잘못됐는지 담은 완결된 메시지를 만든다.
 		return "", "", err
 	}
 

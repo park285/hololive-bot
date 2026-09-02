@@ -44,7 +44,6 @@ func ReadProviderJSONDocument(
 	provider contract.Provider,
 ) (body []byte, err error) {
 	if resp == nil || resp.Body == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" response is nil")
 	}
 
@@ -53,7 +52,6 @@ func ReadProviderJSONDocument(
 	}()
 
 	if ctx == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "provider response context is nil")
 	}
 
@@ -62,7 +60,6 @@ func ReadProviderJSONDocument(
 	}
 
 	if resp.StatusCode != policy.SuccessStatus {
-		//nolint:wrapcheck // 분류가 끝난 provider 오류를 그대로 돌려줘야 DiagnosticOf가 기록하는 detail이 유지된다.
 		return nil, readProviderError(ctx, resp, policy, provider)
 	}
 
@@ -91,23 +88,19 @@ func cleanupProviderResponse(ctx context.Context, body io.ReadCloser, maxDrainBy
 		primary = joinResponseError(primary, collecterr.FromContext(fmt.Errorf("close provider response: %w", closeErr)))
 	}
 
-	//nolint:wrapcheck // 호출자가 만든 오류를 지나보내는 자리라 여기서 감싸면 접두어가 이중으로 붙는다.
 	return primary
 }
 
 func (policy ProviderResponsePolicy) validate() error {
 	if policy.SuccessStatus <= 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider success status is invalid")
 	}
 
 	if len(policy.SuccessContentTypes) == 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider success content types are required")
 	}
 
 	if policy.MaxSuccessBodyBytes < 0 || policy.MaxErrorBodyBytes < 0 || policy.MaxDrainBytes < 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "provider body limits are invalid")
 	}
 
@@ -133,12 +126,10 @@ func readProviderError(ctx context.Context, resp *http.Response, policy Provider
 
 func validateSuccessHeaders(resp *http.Response, policy ProviderResponsePolicy, provider contract.Provider) error {
 	if remainingContentEncoding(resp) != "" {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" content encoding is unsupported")
 	}
 
 	if !allowedSuccessContentType(resp.Header.Get("Content-Type"), policy.SuccessContentTypes) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" content type is not JSON")
 	}
 
@@ -156,12 +147,10 @@ func readProviderSuccess(ctx context.Context, body io.Reader, policy ProviderRes
 	}
 
 	if overflow {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, string(provider)+" response exceeds body limit")
 	}
 
 	if !jsontext.Value(data).IsValid() {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, string(provider)+" response is not a single JSON document")
 	}
 
@@ -198,7 +187,6 @@ func allowedSuccessContentType(header string, allowed []string) bool {
 
 func readAtMost(ctx context.Context, body io.Reader, maxBytes int64) (data []byte, overflow bool, err error) {
 	if maxBytes < 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, false, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "provider response body limit is invalid")
 	}
 
@@ -242,12 +230,10 @@ type ctxReader struct {
 
 func (r *ctxReader) Read(p []byte) (int, error) {
 	if err := r.ctx.Err(); err != nil {
-		//nolint:wrapcheck // io.Reader 소비자가 취소 센티널을 등가 비교할 수 있으므로 그대로 돌려준다.
 		return 0, err
 	}
 
 	// io.ReadAll과 io.Copy는 종료 조건을 EOF 등가 비교로 판별하므로, 여기서 %w로 감싸면
 	// 정상 종료가 실패로 뒤바뀌어 모든 응답 읽기가 실패한다.
-	//nolint:wrapcheck // 바로 위 주석대로 EOF 센티널을 그대로 돌려줘야 한다.
 	return r.r.Read(p)
 }

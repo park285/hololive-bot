@@ -33,7 +33,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/kapu/hololive-shared/pkg/service/activity"
+	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 

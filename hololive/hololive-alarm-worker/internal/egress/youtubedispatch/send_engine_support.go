@@ -28,9 +28,9 @@ import (
 	"sync"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	messagedelivery "github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 func partitionGroupedDeliveries(
@@ -182,7 +182,6 @@ func (d *SendEngine) sendDeliveryMessage(ctx context.Context, req deliverySendRe
 	}
 
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return d.wrapDeliverySendError(sendCtx, err)
 	}
 

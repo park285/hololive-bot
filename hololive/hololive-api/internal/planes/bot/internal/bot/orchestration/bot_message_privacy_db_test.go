@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -21,13 +22,14 @@ type repositoryReplyOutboxWriter struct {
 }
 
 func (w repositoryReplyOutboxWriter) RecordReply(ctx context.Context, entry *transport.ReplyOutboxEntry) error {
-	_, err := w.repo.Insert(ctx, &durability.ReplyOutboxEntry{
+	if _, err := w.repo.Insert(ctx, &durability.ReplyOutboxEntry{
 		MessageID: entry.MessageID, Phase: entry.Phase, Ordinal: entry.Ordinal,
 		RoomID: entry.Room, Payload: []byte(entry.Payload), ClientRequestID: entry.ClientRequestID,
-	})
+	}); err != nil {
+		return fmt.Errorf("insert: %w", err)
+	}
 
-	//nolint:wrapcheck // 테스트가 재현하는 redaction 체인을 그대로 대조하므로 이 어댑터는 계층을 덧붙이면 안 된다.
-	return err
+	return nil
 }
 
 func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing.T) {
@@ -70,6 +72,6 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 	require.Contains(t, err.Error(), "reason=database_operation_failed")
 	require.False(t, strings.Contains(logs.String(), rawID) || strings.Contains(logs.String(), causeText),
 		"bot_message_handler -> sharedlog.ErrorAttrs exposed repository cause: %s", logs.String())
-	require.Contains(t, logs.String(), `"error_message":"send error message: record reply: reply staging failed: insert reply outbox row: message_token=anon:`)
+	require.Contains(t, logs.String(), `"error_message":"send error reply: send error message: record reply: reply staging failed: insert: insert reply outbox row: message_token=anon:`)
 	require.Contains(t, logs.String(), `reason=database_operation_failed`)
 }

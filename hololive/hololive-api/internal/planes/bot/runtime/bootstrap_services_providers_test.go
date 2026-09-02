@@ -31,8 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	"github.com/kapu/hololive-api/internal/service/acl"
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )

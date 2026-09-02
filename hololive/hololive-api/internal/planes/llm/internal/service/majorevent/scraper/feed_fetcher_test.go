@@ -29,7 +29,6 @@ func (r *trackingReadCloser) Read(p []byte) (int, error) {
 
 	out, err := r.reader.Read(p)
 
-	//nolint:wrapcheck // io.ReadAll이 io.EOF를 등가 비교하므로 센티널을 그대로 돌려줘야 한다.
 	return out, err
 }
 

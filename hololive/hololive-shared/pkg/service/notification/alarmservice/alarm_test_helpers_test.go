@@ -29,11 +29,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
+	"github.com/kapu/hololive-shared/internal/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/pkg/service/notification/platformmap"
 	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 

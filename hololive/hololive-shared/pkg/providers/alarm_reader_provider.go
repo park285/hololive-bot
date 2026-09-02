@@ -23,8 +23,8 @@ package providers
 import (
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/internal/service/alarmread"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/alarmread"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 

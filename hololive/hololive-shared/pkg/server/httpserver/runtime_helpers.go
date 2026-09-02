@@ -10,15 +10,15 @@ import (
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/health"
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/kapu/hololive-shared/internal/workerobservability"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/kapu/hololive-shared/pkg/workerobservability"
 )
 
 type RuntimeRouterOptions struct {

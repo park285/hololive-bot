@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -105,11 +104,9 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 	return resources, resources.Close, nil
 }
 
-const irisBaseURLFileEnv = "IRIS_BASE_URL_FILE"
-
 // ProvideIrisClient - Iris 발송 클라이언트 생성.
-func ProvideIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (iris.Client, error) {
-	out, err := provideRuntimeIrisClient(logger, opts...)
+func ProvideIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (iris.Client, error) {
+	out, err := provideRuntimeIrisClient(irisConfig, logger, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("provide runtime iris client: %w", err)
 	}
@@ -122,8 +119,8 @@ type IrisKaringClient interface {
 	iris.KaringClient
 }
 
-func ProvideIrisKaringClient(logger *slog.Logger, opts ...iris.ClientOption) (IrisKaringClient, error) {
-	out, err := provideRuntimeIrisClient(logger, opts...)
+func ProvideIrisKaringClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (IrisKaringClient, error) {
+	out, err := provideRuntimeIrisClient(irisConfig, logger, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("provide runtime iris client: %w", err)
 	}
@@ -131,22 +128,26 @@ func ProvideIrisKaringClient(logger *slog.Logger, opts ...iris.ClientOption) (Ir
 	return out, nil
 }
 
-func provideRuntimeIrisClient(logger *slog.Logger, opts ...iris.ClientOption) (*delivery.RuntimeIrisClient, error) {
-	irisConfig := iris.ResolveClientSDKConfig(opts)
-	fallbackBaseURL := strings.TrimSpace(irisConfig.BaseURL)
-
-	if fallbackBaseURL == "" {
-		fallbackBaseURL = strings.TrimSpace(os.Getenv(iris.EnvBaseURL))
+func provideRuntimeIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (*delivery.RuntimeIrisClient, error) {
+	if irisConfig == nil {
+		return nil, errors.New("provide iris client: iris config is required")
 	}
 
-	baseURLFilePath := strings.TrimSpace(os.Getenv(irisBaseURLFileEnv))
+	resolved := iris.ResolveClientSDKConfig(opts)
+	fallbackBaseURL := strings.TrimSpace(resolved.BaseURL)
+
+	if fallbackBaseURL == "" {
+		fallbackBaseURL = strings.TrimSpace(irisConfig.BaseURL)
+	}
+
+	baseURLFilePath := strings.TrimSpace(irisConfig.BaseURLFile)
 	if fallbackBaseURL == "" && baseURLFilePath == "" {
 		return nil, errors.New("provide iris client: IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
-	botToken := strings.TrimSpace(irisConfig.BotToken)
+	botToken := strings.TrimSpace(resolved.BotToken)
 	if botToken == "" {
-		botToken = strings.TrimSpace(os.Getenv(iris.EnvBotToken))
+		botToken = strings.TrimSpace(irisConfig.BotToken)
 	}
 
 	if botToken == "" {

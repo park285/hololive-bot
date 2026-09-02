@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/kapu/hololive-shared/pkg/service/youtube/logschema"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline"
 )
 

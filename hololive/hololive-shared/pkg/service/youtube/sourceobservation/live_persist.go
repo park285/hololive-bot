@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/live"
 )
 
 func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision) error {

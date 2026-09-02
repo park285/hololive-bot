@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/service/acl"
+	"github.com/kapu/hololive-api/internal/service/acl"
 )
 
 func TestRoomHandlerSetACLRejectsInvalidModeBeforeEnabledMutation(t *testing.T) {
