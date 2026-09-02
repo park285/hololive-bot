@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	dbtest "github.com/kapu/hololive-dbtest"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -692,7 +693,7 @@ func youtubeInputWithLiveGeneration(
 		enabled[kind] = []string{subject}
 	}
 
-	targets := testutil.TargetSnapshot(tb, &spec, job, enabled)
+	targets := testutil.TargetSnapshot(tb, dbtest.NewPool(tb), &spec, job, enabled)
 
 	lease.ProjectionGeneration = targets.Generation()
 
@@ -725,7 +726,7 @@ func withEnabled(tb testing.TB, input *collectutil.RunInput, enabled map[contrac
 	}
 
 	inputSpec := input.Spec()
-	targets := testutil.TargetSnapshot(tb, &inputSpec, job, enabled)
+	targets := testutil.TargetSnapshot(tb, dbtest.NewPool(tb), &inputSpec, job, enabled)
 	lease := input.Lease()
 
 	lease.ProjectionGeneration = targets.Generation()
