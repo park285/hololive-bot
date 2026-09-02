@@ -6,7 +6,7 @@ trigger.manual|hololive-api|hololive-api|http_json|/internal/trigger/majorevent-
 alarm.http|alarm-worker|hololive-api|http_json|/internal/alarm/*|hololive/hololive-shared/pkg/service/alarm|docs/current/contracts/alarm.md
 alarm.dispatch|alarm-worker|alarm-worker|valkey_queue|alarm:dispatch:queue;alarm:dispatch:retry;alarm:dispatch:dlq|hololive/hololive-shared/pkg/contracts/alarm|docs/current/contracts/alarm.md
 youtube.outbox.egress|hololive-api|alarm-worker|postgres_table|youtube_notification_outbox|hololive/hololive-shared/pkg/service/youtube/outbox|docs/current/contracts/alarm.md
-alarm.state.read|alarm-worker|hololive-api|postgres_table|alarms|hololive/hololive-shared/pkg/service/alarmread|docs/current/contracts/alarm.md
+alarm.state.read|alarm-worker|hololive-api|postgres_table|alarms|hololive/hololive-shared/internal/service/alarmread|docs/current/contracts/alarm.md
 karing.kakaolink|alarm-worker|iris|external_http_json+kakaolink|/karing/content-list;KakaoLink list templates|external|docs/current/contracts/karing-kakaolink.md
 shortlink.youtube|hololive-api|external,alarm-worker|external_https_redirect|GET,HEAD /l/:videoID|hololive/hololive-shared/pkg/contracts/shortlink|docs/current/contracts/shortlink.md
 settings.update|hololive-api|hololive-api,alarm-worker|valkey_pubsub|config:update|hololive/hololive-shared/pkg/contracts/settings|docs/current/contracts/settings.md
