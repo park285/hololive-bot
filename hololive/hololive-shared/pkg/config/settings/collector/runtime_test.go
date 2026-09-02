@@ -1,26 +1,31 @@
-package settings
+package collector
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
 )
 
 func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 	t.Helper()
-	clearIrisAndRoomEnv(t)
+	settingstest.ClearIrisAndRoomEnv(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("API_SECRET_KEY", "dummy-admin-secret")
 	t.Setenv("METRICS_API_KEY", "dummy-metrics-secret")
-	setRuntimeH3ServerEnv(t)
-	t.Setenv("POSTGRES_USER", postgresScraperRoleUser)
-	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", collectorInstanceC)
+	settingstest.SetRuntimeH3ServerEnv(t)
+	t.Setenv("POSTGRES_USER", load.PostgresScraperRoleUser)
+	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", settingstest.CollectorInstanceC)
 	t.Setenv("YOUTUBE_COLLECTOR_RUNTIME_ALLOWED", "true")
 	t.Setenv("PHOTO_SYNC_ENABLED", "false")
-	useStackWorkerProfileFixture(t, "stack-worker-profile-youtube-collector.json")
+	settingstest.UseProfileFixture(t, "stack-worker-profile-youtube-collector.json")
 	t.Setenv("HOLODEX_API_KEY", "dummy-holodex")
 	t.Setenv("LLM_MODEL", "")
 	t.Setenv("CLIPROXY_API_KEY", "")
@@ -32,8 +37,8 @@ func setYouTubeCollectorRuntimeLoadEnv(t *testing.T) {
 		"CACHE_PASSWORD",
 		"CACHE_SOCKET_PATH",
 		"CACHE_DB",
-		irisWebhookTokenEnv,
-		irisBotTokenEnv,
+		settingstest.IrisWebhookTokenEnv,
+		settingstest.IrisBotTokenEnv,
 		"KAKAO_ROOMS",
 		"LLM_MODEL",
 		"CLIPROXY_API_KEY",
@@ -58,52 +63,52 @@ func writeReadablePostgresCA(t *testing.T) string {
 	return path
 }
 
-func validYouTubeCollectorRuntimeConfig(t *testing.T) *YouTubeCollectorRuntimeConfig {
+func validYouTubeCollectorRuntimeConfig(t *testing.T) *RuntimeConfig {
 	t.Helper()
 
 	cert := writeReadablePostgresCA(t)
-	collector := DefaultYouTubeCollectorConfig()
+	collector := DefaultConfig()
 
-	collector.InstanceID = collectorInstanceC
+	collector.InstanceID = settingstest.CollectorInstanceC
 
-	return &YouTubeCollectorRuntimeConfig{
-		Environment: environmentProduction,
+	return &RuntimeConfig{
+		Environment: load.EnvironmentProduction,
 		Version:     "test",
-		Server: ServerConfig{
+		Server: settings.ServerConfig{
 			Port:           30025,
 			APIKey:         "test-metrics-key",
 			HTTPTransports: []string{"h3"},
 			H3Addr:         ":30025",
 			H3CertFile:     "/run/hololive-bot/certs/hololive-h3.crt",
-			H3KeyFile:      hololiveH3KeyPath,
+			H3KeyFile:      settingstest.HololiveH3KeyPath,
 		},
-		Tracing: TracingConfig{
+		Tracing: settings.TracingConfig{
 			Enabled:    true,
 			Endpoint:   "otel-collector:4317",
 			Insecure:   true,
-			SampleRate: defaultOTELSampleRate,
+			SampleRate: 0.1,
 		},
-		Postgres: PostgresConfig{
-			User:        postgresScraperRoleUser,
+		Postgres: settings.PostgresConfig{
+			User:        load.PostgresScraperRoleUser,
 			Password:    "x",
-			SSLMode:     postgresSSLModeVerifyFull,
+			SSLMode:     load.PostgresSSLModeVerifyFull,
 			SSLRootCert: cert,
 		},
-		RuntimeOwnership: CollectorRuntimeOwnershipConfig{
+		RuntimeOwnership: RuntimeOwnershipConfig{
 			RuntimeAllowed:         true,
 			PhotoSyncEnabled:       false,
-			NotificationEgressRole: notificationEgressRoleOff,
+			NotificationEgressRole: load.NotificationEgressRoleOff,
 		},
 		WorkerProfile: mustLoadCollectorWorkerProfile(t),
 		Collector:     collector,
-		Holodex: CollectorHolodexConfig{
-			BaseURL:   DefaultHolodexOperationalConfig().BaseURL,
+		Holodex: HolodexConfig{
+			BaseURL:   settings.DefaultHolodexOperationalConfig().BaseURL,
 			APIKey:    "x",
-			Transport: ProviderTransportConfig{Timeout: DefaultHolodexOperationalConfig().Timeout},
+			Transport: ProviderTransportConfig{Timeout: settings.DefaultHolodexOperationalConfig().Timeout},
 		},
-		OfficialSchedule: CollectorOfficialScheduleConfig{
-			BaseURL:   DefaultOfficialScheduleConfig().BaseURL,
-			Transport: ProviderTransportConfig{Timeout: DefaultOfficialScheduleConfig().Timeout},
+		OfficialSchedule: OfficialScheduleConfig{
+			BaseURL:   settings.DefaultOfficialScheduleConfig().BaseURL,
+			Transport: ProviderTransportConfig{Timeout: settings.DefaultOfficialScheduleConfig().Timeout},
 		},
 	}
 }
@@ -111,16 +116,16 @@ func validYouTubeCollectorRuntimeConfig(t *testing.T) *YouTubeCollectorRuntimeCo
 func TestCFG001CollectorLoaderSucceedsWithoutCacheEnv(t *testing.T) {
 	setYouTubeCollectorRuntimeLoadEnv(t)
 
-	cfg, err := LoadYouTubeCollectorRuntime()
+	cfg, err := LoadRuntime()
 	if err != nil {
-		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
+		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
-	if cfg.Postgres.User != postgresScraperRoleUser {
-		t.Fatalf("Postgres.User = %q, want %s", cfg.Postgres.User, postgresScraperRoleUser)
+	if cfg.Postgres.User != load.PostgresScraperRoleUser {
+		t.Fatalf("Postgres.User = %q, want %s", cfg.Postgres.User, load.PostgresScraperRoleUser)
 	}
 
-	if cfg.Collector.InstanceID != collectorInstanceC {
+	if cfg.Collector.InstanceID != settingstest.CollectorInstanceC {
 		t.Fatalf("InstanceID = %q, want youtube-collector-c", cfg.Collector.InstanceID)
 	}
 }
@@ -130,9 +135,9 @@ func TestCFG001CollectorLoaderUsesOnlyDedicatedMetricsKey(t *testing.T) {
 	t.Setenv("API_SECRET_KEY", "admin-only-key")
 	t.Setenv("METRICS_API_KEY", "collector-metrics-key")
 
-	cfg, err := LoadYouTubeCollectorRuntime()
+	cfg, err := LoadRuntime()
 	if err != nil {
-		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
+		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
 	if cfg.Server.APIKey != "collector-metrics-key" {
@@ -148,12 +153,12 @@ func TestCFG001LeftoverCacheEnvStillLoadsYouTubeCollectorRuntime(t *testing.T) {
 	t.Setenv("CACHE_SOCKET_PATH", "/var/run/valkey/valkey.sock")
 	t.Setenv("CACHE_DB", "0")
 
-	cfg, err := LoadYouTubeCollectorRuntime()
+	cfg, err := LoadRuntime()
 	if err != nil {
-		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v, want success with leftover CACHE_* env and no Valkey dial", err)
+		t.Fatalf("LoadRuntime() error = %v, want success with leftover CACHE_* env and no Valkey dial", err)
 	}
 
-	if cfg.Collector.InstanceID != collectorInstanceC {
+	if cfg.Collector.InstanceID != settingstest.CollectorInstanceC {
 		t.Fatalf("InstanceID = %q, want youtube-collector-c", cfg.Collector.InstanceID)
 	}
 }
@@ -161,32 +166,40 @@ func TestCFG001LeftoverCacheEnvStillLoadsYouTubeCollectorRuntime(t *testing.T) {
 func TestCFG001CollectorLoaderSourceOmitsCacheAndUnrelatedConstructors(t *testing.T) {
 	t.Parallel()
 
-	source, err := os.ReadFile("config_youtube_collector_runtime.go")
+	packageDir := os.DirFS(".")
+
+	names, err := fs.Glob(packageDir, "*.go")
 	if err != nil {
-		t.Fatalf("read collector runtime loader: %v", err)
+		t.Fatalf("list collector package sources: %v", err)
 	}
 
-	text := string(source)
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
 
-	for _, forbidden := range []string{
-		"loadServerConfig()",
-		"API_SECRET_KEY",
-		"loadValkeyConfig",
-		"loadIrisConfig",
-		"loadKakaoConfig",
-		"loadLLMConfig",
-		"loadCliproxyConfig",
-		"loadExaConfig",
-		"loadChzzkConfig",
-		"loadTwitchConfig",
-		"loadNotificationConfig",
-		"loadCORSConfig",
-		"loadScraperConfig",
-		"loadYouTubeConfig",
-		"ProvideCacheResources",
-	} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("collector loader must not call %s", forbidden)
+		source, err := fs.ReadFile(packageDir, name)
+		if err != nil {
+			t.Fatalf("read collector source %s: %v", name, err)
+		}
+
+		text := string(source)
+
+		for _, forbidden := range []string{
+			"CACHE_",
+			"API_SECRET_KEY",
+			"IRIS_",
+			"KAKAO_",
+			"settings.LoadValkeyConfig",
+			"settings.LoadLLMConfig",
+			"settings.LoadCliproxyConfig",
+			"settings.LoadGeminiConfig",
+			"settings.LoadExaConfig",
+			"ProvideCacheResources",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Fatalf("collector loader %s must not reference %s", name, forbidden)
+			}
 		}
 	}
 }
@@ -194,9 +207,9 @@ func TestCFG001CollectorLoaderSourceOmitsCacheAndUnrelatedConstructors(t *testin
 func TestCFG002CollectorLoaderAllowsMissingIrisKakaoAndLLM(t *testing.T) {
 	setYouTubeCollectorRuntimeLoadEnv(t)
 
-	cfg, err := LoadYouTubeCollectorRuntime()
+	cfg, err := LoadRuntime()
 	if err != nil {
-		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v", err)
+		t.Fatalf("LoadRuntime() error = %v", err)
 	}
 
 	if cfg.WorkerProfile == nil || !cfg.WorkerProfile.Loaded.Profile.Workers["collection"].Executor.Enabled {
@@ -206,17 +219,17 @@ func TestCFG002CollectorLoaderAllowsMissingIrisKakaoAndLLM(t *testing.T) {
 
 func TestCFG002CollectorLoaderIgnoresAccidentalIrisToken(t *testing.T) {
 	setYouTubeCollectorRuntimeLoadEnv(t)
-	t.Setenv(irisBotTokenEnv, "accidental-egress-token")
+	t.Setenv(settingstest.IrisBotTokenEnv, "accidental-egress-token")
 	t.Setenv("IRIS_BASE_URL", "http://iris.invalid")
 
-	if _, err := LoadYouTubeCollectorRuntime(); err != nil {
-		t.Fatalf("LoadYouTubeCollectorRuntime() error = %v, want nil without Iris worker profile fetch", err)
+	if _, err := LoadRuntime(); err != nil {
+		t.Fatalf("LoadRuntime() error = %v, want nil without Iris worker profile fetch", err)
 	}
 }
 
 type collectorRuntimeValidateCase struct {
 	name    string
-	mutate  func(*YouTubeCollectorRuntimeConfig)
+	mutate  func(*RuntimeConfig)
 	wantSub string
 }
 
@@ -224,22 +237,22 @@ func collectorRuntimeOwnershipValidateCases() []collectorRuntimeValidateCase {
 	return []collectorRuntimeValidateCase{
 		{
 			name:    "runtime disabled",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.RuntimeAllowed = false },
+			mutate:  func(c *RuntimeConfig) { c.RuntimeOwnership.RuntimeAllowed = false },
 			wantSub: "YOUTUBE_COLLECTOR_RUNTIME_ALLOWED",
 		},
 		{
 			name:    "photo sync enabled",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.PhotoSyncEnabled = true },
+			mutate:  func(c *RuntimeConfig) { c.RuntimeOwnership.PhotoSyncEnabled = true },
 			wantSub: "PHOTO_SYNC_ENABLED",
 		},
 		{
 			name:    "notification egress not off",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.RuntimeOwnership.NotificationEgressRole = "" },
+			mutate:  func(c *RuntimeConfig) { c.RuntimeOwnership.NotificationEgressRole = "" },
 			wantSub: "NOTIFICATION_EGRESS_ROLE",
 		},
 		{
 			name:    "empty instance id",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Collector.InstanceID = "" },
+			mutate:  func(c *RuntimeConfig) { c.Collector.InstanceID = "" },
 			wantSub: "YOUTUBE_COLLECTOR_INSTANCE_ID",
 		},
 	}
@@ -249,22 +262,22 @@ func collectorRuntimeServerValidateCases() []collectorRuntimeValidateCase {
 	return []collectorRuntimeValidateCase{
 		{
 			name:    "server port zero",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.Port = 0 },
+			mutate:  func(c *RuntimeConfig) { c.Server.Port = 0 },
 			wantSub: "SERVER_PORT",
 		},
 		{
 			name:    "metrics key empty",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.APIKey = "" },
+			mutate:  func(c *RuntimeConfig) { c.Server.APIKey = "" },
 			wantSub: "METRICS_API_KEY",
 		},
 		{
 			name:    "tracing disabled",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Tracing.Enabled = false },
-			wantSub: tracingYouTubeCollectorCEnabledEnv,
+			mutate:  func(c *RuntimeConfig) { c.Tracing.Enabled = false },
+			wantSub: load.TracingYouTubeCollectorCEnabledEnv,
 		},
 		{
 			name:    "h3 cert missing",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Server.H3CertFile = "" },
+			mutate:  func(c *RuntimeConfig) { c.Server.H3CertFile = "" },
 			wantSub: "HOLOLIVE_H3_CERT_FILE",
 		},
 	}
@@ -274,22 +287,22 @@ func collectorRuntimePostgresValidateCases() []collectorRuntimeValidateCase {
 	return []collectorRuntimeValidateCase{
 		{
 			name:    "postgres user mismatch",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Postgres.User = postgresRuntimeRoleUser },
+			mutate:  func(c *RuntimeConfig) { c.Postgres.User = load.PostgresRuntimeRoleUser },
 			wantSub: "POSTGRES_USER",
 		},
 		{
 			name:    "postgres password empty",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Postgres.Password = "" },
+			mutate:  func(c *RuntimeConfig) { c.Postgres.Password = "" },
 			wantSub: "POSTGRES_PASSWORD",
 		},
 		{
 			name:    "postgres sslmode insecure",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Postgres.SSLMode = "require" },
+			mutate:  func(c *RuntimeConfig) { c.Postgres.SSLMode = "require" },
 			wantSub: "POSTGRES_SSLMODE",
 		},
 		{
 			name:    "postgres sslrootcert empty",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Postgres.SSLRootCert = "" },
+			mutate:  func(c *RuntimeConfig) { c.Postgres.SSLRootCert = "" },
 			wantSub: "POSTGRES_SSLROOTCERT",
 		},
 	}
@@ -299,39 +312,39 @@ func collectorRuntimeUpstreamValidateCases() []collectorRuntimeValidateCase {
 	return []collectorRuntimeValidateCase{
 		{
 			name:    "holodex key empty",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Holodex.APIKey = "" },
+			mutate:  func(c *RuntimeConfig) { c.Holodex.APIKey = "" },
 			wantSub: "HOLODEX_API_KEY",
 		},
 		{
 			name:    "holodex timeout zero",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Holodex.Transport.Timeout = 0 },
+			mutate:  func(c *RuntimeConfig) { c.Holodex.Transport.Timeout = 0 },
 			wantSub: "HOLODEX_TIMEOUT_SECONDS must be positive",
 		},
 		{
 			name:    "holodex timeout negative",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.Holodex.Transport.Timeout = -time.Second },
+			mutate:  func(c *RuntimeConfig) { c.Holodex.Transport.Timeout = -time.Second },
 			wantSub: "HOLODEX_TIMEOUT_SECONDS must be positive",
 		},
 		{
 			name:    "official url invalid",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.OfficialSchedule.BaseURL = "http://schedule.example" },
+			mutate:  func(c *RuntimeConfig) { c.OfficialSchedule.BaseURL = "http://schedule.example" },
 			wantSub: "OFFICIAL_SCHEDULE_BASE_URL",
 		},
 		{
 			name:    "official schedule timeout zero",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.OfficialSchedule.Transport.Timeout = 0 },
+			mutate:  func(c *RuntimeConfig) { c.OfficialSchedule.Transport.Timeout = 0 },
 			wantSub: "OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive",
 		},
 		{
 			name:    "official schedule timeout negative",
-			mutate:  func(c *YouTubeCollectorRuntimeConfig) { c.OfficialSchedule.Transport.Timeout = -time.Second },
+			mutate:  func(c *RuntimeConfig) { c.OfficialSchedule.Transport.Timeout = -time.Second },
 			wantSub: "OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive",
 		},
 	}
 }
 
 func TestCFG003ProductionValidationExact(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	tests := slices.Concat(
 		collectorRuntimeOwnershipValidateCases(),
@@ -353,7 +366,7 @@ func TestCFG003ProductionValidationExact(t *testing.T) {
 }
 
 func TestCFG003ProductionAcceptsCompleteConfig(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 	if err := cfg.Validate(); err != nil {
@@ -366,7 +379,7 @@ func TestCFG003ProductionAcceptsCompleteConfig(t *testing.T) {
 }
 
 func TestCFG003ProductionRejectsMissingMetricsSecretEvenWithAdminSecret(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 	t.Setenv("API_SECRET_KEY", "admin-only-key")
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
@@ -381,7 +394,7 @@ func TestCFG003ProductionRejectsMissingMetricsSecretEvenWithAdminSecret(t *testi
 }
 
 func TestCFG003ProductionRejectsUnreadableSSLRootCert(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 
@@ -401,40 +414,40 @@ func TestCFG004ProxyTruthTableAndUserinfoRedaction(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		proxy   CollectorProxyConfig
+		proxy   ProxyConfig
 		wantErr bool
 		wantSub string
 	}{
-		{name: "direct mode", proxy: CollectorProxyConfig{}},
-		{name: "proxy mode", proxy: CollectorProxyConfig{Enabled: true, URL: "http://127.0.0.1:8080"}},
-		{name: "proxy with userinfo", proxy: CollectorProxyConfig{Enabled: true, URL: "http://user:" + redactionSentinel + "@127.0.0.1:8080"}},
+		{name: "direct mode", proxy: ProxyConfig{}},
+		{name: "proxy mode", proxy: ProxyConfig{Enabled: true, URL: "http://127.0.0.1:8080"}},
+		{name: "proxy with userinfo", proxy: ProxyConfig{Enabled: true, URL: "http://user:" + redactionSentinel + "@127.0.0.1:8080"}},
 		{
 			name:    "disabled with url",
-			proxy:   CollectorProxyConfig{Enabled: false, URL: "http://user:" + redactionSentinel + "@127.0.0.1:8080"},
+			proxy:   ProxyConfig{Enabled: false, URL: "http://user:" + redactionSentinel + "@127.0.0.1:8080"},
 			wantErr: true,
 			wantSub: "SCRAPER_PROXY_URL must be empty",
 		},
 		{
 			name:    "enabled without url",
-			proxy:   CollectorProxyConfig{Enabled: true},
+			proxy:   ProxyConfig{Enabled: true},
 			wantErr: true,
 			wantSub: "SCRAPER_PROXY_URL is required",
 		},
 		{
 			name:    "invalid scheme",
-			proxy:   CollectorProxyConfig{Enabled: true, URL: "socks5://user:" + redactionSentinel + "@127.0.0.1:1080"},
+			proxy:   ProxyConfig{Enabled: true, URL: "socks5://user:" + redactionSentinel + "@127.0.0.1:1080"},
 			wantErr: true,
 			wantSub: "scheme",
 		},
 		{
 			name:    "path not empty",
-			proxy:   CollectorProxyConfig{Enabled: true, URL: "http://127.0.0.1:8080/proxy"},
+			proxy:   ProxyConfig{Enabled: true, URL: "http://127.0.0.1:8080/proxy"},
 			wantErr: true,
 			wantSub: "path",
 		},
 		{
 			name:    "query forbidden",
-			proxy:   CollectorProxyConfig{Enabled: true, URL: "http://127.0.0.1:8080?x=1"},
+			proxy:   ProxyConfig{Enabled: true, URL: "http://127.0.0.1:8080?x=1"},
 			wantErr: true,
 			wantSub: "query or fragment",
 		},
@@ -461,7 +474,7 @@ func TestCFG004ProxyTruthTableAndUserinfoRedaction(t *testing.T) {
 }
 
 func TestValidateYouTubeCollectorRuntimeDoesNotDefaultCollectorConfig(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 
@@ -483,7 +496,7 @@ func TestValidateYouTubeCollectorRuntimeDoesNotDefaultCollectorConfig(t *testing
 }
 
 func TestValidateYouTubeCollectorRuntimeRejectsInvalidCollectorBudget(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 
@@ -497,21 +510,21 @@ func TestValidateYouTubeCollectorRuntimeRejectsInvalidCollectorBudget(t *testing
 }
 
 func TestValidateYouTubeCollectorRuntimeRequiresScraperPostgresUser(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 
-	cfg.Postgres.User = postgresRuntimeRoleUser
+	cfg.Postgres.User = load.PostgresRuntimeRoleUser
 
 	err := cfg.Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+postgresScraperRoleUser) {
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_USER="+load.PostgresScraperRoleUser) {
 		t.Fatalf("Validate() error = %v, want scraper postgres user", err)
 	}
 }
 
 func TestValidateYouTubeCollectorRuntimeRejectsMissingHolodexAPIKey(t *testing.T) {
-	clearRuntimeRoleEnv(t)
+	settingstest.ClearRuntimeRoleEnv(t)
 
 	cfg := validYouTubeCollectorRuntimeConfig(t)
 

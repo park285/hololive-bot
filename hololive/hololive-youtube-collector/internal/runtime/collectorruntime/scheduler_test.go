@@ -16,7 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	dbtest "github.com/kapu/hololive-dbtest"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
@@ -26,7 +26,7 @@ import (
 func TestLeaseConfigFromUsesCollectorBudgets(t *testing.T) {
 	t.Parallel()
 
-	cfg := settings.DefaultYouTubeCollectorConfig()
+	cfg := collectorconfig.DefaultConfig()
 
 	cfg.TotalWorkers = 3
 	cfg.QueueCapacity = 12
@@ -70,7 +70,7 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: settings.DefaultYouTubeCollectorConfig(),
+		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
@@ -122,7 +122,7 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: settings.DefaultYouTubeCollectorConfig(),
+		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
@@ -212,7 +212,7 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: settings.DefaultYouTubeCollectorConfig(),
+		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
@@ -261,7 +261,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: settings.DefaultYouTubeCollectorConfig(),
+		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(), queued: make(map[string]struct{}),
 		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
 	}
@@ -313,7 +313,7 @@ func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 		repository: repository, candidates: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: settings.DefaultYouTubeCollectorConfig(),
+		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
 		state:     SchedulerNew, queued: make(map[string]struct{}),
 		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
@@ -491,7 +491,7 @@ func withOverride(override JobRunner) []JobRunner {
 }
 
 func defaultProviderGates() map[contract.Provider]chan struct{} {
-	cfg := settings.DefaultYouTubeCollectorConfig()
+	cfg := collectorconfig.DefaultConfig()
 	return newProviderGates(&cfg)
 }
 

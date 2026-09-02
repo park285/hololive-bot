@@ -1,10 +1,13 @@
-package settings
+package apiplane
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func TestValidateAlarmProviderURL(t *testing.T) {
@@ -17,10 +20,10 @@ func TestValidateAlarmProviderURL(t *testing.T) {
 		wantErr     string
 	}{
 		{name: "development http", environment: "development", url: "http://127.0.0.1:30007"},
-		{name: "production https", environment: environmentProduction, url: "https://hololive-alarm-worker:30007"},
-		{name: "missing", environment: environmentProduction, wantErr: "required"},
+		{name: "production https", environment: load.EnvironmentProduction, url: "https://hololive-alarm-worker:30007"},
+		{name: "missing", environment: load.EnvironmentProduction, wantErr: "required"},
 		{name: "missing host", environment: "development", url: "https:///alarm", wantErr: "include a host"},
-		{name: "production http", environment: environmentProduction, url: "http://hololive-alarm-worker:30007", wantErr: "must use https"},
+		{name: "production http", environment: load.EnvironmentProduction, url: "http://hololive-alarm-worker:30007", wantErr: "must use https"},
 		{name: "unsupported scheme", environment: "development", url: "grpc://alarm:30007", wantErr: "scheme must be http or https"},
 	}
 
@@ -44,27 +47,27 @@ func TestValidateAlarmProviderURL(t *testing.T) {
 func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 	t.Parallel()
 
-	newConfig := func(shortLinkAddr string) *HololiveAPIConfig {
-		return &HololiveAPIConfig{
-			Bot: &Config{Server: ServerConfig{
+	newConfig := func(shortLinkAddr string) *RuntimeConfig {
+		return &RuntimeConfig{
+			Bot: &settings.Config{Server: settings.ServerConfig{
 				Port:          30001,
 				H3Addr:        ":30001",
 				ShortLinkAddr: shortLinkAddr,
 				MetricsAddr:   ":30091",
 				PprofAddr:     ":30061",
 			}},
-			Admin: &Config{Server: ServerConfig{Port: 30006, H3Addr: ":30006"}},
-			LLM:   &LLMSchedulerConfig{Server: ServerConfig{Port: 30003, H3Addr: ":30003"}},
+			Admin: &settings.Config{Server: settings.ServerConfig{Port: 30006, H3Addr: ":30006"}},
+			LLM:   &LLMSchedulerConfig{Server: settings.ServerConfig{Port: 30003, H3Addr: ":30003"}},
 		}
 	}
 
 	config := newConfig(":30101")
-	require.NoError(t, validateHololiveAPIListenerPorts(config))
+	require.NoError(t, validateListenerPorts(config))
 
 	config.Admin.Server.Port = 30001
 	config.Admin.Server.H3Addr = ":30001"
 
-	err := validateHololiveAPIListenerPorts(config)
+	err := validateListenerPorts(config)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "shared by bot-h3 and admin-h3")
 
@@ -81,21 +84,21 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateHololiveAPIListenerPorts(newConfig(tt.addr))
+			err := validateListenerPorts(newConfig(tt.addr))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 
 	t.Run("same port on tcp and udp is allowed", func(t *testing.T) {
-		require.NoError(t, validateHololiveAPIListenerPorts(newConfig(":30001")))
+		require.NoError(t, validateListenerPorts(newConfig(":30001")))
 	})
 
 	t.Run("same tcp port on distinct specific hosts is allowed", func(t *testing.T) {
 		config := newConfig("127.0.0.1:30091")
 
 		config.Bot.Server.MetricsAddr = "100.100.1.3:30091"
-		require.NoError(t, validateHololiveAPIListenerPorts(config))
+		require.NoError(t, validateListenerPorts(config))
 	})
 
 	t.Run("h3 address must match configured plane port", func(t *testing.T) {
@@ -103,7 +106,7 @@ func TestValidateHololiveAPIListenerPorts(t *testing.T) {
 
 		config.LLM.Server.H3Addr = ":30004"
 
-		err := validateHololiveAPIListenerPorts(config)
+		err := validateListenerPorts(config)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "llm-h3 listener: address port 30004 must match configured port 30003")
 	})
@@ -113,11 +116,11 @@ func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
 	t.Setenv("SERVER_PORT", "31001")
 	t.Setenv("HOLOLIVE_BOT_INTERNAL_URL", "")
 
-	botConfig := &Config{}
-	adminConfig := &Config{}
+	botConfig := &settings.Config{}
+	adminConfig := &settings.Config{}
 	llmConfig := &LLMSchedulerConfig{}
 
-	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+	configurePlanes(botConfig, adminConfig, llmConfig)
 
 	require.Equal(t, 31001, botConfig.Server.Port)
 	require.Equal(t, "https://127.0.0.1:31001", adminConfig.BotInternalURL)
@@ -126,11 +129,11 @@ func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
 func TestConfigureHololiveAPIPlanesPreservesBotInternalURLOverride(t *testing.T) {
 	t.Setenv("SERVER_PORT", "31001")
 
-	botConfig := &Config{}
-	adminConfig := &Config{BotInternalURL: "https://bot.internal:3443"}
+	botConfig := &settings.Config{}
+	adminConfig := &settings.Config{BotInternalURL: "https://bot.internal:3443"}
 	llmConfig := &LLMSchedulerConfig{}
 
-	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+	configurePlanes(botConfig, adminConfig, llmConfig)
 
 	require.Equal(t, "https://bot.internal:3443", adminConfig.BotInternalURL)
 }
@@ -138,19 +141,19 @@ func TestConfigureHololiveAPIPlanesPreservesBotInternalURLOverride(t *testing.T)
 func TestValidatePlanePool(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 1, PoolMaxConns: 4}))
-	require.Error(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 5, PoolMaxConns: 4}))
-	require.Error(t, validatePlanePool("bot", &PostgresConfig{PoolMinConns: 0, PoolMaxConns: 0}))
+	require.NoError(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 1, PoolMaxConns: 4}))
+	require.Error(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 5, PoolMaxConns: 4}))
+	require.Error(t, validatePlanePool("bot", &settings.PostgresConfig{PoolMinConns: 0, PoolMaxConns: 0}))
 }
 
 func TestValidateYouTubePlaneDatabaseRole(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, validateYouTubePlaneDatabaseRole("hololive_runtime"))
 
-	for _, user := range []string{postgresScraperRoleUser, "postgres_admin", ""} {
+	for _, user := range []string{load.PostgresScraperRoleUser, "postgres_admin", ""} {
 		err := validateYouTubePlaneDatabaseRole(user)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), postgresRuntimeRoleUser)
+		assert.Contains(t, err.Error(), load.PostgresRuntimeRoleUser)
 	}
 }
 

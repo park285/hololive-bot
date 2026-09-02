@@ -17,6 +17,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
@@ -64,7 +65,7 @@ type observationReplayer interface {
 }
 
 type Runtime struct {
-	Config settings.YouTubePlaneConfig
+	Config apiplane.YouTubePlaneConfig
 	Logger *slog.Logger
 
 	pool               *pgxpool.Pool
@@ -97,7 +98,7 @@ type Runtime struct {
 	workerSampler *workercontract.QueueSampler
 }
 
-func Build(ctx context.Context, plane *settings.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
+func Build(ctx context.Context, plane *apiplane.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
 	config, postgres, err := validateBuildInputs(plane, postgresConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("validate build inputs: %w", err)
@@ -135,10 +136,10 @@ func Build(ctx context.Context, plane *settings.YouTubePlaneConfig, postgresConf
 }
 
 func validateBuildInputs(
-	plane *settings.YouTubePlaneConfig,
+	plane *apiplane.YouTubePlaneConfig,
 	postgres *settings.PostgresConfig,
 	logger *slog.Logger,
-) (*settings.YouTubePlaneConfig, *settings.PostgresConfig, error) {
+) (*apiplane.YouTubePlaneConfig, *settings.PostgresConfig, error) {
 	if logger == nil {
 		return nil, nil, errors.New("build youtube plane: logger is not configured")
 	}
@@ -166,7 +167,7 @@ func validateBuildInputs(
 }
 
 func newRuntime(
-	plane *settings.YouTubePlaneConfig,
+	plane *apiplane.YouTubePlaneConfig,
 	logger *slog.Logger,
 	pool *pgxpool.Pool,
 	cleanup func(),

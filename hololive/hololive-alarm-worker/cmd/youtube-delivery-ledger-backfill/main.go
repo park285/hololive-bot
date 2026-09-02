@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	"github.com/kapu/hololive-shared/pkg/providers"
 )
 
@@ -44,7 +44,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
 
-	config, err := settings.LoadAlarmWorkerRuntime()
+	config, err := alarmworker.LoadRuntime()
 	if err != nil {
 		logger.Error("load alarm-worker runtime config", slog.Any("error", err))
 

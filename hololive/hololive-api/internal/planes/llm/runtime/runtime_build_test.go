@@ -24,7 +24,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
 func TestBuildLLMSchedulerRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -46,7 +46,7 @@ func TestBuildLLMSchedulerRuntime_FailFastOnNilInputs(t *testing.T) {
 	})
 
 	t.Run("nil logger", func(t *testing.T) {
-		runtime, err := BuildLLMSchedulerRuntime(t.Context(), &settings.LLMSchedulerConfig{}, nil)
+		runtime, err := BuildLLMSchedulerRuntime(t.Context(), &apiplane.LLMSchedulerConfig{}, nil)
 		if err == nil {
 			t.Fatal("BuildLLMSchedulerRuntime() expected error for nil logger")
 		}

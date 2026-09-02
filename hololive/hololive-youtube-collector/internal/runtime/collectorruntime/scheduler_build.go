@@ -11,7 +11,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectutil"
@@ -21,7 +21,7 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejscollector"
 )
 
-func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, error) {
+func leaseConfigFrom(cfg *collectorconfig.Config) (joblease.Config, error) {
 	lease := joblease.Config{
 		LeaseTTL: cfg.LeaseTTL, RenewInterval: cfg.RenewInterval,
 		RenewTimeout: cfg.RenewTimeout, DBTimeout: cfg.DBTimeout, CleanupTimeout: cfg.CleanupTimeout,
@@ -38,7 +38,7 @@ func leaseConfigFrom(cfg *settings.YouTubeCollectorConfig) (joblease.Config, err
 }
 
 func buildScheduler(
-	appConfig *settings.YouTubeCollectorRuntimeConfig,
+	appConfig *collectorconfig.RuntimeConfig,
 	infra *collectorInfrastructure,
 	logger *slog.Logger,
 	tracker *readinessTracker,
@@ -65,7 +65,7 @@ func buildScheduler(
 	return out, nil
 }
 
-func requireSchedulerDeps(appConfig *settings.YouTubeCollectorRuntimeConfig, infra *collectorInfrastructure) error {
+func requireSchedulerDeps(appConfig *collectorconfig.RuntimeConfig, infra *collectorInfrastructure) error {
 	if appConfig == nil || infra == nil || infra.postgres == nil || infra.postgres.GetPool() == nil {
 		return errors.New("build youtube collector: postgres pool is required")
 	}
@@ -80,7 +80,7 @@ func requireSchedulerDeps(appConfig *settings.YouTubeCollectorRuntimeConfig, inf
 func newLeaseScheduler(
 	infra *collectorInfrastructure,
 	logger *slog.Logger,
-	collector *settings.YouTubeCollectorConfig,
+	collector *collectorconfig.Config,
 	leaseConfig *joblease.Config,
 	tracker *readinessTracker,
 	holodexTimeout time.Duration,
@@ -143,7 +143,7 @@ func newCollectionExecutor(s *leaseScheduler) *collectionExecutor {
 
 func newCollectorRegistry(
 	infra *collectorInfrastructure,
-	cfg *settings.YouTubeCollectorConfig,
+	cfg *collectorconfig.Config,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
 ) (*Registry, error) {
@@ -180,7 +180,7 @@ func collectorRunners(infra *collectorInfrastructure) []JobRunner {
 
 func collectorExecutionProfiles(
 	runners []JobRunner,
-	cfg *settings.YouTubeCollectorConfig,
+	cfg *collectorconfig.Config,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
 ) (map[sourceobservation.JobID]ExecutionProfile, error) {
@@ -202,7 +202,7 @@ func collectorExecutionProfiles(
 
 func executionProfileInputs(
 	id sourceobservation.JobID,
-	cfg *settings.YouTubeCollectorConfig,
+	cfg *collectorconfig.Config,
 	holodexTimeout time.Duration,
 	officialTimeout time.Duration,
 ) (
@@ -232,7 +232,7 @@ func executionProfileInputs(
 	return maxCalls, requestTimeout, rateInterval, inflight
 }
 
-func newProviderGates(cfg *settings.YouTubeCollectorConfig) map[contract.Provider]chan struct{} {
+func newProviderGates(cfg *collectorconfig.Config) map[contract.Provider]chan struct{} {
 	return map[contract.Provider]chan struct{}{
 		contract.ProviderHolodex:          make(chan struct{}, cfg.HolodexMaxInflight),
 		contract.ProviderHololiveOfficial: make(chan struct{}, cfg.OfficialMaxInflight),

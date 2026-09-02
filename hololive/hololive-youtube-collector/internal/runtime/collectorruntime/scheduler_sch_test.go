@@ -12,7 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -598,7 +598,7 @@ func newLifecycleScheduler(t *testing.T) *leaseScheduler {
 		metrics:    NewMetrics(prometheus.NewPedanticRegistry()),
 		logger:     slog.New(slog.DiscardHandler),
 		config:     config,
-		collector:  settings.DefaultYouTubeCollectorConfig(),
+		collector:  collectorconfig.DefaultConfig(),
 		state:      SchedulerNew,
 		queued:     make(map[string]struct{}),
 		queue:      make(chan joblease.JobSpec, config.QueueCapacity),

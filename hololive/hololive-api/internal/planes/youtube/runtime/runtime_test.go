@@ -15,6 +15,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
@@ -43,7 +44,7 @@ func TestRuntimeClaimsLiveViewerAndScheduleKinds(t *testing.T) {
 func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 	t.Parallel()
 
-	cfg := settings.DefaultYouTubePlaneConfig()
+	cfg := apiplane.DefaultYouTubePlaneConfig()
 
 	cfg.DBOperationConcurrency = cfg.PostgresPoolMaxConns
 
@@ -57,7 +58,7 @@ func TestBuildFailsClosedOnInvalidBudget(t *testing.T) {
 func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 	t.Parallel()
 
-	cfg := settings.DefaultYouTubePlaneConfig()
+	cfg := apiplane.DefaultYouTubePlaneConfig()
 	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: scraperDatabaseRole}, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
@@ -68,7 +69,7 @@ func TestBuildFailsClosedOnScraperRole(t *testing.T) {
 func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 	t.Parallel()
 
-	cfg := settings.DefaultYouTubePlaneConfig()
+	cfg := apiplane.DefaultYouTubePlaneConfig()
 	_, err := Build(t.Context(), &cfg, &settings.PostgresConfig{User: "postgres_admin"}, slog.Default())
 
 	if err == nil || !strings.Contains(err.Error(), runtimeDatabaseRole) {
@@ -650,7 +651,7 @@ func awaitSignal(t *testing.T, signal <-chan struct{}, message string) {
 }
 
 func newTestRuntime(claimer observationClaimer, consumer observationConsumer) *Runtime {
-	cfg := settings.DefaultYouTubePlaneConfig()
+	cfg := apiplane.DefaultYouTubePlaneConfig()
 
 	cfg.ClaimInterval = 20 * time.Millisecond
 	cfg.TargetProjection.Interval = time.Hour

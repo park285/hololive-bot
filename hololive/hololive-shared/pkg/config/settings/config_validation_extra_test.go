@@ -124,9 +124,9 @@ func TestServerTransportEnabled_ExplicitList(t *testing.T) {
 func TestValidateServerTransports_RejectsExplicitEmptyTransport(t *testing.T) {
 	t.Parallel()
 
-	err := validateServerTransports(&ServerConfig{HTTPTransports: []string{""}})
+	err := ValidateServerTransports(&ServerConfig{HTTPTransports: []string{""}})
 	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_HTTP_TRANSPORTS must include h3") {
-		t.Fatalf("validateServerTransports(empty explicit) error = %v, want h3 required", err)
+		t.Fatalf("ValidateServerTransports(empty explicit) error = %v, want h3 required", err)
 	}
 }
 
@@ -160,21 +160,6 @@ func TestNormalizeServerHTTPTransport(t *testing.T) {
 				t.Fatalf("normalizeServerHTTPTransport(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestIsValidPostgresSSLMode(t *testing.T) {
-	t.Parallel()
-
-	valid := []string{"disable", "allow", "prefer", "require", "verify-ca", postgresSSLModeVerifyFull}
-	for _, mode := range valid {
-		if !isValidPostgresSSLMode(mode) {
-			t.Fatalf("isValidPostgresSSLMode(%q) = false, want true", mode)
-		}
-	}
-
-	if isValidPostgresSSLMode("invalid") {
-		t.Fatal("isValidPostgresSSLMode(\"invalid\") = true, want false")
 	}
 }
 
@@ -215,7 +200,7 @@ func TestLoadAdminAPIRuntime_BootsWithoutIrisEgressTokens(t *testing.T) {
 	t.Setenv(irisBotTokenEnv, "test-bot-token")
 	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
 
-	if _, err := load(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
+	if _, err := loadBotRuntimeConfig(); err == nil || !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
 		t.Fatalf("Load() error = %v, want IRIS_WEBHOOK_TOKEN is required", err)
 	}
 }
@@ -249,13 +234,8 @@ func TestLoadAdminAPIRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	setAdminAPIRuntimeEnv(t)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
-	cfg, err := LoadAdminAPIRuntime()
-	if err != nil {
+	if _, err := LoadAdminAPIRuntime(); err != nil {
 		t.Fatalf("LoadAdminAPIRuntime() error = %v, want success when collector env is invalid", err)
-	}
-
-	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
-		t.Fatalf("YouTubeCollector = %#v, want zero value unused by admin API loader", cfg.YouTubeCollector)
 	}
 }
 
@@ -264,29 +244,7 @@ func TestLoadBotRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
 
-	cfg, err := LoadBotRuntime()
-	if err != nil {
+	if _, err := LoadBotRuntime(); err != nil {
 		t.Fatalf("LoadBotRuntime() error = %v, want success when collector env is invalid", err)
-	}
-
-	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
-		t.Fatalf("YouTubeCollector = %#v, want zero value unused by bot loader", cfg.YouTubeCollector)
-	}
-}
-
-func TestLoadAlarmWorkerRuntimeIgnoresInvalidYouTubeCollectorEnv(t *testing.T) {
-	clearRuntimeRoleEnv(t)
-	setRequiredLoadEnv(t)
-	useStackWorkerProfileFixture(t, "stack-worker-profile-alarm-worker.json")
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("YOUTUBE_COLLECTOR_INSTANCE_ID", "INVALID")
-
-	cfg, err := LoadAlarmWorkerRuntime()
-	if err != nil {
-		t.Fatalf("LoadAlarmWorkerRuntime() error = %v, want success when collector env is invalid", err)
-	}
-
-	if cfg.YouTubeCollector != (YouTubeCollectorConfig{}) {
-		t.Fatalf("YouTubeCollector = %#v, want zero value unused by alarm-worker loader", cfg.YouTubeCollector)
 	}
 }

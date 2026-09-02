@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	"github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
@@ -29,7 +29,7 @@ type collectorInfrastructure struct {
 	closeErr     error
 }
 
-func initInfrastructure(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) (*collectorInfrastructure, error) {
+func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger) (*collectorInfrastructure, error) {
 	if appConfig == nil {
 		return nil, errors.New("build collector infra: config is nil")
 	}
@@ -62,8 +62,8 @@ func initInfrastructure(ctx context.Context, appConfig *settings.YouTubeCollecto
 }
 
 func (i *collectorInfrastructure) buildProviderClients(
-	appConfig *settings.YouTubeCollectorRuntimeConfig,
-	collector *settings.YouTubeCollectorConfig,
+	appConfig *collectorconfig.RuntimeConfig,
+	collector *collectorconfig.Config,
 ) error {
 	maxBody := int64(collector.MaxSuccessResponseBytes)
 
@@ -155,11 +155,11 @@ func (i *collectorInfrastructure) closeResources(ctx context.Context) error {
 
 func startYouTubeJSHelper(
 	ctx context.Context,
-	proxy *settings.CollectorProxyConfig,
-	collector *settings.YouTubeCollectorConfig,
+	proxy *collectorconfig.ProxyConfig,
+	collector *collectorconfig.Config,
 	limiter *ratelimiter.RateLimiter,
 ) (*youtubejs.Helper, *youtubejs.RPC, error) {
-	proxyConfig := settings.CollectorProxyConfig{}
+	proxyConfig := collectorconfig.ProxyConfig{}
 
 	if proxy != nil {
 		proxyConfig = *proxy

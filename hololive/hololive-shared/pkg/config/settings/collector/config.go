@@ -1,4 +1,6 @@
-package settings
+// Package collector: youtube-collector 런타임 전용 설정을 소유한다.
+// 외부 fetch·lease·checkpoint 소유권이 collector에 있으므로 그 설정도 여기에 둔다.
+package collector
 
 import (
 	"errors"
@@ -6,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const (
@@ -19,7 +23,7 @@ const (
 
 var youtubeCollectorInstanceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
-type YouTubeCollectorConfig struct {
+type Config struct {
 	InstanceID               string
 	TotalWorkers             int
 	QueueCapacity            int
@@ -51,13 +55,13 @@ type YouTubeCollectorConfig struct {
 	RequestInterval          time.Duration
 }
 
-func DefaultYouTubeCollectorConfig() YouTubeCollectorConfig {
-	workers := DefaultScraperWorkerCount()
-	retry := DefaultScraperSchedulerConfig()
+func DefaultConfig() Config {
+	workers := settings.DefaultScraperWorkerCount()
+	retry := settings.DefaultScraperSchedulerConfig()
 	queueCapacity := workers * 4
 	acquisitionBatch := min(queueCapacity, youtubeCollectorMaxAcquisitionBatch)
 
-	return YouTubeCollectorConfig{
+	return Config{
 		TotalWorkers:             workers,
 		QueueCapacity:            queueCapacity,
 		AcquisitionBatch:         acquisitionBatch,
@@ -89,9 +93,9 @@ func DefaultYouTubeCollectorConfig() YouTubeCollectorConfig {
 	}
 }
 
-func (c *YouTubeCollectorConfig) OrDefault() YouTubeCollectorConfig {
+func (c *Config) OrDefault() Config {
 	out := *c
-	defaults := DefaultYouTubeCollectorConfig()
+	defaults := DefaultConfig()
 	out.defaultWorkerQueue(&defaults)
 	out.defaultLeaseBudgets(&defaults)
 	out.defaultProviderLimits(&defaults)
@@ -99,7 +103,7 @@ func (c *YouTubeCollectorConfig) OrDefault() YouTubeCollectorConfig {
 	return out
 }
 
-func (c *YouTubeCollectorConfig) defaultWorkerQueue(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultWorkerQueue(defaults *Config) {
 	if c.TotalWorkers <= 0 {
 		c.TotalWorkers = defaults.TotalWorkers
 	}
@@ -117,13 +121,13 @@ func (c *YouTubeCollectorConfig) defaultWorkerQueue(defaults *YouTubeCollectorCo
 	}
 }
 
-func (c *YouTubeCollectorConfig) defaultLeaseBudgets(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultLeaseBudgets(defaults *Config) {
 	c.defaultLeaseTimings(defaults)
 	c.defaultPhaseTimeouts(defaults)
 	c.defaultRetryDelays(defaults)
 }
 
-func (c *YouTubeCollectorConfig) defaultLeaseTimings(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultLeaseTimings(defaults *Config) {
 	if c.LeaseTTL <= 0 {
 		c.LeaseTTL = defaults.LeaseTTL
 	}
@@ -137,7 +141,7 @@ func (c *YouTubeCollectorConfig) defaultLeaseTimings(defaults *YouTubeCollectorC
 	}
 }
 
-func (c *YouTubeCollectorConfig) defaultPhaseTimeouts(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultPhaseTimeouts(defaults *Config) {
 	if c.DBTimeout <= 0 {
 		c.DBTimeout = defaults.DBTimeout
 	}
@@ -167,7 +171,7 @@ func (c *YouTubeCollectorConfig) defaultPhaseTimeouts(defaults *YouTubeCollector
 	}
 }
 
-func (c *YouTubeCollectorConfig) defaultRetryDelays(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultRetryDelays(defaults *Config) {
 	if c.RetryMin <= 0 {
 		c.RetryMin = defaults.RetryMin
 	}
@@ -177,7 +181,7 @@ func (c *YouTubeCollectorConfig) defaultRetryDelays(defaults *YouTubeCollectorCo
 	}
 }
 
-func (c *YouTubeCollectorConfig) defaultProviderLimits(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultProviderLimits(defaults *Config) {
 	c.defaultInflightLimits()
 
 	if c.ReleaseJitterMin <= 0 {
@@ -203,7 +207,7 @@ func (c *YouTubeCollectorConfig) defaultProviderLimits(defaults *YouTubeCollecto
 	c.defaultPaginationLimits(defaults)
 }
 
-func (c *YouTubeCollectorConfig) defaultInflightLimits() {
+func (c *Config) defaultInflightLimits() {
 	if c.HolodexMaxInflight <= 0 {
 		c.HolodexMaxInflight = c.TotalWorkers
 	}
@@ -217,7 +221,7 @@ func (c *YouTubeCollectorConfig) defaultInflightLimits() {
 	}
 }
 
-func (c *YouTubeCollectorConfig) defaultPaginationLimits(defaults *YouTubeCollectorConfig) {
+func (c *Config) defaultPaginationLimits(defaults *Config) {
 	if c.MaxPages <= 0 {
 		c.MaxPages = defaults.MaxPages
 	}
@@ -235,12 +239,12 @@ func (c *YouTubeCollectorConfig) defaultPaginationLimits(defaults *YouTubeCollec
 	}
 }
 
-func (c *YouTubeCollectorConfig) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
+func (c *Config) MaxProviderTimeout(holodexTimeout, officialTimeout time.Duration) time.Duration {
 	maxTimeout := max(officialTimeout, max(holodexTimeout, c.YouTubeJSRequestTimeout))
 	return maxTimeout
 }
 
-func (c *YouTubeCollectorConfig) Validate(holodexTimeout, officialTimeout time.Duration) error {
+func (c *Config) Validate(holodexTimeout, officialTimeout time.Duration) error {
 	if err := c.validateInstanceID(); err != nil {
 		return fmt.Errorf("validate instance ID: %w", err)
 	}
@@ -260,7 +264,7 @@ func (c *YouTubeCollectorConfig) Validate(holodexTimeout, officialTimeout time.D
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validateInstanceID() error {
+func (c *Config) validateInstanceID() error {
 	if !validYouTubeCollectorInstanceID(c.InstanceID) {
 		return errors.New("YOUTUBE_COLLECTOR_INSTANCE_ID is invalid")
 	}
@@ -272,7 +276,7 @@ func validYouTubeCollectorInstanceID(id string) bool {
 	return youtubeCollectorInstanceIDPattern.MatchString(strings.TrimSpace(id))
 }
 
-func (c *YouTubeCollectorConfig) validateLeaseBudgets(holodexTimeout, officialTimeout time.Duration) error {
+func (c *Config) validateLeaseBudgets(holodexTimeout, officialTimeout time.Duration) error {
 	if err := c.validateLeaseTiming(); err != nil {
 		return fmt.Errorf("validate lease timing: %w", err)
 	}
@@ -296,7 +300,7 @@ func (c *YouTubeCollectorConfig) validateLeaseBudgets(holodexTimeout, officialTi
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validateLeaseTiming() error {
+func (c *Config) validateLeaseTiming() error {
 	if c.LeaseTTL < time.Second || c.LeaseTTL > 30*time.Minute {
 		return errors.New("collection lease_ttl_ms must be between 1000 and 1800000")
 	}
@@ -310,7 +314,7 @@ func (c *YouTubeCollectorConfig) validateLeaseTiming() error {
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validatePhaseTimeouts() error {
+func (c *Config) validatePhaseTimeouts() error {
 	if !validCollectorPhaseTimeout(c.DBTimeout, time.Minute) ||
 		!validCollectorPhaseTimeout(c.CleanupTimeout, time.Minute) {
 		return errors.New("YOUTUBE_COLLECTOR phase timeout bounds are invalid")
@@ -334,7 +338,7 @@ func validCollectorPhaseTimeout(value, maximum time.Duration) bool {
 	return value >= 100*time.Millisecond && value <= maximum
 }
 
-func (c *YouTubeCollectorConfig) validateYouTubeJSTimeouts() error {
+func (c *Config) validateYouTubeJSTimeouts() error {
 	if c.YouTubeJSRequestTimeout <= 0 || c.YouTubeJSRequestTimeout > 10*time.Minute ||
 		c.YouTubeJSStartupTimeout <= 0 || c.YouTubeJSStartupTimeout > 10*time.Minute ||
 		c.YouTubeJSShutdownTimeout <= 0 || c.YouTubeJSShutdownTimeout > 10*time.Minute {
@@ -344,7 +348,7 @@ func (c *YouTubeCollectorConfig) validateYouTubeJSTimeouts() error {
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validateRetryAndJitter() error {
+func (c *Config) validateRetryAndJitter() error {
 	if c.RetryMin < 100*time.Millisecond || c.RetryMax < c.RetryMin || c.RetryMax > time.Hour {
 		return errors.New("YOUTUBE_COLLECTOR retry delay bounds are invalid")
 	}
@@ -356,7 +360,7 @@ func (c *YouTubeCollectorConfig) validateRetryAndJitter() error {
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validateWorkerQueue() error {
+func (c *Config) validateWorkerQueue() error {
 	if c.AcquisitionBatch < 1 || c.AcquisitionBatch > youtubeCollectorMaxAcquisitionBatch {
 		return fmt.Errorf("collection.settings.acquisition_batch must be between 1 and %d", youtubeCollectorMaxAcquisitionBatch)
 	}
@@ -376,7 +380,7 @@ func (c *YouTubeCollectorConfig) validateWorkerQueue() error {
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validateProviderLimits() error {
+func (c *Config) validateProviderLimits() error {
 	if err := c.validateInflightLimits(); err != nil {
 		return fmt.Errorf("validate inflight limits: %w", err)
 	}
@@ -388,7 +392,7 @@ func (c *YouTubeCollectorConfig) validateProviderLimits() error {
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validateInflightLimits() error {
+func (c *Config) validateInflightLimits() error {
 	if err := validateProviderInflight("collection.settings.holodex_max_inflight", c.HolodexMaxInflight, c.TotalWorkers); err != nil {
 		return fmt.Errorf("validate provider inflight: %w", err)
 	}
@@ -404,7 +408,7 @@ func (c *YouTubeCollectorConfig) validateInflightLimits() error {
 	return nil
 }
 
-func (c *YouTubeCollectorConfig) validatePaginationLimits() error {
+func (c *Config) validatePaginationLimits() error {
 	if c.MaxPages < 1 || c.MaxPages > youtubeCollectorMaxPages {
 		return fmt.Errorf("YOUTUBE_COLLECTOR_MAX_PAGES must be between 1 and %d", youtubeCollectorMaxPages)
 	}

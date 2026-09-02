@@ -23,20 +23,10 @@ package settings
 import (
 	"errors"
 	"fmt"
-	"net/url"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/stringutil"
-)
-
-const (
-	schemeHTTP  = "http"
-	schemeHTTPS = "https"
-
-	environmentProduction     = "production"
-	postgresSSLModeVerifyFull = "verify-full"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func (c *Config) Validate() error {
@@ -54,7 +44,7 @@ func (c *Config) ValidateAdminAPIRuntime() error {
 		return fmt.Errorf("validate with required: %w", err)
 	}
 
-	if err := validateNoNotificationEgressOwnership(runtimeAdminAPI); err != nil {
+	if err := load.ValidateNoNotificationEgressOwnership(load.RuntimeAdminAPI); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 
@@ -62,7 +52,7 @@ func (c *Config) ValidateAdminAPIRuntime() error {
 }
 
 func (c *Config) validateWithRequired(validateRequired func() error) error {
-	if err := validateUnsupportedLegacyEnvUsage(); err != nil {
+	if err := load.ValidateUnsupportedLegacyEnvUsage(); err != nil {
 		return fmt.Errorf("validate unsupported legacy env usage: %w", err)
 	}
 
@@ -74,7 +64,7 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 		return fmt.Errorf("validate server transports: %w", err)
 	}
 
-	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
+	if err := load.ValidateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return fmt.Errorf("validate API secret key: %w", err)
 	}
 
@@ -82,7 +72,7 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 		return fmt.Errorf("validate required: %w", err)
 	}
 
-	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	if err := load.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
@@ -94,7 +84,7 @@ func (c *Config) validateWithRequired(validateRequired func() error) error {
 }
 
 func (c *Config) validateRuntimeConfigs() error {
-	if err := validateTracingConfig(c.Tracing); err != nil {
+	if err := ValidateTracingConfig(c.Tracing); err != nil {
 		return fmt.Errorf("validate tracing config: %w", err)
 	}
 
@@ -122,7 +112,7 @@ func validateHolodexConfig(config *HolodexConfig) error {
 		return nil
 	}
 
-	if err := validateHolodexTimeout(config.Timeout); err != nil {
+	if err := load.ValidateHolodexTimeout(config.Timeout); err != nil {
 		return fmt.Errorf("validate holodex timeout: %w", err)
 	}
 
@@ -142,40 +132,16 @@ func validateHolodexConfig(config *HolodexConfig) error {
 	return nil
 }
 
-func validateHolodexTimeout(timeout time.Duration) error {
-	if timeout <= 0 {
-		return errors.New("HOLODEX_TIMEOUT_SECONDS must be positive")
-	}
-
-	return nil
-}
-
-func validateHolodexAPIKey(apiKey string) error {
-	if strings.TrimSpace(apiKey) == "" {
-		return errors.New("HOLODEX_API_KEY is required")
-	}
-
-	return nil
-}
-
-func validateOfficialScheduleTimeout(timeout time.Duration) error {
-	if timeout <= 0 {
-		return errors.New("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS must be positive")
-	}
-
-	return nil
-}
-
 func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseBodyBytes int64) error {
 	if config == nil {
 		return errors.New("official schedule config is required")
 	}
 
-	if err := validateOfficialScheduleBaseURL(config.BaseURL); err != nil {
+	if err := load.ValidateOfficialScheduleBaseURL(config.BaseURL); err != nil {
 		return fmt.Errorf("validate official schedule base URL: %w", err)
 	}
 
-	if err := validateOfficialScheduleTimeout(config.Timeout); err != nil {
+	if err := load.ValidateOfficialScheduleTimeout(config.Timeout); err != nil {
 		return fmt.Errorf("validate official schedule timeout: %w", err)
 	}
 
@@ -194,33 +160,12 @@ func validateOfficialScheduleConfig(config *OfficialScheduleConfig, maxResponseB
 	return nil
 }
 
-func validateOfficialScheduleBaseURL(rawURL string) error {
-	baseURL, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return fmt.Errorf("parse OFFICIAL_SCHEDULE_BASE_URL: %w", err)
-	}
-
-	if baseURL.Scheme != schemeHTTPS || baseURL.Host == "" {
-		return errors.New("OFFICIAL_SCHEDULE_BASE_URL must be an HTTPS origin")
-	}
-
-	if baseURL.User != nil || (baseURL.Path != "" && baseURL.Path != "/") {
-		return errors.New("OFFICIAL_SCHEDULE_BASE_URL must not contain userinfo or path")
-	}
-
-	if baseURL.RawQuery != "" || baseURL.Fragment != "" {
-		return errors.New("OFFICIAL_SCHEDULE_BASE_URL must not contain query or fragment")
-	}
-
-	return nil
-}
-
 func (c *Config) validateAdminAPIRequiredConfig() error {
 	if len(c.Kakao.Rooms) == 0 {
 		return errors.New("KAKAO_ROOMS is required")
 	}
 
-	if err := validateHolodexAPIKey(c.Holodex.APIKey); err != nil {
+	if err := load.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
 		return fmt.Errorf("validate holodex API key: %w", err)
 	}
 
@@ -248,7 +193,7 @@ func (c *Config) validateRequiredConfig() error {
 		return errors.New("IRIS_BASE_URL or IRIS_BASE_URL_FILE is required")
 	}
 
-	if err := validateHolodexAPIKey(c.Holodex.APIKey); err != nil {
+	if err := load.ValidateHolodexAPIKey(c.Holodex.APIKey); err != nil {
 		return fmt.Errorf("validate holodex API key: %w", err)
 	}
 
@@ -276,7 +221,7 @@ func validateScraperConfig(config *ScraperConfig) error {
 }
 
 func validateCORSConfig(environment string, config CORSConfig) error {
-	if isProductionEnvironment(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
+	if load.IsProduction(environment) && config.Enforce && len(config.AllowedOrigins) == 0 {
 		return errors.New("CORS_ALLOWED_ORIGINS is required in production when CORS_ENFORCE=true")
 	}
 
@@ -364,7 +309,7 @@ func loadScraperPoll() (ScraperPoll, error) {
 		{key: "SCRAPER_POLL_STATS_INTERVAL_SECONDS", fallback: defaults.Stats, target: &poll.Stats},
 		{key: "SCRAPER_POLL_LIVE_INTERVAL_SECONDS", fallback: defaults.Live, target: &poll.Live},
 	} {
-		value, err := requiredSecondsDurationEnv(field.key, field.fallback)
+		value, err := load.RequiredSecondsDurationEnv(field.key, field.fallback)
 		if err != nil {
 			return ScraperPoll{}, fmt.Errorf("required seconds duration env: %w", err)
 		}
@@ -373,79 +318,4 @@ func loadScraperPoll() (ScraperPoll, error) {
 	}
 
 	return poll, nil
-}
-
-func validateUnsupportedLegacyEnvUsage() error {
-	if value, exists := os.LookupEnv("MEMBER_NEWS_CLIPROXY_MODEL"); exists && stringutil.TrimSpace(value) != "" {
-		return errors.New("MEMBER_NEWS_CLIPROXY_MODEL is no longer supported; use MEMBER_NEWS_LLM_MODEL")
-	}
-
-	if value, exists := os.LookupEnv("DB_SSLMODE"); exists && stringutil.TrimSpace(value) != "" {
-		return errors.New("DB_SSLMODE is no longer supported; use POSTGRES_SSLMODE")
-	}
-
-	if value, exists := os.LookupEnv("DB_QUERY_EXEC_MODE"); exists && stringutil.TrimSpace(value) != "" {
-		return errors.New("DB_QUERY_EXEC_MODE is no longer supported; use POSTGRES_QUERY_EXEC_MODE")
-	}
-
-	if value, exists := os.LookupEnv("OTEL_ENVIRONMENT"); exists && stringutil.TrimSpace(value) != "" {
-		return errors.New("OTEL_ENVIRONMENT is no longer supported; use APP_ENV")
-	}
-
-	return nil
-}
-
-func validatePostgresSSLMode(environment, sslMode string) error {
-	mode := strings.ToLower(strings.TrimSpace(sslMode))
-	if mode == "" {
-		return errors.New("POSTGRES_SSLMODE is required")
-	}
-
-	if !isValidPostgresSSLMode(mode) {
-		return fmt.Errorf("invalid POSTGRES_SSLMODE: %s", sslMode)
-	}
-
-	if !isProductionEnvironment(environment) {
-		return nil
-	}
-
-	if isInsecurePostgresSSLMode(mode) {
-		return fmt.Errorf("POSTGRES_SSLMODE=%s is not allowed in production; use verify-full with POSTGRES_SSLROOTCERT", sslMode)
-	}
-
-	return nil
-}
-
-func isValidPostgresSSLMode(mode string) bool {
-	switch mode {
-	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
-		return true
-	default:
-		return false
-	}
-}
-
-func isInsecurePostgresSSLMode(mode string) bool {
-	switch mode {
-	case "disable", "allow", "prefer", "require", "verify-ca":
-		return true
-	default:
-		return false
-	}
-}
-
-func isProductionEnvironment(environment string) bool {
-	return strings.EqualFold(strings.TrimSpace(environment), environmentProduction)
-}
-
-func validateAPISecretKey(environment, apiKey string) error {
-	if !strings.EqualFold(strings.TrimSpace(environment), environmentProduction) {
-		return nil
-	}
-
-	if strings.TrimSpace(apiKey) != "" {
-		return nil
-	}
-
-	return errors.New("API_SECRET_KEY is required in production")
 }

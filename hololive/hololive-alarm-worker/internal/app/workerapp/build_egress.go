@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
@@ -29,7 +30,7 @@ import (
 
 func buildNotificationEgress(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *alarmworker.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
@@ -69,23 +70,23 @@ func buildNotificationEgress(
 
 func buildEgressRunners(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *alarmworker.RuntimeConfig,
 	infra *sharedmodules.InfraModule,
 	irisSender *egress.IrisMessageSender,
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) ([]workerruntime.NamedScheduler, error) {
-	runners, err := appendAlarmDispatchRunner(ctx, nil, appConfig, infra, irisSender, logger, workerState)
+	runners, err := appendAlarmDispatchRunner(ctx, nil, appConfig.Config, infra, irisSender, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append alarm dispatch runner: %w", err)
 	}
 
 	runners = append(runners, workerruntime.NamedScheduler{
 		Name:      "alarm-dispatch-maintenance",
-		Scheduler: dispatchrun.NewMaintenanceRunner(infra, appConfig.AlarmDispatchRetention, logger),
+		Scheduler: dispatchrun.NewMaintenanceRunner(infra, appConfig.DispatchRetention, logger),
 	})
 
-	mode, youtubeEnabled, err := youtubeOutboxHandoffActivation(appConfig, logger)
+	mode, youtubeEnabled, err := youtubeOutboxHandoffActivation(appConfig.Config, logger)
 	if err != nil {
 		return nil, fmt.Errorf("resolve youtube outbox handoff activation: %w", err)
 	}
@@ -93,7 +94,7 @@ func buildEgressRunners(
 	if youtubeEnabled {
 		sender := buildYouTubeOutboxSender(irisSender, alarmDispatchMessageStrings(infra, logger))
 
-		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig, infra, sender, logger, workerState, mode)
+		dispatcher, buildErr := buildYouTubeOutboxDispatcher(appConfig.Config, infra, sender, logger, workerState, mode)
 		if buildErr != nil {
 			return nil, fmt.Errorf("build youtube outbox dispatcher: %w", buildErr)
 		}
@@ -104,7 +105,7 @@ func buildEgressRunners(
 		})
 	}
 
-	runners, err = appendNotificationDeliveryRunner(runners, appConfig, infra, irisSender, logger, workerState)
+	runners, err = appendNotificationDeliveryRunner(runners, appConfig.Config, infra, irisSender, logger, workerState)
 	if err != nil {
 		return nil, fmt.Errorf("append notification delivery runner: %w", err)
 	}

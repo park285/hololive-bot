@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 )
 
 func TestAlarmWorkerTelemetryConfigUsesFixedIdentity(t *testing.T) {
@@ -20,7 +21,7 @@ func TestAlarmWorkerTelemetryConfigUsesFixedIdentity(t *testing.T) {
 		},
 	}
 
-	got := alarmWorkerTelemetryConfig(appConfig, "2.3.4")
+	got := alarmWorkerTelemetryConfig(&alarmworker.RuntimeConfig{Config: appConfig}, "2.3.4")
 
 	if got.ServiceName != "hololive-alarm-worker" {
 		t.Fatalf("ServiceName = %q, want hololive-alarm-worker", got.ServiceName)

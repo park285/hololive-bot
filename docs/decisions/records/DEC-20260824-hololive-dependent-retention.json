@@ -22,7 +22,7 @@
     "hololive/hololive-api/scripts/migrations/185_source_application_orphan_retention_index.sql",
     "hololive/hololive-api/scripts/migrations/186_source_checkpoint_retention_candidate_index.sql",
     "hololive/hololive-api/scripts/migrations/187_youtube_dependent_retention_api.sql",
-    "hololive/hololive-shared/pkg/config/settings/config_youtube_plane_retention.go",
+    "hololive/hololive-shared/pkg/config/settings/apiplane/youtube_plane_retention.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_retention.go"
   ],
   "supersedes": [],

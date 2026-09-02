@@ -14,7 +14,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
@@ -480,7 +480,7 @@ func TestReadinessHTTPStatusTable(t *testing.T) {
 	}
 }
 
-func collectorInstanceIDForTest(appConfig *settings.YouTubeCollectorRuntimeConfig) string {
+func collectorInstanceIDForTest(appConfig *collectorconfig.RuntimeConfig) string {
 	if id := collectorInstanceID(appConfig); id != "" {
 		return id
 	}

@@ -1,4 +1,4 @@
-package settings
+package load
 
 import (
 	"fmt"
@@ -9,7 +9,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-func positiveValueProblems(values map[string]int64) []string {
+// PositiveValueProblems: 밀리초 설정이 1..30일 범위를 벗어나면 문제로 보고한다.
+func PositiveValueProblems(values map[string]int64) []string {
 	problems := make([]string, 0)
 
 	for name, value := range values {
@@ -21,7 +22,7 @@ func positiveValueProblems(values map[string]int64) []string {
 	return problems
 }
 
-func positiveIntProblems(values map[string]int) []string {
+func PositiveIntProblems(values map[string]int) []string {
 	problems := make([]string, 0)
 
 	for name, value := range values {
@@ -33,7 +34,7 @@ func positiveIntProblems(values map[string]int) []string {
 	return problems
 }
 
-func allPositiveInts(values ...int) bool {
+func AllPositiveInts(values ...int) bool {
 	for _, value := range values {
 		if value < 1 {
 			return false
@@ -43,7 +44,7 @@ func allPositiveInts(values ...int) bool {
 	return true
 }
 
-func joinWorkerProfileProblems(role string, problems []string) error {
+func JoinWorkerProfileProblems(role string, problems []string) error {
 	if len(problems) == 0 {
 		return nil
 	}
@@ -53,7 +54,7 @@ func joinWorkerProfileProblems(role string, problems []string) error {
 	return fmt.Errorf("validate Hololive %s worker profile: %s", role, strings.Join(problems, "; "))
 }
 
-func workerDuration(policy workercontract.DurationPolicy) time.Duration {
+func WorkerDuration(policy workercontract.DurationPolicy) time.Duration {
 	if policy.Milliseconds == nil {
 		return 0
 	}

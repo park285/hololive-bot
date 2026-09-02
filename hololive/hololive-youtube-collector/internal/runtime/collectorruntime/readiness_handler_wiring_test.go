@@ -3,7 +3,7 @@ package collectorruntime
 import (
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
@@ -28,7 +28,7 @@ func TestConfigureFeedsInjectedTrackerIntoReadinessEvaluation(t *testing.T) {
 	readiness := &collectorReadiness{scheduler: scheduler, tracker: scheduler.readiness}
 	readiness.configure(&sharedserver.RuntimeRouterOptions{})
 
-	cfg := settings.DefaultYouTubeCollectorConfig()
+	cfg := collectorconfig.DefaultConfig()
 	deps := readiness.deps(&cfg)
 
 	if deps.tracker != scheduler.readiness {

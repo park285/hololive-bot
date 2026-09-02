@@ -14,6 +14,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/fxapp"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
@@ -31,7 +32,7 @@ func main() {
 	}
 
 	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
-		if _, err := settings.LoadHololiveAPIRuntime(); err != nil {
+		if _, err := apiplane.LoadRuntime(); err != nil {
 			return fmt.Errorf("load hololive api runtime: %w", err)
 		}
 
@@ -68,9 +69,9 @@ type loggerResult struct {
 
 type startupDependencies struct {
 	initialize     func(string)
-	loadConfig     func() (*settings.HololiveAPIConfig, error)
-	newLogger      func(*settings.HololiveAPIConfig) (loggerResult, error)
-	newApplication func(context.Context, *settings.HololiveAPIConfig, *slog.Logger, string) (hololiveAPIApplication, error)
+	loadConfig     func() (*apiplane.RuntimeConfig, error)
+	newLogger      func(*apiplane.RuntimeConfig) (loggerResult, error)
+	newApplication func(context.Context, *apiplane.RuntimeConfig, *slog.Logger, string) (hololiveAPIApplication, error)
 	stderr         io.Writer
 }
 
@@ -80,11 +81,11 @@ func productionStartupDependencies() startupDependencies {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		loadConfig: settings.LoadHololiveAPIRuntime,
+		loadConfig: apiplane.LoadRuntime,
 		newLogger:  newHololiveAPILogger,
 		newApplication: func(
 			ctx context.Context,
-			config *settings.HololiveAPIConfig,
+			config *apiplane.RuntimeConfig,
 			logger *slog.Logger,
 			version string,
 		) (hololiveAPIApplication, error) {
@@ -143,7 +144,7 @@ func runHololiveAPIWithDependencies(setLogCloser func(io.Closer), dependencies s
 	return application.Run(logger)
 }
 
-func newHololiveAPILogger(config *settings.HololiveAPIConfig) (loggerResult, error) {
+func newHololiveAPILogger(config *apiplane.RuntimeConfig) (loggerResult, error) {
 	logger, closer, err := sharedlogging.EnableFileLoggingWithOptions(sharedlogging.Config{
 		Level:      config.Logging.Level,
 		Dir:        config.Logging.Dir,

@@ -96,15 +96,3 @@ type WorkerPoolConfig struct {
 	Workers   int
 	QueueSize int
 }
-
-type AlarmDispatchRetentionConfig struct {
-	Enabled         bool
-	Interval        time.Duration
-	QueryTimeout    time.Duration
-	Limit           int
-	SentDays        int
-	DLQDays         int
-	QuarantinedDays int
-	CancelledDays   int
-	EventDays       int
-}

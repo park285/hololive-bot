@@ -1,4 +1,4 @@
-package settings
+package apiplane
 
 import (
 	"errors"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 const (
@@ -46,7 +48,7 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 		return fmt.Errorf("read bool env: %w", err)
 	}
 
-	if config.Retention.Interval, err = strictDurationUnitEnv(
+	if config.Retention.Interval, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_INTERVAL_SECONDS",
 		defaults.Interval,
 		time.Second,
@@ -71,7 +73,7 @@ func loadYouTubePlaneRetention(config *YouTubePlaneConfig) error {
 func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 
-	if config.Retention.QueueProcessedAge, err = strictDurationUnitEnv(
+	if config.Retention.QueueProcessedAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS",
 		defaults.QueueProcessedAge,
 		youtubePlaneRetentionDay,
@@ -79,7 +81,7 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.QueueDLQAge, err = strictDurationUnitEnv(
+	if config.Retention.QueueDLQAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_QUEUE_DLQ_DAYS",
 		defaults.QueueDLQAge,
 		youtubePlaneRetentionDay,
@@ -87,7 +89,7 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.CollisionAge, err = strictDurationUnitEnv(
+	if config.Retention.CollisionAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_COLLISION_DAYS",
 		defaults.CollisionAge,
 		youtubePlaneRetentionDay,
@@ -95,7 +97,7 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ReplayAuditAge, err = strictDurationUnitEnv(
+	if config.Retention.ReplayAuditAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_REPLAY_AUDIT_DAYS",
 		defaults.ReplayAuditAge,
 		youtubePlaneRetentionDay,
@@ -113,7 +115,7 @@ func loadYouTubePlaneRetentionAges(config *YouTubePlaneConfig, defaults *YouTube
 func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 
-	if config.Retention.ApplicationAuditGrace, err = strictDurationUnitEnv(
+	if config.Retention.ApplicationAuditGrace, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_APPLICATION_AUDIT_GRACE_DAYS",
 		defaults.ApplicationAuditGrace,
 		youtubePlaneRetentionDay,
@@ -121,7 +123,7 @@ func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.CheckpointHistoryAge, err = strictDurationUnitEnv(
+	if config.Retention.CheckpointHistoryAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHECKPOINT_HISTORY_DAYS",
 		defaults.CheckpointHistoryAge,
 		youtubePlaneRetentionDay,
@@ -129,7 +131,7 @@ func loadYouTubePlaneRetentionSupportAges(config *YouTubePlaneConfig, defaults *
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ProjectionRetiredAge, err = strictDurationUnitEnv(
+	if config.Retention.ProjectionRetiredAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_PROJECTION_RETIRED_DAYS",
 		defaults.ProjectionRetiredAge,
 		youtubePlaneRetentionDay,
@@ -159,7 +161,7 @@ func loadYouTubePlaneEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubeP
 func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 
-	if config.Retention.CommunityPageAge, err = strictDurationUnitEnv(
+	if config.Retention.CommunityPageAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_COMMUNITY_PAGE_DAYS",
 		defaults.CommunityPageAge,
 		youtubePlaneRetentionDay,
@@ -167,7 +169,7 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.VideoListAge, err = strictDurationUnitEnv(
+	if config.Retention.VideoListAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_VIDEO_LIST_DAYS",
 		defaults.VideoListAge,
 		youtubePlaneRetentionDay,
@@ -175,7 +177,7 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ShortsListAge, err = strictDurationUnitEnv(
+	if config.Retention.ShortsListAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_SHORTS_LIST_DAYS",
 		defaults.ShortsListAge,
 		youtubePlaneRetentionDay,
@@ -183,7 +185,7 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.LiveSnapshotAge, err = strictDurationUnitEnv(
+	if config.Retention.LiveSnapshotAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_LIVE_SNAPSHOT_DAYS",
 		defaults.LiveSnapshotAge,
 		youtubePlaneRetentionDay,
@@ -197,7 +199,7 @@ func loadYouTubePlaneContentEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *YouTubePlaneRetentionConfig) error {
 	var err error
 
-	if config.Retention.ChannelStatsAge, err = strictDurationUnitEnv(
+	if config.Retention.ChannelStatsAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHANNEL_STATS_DAYS",
 		defaults.ChannelStatsAge,
 		youtubePlaneRetentionDay,
@@ -205,7 +207,7 @@ func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ViewerSampleAge, err = strictDurationUnitEnv(
+	if config.Retention.ViewerSampleAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_VIEWER_SAMPLE_DAYS",
 		defaults.ViewerSampleAge,
 		youtubePlaneRetentionDay,
@@ -213,7 +215,7 @@ func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ChannelProfileAge, err = strictDurationUnitEnv(
+	if config.Retention.ChannelProfileAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHANNEL_PROFILE_DAYS",
 		defaults.ChannelProfileAge,
 		youtubePlaneRetentionDay,
@@ -221,7 +223,7 @@ func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ChannelPhotoAge, err = strictDurationUnitEnv(
+	if config.Retention.ChannelPhotoAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_CHANNEL_PHOTO_DAYS",
 		defaults.ChannelPhotoAge,
 		youtubePlaneRetentionDay,
@@ -229,7 +231,7 @@ func loadYouTubePlaneChannelEvidenceAges(config *YouTubePlaneConfig, defaults *Y
 		return fmt.Errorf("strict duration unit env: %w", err)
 	}
 
-	if config.Retention.ScheduleSnapshotAge, err = strictDurationUnitEnv(
+	if config.Retention.ScheduleSnapshotAge, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_RETENTION_SCHEDULE_SNAPSHOT_DAYS",
 		defaults.ScheduleSnapshotAge,
 		youtubePlaneRetentionDay,
@@ -249,7 +251,7 @@ func loadYouTubePlaneReplay(config *YouTubePlaneConfig) error {
 		return fmt.Errorf("read bool env: %w", err)
 	}
 
-	if config.Replay.Interval, err = strictDurationUnitEnv(
+	if config.Replay.Interval, err = load.StrictDurationUnitEnv(
 		"YOUTUBE_PLANE_REPLAY_INTERVAL_SECONDS",
 		defaults.Interval,
 		time.Second,
@@ -368,7 +370,7 @@ func validateRetentionAge(name string, age time.Duration) error {
 }
 
 func (c *YouTubePlaneConfig) validateProductionRetention(environment string) error {
-	if !isProductionEnvironment(environment) || !c.Enabled {
+	if !load.IsProduction(environment) || !c.Enabled {
 		return nil
 	}
 
