@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/georgysavva/scany/v2 v2.1.4
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
@@ -14,7 +15,7 @@ require (
 	github.com/mmcdole/gofeed v1.4.2
 	github.com/openai/openai-go/v3 v3.52.0
 	github.com/park285/iris-client-go/v2 v2.4.0
-	github.com/park285/shared-go/v2 v2.2.0
+	github.com/park285/shared-go/v2 v2.3.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/quic-go/quic-go v0.61.0
 	github.com/shirou/gopsutil/v4 v4.26.7
@@ -53,7 +54,6 @@ require (
 	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
-	github.com/georgysavva/scany/v2 v2.1.4 // indirect
 	github.com/gin-contrib/gzip v1.2.6 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
