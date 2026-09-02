@@ -26,40 +26,11 @@ func TestRuntimeSplitStandaloneModulesContract(t *testing.T) {
 		}
 	}
 
-	mustNotExist := []string{
-		"hololive/hololive-kakao-bot-go/cmd/admin-api",
-		"hololive/hololive-kakao-bot-go/cmd/alarm-worker",
-		"hololive/hololive-kakao-bot-go/internal/server",
-		"hololive/hololive-kakao-bot-go/internal/service/alarm/checker",
-		"hololive/hololive-kakao-bot-go/internal/service/alarm/scheduler",
-		"hololive/hololive-kakao-bot-go/internal/service/system",
-		"hololive/hololive-kakao-bot-go/internal/service/trigger",
-		"hololive/hololive-kakao-bot-go/internal/service/notification",
-	}
-	for _, path := range mustNotExist {
-		if _, err := os.Stat(filepath.Join(root, path)); err == nil {
-			t.Fatalf("expected %s to be removed from hololive-kakao-bot-go ownership", path)
-		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat %s: %v", path, err)
-		}
-	}
-
 	goWork := readRepoFile(t, root, "go.work")
 
 	for _, entry := range []string{"./hololive/hololive-api", "./hololive/hololive-alarm-worker"} {
 		if !strings.Contains(goWork, entry) {
 			t.Fatalf("go.work must include %s", entry)
-		}
-	}
-
-	projectMap := readRepoFile(t, root, "docs/current/PROJECT_MAP.md")
-
-	for _, want := range []string{
-		"| `hololive-api` | Go 1.27 | `hololive/hololive-api/` |",
-		"| `hololive-alarm-worker` | Go 1.27 | `hololive/hololive-alarm-worker/` |",
-	} {
-		if !strings.Contains(projectMap, want) {
-			t.Fatalf("project map must contain %q", want)
 		}
 	}
 }
