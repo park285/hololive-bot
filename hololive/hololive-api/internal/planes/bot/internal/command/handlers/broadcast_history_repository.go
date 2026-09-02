@@ -331,3 +331,75 @@ func (r *pgBroadcastHistoryRepository) GetEndedBroadcast(ctx context.Context, qu
 
 	return &entry, nil
 }
+
+var (
+	broadcastHistoryListPageSQL     = mustSQL("broadcast_history_repository_0179_01.sql")
+	broadcastHistoryGetByVideoIDSQL = mustSQL("broadcast_history_repository_0242_02.sql")
+)
+
+type broadcastHistoryScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.BroadcastHistoryEntry, error) {
+	var entry handlercore.BroadcastHistoryEntry
+
+	if err := row.Scan(
+		&entry.VideoID,
+		&entry.ChannelID,
+		&entry.MemberName,
+		&entry.Title,
+		&entry.TopicID,
+		&entry.ThumbnailURL,
+		&entry.ScheduledStartTime,
+		&entry.StartedAt,
+		&entry.EndedAt,
+		&entry.LastSeenAt,
+	); err != nil {
+		return handlercore.BroadcastHistoryEntry{}, fmt.Errorf("scan broadcast history row: %w", err)
+	}
+
+	classification := ClassifyBroadcastWithSource(entry.TopicID, entry.Title)
+
+	entry.BroadcastType = string(classification.Type)
+	entry.BroadcastTypeSource = classification.Source
+
+	return entry, nil
+}
+
+func broadcastHistoryEntryMatches(query *handlercore.BroadcastHistoryQuery, entry *handlercore.BroadcastHistoryEntry) bool {
+	if query.TopicID != "" && !broadcastTopicMatches(entry.TopicID, query.TopicID) {
+		return false
+	}
+
+	if query.Type != "" && entry.BroadcastType != query.Type {
+		return false
+	}
+
+	return true
+}
+
+func broadcastHistorySortTime(entry *handlercore.BroadcastHistoryEntry) time.Time {
+	switch {
+	case entry.EndedAt != nil:
+		return entry.EndedAt.UTC()
+	case entry.StartedAt != nil:
+		return entry.StartedAt.UTC()
+	case entry.ScheduledStartTime != nil:
+		return entry.ScheduledStartTime.UTC()
+	default:
+		return entry.LastSeenAt.UTC()
+	}
+}
+
+func normalizeBroadcastHistoryLimit(limit int) int {
+	if limit <= 0 {
+		return defaultBroadcastHistoryLimit
+	}
+
+	if limit > maxBroadcastHistoryLimit {
+		return maxBroadcastHistoryLimit
+	}
+
+	return limit
+}

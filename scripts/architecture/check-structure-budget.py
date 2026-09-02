@@ -41,6 +41,7 @@ FUNC_RE = re.compile(
     r"(?:\[[^\]]+\])?\s*\("
 )
 CONTROL_RE = re.compile(r"\b(if|for|switch|select|case)\b")
+PARTITION_FILE_RE = re.compile(r"_part[0-9]+(?:_test)?\.go$")
 
 
 @dataclass(frozen=True)
@@ -117,7 +118,9 @@ def load_policy(path: Path) -> dict[str, Any]:
         )
     except (OSError, UnicodeError, json.JSONDecodeError, PolicyError) as exc:
         raise PolicyError(f"read policy {path}: {exc}") from exc
-    policy = exact_object(policy, {"schema_version", "file", "functions"}, "policy")
+    policy = exact_object(
+        policy, {"schema_version", "file", "functions", "forbid_partition_files"}, "policy"
+    )
     if policy["schema_version"] != 1:
         raise PolicyError("policy.schema_version must be 1")
     file_policy = exact_object(
@@ -138,6 +141,8 @@ def load_policy(path: Path) -> dict[str, Any]:
     )
     for rule, pair in functions.items():
         budget_pair(pair, f"policy.functions.{rule}")
+    if not isinstance(policy["forbid_partition_files"], bool):
+        raise PolicyError("policy.forbid_partition_files must be a boolean")
     return policy
 
 
@@ -414,6 +419,20 @@ def main() -> int:
                     "hard": default["hard"],
                 }
                 add_finding(findings, "file_lines", rel, actual, budget)
+                if policy["forbid_partition_files"] and PARTITION_FILE_RE.search(PurePosixPath(rel).name):
+                    # DEC-20260902-structure-gate-cohesion-over-line-budget: 줄 수 예산이 만든 _partN 분할은 invariant 위반이다.
+                    findings.append(
+                        Finding(
+                            id=f"partition_file:{rel}",
+                            rule="partition_file",
+                            path=rel,
+                            actual=1,
+                            advisory_limit=0,
+                            hard_limit=0,
+                            level="hard_invariant",
+                            message="file name carries a _partN split suffix; merge it or rename it by responsibility",
+                        )
+                    )
         function_metrics = scan_functions(root, files) if args.component in {"all", "functions"} else []
         if args.component in {"all", "functions"}:
             for metric in function_metrics:
@@ -450,7 +469,7 @@ def main() -> int:
             print(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
         else:
             emit_text(findings)
-        hard_failure = any(finding.level == "hard_ceiling" for finding in findings)
+        hard_failure = any(finding.level in {"hard_ceiling", "hard_invariant"} for finding in findings)
         return 1 if args.mode == "hard" and hard_failure else 0
     except (OSError, PolicyError) as exc:
         report = {

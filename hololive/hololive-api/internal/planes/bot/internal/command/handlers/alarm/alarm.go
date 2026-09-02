@@ -27,6 +27,7 @@ import (
 	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -348,4 +349,102 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 	}
 
 	return nil
+}
+
+func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *domain.Channel, alarmTypes domain.AlarmTypes) error {
+	removed, err := c.Deps().Alarm.RemoveAlarm(ctx, cmdCtx.Room, channel.ID, alarmTypes)
+	if err != nil {
+		c.Deps().Logger.Error("Failed to remove alarm",
+			slog.String("channel", channel.Name),
+			slog.Any("error", err),
+		)
+
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrAlarmRemoveFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
+	}
+
+	message := c.Deps().Formatter.FormatAlarmRemoved(ctx, channel.Name, removed)
+
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *AlarmCommand) handleList(ctx context.Context, cmdCtx *domain.CommandContext) error {
+	entries, err := c.Deps().Alarm.ListRoomAlarmsView(ctx, cmdCtx.Room)
+	if err != nil {
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrAlarmListFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
+	}
+
+	alarmInfos := make([]formatter.AlarmListEntry, 0, len(entries))
+	for _, entry := range entries {
+		alarmInfos = append(alarmInfos, formatter.AlarmListEntry{
+			MemberName: entry.MemberName,
+			AlarmTypes: entry.AlarmTypes,
+			NextStream: entry.NextStream,
+		})
+	}
+
+	message := c.Deps().Formatter.FormatAlarmList(ctx, alarmInfos)
+
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *AlarmCommand) handleClear(ctx context.Context, cmdCtx *domain.CommandContext) error {
+	count, err := c.Deps().Alarm.ClearRoomAlarms(ctx, cmdCtx.Room)
+	if err != nil {
+		c.Deps().Logger.Error("Failed to clear alarms", slog.Any("error", err))
+
+		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrAlarmClearFailed); err != nil {
+			return fmt.Errorf("send error: %w", err)
+		}
+
+		return nil
+	}
+
+	message := c.Deps().Formatter.FormatAlarmCleared(ctx, count)
+
+	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
+		return fmt.Errorf("send message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *AlarmCommand) parseAlarmTypes(params map[string]any) domain.AlarmTypes {
+	typeStr, hasType := params["type"].(string)
+	if !hasType || typeStr == "" {
+		return domain.DefaultAlarmTypes
+	}
+
+	if alarmTypes, ok := alarmTypesByName[typeStr]; ok {
+		return alarmTypes
+	}
+
+	return domain.DefaultAlarmTypes
+}
+
+var alarmTypesByName = map[string]domain.AlarmTypes{
+	"방송":        {domain.AlarmTypeLive},
+	"라이브":       {domain.AlarmTypeLive},
+	"live":      {domain.AlarmTypeLive},
+	"커뮤니티":      {domain.AlarmTypeCommunity},
+	"community": {domain.AlarmTypeCommunity},
+	"쇼츠":        {domain.AlarmTypeShorts},
+	"shorts":    {domain.AlarmTypeShorts},
+	"전체":        domain.AllAlarmTypes,
+	"all":       domain.AllAlarmTypes,
 }

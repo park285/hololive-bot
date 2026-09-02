@@ -22,6 +22,7 @@ package member
 
 import (
 	"context"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"time"
@@ -326,3 +327,85 @@ func (r *Repository) scanMember(
 }
 
 // scanMemberWithPhoto: DB 조회 결과를 domain.Member로 변환 (photo 포함).
+
+func (r *Repository) scanMemberWithPhoto(
+	id int,
+	channelID *string,
+	englishName string,
+	japaneseName *string,
+	koreanName *string,
+	shortKoreanName *string,
+	isGraduated bool,
+	aliasesJSON []byte,
+	photo *string,
+	org string,
+	suborg *string,
+	syncSource string,
+	twitchUserID *string,
+) (*domain.Member, error) {
+	var aliases domain.Aliases
+
+	if err := jsonv2.Unmarshal(aliasesJSON, &aliases); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal aliases: %w", err)
+	}
+
+	member := &domain.Member{
+		ID:          id,
+		Name:        englishName,
+		Aliases:     &aliases,
+		IsGraduated: isGraduated,
+		Org:         org,
+		SyncSource:  syncSource,
+	}
+
+	if channelID != nil {
+		member.ChannelID = *channelID
+	}
+
+	if japaneseName != nil {
+		member.NameJa = *japaneseName
+	}
+
+	if koreanName != nil {
+		member.NameKo = *koreanName
+	}
+
+	if shortKoreanName != nil {
+		member.ShortKoreanName = *shortKoreanName
+	}
+
+	if photo != nil {
+		member.Photo = *photo
+	}
+
+	if suborg != nil {
+		member.Suborg = *suborg
+	}
+
+	if twitchUserID != nil {
+		member.TwitchUserID = *twitchUserID
+	}
+
+	return member, nil
+}
+
+func (r *Repository) collectMembersByNameFromRows(rows pgx.Rows) ([]*domain.Member, error) {
+	out, err := collectJoinedRows(rows, "rows iteration error", func(rows pgx.Rows) (*domain.Member, error) {
+		row, err := scanMemberQueryRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan member row: %w", err)
+		}
+
+		member, err := r.parseMemberRow(&row)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse member row %q: %w", row.englishName, err)
+		}
+
+		return member, nil
+	})
+	if err != nil {
+		return out, fmt.Errorf("collect joined rows: %w", err)
+	}
+
+	return out, nil
+}
