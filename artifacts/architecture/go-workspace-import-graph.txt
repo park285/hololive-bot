@@ -1428,6 +1428,11 @@ github.com/park285/shared-go/v2/pkg/irisdurable -> github.com/park285/shared-go/
 github.com/park285/shared-go/v2/pkg/irisdurable/contracttest -> github.com/park285/shared-go/v2/pkg/irisdurable
 github.com/park285/shared-go/v2/pkg/irisdurable/contracttest -> github.com/park285/shared-go/v2/pkg/irisdurable/contracttest
 github.com/park285/shared-go/v2/pkg/irisdurable/contracttest -> github.com/park285/shared-go/v2/pkg/workercontract
+github.com/park285/shared-go/v2/pkg/irisdurable/pgstore -> github.com/park285/shared-go/v2/pkg/dbmigrate
+github.com/park285/shared-go/v2/pkg/irisdurable/pgstore -> github.com/park285/shared-go/v2/pkg/irisdurable
+github.com/park285/shared-go/v2/pkg/irisdurable/pgstore -> github.com/park285/shared-go/v2/pkg/irisdurable/contracttest
+github.com/park285/shared-go/v2/pkg/irisdurable/pgstore -> github.com/park285/shared-go/v2/pkg/irisdurable/pgstore
+github.com/park285/shared-go/v2/pkg/irisdurable/pgstore -> github.com/park285/shared-go/v2/pkg/workercontract
 github.com/park285/shared-go/v2/pkg/jsonutil -> github.com/park285/shared-go/v2/pkg/httputil
 github.com/park285/shared-go/v2/pkg/llm -> github.com/park285/shared-go/v2/pkg/internal/testsupport
 github.com/park285/shared-go/v2/pkg/llm -> github.com/park285/shared-go/v2/pkg/jsonutil

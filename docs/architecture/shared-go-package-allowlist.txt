@@ -12,6 +12,7 @@ internal/guardtext
 internal/testsupport
 irisdurable
 irisdurable/contracttest
+irisdurable/pgstore
 jsonutil
 kakaoformat
 llm
