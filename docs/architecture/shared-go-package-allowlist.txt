@@ -5,10 +5,13 @@ dbmigrate
 envutil
 ginjson
 h3
+health
 healthprobe
 httputil
 internal/guardtext
 internal/testsupport
+irisdurable
+irisdurable/contracttest
 jsonutil
 kakaoformat
 llm
