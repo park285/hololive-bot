@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
 func TestStackWorkerProfilesLoadExactRoleSettings(t *testing.T) {
@@ -61,7 +63,7 @@ func TestStackWorkerProfilesLoadExactRoleSettings(t *testing.T) {
 }
 
 func TestStackWorkerProfileIsRequired(t *testing.T) {
-	unsetEnvForTest(t, StackWorkerProfileFileEnv)
+	unsetEnvForTest(t, workercontract.ProfileFileEnv)
 
 	if _, err := LoadAPIWorkerProfile(); err == nil || err.Error() != "load stack worker profile: STACK_WORKER_PROFILE_FILE is required" {
 		t.Fatalf("LoadAPIWorkerProfile() error = %v", err)
@@ -97,7 +99,7 @@ func TestStackWorkerProfileRejectsUnknownServiceSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv(StackWorkerProfileFileEnv, profileFile.Name())
+	t.Setenv(workercontract.ProfileFileEnv, profileFile.Name())
 
 	if _, err := LoadYouTubeCollectorWorkerProfile(); err == nil || !strings.Contains(err.Error(), "unknown") {
 		t.Fatalf("LoadYouTubeCollectorWorkerProfile() error = %v", err)

@@ -10,6 +10,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/park285/shared-go/v2/pkg/envutil"
+	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
 )

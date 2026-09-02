@@ -8,13 +8,13 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/park285/shared-go/v2/pkg/health"
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 
 	"github.com/kapu/hololive-api/internal/fxapp"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/health"
 )
 
 var Version = "dev"

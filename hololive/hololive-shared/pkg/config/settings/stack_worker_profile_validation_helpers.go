@@ -9,27 +9,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-func validateWorkerShapes(workers map[string]workercontract.WorkerProfile, shapes map[string]workerShape) []string {
-	problems := make([]string, 0)
-
-	for workerID, shape := range shapes {
-		worker := workers[workerID]
-		if worker.Executor.AttemptTimeout.Mode != shape.attemptTimeout {
-			problems = append(problems, workerID+" attempt_timeout mode mismatch")
-		}
-
-		if worker.Queue.Capacity.Mode != shape.capacity {
-			problems = append(problems, workerID+" capacity mode mismatch")
-		}
-
-		if worker.Queue.MaxAge.Mode != shape.maxAge {
-			problems = append(problems, workerID+" max_age mode mismatch")
-		}
-	}
-
-	return problems
-}
-
 func positiveValueProblems(values map[string]int64) []string {
 	problems := make([]string, 0)
 

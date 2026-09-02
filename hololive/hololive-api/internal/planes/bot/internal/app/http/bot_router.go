@@ -32,11 +32,11 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/iris-client-go/v2/webhook"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
+	"github.com/park285/shared-go/v2/pkg/health"
 
 	"github.com/kapu/hololive-api/internal/readiness"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	irisroomscontracts "github.com/kapu/hololive-shared/pkg/contracts/irisrooms"
-	"github.com/kapu/hololive-shared/pkg/health"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"

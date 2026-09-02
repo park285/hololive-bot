@@ -20,7 +20,7 @@ func stackWorkerProfileFixture(t *testing.T, name string) string {
 
 func useStackWorkerProfileFixture(t *testing.T, name string) {
 	t.Helper()
-	t.Setenv(StackWorkerProfileFileEnv, stackWorkerProfileFixture(t, name))
+	t.Setenv(workercontract.ProfileFileEnv, stackWorkerProfileFixture(t, name))
 }
 
 func mustLoadWorkerProfileFixture(t *testing.T, service, role, name string) workercontract.LoadedProfile {

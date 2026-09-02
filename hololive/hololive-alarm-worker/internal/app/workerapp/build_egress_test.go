@@ -68,7 +68,7 @@ func alarmWorkerTestConfig(t *testing.T) (*settings.Config, *alarmWorkerRegistry
 
 	path, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "hololive-shared", "pkg", "config", "settings", "testdata", "stack-worker-profile-alarm-worker.json"))
 	require.NoError(t, err)
-	t.Setenv(settings.StackWorkerProfileFileEnv, path)
+	t.Setenv(workercontract.ProfileFileEnv, path)
 
 	profile, err := settings.LoadAlarmWorkerProfile()
 	require.NoError(t, err)

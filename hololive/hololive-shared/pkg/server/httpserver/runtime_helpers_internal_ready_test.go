@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/park285/shared-go/v2/pkg/health"
 
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
-	"github.com/kapu/hololive-shared/pkg/health"
 )
 
 func TestNewRuntimeRouter_PublicReadyIncludesProcessComponents(t *testing.T) {

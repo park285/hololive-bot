@@ -1,42 +1,28 @@
 package settings
 
 import (
-	"encoding/json/jsontext"
-	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"os"
-	"slices"
-	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 )
 
-const StackWorkerProfileFileEnv = "STACK_WORKER_PROFILE_FILE"
-
 func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
-	loaded, err := loadStackWorkerProfile("hololive", "api")
+	loaded, err := workercontract.LoadProfileFromEnv("hololive", "api")
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}
 
 	profile := &APIWorkerProfile{Loaded: loaded}
-	if err := decodeWorkerSettings(&loaded, "bot_webhook_inbox", &profile.BotWebhookInbox,
-		"max_body_bytes", "dedup_ttl_ms", "dedup_timeout_ms", "poll_interval_ms", "claim_lease_ms",
-		"heartbeat_interval_ms", "ownership_safety_margin_ms", "retry_after_ms", "max_attempts",
-		"maintenance_interval_ms", "settlement_timeout_ms", "terminal_retention_ms"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "bot_webhook_inbox", &profile.BotWebhookInbox); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
-	if err := decodeWorkerSettings(&loaded, "bot_reply_outbox", &profile.BotReplyOutbox,
-		"poll_interval_ms", "claim_lease_ms", "dispatch_budget_ms", "retry_after_ms", "max_attempts",
-		"maintenance_interval_ms", "manual_review_retention_ms", "automatic_replay_horizon_ms"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "bot_reply_outbox", &profile.BotReplyOutbox); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
-	if err := decodeWorkerSettings(&loaded, "source_observation", &profile.SourceObservation,
-		"db_operation_concurrency", "claim_batch_size", "claim_interval_ms", "claim_lease_ms",
-		"transaction_timeout_ms", "shutdown_timeout_ms"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "source_observation", &profile.SourceObservation); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
@@ -48,31 +34,21 @@ func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
 }
 
 func LoadAlarmWorkerProfile() (*AlarmWorkerProfile, error) {
-	loaded, err := loadStackWorkerProfile("hololive", "alarm-worker")
+	loaded, err := workercontract.LoadProfileFromEnv("hololive", "alarm-worker")
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}
 
 	profile := &AlarmWorkerProfile{Loaded: loaded}
-	if err := decodeWorkerSettings(&loaded, "alarm_dispatch", &profile.AlarmDispatch,
-		"lease_ms", "quarantine_threshold_ms", "recovery_interval_ms", "recovery_batch_size", "max_batch",
-		"max_batches_per_wake", "poll_interval_ms", "idle_backoff_min_ms", "idle_backoff_max_ms", "wakeup_enabled"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "alarm_dispatch", &profile.AlarmDispatch); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
-	if err := decodeWorkerSettings(&loaded, "notification_delivery", &profile.NotificationDelivery,
-		"batch_size", "max_retries", "lock_timeout_ms", "poll_interval_ms", "retry_backoff_ms", "cleanup_after_ms",
-		"cleanup_interval_ms", "cleanup_enabled", "stale_sending_after_ms", "stale_sending_sweep_interval_ms",
-		"stale_sending_sweep_limit"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "notification_delivery", &profile.NotificationDelivery); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
-	if err := decodeWorkerSettings(&loaded, "youtube_delivery", &profile.YouTubeDelivery,
-		"batch_size", "lock_timeout_ms", "poll_interval_ms", "max_retries", "retry_backoff_ms", "cleanup_after_ms",
-		"cleanup_enabled", "revive_enabled", "revive_interval_ms", "revive_freshness_window_ms",
-		"claim_freshness_window_ms", "delivery_send_timeout_ms", "subscriber_lookup_parallelism",
-		"aggregate_sync_interval_ms", "telemetry_poll_interval_ms", "telemetry_backfill_batch",
-		"telemetry_flush_batch", "telemetry_retry_backoff_ms", "telemetry_retention_ms"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "youtube_delivery", &profile.YouTubeDelivery); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
@@ -84,17 +60,13 @@ func LoadAlarmWorkerProfile() (*AlarmWorkerProfile, error) {
 }
 
 func LoadYouTubeCollectorWorkerProfile() (*YouTubeCollectorWorkerProfile, error) {
-	loaded, err := loadStackWorkerProfile("hololive", "youtube-collector")
+	loaded, err := workercontract.LoadProfileFromEnv("hololive", "youtube-collector")
 	if err != nil {
 		return nil, fmt.Errorf("load stack worker profile: %w", err)
 	}
 
 	profile := &YouTubeCollectorWorkerProfile{Loaded: loaded}
-	if err := decodeWorkerSettings(&loaded, "collection", &profile.Collection,
-		"acquisition_batch", "acquisition_cadence_ms", "lease_ttl_ms", "renew_interval_ms", "renew_timeout_ms",
-		"db_timeout_ms", "cleanup_timeout_ms", "provider_admission_timeout_ms", "collection_overhead_ms",
-		"publish_timeout_ms", "retry_min_ms", "retry_max_ms", "release_jitter_min_ms", "release_jitter_max_ms",
-		"holodex_max_inflight", "official_max_inflight", "youtubejs_max_inflight"); err != nil {
+	if err := workercontract.DecodeWorkerSettings(loaded, "collection", &profile.Collection); err != nil {
 		return nil, fmt.Errorf("decode worker settings: %w", err)
 	}
 
@@ -105,82 +77,16 @@ func LoadYouTubeCollectorWorkerProfile() (*YouTubeCollectorWorkerProfile, error)
 	return profile, nil
 }
 
-func loadStackWorkerProfile(service, role string) (workercontract.LoadedProfile, error) {
-	path, present := os.LookupEnv(StackWorkerProfileFileEnv)
-	if !present || path == "" {
-		return workercontract.LoadedProfile{}, errors.New("STACK_WORKER_PROFILE_FILE is required")
-	}
-
-	if path != strings.TrimSpace(path) {
-		return workercontract.LoadedProfile{}, errors.New("STACK_WORKER_PROFILE_FILE must not contain surrounding whitespace")
-	}
-
-	identity, err := workercontract.KnownIdentity(service, role)
-	if err != nil {
-		return workercontract.LoadedProfile{}, fmt.Errorf("known identity: %w", err)
-	}
-
-	loaded, err := workercontract.LoadProfileFile(path, identity)
-	if err != nil {
-		return workercontract.LoadedProfile{}, fmt.Errorf("load stack worker profile: %w", err)
-	}
-
-	return loaded, nil
-}
-
-func decodeWorkerSettings(loaded *workercontract.LoadedProfile, workerID string, destination any, requiredKeys ...string) error {
-	if loaded == nil {
-		return fmt.Errorf("decode %s settings: loaded profile is nil", workerID)
-	}
-
-	worker, ok := loaded.Profile.Workers[workerID]
-	if !ok {
-		return fmt.Errorf("decode %s settings: worker is missing", workerID)
-	}
-
-	if err := workercontract.DecodeSettings(worker.Settings, destination); err != nil {
-		return fmt.Errorf("decode %s settings: %w", workerID, err)
-	}
-
-	var fields map[string]jsontext.Value
-
-	if err := jsonv2.Unmarshal(worker.Settings, &fields); err != nil {
-		return fmt.Errorf("decode %s settings keys: %w", workerID, err)
-	}
-
-	actual := make([]string, 0, len(fields))
-	for key := range fields {
-		actual = append(actual, key)
-	}
-
-	slices.Sort(actual)
-
-	expected := slices.Clone(requiredKeys)
-	slices.Sort(expected)
-
-	if !slices.Equal(actual, expected) {
-		return fmt.Errorf("decode %s settings: got keys %v, want %v", workerID, actual, expected)
-	}
-
-	return nil
-}
-
-type workerShape struct {
-	attemptTimeout workercontract.DurationMode
-	capacity       workercontract.CapacityMode
-	maxAge         workercontract.DurationMode
-}
-
 func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 	if profile == nil {
 		return errors.New("API worker profile is nil")
 	}
 
 	workers := profile.Loaded.Profile.Workers
-	problems := validateWorkerShapes(workers, map[string]workerShape{
-		"bot_webhook_inbox":  {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
-		"bot_reply_outbox":   {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
-		"source_observation": {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
+	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
+		"bot_webhook_inbox":  {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
+		"bot_reply_outbox":   {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
+		"source_observation": {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
 	})
 	positive := map[string]int64{
 		"bot_webhook_inbox.max_body_bytes":             profile.BotWebhookInbox.MaxBodyBytes,
@@ -253,10 +159,10 @@ func validateAlarmWorkerProfile(profile *AlarmWorkerProfile) error {
 	}
 
 	workers := profile.Loaded.Profile.Workers
-	problems := validateWorkerShapes(workers, map[string]workerShape{
-		"alarm_dispatch":        {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
-		"notification_delivery": {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
-		"youtube_delivery":      {workercontract.DurationModeFixed, workercontract.CapacityModeUnbounded, workercontract.DurationModeFixed},
+	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
+		"alarm_dispatch":        {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
+		"notification_delivery": {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
+		"youtube_delivery":      {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
 	})
 
 	problems = append(problems, alarmPositiveValueProblems(profile)...)
@@ -341,8 +247,8 @@ func validateCollectorWorkerProfile(profile *YouTubeCollectorWorkerProfile) erro
 	}
 
 	workers := profile.Loaded.Profile.Workers
-	problems := validateWorkerShapes(workers, map[string]workerShape{
-		"collection": {workercontract.DurationModePerJob, workercontract.CapacityModeBounded, workercontract.DurationModeFixed},
+	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
+		"collection": {AttemptTimeout: workercontract.DurationModePerJob, Capacity: workercontract.CapacityModeBounded, MaxAge: workercontract.DurationModeFixed},
 	})
 	positive := map[string]int64{
 		"collection.acquisition_cadence_ms":        profile.Collection.AcquisitionCadenceMS,

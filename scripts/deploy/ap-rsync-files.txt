@@ -12,6 +12,7 @@
 ../shared-go/pkg/ginjson/ginjson.go
 ../shared-go/pkg/h3/certificate_reloader.go
 ../shared-go/pkg/h3/h3.go
+../shared-go/pkg/health/health.go
 ../shared-go/pkg/healthprobe/cli.go
 ../shared-go/pkg/healthprobe/healthprobe.go
 ../shared-go/pkg/httputil/auth.go
@@ -69,9 +70,12 @@
 ../shared-go/pkg/workercontract/diagnostics.go
 ../shared-go/pkg/workercontract/metrics.go
 ../shared-go/pkg/workercontract/profile.go
+../shared-go/pkg/workercontract/profile_env.go
 ../shared-go/pkg/workercontract/profile_file.go
 ../shared-go/pkg/workercontract/registry.go
 ../shared-go/pkg/workercontract/sampler.go
+../shared-go/pkg/workercontract/settings.go
+../shared-go/pkg/workercontract/shape.go
 ../shared-go/pkg/workercontract/tracker.go
 deploy/compose/docker-compose.osaka.yml
 deploy/compose/docker-compose.osaka2.yml
@@ -337,7 +341,6 @@ hololive/hololive-shared/pkg/domain/youtube_content.go
 hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go
 hololive/hololive-shared/pkg/domain/youtube_delivery_telemetry.go
-hololive/hololive-shared/pkg/health/health.go
 hololive/hololive-shared/pkg/observability/runtime.go
 hololive/hololive-shared/pkg/pgxutil/rollback.go
 hololive/hololive-shared/pkg/privacylog/cachekey.go
