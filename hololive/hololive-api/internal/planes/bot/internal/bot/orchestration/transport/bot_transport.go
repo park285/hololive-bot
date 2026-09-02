@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -205,31 +206,50 @@ func postLiveMediaWithReissue(
 	return out, nil
 }
 
+// postReplyWithReissue는 pre-handoff conflict에서만 replyReissueLadder로 세대를 올린다. Conflict는
+// 원문 오류 그대로 돌려줘 호출자가 Iris code로 정산하고, clientRequestId가 없는 발송은 재발급할
+// 정체성이 없으므로 한 번만 보낸다.
 func postReplyWithReissue(
 	ctx context.Context,
 	clientRequestID string,
 	post func(string) (*iris.ReplyAcceptedResponse, error),
 ) (*iris.ReplyAcceptedResponse, error) {
-	var lastErr error
+	clientRequestID = strings.TrimSpace(clientRequestID)
 
-	for generation := 0; generation <= iris.ReplyReissueMaxGenerations; generation++ {
-		accepted, err := post(reissuedReplyClientRequestID(clientRequestID, generation))
-		if err == nil {
-			return accepted, nil
+	if clientRequestID == "" {
+		accepted, err := post("")
+		if err != nil {
+			return nil, replyPostError(err)
 		}
 
-		if !isReplyReissueConflict(err) {
-			return nil, fmt.Errorf("post reply: %w", err)
-		}
-
-		lastErr = err
-
-		if clientRequestID == "" || ctx.Err() != nil {
-			break
-		}
+		return accepted, nil
 	}
 
-	return nil, lastErr
+	var accepted *iris.ReplyAcceptedResponse
+
+	_, err := replyReissueLadder.Run(ctx, clientRequestID, 0, func(_ context.Context, generationID string, _ int) error {
+		out, err := post(generationID)
+		if err != nil {
+			return err
+		}
+
+		accepted = out
+
+		return nil
+	}, isReplyReissueConflict)
+	if err != nil {
+		return nil, replyPostError(err)
+	}
+
+	return accepted, nil
+}
+
+func replyPostError(err error) error {
+	if isReplyReissueConflict(err) {
+		return err
+	}
+
+	return fmt.Errorf("post reply: %w", err)
 }
 
 func postReply(
