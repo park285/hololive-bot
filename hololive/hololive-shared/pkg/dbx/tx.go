@@ -112,7 +112,6 @@ func InPgxTxWithResult[T any](ctx context.Context, pool *pgxpool.Pool, fn func(t
 
 		result, txErr = fn(tx)
 
-		//nolint:wrapcheck // 여기서 감싸면 nil이 오류로 뒤바뀌어 성공한 트랜잭션까지 롤백된다.
 		return txErr
 	})
 	if err != nil {

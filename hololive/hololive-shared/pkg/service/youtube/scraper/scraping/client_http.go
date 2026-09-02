@@ -179,7 +179,6 @@ func (c *Client) fetchPagePreflight(ctx context.Context, pageURL string, policy 
 	}
 
 	if !decision.Allowed {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return newRateLimitAdmissionDeferredError(bucket, decision)
 	}
 

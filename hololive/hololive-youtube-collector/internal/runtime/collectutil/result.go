@@ -28,7 +28,6 @@ type CollectResult struct {
 
 func NewCompleteResult(output RunOutput) (CollectResult, error) {
 	if len(output.observations) != len(output.checkpoints) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "complete result output is invalid")
 	}
 
@@ -37,7 +36,6 @@ func NewCompleteResult(output RunOutput) (CollectResult, error) {
 
 func NewPartialResult(output RunOutput, cause error, failedKinds ...contract.ObservationKind) (CollectResult, error) {
 	if output.Empty() || len(failedKinds) == 0 || cause == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return CollectResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result is incomplete")
 	}
 
@@ -62,13 +60,11 @@ func NewPartialResult(output RunOutput, cause error, failedKinds ...contract.Obs
 
 func normalizePartialCause(cause error) (normalized *collecterr.Error, validationErr error) {
 	if cause == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure class is not allowed")
 	}
 
 	normalized = collecterr.Normalize(cause)
 	if !PartialFailureClassAllowed(collecterr.ClassOf(normalized)) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure class is not allowed")
 	}
 
@@ -83,12 +79,10 @@ func validatePartialKinds(observations []contract.Envelope, failed []contract.Ob
 
 	for _, kind := range failed {
 		if !kind.Valid() {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result contains invalid failed kind")
 		}
 
 		if _, ok := emitted[kind]; ok {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failed and emitted kinds overlap")
 		}
 	}

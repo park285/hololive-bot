@@ -2,6 +2,7 @@ package dbx
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
@@ -21,10 +22,11 @@ func TestPgxTxCommitsOnNilError(t *testing.T) {
 	pool := newTxTestPool(t)
 
 	err := InPgxTx(ctx, pool, func(tx Tx) error {
-		_, err := tx.Exec(ctx, "INSERT INTO dbx_tx_test (value) VALUES ($1)", "committed")
+		if _, err := tx.Exec(ctx, "INSERT INTO dbx_tx_test (value) VALUES ($1)", "committed"); err != nil {
+			return fmt.Errorf("insert committed row: %w", err)
+		}
 
-		//nolint:wrapcheck // 커밋 경로를 검증하는 테스트라, nil을 감싸면 롤백 경로로 뒤바뀐다.
-		return err
+		return nil
 	})
 	require.NoError(t, err)
 
@@ -82,10 +84,11 @@ func TestPgxTxWithResultReturnsValue(t *testing.T) {
 
 		var marker txMarker
 
-		err = pgxscan.Get(ctx, tx, &marker, "SELECT id, value FROM dbx_tx_test WHERE value = $1", "result")
+		if err := pgxscan.Get(ctx, tx, &marker, "SELECT id, value FROM dbx_tx_test WHERE value = $1", "result"); err != nil {
+			return marker, fmt.Errorf("select marker: %w", err)
+		}
 
-		//nolint:wrapcheck // 커밋 경로를 검증하는 테스트라, nil을 감싸면 롤백 경로로 뒤바뀐다.
-		return marker, err
+		return marker, nil
 	})
 	require.NoError(t, err)
 	require.Equal(t, "result", got.Value)

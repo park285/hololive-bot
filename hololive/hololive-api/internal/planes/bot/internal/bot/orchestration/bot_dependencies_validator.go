@@ -35,26 +35,21 @@ func validateBotDependencies(deps *Dependencies) (streamRuntime, error) {
 	stream := deps.streamDeps()
 
 	if err := validateCoreDependencies(&core); err != nil {
-		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
 		return nil, err
 	}
 
 	if err := validateMessagingDependencies(messaging); err != nil {
-		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
 		return nil, err
 	}
 
 	if err := validateDataDependencies(data); err != nil {
-		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
 		return nil, err
 	}
 
 	if err := validateStreamDependencies(&stream); err != nil {
-		//nolint:wrapcheck // 검증 경계는 leaf dependency 오류 문자열과 분류를 그대로 보존한다.
 		return nil, err
 	}
 
-	//nolint:wrapcheck // runtime type 검증의 leaf 오류에 중복 validation context를 붙이지 않는다.
 	return validateStreamRuntime(&stream)
 }
 

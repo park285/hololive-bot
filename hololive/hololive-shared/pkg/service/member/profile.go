@@ -58,7 +58,6 @@ func NewProfileService(cacheClient cache.KeyValueCache, membersData domain.Membe
 
 	profiles, preTranslated, members, err := loadProfileServiceData(membersData)
 	if err != nil {
-		//nolint:wrapcheck // loadProfileServiceData가 세 갈래 실패 경로 모두에 라벨을 붙이므로, 여기서 다시 감싸면 같은 말이 겹친다.
 		return nil, err
 	}
 

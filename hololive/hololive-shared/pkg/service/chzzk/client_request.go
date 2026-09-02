@@ -60,7 +60,6 @@ func (c *Client) executeRequest(
 ) error {
 	body, err := c.doRequest(op, req, readErrorPrefix)
 	if err != nil {
-		//nolint:wrapcheck // doRequest가 돌려주는 APIError에 operation과 status가 이미 담겨 있어, 호출 계층 이름을 덧씌워도 errors.As 소비자에게 새 정보를 주지 못한다.
 		return err
 	}
 
@@ -80,19 +79,16 @@ func (c *Client) doRequest(op string, req *http.Request, readErrorPrefix string)
 	if err != nil {
 		c.recordFailure()
 
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, chzzkRequestError(op, err, resp == nil)
 	}
 
 	if resp == nil {
 		c.recordFailure()
 
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, chzzkRequestError(op, errors.New("nil response"), true)
 	}
 
 	if validateErr := c.validateResponse(op, resp); validateErr != nil {
-		//nolint:wrapcheck // validateResponse도 operation이 박힌 APIError만 돌려주므로 접두사를 겹치지 않는다.
 		return nil, validateErr
 	}
 
@@ -125,14 +121,12 @@ func (c *Client) validateResponse(op string, resp *http.Response) error {
 	if resp == nil {
 		c.recordFailure()
 
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return chzzkRequestError(op, errors.New("nil response"), false)
 	}
 
 	if resp.Body == nil {
 		c.recordFailure()
 
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return chzzkRequestError(op, errors.New("nil response body"), false)
 	}
 

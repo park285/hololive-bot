@@ -22,7 +22,6 @@ type Client struct {
 
 func NewClient(httpClient *providerhttp.ProviderHTTPClient, baseURL, apiKey string, maxBody int64) (*Client, error) {
 	if httpClient == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex HTTP client is not configured")
 	}
 
@@ -53,12 +52,10 @@ func (c *Client) Close() error {
 
 func (c *Client) Fetch(ctx context.Context) ([]byte, error) {
 	if c == nil || c.http == nil || c.base == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex client is not configured")
 	}
 
 	if c.apiKey == "" {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex api key is not configured")
 	}
 

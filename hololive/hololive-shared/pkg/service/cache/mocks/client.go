@@ -168,7 +168,6 @@ func (m *Client) MSet(ctx context.Context, pairs map[string]any, ttl time.Durati
 func (m *Client) Del(ctx context.Context, key string) error {
 	if m.DelFunc != nil {
 		if err := m.DelFunc(ctx, key); err != nil {
-			//nolint:wrapcheck // 설정된 mock callback의 오류 문자열과 concrete type을 그대로 돌려주는 테스트 대역 계약이다.
 			return err
 		}
 
@@ -214,7 +213,6 @@ func (m *Client) SAdd(ctx context.Context, key string, members []string) (int64,
 	if m.SAddFunc != nil {
 		out, err := m.SAddFunc(ctx, key, members)
 		if err != nil {
-			//nolint:wrapcheck // 설정된 mock callback의 오류 문자열과 concrete type을 그대로 돌려주는 테스트 대역 계약이다.
 			return out, err
 		}
 
@@ -230,7 +228,6 @@ func (m *Client) SRem(ctx context.Context, key string, members []string) (int64,
 	if m.SRemFunc != nil {
 		out, err := m.SRemFunc(ctx, key, members)
 		if err != nil {
-			//nolint:wrapcheck // 설정된 mock callback의 오류 문자열과 concrete type을 그대로 돌려주는 테스트 대역 계약이다.
 			return out, err
 		}
 

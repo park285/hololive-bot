@@ -33,7 +33,6 @@ func (s *postgresQueueStore) LoadHandoffStatuses(ctx context.Context, ids []int6
 	}
 
 	if len(ids) > maxHandoffCandidates {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "handoff status request exceeds candidate cap")
 	}
 
@@ -57,7 +56,6 @@ func (s *postgresQueueStore) CountPending(ctx context.Context, limit int) (Bound
 	}
 
 	if limit < 1 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return BoundedCount{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pending queue cap is invalid")
 	}
 
@@ -90,7 +88,6 @@ func scanHandoffStatuses(rows interface {
 		}
 
 		if len(out) >= len(ids) {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status row count is invalid")
 		}
 
@@ -124,7 +121,6 @@ func scanHandoffRow(rows interface{ Scan(dest ...any) error }) (handoffStatus, e
 
 	status := contract.Status(*raw)
 	if !status.Valid() {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return handoffStatus{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation handoff status is unknown")
 	}
 

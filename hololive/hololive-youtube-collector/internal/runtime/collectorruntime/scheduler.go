@@ -105,7 +105,6 @@ type leaseScheduler struct {
 
 func (s *leaseScheduler) Start(parent context.Context) error {
 	if s == nil || s.repository == nil || s.registry == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: scheduler is not configured")
 	}
 
@@ -114,7 +113,6 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 	if s.lifecycleState() != SchedulerNew {
 		s.lifecycleMu.Unlock()
 
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: instance is not NEW")
 	}
 
@@ -204,7 +202,6 @@ func (s *leaseScheduler) prepareStop() (schedulerStopPlan, error) {
 		return schedulerStopPlan{done: s.done, wait: true}, nil
 	}
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return schedulerStopPlan{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "stop lease scheduler: state is invalid")
 }
 

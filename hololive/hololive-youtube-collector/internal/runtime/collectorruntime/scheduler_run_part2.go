@@ -123,7 +123,6 @@ func (e *collectionExecutor) commitCollectResult(
 func resultPartialCause(result *collectutil.CollectResult) error {
 	partial, _ := result.PartialFailure()
 	if partial == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial result failure is missing")
 	}
 

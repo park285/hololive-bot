@@ -90,7 +90,6 @@ func (m *Mapper) SyncForChannel(ctx context.Context, channelID string) error {
 	}
 
 	if err := m.validateDependencies(); err != nil {
-		//nolint:wrapcheck // caller telemetry pins this configuration error's concrete type and exact text.
 		return err
 	}
 

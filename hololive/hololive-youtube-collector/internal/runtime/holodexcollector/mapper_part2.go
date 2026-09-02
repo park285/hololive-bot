@@ -17,7 +17,6 @@ func uniqueStatsCount(rows []parsedLive, field string, valueOf func(*liveChannel
 		}
 
 		if selected != nil && *selected != *value {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel "+field+" metadata conflicts across rows")
 		}
 
@@ -41,7 +40,6 @@ func photoPayload(channelID string, rows []parsedLive) (contract.ChannelPhotoV1,
 		}
 
 		if selected != "" && selected != photoURL {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return contract.ChannelPhotoV1{}, false, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel photo metadata conflicts across rows")
 		}
 

@@ -261,7 +261,6 @@ func withRemainingTimeout(ctx context.Context, limit time.Duration) (context.Con
 
 func newBoundedCount(value, limit int) (BoundedCount, error) {
 	if value < 0 || value > limit+1 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return BoundedCount{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "pending queue count is outside bounds")
 	}
 

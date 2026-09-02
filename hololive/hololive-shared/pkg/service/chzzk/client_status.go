@@ -57,7 +57,6 @@ func (c *Client) GetLiveStatus(ctx context.Context, channelID string) (*LiveStat
 
 		return nil
 	}); err != nil {
-		//nolint:wrapcheck // 상태 코드 오류에도 unmarshal 접두사가 붙어 실제로 거치지 않은 단계를 가리켰다. APIError 문자열을 그대로 둔다.
 		return nil, err
 	}
 
@@ -109,7 +108,6 @@ func (c *Client) GetScheduledLives(ctx context.Context, channelID string) ([]Sch
 
 		return nil
 	}); err != nil {
-		//nolint:wrapcheck // 상태 코드 오류에도 unmarshal 접두사가 붙어 실제로 거치지 않은 단계를 가리켰다. APIError 문자열을 그대로 둔다.
 		return nil, err
 	}
 

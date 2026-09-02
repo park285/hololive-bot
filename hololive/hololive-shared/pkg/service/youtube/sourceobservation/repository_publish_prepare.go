@@ -104,7 +104,6 @@ func preflightPublishObservations(observations []contract.Envelope, aggregateByt
 		}
 
 		if !publishBytesWithinLimit(aggregateBytes, len(observations[i].Payload)) {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return publishBatchBytesError()
 		}
 	}
@@ -119,7 +118,6 @@ func preflightPublishCheckpoints(checkpoints []CheckpointEntry, aggregateBytes *
 		}
 
 		if !publishBytesWithinLimit(aggregateBytes, len(checkpoints[i].Cursor)) {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return publishBatchBytesError()
 		}
 	}

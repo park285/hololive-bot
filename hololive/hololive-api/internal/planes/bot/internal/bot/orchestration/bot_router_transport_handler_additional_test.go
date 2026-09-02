@@ -57,7 +57,6 @@ func (c *testCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext
 		return nil
 	}
 
-	//nolint:wrapcheck // test double은 production router가 붙이는 command context 검증을 위해 주입된 원인을 그대로 전달한다.
 	return c.execute(ctx, cmdCtx, params)
 }
 

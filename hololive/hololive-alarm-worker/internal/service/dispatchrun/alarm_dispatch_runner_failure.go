@@ -23,7 +23,6 @@ func (r *Runner) persistPreSendFailure(ctx context.Context, envelopes []domain.A
 
 		return nil
 	}, r.consumer.Requeue); err != nil {
-		//nolint:wrapcheck // 콜백이 이미 연산 맥락을 붙여 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
 
@@ -142,7 +141,6 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 		// fallback도 sending fence로 전량 retry 복원한다.
 		return r.consumer.RouteSendingFailures(ctx, envelopes, nil)
 	}); err != nil {
-		//nolint:wrapcheck // 콜백이 이미 연산 맥락을 붙여 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,10 +90,11 @@ func TestClientRejectsEmptyRoomIDWithoutRequest(t *testing.T) {
 		call func(ctx context.Context) error
 	}{
 		{name: "IsSubscribed", call: func(ctx context.Context) error {
-			_, err := client.IsSubscribed(ctx, "   ")
+			if _, err := client.IsSubscribed(ctx, "   "); err != nil {
+				return fmt.Errorf("is subscribed: %w", err)
+			}
 
-			//nolint:wrapcheck // 같은 테이블의 다른 케이스와 마찬가지로 클라이언트 오류를 그대로 넘겨야 단언 조건이 나란해진다.
-			return err
+			return nil
 		}},
 		{name: "Subscribe", call: func(ctx context.Context) error {
 			return client.Subscribe(ctx, "", "room name")

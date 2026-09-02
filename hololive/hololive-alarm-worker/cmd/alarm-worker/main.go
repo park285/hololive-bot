@@ -44,10 +44,11 @@ var Version = "dev"
 
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
-		_, err := settings.LoadAlarmWorkerProfile()
+		if _, err := settings.LoadAlarmWorkerProfile(); err != nil {
+			return fmt.Errorf("load alarm worker profile: %w", err)
+		}
 
-		//nolint:wrapcheck // runWorkerProfileCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
-		return err
+		return nil
 	}); handled {
 		os.Exit(exitCode)
 	}

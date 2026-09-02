@@ -31,12 +31,10 @@ type listenerEndpoint struct {
 func parseListenerEndpoint(listener *listenerEndpoint) (listenerEndpoint, error) {
 	host, port, err := splitListenerAddress(listener.addr)
 	if err != nil {
-		//nolint:wrapcheck // 하위 함수가 어떤 리스너의 무엇이 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return listenerEndpoint{}, err
 	}
 
 	if err := validateListenerPortMatch(listener, port); err != nil {
-		//nolint:wrapcheck // 하위 함수가 어떤 리스너의 무엇이 잘못됐는지 담은 완결된 메시지를 만들므로, 다시 감싸면 같은 말이 반복된다.
 		return listenerEndpoint{}, err
 	}
 

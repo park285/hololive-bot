@@ -29,7 +29,6 @@ func (c *APIClient) processHolodexResponse(ctx context.Context, status int, body
 	}
 
 	if status >= 400 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, true, holodexClientError(status, reqURL)
 	}
 

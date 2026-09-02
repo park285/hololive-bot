@@ -146,12 +146,10 @@ func (c *RPC) successLimit(requested int) (int, error) {
 
 func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, successLimit int64) (*T, error) {
 	if c == nil || c.http == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js client is not configured")
 	}
 
 	if successLimit < minimumSuccessResponseBytes(path) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper success response metadata exceeds requested limit")
 	}
 
@@ -171,7 +169,6 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 	}
 
 	if invalidHelperHTTPResponse(resp) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "youtube.js helper response is nil")
 	}
 
@@ -218,7 +215,6 @@ func (c *RPC) newJSONRequest(ctx context.Context, path string, request any) (*ht
 
 func decodeHelperResponse(resp *http.Response, limit int64, response any) error {
 	if resp == nil || resp.Body == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.Failed, collecterr.ClassProtocol, "youtube.js helper response is nil")
 	}
 
@@ -295,7 +291,6 @@ func readHelperBody(resp *http.Response, limit int64) ([]byte, error) {
 
 func oversizedHelperResponse(status int) error {
 	if status == http.StatusOK {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper success response exceeds body limit")
 	}
 

@@ -223,7 +223,6 @@ func FromContext(err error) error {
 		return Wrap(Failed, ClassTransient, err)
 	}
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return unclassifiedError(err)
 }
 

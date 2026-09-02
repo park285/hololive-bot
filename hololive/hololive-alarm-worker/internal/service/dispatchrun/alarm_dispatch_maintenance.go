@@ -328,7 +328,6 @@ func (s alarmDispatchMaintenancePgxStore) WithAdvisoryLock(
 	}
 
 	if err != nil {
-		//nolint:wrapcheck // rollbackAlarmDispatchTx는 롤백이 성공하면 원인 오류를, 실패하면 둘을 합친 오류를 이미 완결되게 돌려준다.
 		return rollbackAlarmDispatchTx(ctx, tx, err, "alarm dispatch retention transaction failed and rollback failed: %w")
 	}
 

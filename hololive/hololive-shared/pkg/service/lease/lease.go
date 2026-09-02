@@ -188,7 +188,6 @@ func (l *Lease) RenewLoop(ctx context.Context) error {
 	for {
 		stop, err := l.renewOnTick(ctx, ticker.C)
 		if stop {
-			//nolint:wrapcheck // Renew가 이미 리스 이름을 담은 완결된 메시지를 만들므로, 다시 감싸면 이름이 두 번 나온다.
 			return err
 		}
 	}
@@ -201,7 +200,6 @@ func (l *Lease) renewOnTick(ctx context.Context, tick <-chan time.Time) (bool, e
 	case <-tick:
 		err := l.Renew(ctx)
 
-		//nolint:wrapcheck // Renew가 이미 리스 이름을 담은 완결된 메시지를 만들므로, 다시 감싸면 이름이 두 번 나온다.
 		return err != nil, err
 	}
 }

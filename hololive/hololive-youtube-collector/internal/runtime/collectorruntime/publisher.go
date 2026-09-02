@@ -50,7 +50,6 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 	kinds []contract.ObservationKind,
 ) (map[contract.ObservationKind]int64, error) {
 	if p == nil || p.pool == nil || !provider.Valid() || len(kinds) == 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "load observation contract generations: request is invalid")
 	}
 
@@ -80,7 +79,6 @@ func (p *postgresContractGenerationReader) LoadContractGenerations(
 
 func (p *Publisher) LoadContractSnapshot(ctx context.Context, registration RegisteredRunner) (collectutil.ContractSnapshot, error) {
 	if p == nil || p.contracts == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return collectutil.ContractSnapshot{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "contract generation reader is not configured")
 	}
 
@@ -119,7 +117,6 @@ func scanContractGenerations(rows interface {
 		}
 
 		if generation <= 0 {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation contract generation must be positive")
 		}
 
@@ -136,7 +133,6 @@ func scanContractGenerations(rows interface {
 func requireContractGenerations(result map[contract.ObservationKind]int64, kinds []contract.ObservationKind) (map[contract.ObservationKind]int64, error) {
 	for _, kind := range kinds {
 		if _, ok := result[kind]; !ok {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "observation contract generation is missing for "+string(kind))
 		}
 	}
@@ -146,12 +142,10 @@ func requireContractGenerations(result map[contract.ObservationKind]int64, kinds
 
 func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeaseProof, output collectutil.RunOutput) (sourceobservation.PublishBatchResult, error) {
 	if p == nil || p.observations == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "observation publisher is not configured")
 	}
 
 	if lease == nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "complete publish lease is missing")
 	}
 
@@ -163,7 +157,6 @@ func (p *Publisher) PublishComplete(ctx context.Context, lease *contract.LeasePr
 	}
 
 	if len(checkpoints) != len(observations) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return sourceobservation.PublishBatchResult{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "checkpoint count does not match observation count")
 	}
 
@@ -229,7 +222,6 @@ func validatePartialPublishInput(
 ) (*collectutil.PartialFailure, error) {
 	partial, ok := result.PartialFailure()
 	if publisher == nil || publisher.observations == nil || lease == nil || !ok {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "partial publish input is invalid")
 	}
 

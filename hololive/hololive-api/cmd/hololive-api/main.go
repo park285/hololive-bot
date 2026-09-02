@@ -21,19 +21,21 @@ var Version = "dev"
 
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
-		_, err := settings.LoadAPIWorkerProfile()
+		if _, err := settings.LoadAPIWorkerProfile(); err != nil {
+			return fmt.Errorf("load api worker profile: %w", err)
+		}
 
-		//nolint:wrapcheck // runWorkerProfileCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
-		return err
+		return nil
 	}); handled {
 		os.Exit(exitCode)
 	}
 
 	if handled, exitCode := runConfigCheck(os.Args[1:], os.Stderr, func() error {
-		_, err := settings.LoadHololiveAPIRuntime()
+		if _, err := settings.LoadHololiveAPIRuntime(); err != nil {
+			return fmt.Errorf("load hololive api runtime: %w", err)
+		}
 
-		//nolint:wrapcheck // runConfigCheck가 자체 문구를 붙여 출력하므로, 여기서 감싸면 같은 말이 겹친다.
-		return err
+		return nil
 	}); handled {
 		os.Exit(exitCode)
 	}

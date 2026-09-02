@@ -22,7 +22,6 @@ func FromStatus(source string, status int, retryAfter string, now time.Time) err
 	if status == http.StatusServiceUnavailable {
 		hint := ParseRetryAfter(retryAfter, now)
 		if hint.Kind() == RetryDefault {
-			//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 			return New(Failed, ClassTransient, message)
 		}
 
@@ -35,7 +34,6 @@ func FromStatus(source string, status int, retryAfter string, now time.Time) err
 
 	code, class := statusFailure(status)
 
-	//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 	return New(code, class, message)
 }
 

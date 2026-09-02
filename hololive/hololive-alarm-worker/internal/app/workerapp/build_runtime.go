@@ -87,7 +87,6 @@ func buildAlarmWorkerRuntimeFromInfra(
 ) (runtime *workerruntime.AlarmWorkerRuntime, err error) {
 	foundation, err := buildAlarmFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
 
@@ -102,25 +101,21 @@ func buildAlarmWorkerRuntimeFromInfra(
 
 	workerState, err := newAlarmWorkerRegistryState(appConfig.AlarmWorkerProfile, infra.Postgres.GetPool())
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
 	}
 
 	schedulerResult := buildOptionalRuntimeScheduler(appConfig, infra.Cache, foundation, logger)
 	if schedulerResult.err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, failAlarmWorkerBuild(infra, "scheduler", schedulerResult.err)
 	}
 
 	notificationEgress, err := buildNotificationEgress(ctx, appConfig, infra, logger, workerState)
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
 	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
 

@@ -16,7 +16,6 @@ func ParseHolodexBaseURL(raw string) (*url.URL, error) {
 	}
 
 	if !validHolodexPath(parsed.Path) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "holodex base URL path prefix is invalid")
 	}
 
@@ -30,7 +29,6 @@ func ParseOfficialScheduleBaseURL(raw string) (*url.URL, error) {
 	}
 
 	if parsed.Path != "" && parsed.Path != "/" {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "official schedule base URL must be an HTTPS origin")
 	}
 
@@ -40,22 +38,18 @@ func ParseOfficialScheduleBaseURL(raw string) (*url.URL, error) {
 func parseProviderBaseURL(raw, name string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL is invalid")
 	}
 
 	if parsed.User != nil {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must not include userinfo")
 	}
 
 	if !isHTTPSProviderURL(parsed) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must be HTTPS")
 	}
 
 	if hasDisallowedProviderURLParts(parsed) {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, name+" base URL must not include query, fragment, or escaped path")
 	}
 

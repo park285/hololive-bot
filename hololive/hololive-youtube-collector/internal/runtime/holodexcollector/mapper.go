@@ -74,7 +74,6 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 	}
 
 	if len(rawRows) > 0 && validRows == 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response has no valid rows")
 	}
 
@@ -84,7 +83,6 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 func decodeLiveRows(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !jsontext.Value(trimmed).IsValid() || len(trimmed) == 0 || trimmed[0] != '[' {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response is not a JSON array")
 	}
 
@@ -105,7 +103,6 @@ func parseLiveRow(raw jsontext.Value) (parsedLive, error) {
 	}
 
 	if strings.TrimSpace(row.ID) == "" {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return parsedLive{}, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row id is empty")
 	}
 
@@ -140,7 +137,6 @@ func liveChannelID(row *liveRow) (string, error) {
 	nestedChannelID := strings.TrimSpace(row.Channel.ID)
 
 	if channelID != "" && nestedChannelID != "" && channelID != nestedChannelID {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row has conflicting channel identity")
 	}
 
@@ -149,7 +145,6 @@ func liveChannelID(row *liveRow) (string, error) {
 	}
 
 	if channelID == "" {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live row channel id is empty")
 	}
 
@@ -267,7 +262,6 @@ func viewerAvailability(row *parsedLive) (availability string, viewerCount *int6
 	}
 
 	if count < 0 {
-		//nolint:wrapcheck // 오류 생성자가 만든 값이라 감쌀 하위 오류가 없다.
 		return "", nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex viewer count is negative")
 	}
 

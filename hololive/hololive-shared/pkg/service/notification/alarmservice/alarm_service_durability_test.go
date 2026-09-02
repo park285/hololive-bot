@@ -481,8 +481,8 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			},
 			wantEvent:    "sync platform alarm mapping after add.failed",
 			wantMessage:  "Failed to sync platform alarm mapping after add",
-			wantErrorTyp: "errorString",
-			wantErrorMsg: "member data provider not configured",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 		{
 			name: "after_remove_sync_platform_mapping",
@@ -493,8 +493,8 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			},
 			wantEvent:    "sync platform alarm mapping after remove.failed",
 			wantMessage:  "Failed to sync platform alarm mapping after remove",
-			wantErrorTyp: "errorString",
-			wantErrorMsg: "member data provider not configured",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 		{
 			name: "clear_room_cleanup_channel_registry",
@@ -519,8 +519,8 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			},
 			wantEvent:    "sync platform alarm mapping after clear.failed",
 			wantMessage:  "Failed to sync platform alarm mapping after clear",
-			wantErrorTyp: "errorString",
-			wantErrorMsg: "member data provider not configured",
+			wantErrorTyp: "wrapError",
+			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 	}
 }

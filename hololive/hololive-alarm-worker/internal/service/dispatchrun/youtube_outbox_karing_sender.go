@@ -36,7 +36,6 @@ func (s YouTubeOutboxKaringSender) requireSender() error {
 
 func (s YouTubeOutboxKaringSender) SendMessage(ctx context.Context, roomID, message string) error {
 	if err := s.requireSender(); err != nil {
-		//nolint:wrapcheck // requireSender가 이미 패키지 이름을 붙인 완결된 오류를 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
 
@@ -49,7 +48,6 @@ func (s YouTubeOutboxKaringSender) SendMessage(ctx context.Context, roomID, mess
 
 func (s YouTubeOutboxKaringSender) SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error {
 	if err := s.requireSender(); err != nil {
-		//nolint:wrapcheck // requireSender가 이미 패키지 이름을 붙인 완결된 오류를 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
 
@@ -62,7 +60,6 @@ func (s YouTubeOutboxKaringSender) SendMessageWithClientRequestID(ctx context.Co
 
 func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error {
 	if err := s.requireSender(); err != nil {
-		//nolint:wrapcheck // requireSender가 이미 패키지 이름을 붙인 완결된 오류를 반환하므로, 다시 감싸면 고정된 오류 계약이 깨진다.
 		return err
 	}
 
