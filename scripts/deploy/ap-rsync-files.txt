@@ -48,8 +48,10 @@
 ../shared-go/pkg/runtime/automaxprocs/automaxprocs.go
 ../shared-go/pkg/runtime/bootstrap/bootstrap.go
 ../shared-go/pkg/runtime/bootstrap/inputs.go
+../shared-go/pkg/runtime/httpserver/body_timeout.go
 ../shared-go/pkg/runtime/httpserver/doc.go
 ../shared-go/pkg/runtime/httpserver/run.go
+../shared-go/pkg/runtime/httpserver/server.go
 ../shared-go/pkg/runtime/httpserver/shutdown.go
 ../shared-go/pkg/runtime/httpserver/start.go
 ../shared-go/pkg/runtime/httpserver/start_http_server.go
