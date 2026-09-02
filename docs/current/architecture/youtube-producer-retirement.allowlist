@@ -31,7 +31,6 @@ hololive/hololive-shared/pkg/config/settings/config_validation_extra_test.go
 hololive/hololive-shared/pkg/config/settings/config_youtube_producer_retired.go
 hololive/hololive-shared/pkg/config/settings/config_youtube_producer_retired_test.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime_test.go
-internal/workspace/entrypoint_contract_test.go
 scripts/architecture/check-youtube-producer-retirement.sh
 scripts/architecture/ci-boundary-gate.sh
 scripts/deploy/ap-deploy-version_test.sh
