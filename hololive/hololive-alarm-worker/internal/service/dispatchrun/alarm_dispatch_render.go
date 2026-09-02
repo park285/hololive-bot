@@ -14,7 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (string, error) {
+func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
 	if message, handled, err := renderAlarmDispatchGroupSource(ctx, renderer, messageStrings, group); handled {
 		if err != nil {
 			return message, fmt.Errorf("render alarm dispatch group source: %w", err)
@@ -32,7 +32,7 @@ func renderAlarmDispatchGroup(ctx context.Context, renderer *template.Renderer, 
 		return out, nil
 	}
 
-	out, err := renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, group)
+	out, err := renderAlarmDispatchNotificationGroup(ctx, renderer, messageStrings, members, shortLinkBaseURL, group)
 	if err != nil {
 		return out, fmt.Errorf("render alarm dispatch notification group: %w", err)
 	}
@@ -201,8 +201,8 @@ func buildAlarmDispatchGroupViewWithShortLinks(
 	}
 }
 
-func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, group alarmDispatchGroup) (string, error) {
-	shortLinks, err := configuredAlarmShortLinkBuilder()
+func renderAlarmDispatchNotificationGroup(ctx context.Context, renderer *template.Renderer, store *messagestrings.Store, members domain.MemberDataProvider, shortLinkBaseURL string, group alarmDispatchGroup) (string, error) {
+	shortLinks, err := configuredAlarmShortLinkBuilder(shortLinkBaseURL)
 	if err != nil {
 		return "", fmt.Errorf("render alarm dispatch notification group: short links: %w", err)
 	}

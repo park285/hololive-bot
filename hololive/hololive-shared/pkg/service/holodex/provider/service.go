@@ -10,13 +10,13 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
+	"github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
+	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
+	"github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient"
-	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
-	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/service/ratelimit"
 )
 

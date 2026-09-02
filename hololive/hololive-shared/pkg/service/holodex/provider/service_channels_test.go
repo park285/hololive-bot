@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
 func TestSearchChannels_UsesPaginatedHololiveChannelListCache(t *testing.T) {

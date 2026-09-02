@@ -28,7 +28,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )

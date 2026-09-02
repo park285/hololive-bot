@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/community"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo"
 )
 

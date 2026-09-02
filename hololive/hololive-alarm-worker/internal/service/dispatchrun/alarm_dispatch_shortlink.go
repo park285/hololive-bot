@@ -3,7 +3,6 @@ package dispatchrun
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
@@ -15,8 +14,8 @@ const (
 )
 
 // ValidateAlarmShortLinkConfig는 섬네일 없는 텍스트 링크와 Karing 카드가 동시에 켜지는 구성을 거부합니다.
-func ValidateAlarmShortLinkConfig(karingEnabled bool) error {
-	builder, err := configuredAlarmShortLinkBuilder()
+func ValidateAlarmShortLinkConfig(baseURL string, karingEnabled bool) error {
+	builder, err := configuredAlarmShortLinkBuilder(baseURL)
 	if err != nil {
 		return fmt.Errorf("configured alarm short link builder: %w", err)
 	}
@@ -28,8 +27,8 @@ func ValidateAlarmShortLinkConfig(karingEnabled bool) error {
 	return nil
 }
 
-func configuredAlarmShortLinkBuilder() (shortlinkservice.YouTubeBuilder, error) {
-	rawOrigin := strings.TrimSpace(os.Getenv(alarmShortLinkBaseURLEnv))
+func configuredAlarmShortLinkBuilder(baseURL string) (shortlinkservice.YouTubeBuilder, error) {
+	rawOrigin := strings.TrimSpace(baseURL)
 
 	builder, err := shortlinkservice.NewYouTubeBuilder(rawOrigin)
 	if err != nil {

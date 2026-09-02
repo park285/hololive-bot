@@ -8,8 +8,8 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/kapu/hololive-shared/internal/workerobservability"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/workerobservability"
 )
 
 // 운영 표면이 H3 전용이라 Prometheus가 직접 scrape하지 못해,

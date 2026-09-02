@@ -16,7 +16,7 @@ func TestGathererExposesCommonWorkerFamilies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	profilePath, err := filepath.Abs(filepath.Join("..", "config", "settings", "testdata", "stack-worker-profile-youtube-collector.json"))
+	profilePath, err := filepath.Abs(filepath.Join("..", "..", "pkg", "config", "settings", "testdata", "stack-worker-profile-youtube-collector.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

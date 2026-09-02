@@ -25,8 +25,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kapu/hololive-shared/internal/service/alarmread"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/alarmread"
 )
 
 type writeCapableStub struct {

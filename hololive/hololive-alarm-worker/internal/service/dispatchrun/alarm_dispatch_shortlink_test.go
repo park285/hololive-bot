@@ -8,16 +8,16 @@ import (
 )
 
 func TestValidateAlarmShortLinkConfigAllowsDisabledConfiguration(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, "")
+	t.Parallel()
 
-	require.NoError(t, ValidateAlarmShortLinkConfig(false))
-	require.NoError(t, ValidateAlarmShortLinkConfig(true))
+	require.NoError(t, ValidateAlarmShortLinkConfig("", false))
+	require.NoError(t, ValidateAlarmShortLinkConfig("", true))
 }
 
 func TestValidateAlarmShortLinkConfigRejectsInvalidOrigin(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, "http://go.example.com")
+	t.Parallel()
 
-	err := ValidateAlarmShortLinkConfig(false)
+	err := ValidateAlarmShortLinkConfig("http://go.example.com", false)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), alarmShortLinkBaseURLEnv)
@@ -25,27 +25,27 @@ func TestValidateAlarmShortLinkConfigRejectsInvalidOrigin(t *testing.T) {
 }
 
 func TestValidateAlarmShortLinkConfigRejectsKaringConflict(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin)
+	t.Parallel()
 
-	err := ValidateAlarmShortLinkConfig(true)
+	err := ValidateAlarmShortLinkConfig(alarmShortLinkOrigin, true)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ALARM_DISPATCH_KARING_ENABLED=false")
 }
 
 func TestValidateAlarmShortLinkConfigRejectsUntrustedHTTPSOrigin(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, "https://go.example.com")
+	t.Parallel()
 
-	err := ValidateAlarmShortLinkConfig(false)
+	err := ValidateAlarmShortLinkConfig("https://go.example.com", false)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), alarmShortLinkOrigin)
 }
 
 func TestConfiguredAlarmShortLinkBuilderBuildsLink(t *testing.T) {
-	t.Setenv(alarmShortLinkBaseURLEnv, alarmShortLinkOrigin+"/")
+	t.Parallel()
 
-	builder, err := configuredAlarmShortLinkBuilder()
+	builder, err := configuredAlarmShortLinkBuilder(alarmShortLinkOrigin + "/")
 	require.NoError(t, err)
 
 	link, ok := builder.URL("dQw4w9WgXcQ")

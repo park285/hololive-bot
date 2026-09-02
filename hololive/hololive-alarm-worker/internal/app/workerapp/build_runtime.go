@@ -413,7 +413,7 @@ func buildAlarmFoundation(
 
 	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
 	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
+	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 
 	alarmService, err := alarmservice.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
 	if err != nil {

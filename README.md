@@ -36,6 +36,10 @@
 
 ---
 
+## 모듈 경로 계약 (Module Path Contract)
+
+루트 `go.mod`와 `hololive/*`, `admin-dashboard/backend`의 여섯 `go.mod`가 쓰는 `github.com/kapu/*` 모듈 경로는 go.work 전용 계약이다. 이 경로는 루트 `go.work`와 각 `go.mod`의 `replace ../…` 지시문으로만 해석되며 `go get`으로 받을 수 없다. 여섯 모듈 분리는 `internal/workspace/runtime_split_multimodule_contract_test.go`가 고정한다. 외부 소비자가 없으므로 원격 경로와 맞추는 작업은 `hololive-shared`가 contracts·domain 수준으로 줄어든 뒤 모듈 수 축소와 함께 재검토한다(`DEC-20260902-hololive-module-layout-go-work-only`).
+
 ## 개발 및 검증 (Development & Test)
 
 ### 사전 요구 사양 (Prerequisites)

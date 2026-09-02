@@ -201,6 +201,8 @@ func newAdminAPIRuntime(
 		return nil, errors.New("config must not be nil")
 	}
 
+	sharedserver.InitWSUpgrader(appConfig.Server.WebSocketAllowedOrigins)
+
 	servers, err := sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-admin-api.http",
 		nil, sharedserver.LocalPlaneTraceFilter)
 	if err != nil {

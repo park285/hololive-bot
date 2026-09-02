@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/content"
 )
 
 func TestDomainNotificationCarriesPremiereSchedule(t *testing.T) {

@@ -30,8 +30,8 @@ import (
 
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
 func (h *Service) GetChannel(ctx context.Context, channelID string) (*domain.Channel, error) {

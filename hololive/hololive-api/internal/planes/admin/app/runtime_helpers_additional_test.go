@@ -20,10 +20,10 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
 )
 

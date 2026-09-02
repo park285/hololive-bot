@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	apiclient "github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	apiclient "github.com/kapu/hololive-shared/pkg/service/holodex/provider/apiclient"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 )
 

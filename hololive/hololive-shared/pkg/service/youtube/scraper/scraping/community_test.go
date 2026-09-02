@@ -32,9 +32,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
 type communityRoundTripFunc func(req *http.Request) (*http.Response, error)

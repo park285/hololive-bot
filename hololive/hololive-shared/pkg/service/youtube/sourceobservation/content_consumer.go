@@ -5,9 +5,9 @@ import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/content"
 )
 
 func (c *Consumer) reconcileContent(

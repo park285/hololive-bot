@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	dispatchstate "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
+	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 )
 
 func TestEnqueueDeliveries_DoesNotLogZeroWorkAtInfo(t *testing.T) {

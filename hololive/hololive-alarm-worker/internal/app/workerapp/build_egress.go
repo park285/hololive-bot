@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
+	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -24,7 +25,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/dispatchstate"
 )
 
 func buildNotificationEgress(
@@ -43,6 +43,7 @@ func buildNotificationEgress(
 	}
 
 	irisClient, err := providers.ProvideIrisKaringClient(
+		&appConfig.Iris,
 		logger,
 		iris.WithBaseURL(appConfig.Iris.BaseURL),
 		iris.WithBotToken(appConfig.Iris.BotToken),
@@ -213,7 +214,7 @@ func buildAlarmDispatchRunner(
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) (workerruntime.Scheduler, error) {
-	if err := dispatchrun.ValidateAlarmShortLinkConfig(parseAlarmDispatchKaringEnabled()); err != nil {
+	if err := dispatchrun.ValidateAlarmShortLinkConfig(appConfig.Notification.AlarmShortLinkBaseURL, parseAlarmDispatchKaringEnabled()); err != nil {
 		return nil, fmt.Errorf("validate alarm dispatch short links: %w", err)
 	}
 
@@ -277,6 +278,7 @@ func alarmDispatchRunnerConfig(appConfig *settings.Config) dispatchrun.RunnerCon
 
 	return dispatchrun.RunnerConfig{
 		KaringEnabled:     parseAlarmDispatchKaringEnabled(),
+		ShortLinkBaseURL:  appConfig.Notification.AlarmShortLinkBaseURL,
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,
 		AttemptTimeout:    time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,

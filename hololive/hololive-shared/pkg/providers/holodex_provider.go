@@ -24,10 +24,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/holodex/provider/htmlscraper"
 )
 
 // ProvideHolodexService - Holodex API 서비스 생성.

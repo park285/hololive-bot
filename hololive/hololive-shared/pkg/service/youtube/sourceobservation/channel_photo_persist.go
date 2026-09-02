@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/photo"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/photo"
 )
 
 func loadPhotoState(ctx context.Context, tx dbx.Tx, channelID string) (photo.State, error) {

@@ -22,6 +22,7 @@ package settings
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -77,23 +78,25 @@ func loadServerConfigWithAPIKey(apiKey string) ServerConfig {
 	port := sharedenv.Int("SERVER_PORT", 30001)
 
 	return ServerConfig{
-		Port:            port,
-		APIKey:          apiKey,
-		HTTPTransports:  parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
-		H3Addr:          sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
-		H3CertFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
-		H3KeyFile:       strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
-		ShortLinkAddr:   strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
-		MetricsAddr:     strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
-		PprofAddr:       strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
-		AdminAllowedIPs: parseCommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
+		Port:                    port,
+		APIKey:                  apiKey,
+		HTTPTransports:          parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+		H3Addr:                  sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
+		H3CertFile:              strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
+		H3KeyFile:               strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
+		ShortLinkAddr:           strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
+		MetricsAddr:             strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
+		PprofAddr:               strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
+		AdminAllowedIPs:         parseCommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
+		WebSocketAllowedOrigins: parseCommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
 	}
 }
 
 func loadNotificationConfig() NotificationConfig {
 	return NotificationConfig{
-		AdvanceMinutes: parseIntList(sharedenv.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
-		CheckInterval:  time.Duration(sharedenv.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
+		AdvanceMinutes:        parseIntList(sharedenv.String("NOTIFICATION_ADVANCE_MINUTES", "5")),
+		CheckInterval:         time.Duration(sharedenv.Int("CHECK_INTERVAL_SECONDS", 60)) * time.Second,
+		AlarmShortLinkBaseURL: strings.TrimSpace(sharedenv.String("ALARM_SHORT_LINK_BASE_URL", "")),
 	}
 }
 
@@ -268,4 +271,13 @@ func loadExaConfig() ExaConfig {
 		APIKey:   sharedenv.String("EXA_API_KEY", ""),
 		Enabled:  sharedenv.Bool("EXA_ENABLED", false),
 	}
+}
+
+func loadSettingsFilePath() string {
+	dir := strings.TrimSpace(sharedenv.String("SETTINGS_DIR", ""))
+	if dir == "" {
+		dir = "data"
+	}
+
+	return filepath.Join(dir, "settings.json")
 }

@@ -14,8 +14,8 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 
+	"github.com/kapu/hololive-api/internal/service/subscriptionclient"
 	"github.com/kapu/hololive-shared/pkg/contracts/subscription"
-	"github.com/kapu/hololive-shared/pkg/service/subscriptionclient"
 )
 
 const testSubscriptionsPath = "/internal/subscriptions"

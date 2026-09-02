@@ -5,16 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
 
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
-func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) settings.ReadWriter {
-	settingsPath := resolveSettingsFilePath()
-
+func BuildSettingsService(settingsPath string, targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) settings.ReadWriter {
 	if logger != nil {
 		logger.Info("Using settings file path", slog.String("path", settingsPath))
 	}
@@ -28,10 +24,9 @@ func BuildSettingsService(targetMinutes []int, scraperProxyEnabled bool, logger 
 	}, logger)
 }
 
-func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) []int {
+func ResolvePersistedTargetMinutes(settingsPath string, targetMinutes []int, scraperProxyEnabled bool, logger *slog.Logger) []int {
 	_ = scraperProxyEnabled
 
-	settingsPath := resolveSettingsFilePath()
 	configuredPolicy := sharedchecker.NewTargetMinutePolicyFromConfigured(targetMinutes)
 	resolvedConfigured := configuredPolicy.Clone()
 
@@ -69,15 +64,6 @@ func ResolvePersistedTargetMinutes(targetMinutes []int, scraperProxyEnabled bool
 	logResolvedTargetMinutes(logger, "persisted-settings", resolved)
 
 	return resolved
-}
-
-func resolveSettingsFilePath() string {
-	dir := strings.TrimSpace(os.Getenv("SETTINGS_DIR"))
-	if dir == "" {
-		dir = "data"
-	}
-
-	return filepath.Join(dir, "settings.json")
 }
 
 type persistedSettings struct {

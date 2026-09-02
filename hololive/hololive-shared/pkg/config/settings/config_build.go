@@ -141,6 +141,7 @@ func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, op
 		Bot:                    loadBotConfig(),
 		Services:               loadServicesConfig(),
 		Environment:            loadAppEnvironment(),
+		SettingsFilePath:       loadSettingsFilePath(),
 		Chzzk:                  loadChzzkConfig(),
 		Twitch:                 loadTwitchConfig(),
 		Cliproxy:               loadCliproxyConfig(),

@@ -20,6 +20,7 @@ import (
 func InitAlarmDependencies(
 	chzzkConfig settings.ChzzkConfig,
 	twitchConfig *settings.TwitchConfig,
+	settingsFilePath string,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,
@@ -32,7 +33,7 @@ func InitAlarmDependencies(
 	twitchClient := ProvideTwitchClient(twitchConfig, logger)
 	memberDataProvider := memberServiceAdapter
 
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(advanceMinutes, scraperProxyEnabled, logger)
+	resolved := sharedmodules.ResolvePersistedTargetMinutes(settingsFilePath, advanceMinutes, scraperProxyEnabled, logger)
 
 	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)
 	if err != nil {
@@ -74,6 +75,7 @@ func InitAlarmModeComponents(
 	alarmDeps, alarmErr := InitAlarmDependencies(
 		appConfig.Chzzk,
 		&appConfig.Twitch,
+		appConfig.SettingsFilePath,
 		appConfig.Notification.AdvanceMinutes,
 		appConfig.Scraper.ProxyEnabled,
 		infra.Cache,

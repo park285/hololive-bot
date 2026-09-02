@@ -24,7 +24,7 @@ import (
 	"context"
 	"log/slog"
 
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 )
 
 type memberNewsWeeklyRunNowTrigger interface {

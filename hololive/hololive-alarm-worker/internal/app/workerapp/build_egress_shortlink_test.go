@@ -12,9 +12,11 @@ import (
 
 func TestBuildAlarmDispatchRunnerRejectsInvalidShortLinkOrigin(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
-	t.Setenv("ALARM_SHORT_LINK_BASE_URL", "http://go.example.com")
 
 	config, state := alarmWorkerTestConfig(t)
+
+	config.Notification.AlarmShortLinkBaseURL = "http://go.example.com"
+
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
 	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)
@@ -26,9 +28,11 @@ func TestBuildAlarmDispatchRunnerRejectsInvalidShortLinkOrigin(t *testing.T) {
 
 func TestBuildAlarmDispatchRunnerRejectsShortLinksWithKaring(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
-	t.Setenv("ALARM_SHORT_LINK_BASE_URL", "https://short.holoshi.com")
 
 	config, state := alarmWorkerTestConfig(t)
+
+	config.Notification.AlarmShortLinkBaseURL = "https://short.holoshi.com"
+
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
 	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)

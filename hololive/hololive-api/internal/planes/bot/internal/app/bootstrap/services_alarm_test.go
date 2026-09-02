@@ -22,15 +22,16 @@ package bootstrap
 
 import (
 	"log/slog"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
-	membermocks "github.com/kapu/hololive-shared/pkg/service/member/mocks"
 )
 
 func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {
@@ -39,6 +40,7 @@ func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {
 	deps, err := InitAlarmDependencies(
 		settings.ChzzkConfig{},
 		&settings.TwitchConfig{},
+		filepath.Join(t.TempDir(), "settings.json"),
 		[]int{10, 5, 1},
 		false,
 		nil,
@@ -60,6 +62,7 @@ func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
 	deps, err := InitAlarmDependencies(
 		settings.ChzzkConfig{},
 		&settings.TwitchConfig{},
+		filepath.Join(t.TempDir(), "settings.json"),
 		[]int{10, 5, 1},
 		false,
 		cachemocks.NewLenientClient(),

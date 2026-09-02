@@ -16,9 +16,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/kapu/hololive-shared/internal/workerobservability"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/server/middleware"
-	"github.com/kapu/hololive-shared/pkg/workerobservability"
 )
 
 type RuntimeRouterOptions struct {

@@ -419,7 +419,7 @@ func TestRenderAlarmDispatchNotificationGroupMatchesCanonicalRendering(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			want := goldenAlarmDispatchGroup(tc.group)
 
-			got, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, tc.group)
+			got, err := renderAlarmDispatchNotificationGroup(t.Context(), renderer, store, nil, "", tc.group)
 
 			require.NoError(t, err)
 			assert.Equal(t, want, got)

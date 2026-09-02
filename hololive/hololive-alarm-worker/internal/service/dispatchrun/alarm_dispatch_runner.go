@@ -58,6 +58,7 @@ type Runner struct {
 	renderer          *template.Renderer
 	messageStrings    *messagestrings.Store
 	idleWaiter        IdleWaiter
+	shortLinkBaseURL  string
 	karingEnabled     bool
 	maxBatch          int
 	maxBatchesPerWake int
@@ -72,6 +73,7 @@ type Runner struct {
 
 type RunnerConfig struct {
 	KaringEnabled     bool
+	ShortLinkBaseURL  string
 	MaxBatch          int
 	MaxBatchesPerWake int
 	Members           domain.MemberDataProvider
@@ -95,6 +97,7 @@ func NewRunner(
 		renderer:          renderer,
 		messageStrings:    messageStrings,
 		idleWaiter:        idleWaiter,
+		shortLinkBaseURL:  config.ShortLinkBaseURL,
 		karingEnabled:     config.KaringEnabled,
 		maxBatch:          config.MaxBatch,
 		maxBatchesPerWake: config.MaxBatchesPerWake,
@@ -278,7 +281,7 @@ func alarmDispatchGroupUsesTextPath(group alarmDispatchGroup) bool {
 }
 
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
-	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, group)
+	message, err := renderAlarmDispatchGroup(ctx, r.renderer, r.messageStrings, r.members, r.shortLinkBaseURL, group)
 	if err != nil {
 		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
 			return fmt.Errorf("route pre send failure: %w", routeErr)

@@ -25,9 +25,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	backoff "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/backoff"
+	backoff "github.com/kapu/hololive-shared/internal/service/youtube/scraper/scraping/backoff"
+	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
 	ratelimiter "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/ua"
 )
 
 type Client struct {

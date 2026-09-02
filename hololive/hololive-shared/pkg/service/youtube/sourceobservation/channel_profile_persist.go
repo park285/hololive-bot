@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/profile"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/profile"
 )
 
 func loadProfileState(ctx context.Context, tx dbx.Tx, channelID string) (profile.State, error) {

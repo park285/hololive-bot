@@ -37,6 +37,7 @@ import (
 func initAlarmDependencies(
 	chzzkConfig settings.ChzzkConfig,
 	twitchConfig *settings.TwitchConfig,
+	settingsFilePath string,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
 	cacheService cache.Client,
@@ -44,7 +45,7 @@ func initAlarmDependencies(
 	memberServiceAdapter domain.MemberDataProvider, alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*appbootstrap.AlarmDependencies, error) {
-	deps, err := appbootstrap.InitAlarmDependencies(chzzkConfig, twitchConfig, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
+	deps, err := appbootstrap.InitAlarmDependencies(chzzkConfig, twitchConfig, settingsFilePath, advanceMinutes, scraperProxyEnabled, cacheService, holodexService, memberServiceAdapter, alarmRepository, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm dependencies: %w", err)
 	}

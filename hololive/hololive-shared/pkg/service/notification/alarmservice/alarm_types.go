@@ -25,14 +25,14 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
+	"github.com/kapu/hololive-shared/internal/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/pkg/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 

@@ -14,14 +14,14 @@ import (
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
+	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
+	"github.com/kapu/hololive-api/internal/service/acl"
+	"github.com/kapu/hololive-api/internal/service/activity"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
 	"github.com/kapu/hololive-shared/pkg/repository"
-	sharedsettings "github.com/kapu/hololive-shared/pkg/server/settings"
-	"github.com/kapu/hololive-shared/pkg/service/acl"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -62,7 +62,7 @@ func buildAdminHandler(
 			SystemStats: systemCollector,
 		},
 		Settings: server.SettingsDeps{
-			Settings: sharedmodules.BuildSettingsService(appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
+			Settings: sharedmodules.BuildSettingsService(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger),
 			Applier:  settingsApplier,
 		},
 		Template: server.TemplateDeps{

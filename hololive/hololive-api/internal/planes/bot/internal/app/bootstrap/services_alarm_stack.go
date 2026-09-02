@@ -9,10 +9,10 @@ import (
 
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
+	"github.com/kapu/hololive-api/internal/service/activity"
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedproviders "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
-	"github.com/kapu/hololive-shared/pkg/service/activity"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
 
@@ -69,6 +69,7 @@ func InitAlarmYouTubeStack(
 		YouTubeStack:   apiStack,
 		ActivityLogger: ProvideActivityLogger(logger),
 		SettingsService: sharedmodules.BuildSettingsService(
+			appConfig.SettingsFilePath,
 			appConfig.Notification.AdvanceMinutes,
 			appConfig.Scraper.ProxyEnabled,
 			logger,

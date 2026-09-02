@@ -28,10 +28,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/livestatus"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	youtubeadmission "github.com/kapu/hololive-shared/pkg/service/youtube/admission"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/livestatus"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )

@@ -31,9 +31,9 @@ import (
 	"net/url"
 	"slices"
 
+	streammapping "github.com/kapu/hololive-shared/internal/service/holodex/provider/streammapping"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	streammapping "github.com/kapu/hololive-shared/pkg/service/holodex/provider/streammapping"
 )
 
 // includeLive가 true이면 현재 진행 중인 방송도 포함한다.

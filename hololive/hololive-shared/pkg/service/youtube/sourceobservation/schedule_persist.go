@@ -6,10 +6,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/schedule"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/dbx"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/live"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/reconcile/schedule"
 )
 
 func lockScheduleSubject(ctx context.Context, tx dbx.Tx, groupKey string) error {
