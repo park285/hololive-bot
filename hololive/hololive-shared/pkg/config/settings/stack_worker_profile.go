@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/park285/shared-go/v2/pkg/workercontract"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
@@ -28,50 +30,6 @@ func LoadAPIWorkerProfile() (*APIWorkerProfile, error) {
 
 	if err := validateAPIWorkerProfile(profile); err != nil {
 		return nil, fmt.Errorf("validate API worker profile: %w", err)
-	}
-
-	return profile, nil
-}
-
-func LoadAlarmWorkerProfile() (*AlarmWorkerProfile, error) {
-	loaded, err := workercontract.LoadProfileFromEnv("hololive", "alarm-worker")
-	if err != nil {
-		return nil, fmt.Errorf("load stack worker profile: %w", err)
-	}
-
-	profile := &AlarmWorkerProfile{Loaded: loaded}
-	if err := workercontract.DecodeWorkerSettings(loaded, "alarm_dispatch", &profile.AlarmDispatch); err != nil {
-		return nil, fmt.Errorf("decode worker settings: %w", err)
-	}
-
-	if err := workercontract.DecodeWorkerSettings(loaded, "notification_delivery", &profile.NotificationDelivery); err != nil {
-		return nil, fmt.Errorf("decode worker settings: %w", err)
-	}
-
-	if err := workercontract.DecodeWorkerSettings(loaded, "youtube_delivery", &profile.YouTubeDelivery); err != nil {
-		return nil, fmt.Errorf("decode worker settings: %w", err)
-	}
-
-	if err := validateAlarmWorkerProfile(profile); err != nil {
-		return nil, fmt.Errorf("validate alarm worker profile: %w", err)
-	}
-
-	return profile, nil
-}
-
-func LoadYouTubeCollectorWorkerProfile() (*YouTubeCollectorWorkerProfile, error) {
-	loaded, err := workercontract.LoadProfileFromEnv("hololive", "youtube-collector")
-	if err != nil {
-		return nil, fmt.Errorf("load stack worker profile: %w", err)
-	}
-
-	profile := &YouTubeCollectorWorkerProfile{Loaded: loaded}
-	if err := workercontract.DecodeWorkerSettings(loaded, "collection", &profile.Collection); err != nil {
-		return nil, fmt.Errorf("decode worker settings: %w", err)
-	}
-
-	if err := validateCollectorWorkerProfile(profile); err != nil {
-		return nil, fmt.Errorf("validate collector worker profile: %w", err)
 	}
 
 	return profile, nil
@@ -113,10 +71,10 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 		"source_observation.shutdown_timeout_ms":       profile.SourceObservation.ShutdownTimeoutMS,
 	}
 
-	problems = append(problems, positiveValueProblems(positive)...)
+	problems = append(problems, load.PositiveValueProblems(positive)...)
 	problems = append(problems, apiWorkerRelationshipProblems(profile, workers)...)
 
-	if err := joinWorkerProfileProblems("API", problems); err != nil {
+	if err := load.JoinWorkerProfileProblems("API", problems); err != nil {
 		return fmt.Errorf("join worker profile problems: %w", err)
 	}
 
@@ -126,7 +84,7 @@ func validateAPIWorkerProfile(profile *APIWorkerProfile) error {
 func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
 	problems := make([]string, 0)
 
-	if profile.BotWebhookInbox.MaxAttempts <= 0 || profile.BotReplyOutbox.MaxAttempts <= 0 || !allPositiveInts(
+	if profile.BotWebhookInbox.MaxAttempts <= 0 || profile.BotReplyOutbox.MaxAttempts <= 0 || !load.AllPositiveInts(
 		profile.SourceObservation.DBOperationConcurrency,
 		profile.SourceObservation.ClaimBatchSize,
 	) {
@@ -148,182 +106,6 @@ func apiWorkerRelationshipProblems(profile *APIWorkerProfile, workers map[string
 	if profile.SourceObservation.ClaimBatchSize < workers["source_observation"].Executor.ConfiguredWorkers ||
 		profile.SourceObservation.DBOperationConcurrency < workers["source_observation"].Executor.ConfiguredWorkers {
 		problems = append(problems, "source_observation batch and DB concurrency must cover workers")
-	}
-
-	return problems
-}
-
-func validateAlarmWorkerProfile(profile *AlarmWorkerProfile) error {
-	if profile == nil {
-		return errors.New("alarm worker profile is nil")
-	}
-
-	workers := profile.Loaded.Profile.Workers
-	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
-		"alarm_dispatch":        {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
-		"notification_delivery": {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
-		"youtube_delivery":      {AttemptTimeout: workercontract.DurationModeFixed, Capacity: workercontract.CapacityModeUnbounded, MaxAge: workercontract.DurationModeFixed},
-	})
-
-	problems = append(problems, alarmPositiveValueProblems(profile)...)
-	problems = append(problems, alarmPositiveIntProblems(profile)...)
-	problems = append(problems, alarmRelationshipProblems(profile, workers)...)
-
-	if err := joinWorkerProfileProblems("alarm-worker", problems); err != nil {
-		return fmt.Errorf("join worker profile problems: %w", err)
-	}
-
-	return nil
-}
-
-func alarmPositiveValueProblems(profile *AlarmWorkerProfile) []string {
-	return positiveValueProblems(map[string]int64{
-		"alarm_dispatch.lease_ms":                               profile.AlarmDispatch.LeaseMS,
-		"alarm_dispatch.quarantine_threshold_ms":                profile.AlarmDispatch.QuarantineThresholdMS,
-		"alarm_dispatch.recovery_interval_ms":                   profile.AlarmDispatch.RecoveryIntervalMS,
-		"alarm_dispatch.poll_interval_ms":                       profile.AlarmDispatch.PollIntervalMS,
-		"alarm_dispatch.idle_backoff_min_ms":                    profile.AlarmDispatch.IdleBackoffMinMS,
-		"alarm_dispatch.idle_backoff_max_ms":                    profile.AlarmDispatch.IdleBackoffMaxMS,
-		"notification_delivery.lock_timeout_ms":                 profile.NotificationDelivery.LockTimeoutMS,
-		"notification_delivery.poll_interval_ms":                profile.NotificationDelivery.PollIntervalMS,
-		"notification_delivery.retry_backoff_ms":                profile.NotificationDelivery.RetryBackoffMS,
-		"notification_delivery.cleanup_after_ms":                profile.NotificationDelivery.CleanupAfterMS,
-		"notification_delivery.cleanup_interval_ms":             profile.NotificationDelivery.CleanupIntervalMS,
-		"notification_delivery.stale_sending_after_ms":          profile.NotificationDelivery.StaleSendingAfterMS,
-		"notification_delivery.stale_sending_sweep_interval_ms": profile.NotificationDelivery.StaleSendingSweepIntervalMS,
-		"youtube_delivery.lock_timeout_ms":                      profile.YouTubeDelivery.LockTimeoutMS,
-		"youtube_delivery.poll_interval_ms":                     profile.YouTubeDelivery.PollIntervalMS,
-		"youtube_delivery.retry_backoff_ms":                     profile.YouTubeDelivery.RetryBackoffMS,
-		"youtube_delivery.cleanup_after_ms":                     profile.YouTubeDelivery.CleanupAfterMS,
-		"youtube_delivery.revive_interval_ms":                   profile.YouTubeDelivery.ReviveIntervalMS,
-		"youtube_delivery.revive_freshness_window_ms":           profile.YouTubeDelivery.ReviveFreshnessWindowMS,
-		"youtube_delivery.claim_freshness_window_ms":            profile.YouTubeDelivery.ClaimFreshnessWindowMS,
-		"youtube_delivery.delivery_send_timeout_ms":             profile.YouTubeDelivery.DeliverySendTimeoutMS,
-		"youtube_delivery.aggregate_sync_interval_ms":           profile.YouTubeDelivery.AggregateSyncIntervalMS,
-		"youtube_delivery.telemetry_poll_interval_ms":           profile.YouTubeDelivery.TelemetryPollIntervalMS,
-		"youtube_delivery.telemetry_retry_backoff_ms":           profile.YouTubeDelivery.TelemetryRetryBackoffMS,
-		"youtube_delivery.telemetry_retention_ms":               profile.YouTubeDelivery.TelemetryRetentionMS,
-	})
-}
-
-func alarmPositiveIntProblems(profile *AlarmWorkerProfile) []string {
-	return positiveIntProblems(map[string]int{
-		"alarm_dispatch.recovery_batch_size":              profile.AlarmDispatch.RecoveryBatchSize,
-		"alarm_dispatch.max_batch":                        profile.AlarmDispatch.MaxBatch,
-		"alarm_dispatch.max_batches_per_wake":             profile.AlarmDispatch.MaxBatchesPerWake,
-		"notification_delivery.batch_size":                profile.NotificationDelivery.BatchSize,
-		"notification_delivery.max_retries":               profile.NotificationDelivery.MaxRetries,
-		"notification_delivery.stale_sending_sweep_limit": profile.NotificationDelivery.StaleSendingSweepLimit,
-		"youtube_delivery.batch_size":                     profile.YouTubeDelivery.BatchSize,
-		"youtube_delivery.max_retries":                    profile.YouTubeDelivery.MaxRetries,
-		"youtube_delivery.subscriber_lookup_parallelism":  profile.YouTubeDelivery.SubscriberLookupParallelism,
-		"youtube_delivery.telemetry_backfill_batch":       profile.YouTubeDelivery.TelemetryBackfillBatch,
-		"youtube_delivery.telemetry_flush_batch":          profile.YouTubeDelivery.TelemetryFlushBatch,
-	})
-}
-
-func alarmRelationshipProblems(profile *AlarmWorkerProfile, workers map[string]workercontract.WorkerProfile) []string {
-	problems := make([]string, 0)
-
-	if profile.AlarmDispatch.IdleBackoffMaxMS < profile.AlarmDispatch.IdleBackoffMinMS {
-		problems = append(problems, "alarm_dispatch idle backoff range is invalid")
-	}
-
-	if profile.YouTubeDelivery.ClaimFreshnessWindowMS < profile.YouTubeDelivery.ReviveFreshnessWindowMS+profile.YouTubeDelivery.ReviveIntervalMS {
-		problems = append(problems, "youtube_delivery claim freshness window is invalid")
-	}
-
-	alarm := workers["alarm_dispatch"]
-	if alarm.Executor.Enabled && alarm.Executor.ConfiguredWorkers != 1 {
-		problems = append(problems, "alarm_dispatch currently requires exactly one scheduler worker")
-	}
-
-	return problems
-}
-
-func validateCollectorWorkerProfile(profile *YouTubeCollectorWorkerProfile) error {
-	if profile == nil {
-		return errors.New("youtube collector worker profile is nil")
-	}
-
-	workers := profile.Loaded.Profile.Workers
-	problems := workercontract.ShapeProblems(workers, map[string]workercontract.WorkerShape{
-		"collection": {AttemptTimeout: workercontract.DurationModePerJob, Capacity: workercontract.CapacityModeBounded, MaxAge: workercontract.DurationModeFixed},
-	})
-	positive := map[string]int64{
-		"collection.acquisition_cadence_ms":        profile.Collection.AcquisitionCadenceMS,
-		"collection.lease_ttl_ms":                  profile.Collection.LeaseTTLMS,
-		"collection.renew_interval_ms":             profile.Collection.RenewIntervalMS,
-		"collection.renew_timeout_ms":              profile.Collection.RenewTimeoutMS,
-		"collection.db_timeout_ms":                 profile.Collection.DBTimeoutMS,
-		"collection.cleanup_timeout_ms":            profile.Collection.CleanupTimeoutMS,
-		"collection.provider_admission_timeout_ms": profile.Collection.ProviderAdmissionTimeoutMS,
-		"collection.collection_overhead_ms":        profile.Collection.CollectionOverheadMS,
-		"collection.publish_timeout_ms":            profile.Collection.PublishTimeoutMS,
-		"collection.retry_min_ms":                  profile.Collection.RetryMinMS,
-		"collection.retry_max_ms":                  profile.Collection.RetryMaxMS,
-		"collection.release_jitter_min_ms":         profile.Collection.ReleaseJitterMinMS,
-		"collection.release_jitter_max_ms":         profile.Collection.ReleaseJitterMaxMS,
-	}
-
-	problems = append(problems, positiveValueProblems(positive)...)
-
-	worker := workers["collection"]
-
-	problems = append(problems, collectorCapacityProblems(profile, &worker)...)
-	problems = append(problems, collectorConcurrencyProblems(profile, &worker)...)
-	problems = append(problems, collectorTimingProblems(profile)...)
-
-	if err := joinWorkerProfileProblems("youtube-collector", problems); err != nil {
-		return fmt.Errorf("join worker profile problems: %w", err)
-	}
-
-	return nil
-}
-
-func collectorCapacityProblems(profile *YouTubeCollectorWorkerProfile, worker *workercontract.WorkerProfile) []string {
-	capacity := int64(0)
-
-	if worker != nil && worker.Queue.Capacity.Items != nil {
-		capacity = *worker.Queue.Capacity.Items
-	}
-
-	if profile.Collection.AcquisitionBatch < 1 || int64(profile.Collection.AcquisitionBatch) > capacity {
-		return []string{"collection acquisition batch must fit queue capacity"}
-	}
-
-	return nil
-}
-
-func collectorConcurrencyProblems(profile *YouTubeCollectorWorkerProfile, worker *workercontract.WorkerProfile) []string {
-	problems := make([]string, 0)
-
-	if worker == nil {
-		return []string{"collection worker is missing"}
-	}
-
-	for name, value := range map[string]int{
-		"holodex_max_inflight":   profile.Collection.HolodexMaxInflight,
-		"official_max_inflight":  profile.Collection.OfficialMaxInflight,
-		"youtubejs_max_inflight": profile.Collection.YouTubeJSMaxInflight,
-	} {
-		if value < 1 || value > worker.Executor.ConfiguredWorkers {
-			problems = append(problems, "collection "+name+" must be within configured workers")
-		}
-	}
-
-	return problems
-}
-
-func collectorTimingProblems(profile *YouTubeCollectorWorkerProfile) []string {
-	problems := make([]string, 0)
-
-	if profile.Collection.RenewIntervalMS+profile.Collection.RenewTimeoutMS+1000 >= profile.Collection.LeaseTTLMS {
-		problems = append(problems, "collection renewal budget must fit lease TTL")
-	}
-
-	if profile.Collection.RetryMaxMS < profile.Collection.RetryMinMS || profile.Collection.ReleaseJitterMaxMS < profile.Collection.ReleaseJitterMinMS {
-		problems = append(problems, "collection retry or jitter range is invalid")
 	}
 
 	return problems

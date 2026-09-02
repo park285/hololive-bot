@@ -6,8 +6,6 @@ const (
 	serviceAdminDashboard = "admin-dashboard"
 	serviceHoloPostgres   = "holo-postgres"
 
-	collectorInstanceC = "youtube-collector-c"
-
 	runtimeCertsDir    = "/run/hololive-bot/certs"
 	hololiveH3KeyPath  = "/run/hololive-bot/certs/hololive-h3.key"
 	postgresCACertPath = "/run/hololive-bot/certs/postgres-ca.pem"

@@ -14,6 +14,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
@@ -25,7 +26,7 @@ const (
 )
 
 type Runtime struct {
-	Config          *settings.YouTubeCollectorRuntimeConfig
+	Config          *collectorconfig.RuntimeConfig
 	Logger          *slog.Logger
 	Scheduler       *leaseScheduler
 	servers         *sharedserver.RuntimeHTTPServers
@@ -37,7 +38,7 @@ type Runtime struct {
 	cleanupReported bool
 }
 
-func Build(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) (*Runtime, error) {
+func Build(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
 	if err := validateBuildInputs(appConfig, logger); err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -64,7 +65,7 @@ func Build(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfi
 	return runtime, nil
 }
 
-func validateBuildInputs(appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) error {
+func validateBuildInputs(appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger) error {
 	if appConfig == nil {
 		return errors.New("config must not be nil")
 	}
@@ -84,7 +85,7 @@ func validateBuildInputs(appConfig *settings.YouTubeCollectorRuntimeConfig, logg
 	return nil
 }
 
-func buildDisabledRuntime(ctx context.Context, appConfig *settings.YouTubeCollectorRuntimeConfig, logger *slog.Logger) (*Runtime, error) {
+func buildDisabledRuntime(ctx context.Context, appConfig *collectorconfig.RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
 	out, err := assembleDisabledRuntime(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("assemble disabled runtime: %w", err)
@@ -95,7 +96,7 @@ func buildDisabledRuntime(ctx context.Context, appConfig *settings.YouTubeCollec
 
 func assembleDisabledRuntime(
 	ctx context.Context,
-	appConfig *settings.YouTubeCollectorRuntimeConfig,
+	appConfig *collectorconfig.RuntimeConfig,
 	logger *slog.Logger,
 ) (*Runtime, error) {
 	workerRegistry, profileChecker, err := newCollectorWorkerRegistry(appConfig.WorkerProfile, nil)
@@ -127,7 +128,7 @@ func assembleDisabledRuntime(
 
 func assembleRuntime(
 	ctx context.Context,
-	appConfig *settings.YouTubeCollectorRuntimeConfig,
+	appConfig *collectorconfig.RuntimeConfig,
 	logger *slog.Logger,
 	infra *collectorInfrastructure,
 ) (*Runtime, error) {

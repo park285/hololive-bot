@@ -7,14 +7,15 @@ import (
 )
 
 func (c *Config) validateServerTransports() error {
-	if err := validateServerTransports(&c.Server); err != nil {
+	if err := ValidateServerTransports(&c.Server); err != nil {
 		return fmt.Errorf("validate server transports: %w", err)
 	}
 
 	return nil
 }
 
-func validateServerTransports(server *ServerConfig) error {
+// ValidateServerTransports: h3 전용 전송 계약과 인증서 파일 요구를 확인한다.
+func ValidateServerTransports(server *ServerConfig) error {
 	if err := validateServerHTTPTransportNames(server); err != nil {
 		return fmt.Errorf("validate server HTTP transport names: %w", err)
 	}

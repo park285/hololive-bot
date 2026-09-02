@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/youtube/targetprojection"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 )
@@ -212,7 +212,7 @@ func (r *Runtime) processNextReplay(ctx context.Context) (bool, error) {
 	return processed, nil
 }
 
-func planeRetentionConfig(cfg *settings.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
+func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobservation.RetentionConfig {
 	return sourceobservation.RetentionConfig{
 		QueueProcessedAge:     cfg.QueueProcessedAge,
 		QueueDLQAge:           cfg.QueueDLQAge,
@@ -225,7 +225,7 @@ func planeRetentionConfig(cfg *settings.YouTubePlaneRetentionConfig) sourceobser
 	}
 }
 
-func evidenceRetentionAges(cfg *settings.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
+func evidenceRetentionAges(cfg *apiplane.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
 	ages := make(map[contract.ObservationKind]time.Duration, 9)
 	addEvidenceRetentionAge(ages, contract.KindCommunityPage, cfg.CommunityPageAge)
 	addEvidenceRetentionAge(ages, contract.KindVideoList, cfg.VideoListAge)

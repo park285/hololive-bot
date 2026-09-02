@@ -8,12 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/park285/shared-go/v2/pkg/ginjson"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 )
 
 type collectorReadiness struct {
-	appConfig *settings.YouTubeCollectorRuntimeConfig
+	appConfig *collectorconfig.RuntimeConfig
 	infra     *collectorInfrastructure
 	scheduler *leaseScheduler
 	tracker   *readinessTracker
@@ -54,7 +54,7 @@ func (r *collectorReadiness) respond(c *gin.Context) {
 		return
 	}
 
-	cfg := settings.YouTubeCollectorConfig{}
+	cfg := collectorconfig.Config{}
 
 	if r.appConfig != nil {
 		cfg = r.appConfig.Collector
@@ -96,7 +96,7 @@ func (r *collectorReadiness) respondDisabled(c *gin.Context) {
 	})
 }
 
-func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readinessDeps {
+func (r *collectorReadiness) deps(cfg *collectorconfig.Config) readinessDeps {
 	var helper helperHealth
 
 	if r != nil && r.infra != nil && r.infra.youtubejs != nil {
@@ -121,7 +121,7 @@ func (r *collectorReadiness) deps(cfg *settings.YouTubeCollectorConfig) readines
 	}
 }
 
-func collectorInstanceID(appConfig *settings.YouTubeCollectorRuntimeConfig) string {
+func collectorInstanceID(appConfig *collectorconfig.RuntimeConfig) string {
 	if appConfig == nil {
 		return ""
 	}

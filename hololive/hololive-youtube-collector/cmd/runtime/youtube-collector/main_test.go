@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 )
 
 func TestYouTubeCollectorLogFileNameUsesExplicitEnv(t *testing.T) {
@@ -43,7 +44,7 @@ func TestYouTubeCollectorLogFileNameRejectsPathSeparators(t *testing.T) {
 }
 
 func TestYouTubeCollectorTelemetryServiceNameIsStable(t *testing.T) {
-	cfg := &settings.YouTubeCollectorRuntimeConfig{
+	cfg := &collectorconfig.RuntimeConfig{
 		Environment: "production",
 		Tracing: settings.TracingConfig{
 			Enabled:    true,

@@ -21,38 +21,36 @@
 package settings
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 type Config struct {
-	Iris                   IrisConfig
-	Server                 ServerConfig
-	Kakao                  KakaoConfig
-	Holodex                HolodexConfig
-	YouTube                YouTubeConfig
-	Ingestion              IngestionConfig
-	Chzzk                  ChzzkConfig
-	Twitch                 TwitchConfig
-	Valkey                 ValkeyConfig
-	Postgres               PostgresConfig
-	Notification           NotificationConfig
-	AlarmDispatchRetention AlarmDispatchRetentionConfig
-	Logging                LoggingConfig
-	Tracing                TracingConfig
-	Bot                    BotConfig
-	Services               ServicesConfig
-	Environment            string
+	Iris         IrisConfig
+	Server       ServerConfig
+	Kakao        KakaoConfig
+	Holodex      HolodexConfig
+	YouTube      YouTubeConfig
+	Ingestion    IngestionConfig
+	Chzzk        ChzzkConfig
+	Twitch       TwitchConfig
+	Valkey       ValkeyConfig
+	Postgres     PostgresConfig
+	Notification NotificationConfig
+	Logging      LoggingConfig
+	Tracing      TracingConfig
+	Bot          BotConfig
+	Services     ServicesConfig
+	Environment  string
 	// SettingsFilePath: 관리 화면이 저장하는 persisted settings(JSON) 경로. SETTINGS_DIR(기본 data)/settings.json.
 	SettingsFilePath     string
 	Scraper              ScraperConfig
-	YouTubeCollector     YouTubeCollectorConfig
 	Webhook              WebhookConfig
 	WorkerPool           WorkerPoolConfig
 	APIWorkerProfile     *APIWorkerProfile
@@ -70,16 +68,18 @@ type Config struct {
 	Version              string
 }
 
-type configLoadOptions struct {
-	WorkerProfileRole  string
+// LoadOptions: plane 패키지가 core Config 로딩을 조립할 때 쓰는 hook이다.
+// Section은 role 전용 구획(worker profile 등)을 채우며 nil이면 건너뛴다.
+type LoadOptions struct {
+	Section            func(*Config) error
 	CORSDefaultEnforce bool
-	TracingRuntime     tracingRuntime
+	TracingRuntime     TracingRuntime
 }
 
 func LoadAdminAPIRuntime() (*Config, error) {
-	out, err := loadConfigValidated((*Config).ValidateAdminAPIRuntime, configLoadOptions{
+	out, err := LoadConfig((*Config).ValidateAdminAPIRuntime, LoadOptions{
 		CORSDefaultEnforce: true,
-		TracingRuntime:     tracingRuntimeHololiveAPI,
+		TracingRuntime:     TracingRuntimeHololiveAPI,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load config validated: %w", err)
@@ -88,12 +88,13 @@ func LoadAdminAPIRuntime() (*Config, error) {
 	return out, nil
 }
 
-func loadConfigValidated(validate func(*Config) error, options configLoadOptions) (*Config, error) {
-	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("load .env: %w", err)
+// LoadConfig: .env를 읽고 core Config를 만든 뒤 호출자가 준 검증을 적용한다.
+func LoadConfig(validate func(*Config) error, options LoadOptions) (*Config, error) {
+	if err := load.DotEnv(); err != nil {
+		return nil, fmt.Errorf("load dot env: %w", err)
 	}
 
-	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := loadRuntimeTokensAndCORS()
+	webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction := LoadRuntimeTokensAndCORS()
 
 	config, err := buildConfig(webhookToken, botToken, corsAllowedOrigins, corsMissingInProduction, options)
 	if err != nil {
@@ -121,7 +122,7 @@ func loadIngestionConfig(communityShortsBigBangCutoverAt time.Time) IngestionCon
 func loadCORSConfig(
 	corsAllowedOrigins []string,
 	corsMissingInProduction bool,
-	options configLoadOptions,
+	options LoadOptions,
 ) CORSConfig {
 	return CORSConfig{
 		AllowedOrigins:      corsAllowedOrigins,
@@ -165,7 +166,7 @@ func loadKakaoConfig() (*KakaoConfig, error) {
 	}
 
 	return &KakaoConfig{
-		Rooms:      parseCommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
+		Rooms:      load.CommaSeparated(sharedenv.String("KAKAO_ROOMS", "홀로라이브 알림방")),
 		ACLEnabled: enabled,
 		ACLMode:    mode,
 	}, nil
@@ -210,7 +211,7 @@ func loadKakaoACLMode() (string, error) {
 	}
 }
 
-func loadLoggingConfig() LoggingConfig {
+func LoadLoggingConfig() LoggingConfig {
 	return LoggingConfig{
 		Level:      sharedenv.String("LOG_LEVEL", "info"),
 		Dir:        sharedenv.String("LOG_DIR", ""),
@@ -238,7 +239,7 @@ func loadHolodexConfig() HolodexConfig {
 
 	return HolodexConfig{
 		BaseURL:           sharedenv.String("HOLODEX_BASE_URL", d.BaseURL),
-		APIKey:            resolveHolodexAPIKey(),
+		APIKey:            load.HolodexAPIKey(),
 		Timeout:           time.Duration(sharedenv.Int("HOLODEX_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
 		PerAttemptTimeout: time.Duration(sharedenv.Int("HOLODEX_PER_ATTEMPT_TIMEOUT_SECONDS", int(d.PerAttemptTimeout/time.Second))) * time.Second,
 		MaxRetryAttempts:  sharedenv.Int("HOLODEX_MAX_RETRY_ATTEMPTS", d.MaxRetryAttempts),

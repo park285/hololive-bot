@@ -1,4 +1,6 @@
-package settings
+// Package apiplane: 단일 hololive-api 프로세스가 호스팅하는 bot·admin·llm plane과
+// YouTube background plane의 설정을 소유한다.
+package apiplane
 
 import (
 	"errors"
@@ -10,6 +12,9 @@ import (
 	"time"
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 const (
@@ -18,25 +23,25 @@ const (
 	defaultAdminAPIPort = 30006
 )
 
-// HololiveAPIConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin/llm HTTP plane과
+// RuntimeConfig는 단일 hololive-api 프로세스가 호스팅하는 bot/admin/llm HTTP plane과
 // YouTube background plane을 담는다. 각 plane은 자체 bounded DB pool을 explicit bulkhead로
 // 유지하고, 프로세스 전역의 logging·GC·signal 처리는 부모 runtime이 소유한다.
-type HololiveAPIConfig struct {
-	Bot     *Config
-	Admin   *Config
+type RuntimeConfig struct {
+	Bot     *settings.Config
+	Admin   *settings.Config
 	LLM     *LLMSchedulerConfig
 	YouTube YouTubePlaneConfig
-	Logging LoggingConfig
-	Tracing TracingConfig
+	Logging settings.LoggingConfig
+	Tracing settings.TracingConfig
 }
 
-func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
-	botConfig, err := LoadBotRuntime()
+func LoadRuntime() (*RuntimeConfig, error) {
+	botConfig, err := settings.LoadBotRuntime()
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api bot plane: %w", err)
 	}
 
-	adminConfig, err := LoadAdminAPIRuntime()
+	adminConfig, err := settings.LoadAdminAPIRuntime()
 	if err != nil {
 		return nil, fmt.Errorf("load hololive-api admin plane: %w", err)
 	}
@@ -46,7 +51,7 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 		return nil, fmt.Errorf("load hololive-api llm plane: %w", err)
 	}
 
-	configureHololiveAPIPlanes(botConfig, adminConfig, llmConfig)
+	configurePlanes(botConfig, adminConfig, llmConfig)
 
 	youtubeConfig, err := loadYouTubePlaneConfig()
 	if err != nil {
@@ -55,7 +60,7 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 
 	applySourceObservationWorkerProfile(&youtubeConfig, botConfig.APIWorkerProfile)
 
-	config := &HololiveAPIConfig{
+	config := &RuntimeConfig{
 		Bot:     botConfig,
 		Admin:   adminConfig,
 		LLM:     llmConfig,
@@ -70,25 +75,25 @@ func LoadHololiveAPIRuntime() (*HololiveAPIConfig, error) {
 	return config, nil
 }
 
-func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *APIWorkerProfile) {
+func applySourceObservationWorkerProfile(config *YouTubePlaneConfig, profile *settings.APIWorkerProfile) {
 	worker := profile.Loaded.Profile.Workers["source_observation"]
-	settings := profile.SourceObservation
+	observation := profile.SourceObservation
 
 	config.Enabled = worker.Executor.Enabled
 	config.ConsumerWorkers = worker.Executor.ConfiguredWorkers
-	config.DBOperationConcurrency = settings.DBOperationConcurrency
-	config.ClaimBatchSize = settings.ClaimBatchSize
-	config.ClaimInterval = time.Duration(settings.ClaimIntervalMS) * time.Millisecond
-	config.ClaimLease = time.Duration(settings.ClaimLeaseMS) * time.Millisecond
-	config.TransactionTimeout = time.Duration(settings.TransactionTimeoutMS) * time.Millisecond
-	config.ShutdownTimeout = time.Duration(settings.ShutdownTimeoutMS) * time.Millisecond
+	config.DBOperationConcurrency = observation.DBOperationConcurrency
+	config.ClaimBatchSize = observation.ClaimBatchSize
+	config.ClaimInterval = time.Duration(observation.ClaimIntervalMS) * time.Millisecond
+	config.ClaimLease = time.Duration(observation.ClaimLeaseMS) * time.Millisecond
+	config.TransactionTimeout = time.Duration(observation.TransactionTimeoutMS) * time.Millisecond
+	config.ShutdownTimeout = time.Duration(observation.ShutdownTimeoutMS) * time.Millisecond
 }
 
-func configureHololiveAPIPlanes(botConfig, adminConfig *Config, llmConfig *LLMSchedulerConfig) {
+func configurePlanes(botConfig, adminConfig *settings.Config, llmConfig *LLMSchedulerConfig) {
 	adminPort := sharedenv.Int("HOLOLIVE_ADMIN_API_PORT", defaultAdminAPIPort)
 
 	adminConfig.Server.Port = adminPort
-	adminConfig.Server.HTTPTransports = parseCommaSeparated(sharedenv.String("HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS", "h3"))
+	adminConfig.Server.HTTPTransports = load.CommaSeparated(sharedenv.String("HOLOLIVE_ADMIN_API_HTTP_TRANSPORTS", "h3"))
 	adminConfig.Server.H3Addr = sharedenv.String("HOLOLIVE_ADMIN_API_H3_ADDR", fmt.Sprintf(":%d", adminPort))
 	adminConfig.Server.H3CertFile = botConfig.Server.H3CertFile
 	adminConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
@@ -100,7 +105,7 @@ func configureHololiveAPIPlanes(botConfig, adminConfig *Config, llmConfig *LLMSc
 	llmPort := sharedenv.Int("LLM_SCHEDULER_PORT", defaultLLMPort)
 
 	llmConfig.Server.Port = llmPort
-	llmConfig.Server.HTTPTransports = parseCommaSeparated(sharedenv.String("HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS", "h3"))
+	llmConfig.Server.HTTPTransports = load.CommaSeparated(sharedenv.String("HOLOLIVE_LLM_SCHEDULER_HTTP_TRANSPORTS", "h3"))
 	llmConfig.Server.H3Addr = sharedenv.String("HOLOLIVE_LLM_SCHEDULER_H3_ADDR", fmt.Sprintf(":%d", llmPort))
 	llmConfig.Server.H3CertFile = botConfig.Server.H3CertFile
 	llmConfig.Server.H3KeyFile = botConfig.Server.H3KeyFile
@@ -132,7 +137,7 @@ func configureHololiveAPIPlanes(botConfig, adminConfig *Config, llmConfig *LLMSc
 	adminConfig.AlarmServiceURL = alarmURL
 }
 
-func (c *HololiveAPIConfig) Validate() error {
+func (c *RuntimeConfig) Validate() error {
 	if c == nil {
 		return errors.New("config must not be nil")
 	}
@@ -149,15 +154,15 @@ func (c *HololiveAPIConfig) Validate() error {
 		return fmt.Errorf("validate youtube bindings: %w", err)
 	}
 
-	if err := validateHololiveAPIListenerPorts(c); err != nil {
+	if err := validateListenerPorts(c); err != nil {
 		return fmt.Errorf("validate hololive API listener ports: %w", err)
 	}
 
 	return nil
 }
 
-func (c *HololiveAPIConfig) validateSharedPlanes() error {
-	if err := validateTracingConfig(c.Tracing); err != nil {
+func (c *RuntimeConfig) validateSharedPlanes() error {
+	if err := settings.ValidateTracingConfig(c.Tracing); err != nil {
 		return fmt.Errorf("validate tracing config: %w", err)
 	}
 
@@ -176,7 +181,7 @@ func (c *HololiveAPIConfig) validateSharedPlanes() error {
 	return nil
 }
 
-func (c *HololiveAPIConfig) validateYouTubeBindings() error {
+func (c *RuntimeConfig) validateYouTubeBindings() error {
 	if err := c.YouTube.Validate(); err != nil {
 		return fmt.Errorf("youtube plane: %w", err)
 	}
@@ -192,7 +197,7 @@ func (c *HololiveAPIConfig) validateYouTubeBindings() error {
 	return nil
 }
 
-func (c *HololiveAPIConfig) validatePlaneRuntimes() error {
+func (c *RuntimeConfig) validatePlaneRuntimes() error {
 	if err := c.Bot.ValidateBotRuntime(); err != nil {
 		return fmt.Errorf("bot plane: %w", err)
 	}
@@ -208,7 +213,7 @@ func (c *HololiveAPIConfig) validatePlaneRuntimes() error {
 	return nil
 }
 
-func (c *HololiveAPIConfig) validateAlarmProviders() error {
+func (c *RuntimeConfig) validateAlarmProviders() error {
 	if err := validateAlarmProviderURL(c.Bot.Environment, c.Bot.AlarmServiceURL); err != nil {
 		return fmt.Errorf("validate alarm provider URL: %w", err)
 	}
@@ -220,7 +225,7 @@ func (c *HololiveAPIConfig) validateAlarmProviders() error {
 	return nil
 }
 
-func (c *HololiveAPIConfig) validatePlanePools() error {
+func (c *RuntimeConfig) validatePlanePools() error {
 	if err := validatePlanePool("bot", &c.Bot.Postgres); err != nil {
 		return fmt.Errorf("validate plane pool: %w", err)
 	}
@@ -259,11 +264,11 @@ func validateAlarmProviderURL(environment, rawURL string) error {
 }
 
 func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
-	if isProductionEnvironment(environment) && parsed.Scheme != schemeHTTPS {
+	if load.IsProduction(environment) && parsed.Scheme != load.SchemeHTTPS {
 		return errors.New("ALARM_INTERNAL_URL must use https in production")
 	}
 
-	if parsed.Scheme != schemeHTTP && parsed.Scheme != schemeHTTPS {
+	if parsed.Scheme != load.SchemeHTTP && parsed.Scheme != load.SchemeHTTPS {
 		return errors.New("ALARM_INTERNAL_URL scheme must be http or https")
 	}
 
@@ -271,14 +276,14 @@ func validateAlarmProviderScheme(environment string, parsed *url.URL) error {
 }
 
 func validateYouTubePlaneDatabaseRole(user string) error {
-	if strings.TrimSpace(user) != postgresRuntimeRoleUser {
-		return fmt.Errorf("youtube plane requires POSTGRES_USER=%s", postgresRuntimeRoleUser)
+	if strings.TrimSpace(user) != load.PostgresRuntimeRoleUser {
+		return fmt.Errorf("youtube plane requires POSTGRES_USER=%s", load.PostgresRuntimeRoleUser)
 	}
 
 	return nil
 }
 
-func validatePlanePool(plane string, config *PostgresConfig) error {
+func validatePlanePool(plane string, config *settings.PostgresConfig) error {
 	if config.PoolMinConns < 0 {
 		return fmt.Errorf("%s POSTGRES_POOL_MIN_CONNS must be >= 0", plane)
 	}
@@ -294,7 +299,7 @@ func validatePlanePool(plane string, config *PostgresConfig) error {
 	return nil
 }
 
-func validateHololiveAPIListenerPorts(config *HololiveAPIConfig) error {
+func validateListenerPorts(config *RuntimeConfig) error {
 	listeners := []listenerEndpoint{
 		{owner: "bot-h3", network: "udp", addr: config.Bot.Server.H3Addr, expectedPort: config.Bot.Server.Port, requirePortMatch: true},
 		{owner: "admin-h3", network: "udp", addr: config.Admin.Server.H3Addr, expectedPort: config.Admin.Server.Port, requirePortMatch: true},

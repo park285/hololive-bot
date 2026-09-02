@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 )
 
 func readWalkedSource(root, path string) ([]byte, error) {
@@ -27,8 +27,8 @@ func readWalkedSource(root, path string) ([]byte, error) {
 }
 
 func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
-	runtime, err := Build(t.Context(), &settings.YouTubeCollectorRuntimeConfig{
-		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{},
+	runtime, err := Build(t.Context(), &collectorconfig.RuntimeConfig{
+		RuntimeOwnership: collectorconfig.RuntimeOwnershipConfig{},
 	}, testLogger())
 	if err == nil || runtime != nil {
 		t.Fatalf("Build() = %#v, %v, want runtime disabled error", runtime, err)
@@ -40,8 +40,8 @@ func TestBuildRequiresRuntimeAllowEnv(t *testing.T) {
 }
 
 func TestBuildRequiresWorkerProfile(t *testing.T) {
-	runtime, err := Build(t.Context(), &settings.YouTubeCollectorRuntimeConfig{
-		RuntimeOwnership: settings.CollectorRuntimeOwnershipConfig{
+	runtime, err := Build(t.Context(), &collectorconfig.RuntimeConfig{
+		RuntimeOwnership: collectorconfig.RuntimeOwnershipConfig{
 			RuntimeAllowed: true,
 		},
 	}, testLogger())

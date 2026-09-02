@@ -1,10 +1,12 @@
-package settings
+package apiplane
 
 import (
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func TestDefaultYouTubePlaneConfigValidates(t *testing.T) {
@@ -356,19 +358,19 @@ func TestYouTubePlaneProductionRetentionRequiresApprovedBoundedPolicy(t *testing
 		t.Fatalf("development retention validation: %v", err)
 	}
 
-	if err := cfg.validateProductionRetention(environmentProduction); err == nil ||
+	if err := cfg.validateProductionRetention(load.EnvironmentProduction); err == nil ||
 		!strings.Contains(err.Error(), "YOUTUBE_PLANE_RETENTION_ENABLED=true") {
 		t.Fatalf("disabled production retention error = %v", err)
 	}
 
 	cfg.Retention.Enabled = true
-	if err := cfg.validateProductionRetention(environmentProduction); err == nil ||
+	if err := cfg.validateProductionRetention(load.EnvironmentProduction); err == nil ||
 		!strings.Contains(err.Error(), "YOUTUBE_PLANE_RETENTION_POLICY_APPROVED=true") {
 		t.Fatalf("unapproved production retention error = %v", err)
 	}
 
 	cfg.Retention.PolicyApproved = true
-	if err := cfg.validateProductionRetention(environmentProduction); err == nil ||
+	if err := cfg.validateProductionRetention(load.EnvironmentProduction); err == nil ||
 		!strings.Contains(err.Error(), "YOUTUBE_PLANE_RETENTION_QUEUE_PROCESSED_DAYS") {
 		t.Fatalf("unbounded production retention error = %v", err)
 	}
@@ -393,7 +395,7 @@ func TestYouTubePlaneProductionRetentionRequiresApprovedBoundedPolicy(t *testing
 		t.Fatalf("bounded production retention config: %v", err)
 	}
 
-	if err := cfg.validateProductionRetention(environmentProduction); err != nil {
+	if err := cfg.validateProductionRetention(load.EnvironmentProduction); err != nil {
 		t.Fatalf("approved production retention policy: %v", err)
 	}
 }

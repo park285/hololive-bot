@@ -12,13 +12,13 @@ import (
 	llmruntime "github.com/kapu/hololive-api/internal/planes/llm/runtime"
 	youtuberuntime "github.com/kapu/hololive-api/internal/planes/youtube/runtime"
 	"github.com/kapu/hololive-shared/pkg/applifecycle"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
 // Runtime은 bot ingress, admin API, LLM scheduler, YouTube plane을 하나의 Go
 // 프로세스에서 호스팅하되, 컴포넌트별 lifecycle 경계는 명시적으로 유지한다.
 type Runtime struct {
-	Config *settings.HololiveAPIConfig
+	Config *apiplane.RuntimeConfig
 	Logger *slog.Logger
 
 	Bot     *botruntime2.BotRuntime
@@ -36,7 +36,7 @@ type runtimeGroup interface {
 	Shutdown(context.Context) error
 }
 
-func BuildRuntime(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (*Runtime, error) {
+func BuildRuntime(ctx context.Context, appConfig *apiplane.RuntimeConfig, logger *slog.Logger) (*Runtime, error) {
 	if appConfig == nil {
 		return nil, errors.New("hololive-api config must not be nil")
 	}
@@ -60,7 +60,7 @@ type apiPlanes struct {
 	youtube *youtuberuntime.Runtime
 }
 
-func buildAPIPlanes(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) (apiPlanes, error) {
+func buildAPIPlanes(ctx context.Context, appConfig *apiplane.RuntimeConfig, logger *slog.Logger) (apiPlanes, error) {
 	llm, err := llmruntime.BuildLLMSchedulerRuntime(ctx, appConfig.LLM, logger.With(slog.String("plane", "llm")))
 	if err != nil {
 		return apiPlanes{}, fmt.Errorf("build llm plane: %w", err)
@@ -106,7 +106,7 @@ type optionalYouTubePlaneResult struct {
 	err     error
 }
 
-func buildOptionalYouTubePlane(ctx context.Context, appConfig *settings.HololiveAPIConfig, logger *slog.Logger) optionalYouTubePlaneResult {
+func buildOptionalYouTubePlane(ctx context.Context, appConfig *apiplane.RuntimeConfig, logger *slog.Logger) optionalYouTubePlaneResult {
 	if !appConfig.YouTube.Enabled {
 		return optionalYouTubePlaneResult{}
 	}
@@ -137,7 +137,7 @@ func (p apiPlanes) shutdown() {
 	}
 }
 
-func assembleAPIRuntime(appConfig *settings.HololiveAPIConfig, logger *slog.Logger, planes apiPlanes) *Runtime {
+func assembleAPIRuntime(appConfig *apiplane.RuntimeConfig, logger *slog.Logger, planes apiPlanes) *Runtime {
 	runtime := &Runtime{
 		Config:  appConfig,
 		Logger:  logger,

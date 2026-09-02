@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
@@ -22,7 +24,7 @@ func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
 	for _, service := range []string{
 		serviceHololiveAPI,
 		serviceAlarmWorker,
-		runtimeYouTubeCollector,
+		load.RuntimeYouTubeCollector,
 		serviceAdminDashboard,
 	} {
 		block := composeServiceBlock(t, content, service)

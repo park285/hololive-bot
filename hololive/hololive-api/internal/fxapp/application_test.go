@@ -11,6 +11,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
 func TestApplicationGraphValidates(t *testing.T) {
@@ -47,7 +48,7 @@ func TestApplicationStartsAndStopsAggregateLifecycle(t *testing.T) {
 	params := successfulApplicationParams(&cleanup)
 	runtime := &applicationLifecycleTestRuntime{}
 
-	params.dependencies.buildRuntime = func(context.Context, *settings.HololiveAPIConfig, *slog.Logger) (runtimeResource, error) {
+	params.dependencies.buildRuntime = func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 		return runtime, nil
 	}
 
@@ -86,7 +87,7 @@ func TestApplicationTelemetryFailureStopsBeforeRuntimeBuild(t *testing.T) {
 	params.dependencies.newTelemetry = func(context.Context, telemetry.Config) (telemetryResource, error) {
 		return nil, telemetryErr
 	}
-	params.dependencies.buildRuntime = func(context.Context, *settings.HololiveAPIConfig, *slog.Logger) (runtimeResource, error) {
+	params.dependencies.buildRuntime = func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 		runtimeBuilt = true
 
 		return &applicationTestRuntime{}, nil
@@ -111,7 +112,7 @@ func TestApplicationRuntimeFailureClosesTelemetry(t *testing.T) {
 	params.dependencies.newTelemetry = func(context.Context, telemetry.Config) (telemetryResource, error) {
 		return telemetrySpy, nil
 	}
-	params.dependencies.buildRuntime = func(context.Context, *settings.HololiveAPIConfig, *slog.Logger) (runtimeResource, error) {
+	params.dependencies.buildRuntime = func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 		return nil, runtimeErr
 	}
 
@@ -167,7 +168,7 @@ func TestResourceOwnerClosesInReverseOrderExactlyOnce(t *testing.T) {
 }
 
 func TestHololiveAPITelemetryConfigUsesFixedIdentity(t *testing.T) {
-	config := &settings.HololiveAPIConfig{
+	config := &apiplane.RuntimeConfig{
 		Bot: &settings.Config{Environment: "production"},
 		Tracing: settings.TracingConfig{
 			Enabled:    true,
@@ -242,7 +243,7 @@ func successfulApplicationParams(cleanup *[]string) applicationParams {
 	logger := slog.New(slog.DiscardHandler)
 
 	return applicationParams{
-		config: &settings.HololiveAPIConfig{
+		config: &apiplane.RuntimeConfig{
 			Bot: &settings.Config{Environment: "test"},
 		},
 		logger:  logger,
@@ -251,7 +252,7 @@ func successfulApplicationParams(cleanup *[]string) applicationParams {
 			newTelemetry: func(context.Context, telemetry.Config) (telemetryResource, error) {
 				return &applicationTestTelemetry{cleanup: cleanup}, nil
 			},
-			buildRuntime: func(context.Context, *settings.HololiveAPIConfig, *slog.Logger) (runtimeResource, error) {
+			buildRuntime: func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error) {
 				return &applicationTestRuntime{cleanup: cleanup}, nil
 			},
 		},

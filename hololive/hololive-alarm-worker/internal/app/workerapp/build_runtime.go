@@ -16,6 +16,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/envconfig"
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -61,7 +62,7 @@ func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err er
 	return fmt.Errorf("build alarm worker runtime: %s: %w", stage, err)
 }
 
-func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
+func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *alarmworker.RuntimeConfig, logger *slog.Logger) (*workerruntime.AlarmWorkerRuntime, error) {
 	ctx, err := bootstrap.NormalizeRuntimeBuildInputs(ctx, appConfig, logger)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime build inputs: %w", err)
@@ -71,7 +72,7 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, lo
 		return nil, errors.New("config must not be nil")
 	}
 
-	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig, logger)
+	infra, err := sharedmodules.BuildInfraModule(ctx, appConfig.Config, logger)
 	if err != nil {
 		return nil, fmt.Errorf("build alarm worker runtime: build infra module: %w", err)
 	}
@@ -86,11 +87,11 @@ func BuildAlarmWorkerRuntime(ctx context.Context, appConfig *settings.Config, lo
 
 func buildAlarmWorkerRuntimeFromInfra(
 	ctx context.Context,
-	appConfig *settings.Config,
+	appConfig *alarmworker.RuntimeConfig,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
 ) (runtime *workerruntime.AlarmWorkerRuntime, err error) {
-	foundation, err := buildAlarmFoundation(ctx, appConfig, infra, logger)
+	foundation, err := buildAlarmFoundation(ctx, appConfig.Config, infra, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, "alarm foundation", err)
 	}
@@ -109,7 +110,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
 	}
 
-	schedulerResult := buildOptionalRuntimeScheduler(appConfig, infra.Cache, foundation, logger)
+	schedulerResult := buildOptionalRuntimeScheduler(appConfig.Config, infra.Cache, foundation, logger)
 	if schedulerResult.err != nil {
 		return nil, failAlarmWorkerBuild(infra, "scheduler", schedulerResult.err)
 	}
@@ -119,7 +120,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "notification egress", err)
 	}
 
-	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig, infra, foundation, logger)
+	servers, backgroundRunners, stage, err := buildAlarmWorkerHTTPRuntime(ctx, appConfig.Config, infra, foundation, logger)
 	if err != nil {
 		return nil, failAlarmWorkerBuild(infra, stage, err)
 	}
@@ -128,7 +129,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		servers.Metrics = sharedserver.NewMetricsServer(ctx, metricsAddr, appConfig.Server.APIKey, workerState.registry)
 	}
 
-	runtime = newAlarmWorkerRuntime(ctx, appConfig, logger, infra, foundation, alarmWorkerRuntimeParts{
+	runtime = newAlarmWorkerRuntime(ctx, appConfig.Config, logger, infra, foundation, alarmWorkerRuntimeParts{
 		scheduler:          schedulerResult.scheduler,
 		notificationEgress: notificationEgress,
 		servers:            servers,

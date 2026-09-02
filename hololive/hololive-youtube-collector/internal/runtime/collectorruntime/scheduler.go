@@ -10,7 +10,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
@@ -73,7 +73,7 @@ type leaseScheduler struct {
 	owner      string
 	logger     *slog.Logger
 	config     joblease.Config
-	collector  settings.YouTubeCollectorConfig
+	collector  collectorconfig.Config
 	gates      map[contract.Provider]chan struct{}
 
 	lifecycleMu            sync.Mutex

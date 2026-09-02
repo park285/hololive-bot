@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews"
 	mnscheduler "github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/scheduler"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedreadiness "github.com/kapu/hololive-shared/pkg/readiness"
@@ -54,7 +55,7 @@ const llmSchedulerAPISecretRequired = "build llm scheduler router: API_SECRET_KE
 type LLMSchedulerRuntime struct {
 	lifecycle.Managed
 
-	Config *settings.LLMSchedulerConfig
+	Config *apiplane.LLMSchedulerConfig
 	Logger *slog.Logger
 
 	MajorEventScheduler        *mescheduler.Scheduler
@@ -184,7 +185,7 @@ func (r *LLMSchedulerRuntime) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *settings.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
+func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *apiplane.LLMSchedulerConfig, logger *slog.Logger) (*LLMSchedulerRuntime, error) {
 	if schedulerConfig == nil {
 		return nil, errors.New("llm scheduler config must not be nil")
 	}
@@ -228,7 +229,7 @@ func BuildLLMSchedulerRuntime(ctx context.Context, schedulerConfig *settings.LLM
 
 func buildLLMSchedulerComponents(
 	ctx context.Context,
-	schedulerConfig *settings.LLMSchedulerConfig,
+	schedulerConfig *apiplane.LLMSchedulerConfig,
 	logger *slog.Logger,
 	cacheService cache.Client,
 	postgresService database.Client,
@@ -282,7 +283,7 @@ func buildLLMSchedulerComponents(
 
 func buildLLMSchedulerRuntimeComponents(
 	ctx context.Context,
-	schedulerConfig *settings.LLMSchedulerConfig,
+	schedulerConfig *apiplane.LLMSchedulerConfig,
 	logger *slog.Logger,
 	postgresService database.Client,
 	cacheService cache.Client,
@@ -332,7 +333,7 @@ func buildLLMSchedulerReadyProbe(postgresService database.Client, cacheService c
 }
 
 func newLLMSchedulerRuntime(
-	schedulerConfig *settings.LLMSchedulerConfig,
+	schedulerConfig *apiplane.LLMSchedulerConfig,
 	logger *slog.Logger,
 	majorEventScheduler *mescheduler.Scheduler,
 	majorEventMonthlyScheduler *mescheduler.MonthlyScheduler,

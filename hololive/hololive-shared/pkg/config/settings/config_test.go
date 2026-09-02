@@ -21,26 +21,19 @@
 package settings
 
 import (
-	"bytes"
-	"crypto/tls"
-	"encoding/pem"
-	"errors"
 	"fmt"
-	"log/slog"
-	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-func load() (*Config, error) {
+func loadBotRuntimeConfig() (*Config, error) {
 	out, err := LoadBotRuntime()
 	if err != nil {
 		return nil, fmt.Errorf("load bot runtime: %w", err)
@@ -51,347 +44,27 @@ func load() (*Config, error) {
 
 func setRequiredLoadEnv(t *testing.T) {
 	t.Helper()
-	useStackWorkerProfileFixture(t, "stack-worker-profile-api.json")
-	t.Setenv("HOLODEX_API_KEY", "test-key")
-	t.Setenv("YOUTUBE_API_KEY", "test-youtube-key")
-	t.Setenv("KAKAO_ROOMS", "test-room")
-	t.Setenv(irisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(irisBotTokenEnv, "test-bot-token")
-
-	server := newIrisRuntimeDiagnosticsServer(t, loadTestWorkerProfileDiagnosticsJSON())
-	t.Setenv("IRIS_BASE_URL", server.URL)
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", testURLHostname(t, server.URL))
-	t.Setenv("IRIS_TRANSPORT", "http1")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
-	t.Setenv("HOLOLIVE_H3_KEY_FILE", hololiveH3KeyPath)
-	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.example.com")
+	settingstest.SetRequiredLoadEnv(t)
 }
-
-func setRequiredH3ServerEnv(t *testing.T) {
-	t.Helper()
-	t.Setenv("HOLOLIVE_H3_CERT_FILE", "/run/hololive-bot/certs/hololive-h3.crt")
-	t.Setenv("HOLOLIVE_H3_KEY_FILE", hololiveH3KeyPath)
-}
-
-func captureSlogOutput(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var output bytes.Buffer
-
-	previous := slog.Default()
-
-	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
-	t.Cleanup(func() {
-		slog.SetDefault(previous)
-	})
-
-	return &output
-}
-
-var (
-	irisRuntimeDiagnosticsTLSOnce     sync.Once
-	irisRuntimeDiagnosticsTLSCert     tls.Certificate
-	irisRuntimeDiagnosticsTLSCertFile string
-	errIrisRuntimeDiagnosticsTLS      error
-)
 
 func newIrisRuntimeDiagnosticsServer(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 
-	cert, certFile := irisRuntimeDiagnosticsTLS(t)
-	t.Setenv("SSL_CERT_FILE", certFile)
-
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/diagnostics/runtime" {
-			http.NotFound(w, r)
-
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-
-		if _, err := w.Write([]byte(body)); err != nil {
-			t.Errorf("write diagnostics response: %v", err)
-		}
-	}))
-
-	server.TLS = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		NextProtos:   []string{"http/1.1"},
-	}
-	server.StartTLS()
-	t.Cleanup(server.Close)
-
-	return server
+	return settingstest.NewIrisRuntimeDiagnosticsServer(t, body)
 }
 
-func irisRuntimeDiagnosticsTLS(t *testing.T) (cert tls.Certificate, certFile string) {
-	t.Helper()
+func loadTestWorkerProfileDiagnosticsJSON() string {
+	return settingstest.WorkerProfileDiagnosticsJSON()
+}
 
-	irisRuntimeDiagnosticsTLSOnce.Do(func() {
-		server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		defer server.Close()
-
-		if len(server.TLS.Certificates) == 0 {
-			errIrisRuntimeDiagnosticsTLS = errors.New("test TLS server did not provide a certificate")
-			return
-		}
-
-		certPEM := pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: server.Certificate().Raw,
-		})
-
-		file, err := os.CreateTemp(t.TempDir(), "hololive-iris-diagnostics-ca-*.pem")
-		if err != nil {
-			errIrisRuntimeDiagnosticsTLS = err
-			return
-		}
-
-		if _, err := file.Write(certPEM); err != nil {
-			errIrisRuntimeDiagnosticsTLS = err
-
-			if closeErr := file.Close(); closeErr != nil {
-				errIrisRuntimeDiagnosticsTLS = errors.Join(errIrisRuntimeDiagnosticsTLS, closeErr)
-			}
-
-			return
-		}
-
-		if err := file.Close(); err != nil {
-			errIrisRuntimeDiagnosticsTLS = err
-			return
-		}
-
-		irisRuntimeDiagnosticsTLSCert = server.TLS.Certificates[0]
-		irisRuntimeDiagnosticsTLSCertFile = file.Name()
-	})
-
-	if errIrisRuntimeDiagnosticsTLS != nil {
-		t.Fatalf("initialize Iris diagnostics TLS failed: %v", errIrisRuntimeDiagnosticsTLS)
-	}
-
-	return irisRuntimeDiagnosticsTLSCert, irisRuntimeDiagnosticsTLSCertFile
+func localStackWorkerProfileDiagnosticsJSON() string {
+	return settingstest.LocalStackWorkerProfileDiagnosticsJSON()
 }
 
 func testURLHostname(t *testing.T, raw string) string {
 	t.Helper()
 
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		t.Fatalf("parse URL %q failed: %v", raw, err)
-	}
-
-	return parsed.Hostname()
-}
-
-func writeIrisBaseURLFile(t *testing.T, raw string) string {
-	t.Helper()
-
-	path := t.TempDir() + "/iris_base_url"
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write IRIS_BASE_URL_FILE failed: %v", err)
-	}
-
-	return path
-}
-
-func loadTestWorkerProfileDiagnosticsJSON() string {
-	return `{
-		"state": "running",
-		"workers": {
-			"webhook": {
-				"webhookPipeline": {
-					"profileEnabled": true,
-					"profileVersion": 1,
-					"profileId": "hololive-test",
-					"profileHash": "6cfd26b9d08b5065b3aaf8d1ae320e9205962dead8753ce0ea33de7c7b140f2b",
-					"workerProfile": {
-						"version": 1,
-						"profile_id": "hololive-test",
-						"delivery": {
-							"lane_workers": 32,
-							"lane_queue_capacity": 128,
-							"max_global_in_flight": 32,
-							"max_per_endpoint_in_flight": 8,
-							"max_drain_per_tick": 128,
-							"max_attempts": 6,
-							"request_timeout_ms": 30000,
-							"lane_idle_timeout_ms": 750,
-							"breaker_failure_threshold": 5,
-							"breaker_cooldown_ms": 30000
-						},
-						"receive": {
-							"workers": 16,
-							"queue_size": 1000,
-							"enqueue_timeout_ms": 50,
-							"handler_timeout_ms": 30000,
-							"max_body_bytes": 65536,
-							"dedup_ttl_ms": 960000,
-							"dedup_timeout_ms": 200
-						},
-						"validation": {
-							"min_queue_per_endpoint_multiplier": 4,
-							"require_receive_capacity_for_endpoint_burst": true
-						}
-					}
-				}
-			}
-		}
-	}`
-}
-
-func localStackWorkerProfileDiagnosticsJSON() string {
-	return `{
-		"state": "running",
-		"workers": {
-			"webhook": {
-				"webhookPipeline": {
-					"profileEnabled": true,
-					"profileVersion": 1,
-					"profileId": "hololive-custom-test",
-					"profileHash": "081e2ddfc8d37b5399ff9d81e533b9918aec3ee3d74d1f878c71f99db4ea5855",
-					"workerProfile": {
-						"version": 1,
-						"profile_id": "hololive-custom-test",
-						"delivery": {
-							"lane_workers": 32,
-							"lane_queue_capacity": 128,
-							"max_global_in_flight": 32,
-							"max_per_endpoint_in_flight": 8,
-							"max_drain_per_tick": 128,
-							"max_attempts": 6,
-							"request_timeout_ms": 30000,
-							"lane_idle_timeout_ms": 750,
-							"breaker_failure_threshold": 5,
-							"breaker_cooldown_ms": 30000
-						},
-						"receive": {
-							"workers": 20,
-							"queue_size": 640,
-							"enqueue_timeout_ms": 80,
-							"handler_timeout_ms": 36000,
-							"max_body_bytes": 262144,
-							"dedup_ttl_ms": 360000,
-							"dedup_timeout_ms": 300
-						},
-						"bot_pool": {
-							"workers": 15,
-							"queue_size": 200
-						},
-						"validation": {
-							"min_queue_per_endpoint_multiplier": 4,
-							"require_receive_capacity_for_endpoint_burst": true
-						}
-					}
-				}
-			}
-		}
-	}`
-}
-
-func TestResolveIrisBaseURLValidatesFileURL(t *testing.T) {
-	tests := []struct {
-		name    string
-		raw     string
-		env     map[string]string
-		wantErr string
-	}{
-		{
-			name:    "rejects http scheme",
-			raw:     "http://attacker/",
-			wantErr: "https",
-		},
-		{
-			name: "rejects host mismatch",
-			raw:  "https://evil.example/",
-			env: map[string]string{
-				"IRIS_H3_SERVER_NAME": "otherhost",
-			},
-			wantErr: "must match IRIS_H3_SERVER_NAME or IRIS_BASE_URL_ALLOWED_HOSTS",
-		},
-		{
-			name: "accepts allowed host",
-			raw:  "https://100.100.1.5:3001",
-			env: map[string]string{
-				"IRIS_BASE_URL_ALLOWED_HOSTS": "100.100.1.5",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("IRIS_H3_SERVER_NAME", "")
-			t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", "")
-
-			for key, value := range tt.env {
-				t.Setenv(key, value)
-			}
-
-			got, err := resolveIrisBaseURL(&IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, tt.raw)})
-			assertResolveIrisBaseURLResult(t, got, err, tt.raw, tt.wantErr)
-		})
-	}
-}
-
-func assertResolveIrisBaseURLResult(t *testing.T, got string, err error, wantURL, wantErr string) {
-	t.Helper()
-
-	if wantErr != "" {
-		if err == nil {
-			t.Fatalf("resolveIrisBaseURL() error = nil, want %q", wantErr)
-		}
-
-		if !strings.Contains(err.Error(), wantErr) {
-			t.Fatalf("resolveIrisBaseURL() error = %v, want %q", err, wantErr)
-		}
-
-		return
-	}
-
-	if err != nil {
-		t.Fatalf("resolveIrisBaseURL() error = %v", err)
-	}
-
-	if got != wantURL {
-		t.Fatalf("resolveIrisBaseURL() = %q, want %q", got, wantURL)
-	}
-}
-
-func TestResolveIrisBaseURLAllowsUnconfiguredHostWithWarning(t *testing.T) {
-	t.Setenv("IRIS_H3_SERVER_NAME", "")
-	t.Setenv("IRIS_BASE_URL_ALLOWED_HOSTS", "")
-
-	output := captureSlogOutput(t)
-
-	raw := "https://iris.example:3001"
-
-	got, err := resolveIrisBaseURL(&IrisConfig{BaseURLFile: writeIrisBaseURLFile(t, raw)})
-	if err != nil {
-		t.Fatalf("resolveIrisBaseURL() error = %v", err)
-	}
-
-	if got != raw {
-		t.Fatalf("resolveIrisBaseURL() = %q, want %q", got, raw)
-	}
-
-	for _, want := range []string{"IRIS_BASE_URL_FILE host is unvalidated", "allowlist_env"} {
-		if !strings.Contains(output.String(), want) {
-			t.Fatalf("warning output = %q, want %q", output.String(), want)
-		}
-	}
-}
-
-func TestResolveIrisBaseURLValidatesDirectBaseURL(t *testing.T) {
-	_, err := resolveIrisBaseURL(&IrisConfig{BaseURL: "http://100.100.1.5:3001"})
-	if err == nil {
-		t.Fatal("resolveIrisBaseURL() error = nil, want bad scheme rejection")
-	}
-
-	if !strings.Contains(err.Error(), "https") {
-		t.Fatalf("resolveIrisBaseURL() error = %v, want https rejection", err)
-	}
+	return settingstest.URLHostname(t, raw)
 }
 
 func assertScraperPoll(t *testing.T, got, want ScraperPoll) {
@@ -407,9 +80,9 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 		t.Setenv("HOLODEX_API_KEY", " primary-key ")
 		t.Setenv("HOLODEX_API_KEY_1", "legacy-key")
 
-		got := resolveHolodexAPIKey()
+		got := load.HolodexAPIKey()
 		if got != "primary-key" {
-			t.Fatalf("resolveHolodexAPIKey() = %q, want %q", got, "primary-key")
+			t.Fatalf("load.HolodexAPIKey() = %q, want %q", got, "primary-key")
 		}
 	})
 
@@ -417,9 +90,9 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 		t.Setenv("HOLODEX_API_KEY", "")
 		t.Setenv("HOLODEX_API_KEY_1", "legacy-key")
 
-		got := resolveHolodexAPIKey()
+		got := load.HolodexAPIKey()
 		if got != "legacy-key" {
-			t.Fatalf("resolveHolodexAPIKey() = %q, want %q", got, "legacy-key")
+			t.Fatalf("load.HolodexAPIKey() = %q, want %q", got, "legacy-key")
 		}
 	})
 }
@@ -448,7 +121,7 @@ func TestLoad_HolodexLiveStatusFallbackEnvOverrides(t *testing.T) {
 	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_WALL_CLOCK_BUDGET_SECONDS", "18")
 	t.Setenv("HOLODEX_LIVE_STATUS_FALLBACK_DEADLINE_MARGIN_MS", "750")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -464,7 +137,7 @@ func TestLoad_HolodexTimeoutMustBePositive(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLODEX_TIMEOUT_SECONDS", "0")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil || !strings.Contains(err.Error(), "HOLODEX_TIMEOUT_SECONDS must be positive") {
 		t.Fatalf("Load() error = %v, want HOLODEX_TIMEOUT_SECONDS must be positive", err)
 	}
@@ -474,7 +147,7 @@ func TestLoad_HolodexTimeoutEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLODEX_TIMEOUT_SECONDS", "45")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -490,7 +163,7 @@ func TestLoad_HolodexAPIKeyRequired(t *testing.T) {
 		t.Setenv("HOLODEX_API_KEY", "")
 		t.Setenv("HOLODEX_API_KEY_1", "")
 
-		_, err := load()
+		_, err := loadBotRuntimeConfig()
 		if err == nil || !strings.Contains(err.Error(), "HOLODEX_API_KEY is required") {
 			t.Fatalf("Load() error = %v, want HOLODEX_API_KEY is required", err)
 		}
@@ -499,7 +172,7 @@ func TestLoad_HolodexAPIKeyRequired(t *testing.T) {
 	t.Run("Validate rejects blank key", func(t *testing.T) {
 		setRequiredLoadEnv(t)
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -550,7 +223,7 @@ func TestLoad_HolodexLiveStatusFallbackValidation(t *testing.T) {
 				t.Setenv(key, value)
 			}
 
-			_, err := load()
+			_, err := loadBotRuntimeConfig()
 			if err == nil {
 				t.Fatal("Load() error = nil, want validation error")
 			}
@@ -664,7 +337,7 @@ func TestLoad_UsesSeparateIrisTokens(t *testing.T) {
 	t.Setenv(irisWebhookTokenEnv, " webhook-token ")
 	t.Setenv(irisBotTokenEnv, " bot-token ")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -687,7 +360,7 @@ func TestLoad_ServerHTTP3Config(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", hololiveH3KeyPath)
 	t.Setenv("HOLOLIVE_SHORT_LINK_ADDR", " 127.0.0.1:30101 ")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -723,7 +396,7 @@ func TestLoad_ServerHTTP3RequiresCertificateFiles(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
 		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
 	}
@@ -735,7 +408,7 @@ func TestLoad_ServerHTTP3AliasesRequireCertificateFiles(t *testing.T) {
 	t.Setenv("HOLOLIVE_H3_CERT_FILE", "")
 	t.Setenv("HOLOLIVE_H3_KEY_FILE", "")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil || !strings.Contains(err.Error(), "HOLOLIVE_H3_CERT_FILE is required") {
 		t.Fatalf("Load() error = %v, want missing H3 cert file", err)
 	}
@@ -745,7 +418,7 @@ func TestLoad_ServerHTTPTransportsRejectUnsupportedValue(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("HOLOLIVE_HTTP_TRANSPORTS", "htp3")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil || !strings.Contains(err.Error(), "unsupported HOLOLIVE_HTTP_TRANSPORTS value: htp3") {
 		t.Fatalf("Load() error = %v, want unsupported transport", err)
 	}
@@ -754,7 +427,7 @@ func TestLoad_ServerHTTPTransportsRejectUnsupportedValue(t *testing.T) {
 func TestLoad_CommunityShortsBigBangCutoverDefaultsZero(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -768,7 +441,7 @@ func TestLoad_CommunityShortsBigBangCutoverEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10T01:11:12+09:00")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -783,7 +456,7 @@ func TestLoad_CommunityShortsBigBangCutoverRejectsInvalidRFC3339(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT", "2026-04-10 01:11:12")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() error = nil, want error")
 	}
@@ -796,7 +469,7 @@ func TestLoad_CommunityShortsBigBangCutoverRejectsInvalidRFC3339(t *testing.T) {
 func TestLoad_ScraperPollDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -818,7 +491,7 @@ func TestLoad_ScraperPollEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_POLL_STATS_INTERVAL_SECONDS", "14400")
 	t.Setenv("SCRAPER_POLL_LIVE_INTERVAL_SECONDS", "180")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -840,7 +513,7 @@ func TestLoad_ScraperPollIgnoresRemovedLegacyEnv(t *testing.T) {
 	t.Setenv("SCRAPER_STATS_SECONDS", "14400")
 	t.Setenv("SCRAPER_LIVE_SECONDS", "180")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -861,7 +534,7 @@ func TestLoad_ScraperPollCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.T) {
 	t.Setenv("SCRAPER_STATS_SECONDS", "60")
 	t.Setenv("SCRAPER_LIVE_SECONDS", "60")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -910,7 +583,7 @@ func TestLoad_ScraperInvalidEnvFailsLoad(t *testing.T) {
 			setRequiredLoadEnv(t)
 			t.Setenv(key, "invalid")
 
-			_, err := load()
+			_, err := loadBotRuntimeConfig()
 			if err == nil {
 				t.Fatalf("Load() error = nil, want %s rejection", key)
 			}
@@ -922,24 +595,10 @@ func TestLoad_ScraperInvalidEnvFailsLoad(t *testing.T) {
 	}
 }
 
-func TestLoad_AlarmDispatchRetentionInvalidEnvFailsLoad(t *testing.T) {
-	setRequiredLoadEnv(t)
-	t.Setenv("ALARM_DISPATCH_RETENTION_INTERVAL_MS", "0")
-
-	_, err := load()
-	if err == nil {
-		t.Fatal("Load() error = nil, want alarm dispatch retention rejection")
-	}
-
-	if !strings.Contains(err.Error(), "load alarm dispatch retention config: ") || !strings.Contains(err.Error(), "ALARM_DISPATCH_RETENTION_INTERVAL_MS") {
-		t.Fatalf("Load() error = %v, want wrapped alarm dispatch retention rejection", err)
-	}
-}
-
 func TestLoad_ScraperBackfillDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -979,7 +638,7 @@ func TestLoad_ScraperBackfillEnvOverrides(t *testing.T) {
 	t.Setenv("SCRAPER_BACKFILL_LIVE_INTERVAL_SECONDS", "180")
 	t.Setenv("SCRAPER_BACKFILL_TARGET_GROUP", " notification ")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1051,7 +710,7 @@ func TestLoad_ScraperBackfillValidation(t *testing.T) {
 				t.Setenv(key, value)
 			}
 
-			_, err := load()
+			_, err := loadBotRuntimeConfig()
 
 			if tt.wantErr == "" {
 				if err != nil {
@@ -1076,7 +735,7 @@ func TestLoad_ScraperWorkerCountEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1090,7 +749,7 @@ func TestLoad_ScraperWorkerCountIgnoresRemovedLegacyEnv(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_WORKER_COUNT", "6")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1105,7 +764,7 @@ func TestLoad_ScraperWorkerCountCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.
 	t.Setenv("SCRAPER_SCHEDULER_WORKER_COUNT", "6")
 	t.Setenv("SCRAPER_WORKER_COUNT", "9")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1118,7 +777,7 @@ func TestLoad_ScraperWorkerCountCanonicalEnvWinsOverRemovedLegacyEnv(t *testing.
 func TestLoad_ScraperFetcherEngineDefault(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1132,7 +791,7 @@ func TestLoad_ScraperFetcherEngineRejectsRemovedGoScrapy(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "goscrapy")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() error = nil, want removed goscrapy engine error")
 	}
@@ -1146,7 +805,7 @@ func TestLoad_ScraperFetcherEngineValidation(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "bad-engine")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
 	}
@@ -1160,7 +819,7 @@ func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_FETCHER_ENGINE", "browser_snapshot")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() error = nil, want invalid scraper fetcher engine error")
 	}
@@ -1173,7 +832,7 @@ func TestLoad_ScraperFetcherEngineRejectsBrowserSnapshot(t *testing.T) {
 func TestLoad_ScraperSnapshotAndChannelHealthDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1203,7 +862,7 @@ func TestLoad_ScraperChannelHealthEnforceCanBeDisabled(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SCRAPER_CHANNEL_HEALTH_ENFORCE", "false")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1226,7 +885,7 @@ func TestLoad_ScraperSnapshotAndChannelHealthEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_BROWSER_DIAGNOSTIC_ENDPOINT", "http://browser:9222/snapshot")
 	t.Setenv("SCRAPER_POLL_TIERING_ENABLED", "true")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1274,7 +933,7 @@ func TestLoad_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
 	t.Setenv(irisWebhookTokenEnv, "")
 	t.Setenv(irisBotTokenEnv, "test-bot-token")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected missing webhook token error, got nil")
 	}
@@ -1286,11 +945,11 @@ func TestLoad_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
 
 func TestLoad_CORSProductionMonitorModeAllowsMissingOrigins(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "false")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1308,7 +967,7 @@ func TestLoad_UnsupportedLegacyTelemetryEnvRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("OTEL_ENVIRONMENT", "development")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
@@ -1320,11 +979,11 @@ func TestLoad_UnsupportedLegacyTelemetryEnvRejected(t *testing.T) {
 
 func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("CORS_ENFORCE", "true")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected error, got nil")
 	}
@@ -1336,11 +995,11 @@ func TestLoad_CORSProductionEnforceModeFailsWhenMissingOrigins(t *testing.T) {
 
 func TestLoad_CORSProductionFiltersWildcardAndLocalhost(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("CORS_ENFORCE", "false")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "*,http://localhost:5173,https://admin.example.com")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1355,7 +1014,7 @@ func TestLoad_UnsupportedLegacyDBAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_SSLMODE", "disable")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
@@ -1369,7 +1028,7 @@ func TestLoad_UnsupportedLegacyQueryModeAliasRejected(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("DB_QUERY_EXEC_MODE", "describe_exec")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected unsupported legacy env error, got nil")
 	}
@@ -1389,7 +1048,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1403,7 +1062,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 		setup(t)
 		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "old-model")
 
-		_, err := load()
+		_, err := loadBotRuntimeConfig()
 		if err == nil {
 			t.Fatal("Load() expected unsupported legacy env error, got nil")
 		}
@@ -1418,7 +1077,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "new-model")
 		t.Setenv("MEMBER_NEWS_CLIPROXY_MODEL", "new-model")
 
-		_, err := load()
+		_, err := loadBotRuntimeConfig()
 		if err == nil {
 			t.Fatal("Load() expected unsupported legacy env error, got nil")
 		}
@@ -1431,7 +1090,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 	t.Run("both unset", func(t *testing.T) {
 		setup(t)
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1444,7 +1103,7 @@ func TestLoad_LLMConfig(t *testing.T) {
 	t.Run("temperature default", func(t *testing.T) {
 		setup(t)
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1458,22 +1117,22 @@ func TestLoad_LLMConfig(t *testing.T) {
 func TestLoad_DefaultPostgresSSLModeVerifyFull(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if config.Postgres.SSLMode != postgresSSLModeVerifyFull {
-		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, postgresSSLModeVerifyFull)
+	if config.Postgres.SSLMode != load.PostgresSSLModeVerifyFull {
+		t.Fatalf("Postgres.SSLMode = %q, want %q", config.Postgres.SSLMode, load.PostgresSSLModeVerifyFull)
 	}
 }
 
 func TestLoad_PostgresSSLRootCertEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("POSTGRES_SSLMODE", postgresSSLModeVerifyFull)
+	t.Setenv("POSTGRES_SSLMODE", load.PostgresSSLModeVerifyFull)
 	t.Setenv("POSTGRES_SSLROOTCERT", "/run/postgresql/root.crt")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1485,10 +1144,10 @@ func TestLoad_PostgresSSLRootCertEnvOverride(t *testing.T) {
 
 func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("API_SECRET_KEY", "")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected production API key validation error, got nil")
 	}
@@ -1500,10 +1159,10 @@ func TestLoad_ProductionRequiresAPISecretKey(t *testing.T) {
 
 func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "require")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected production sslmode validation error, got nil")
 	}
@@ -1512,18 +1171,18 @@ func TestLoad_ProductionRejectsWeakPostgresSSLMode(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(err.Error(), postgresSSLModeVerifyFull) {
+	if !strings.Contains(err.Error(), load.PostgresSSLModeVerifyFull) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected production verify-ca validation error, got nil")
 	}
@@ -1532,18 +1191,18 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(err.Error(), postgresSSLModeVerifyFull) {
+	if !strings.Contains(err.Error(), load.PostgresSSLModeVerifyFull) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode_WithRetiredOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "verify-ca")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected production verify-ca validation error, got nil")
 	}
@@ -1555,27 +1214,27 @@ func TestLoad_ProductionRejectsVerifyCAPostgresSSLMode_WithRetiredOverride(t *te
 
 func TestLoad_ProductionAllowsVerifyFullPostgresSSLMode(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
-	t.Setenv("POSTGRES_SSLMODE", postgresSSLModeVerifyFull)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
+	t.Setenv("POSTGRES_SSLMODE", load.PostgresSSLModeVerifyFull)
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if config.Postgres.SSLMode != postgresSSLModeVerifyFull {
+	if config.Postgres.SSLMode != load.PostgresSSLModeVerifyFull {
 		t.Fatalf("Postgres.SSLMode = %q, want verify-full", config.Postgres.SSLMode)
 	}
 }
 
 func TestLoad_ProductionRejectsWeakPostgresSSLMode_WithRetiredOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
-	t.Setenv("APP_ENV", environmentProduction)
+	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "require")
 	t.Setenv("POSTGRES_SSLMODE_ALLOW_INSECURE", "true")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() expected production sslmode validation error, got nil")
 	}
@@ -1590,7 +1249,7 @@ func TestLoad_DevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("POSTGRES_SSLMODE", "prefer")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1600,46 +1259,10 @@ func TestLoad_DevelopmentAllowsWeakPostgresSSLMode(t *testing.T) {
 	}
 }
 
-func TestLoadLLMScheduler_ProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
-	setRequiredH3ServerEnv(t)
-	t.Setenv(irisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(irisBotTokenEnv, "test-bot-token")
-	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("APP_ENV", environmentProduction)
-	t.Setenv("POSTGRES_SSLMODE", "require")
-
-	_, err := LoadLLMScheduler()
-	if err == nil {
-		t.Fatal("LoadLLMScheduler() expected production sslmode validation error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestLoadLLMScheduler_ProductionRequiresAPISecretKey(t *testing.T) {
-	setRequiredH3ServerEnv(t)
-	t.Setenv(irisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(irisBotTokenEnv, "test-bot-token")
-	t.Setenv("APP_ENV", environmentProduction)
-	t.Setenv("API_SECRET_KEY", "")
-
-	_, err := LoadLLMScheduler()
-	if err == nil {
-		t.Fatal("LoadLLMScheduler() expected production API key validation error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestLoadLLMConfig_ConsensusDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1675,7 +1298,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 	t.Run("negative clamped to 0", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "-0.5")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1688,7 +1311,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 	t.Run("above 1 clamped to 1", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "1.5")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1701,7 +1324,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 	t.Run("NaN falls back to default", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "NaN")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1714,7 +1337,7 @@ func TestLoadLLMConfig_ConsensusConfidenceClamp(t *testing.T) {
 	t.Run("Inf falls back to default", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_CONSENSUS_CONFIDENCE", "Inf")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1731,7 +1354,7 @@ func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
 	t.Run("review timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEW_TIMEOUT_SEC", "2")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1744,7 +1367,7 @@ func TestLoadLLMConfig_ConsensusTimeoutMinimum(t *testing.T) {
 	t.Run("adjudicate timeout below minimum", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_ADJUDICATE_TIMEOUT_SEC", "3")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1761,7 +1384,7 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 	t.Run("empty reviewer model falls back to MemberNewsModel", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_LLM_MODEL", "primary-model")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1774,7 +1397,7 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 	t.Run("explicit reviewer model preserved", func(t *testing.T) {
 		t.Setenv("MEMBER_NEWS_REVIEWER_MODEL", "gpt-4.1-mini")
 
-		config, err := load()
+		config, err := loadBotRuntimeConfig()
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -1783,29 +1406,6 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 			t.Errorf("ConsensusReviewerModel = %q, want gpt-4.1-mini", config.LLM.MemberNews.ReviewerModel)
 		}
 	})
-}
-
-func TestLoadLLMScheduler_EnvApplied(t *testing.T) {
-	setRequiredH3ServerEnv(t)
-	t.Setenv(irisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(irisBotTokenEnv, "test-bot-token")
-	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-	t.Setenv("LLM_SCHEDULER_PORT", "39003")
-	t.Setenv("BOT_PREFIX", "#")
-
-	config, err := LoadLLMScheduler()
-	if err != nil {
-		t.Fatalf("LoadLLMScheduler() error = %v", err)
-	}
-
-	if config.Server.Port != 39003 {
-		t.Fatalf("Server.Port = %d, want %d", config.Server.Port, 39003)
-	}
-
-	if config.Bot.Prefix != "#" {
-		t.Fatalf("Bot.Prefix = %q, want %q", config.Bot.Prefix, "#")
-	}
 }
 
 func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
@@ -1835,29 +1435,12 @@ func TestLoadBotConfig_DefaultCalendarImageCacheDir(t *testing.T) {
 	}
 }
 
-func TestLoadLLMScheduler_IrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
-	setRequiredH3ServerEnv(t)
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
-	t.Setenv(irisWebhookTokenEnv, "")
-	t.Setenv(irisBotTokenEnv, "")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-
-	_, err := LoadLLMScheduler()
-	if err == nil {
-		t.Fatal("LoadLLMScheduler() expected missing webhook token error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestLoad_InvalidNumericStillUsesDefault(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("POSTGRES_PORT", "not-a-number")
 	t.Setenv("CACHE_PORT", "invalid")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1875,7 +1458,7 @@ func TestLoad_InvalidCoreNumeric(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVER_PORT", "invalid")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1895,7 +1478,7 @@ func TestLoad_WebhookUsesLocalStackWorkerProfile(t *testing.T) {
 	server := newIrisRuntimeDiagnosticsServer(t, localStackWorkerProfileDiagnosticsJSON())
 	t.Setenv("IRIS_BASE_URL", server.URL)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1941,7 +1524,7 @@ func TestLoad_WebhookRequireHMACEnvOverride(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_WEBHOOK_REQUIRE_HMAC", "true")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1955,7 +1538,7 @@ func TestLoad_WebhookRequireHMACFalseFailsClosed(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("IRIS_WEBHOOK_REQUIRE_HMAC", "false")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() error = nil, want HMAC false rejection")
 	}
@@ -1969,7 +1552,7 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 	setRequiredLoadEnv(t)
 	t.Setenv("SERVICES_LLM_SERVER_HEALTH_URL", "http://legacy-llm-server/health")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1982,7 +1565,7 @@ func TestLoad_BackwardCompatibleLLMServiceHealthURL(t *testing.T) {
 func TestLoad_ScraperSchedulerDefaults(t *testing.T) {
 	setRequiredLoadEnv(t)
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2006,7 +1589,7 @@ func TestLoad_ScraperSchedulerEnvOverride(t *testing.T) {
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "7")
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "99")
 
-	config, err := load()
+	config, err := loadBotRuntimeConfig()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2029,7 +1612,7 @@ func TestLoad_ScraperSchedulerBackoffValidation(t *testing.T) {
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MIN_SECONDS", "60")
 	t.Setenv("SCRAPER_SCHEDULER_ERROR_BACKOFF_MAX_SECONDS", "30")
 
-	_, err := load()
+	_, err := loadBotRuntimeConfig()
 	if err == nil {
 		t.Fatal("Load() error = nil, want validation error")
 	}

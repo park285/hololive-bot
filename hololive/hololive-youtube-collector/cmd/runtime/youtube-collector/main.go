@@ -16,7 +16,7 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 	"github.com/park285/shared-go/v2/pkg/telemetry"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/observability"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime"
@@ -29,7 +29,7 @@ var (
 
 func main() {
 	if handled, exitCode := runWorkerProfileCheck(os.Args[1:], os.Stderr, func() error {
-		if _, err := settings.LoadYouTubeCollectorWorkerProfile(); err != nil {
+		if _, err := collectorconfig.LoadWorkerProfile(); err != nil {
 			return fmt.Errorf("load youtube collector worker profile: %w", err)
 		}
 
@@ -38,15 +38,15 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	os.Exit(bootstrap.Options[*settings.YouTubeCollectorRuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
+	os.Exit(bootstrap.Options[*collectorconfig.RuntimeConfig, *observability.ManagedRuntime[*collectorruntime.Runtime]]{
 		Version: Version,
 		Initialize: func(version string) {
 			automaxprocs.Init(nil)
 			health.Init(version)
 		},
-		LoadConfig:             settings.LoadYouTubeCollectorRuntime,
+		LoadConfig:             collectorconfig.LoadRuntime,
 		LoadConfigErrorMessage: "Failed to load youtube collector config",
-		LoggerConfig: func(appConfig *settings.YouTubeCollectorRuntimeConfig) sharedlogging.Config {
+		LoggerConfig: func(appConfig *collectorconfig.RuntimeConfig) sharedlogging.Config {
 			return sharedlogging.Config{
 				Dir:        appConfig.Logging.Dir,
 				MaxSizeMB:  appConfig.Logging.MaxSizeMB,
@@ -56,17 +56,17 @@ func main() {
 			}
 		},
 		LoggerFileName: youtubeCollectorLogFileName(),
-		LoggerLevel: func(appConfig *settings.YouTubeCollectorRuntimeConfig) string {
+		LoggerLevel: func(appConfig *collectorconfig.RuntimeConfig) string {
 			return appConfig.Logging.Level
 		},
 		StartupMessage: "YouTube Collector starting...",
-		StartupFields: func(appConfig *settings.YouTubeCollectorRuntimeConfig) []any {
+		StartupFields: func(appConfig *collectorconfig.RuntimeConfig) []any {
 			return []any{slog.Int("port", appConfig.Server.Port)}
 		},
 		BuildTimeout: constants.AppTimeout.Build,
 		BuildRuntime: func(
 			ctx context.Context,
-			appConfig *settings.YouTubeCollectorRuntimeConfig,
+			appConfig *collectorconfig.RuntimeConfig,
 			logger *slog.Logger,
 		) (*observability.ManagedRuntime[*collectorruntime.Runtime], error) {
 			traceConfig := youtubeCollectorTelemetryConfig(appConfig, Version)
@@ -104,7 +104,7 @@ func runWorkerProfileCheck(args []string, stderr io.Writer, load func() error) (
 	return true, 0
 }
 
-func youtubeCollectorTelemetryConfig(appConfig *settings.YouTubeCollectorRuntimeConfig, version string) telemetry.Config {
+func youtubeCollectorTelemetryConfig(appConfig *collectorconfig.RuntimeConfig, version string) telemetry.Config {
 	return telemetry.Config{
 		Enabled:        appConfig.Tracing.Enabled,
 		ServiceName:    "youtube-collector",

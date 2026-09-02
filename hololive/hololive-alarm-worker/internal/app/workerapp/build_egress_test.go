@@ -14,6 +14,7 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
@@ -70,7 +71,7 @@ func alarmWorkerTestConfig(t *testing.T) (*settings.Config, *alarmWorkerRegistry
 	require.NoError(t, err)
 	t.Setenv(workercontract.ProfileFileEnv, path)
 
-	profile, err := settings.LoadAlarmWorkerProfile()
+	profile, err := alarmworker.LoadWorkerProfile()
 	require.NoError(t, err)
 
 	profile.AlarmDispatch.WakeupEnabled = false
@@ -154,7 +155,7 @@ func TestYouTubeOutboxKaringSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
 
 func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
-	runner, err := buildNotificationEgress(t.Context(), config, &sharedmodules.InfraModule{}, nil, state)
+	runner, err := buildNotificationEgress(t.Context(), &alarmworker.RuntimeConfig{Config: config}, &sharedmodules.InfraModule{}, nil, state)
 
 	require.Error(t, err)
 	assert.Nil(t, runner)
@@ -232,7 +233,7 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	runners, err := buildEgressRunners(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)
+	runners, err := buildEgressRunners(t.Context(), &alarmworker.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))
@@ -250,7 +251,7 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
 	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
 
-	runners, err := buildEgressRunners(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)
+	runners, err := buildEgressRunners(t.Context(), &alarmworker.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
 
 	names := make([]string, 0, len(runners))
@@ -321,7 +322,7 @@ func TestBuildYouTubeOutboxDispatcherValidatesV3HandoffActivation(t *testing.T) 
 
 	runners, err := buildEgressRunners(
 		t.Context(),
-		config,
+		&alarmworker.RuntimeConfig{Config: config},
 		&sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}},
 		egress.NewIrisMessageSender(nil),
 		nil,

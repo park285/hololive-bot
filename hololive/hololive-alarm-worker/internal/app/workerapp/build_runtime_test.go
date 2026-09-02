@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 )
 
 func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -20,7 +21,7 @@ func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
 	assert.Nil(t, runtime)
 	assert.Equal(t, "normalize runtime build inputs: config must not be nil", err.Error())
 
-	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &settings.Config{}, nil)
+	runtime, err = BuildAlarmWorkerRuntime(t.Context(), &alarmworker.RuntimeConfig{}, nil)
 	require.Error(t, err)
 	assert.Nil(t, runtime)
 	assert.Equal(t, "normalize runtime build inputs: logger must not be nil", err.Error())

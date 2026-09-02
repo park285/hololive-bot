@@ -28,14 +28,11 @@ import (
 
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 	"github.com/kapu/hololive-shared/pkg/constants"
 )
 
-func loadAppEnvironment() string {
-	return sharedenv.String("APP_ENV", environmentProduction)
-}
-
-func loadValkeyConfig() ValkeyConfig {
+func LoadValkeyConfig() ValkeyConfig {
 	return ValkeyConfig{
 		Host:       sharedenv.String("CACHE_HOST", "localhost"),
 		Port:       sharedenv.Int("CACHE_PORT", 6379),
@@ -45,7 +42,7 @@ func loadValkeyConfig() ValkeyConfig {
 	}
 }
 
-func loadPostgresConfig() PostgresConfig {
+func LoadPostgresConfig() PostgresConfig {
 	password := sharedenv.StringRaw("POSTGRES_PASSWORD", "")
 	if strings.TrimSpace(password) == "" {
 		password = constants.DatabaseDefaults.Password
@@ -58,7 +55,7 @@ func loadPostgresConfig() PostgresConfig {
 		User:          sharedenv.String("POSTGRES_USER", constants.DatabaseDefaults.User),
 		Password:      password,
 		Database:      sharedenv.String("POSTGRES_DB", constants.DatabaseDefaults.Database),
-		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", postgresSSLModeVerifyFull),
+		SSLMode:       sharedenv.String("POSTGRES_SSLMODE", load.PostgresSSLModeVerifyFull),
 		SSLRootCert:   sharedenv.String("POSTGRES_SSLROOTCERT", ""),
 		QueryExecMode: sharedenv.String("POSTGRES_QUERY_EXEC_MODE", "cache_statement"),
 		PoolMinConns:  sharedenv.Int("POSTGRES_POOL_MIN_CONNS", constants.DatabaseConfig.MaxIdleConns),
@@ -67,28 +64,25 @@ func loadPostgresConfig() PostgresConfig {
 }
 
 func loadServerConfig() ServerConfig {
-	return loadServerConfigWithAPIKey(sharedenv.String("API_SECRET_KEY", ""))
+	return LoadServerConfigWithAPIKey(sharedenv.String("API_SECRET_KEY", ""))
 }
 
-func loadYouTubeCollectorServerConfig() ServerConfig {
-	return loadServerConfigWithAPIKey(sharedenv.String("METRICS_API_KEY", ""))
-}
-
-func loadServerConfigWithAPIKey(apiKey string) ServerConfig {
+// LoadServerConfigWithAPIKey: 런타임마다 인증 키 환경변수가 달라 호출자가 값을 넘긴다.
+func LoadServerConfigWithAPIKey(apiKey string) ServerConfig {
 	port := sharedenv.Int("SERVER_PORT", 30001)
 
 	return ServerConfig{
 		Port:                    port,
 		APIKey:                  apiKey,
-		HTTPTransports:          parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+		HTTPTransports:          load.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
 		H3Addr:                  sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
 		H3CertFile:              strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
 		H3KeyFile:               strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
 		ShortLinkAddr:           strings.TrimSpace(sharedenv.String("HOLOLIVE_SHORT_LINK_ADDR", "")),
 		MetricsAddr:             strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
 		PprofAddr:               strings.TrimSpace(sharedenv.String("HOLOLIVE_PPROF_ADDR", "")),
-		AdminAllowedIPs:         parseCommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
-		WebSocketAllowedOrigins: parseCommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
+		AdminAllowedIPs:         load.CommaSeparated(sharedenv.String("ADMIN_ALLOWED_IPS", "")),
+		WebSocketAllowedOrigins: load.CommaSeparated(sharedenv.String("WEBSOCKET_ALLOWED_ORIGINS", "")),
 	}
 }
 
@@ -104,7 +98,7 @@ func loadScraperConfig() (ScraperConfig, error) {
 	scraperSchedulerDefaults := DefaultScraperSchedulerConfig()
 	snapshotDefaults := DefaultScraperSnapshotConfig()
 
-	workerCount, err := requiredPositiveIntEnv("SCRAPER_SCHEDULER_WORKER_COUNT", DefaultScraperWorkerCount())
+	workerCount, err := load.RequiredPositiveIntEnv("SCRAPER_SCHEDULER_WORKER_COUNT", DefaultScraperWorkerCount())
 	if err != nil {
 		return ScraperConfig{}, fmt.Errorf("required positive int env: %w", err)
 	}
@@ -213,7 +207,7 @@ func loadCommunityShortsBigBangCutoverAt() (time.Time, error) {
 	return cutoverAt.UTC(), nil
 }
 
-func loadCliproxyConfig() CliproxyConfig {
+func LoadCliproxyConfig() CliproxyConfig {
 	return CliproxyConfig{
 		BaseURL:         sharedenv.String("CLIPROXY_BASE_URL", ""),
 		APIKey:          sharedenv.String("CLIPROXY_API_KEY", ""),
@@ -223,7 +217,7 @@ func loadCliproxyConfig() CliproxyConfig {
 	}
 }
 
-func loadGeminiConfig() GeminiConfig {
+func LoadGeminiConfig() GeminiConfig {
 	return GeminiConfig{
 		BaseURL:       sharedenv.String("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com"),
 		APIKey:        sharedenv.String("GEMINI_API_KEY", ""),
@@ -255,7 +249,7 @@ func loadConsensusLLMConfig(prefix string) ConsensusLLMConfig {
 	}
 }
 
-func loadLLMConfig() LLMConfig {
+func LoadLLMConfig() LLMConfig {
 	return LLMConfig{
 		MemberNewsModel:       sharedenv.String("MEMBER_NEWS_LLM_MODEL", ""),
 		MemberNewsTemperature: sharedenv.Float("MEMBER_NEWS_TEMPERATURE", 0),
@@ -265,7 +259,7 @@ func loadLLMConfig() LLMConfig {
 	}
 }
 
-func loadExaConfig() ExaConfig {
+func LoadExaConfig() ExaConfig {
 	return ExaConfig{
 		Endpoint: sharedenv.String("EXA_MCP_ENDPOINT", "https://mcp.exa.ai/mcp"),
 		APIKey:   sharedenv.String("EXA_API_KEY", ""),

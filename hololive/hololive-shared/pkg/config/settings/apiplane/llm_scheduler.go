@@ -18,32 +18,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package settings
+package apiplane
 
 import (
 	"cmp"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/joho/godotenv"
 	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 type LLMSchedulerConfig struct {
-	Server      ServerConfig
-	Iris        IrisConfig
-	Valkey      ValkeyConfig
-	Postgres    PostgresConfig
-	Logging     LoggingConfig
-	Bot         BotConfig
+	Server      settings.ServerConfig
+	Iris        settings.IrisConfig
+	Valkey      settings.ValkeyConfig
+	Postgres    settings.PostgresConfig
+	Logging     settings.LoggingConfig
+	Bot         settings.BotConfig
 	Environment string
 	LLMProvider string
-	Cliproxy    CliproxyConfig
-	Gemini      GeminiConfig
-	LLM         LLMConfig
-	Exa         ExaConfig
+	Cliproxy    settings.CliproxyConfig
+	Gemini      settings.GeminiConfig
+	LLM         settings.LLMConfig
+	Exa         settings.ExaConfig
 	Version     string
 }
 
@@ -68,8 +69,8 @@ func LoadLLMSchedulerRuntime() (*LLMSchedulerConfig, error) {
 }
 
 func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSchedulerConfig, error) {
-	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("load .env: %w", err)
+	if err := load.DotEnv(); err != nil {
+		return nil, fmt.Errorf("load dot env: %w", err)
 	}
 
 	config := buildLLMSchedulerConfig()
@@ -81,38 +82,38 @@ func loadLLMSchedulerValidated(validate func(*LLMSchedulerConfig) error) (*LLMSc
 }
 
 func buildLLMSchedulerConfig() *LLMSchedulerConfig {
-	webhookToken, botToken, _, _ := loadRuntimeTokensAndCORS()
+	webhookToken, botToken, _, _ := settings.LoadRuntimeTokensAndCORS()
 	port := sharedenv.Int("LLM_SCHEDULER_PORT", 30003)
 
 	return &LLMSchedulerConfig{
-		Server: ServerConfig{
+		Server: settings.ServerConfig{
 			Port:           port,
 			APIKey:         sharedenv.String("API_SECRET_KEY", ""),
-			HTTPTransports: parseCommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
+			HTTPTransports: load.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),
 			H3Addr:         sharedenv.String("HOLOLIVE_H3_ADDR", fmt.Sprintf(":%d", port)),
 			H3CertFile:     strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_CERT_FILE", "")),
 			H3KeyFile:      strings.TrimSpace(sharedenv.String("HOLOLIVE_H3_KEY_FILE", "")),
 			MetricsAddr:    strings.TrimSpace(sharedenv.String("HOLOLIVE_METRICS_ADDR", "")),
 		},
-		Iris: IrisConfig{
+		Iris: settings.IrisConfig{
 			BaseURL:      sharedenv.String("IRIS_BASE_URL", ""),
 			BaseURLFile:  sharedenv.String("IRIS_BASE_URL_FILE", ""),
 			WebhookToken: webhookToken,
 			BotToken:     botToken,
 		},
-		Valkey:   loadValkeyConfig(),
-		Postgres: loadPostgresConfig(),
-		Logging:  loadLoggingConfig(),
-		Bot: BotConfig{
+		Valkey:   settings.LoadValkeyConfig(),
+		Postgres: settings.LoadPostgresConfig(),
+		Logging:  settings.LoadLoggingConfig(),
+		Bot: settings.BotConfig{
 			Prefix:   sharedenv.String("BOT_PREFIX", "!"),
 			SelfUser: sharedenv.String("BOT_SELF_USER", "iris"),
 		},
-		Environment: loadAppEnvironment(),
-		LLMProvider: strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", LLMProviderCliproxy))),
-		Cliproxy:    loadCliproxyConfig(),
-		Gemini:      loadGeminiConfig(),
-		LLM:         loadLLMConfig(),
-		Exa:         loadExaConfig(),
+		Environment: load.AppEnvironment(),
+		LLMProvider: strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", settings.LLMProviderCliproxy))),
+		Cliproxy:    settings.LoadCliproxyConfig(),
+		Gemini:      settings.LoadGeminiConfig(),
+		LLM:         settings.LoadLLMConfig(),
+		Exa:         settings.LoadExaConfig(),
 		Version:     sharedenv.String("APP_VERSION", "1.0.0-llm-scheduler"),
 	}
 }
@@ -138,7 +139,7 @@ func (c *LLMSchedulerConfig) validate() error {
 		return fmt.Errorf("validate LLM provider: %w", err)
 	}
 
-	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	if err := load.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
@@ -150,7 +151,7 @@ func (c *LLMSchedulerConfig) validateRuntime() error {
 		return fmt.Errorf("validate server basics: %w", err)
 	}
 
-	if err := validatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
+	if err := load.ValidatePostgresSSLMode(c.Environment, c.Postgres.SSLMode); err != nil {
 		return fmt.Errorf("validate postgres SSL mode: %w", err)
 	}
 
@@ -158,45 +159,45 @@ func (c *LLMSchedulerConfig) validateRuntime() error {
 		return fmt.Errorf("validate LLM provider: %w", err)
 	}
 
-	if err := validateNoNotificationEgressOwnership(runtimeLLMScheduler); err != nil {
+	if err := load.ValidateNoNotificationEgressOwnership(load.RuntimeLLMScheduler); err != nil {
 		return fmt.Errorf("validate no notification egress ownership: %w", err)
 	}
 
 	return nil
 }
 
-func (c *LLMSchedulerConfig) SelectedLLMProvider() LLMProviderConfig {
+func (c *LLMSchedulerConfig) SelectedLLMProvider() settings.LLMProviderConfig {
 	if c == nil {
-		return LLMProviderConfig{}
+		return settings.LLMProviderConfig{}
 	}
 
-	return LLMProviderConfig{
+	return settings.LLMProviderConfig{
 		Name:     c.LLMProvider,
 		Cliproxy: c.Cliproxy,
 		Gemini:   c.Gemini,
 	}
 }
 
-func validateLLMProvider(config LLMProviderConfig) error {
-	provider := cmp.Or(strings.ToLower(strings.TrimSpace(config.Name)), LLMProviderCliproxy)
+func validateLLMProvider(config settings.LLMProviderConfig) error {
+	provider := cmp.Or(strings.ToLower(strings.TrimSpace(config.Name)), settings.LLMProviderCliproxy)
 
 	switch provider {
-	case LLMProviderCliproxy:
+	case settings.LLMProviderCliproxy:
 		if err := validateCliproxyProvider(config.Cliproxy); err != nil {
 			return fmt.Errorf("validate cliproxy provider: %w", err)
 		}
-	case LLMProviderGemini:
+	case settings.LLMProviderGemini:
 		if err := validateGeminiProvider(config.Gemini); err != nil {
 			return fmt.Errorf("validate gemini provider: %w", err)
 		}
 	default:
-		return fmt.Errorf("LLM_PROVIDER must be %q or %q", LLMProviderCliproxy, LLMProviderGemini)
+		return fmt.Errorf("LLM_PROVIDER must be %q or %q", settings.LLMProviderCliproxy, settings.LLMProviderGemini)
 	}
 
 	return nil
 }
 
-func validateCliproxyProvider(config CliproxyConfig) error {
+func validateCliproxyProvider(config settings.CliproxyConfig) error {
 	if !config.Enabled {
 		return nil
 	}
@@ -208,7 +209,7 @@ func validateCliproxyProvider(config CliproxyConfig) error {
 	return nil
 }
 
-func validateGeminiProvider(config GeminiConfig) error {
+func validateGeminiProvider(config settings.GeminiConfig) error {
 	if !config.Enabled {
 		return errors.New("selected gemini provider is disabled")
 	}
@@ -230,11 +231,11 @@ func (c *LLMSchedulerConfig) validateServerBasics() error {
 		return errors.New("LLM_SCHEDULER_PORT is required")
 	}
 
-	if err := validateServerTransports(&c.Server); err != nil {
+	if err := settings.ValidateServerTransports(&c.Server); err != nil {
 		return fmt.Errorf("validate server transports: %w", err)
 	}
 
-	if err := validateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
+	if err := load.ValidateAPISecretKey(c.Environment, c.Server.APIKey); err != nil {
 		return fmt.Errorf("validate API secret key: %w", err)
 	}
 

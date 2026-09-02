@@ -1,4 +1,4 @@
-package settings
+package alarmworker
 
 import (
 	"testing"
@@ -20,10 +20,10 @@ var alarmDispatchRetentionEnvKeys = []string{
 }
 
 func TestLoadAlarmDispatchRetentionConfigDefaults(t *testing.T) {
-	config, err := loadAlarmDispatchRetentionConfig()
+	config, err := loadDispatchRetentionConfig()
 	require.NoError(t, err)
 
-	assert.Equal(t, AlarmDispatchRetentionConfig{
+	assert.Equal(t, DispatchRetentionConfig{
 		Enabled:         true,
 		Interval:        time.Hour,
 		QueryTimeout:    30 * time.Second,
@@ -47,10 +47,10 @@ func TestLoadAlarmDispatchRetentionConfigFromEnvironment(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_RETENTION_CANCELLED_DAYS", "80") //nolint:misspell // ALARM_DISPATCH_RETENTION_CANCELLED_DAYS는 배포 환경에 실재하는 환경변수 이름이라 US 철자로 바꾸면 설정이 끊긴다.
 	t.Setenv("ALARM_DISPATCH_RETENTION_EVENT_DAYS", "90")
 
-	config, err := loadAlarmDispatchRetentionConfig()
+	config, err := loadDispatchRetentionConfig()
 	require.NoError(t, err)
 
-	assert.Equal(t, AlarmDispatchRetentionConfig{
+	assert.Equal(t, DispatchRetentionConfig{
 		Enabled:         false,
 		Interval:        2 * time.Second,
 		QueryTimeout:    3 * time.Second,
@@ -69,7 +69,7 @@ func TestLoadAlarmDispatchRetentionConfigRejectsInvalidValues(t *testing.T) {
 			t.Run(key+"="+value, func(t *testing.T) {
 				t.Setenv(key, value)
 
-				_, err := loadAlarmDispatchRetentionConfig()
+				_, err := loadDispatchRetentionConfig()
 
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), key)
@@ -81,7 +81,7 @@ func TestLoadAlarmDispatchRetentionConfigRejectsInvalidValues(t *testing.T) {
 func TestLoadAlarmDispatchRetentionConfigClampsLimit(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_RETENTION_LIMIT", "10001")
 
-	config, err := loadAlarmDispatchRetentionConfig()
+	config, err := loadDispatchRetentionConfig()
 	require.NoError(t, err)
 
 	assert.Equal(t, 10000, config.Limit)

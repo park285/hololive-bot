@@ -12,7 +12,7 @@ import (
 	"go.uber.org/fx/fxevent"
 
 	runtimeapp "github.com/kapu/hololive-api/internal/app"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/config/settings/apiplane"
 )
 
 const processLifecycleTimeout = 30 * time.Second
@@ -31,7 +31,7 @@ type runtimeResource interface {
 
 type (
 	telemetryFactory func(context.Context, telemetry.Config) (telemetryResource, error)
-	runtimeFactory   func(context.Context, *settings.HololiveAPIConfig, *slog.Logger) (runtimeResource, error)
+	runtimeFactory   func(context.Context, *apiplane.RuntimeConfig, *slog.Logger) (runtimeResource, error)
 )
 
 type applicationDependencies struct {
@@ -44,7 +44,7 @@ type applicationState struct {
 }
 
 type applicationParams struct {
-	config       *settings.HololiveAPIConfig
+	config       *apiplane.RuntimeConfig
 	logger       *slog.Logger
 	version      string
 	dependencies applicationDependencies
@@ -59,7 +59,7 @@ type Application struct {
 
 func New(
 	ctx context.Context,
-	config *settings.HololiveAPIConfig,
+	config *apiplane.RuntimeConfig,
 	logger *slog.Logger,
 	version string,
 ) (*Application, error) {
@@ -165,7 +165,7 @@ func productionDependencies() applicationDependencies {
 		},
 		buildRuntime: func(
 			ctx context.Context,
-			config *settings.HololiveAPIConfig,
+			config *apiplane.RuntimeConfig,
 			logger *slog.Logger,
 		) (runtimeResource, error) {
 			runtime, err := runtimeapp.BuildRuntime(ctx, config, logger)
@@ -181,14 +181,14 @@ func productionDependencies() applicationDependencies {
 func telemetryConstructor(factory telemetryFactory) func(
 	context.Context,
 	buildVersion,
-	*settings.HololiveAPIConfig,
+	*apiplane.RuntimeConfig,
 	*slog.Logger,
 	*resourceOwner,
 ) (telemetryResource, error) {
 	return func(
 		ctx context.Context,
 		version buildVersion,
-		config *settings.HololiveAPIConfig,
+		config *apiplane.RuntimeConfig,
 		logger *slog.Logger,
 		resources *resourceOwner,
 	) (telemetryResource, error) {
@@ -209,14 +209,14 @@ func telemetryConstructor(factory telemetryFactory) func(
 
 func runtimeConstructor(factory runtimeFactory) func(
 	context.Context,
-	*settings.HololiveAPIConfig,
+	*apiplane.RuntimeConfig,
 	*slog.Logger,
 	telemetryResource,
 	*resourceOwner,
 ) (runtimeResource, error) {
 	return func(
 		ctx context.Context,
-		config *settings.HololiveAPIConfig,
+		config *apiplane.RuntimeConfig,
 		logger *slog.Logger,
 		_ telemetryResource,
 		resources *resourceOwner,
@@ -242,7 +242,7 @@ func newFXEventLogger(logger *slog.Logger) fxevent.Logger {
 	return fxLogger
 }
 
-func hololiveAPITelemetryConfig(config *settings.HololiveAPIConfig, version string) telemetry.Config {
+func hololiveAPITelemetryConfig(config *apiplane.RuntimeConfig, version string) telemetry.Config {
 	return telemetry.Config{
 		Enabled:        config.Tracing.Enabled,
 		ServiceName:    "hololive-api",

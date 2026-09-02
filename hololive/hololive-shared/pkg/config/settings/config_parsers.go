@@ -21,16 +21,14 @@
 package settings
 
 import (
-	"fmt"
 	"log/slog"
 	"math"
-	"os"
 	"strconv"
 	"strings"
-	"time"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 // clampConfidence: confidence 값을 [0, 1] 범위로 정규화한다.
@@ -49,23 +47,6 @@ func clampConfidence(v float64) float64 {
 	}
 
 	return v
-}
-
-func parseCommaSeparated(value string) []string {
-	if value == "" {
-		return []string{}
-	}
-
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-
-	for _, part := range parts {
-		if trimmed := stringutil.TrimSpace(part); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-
-	return result
 }
 
 func parseIntList(value string) []int {
@@ -97,92 +78,8 @@ func parseIntList(value string) []int {
 	return result
 }
 
-func requiredPositiveIntEnv(key string, fallback int) (int, error) {
-	raw, found := os.LookupEnv(key)
-	if !found {
-		return fallback, nil
-	}
-
-	if strings.TrimSpace(raw) == "" {
-		return 0, fmt.Errorf("%s must be a positive integer", key)
-	}
-
-	value, err := sharedenv.IntE(key, fallback)
-	if err != nil {
-		return 0, fmt.Errorf("read int env: %w", err)
-	}
-
-	if value <= 0 {
-		return 0, fmt.Errorf("%s must be positive", key)
-	}
-
-	return value, nil
-}
-
-func requiredSecondsDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
-	out, err := requiredPositiveDurationUnitEnv(key, fallback, time.Second)
-	if err != nil {
-		return out, fmt.Errorf("required positive duration unit env: %w", err)
-	}
-
-	return out, nil
-}
-
-func requiredMillisDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
-	out, err := requiredPositiveDurationUnitEnv(key, fallback, time.Millisecond)
-	if err != nil {
-		return out, fmt.Errorf("required positive duration unit env: %w", err)
-	}
-
-	return out, nil
-}
-
-func requiredPositiveDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
-	raw, found := os.LookupEnv(key)
-	if !found {
-		return fallback, nil
-	}
-
-	if strings.TrimSpace(raw) == "" {
-		return 0, fmt.Errorf("%s must be a positive duration", key)
-	}
-
-	value, err := strictDurationUnitEnv(key, fallback, unit)
-	if err != nil {
-		return 0, fmt.Errorf("strict duration unit env: %w", err)
-	}
-
-	if value <= 0 {
-		return 0, fmt.Errorf("%s must be positive", key)
-	}
-
-	return value, nil
-}
-
-func strictDurationUnitEnv(key string, fallback, unit time.Duration) (time.Duration, error) {
-	value, err := sharedenv.Int64E(key, int64(fallback/unit))
-	if err != nil {
-		return 0, fmt.Errorf("int64 e: %w", err)
-	}
-
-	const (
-		maxDuration = time.Duration(1<<63 - 1)
-		minDuration = time.Duration(-1 << 63)
-	)
-
-	if value > int64(maxDuration/unit) || value < int64(minDuration/unit) {
-		return 0, fmt.Errorf("parse environment variable %s as duration: value is out of range", key)
-	}
-
-	return time.Duration(value) * unit, nil
-}
-
-func resolveHolodexAPIKey() string {
-	return sharedenv.StringAny("HOLODEX_API_KEY", "HOLODEX_API_KEY_1")
-}
-
 func parseCORSAllowedOrigins(rawOrigins string, isProduction bool) ([]string, bool) {
-	origins := parseCommaSeparated(rawOrigins)
+	origins := load.CommaSeparated(rawOrigins)
 
 	if !isProduction {
 		if len(origins) == 0 {

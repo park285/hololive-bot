@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 )
 
 func TestRepoAPDeployScriptsUseSplitRuntimeEnv(t *testing.T) {
@@ -94,7 +96,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 		{
 			name:     "base prod",
 			files:    []string{composeProdFile},
-			services: []string{serviceHololiveAPI, serviceAlarmWorker, runtimeYouTubeCollector},
+			services: []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector},
 		},
 		{
 			name: "live-compat",
@@ -102,7 +104,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				composeProdFile,
 				composeLiveCompatFile,
 			},
-			services: []string{serviceHololiveAPI, serviceAlarmWorker, runtimeYouTubeCollector},
+			services: []string{serviceHololiveAPI, serviceAlarmWorker, load.RuntimeYouTubeCollector},
 		},
 		{
 			name: "main-ap live-compat",
@@ -112,7 +114,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 				"deploy/compose/docker-compose.main-ap.yml",
 				"deploy/compose/docker-compose.main-ap.live-compat.yml",
 			},
-			services: []string{runtimeYouTubeCollector},
+			services: []string{load.RuntimeYouTubeCollector},
 		},
 	}
 
@@ -121,7 +123,7 @@ func TestRepoComposeAllStacksRenderVerifyFullPostgres(t *testing.T) {
 			cfg := renderComposeConfig(t, tt.files...)
 			for _, service := range tt.services {
 				env := composeEnvironment(t, cfg, service)
-				if env["POSTGRES_SSLMODE"] != postgresSSLModeVerifyFull {
+				if env["POSTGRES_SSLMODE"] != load.PostgresSSLModeVerifyFull {
 					t.Fatalf("%s in %s POSTGRES_SSLMODE = %q, want verify-full", service, tt.name, env["POSTGRES_SSLMODE"])
 				}
 
@@ -206,7 +208,7 @@ func assertDBMigrateVerifyFullTLS(t *testing.T, cfg renderedCompose, stackName s
 	t.Helper()
 
 	migrateEnv := composeEnvironment(t, cfg, "hololive-db-migrate")
-	if migrateEnv["PGSSLMODE"] != postgresSSLModeVerifyFull {
+	if migrateEnv["PGSSLMODE"] != load.PostgresSSLModeVerifyFull {
 		t.Fatalf("hololive-db-migrate PGSSLMODE = %q in %s, want verify-full", migrateEnv["PGSSLMODE"], stackName)
 	}
 

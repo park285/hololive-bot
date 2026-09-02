@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
+	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
@@ -54,7 +54,7 @@ func TestInfrastructureUsesConfiguredProviderTimeouts(t *testing.T) {
 func TestHTTP014TransportCapEqualsProviderGate(t *testing.T) {
 	t.Parallel()
 
-	collector := settings.DefaultYouTubeCollectorConfig()
+	collector := collectorconfig.DefaultConfig()
 
 	collector.HolodexMaxInflight = 3
 	collector.OfficialMaxInflight = 2
