@@ -46,19 +46,8 @@ jobs:
             "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
           test "${actual_sha}" = "${EXPECTED_SHA}"
 
-      - name: Setup Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version-file: .python-version
-
-      - name: Install uv
-        run: python -m pip install --disable-pip-version-check --no-cache-dir --no-deps uv==0.12.7
-
-      - name: Initialize Python runtime
-        run: |
-          interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"
-          printf 'CI_PYTHON_BIN=%s\n' "$interpreter" >>"$GITHUB_ENV"
-          printf 'CI_PYTHON_RUNTIME_ROOT=%s\n' "$GITHUB_WORKSPACE" >>"$GITHUB_ENV"
+      - name: Python runtime
+        uses: ./.github/actions/python-runtime
 
       # gofmt 규칙은 릴리스마다 바뀐다. 이 단계가 없으면 러너 기본 Go로 검사해
       # go.mod가 요구하는 판본과 다른 결과를 낸다.
@@ -123,19 +112,8 @@ jobs:
             "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
           test "${actual_sha}" = "${EXPECTED_SHA}"
 
-      - name: Setup Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version-file: .python-version
-
-      - name: Install uv
-        run: python -m pip install --disable-pip-version-check --no-cache-dir --no-deps uv==0.12.7
-
-      - name: Initialize Python runtime
-        run: |
-          interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"
-          printf 'CI_PYTHON_BIN=%s\n' "$interpreter" >>"$GITHUB_ENV"
-          printf 'CI_PYTHON_RUNTIME_ROOT=%s\n' "$GITHUB_WORKSPACE" >>"$GITHUB_ENV"
+      - name: Python runtime
+        uses: ./.github/actions/python-runtime
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

@@ -129,16 +129,26 @@ grep -Fq "actual_platform=\"\$(docker image inspect --format '{{.Os}}/{{.Archite
 
 [[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v2.39.4' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must install the exact Docker Compose release"
-[[ "$(grep -Fc 'python-version-file: hololive-bot/.python-version' "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must install the exact Python runtime"
-[[ "$(grep -Fc 'uv==0.12.7' "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must install the exact uv release"
-[[ "$(grep -Fc 'interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"' "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must initialize the exact Python interpreter"
-[[ "$(grep -Fc "CI_PYTHON_BIN=%s" "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must export the exact Python interpreter"
-[[ "$(grep -Fc "CI_PYTHON_RUNTIME_ROOT=%s" "$workflow")" -eq 2 ]] ||
-  fail "both recurring scan jobs must export the Python runtime root"
+# Python 부트스트랩은 저장소 composite action 이 소유하고, subdirectory checkout(path: hololive-bot)을
+# 쓰는 두 job 은 그 action 을 checkout 경로로 호출한다. action 사본 parity 와 핀 값은 iris-stack 이 본다.
+python_runtime_action=.github/actions/python-runtime/action.yml
+[[ "$(grep -Fc 'uses: ./hololive-bot/.github/actions/python-runtime' "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must bootstrap Python through the repository python-runtime action"
+[[ "$(grep -Fc '          working-directory: hololive-bot' "$workflow")" -eq 2 ]] ||
+  fail "both recurring scan jobs must point the python-runtime action at the hololive-bot checkout"
+if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.7' -e 'python-runner.sh --print-interpreter' "$workflow"; then
+  fail "recurring scan jobs must not inline the Python bootstrap"
+fi
+grep -Fq 'python-version-file: ${{ inputs.working-directory }}/.python-version' "$python_runtime_action" ||
+  fail "python-runtime action must install the exact Python runtime from the checkout .python-version"
+grep -Fq 'uv==0.12.7' "$python_runtime_action" ||
+  fail "python-runtime action must install the exact uv release"
+grep -Fq 'interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"' "$python_runtime_action" ||
+  fail "python-runtime action must initialize the exact Python interpreter"
+grep -Fq "CI_PYTHON_BIN=%s" "$python_runtime_action" ||
+  fail "python-runtime action must export the exact Python interpreter"
+grep -Fq "CI_PYTHON_RUNTIME_ROOT=%s" "$python_runtime_action" ||
+  fail "python-runtime action must export the Python runtime root"
 
 if grep -Fq 'uses: aquasecurity/' "$workflow"; then
   fail "security workflow must not use actions blocked by the repository allowlist"

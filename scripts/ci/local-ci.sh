@@ -25,7 +25,6 @@ source "${SCRIPT_DIR}/local-ci-gofix.sh"
 source "${SCRIPT_DIR}/local-ci-integration.sh"
 
 LOCAL_CI_GO_SCOPE="${LOCAL_CI_GO_SCOPE:-all}"
-RUN_DEPENDENCY_HYGIENE="${RUN_DEPENDENCY_HYGIENE:-true}"
 RUN_RACE_TESTS="${RUN_RACE_TESTS:-true}"
 RUN_NILAWAY="${RUN_NILAWAY:-true}"
 STRICT_STATICCHECK="${STRICT_STATICCHECK:-true}"
@@ -245,10 +244,8 @@ if (( $# != 0 )); then
     exit 2
 fi
 
-run_step "local-ci package scope tests" ./scripts/ci/test-local-ci-packages.sh
-run_step "go fix drift tests" bash ./scripts/ci/local-ci-gofix_test.sh
-run_step "go work sync drift tests" bash ./scripts/ci/go-work-sync-drift_test.sh
-run_step "NilAway input guard tests" bash ./scripts/ci/nilaway-inputs_test.sh
+# 검사기 자기 테스트(*_test.sh, test-*.sh, *_test.py)는 scripts/ci/pre-push-gate.sh 의
+# reusable phase 가 입력 변경 시에만 run_self_test 로 실행한다. 여기에는 검사만 남긴다.
 configure_go_packages
 echo "[LOCAL CI] Go package scope: ${LOCAL_CI_GO_SCOPE} (${#GO_PACKAGES[@]} packages)"
 if has_go_packages; then
@@ -260,10 +257,8 @@ echo
 
 run_step "Architecture gates" ./scripts/architecture/ci-boundary-gate.sh
 run_step "Sensitive log scan" ./scripts/refactor/grep-sensitive-logs.sh
-run_step "Sensitive log scan tests" bash ./scripts/refactor/grep-sensitive-logs_test.sh
 if [[ "${RUN_ADMIN_TOUCH_GUARDRAIL}" == "true" ]]; then
     run_step "Refactor admin-dashboard guardrail" ./scripts/refactor/validate-no-admin-touch.sh
-    run_step "Refactor admin-dashboard guardrail tests" ./scripts/refactor/test-validate-no-admin-touch.sh
 else
     echo "[LOCAL CI] Skip refactor admin-dashboard guardrail: RUN_ADMIN_TOUCH_GUARDRAIL=${RUN_ADMIN_TOUCH_GUARDRAIL}"
     echo
@@ -280,24 +275,14 @@ check_staticcheck
 check_golangci_lint
 check_nilaway
 run_go_package_step "Go build" go_mod_readonly go build
-run_step "PGO default policy tests" ./scripts/ci/check-pgo-default_test.sh
 run_step "PGO default gate" ./scripts/ci/check-pgo-default.sh
-run_step "collector go-test-json parser tests" "${CI_PYTHON_BIN}" ./scripts/ci/check-go-test-json_test.py
-run_step "collector hardening-contract parser tests" ./scripts/ci/check-youtube-collector-hardening-contract_test.sh
 run_step "collector hardening-contract gate" ./scripts/ci/check-youtube-collector-hardening-contract.sh
-run_step "collector production build entrypoint tests" ./scripts/build/build-youtube-collector-go_test.sh
 run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
-run_step "production Go workspace gate tests" ./scripts/ci/check-production-go-workspace_test.sh
-run_step "AP rsync manifest gate tests" ./scripts/deploy/check-ap-rsync-manifest_test.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
-run_step "PostgreSQL capacity gate tests" ./scripts/ci/check-postgres-capacity_test.sh
 run_step "YouTube plane performance budget" ./scripts/perf/check-youtube-plane-budget.sh
-run_step "PostgreSQL capacity mutation-entrypoint tests" ./scripts/deploy/test-postgres-capacity-entrypoints.sh
-run_step "migration 114 restore preflight tests" ./hololive/hololive-api/scripts/migrations/preflight-114-restore_test.sh
-run_step "durable runtime rollback preflight tests" ./hololive/hololive-api/scripts/migrations/preflight-durable-runtime-rollback_test.sh
 run_go_package_step "Go test" go_mod_readonly go test -count=1
 
 if [[ "${RUN_RACE_TESTS}" == "true" ]]; then
@@ -318,16 +303,7 @@ fi
 
 check_integration_tests
 
-if [[ "${RUN_DEPENDENCY_HYGIENE}" == "true" ]]; then
-    govulncheck_bin="$(ensure_govulncheck)"
-
-    for module in . "${GO_MODULES[@]}"; do
-        run_step "Dependency hygiene: ${module}" \
-            bash -c "cd '$module' && GOWORK=off go list -m -u -mod=readonly all >/dev/null && GOWORK=off '${govulncheck_bin}' ./..."
-    done
-else
-    echo "[LOCAL CI] Skip dependency hygiene: RUN_DEPENDENCY_HYGIENE=${RUN_DEPENDENCY_HYGIENE}"
-    echo
-fi
+# 의존성 hygiene(go list -m -u, govulncheck)은 시간에 따라 부패하는 advisory 데이터라
+# scripts/ci/pre-push-gate.sh 의 freshness phase 가 소유한다.
 
 echo "[LOCAL CI] Passed"
