@@ -248,8 +248,8 @@ cp "${ROOT_DIR}/.python-version" "${fingerprint_fixture}/.python-version"
 cat >"${fingerprint_fixture}/fake-bin/go" <<'SH'
 #!/bin/bash
 case "${1:-}" in
-  version) echo 'go version go1.27.0 linux/amd64' ;;
-  env) printf 'go1.27.0\nlinux\namd64\ngo1.27.0+auto\n' ;;
+  version) echo 'go version go1.27.1 linux/amd64' ;;
+  env) printf 'go1.27.1\nlinux\namd64\ngo1.27.1+auto\n' ;;
   work) echo '{"Use":[{"DiskPath":"../sib"},{"DiskPath":"./"}]}' ;;
   *) exit 1 ;;
 esac

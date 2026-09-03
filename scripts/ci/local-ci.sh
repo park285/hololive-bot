@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 . "${SCRIPT_DIR}/python-runtime.sh"
 repo_python_init
-export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.0+auto}"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.1+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 source "${SCRIPT_DIR}/nilaway-inputs.sh"
@@ -58,9 +58,9 @@ check_go_toolchain() {
 
 ensure_go_mod_toolchains() {
     # go.mod/go.work의 toolchain 하한을 현재 보안 patch로 고정한다.
-    # GOTOOLCHAIN=go1.27.0+auto가 필요한 patch toolchain을 확보한다.
+    # GOTOOLCHAIN=go1.27.1+auto가 필요한 patch toolchain을 확보한다.
     local module
-    local pin="${GO_TOOLCHAIN_PIN:-go1.27.0}"
+    local pin="${GO_TOOLCHAIN_PIN:-go1.27.1}"
     local pin_version="${pin#go}"
 
     # go directive가 핀 이상이면 directive 자체가 하한이고, 그때의 toolchain 라인은

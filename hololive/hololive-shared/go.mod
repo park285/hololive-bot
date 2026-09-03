@@ -1,6 +1,6 @@
 module github.com/kapu/hololive-shared
 
-go 1.27.0
+go 1.27.1
 
 replace github.com/kapu/hololive-dbtest => ../hololive-dbtest
 

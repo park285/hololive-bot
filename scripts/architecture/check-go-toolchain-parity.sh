@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-expected_module_version="1.27.0"
+expected_module_version="1.27.1"
 expected_selector_version="1.27"
 module_files=(
   "go.mod"
