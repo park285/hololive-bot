@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GO_VERSION=1.27.0
+ARG GO_VERSION=1.27.1
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.npm corepack npm ci --no-audit --no-fund
 COPY admin-dashboard/frontend/ .
 RUN corepack npm run build
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown

@@ -15,7 +15,7 @@ INHERIT: ../AGENTS.md
 | Layer | Technology |
 |-------|------------|
 | **Frontend** | React 19, TypeScript, Vite 7, TailwindCSS 4, shadcn/ui |
-| **Backend** | Go 1.27.0 toolchain, Gin 1.12 on `net/http`, Valkey session store, gorilla/websocket |
+| **Backend** | Go 1.27.1 toolchain, Gin 1.12 on `net/http`, Valkey session store, gorilla/websocket |
 | **State** | TanStack Query v5 (server), Zustand (client) |
 | **Auth** | HMAC-signed session cookie, CSRF token, heartbeat rotation |
 
