@@ -16,6 +16,7 @@ import (
 )
 
 type YouTubeOutboxKaringSender interface {
+	RegularChat(ctx context.Context, roomID string) bool
 	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
 }
 
@@ -31,7 +32,7 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	sender, supported := d.karingSender(kind)
+	sender, supported := d.karingSender(ctx, roomID, kind)
 	if !supported {
 		return false
 	}
@@ -47,10 +48,14 @@ func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
 	return true
 }
 
-func (d *SendEngine) karingSender(kind domain.OutboxKind) (YouTubeOutboxKaringSender, bool) {
+func (d *SendEngine) karingSender(
+	ctx context.Context,
+	roomID string,
+	kind domain.OutboxKind,
+) (YouTubeOutboxKaringSender, bool) {
 	sender, ok := d.sender.(YouTubeOutboxKaringSender)
 
-	return sender, ok && isYouTubeOutboxKaringKind(kind)
+	return sender, ok && isYouTubeOutboxKaringKind(kind) && sender.RegularChat(ctx, roomID)
 }
 
 func (d *SendEngine) dispatchClaimedKaring(

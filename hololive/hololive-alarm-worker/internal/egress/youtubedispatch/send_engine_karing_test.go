@@ -11,16 +11,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 )
 
 type youtubeOutboxKaringTestSender struct {
-	mu       sync.Mutex
-	messages []string
-	payloads []domain.YouTubeOutboxDispatchPayload
-	failErr  error
+	mu         sync.Mutex
+	messages   []string
+	payloads   []domain.YouTubeOutboxDispatchPayload
+	failErr    error
+	calls      int
+	nonRegular bool
+}
+
+func (s *youtubeOutboxKaringTestSender) RegularChat(context.Context, string) bool {
+	return !s.nonRegular
 }
 
 func (s *youtubeOutboxKaringTestSender) SendMessage(_ context.Context, roomID, message string) error {
@@ -36,6 +43,8 @@ func (s *youtubeOutboxKaringTestSender) SendYouTubeOutboxKaring(_ context.Contex
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.calls++
+
 	if s.failErr != nil {
 		return s.failErr
 	}
@@ -43,6 +52,68 @@ func (s *youtubeOutboxKaringTestSender) SendYouTubeOutboxKaring(_ context.Contex
 	s.payloads = append(s.payloads, *payload)
 
 	return nil
+}
+
+func TestSendEngineKaringSenderRequiresRegularChat(t *testing.T) {
+	regular := &youtubeOutboxKaringTestSender{}
+	regularEngine := &SendEngine{sender: regular}
+	_, ok := regularEngine.karingSender(t.Context(), testRoomOne, domain.OutboxKindNewVideo)
+
+	if !ok {
+		t.Fatal("known regular chat should use Karing")
+	}
+
+	nonRegular := &youtubeOutboxKaringTestSender{nonRegular: true}
+	nonRegularEngine := &SendEngine{sender: nonRegular}
+
+	_, ok = nonRegularEngine.karingSender(t.Context(), testRoomOne, domain.OutboxKindNewVideo)
+
+	if ok {
+		t.Fatal("open or unknown chat must use the existing message path")
+	}
+}
+
+func TestSendEngineKaringOutcomeUnknownPreservesSendingWithoutRepost(t *testing.T) {
+	t.Parallel()
+
+	sender := &youtubeOutboxKaringTestSender{failErr: egress.ErrKaringOutcomeUnknown}
+	engine, claims := newOutcomeUnknownTestEngine(sender, nil, time.Second)
+	transition := &lifecycleTransitionSpy{}
+
+	engine.transition = transition
+
+	rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoomOne}}
+	outboxes := []domain.YouTubeNotificationOutbox{{
+		ID: 1, ChannelID: "UCvideo", Kind: domain.OutboxKindNewVideo,
+		ContentID: "video-1", Payload: `{"video_id":"video-1","title":"video 1"}`,
+	}}
+	claimTokens := []dispatchstate.ClaimToken{outcomeUnknownClaimToken(&outboxes[0])}
+	result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+
+	var mu sync.Mutex
+
+	engine.dispatchClaimedKaring(
+		t.Context(), sender, testRoomOne, "UCvideo", domain.OutboxKindNewVideo,
+		rows, outboxes, claimTokens, "", &result, &mu,
+	)
+
+	assertOutcomeUnknownHold(t, &result, claims)
+
+	if sender.calls != 1 {
+		t.Fatalf("Karing post calls = %d, want 1", sender.calls)
+	}
+
+	if got := transition.beginCalls.Load(); got != 1 {
+		t.Fatalf("begin calls = %d, want 1", got)
+	}
+
+	if got := transition.startedFailureCalls.Load(); got != 0 {
+		t.Fatalf("started failure calls = %d, want 0", got)
+	}
+
+	if got := transition.completeCalls.Load(); got != 0 {
+		t.Fatalf("complete calls = %d, want 0", got)
+	}
 }
 
 func TestDispatcherUsesKaringForSupportedYouTubeOutboxKind(t *testing.T) {
@@ -249,6 +320,10 @@ func newBlockingKaringSender() *blockingKaringSender {
 
 func (s *blockingKaringSender) SendMessage(_ context.Context, _, _ string) error {
 	return nil
+}
+
+func (*blockingKaringSender) RegularChat(context.Context, string) bool {
+	return true
 }
 
 func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *domain.YouTubeOutboxDispatchPayload) error {

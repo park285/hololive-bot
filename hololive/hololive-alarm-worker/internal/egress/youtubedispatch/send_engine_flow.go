@@ -13,6 +13,7 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
@@ -163,6 +164,10 @@ func shouldFallbackGroupedSend(err error) bool {
 func deliverySendOutcomeUnknown(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	if errors.Is(err, egress.ErrKaringOutcomeUnknown) {
+		return true
 	}
 
 	if errors.Is(err, errDeliverySendTimeout) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {

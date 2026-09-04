@@ -23,11 +23,10 @@ package botruntime
 import (
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v2/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -42,7 +41,7 @@ func buildBotDependencyModules(
 	messageAdapter *messaging.MessageAdapter,
 	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
-	irisClient iris.BotClient,
+	irisClient orchestration.BotIrisClient,
 	logger *slog.Logger,
 ) appbootstrap.BotDependencyModules {
 	return appbootstrap.BuildBotDependencyModules(

@@ -22,19 +22,33 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
 
-// NewIrisMessageSender가 any를 받아 type switch로 판별하므로, 이 단언이 없으면 SDK 시그니처가
-// 어긋나도 컴파일이 통과하고 런타임에 client=nil sender로 조용히 전락한다.
+// Runtime client와 alarm-worker sender 사이의 typed compile-time 계약을 고정한다.
 var _ egress.IrisClient = (*delivery.RuntimeIrisClient)(nil)
 
+const workerappTestOpenRoom = "open"
+
 type youtubeOutboxKaringCapableSender interface {
+	RegularChat(ctx context.Context, roomID string) bool
 	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
 }
 
+type workerappTestRooms map[string]string
+
+func (rooms workerappTestRooms) OpenChat(_ context.Context, roomID string) bool {
+	return rooms[roomID] == workerappTestOpenRoom
+}
+
+func (rooms workerappTestRooms) RegularChat(_ context.Context, roomID string) bool {
+	return rooms[roomID] == "regular"
+}
+
 type clientRequestIDRecordingIrisSender struct {
-	roomID       string
-	message      string
-	opts         int
-	markdownSent bool
+	roomID          string
+	message         string
+	opts            int
+	markdownRoomID  string
+	markdownMessage string
+	markdownOpts    int
 }
 
 func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
@@ -45,22 +59,21 @@ func (s *clientRequestIDRecordingIrisSender) SendMessage(_ context.Context, room
 	return nil
 }
 
-func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
-	s.roomID = roomID
-	s.message = markdown
-	s.opts = len(opts)
-	s.markdownSent = true
+func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roomID, message string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
+	s.markdownRoomID = roomID
+	s.markdownMessage = message
+	s.markdownOpts = len(opts)
 
 	return &iris.ReplyAcceptedResponse{}, nil
 }
 
-func (*clientRequestIDRecordingIrisSender) SendKaringContentList(context.Context, *iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
-	return &iris.KaringDryRunResponse{}, nil
+func (*clientRequestIDRecordingIrisSender) SendKaringContentList(context.Context, iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
+	return &iris.KaringDryRunResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
 }
 
-type staticOpenRooms struct{}
-
-func (staticOpenRooms) OpenChat(context.Context, string) bool { return true }
+func (*clientRequestIDRecordingIrisSender) GetReplyStatus(_ context.Context, requestID string) (*iris.ReplyStatusSnapshot, error) {
+	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "handoff_completed"}, nil
+}
 
 type workerappEgressTestPostgres struct{}
 
@@ -102,28 +115,36 @@ func (workerappEgressTestPostgres) Close() error {
 	return nil
 }
 
-func TestBuildYouTubeOutboxSenderDisablesKaringByDefault(t *testing.T) {
-	t.Setenv("YOUTUBE_OUTBOX_KARING_ENABLED", "")
-
-	irisSender := egress.NewIrisMessageSender(nil)
+func TestBuildYouTubeOutboxSenderScopesKaringToRegularChats(t *testing.T) {
+	irisSender := egress.NewIrisMessageSender(nil, egress.WithRoomChat(workerappTestRooms{
+		"regular":             "regular",
+		workerappTestOpenRoom: workerappTestOpenRoom,
+	}))
 
 	sender := buildYouTubeOutboxSender(irisSender, nil)
 
-	assert.Same(t, irisSender, sender)
-
-	_, ok := sender.(youtubeOutboxKaringCapableSender)
-	assert.False(t, ok)
+	karing, ok := sender.(youtubeOutboxKaringCapableSender)
+	require.True(t, ok)
+	assert.True(t, karing.RegularChat(t.Context(), "regular"))
+	assert.False(t, karing.RegularChat(t.Context(), workerappTestOpenRoom))
+	assert.False(t, karing.RegularChat(t.Context(), "missing"))
 }
 
-func TestBuildYouTubeOutboxSenderEnablesKaringWhenConfigured(t *testing.T) {
-	t.Setenv("YOUTUBE_OUTBOX_KARING_ENABLED", "true")
-
-	irisSender := egress.NewIrisMessageSender(nil)
-
+func TestBuildYouTubeOutboxSenderPreservesOpenChatMarkdownLane(t *testing.T) {
+	stub := &clientRequestIDRecordingIrisSender{}
+	irisSender := egress.NewIrisMessageSender(
+		stub,
+		egress.WithMarkdownReplies(true),
+		egress.WithRoomChat(workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom}),
+	)
 	sender := buildYouTubeOutboxSender(irisSender, nil)
 
-	_, ok := sender.(youtubeOutboxKaringCapableSender)
-	assert.True(t, ok)
+	require.NoError(t, sender.SendMessage(t.Context(), workerappTestOpenRoom, "**hello**"))
+
+	assert.Equal(t, workerappTestOpenRoom, stub.markdownRoomID)
+	assert.Equal(t, "**hello**", stub.markdownMessage)
+	assert.Zero(t, stub.markdownOpts)
+	assert.Empty(t, stub.roomID)
 }
 
 func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t *testing.T) {
@@ -134,22 +155,6 @@ func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t 
 
 	assert.Equal(t, "room-1", stub.roomID)
 	assert.Equal(t, "hello", stub.message)
-	assert.Equal(t, 1, stub.opts)
-	assert.False(t, stub.markdownSent)
-}
-
-func TestYouTubeOutboxKaringSenderUsesMarkdownLaneWhenEnabled(t *testing.T) {
-	stub := &clientRequestIDRecordingIrisSender{}
-	sender := dispatchrun.NewYouTubeOutboxKaringSender(
-		egress.NewIrisMessageSender(stub, egress.WithMarkdownReplies(true), egress.WithRoomChat(staticOpenRooms{})),
-		nil,
-	)
-
-	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), "room-1", "**hello**", "req-1"))
-
-	assert.True(t, stub.markdownSent)
-	assert.Equal(t, "room-1", stub.roomID)
-	assert.Equal(t, "**hello**", stub.message)
 	assert.Equal(t, 1, stub.opts)
 }
 
@@ -163,8 +168,6 @@ func TestBuildNotificationEgressRequiresPostgres(t *testing.T) {
 }
 
 func TestBuildAlarmDispatchRunnerBuildsPGRunner(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
-
 	config, state := alarmWorkerTestConfig(t)
 
 	config.AlarmWorkerProfile.AlarmDispatch.MaxBatch = 7
@@ -180,23 +183,9 @@ func TestBuildAlarmDispatchRunnerBuildsPGRunner(t *testing.T) {
 
 	runnerConfig := alarmDispatchRunnerConfig(config)
 	assert.Equal(t, 7, runnerConfig.MaxBatch)
-	assert.True(t, runnerConfig.KaringEnabled)
-}
-
-func TestParseAlarmDispatchKaringEnabledFromEnv(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "")
-	assert.False(t, parseAlarmDispatchKaringEnabled())
-
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
-	assert.True(t, parseAlarmDispatchKaringEnabled())
-
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
-	assert.False(t, parseAlarmDispatchKaringEnabled())
 }
 
 func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
-
 	config, state := alarmWorkerTestConfig(t)
 
 	config.AlarmWorkerProfile.AlarmDispatch.MaxBatch = 9
@@ -214,7 +203,6 @@ func TestBuildAlarmDispatchRunnerHonorsBatchEnv(t *testing.T) {
 	runnerConfig := alarmDispatchRunnerConfig(config)
 	assert.Equal(t, 9, runnerConfig.MaxBatch)
 	assert.Equal(t, 3, runnerConfig.MaxBatchesPerWake)
-	assert.False(t, runnerConfig.KaringEnabled)
 }
 
 func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
@@ -245,7 +233,6 @@ func TestBuildEgressDispatchersRespectDisabledFlags(t *testing.T) {
 }
 
 func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
 	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "off")
 
 	config, state := alarmWorkerTestConfig(t)

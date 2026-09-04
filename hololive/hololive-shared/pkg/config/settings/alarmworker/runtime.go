@@ -20,6 +20,10 @@ func LoadRuntime() (*RuntimeConfig, error) {
 
 	// worker profile과 dispatch retention은 alarm-worker만 읽으므로 core 로더 대신 여기서 채운다.
 	loadSections := func(config *settings.Config) error {
+		if err := rejectRetiredNotificationEgressEnv(); err != nil {
+			return fmt.Errorf("reject retired notification egress env: %w", err)
+		}
+
 		profile, err := LoadWorkerProfile()
 		if err != nil {
 			return fmt.Errorf("load alarm worker profile: %w", err)

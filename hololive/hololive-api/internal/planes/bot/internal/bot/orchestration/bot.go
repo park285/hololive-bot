@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	messagingadapter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -61,7 +60,7 @@ type Bot struct {
 	irisBaseURL           string
 	notification          settings.NotificationConfig
 	logger                *slog.Logger
-	irisClient            iris.BotClient
+	irisClient            BotIrisClient
 	messageAdapter        *messagingadapter.MessageAdapter
 	formatter             *formatter.ResponseFormatter
 	messageStrings        *messagestrings.Store

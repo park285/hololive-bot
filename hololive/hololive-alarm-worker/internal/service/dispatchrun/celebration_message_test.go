@@ -178,7 +178,7 @@ func TestAlarmDispatchGroupKeyCelebrationPerMember(t *testing.T) {
 		Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, ChannelID: "UC_b"},
 	}
 
-	groups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{member1, member2})
+	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{member1, member2})
 	assert.Len(t, groups, 2)
 }
 
@@ -214,7 +214,7 @@ func TestAlarmDispatchGroupKeyCelebrationPerVideo(t *testing.T) {
 		}
 	}
 
-	groups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{frame("video-1"), frame("video-2"), frame("video-1")})
+	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{frame("video-1"), frame("video-2"), frame("video-1")})
 	require.Len(t, groups, 2)
 	assert.Len(t, groups[0].envelopes, 2)
 	assert.Len(t, groups[1].envelopes, 1)
@@ -258,7 +258,7 @@ func TestDispatchGroupCelebrationUsesMessagePath(t *testing.T) {
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{}
-	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), karingEnabled: true, maxBatch: 10}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newCelebrationTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 

@@ -40,7 +40,7 @@ fi
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt
 sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
-require_youtubejs_node_version /usr/bin/node
+require_node_version /usr/bin/node
 
 sudo -n install -d -m 0755 -o root -g root "$releases_root"
 sudo -n install -d -m 0750 -o hololive -g opc /var/log/hololive-bot /var/log/hololive-bot/archive

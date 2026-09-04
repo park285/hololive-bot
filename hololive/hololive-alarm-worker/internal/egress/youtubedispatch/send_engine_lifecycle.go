@@ -9,6 +9,7 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -213,6 +214,10 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 }
 
 func lifecycleProviderFailure(err error, defaultReason ytlifecycle.Reason) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
+	if errors.Is(err, egress.ErrKaringStatusFailed) {
+		return ytlifecycle.FailurePermanent, defaultReason, 0
+	}
+
 	if errors.Is(err, errDeliverySendOutcomeUnknown) {
 		observeDeliveryOutcomeUnknown(string(defaultReason))
 

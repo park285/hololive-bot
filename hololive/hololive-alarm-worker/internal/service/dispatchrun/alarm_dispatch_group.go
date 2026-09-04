@@ -2,6 +2,8 @@ package dispatchrun
 
 import (
 	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -9,29 +11,111 @@ import (
 )
 
 type alarmDispatchGroup struct {
-	roomID        string
-	minutesUntil  int
-	envelopes     []domain.AlarmQueueEnvelope
-	notifications []domain.AlarmNotification
+	roomID           string
+	minutesUntil     int
+	envelopes        []domain.AlarmQueueEnvelope
+	notifications    []domain.AlarmNotification
+	egressPath       alarmDispatchEgressPath
+	egressErr        error
+	egressRoomScoped bool
 }
 
-func groupAlarmDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelope) []alarmDispatchGroup {
-	return groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchGroupKey)
+type regularChatResolver interface {
+	RegularChat(ctx context.Context, roomID string) bool
 }
 
-func groupAlarmDispatchEnvelopesForKaring(envelopes []domain.AlarmQueueEnvelope, karingEnabled bool) []alarmDispatchGroup {
-	if !karingEnabled {
-		return groupAlarmDispatchEnvelopes(envelopes)
+type alarmDispatchRoomEligibilitySnapshot struct {
+	rooms         regularChatResolver
+	regularByRoom map[string]bool
+}
+
+func newAlarmDispatchRoomEligibilitySnapshot(rooms regularChatResolver) *alarmDispatchRoomEligibilitySnapshot {
+	return &alarmDispatchRoomEligibilitySnapshot{
+		rooms:         rooms,
+		regularByRoom: make(map[string]bool),
+	}
+}
+
+func (s *alarmDispatchRoomEligibilitySnapshot) RegularChat(ctx context.Context, roomID string) bool {
+	if regular, ok := s.regularByRoom[roomID]; ok {
+		return regular
 	}
 
-	grouped := groupAlarmDispatchEnvelopesByKey(envelopes, alarmDispatchKaringGroupKey)
+	regular := s.rooms != nil && s.rooms.RegularChat(ctx, roomID)
+
+	s.regularByRoom[roomID] = regular
+
+	return regular
+}
+
+func groupAlarmDispatchEnvelopesForDelivery(
+	ctx context.Context,
+	rooms regularChatResolver,
+	envelopes []domain.AlarmQueueEnvelope,
+) []alarmDispatchGroup {
+	grouped := make([]alarmDispatchGroup, 0, len(envelopes))
+	index := map[string]int{}
+	roomEligibility := newAlarmDispatchRoomEligibilitySnapshot(rooms)
+
+	for i := range envelopes {
+		envelope := &envelopes[i]
+		path, roomScoped, pathErr := alarmDispatchEnvelopeEgressPath(ctx, roomEligibility, envelope)
+		key := fmt.Sprintf("%d|%s", path, alarmDispatchRegroupKey(envelope, func(current *domain.AlarmQueueEnvelope) string {
+			return alarmDispatchDeliveryGroupKey(current, path, pathErr)
+		}))
+		groupIndex, ok := index[key]
+
+		if !ok {
+			group := newAlarmDispatchGroup(envelope)
+
+			group.egressPath = path
+			group.egressErr = pathErr
+			group.egressRoomScoped = roomScoped
+			index[key] = len(grouped)
+			grouped = append(grouped, group)
+
+			continue
+		}
+
+		appendAlarmDispatchEnvelope(&grouped[groupIndex], envelope)
+
+		grouped[groupIndex].egressRoomScoped = grouped[groupIndex].egressRoomScoped || roomScoped
+	}
+
 	split := make([]alarmDispatchGroup, 0, len(grouped))
 
 	for i := range grouped {
+		if grouped[i].egressErr != nil || grouped[i].egressPath != alarmDispatchEgressKaring {
+			split = append(split, grouped[i])
+			continue
+		}
+
 		split = append(split, splitAlarmDispatchKaringGroup(grouped[i])...)
 	}
 
 	return split
+}
+
+func alarmDispatchDeliveryGroupKey(
+	envelope *domain.AlarmQueueEnvelope,
+	path alarmDispatchEgressPath,
+	pathErr error,
+) string {
+	if pathErr != nil || path == alarmDispatchEgressUnresolved {
+		var outboxID int64
+
+		if envelope != nil {
+			outboxID = envelope.DispatchOutboxID
+		}
+
+		return fmt.Sprintf("%s|invalid|%d", alarmDispatchGroupKey(envelope), outboxID)
+	}
+
+	if path == alarmDispatchEgressText {
+		return alarmDispatchGroupKey(envelope)
+	}
+
+	return alarmDispatchKaringGroupKey(envelope)
 }
 
 // 한 그룹이 여러 chunk로 나뉘면 앞 chunk만 전송된 뒤 뒤 chunk가 502로 실패하는 부분 성공이 가능하고,
@@ -60,7 +144,13 @@ func splitAlarmDispatchKaringGroup(group alarmDispatchGroup) []alarmDispatchGrou
 	groups := make([]alarmDispatchGroup, 0, (len(order)+alarmDispatchKaringMaxItemsPerRequest-1)/alarmDispatchKaringMaxItemsPerRequest)
 	for start := 0; start < len(order); start += alarmDispatchKaringMaxItemsPerRequest {
 		end := min(start+alarmDispatchKaringMaxItemsPerRequest, len(order))
-		sub := alarmDispatchGroup{roomID: group.roomID, minutesUntil: group.minutesUntil}
+		sub := alarmDispatchGroup{
+			roomID:           group.roomID,
+			minutesUntil:     group.minutesUntil,
+			egressPath:       group.egressPath,
+			egressErr:        group.egressErr,
+			egressRoomScoped: group.egressRoomScoped,
+		}
 
 		for _, index := range order[start:end] {
 			envelope := group.envelopes[index]
@@ -233,6 +323,102 @@ func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 		phase,
 		envelope.Notification.MinutesUntil,
 	)
+}
+
+type alarmDispatchEgressPath uint8
+
+const (
+	alarmDispatchEgressUnresolved alarmDispatchEgressPath = iota
+	alarmDispatchEgressKaring
+	alarmDispatchEgressText
+)
+
+func alarmDispatchEnvelopeEgressPath(
+	ctx context.Context,
+	rooms regularChatResolver,
+	envelope *domain.AlarmQueueEnvelope,
+) (alarmDispatchEgressPath, bool, error) {
+	if envelope == nil {
+		return alarmDispatchEgressUnresolved, false, errors.New("alarm dispatch envelope is nil")
+	}
+
+	switch envelope.SourceKind {
+	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest:
+		return alarmDispatchEgressText, false, nil
+	case domain.AlarmDispatchSourceKindYouTubeOutbox:
+		return alarmDispatchYouTubeOutboxEgressPath(ctx, rooms, envelope)
+	case "":
+		return alarmDispatchStreamEgressPath(ctx, rooms, envelope)
+	default:
+		return alarmDispatchEgressUnresolved, false, fmt.Errorf("alarm dispatch source kind %q has no egress path", envelope.SourceKind)
+	}
+}
+
+func alarmDispatchYouTubeOutboxEgressPath(
+	ctx context.Context,
+	rooms regularChatResolver,
+	envelope *domain.AlarmQueueEnvelope,
+) (alarmDispatchEgressPath, bool, error) {
+	if envelope.YouTubeOutbox == nil {
+		return alarmDispatchEgressUnresolved, false, errors.New("youtube outbox dispatch payload is nil")
+	}
+
+	switch envelope.YouTubeOutbox.Kind {
+	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream, domain.OutboxKindCommunityPost:
+		return alarmDispatchRoomEgressPath(ctx, rooms, envelope.Notification.RoomID), true, nil
+	case domain.OutboxKindMilestone:
+		return alarmDispatchEgressText, false, nil
+	default:
+		return alarmDispatchEgressUnresolved, false, fmt.Errorf("youtube outbox kind %q has no egress path", envelope.YouTubeOutbox.Kind)
+	}
+}
+
+func alarmDispatchStreamEgressPath(
+	ctx context.Context,
+	rooms regularChatResolver,
+	envelope *domain.AlarmQueueEnvelope,
+) (alarmDispatchEgressPath, bool, error) {
+	stream := envelope.Notification.Stream
+	if stream == nil {
+		return alarmDispatchEgressUnresolved, false, errors.New("alarm notification stream is nil")
+	}
+
+	if stream.IsTwitchOnly || stream.IsChzzkOnly {
+		return alarmDispatchEgressText, false, nil
+	}
+
+	if !stream.HasYouTubeInfo() {
+		return alarmDispatchEgressUnresolved, false, errors.New("alarm notification has no YouTube target")
+	}
+
+	return alarmDispatchRoomEgressPath(ctx, rooms, envelope.Notification.RoomID), true, nil
+}
+
+func alarmDispatchRoomEgressPath(ctx context.Context, rooms regularChatResolver, roomID string) alarmDispatchEgressPath {
+	if rooms != nil && rooms.RegularChat(ctx, roomID) {
+		return alarmDispatchEgressKaring
+	}
+
+	return alarmDispatchEgressText
+}
+
+func alarmDispatchGroupEgressPath(group alarmDispatchGroup) (alarmDispatchEgressPath, error) {
+	if group.egressErr != nil {
+		return group.egressPath, group.egressErr
+	}
+
+	if len(group.envelopes) == 0 {
+		return alarmDispatchEgressUnresolved, errors.New("alarm dispatch group is empty")
+	}
+
+	switch group.egressPath {
+	case alarmDispatchEgressKaring, alarmDispatchEgressText:
+		return group.egressPath, nil
+	case alarmDispatchEgressUnresolved:
+		return alarmDispatchEgressUnresolved, errors.New("alarm dispatch group egress path is unresolved")
+	default:
+		return alarmDispatchEgressUnresolved, errors.New("alarm dispatch group egress path is unresolved")
+	}
 }
 
 func minAlarmDispatchMinutes(current, next int) int {

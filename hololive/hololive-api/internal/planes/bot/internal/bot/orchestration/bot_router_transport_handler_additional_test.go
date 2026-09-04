@@ -212,6 +212,10 @@ func (c *testIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error
 	return &iris.ConfigResponse{}, nil
 }
 
+func (c *testIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
+	return &iris.RoomListResponse{}, nil
+}
+
 func (c *testIrisClient) Decrypt(_ context.Context, data string) (string, error) {
 	return data, nil
 }

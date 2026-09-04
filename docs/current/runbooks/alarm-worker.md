@@ -31,36 +31,36 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `SERVER_PORT` | HTTP health port | yes |
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
-| `YOUTUBE_OUTBOX_KARING_ENABLED` | YouTube outbox egress uses Karing content-list templates instead of text sends for supported kinds | no |
 | `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` | `off`, `shadow`, `cutover`; v1 delivery rows를 v3 ledger로 넘기는 모드 | no; default `off` |
-| `ALARM_DISPATCH_KARING_ENABLED` | alarm dispatch queue egress uses Karing content-list templates instead of text sends | no |
-| `ALARM_SHORT_LINK_BASE_URL` | `https://short.holoshi.com` for thumbnail-free grouped alarm links; blank disables | no |
+| `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 기존 Markdown message lane | no |
+| `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
 | `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
 | `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
 | `BIRTHDAY_STREAM_SESSION_FRESHNESS_MS` | stale UPCOMING/LIVE 제외 창; 기본 30분 | no |
 | `CACHE_*` | Valkey connection | yes |
 | `POSTGRES_*` | DB connection | yes |
 
-## Grouped alarm short links
+## Notification egress
 
-여러 방송을 하나의 일반 텍스트 alarm notification으로 묶을 때 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하면 YouTube 링크를 해당 origin의 `/l/<video_id>`로 렌더링합니다. 빈 값 외 다른 origin은 migration 139의 trusted-link 계약과 어긋나므로 startup에서 거부합니다. `hololive-api` bot plane의 `/l/:videoID` route가 일반 사용자는 YouTube로 `302` redirect하고 KakaoTalk scraper의 `kakaotalk-scrap/` User-Agent는 `403`으로 거부합니다.
+Alarm-worker는 방 유형과 알림 compatibility를 모두 확인한 뒤 전송 경로를 선택합니다.
 
-provider-first 활성화 순서:
+| Room / notification | Egress |
+|---|---|
+| 확인된 일반채팅 + YouTube target이 있는 broadcast/video/Shorts/community | Karing content-list |
+| 확인된 일반채팅 + YouTube와 Chzzk 통합 방송 | YouTube target의 Karing content-list |
+| 오픈채팅 | `BOT_MARKDOWN_REPLIES=true`이면 기존 Markdown, 아니면 일반 텍스트 |
+| 방 유형 미확인 | 일반 텍스트 |
+| Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 방 유형에 따른 기존 message path |
 
-1. `hololive-api`의 `127.0.0.1:30101` short-link listener를 활성화하고 검증합니다.
-2. 중앙 source-restricted Nginx의 `100.100.1.8:30192` ingress를 활성화합니다.
-3. Seoul Nginx에 `deploy/nginx/holoshi-public-shortlink.conf`를 적용해 전용 `short.holoshi.com/l/*`만 `30192`로 전달합니다.
-4. 중앙 호스트에서 `scripts/deploy/shortlink-smoke.sh`를 실행해 세 hop의 일반 `302`, Kakao scraper `403`, invalid ID `404`를 모두 확인합니다.
-5. `ALARM_DISPATCH_KARING_ENABLED=false`를 확인한 뒤 `/etc/stack-secrets/hololive-bot/alarm-worker.env`에 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 설정하고 alarm-worker를 재기동합니다. Karing list template은 명시적 thumbnail 계약을 가지므로 두 기능을 동시에 켜면 alarm-worker가 fail closed합니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. 지원되는 Karing 알림의 build, admission 또는 handoff가 실패해도 Markdown이나 일반 텍스트로 fallback하지 않습니다. 오픈채팅과 미확인 방은 Karing 호출 전에 message path로 결정되므로 fallback이 아닙니다.
 
-중앙 live-compat Compose는 `/l/*`만 제공하는 host ingress 전용 HTTP backend를 `127.0.0.1:30101`에 publish합니다. 중앙 source-restricted Nginx가 `100.100.1.8:30192`에서 Seoul gateway 요청만 받아 이 listener로 전달하고, Seoul public Nginx는 `short.holoshi.com/l/*`만 해당 upstream으로 분기합니다.
+Karing live send의 `202 Accepted`는 성공이 아닙니다. Alarm-worker는 응답의 exact `requestId`로 Iris `/reply-status/{requestId}`를 조회하고 `handoff_completed`를 확인한 뒤에만 dispatch/outbox를 성공 처리합니다. `failed`는 확정 실패이고 `outcome_unknown`, 알 수 없는 상태, request ID 불일치, 빈 응답과 확인 deadline 소진은 결과 불명확입니다. 결과 불명확 상태는 alarm dispatch에서 quarantine되고 YouTube outbox에서는 `SENDING`으로 남아 stale sweeper가 처리하며 다시 post하지 않습니다.
 
-```text
-ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com
-ALARM_DISPATCH_KARING_ENABLED=false
-```
+`YOUTUBE_OUTBOX_KARING_ENABLED`와 `ALARM_DISPATCH_KARING_ENABLED`는 퇴역했습니다. 값이 비어 있어도 runtime file에 key가 존재하면 startup이 실패합니다. `ALARM_SHORT_LINK_BASE_URL`은 기존 grouped message path를 위해 유지되며, `hololive-api`의 `127.0.0.1:30101` listener와 중앙·Seoul ingress도 계속 유지합니다.
 
-기능을 되돌리려면 consumer인 `ALARM_SHORT_LINK_BASE_URL`을 먼저 비우고 alarm-worker를 재기동합니다. 이미 발송된 short link가 계속 동작하도록 `30101` listener와 중앙·Seoul ingress는 무기한 유지하며, 명시적으로 승인된 미래 compatibility deprecation 전에는 제거하지 않습니다. 기존 단일 알림과 Karing template 계약은 변경되지 않습니다.
+`ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 사용하면 두 개 이상의 message-path 방송 알림에서 YouTube URL만 `/l/<videoID>`로 바뀝니다. Provider-first로 listener, 중앙 ingress, Seoul public route와 `scripts/deploy/shortlink-smoke.sh`를 검증한 뒤 consumer를 재기동합니다.
+
+승인된 production 전환은 alarm-worker 중지, static-secret master와 host runtime file의 두 퇴역 flag 제거, exact arm64 artifact의 no-build deploy, replica 1/readiness 확인 순서로 수행합니다. 실제 Karing smoke는 명시적으로 승인된 일반채팅 test room에만 보내고 `handoff_completed`와 lifecycle 단일 완료를 함께 확인합니다. 오픈채팅 test room에서는 기존 Markdown lane이 유지되는지도 별도 승인 아래 확인합니다.
 
 ## Logs
 
@@ -151,8 +151,8 @@ Rollback:
 ### 3. Grouped short links do not suppress previews
 
 Symptoms:
-- Grouped alarm still contains direct YouTube URLs.
-- KakaoTalk still renders a YouTube preview.
+- Grouped message-path alarm에 YouTube 원본 URL이 남습니다.
+- KakaoTalk이 YouTube preview를 생성합니다.
 
 Diagnosis:
 ```bash
@@ -165,14 +165,32 @@ Expected:
 - Kakao scraper request: `403` without a `Location` header
 
 Mitigation:
-- Confirm the public ingress routes `/l/*` to the bot plane and preserves `User-Agent`.
-- Confirm `ALARM_DISPATCH_KARING_ENABLED=false`.
-- Restart alarm-worker after updating its env file.
+- Public ingress가 `/l/*`를 bot plane으로 전달하고 `User-Agent`를 보존하는지 확인합니다.
+- `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`인지 확인하고 alarm-worker를 재기동합니다.
 
 Rollback:
-- Clear `ALARM_SHORT_LINK_BASE_URL` and restart alarm-worker first. Keep the listener and both ingress layers indefinitely until an explicitly approved future compatibility deprecation.
+- `ALARM_SHORT_LINK_BASE_URL`을 비우고 alarm-worker를 재기동합니다. 이미 발송된 URL을 위해 listener와 양쪽 ingress는 유지합니다.
 
-### 4. 생일축하는 갔지만 생일 방송 알람이 생성되지 않음
+### 4. Karing admission 이후 delivery가 완료되지 않음
+
+Symptoms:
+- Iris `/karing/content-list`는 `202 Accepted`를 반환했지만 alarm delivery가 `sent`로 전이되지 않습니다.
+- 로그에 Karing handoff failure 또는 outcome unknown이 있고 alarm dispatch는 quarantine되거나 YouTube delivery가 `SENDING`에 남습니다.
+
+Diagnosis:
+- Raw `requestId`를 로그나 응답에 복사하지 않고 bounded alarm-worker/Iris 로그에서 status state와 오류 class만 확인합니다.
+- `queued`, `preparing`, `prepared`, `sending`이 caller deadline까지 계속되었는지, `failed` 또는 `outcome_unknown`으로 끝났는지 확인합니다.
+- `handoff_completed`가 없는데 DB row만 수동으로 `sent` 처리하지 않습니다.
+
+Mitigation:
+- Iris reply delivery worker와 Kakao bridge를 먼저 복구합니다.
+- Outcome unknown인 alarm을 Karing 또는 일반 텍스트로 재발송하지 않습니다. YouTube `SENDING` row는 기존 stale sweeper 계약에 맡깁니다.
+- 퇴역 환경변수로 plain-text 경로를 다시 켜거나 startup guard를 우회하지 않습니다.
+
+Rollback:
+- Karing post 뒤 결과가 불명확한 delivery가 있으면 이전 alarm-worker image를 시작하지 않습니다. Exact pending/sending 범위와 prior artifact의 egress 차이를 제시하고 별도 승인을 받습니다.
+
+### 5. 생일축하는 갔지만 생일 방송 알람이 생성되지 않음
 
 Diagnosis:
 - `celebration:birthday:{channelID}:{date}` event와 그 delivery의 `status`, `sent_at`을 확인합니다. `sent`가 아닌 방은 의도적으로 대상이 아닙니다.
@@ -187,7 +205,7 @@ Mitigation:
 Rollback:
 - 구 alarm-worker image는 전체 방 fan-out 의미를 가지므로 rollback 전에 `BIRTHDAY_STREAM_RUNNER_ENABLED=false`로 runner를 중지합니다.
 
-### 5. 5분 전 알림 뒤에 종료 직후 `방송 시작`이 다시 나감
+### 6. 5분 전 알림 뒤에 종료 직후 `방송 시작`이 다시 나감
 
 Symptoms:
 - 예정 시각 기준 `방송 5분 전`은 나갔다.
@@ -207,7 +225,7 @@ Mitigation:
 Rollback:
 - 수정 전 image로 rollback하면 같은 증상이 다시 열리므로, 이 결함만으로는 rollback하지 않고 current revision을 fix-forward한다.
 
-### 6. 최초공개 `공개 예정` 뒤에 같은 영상의 `방송 5분 전`이 다시 나감
+### 7. 최초공개 `공개 예정` 뒤에 같은 영상의 `방송 5분 전`이 다시 나감
 
 Symptoms:
 - `youtube_notification_outbox`에 해당 `video_id`의 `NEW_VIDEO`가 있고 문구는 `N분 후 공개 예정` 또는 `최초공개`다.

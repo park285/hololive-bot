@@ -30,6 +30,10 @@ func (s *stubIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error
 	return &iris.ConfigResponse{}, nil
 }
 
+func (s *stubIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
+	return &iris.RoomListResponse{}, nil
+}
+
 func (s *stubIrisClient) SendMarkdown(context.Context, string, string, ...iris.SendOption) (*iris.ReplyAcceptedResponse, error) {
 	return &iris.ReplyAcceptedResponse{}, nil
 }

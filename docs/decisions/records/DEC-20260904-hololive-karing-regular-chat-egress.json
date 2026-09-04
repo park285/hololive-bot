@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260904-hololive-karing-regular-chat-egress",
+  "title": "Hololive Karing 알림은 확인된 일반채팅에만 사용한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-04",
+  "summary": "Alarm-worker는 방 유형이 일반채팅으로 확인되고 YouTube target을 가진 broadcast, video, Shorts, community 알림에만 기존 Karing content-list template을 사용한다. 오픈채팅은 BOT_MARKDOWN_REPLIES에 따른 기존 Markdown 경로를 유지하고, 방 유형을 확인하지 못했거나 Karing으로 표현할 수 없는 알림은 기존 일반 텍스트 경로를 사용한다. Iris의 202 Accepted는 성공이 아니며 exact requestId의 handoff_completed만 Karing 성공으로 인정한다. 두 Karing opt-in flag는 퇴역시키되 기존 grouped message path의 short-link producer와 /l/* provider는 유지한다.",
+  "sources": [
+    "docs/current/plans/2026-09-04-karing-regular-chat-egress-correction.md#Chosen boundary"
+  ],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/kakaoroom/catalog.go",
+    "hololive/hololive-alarm-worker/internal/egress/iris_sender.go",
+    "hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/send_engine_karing.go",
+    "hololive/hololive-alarm-worker/internal/app/workerapp/build_egress.go",
+    "hololive/hololive-shared/pkg/config/settings/alarmworker/retired_notification_egress.go",
+    "deploy/compose/docker-compose.prod.yml"
+  ],
+  "supersedes": [
+    "DEC-20260904-hololive-karing-canonical-notification-egress"
+  ],
+  "review": {
+    "trigger": "Kakao 일반채팅이 Markdown을 지원하거나 Karing template의 지원 알림·방 유형 계약이 바뀔 때"
+  }
+}

@@ -1,6 +1,5 @@
 backoff
 db/pgxdb
-db/sqldb
 dbmigrate
 envutil
 ginjson

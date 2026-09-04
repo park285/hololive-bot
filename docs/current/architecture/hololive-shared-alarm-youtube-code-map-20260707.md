@@ -769,12 +769,12 @@ stale sending은 maintenance query가 `quarantined`로 보낸다. reason은 외�
 
 ```text
 consumer.DrainBatch(ctx, maxBatch)
-  -> groupAlarmDispatchEnvelopesForKaring
+  -> groupAlarmDispatchEnvelopesForDelivery
   -> dispatchGroups
   -> dispatchGroup
 ```
 
-`dispatchGroup`은 text path와 Karing content-list path를 나눈다.
+`dispatchGroup`은 room facts와 content compatibility를 함께 확인해 message path와 Karing content-list path를 나눕니다. 확인된 일반채팅의 YouTube target이 있는 broadcast/video/Shorts/community와 integrated 알림만 Karing을 사용합니다. 오픈채팅과 미확인 방은 기존 message path를 사용하고, Twitch/Chzzk-only, celebration, delivery digest와 YouTube milestone도 message path를 사용합니다. 알 수 없는 source/kind나 불완전한 YouTube target은 fallback 없이 pre-send failure로 처리합니다.
 
 text path:
 
@@ -791,6 +791,9 @@ Karing path:
 buildAlarmDispatchKaringContentListRequests
 MarkSending
 SendKaringContentList
+  -> Iris 202 Accepted의 requestId 검증
+  -> /reply-status/{requestId} polling
+  -> handoff_completed 확인
 MarkDispatched
 ```
 
@@ -806,12 +809,14 @@ render/build 실패
 발송 후 실패:
 
 ```text
-HTTP 429/502/503
+admission 전 HTTP 429/502/503
   -> RouteSendingFailures
-기타 post-send failure + quarantine enabled
+동일 ClientRequestID를 재생산할 수 있는 bounded transport/deadline failure
+  -> RouteSendingFailures
+Karing outcome_unknown 또는 status 확인 불가
+  -> Quarantine (같은 알림 재post 없음)
+기타 post-send failure
   -> Quarantine
-그 외
-  -> RouteFailures
 ```
 
 MarkSending 실패는 발송 전이지만 UPDATE가 이미 커밋된 'sending' 잔류 행이므로 `RouteSendingFailures`로 보상한다. sending 경로의 라우팅이 infra 오류로 실패하면 fallback도 sending fence(`RouteSendingFailures` 전량 retry)로 복원한다 — leased 전용 fence는 'sending' 행에 매칭되지 않는다.
@@ -820,14 +825,16 @@ MarkSending 실패는 발송 전이지만 UPDATE가 이미 커밋된 'sending' �
 
 파일:
 
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_group.go`
-- `hololive/hololive-alarm-worker/internal/app/workerapp/alarm_dispatch_render.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go`
+- `hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_render.go`
 
 그룹핑은 "같은 메시지로 묶어도 되는 delivery"를 결정한다.
 
 중요 규칙:
 
-- celebration과 YouTube outbox milestone은 text path를 쓴다.
+- celebration, delivery digest, YouTube outbox milestone과 Twitch/Chzzk-only는 message path를 쓴다.
+- YouTube target이 있는 일반 알림도 방 유형이 일반채팅으로 확인된 경우에만 feature flag 없이 Karing path를 쓴다.
+- 오픈채팅은 기존 Markdown/message grouping을 유지하고 방 유형 미확인은 일반 텍스트를 사용한다.
 - live alarm의 Karing 그룹 키는 room, alarm type, phase, minutes를 포함한다.
 - `phase`는 `prelive` 또는 `starting`이다.
 

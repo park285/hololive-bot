@@ -58,7 +58,7 @@ func cleanupFailedBotInfrastructureBuild(
 	ctx context.Context,
 	buildErr error,
 	ownedAlarmService *alarmservice.AlarmService,
-	irisClient iris.Client,
+	irisClient providers.ManagedIrisClient,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
 ) error {
@@ -83,7 +83,7 @@ func buildBotInfrastructureServices(
 	appConfig *settings.Config,
 	logger *slog.Logger,
 	infra *sharedmodules.InfraModule,
-	irisClient iris.Client,
+	irisClient providers.ManagedIrisClient,
 ) (*BotInfrastructure, *alarmservice.AlarmService, error) {
 	templateRenderer := template.NewRenderer(infra.Postgres.GetPool(), logger)
 	messageStrings := messagestrings.NewStore(infra.Postgres.GetPool(), logger)
@@ -123,26 +123,11 @@ func buildBotInfrastructureServices(
 		AlarmCRUD:      alarmYouTubeStack.AlarmMode.AlarmCRUD,
 		AlarmService:   ownedAlarmService,
 		HolodexService: foundation.HolodexService,
-		IrisRoomLister: buildBotIrisRoomLister(irisClient, logger),
+		IrisRoomLister: irisClient,
 		Postgres:       infra.Postgres,
 		Cache:          infra.Cache,
 		Cleanup:        composeBotInfrastructureCleanup(infra.Cleanup, irisClient, logger),
 	}, ownedAlarmService, nil
-}
-
-func buildBotIrisRoomLister(irisClient iris.Client, logger *slog.Logger) IrisRoomLister {
-	roomLister, ok := irisClient.(IrisRoomLister)
-	if !ok {
-		if logger == nil {
-			logger = slog.Default()
-		}
-
-		logger.Warn("bot iris client cannot list joined rooms")
-
-		return nil
-	}
-
-	return roomLister
 }
 
 func provideBotDependenciesFromStacks(
@@ -154,7 +139,7 @@ func provideBotDependenciesFromStacks(
 	messageAdapter *messaging.MessageAdapter,
 	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
-	irisClient iris.BotClient,
+	irisClient orchestration.BotIrisClient,
 	logger *slog.Logger,
 ) *orchestration.Dependencies {
 	modules := BuildBotDependencyModules(

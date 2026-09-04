@@ -40,12 +40,3 @@ func (l irisRooms) GetRooms(ctx context.Context) ([]Facts, error) {
 
 	return rooms, nil
 }
-
-func ListerFrom(client any) irisLister {
-	rooms, ok := client.(IrisRooms)
-	if !ok {
-		return nil
-	}
-
-	return NewIrisLister(rooms)
-}

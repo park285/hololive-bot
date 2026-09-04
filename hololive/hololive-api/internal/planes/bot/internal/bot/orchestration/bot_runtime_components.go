@@ -66,12 +66,12 @@ func (b *Bot) SetReplyOutboxWriter(writer transport.ReplyOutboxWriter) {
 	)
 }
 
-func newRoomCatalog(postgres database.Client, irisClient any, logger *slog.Logger) *kakaoroom.Catalog {
+func newRoomCatalog(postgres database.Client, irisClient BotIrisClient, logger *slog.Logger) *kakaoroom.Catalog {
 	if postgres == nil || postgres.GetPool() == nil {
 		return nil
 	}
 
-	return kakaoroom.New(postgres.GetPool(), kakaoroom.ListerFrom(irisClient), logger)
+	return kakaoroom.New(postgres.GetPool(), kakaoroom.NewIrisLister(irisClient), logger)
 }
 
 func (b *Bot) ensureTransport() *transport.CommandTransport {

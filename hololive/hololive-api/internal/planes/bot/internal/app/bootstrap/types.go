@@ -91,7 +91,7 @@ type BotCoreModule struct {
 }
 
 type BotMessagingModule struct {
-	Client          iris.BotClient
+	Client          orchestration.BotIrisClient
 	MessageAdapter  *messaging.MessageAdapter
 	Formatter       *formatter.ResponseFormatter
 	MessageStrings  *messagestrings.Store

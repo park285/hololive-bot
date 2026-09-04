@@ -24,7 +24,7 @@ The structured inventory used by CI is `../CONTRACT_MANIFEST.txt`.
 - `trigger.md` - manual notification trigger HTTP JSON
 - `alarm.md` - alarm HTTP API and alarm dispatch queue
 - `karing-kakaolink.md` - Karing KakaoLink template ID, variables, links, and smoke-test contract
-- `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and alarm rendering contract
+- `shortlink.md` - fixed-target YouTube short-link route, scraper rejection, and grouped message rendering contract
 - `settings.md` - settings/config update Pub/Sub
 - `iris-boundary.md` - Iris external boundary
 - `schedule-hololive-tv-api.md` - Official Schedule API request, mapping, fallback ownership, live non-goal, cache, and observability contract

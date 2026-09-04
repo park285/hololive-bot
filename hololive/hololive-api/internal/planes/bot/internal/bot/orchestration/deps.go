@@ -38,12 +38,19 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
+
+// BotIrisClient는 bot orchestration이 발송과 room catalog 구성에 사용하는 Iris 계약입니다.
+type BotIrisClient interface {
+	iris.BotClient
+	kakaoroom.IrisRooms
+}
 
 type Dependencies struct {
 	BotSelfUser           string
@@ -52,7 +59,7 @@ type Dependencies struct {
 	CalendarImageCacheDir string
 	CalendarEntryCacheTTL time.Duration
 	Logger                *slog.Logger
-	Client                iris.BotClient
+	Client                BotIrisClient
 	MessageAdapter        *messaging.MessageAdapter
 	Formatter             *formatter.ResponseFormatter
 	MessageStrings        *messagestrings.Store
@@ -87,7 +94,7 @@ type coreDependencies struct {
 }
 
 type messagingDependencies struct {
-	client          iris.BotClient
+	client          BotIrisClient
 	messageAdapter  *messaging.MessageAdapter
 	formatter       *formatter.ResponseFormatter
 	messageStrings  *messagestrings.Store

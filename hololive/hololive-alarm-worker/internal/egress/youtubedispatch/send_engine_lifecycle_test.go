@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	ytlifecycle "github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -18,6 +19,16 @@ type lifecycleTestSender struct {
 	calls atomic.Int32
 }
 
+func TestLifecycleProviderFailureTreatsKaringStatusFailureAsKnown(t *testing.T) {
+	t.Parallel()
+
+	kind, reason, retryAfter := lifecycleProviderFailure(egress.ErrKaringStatusFailed, lifecycleReasonKaring)
+
+	if kind != ytlifecycle.FailurePermanent || reason != lifecycleReasonKaring || retryAfter != 0 {
+		t.Fatalf("lifecycleProviderFailure() = %v, %q, %s; want permanent, %q, 0", kind, reason, retryAfter, lifecycleReasonKaring)
+	}
+}
+
 func (s *lifecycleTestSender) SendMessage(context.Context, string, string) error {
 	s.calls.Add(1)
 
@@ -25,10 +36,11 @@ func (s *lifecycleTestSender) SendMessage(context.Context, string, string) error
 }
 
 type lifecycleTransitionSpy struct {
-	beginCalls    atomic.Int32
-	completeCalls atomic.Int32
-	complete      store.ApplyResult
-	completeErr   error
+	beginCalls          atomic.Int32
+	startedFailureCalls atomic.Int32
+	completeCalls       atomic.Int32
+	complete            store.ApplyResult
+	completeErr         error
 }
 
 func (s *lifecycleTransitionSpy) PrepareClaimed(
@@ -67,6 +79,8 @@ func (s *lifecycleTransitionSpy) ApplyStartedFailure(
 	ytlifecycle.Reason,
 	time.Duration,
 ) (store.ApplyResult, error) {
+	s.startedFailureCalls.Add(1)
+
 	return store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
 

@@ -71,6 +71,10 @@ func (f *fakeIrisClient) GetReplyStatus(_ context.Context, _ string) (*iris.Repl
 func (f *fakeIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, error) {
 	return &iris.ConfigResponse{}, nil
 }
+
+func (f *fakeIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
+	return &iris.RoomListResponse{}, nil
+}
 func (f *fakeIrisClient) Decrypt(context.Context, string) (string, error) { return "", nil }
 func (f *fakeIrisClient) Ping(context.Context) bool {
 	f.pingCalls++

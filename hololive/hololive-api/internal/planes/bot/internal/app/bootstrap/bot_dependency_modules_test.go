@@ -306,6 +306,10 @@ func (s *stubBotIrisClient) GetConfig(context.Context) (*iris.ConfigResponse, er
 	return &iris.ConfigResponse{}, nil
 }
 
+func (s *stubBotIrisClient) GetRooms(context.Context) (*iris.RoomListResponse, error) {
+	return &iris.RoomListResponse{}, nil
+}
+
 type stubYouTubeService struct{}
 
 func (s *stubYouTubeService) SetScraperProxyEnabled(bool) bool {

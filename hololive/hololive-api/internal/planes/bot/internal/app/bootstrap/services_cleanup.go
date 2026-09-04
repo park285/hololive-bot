@@ -9,7 +9,7 @@ type irisCleanupCloser interface {
 	Close() error
 }
 
-func composeBotInfrastructureCleanup(infraCleanup func(), irisClient any, logger *slog.Logger) func() {
+func composeBotInfrastructureCleanup(infraCleanup func(), irisClient irisCleanupCloser, logger *slog.Logger) func() {
 	var once sync.Once
 
 	return func() {
@@ -23,13 +23,12 @@ func composeBotInfrastructureCleanup(infraCleanup func(), irisClient any, logger
 	}
 }
 
-func closeIrisClientForCleanup(irisClient any, logger *slog.Logger) {
-	closer, ok := irisClient.(irisCleanupCloser)
-	if !ok || closer == nil {
+func closeIrisClientForCleanup(irisClient irisCleanupCloser, logger *slog.Logger) {
+	if irisClient == nil {
 		return
 	}
 
-	if err := closer.Close(); err != nil && logger != nil {
+	if err := irisClient.Close(); err != nil && logger != nil {
 		logger.Warn("iris_client_close_failed", slog.Any("error", err))
 	}
 }

@@ -134,8 +134,8 @@ target으로 전달합니다. 알려진 Kakao scraper는 먼저 거부하고, `H
 계약은 그대로입니다. Admin traffic과 WebSocket은 이 server를 통과하지 않습니다. 적용 전후
 `nginx -t`를 통과시킨 뒤 reload합니다.
 
-provider rollout은 `127.0.0.1:30101` listener → 중앙 `30192` ingress → Seoul template →
-`scripts/deploy/shortlink-smoke.sh` public smoke → `ALARM_SHORT_LINK_BASE_URL` consumer 활성화 순서입니다.
+Provider rollout은 `127.0.0.1:30101` listener → 중앙 `30192` ingress → Seoul template →
+`scripts/deploy/shortlink-smoke.sh` public smoke → grouped message path용 `ALARM_SHORT_LINK_BASE_URL` consumer 활성화 순서입니다.
 
 ## Logs
 
@@ -229,7 +229,7 @@ curl -sI http://127.0.0.1:30190/health | grep -i x-content-type-options         
 ## Rollback
 
 - `docs/current/runbooks/rollback.md` 기준으로 직전 `admin-dashboard` 이미지/설정 재배포.
-- short-link consumer rollback은 `ALARM_SHORT_LINK_BASE_URL`을 먼저 비우고 alarm-worker를 재기동합니다. 이미 발송된 URL을 위해 `30101` listener, 중앙 `30192` ingress, Seoul public routing은 명시적으로 승인된 미래 compatibility deprecation 전까지 무기한 유지합니다.
+- Short-link consumer rollback은 `ALARM_SHORT_LINK_BASE_URL`을 먼저 비우고 alarm-worker를 재기동합니다. 이미 발송된 URL을 위해 `30101` listener, 중앙 `30192` ingress, Seoul public routing은 명시적으로 승인된 미래 compatibility deprecation 전까지 무기한 유지합니다.
 - 롤백 후 위 Smoke test와 대시보드 로그인 경로 재확인.
 
 ## Related
