@@ -17,7 +17,7 @@ ARG GO_VERSION=1.27.1
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS frontend-builder
 WORKDIR /app/frontend
 
 COPY admin-dashboard/frontend/package.json admin-dashboard/frontend/package-lock.json ./
