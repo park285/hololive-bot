@@ -14,6 +14,15 @@ import (
 type karingSenderStubIrisSender struct {
 	sendMessageCalls []karingSenderStubMessageCall
 	karingRequests   []iris.KaringContentListRequest
+	regularRooms     map[string]bool
+}
+
+func (s *karingSenderStubIrisSender) RegularChat(_ context.Context, roomID string) bool {
+	if s.regularRooms != nil {
+		return s.regularRooms[roomID]
+	}
+
+	return true
 }
 
 type karingSenderStubMessageCall struct {
@@ -49,6 +58,15 @@ func TestYouTubeOutboxKaringSenderNilInnerReturnsPinnedError(t *testing.T) {
 		"youtube outbox karing sender: sender is nil")
 	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), testAlarmRoomID, &domain.YouTubeOutboxDispatchPayload{}),
 		"youtube outbox karing sender: sender is nil")
+	assert.False(t, sender.RegularChat(t.Context(), testAlarmRoomID))
+}
+
+func TestYouTubeOutboxKaringSenderDelegatesRegularChatEligibility(t *testing.T) {
+	stub := &karingSenderStubIrisSender{regularRooms: map[string]bool{"regular": true}}
+	sender := NewYouTubeOutboxKaringSender(stub, nil)
+
+	assert.True(t, sender.RegularChat(t.Context(), "regular"))
+	assert.False(t, sender.RegularChat(t.Context(), "open-or-unknown"))
 }
 
 func TestYouTubeOutboxKaringSenderForwardsSendMessage(t *testing.T) {

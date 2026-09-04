@@ -97,6 +97,16 @@ func TestResolveHolodexAPIKey(t *testing.T) {
 	})
 }
 
+func TestLoadNotificationConfigKeepsAlarmShortLinkBaseURL(t *testing.T) {
+	t.Setenv("ALARM_SHORT_LINK_BASE_URL", " https://short.holoshi.com ")
+
+	config := loadNotificationConfig()
+
+	if config.AlarmShortLinkBaseURL != "https://short.holoshi.com" {
+		t.Fatalf("AlarmShortLinkBaseURL = %q, want trimmed configured origin", config.AlarmShortLinkBaseURL)
+	}
+}
+
 func assertHolodexLiveStatusFallbackConfig(t *testing.T, got, want HolodexLiveStatusFallbackConfig) {
 	t.Helper()
 

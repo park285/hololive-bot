@@ -22,7 +22,7 @@ func TestAlarmDispatchRunnerMultiEnvelopeTransportFailureQuarantines(t *testing.
 	second.DispatchOutboxID = 12
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
-	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
+	sender := &alarmDispatchRunnerTestSender{karingErr: transportErr}
 	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
@@ -44,7 +44,7 @@ func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
 	second.DispatchOutboxID = 12
 
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
-	sender := &alarmDispatchRunnerTestSender{messageErr: &iris.HTTPError{StatusCode: 503}}
+	sender := &alarmDispatchRunnerTestSender{karingErr: &iris.HTTPError{StatusCode: 503}}
 	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
@@ -55,15 +55,41 @@ func TestAlarmDispatchRunnerMultiEnvelope503StillRetries(t *testing.T) {
 	require.Len(t, consumer.scheduledSendingRetry, 2, "definitive not-admitted status keeps group-size-independent retry")
 }
 
-func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousMultiEnvelopeFailure(t *testing.T) {
+func TestAlarmDispatchRunnerPersistedSendUnitQuarantinesAmbiguousRoomScopedFailure(t *testing.T) {
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	first.DispatchOutboxID = 11
 	first.SendUnitID = 7
-	first.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
+	first.ClientRequestID = testRetryClientRequestID
 
 	second := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
+
+	second.DispatchOutboxID = 12
+	second.SendUnitID = first.SendUnitID
+	second.ClientRequestID = first.ClientRequestID
+
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, second}}}
+	sender := &alarmDispatchRunnerTestSender{karingErr: transportErr}
+	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
+
+	processed, err := runner.runOnce(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, processed)
+	require.Len(t, consumer.quarantined, 2)
+	assert.Empty(t, consumer.scheduledSendingRetry)
+}
+
+func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailure(t *testing.T) {
+	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
+	first := alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)
+
+	first.DispatchOutboxID = 11
+	first.SendUnitID = 7
+	first.ClientRequestID = testRetryClientRequestID
+
+	second := alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)
 
 	second.DispatchOutboxID = 12
 	second.SendUnitID = first.SendUnitID
@@ -80,7 +106,7 @@ func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousMultiEnvelopeFailur
 	assert.Empty(t, consumer.quarantined)
 	require.Len(t, consumer.scheduledSendingRetry, 2)
 
-	groups := groupAlarmDispatchEnvelopes(consumer.scheduledSendingRetry)
+	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), sender, consumer.scheduledSendingRetry)
 	require.Len(t, groups, 1)
 	assert.Equal(t, first.ClientRequestID, alarmDispatchClientRequestID(groups[0], 0, len(groups[0].envelopes)))
 }
@@ -111,7 +137,7 @@ func TestGroupAlarmDispatchEnvelopesKeepsRetriedEnvelopeSolo(t *testing.T) {
 
 	freshB.DispatchOutboxID = 23
 
-	groups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{retried, freshA, freshB})
+	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{retried, freshA, freshB})
 
 	require.Len(t, groups, 2)
 	require.Len(t, groups[0].envelopes, 1)
@@ -126,7 +152,7 @@ func TestAlarmDispatchClientRequestIDStableAcrossSoloRedrain(t *testing.T) {
 
 	original.DispatchOutboxID = 31
 
-	firstGroups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{original})
+	firstGroups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{original})
 	require.Len(t, firstGroups, 1)
 
 	firstID := alarmDispatchClientRequestID(firstGroups[0], 0, len(firstGroups[0].envelopes))
@@ -139,7 +165,7 @@ func TestAlarmDispatchClientRequestIDStableAcrossSoloRedrain(t *testing.T) {
 
 	fresh.DispatchOutboxID = 32
 
-	retryGroups := groupAlarmDispatchEnvelopes([]domain.AlarmQueueEnvelope{fresh, redrained})
+	retryGroups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{fresh, redrained})
 
 	require.Len(t, retryGroups, 2)
 

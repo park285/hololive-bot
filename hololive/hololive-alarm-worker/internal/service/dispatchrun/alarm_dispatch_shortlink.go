@@ -1,7 +1,6 @@
 package dispatchrun
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -13,15 +12,10 @@ const (
 	alarmShortLinkOrigin     = "https://short.holoshi.com"
 )
 
-// ValidateAlarmShortLinkConfig는 섬네일 없는 텍스트 링크와 Karing 카드가 동시에 켜지는 구성을 거부합니다.
-func ValidateAlarmShortLinkConfig(baseURL string, karingEnabled bool) error {
-	builder, err := configuredAlarmShortLinkBuilder(baseURL)
-	if err != nil {
+// ValidateAlarmShortLinkConfig는 grouped message의 short-link origin을 검증합니다.
+func ValidateAlarmShortLinkConfig(baseURL string) error {
+	if _, err := configuredAlarmShortLinkBuilder(baseURL); err != nil {
 		return fmt.Errorf("configured alarm short link builder: %w", err)
-	}
-
-	if builder.Enabled() && karingEnabled {
-		return errors.New("ALARM_SHORT_LINK_BASE_URL requires ALARM_DISPATCH_KARING_ENABLED=false")
 	}
 
 	return nil

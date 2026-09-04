@@ -9,6 +9,7 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 )
@@ -103,7 +104,19 @@ func (r *Runner) persistMarkSendingFailure(ctx context.Context, envelopes []doma
 	return nil
 }
 
-func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) persistPostSendingFailure(ctx context.Context, group alarmDispatchGroup, cause error) error {
+	envelopes := group.envelopes
+
+	if errors.Is(cause, egress.ErrKaringOutcomeUnknown) {
+		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
+	}
+
+	// Room facts는 다음 drain에서 바뀔 수 있고 선택된 path는 영속되지 않는다. ambiguous 발송을
+	// 재드레인하면 text와 Karing 사이에서 payload와 ClientRequestID가 함께 바뀔 수 있다.
+	if group.egressRoomScoped && isAlarmDispatchAmbiguousPostSendFailure(cause) {
+		return r.quarantinePostSendingFailure(ctx, envelopes, cause)
+	}
+
 	if alarmDispatchPostSendFailureIsRetryable(cause, len(envelopes)) ||
 		(hasPersistedClientRequestID(envelopes) && isAlarmDispatchAmbiguousPostSendFailure(cause)) {
 		if err := r.persistSendingRetry(ctx, envelopes, cause); err != nil {
@@ -113,6 +126,10 @@ func (r *Runner) persistPostSendingFailure(ctx context.Context, envelopes []doma
 		return nil
 	}
 
+	return r.quarantinePostSendingFailure(ctx, envelopes, cause)
+}
+
+func (r *Runner) quarantinePostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
 	if err := r.consumer.Quarantine(ctx, envelopes, cause); err != nil {
 		return fmt.Errorf("quarantine alarm dispatch after send failure: %w", err)
 	}
@@ -148,9 +165,8 @@ func (r *Runner) persistSendingRetry(ctx context.Context, envelopes []domain.Ala
 }
 
 // TransportError/DeadlineExceeded는 응답을 한 번도 받지 못한 경우라 첫 발송이 이미
-// admission됐을 수 있다. 재드레인에서 그룹 구성이 바뀌면 ClientRequestID가 다르게 재파생되어
-// Iris dedup에 접히지 않고 중복 발화하므로, ambiguous 원인은 solo 재그룹핑으로 ID가 그대로
-// 재생산되는 단건 그룹에만 재시도를 허용하고 다건 그룹은 quarantine한다.
+// admission됐을 수 있다. Room-scoped path는 호출 전에 quarantine하고, 남은 고정 path에서도
+// ambiguous 원인은 solo 재그룹핑으로 ID가 그대로 재생산되는 단건 그룹에만 재시도를 허용한다.
 // 429/502/503은 미수용이 확정된 응답이라 그룹 크기와 무관하게 재시도한다.
 func alarmDispatchPostSendFailureIsRetryable(cause error, envelopeCount int) bool {
 	if isAlarmDispatchNotAdmittedRetryableFailure(cause) {
@@ -174,6 +190,10 @@ func isAlarmDispatchNotAdmittedRetryableFailure(cause error) bool {
 
 func isAlarmDispatchAmbiguousPostSendFailure(cause error) bool {
 	if cause == nil {
+		return false
+	}
+
+	if errors.Is(cause, egress.ErrKaringOutcomeUnknown) {
 		return false
 	}
 

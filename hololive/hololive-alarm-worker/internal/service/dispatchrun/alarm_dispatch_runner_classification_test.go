@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v2/iris"
+
+	"github.com/kapu/hololive-alarm-worker/internal/egress"
 )
 
 type alarmDispatchRetryableCase struct {
@@ -111,6 +113,11 @@ func alarmDispatchRetryableTransportCases() []alarmDispatchRetryableCase {
 		{
 			name: "context canceled stays non-retryable",
 			err:  context.Canceled,
+			want: false,
+		},
+		{
+			name: "confirmed outcome unknown stays non-retryable",
+			err:  errors.Join(egress.ErrKaringOutcomeUnknown, context.DeadlineExceeded),
 			want: false,
 		},
 		{

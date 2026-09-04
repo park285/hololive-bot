@@ -12,6 +12,7 @@ import (
 )
 
 type YouTubeOutboxKaringInnerSender interface {
+	regularChatResolver
 	SendMessage(ctx context.Context, roomID, message string) error
 	SendMessageWithClientRequestID(ctx context.Context, roomID, message, clientRequestID string) error
 	SendKaringContentList(ctx context.Context, roomID string, req *iris.KaringContentListRequest) error
@@ -20,6 +21,11 @@ type YouTubeOutboxKaringInnerSender interface {
 type YouTubeOutboxKaringSender struct {
 	sender         YouTubeOutboxKaringInnerSender
 	messageStrings *messagestrings.Store
+}
+
+// RegularChat은 inner sender가 확인한 일반채팅 eligibility를 전달합니다.
+func (s YouTubeOutboxKaringSender) RegularChat(ctx context.Context, roomID string) bool {
+	return s.sender != nil && s.sender.RegularChat(ctx, roomID)
 }
 
 func NewYouTubeOutboxKaringSender(sender YouTubeOutboxKaringInnerSender, messageStrings *messagestrings.Store) YouTubeOutboxKaringSender {

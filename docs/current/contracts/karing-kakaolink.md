@@ -11,7 +11,7 @@
 ## Provider
 
 - Service: `alarm-worker`
-- Code owner: `hololive/hololive-alarm-worker/internal/app/internal/workerapp`
+- Code owner: `hololive/hololive-alarm-worker/internal/egress`, `hololive/hololive-alarm-worker/internal/service/dispatchrun`
 - Request type: `iris.KaringContentListRequest`
 
 ## Consumers
@@ -19,6 +19,14 @@
 - Iris runtime: `/karing/content-list`, `/karing/hololive`
 - Iris bridge: KakaoLinkSpec existing-chat send method `c(Long)`
 - Kakao Developers app: `hololive-bot`, app ID `1369981`
+
+## Routing
+
+- 방 유형이 일반채팅으로 확인되고 YouTube target이 있는 broadcast/video/Shorts/community 알림만 Karing content-list를 사용합니다.
+- 확인된 일반채팅의 YouTube와 Chzzk 통합 알림은 YouTube target으로 Karing을 구성합니다.
+- 오픈채팅은 `BOT_MARKDOWN_REPLIES`에 따른 기존 Markdown/message 경로를 사용하고, 방 유형을 확인하지 못한 경우에는 일반 텍스트를 사용합니다.
+- Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone과 generic notification delivery는 방 유형에 맞는 기존 message 경로를 사용합니다.
+- 지원되는 알림의 Karing build, admission 또는 handoff가 실패해도 일반 텍스트나 Markdown으로 fallback하지 않습니다.
 
 ## Stable Template Map
 
@@ -101,15 +109,18 @@ Do not use `https://youtu.be/${item_web_url}` for the 1-item template because it
 - `/karing/send` is allowed only for controlled smoke tests or already-materialized template args.
 - Iris bridge must use KakaoLinkSpec existing-chat method `c(Long)`.
 - Do not reintroduce direct DB injection, Web Picker send, or `b`/direct fallback for this contract.
-- A send is successful only when Iris returns `200` and bridge logs show `kakaolink commit verified`.
-- `200` confirms KakaoTalk chat log commit. It does not guarantee the recipient has read the message.
+- Live send admission은 `202 Accepted`와 `success=true`, `delivery=queued`, non-empty `requestId`를 모두 요구합니다.
+- `202 Accepted`는 reply queue 접수 증거일 뿐 성공 증거가 아닙니다. Caller는 exact `requestId`로 `/reply-status/{requestId}`를 조회하고 `handoff_completed`를 관측한 뒤에만 delivery를 성공 처리합니다.
+- `queued`, `preparing`, `prepared`, `sending`은 확인 중입니다. `failed`는 확정 실패이고 `outcome_unknown`, 알 수 없는 상태, request ID 불일치, 빈 응답과 확인 deadline 소진은 결과 불명확입니다.
+- `handoff_completed`는 Kakao handoff를 확인하지만 상대방의 읽음이나 Kakao client의 최종 template 표시를 보장하지 않습니다.
 
 ## Retry Policy
 
-- Bridge-level retry for missing KakaoLink commit is allowed and expected.
-- Caller/outbox retry is allowed for bounded `502`/`503` failures.
+- Iris가 admission 전에 반환한 bounded `429`/`502`/`503`과 요청이 client를 떠나지 않은 dial/DNS 실패는 owning queue 정책이 재시도할 수 있습니다. Alarm dispatch의 ambiguous transport 재시도는 동일 `clientRequestId`를 재생산할 수 있는 기존 단건/persisted send-unit 경계로 제한합니다.
+- Iris 내부의 queue/handoff retry는 Iris가 소유합니다. Caller는 accepted request를 다시 post하지 않고 status만 조회합니다.
 - Do not fall back to duplicate plain text after a Karing failure.
-- Failed deliveries remain retryable through the owning queue/outbox policy.
+- `outcome_unknown` 또는 status 확인 실패는 caller retry 대상이 아닙니다. YouTube outbox는 `SENDING`을 보존하고 alarm dispatch는 quarantine하여 같은 알림을 다시 post하지 않습니다.
+- `failed`는 owning lifecycle의 known failure로 기록하며 임의의 새 `clientRequestId`로 재발급하지 않습니다.
 
 ## Smoke Test Policy
 
@@ -126,10 +137,10 @@ Before changing template IDs, variables, or link settings:
 
 1. Run `/karing/content-list` dry-run for 1, 2, 3, and 4 items.
 2. Run live smoke only against an explicit test room.
-3. Confirm `HTTP 200`.
-4. Confirm bridge log contains `text send kakaolink spec invoked method=c`.
-5. Confirm bridge log contains `kakaolink commit verified`.
-6. Confirm KakaoTalk `chat_logs` has a new row in the target room.
+3. Confirm live send returns `HTTP 202` with a non-empty `requestId`.
+4. Poll `/reply-status/{requestId}` until `handoff_completed`; `failed`, `outcome_unknown` or deadline exhaustion fails the smoke.
+5. Confirm bridge log contains `text send kakaolink spec invoked method=c` and `kakaolink commit verified`.
+6. Confirm KakaoTalk `chat_logs` has exactly one new row in the target room.
 7. Manually check mobile and PC list item taps open the intended YouTube URL.
 
 ## Compatibility Rule

@@ -19,10 +19,9 @@ func TestAlarmDispatchRunnerRetryable502AfterMarkSendingUsesRouteSendingFailures
 	}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := Runner{
-		consumer:      consumer,
-		sender:        sender,
-		karingEnabled: true,
-		maxBatch:      10,
+		consumer: consumer,
+		sender:   sender,
+		maxBatch: 10,
 	}
 
 	processed, err := runner.runOnce(t.Context())
@@ -47,10 +46,9 @@ func TestAlarmDispatchRunnerRetryable503AfterMarkSendingUsesRouteSendingFailures
 	}
 	sender := &alarmDispatchRunnerTestSender{karingErr: karingErr}
 	runner := Runner{
-		consumer:      consumer,
-		sender:        sender,
-		karingEnabled: true,
-		maxBatch:      10,
+		consumer: consumer,
+		sender:   sender,
+		maxBatch: 10,
 	}
 
 	processed, err := runner.runOnce(t.Context())

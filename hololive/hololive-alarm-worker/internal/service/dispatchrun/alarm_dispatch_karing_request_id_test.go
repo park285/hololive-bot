@@ -25,7 +25,7 @@ func alarmDispatchKaringIdentityTestEnvelope(roomID string, dispatchOutboxID int
 func karingRequestIDs(t *testing.T, envelopes []domain.AlarmQueueEnvelope) []string {
 	t.Helper()
 
-	groups := groupAlarmDispatchEnvelopesForKaring(envelopes, true)
+	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, envelopes)
 	ids := make([]string, 0, len(groups))
 
 	for g := range groups {
@@ -128,7 +128,7 @@ func TestAlarmDispatchPersistedSendUnitUsesDistinctStableKaringChunkIDs(t *testi
 			envelope := alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id)
 
 			envelope.SendUnitID = 42
-			envelope.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
+			envelope.ClientRequestID = testRetryClientRequestID
 			envelopes = append(envelopes, envelope)
 		}
 
@@ -194,14 +194,14 @@ func alarmDispatchPersistedSendUnitTestEnvelopes(t *testing.T, count int) []doma
 		envelope := alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, int64(11+i))
 
 		envelope.SendUnitID = 7
-		envelope.ClientRequestID = "hololive-alarm:0123456789abcdef0123456789abcdef"
+		envelope.ClientRequestID = testRetryClientRequestID
 		envelopes = append(envelopes, envelope)
 	}
 
 	return envelopes
 }
 
-func TestHasPersistedClientRequestIDMatchesPersistedIDActuallySent(t *testing.T) {
+func TestHasPersistedClientRequestIDMatchesTextIDActuallySent(t *testing.T) {
 	t.Parallel()
 
 	for _, count := range []int{1, alarmDispatchKaringMaxItemsPerRequest, alarmDispatchKaringMaxItemsPerRequest + 1} {
@@ -214,41 +214,44 @@ func TestHasPersistedClientRequestIDMatchesPersistedIDActuallySent(t *testing.T)
 	}
 }
 
-func TestAlarmDispatchRunnerPersistedSendUnitOverMaxItemsQuarantinesAmbiguousFailure(t *testing.T) {
+func TestAlarmDispatchRunnerPersistedSendUnitOverMaxItemsQuarantinesAmbiguousKaringFailure(t *testing.T) {
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, alarmDispatchKaringMaxItemsPerRequest+1)
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
-	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
+	sender := &alarmDispatchRunnerTestSender{karingErr: transportErr}
 	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	require.Len(t, sender.clientRequestIDs, 1)
-	require.NotEqual(t, envelopes[0].ClientRequestID, sender.clientRequestIDs[0],
-		"상한 초과 그룹은 persisted ID를 쓰지 않고 조합 파생 해시로 나간다")
-	require.Len(t, consumer.quarantined, len(envelopes),
-		"전송 ID를 재생산할 수 없는 그룹의 ambiguous 실패는 재시도가 아니라 quarantine이어야 한다")
+	require.Len(t, sender.karingRequests, 2)
+	require.NotNil(t, sender.karingRequests[0].ClientRequestID)
+	require.NotNil(t, sender.karingRequests[1].ClientRequestID)
+	assert.NotEqual(t, envelopes[0].ClientRequestID, *sender.karingRequests[0].ClientRequestID)
+	assert.NotEqual(t, *sender.karingRequests[0].ClientRequestID, *sender.karingRequests[1].ClientRequestID)
 	assert.Empty(t, consumer.scheduledSendingRetry)
+	require.Len(t, consumer.quarantined, len(envelopes))
 	assert.Empty(t, consumer.markDispatched)
 }
 
-func TestAlarmDispatchRunnerPersistedSendUnitAtMaxItemsStillRetriesAmbiguousFailure(t *testing.T) {
+func TestAlarmDispatchRunnerPersistedSendUnitAtMaxItemsQuarantinesAmbiguousKaringFailure(t *testing.T) {
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
 	envelopes := alarmDispatchPersistedSendUnitTestEnvelopes(t, alarmDispatchKaringMaxItemsPerRequest)
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
-	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
+	sender := &alarmDispatchRunnerTestSender{karingErr: transportErr}
 	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
 
 	processed, err := runner.runOnce(t.Context())
 
 	require.NoError(t, err)
 	assert.True(t, processed)
-	require.Len(t, sender.clientRequestIDs, 1)
-	assert.Equal(t, envelopes[0].ClientRequestID, sender.clientRequestIDs[0])
-	require.Len(t, consumer.scheduledSendingRetry, len(envelopes))
-	assert.Empty(t, consumer.quarantined)
+	require.Len(t, sender.karingRequests, 1)
+	require.NotNil(t, sender.karingRequests[0].ClientRequestID)
+	assert.NotEqual(t, envelopes[0].ClientRequestID, *sender.karingRequests[0].ClientRequestID)
+	assert.Equal(t, karingRequestIDs(t, envelopes)[0], *sender.karingRequests[0].ClientRequestID)
+	assert.Empty(t, consumer.scheduledSendingRetry)
+	require.Len(t, consumer.quarantined, len(envelopes))
 }
 
 func TestAlarmDispatchOutboxRetryReproducesEveryKaringChunkClientRequestID(t *testing.T) {
@@ -285,7 +288,7 @@ func TestAlarmDispatchOutboxRetryReproducesEveryKaringChunkClientRequestID(t *te
 	}
 
 	chunkIDs := func(envelope domain.AlarmQueueEnvelope) []string {
-		groups := groupAlarmDispatchEnvelopesForKaring([]domain.AlarmQueueEnvelope{envelope}, true)
+		groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{envelope})
 		ids := make([]string, 0, itemCount)
 
 		for g := range groups {

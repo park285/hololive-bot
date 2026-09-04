@@ -31,9 +31,3 @@ func TestComposeBotInfrastructureCleanupClosesIrisAndInfraOnce(t *testing.T) {
 		t.Fatalf("infra close count = %d, want 1", infraClosed)
 	}
 }
-
-func TestCloseIrisClientForCleanupIgnoresNonCloser(t *testing.T) {
-	t.Parallel()
-
-	closeIrisClientForCleanup(struct{}{}, nil)
-}

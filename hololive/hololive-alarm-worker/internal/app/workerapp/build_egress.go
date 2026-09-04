@@ -53,7 +53,7 @@ func buildNotificationEgress(
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}
 
-	rooms := kakaoroom.New(infra.Postgres.GetPool(), kakaoroom.ListerFrom(irisClient), logger)
+	rooms := kakaoroom.New(infra.Postgres.GetPool(), kakaoroom.NewIrisLister(irisClient), logger)
 	irisSender := egress.NewIrisMessageSender(
 		irisClient,
 		egress.WithMarkdownReplies(appConfig.Bot.MarkdownReplies),
@@ -215,7 +215,7 @@ func buildAlarmDispatchRunner(
 	logger *slog.Logger,
 	workerState *alarmWorkerRegistryState,
 ) (workerruntime.Scheduler, error) {
-	if err := dispatchrun.ValidateAlarmShortLinkConfig(appConfig.Notification.AlarmShortLinkBaseURL, parseAlarmDispatchKaringEnabled()); err != nil {
+	if err := dispatchrun.ValidateAlarmShortLinkConfig(appConfig.Notification.AlarmShortLinkBaseURL); err != nil {
 		return nil, fmt.Errorf("validate alarm dispatch short links: %w", err)
 	}
 
@@ -278,16 +278,11 @@ func alarmDispatchRunnerConfig(appConfig *settings.Config) dispatchrun.RunnerCon
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["alarm_dispatch"]
 
 	return dispatchrun.RunnerConfig{
-		KaringEnabled:     parseAlarmDispatchKaringEnabled(),
 		ShortLinkBaseURL:  appConfig.Notification.AlarmShortLinkBaseURL,
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,
 		AttemptTimeout:    time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
 	}
-}
-
-func parseAlarmDispatchKaringEnabled() bool {
-	return envutil.Bool("ALARM_DISPATCH_KARING_ENABLED", false)
 }
 
 func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.Logger) *messagestrings.Store {
@@ -304,10 +299,6 @@ func alarmDispatchMessageStrings(infra *sharedmodules.InfraModule, logger *slog.
 }
 
 func buildYouTubeOutboxSender(irisSender *egress.IrisMessageSender, messageStrings *messagestrings.Store) delivery.MessageSender {
-	if !envutil.Bool("YOUTUBE_OUTBOX_KARING_ENABLED", false) {
-		return irisSender
-	}
-
 	return dispatchrun.NewYouTubeOutboxKaringSender(irisSender, messageStrings)
 }
 

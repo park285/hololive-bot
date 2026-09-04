@@ -30,7 +30,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestGroupAlarmDispatchEnvelopes(t *testing.T) {
+func TestGroupAlarmDispatchEnvelopesByRegularKey(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -71,40 +71,26 @@ func TestGroupAlarmDispatchEnvelopes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			groups := groupAlarmDispatchEnvelopes(tc.envelopes)
+			groups := groupAlarmDispatchEnvelopesByKey(tc.envelopes, alarmDispatchGroupKey)
 
 			assert.Equal(t, tc.want, summarizeAlarmDispatchGroups(groups))
 		})
 	}
 }
 
-func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
+func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 	t.Parallel()
 
 	firstStart := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
 	secondStart := firstStart.Add(time.Minute)
 
 	testCases := []struct {
-		name          string
-		karingEnabled bool
-		envelopes     []domain.AlarmQueueEnvelope
-		want          []alarmDispatchGroupSummary
+		name      string
+		envelopes []domain.AlarmQueueEnvelope
+		want      []alarmDispatchGroupSummary
 	}{
 		{
-			name:          "karing disabled falls back to regular grouping",
-			karingEnabled: false,
-			envelopes: []domain.AlarmQueueEnvelope{
-				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart),
-				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
-			},
-			want: []alarmDispatchGroupSummary{
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
-			},
-		},
-		{
-			name:          "karing enabled groups by alarm type",
-			karingEnabled: true,
+			name: "groups Karing notifications by alarm type",
 			envelopes: []domain.AlarmQueueEnvelope{
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart),
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeCommunity, 5, secondStart),
@@ -116,12 +102,27 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 			},
 		},
 		{
-			name:          "karing enabled splits live catchup and prelive",
-			karingEnabled: true,
+			name: "splits Karing live catchup and prelive",
 			envelopes: []domain.AlarmQueueEnvelope{
 				alarmDispatchGroupTestStartedEnvelope(domain.AlarmTypeLive, 5, firstStart),
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
+			want: []alarmDispatchGroupSummary{
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+			},
+		},
+		{
+			name: "separates non YouTube text notifications",
+			envelopes: func() []domain.AlarmQueueEnvelope {
+				youtube := alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart)
+				twitch := alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart)
+
+				twitch.Notification.Stream.IsTwitchOnly = true
+				twitch.Notification.Stream.TwitchLiveURL = testTwitchLiveURL
+
+				return []domain.AlarmQueueEnvelope{youtube, twitch}
+			}(),
 			want: []alarmDispatchGroupSummary{
 				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
 				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
@@ -133,7 +134,7 @@ func TestGroupAlarmDispatchEnvelopesForKaring(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			groups := groupAlarmDispatchEnvelopesForKaring(tc.envelopes, tc.karingEnabled)
+			groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, tc.envelopes)
 
 			assert.Equal(t, tc.want, summarizeAlarmDispatchGroups(groups))
 		})

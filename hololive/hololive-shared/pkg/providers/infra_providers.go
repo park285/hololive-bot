@@ -104,8 +104,15 @@ func ProvideDatabaseResources(ctx context.Context, postgresConfig *settings.Post
 	return resources, resources.Close, nil
 }
 
+// ManagedIrisClient는 Hololive runtime이 room 조회와 종료까지 소유하는 Iris 계약입니다.
+type ManagedIrisClient interface {
+	iris.Client
+	GetRooms(ctx context.Context) (*iris.RoomListResponse, error)
+	Close() error
+}
+
 // ProvideIrisClient - Iris 발송 클라이언트 생성.
-func ProvideIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (iris.Client, error) {
+func ProvideIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opts ...iris.ClientOption) (ManagedIrisClient, error) {
 	out, err := provideRuntimeIrisClient(irisConfig, logger, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("provide runtime iris client: %w", err)
@@ -114,8 +121,9 @@ func ProvideIrisClient(irisConfig *settings.IrisConfig, logger *slog.Logger, opt
 	return out, nil
 }
 
+// IrisKaringClient는 managed Iris 수명주기에 Karing 전송 계약을 더합니다.
 type IrisKaringClient interface {
-	iris.Client
+	ManagedIrisClient
 	iris.KaringClient
 }
 

@@ -3,10 +3,9 @@ package bootstrap
 import (
 	"log/slog"
 
-	"github.com/park285/iris-client-go/v2/iris"
-
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	messageformatter "github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/orchcmd"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
@@ -30,7 +29,7 @@ func BuildBotDependencyModules(
 	messageAdapter *messaging.MessageAdapter,
 	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,
-	irisClient iris.BotClient,
+	irisClient orchestration.BotIrisClient,
 	logger *slog.Logger,
 ) BotDependencyModules {
 	return BotDependencyModules{
@@ -55,7 +54,7 @@ func buildBotCoreModule(appConfig *configsettings.Config, logger *slog.Logger) B
 }
 
 func buildBotMessagingModule(
-	irisClient iris.BotClient,
+	irisClient orchestration.BotIrisClient,
 	messageAdapter *messaging.MessageAdapter,
 	formatter *messageformatter.ResponseFormatter,
 	messageStrings *messagestrings.Store,

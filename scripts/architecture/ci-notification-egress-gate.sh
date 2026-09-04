@@ -44,11 +44,39 @@ check_forbidden_scoped_go_hits() {
   report_hits "${label}" "${hits}"
 }
 
+check_required_scoped_go_hit() {
+  local label="$1"
+  local pattern="$2"
+  local path="$3"
+
+  if rg -q "${pattern}" "${ROOT_DIR}/${path}"; then
+    echo "[PASS] ${label}"
+  else
+    echo "[FAIL] ${label}" >&2
+    fail=1
+  fi
+}
+
 check_forbidden_global_go_hits \
   "Iris proactive sender implementation is alarm-worker internal only" \
   'NewIrisMessageSender|type .*IrisMessageSender' \
   -g '!hololive/hololive-alarm-worker/internal/egress/**' \
   -g '!hololive/hololive-alarm-worker/internal/app/**'
+
+check_forbidden_global_go_hits \
+  "retired Karing opt-in env is referenced only by the alarm-worker guard" \
+  'YOUTUBE_OUTBOX_KARING_ENABLED|ALARM_DISPATCH_KARING_ENABLED' \
+  -g '!hololive/hololive-shared/pkg/config/settings/alarmworker/retired_notification_egress.go'
+
+check_required_scoped_go_hit \
+  "alarm dispatch gates Karing on confirmed regular chat" \
+  'rooms\.RegularChat\(ctx, roomID\)' \
+  "hololive/hololive-alarm-worker/internal/service/dispatchrun/alarm_dispatch_group.go"
+
+check_required_scoped_go_hit \
+  "YouTube outbox gates Karing on confirmed regular chat" \
+  'sender\.RegularChat\(ctx, roomID\)' \
+  "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/send_engine_karing.go"
 
 # Dispatcher symbols are compiler-protected by alarm-worker/internal; shared delivery/Iris symbols require this scoped textual gate.
 check_forbidden_scoped_go_hits \
@@ -118,7 +146,12 @@ if ! grep -Fq 'STACK_WORKER_PROFILE_FILE: /run/hololive-bot/worker-profiles/alar
 else
   echo "[PASS] alarm-worker uses its strict local Stack Worker Profile v1"
 fi
-for retired in DELIVERY_DISPATCHER_ENABLED ALARM_DISPATCH_CONSUMER_ENABLED YOUTUBE_OUTBOX_DISPATCHER_ENABLED; do
+for retired in \
+  DELIVERY_DISPATCHER_ENABLED \
+  ALARM_DISPATCH_CONSUMER_ENABLED \
+  YOUTUBE_OUTBOX_DISPATCHER_ENABLED \
+  YOUTUBE_OUTBOX_KARING_ENABLED \
+  ALARM_DISPATCH_KARING_ENABLED; do
   if grep -Fq "${retired}:" <<< "${alarm_worker_block}"; then
     echo "[FAIL] alarm-worker still declares retired worker enablement ${retired}" >&2
     fail=1

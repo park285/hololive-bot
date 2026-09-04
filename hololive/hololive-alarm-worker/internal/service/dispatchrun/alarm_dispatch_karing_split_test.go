@@ -17,7 +17,7 @@ func karingGroupsFor(t *testing.T, count int) []alarmDispatchGroup {
 		envelopes = append(envelopes, alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, id))
 	}
 
-	return groupAlarmDispatchEnvelopesForKaring(envelopes, true)
+	return groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, envelopes)
 }
 
 func TestKaringGroupNeverExceedsOneChunk(t *testing.T) {
@@ -110,7 +110,7 @@ func TestKaringSplitLeavesOutboxGroupsIntact(t *testing.T) {
 		Items:      items,
 	}
 
-	groups := groupAlarmDispatchEnvelopesForKaring([]domain.AlarmQueueEnvelope{envelope}, true)
+	groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, []domain.AlarmQueueEnvelope{envelope})
 
 	require.Len(t, groups, 1, "an outbox envelope carries all its items; splitting by envelope cannot divide them")
 	require.Len(t, groups[0].envelopes, 1)

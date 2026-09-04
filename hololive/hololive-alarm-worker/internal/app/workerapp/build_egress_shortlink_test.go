@@ -11,8 +11,6 @@ import (
 )
 
 func TestBuildAlarmDispatchRunnerRejectsInvalidShortLinkOrigin(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "false")
-
 	config, state := alarmWorkerTestConfig(t)
 
 	config.Notification.AlarmShortLinkBaseURL = "http://go.example.com"
@@ -26,9 +24,7 @@ func TestBuildAlarmDispatchRunnerRejectsInvalidShortLinkOrigin(t *testing.T) {
 	assert.Contains(t, err.Error(), "validate alarm dispatch short links")
 }
 
-func TestBuildAlarmDispatchRunnerRejectsShortLinksWithKaring(t *testing.T) {
-	t.Setenv("ALARM_DISPATCH_KARING_ENABLED", "true")
-
+func TestBuildAlarmDispatchRunnerAcceptsShortLinksWithRoomScopedKaring(t *testing.T) {
 	config, state := alarmWorkerTestConfig(t)
 
 	config.Notification.AlarmShortLinkBaseURL = "https://short.holoshi.com"
@@ -37,7 +33,6 @@ func TestBuildAlarmDispatchRunnerRejectsShortLinksWithKaring(t *testing.T) {
 
 	scheduler, err := buildAlarmDispatchRunner(t.Context(), config, infra, egress.NewIrisMessageSender(nil), nil, state)
 
-	require.Error(t, err)
-	assert.Nil(t, scheduler)
-	assert.Contains(t, err.Error(), "ALARM_DISPATCH_KARING_ENABLED=false")
+	require.NoError(t, err)
+	assert.NotNil(t, scheduler)
 }

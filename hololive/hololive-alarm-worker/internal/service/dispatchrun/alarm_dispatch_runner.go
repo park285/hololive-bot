@@ -44,6 +44,7 @@ type IdleWaiter interface {
 }
 
 type Sender interface {
+	regularChatResolver
 	SendMessage(ctx context.Context, roomID, message string) error
 	SendKaringContentList(ctx context.Context, roomID string, req *iris.KaringContentListRequest) error
 }
@@ -59,7 +60,6 @@ type Runner struct {
 	messageStrings    *messagestrings.Store
 	idleWaiter        IdleWaiter
 	shortLinkBaseURL  string
-	karingEnabled     bool
 	maxBatch          int
 	maxBatchesPerWake int
 	batchesSinceWake  int
@@ -72,7 +72,6 @@ type Runner struct {
 }
 
 type RunnerConfig struct {
-	KaringEnabled     bool
 	ShortLinkBaseURL  string
 	MaxBatch          int
 	MaxBatchesPerWake int
@@ -98,7 +97,6 @@ func NewRunner(
 		messageStrings:    messageStrings,
 		idleWaiter:        idleWaiter,
 		shortLinkBaseURL:  config.ShortLinkBaseURL,
-		karingEnabled:     config.KaringEnabled,
 		maxBatch:          config.MaxBatch,
 		maxBatchesPerWake: config.MaxBatchesPerWake,
 		logger:            logger,
@@ -132,7 +130,7 @@ func (r *Runner) runOnce(ctx context.Context) (bool, error) {
 
 	defer cancel()
 
-	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForKaring(envelopes, r.karingEnabled))
+	err = r.dispatchGroups(attemptCtx, groupAlarmDispatchEnvelopesForDelivery(attemptCtx, r.sender, envelopes))
 	r.workerTotals.RecordAttempt(dispatchAttemptOutcome(err))
 
 	if err != nil {
@@ -227,9 +225,9 @@ func (r *Runner) routePreSendFailure(ctx context.Context, envelopes []domain.Ala
 	return nil
 }
 
-func (r *Runner) routePostSendingFailure(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, cause error) error {
+func (r *Runner) routePostSendingFailure(ctx context.Context, group alarmDispatchGroup, cause error) error {
 	if err := r.withStateContext(ctx, func(stateCtx context.Context) error {
-		return r.persistPostSendingFailure(stateCtx, envelopes, cause)
+		return r.persistPostSendingFailure(stateCtx, group, cause)
 	}); err != nil {
 		return fmt.Errorf("with state context: %w", err)
 	}
@@ -238,15 +236,16 @@ func (r *Runner) routePostSendingFailure(ctx context.Context, envelopes []domain
 }
 
 func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) error {
-	if alarmDispatchGroupUsesTextPath(group) {
-		if err := r.dispatchMessageGroup(ctx, group); err != nil {
-			return fmt.Errorf("dispatch message group: %w", err)
+	path, err := alarmDispatchGroupEgressPath(group)
+	if err != nil {
+		if routeErr := r.routePreSendFailure(ctx, group.envelopes, err); routeErr != nil {
+			return fmt.Errorf("route invalid egress group: %w", routeErr)
 		}
 
 		return nil
 	}
 
-	if !r.karingEnabled {
+	if path == alarmDispatchEgressText {
 		if err := r.dispatchMessageGroup(ctx, group); err != nil {
 			return fmt.Errorf("dispatch message group: %w", err)
 		}
@@ -259,25 +258,6 @@ func (r *Runner) dispatchGroup(ctx context.Context, group alarmDispatchGroup) er
 	}
 
 	return nil
-}
-
-func alarmDispatchGroupUsesTextPath(group alarmDispatchGroup) bool {
-	if len(group.envelopes) == 0 {
-		return false
-	}
-
-	envelope := group.envelopes[0]
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration {
-		return true
-	}
-
-	if envelope.SourceKind == domain.AlarmDispatchSourceKindDeliveryDigest {
-		return true
-	}
-
-	return envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox &&
-		envelope.YouTubeOutbox != nil &&
-		envelope.YouTubeOutbox.Kind == domain.OutboxKindMilestone
 }
 
 func (r *Runner) dispatchMessageGroup(ctx context.Context, group alarmDispatchGroup) error {
@@ -309,7 +289,7 @@ func (r *Runner) dispatchRenderedMessageGroup(ctx context.Context, group alarmDi
 	}
 
 	if sendErr := sendAlarmDispatchMessage(ctx, r.sender, group, message); sendErr != nil {
-		if routeErr := r.routePostSendingFailure(ctx, group.envelopes, sendErr); routeErr != nil {
+		if routeErr := r.routePostSendingFailure(ctx, group, sendErr); routeErr != nil {
 			return fmt.Errorf("route post sending failure: %w", routeErr)
 		}
 
@@ -386,7 +366,7 @@ func (r *Runner) dispatchKaringRequests(ctx context.Context, group alarmDispatch
 func (r *Runner) sendKaringRequests(ctx context.Context, group alarmDispatchGroup, requests []iris.KaringContentListRequest) (bool, error) {
 	for i := range requests {
 		if sendErr := r.sender.SendKaringContentList(ctx, group.roomID, &requests[i]); sendErr != nil {
-			if routeErr := r.routePostSendingFailure(ctx, group.envelopes, sendErr); routeErr != nil {
+			if routeErr := r.routePostSendingFailure(ctx, group, sendErr); routeErr != nil {
 				return false, fmt.Errorf("route post sending failure: %w", routeErr)
 			}
 

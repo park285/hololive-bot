@@ -100,7 +100,7 @@ scripts/architecture/ci-notification-egress-gate.sh
 - text 경로: `alarmDispatchClientRequestID(group, 0, len(group.envelopes))`가 그룹의 모든 envelope `DispatchOutboxID`와 `(start, end)` 범위를 함께 해싱합니다. 분절된 각 워커는 서로 다른 envelope 집합을 보므로 서로 다른 ID를 만듭니다.
 - karing 경로: `alarmDispatchKaringChunkClientRequestID(roomID, identities)`가 chunk의 item identity 집합을 해싱합니다. 그룹이 쪼개지면 chunk 구성이 달라지므로 이 경로에서도 ID가 달라집니다.
 
-즉 양쪽 경로 모두에서 분절된 워커들이 서로 다른 `ClientRequestID`를 만들고, **Iris 멱등성으로도 중복 발송을 걸러낼 수 없습니다**. 참고로 production compose는 `ALARM_DISPATCH_KARING_ENABLED` 기본값이 `false`이므로 현재 라이브 경로는 text 경로입니다.
+즉 양쪽 경로 모두에서 분절된 워커들이 서로 다른 `ClientRequestID`를 만들고, **Iris 멱등성으로도 중복 발송을 걸러낼 수 없습니다**. 확인된 일반채팅의 YouTube-addressable 알림은 Karing, 오픈채팅과 미확인 방은 message path를 사용하지만 양쪽 모두 이 그룹 분절 제약이 있으므로 replica=1을 유지합니다.
 
 ### 근거 테스트
 

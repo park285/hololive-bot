@@ -64,6 +64,17 @@ func (c *Catalog) OpenChat(ctx context.Context, roomID string) bool {
 	return ok && facts.OpenChat()
 }
 
+// RegularChat은 room facts가 존재하고 오픈채팅이 아닐 때만 true를 반환합니다.
+func (c *Catalog) RegularChat(ctx context.Context, roomID string) bool {
+	if c == nil {
+		return false
+	}
+
+	facts, ok := c.lookup(ctx, roomID)
+
+	return ok && !facts.OpenChat()
+}
+
 func (c *Catalog) lookup(ctx context.Context, roomID string) (Facts, bool) {
 	roomID = normalizeFacts(roomID, "", "").RoomID
 	if roomID == "" {

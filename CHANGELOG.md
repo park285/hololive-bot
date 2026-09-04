@@ -10,6 +10,7 @@
 
 ### 수정
 
+- Alarm-worker는 확인된 일반채팅의 YouTube-addressable 알림만 Karing content-list로 보내고 오픈채팅의 기존 Markdown lane을 유지합니다. Iris `202 Accepted` 뒤 exact reply status의 `handoff_completed`를 확인한 경우에만 Karing 성공으로 처리하며, 두 opt-in flag는 제거하고 결과 불명확 상태는 재발송하지 않습니다.
 - hololive-api artifact `3.1.1`이 `shared-go v2.1.1`을 사용해 major-event RSS HTTP/1.1 ALPN 불일치를 해소합니다.
 
 ## v3.4.0 - 2026-08-29

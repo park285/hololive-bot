@@ -10,4 +10,6 @@ const (
 	testIrisPostOp            = "post"
 	testIrisReplyPath         = "/reply"
 	testKaringContentListPath = "/karing/content-list"
+	testTwitchLiveURL         = "https://twitch.tv/member"
+	testRetryClientRequestID  = "hololive-alarm:0123456789abcdef0123456789abcdef"
 )

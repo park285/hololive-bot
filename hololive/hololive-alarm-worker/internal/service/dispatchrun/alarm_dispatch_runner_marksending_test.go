@@ -48,10 +48,9 @@ func TestAlarmDispatchRunnerCompensatesKaringMarkSendingFailureWithSendingRetry(
 	}
 	sender := &alarmDispatchRunnerTestSender{}
 	runner := Runner{
-		consumer:      consumer,
-		sender:        sender,
-		karingEnabled: true,
-		maxBatch:      10,
+		consumer: consumer,
+		sender:   sender,
+		maxBatch: 10,
 	}
 
 	processed, err := runner.runOnce(t.Context())
