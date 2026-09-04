@@ -19,6 +19,24 @@ worker_profile="/etc/stack-secrets/hololive-bot/worker-profiles/${service}.json"
 producer_state_file="$releases_root/first-cutover-producer.state"
 swapfile="/swapfile"
 
+normalize_runtime_payload_permissions() {
+  local root="$1"
+  local required
+
+  for required in \
+    "$root/internal" \
+    "$root/internal/domain" \
+    "$root/internal/domain/data" \
+    "$root/youtubejs"; do
+    sudo -n test -d "$required" || return
+    sudo -n test ! -L "$required" || return
+  done
+
+  # 서비스 계정은 root 소유 release의 정적 데이터와 helper graph를 읽고 순회할 수 있어야 한다.
+  sudo -n chmod a+rx -- "$root/internal" "$root/internal/domain" || return
+  sudo -n chmod -R -P a+rX -- "$root/internal/domain/data" "$root/youtubejs"
+}
+
 test -r "$release_path_lib"
 # 검증한 release payload 내부의 동적 경로만 source합니다.
 # shellcheck disable=SC1090
@@ -105,7 +123,8 @@ release_dir="$(native_release_dir_resolve "$releases_root" "$release_id" "$curre
 sudo -n rm -rf "$release_dir"
 sudo -n mkdir -p "$release_dir"
 sudo -n rsync -a --delete "$payload/" "$release_dir/"
-sudo -n chown -R root:root "$release_dir"
+sudo -n chown -R -P root:root "$release_dir"
+normalize_runtime_payload_permissions "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"
 sudo -n -u hololive env STACK_WORKER_PROFILE_FILE="$worker_profile" \
   "$release_dir/bin/youtube-collector" --check-worker-profile

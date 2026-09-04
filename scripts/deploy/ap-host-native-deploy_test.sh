@@ -59,6 +59,58 @@ else
   pass "ap-host-native does not create unused collector settings dir"
 fi
 
+permission_line="$(grep -nF 'normalize_runtime_payload_permissions "$release_dir"' "${REMOTE_APPLY}" | tail -1 | cut -d: -f1)"
+profile_line="$(grep -nF '"$release_dir/bin/youtube-collector" --check-worker-profile' "${REMOTE_APPLY}" | head -1 | cut -d: -f1)"
+if [[ -n "${permission_line}" && -n "${profile_line}" ]] && (( permission_line < profile_line )); then
+  pass "host-native release normalizes service-readable payload permissions before validation"
+else
+  record_fail "host-native release must normalize service-readable payload permissions before validation"
+fi
+
+permission_fn="$(awk '/^normalize_runtime_payload_permissions\(\) \{/,/^}$/' "${REMOTE_APPLY}")"
+permission_fixture="$(mktemp -d)"
+if [[ -z "${permission_fn}" ]]; then
+  record_fail "host-native payload permission normalizer is missing"
+elif (
+  sudo() {
+    [[ "${1:-}" != "-n" ]] || shift
+    command "$@"
+  }
+
+  normal="${permission_fixture}/normal"
+  external="${permission_fixture}/external"
+  mkdir -p "${normal}/internal/domain/data" "${normal}/youtubejs/src" "${external}"
+  printf 'fixture\n' >"${normal}/internal/domain/data/member.json"
+  printf 'export {}\n' >"${normal}/youtubejs/src/server.mjs"
+  printf 'sentinel\n' >"${external}/sentinel"
+  chmod 0700 "${normal}/internal" "${normal}/internal/domain" \
+    "${normal}/internal/domain/data" "${normal}/youtubejs" "${normal}/youtubejs/src" "${external}"
+  chmod 0600 "${normal}/internal/domain/data/member.json" \
+    "${normal}/youtubejs/src/server.mjs" "${external}/sentinel"
+  ln -s "${external}" "${normal}/youtubejs/external-link"
+
+  eval "${permission_fn}"
+  normalize_runtime_payload_permissions "${normal}"
+  [[ "$(stat -c '%a' "${normal}/internal")" == 755 ]]
+  [[ "$(stat -c '%a' "${normal}/internal/domain")" == 755 ]]
+  [[ "$(stat -c '%a' "${normal}/internal/domain/data/member.json")" == 644 ]]
+  [[ "$(stat -c '%a' "${normal}/youtubejs/src/server.mjs")" == 644 ]]
+  [[ "$(stat -c '%a' "${external}/sentinel")" == 600 ]]
+
+  bad="${permission_fixture}/bad"
+  mkdir -p "${bad}/internal/domain/data"
+  ln -s "${external}" "${bad}/youtubejs"
+  if normalize_runtime_payload_permissions "${bad}"; then
+    exit 1
+  fi
+  [[ "$(stat -c '%a' "${external}/sentinel")" == 600 ]]
+); then
+  pass "host-native payload permissions survive restrictive umask without following symlinks"
+else
+  record_fail "host-native payload permissions must cover parent traversal and reject symlink escape"
+fi
+rm -rf "${permission_fixture}"
+
 if grep -Fq 'ReadWritePaths=/var/lib/hololive-bot' "${UNIT_TEMPLATE}"; then
   pass "ap-host-native keeps /var/lib/hololive-bot writable under systemd hardening"
 else
