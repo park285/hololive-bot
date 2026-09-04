@@ -131,7 +131,7 @@ jobs:
         if: matrix.module == 'hololive/hololive-youtube-collector'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24"
+          node-version: "24.20.0"
           cache: npm
           cache-dependency-path: hololive/hololive-youtube-collector/youtubejs/package-lock.json
 
@@ -222,7 +222,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24"
+          node-version: "24.20.0"
           cache: npm
           cache-dependency-path: admin-dashboard/frontend/package-lock.json
 
@@ -258,7 +258,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24"
+          node-version: "24.20.0"
           cache: npm
           cache-dependency-path: hololive/hololive-youtube-collector/youtubejs/package-lock.json
 
