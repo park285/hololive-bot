@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 FRONTEND_DIR="${ROOT_DIR}/admin-dashboard/frontend"
 NODE_VERSION_LIB="${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version.sh"
 
+# shellcheck source=scripts/deploy/lib/youtubejs-node-version.sh
 . "${NODE_VERSION_LIB}"
 
 [[ -f "${FRONTEND_DIR}/package-lock.json" ]] || {
