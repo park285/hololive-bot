@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 FRONTEND_DIR="${ROOT_DIR}/admin-dashboard/frontend"
+NODE_VERSION_LIB="${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version.sh"
+
+. "${NODE_VERSION_LIB}"
 
 [[ -f "${FRONTEND_DIR}/package-lock.json" ]] || {
   echo "frontend package-lock.json is required" >&2
@@ -20,20 +23,13 @@ require_command() {
 require_command node
 require_command corepack
 
-node - <<'NODE'
-const [major, minor, patch] = process.versions.node.split('.').map(Number)
-const supported = major > 22 || (major === 22 && (minor > 22 || (minor === 22 && patch >= 2)))
-if (!supported) {
-  console.error(`unsupported Node.js ${process.versions.node}; expected >=22.22.2`)
-  process.exit(1)
-}
-console.log(`[public-pr] Node.js ${process.versions.node}, Corepack-managed npm available`)
-NODE
+require_node_version node
+echo "[public-pr] Node.js $(node --version), Corepack-managed npm available"
 
 cd "${FRONTEND_DIR}"
 
 echo "[public-pr] corepack npm ci"
-corepack npm ci
+npm_config_engine_strict=true corepack npm ci
 
 echo "[public-pr] generate API client"
 corepack npm run generate:api

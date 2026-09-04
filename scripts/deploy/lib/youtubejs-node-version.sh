@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-youtubejs_node_version_supported() {
+node_version_supported() {
   local version="${1#v}"
   local major=""
   local minor=""
@@ -12,18 +12,10 @@ youtubejs_node_version_supported() {
   major="${BASH_REMATCH[1]}"
   minor="${BASH_REMATCH[2]}"
   patch="${BASH_REMATCH[3]}"
-  if (( 10#$major == 22 )); then
-    (( 10#$minor > 22 || (10#$minor == 22 && 10#$patch >= 2) ))
-    return
-  fi
-  if (( 10#$major == 24 )); then
-    (( 10#$minor > 15 || (10#$minor == 15 && 10#$patch >= 0) ))
-    return
-  fi
-  (( 10#$major >= 26 ))
+  (( 10#$major == 24 && (10#$minor > 20 || (10#$minor == 20 && 10#$patch >= 0)) ))
 }
 
-require_youtubejs_node_version() {
+require_node_version() {
   local node_path="${1:-node}"
   local version=""
 
@@ -32,8 +24,8 @@ require_youtubejs_node_version() {
     return 1
   }
   version="$("$node_path" --version)"
-  youtubejs_node_version_supported "$version" || {
-    echo "YouTube.js Node runtime $version does not satisfy ^22.22.2 || ^24.15.0 || >=26.0.0" >&2
+  node_version_supported "$version" || {
+    echo "Node runtime $version does not satisfy ^24.20.0" >&2
     return 1
   }
 }

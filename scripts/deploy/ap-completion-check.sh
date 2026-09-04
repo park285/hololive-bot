@@ -51,7 +51,7 @@ sudo -n test -r /etc/stack-secrets/hololive-bot/certs/hololive-h3.key
 sudo -n test -r /etc/hololive-bot/youtube-collector-host.env
 sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
-require_youtubejs_node_version node
+require_node_version node
 
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
@@ -129,7 +129,7 @@ sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMP
 for container in $containers_list; do
   docker inspect \"\$container\" >/dev/null
   node_version=\$(docker exec \"\$container\" node --version)
-  youtubejs_node_version_supported \"\$node_version\"
+  node_version_supported \"\$node_version\"
   status=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \"\$container\")
   [[ \"\$status\" == healthy ]]
 done
