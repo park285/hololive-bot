@@ -8,10 +8,33 @@
 
 ## 미출시
 
+## v3.5.0 - 2026-09-04
+
+### 추가
+
+- YouTube delivery ledger lifecycle과 source-observation replay epoch 기반을 추가합니다.
+  이번 릴리스는 epoch activation과 historical backfill을 실행하지 않습니다.
+- 확인된 일반채팅의 YouTube-addressable 알림을 Karing content-list로 보내고 오픈채팅은 기존
+  Markdown lane을 유지합니다.
+
 ### 수정
 
-- Alarm-worker는 확인된 일반채팅의 YouTube-addressable 알림만 Karing content-list로 보내고 오픈채팅의 기존 Markdown lane을 유지합니다. Iris `202 Accepted` 뒤 exact reply status의 `handoff_completed`를 확인한 경우에만 Karing 성공으로 처리하며, 두 opt-in flag는 제거하고 결과 불명확 상태는 재발송하지 않습니다.
-- hololive-api artifact `3.1.1`이 `shared-go v2.1.1`을 사용해 major-event RSS HTTP/1.1 ALPN 불일치를 해소합니다.
+- Alarm-worker는 Iris `202 Accepted` 뒤 exact reply status의 `handoff_completed`를 확인한
+  경우에만 Karing 성공으로 처리합니다. Egress path를 envelope당 한 번 결정해 split group 전체에
+  고정하고 결과 불명확 상태는 재발송하지 않습니다.
+- YouTube collector가 방송 예정 시각 metadata를 복구하고 lifecycle 전환을 한 owner에 결속합니다.
+- `x/crypto`와 `fast-uri` 보안 권고를 해소하고 Node 24.20.0 production image와 npm dependency
+  provenance를 갱신합니다.
+
+### 변경
+
+- migration 190·191이 delivery table constraint와 ledger/replay 기반을 추가합니다. Migration
+  one-shot은 종료 코드 0을 직접 전파하며 central cutover는 build host와 runtime no-build 단계를
+  분리합니다.
+- Go toolchain을 `1.27.1`로 올리고 여섯 Go module 및 두 npm application dependency graph를
+  갱신합니다. 모든 consumer는 `iris-client-go v2.4.2`, `shared-go v2.5.0`에 고정합니다.
+- 전체 source release는 `3.5.0`, hololive-api·alarm-worker·collector·admin·migrator artifact는
+  `3.2.0`입니다.
 
 ## v3.4.0 - 2026-08-29
 

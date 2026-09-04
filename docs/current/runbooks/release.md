@@ -33,13 +33,13 @@ artifact 버전이며 독립 build가 필요하면 서로 달라질 수 있습�
 
 모든 build·deploy·restart는 `hololive-bot-ops`로 라우팅하고 각각 필요한 승인을
 확인합니다. 검증된 clean revision의 전체 image build-only 진입점은
-`./build-all.sh --no-bump --build-only`이고, 개별 중앙 service의 build와 cutover
-진입점은 `./scripts/deploy/compose-redeploy-service.sh <service>`입니다.
+`./build-all.sh --no-bump --build-only`입니다. 중앙 service의 실제 배포는 아래의
+build host 생성·검증, image와 deploy tree 전송, runtime host no-build cutover 세 단계를
+분리해 수행합니다.
 
-`./scripts/deploy/compose-redeploy-service.sh`는 cutover 전에 `compose build`를
-수행하므로 **빌드 호스트 전용**입니다. 런타임 호스트에서 실행하면 그 호스트에서
-컴파일이 돌고, `/opt/hololive-bot/compose/current`에는 `.git`이 없어
-`org.opencontainers.image.revision`이 `unknown`으로 찍힙니다.
+`./scripts/deploy/compose-redeploy-service.sh`는 실행한 한 호스트에서 build, migration과
+`compose up`을 연속 수행하는 로컬 검증 도구입니다. 중앙 production cutover 진입점이
+아니며 build host나 runtime host 어느 쪽에서도 중앙 배포용으로 실행하지 않습니다.
 
 ### 1. 빌드 호스트: 이미지 생성과 검증
 
@@ -89,8 +89,7 @@ export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 # 마이그레이션 one-shot 먼저, 종료 코드 0 확인
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
   -f deploy/compose/docker-compose.live-compat.yml \
-  up -d --no-deps hololive-db-migrate
-docker wait hololive-db-migrate
+  run --rm --no-deps hololive-db-migrate
 
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml \
   -f deploy/compose/docker-compose.live-compat.yml \

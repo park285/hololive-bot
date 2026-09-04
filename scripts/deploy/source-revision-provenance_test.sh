@@ -133,6 +133,8 @@ grep -Fq "REVISION=\"${literal_dollar}(deploy_source_revision \"${literal_dollar
     || fail "build-all must derive a clean full revision"
 grep -Fq 'verify_build_services' "${build_all}" \
     || fail "build-all must verify built image labels"
+grep -Fq 'BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)' "${build_all}" \
+    || fail "all-service build must verify the collector revision label"
 
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh"
 bash "${ROOT_DIR}/scripts/deploy/source-revision-entrypoints_test.sh"
