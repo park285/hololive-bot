@@ -335,7 +335,7 @@ export HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION REVISION
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
     BUILD_REVISION_SERVICES=("${TARGET_SERVICES[@]}")
 else
-    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker admin-dashboard)
+    BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
 fi
 
 validate_runtime_config_for_deploy

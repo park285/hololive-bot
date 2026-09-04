@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/shared-go
-          ref: 4c736cbdb0fa18716fc4d4f8013c6f4d0d7eb4cf # v2.4.0
+          ref: e83c04da6eb91ba83d2c2bf028f5fd76782e9733 # v2.5.0
           path: shared-go
           persist-credentials: false
 
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: park285/iris-client-go
-          ref: 9eabdc0b2b2ae520a02b7c7f40cc199f29b01833 # v2.4.1
+          ref: 1861b3f6baf06719eddf905abfeb99c609483ec7 # v2.4.2
           path: iris-client-go
           persist-credentials: false
 

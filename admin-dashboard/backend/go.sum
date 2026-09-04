@@ -67,8 +67,8 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/onsi/gomega v1.42.1 h1:iN1rCUX+44NZ1Dc97MPoeFYbFR0vh8zxoxMFwKdyZ6I=
 github.com/onsi/gomega v1.42.1/go.mod h1:REff/hsDsodHoKlWsP2mAPhu1+5/6hVYNf9rIEBpeSg=
-github.com/park285/shared-go/v2 v2.4.0 h1:6q/khowq4QpmMZduU4DrjI/eI4IT+RhOvcfGcm4m7Jw=
-github.com/park285/shared-go/v2 v2.4.0/go.mod h1:t0crf9+A7/LtMIZerTBj7RygHNFRaGUmvpLGifCAq9Y=
+github.com/park285/shared-go/v2 v2.5.0 h1:7FdeHc7YqGrCNhUTSuqxlTWk+daos0yAARYfBnL/vw8=
+github.com/park285/shared-go/v2 v2.5.0/go.mod h1:2LY5CTeEUy190KMMUwk1brk228rC+ibeXelLfw3yV4w=
 github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
 github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
