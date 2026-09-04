@@ -571,6 +571,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 
 	queryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-shared", "pkg", "service", "youtube", "sourceobservation", "queries"))
+	backfillQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-alarm-worker", "internal", "egress", "youtubedispatch", "backfill", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string][]observationRoleQuery{
 		roles.scraper: {
@@ -581,6 +582,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		roles.runtime: {
 			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
 			{name: "repository_replay_epoch_load_0086_86.sql"},
+			{name: "replay_epoch_load.sql", dir: backfillQueryDir},
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_observation_lock_0051_51.sql", args: []any{int64(0)}},
@@ -605,9 +607,21 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		}
 
 		for _, check := range queries {
-			query := readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
+			checkDir := check.dir
+			if checkDir == "" {
+				checkDir = queryDir
+			}
+
+			query := readObservationRoleSQL(t, filepath.Join(checkDir, check.name), nil)
 
 			rows, err := tx.Query(t.Context(), query, check.args...)
+			if err == nil {
+				// pgx는 실행 오류를 Close 뒤 Err()로 넘기므로, 여기서 확인하지 않으면
+				// 권한 오류가 다음 쿼리의 25P02로 둔갑해 원인 쿼리를 잃는다.
+				rows.Close()
+				err = rows.Err()
+			}
+
 			if err != nil {
 				if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
 					t.Errorf("rollback observation lock API query %s as %s: %v", check.name, role, rollbackErr)
@@ -615,8 +629,6 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 
 				t.Fatalf("execute observation lock API query %s as %s: %v", check.name, role, err)
 			}
-
-			rows.Close()
 		}
 
 		if err := tx.Rollback(t.Context()); err != nil {
@@ -745,6 +757,9 @@ func assertScheduleCollaboConstraintAccess(t *testing.T, pool *pgxpool.Pool, rol
 type observationRoleQuery struct {
 	name string
 	args []any
+	// dir이 비면 sourceobservation queries 디렉터리를 쓴다. 다른 모듈이 같은 테이블을
+	// 같은 role로 읽는 쿼리 자산도 이 검사가 함께 돌아야 권한 회귀를 잡는다.
+	dir string
 }
 
 func readObservationRoleSQL(t *testing.T, path string, replacements map[string]string) string {
