@@ -136,14 +136,48 @@ export const authApi = {
 	},
 };
 
+export class DockerActionOutcomeUnknownError extends Error {
+	constructor(cause?: unknown) {
+		super("작업 실행 결과를 확인하지 못했습니다. 자동 재시도하지 않았습니다. 현재 상태를 확인해 주세요.", { cause });
+		this.name = "DockerActionOutcomeUnknownError";
+	}
+}
+
+function validateDockerActionResponse(data: unknown): StatusOnlyResponse {
+	if (
+		typeof data !== "object" || data === null || Array.isArray(data) ||
+		!("status" in data) || data.status !== "ok"
+	) {
+		throw new DockerActionOutcomeUnknownError();
+	}
+	const message = "message" in data ? data.message : undefined;
+	if (message !== undefined && message !== null && typeof message !== "string") {
+		throw new DockerActionOutcomeUnknownError();
+	}
+	return { status: "ok", message };
+}
+
 const postDockerAction = async (
 	name: string,
 	action: "restart" | "stop" | "start",
 ): Promise<StatusOnlyResponse> => {
-	const { data } = await apiClient.post<Partial<StatusOnlyResponse> | undefined>(
-		`/docker/containers/${encodeURIComponent(name)}/${action}`,
-	);
-	return normalizeStatusOnly(data);
+	try {
+		const { data, status } = await apiClient.post<unknown>(
+			`/docker/containers/${encodeURIComponent(name)}/${action}`,
+		);
+		if (status !== 200) {
+			throw new DockerActionOutcomeUnknownError();
+		}
+		return validateDockerActionResponse(data);
+	} catch (error) {
+		if (error instanceof DockerActionOutcomeUnknownError) {
+			throw error;
+		}
+		if (!isAxiosError(error) || !error.response || error.response.status >= 500) {
+			throw new DockerActionOutcomeUnknownError(error);
+		}
+		throw error;
+	}
 };
 
 export const dockerApi = {
