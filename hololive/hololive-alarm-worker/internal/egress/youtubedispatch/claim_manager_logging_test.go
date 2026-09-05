@@ -15,7 +15,7 @@ func TestEnqueueDeliveries_DoesNotLogZeroWorkAtInfo(t *testing.T) {
 	var logBuffer bytes.Buffer
 
 	logger := slog.New(slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	dispatcher := NewDispatcher(nil, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, nil, &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{})
 
 	dispatcher.claim.recordOutboxEnqueueStats(0, outboxEnqueueStats{})
 
