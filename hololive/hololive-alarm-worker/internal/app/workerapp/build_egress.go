@@ -314,11 +314,11 @@ func buildYouTubeOutboxDispatcher(
 		return nil, errors.New("postgres is required")
 	}
 
-	if err := validateYouTubeOutboxHandoffConfig(mode); err != nil {
-		return nil, fmt.Errorf("validate youtube outbox handoff config: %w", err)
+	dispatcher, err := newYouTubeOutboxDispatcher(appConfig, infra, sender, logger)
+	if err != nil {
+		return nil, fmt.Errorf("create youtube outbox dispatcher: %w", err)
 	}
 
-	dispatcher := newYouTubeOutboxDispatcher(appConfig, infra, sender, logger)
 	dispatcher.SetWorkerInstrumentation(workerState.trackers["youtube_delivery"], workerState.totals["youtube_delivery"])
 
 	if err := configureYouTubeOutboxDispatcher(dispatcher, infra, logger, mode); err != nil {
@@ -367,16 +367,20 @@ func youtubeOutboxDispatcherEnabled(appConfig *settings.Config, mode handoff.Mod
 	return false, nil
 }
 
-func validateYouTubeOutboxHandoffConfig(_ handoff.Mode) error {
-	return nil
-}
-
 func newYouTubeOutboxDispatcher(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	sender delivery.MessageSender,
 	logger *slog.Logger,
-) *youtubedispatch.Dispatcher {
+) (*youtubedispatch.Dispatcher, error) {
+	if appConfig == nil {
+		return nil, errors.New("youtube outbox config is required")
+	}
+
+	if infra == nil || infra.Postgres == nil || infra.Postgres.GetPool() == nil {
+		return nil, errors.New("youtube outbox postgres pool is required")
+	}
+
 	profile := appConfig.AlarmWorkerProfile.YouTubeDelivery
 	worker := appConfig.AlarmWorkerProfile.Loaded.Profile.Workers["youtube_delivery"]
 	dispatchConfig := dispatchstate.Config{
@@ -391,15 +395,16 @@ func newYouTubeOutboxDispatcher(
 		TelemetryBackfillBatch: profile.TelemetryBackfillBatch, TelemetryFlushBatch: profile.TelemetryFlushBatch,
 		TelemetryRetryBackoff: durationMS(profile.TelemetryRetryBackoffMS), TelemetryRetention: durationMS(profile.TelemetryRetentionMS),
 	}
+	pool := infra.Postgres.GetPool()
+	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
+		DB: pool, Cache: infra.Cache, Sender: sender,
+		Renderer: template.NewRenderer(pool, logger), MessageStrings: messagestrings.NewStore(pool, logger),
+	}, logger, &dispatchConfig)
+	if err != nil {
+		return nil, fmt.Errorf("initialize youtube outbox dispatcher dependencies: %w", err)
+	}
 
-	return youtubedispatch.NewDispatcher(
-		infra.Postgres.GetPool(),
-		infra.Cache,
-		sender,
-		template.NewRenderer(infra.Postgres.GetPool(), logger),
-		logger,
-		&dispatchConfig,
-	)
+	return dispatcher, nil
 }
 
 func durationMS(milliseconds int64) time.Duration {

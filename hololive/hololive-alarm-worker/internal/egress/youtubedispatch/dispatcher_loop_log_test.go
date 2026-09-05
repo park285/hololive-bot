@@ -128,7 +128,7 @@ func TestDispatcherTelemetryLoopDoesNotWarnWhenContextCanceled(t *testing.T) {
 func newCanceledTickerDispatcher(t *testing.T, logger *slog.Logger) *Dispatcher {
 	t.Helper()
 
-	dispatcher := NewDispatcher(openDispatcherStartTestDB(t, "dispatcher_cancel_log"), cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, openDispatcherStartTestDB(t, "dispatcher_cancel_log"), cachemocks.NewLenientClient(), &testSender{failRoom: map[string]bool{}}, nil, logger, &dispatchstate.Config{
 		BatchSize:             10,
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,

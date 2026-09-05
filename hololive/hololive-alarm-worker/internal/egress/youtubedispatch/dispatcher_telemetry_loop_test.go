@@ -43,7 +43,7 @@ func TestProcessOnceForTest_DoesNotFlushTelemetryBuffer(t *testing.T) {
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          50 * time.Millisecond,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -82,7 +82,7 @@ func TestDispatcherStart_FlushesTelemetryInBackground(t *testing.T) {
 		NextAttemptAt:  time.Now().UTC(),
 	}}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          10 * time.Millisecond,
 		TelemetryPollInterval: 10 * time.Millisecond,
@@ -114,7 +114,7 @@ func TestDispatcherTelemetryLoop_ProcessesImmediatelyThenTicksUntilCanceled(t *t
 		telemetryLoopTestRow(703, 803, "short-loop-immediate", "room-loop-immediate"),
 	}))
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: 20 * time.Millisecond,
@@ -156,7 +156,7 @@ func TestDispatcherTelemetryLoop_StopsOnContextCancelBeforeNextTick(t *testing.T
 
 	db := openTelemetryLoopTestDB(t)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		LockTimeout:           time.Minute,
 		PollInterval:          time.Hour,
 		TelemetryPollInterval: time.Hour,

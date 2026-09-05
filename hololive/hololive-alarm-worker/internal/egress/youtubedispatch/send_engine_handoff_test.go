@@ -32,7 +32,7 @@ func TestDispatcherCutoverHandsOffMilestoneWithoutDirectSend(t *testing.T) {
 
 	sender := &youtubeOutboxKaringTestSender{}
 	publisher := &youtubeOutboxHandoffTestPublisher{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -62,7 +62,7 @@ func TestDispatcherShadowHandoffPreservesDirectKaringSend(t *testing.T) {
 
 	sender := &youtubeOutboxKaringTestSender{}
 	publisher := &youtubeOutboxHandoffTestPublisher{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})

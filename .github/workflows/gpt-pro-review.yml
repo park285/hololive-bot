@@ -1,0 +1,71 @@
+name: GPT Pro Source Evidence
+run-name: GPT Pro Source Evidence · ${{ github.event.pull_request.head.sha || github.sha }}
+
+# 테스트는 기존 public PR gate가 실행한다. 이 job은 같은 SHA의 offline 검증 입력만 보존한다.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpt-pro-source-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOWORK: "off"
+  GOTOOLCHAIN: local
+
+jobs:
+  source-evidence:
+    name: Exact source evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify exact checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          printf 'expected_sha=%s\nchecked_out_sha=%s\n' "${EXPECTED_SHA}" "${actual_sha}"
+          test "${actual_sha}" = "${EXPECTED_SHA}"
+
+      - name: Setup Go from go.mod
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Preserve exact source and declared module dependencies
+        run: |
+          go version
+          for module in . admin-dashboard/backend hololive/hololive-api hololive/hololive-shared hololive/hololive-dbtest hololive/hololive-alarm-worker hololive/hololive-youtube-collector; do
+            (cd "${module}" && go mod download all)
+          done
+          evidence="${RUNNER_TEMP}/source-evidence"
+          mkdir -p "${evidence}"
+          git archive --format=tar HEAD | gzip > "${evidence}/source.tar.gz"
+          git ls-tree -r HEAD > "${evidence}/source-tree.txt"
+          git rev-parse HEAD > "${evidence}/source-commit.txt"
+          tar -C "$(go env GOMODCACHE)" -czf "${evidence}/go-modcache.tar.gz" .
+          (cd "${evidence}" && sha256sum source.tar.gz go-modcache.tar.gz > SHA256SUMS)
+
+      - name: Upload exact source evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: source-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/source-evidence/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
