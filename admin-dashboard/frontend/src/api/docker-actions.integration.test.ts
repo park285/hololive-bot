@@ -142,4 +142,30 @@ for (const [action, invoke] of actions) {
 			isOutcomeUnknown(error) && error instanceof Error && error.cause instanceof Error);
 		assert.equal(requests, 1);
 	});
+
+	test(`docker ${action} preserves timeout cause without replay`, { timeout: 5_000 }, async (t) => {
+		const originalTimeout = apiClient.defaults.timeout;
+		let releaseResponse: (() => void) | undefined;
+		const responseGate = new Promise<void>((resolve) => {
+			releaseResponse = resolve;
+		});
+		t.after(() => {
+			apiClient.defaults.timeout = originalTimeout;
+			releaseResponse?.();
+		});
+
+		let requests = 0;
+		server.use(http.post(url, async () => {
+			requests += 1;
+			await responseGate;
+			return HttpResponse.json({ status: "ok" });
+		}));
+		apiClient.defaults.timeout = 500;
+
+		await assert.rejects(invoke(containerName), (error: unknown) =>
+			isOutcomeUnknown(error) && error instanceof Error &&
+			isAxiosError(error.cause) &&
+			(error.cause.code === "ECONNABORTED" || error.cause.code === "ETIMEDOUT"));
+		assert.equal(requests, 1);
+	});
 }
