@@ -43,7 +43,7 @@ func TestDispatcherAggregateSyncQuarantinesStaleSendingDelivery(t *testing.T) {
 	}
 	require.NoError(t, insertDeliveryTestRows(db, &delivery).Error)
 
-	dispatcher := NewDispatcher(db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, nil, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:      10,
 		LockTimeout:    time.Minute,
 		PollInterval:   time.Hour,

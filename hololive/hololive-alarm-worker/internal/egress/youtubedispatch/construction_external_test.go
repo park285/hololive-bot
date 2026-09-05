@@ -1,4 +1,4 @@
-package youtubedispatch
+package youtubedispatch_test
 
 import (
 	"log/slog"
@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
@@ -14,28 +15,22 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
 
-func newDispatcherForTest(
+func newIntegrationDispatcher(
 	t testing.TB,
 	db *pgxpool.Pool,
 	cacheClient cache.Client,
 	sender delivery.MessageSender,
-	renderer *template.Renderer,
 	logger *slog.Logger,
 	config *dispatchstate.Config,
-) *Dispatcher {
+) *youtubedispatch.Dispatcher {
 	t.Helper()
 
-	deps := Dependencies{Cache: cacheClient, Sender: sender, Renderer: renderer}
-	if db != nil {
-		deps.DB = db
-		deps.MessageStrings = messagestrings.NewStore(db, logger)
+	require.NotNil(t, db)
 
-		if deps.Renderer == nil {
-			deps.Renderer = template.NewRenderer(db, logger)
-		}
-	}
-
-	dispatcher, err := NewDispatcher(deps, logger, config)
+	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
+		DB: db, Cache: cacheClient, Sender: sender,
+		Renderer: template.NewRenderer(db, logger), MessageStrings: messagestrings.NewStore(db, logger),
+	}, logger, config)
 	require.NoError(t, err)
 
 	return dispatcher

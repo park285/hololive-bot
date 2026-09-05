@@ -120,7 +120,7 @@ func TestDispatcherUsesKaringForSupportedYouTubeOutboxKind(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -165,7 +165,7 @@ func TestDispatcherFallsBackToTextForUnsupportedKaringKind(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -193,7 +193,7 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 	t.Parallel()
 
 	sender := &youtubeOutboxKaringTestSender{failErr: errors.New("karing failed")}
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
 	})
@@ -219,7 +219,7 @@ func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 
 func TestDispatcherSerializesKaringSends(t *testing.T) {
 	sender := newBlockingKaringSender()
-	dispatcher := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 2,
 		DeliverySendTimeout: time.Second,
 	})
