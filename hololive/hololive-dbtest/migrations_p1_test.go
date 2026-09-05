@@ -595,8 +595,10 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 }
 
-// runObservationRoleQueries는 role 하나로 SET LOCAL ROLE한 트랜잭션에서 쿼리 자산을 차례로
-// 실행하고 항상 롤백한다. 검사 목적이 권한이므로 어떤 행도 남기지 않는다.
+// runObservationRoleQueries는 쿼리 자산을 모두 읽은 뒤 role 하나로 SET LOCAL ROLE한 트랜잭션에서
+// 차례로 실행하고 항상 롤백한다. 검사 목적이 권한이므로 어떤 행도 남기지 않는다. 파일 읽기는 Begin 앞에
+// 둔다. 트랜잭션을 연 채 Fatalf로 빠져나가면 연결이 pool에 돌아가지 않아 cleanup의 pool.Close가
+// go test timeout까지 멈추기 때문이다.
 func runObservationRoleQueries(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -605,28 +607,31 @@ func runObservationRoleQueries(
 ) {
 	t.Helper()
 
+	quoted := pgx.Identifier{role}.Sanitize()
+	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": quoted})
+	querySQL := make([]string, len(queries))
+
+	for i, check := range queries {
+		queryDir := check.dir
+		if queryDir == "" {
+			queryDir = defaultQueryDir
+		}
+
+		querySQL[i] = readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
+	}
+
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatalf("begin observation lock API check for %s: %v", role, err)
 	}
-
-	quoted := pgx.Identifier{role}.Sanitize()
-	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": quoted})
 
 	if _, err := tx.Exec(t.Context(), roleSQL); err != nil {
 		rollbackObservationRoleTx(t, tx, role, "role setup")
 		t.Fatalf("set observation lock API role %s: %v", role, err)
 	}
 
-	for _, check := range queries {
-		queryDir := check.dir
-		if queryDir == "" {
-			queryDir = defaultQueryDir
-		}
-
-		query := readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
-
-		if err := execObservationRoleQuery(t.Context(), tx, query, check.args); err != nil {
+	for i, check := range queries {
+		if err := execObservationRoleQuery(t.Context(), tx, querySQL[i], check.args); err != nil {
 			rollbackObservationRoleTx(t, tx, role, "query "+check.name)
 			t.Fatalf("execute observation lock API query %s as %s: %v", check.name, role, err)
 		}
@@ -638,7 +643,8 @@ func runObservationRoleQueries(
 }
 
 // execObservationRoleQuery는 Close 뒤 Err()까지 본다. Err()를 확인하지 않으면 pgx가 그쪽으로
-// 넘긴 권한 오류가 다음 쿼리의 25P02로 둔갑해 원인 쿼리를 잃는다.
+// 넘긴 권한 오류가 다음 쿼리의 25P02로 둔갑해 원인 쿼리를 잃고, 목록 마지막 쿼리의 오류는 조용히
+// 통과한다.
 func execObservationRoleQuery(ctx context.Context, tx pgx.Tx, query string, args []any) error {
 	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
