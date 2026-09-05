@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260905-hololive-replay-epoch-load-no-row-lock",
+  "title": "backfill의 replay epoch 조회는 행 잠금 없이 읽고 epoch 불변성은 ACL과 제약이 소유한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-05",
+  "summary": "youtubedispatch backfill의 replay_epoch_load.sql이 source_observation_replay_epoch를 SELECT ... FOR SHARE로 읽고 있었다. PostgreSQL은 FOR SHARE에 SELECT 외에 대상 테이블 최소 한 컬럼의 UPDATE 권한을 추가로 요구하는데, migration 191이 hololive_runtime에서 UPDATE·DELETE·TRUNCATE를 REVOKE하고 SELECT, INSERT만 GRANT하므로 alarm-worker의 canonical completion 경로는 운영 role에서 항상 SQLSTATE 42501로 실패한다. 2026-09-01 운영 활성화에서 completion 트랜잭션이 남긴 원인 미상 42501이 이것이며, 당시 'live ACL이 SELECT, INSERT를 증명했다'는 관찰은 모순이 아니라 원인 그 자체였다. 같은 트랜잭션의 ledger state FOR UPDATE는 통과하는데, ledger 테이블에는 대응하는 REVOKE가 없어 기본 부여가 남기 때문이다. 따라서 epoch 조회에서 FOR SHARE를 제거한다. epoch의 불변성은 행 잠금이 아니라 singleton boolean PRIMARY KEY와 chk_source_observation_replay_epoch_singleton, 활성화 쿼리의 ON CONFLICT (singleton) DO NOTHING, 그리고 migration 191의 REVOKE가 소유하므로 runtime role이 도달하는 경로에서 잠금은 보호를 더하지 못한다. owner나 superuser의 동시 변경은 DEC-20260901이 금지한 운영 위반이며, 잠금이 있어도 commit 순서만 바뀌고 종료 상태의 어긋남은 막지 못한다. 같은 테이블을 같은 role로 읽는 sourceobservation의 repository_replay_epoch_load_0086_86.sql과 claim 경로(repository_claim_0012_12.sql, repository_claim_lock_0013_13.sql, repository_replay_observation_0020_20.sql)도 잠금 없이 읽는다. 기각한 대안 둘: hololive_runtime에 UPDATE를 부여하면 DEC-20260901이 정한 epoch immutability가 ACL 층위에서 깨지고 잠금을 위해 변경 권한을 주는 것이 되어 보호 대상과 보호 수단이 뒤바뀐다. SECURITY DEFINER 잠금 함수를 경유하면 보호할 대상이 없는 잠금을 위해 권한 상승 표면을 새로 만든다. 회귀는 TestSourceObservationMigrationGrantsAreLeastPrivilege가 막는다. 이 검사는 격리 role에 migration 191을 재적용한 뒤 runtime role로 epoch 쿼리 자산을 실행하는데, 지금까지 sourceobservation queries 디렉터리만 대상으로 삼아 alarm-worker backfill의 같은 테이블 접근을 보지 못했다. 검사의 쿼리 조회 루트에 backfill queries 디렉터리를 더해 replay_epoch_load.sql을 runtime role 검사에 등록하고, pgx가 실행 오류를 Close 뒤 Err()로 넘기는 탓에 권한 오류가 다음 쿼리의 25P02로 둔갑하거나 목록 마지막 쿼리에서는 조용히 통과하던 문제도 함께 고쳐 원인 쿼리가 그대로 보고되게 했다. 현재 production은 ledger가 이미 completed라 Run이 조기 반환하므로 이 경로에 도달하지 않는다. 재발 조건은 새 환경과 completion 이전 상태의 백업 복원이다. LedgerSchemaVersion만 올리면 validateState가 Initialize에서 unsupported ledger schema version으로 먼저 실패하므로 승격 단독으로는 이 경로에 도달하지 않는다.",
+  "sources": [
+    "iris-stack@283f57013d38a59a2863ee0cbc9cf5a8cc2896be:docs/agent-workflows/evidence/2026-09-01-youtube-replay-epoch-production-rollout/rollout.md#T05 backfill and completion"
+  ],
+  "evidence": [
+    "hololive/hololive-dbtest/migrations_p1_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/queries/replay_epoch_load.sql",
+    "hololive/hololive-dbtest/migrations_p1_test.go"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "epoch 테이블에 runtime role의 쓰기가 필요해지거나, completion 트랜잭션이 행 잠금 없이는 지킬 수 없는 불변식을 갖게 된다"
+  }
+}

@@ -3,7 +3,7 @@
   "id": "DEC-20260901-hololive-source-observation-replay-epoch",
   "title": "Source observation replay는 immutable DB 수신 epoch로 제한한다",
   "decision_status": "accepted",
-  "delivery_status": "implemented",
+  "delivery_status": "verified",
   "scope": [
     "hololive-bot"
   ],
@@ -13,6 +13,7 @@
     "docs/current/plans/2026-08-31-youtube-egress-lifecycle-implementation.md#T10 — Source observation replay epoch를 고정하고 pre-epoch 재처리를 차단"
   ],
   "evidence": [
+    "iris-stack@283f57013d38a59a2863ee0cbc9cf5a8cc2896be:docs/agent-workflows/evidence/2026-09-01-youtube-replay-epoch-production-rollout/rollout.md",
     "hololive/hololive-api/cmd/source-observation-replay-epoch/main_test.go",
     "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/backfill_test.go",
     "hololive/hololive-shared/pkg/service/youtube/sourceobservation/repository_replay_epoch_test.go",

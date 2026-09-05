@@ -11,8 +11,15 @@
 `pg_basebackup`, fencing/route backend 승인, 자동 승격 활성화, 승격 뒤 재시딩은 이
 문서가 소유합니다.
 
-`kapu`의 `holo-postgres`는 이 복제와 무관합니다. `x86_64`라 물리 복제 대상이 될 수
-없고, `hololive-db-backup.timer`가 매시 논리 덤프를 받는 백업 사본입니다.
+`kapu`의 주기적 dump/restore는 사용자 지시로 2026-09-05 종료했고, user
+`hololive-db-backup.timer`는 `disabled`·`inactive`입니다
+(`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 로컬 `holo-postgres` container와
+`hololive-bot_holo-pg-data` volume을 제거했습니다(`DEC-20260905-stack-disk-cleanup`).
+`/home/kapu/.local/share/hololive-db-backup/hololive-20260905T004953Z.dump` 하나를 보존하며
+현재 데이터로 간주하지 않습니다. 복구에는 별도 PostgreSQL과 archive restore가 필요합니다.
+`kapu`는 `x86_64`이므로 현재 `aarch64` primary의 물리 standby로 전환하지 않습니다.
+Seoul의 streaming replication은 계속 유지되지만 과거 시점 archive를 대체하지 않습니다.
+kapu 갱신 재개나 보존 자료 삭제는 각 대상과 영향에 대한 승인이 필요합니다.
 
 ## Safety model
 

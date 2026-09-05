@@ -2,6 +2,7 @@ package dbtest
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -571,6 +572,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 
 	queryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-shared", "pkg", "service", "youtube", "sourceobservation", "queries"))
+	backfillQueryDir := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-alarm-worker", "internal", "egress", "youtubedispatch", "backfill", "queries"))
 	roleSQLPath := filepath.Clean(filepath.Join(dir, "..", "..", "..", "hololive-dbtest", "testdata", "queries", "set_local_role.sql"))
 	checks := map[string][]observationRoleQuery{
 		roles.scraper: {
@@ -581,6 +583,7 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 		roles.runtime: {
 			{name: "repository_replay_epoch_activate_0085_85.sql", args: []any{"grant-test", "verify replay epoch runtime grant"}},
 			{name: "repository_replay_epoch_load_0086_86.sql"},
+			{name: "replay_epoch_load.sql", dir: backfillQueryDir},
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
 			{name: "repository_live_observation_lock_0051_51.sql", args: []any{int64(0)}},
@@ -588,40 +591,80 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 	}
 
 	for role, queries := range checks {
-		tx, err := pool.Begin(t.Context())
-		if err != nil {
-			t.Fatalf("begin observation lock API check for %s: %v", role, err)
+		runObservationRoleQueries(t, pool, role, roleSQLPath, queryDir, queries)
+	}
+}
+
+// runObservationRoleQueries는 쿼리 자산을 모두 읽은 뒤 role 하나로 SET LOCAL ROLE한 트랜잭션에서
+// 차례로 실행하고 항상 롤백한다. 검사 목적이 권한이므로 어떤 행도 남기지 않는다. 파일 읽기는 Begin 앞에
+// 둔다. 트랜잭션을 연 채 Fatalf로 빠져나가면 연결이 pool에 돌아가지 않아 cleanup의 pool.Close가
+// go test timeout까지 멈추기 때문이다.
+func runObservationRoleQueries(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	role, roleSQLPath, defaultQueryDir string,
+	queries []observationRoleQuery,
+) {
+	t.Helper()
+
+	quoted := pgx.Identifier{role}.Sanitize()
+	roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": quoted})
+	querySQL := make([]string, len(queries))
+
+	for i, check := range queries {
+		queryDir := check.dir
+		if queryDir == "" {
+			queryDir = defaultQueryDir
 		}
 
-		quoted := pgx.Identifier{role}.Sanitize()
-		roleSQL := readObservationRoleSQL(t, roleSQLPath, map[string]string{"__ROLE__": quoted})
+		querySQL[i] = readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
+	}
 
-		if _, err := tx.Exec(t.Context(), roleSQL); err != nil {
-			if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
-				t.Errorf("rollback observation lock API role setup for %s: %v", role, rollbackErr)
-			}
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatalf("begin observation lock API check for %s: %v", role, err)
+	}
 
-			t.Fatalf("set observation lock API role %s: %v", role, err)
+	if _, err := tx.Exec(t.Context(), roleSQL); err != nil {
+		rollbackObservationRoleTx(t, tx, role, "role setup")
+		t.Fatalf("set observation lock API role %s: %v", role, err)
+	}
+
+	for i, check := range queries {
+		if err := execObservationRoleQuery(t.Context(), tx, querySQL[i], check.args); err != nil {
+			rollbackObservationRoleTx(t, tx, role, "query "+check.name)
+			t.Fatalf("execute observation lock API query %s as %s: %v", check.name, role, err)
 		}
+	}
 
-		for _, check := range queries {
-			query := readObservationRoleSQL(t, filepath.Join(queryDir, check.name), nil)
+	if err := tx.Rollback(t.Context()); err != nil {
+		t.Fatalf("rollback observation lock API check for %s: %v", role, err)
+	}
+}
 
-			rows, err := tx.Query(t.Context(), query, check.args...)
-			if err != nil {
-				if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil {
-					t.Errorf("rollback observation lock API query %s as %s: %v", check.name, role, rollbackErr)
-				}
+// execObservationRoleQuery는 Close 뒤 Err()까지 본다. Err()를 확인하지 않으면 pgx가 그쪽으로
+// 넘긴 권한 오류가 다음 쿼리의 25P02로 둔갑해 원인 쿼리를 잃고, 목록 마지막 쿼리의 오류는 조용히
+// 통과한다.
+func execObservationRoleQuery(ctx context.Context, tx pgx.Tx, query string, args []any) error {
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("start observation role query: %w", err)
+	}
 
-				t.Fatalf("execute observation lock API query %s as %s: %v", check.name, role, err)
-			}
+	rows.Close()
 
-			rows.Close()
-		}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read observation role query result: %w", err)
+	}
 
-		if err := tx.Rollback(t.Context()); err != nil {
-			t.Fatalf("rollback observation lock API check for %s: %v", role, err)
-		}
+	return nil
+}
+
+func rollbackObservationRoleTx(t *testing.T, tx pgx.Tx, role, stage string) {
+	t.Helper()
+
+	if err := tx.Rollback(t.Context()); err != nil {
+		t.Errorf("rollback observation lock API %s for %s: %v", stage, role, err)
 	}
 }
 
@@ -745,6 +788,9 @@ func assertScheduleCollaboConstraintAccess(t *testing.T, pool *pgxpool.Pool, rol
 type observationRoleQuery struct {
 	name string
 	args []any
+	// dir이 비면 sourceobservation queries 디렉터리를 쓴다. 다른 모듈이 같은 테이블을
+	// 같은 role로 읽는 쿼리 자산도 이 검사가 함께 돌아야 권한 회귀를 잡는다.
+	dir string
 }
 
 func readObservationRoleSQL(t *testing.T, path string, replacements map[string]string) string {
