@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -905,7 +906,7 @@ func TestAlarmDispatchRunnerQuarantinesRoomScopedKaringTransportFailure(t *testi
 }
 
 func TestAlarmDispatchRunnerQuarantinesRoomScopedTextDeadlineBeforePathCanFlip(t *testing.T) {
-	intrinsic := alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)
+	intrinsic := alarmDispatchRunnerIntrinsicTextEnvelope()
 	dynamic := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	dynamic.DispatchOutboxID = 2
@@ -929,7 +930,7 @@ func TestAlarmDispatchRunnerQuarantinesRoomScopedTextDeadlineBeforePathCanFlip(t
 
 func TestAlarmDispatchRunnerRetriesIntrinsicTextTransportFailure(t *testing.T) {
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection refused")}
-	envelope := alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)
+	envelope := alarmDispatchRunnerIntrinsicTextEnvelope()
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 	sender := &alarmDispatchRunnerTestSender{messageErr: transportErr}
 	runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
@@ -1462,11 +1463,26 @@ type alarmDispatchRunnerBlockingSender struct {
 	succeed bool
 }
 
-func alarmDispatchRunnerIntrinsicTextEnvelope(roomID string) domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
+func alarmDispatchRunnerIntrinsicTextEnvelope() domain.AlarmQueueEnvelope {
+	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	envelope.Notification.Stream.IsTwitchOnly = true
 	envelope.Notification.Stream.TwitchLiveURL = testTwitchLiveURL
+
+	return envelope
+}
+
+// attempt deadline 검증은 렌더러의 실제 DB I/O와 분리한다.
+func alarmDispatchRunnerPreRenderedTextEnvelope(roomID string) domain.AlarmQueueEnvelope {
+	envelope := alarmDispatchRunnerTestEnvelope(roomID, nil)
+
+	envelope.Notification.AlarmType = domain.AlarmTypeCommunity
+	envelope.SourceKind = domain.AlarmDispatchSourceKindDeliveryDigest
+	envelope.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{
+		Kind:               domain.DeliveryKindMemberNewsWeekly,
+		PeriodKey:          "2026-W32",
+		PreRenderedMessage: "주간 멤버 뉴스",
+	}
 
 	return envelope
 }
@@ -1511,78 +1527,82 @@ func (s *alarmDispatchRunnerBlockingSender) SendKaringContentList(ctx context.Co
 }
 
 func TestAlarmDispatchRunnerRoutesSendingRetryWithLiveContextAfterAttemptDeadline(t *testing.T) {
-	consumer := &alarmDispatchRunnerContextConsumer{}
+	synctest.Test(t, func(t *testing.T) {
+		consumer := &alarmDispatchRunnerContextConsumer{}
 
-	consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)}}
+		consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID)}}
 
-	sender := &alarmDispatchRunnerBlockingSender{}
-	runner := Runner{
-		consumer:       consumer,
-		sender:         sender,
-		renderer:       newAlarmDispatchTestRenderer(t),
-		maxBatch:       10,
-		attemptTimeout: 50 * time.Millisecond,
-	}
+		sender := &alarmDispatchRunnerBlockingSender{}
+		runner := Runner{
+			consumer:       consumer,
+			sender:         sender,
+			maxBatch:       10,
+			attemptTimeout: 50 * time.Millisecond,
+		}
 
-	processed, err := runner.runOnce(t.Context())
+		processed, err := runner.runOnce(t.Context())
 
-	require.NoError(t, err)
-	assert.True(t, processed)
-	require.NoError(t, consumer.routeSendingCtxErr, "attempt 만료 뒤에도 실패 라우팅은 살아있는 컨텍스트로 실행돼야 한다")
-	assert.True(t, consumer.routeSendingDeadline, "정리 컨텍스트도 시간 상한을 가져야 한다")
-	require.Len(t, consumer.scheduledSendingRetry, 1)
-	assert.Empty(t, consumer.quarantined)
-	assert.Empty(t, consumer.markDispatched)
+		require.NoError(t, err)
+		assert.True(t, processed)
+		require.NoError(t, consumer.routeSendingCtxErr, "attempt 만료 뒤에도 실패 라우팅은 살아있는 컨텍스트로 실행돼야 한다")
+		assert.True(t, consumer.routeSendingDeadline, "정리 컨텍스트도 시간 상한을 가져야 한다")
+		require.Len(t, consumer.scheduledSendingRetry, 1)
+		assert.Empty(t, consumer.quarantined)
+		assert.Empty(t, consumer.markDispatched)
+	})
 }
 
 func TestAlarmDispatchRunnerMarksDispatchedAfterAttemptDeadlineExpires(t *testing.T) {
-	consumer := &alarmDispatchRunnerContextConsumer{}
+	synctest.Test(t, func(t *testing.T) {
+		consumer := &alarmDispatchRunnerContextConsumer{}
 
-	consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}
+		consumer.batches = [][]domain.AlarmQueueEnvelope{{alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)}}
 
-	sender := &alarmDispatchRunnerBlockingSender{succeed: true}
-	runner := Runner{
-		consumer:       consumer,
-		sender:         sender,
-		maxBatch:       10,
-		attemptTimeout: 50 * time.Millisecond,
-	}
+		sender := &alarmDispatchRunnerBlockingSender{succeed: true}
+		runner := Runner{
+			consumer:       consumer,
+			sender:         sender,
+			maxBatch:       10,
+			attemptTimeout: 50 * time.Millisecond,
+		}
 
-	processed, err := runner.runOnce(t.Context())
+		processed, err := runner.runOnce(t.Context())
 
-	require.NoError(t, err)
-	assert.True(t, processed)
-	require.NoError(t, consumer.markDispatchedCtxErr, "발송에 성공한 배치는 attempt 만료 뒤에도 sent로 기록돼야 한다")
-	require.Len(t, consumer.markDispatched, 1)
-	assert.Empty(t, consumer.scheduledSendingRetry)
-	assert.Empty(t, consumer.quarantined)
+		require.NoError(t, err)
+		assert.True(t, processed)
+		require.NoError(t, consumer.markDispatchedCtxErr, "발송에 성공한 배치는 attempt 만료 뒤에도 sent로 기록돼야 한다")
+		require.Len(t, consumer.markDispatched, 1)
+		assert.Empty(t, consumer.scheduledSendingRetry)
+		assert.Empty(t, consumer.quarantined)
+	})
 }
 
 func TestAlarmDispatchRunnerStopsRemainingGroupsWhenAttemptDeadlineExpires(t *testing.T) {
-	consumer := &alarmDispatchRunnerContextConsumer{}
+	synctest.Test(t, func(t *testing.T) {
+		consumer := &alarmDispatchRunnerContextConsumer{}
 
-	consumer.batches = [][]domain.AlarmQueueEnvelope{{
-		alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID),
-		alarmDispatchRunnerIntrinsicTextEnvelope("room-2"),
-	}}
+		consumer.batches = [][]domain.AlarmQueueEnvelope{{
+			alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID),
+			alarmDispatchRunnerPreRenderedTextEnvelope("room-2"),
+		}}
 
-	sender := &alarmDispatchRunnerBlockingSender{}
-	runner := Runner{
-		consumer:       consumer,
-		sender:         sender,
-		renderer:       newAlarmDispatchTestRenderer(t),
-		maxBatch:       10,
-		attemptTimeout: 50 * time.Millisecond,
-	}
+		sender := &alarmDispatchRunnerBlockingSender{}
+		runner := Runner{
+			consumer:       consumer,
+			sender:         sender,
+			maxBatch:       10,
+			attemptTimeout: 50 * time.Millisecond,
+		}
 
-	processed, err := runner.runOnce(t.Context())
+		processed, err := runner.runOnce(t.Context())
 
-	assert.True(t, processed)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	assert.Equal(t, []string{testAlarmRoomID}, sender.rooms, "만료된 attempt로 남은 그룹을 더 보내면 미발송 행이 sending으로 굳는다")
-	require.Len(t, consumer.markSending, 1)
-	require.Len(t, consumer.scheduledSendingRetry, 1)
-	assert.Empty(t, consumer.quarantined)
+		assert.True(t, processed)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Equal(t, []string{testAlarmRoomID}, sender.rooms, "만료된 attempt로 남은 그룹을 더 보내면 미발송 행이 sending으로 굳는다")
+		require.Len(t, consumer.markSending, 1)
+		require.Len(t, consumer.scheduledSendingRetry, 1)
+		assert.Empty(t, consumer.quarantined)
+	})
 }
 
 func TestAlarmDispatchRunnerBoundsStateContextWhenParentCanceled(t *testing.T) {

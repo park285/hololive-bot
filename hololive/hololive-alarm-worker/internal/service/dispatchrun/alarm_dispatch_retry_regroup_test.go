@@ -83,13 +83,13 @@ func TestAlarmDispatchRunnerPersistedSendUnitQuarantinesAmbiguousRoomScopedFailu
 
 func TestAlarmDispatchRunnerPersistedSendUnitRetriesAmbiguousIntrinsicTextFailure(t *testing.T) {
 	transportErr := &iris.TransportError{Op: testIrisPostOp, URL: testIrisReplyPath, Err: errors.New("connection reset")}
-	first := alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)
+	first := alarmDispatchRunnerIntrinsicTextEnvelope()
 
 	first.DispatchOutboxID = 11
 	first.SendUnitID = 7
 	first.ClientRequestID = testRetryClientRequestID
 
-	second := alarmDispatchRunnerIntrinsicTextEnvelope(testAlarmRoomID)
+	second := alarmDispatchRunnerIntrinsicTextEnvelope()
 
 	second.DispatchOutboxID = 12
 	second.SendUnitID = first.SendUnitID
