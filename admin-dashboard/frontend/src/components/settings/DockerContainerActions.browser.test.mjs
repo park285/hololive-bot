@@ -85,15 +85,25 @@ run().then(
     document.documentElement.dataset.testStatus = "failed";
     document.querySelector("#result").textContent = error?.stack ?? String(error);
   },
-).finally(() => { root.unmount(); client.clear(); toast.dismiss(); });
+).finally(async () => {
+  root.unmount(); client.clear(); toast.dismiss();
+  await fetch("/__docker_contract_result", { method: "POST", body: document.documentElement.outerHTML });
+});
 `;
 
-function fixturePlugin(requestCounts, unexpectedRequests) {
+function fixturePlugin(requestCounts, unexpectedRequests, complete) {
 	return {
 		name: "docker-action-browser-contract",
 		configureServer(server) {
 			server.middlewares.use(async (request, response, next) => {
 				const pathname = new URL(request.url, "http://localhost").pathname;
+				if (pathname === "/__docker_contract_result" && request.method === "POST") {
+					let body = "";
+					for await (const chunk of request) body += chunk;
+					response.end("ok");
+					complete(body);
+					return;
+				}
 				if (pathname === "/__docker_contract_test__") {
 					response.setHeader("Content-Type", "text/html");
 					response.end(await server.transformIndexHtml(pathname, '<div id="root"></div><pre id="result"></pre><script type="module" src="/__docker_contract_entry.jsx"></script>'));
@@ -140,25 +150,31 @@ test("Docker actions preserve confirmed/unknown/refused outcomes and disable inh
 	const userDataDirectory = await mkdtemp(path.join(tmpdir(), "docker-action-browser-"));
 	const requestCounts = new Map();
 	const unexpectedRequests = [];
+	const completion = Promise.withResolvers();
 	const unit = `iris-docker-browser-${process.pid}-${Date.now()}`;
 	let server;
+	let completionTimeout;
 	try {
 		server = await createServer({
 			configFile: path.join(frontendRoot, "vite.config.ts"), root: frontendRoot,
-			logLevel: "error", plugins: [fixturePlugin(requestCounts, unexpectedRequests)],
+			cacheDir: path.join(userDataDirectory, "vite-cache"),
+			logLevel: "error", plugins: [fixturePlugin(requestCounts, unexpectedRequests, completion.resolve)],
 			server: { host: "127.0.0.1", port: 0, strictPort: false },
 		});
 		await server.listen();
 		const address = server.httpServer?.address();
 		assert(address && typeof address === "object");
-		const { stdout, stderr } = await execFileAsync("systemd-run", [
-			"--user", "--quiet", "--pipe", "--wait", "--collect", `--unit=${unit}`,
+		// 가상 시간 DOM 덤프는 Vite 모듈 로드 전에 끝날 수 있어 실제 완료 보고를 기다린다.
+		await execFileAsync("systemd-run", [
+			"--user", "--quiet", "--collect", `--unit=${unit}`,
 			"--property=RuntimeMaxSec=120", "--property=KillMode=control-group", "--property=TimeoutStopSec=5", browser,
 			"--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-			`--user-data-dir=${userDataDirectory}`, "--virtual-time-budget=10000", "--dump-dom",
+			`--user-data-dir=${userDataDirectory}`,
 			`http://127.0.0.1:${address.port}/__docker_contract_test__`,
-		], { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 });
-		assert.match(stdout, /data-test-status="passed"/, `${stderr}\n${stdout}`);
+		], { timeout: 10_000 });
+		completionTimeout = setTimeout(() => completion.reject(new Error("browser contract did not report completion")), 110_000);
+		const html = await completion.promise;
+		assert.match(html, /data-test-status="passed"/, html);
 		assert.deepEqual(unexpectedRequests, []);
 		assert.equal(requestCounts.size, actions.length * outcomes.length);
 		for (const action of actions) {
@@ -167,6 +183,7 @@ test("Docker actions preserve confirmed/unknown/refused outcomes and disable inh
 			}
 		}
 	} finally {
+		clearTimeout(completionTimeout);
 		await execFileAsync("systemctl", ["--user", "stop", unit], { timeout: 10000 }).catch(() => {});
 		try {
 			await server?.close();
