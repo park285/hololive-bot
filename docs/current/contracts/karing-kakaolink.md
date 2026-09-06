@@ -22,11 +22,9 @@
 
 ## Routing
 
-- 방 유형이 일반채팅으로 확인되고 YouTube target이 있는 broadcast/video/Shorts/community 알림만 Karing content-list를 사용합니다.
-- 확인된 일반채팅의 YouTube와 Chzzk 통합 알림은 YouTube target으로 Karing을 구성합니다.
-- 오픈채팅은 `BOT_MARKDOWN_REPLIES`에 따른 기존 Markdown/message 경로를 사용하고, 방 유형을 확인하지 못한 경우에는 일반 텍스트를 사용합니다.
-- Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone과 generic notification delivery는 방 유형에 맞는 기존 message 경로를 사용합니다.
-- 지원되는 알림의 Karing build, admission 또는 handoff가 실패해도 일반 텍스트나 Markdown으로 fallback하지 않습니다.
+- Alarm-worker runtime은 모든 방과 알림 종류에서 일반 텍스트를 사용하며 Karing 전송은 비활성화되어 있습니다.
+- Runtime 전송기에 방 유형 resolver와 Markdown 옵션을 연결하지 않습니다. `BOT_MARKDOWN_REPLIES`는 알림 형식을 바꾸지 않습니다.
+- 아래 template 및 handoff 계약은 남아 있는 Karing 구현을 설명합니다. 이전 전송의 결과 불명확 기록을 텍스트로 재발송하지 않습니다.
 
 ## Stable Template Map
 
