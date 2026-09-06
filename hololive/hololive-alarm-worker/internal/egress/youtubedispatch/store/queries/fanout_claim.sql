@@ -2,6 +2,8 @@ WITH claim AS (
     SELECT outbox.id
     FROM youtube_notification_outbox AS outbox
     WHERE outbox.status = $1
+      -- 범용 실행계획에서도 PENDING 전용 부분 인덱스 조건을 증명할 수 있게 한다.
+      AND outbox.status = 'PENDING'
       AND (outbox.locked_at IS NULL OR outbox.locked_at < $2)
       AND outbox.next_attempt_at <= $3
       AND outbox.created_at >= $4
