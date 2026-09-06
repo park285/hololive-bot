@@ -15,7 +15,7 @@ func TestFindSubscriptionMember(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, unitBChannel, channelID)
 			require.Equal(t, subscriptionMiraHostID, member.ID)
-			require.Equal(t, "미라", member.Name)
+			require.Equal(t, "미라[유닛b]", member.Name)
 		})
 	}
 

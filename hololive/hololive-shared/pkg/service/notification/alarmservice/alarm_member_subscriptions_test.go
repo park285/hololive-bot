@@ -105,7 +105,7 @@ func TestMemberSubscriptionsKeepOtherRoomChoicesAndCache(t *testing.T) {
 	require.Len(t, views, 2)
 
 	want := map[string]domain.AlarmTypes{
-		"미라": {domain.AlarmTypeShorts}, "라이라": {domain.AlarmTypeCommunity},
+		"미라[유닛b]": {domain.AlarmTypeShorts}, "라이라[유닛b]": {domain.AlarmTypeCommunity},
 	}
 
 	for _, view := range views {
@@ -200,12 +200,16 @@ func TestMemberSubscriptionViewDoesNotUseAnotherMembersNextStream(t *testing.T) 
 		{ChannelID: memberSubscriptionChannel, HostID: memberSubscriptionMiraID, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		{ChannelID: memberSubscriptionChannel, HostID: "yoinagi-neon", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 		{ChannelID: memberSubscriptionChannel, HostID: "yoinagi-neon", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
+		{ChannelID: memberSubscriptionChannel, AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
+		{ChannelID: "other-channel", MemberName: "페코라", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
 	}
 	next := &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, Title: "#宵凪ネオン"}
 	views := buildAlarmListViews(alarms, map[string]string{memberSubscriptionChannel: "유닛 B"}, map[string]*domain.NextStreamInfo{memberSubscriptionChannel: next})
-	require.Equal(t, "미라", views[0].MemberName)
+	require.Equal(t, "미라[유닛b]", views[0].MemberName)
 	require.Nil(t, views[0].NextStream)
-	require.Equal(t, "네온", views[1].MemberName)
+	require.Equal(t, "네온[유닛b]", views[1].MemberName)
 	require.Same(t, next, views[1].NextStream)
 	require.Nil(t, views[2].NextStream)
+	require.Equal(t, "유닛 B", views[3].MemberName)
+	require.Equal(t, "페코라", views[4].MemberName)
 }

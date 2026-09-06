@@ -11,7 +11,7 @@ func SupportsSubscriptions(channelID string) bool {
 	return loadRules().unitForChannel(channelID) == "unit-b"
 }
 
-// SubscriptionMember는 UNIT B의 유효한 멤버 구독 대상과 표시 이름을 반환한다.
+// SubscriptionMember는 UNIT B의 유효한 구독 대상과 [유닛b]를 붙인 표시 이름을 반환한다.
 func SubscriptionMember(channelID, hostID string) (Participant, bool) {
 	if !SupportsSubscriptions(channelID) {
 		return Participant{}, false
@@ -22,7 +22,7 @@ func SubscriptionMember(channelID, hostID string) (Participant, bool) {
 		return Participant{}, false
 	}
 
-	return Participant{ID: member.ID, Name: member.Name}, true
+	return Participant{ID: member.ID, Name: subscriptionDisplayName(member.Name)}, true
 }
 
 // FindSubscriptionMember는 정확한 멤버 이름으로 UNIT B 채널과 구독 대상을 찾는다.
@@ -42,12 +42,16 @@ func FindSubscriptionMember(query string) (string, Participant, bool) {
 
 		for _, name := range []string{member.ID, member.Name, member.FullName, member.GivenName} {
 			if query == normalizeSubscriptionName(name) {
-				return rules.Units[member.Unit].ChannelID, Participant{ID: member.ID, Name: member.Name}, true
+				return rules.Units[member.Unit].ChannelID, Participant{ID: member.ID, Name: subscriptionDisplayName(member.Name)}, true
 			}
 		}
 	}
 
 	return "", Participant{}, false
+}
+
+func subscriptionDisplayName(name string) string {
+	return name + "[유닛b]"
 }
 
 func normalizeSubscriptionName(value string) string {
