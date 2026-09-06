@@ -396,6 +396,7 @@ func newYouTubeOutboxDispatcher(
 		TelemetryRetryBackoff: durationMS(profile.TelemetryRetryBackoffMS), TelemetryRetention: durationMS(profile.TelemetryRetentionMS),
 	}
 	pool := infra.Postgres.GetPool()
+
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
 		DB: pool, Cache: infra.Cache, Sender: sender,
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messagestrings.NewStore(pool, logger),

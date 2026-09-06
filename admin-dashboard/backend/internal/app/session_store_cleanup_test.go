@@ -82,6 +82,7 @@ func TestCleanupSessionStoreRevokeFamilyDetachesCancellationAndPreservesError(t 
 
 		return want
 	}})
+
 	if store == nil {
 		t.Fatal("newCleanupSessionStore() returned nil")
 	}
