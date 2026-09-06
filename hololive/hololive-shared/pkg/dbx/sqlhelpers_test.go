@@ -72,6 +72,8 @@ func TestPostgresPlaceholdersRewritesNonPlaceholderQuestionMarks(t *testing.T) {
 
 func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 	moduleRoot := filepath.Join("..", "..")
+	// 이 SQL만 live_evidence.go의 tx.Query가 직접 실행하며 ?|는 migration 193의 GIN 인덱스 조건이다.
+	nativeJSONBAnyQuery := filepath.Join(moduleRoot, "pkg/service/youtube/sourceobservation/queries/repository_live_absence_slots.sql")
 
 	err := filepath.Walk(moduleRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -87,7 +89,7 @@ func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 			return fmt.Errorf("read file: %w", readErr)
 		}
 
-		for _, hazard := range questionMarkHazards(string(data)) {
+		for _, hazard := range questionMarkHazards(string(data), path == nativeJSONBAnyQuery) {
 			t.Errorf("%s: %s: PostgresPlaceholders would rewrite this '?'", path, hazard)
 		}
 
@@ -98,7 +100,7 @@ func TestEmbeddedSQLAssetsHaveNoNonPlaceholderQuestionMarks(t *testing.T) {
 	}
 }
 
-func questionMarkHazards(sql string) []string {
+func questionMarkHazards(sql string, allowJSONBAny bool) []string {
 	var hazards []string
 
 	quoted := false
@@ -110,12 +112,32 @@ func questionMarkHazards(sql string) []string {
 		case sql[i] != '?':
 		case quoted:
 			hazards = append(hazards, "quoted literal at offset "+strconv.Itoa(i))
-		case i+1 < len(sql) && (sql[i+1] == '|' || sql[i+1] == '&'):
+		case i+1 < len(sql) && (sql[i+1] == '&' || sql[i+1] == '|' && !allowJSONBAny):
 			hazards = append(hazards, "jsonb operator at offset "+strconv.Itoa(i))
 		}
 	}
 
 	return hazards
+}
+
+func TestQuestionMarkHazardsOnlyAllowsNativeAnyOperator(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		query         string
+		allowJSONBAny bool
+		want          int
+	}{
+		{name: "converted SQL", query: "payload ?| $1", want: 1},
+		{name: "native SQL", query: "payload ?| $1", allowJSONBAny: true},
+		{name: "quoted operator", query: "note = '?|'", allowJSONBAny: true, want: 1},
+		{name: "other operator", query: "payload ?& $1", allowJSONBAny: true, want: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := questionMarkHazards(tc.query, tc.allowJSONBAny); len(got) != tc.want {
+				t.Fatalf("hazards=%v, want %d", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestInPlaceholders(t *testing.T) {

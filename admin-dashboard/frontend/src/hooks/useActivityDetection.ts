@@ -2,17 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 const CHANNEL_NAME = "admin_session";
+const TAB_ID = crypto.randomUUID();
 const THROTTLE_MS = 1000;
 const BROADCAST_THROTTLE_MS = 5000;
 
 type TabSyncMessage =
 	| { type: "ACTIVITY"; timestamp: number }
+	| { type: "SESSION_REFRESH"; timestamp: number; source?: string }
 	| { type: "LOGOUT"; timestamp: number };
 
 interface UseActivityDetectionOptions {
 	enabled: boolean;
 	idleTimeoutMs: number;
 	onRemoteLogout?: () => void;
+	onSessionRefresh?: () => void;
 }
 
 const parseTabSyncMessage = (value: unknown): TabSyncMessage | null => {
@@ -21,12 +24,20 @@ const parseTabSyncMessage = (value: unknown): TabSyncMessage | null => {
 	}
 
 	const candidate = value as Partial<TabSyncMessage>;
+	if (candidate.type === "SESSION_REFRESH" && candidate.source === TAB_ID) return null;
 
 	if (
 		candidate.type === "ACTIVITY" &&
 		typeof candidate.timestamp === "number"
 	) {
 		return { type: "ACTIVITY", timestamp: candidate.timestamp };
+	}
+
+	if (
+		candidate.type === "SESSION_REFRESH" &&
+		typeof candidate.timestamp === "number"
+	) {
+		return { type: "SESSION_REFRESH", timestamp: candidate.timestamp };
 	}
 
 	if (
@@ -37,6 +48,14 @@ const parseTabSyncMessage = (value: unknown): TabSyncMessage | null => {
 	}
 
 	return null;
+};
+
+// 쿠키 적용 뒤 변경 사실만 알리고 각 탭은 서버에서 현재 CSRF를 다시 읽는다.
+export const broadcastSessionRefresh = (): void => {
+	if (typeof BroadcastChannel === "undefined") return;
+	const channel = new BroadcastChannel(CHANNEL_NAME);
+	channel.postMessage({ type: "SESSION_REFRESH", timestamp: Date.now(), source: TAB_ID } satisfies TabSyncMessage);
+	channel.close();
 };
 
 export const broadcastSessionLogout = (): void => {
@@ -56,6 +75,7 @@ export function useActivityDetection({
 	enabled,
 	idleTimeoutMs,
 	onRemoteLogout,
+	onSessionRefresh,
 }: UseActivityDetectionOptions) {
 	const [isIdle, setIsIdle] = useState(false);
 	const timeoutRef = useRef<number | null>(null);
@@ -133,6 +153,10 @@ export function useActivityDetection({
 				resetTimerInternal(Date.now());
 				return;
 			}
+			if (message.type === "SESSION_REFRESH") {
+				onSessionRefresh?.();
+				return;
+			}
 
 			onRemoteLogout?.();
 		};
@@ -143,7 +167,7 @@ export function useActivityDetection({
 				channelRef.current = null;
 			}
 		};
-	}, [enabled, onRemoteLogout, resetTimerInternal]);
+	}, [enabled, onRemoteLogout, onSessionRefresh, resetTimerInternal]);
 
 	useEffect(() => {
 		if (!enabled) {

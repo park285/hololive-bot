@@ -43,3 +43,9 @@ export const logoutEverywhere = async (): Promise<void> => {
 		clearClientSession(true);
 	}
 };
+
+/** 현재 공유 쿠키로 세션을 조회하여 각 탭의 CSRF와 표시 상태를 동기화합니다. */
+export const refreshClientSession = async (signal?: AbortSignal): Promise<void> => {
+	const session = await authApi.getSession(signal);
+	applySessionStatus(session);
+};

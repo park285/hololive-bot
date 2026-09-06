@@ -28,6 +28,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -196,8 +197,15 @@ func (f *ResponseFormatter) scheduleEntryViews(ctx context.Context, streams []*d
 }
 
 func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domain.Stream) scheduleEntryView {
+	title := stream.Title
+	if !stream.IsChzzkOnly && !stream.IsTwitchOnly {
+		if label := mekparkhost.Identify(stream.ChannelID, title).Label(); label != "" {
+			title = label + " · " + title
+		}
+	}
+
 	entry := scheduleEntryView{
-		Title: f.truncateTitle(stream.Title),
+		Title: f.truncateTitle(title),
 		URL:   stream.GetYouTubeURL(),
 	}
 	if stream.IsLive() {
@@ -246,6 +254,10 @@ func (f *ResponseFormatter) formatChannelName(ctx context.Context, stream *domai
 	}
 
 	name := stream.ChannelName
+	if !stream.IsChzzkOnly && !stream.IsTwitchOnly {
+		name = mekparkhost.DisplayName(stream.ChannelID, stream.Title, name)
+	}
+
 	displayOrg := f.streamDisplayOrg(ctx, stream)
 
 	if displayOrg == "" {

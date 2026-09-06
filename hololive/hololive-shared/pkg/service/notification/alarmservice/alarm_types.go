@@ -39,6 +39,7 @@ import (
 type alarmWriter interface {
 	Add(ctx context.Context, alarm *domain.Alarm) error
 	Remove(ctx context.Context, roomID, channelID string) error
+	RemoveHost(ctx context.Context, roomID, channelID, hostID string) error
 	ClearByRoom(ctx context.Context, roomID string) (int64, error)
 }
 

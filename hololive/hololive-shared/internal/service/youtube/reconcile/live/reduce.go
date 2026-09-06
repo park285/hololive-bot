@@ -8,12 +8,13 @@ import (
 )
 
 type reduceSession struct {
-	state        *State
-	evidence     *Evidence
-	grace        time.Duration
-	dbNow        time.Time
-	dirty        map[string]struct{}
-	applications []Application
+	state           *State
+	evidence        *Evidence
+	grace           time.Duration
+	dbNow           time.Time
+	dirty           map[string]struct{}
+	applications    []Application
+	ignoredAbsences map[string]map[time.Time]struct{}
 }
 
 func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) {

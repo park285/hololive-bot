@@ -167,6 +167,9 @@ hololive/hololive-shared/pkg/domain/alarm.go
 hololive/hololive-shared/pkg/domain/alarm_dispatch_source.go
 hololive/hololive-shared/pkg/domain/alarm_interfaces.go
 hololive/hololive-shared/pkg/domain/alarm_persistence_identity.go
+hololive/hololive-shared/pkg/domain/mekparkhost/identify.go
+hololive/hololive-shared/pkg/domain/mekparkhost/rules.json
+hololive/hololive-shared/pkg/domain/mekparkhost/subscriptions.go
 hololive/hololive-shared/pkg/domain/command.go
 hololive/hololive-shared/pkg/domain/context.go
 hololive/hololive-shared/pkg/domain/event_celebration.go
@@ -385,6 +388,7 @@ hololive/hololive-shared/pkg/service/alarm/client.go
 hololive/hololive-shared/pkg/service/alarm/client_transport.go
 hololive/hololive-shared/pkg/service/alarm/client_strict.go
 hololive/hololive-shared/pkg/service/alarm/dto.go
+hololive/hololive-shared/pkg/service/alarm/event_targets.go
 hololive/hololive-shared/pkg/service/alarm/handoff/mode.go
 hololive/hololive-shared/pkg/service/alarm/keys/keys.go
 hololive/hololive-shared/pkg/service/alarm/keys/validation.go
@@ -677,6 +681,7 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_premiere.
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_scan.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/content_state.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_consumer.go
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_evidence.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_finalizer.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_persist.go
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_state.go
@@ -714,10 +719,14 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repositor
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_job_complete_error_0081_81.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_job_defer_0082_82.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_due_one_0049_49.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_absence_slot_insert.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_absence_slots.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_head_upsert_0048_48.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_heads_0046_46.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_now_0050_50.sql
-hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_observation_lock_0051_51.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_pending_end_upsert.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_pending_ends.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_pending_ends_delete.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_session_one_0060_60.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_session_upsert_0047_47.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_live_sessions_0045_45.sql

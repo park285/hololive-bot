@@ -69,7 +69,7 @@ func runRetryExactOnceCase(t *testing.T, tc retryFinalizeOnceTestCase) {
 	item, delivery, postID := seedRetryExactOnceFixture(t, db, tc)
 
 	sender := &testSender{failRoom: map[string]bool{tc.roomID: true}, failErr: iris.ErrRateLimited}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -276,7 +276,7 @@ func runPostSendFinalizeConflictHoldsSending(
 
 	postID := mustCanonicalDeliveryPostID(item.Kind, item.ContentID)
 	sender := newPostSendFinalizeFailureSender(db, item.Kind, postID, now.Add(-10*time.Minute))
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

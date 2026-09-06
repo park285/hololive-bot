@@ -109,6 +109,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Local cookies cleared; server session family revocation could not be confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1412,7 +1422,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                  "$ref": "#/components/schemas/SettingsUpdateResponse"
                 }
               }
             }
@@ -2962,6 +2972,56 @@
             "type": "string"
           }
         }
+      },
+      "SettingsUpdateResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "settings",
+          "runtime"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/SettingsRuntimeResult"
+          }
+        }
+      },
+      "SettingsRuntimeResult": {
+        "type": "object",
+        "properties": {
+          "alarm_applied": {
+            "type": "boolean"
+          },
+          "alarm_requested_advance_minutes": {
+            "type": "integer"
+          },
+          "alarm_reason": {
+            "type": "string"
+          },
+          "alarm_target_minutes": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "config_publish_alarm_advance_minutes": {
+            "type": "boolean"
+          },
+          "config_publish_alarm_advance_minutes_error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
       }
     }
   },

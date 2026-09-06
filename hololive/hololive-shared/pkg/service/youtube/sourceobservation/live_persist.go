@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/live"
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
 func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision) error {
+	// 여러 영상의 신규 행도 consumer마다 같은 순서로 생성한다.
+	slices.SortFunc(decision.Sessions, func(a, b live.SessionState) int { return strings.Compare(a.VideoID, b.VideoID) })
+	slices.SortFunc(decision.PendingEnds, func(a, b live.PendingEnd) int { return strings.Compare(a.VideoID, b.VideoID) })
+
 	for i := range decision.Sessions {
 		if err := upsertLiveSession(ctx, tx, &decision.Sessions[i]); err != nil {
 			return fmt.Errorf("upsert live session: %w", err)
@@ -18,6 +24,10 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision
 		if err := upsertLiveHead(ctx, tx, &decision.Sessions[i]); err != nil {
 			return fmt.Errorf("upsert live head: %w", err)
 		}
+	}
+
+	if err := persistLiveEvidence(ctx, tx, decision); err != nil {
+		return fmt.Errorf("persist live evidence: %w", err)
 	}
 
 	return nil
@@ -113,6 +123,10 @@ func upsertLiveHead(ctx context.Context, tx dbx.Tx, session *live.SessionState) 
 		nextCheck,
 		session.Clock.EndedAt,
 		reason,
+		session.FirstAbsenceScheduledFor,
+		session.SecondAbsenceScheduledFor,
+		session.LastAbsenceObservationID,
+		session.IgnoredAbsenceScheduledFor,
 	); err != nil {
 		return fmt.Errorf("upsert live head: %w", err)
 	}

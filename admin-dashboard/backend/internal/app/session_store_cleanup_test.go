@@ -67,3 +67,30 @@ func TestCleanupSessionStoreDeletePreservesError(t *testing.T) {
 		t.Fatalf("Delete() error = %v, want %v", err, wantErr)
 	}
 }
+
+func TestCleanupSessionStoreRevokeFamilyDetachesCancellationAndPreservesError(t *testing.T) {
+	want := errors.New("family revocation unavailable")
+	store := newCleanupSessionStore(&fakeSessions{revokeFn: func(ctx context.Context, familyID string) error {
+		if ctx.Err() != nil || familyID != "family-1" {
+			t.Fatalf("cleanup family=%s context=%v", familyID, ctx.Err())
+		}
+
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > cleanupctx.DefaultTimeout {
+			t.Fatal("family revocation must have a bounded cleanup deadline")
+		}
+
+		return want
+	}})
+
+	if store == nil {
+		t.Fatal("newCleanupSessionStore() returned nil")
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	if err := store.RevokeFamily(ctx, "family-1"); !errors.Is(err, want) {
+		t.Fatalf("RevokeFamily() = %v, want %v", err, want)
+	}
+}

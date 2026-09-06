@@ -32,6 +32,7 @@ import (
 	broadcasttype "github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
 type BroadcastHistoryCommand struct {
@@ -324,7 +325,7 @@ func broadcastHistoryFormatterEntries(entries []handlercore.BroadcastHistoryEntr
 
 		result = append(result, formatter.BroadcastHistoryEntry{
 			VideoID:      entry.VideoID,
-			MemberName:   entry.MemberName,
+			MemberName:   mekparkhost.DisplayName(entry.ChannelID, entry.Title, entry.MemberName),
 			Type:         entry.BroadcastType,
 			TypeLabel:    broadcasttype.Type(entry.BroadcastType).Label(),
 			TopicID:      entry.TopicID,

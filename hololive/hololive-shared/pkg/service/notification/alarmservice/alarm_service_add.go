@@ -11,9 +11,11 @@ import (
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
+// AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 캐시를 갱신하며 새 종류가 추가됐는지 반환한다.
 func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	as.cacheMutationMu.Lock()
 	defer as.cacheMutationMu.Unlock()
@@ -30,6 +32,11 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 	if err != nil {
 		opErr = err
 		return false, fmt.Errorf("normalize add alarm request: %w", err)
+	}
+
+	if normalizedReq.HostID != "" && as.alarmRepository == nil {
+		opErr = errors.New("member subscription requires alarm repository")
+		return false, opErr
 	}
 
 	requestedTypes, err := normalizeAlarmTypesStrict(normalizedReq.AlarmTypes, domain.DefaultAlarmTypes)
@@ -61,7 +68,7 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 
 	as.afterAddAlarm(ctx, normalizedReq, mutation.newlyAddedTypes)
 
-	return added > 0 || mutation.existing, nil
+	return added > 0 || mutation.existing || mekparkhost.SupportsSubscriptions(normalizedReq.ChannelID), nil
 }
 
 func (as *AlarmService) cacheAddAlarmMutation(ctx context.Context, mutation *addAlarmMutation) (int64, error) {
@@ -85,6 +92,7 @@ func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequ
 	normalized.RoomID = strings.TrimSpace(normalized.RoomID)
 	normalized.UserID = strings.TrimSpace(normalized.UserID)
 	normalized.ChannelID = strings.TrimSpace(normalized.ChannelID)
+	normalized.HostID = strings.TrimSpace(normalized.HostID)
 	normalized.MemberName = strings.TrimSpace(normalized.MemberName)
 	normalized.RoomName = strings.TrimSpace(normalized.RoomName)
 	normalized.UserName = strings.TrimSpace(normalized.UserName)
@@ -93,11 +101,20 @@ func normalizeAddAlarmRequest(req *domain.AddAlarmRequest) (*domain.AddAlarmRequ
 		return nil, errors.New("room_id and channel_id are required")
 	}
 
+	if req.HostID != "" {
+		member, ok := mekparkhost.SubscriptionMember(normalized.ChannelID, normalized.HostID)
+		if !ok {
+			return nil, errors.New("invalid member subscription target")
+		}
+
+		normalized.MemberName = member.Name
+	}
+
 	return &normalized, nil
 }
 
 func (as *AlarmService) prepareAddAlarmMutation(ctx context.Context, req *domain.AddAlarmRequest, requestedTypes domain.AlarmTypes) (addAlarmMutation, bool, error) {
-	existing, err := as.findAlarmRecordForMutation(ctx, req.RoomID, req.ChannelID)
+	existing, err := as.findAlarmRecordForMutation(ctx, req.RoomID, req.ChannelID, req.HostID)
 	if err != nil && !errors.Is(err, errAlarmRecordNotFound) {
 		return addAlarmMutation{}, false, fmt.Errorf("find alarm record for mutation: %w", err)
 	}

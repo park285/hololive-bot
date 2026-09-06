@@ -75,6 +75,10 @@ func (s *stubAlarmCRUDForServer) RemoveAlarm(
 	return out, nil
 }
 
+func (s *stubAlarmCRUDForServer) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+
 func (s *stubAlarmCRUDForServer) GetRoomAlarms(context.Context, string) ([]string, error) {
 	return nil, nil
 }

@@ -41,6 +41,17 @@ func TestSourceObservationRetentionBatchHonorsGlobalLimitAndProtection(t *testin
 	}
 
 	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO public.youtube_live_pending_ends (
+			video_id, channel_id, kind, observation_id, effective_at, received_at,
+			scheduled_for, negative_eligible, scope_covers
+		)
+		SELECT 'retention-head', 'retention-channel', 'EXPLICIT_END', id, observed_at,
+		       received_at, scheduled_for, true, true
+		FROM public.source_observations WHERE id = $1`, headProtected); err != nil {
+		t.Fatalf("protect retention observation with pending end: %v", err)
+	}
+
+	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO public.youtube_live_reconciliation_heads (
 			video_id, status, end_candidate_kind, end_candidate_observation_id, next_end_check_at
 		) VALUES ('retention-head', 'LIVE', 'EXPLICIT_END', $1, $2)`, headProtected, base); err != nil {

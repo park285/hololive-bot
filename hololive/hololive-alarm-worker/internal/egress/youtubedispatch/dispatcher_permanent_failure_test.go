@@ -55,7 +55,7 @@ func TestDispatcherFlowCategorizesPermanentSentinel(t *testing.T) {
 				}
 			}()
 
-			dispatcher := NewDispatcher(nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+			dispatcher := newDispatcherForTest(t, nil, cache, sentinelFailureSender{err: tt.err}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 				DeliveryParallelism: 1,
 			})
 			rows := []domain.YouTubeNotificationDelivery{{ID: 101, OutboxID: 1, RoomID: testRoom1}}
@@ -136,7 +136,7 @@ func TestDispatcherMarksAuthSentinelDeliveryFAILEDImmediately(t *testing.T) {
 	}()
 
 	outbox, delivery := seedAuthSentinelFailureRows(t, db)
-	dispatcher := NewDispatcher(db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cache, sentinelFailureSender{err: fmt.Errorf("wrapped auth: %w", &iris.HTTPError{StatusCode: 401})}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		MaxRetries:          3,

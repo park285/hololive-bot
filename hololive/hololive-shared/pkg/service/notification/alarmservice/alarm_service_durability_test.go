@@ -27,6 +27,7 @@ import (
 type stubAlarmWriter struct {
 	addFn         func(context.Context, *domain.Alarm) error
 	removeFn      func(context.Context, string, string) error
+	removeHostFn  func(context.Context, string, string, string) error
 	clearByRoomFn func(context.Context, string) (int64, error)
 }
 
@@ -44,6 +45,16 @@ func (w *stubAlarmWriter) Remove(ctx context.Context, roomID, channelID string) 
 	if w.removeFn != nil {
 		if err := w.removeFn(ctx, roomID, channelID); err != nil {
 			return fmt.Errorf("stub remove: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (w *stubAlarmWriter) RemoveHost(ctx context.Context, roomID, channelID, hostID string) error {
+	if w.removeHostFn != nil {
+		if err := w.removeHostFn(ctx, roomID, channelID, hostID); err != nil {
+			return fmt.Errorf("stub remove host: %w", err)
 		}
 	}
 
@@ -268,7 +279,7 @@ func TestRemoveAlarmPersistFailureLogsWrappedEvents(t *testing.T) {
 					},
 				}
 
-				return as.deleteAlarmBeforeCacheRemoval(ctx, testRoomID, testChannelID)
+				return as.deleteAlarmBeforeCacheRemoval(ctx, testRoomID, testChannelID, "")
 			},
 			wantEvent: "delete alarm before cache removal.failed",
 			wantError: "delete alarm: stub remove: db down",

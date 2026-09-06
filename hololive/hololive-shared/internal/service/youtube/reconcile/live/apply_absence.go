@@ -73,12 +73,18 @@ func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, 
 	}
 
 	covers := contract.LiveCoverageCoversSession(slot.Coverage, existing.ChannelID, string(existing.Status))
-	if !covers || ignoredAbsence(existing, slot.ScheduledFor) {
+	if !covers {
+		return
+	}
+
+	ignoredSlots := ignoredAbsenceSlots(session, existing)
+	if _, ignored := ignoredSlots[slot.ScheduledFor.UTC()]; ignored {
 		return
 	}
 
 	if existing.Clock.LastLivePositiveAt == nil {
 		existing.IgnoredAbsenceScheduledFor = append(existing.IgnoredAbsenceScheduledFor, slot.ScheduledFor)
+		ignoredSlots[slot.ScheduledFor.UTC()] = struct{}{}
 		session.state.Sessions[existing.VideoID] = *existing
 		markDirty(session, existing.VideoID)
 
@@ -118,18 +124,23 @@ func recordAbsencePending(session *reduceSession, existing *SessionState, slot *
 	reapplyStoredEnds(session, existing.VideoID)
 }
 
-func ignoredAbsence(existing *SessionState, scheduledFor time.Time) bool {
-	if existing == nil {
-		return true
+func ignoredAbsenceSlots(session *reduceSession, existing *SessionState) map[time.Time]struct{} {
+	if session.ignoredAbsences == nil {
+		session.ignoredAbsences = make(map[string]map[time.Time]struct{})
 	}
 
-	for _, ignored := range existing.IgnoredAbsenceScheduledFor {
-		if ignored.Equal(scheduledFor) {
-			return true
+	ignored := session.ignoredAbsences[existing.VideoID]
+	if ignored == nil {
+		// 신규 positive가 긴 이력을 복원할 때 같은 목록을 slot마다 선형 탐색하지 않는다.
+		ignored = make(map[time.Time]struct{}, len(existing.IgnoredAbsenceScheduledFor))
+		for _, at := range existing.IgnoredAbsenceScheduledFor {
+			ignored[at.UTC()] = struct{}{}
 		}
+
+		session.ignoredAbsences[existing.VideoID] = ignored
 	}
 
-	return false
+	return ignored
 }
 
 func replayedAbsence(existing *SessionState, slot *AbsenceSlot) bool {

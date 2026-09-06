@@ -32,7 +32,7 @@ import (
 // errAlarmRecordNotFound는 대상 알람이 없다는 정상 결과이며, 호출부는 오류가 아닌 미존재로 다뤄야 한다.
 var errAlarmRecordNotFound = errors.New("alarm record not found")
 
-func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
+func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, channelID, hostID string) (*domain.Alarm, error) {
 	roomID = strings.TrimSpace(roomID)
 	channelID = strings.TrimSpace(channelID)
 
@@ -41,12 +41,16 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 	}
 
 	if as.alarmRepository != nil {
-		record, err := as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID)
+		record, err := as.findAlarmRecordForMutationFromRepository(ctx, roomID, channelID, hostID)
 		if err != nil {
 			return nil, fmt.Errorf("find alarm record for mutation from repository: %w", err)
 		}
 
 		return record, nil
+	}
+
+	if hostID != "" {
+		return nil, errors.New("member subscription requires alarm repository")
 	}
 
 	record, err := as.findAlarmRecordForMutationFromCache(ctx, roomID, channelID)
@@ -57,14 +61,14 @@ func (as *AlarmService) findAlarmRecordForMutation(ctx context.Context, roomID, 
 	return record, nil
 }
 
-func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID, channelID string) (*domain.Alarm, error) {
+func (as *AlarmService) findAlarmRecordForMutationFromRepository(ctx context.Context, roomID, channelID, hostID string) (*domain.Alarm, error) {
 	alarms, err := findRoomAlarmsFromRepository(ctx, as.alarmRepository, roomID)
 	if err != nil {
 		return nil, fmt.Errorf("find room alarms: %w", err)
 	}
 
 	for _, alarm := range alarms {
-		if alarm == nil || strings.TrimSpace(alarm.ChannelID) != channelID {
+		if alarm == nil || strings.TrimSpace(alarm.ChannelID) != channelID || alarm.HostID != hostID {
 			continue
 		}
 

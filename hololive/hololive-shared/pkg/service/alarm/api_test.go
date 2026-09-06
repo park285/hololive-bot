@@ -42,6 +42,7 @@ import (
 type mockAlarmCRUD struct {
 	addAlarmFn                  func(ctx context.Context, req domain.AddAlarmRequest) (bool, error)
 	removeAlarmFn               func(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error)
+	removeHostAlarmFn           func(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error)
 	getRoomAlarmsFn             func(ctx context.Context, roomID string) ([]string, error)
 	getRoomAlarmsWithTypesFn    func(ctx context.Context, roomID string) ([]*domain.Alarm, error)
 	listRoomAlarmsViewFn        func(ctx context.Context, roomID string) ([]domain.AlarmListView, error)
@@ -68,6 +69,15 @@ func (m *mockAlarmCRUD) RemoveAlarm(ctx context.Context, roomID, channelID strin
 	out, err := m.removeAlarmFn(ctx, roomID, channelID, alarmTypes)
 	if err != nil {
 		return out, fmt.Errorf("remove alarm fn: %w", err)
+	}
+
+	return out, nil
+}
+
+func (m *mockAlarmCRUD) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	out, err := m.removeHostAlarmFn(ctx, roomID, channelID, hostID, alarmTypes)
+	if err != nil {
+		return out, fmt.Errorf("remove host alarm fn: %w", err)
 	}
 
 	return out, nil

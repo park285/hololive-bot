@@ -72,7 +72,7 @@ func (data *subscriberCacheWarmData) addChannelSubscribers(channelID, registryKe
 }
 
 func (data *subscriberCacheWarmData) addNames(alarmRecord *domain.Alarm, roomID, channelID string) {
-	if alarmRecord.MemberName != "" {
+	if alarmRecord.HostID == "" && alarmRecord.MemberName != "" {
 		data.memberNames[channelID] = alarmRecord.MemberName
 	}
 

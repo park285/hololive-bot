@@ -25,10 +25,12 @@ import (
 	"time"
 )
 
+// AddAlarmRequest는 채팅방의 구독 대상을 지정하며 빈 HostID는 전체 채널을 뜻한다.
 type AddAlarmRequest struct {
 	RoomID     string
 	UserID     string
 	ChannelID  string
+	HostID     string
 	MemberName string
 	RoomName   string
 	UserName   string
@@ -42,8 +44,10 @@ type AlarmEntry struct {
 	MemberName string `json:"memberName"`
 }
 
+// AlarmListView는 채팅방에서 구독한 대상과 알림 종류, 대상에 맞는 다음 방송을 표시한다.
 type AlarmListView struct {
 	ChannelID  string
+	HostID     string `json:",omitempty"`
 	MemberName string
 	AlarmTypes AlarmTypes
 	NextStream *NextStreamInfo
@@ -52,6 +56,8 @@ type AlarmListView struct {
 type AlarmWriter interface {
 	AddAlarm(ctx context.Context, req *AddAlarmRequest) (bool, error)
 	RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes AlarmTypes) (bool, error)
+	// RemoveHostAlarm은 지정한 멤버의 알림 종류만 해지하고 다른 구독을 보존한다.
+	RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes AlarmTypes) (bool, error)
 	ClearRoomAlarms(ctx context.Context, roomID string) (int, error)
 }
 

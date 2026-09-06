@@ -73,6 +73,8 @@ var sourceObservationReplayMigrations = []string{
 	"162_youtube_content_evidence_clocks.sql",
 	"163_youtube_live_viewer_schedule_canonical.sql",
 	"191_source_observation_replay_epoch.sql",
+	"192_live_reconciliation_evidence.sql",
+	"193_live_absence_slot_channel_index.sql",
 }
 
 func TestSourceObservationMigrationReplaysWithoutRegressingContracts(t *testing.T) {
@@ -191,6 +193,7 @@ var observationGrantMigrationFiles = []string{
 	"176_youtube_projection_retention_revoke_delete.sql",
 	"178_youtube_schedule_collabo_talent_names.sql",
 	"191_source_observation_replay_epoch.sql",
+	"192_live_reconciliation_evidence.sql",
 }
 
 func readObservationGrantMigrations(t *testing.T, dir string) string {
@@ -433,6 +436,8 @@ var sourceObservationTables = []string{
 	"source_observation_subject_heads",
 	"source_reconciliation_conflicts",
 	"youtube_live_reconciliation_heads",
+	"youtube_live_pending_ends",
+	"youtube_live_absence_slots",
 	"youtube_content_evidence_clocks",
 	"youtube_content_absence_slots",
 	"youtube_content_channel_heads",
@@ -480,6 +485,8 @@ func assertObservationGrantMatrix(t *testing.T, pool *pgxpool.Pool, roles observ
 			"source_observation_subject_heads":          observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"source_reconciliation_conflicts":           observationPrivileges("SELECT", "INSERT", "DELETE"),
 			"youtube_live_reconciliation_heads":         observationPrivileges("SELECT", "INSERT", "UPDATE"),
+			"youtube_live_pending_ends":                 observationPrivileges("SELECT", "INSERT", "UPDATE", "DELETE"),
+			"youtube_live_absence_slots":                observationPrivileges("SELECT", "INSERT"),
 			"youtube_content_evidence_clocks":           observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_absence_slots":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
 			"youtube_content_channel_heads":             observationPrivileges("SELECT", "INSERT", "UPDATE"),
@@ -586,7 +593,8 @@ func assertObservationLockAPIAccess(t *testing.T, pool *pgxpool.Pool, roles obse
 			{name: "replay_epoch_load.sql", dir: backfillQueryDir},
 			{name: "repository_replay_observation_0020_20.sql", args: []any{int64(0)}},
 			{name: "repository_claim_lock_0013_13.sql", args: []any{int64(0), strings.Repeat("0", 64)}},
-			{name: "repository_live_observation_lock_0051_51.sql", args: []any{int64(0)}},
+			{name: "repository_live_pending_ends.sql", args: []any{[]string{}}},
+			{name: "repository_live_absence_slots.sql", args: []any{[]string{}, nil, time.Now().UTC(), []string{}}},
 		},
 	}
 

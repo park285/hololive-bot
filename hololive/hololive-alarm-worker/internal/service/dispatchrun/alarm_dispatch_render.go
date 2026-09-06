@@ -8,6 +8,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/officialidentity"
 	shortlinkservice "github.com/kapu/hololive-shared/pkg/service/shortlink"
@@ -232,15 +233,27 @@ func renderAlarmDispatchNotification(ctx context.Context, renderer *template.Ren
 }
 
 func resolveAlarmDispatchMemberName(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {
+	var name string
+
 	if notification.Channel != nil && strings.TrimSpace(notification.Channel.Name) != "" {
-		return strings.TrimSpace(notification.Channel.Name)
+		name = strings.TrimSpace(notification.Channel.Name)
+	} else if notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelName) != "" {
+		name = strings.TrimSpace(notification.Stream.ChannelName)
+	} else {
+		name = alarmDispatchMessageString(ctx, store, "alarm_unknown_member", "알 수 없는 멤버")
 	}
 
-	if notification.Stream != nil && strings.TrimSpace(notification.Stream.ChannelName) != "" {
-		return strings.TrimSpace(notification.Stream.ChannelName)
+	stream := notification.Stream
+	if stream == nil || stream.IsChzzkOnly || stream.IsTwitchOnly {
+		return name
 	}
 
-	return alarmDispatchMessageString(ctx, store, "alarm_unknown_member", "알 수 없는 멤버")
+	channelID := stream.ChannelID
+	if channelID == "" && notification.Channel != nil {
+		channelID = notification.Channel.ID
+	}
+
+	return mekparkhost.DisplayName(channelID, stream.Title, name)
 }
 
 func resolveAlarmDispatchTitle(ctx context.Context, store *messagestrings.Store, notification *domain.AlarmNotification) string {

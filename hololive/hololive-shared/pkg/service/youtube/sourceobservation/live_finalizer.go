@@ -40,26 +40,28 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 		return false, fmt.Errorf("claim due live end: %w", err)
 	}
 
+	// due 조회에서는 head를 선잠그지 않는다. consumer와 같은 session→head→evidence
+	// 순서로 잠근 뒤 최신 candidate와 due 조건을 다시 확인한다.
+	state, err := loadLiveState(ctx, tx, nil, []string{videoID})
+	if err != nil {
+		return false, fmt.Errorf("load live state: %w", err)
+	}
+
 	var dbNow time.Time
 
 	if nowErr := tx.QueryRow(ctx, mustSQL("repository_live_now_0050_50.sql")).Scan(&dbNow); nowErr != nil {
 		return false, fmt.Errorf("load database now: %w", nowErr)
 	}
 
-	state, err := loadLiveState(ctx, tx, nil, []string{videoID})
-	if err != nil {
-		return false, fmt.Errorf("load live state: %w", err)
-	}
-
 	session, ok := state.Sessions[videoID]
-	if !ok || session.Clock.EndCandidateObservationID == nil {
-		finalizeErr := finalizeMissingLiveCandidate(ctx, tx, &session, videoID)
-
-		return true, errors.Join(finalizeErr)
+	if !ok || session.Clock.EndCandidateObservationID == nil ||
+		session.Clock.NextEndCheckAt == nil || session.Clock.NextEndCheckAt.After(dbNow) {
+		return false, nil
 	}
 
-	if _, err := tx.Exec(ctx, mustSQL("repository_live_observation_lock_0051_51.sql"), *session.Clock.EndCandidateObservationID); err != nil {
-		return false, fmt.Errorf("lock end candidate observation: %w", err)
+	pending, ok := state.PendingEnds[videoID]
+	if !ok || pending.ObservationID != *session.Clock.EndCandidateObservationID {
+		return false, errors.New("live end candidate evidence is missing or inconsistent")
 	}
 
 	decision := live.FinalizeDue(state, dbNow, grace)
@@ -68,33 +70,4 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 	}
 
 	return true, nil
-}
-
-func finalizeMissingLiveCandidate(ctx context.Context, tx dbx.Tx, session *live.SessionState, videoID string) error {
-	if err := clearLiveCandidate(ctx, tx, session, videoID); err != nil {
-		return fmt.Errorf("clear live candidate: %w", err)
-	}
-
-	return nil
-}
-
-func clearLiveCandidate(ctx context.Context, tx dbx.Tx, session *live.SessionState, videoID string) error {
-	if session == nil {
-		return errors.New("clear live candidate: session state is nil")
-	}
-
-	session.VideoID = videoID
-	if session.Status == "" {
-		session.Status = live.StatusUpcoming
-	}
-
-	session.Clock.EndCandidateKind = nil
-	session.Clock.EndCandidateObservationID = nil
-	session.Clock.NextEndCheckAt = nil
-
-	if err := upsertLiveHead(ctx, tx, session); err != nil {
-		return fmt.Errorf("upsert live head: %w", err)
-	}
-
-	return nil
 }

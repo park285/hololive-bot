@@ -189,24 +189,23 @@ func (r *Runtime) sessionStatusCSRFToken(req *http.Request, sessionID string) (t
 }
 
 func (r *Runtime) handleLogout(c *gin.Context) {
-	if sessionID, ok := sessionIDFrom(c); ok {
-		// 회전 유예 중에는 sessionID가 marker이고 실세션은 교체본이다 — 교체본을 먼저
-		// 회수해야 marker만 지워진 채 세션이 최대 8시간 살아남는 일이 없다.
-		if sess, ok := sessionFrom(c); ok && sess != nil && sess.ID != sessionID {
-			r.deleteSessionForLogout(c, sess.ID)
-		}
-
-		r.deleteSessionForLogout(c, sessionID)
-	}
-
 	auth.ClearAuthCookies(c.Writer, r.cfg.Security.ForceHTTPS)
-	ginjson.Respond(c, http.StatusOK, statusResponse{Status: "ok"})
-}
 
-func (r *Runtime) deleteSessionForLogout(c *gin.Context, sessionID string) {
-	if err := r.sessions.Delete(c.Request.Context(), sessionID); err != nil {
-		r.logger.Warn("session delete failed during logout", slog.Any("error", err))
+	sess, ok := sessionFrom(c)
+	if !ok || sess == nil {
+		httpx.Abort(c, httpx.StoreUnavailable())
+
+		return
 	}
+
+	if err := r.sessions.RevokeFamily(c.Request.Context(), sess.FamilyID); err != nil {
+		r.logger.Warn("session family revocation failed during logout", slog.Any("error", err))
+		httpx.Abort(c, httpx.StoreUnavailable())
+
+		return
+	}
+
+	ginjson.Respond(c, http.StatusOK, statusResponse{Status: "ok"})
 }
 
 const maxHeartbeatBodyBytes int64 = 1024

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -32,6 +33,7 @@ import (
 
 	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
@@ -84,11 +86,18 @@ func (h *Handler) RegisterInternalRoutes(rg *gin.RouterGroup) {
 	internal.GET(contractsalarm.KeysRoute, h.GetAllAlarmKeys)
 }
 
+// AddAlarm은 선택적인 host_id로 채팅방의 채널 또는 멤버 구독을 등록한다.
 func (h *Handler) AddAlarm(c *gin.Context) {
 	var req AddAlarmRequest
 
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	if !validAlarmHost(req.ChannelID, req.HostID) {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_host_id", "invalid member subscription target"))
 
 		return
 	}
@@ -104,6 +113,7 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
+		HostID:     req.HostID,
 		MemberName: req.MemberName,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,
@@ -121,11 +131,18 @@ func (h *Handler) AddAlarm(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"added": added}})
 }
 
+// RemoveAlarm은 host_id가 있으면 해당 멤버만, 없으면 전체 채널 구독만 해지한다.
 func (h *Handler) RemoveAlarm(c *gin.Context) {
 	var req RemoveAlarmRequest
 
 	if err := decodeAlarmRequest(c, &req); err != nil {
 		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_request_body", err.Error()))
+
+		return
+	}
+
+	if !validAlarmHost(req.ChannelID, req.HostID) {
+		ginjson.Respond(c, http.StatusBadRequest, alarmAPIError("invalid_host_id", "invalid member subscription target"))
 
 		return
 	}
@@ -137,7 +154,17 @@ func (h *Handler) RemoveAlarm(c *gin.Context) {
 		alarmTypes = append(alarmTypes, domain.AlarmType(t))
 	}
 
-	removed, err := h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, alarmTypes)
+	var (
+		removed bool
+		err     error
+	)
+
+	if req.HostID == "" {
+		removed, err = h.alarm.RemoveAlarm(ctx, req.RoomID, req.ChannelID, alarmTypes)
+	} else {
+		removed, err = h.alarm.RemoveHostAlarm(ctx, req.RoomID, req.ChannelID, req.HostID, alarmTypes)
+	}
+
 	if err != nil {
 		h.logger.Error("알람 제거 실패", slog.Any("error", err))
 		ginjson.Respond(c, http.StatusInternalServerError, alarmAPIError("alarm_remove_failed", "alarm remove failed"))
@@ -146,6 +173,16 @@ func (h *Handler) RemoveAlarm(c *gin.Context) {
 	}
 
 	ginjson.Respond(c, http.StatusOK, APIResponse{Success: true, Data: gin.H{"removed": removed}})
+}
+
+func validAlarmHost(channelID, hostID string) bool {
+	if hostID == "" {
+		return true
+	}
+
+	_, ok := mekparkhost.SubscriptionMember(strings.TrimSpace(channelID), strings.TrimSpace(hostID))
+
+	return ok
 }
 
 func (h *Handler) GetRoomAlarmsWithTypes(c *gin.Context) {

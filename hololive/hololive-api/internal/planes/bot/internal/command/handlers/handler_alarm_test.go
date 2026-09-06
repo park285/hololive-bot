@@ -51,6 +51,10 @@ func (s *alarmListViewerStub) RemoveAlarm(context.Context, string, string, domai
 	return false, nil
 }
 
+func (s *alarmListViewerStub) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+
 func (s *alarmListViewerStub) GetRoomAlarms(context.Context, string) ([]string, error) {
 	return nil, nil
 }
@@ -175,6 +179,10 @@ func (s *alarmAddRecorder) AddAlarm(ctx context.Context, _ *domain.AddAlarmReque
 }
 
 func (s *alarmAddRecorder) RemoveAlarm(context.Context, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+
+func (s *alarmAddRecorder) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
 	return false, nil
 }
 
@@ -327,7 +335,7 @@ func TestAlarmCommand_AddPropagatesRequestContextToMatcher(t *testing.T) {
 		UserID:   "user-1",
 		UserName: "tester",
 	}, map[string]any{
-		testParamAction: "add",
+		testParamAction: testActionAdd,
 		paramMember:     testMemberAqua,
 	})
 	if err != nil {
@@ -367,7 +375,7 @@ func TestAlarmCommand_AddNoMatchStopsAfterErrorMessage(t *testing.T) {
 		UserID:   "user-1",
 		UserName: "tester",
 	}, map[string]any{
-		testParamAction: "add",
+		testParamAction: testActionAdd,
 		paramMember:     "NoSuchMember",
 	})
 	if err != nil {

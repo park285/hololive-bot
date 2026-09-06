@@ -340,6 +340,10 @@ func (s *stubAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.Alar
 	return false, nil
 }
 
+func (s *stubAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+
 func (s *stubAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) {
 	return nil, nil
 }

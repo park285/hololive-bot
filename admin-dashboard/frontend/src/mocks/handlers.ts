@@ -123,6 +123,7 @@ export const handlers = [
 			status: "ok",
 			authenticated: true,
 			username: "admin",
+			csrf_token: "msw-token",
 			absolute_expires_at: nowUnix() + 60 * 60,
 			session_policy: {
 				heartbeat_interval_ms: 300000,
@@ -134,7 +135,7 @@ export const handlers = [
 		}),
 	),
 	http.post("*/admin/api/auth/login", () =>
-		HttpResponse.json({ status: "ok", message: "logged in" }),
+		HttpResponse.json({ status: "ok", message: "logged in", csrf_token: "msw-token" }),
 	),
 	http.post("*/admin/api/auth/logout", () =>
 		HttpResponse.json({ status: "ok", message: "logged out" }),
@@ -196,6 +197,8 @@ export const handlers = [
 		const nextSettings = (await request.json()) as { alarmAdvanceMinutes?: number };
 		return HttpResponse.json({
 			status: "ok",
+			message: "Settings updated",
+			runtime: { alarm_applied: true, config_publish_alarm_advance_minutes: true },
 			settings: {
 				alarmAdvanceMinutes:
 					nextSettings.alarmAdvanceMinutes ?? settings.settings.alarmAdvanceMinutes,

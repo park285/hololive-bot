@@ -38,6 +38,7 @@ import {
   SetGraduationRequest,
   Settings,
   SettingsResponse,
+  SettingsUpdateResponse,
   StatsResponse,
   StatusOnlyResponse,
   StreamsResponse,
@@ -91,7 +92,7 @@ export class Admin<
    * @request POST:/admin/api/auth/logout
    */
   handleLogout = (params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, any>({
+    this.request<StatusOnlyResponse, ErrorResponse>({
       path: `/admin/api/auth/logout`,
       method: "POST",
       format: "json",
@@ -494,7 +495,7 @@ export class Admin<
    * @request POST:/admin/api/holo/settings
    */
   holoUpdateSettings = (data: Settings, params: RequestParams = {}) =>
-    this.request<StatusOnlyResponse, ErrorResponse>({
+    this.request<SettingsUpdateResponse, ErrorResponse>({
       path: `/admin/api/holo/settings`,
       method: "POST",
       body: data,

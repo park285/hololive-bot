@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { broadcastSessionLogout } from "@/hooks/useActivityDetection";
 import { clearClientSession } from "@/lib/sessionLifecycle";
+import toast from "@/lib/toast-api";
 import { NAV_GROUPS, prefetchRoute, ROUTE_MANIFEST } from "@/routes/manifest";
 
 export const AppLayout = () => {
@@ -36,8 +37,8 @@ export const AppLayout = () => {
 		void (async () => {
 			try {
 				await authApi.logout();
-			} catch {
-				// 서버 로그아웃 실패 여부와 무관하게 클라이언트 세션은 정리합니다.
+			} catch (error) {
+				toast.error(error instanceof Error ? error.message : "서버 세션 폐기를 확인하지 못했습니다.");
 			} finally {
 				broadcastSessionLogout();
 				setIsLoggingOut(false);

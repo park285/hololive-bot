@@ -35,8 +35,10 @@ import (
 )
 
 // reviveTestClaimManager는 정규화된 canonical lifecycle 구성을 사용합니다.
-func reviveTestClaimManager(db *deliveryTestDB) *ClaimManager {
-	return NewDispatcher(
+func reviveTestClaimManager(t *testing.T, db *deliveryTestDB) *ClaimManager {
+	t.Helper()
+
+	return newDispatcherForTest(t,
 		db,
 		cachemocks.NewLenientClient(),
 		&testSender{failRoom: map[string]bool{}},
@@ -66,7 +68,7 @@ type reviveStaleFixture struct {
 
 func TestReviveStaleFailedOutbox_RevivesFreshNeverSentAndPreservesDelivered(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := reviveTestClaimManager(db)
+	cm := reviveTestClaimManager(t, db)
 	ctx := t.Context()
 	fixture := seedReviveStaleFailedOutboxFixture(t, db)
 
@@ -195,7 +197,7 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 	ctx := t.Context()
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil,
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil,
 		slog.New(slog.DiscardHandler), &dispatchstate.Config{
 			BatchSize:             10,
 			LockTimeout:           time.Minute,
@@ -243,7 +245,7 @@ func TestReviveStaleFailedOutbox_RevivedRowIsActuallyRedelivered(t *testing.T) {
 
 func TestReviveStaleFailedOutbox_RevivesCommunityAndShorts(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := reviveTestClaimManager(db)
+	cm := reviveTestClaimManager(t, db)
 	fixture := seedCommunityShortReviveFixture(t, db)
 
 	revived, err := cm.reviveStaleFailedOutbox(t.Context(), 60*time.Minute, 50)
@@ -353,7 +355,7 @@ func assertCommunityShortReviveFixture(
 
 func TestReviveStaleFailedOutbox_ExcludesAllQuarantinedOutbox(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := reviveTestClaimManager(db)
+	cm := reviveTestClaimManager(t, db)
 	ctx := t.Context()
 
 	now := time.Now().UTC()
@@ -388,7 +390,7 @@ func TestReviveStaleFailedOutbox_ExcludesAllQuarantinedOutbox(t *testing.T) {
 
 func TestReviveStaleFailedOutbox_MixedFailedAndQuarantinedResetsFailedLogicalGroup(t *testing.T) {
 	db := newDeliveryPool(t)
-	cm := reviveTestClaimManager(db)
+	cm := reviveTestClaimManager(t, db)
 	ctx := t.Context()
 
 	now := time.Now().UTC()

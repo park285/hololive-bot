@@ -482,7 +482,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexOmitsLive(t *tes
 		recentDispatch: map[string]bool{streamID: true},
 	}
 
-	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, persistedSource, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, persistedSource, nil, logger)
 	require.NoError(t, err)
 
 	ctx := t.Context()
@@ -533,7 +533,7 @@ func TestYouTubeCheckerCheck_ForcesPersistedLiveChannelDueEvenWhenTierNotDue(t *
 	liveStart := now.Add(-2 * time.Minute)
 	persistedSource := &fakeYouTubeLiveSessionSource{}
 
-	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, persistedSource, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, persistedSource, nil, logger)
 	require.NoError(t, err)
 
 	ctx := t.Context()
@@ -615,7 +615,7 @@ func TestYouTubeCheckerCheck_UsesPersistedLiveSessionWhenHolodexFails(t *testing
 		recentDispatch: map[string]bool{streamID: true},
 	}
 
-	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, persistedSource, logger)
+	checker, err := NewYouTubeCheckerWithPersistedLiveSource(cache, holodexService, tierSched, dedupService, []int{5, 3, 1}, 0, persistedSource, nil, logger)
 	require.NoError(t, err)
 
 	ctx := t.Context()
@@ -676,6 +676,7 @@ func checkYouTubeUpcomingWithConfirmedPremieres(t *testing.T, confirmedPremiereI
 		[]int{5, 3, 1},
 		0,
 		&fakeYouTubeLiveSessionSource{confirmedPremiereIDs: confirmedPremiereIDs},
+		nil,
 		logger,
 	)
 	require.NoError(t, err)

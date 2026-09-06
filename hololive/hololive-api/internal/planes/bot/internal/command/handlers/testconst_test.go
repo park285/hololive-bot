@@ -28,6 +28,7 @@ const (
 	testTypeSourceTitle = "title"
 
 	testParamAction = "action"
+	testActionAdd   = "add"
 	testParamLimit  = "limit"
 	testParamMonth  = "month"
 	testParamHours  = "hours"

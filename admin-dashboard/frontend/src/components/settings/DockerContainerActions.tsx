@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+	DockerActionOutcomeUnknownError,
 	type DockerContainer,
 	dockerApi,
 	type StatusOnlyResponse,
@@ -81,6 +82,13 @@ export function useDockerContainerActions({
 
 	const onMutationError = (error: unknown) => {
 		setActionInProgress(null);
+		if (error instanceof DockerActionOutcomeUnknownError) {
+			toast.error(`컨테이너 작업 결과 확인 불가: ${error.message}`);
+			void queryClient.invalidateQueries({
+				queryKey: queryKeys.docker.containers,
+			});
+			return;
+		}
 		toast.error(`컨테이너 작업 실패: ${getErrorMessageFromUnknown(error)}`);
 	};
 
@@ -91,6 +99,7 @@ export function useDockerContainerActions({
 			onMutationSuccess(containerName, "재시작을 요청했습니다.");
 		},
 		onError: onMutationError,
+		retry: false,
 	});
 
 	const stopMutation = useMutation({
@@ -100,6 +109,7 @@ export function useDockerContainerActions({
 			onMutationSuccess(containerName, "중지되었습니다.");
 		},
 		onError: onMutationError,
+		retry: false,
 	});
 
 	const startMutation = useMutation({
@@ -109,6 +119,7 @@ export function useDockerContainerActions({
 			onMutationSuccess(containerName, "시작되었습니다.");
 		},
 		onError: onMutationError,
+		retry: false,
 	});
 
 	const openConfirmModal = (

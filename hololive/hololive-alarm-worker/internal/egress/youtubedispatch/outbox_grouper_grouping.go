@@ -43,18 +43,25 @@ type channelAlarmRoomTargets map[domain.AlarmType]map[string]bool
 
 type channelAlarmEntry struct {
 	channelID string
+	targetKey string
+	title     string
 	alarmType domain.AlarmType
 }
 
 type subscriberLookupResult struct {
-	channelID string
+	targetKey string
 	alarmType domain.AlarmType
 	rooms     map[string]bool
 	ok        bool
 }
 
 func roomsForItem(roomsByChannel map[string]channelAlarmRoomTargets, item *domain.YouTubeNotificationOutbox) (map[string]bool, bool) {
-	alarmTargets, ok := roomsByChannel[item.ChannelID]
+	targetKey, _, err := outboxSubscriberTarget(item)
+	if err != nil {
+		return nil, false
+	}
+
+	alarmTargets, ok := roomsByChannel[targetKey]
 	if !ok {
 		return nil, false
 	}
@@ -113,14 +120,22 @@ func (g *OutboxGrouper) groupOutboxItems(items []domain.YouTubeNotificationOutbo
 	return groups
 }
 
-func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []channelAlarmEntry {
+func (g *OutboxGrouper) channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []channelAlarmEntry {
 	entries := make([]channelAlarmEntry, 0)
 	seen := make(map[string]bool)
 
 	for i := range items {
 		item := &items[i]
+
+		targetKey, title, err := outboxSubscriberTarget(item)
+		if err != nil {
+			g.logger.Warn("Failed to read member subscription title", slog.Int64("outbox_id", item.ID), slog.Any("error", err))
+
+			continue
+		}
+
 		alarmType := item.Kind.ToAlarmType()
-		lookupKey := item.ChannelID + "|" + string(alarmType)
+		lookupKey := targetKey + "|" + string(alarmType)
 
 		if seen[lookupKey] {
 			continue
@@ -128,7 +143,7 @@ func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []cha
 
 		seen[lookupKey] = true
 
-		entries = append(entries, channelAlarmEntry{channelID: item.ChannelID, alarmType: alarmType})
+		entries = append(entries, channelAlarmEntry{channelID: item.ChannelID, targetKey: targetKey, title: title, alarmType: alarmType})
 	}
 
 	return entries
@@ -136,7 +151,7 @@ func channelAlarmEntriesForItems(items []domain.YouTubeNotificationOutbox) []cha
 
 func (g *OutboxGrouper) collectRoomsByChannel(ctx context.Context, items []domain.YouTubeNotificationOutbox) map[string]channelAlarmRoomTargets {
 	result := make(map[string]channelAlarmRoomTargets)
-	entries := channelAlarmEntriesForItems(items)
+	entries := g.channelAlarmEntriesForItems(items)
 
 	if len(entries) == 0 {
 		return result
@@ -159,7 +174,7 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 				rooms, ok := g.resolveSubscriberRooms(egCtx, e)
 
 				results[idx] = subscriberLookupResult{
-					channelID: e.channelID,
+					targetKey: e.targetKey,
 					alarmType: e.alarmType,
 					rooms:     rooms,
 					ok:        ok,
@@ -178,7 +193,7 @@ func (g *OutboxGrouper) lookupSubscriberRooms(ctx context.Context, entries []cha
 }
 
 func (g *OutboxGrouper) resolveSubscriberRooms(ctx context.Context, entry channelAlarmEntry) (map[string]bool, bool) {
-	members, err := g.lookupSubscribers(ctx, entry.channelID, entry.alarmType)
+	members, err := g.lookupSubscribers(ctx, entry.channelID, entry.title, entry.alarmType)
 	if err != nil {
 		g.logger.Warn("Failed to get subscribers for channel",
 			slog.String("channel_id", entry.channelID),
@@ -202,10 +217,10 @@ func mergeSubscriberLookupResults(result map[string]channelAlarmRoomTargets, res
 			continue
 		}
 
-		alarmTargets, ok := result[results[i].channelID]
+		alarmTargets, ok := result[results[i].targetKey]
 		if !ok {
 			alarmTargets = make(channelAlarmRoomTargets)
-			result[results[i].channelID] = alarmTargets
+			result[results[i].targetKey] = alarmTargets
 		}
 
 		alarmTargets[results[i].alarmType] = results[i].rooms

@@ -163,11 +163,13 @@ TABLE alarms
   COLUMN user_name character varying(200)
   COLUMN created_at timestamp with time zone DEFAULT now()
   COLUMN alarm_types alarm_type[] NOT NULL DEFAULT ARRAY['LIVE'::alarm_type]
+  COLUMN host_id text NOT NULL DEFAULT ''::text
+  CONSTRAINT chk_alarms_host_id_vocab CHECK (((host_id = ''::text) OR (((channel_id)::text = 'UC3OH5FKQ3qtl4uRme_vZTgA'::text) AND (host_id = ANY (ARRAY['kiyosumi-lyra'::text, 'reimei-mira'::text, 'yoinagi-neon'::text])))))
   CONSTRAINT alarms_pkey PRIMARY KEY (id)
-  CONSTRAINT alarms_room_channel_unique UNIQUE (room_id, channel_id)
   INDEX CREATE INDEX idx_alarms_alarm_types_gin ON public.alarms USING gin (alarm_types)
   INDEX CREATE INDEX idx_alarms_channel_created ON public.alarms USING btree (channel_id, created_at)
   INDEX CREATE INDEX idx_alarms_channel_member_latest ON public.alarms USING btree (channel_id, created_at DESC) WHERE ((member_name IS NOT NULL) AND (member_name <> ''::text))
+  INDEX CREATE UNIQUE INDEX idx_alarms_room_channel_host ON public.alarms USING btree (room_id, channel_id, host_id)
   INDEX CREATE INDEX idx_alarms_room_created ON public.alarms USING btree (room_id, created_at)
 
 TABLE auth_password_reset_tokens
@@ -1097,6 +1099,34 @@ TABLE youtube_content_watermarks
   CONSTRAINT chk_youtube_content_watermarks_watermark_type_vocab CHECK (((watermark_type)::text = ANY ((ARRAY['VIDEO'::character varying, 'SHORT'::character varying, 'COMMUNITY_POST'::character varying])::text[])))
   CONSTRAINT youtube_content_watermarks_pkey PRIMARY KEY (channel_id, watermark_type)
 
+TABLE youtube_live_absence_slots
+  COLUMN observation_id bigint NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN scope_sha256 text NOT NULL
+  COLUMN coverage jsonb NOT NULL
+  CONSTRAINT chk_youtube_live_absence_slots_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (jsonb_typeof((coverage -> 'requested_channel_ids'::text)) = 'array'::text)))
+  CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
+  INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
+
+TABLE youtube_live_pending_ends
+  COLUMN video_id text NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN kind text NOT NULL
+  COLUMN observation_id bigint NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN ended_at timestamp with time zone
+  COLUMN negative_eligible boolean NOT NULL
+  COLUMN scope_covers boolean NOT NULL
+  CONSTRAINT chk_youtube_live_pending_ends_kind_vocab CHECK ((kind = ANY (ARRAY['EXPLICIT_END'::text, 'EXPLICIT_CANCEL'::text, 'SCOPED_ABSENCE'::text])))
+  CONSTRAINT chk_youtube_live_pending_ends_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
+  CONSTRAINT youtube_live_pending_ends_pkey PRIMARY KEY (video_id)
+  CONSTRAINT uq_youtube_live_pending_end_observation UNIQUE (video_id, observation_id)
+
 TABLE youtube_live_reconciliation_heads
   COLUMN video_id text NOT NULL
   COLUMN status text NOT NULL
@@ -1114,13 +1144,17 @@ TABLE youtube_live_reconciliation_heads
   COLUMN ended_at timestamp with time zone
   COLUMN end_reason text
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN first_absence_scheduled_for timestamp with time zone
+  COLUMN second_absence_scheduled_for timestamp with time zone
+  COLUMN last_absence_observation_id bigint NOT NULL DEFAULT 0
+  COLUMN ignored_absence_scheduled_for timestamp with time zone[] NOT NULL DEFAULT '{}'::timestamp with time zone[]
   CONSTRAINT chk_youtube_live_head_candidate_shape CHECK ((((end_candidate_kind IS NULL) AND (end_candidate_observation_id IS NULL) AND (next_end_check_at IS NULL)) OR ((end_candidate_kind IS NOT NULL) AND (end_candidate_observation_id IS NOT NULL) AND (next_end_check_at IS NOT NULL))))
   CONSTRAINT chk_youtube_live_head_video_id CHECK (((length(video_id) >= 1) AND (length(video_id) <= 128)))
   CONSTRAINT youtube_live_reconciliation_hea_consecutive_absence_slots_check CHECK (((consecutive_absence_slots >= 0) AND (consecutive_absence_slots <= 32767)))
   CONSTRAINT youtube_live_reconciliation_heads_end_candidate_kind_check CHECK ((end_candidate_kind = ANY (ARRAY['EXPLICIT_END'::text, 'EXPLICIT_CANCEL'::text, 'SCOPED_ABSENCE'::text])))
   CONSTRAINT youtube_live_reconciliation_heads_end_reason_check CHECK ((end_reason = ANY (ARRAY['EXPLICIT_END'::text, 'CANCELLED_BEFORE_LIVE'::text, 'SCOPED_ABSENCE'::text])))
   CONSTRAINT youtube_live_reconciliation_heads_status_check CHECK ((status = ANY (ARRAY['UPCOMING'::text, 'LIVE'::text, 'ENDED'::text])))
-  CONSTRAINT youtube_live_reconciliation_h_end_candidate_observation_id_fkey FOREIGN KEY (end_candidate_observation_id) REFERENCES source_observations(id) ON DELETE RESTRICT
+  CONSTRAINT fk_youtube_live_head_pending_end FOREIGN KEY (video_id, end_candidate_observation_id) REFERENCES youtube_live_pending_ends(video_id, observation_id) DEFERRABLE INITIALLY DEFERRED
   CONSTRAINT youtube_live_reconciliation_heads_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_youtube_live_reconciliation_due ON public.youtube_live_reconciliation_heads USING btree (next_end_check_at, video_id) WHERE (next_end_check_at IS NOT NULL)
   INDEX CREATE INDEX idx_youtube_live_reconciliation_end_candidate ON public.youtube_live_reconciliation_heads USING btree (end_candidate_observation_id) WHERE (end_candidate_observation_id IS NOT NULL)

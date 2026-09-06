@@ -74,6 +74,10 @@ func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alar
 		return nil
 	}
 
+	if alarm.HostID != "" {
+		return as.persistAlarm(ctx, alarm)
+	}
+
 	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
 
@@ -124,13 +128,21 @@ func upsertAlarmTypeUpdate(ctx context.Context, writer alarmUpsertWriter, alarm 
 	return nil
 }
 
-func (as *AlarmService) deleteAlarm(ctx context.Context, roomID, channelID string) error {
+func (as *AlarmService) deleteAlarm(ctx context.Context, roomID, channelID, hostID string) error {
 	if as.alarmWriter == nil {
 		return nil
 	}
 
 	persistCtx, cancel := alarmPersistenceContext(ctx)
 	defer cancel()
+
+	if hostID != "" {
+		if err := as.alarmWriter.RemoveHost(persistCtx, roomID, channelID, hostID); err != nil {
+			return fmt.Errorf("delete member alarm: %w", err)
+		}
+
+		return nil
+	}
 
 	if err := as.alarmWriter.Remove(persistCtx, roomID, channelID); err != nil {
 		return fmt.Errorf("delete alarm: %w", err)

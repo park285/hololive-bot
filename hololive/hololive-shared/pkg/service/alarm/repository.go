@@ -30,6 +30,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
@@ -49,7 +50,7 @@ func newRepositoryWithQuerier(querier dbx.Querier) *Repository {
 	return &Repository{pool: querier}
 }
 
-// 방 기반 시스템이므로 room_id + channel_id 기준으로 unique하다.
+// Add는 방·채널·멤버 구독별 알림 종류를 저장하며 빈 HostID는 전체 채널 구독이다.
 func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	alarmTypes := alarm.AlarmTypes
 	if len(alarmTypes) == 0 {
@@ -66,7 +67,7 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	_, err = r.pool.Exec(ctx, query,
 		alarm.RoomID, alarm.UserID, alarm.ChannelID,
 		alarm.MemberName, alarm.RoomName, alarm.UserName,
-		typesValue,
+		typesValue, alarm.HostID,
 	)
 	if err != nil {
 		return fmt.Errorf("add alarm: %w", err)
@@ -75,10 +76,24 @@ func (r *Repository) Add(ctx context.Context, alarm *domain.Alarm) error {
 	return nil
 }
 
+// Remove는 해당 채팅방의 전체 채널 구독만 삭제한다.
 func (r *Repository) Remove(ctx context.Context, roomID, channelID string) error {
+	return r.removeSubscription(ctx, roomID, channelID, "")
+}
+
+// RemoveHost는 해당 채팅방의 지정한 UNIT B 멤버 구독만 삭제한다.
+func (r *Repository) RemoveHost(ctx context.Context, roomID, channelID, hostID string) error {
+	if _, ok := mekparkhost.SubscriptionMember(channelID, hostID); !ok {
+		return errors.New("remove member subscription: invalid target")
+	}
+
+	return r.removeSubscription(ctx, roomID, channelID, hostID)
+}
+
+func (r *Repository) removeSubscription(ctx context.Context, roomID, channelID, hostID string) error {
 	query := mustSQL("repository_0082_02.sql")
 
-	_, err := r.pool.Exec(ctx, query, roomID, channelID)
+	_, err := r.pool.Exec(ctx, query, roomID, channelID, hostID)
 	if err != nil {
 		return fmt.Errorf("remove alarm: %w", err)
 	}
@@ -268,6 +283,7 @@ func scanAlarmRow(rows pgx.Rows) (*domain.Alarm, error) {
 	err := rows.Scan(
 		&alarm.ID, &alarm.RoomID, &alarm.UserID, &alarm.ChannelID,
 		&memberName, &roomName, &userName, &alarmTypesStr, &alarm.CreatedAt,
+		&alarm.HostID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan alarm: %w", err)

@@ -32,10 +32,17 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 )
 
 type AlarmCommand struct {
 	handlercore.BaseCommand
+}
+
+type alarmTarget struct {
+	ChannelID string
+	HostID    string
+	Name      string
 }
 
 type alarmActionHandler func(context.Context, *domain.CommandContext, map[string]any) error
@@ -201,7 +208,7 @@ func (c *AlarmCommand) requiredAlarmMemberName(ctx context.Context, room string,
 	return "", nil
 }
 
-func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberName string) (*domain.Channel, error) {
+func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberName string) (*alarmTarget, error) {
 	channel, err := c.resolveAlarmMember(ctx, room, memberName)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
@@ -211,7 +218,7 @@ func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberNa
 		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	if !c.isGraduatedMember(ctx, channel.ID) {
+	if !c.isGraduatedMember(ctx, channel.ChannelID) {
 		return channel, nil
 	}
 
@@ -222,10 +229,11 @@ func (c *AlarmCommand) resolveAlarmAddMember(ctx context.Context, room, memberNa
 	return nil, handlercore.ErrMemberLookupHandled
 }
 
-func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *domain.Channel, alarmTypes domain.AlarmTypes) error {
+func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
 	added, err := c.Deps().Alarm.AddAlarm(ctx, &domain.AddAlarmRequest{
 		RoomID:     cmdCtx.Room,
-		ChannelID:  channel.ID,
+		ChannelID:  channel.ChannelID,
+		HostID:     channel.HostID,
 		MemberName: channel.Name,
 		RoomName:   cmdCtx.RoomName,
 		AlarmTypes: alarmTypes,
@@ -243,9 +251,14 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.Comm
 		return nil
 	}
 
-	nextStreamInfo, err := c.Deps().Alarm.GetNextStreamInfo(ctx, channel.ID)
+	nextStreamInfo, err := c.Deps().Alarm.GetNextStreamInfo(ctx, channel.ChannelID)
 	if err != nil {
 		c.Deps().Logger.Debug("Failed to get next stream info", slog.Any("error", err))
+	}
+
+	if channel.HostID != "" && (!alarmTypes.Contains(domain.AlarmTypeLive) ||
+		nextStreamInfo != nil && !mekparkhost.Identify(channel.ChannelID, nextStreamInfo.Title).MatchesSubscription(channel.HostID)) {
+		nextStreamInfo = nil
 	}
 
 	message := c.Deps().Formatter.FormatAlarmAdded(ctx, channel.Name, added, nextStreamInfo)
@@ -258,7 +271,11 @@ func (c *AlarmCommand) addAlarmAndReply(ctx context.Context, cmdCtx *domain.Comm
 }
 
 // 사용자-facing 응답을 이미 보낸 경우 handlercore.ErrMemberLookupHandled를 반환한다.
-func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName string) (*domain.Channel, error) {
+func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName string) (*alarmTarget, error) {
+	if channelID, host, ok := mekparkhost.FindSubscriptionMember(memberName); ok {
+		return &alarmTarget{ChannelID: channelID, HostID: host.ID, Name: host.Name}, nil
+	}
+
 	channel, found, err := c.Deps().Matcher.FindBestMatchWithCandidates(ctx, memberName)
 	if err != nil {
 		if replyErr := c.replyAlarmMemberLookupFailure(ctx, room, memberName, err); replyErr != nil {
@@ -268,7 +285,7 @@ func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName 
 		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	if !found {
+	if !found || channel == nil {
 		if replyErr := c.replyAlarmMemberNotFound(ctx, room, memberName); replyErr != nil {
 			return nil, fmt.Errorf("reply alarm member not found: %w", replyErr)
 		}
@@ -276,7 +293,7 @@ func (c *AlarmCommand) resolveAlarmMember(ctx context.Context, room, memberName 
 		return nil, handlercore.ErrMemberLookupHandled
 	}
 
-	return channel, nil
+	return &alarmTarget{ChannelID: channel.ID, Name: channel.Name}, nil
 }
 
 func (c *AlarmCommand) replyAlarmMemberLookupFailure(ctx context.Context, room, memberName string, lookupErr error) error {
@@ -351,8 +368,18 @@ func (c *AlarmCommand) handleRemove(ctx context.Context, cmdCtx *domain.CommandC
 	return nil
 }
 
-func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *domain.Channel, alarmTypes domain.AlarmTypes) error {
-	removed, err := c.Deps().Alarm.RemoveAlarm(ctx, cmdCtx.Room, channel.ID, alarmTypes)
+func (c *AlarmCommand) removeAlarmAndReply(ctx context.Context, cmdCtx *domain.CommandContext, channel *alarmTarget, alarmTypes domain.AlarmTypes) error {
+	var (
+		removed bool
+		err     error
+	)
+
+	if channel.HostID == "" {
+		removed, err = c.Deps().Alarm.RemoveAlarm(ctx, cmdCtx.Room, channel.ChannelID, alarmTypes)
+	} else {
+		removed, err = c.Deps().Alarm.RemoveHostAlarm(ctx, cmdCtx.Room, channel.ChannelID, channel.HostID, alarmTypes)
+	}
+
 	if err != nil {
 		c.Deps().Logger.Error("Failed to remove alarm",
 			slog.String("channel", channel.Name),

@@ -141,11 +141,13 @@ func (a AlarmTypes) Contains(t AlarmType) bool {
 	return slices.Contains(a, t)
 }
 
+// Alarm은 채팅방의 채널 또는 UNIT B 멤버별 구독과 알림 종류를 저장한다.
 type Alarm struct {
 	ID         int        `json:"id"`                    // DB 기본 키
 	RoomID     string     `json:"room_id"`               // 카카오톡 방 ID
 	UserID     string     `json:"user_id"`               // 카카오톡 사용자 ID
 	ChannelID  string     `json:"channel_id"`            // YouTube 채널 ID
+	HostID     string     `json:"host_id,omitempty"`     // 비어 있으면 전체 채널 구독
 	MemberName string     `json:"member_name,omitempty"` // 표시용 멤버 이름
 	RoomName   string     `json:"room_name,omitempty"`   // 방 이름 (캐싱용)
 	UserName   string     `json:"user_name,omitempty"`   // 사용자 이름 (캐싱용)

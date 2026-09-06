@@ -22,19 +22,23 @@ package alarm
 
 // API 요청/응답 DTO (alarm-dispatcher internal API)
 
+// AddAlarmRequest는 기존 채널 ID와 선택적인 UNIT B 멤버 ID로 구독을 지정한다.
 type AddAlarmRequest struct {
 	RoomID     string   `json:"room_id" binding:"required"`
 	UserID     string   `json:"user_id"`
 	ChannelID  string   `json:"channel_id" binding:"required"`
+	HostID     string   `json:"host_id,omitempty"`
 	MemberName string   `json:"member_name"`
 	RoomName   string   `json:"room_name"`
 	UserName   string   `json:"user_name"`
 	AlarmTypes []string `json:"alarm_types"`
 }
 
+// RemoveAlarmRequest는 지정한 채널 또는 멤버 구독에서 해지할 알림 종류를 담는다.
 type RemoveAlarmRequest struct {
 	RoomID     string   `json:"room_id" binding:"required"`
 	ChannelID  string   `json:"channel_id" binding:"required"`
+	HostID     string   `json:"host_id,omitempty"`
 	AlarmTypes []string `json:"alarm_types"`
 }
 

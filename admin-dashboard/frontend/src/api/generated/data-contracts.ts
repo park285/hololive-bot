@@ -296,6 +296,23 @@ export interface SettingsResponse {
   status: string;
 }
 
+export interface SettingsRuntimeResult {
+  alarm_applied?: boolean;
+  alarm_reason?: string;
+  alarm_requested_advance_minutes?: number;
+  alarm_target_minutes?: number[];
+  config_publish_alarm_advance_minutes?: boolean;
+  config_publish_alarm_advance_minutes_error?: string;
+  [key: string]: any;
+}
+
+export interface SettingsUpdateResponse {
+  message: string;
+  runtime: SettingsRuntimeResult;
+  settings: Settings;
+  status: string;
+}
+
 export interface StatsResponse {
   /** @format int32 */
   alarms: number;

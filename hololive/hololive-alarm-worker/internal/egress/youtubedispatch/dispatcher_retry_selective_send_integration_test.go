@@ -50,7 +50,7 @@ func runRetrySelectiveSendCase(t *testing.T, tc recoverySelectiveSendCase, fixed
 	fixture := seedCommunityShortsRecoveryInputFixture(t, db, &tc.spec)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,

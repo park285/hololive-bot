@@ -46,6 +46,10 @@ func loadLiveState(ctx context.Context, tx dbx.Tx, channelIDs, videoIDs []string
 		return live.State{}, fmt.Errorf("load live heads: %w", err)
 	}
 
+	if err := loadLivePendingEnds(ctx, tx, &state, ids); err != nil {
+		return live.State{}, fmt.Errorf("load live pending ends: %w", err)
+	}
+
 	return state, nil
 }
 
@@ -122,7 +126,7 @@ func loadLiveHeads(ctx context.Context, tx dbx.Tx, state *live.State, videoIDs [
 }
 
 func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
-	head, pending, hasPending, err := scanLiveHead(rows)
+	head, err := scanLiveHead(rows)
 	if err != nil {
 		return fmt.Errorf("scan live head: %w", err)
 	}
@@ -138,13 +142,13 @@ func applyLiveHeadRow(rows pgx.Rows, state *live.State) error {
 	existing.Clock = head.Clock
 	existing.EndReason = head.EndReason
 	existing.LastAbsenceScheduledFor = head.LastAbsenceScheduledFor
+	existing.FirstAbsenceScheduledFor = head.FirstAbsenceScheduledFor
+	existing.SecondAbsenceScheduledFor = head.SecondAbsenceScheduledFor
+	existing.LastAbsenceObservationID = head.LastAbsenceObservationID
+	existing.IgnoredAbsenceScheduledFor = head.IgnoredAbsenceScheduledFor
 	applyAbsenceSlotHints(&existing)
 
 	state.Sessions[head.VideoID] = existing
-
-	if hasPending {
-		state.PendingEnds[head.VideoID] = pending
-	}
 
 	return nil
 }
@@ -154,16 +158,16 @@ func applyAbsenceSlotHints(existing *live.SessionState) {
 		return
 	}
 
-	if existing.Clock.ConsecutiveAbsenceSlots == 1 {
+	if existing.Clock.ConsecutiveAbsenceSlots == 1 && existing.FirstAbsenceScheduledFor == nil {
 		existing.FirstAbsenceScheduledFor = existing.LastAbsenceScheduledFor
 	}
 
-	if existing.Clock.ConsecutiveAbsenceSlots >= 2 {
+	if existing.Clock.ConsecutiveAbsenceSlots >= 2 && existing.SecondAbsenceScheduledFor == nil {
 		existing.SecondAbsenceScheduledFor = existing.LastAbsenceScheduledFor
 	}
 }
 
-func scanLiveHead(rows pgx.Rows) (live.SessionState, live.PendingEnd, bool, error) {
+func scanLiveHead(rows pgx.Rows) (live.SessionState, error) {
 	var (
 		session      live.SessionState
 		status       string
@@ -180,8 +184,10 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, live.PendingEnd, bool, erro
 		&session.Clock.LastEndEvidenceAt, &session.Clock.LastCompleteAbsenceAt, &absenceSched,
 		&session.Clock.ConsecutiveAbsenceSlots, &candidate, &candidateID,
 		&session.Clock.NextEndCheckAt, &session.Clock.EndedAt, &endReason,
+		&session.FirstAbsenceScheduledFor, &session.SecondAbsenceScheduledFor,
+		&session.LastAbsenceObservationID, &session.IgnoredAbsenceScheduledFor,
 	); err != nil {
-		return live.SessionState{}, live.PendingEnd{}, false, fmt.Errorf("scan live head: %w", err)
+		return live.SessionState{}, fmt.Errorf("scan live head: %w", err)
 	}
 
 	session.Status = domain.LiveStatus(status)
@@ -198,21 +204,7 @@ func scanLiveHead(rows pgx.Rows) (live.SessionState, live.PendingEnd, bool, erro
 
 		session.Clock.EndCandidateKind = &kind
 		session.Clock.EndCandidateObservationID = candidateID
-
-		pending := live.PendingEnd{
-			Kind:             kind,
-			VideoID:          session.VideoID,
-			ObservationID:    *candidateID,
-			NegativeEligible: kind == live.EndEvidenceScopedAbsence,
-			ScopeCovers:      kind == live.EndEvidenceScopedAbsence || kind == live.EndEvidenceExplicitEnd || kind == live.EndEvidenceExplicitCancel,
-		}
-
-		if session.Clock.LastEndEvidenceAt != nil {
-			pending.EffectiveAt = *session.Clock.LastEndEvidenceAt
-		}
-
-		return session, pending, true, nil
 	}
 
-	return session, live.PendingEnd{}, false, nil
+	return session, nil
 }

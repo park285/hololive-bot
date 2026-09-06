@@ -30,3 +30,15 @@ func (s cleanupSessionStore) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// RevokeFamily는 logout 요청이 취소돼도 기존 cleanup budget 안에서 family를 폐기한다.
+func (s cleanupSessionStore) RevokeFamily(ctx context.Context, familyID string) error {
+	cleanupCtx, cancel := cleanupctx.WithTimeout(ctx, cleanupctx.DefaultTimeout)
+	defer cancel()
+
+	if err := s.sessionStore.RevokeFamily(cleanupCtx, familyID); err != nil {
+		return fmt.Errorf("revoke family: %w", err)
+	}
+
+	return nil
+}

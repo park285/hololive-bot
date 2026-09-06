@@ -165,3 +165,60 @@ func TestLegacySessionGetsStableFamilyOnRefresh(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, legacy.ID, familyCurrent)
 }
+
+func TestRevokeFamilySerializesWithRotation(t *testing.T) {
+	store, _ := newTestStore(t)
+
+	store.cfg.RotationInterval = 0
+
+	other, err := store.Create(t.Context())
+	require.NoError(t, err)
+
+	for range 24 {
+		original, createErr := store.Create(t.Context())
+		require.NoError(t, createErr)
+
+		start := make(chan struct{})
+		rotated := make(chan Session, 1)
+		errs := make(chan error, 2)
+
+		var wg sync.WaitGroup
+
+		wg.Go(func() {
+			<-start
+
+			next, _, rotateErr := store.Rotate(t.Context(), original.ID)
+			rotated <- next
+
+			errs <- rotateErr
+		})
+		wg.Go(func() {
+			<-start
+
+			errs <- store.RevokeFamily(t.Context(), original.FamilyID)
+		})
+		close(start)
+		wg.Wait()
+		require.NoError(t, <-errs)
+		require.NoError(t, <-errs)
+
+		for _, id := range []string{original.ID, (<-rotated).ID} {
+			_, found, getErr := store.Get(t.Context(), id)
+			require.NoError(t, getErr)
+			require.False(t, found)
+
+			_, ok, rotateErr := store.Rotate(t.Context(), id)
+			require.NoError(t, rotateErr)
+			require.False(t, ok, "a late rotation cannot recreate a revoked family")
+		}
+
+		active, activeErr := store.FamilyActive(t.Context(), original.FamilyID)
+		require.NoError(t, activeErr)
+		require.False(t, active)
+		require.NoError(t, store.RevokeFamily(t.Context(), original.FamilyID))
+	}
+
+	_, found, err := store.Get(t.Context(), other.ID)
+	require.NoError(t, err)
+	require.True(t, found, "revocation must remain family scoped")
+}

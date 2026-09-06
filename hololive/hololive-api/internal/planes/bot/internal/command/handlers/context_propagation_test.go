@@ -239,7 +239,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 	})
 
 	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{
-		testParamAction: "add",
+		testParamAction: testActionAdd,
 		paramMember:     testMemberAqua,
 	})
 	require.NoError(t, err)

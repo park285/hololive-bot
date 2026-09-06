@@ -6,6 +6,7 @@ import {
 	Navigate,
 } from "react-router";
 import { RouterProvider } from "react-router/dom";
+import { clearCSRFToken } from "@/api/client";
 import { SessionAbsoluteWarningModal } from "@/components/auth/SessionAbsoluteWarningModal";
 import { SessionIdleWarningModal } from "@/components/auth/SessionIdleWarningModal";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
@@ -15,6 +16,7 @@ import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useSessionWarnings } from "@/hooks/useSessionWarnings";
 import { queryClient } from "@/lib/queryClient";
+import { clearClientSession, refreshClientSession } from "@/lib/sessionLifecycle";
 import { Toaster } from "@/lib/toast";
 import {
 	getLazyComponent,
@@ -59,19 +61,26 @@ const FullPageLoader = () => (
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 	const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 	const isAuthResolved = useAuthStore((state) => state.isAuthResolved);
-	const logout = useAuthStore((state) => state.logout);
 	const policy = useSessionWarningStore((state) => state.policy);
 	const idleTimeoutMs =
 		policy?.idle_timeout_ms ?? CONFIG.heartbeat.idleTimeoutMs;
 	const activityEnabled = isAuthResolved && isAuthenticated;
 	const handleRemoteLogout = useCallback(() => {
-		logout();
-		queryClient.clear();
-	}, [logout]);
+		clearClientSession();
+	}, []);
+	const handleSessionRefresh = useCallback(() => {
+		clearCSRFToken();
+		void refreshClientSession().catch((error: unknown) => {
+			if (!(error instanceof Error && error.name === "AbortError")) {
+				console.warn("다른 탭의 세션 변경을 확인하지 못했습니다.", error);
+			}
+		});
+	}, []);
 	const isIdle = useActivityDetection({
 		enabled: activityEnabled,
 		idleTimeoutMs,
 		onRemoteLogout: handleRemoteLogout,
+		onSessionRefresh: handleSessionRefresh,
 	});
 
 	useHeartbeat(isIdle);

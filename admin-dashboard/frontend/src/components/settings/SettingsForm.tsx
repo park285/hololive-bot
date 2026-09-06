@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
 import Save from "lucide-react/dist/esm/icons/save.mjs";
@@ -33,53 +34,66 @@ const validateAlarmAdvanceMinutes = (value: string) => {
 export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 	const queryClient = useQueryClient();
 
-	const { data: settingsData } = useQuery({
+	const { data: settingsData, isPending, isError, refetch } = useQuery({
 		queryKey: queryKeys.settings.all,
 		queryFn: settingsApi.get,
 		initialData,
 	});
 
-	const defaultAlarmMinutes =
-		settingsData?.settings.alarmAdvanceMinutes ??
-		initialData?.settings.alarmAdvanceMinutes ??
-		5;
+	const defaultAlarmMinutes = settingsData?.settings.alarmAdvanceMinutes;
+	const knownSettings = defaultAlarmMinutes !== undefined;
+	const baseline = knownSettings ? String(defaultAlarmMinutes) : "";
 	const [alarmAdvanceMinutes, setAlarmAdvanceMinutes] = useState(
-		String(defaultAlarmMinutes),
+		baseline,
 	);
 	const [error, setError] = useState("");
-	const previousDefaultRef = useRef(defaultAlarmMinutes);
+	const [saveResult, setSaveResult] = useState("");
+	const previousDefaultRef = useRef(baseline);
 	const alarmAdvanceMinutesInputRef = useRef<HTMLInputElement>(null);
 
 	const isDirty = useMemo(
-		() => alarmAdvanceMinutes.trim() !== String(defaultAlarmMinutes),
-		[alarmAdvanceMinutes, defaultAlarmMinutes],
+		() => knownSettings && alarmAdvanceMinutes.trim() !== baseline,
+		[alarmAdvanceMinutes, baseline, knownSettings],
 	);
 
 	useEffect(() => {
 		const previousDefault = previousDefaultRef.current;
-		previousDefaultRef.current = defaultAlarmMinutes;
+		previousDefaultRef.current = baseline;
 
-		if (alarmAdvanceMinutes.trim() === String(previousDefault)) {
-			setAlarmAdvanceMinutes(String(defaultAlarmMinutes));
+		if (alarmAdvanceMinutes.trim() === previousDefault) {
+			setAlarmAdvanceMinutes(baseline);
 			setError("");
 		}
-	}, [alarmAdvanceMinutes, defaultAlarmMinutes]);
+	}, [alarmAdvanceMinutes, baseline]);
 
 	const updateMutation = useMutation({
 		mutationFn: settingsApi.update,
-		onSuccess: (_, variables) => {
+		retry: false,
+		onSuccess: (result) => {
+			queryClient.setQueryData(queryKeys.settings.all, { status: result.status, settings: result.settings });
 			void queryClient.invalidateQueries({ queryKey: queryKeys.settings.all });
-			setAlarmAdvanceMinutes(String(variables.alarmAdvanceMinutes));
+			setAlarmAdvanceMinutes(String(result.settings.alarmAdvanceMinutes));
 			setError("");
-			toast.success("설정이 성공적으로 저장되었습니다.");
+			const { runtime } = result;
+			const problems: string[] = [];
+			if (runtime.alarm_applied !== true) problems.push(runtime.alarm_applied === false ? "런타임 적용에 실패했습니다." : "런타임 적용 결과를 확인하지 못했습니다.");
+			if (runtime.config_publish_alarm_advance_minutes !== true) problems.push(runtime.config_publish_alarm_advance_minutes === false ? "다른 서비스로 전파하지 못했습니다." : "전파 결과를 확인하지 못했습니다.");
+			const message = problems.length > 0 ? `설정은 저장됐지만 ${problems.join(" ")}` : "설정을 저장하고 적용·전파했습니다.";
+			setSaveResult(message);
+			if (problems.length > 0) toast.error(message);
+			else toast.success(message);
 		},
 		onError: (err: Error) => {
-			toast.error(`설정 저장 실패: ${getErrorMessageFromUnknown(err)}`);
+			const refused = isAxiosError(err) && [400, 401, 403].includes(err.response?.status ?? 0);
+			const message = refused ? "설정 저장 요청이 거절되어 변경되지 않았습니다." : `설정 저장 결과를 확인하지 못했습니다: ${getErrorMessageFromUnknown(err)}`;
+			setSaveResult(message);
+			toast.error(message);
 		},
 	});
 
 	const onSubmit = (event: React.SyntheticEvent<HTMLFormElement>) => {
 		event.preventDefault();
+		if (!knownSettings || !isDirty || updateMutation.isPending) return;
 
 		const nextError = validateAlarmAdvanceMinutes(alarmAdvanceMinutes);
 		if (nextError) {
@@ -104,6 +118,9 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 			</Card.Header>
 
 			<Card.Body className="space-y-6 pt-6">
+				{isPending && <p role="status">설정을 불러오는 중입니다.</p>}
+				{isError && <div role="alert"><p>{knownSettings ? "최신 설정을 조회하지 못했습니다. 마지막으로 확인한 값을 표시합니다." : "설정을 조회하지 못했습니다. 저장된 값을 확인한 뒤 변경할 수 있습니다."}</p><Button type="button" onClick={() => { void refetch(); }}>다시 조회</Button></div>}
+				{saveResult && <p role="status">{saveResult}</p>}
 				<form onSubmit={onSubmit} className="space-y-6" noValidate>
 					<div>
 						<h4 className="mb-4 border-l-4 border-sky-400 pl-3 text-sm font-bold text-foreground">
@@ -127,6 +144,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 										step={1}
 										inputMode="numeric"
 										value={alarmAdvanceMinutes}
+										disabled={!knownSettings || updateMutation.isPending}
 										onChange={(event) => {
 											setAlarmAdvanceMinutes(event.target.value);
 											setError("");
@@ -167,7 +185,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 					<div className="flex justify-end pt-2">
 						<Button
 							type="submit"
-							disabled={!isDirty || updateMutation.isPending}
+							disabled={!knownSettings || !isDirty || updateMutation.isPending}
 							className="gap-2 bg-linear-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 shadow-sm shadow-sky-200 focus-visible:ring-2 focus-visible:ring-sky-200"
 							aria-label="설정 저장하기"
 						>
@@ -182,7 +200,7 @@ export const SettingsForm = ({ initialData }: SettingsFormProps) => {
 							) : (
 								<Check size={16} aria-hidden="true" />
 							)}
-							{updateMutation.isPending
+							{!knownSettings ? "설정 확인 필요" : updateMutation.isPending
 								? "저장 중…"
 								: isDirty
 									? "변경 사항 저장"

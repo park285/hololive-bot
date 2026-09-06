@@ -11,10 +11,30 @@ import (
 	sharedlogging "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
+// RemoveAlarm은 전체 채널 구독의 알림 종류를 해지하고 멤버별 구독을 보존한다.
 func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	return as.removeAlarm(ctx, roomID, channelID, "", alarmTypes)
+}
+
+// RemoveHostAlarm은 해당 채팅방의 지정한 UNIT B 멤버 구독에서 알림 종류를 해지한다.
+func (as *AlarmService) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	channelID, hostID = strings.TrimSpace(channelID), strings.TrimSpace(hostID)
+	if _, ok := mekparkhost.SubscriptionMember(channelID, hostID); !ok {
+		return false, errors.New("invalid member subscription target")
+	}
+
+	if as.alarmRepository == nil {
+		return false, errors.New("member subscription requires alarm repository")
+	}
+
+	return as.removeAlarm(ctx, roomID, channelID, hostID, alarmTypes)
+}
+
+func (as *AlarmService) removeAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
 	as.cacheMutationMu.Lock()
 	defer as.cacheMutationMu.Unlock()
 
@@ -32,7 +52,7 @@ func (as *AlarmService) RemoveAlarm(ctx context.Context, roomID, channelID strin
 		return false, fmt.Errorf("normalize remove alarm request: %w", err)
 	}
 
-	mutation, found, err := as.prepareRemoveAlarmMutation(ctx, roomID, channelID, requestedRemovalTypes)
+	mutation, found, err := as.prepareRemoveAlarmMutation(ctx, roomID, channelID, hostID, requestedRemovalTypes)
 	if err != nil {
 		opErr = err
 		return false, fmt.Errorf("prepare remove alarm mutation: %w", err)
@@ -78,8 +98,8 @@ func normalizeRemoveAlarmRequest(roomID, channelID string, alarmTypes domain.Ala
 	return roomID, channelID, requestedRemovalTypes, nil
 }
 
-func (as *AlarmService) prepareRemoveAlarmMutation(ctx context.Context, roomID, channelID string, requestedRemovalTypes domain.AlarmTypes) (removeAlarmMutation, bool, error) {
-	existing, err := as.findAlarmRecordForMutation(ctx, roomID, channelID)
+func (as *AlarmService) prepareRemoveAlarmMutation(ctx context.Context, roomID, channelID, hostID string, requestedRemovalTypes domain.AlarmTypes) (removeAlarmMutation, bool, error) {
+	existing, err := as.findAlarmRecordForMutation(ctx, roomID, channelID, hostID)
 	if errors.Is(err, errAlarmRecordNotFound) {
 		return removeAlarmMutation{}, false, nil
 	}
@@ -113,7 +133,7 @@ func (as *AlarmService) prepareRemoveAlarmMutation(ctx context.Context, roomID, 
 
 func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) error {
 	if mutation.removeRoomChannel {
-		if err := as.deleteAlarmBeforeCacheRemoval(ctx, roomID, channelID); err != nil {
+		if err := as.deleteAlarmBeforeCacheRemoval(ctx, roomID, channelID, mutation.updatedRecord.HostID); err != nil {
 			return fmt.Errorf("delete alarm before cache removal: %w", err)
 		}
 
@@ -127,8 +147,8 @@ func (as *AlarmService) persistRemoveAlarmMutation(ctx context.Context, roomID, 
 	return nil
 }
 
-func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID, channelID string) error {
-	if err := as.deleteAlarm(ctx, roomID, channelID); err != nil {
+func (as *AlarmService) deleteAlarmBeforeCacheRemoval(ctx context.Context, roomID, channelID, hostID string) error {
+	if err := as.deleteAlarm(ctx, roomID, channelID, hostID); err != nil {
 		if logErr := sharedlogging.LogAndWrapError(ctx, as.logger, "delete alarm before cache removal", err); logErr != nil {
 			return fmt.Errorf("log and wrap error: %w", logErr)
 		}
@@ -152,7 +172,17 @@ func (as *AlarmService) updateAlarmTypesBeforeCacheRemoval(ctx context.Context, 
 }
 
 func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) (bool, error) {
-	removed, err := as.removeAlarmFromCache(ctx, roomID, channelID, mutation.effectiveRemovalTypes, mutation.removeRoomChannel)
+	var (
+		removed bool
+		err     error
+	)
+
+	if mekparkhost.SupportsSubscriptions(channelID) && as.alarmRepository != nil {
+		removed, err = as.refreshRoomChannelSubscriptions(ctx, roomID, channelID)
+	} else {
+		removed, err = as.removeAlarmFromCache(ctx, roomID, channelID, mutation.effectiveRemovalTypes, mutation.removeRoomChannel)
+	}
+
 	if err != nil {
 		opErr := as.rebuildAlarmCacheFromRepository(ctx, "remove", fmt.Errorf("remove alarm: %w", err))
 		if err := sharedlogging.LogAndWrapError(ctx, as.logger, "rebuild remove cache from repository", opErr); err != nil {

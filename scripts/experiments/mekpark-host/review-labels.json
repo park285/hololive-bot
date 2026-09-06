@@ -1,0 +1,88 @@
+{
+  "reviewed_at": "2026-09-06",
+  "purpose": "Evaluation-only review frozen before model predictions; public title/description evidence, not video playback verification.",
+  "cases": [
+    {
+      "video_id": "C5GAyKlGcBo",
+      "scope": "single",
+      "host": "kiyosumi-lyra",
+      "basis": "public_description_specific_tag",
+      "source_url": "https://www.youtube.com/watch?v=C5GAyKlGcBo",
+      "evidence": "공개 설명 첫 줄에 #ホロドリ #ホロライブ #unit_b #清澄ライラ가 있으며 제목에는 개인 이름이 없다. 전체 멤버 소개와 구분되는 해당 영상의 개별 태그다."
+    },
+    {
+      "video_id": "OOfUWBQzqKk",
+      "scope": "single",
+      "host": "yuikawa-hinami",
+      "basis": "public_title_subject_and_description",
+      "source_url": "https://www.youtube.com/watch?v=OOfUWBQzqKk",
+      "evidence": "제목은 별 5개를 연속으로 뽑는 ひなみ를 주어로 쓰며 설명 첫 문장에도 ゆいひな가 나온다. 성명/개인 태그에 의존하는 현재 룰은 보류한다."
+    },
+    {
+      "video_id": "Ie1e9qn5ZVk",
+      "scope": "multiple",
+      "basis": "public_description_relay_timetable_and_duration",
+      "source_url": "https://www.youtube.com/watch?v=Ie1e9qn5ZVk",
+      "evidence": "설명 시간표는 20:00 사야나, 21:00 리라라, 22:00 히나미다. 공개 player metadata의 시작은 2026-09-04T11:00:32Z, 종료는 14:33:54Z로 세 슬롯을 모두 포함한다. 시작 시각만 보고 사야나 단독으로 라벨링하지 않는다.",
+      "start_timestamp": "2026-09-04T11:00:32.000Z",
+      "end_timestamp": "2026-09-04T14:33:54.000Z",
+      "duration_seconds": 12249
+    },
+    {
+      "video_id": "0Q1kqfuGUCQ",
+      "scope": "multiple",
+      "basis": "public_title_all_members",
+      "source_url": "https://www.youtube.com/watch?v=0Q1kqfuGUCQ",
+      "evidence": "제목이 全員集合로 유닛 전체 출연을 명시한다."
+    },
+    {
+      "video_id": "4xTZgom-peA",
+      "scope": "multiple",
+      "basis": "public_title_and_description_all_members",
+      "source_url": "https://www.youtube.com/watch?v=4xTZgom-peA",
+      "evidence": "제목의 全員いるよ와 설명 첫 문장의 メンバー全員でオフコラボ가 전체 출연을 명시한다."
+    },
+    {
+      "video_id": "5StpeyneUzE",
+      "scope": "multiple",
+      "basis": "public_title_all_members",
+      "source_url": "https://www.youtube.com/watch?v=5StpeyneUzE",
+      "evidence": "제목이 #全員集合를 명시한다."
+    },
+    {
+      "video_id": "CqpMpPa-_Vs",
+      "scope": "multiple",
+      "basis": "public_description_all_members",
+      "source_url": "https://www.youtube.com/watch?v=CqpMpPa-_Vs",
+      "evidence": "설명 첫 두 문장은 今日は全員配信、みんなでゆっくり座談会라고 명시한다."
+    },
+    {
+      "video_id": "aWoYag4w0MA",
+      "scope": "multiple",
+      "basis": "public_description_all_members",
+      "source_url": "https://www.youtube.com/watch?v=aWoYag4w0MA",
+      "evidence": "설명에서 ACHRORAみんなで振り返ります라고 명시한다. 제목의 ひなみ 생일 언급을 단독 진행자로 해석하지 않는다."
+    },
+    {
+      "video_id": "2Danwap7QaA",
+      "scope": "multiple",
+      "basis": "public_description_performance_credits",
+      "source_url": "https://www.youtube.com/watch?v=2Danwap7QaA",
+      "evidence": "곡 크레딧은 Vocal 宵凪ネオン, Chorus 清澄ライラ, Piano 玲銘ミラ를 구분한다. 한 사람의 방송으로 채점하지 않는다."
+    },
+    {
+      "video_id": "1ryHugzR3_M",
+      "scope": "unknown",
+      "basis": "public_description_insufficient",
+      "source_url": "https://www.youtube.com/watch?v=1ryHugzR3_M",
+      "evidence": "설명은 게임과 낮 방송을 설명한 뒤 세 명의 공통 프로필을 나열한다. 개인 진행자를 확정할 정보는 확인하지 못했다."
+    },
+    {
+      "video_id": "T060Goa2yxg",
+      "scope": "unknown",
+      "basis": "public_description_insufficient",
+      "source_url": "https://www.youtube.com/watch?v=T060Goa2yxg",
+      "evidence": "설명은 곡 악보로 공부한다는 내용과 세 명의 공통 프로필이다. 피아노나 작곡 담당이라는 역할만으로 진행자를 추측하지 않는다."
+    }
+  ]
+}

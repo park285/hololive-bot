@@ -11,13 +11,25 @@ import { useAuthStore } from "@/stores/authStore";
 const unsafeMethods = new Set(["post", "put", "delete", "patch"]);
 
 let csrfToken: string | null = null;
+let csrfVersion = 0;
 
-export function setCSRFToken(token: string | null | undefined): void {
-	csrfToken = token && token !== "" ? token : null;
+export function getCSRFVersion(): number {
+	return csrfVersion;
+}
+
+export function setCSRFToken(token: string | null | undefined, expectedVersion?: number): boolean {
+	const next = token && token !== "" ? token : null;
+	if (expectedVersion !== undefined && expectedVersion !== csrfVersion) {
+		return next !== null && next === csrfToken;
+	}
+	if (next !== csrfToken) csrfVersion += 1;
+	csrfToken = next;
+	return true;
 }
 
 export function clearCSRFToken(): void {
 	csrfToken = null;
+	csrfVersion += 1;
 }
 
 function csrfTokenForRequest(): string | null {

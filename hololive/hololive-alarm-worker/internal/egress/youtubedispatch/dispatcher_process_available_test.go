@@ -31,7 +31,7 @@ func TestDispatcher_ProcessAvailable_DrainsMultipleRounds(t *testing.T) {
 	}
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cache, sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -75,7 +75,7 @@ func TestDispatcher_ProcessAvailable_StopsWhenIdle(t *testing.T) {
 	db := newDeliveryPool(t)
 
 	sender := &testSender{failRoom: map[string]bool{}}
-	dispatcher := NewDispatcher(db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           1,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Hour,
@@ -109,6 +109,6 @@ func TestDispatcher_ProcessAvailableAcceptsZeroValue(t *testing.T) {
 func TestDispatcher_ProcessAvailableWithoutWorkerInstrumentation(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := NewDispatcher(nil, nil, nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, nil, nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
 	dispatcher.processClaimedOrPendingDeliveries(t.Context(), nil, 0)
 }

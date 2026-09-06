@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
@@ -41,7 +42,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
-var errSendFailed = errors.New("send failed")
+var errSendFailed = errors.Join(iris.ErrRateLimited, errors.New("synthetic request rejection before dispatch"))
 
 type fakeSender struct {
 	mu       sync.Mutex
@@ -113,58 +114,35 @@ func (f *fakeSender) setFailRoom(room string) {
 }
 
 func TestDispatcher_ProcessOnce_Success(t *testing.T) {
-	if os.Getenv("INTEGRATION_TEST") != integrationEnvEnabled {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=true to run)")
-	}
-
+	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(time.Second))
 	ctx := t.Context()
-	db := dbtest.NewPool(t)
-	cleanupOutbox(t, db)
 
-	sender := &fakeSender{}
-	cacheService := setupCacheService(t)
-	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	setupTestSubscribers(t, env.cacheService)
 
-	setupTestSubscribers(t, cacheService)
-
-	config := dispatchstate.Config{
-		BatchSize:    10,
-		LockTimeout:  1 * time.Minute,
-		PollInterval: 100 * time.Millisecond,
-		MaxRetries:   3,
-		RetryBackoff: 1 * time.Second,
-	}
-
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
-
+	contentID := "test_success_" + time.Now().Format("150405")
 	payload := mustMarshalPayload(t, map[string]string{
-		payloadKeyVideoID: "test123",
-		payloadKeyTitle:   "Test Video Title",
+		"canonical_post_id": "short:" + contentID,
+		payloadKeyVideoID:   "test123",
+		payloadKeyTitle:     "Test Video Title",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewShort,
 		ChannelID:     "UCtest123",
-		ContentID:     "test_success_" + time.Now().Format("150405"),
+		ContentID:     contentID,
 		Payload:       string(payload),
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
 		NextAttemptAt: time.Now(),
 	}
 
-	if err := insertDeliveryTestRows(db, item).Error; err != nil {
-		t.Fatalf("Failed to create test outbox item: %v", err)
-	}
+	seedIntegrationOutboxItem(t, env.db, item)
 
-	t.Cleanup(func() {
-		deleteDeliveryTestRows(t, db, item)
-	})
-
-	dispatcher.ProcessOnceForTest(ctx)
+	env.dispatcher.ProcessOnceForTest(ctx)
 
 	var updated domain.YouTubeNotificationOutbox
 
-	if err := firstDeliveryTestRow(db, &updated, item.ID).Error; err != nil {
+	if err := firstDeliveryTestRow(env.db, &updated, item.ID).Error; err != nil {
 		t.Fatalf("Failed to fetch updated item: %v", err)
 	}
 
@@ -176,7 +154,7 @@ func TestDispatcher_ProcessOnce_Success(t *testing.T) {
 		t.Error("Expected sent_at to be set")
 	}
 
-	msgs := sender.getMessages()
+	msgs := env.sender.getMessages()
 	if len(msgs) != 1 {
 		t.Errorf("Expected 1 message sent, got %d", len(msgs))
 	}
@@ -267,7 +245,7 @@ func TestDispatcher_NoSubscribers_MarkedAsSent(t *testing.T) {
 		RetryBackoff: 1 * time.Second,
 	}
 
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	dispatcher := newIntegrationDispatcher(t, db, cacheService, sender, testLogger, &config)
 
 	payload := mustMarshalPayload(t, map[string]string{
 		payloadKeyVideoID: "nosub123",
@@ -316,15 +294,17 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:SHORTS:UCperroom_success", []string{"roomA", "roomB"})
 	setupMemberName(t, env.cacheService, "UCperroom_success", "PerRoomMember")
 
+	contentID := "test_perroom_success_" + time.Now().Format("150405")
 	payload := mustMarshalPayload(t, map[string]string{
-		payloadKeyVideoID: "perroom_success_video",
-		payloadKeyTitle:   "PerRoom Success Video",
+		"canonical_post_id": "short:" + contentID,
+		payloadKeyVideoID:   "perroom_success_video",
+		payloadKeyTitle:     "PerRoom Success Video",
 	})
 
 	item := &domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewShort,
 		ChannelID:     "UCperroom_success",
-		ContentID:     "test_perroom_success_" + time.Now().Format("150405"),
+		ContentID:     contentID,
 		Payload:       string(payload),
 		Status:        domain.OutboxStatusPending,
 		AttemptCount:  0,
@@ -443,7 +423,7 @@ func TestDispatcher_PerRoomMode_NoSubscribers_MarkedAsSentWithoutDeliveryRows(t 
 		RetryBackoff: 50 * time.Millisecond,
 	}
 
-	dispatcher := youtubedispatch.NewDispatcher(db, cacheService, sender, nil, testLogger, &config)
+	dispatcher := newIntegrationDispatcher(t, db, cacheService, sender, testLogger, &config)
 
 	payload := mustMarshalPayload(t, map[string]string{
 		payloadKeyVideoID: "perroom_no_sub_video",
@@ -636,8 +616,8 @@ func runConcurrentAlarmCase(t *testing.T, tc concurrentAlarmCase) {
 	config := newIntegrationDispatchConfig(30 * time.Millisecond)
 	logger := newIntegrationTestLogger()
 	dispatchers := []*youtubedispatch.Dispatcher{
-		youtubedispatch.NewDispatcher(dbPrimary, cacheService, sender, nil, logger, &config),
-		youtubedispatch.NewDispatcher(dbSecondary, cacheService, sender, nil, logger, &config),
+		newIntegrationDispatcher(t, dbPrimary, cacheService, sender, logger, &config),
+		newIntegrationDispatcher(t, dbSecondary, cacheService, sender, logger, &config),
 	}
 
 	contentID := "test_" + tc.contentPrefix + "_" + time.Now().UTC().Format("150405000000000")
@@ -946,7 +926,7 @@ func newDispatcherIntegrationEnv(t *testing.T, config dispatchstate.Config) disp
 		db:           db,
 		sender:       sender,
 		cacheService: cacheService,
-		dispatcher:   youtubedispatch.NewDispatcher(db, cacheService, sender, nil, newIntegrationTestLogger(), &config),
+		dispatcher:   newIntegrationDispatcher(t, db, cacheService, sender, newIntegrationTestLogger(), &config),
 	}
 }
 

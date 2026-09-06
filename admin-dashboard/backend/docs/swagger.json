@@ -863,6 +863,56 @@
         ],
         "type": "object"
       },
+      "SettingsRuntimeResult": {
+        "additionalProperties": true,
+        "properties": {
+          "alarm_applied": {
+            "type": "boolean"
+          },
+          "alarm_reason": {
+            "type": "string"
+          },
+          "alarm_requested_advance_minutes": {
+            "type": "integer"
+          },
+          "alarm_target_minutes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "config_publish_alarm_advance_minutes": {
+            "type": "boolean"
+          },
+          "config_publish_alarm_advance_minutes_error": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SettingsUpdateResponse": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/SettingsRuntimeResult"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "settings",
+          "runtime"
+        ],
+        "type": "object"
+      },
       "StatsResponse": {
         "properties": {
           "alarms": {
@@ -1374,6 +1424,16 @@
               }
             },
             "description": "Logout successful"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local cookies cleared; server session family revocation could not be confirmed"
           }
         },
         "tags": [
@@ -2676,7 +2736,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusOnlyResponse"
+                  "$ref": "#/components/schemas/SettingsUpdateResponse"
                 }
               }
             },

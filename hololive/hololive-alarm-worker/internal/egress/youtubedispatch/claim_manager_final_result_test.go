@@ -346,7 +346,7 @@ func newLoggedSQLiteDispatcherForFinalResultTest(t *testing.T, db *deliveryTestD
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cache := cachemocks.NewLenientClient()
 
-	return NewDispatcher(db, cache, sender, nil, logger, config), logBuffer
+	return newDispatcherForTest(t, db, cache, sender, nil, logger, config), logBuffer
 }
 
 func findOutboxFinalResultAuditLogEntry(t *testing.T, logBuffer *bytes.Buffer) map[string]any {

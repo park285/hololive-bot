@@ -2,7 +2,7 @@ import { isAxiosError } from "axios";
 import { useCallback, useEffect, useRef } from "react";
 import { authApi } from "@/api/core";
 import { CONFIG } from "@/config";
-import { clearClientSession } from "@/lib/sessionLifecycle";
+import { clearClientSession, refreshClientSession } from "@/lib/sessionLifecycle";
 import toast from "@/lib/toast-api";
 import { useAuthStore } from "@/stores/authStore";
 import { useSessionWarningStore } from "@/stores/sessionWarningStore";
@@ -38,7 +38,9 @@ export const useHeartbeat = (isIdle: boolean) => {
 	}, [isIdle]);
 
 	const expireSession = useCallback((message: string) => {
-		void authApi.logout().catch(() => undefined);
+		void authApi.logout().catch((error: unknown) => {
+			toast.error(error instanceof Error ? error.message : "서버 세션 폐기를 확인하지 못했습니다.");
+		});
 		clearClientSession(true);
 		toast.error(message);
 	}, []);
@@ -89,6 +91,17 @@ export const useHeartbeat = (isIdle: boolean) => {
 				if (isCanceledRequest(error)) {
 					return;
 				}
+				if (isAxiosError(error) && error.response?.status === 403) {
+					// 다른 탭이 쿠키를 회전한 뒤의 CSRF 거절은 세션 만료의 증거가 아니다.
+					// POST는 재전송하지 않고 권위 있는 GET으로 다음 요청의 상태만 복원한다.
+					try {
+						await refreshClientSession(controller.signal);
+						failCountRef.current = 0;
+						return;
+					} catch (refreshError: unknown) {
+						if (isCanceledRequest(refreshError)) return;
+					}
+				}
 
 				failCountRef.current += 1;
 				console.warn(
@@ -116,7 +129,9 @@ export const useHeartbeat = (isIdle: boolean) => {
 
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === "visible") {
-				void sendHeartbeat(false);
+				void refreshClientSession().then(() => sendHeartbeat(false)).catch((error: unknown) => {
+					if (!isCanceledRequest(error)) console.warn("세션 재개 확인에 실패했습니다.", error);
+				});
 			}
 		};
 
