@@ -38,7 +38,7 @@ func newTestDispatcherForSend(t *testing.T, sender *testSender) *Dispatcher {
 
 	cache := cachemocks.NewLenientClient()
 
-	return NewDispatcher(nil, cache, sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	return newDispatcherForTest(t, nil, cache, sender, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -97,7 +97,7 @@ func TestCollectRoomsByChannelUsesTypedSubscriberLookup(t *testing.T) {
 		}
 	}
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
+	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
 	roomsByChannel := dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
 		{ChannelID: testChannelTarget, Kind: domain.OutboxKindNewShort},
 		{ChannelID: testChannelTarget, Kind: domain.OutboxKindCommunityPost},
@@ -177,7 +177,7 @@ func TestCollectRoomsByChannelRespectsSubscriberLookupParallelism(t *testing.T) 
 
 	cache.SMembersFunc = gate.lookup
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		SubscriberLookupParallelism: 1,
 	})
 
@@ -525,7 +525,7 @@ func TestDispatchDeliveryRows_GroupedFallback(t *testing.T) {
 
 	sender := &testSender{failRoom: map[string]bool{}}
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShorts, "{{.Title}}\n{{.URL}}")
-	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -565,7 +565,7 @@ func TestDispatchDeliveryRows_GroupedSendFailureRetriesGroupedBatch(t *testing.T
 
 	renderer := newGroupedTemplateRenderer(t, domain.TemplateKeyOutboxShortsGroup, "{{range .Items}}{{.Title}} {{.URL}}\n{{end}}")
 	sender := &failFirstSendTestSender{}
-	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -603,7 +603,7 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 
 	renderer := newShortsGroupAndSingleTemplateRenderer(t)
 	sender := &groupedPermanentFailureSender{}
-	d := NewDispatcher(nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1404,7 +1404,7 @@ func newLoggedTestDispatcherForSend(t *testing.T, sender *testSender, renderer *
 	logBuffer := &safeBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	return NewDispatcher(nil, cache, sender, renderer, logger, &dispatchstate.Config{
+	return newDispatcherForTest(t, nil, cache, sender, renderer, logger, &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -1646,7 +1646,7 @@ func (s *parentDeadlineBeforeReturnSender) SendMessage(ctx context.Context, _, _
 func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := NewDispatcher(nil,
+	dispatcher := newDispatcherForTest(t, nil,
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
@@ -1674,7 +1674,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeout(t *testing.T) {
 func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := NewDispatcher(nil,
+	dispatcher := newDispatcherForTest(t, nil,
 		cachemocks.NewLenientClient(),
 		&blockingSender{},
 		nil,
@@ -1710,7 +1710,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 
 	sender := &parentDeadlineBeforeReturnSender{parentDone: parentCtx.Done()}
 
-	dispatcher := NewDispatcher(nil,
+	dispatcher := newDispatcherForTest(t, nil,
 		cachemocks.NewLenientClient(),
 		sender,
 		nil,
@@ -1742,7 +1742,7 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := NewDispatcher(nil,
+	dispatcher := newDispatcherForTest(t, nil,
 		cachemocks.NewLenientClient(),
 		&testSender{failRoom: map[string]bool{}},
 		nil,

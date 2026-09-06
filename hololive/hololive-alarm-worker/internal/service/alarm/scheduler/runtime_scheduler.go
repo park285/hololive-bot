@@ -31,6 +31,7 @@ import (
 	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -119,6 +120,7 @@ func NewRuntimeScheduler(
 		targetMinutes,
 		youtubeEvaluationWindowCap,
 		checking.NewPgYouTubeLiveSessionSource(postgres),
+		postgres,
 		logger,
 	)
 	if err != nil {
@@ -176,8 +178,15 @@ func newRuntimeSchedulerYouTubeChecker(
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource checking.YouTubeLiveSessionSource,
+	postgres database.Client,
 	logger *slog.Logger,
 ) (*checking.YouTubeChecker, error) {
+	var subscriptionDB dbx.Querier
+
+	if postgres != nil {
+		subscriptionDB = postgres.GetPool()
+	}
+
 	youtubeChecker, err := checking.NewYouTubeCheckerWithPersistedLiveSource(
 		cacheClient,
 		holodexService,
@@ -186,6 +195,7 @@ func newRuntimeSchedulerYouTubeChecker(
 		targetMinutes,
 		evaluationWindowCap,
 		persistedLiveSource,
+		subscriptionDB,
 		logger,
 	)
 	if err != nil {

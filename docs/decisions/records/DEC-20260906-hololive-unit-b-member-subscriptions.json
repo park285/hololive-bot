@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260906-hololive-unit-b-member-subscriptions",
+  "title": "UNIT B는 멤버별 구독을 보존하고 진행자 미상 제목은 구독 방 합집합에 알린다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-06",
+  "summary": "사용자의 UNIT B 멤버 구독 및 fail-open 요구에 따라 실제 YouTube channel_id와 별도의 host ID로 구독을 식별한다. 기존 alarms가 전체/멤버 구독의 저장 소유자로 남고 빈 host는 전체 채널 구독이다. 캐시는 채널별 조회 후보를 합치며 발송 대상은 알림 종류와 항목별 제목의 확인된 진행자로 정한다. 멤버 판별이 미상이면 해당 채널의 전체/멤버 구독 방 합집합을 사용한다. 공동 진행자는 합집합이고 외부 게스트는 제외한다. 구독 DB 실패를 판별 미상으로 가장하지 않는다. 제목 판별은 기존 mekparkhost 소유자를 사용하며 검증이 부족한 ML 점수로 대상을 확정하지 않는다. 로컬 구현과 테스트만 수행하며 운영 migration·배포·발송은 포함하지 않는다.",
+  "sources": ["docs/current/plans/2026-09-06-unit-b-member-subscriptions.md#UNIT B 멤버별 구독과 판별 미상 알림"],
+  "evidence": ["docs/review/unit-b-member-subscriptions-20260906.md"],
+  "implementation": [
+    "hololive/hololive-shared/pkg/domain/mekparkhost/subscriptions.go",
+    "hololive/hololive-shared/pkg/service/alarm/event_targets.go",
+    "hololive/hololive-shared/pkg/service/notification/alarmservice/alarm_member_subscriptions.go",
+    "hololive/hololive-api/internal/planes/bot/internal/command/handlers/alarm/alarm.go",
+    "hololive/hololive-alarm-worker/internal/service/alarm/checker/checking/youtube_member_subscriptions.go",
+    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/outbox_member_subscriptions.go",
+    "hololive/hololive-api/scripts/migrations/194_unit_b_member_subscriptions.sql",
+    "hololive/hololive-api/scripts/migrations/195_unit_b_member_subscription_index.sql",
+    "hololive/hololive-api/scripts/migrations/196_unit_b_member_subscription_identity.sql"
+  ],
+  "supersedes": [],
+  "review": {"trigger": "ACHRORA 멤버 구독이나 독립 검수된 ML 기반 진행자 확정을 도입할 때"}
+}

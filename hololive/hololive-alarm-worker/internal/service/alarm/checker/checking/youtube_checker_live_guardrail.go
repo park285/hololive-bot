@@ -43,6 +43,19 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 
 	metas := persistedLiveGuardrailMetas(sessions, subscriberMap, now)
 	for _, meta := range metas {
+		rooms, err := c.guardrailSubscriberRooms(ctx, &meta, streamsByChannel)
+		if err != nil {
+			observeYouTubeLiveGuardrail("dispatch_check_error")
+			c.logger.Warn("YouTube live guardrail subscriber check failed", slog.String("stream_id", meta.streamID), slog.Any("error", err))
+
+			continue
+		}
+
+		if len(rooms) == 0 {
+			continue
+		}
+
+		meta.rooms = rooms
 		c.observePersistedLiveGuardrailMeta(&meta, evidence, since)
 	}
 

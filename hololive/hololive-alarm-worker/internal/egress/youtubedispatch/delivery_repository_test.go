@@ -44,7 +44,7 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 		}
 	}()
 
-	dispatcher := NewDispatcher(nil, cache, &testSender{
+	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{
 		failRoom: map[string]bool{"room-fail": true},
 	}, newSendTestRenderer(t), slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,

@@ -72,6 +72,7 @@ type addAlarmReq struct {
 	RoomID     string            `json:"room_id"`
 	UserID     string            `json:"user_id"`
 	ChannelID  string            `json:"channel_id"`
+	HostID     string            `json:"host_id,omitempty"`
 	MemberName string            `json:"member_name"`
 	RoomName   string            `json:"room_name"`
 	UserName   string            `json:"user_name"`
@@ -81,6 +82,7 @@ type addAlarmReq struct {
 type removeAlarmReq struct {
 	RoomID     string            `json:"room_id"`
 	ChannelID  string            `json:"channel_id"`
+	HostID     string            `json:"host_id,omitempty"`
 	AlarmTypes domain.AlarmTypes `json:"alarm_types"`
 }
 
@@ -125,6 +127,7 @@ type apiEnvelope struct {
 	Data    jsontext.Value `json:"data,omitempty"`
 }
 
+// AddAlarm은 채팅방의 채널·멤버별 구독을 알람 API에 등록한다.
 func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (bool, error) {
 	if req == nil {
 		return false, errors.New("alarm-api: add alarm request must not be nil")
@@ -134,6 +137,7 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
+		HostID:     req.HostID,
 		MemberName: req.MemberName,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,
@@ -148,13 +152,27 @@ func (c *Client) AddAlarm(ctx context.Context, req *domain.AddAlarmRequest) (boo
 	return resp.Added, nil
 }
 
+// RemoveAlarm은 채팅방의 전체 채널 구독에서 지정한 알림 종류를 해지한다.
 func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alarmTypes domain.AlarmTypes) (bool, error) {
-	body := removeAlarmReq{
+	return c.removeAlarm(ctx, removeAlarmReq{
 		RoomID:     roomID,
 		ChannelID:  channelID,
 		AlarmTypes: alarmTypes,
+	})
+}
+
+// RemoveHostAlarm은 해당 채팅방에서 지정한 멤버의 알림 종류만 해지한다.
+func (c *Client) RemoveHostAlarm(ctx context.Context, roomID, channelID, hostID string, alarmTypes domain.AlarmTypes) (bool, error) {
+	if strings.TrimSpace(hostID) == "" {
+		return false, errors.New("alarm-api: host_id is required for member removal")
 	}
 
+	return c.removeAlarm(ctx, removeAlarmReq{
+		RoomID: roomID, ChannelID: channelID, HostID: hostID, AlarmTypes: alarmTypes,
+	})
+}
+
+func (c *Client) removeAlarm(ctx context.Context, body removeAlarmReq) (bool, error) {
 	resp, err := c.postJSON[removeAlarmResp](ctx, contractsalarm.RemovePath, body)
 	if err != nil {
 		return false, err
@@ -163,6 +181,7 @@ func (c *Client) RemoveAlarm(ctx context.Context, roomID, channelID string, alar
 	return resp.Removed, nil
 }
 
+// GetRoomAlarms는 채널·멤버별 구독을 합쳐 실제 채널 ID를 중복 없이 반환한다.
 func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, error) {
 	alarms, err := c.GetRoomAlarmsWithTypes(ctx, roomID)
 	if err != nil {
@@ -170,8 +189,11 @@ func (c *Client) GetRoomAlarms(ctx context.Context, roomID string) ([]string, er
 	}
 
 	ids := make([]string, 0, len(alarms))
+	seen := make(map[string]bool, len(alarms))
+
 	for _, alarm := range alarms {
-		if alarm != nil {
+		if alarm != nil && !seen[alarm.ChannelID] {
+			seen[alarm.ChannelID] = true
 			ids = append(ids, alarm.ChannelID)
 		}
 	}

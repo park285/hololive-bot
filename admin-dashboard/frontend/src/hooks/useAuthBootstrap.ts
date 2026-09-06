@@ -8,19 +8,20 @@ export function useAuthBootstrap() {
 
 	useEffect(() => {
 		const lifecycle = { cancelled: false };
+		const controller = new AbortController();
 
 		markAuthPending();
 
 		void (async () => {
 			try {
-				const session = await authApi.getSession();
+				const session = await authApi.getSession(controller.signal);
 				if (lifecycle.cancelled) {
 					return;
 				}
 
 				applySessionStatus(session);
-			} catch {
-				if (lifecycle.cancelled) {
+			} catch (error) {
+				if (lifecycle.cancelled || (error instanceof Error && error.name === "AbortError")) {
 					return;
 				}
 				clearClientSession();
@@ -29,6 +30,7 @@ export function useAuthBootstrap() {
 
 		return () => {
 			lifecycle.cancelled = true;
+			controller.abort();
 		};
 	}, [markAuthPending]);
 }

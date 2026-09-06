@@ -4,4 +4,5 @@ SELECT video_id, channel_id, status, title, topic_id, thumbnail_url,
 FROM youtube_live_sessions
 WHERE channel_id = ANY($1::text[])
    OR video_id = ANY($2::text[])
+ORDER BY video_id
 FOR UPDATE

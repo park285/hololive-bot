@@ -548,6 +548,13 @@ func assertRetentionCheckpointCount(t *testing.T, pool *pgxpool.Pool, subjectKey
 func insertLiveEndCandidate(t *testing.T, pool *pgxpool.Pool, observationID int64) {
 	t.Helper()
 
+	now := time.Now().UTC()
+	if _, err := pool.Exec(t.Context(), mustSQL("repository_live_pending_end_upsert.sql"),
+		"video-end-candidate", testChannelID, "SCOPED_ABSENCE", observationID,
+		now, now, now, nil, true, true); err != nil {
+		t.Fatalf("insert live end evidence: %v", err)
+	}
+
 	if _, err := pool.Exec(t.Context(), `
 		INSERT INTO youtube_live_reconciliation_heads (
 			video_id, status, end_candidate_kind, end_candidate_observation_id, next_end_check_at

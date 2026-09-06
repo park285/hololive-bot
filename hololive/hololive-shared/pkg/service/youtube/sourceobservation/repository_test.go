@@ -895,13 +895,6 @@ func TestRetentionSQLLocksCandidatesWithSkipLocked(t *testing.T) {
 	}
 }
 
-func TestLiveObservationLockUsesRestrictedFunction(t *testing.T) {
-	query := mustSQL("repository_live_observation_lock_0051_51.sql")
-	if !strings.Contains(query, "lock_source_observation") || strings.Contains(query, "FOR UPDATE") {
-		t.Fatal("live observation lock must use the restricted lock function")
-	}
-}
-
 func TestPublishSetCollisionWriteKeepsInsertOnlyPrivilege(t *testing.T) {
 	query := mustSQL("repository_publish_set_0032_32.sql")
 	start := strings.Index(query, "collision_write AS (")

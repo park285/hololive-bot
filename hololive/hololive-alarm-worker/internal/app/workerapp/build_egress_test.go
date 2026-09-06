@@ -13,6 +13,7 @@ import (
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
+	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -75,7 +76,7 @@ func (*clientRequestIDRecordingIrisSender) GetReplyStatus(_ context.Context, req
 	return &iris.ReplyStatusSnapshot{RequestID: requestID, State: "handoff_completed"}, nil
 }
 
-type workerappEgressTestPostgres struct{}
+type workerappEgressTestPostgres struct{ pool *pgxpool.Pool }
 
 func alarmWorkerTestConfig(t *testing.T) (*settings.Config, *alarmWorkerRegistryState) {
 	t.Helper()
@@ -103,8 +104,8 @@ func alarmWorkerTestConfig(t *testing.T) (*settings.Config, *alarmWorkerRegistry
 	return &settings.Config{AlarmWorkerProfile: profile}, state
 }
 
-func (workerappEgressTestPostgres) GetPool() *pgxpool.Pool {
-	return nil
+func (p workerappEgressTestPostgres) GetPool() *pgxpool.Pool {
+	return p.pool
 }
 
 func (workerappEgressTestPostgres) Ping(context.Context) error {
@@ -236,7 +237,7 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 	t.Setenv("YOUTUBE_OUTBOX_V3_HANDOFF_MODE", "off")
 
 	config, state := alarmWorkerTestConfig(t)
-	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
+	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{pool: dbtest.NewPool(t)}}
 
 	runners, err := buildEgressRunners(t.Context(), &alarmworker.RuntimeConfig{Config: config}, infra, egress.NewIrisMessageSender(nil), nil, state)
 	require.NoError(t, err)
@@ -258,6 +259,14 @@ func TestBuildEgressRunnersRegistersEveryEnabledWorker(t *testing.T) {
 	assert.True(t, scheduled["alarm-dispatch"])
 	assert.True(t, scheduled["youtube-outbox"])
 	assert.True(t, scheduled["notification-delivery-outbox"])
+}
+
+func TestNewYouTubeOutboxDispatcherRejectsMissingPool(t *testing.T) {
+	config, _ := alarmWorkerTestConfig(t)
+	infra := &sharedmodules.InfraModule{Postgres: workerappEgressTestPostgres{}}
+	dispatcher, err := newYouTubeOutboxDispatcher(config, infra, nil, nil)
+	require.ErrorContains(t, err, "postgres pool is required")
+	require.Nil(t, dispatcher)
 }
 
 func TestBuildEgressDispatchersRejectMissingInfraWhenEnabled(t *testing.T) {

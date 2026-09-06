@@ -91,7 +91,7 @@ func expectedAmbiguousMessage(t *testing.T, matcherService *matcher.Matcher) str
 	}
 
 	err := alarmcmd.NewAlarmCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
-		testParamAction: "add",
+		testParamAction: testActionAdd,
 		paramMember:     testMemberAqua,
 	})
 	require.NoError(t, err)

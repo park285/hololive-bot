@@ -82,7 +82,8 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 
 	db := newDeliveryPool(t)
 
-	dispatcher := NewDispatcher(
+	dispatcher := newDispatcherForTest(
+		t,
 		db,
 		cachemocks.NewLenientClient(),
 		sender,
@@ -123,7 +124,8 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *
 		config.DeliveryParallelism = 2
 	}
 
-	dispatcher := NewDispatcher(
+	dispatcher := newDispatcherForTest(
+		t,
 		db,
 		cachemocks.NewLenientClient(),
 		sender,

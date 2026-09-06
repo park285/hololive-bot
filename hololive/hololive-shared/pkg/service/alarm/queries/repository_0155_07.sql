@@ -3,6 +3,7 @@
 			SELECT member_name
 			FROM alarms
 			WHERE channel_id = $1
+			  AND host_id = ''
 			  AND member_name IS NOT NULL
 			  AND member_name <> ''
 			ORDER BY created_at DESC
@@ -20,4 +21,4 @@
 			(SELECT member_name FROM latest_alarm_name),
 			''
 		)
-	
+

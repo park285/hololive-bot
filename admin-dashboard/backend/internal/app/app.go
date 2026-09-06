@@ -47,6 +47,7 @@ type sessionRecords interface {
 type sessionStore interface {
 	sessionRecords
 
+	RevokeFamily(ctx context.Context, familyID string) error
 	Refresh(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
 	Rotate(ctx context.Context, oldID string) (session.Session, bool, error)
 	Close()

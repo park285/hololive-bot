@@ -37,6 +37,7 @@ type fakeSessions struct {
 	createFn  func(ctx context.Context) (session.Session, error)
 	getFn     func(ctx context.Context, id string) (*session.Session, error)
 	deleteFn  func(ctx context.Context, id string) error
+	revokeFn  func(ctx context.Context, familyID string) error
 	refreshFn func(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
 	rotateFn  func(ctx context.Context, oldID string) (session.Session, bool, error)
 }
@@ -83,6 +84,14 @@ func (f *fakeSessions) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (f *fakeSessions) RevokeFamily(ctx context.Context, familyID string) error {
+	if f.revokeFn != nil {
+		return f.revokeFn(ctx, familyID)
+	}
+
+	return nil
+}
+
 func (f *fakeSessions) Refresh(ctx context.Context, id string, idle bool) (session.RefreshResult, error) {
 	if f.refreshFn == nil {
 		return session.RefreshResult{Kind: session.RefreshMissing}, nil
@@ -116,6 +125,7 @@ func liveSession(id string) *session.Session {
 
 	return &session.Session{
 		ID:                id,
+		FamilyID:          id,
 		CreatedAt:         now,
 		ExpiresAt:         now.Add(30 * time.Minute),
 		AbsoluteExpiresAt: now.Add(8 * time.Hour),

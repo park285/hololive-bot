@@ -8,6 +8,7 @@
 			SELECT DISTINCT ON (channel_id) channel_id, member_name
 			FROM alarms
 			WHERE channel_id IS NOT NULL AND channel_id != ''
+			  AND host_id = ''
 			  AND member_name IS NOT NULL
 			  AND member_name <> ''
 			ORDER BY channel_id, created_at DESC
@@ -27,4 +28,4 @@
 		LEFT JOIN member_display_names m ON m.channel_id = c.channel_id
 		WHERE COALESCE(NULLIF(m.member_name, ''), a.member_name, '') != ''
 		ORDER BY c.channel_id
-	
+

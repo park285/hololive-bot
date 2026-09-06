@@ -11,6 +11,7 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -117,13 +118,14 @@ func buildAlarmDispatchVideoOutboxKaringContentItem(
 	}
 
 	videoID := firstNonEmptyString(data.VideoID, item.ContentID)
-	memberName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
+	channelName := resolveAlarmDispatchOutboxMemberName(ctx, messageStrings, payload)
+	memberName := mekparkhost.DisplayName(payload.ChannelID, data.Title, channelName)
 
 	return iris.KaringContentItem{
 		Title:        firstNonEmptyString(data.Title, alarmDispatchMessageString(ctx, messageStrings, "alarm_no_title", "제목 없음")),
 		URL:          alarmDispatchVideoOutboxURL(payload.Kind, videoID),
 		MemberName:   memberName,
-		ChannelName:  memberName,
+		ChannelName:  channelName,
 		Status:       alarmDispatchVideoOutboxStatus(ctx, messageStrings, payload.Kind, data),
 		StartAt:      alarmDispatchKaringTimeString(util.FirstNonNilTime(data.ScheduledStartAt, data.PublishedAt)),
 		ThumbnailURL: bestKaringThumbnailURL(data.Thumbnail),

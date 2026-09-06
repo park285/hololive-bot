@@ -72,6 +72,10 @@ func (fakeAlarmCRUD) RemoveAlarm(context.Context, string, string, domain.AlarmTy
 	return false, nil
 }
 
+func (fakeAlarmCRUD) RemoveHostAlarm(context.Context, string, string, string, domain.AlarmTypes) (bool, error) {
+	return false, nil
+}
+
 func (fakeAlarmCRUD) GetRoomAlarms(context.Context, string) ([]string, error) {
 	return nil, nil
 }

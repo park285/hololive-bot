@@ -29,6 +29,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -100,6 +101,15 @@ func (f *ResponseFormatter) alarmChannelName(ctx context.Context, notification *
 	name := alarmBaseChannelName(notification)
 	if name == "" {
 		return ""
+	}
+
+	if stream := notification.Stream; stream != nil && !stream.IsChzzkOnly && !stream.IsTwitchOnly {
+		channelID := stream.ChannelID
+		if channelID == "" && notification.Channel != nil {
+			channelID = notification.Channel.ID
+		}
+
+		name = mekparkhost.DisplayName(channelID, stream.Title, name)
 	}
 
 	return f.alarmChannelNameWithOrg(ctx, name, notification.Channel)

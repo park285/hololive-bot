@@ -120,13 +120,16 @@ func TestWaitForLoginBackoffSkipsNonPositiveDelay(t *testing.T) {
 	require.True(t, waitForLoginBackoff(t.Context(), 0))
 }
 
-func TestLogoutDuringRotationGraceDeletesMarkerAndReplacement(t *testing.T) {
+func TestLogoutDuringRotationGraceRevokesFamily(t *testing.T) {
 	replacement := liveSession("replacement-session")
+
+	replacement.FamilyID = "marker-session"
+
 	store := storeWithSessions(rotatedMarker("marker-session", "replacement-session"), replacement)
 
 	var deleted []string
 
-	store.deleteFn = func(_ context.Context, id string) error {
+	store.revokeFn = func(_ context.Context, id string) error {
 		deleted = append(deleted, id)
 		return nil
 	}
@@ -144,17 +147,17 @@ func TestLogoutDuringRotationGraceDeletesMarkerAndReplacement(t *testing.T) {
 	rec := doRequest(rt.Handler(), req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, []string{"replacement-session", "marker-session"}, deleted,
-		"logout must revoke the live replacement session, not only the grace marker")
+	require.Equal(t, []string{"marker-session"}, deleted,
+		"logout revokes the stable family even when middleware followed a rotation marker")
 	require.True(t, clearsAuthCookies(rec))
 }
 
-func TestLogoutOutsideGraceDeletesSingleSession(t *testing.T) {
+func TestLogoutOutsideGraceRevokesFamily(t *testing.T) {
 	store := storeWith(liveSession("plain-session"))
 
 	var deleted []string
 
-	store.deleteFn = func(_ context.Context, id string) error {
+	store.revokeFn = func(_ context.Context, id string) error {
 		deleted = append(deleted, id)
 		return nil
 	}

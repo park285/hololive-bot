@@ -32,7 +32,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
+	"github.com/kapu/hololive-shared/pkg/dbx"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -50,6 +52,7 @@ type YouTubeChecker struct {
 	tierScheduler       *tier.TieredScheduler
 	dedupService        *dedup.Service
 	persistedLiveSource YouTubeLiveSessionSource
+	lookupSubscribers   func(context.Context, string, string, domain.AlarmType) ([]string, error)
 	targetPolicy        sharedchecker.TargetMinutePolicy
 	targetMinutesMu     sync.RWMutex
 	evaluationWindowCap time.Duration
@@ -74,6 +77,7 @@ func NewYouTubeChecker(
 		targetMinutes,
 		evaluationWindowCap,
 		nil,
+		nil,
 		logger,
 	)
 	if err != nil {
@@ -83,6 +87,8 @@ func NewYouTubeChecker(
 	return out, nil
 }
 
+// NewYouTubeCheckerWithPersistedLiveSource는 저장된 방송 근거와 구독 DB를 사용하는 체커를 생성한다.
+// 구독 DB인 subscriptionDB가 없으면 UNIT B 멤버별 대상 선정은 오류로 처리한다.
 func NewYouTubeCheckerWithPersistedLiveSource(
 	cacheClient cache.Client,
 	holodexService *holodexprovider.Service,
@@ -91,6 +97,7 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 	targetMinutes []int,
 	evaluationWindowCap time.Duration,
 	persistedLiveSource YouTubeLiveSessionSource,
+	subscriptionDB dbx.Querier,
 	logger *slog.Logger,
 ) (*YouTubeChecker, error) {
 	if cacheClient == nil {
@@ -121,6 +128,9 @@ func NewYouTubeCheckerWithPersistedLiveSource(
 		tierScheduler:       tierScheduler,
 		dedupService:        dedupService,
 		persistedLiveSource: persistedLiveSource,
+		lookupSubscribers: func(ctx context.Context, channelID, title string, alarmType domain.AlarmType) ([]string, error) {
+			return sharedalarm.ResolveEventSubscribers(ctx, cacheClient, subscriptionDB, channelID, title, alarmType)
+		},
 		targetPolicy:        sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes)),
 		evaluationWindowCap: evaluationWindowCap,
 		logger:              SafeLogger(logger),

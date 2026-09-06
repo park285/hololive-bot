@@ -185,6 +185,7 @@ func buildAlarmRecord(req *domain.AddAlarmRequest, alarmTypes domain.AlarmTypes)
 		RoomID:     req.RoomID,
 		UserID:     req.UserID,
 		ChannelID:  req.ChannelID,
+		HostID:     req.HostID,
 		MemberName: req.MemberName,
 		RoomName:   req.RoomName,
 		UserName:   req.UserName,

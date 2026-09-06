@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260906-hololive-mekpark-host-ml-evaluation",
+  "title": "mekPark 분류 모델은 분리된 오프라인 평가로 검증한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-06",
+  "summary": "사용자의 머신러닝 진행 및 공개 YouTube 제목 추가 요청에 따라 DB와 두 공유 채널의 공개 자료를 video_id로 합쳐 문자 TF-IDF와 LogisticRegression을 실제 학습한다. 제목에서 검토한 약한 라벨로 단일 진행자 분류를 평가하고, 시간/영상/동일 제목 경계를 유지한다. 룰이 보류한 실제 제목과 익명화 시험을 별도로 다루며 정답 미상을 맞힌 것으로 세지 않는다. 실험용 Python 환경만 추가하고 운영 도입은 결과 검토와 별도 승인을 거친다.",
+  "sources": ["docs/current/plans/2026-09-06-mekpark-host-ml-evaluation.md#mekPark 방송자 분류 모델 학습과 비교"],
+  "evidence": [
+    "docs/review/mekpark-host-ml-20260906.md",
+    "docs/review/mekpark-host-ml-20260906.json"
+  ],
+  "implementation": [
+    "scripts/experiments/mekpark-host/experiment.py",
+    "scripts/experiments/mekpark-host/fetch-public-titles.mjs",
+    "hololive/hololive-shared/pkg/domain/mekparkhost/cmd/classify-titles/main.go"
+  ],
+  "supersedes": [],
+  "review": {"trigger": "독립 검수한 미상 제목의 정답과 알림 시점 제목이 확보되거나 표본이 늘어 모델의 추가 효용을 다시 평가할 때"}
+}

@@ -77,6 +77,8 @@ export const SessionIdleWarningModal = () => {
 		setIsLoggingOut(true);
 		try {
 			await authApi.logout();
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "서버 세션 폐기를 확인하지 못했습니다.");
 		} finally {
 			setIsLoggingOut(false);
 			clearClientSession(true);

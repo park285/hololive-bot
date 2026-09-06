@@ -192,6 +192,26 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// RevokeFamily는 rotation과 원자적으로 직렬화하여 현재 토큰과 family 권한을 폐기한다.
+// 이전 회전 marker는 TTL까지 남을 수 있지만 폐기된 교체 토큰으로 인증할 수 없다.
+func (s *Store) RevokeFamily(ctx context.Context, familyID string) error {
+	if familyID == "" {
+		return errors.New("session family ID is required")
+	}
+
+	result, err := s.evalInt(ctx, revokeFamilyScript,
+		[]string{familyKey(familyID), sessionKey(familyID)}, []string{keyPrefix})
+	if err != nil {
+		return fmt.Errorf("revoke session family: %w", err)
+	}
+
+	if result != 1 {
+		return fmt.Errorf("unexpected family revocation result: %d", result)
+	}
+
+	return nil
+}
+
 func (s *Store) deleteLoadedSession(ctx context.Context, sess *Session) error {
 	deleteCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -384,4 +404,15 @@ if redis.call('GET', family_key) == id then
   redis.call('DEL', family_key)
 end
 return deleted
+`
+
+// lease의 현재 토큰을 같은 Lua 실행에서 읽고 제거해야 auth snapshot 이후의 rotation도 폐기된다.
+// 원본 토큰도 제거하여 lease 도입 전 세션과 FamilyActive의 기존 legacy 조회를 함께 닫는다.
+const revokeFamilyScript = `
+local current_id = redis.call('GET', KEYS[1])
+if current_id then
+  redis.call('DEL', ARGV[1] .. current_id)
+end
+redis.call('DEL', KEYS[2], KEYS[1])
+return 1
 `

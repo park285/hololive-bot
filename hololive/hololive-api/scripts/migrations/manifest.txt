@@ -50,3 +50,8 @@
 050 189_youtube_job_lease_failure_diagnostics_reconcile.sql
 051 190_youtube_delivery_lifecycle_ledger.sql
 052 191_source_observation_replay_epoch.sql
+053 192_live_reconciliation_evidence.sql
+054 193_live_absence_slot_channel_index.sql
+055 194_unit_b_member_subscriptions.sql
+056 195_unit_b_member_subscription_index.sql
+057 196_unit_b_member_subscription_identity.sql

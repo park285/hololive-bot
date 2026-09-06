@@ -48,6 +48,10 @@ func (as *AlarmService) cacheAlarm(ctx context.Context, record *domain.Alarm) (i
 	cacheRecord := *record
 
 	cacheRecord.AlarmTypes = alarmTypes
+	if cacheRecord.HostID != "" {
+		cacheRecord.MemberName = ""
+	}
+
 	cacheRecord.MemberName = as.resolveCacheMemberName(ctx, cacheRecord.ChannelID, cacheRecord.MemberName)
 
 	out, err := as.cacheAlarmSequential(ctx, &cacheRecord)

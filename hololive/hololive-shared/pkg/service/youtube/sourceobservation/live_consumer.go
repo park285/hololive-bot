@@ -29,6 +29,10 @@ func (c *Consumer) reconcileLive(
 		return ReconcileResult{}, fmt.Errorf("load live state: %w", err)
 	}
 
+	if loadErr := loadLiveAbsencesForPositive(ctx, tx, &state, &evidence); loadErr != nil {
+		return ReconcileResult{}, fmt.Errorf("load live positive absence history: %w", loadErr)
+	}
+
 	decision, err := live.Reduce(state, evidence, c.liveGrace, claimed.ReceivedAt)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("reduce: %w", err)

@@ -13,7 +13,7 @@ import (
 
 type OutboxGrouper struct {
 	cache             cache.Client
-	lookupSubscribers func(context.Context, string, domain.AlarmType) ([]string, error)
+	lookupSubscribers func(context.Context, string, string, domain.AlarmType) ([]string, error)
 	logger            *slog.Logger
 	config            dispatchstate.Config
 }
@@ -25,8 +25,8 @@ func newOutboxGrouper(db dbx.Querier, cacheClient cache.Client, logger *slog.Log
 
 	return &OutboxGrouper{
 		cache: cacheClient,
-		lookupSubscribers: func(ctx context.Context, channelID string, alarmType domain.AlarmType) ([]string, error) {
-			return sharedalarm.ResolveChannelSubscribersByType(ctx, cacheClient, db, channelID, alarmType)
+		lookupSubscribers: func(ctx context.Context, channelID, title string, alarmType domain.AlarmType) ([]string, error) {
+			return sharedalarm.ResolveEventSubscribers(ctx, cacheClient, db, channelID, title, alarmType)
 		},
 		logger: logger,
 		config: *config,

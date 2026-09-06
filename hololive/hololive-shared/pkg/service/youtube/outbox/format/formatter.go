@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
@@ -168,6 +169,7 @@ func buildVideoTemplateData(data *TemplateData, item *domain.YouTubeNotification
 	}
 
 	data.Title = p.Title
+	data.MemberName = mekparkhost.DisplayName(item.ChannelID, p.Title, data.MemberName)
 	data.VideoID = p.VideoID
 	data.URL = VideoTemplateURL(item.Kind, p.VideoID)
 	populatePremiereTemplateData(data, item.Kind, &p, time.Now())
@@ -335,8 +337,13 @@ func buildGroupedVideoItemData(item *domain.YouTubeNotificationOutbox) GroupedIt
 		return GroupedItemData{}
 	}
 
+	title := p.Title
+	if label := mekparkhost.Identify(item.ChannelID, p.Title).Label(); label != "" {
+		title = label + " · " + title
+	}
+
 	return GroupedItemData{
-		Title: p.Title,
+		Title: title,
 		URL:   VideoTemplateURL(item.Kind, p.VideoID),
 	}
 }
