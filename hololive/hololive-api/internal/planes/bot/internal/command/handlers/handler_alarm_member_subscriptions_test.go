@@ -42,22 +42,16 @@ func (*memberAlarmRecorder) GetNextStreamInfo(context.Context, string) (*domain.
 	return &domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming, Title: "#宵凪ネオン"}, nil
 }
 
-func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
-	recorder := &memberAlarmRecorder{}
+func newMemberSubscriptionCommand(t *testing.T, recorder *memberAlarmRecorder, send func(context.Context, string, string) error) *alarmcmd.AlarmCommand {
+	t.Helper()
+
 	memberProvider := newContextAwareMemberProvider([]*domain.Member{{ChannelID: commandUnitBChannel, Name: "유닛 B"}})
 	logger := slog.New(slog.DiscardHandler)
-	sent := make([]string, 0, 5)
 	deps := &handlercore.Dependencies{
-		Alarm:     recorder,
-		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, logger),
-		Formatter: formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
-		SendMessage: func(_ context.Context, roomID, message string) error {
-			require.Equal(t, testRoomID, roomID)
-
-			sent = append(sent, message)
-
-			return nil
-		},
+		Alarm:       recorder,
+		Matcher:     matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, logger),
+		Formatter:   formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
+		SendMessage: send,
 		SendError: func(_ context.Context, _, message string) error {
 			t.Errorf("unexpected command error: %s", message)
 
@@ -65,7 +59,20 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 		},
 		Logger: logger,
 	}
-	command := alarmcmd.NewAlarmCommand(deps)
+
+	return alarmcmd.NewAlarmCommand(deps)
+}
+
+func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
+	recorder := &memberAlarmRecorder{}
+	sent := make([]string, 0, 5)
+	command := newMemberSubscriptionCommand(t, recorder, func(_ context.Context, roomID, message string) error {
+		require.Equal(t, testRoomID, roomID)
+
+		sent = append(sent, message)
+
+		return nil
+	})
 	cmdCtx := &domain.CommandContext{Room: testRoomID}
 
 	for _, name := range []string{"미라", "네온"} {
@@ -76,6 +83,8 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 	require.Len(t, sent, 2)
 	require.Equal(t, "reimei-mira", recorder.added[0].HostID)
 	require.Equal(t, "yoinagi-neon", recorder.added[1].HostID)
+	require.Contains(t, sent[0], "미라[유닛b]")
+	require.Contains(t, sent[1], "네온[유닛b]")
 
 	for _, added := range recorder.added {
 		require.Equal(t, testRoomID, added.RoomID)
@@ -92,6 +101,9 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 	require.Len(t, recorder.removed, 2)
 	require.Equal(t, "reimei-mira", recorder.removed[0].HostID)
 	require.Empty(t, recorder.removed[1].HostID)
+	require.Contains(t, sent[2], "미라[유닛b]")
+	require.Contains(t, sent[3], "유닛 B")
+	require.NotContains(t, sent[3], "[유닛b]")
 
 	for _, removed := range recorder.removed {
 		require.Equal(t, testRoomID, removed.RoomID)
@@ -99,11 +111,11 @@ func TestAlarmCommand_UNITBMemberSubscriptionsRemainRoomScoped(t *testing.T) {
 	}
 
 	recorder.entries = []domain.AlarmListView{
-		{ChannelID: commandUnitBChannel, HostID: "reimei-mira", MemberName: "미라", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
-		{ChannelID: commandUnitBChannel, HostID: "yoinagi-neon", MemberName: "네온", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
+		{ChannelID: commandUnitBChannel, HostID: "reimei-mira", MemberName: "미라[유닛b]", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive}},
+		{ChannelID: commandUnitBChannel, HostID: "yoinagi-neon", MemberName: "네온[유닛b]", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeShorts}},
 	}
 
 	require.NoError(t, command.Execute(t.Context(), cmdCtx, map[string]any{"action": "list"}))
-	require.Contains(t, sent[len(sent)-1], "미라")
-	require.Contains(t, sent[len(sent)-1], "네온")
+	require.Contains(t, sent[len(sent)-1], "미라[유닛b]")
+	require.Contains(t, sent[len(sent)-1], "네온[유닛b]")
 }

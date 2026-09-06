@@ -60,20 +60,29 @@ const refetch = () => client.invalidateQueries({queryKey:queryKeys.settings.all}
   }
   document.documentElement.dataset.testStatus="passed";
  } catch(error) {document.documentElement.dataset.testStatus="failed";document.getElementById("result").textContent=error?.stack??String(error);}
- finally {root.unmount();client.clear();toast.dismiss();}
+ finally {
+  root.unmount();client.clear();toast.dismiss();
+  await fetch("/__settings_result",{method:"POST",body:document.documentElement.outerHTML});
+ }
 })();
 `;
 
 test("settings preserve unknown, stale, edited, saved and partially applied results", {timeout:150000}, async()=>{
  const profile=await mkdtemp(path.join(tmpdir(),"settings-contract-browser-"));
  const state={get:"hold",value:15,mode:"confirmed",posts:0};
+ const completion=Promise.withResolvers();
  const unit=`iris-settings-browser-${process.pid}-${Date.now()}`;
  let server;
+ let completionTimeout;
  try {
-  server=await createServer({root,configFile:path.join(root,"vite.config.ts"),logLevel:"error",server:{host:"127.0.0.1",port:0},plugins:[{
+  server=await createServer({root,configFile:path.join(root,"vite.config.ts"),cacheDir:path.join(profile,"vite-cache"),logLevel:"error",server:{host:"127.0.0.1",port:0},plugins:[{
    name:"settings-contract",
    configureServer(server){server.middlewares.use(async(req,res,next)=>{
     const pathname=new URL(req.url,"http://localhost").pathname;
+    if(pathname==="/__settings_result" && req.method==="POST") {
+     let body="";for await(const chunk of req)body+=chunk;
+     res.end("ok");completion.resolve(body);return;
+    }
     if(pathname==="/__settings_test") {res.setHeader("Content-Type","text/html");res.end(await server.transformIndexHtml(pathname,'<div id="root"></div><pre id="result"></pre><script type="module" src="/__settings_entry.jsx"></script>'));return;}
     if(pathname.startsWith("/__settings_control/")) {
      const action=pathname.split("/").at(-1);
@@ -103,10 +112,13 @@ test("settings preserve unknown, stale, edited, saved and partially applied resu
   }]});
   await server.listen();
   const address=server.httpServer.address();
-  const {stdout}=await run("systemd-run",["--user","--quiet","--pipe","--wait","--collect",`--unit=${unit}`,"--property=RuntimeMaxSec=120","--property=KillMode=control-group","--property=TimeoutStopSec=5",process.env.CHROME_BIN??"/usr/bin/google-chrome","--headless=new","--no-sandbox","--disable-gpu","--disable-dev-shm-usage",`--user-data-dir=${profile}`,"--virtual-time-budget=15000","--dump-dom",`http://127.0.0.1:${address.port}/__settings_test`],{timeout:130000,maxBuffer:4*1024*1024});
-  assert.match(stdout,/data-test-status="passed"/);
+  // 가상 시간 DOM 덤프는 Vite 모듈 로드 전에 끝날 수 있어 실제 완료 보고를 기다린다.
+  await run("systemd-run",["--user","--quiet","--collect",`--unit=${unit}`,"--property=RuntimeMaxSec=120","--property=KillMode=control-group","--property=TimeoutStopSec=5",process.env.CHROME_BIN??"/usr/bin/google-chrome","--headless=new","--no-sandbox","--disable-gpu","--disable-dev-shm-usage",`--user-data-dir=${profile}`,`http://127.0.0.1:${address.port}/__settings_test`],{timeout:10000});
+  completionTimeout=setTimeout(()=>completion.reject(new Error("browser contract did not report completion")),110000);
+  assert.match(await completion.promise,/data-test-status="passed"/);
   assert.equal(state.posts,6,"settings mutations must not inherit automatic retry");
  }finally{
+  clearTimeout(completionTimeout);
   state.release?.();
   await run("systemctl",["--user","stop",unit],{timeout:10000}).catch(()=>{});
   await server?.close();await rm(profile,{recursive:true,force:true});

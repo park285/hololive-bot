@@ -402,8 +402,9 @@ func setupAlarmCommandTestRenderer(t *testing.T) *serviceTemplate.Renderer {
 	}
 
 	templates := map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdAlarmList:  "알람 목록\n{{range .Alarms}}{{.MemberName}}\n{{end}}",
-		domain.TemplateKeyCmdAlarmAdded: "알람 추가\n{{.MemberName}}",
+		domain.TemplateKeyCmdAlarmList:    "알람 목록\n{{range .Alarms}}{{.MemberName}}\n{{end}}",
+		domain.TemplateKeyCmdAlarmAdded:   "알람 추가\n{{.MemberName}}",
+		domain.TemplateKeyCmdAlarmRemoved: "알람 해지\n{{.MemberName}}",
 	}
 	for key, body := range templates {
 		if _, err := pool.Exec(t.Context(), `
