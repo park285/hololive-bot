@@ -83,7 +83,6 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/database/mocks
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/delivery
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/holodex/provider
-github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/kakaoroom
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/member
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/messagestrings
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/notification/alarmservice
