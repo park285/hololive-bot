@@ -74,6 +74,10 @@ if [[ -z "${permission_fn}" ]]; then
 elif (
   sudo() {
     [[ "${1:-}" != "-n" ]] || shift
+    # 운영 AP의 구형 coreutils에서도 실행 가능한 명령이어야 합니다.
+    if [[ "${1:-}" == chmod && " $* " == *" -P "* ]]; then
+      return 1
+    fi
     command "$@"
   }
 
@@ -88,14 +92,15 @@ elif (
   chmod 0600 "${normal}/internal/domain/data/member.json" \
     "${normal}/youtubejs/src/server.mjs" "${external}/sentinel"
   ln -s "${external}" "${normal}/youtubejs/external-link"
+  ln -s "${external}/sentinel" "${normal}/youtubejs/external-file"
 
   eval "${permission_fn}"
-  normalize_runtime_payload_permissions "${normal}"
-  [[ "$(stat -c '%a' "${normal}/internal")" == 755 ]]
-  [[ "$(stat -c '%a' "${normal}/internal/domain")" == 755 ]]
-  [[ "$(stat -c '%a' "${normal}/internal/domain/data/member.json")" == 644 ]]
-  [[ "$(stat -c '%a' "${normal}/youtubejs/src/server.mjs")" == 644 ]]
-  [[ "$(stat -c '%a' "${external}/sentinel")" == 600 ]]
+  normalize_runtime_payload_permissions "${normal}" || exit 1
+  [[ "$(stat -c '%a' "${normal}/internal")" == 755 ]] || exit 1
+  [[ "$(stat -c '%a' "${normal}/internal/domain")" == 755 ]] || exit 1
+  [[ "$(stat -c '%a' "${normal}/internal/domain/data/member.json")" == 644 ]] || exit 1
+  [[ "$(stat -c '%a' "${normal}/youtubejs/src/server.mjs")" == 644 ]] || exit 1
+  [[ "$(stat -c '%a' "${external}/sentinel")" == 600 ]] || exit 1
 
   bad="${permission_fixture}/bad"
   mkdir -p "${bad}/internal/domain/data"
