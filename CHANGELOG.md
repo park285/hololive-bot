@@ -8,6 +8,14 @@
 
 ## 미출시
 
+## v3.5.2 - 2026-09-07
+
+### 수정
+
+- 알림 전송을 일반 텍스트 경로로 맞추고 shared-go v2.5.2로 URL·코드 원문을 보존합니다.
+- fanout claim의 pending partial index 조건을 명시하고 generic/custom plan·잠금 행 회귀를 검증합니다.
+- API와 alarm-worker artifact 버전을 3.2.1로 올리고 동일 source revision으로 빌드합니다.
+
 ## v3.5.1 - 2026-09-04
 
 ### 수정
