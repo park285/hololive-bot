@@ -70,10 +70,6 @@ func Start(ctx context.Context, config *Config) (*Helper, *RPC, error) {
 		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
 	}
 
-	if err := verifyHelperSocket(socketPath); err != nil {
-		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
-	}
-
 	rpc := helper.attachRPC(&cfg)
 	if err := helper.bootstrapReady(startCtx, &cfg); err != nil {
 		return nil, nil, fmt.Errorf("fail start: %w", failStart(ctx, helper, err))
@@ -231,19 +227,43 @@ func (h *Helper) waitForSocketEvent(ctx context.Context, tick <-chan time.Time) 
 	case <-h.waited:
 		return false, fmt.Errorf("helper exited before ready: %w", helperExitedBeforeReady(h.waitErr))
 	case <-tick:
-		out, err := helperSocketReadyResult(h.socketPath)
+		out, err := helperSocketReadyResult(ctx, h.socketPath)
 
 		return out, errors.Join(err)
 	}
 }
 
-func helperSocketReadyResult(socketPath string) (bool, error) {
+func helperSocketReadyResult(ctx context.Context, socketPath string) (bool, error) {
 	out, err := helperSocketReady(socketPath)
 	if err != nil {
 		return out, fmt.Errorf("helper socket ready: %w", err)
 	}
 
-	return out, nil
+	if !out {
+		return false, nil
+	}
+
+	if socketErr := verifyHelperSocket(socketPath); socketErr != nil {
+		return false, fmt.Errorf("verify helper socket: %w", socketErr)
+	}
+
+	// 소켓 파일은 bind 직후 생기므로 listen을 확인한 뒤 bootstrap을 한 번만 보낸다.
+	dialer := net.Dialer{}
+
+	conn, err := dialer.DialContext(ctx, "unix", socketPath)
+	if err != nil {
+		if helperStarting(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("connect helper socket: %w", err)
+	}
+
+	if closeErr := conn.Close(); closeErr != nil {
+		return false, fmt.Errorf("close helper socket probe: %w", closeErr)
+	}
+
+	return true, nil
 }
 
 func helperSocketReady(socketPath string) (bool, error) {

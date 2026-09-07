@@ -33,16 +33,6 @@ type youtubeOutboxKaringCapableSender interface {
 	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
 }
 
-type workerappTestRooms map[string]string
-
-func (rooms workerappTestRooms) OpenChat(_ context.Context, roomID string) bool {
-	return rooms[roomID] == workerappTestOpenRoom
-}
-
-func (rooms workerappTestRooms) RegularChat(_ context.Context, roomID string) bool {
-	return rooms[roomID] == "regular"
-}
-
 type clientRequestIDRecordingIrisSender struct {
 	roomID          string
 	message         string
@@ -116,36 +106,38 @@ func (workerappEgressTestPostgres) Close() error {
 	return nil
 }
 
-func TestBuildYouTubeOutboxSenderScopesKaringToRegularChats(t *testing.T) {
-	irisSender := egress.NewIrisMessageSender(nil, egress.WithRoomChat(workerappTestRooms{
-		"regular":             "regular",
-		workerappTestOpenRoom: workerappTestOpenRoom,
-	}))
+func TestBuildNotificationSenderDisablesKaring(t *testing.T) {
+	irisSender := buildNotificationSender(nil)
 
 	sender := buildYouTubeOutboxSender(irisSender, nil)
 
 	karing, ok := sender.(youtubeOutboxKaringCapableSender)
 	require.True(t, ok)
-	assert.True(t, karing.RegularChat(t.Context(), "regular"))
-	assert.False(t, karing.RegularChat(t.Context(), workerappTestOpenRoom))
-	assert.False(t, karing.RegularChat(t.Context(), "missing"))
+
+	for _, roomID := range []string{"regular", workerappTestOpenRoom, "missing"} {
+		assert.False(t, irisSender.RegularChat(t.Context(), roomID))
+		assert.False(t, karing.RegularChat(t.Context(), roomID))
+	}
 }
 
-func TestBuildYouTubeOutboxSenderPreservesOpenChatMarkdownLane(t *testing.T) {
-	stub := &clientRequestIDRecordingIrisSender{}
-	irisSender := egress.NewIrisMessageSender(
-		stub,
-		egress.WithMarkdownReplies(true),
-		egress.WithRoomChat(workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom}),
-	)
-	sender := buildYouTubeOutboxSender(irisSender, nil)
+func TestBuildNotificationSenderUsesPlainTextForAllRooms(t *testing.T) {
+	for _, roomID := range []string{"regular", workerappTestOpenRoom, "missing"} {
+		t.Run(roomID, func(t *testing.T) {
+			stub := &clientRequestIDRecordingIrisSender{}
+			irisSender := buildNotificationSender(stub)
+			sender := buildYouTubeOutboxSender(irisSender, nil)
 
-	require.NoError(t, sender.SendMessage(t.Context(), workerappTestOpenRoom, "**hello**"))
+			require.NoError(t, sender.SendMessage(t.Context(), roomID, "**hello**"))
+			assert.Equal(t, roomID, stub.roomID)
+			assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", stub.message)
+			assert.Empty(t, stub.markdownRoomID)
 
-	assert.Equal(t, workerappTestOpenRoom, stub.markdownRoomID)
-	assert.Equal(t, "**hello**", stub.markdownMessage)
-	assert.Zero(t, stub.markdownOpts)
-	assert.Empty(t, stub.roomID)
+			require.NoError(t, irisSender.SendMessageWithClientRequestID(t.Context(), roomID, "**world**", "req-1"))
+			assert.Equal(t, "𝘄𝗼𝗿𝗹𝗱", stub.message)
+			assert.Equal(t, 1, stub.opts)
+			assert.Empty(t, stub.markdownRoomID)
+		})
+	}
 }
 
 func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t *testing.T) {

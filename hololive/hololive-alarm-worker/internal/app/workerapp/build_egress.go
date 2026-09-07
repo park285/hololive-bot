@@ -23,7 +23,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
-	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -53,12 +52,7 @@ func buildNotificationEgress(
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}
 
-	rooms := kakaoroom.New(infra.Postgres.GetPool(), kakaoroom.NewIrisLister(irisClient), logger)
-	irisSender := egress.NewIrisMessageSender(
-		irisClient,
-		egress.WithMarkdownReplies(appConfig.Bot.MarkdownReplies),
-		egress.WithRoomChat(rooms),
-	)
+	irisSender := buildNotificationSender(irisClient)
 
 	runners, err := buildEgressRunners(ctx, appConfig, infra, irisSender, logger, workerState)
 	if err != nil {
@@ -66,6 +60,11 @@ func buildNotificationEgress(
 	}
 
 	return workerruntime.NewNotificationEgressRunner(runners, logger), nil
+}
+
+func buildNotificationSender(client egress.IrisClient) *egress.IrisMessageSender {
+	// 알림은 일반 텍스트만 사용하므로 Karing eligibility와 Markdown 옵션을 연결하지 않습니다.
+	return egress.NewIrisMessageSender(client)
 }
 
 func buildEgressRunners(

@@ -19,11 +19,20 @@ The central runtime host is `hololive-osaka` (`aarch64`); builds, images, and te
 
 ## Verification Commands
 
+Choose checks relevant to the changed behavior; this list does not require every command. Documentation-only edits normally need diff inspection. Publish-time and explicitly required gates remain mandatory.
+
 ```bash
 ./build-all.sh --no-bump
 go build ./ ../shared-go/... ../iris-client-go/... ./admin-dashboard/backend/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
 go test ./ ../shared-go/... ../iris-client-go/... ./admin-dashboard/backend/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
 (cd hololive/hololive-youtube-collector/youtubejs && npm test)
+```
+
+## Runtime Commands
+
+Deployment changes runtime state and requires explicit authorization for its target and scope. Use `hololive-bot-ops` to select the local build and remote no-build procedure. The helper below builds before cutover and belongs on a build host, not a runtime host; it is not a validation command.
+
+```bash
 ./scripts/deploy/compose-redeploy-service.sh <service>
 ```
 

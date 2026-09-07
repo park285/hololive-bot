@@ -32,7 +32,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
 | `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` | `off`, `shadow`, `cutover`; v1 delivery rows를 v3 ledger로 넘기는 모드 | no; default `off` |
-| `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 기존 Markdown message lane | no |
+| `BOT_MARKDOWN_REPLIES` | alarm-worker 알림에서는 사용하지 않음; 일반 텍스트로 고정 | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
 | `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
 | `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
@@ -42,25 +42,24 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 
 ## Notification egress
 
-Alarm-worker는 방 유형과 알림 compatibility를 모두 확인한 뒤 전송 경로를 선택합니다.
+Alarm-worker는 모든 방의 알림을 일반 텍스트로 전송합니다. Runtime 전송기에 방 유형 resolver와 Markdown 옵션을 연결하지 않아 Karing eligibility와 Markdown lane을 비활성화합니다.
 
 | Room / notification | Egress |
 |---|---|
-| 확인된 일반채팅 + YouTube target이 있는 broadcast/video/Shorts/community | Karing content-list |
-| 확인된 일반채팅 + YouTube와 Chzzk 통합 방송 | YouTube target의 Karing content-list |
-| 오픈채팅 | `BOT_MARKDOWN_REPLIES=true`이면 기존 Markdown, 아니면 일반 텍스트 |
+| 일반채팅의 broadcast/video/Shorts/community 및 통합 방송 | 일반 텍스트 |
+| 오픈채팅 | 일반 텍스트 |
 | 방 유형 미확인 | 일반 텍스트 |
-| Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 방 유형에 따른 기존 message path |
+| Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 일반 텍스트 |
 
-일반 텍스트는 `kakaoformat.Render`를 거칩니다. 지원되는 Karing 알림의 build, admission 또는 handoff가 실패해도 Markdown이나 일반 텍스트로 fallback하지 않습니다. 오픈채팅과 미확인 방은 Karing 호출 전에 message path로 결정되므로 fallback이 아닙니다.
+일반 텍스트는 `kakaoformat.Render`를 거칩니다. 기존 제목과 링크를 텍스트로 렌더링하며, `BOT_MARKDOWN_REPLIES` 값과 관계없이 같은 전송 경로를 사용합니다. Karing 구현과 handoff 검증 코드는 남아 있지만 runtime 알림 경로에서는 선택되지 않습니다.
 
-Karing live send의 `202 Accepted`는 성공이 아닙니다. Alarm-worker는 응답의 exact `requestId`로 Iris `/reply-status/{requestId}`를 조회하고 `handoff_completed`를 확인한 뒤에만 dispatch/outbox를 성공 처리합니다. `failed`는 확정 실패이고 `outcome_unknown`, 알 수 없는 상태, request ID 불일치, 빈 응답과 확인 deadline 소진은 결과 불명확입니다. 결과 불명확 상태는 alarm dispatch에서 quarantine되고 YouTube outbox에서는 `SENDING`으로 남아 stale sweeper가 처리하며 다시 post하지 않습니다.
+이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다.
 
 `YOUTUBE_OUTBOX_KARING_ENABLED`와 `ALARM_DISPATCH_KARING_ENABLED`는 퇴역했습니다. 값이 비어 있어도 runtime file에 key가 존재하면 startup이 실패합니다. `ALARM_SHORT_LINK_BASE_URL`은 기존 grouped message path를 위해 유지되며, `hololive-api`의 `127.0.0.1:30101` listener와 중앙·Seoul ingress도 계속 유지합니다.
 
 `ALARM_SHORT_LINK_BASE_URL=https://short.holoshi.com`을 사용하면 두 개 이상의 message-path 방송 알림에서 YouTube URL만 `/l/<videoID>`로 바뀝니다. Provider-first로 listener, 중앙 ingress, Seoul public route와 `scripts/deploy/shortlink-smoke.sh`를 검증한 뒤 consumer를 재기동합니다.
 
-승인된 production 전환은 alarm-worker 중지, static-secret master와 host runtime file의 두 퇴역 flag 제거, exact arm64 artifact의 no-build deploy, replica 1/readiness 확인 순서로 수행합니다. 실제 Karing smoke는 명시적으로 승인된 일반채팅 test room에만 보내고 `handoff_completed`와 lifecycle 단일 완료를 함께 확인합니다. 오픈채팅 test room에서는 기존 Markdown lane이 유지되는지도 별도 승인 아래 확인합니다.
+Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-build deploy와 replica 1/readiness 확인으로 수행합니다. 실제 메시지 smoke는 별도로 승인된 test room에서 일반 텍스트 수신과 lifecycle 단일 완료를 확인합니다.
 
 ## Logs
 

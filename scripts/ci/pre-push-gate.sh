@@ -43,7 +43,10 @@ if [[ "${phase}" != "--phase=fingerprint" && -z "${PRE_PUSH_GATE_SCOPED:-}" ]] \
   && systemd-run --user --scope --quiet -p MemoryHigh=1G true >/dev/null 2>&1; then
   echo "[pre-push] memory scope: MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G} MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}"
   export PRE_PUSH_GATE_SCOPED=1
+  # 부모 cgroup을 벗어나는 scope에도 종료 상한을 두어 기동 fixture를 회수한다.
   exec systemd-run --user --scope --quiet \
+    -p RuntimeMaxSec=2h \
+    -p KillMode=control-group \
     -p "MemoryHigh=${PRE_PUSH_MEMORY_HIGH:-24G}" \
     -p "MemoryMax=${PRE_PUSH_MEMORY_MAX:-32G}" \
     "${SCRIPT_DIR}/pre-push-gate.sh" "$@"
