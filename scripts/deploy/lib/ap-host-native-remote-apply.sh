@@ -34,7 +34,9 @@ normalize_runtime_payload_permissions() {
 
   # 서비스 계정은 root 소유 release의 정적 데이터와 helper graph를 읽고 순회할 수 있어야 한다.
   sudo -n chmod a+rx -- "$root/internal" "$root/internal/domain" || return
-  sudo -n chmod -R -P a+rX -- "$root/internal/domain/data" "$root/youtubejs"
+  # AP 호스트의 chmod는 -P를 지원하지 않으므로 find가 링크를 제외하고 순회합니다.
+  sudo -n find -P "$root/internal/domain/data" "$root/youtubejs" \
+    \( -type d -o -type f \) -exec chmod a+rX -- {} +
 }
 
 test -r "$release_path_lib"
