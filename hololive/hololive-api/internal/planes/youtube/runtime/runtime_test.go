@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -78,103 +79,107 @@ func TestBuildFailsClosedOnUnexpectedDatabaseRole(t *testing.T) {
 }
 
 func TestShutdownStopsClaimAndJoinsWorkers(t *testing.T) {
-	entered := make(chan struct{})
-	release := make(chan struct{})
+	synctest.Test(t, func(t *testing.T) {
+		entered := make(chan struct{})
+		release := make(chan struct{})
 
-	var claims atomic.Int64
+		var claims atomic.Int64
 
-	runtime := newTestRuntime(fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			claims.Add(1)
+		runtime := newTestRuntime(fakeClaimer{
+			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+				claims.Add(1)
 
-			return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
-				ObservationID:   7,
-				LeaseToken:      strings.Repeat("ab", 32),
-				ObservationKind: contract.KindCommunityPage,
-				SubjectKey:      "UC_TEST",
-			}}}, nil
-		},
-	}, fakeConsumer{
-		consume: func(context.Context, sourceobservation.Claim) error {
-			select {
-			case <-entered:
-			default:
-				close(entered)
-			}
+				return sourceobservation.ClaimedBatch{Claims: []sourceobservation.ClaimWork{{
+					ObservationID:   7,
+					LeaseToken:      strings.Repeat("ab", 32),
+					ObservationKind: contract.KindCommunityPage,
+					SubjectKey:      "UC_TEST",
+				}}}, nil
+			},
+		}, fakeConsumer{
+			consume: func(context.Context, sourceobservation.Claim) error {
+				select {
+				case <-entered:
+				default:
+					close(entered)
+				}
 
-			<-release
+				<-release
 
-			return nil
-		},
-	})
+				return nil
+			},
+		})
 
-	ctx := t.Context()
-	runtime.Start(ctx, make(chan error, 1))
+		ctx := t.Context()
+		runtime.Start(ctx, make(chan error, 1))
 
-	awaitSignal(t, entered, "worker did not start consume")
+		awaitSignal(t, entered, "worker did not start consume")
 
-	done := shutdownAsync(t, runtime)
+		done := shutdownAsync(t, runtime)
 
-	select {
-	case err := <-done:
-		t.Fatalf("shutdown returned before worker joined: %v", err)
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	held := claims.Load()
-
-	time.Sleep(30 * time.Millisecond)
-
-	if claims.Load() != held {
-		t.Fatalf("claim continued after shutdown: before=%d after=%d", held, claims.Load())
-	}
-
-	close(release)
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("shutdown: %v", err)
+		select {
+		case err := <-done:
+			t.Fatalf("shutdown returned before worker joined: %v", err)
+		case <-time.After(50 * time.Millisecond):
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("shutdown did not join workers")
-	}
 
-	if runtime.Ready() {
-		t.Fatal("runtime stayed ready after shutdown")
-	}
+		held := claims.Load()
+
+		synctest.Sleep(30 * time.Millisecond)
+
+		if claims.Load() != held {
+			t.Fatalf("claim continued after shutdown: before=%d after=%d", held, claims.Load())
+		}
+
+		close(release)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("shutdown: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("shutdown did not join workers")
+		}
+
+		if runtime.Ready() {
+			t.Fatal("runtime stayed ready after shutdown")
+		}
+	})
 }
 
 func TestFirstClaimTickTransientErrorDoesNotKillProcess(t *testing.T) {
-	var attempts atomic.Int64
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int64
 
-	errCh := make(chan error, 1)
-	runtime := newTestRuntime(fakeClaimer{
-		claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
-			if attempts.Add(1) == 1 {
-				return sourceobservation.ClaimedBatch{}, &pgconn.PgError{Code: "40001", Message: "serialization failure"}
-			}
+		errCh := make(chan error, 1)
+		runtime := newTestRuntime(fakeClaimer{
+			claim: func(context.Context, sourceobservation.ClaimOptions) (sourceobservation.ClaimedBatch, error) {
+				if attempts.Add(1) == 1 {
+					return sourceobservation.ClaimedBatch{}, &pgconn.PgError{Code: "40001", Message: "serialization failure"}
+				}
 
-			return sourceobservation.ClaimedBatch{}, nil
-		},
-	}, fakeConsumer{})
-	ctx := t.Context()
-	runtime.Start(ctx, errCh)
-	time.Sleep(80 * time.Millisecond)
+				return sourceobservation.ClaimedBatch{}, nil
+			},
+		}, fakeConsumer{})
+		ctx := t.Context()
+		runtime.Start(ctx, errCh)
+		synctest.Sleep(80 * time.Millisecond)
 
-	select {
-	case err := <-errCh:
-		t.Fatalf("transient first claim killed the process: %v", err)
-	default:
-	}
+		select {
+		case err := <-errCh:
+			t.Fatalf("transient first claim killed the process: %v", err)
+		default:
+		}
 
-	if attempts.Load() < 2 {
-		t.Fatalf("claim loop stopped after transient error: attempts=%d", attempts.Load())
-	}
+		if attempts.Load() < 2 {
+			t.Fatalf("claim loop stopped after transient error: attempts=%d", attempts.Load())
+		}
 
-	if err := runtime.Shutdown(t.Context()); err != nil {
-		t.Fatalf("shutdown: %v", err)
-	}
+		if err := runtime.Shutdown(t.Context()); err != nil {
+			t.Fatalf("shutdown: %v", err)
+		}
+	})
 }
 
 func TestUnknownClaimErrorFailsSupervisor(t *testing.T) {

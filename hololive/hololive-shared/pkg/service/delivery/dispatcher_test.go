@@ -31,6 +31,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -453,46 +454,48 @@ func TestProcessOnce_QuarantinesStaleSendingBeforeFetch(t *testing.T) {
 }
 
 func TestDispatcher_ContextCancel_StopsGoroutine(t *testing.T) {
-	var fetchCount atomic.Int32
+	synctest.Test(t, func(t *testing.T) {
+		var fetchCount atomic.Int32
 
-	repository := &mockDeliveryRepository{
-		fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
-			fetchCount.Add(1)
+		repository := &mockDeliveryRepository{
+			fetchAndLockFn: func(_ context.Context, _ string, _ int, _, _ time.Duration) ([]domain.NotificationDeliveryOutbox, error) {
+				fetchCount.Add(1)
 
-			return nil, nil
-		},
-	}
+				return nil, nil
+			},
+		}
 
-	sender := &mockSender{}
+		sender := &mockSender{}
 
-	config := DefaultDispatcherConfig()
+		config := DefaultDispatcherConfig()
 
-	config.PollInterval = 10 * time.Millisecond
+		config.PollInterval = 10 * time.Millisecond
 
-	ctx, cancel := context.WithCancel(t.Context())
-	d := NewDispatcher(repository, sender, dispatcherLogger(), &config)
-	d.Start(ctx)
+		ctx, cancel := context.WithCancel(t.Context())
+		d := NewDispatcher(repository, sender, dispatcherLogger(), &config)
+		d.Start(ctx)
 
-	// 초기 실행 + ticker 몇 회 대기
-	time.Sleep(50 * time.Millisecond)
-	cancel()
+		// 초기 실행 + ticker 몇 회 대기
+		synctest.Sleep(50 * time.Millisecond)
+		cancel()
 
-	// cancel 후 count 고정 확인
-	time.Sleep(30 * time.Millisecond)
+		// cancel 후 count 고정 확인
+		synctest.Sleep(30 * time.Millisecond)
 
-	countAfterCancel := fetchCount.Load()
+		countAfterCancel := fetchCount.Load()
 
-	time.Sleep(30 * time.Millisecond)
+		synctest.Sleep(30 * time.Millisecond)
 
-	countFinal := fetchCount.Load()
+		countFinal := fetchCount.Load()
 
-	if countFinal != countAfterCancel {
-		t.Fatalf("goroutine leaked: count grew from %d to %d after cancel", countAfterCancel, countFinal)
-	}
+		if countFinal != countAfterCancel {
+			t.Fatalf("goroutine leaked: count grew from %d to %d after cancel", countAfterCancel, countFinal)
+		}
 
-	if countAfterCancel == 0 {
-		t.Fatal("expected at least 1 fetch call")
-	}
+		if countAfterCancel == 0 {
+			t.Fatal("expected at least 1 fetch call")
+		}
+	})
 }
 
 func TestDispatcher_RunFetchesOnPeriodicTickAndStopsOnCancel(t *testing.T) {

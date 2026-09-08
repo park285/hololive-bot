@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,38 @@ func TestNewPprofServerRequiresAPIKey(t *testing.T) {
 
 	if okRecorder.Code != http.StatusOK {
 		t.Fatalf("valid key status = %d, want %d", okRecorder.Code, http.StatusOK)
+	}
+}
+
+func TestNewPprofServerServesGoroutineLeakWithAPIKey(t *testing.T) {
+	server := NewPprofServer(t.Context(), testLoopbackAddr, "leak-profile-test-key")
+
+	const path = "/debug/pprof/goroutineleak?debug=1"
+
+	for _, key := range []string{"", "wrong-key", "leak-profile-test-key"} {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
+		req.Header.Set(common.APIKeyHeader, key)
+
+		rec := httptest.NewRecorder()
+		server.Handler.ServeHTTP(rec, req)
+
+		if key != "leak-profile-test-key" {
+			want := http.StatusForbidden
+
+			if key == "" {
+				want = http.StatusUnauthorized
+			}
+
+			if rec.Code != want {
+				t.Fatalf("invalid key status = %d, want %d", rec.Code, want)
+			}
+
+			continue
+		}
+
+		if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Body.String(), "goroutineleak profile: total ") {
+			t.Fatalf("goroutineleak response status = %d, want 200 and a leak profile", rec.Code)
+		}
 	}
 }
 

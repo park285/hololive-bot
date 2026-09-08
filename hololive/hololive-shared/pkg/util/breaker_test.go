@@ -3,6 +3,7 @@ package util
 import (
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -82,22 +83,30 @@ func TestBreaker_RecordSuccess_DoesNotCloseOpenBreaker(t *testing.T) {
 }
 
 func TestBreaker_AutoResetAfterTimeout(t *testing.T) {
-	b := newTestBreaker(1, 10*time.Millisecond)
-	b.RecordFailure()
+	synctest.Test(t, func(t *testing.T) {
+		b := newTestBreaker(1, 10*time.Millisecond)
+		b.RecordFailure()
 
-	if !b.IsOpen() {
-		t.Fatal("breaker should be open")
-	}
+		if !b.IsOpen() {
+			t.Fatal("breaker should be open")
+		}
 
-	time.Sleep(20 * time.Millisecond)
+		synctest.Sleep(10 * time.Millisecond)
 
-	if !b.Allow() {
-		t.Fatal("Allow() should return true after resetTimeout")
-	}
+		if b.Allow() {
+			t.Fatal("Allow() should remain false at resetTimeout")
+		}
 
-	if b.IsOpen() {
-		t.Fatal("breaker should be closed after reset")
-	}
+		synctest.Sleep(time.Nanosecond)
+
+		if !b.Allow() {
+			t.Fatal("Allow() should return true after resetTimeout")
+		}
+
+		if b.IsOpen() {
+			t.Fatal("breaker should be closed after reset")
+		}
+	})
 }
 
 func TestBreaker_RetryAfter(t *testing.T) {
@@ -210,73 +219,79 @@ func TestBreaker_RecordFailure_ConcurrentTransitionOpensOnce(t *testing.T) {
 }
 
 func TestBreaker_RecordFailure_OpenedAtFixedOnceOpen(t *testing.T) {
-	b := newTestBreaker(1, 30*time.Second)
-	b.RecordFailure()
+	synctest.Test(t, func(t *testing.T) {
+		b := newTestBreaker(1, 30*time.Second)
+		b.RecordFailure()
 
-	openedAt1 := b.openedAtTime()
-	if openedAt1.IsZero() {
-		t.Fatal("openedAt must be set after first open")
-	}
+		openedAt1 := b.openedAtTime()
+		if openedAt1.IsZero() {
+			t.Fatal("openedAt must be set after first open")
+		}
 
-	time.Sleep(2 * time.Millisecond)
+		synctest.Sleep(2 * time.Millisecond)
 
-	// open 상태에서 추가 RecordFailure → openedAt 갱신 금지
-	b.RecordFailure()
-	b.RecordFailure()
-	b.RecordFailure()
+		// open 상태에서 추가 RecordFailure → openedAt 갱신 금지
+		b.RecordFailure()
+		b.RecordFailure()
+		b.RecordFailure()
 
-	openedAt2 := b.openedAtTime()
-	if !openedAt1.Equal(openedAt2) {
-		t.Fatalf("openedAt must not change while circuit is open: before=%v after=%v", openedAt1, openedAt2)
-	}
+		openedAt2 := b.openedAtTime()
+		if !openedAt1.Equal(openedAt2) {
+			t.Fatalf("openedAt must not change while circuit is open: before=%v after=%v", openedAt1, openedAt2)
+		}
+	})
 }
 
 func TestBreaker_AfterReset_ThresholdRequiredAgain(t *testing.T) {
-	// M3 핵심: timeout 경과 후 reset → failures=0 → threshold 미달로 즉시 재open 없음
-	b := newTestBreaker(3, 10*time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		// M3 핵심: timeout 경과 후 reset → failures=0 → threshold 미달로 즉시 재open 없음
+		b := newTestBreaker(3, 10*time.Millisecond)
 
-	for range 3 {
+		for range 3 {
+			b.RecordFailure()
+		}
+
+		if !b.IsOpen() {
+			t.Fatal("should be open after threshold failures")
+		}
+
+		synctest.Sleep(20 * time.Millisecond)
+
+		// Allow()로 reset
+		if !b.Allow() {
+			t.Fatal("Allow() should return true after resetTimeout")
+		}
+
+		// reset 후 단 1회 실패로는 열리지 않아야 함
 		b.RecordFailure()
-	}
 
-	if !b.IsOpen() {
-		t.Fatal("should be open after threshold failures")
-	}
-
-	time.Sleep(20 * time.Millisecond)
-
-	// Allow()로 reset
-	if !b.Allow() {
-		t.Fatal("Allow() should return true after resetTimeout")
-	}
-
-	// reset 후 단 1회 실패로는 열리지 않아야 함
-	b.RecordFailure()
-
-	if b.IsOpen() {
-		t.Fatal("single failure after reset must not re-open (threshold=3)")
-	}
+		if b.IsOpen() {
+			t.Fatal("single failure after reset must not re-open (threshold=3)")
+		}
+	})
 }
 
 func TestBreaker_AllowResetsOnTimeout(t *testing.T) {
-	b := newTestBreaker(1, 10*time.Millisecond)
-	b.RecordFailure()
+	synctest.Test(t, func(t *testing.T) {
+		b := newTestBreaker(1, 10*time.Millisecond)
+		b.RecordFailure()
 
-	// open 상태
-	if b.Allow() {
-		t.Fatal("Allow() should be false immediately after open")
-	}
+		// open 상태
+		if b.Allow() {
+			t.Fatal("Allow() should be false immediately after open")
+		}
 
-	// resetTimeout 경과
-	time.Sleep(20 * time.Millisecond)
+		// resetTimeout 경과
+		synctest.Sleep(20 * time.Millisecond)
 
-	// Allow()가 reset 트리거 후 true를 반환해야 함
-	if !b.Allow() {
-		t.Fatal("Allow() should return true after resetTimeout elapsed")
-	}
+		// Allow()가 reset 트리거 후 true를 반환해야 함
+		if !b.Allow() {
+			t.Fatal("Allow() should return true after resetTimeout elapsed")
+		}
 
-	// Allow() 호출로 reset됐으므로 closed 상태여야 함
-	if b.IsOpen() {
-		t.Fatal("breaker should be closed after Allow() triggered reset")
-	}
+		// Allow() 호출로 reset됐으므로 closed 상태여야 함
+		if b.IsOpen() {
+			t.Fatal("breaker should be closed after Allow() triggered reset")
+		}
+	})
 }
