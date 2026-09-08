@@ -1,0 +1,6 @@
+# 승인된 관리 gateway를 연결할 때만 선택하는 overlay입니다.
+# 기존 loopback TCP/UDP publish는 유지하고 중앙 호스트의 Tailscale H3 주소만 추가합니다.
+services:
+  hololive-api:
+    ports:
+      - "${HOLOLIVE_ADMIN_API_PORT_BIND_IP:?HOLOLIVE_ADMIN_API_PORT_BIND_IP must be the approved central Tailscale address}:30006:30006/udp"
