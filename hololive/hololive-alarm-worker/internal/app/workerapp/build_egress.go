@@ -23,6 +23,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
+	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 )
@@ -52,7 +53,8 @@ func buildNotificationEgress(
 		return nil, fmt.Errorf("init alarm-worker notification egress iris client: %w", err)
 	}
 
-	irisSender := buildNotificationSender(irisClient)
+	rooms := kakaoroom.New(infra.Postgres.GetPool(), kakaoroom.NewIrisLister(irisClient), logger)
+	irisSender := buildNotificationSender(irisClient, appConfig.Bot.MarkdownReplies, rooms)
 
 	runners, err := buildEgressRunners(ctx, appConfig, infra, irisSender, logger, workerState)
 	if err != nil {
@@ -62,9 +64,13 @@ func buildNotificationEgress(
 	return workerruntime.NewNotificationEgressRunner(runners, logger), nil
 }
 
-func buildNotificationSender(client egress.IrisClient) *egress.IrisMessageSender {
-	// 알림은 일반 텍스트만 사용하므로 Karing eligibility와 Markdown 옵션을 연결하지 않습니다.
-	return egress.NewIrisMessageSender(client)
+func buildNotificationSender(client egress.IrisClient, markdownReplies bool, rooms egress.OpenChat) *egress.IrisMessageSender {
+	// runtime 알림은 오픈채팅 Markdown만 방 정본을 사용하며, 일반채팅 resolver를 연결하지 않아 Karing eligibility를 노출하지 않습니다.
+	return egress.NewIrisMessageSender(
+		client,
+		egress.WithMarkdownReplies(markdownReplies),
+		egress.WithMarkdownRoomChat(rooms),
+	)
 }
 
 func buildEgressRunners(

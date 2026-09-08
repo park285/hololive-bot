@@ -2,7 +2,11 @@ package workerapp
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +31,12 @@ import (
 var _ egress.IrisClient = (*delivery.RuntimeIrisClient)(nil)
 
 const workerappTestOpenRoom = "open"
+
+type workerappTestRooms map[string]string
+
+func (rooms workerappTestRooms) OpenChat(_ context.Context, roomID string) bool {
+	return rooms[roomID] == workerappTestOpenRoom
+}
 
 type youtubeOutboxKaringCapableSender interface {
 	RegularChat(ctx context.Context, roomID string) bool
@@ -107,7 +117,7 @@ func (workerappEgressTestPostgres) Close() error {
 }
 
 func TestBuildNotificationSenderDisablesKaring(t *testing.T) {
-	irisSender := buildNotificationSender(nil)
+	irisSender := buildNotificationSender(nil, true, workerappTestRooms{"regular": "regular"})
 
 	sender := buildYouTubeOutboxSender(irisSender, nil)
 
@@ -120,24 +130,68 @@ func TestBuildNotificationSenderDisablesKaring(t *testing.T) {
 	}
 }
 
-func TestBuildNotificationSenderUsesPlainTextForAllRooms(t *testing.T) {
+func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 	for _, roomID := range []string{"regular", workerappTestOpenRoom, "missing"} {
 		t.Run(roomID, func(t *testing.T) {
 			stub := &clientRequestIDRecordingIrisSender{}
-			irisSender := buildNotificationSender(stub)
+			irisSender := buildNotificationSender(stub, true, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
 			sender := buildYouTubeOutboxSender(irisSender, nil)
 
-			require.NoError(t, sender.SendMessage(t.Context(), roomID, "**hello**"))
-			assert.Equal(t, roomID, stub.roomID)
-			assert.Equal(t, "𝗵𝗲𝗹𝗹𝗼", stub.message)
-			assert.Empty(t, stub.markdownRoomID)
+			require.NoError(t, sender.SendMessage(t.Context(), roomID, "[title](https://example.com/video)"))
+			if roomID == workerappTestOpenRoom {
+				assert.Equal(t, roomID, stub.markdownRoomID)
+				assert.Equal(t, "[title](https://example.com/video)", stub.markdownMessage)
+				assert.Empty(t, stub.roomID)
+			} else {
+				assert.Equal(t, roomID, stub.roomID)
+				assert.Equal(t, "title( https://example.com/video )", stub.message)
+				assert.Empty(t, stub.markdownRoomID)
+			}
 
 			require.NoError(t, irisSender.SendMessageWithClientRequestID(t.Context(), roomID, "**world**", "req-1"))
-			assert.Equal(t, "𝘄𝗼𝗿𝗹𝗱", stub.message)
-			assert.Equal(t, 1, stub.opts)
-			assert.Empty(t, stub.markdownRoomID)
+			if roomID == workerappTestOpenRoom {
+				assert.Equal(t, roomID, stub.markdownRoomID)
+				assert.Equal(t, "**world**", stub.markdownMessage)
+				assert.Equal(t, 1, stub.markdownOpts)
+			} else {
+				assert.Equal(t, "𝘄𝗼𝗿𝗹𝗱", stub.message)
+				assert.Equal(t, 1, stub.opts)
+				assert.Empty(t, stub.markdownRoomID)
+			}
 		})
 	}
+}
+
+func TestBuildNotificationSenderDisablesMarkdownWhenConfigured(t *testing.T) {
+	stub := &clientRequestIDRecordingIrisSender{}
+	irisSender := buildNotificationSender(stub, false, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
+
+	require.NoError(t, irisSender.SendMessage(t.Context(), workerappTestOpenRoom, "[title](https://example.com/video)"))
+
+	assert.Equal(t, "title( https://example.com/video )", stub.message)
+	assert.Empty(t, stub.markdownRoomID)
+}
+
+func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
+	var requestBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+			return
+		}
+		requestBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"success":true,"delivery":"queued","requestId":"reply-1"}`)
+	}))
+	defer server.Close()
+
+	client := iris.NewAPIClient(server.URL, "test-token", iris.WithTransport("http1"), iris.WithHTTPClient(server.Client()))
+	sender := buildNotificationSender(client, true, workerappTestRooms{workerappTestOpenRoom: workerappTestOpenRoom})
+	clientRequestID := "hololive-alarm:request-123"
+
+	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), workerappTestOpenRoom, "[title](https://example.com/video)", clientRequestID))
+	assert.True(t, strings.Contains(requestBody, `"clientRequestId":"hololive-alarm:request-123"`))
 }
 
 func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t *testing.T) {

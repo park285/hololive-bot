@@ -204,6 +204,19 @@ func TestIrisMessageSenderRegularChatRequiresPositiveRoomFact(t *testing.T) {
 	assert.False(t, sender.RegularChat(t.Context(), "missing-room"))
 }
 
+func TestIrisMessageSenderMarkdownOnlyRoomResolverDoesNotEnableKaring(t *testing.T) {
+	rooms := staticRooms{"regular-room": "regular"}
+	assert.True(t, rooms.RegularChat(t.Context(), "regular-room"))
+
+	sender := NewIrisMessageSender(
+		&irisSenderTestClient{},
+		WithMarkdownReplies(true),
+		WithMarkdownRoomChat(rooms),
+	)
+
+	assert.False(t, sender.RegularChat(t.Context(), "regular-room"))
+}
+
 func TestIrisMessageSenderPlainTextPropagatesClientRequestID(t *testing.T) {
 	client := &irisSenderTestClient{}
 	sender := NewIrisMessageSender(client)

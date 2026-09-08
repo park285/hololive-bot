@@ -28,6 +28,11 @@ type IrisClient interface {
 	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
 }
 
+// OpenChat은 Markdown lane을 결정하는 확인된 Kakao 오픈채팅 여부를 제공합니다.
+type OpenChat interface {
+	OpenChat(ctx context.Context, roomID string) bool
+}
+
 // RoomChat은 Karing과 Markdown lane을 결정하는 확인된 Kakao 방 유형을 제공합니다.
 type RoomChat interface {
 	OpenChat(ctx context.Context, roomID string) bool
@@ -38,6 +43,7 @@ type RoomChat interface {
 type IrisMessageSender struct {
 	client                   IrisClient
 	markdownReplies          bool
+	markdownRooms            OpenChat
 	rooms                    RoomChat
 	karingStatusPollInterval time.Duration
 }
@@ -52,9 +58,18 @@ func WithMarkdownReplies(enabled bool) IrisMessageSenderOption {
 	}
 }
 
-// WithRoomChat은 방 유형 정본을 sender에 연결합니다.
+// WithMarkdownRoomChat은 Markdown lane 판정에 사용할 오픈채팅 resolver만 연결합니다.
+// 일반채팅 resolver를 노출하지 않아 이 옵션만으로는 Karing eligibility가 활성화되지 않습니다.
+func WithMarkdownRoomChat(rooms OpenChat) IrisMessageSenderOption {
+	return func(sender *IrisMessageSender) {
+		sender.markdownRooms = rooms
+	}
+}
+
+// WithRoomChat은 방 유형 정본을 sender의 Markdown 및 Karing 판정에 연결합니다.
 func WithRoomChat(rooms RoomChat) IrisMessageSenderOption {
 	return func(sender *IrisMessageSender) {
+		sender.markdownRooms = rooms
 		sender.rooms = rooms
 	}
 }
@@ -93,7 +108,7 @@ func (s *IrisMessageSender) send(ctx context.Context, roomID, message string, op
 }
 
 func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool {
-	return s != nil && s.markdownReplies && s.rooms != nil && s.rooms.OpenChat(ctx, roomID)
+	return s != nil && s.markdownReplies && s.markdownRooms != nil && s.markdownRooms.OpenChat(ctx, roomID)
 }
 
 // RegularChat은 room facts로 확인된 일반채팅인지 반환합니다.
