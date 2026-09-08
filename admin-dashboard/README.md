@@ -49,14 +49,19 @@ make build
 | `ENABLE_OPENAPI` | 인증 뒤 OpenAPI JSON 노출 여부 | production에서는 기본 `false` |
 | `ENABLE_SWAGGER_UI` | 인증 뒤 docs page 노출 여부 | production에서는 기본 `false` |
 | `ADMIN_USER` | 관리자 계정명 | `admin` |
-| `ADMIN_PASS_HASH` | bcrypt 비밀번호 해시 | 필수 |
-| `SESSION_SECRET` | 세션/HMAC/CSRF 시크릿 | 필수 |
+| `ADMIN_PASS_HASH` | cost 10 이상인 bcrypt 비밀번호 해시 | 필수 |
+| `SESSION_SECRET` | 세션/HMAC/CSRF 시크릿(운영 진입점은 32바이트 이상) | 필수 |
 | `ALLOWED_ORIGINS` | 허용 Origin 목록 | development는 localhost fallback, production은 non-localhost 값 명시 필요 |
 | `ALLOW_LOCALHOST_IN_PROD` | production에서 localhost Origin을 명시적으로 허용 | `false` |
-| `CSRF_MODE` | `enforce`/`monitor`/`off` | `enforce` |
-| `WS_ORIGIN_MODE` | WebSocket Origin 검증 모드 | `enforce` |
+| `CSRF_MODE` | `enforce`/`monitor`/`off`. production은 `enforce`만 허용합니다. | `enforce` |
+| `WS_ORIGIN_MODE` | WebSocket Origin 검증 모드. production은 `enforce`만 허용합니다. | `enforce` |
 | `FORCE_HTTPS` | Secure cookie/HSTS 강제 | `true` |
 | `TRUST_FORWARDED_HEADERS` | rate limit IP 산정 시 forwarded header 신뢰 | `false` |
+
+10분 유휴 경고와 종료 신호는 브라우저가 관찰한 사용자 활동을 기준으로 합니다. 서버는
+`idle=true` heartbeat를 받으면 세션 TTL을 단축하며, 이와 별도로 30분 세션 TTL과 최초
+로그인 기준 8시간 절대 만료를 강제합니다. 따라서 10분 정책을 서버가 독립적으로 관찰한
+무요청 만료로 해석하지 않습니다.
 
 ## 프런트
 

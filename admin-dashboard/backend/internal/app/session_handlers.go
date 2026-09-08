@@ -31,6 +31,7 @@ func (r *Runtime) handleLogin(c *gin.Context) {
 
 	if err := httpx.DecodeJSON(c.Request, &body, 16<<10); err != nil {
 		httpx.Abort(c, httpx.BadRequest("invalid login payload"))
+		r.auditLogin(c, "invalid", http.StatusBadRequest)
 
 		return
 	}
@@ -40,13 +41,37 @@ func (r *Runtime) handleLogin(c *gin.Context) {
 		return
 	}
 
-	if !r.loginCredentialsMatch(body) {
+	if !r.acquireLoginHashSlot(c) {
+		return
+	}
+
+	credentialsMatch := r.loginCredentialsMatch(body)
+	r.releaseLoginHashSlot()
+
+	if !credentialsMatch {
 		r.rejectLoginAttempt(c, ip)
 
 		return
 	}
 
 	r.completeLogin(c, ip)
+}
+
+func (r *Runtime) acquireLoginHashSlot(c *gin.Context) bool {
+	select {
+	case r.loginHashSlots <- struct{}{}:
+		return true
+	default:
+		retry := uint64(1)
+		httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many login attempts", RetryAfter: &retry}})
+		r.auditLogin(c, "denied", http.StatusTooManyRequests)
+
+		return false
+	}
+}
+
+func (r *Runtime) releaseLoginHashSlot() {
+	<-r.loginHashSlots
 }
 
 func (r *Runtime) admitLoginAttempt(c *gin.Context, ip string) bool {
@@ -67,6 +92,7 @@ func (r *Runtime) admitLoginAttempt(c *gin.Context, ip string) bool {
 	retryAfter := max(localRetryAfter, distributedRetryAfter)
 	retry := uint64(max(retryAfter.Seconds(), 1))
 	httpx.Abort(c, &httpx.AppError{Status: http.StatusTooManyRequests, Body: httpx.ErrorResponse{Error: "Too many login attempts", RetryAfter: &retry}})
+	r.auditLogin(c, "denied", http.StatusTooManyRequests)
 
 	return false
 }
@@ -92,6 +118,8 @@ func (r *Runtime) rejectLoginAttempt(c *gin.Context, ip string) {
 
 	count := max(localCount, distributedCount)
 	delay := time.Duration(min(count*500, 3000)) * time.Millisecond
+
+	r.auditLogin(c, "denied", http.StatusUnauthorized)
 
 	if !waitForLoginBackoff(c.Request.Context(), delay) {
 		return
@@ -128,6 +156,7 @@ func (r *Runtime) completeLogin(c *gin.Context, ip string) {
 	auth.SetSessionCookie(c.Writer, auth.SignSessionID(sess.ID, r.cfg.SessionSecret), r.cfg.Session.ExpiryDuration, r.cfg.Security.ForceHTTPS)
 	auth.SetCSRFCookie(c.Writer, csrf, r.cfg.Security.ForceHTTPS)
 	ginjson.Respond(c, http.StatusOK, loginResponse{Status: "ok", Message: "Login successful", CSRFToken: csrf})
+	r.auditLogin(c, "success", http.StatusOK)
 }
 
 func (r *Runtime) handleSessionStatus(c *gin.Context) {

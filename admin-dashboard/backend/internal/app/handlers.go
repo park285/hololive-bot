@@ -20,10 +20,6 @@ import (
 
 const wsSessionRevocationPoll = time.Second
 
-type sessionFamilyChecker interface {
-	FamilyActive(ctx context.Context, familyID string) (bool, error)
-}
-
 func (r *Runtime) handleHealth(c *gin.Context) {
 	ginjson.Respond(c, http.StatusOK, statusResponse{Status: "ok"})
 }
@@ -73,8 +69,6 @@ func (r *Runtime) dockerAction(c *gin.Context, action string) {
 		return
 	}
 
-	r.logger.Info("docker container action", slog.String("action", action), slog.String("container", name))
-
 	message := map[string]string{"restart": "restarted", "stop": "stopped", "start": "started"}[action]
 	ginjson.Respond(c, http.StatusOK, dockerActionResponse{Status: "ok", Message: "Container " + name + " " + message})
 }
@@ -106,6 +100,7 @@ func (r *Runtime) handleSystemStatsWS(c *gin.Context) {
 	origin := c.Request.Header.Get("Origin")
 	if err := r.verifyWSOrigin(origin); err != nil {
 		httpx.Abort(c, err)
+		r.auditSecurityRejection(c, "admin.websocket_origin.denied")
 
 		return
 	}
@@ -182,15 +177,10 @@ func (r *Runtime) streamSystemStats(conn *websocket.Conn, familyID string) {
 }
 
 func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID string) context.CancelFunc {
-	checker, ok := r.sessions.(sessionFamilyChecker)
-	if !ok {
-		return func() {}
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go panicguard.Run(r.logger, panicguard.BackgroundTask, "admin-dashboard-websocket-session-revocation", func() {
-		r.pollSessionFamilyRevocation(ctx, conn, checker, familyID)
+		r.pollSessionFamilyRevocation(ctx, conn, familyID)
 	})
 
 	return cancel
@@ -199,14 +189,13 @@ func (r *Runtime) watchSessionFamilyRevocation(conn *websocket.Conn, familyID st
 func (r *Runtime) pollSessionFamilyRevocation(
 	ctx context.Context,
 	conn *websocket.Conn,
-	checker sessionFamilyChecker,
 	familyID string,
 ) {
 	ticker := time.NewTicker(wsSessionRevocationPoll)
 	defer ticker.Stop()
 
 	for awaitRevocationTick(ctx, ticker) {
-		if !r.sessionFamilyStillActive(ctx, conn, checker, familyID) {
+		if !r.sessionFamilyStillActive(ctx, conn, familyID) {
 			return
 		}
 	}
@@ -224,13 +213,12 @@ func awaitRevocationTick(ctx context.Context, ticker *time.Ticker) bool {
 func (r *Runtime) sessionFamilyStillActive(
 	ctx context.Context,
 	conn *websocket.Conn,
-	checker sessionFamilyChecker,
 	familyID string,
 ) bool {
 	checkCtx, checkCancel := context.WithTimeout(ctx, wsSessionRevocationPoll)
 	defer checkCancel()
 
-	active, err := checker.FamilyActive(checkCtx, familyID)
+	active, err := r.sessions.FamilyActive(checkCtx, familyID)
 	if err != nil {
 		r.logger.Warn("websocket session-family check failed; closing stream", slog.Any("error", err))
 		r.closeWebSocketForRevocation(conn, "session store unavailable")

@@ -86,7 +86,7 @@ func TestReadSecretFileRejectsSymlinkAndEmbeddedNewline(t *testing.T) {
 }
 
 func TestLoadSecureRequires32ByteSessionSecret(t *testing.T) {
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), minimumAdminPasswordBcryptCost)
 	if err != nil {
 		t.Fatalf("GenerateFromPassword() error = %v", err)
 	}
@@ -98,5 +98,22 @@ func TestLoadSecureRequires32ByteSessionSecret(t *testing.T) {
 
 	if _, err := LoadSecure(); err == nil {
 		t.Fatal("31-byte SESSION_SECRET must fail")
+	}
+}
+
+func TestLoadRejectsWeakAdminPasswordBcryptCost(t *testing.T) {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("GenerateFromPassword() error = %v", err)
+	}
+
+	t.Setenv("ENV", "test")
+	t.Setenv("ADMIN_PASS_HASH", string(passwordHash))
+	t.Setenv("SESSION_SECRET", strings.Repeat("x", 32))
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() error = nil, want weak bcrypt cost rejection")
+	} else if !strings.Contains(err.Error(), "bcrypt cost must be at least") {
+		t.Fatalf("Load() error = %q, want bcrypt cost context", err)
 	}
 }

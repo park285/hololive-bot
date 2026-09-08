@@ -2,7 +2,7 @@
 
 ## Role
 
-`admin-dashboard`는 운영 대시보드 서비스입니다. Go 1.27/gin backend가 embedded frontend(React 빌드 산출물)를 서빙하고, Valkey 기반 admin 세션 인증, `hololive-api` admin plane relay, docker-proxy를 통한 컨테이너 제어를 담당합니다.
+`admin-dashboard`는 운영 대시보드 서비스입니다. Go 1.27/gin backend가 embedded frontend(React 빌드 산출물)를 서빙하고, Valkey 기반 admin 세션 인증, `hololive-api` admin plane relay, 전용 `admin-docker-proxy`를 통한 컨테이너 제어를 담당합니다.
 
 ## Normal status
 
@@ -20,32 +20,37 @@
 |---|---|---|
 | Valkey (`valkey-cache`) | yes | 로그인/세션 전체 실패 (503 store unavailable) |
 | `hololive-api` (admin plane) | partial | holo 데이터 조회/뮤테이션 relay 실패 |
-| `docker-proxy` | partial | 컨테이너 상태 조회/start/stop/restart 실패 |
+| `admin-docker-proxy` | partial | 컨테이너 상태 조회/start/stop/restart 실패 |
 | Embedded frontend assets | yes | 대시보드 UI 미서빙 (API는 동작) |
 
 ## Key environment variables
 
-시크릿 4종(`ADMIN_PASS_HASH`/`SESSION_SECRET`/`VALKEY_URL`/`HOLO_BOT_API_KEY`)은 2026-07-05부터 compose 보간이 아니라 scoped env_file `${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}`(`stack-secrets` 렌더, `0600 root`)로 주입됩니다. env_file 값은 compose 보간을 거치지 않으므로 bcrypt 해시를 이스케이프 없이 원문 그대로 넣습니다.
+시크릿 4종(`ADMIN_PASS_HASH`/`SESSION_SECRET`/`VALKEY_URL`/`HOLO_BOT_API_KEY`)의 정본은 `${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}`입니다. 정상 systemd 시작 경로가 이를 `/run/hololive-bot/admin-secrets`에 파일로 준비하고, 필수 `docker-compose.admin-security.yml` 오버레이가 `env_file`을 비운 뒤 `*_FILE`로 주입합니다. bcrypt 해시는 compose 보간을 거치지 않는 원문을 사용합니다.
 
 | Env | Purpose | Required |
 |---|---|---|
 | `PORT` | HTTP port (기본 30190) | no |
 | `ENV` | `production` 여부 (localhost origin 차단 등) | no |
 | `ADMIN_USER` | 로그인 사용자명 (기본 `admin`) | no |
-| `ADMIN_PASS_HASH` (alias `ADMIN_PASS_BCRYPT`) | bcrypt 해시 | yes |
-| `SESSION_SECRET` (alias `ADMIN_SECRET_KEY`) | 세션/CSRF 서명 키 (16바이트 이상) | yes |
+| `ADMIN_PASS_HASH` (alias `ADMIN_PASS_BCRYPT`) | cost 10 이상인 bcrypt 해시 | yes |
+| `SESSION_SECRET` (alias `ADMIN_SECRET_KEY`) | 세션/CSRF 서명 키 (운영 진입점은 32바이트 이상) | yes |
 | `VALKEY_URL` | `host:port` 또는 `:urlencoded_password@host:port` (스킴 금지) | yes |
-| `DOCKER_HOST` | docker-proxy 주소 | no |
+| `DOCKER_HOST` | 운영에서는 전용 `admin-docker-proxy` 주소 | no |
 | `HOLO_ADMIN_API_URL` (alias `HOLO_BOT_URL`) | holo relay 대상 | no |
 | `HOLO_BOT_API_KEY` (alias `API_SECRET_KEY`) | relay 인증 키 | partial |
 | `FORCE_HTTPS` | HSTS + Secure cookie | no |
-| `CSRF_MODE` / `WS_ORIGIN_MODE` | `enforce`/`monitor`/`off` | no |
+| `CSRF_MODE` / `WS_ORIGIN_MODE` | `enforce`/`monitor`/`off` (production은 `enforce`만 허용) | no |
 | `ALLOWED_ORIGINS` | WS origin 허용 목록 (콤마 구분) | production yes |
 | `ALLOW_LOCALHOST_IN_PROD` | production localhost origin 명시적 허용 | no |
 | `SESSION_TOKEN_ROTATION` | 세션 토큰 회전 활성화 | no |
 | `LOG_LEVEL` / `LOG_DIR` | 로그 레벨, 파일 로깅 디렉터리 (`/app/logs`) | no |
 | `ENABLE_OPENAPI` / `ENABLE_SWAGGER_UI` | 스펙/문서 노출 (production 기본 off) | no |
 | `TRUST_FORWARDED_HEADERS` | X-Forwarded-For 신뢰 (rate limiter IP) | no |
+
+`admin.login`, `admin.authentication.denied`, `admin.csrf.denied`,
+`admin.websocket_origin.denied`, `admin.mutation` 보안 이벤트에는 서버가 만든 `request_id`와
+행위자, 클라이언트 IP, 작업, 결과가 기록됩니다. 세션·CSRF 토큰이나 내부 API 키는 감사
+필드에 포함하지 않습니다.
 
 ## Build · Test · CI
 
@@ -182,12 +187,12 @@ Symptoms:
 
 Diagnosis:
 ```bash
-docker ps --filter name=docker-proxy
-./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs --tail=100 docker-proxy
+docker ps --filter name=admin-docker-proxy
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.admin-security.yml logs --tail=100 admin-docker-proxy
 ```
 
 Mitigation:
-- `docker-proxy` 기동 확인, `DOCKER_HOST` 값 확인.
+- `admin-docker-proxy` 기동 확인, `DOCKER_HOST` 값 확인.
 
 ### 4. 시작 직후 즉시 종료 (config 검증 실패)
 
@@ -209,7 +214,7 @@ Symptoms:
 - 대시보드 로그인은 되지만 시스템 리소스 차트가 비어 있음 (`/admin/api/ws/system-stats` WS 403).
 
 Diagnosis:
-- 접속 origin이 allowlist에 있는지 확인. `WS_ORIGIN_MODE=enforce`(기본)에서 미등록 origin은 조용히 403 (로그 없음).
+- 접속 origin이 allowlist에 있는지 확인. `WS_ORIGIN_MODE=enforce`(기본)에서 미등록 origin은 403이며 `admin.websocket_origin.denied` 감사 이벤트로 기록됩니다.
 - production에는 코드 fallback이 없습니다. 기본 compose가 `ALLOWED_ORIGINS`를 명시하며, live-compat overlay에서는 `ADMIN_DASHBOARD_ALLOWED_ORIGINS`로 override할 수 있습니다.
 
 Mitigation:

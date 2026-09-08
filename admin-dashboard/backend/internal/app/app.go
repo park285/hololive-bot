@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -46,11 +47,16 @@ type sessionRecords interface {
 
 type sessionStore interface {
 	sessionRecords
+	sessionLifecycle
 
+	Close()
+}
+
+type sessionLifecycle interface {
+	FamilyActive(ctx context.Context, familyID string) (bool, error)
 	RevokeFamily(ctx context.Context, familyID string) error
 	Refresh(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
 	Rotate(ctx context.Context, oldID string) (session.Session, bool, error)
-	Close()
 }
 
 type Runtime struct {
@@ -59,6 +65,7 @@ type Runtime struct {
 	sessions                sessionStore
 	rateLimiter             *httputil.LoginFailureRateLimiter
 	distributedLoginLimiter *distributedLoginLimiter
+	loginHashSlots          chan struct{}
 	docker                  *docker.Client
 	holo                    *holo.Client
 	statusCollector         *status.Collector
@@ -115,10 +122,10 @@ func New(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Runtime
 		return nil, fmt.Errorf("marshal openapi spec: %w", err)
 	}
 
-	runtime := newRuntime(cfg, logger, store, distributedLimiter, dockerClient, holoClient, endpoints, openapiJSON)
-	startStatsHub(runtime.statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
+	appRuntime := newRuntime(cfg, logger, store, distributedLimiter, dockerClient, holoClient, endpoints, openapiJSON)
+	startStatsHub(appRuntime.statsHub) //nolint:contextcheck // New의 ctx는 기동 후 취소되므로 hub 수명을 의도적으로 분리한다
 
-	return runtime, nil
+	return appRuntime, nil
 }
 
 func newRuntime(
@@ -143,6 +150,7 @@ func newRuntime(
 		sessions:                newCleanupSessionStore(store),
 		rateLimiter:             rateLimiter,
 		distributedLoginLimiter: distributedLimiter,
+		loginHashSlots:          newLoginHashSlots(),
 		docker:                  dockerClient,
 		holo:                    holoClient,
 		statusCollector:         status.NewCollectorWithSampler(endpointSampler, cfg.RuntimeVersion),
@@ -155,6 +163,12 @@ func newRuntime(
 		wsPingPeriod:            defaultWSPingPeriod,
 		openapiJSON:             openapiJSON,
 	}
+}
+
+func newLoginHashSlots() chan struct{} {
+	// automaxprocs가 반영한 CPU 예산 이상으로 bcrypt가 동시에 실행되어 다른 관리 요청을
+	// 굶기지 않도록 대기열 없이 즉시 거부한다.
+	return make(chan struct{}, max(runtime.GOMAXPROCS(0), 1))
 }
 
 func startStatsHub(hub *status.Hub) {

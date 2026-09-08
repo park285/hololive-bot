@@ -141,6 +141,31 @@ func TestProxyDrains5xxBodyForKeepAliveReuse(t *testing.T) {
 	}
 }
 
+func TestUpstreamErrorForwardsOnlyAllowlistedFields(t *testing.T) {
+	err := upstreamError(http.StatusBadRequest, []byte(`{"error":"bad input","code":"E_BAD","details":{"field":"name"},"debug":"internal query"}`))
+
+	if err.Body.Error != "bad input" || err.Body.Code != "E_BAD" {
+		t.Fatalf("upstream error body = %+v", err.Body)
+	}
+
+	details, ok := err.Body.Details.(map[string]any)
+	if !ok || details["field"] != "name" {
+		t.Fatalf("upstream details = %#v, want allowlisted details object", err.Body.Details)
+	}
+
+	if _, leaked := details["debug"]; leaked {
+		t.Fatalf("upstream details leaked unknown debug field: %#v", details)
+	}
+}
+
+func TestUpstreamErrorDoesNotForwardRawText(t *testing.T) {
+	err := upstreamError(http.StatusBadRequest, []byte("internal stack trace"))
+
+	if err.Body.Error != http.StatusText(http.StatusBadRequest) || err.Body.Details != nil {
+		t.Fatalf("upstream raw text error body = %+v, want generic fallback", err.Body)
+	}
+}
+
 type infiniteByteReader struct{}
 
 func (infiniteByteReader) Read(p []byte) (int, error) {

@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadRejectsMissingProductionOrigins(t *testing.T) {
-	adminHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), bcrypt.MinCost)
+	adminHash, err := bcrypt.GenerateFromPassword([]byte("test-password"), minimumAdminPasswordBcryptCost)
 	if err != nil {
 		t.Fatalf("GenerateFromPassword() error = %v", err)
 	}
@@ -22,6 +22,38 @@ func TestLoadRejectsMissingProductionOrigins(t *testing.T) {
 		t.Fatal("Load() error = nil, want missing production ALLOWED_ORIGINS error")
 	} else if !strings.Contains(err.Error(), "ALLOWED_ORIGINS") {
 		t.Fatalf("Load() error = %q, want ALLOWED_ORIGINS context", err)
+	}
+}
+
+func TestProductionSecurityModesMustEnforce(t *testing.T) {
+	t.Setenv("ALLOWED_ORIGINS", "https://admin.example.com")
+
+	tests := []struct {
+		name   string
+		mutate func(*SecurityConfig)
+	}{
+		{"csrf monitor", func(cfg *SecurityConfig) { cfg.CSRFMode = SecurityMonitor }},
+		{"csrf off", func(cfg *SecurityConfig) { cfg.CSRFMode = SecurityOff }},
+		{"websocket origin monitor", func(cfg *SecurityConfig) { cfg.WSOriginMode = SecurityMonitor }},
+		{"websocket origin off", func(cfg *SecurityConfig) { cfg.WSOriginMode = SecurityOff }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := LoadSecurityConfig("production", false)
+			tt.mutate(&cfg)
+
+			if err := validateSecurityConfig("production", cfg); err == nil {
+				t.Fatal("validateSecurityConfig() error = nil, want production rejection")
+			}
+		})
+	}
+}
+
+func TestNonProductionSecurityModesRemainAvailable(t *testing.T) {
+	cfg := SecurityConfig{CSRFMode: SecurityOff, WSOriginMode: SecurityMonitor}
+	if err := validateSecurityConfig("test", cfg); err != nil {
+		t.Fatalf("validateSecurityConfig() error = %v, want non-production modes allowed", err)
 	}
 }
 

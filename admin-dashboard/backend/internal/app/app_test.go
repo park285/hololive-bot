@@ -34,12 +34,13 @@ import (
 const testSecret = "0123456789abcdef-secret"
 
 type fakeSessions struct {
-	createFn  func(ctx context.Context) (session.Session, error)
-	getFn     func(ctx context.Context, id string) (*session.Session, error)
-	deleteFn  func(ctx context.Context, id string) error
-	revokeFn  func(ctx context.Context, familyID string) error
-	refreshFn func(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
-	rotateFn  func(ctx context.Context, oldID string) (session.Session, bool, error)
+	createFn       func(ctx context.Context) (session.Session, error)
+	getFn          func(ctx context.Context, id string) (*session.Session, error)
+	deleteFn       func(ctx context.Context, id string) error
+	familyActiveFn func(ctx context.Context, familyID string) (bool, error)
+	revokeFn       func(ctx context.Context, familyID string) error
+	refreshFn      func(ctx context.Context, id string, idle bool) (session.RefreshResult, error)
+	rotateFn       func(ctx context.Context, oldID string) (session.Session, bool, error)
 }
 
 func (f *fakeSessions) Create(ctx context.Context) (session.Session, error) {
@@ -82,6 +83,14 @@ func (f *fakeSessions) Delete(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+func (f *fakeSessions) FamilyActive(ctx context.Context, familyID string) (bool, error) {
+	if f.familyActiveFn == nil {
+		return true, nil
+	}
+
+	return f.familyActiveFn(ctx, familyID)
 }
 
 func (f *fakeSessions) RevokeFamily(ctx context.Context, familyID string) error {
@@ -215,8 +224,9 @@ func newTestRuntime(t *testing.T, store sessionStore, mutate func(*config.Config
 	return &Runtime{
 		cfg:             cfg,
 		logger:          logging.NewTestLogger(),
-		sessions:        store,
+		sessions:        newCleanupSessionStore(store),
 		rateLimiter:     httputil.NewDefaultLoginFailureRateLimiter(),
+		loginHashSlots:  newLoginHashSlots(),
 		statusCollector: status.NewCollector(nil, "test"),
 		statsHub:        status.NewHub(nil),
 		static:          static.NewHandler(),
@@ -501,6 +511,26 @@ func TestLoginRateLimited(t *testing.T) {
 	rec := doRequest(rt.Handler(), req)
 
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	require.Contains(t, decodeBody(t, rec), "retry_after")
+}
+
+func TestLoginRejectsWhenPasswordHashCapacityIsExhausted(t *testing.T) {
+	created := false
+	rt := newTestRuntime(t, &fakeSessions{createFn: func(context.Context) (session.Session, error) {
+		created = true
+
+		return *liveSession("must-not-be-created"), nil
+	}}, nil)
+
+	rt.loginHashSlots = make(chan struct{}, 1)
+
+	rt.loginHashSlots <- struct{}{}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/admin/api/auth/login", strings.NewReader(`{"username":"admin","password":"correct-password"}`))
+	rec := doRequest(rt.Handler(), req)
+
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	require.False(t, created)
 	require.Contains(t, decodeBody(t, rec), "retry_after")
 }
 

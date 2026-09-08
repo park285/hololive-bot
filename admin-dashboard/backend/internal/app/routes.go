@@ -15,7 +15,7 @@ func (r *Runtime) Handler() http.Handler {
 	engine := gin.New()
 
 	engine.HandleMethodNotAllowed = true
-	engine.Use(gin.Recovery(), r.securityHeaders(), r.hardenedCSP(), r.etag())
+	engine.Use(r.requestContext(), gin.Recovery(), r.securityHeaders(), r.hardenedCSP(), r.etag())
 
 	engine.GET("/health", r.handleHealth)
 	engine.GET("/favicon.svg", gin.WrapF(r.static.ServeFavicon))
@@ -39,10 +39,12 @@ func (r *Runtime) Handler() http.Handler {
 	csrfed := authed.Group("", r.csrf())
 	csrfed.POST("/auth/logout", r.handleLogout)
 	csrfed.POST("/auth/heartbeat", r.handleHeartbeat)
-	csrfed.POST("/docker/containers/:name/restart", r.handleDockerRestart)
-	csrfed.POST("/docker/containers/:name/stop", r.handleDockerStop)
-	csrfed.POST("/docker/containers/:name/start", r.handleDockerStart)
-	registerHoloMutations(csrfed, holoHandler)
+
+	mutations := csrfed.Group("", r.auditMutation())
+	mutations.POST("/docker/containers/:name/restart", r.handleDockerRestart)
+	mutations.POST("/docker/containers/:name/stop", r.handleDockerStop)
+	mutations.POST("/docker/containers/:name/start", r.handleDockerStart)
+	registerHoloMutations(mutations, holoHandler)
 
 	engine.GET("/admin/docs", r.auth(), r.handleDocs)
 

@@ -35,6 +35,15 @@ grep -Fq 'limit_conn holoshi_shortlink_connections' "${PUBLIC_SHORTLINK}" \
   || fail "public shortlink ingress must apply a per-client connection limit"
 pass "shortlink ingress limits are keyed per client at both proxy hops"
 
+ADMIN_SECURITY_COMPOSE="${COMPOSE_DIR}/docker-compose.admin-security.yml"
+admin_proxy_post_contract='-allowPOST=(/v1\.[0-9]+)?/containers/((hololive-alarm-worker|hololive-api|hololive-youtube-collector-c)/(start|stop|restart)|(holo-postgres|valkey-cache|deunhealth|admin-dashboard|admin-dashboard-ingress|admin-docker-proxy)/(start|restart))(\?.*)?'
+grep -Fq -- "${admin_proxy_post_contract}" "${ADMIN_SECURITY_COMPOSE}" \
+  || fail "admin Docker proxy must scope POST actions by exact container name and operation"
+if grep -F -- '-allowPOST=' "${ADMIN_SECURITY_COMPOSE}" | grep -Fq '[^/]+'; then
+  fail "admin Docker proxy must not accept an arbitrary container name or ID"
+fi
+pass "admin Docker proxy independently enforces container and operation scope"
+
 if ! docker compose version >/dev/null 2>&1; then
   echo "[SKIP] docker compose unavailable" >&2
   exit 0

@@ -30,6 +30,7 @@ func (r *Runtime) auth() gin.HandlerFunc {
 			}
 
 			httpx.Abort(c, err)
+			r.auditSecurityRejection(c, "admin.authentication.denied")
 
 			return
 		}
@@ -116,6 +117,7 @@ func (r *Runtime) csrf() gin.HandlerFunc {
 		}
 
 		httpx.Abort(c, httpx.Forbidden())
+		r.auditSecurityRejection(c, "admin.csrf.denied")
 	}
 }
 

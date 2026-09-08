@@ -20,6 +20,8 @@ const (
 	SecurityEnforce SecurityMode = "enforce"
 	SecurityMonitor SecurityMode = "monitor"
 	SecurityOff     SecurityMode = "off"
+
+	minimumAdminPasswordBcryptCost = 10
 )
 
 type SecurityConfig struct {
@@ -104,8 +106,8 @@ func Load() (*Config, error) {
 	}
 
 	securityCfg := LoadSecurityConfig(env, allowLocalhostInProd)
-	if err := validateAllowedOrigins(env, securityCfg.AllowedOrigins); err != nil {
-		return nil, fmt.Errorf("validate allowed origins: %w", err)
+	if err := validateSecurityConfig(env, securityCfg); err != nil {
+		return nil, fmt.Errorf("validate security config: %w", err)
 	}
 
 	return &Config{
@@ -181,6 +183,15 @@ func loadCredentials() (adminHash, sessionSecret string, err error) {
 	adminHash = normalizeEscapedBcryptHash(adminHash)
 	if compareErr := bcrypt.CompareHashAndPassword([]byte(adminHash), []byte("")); compareErr != nil && !isBcryptPasswordMismatch(compareErr) {
 		return "", "", fmt.Errorf("invalid ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt hash: %w", compareErr)
+	}
+
+	cost, err := bcrypt.Cost([]byte(adminHash))
+	if err != nil {
+		return "", "", fmt.Errorf("read ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt cost: %w", err)
+	}
+
+	if cost < minimumAdminPasswordBcryptCost {
+		return "", "", fmt.Errorf("ADMIN_PASS_HASH or ADMIN_PASS_BCRYPT bcrypt cost must be at least %d", minimumAdminPasswordBcryptCost)
 	}
 
 	sessionSecret, err = requiredAlias("SESSION_SECRET", "ADMIN_SECRET_KEY")
@@ -325,6 +336,26 @@ func parseAllowedOrigins(env string, allowLocalhostInProd bool) []string {
 func validateAllowedOrigins(env string, origins []string) error {
 	if strings.EqualFold(env, "production") && len(origins) == 0 {
 		return errors.New("config: ALLOWED_ORIGINS must contain at least one permitted origin in production")
+	}
+
+	return nil
+}
+
+func validateSecurityConfig(env string, cfg SecurityConfig) error {
+	if err := validateAllowedOrigins(env, cfg.AllowedOrigins); err != nil {
+		return fmt.Errorf("allowed origins: %w", err)
+	}
+
+	if !strings.EqualFold(env, "production") {
+		return nil
+	}
+
+	if cfg.CSRFMode != SecurityEnforce {
+		return errors.New("config: CSRF_MODE must be enforce in production")
+	}
+
+	if cfg.WSOriginMode != SecurityEnforce {
+		return errors.New("config: WS_ORIGIN_MODE must be enforce in production")
 	}
 
 	return nil

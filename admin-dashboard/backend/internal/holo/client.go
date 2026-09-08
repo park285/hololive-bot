@@ -208,29 +208,22 @@ func upstreamError(status int, body []byte) *httpx.AppError {
 	var raw any
 
 	if err := jsonv2.Unmarshal(body, &raw); err != nil {
-		return rawTextError(status, body, fallback)
+		return rawTextError(status, fallback)
 	}
 
 	return decodedUpstreamError(status, raw, fallback)
 }
 
-func rawTextError(status int, body []byte, fallback string) *httpx.AppError {
-	text := strings.TrimSpace(string(body))
-	if text == "" {
-		text = fallback
-	}
-
-	return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: text}}
+func rawTextError(status int, fallback string) *httpx.AppError {
+	return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback}}
 }
 
 func decodedUpstreamError(status int, raw any, fallback string) *httpx.AppError {
 	switch value := raw.(type) {
-	case string:
-		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: value}}
 	case map[string]any:
 		return objectUpstreamError(status, value, fallback)
 	default:
-		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback, Details: raw}}
+		return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: fallback}}
 	}
 }
 
@@ -249,14 +242,8 @@ func objectUpstreamError(status int, value map[string]any, fallback string) *htt
 		code = ""
 	}
 
-	delete(value, "error")
-	delete(value, "code")
-
-	var details any
-
-	if len(value) > 0 {
-		details = value
-	}
+	// 업스트림에 새 내부 필드가 추가돼도 BFF 응답으로 자동 노출되지 않게 공개 계약만 복사한다.
+	details := value["details"]
 
 	return &httpx.AppError{Status: status, Body: httpx.ErrorResponse{Error: errorText, Code: code, Details: details}}
 }

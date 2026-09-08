@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/kapu/hololive-shared/pkg/cleanupctx"
 )
 
@@ -93,4 +95,23 @@ func TestCleanupSessionStoreRevokeFamilyDetachesCancellationAndPreservesError(t 
 	if err := store.RevokeFamily(ctx, "family-1"); !errors.Is(err, want) {
 		t.Fatalf("RevokeFamily() = %v, want %v", err, want)
 	}
+}
+
+func TestCleanupSessionStoreExposesFamilyActive(t *testing.T) {
+	wantErr := errors.New("family status unavailable")
+	store := newCleanupSessionStore(&fakeSessions{familyActiveFn: func(ctx context.Context, familyID string) (bool, error) {
+		if ctx != t.Context() || familyID != "family-1" {
+			t.Fatalf("FamilyActive() context=%v family=%q", ctx, familyID)
+		}
+
+		return false, wantErr
+	}})
+
+	if store == nil {
+		t.Fatal("newCleanupSessionStore() returned nil")
+	}
+
+	active, err := store.FamilyActive(t.Context(), "family-1")
+	require.False(t, active)
+	require.ErrorIs(t, err, wantErr)
 }
