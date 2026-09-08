@@ -177,6 +177,31 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 
+# 승인된 host 설정이 있으면 재기동과 수동 compose에도 같은 관리 H3 publish를 유지한다.
+if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_ADMIN_API_PORT_BIND_IP"; then
+    admin_web_overlay="deploy/compose/docker-compose.admin-web.yml"
+    admin_web_present=false
+    for file in "${compose_files[@]}"; do
+        if [[ "${file##*/}" == "${admin_web_overlay##*/}" ]]; then
+            admin_web_present=true
+            break
+        fi
+    done
+    if [[ "${admin_web_present}" == false ]]; then
+        compose_files+=("${admin_web_overlay}")
+        if (( compose_command_index >= 0 )); then
+            compose_args=(
+                "${compose_args[@]:0:compose_command_index}"
+                -f "${admin_web_overlay}"
+                "${compose_args[@]:compose_command_index}"
+            )
+            compose_command_index=$((compose_command_index + 2))
+        else
+            compose_args+=(-f "${admin_web_overlay}")
+        fi
+    fi
+fi
+
 collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then
     collector_disable_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR")"
