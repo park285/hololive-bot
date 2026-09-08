@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"testing"
@@ -43,6 +44,19 @@ func TestHLPLeak(t *testing.T) {
 
 	after := measureHelperLeak(t, base)
 	if after != before {
+		// FD·프로세스·I/O 누수는 goroutineleak만으로 판별할 수 없어 기존 검사와 전체 스택도 유지한다.
+		for _, name := range []string{"goroutineleak", "goroutine"} {
+			var profile bytes.Buffer
+
+			if err := pprof.Lookup(name).WriteTo(&profile, 1); err != nil {
+				t.Errorf("write %s profile: %v", name, err)
+
+				continue
+			}
+
+			t.Logf("%s", profile.String())
+		}
+
 		t.Fatalf("helper leak slope after %d cycles: before=%+v after=%+v", cycles, before, after)
 	}
 }

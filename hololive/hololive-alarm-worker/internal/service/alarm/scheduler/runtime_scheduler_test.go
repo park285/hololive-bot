@@ -24,6 +24,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -46,75 +47,77 @@ func (f *fakeSender) Send(_ context.Context, _ []*domain.AlarmNotification) (del
 
 func TestRuntimeSchedulerStart_CancellationPath(t *testing.T) {
 	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		runtimeScheduler := &RuntimeScheduler{
+			youtubeChecker: &fakeRunner{},
+			chzzkChecker:   &fakeRunner{},
+			twitchChecker:  &fakeRunner{},
+			notifier:       &fakeSender{},
 
-	runtimeScheduler := &RuntimeScheduler{
-		youtubeChecker: &fakeRunner{},
-		chzzkChecker:   &fakeRunner{},
-		twitchChecker:  &fakeRunner{},
-		notifier:       &fakeSender{},
+			youtubeInterval: 5 * time.Second,
+			chzzkInterval:   5 * time.Second,
+			twitchInterval:  5 * time.Second,
 
-		youtubeInterval: 5 * time.Second,
-		chzzkInterval:   5 * time.Second,
-		twitchInterval:  5 * time.Second,
+			youtubeTimeout: 3 * time.Second,
+			chzzkTimeout:   3 * time.Second,
+			twitchTimeout:  3 * time.Second,
 
-		youtubeTimeout: 3 * time.Second,
-		chzzkTimeout:   3 * time.Second,
-		twitchTimeout:  3 * time.Second,
+			logger: slog.New(slog.DiscardHandler),
+		}
 
-		logger: slog.New(slog.DiscardHandler),
-	}
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
+		go func() {
+			done <- runtimeScheduler.Start(ctx)
+		}()
 
-	go func() {
-		done <- runtimeScheduler.Start(ctx)
-	}()
+		synctest.Wait()
+		cancel()
 
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(2 * time.Second):
-		t.Fatal("runtime scheduler did not stop after cancellation")
-	}
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("runtime scheduler did not stop after cancellation")
+		}
+	})
 }
 
 func TestRuntimeSchedulerStart_TwitchLoopOptional(t *testing.T) {
 	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		runtimeScheduler := &RuntimeScheduler{
+			youtubeChecker: &fakeRunner{},
+			chzzkChecker:   &fakeRunner{},
+			notifier:       &fakeSender{},
 
-	runtimeScheduler := &RuntimeScheduler{
-		youtubeChecker: &fakeRunner{},
-		chzzkChecker:   &fakeRunner{},
-		notifier:       &fakeSender{},
+			youtubeInterval: 5 * time.Second,
+			chzzkInterval:   5 * time.Second,
+			twitchInterval:  5 * time.Second,
 
-		youtubeInterval: 5 * time.Second,
-		chzzkInterval:   5 * time.Second,
-		twitchInterval:  5 * time.Second,
+			youtubeTimeout: 3 * time.Second,
+			chzzkTimeout:   3 * time.Second,
+			twitchTimeout:  3 * time.Second,
 
-		youtubeTimeout: 3 * time.Second,
-		chzzkTimeout:   3 * time.Second,
-		twitchTimeout:  3 * time.Second,
+			logger: slog.New(slog.DiscardHandler),
+		}
 
-		logger: slog.New(slog.DiscardHandler),
-	}
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
+		go func() {
+			done <- runtimeScheduler.Start(ctx)
+		}()
 
-	go func() {
-		done <- runtimeScheduler.Start(ctx)
-	}()
+		synctest.Wait()
+		cancel()
 
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(2 * time.Second):
-		t.Fatal("runtime scheduler did not stop with twitch loop disabled")
-	}
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("runtime scheduler did not stop with twitch loop disabled")
+		}
+	})
 }
