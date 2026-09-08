@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -138,6 +137,7 @@ func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 			sender := buildYouTubeOutboxSender(irisSender, nil)
 
 			require.NoError(t, sender.SendMessage(t.Context(), roomID, "[title](https://example.com/video)"))
+
 			if roomID == workerappTestOpenRoom {
 				assert.Equal(t, roomID, stub.markdownRoomID)
 				assert.Equal(t, "[title](https://example.com/video)", stub.markdownMessage)
@@ -149,6 +149,7 @@ func TestBuildNotificationSenderUsesMarkdownOnlyForOpenChat(t *testing.T) {
 			}
 
 			require.NoError(t, irisSender.SendMessageWithClientRequestID(t.Context(), roomID, "**world**", "req-1"))
+
 			if roomID == workerappTestOpenRoom {
 				assert.Equal(t, roomID, stub.markdownRoomID)
 				assert.Equal(t, "**world**", stub.markdownMessage)
@@ -174,16 +175,23 @@ func TestBuildNotificationSenderDisablesMarkdownWhenConfigured(t *testing.T) {
 
 func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	var requestBody string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read request body: %v", err)
+
 			return
 		}
+
 		requestBody = string(body)
+
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"success":true,"delivery":"queued","requestId":"reply-1"}`)
+
+		_, err = io.WriteString(w, `{"success":true,"delivery":"queued","requestId":"reply-1"}`)
+		assert.NoError(t, err)
 	}))
+
 	defer server.Close()
 
 	client := iris.NewAPIClient(server.URL, "test-token", iris.WithTransport("http1"), iris.WithHTTPClient(server.Client()))
@@ -191,7 +199,7 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	clientRequestID := "hololive-alarm:request-123"
 
 	require.NoError(t, sender.SendMessageWithClientRequestID(t.Context(), workerappTestOpenRoom, "[title](https://example.com/video)", clientRequestID))
-	assert.True(t, strings.Contains(requestBody, `"clientRequestId":"hololive-alarm:request-123"`))
+	assert.Contains(t, requestBody, `"clientRequestId":"hololive-alarm:request-123"`)
 }
 
 func TestYouTubeOutboxKaringSenderPreservesClientRequestIDOptionThroughEgress(t *testing.T) {
