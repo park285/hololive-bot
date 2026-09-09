@@ -1,15 +1,16 @@
-# Runbook: postgres streaming replication and failover
+# Runbook: PostgreSQL single-primary baseline and replication reactivation
 
 ## Role
 
-중앙 primary(`hololive-osaka` / `100.100.1.8`)에서 Seoul AP 호스트(`iris-seoul` /
-`100.100.1.5`)의 `holo-postgres-standby`로 가는 물리 스트리밍 복제와, standby에서
-실행하는 fail-closed 자동 승격 컨트롤러의 운영 절차입니다. 두 호스트가 모두
-`aarch64`라 물리 복제가 성립합니다.
+현재 운영 결정은 중앙 primary(`hololive-osaka` / `100.100.1.8`) 하나만 사용하는
+single-primary 구성입니다. Seoul AP 호스트(`iris-seoul` / `100.100.1.5`)의
+`holo-postgres-standby`, 복제 슬롯과 failover controller는 2026-09-08 사용자 결정에 따라
+제거했습니다.
 
-정상 standby 상태는 `deploy/compose/docker-compose.standby.yml`이 소유합니다. 최초
-`pg_basebackup`, fencing/route backend 승인, 자동 승격 활성화, 승격 뒤 재시딩은 이
-문서가 소유합니다.
+이 문서의 Bootstrap 이하 물리 복제와 failover 절차는 재활성화 참고 자료입니다. 다시
+사용하려면 명시적 승인을 새로 받고 당시 Osaka primary에서 새 `pg_basebackup`으로 Seoul을
+재시딩해야 합니다. `deploy/compose/docker-compose.standby.yml`과 controller 코드는 그
+재검토를 위해 저장소에 유지하며 현재 production 활성 구성을 뜻하지 않습니다.
 
 `kapu`의 주기적 dump/restore는 사용자 지시로 2026-09-05 종료했고, user
 `hololive-db-backup.timer`는 `disabled`·`inactive`입니다
@@ -18,10 +19,49 @@
 `/home/kapu/.local/share/hololive-db-backup/hololive-20260905T004953Z.dump` 하나를 보존하며
 현재 데이터로 간주하지 않습니다. 복구에는 별도 PostgreSQL과 archive restore가 필요합니다.
 `kapu`는 `x86_64`이므로 현재 `aarch64` primary의 물리 standby로 전환하지 않습니다.
-Seoul의 streaming replication은 계속 유지되지만 과거 시점 archive를 대체하지 않습니다.
-kapu 갱신 재개나 보존 자료 삭제는 각 대상과 영향에 대한 승인이 필요합니다.
+Seoul 복제를 제거하면 동기화된 대기 복구와 자동 승격 역량이 사라집니다. 2026-09-05 static
+dump는 자동 갱신되지 않아 최신 백업이 아니며, 복구 시점은 그 dump의 생성 시각으로
+제한됩니다. kapu 갱신 재개, Seoul 복제 재구축이나 보존 자료 삭제는 각 대상과 영향에 대한
+명시적 승인이 필요합니다.
 
-## Safety model
+## Current single-primary decision
+
+2026-09-08 제거와 검증을 마친 운영 기준은 다음과 같습니다.
+
+- Osaka `holo-postgres`만 권위 read/write primary입니다.
+- 모든 production consumer의 권위 DB endpoint는 Osaka primary로 해석되어야 합니다.
+- Seoul에는 standby container·PGDATA volume·활성 failover timer/controller가 없어야 합니다.
+- Osaka primary에는 폐기한 Seoul standby용 physical replication slot이 없어야 합니다.
+- PostgreSQL 자동 승격과 동기화된 standby 복구는 제공하지 않습니다.
+
+single-primary 전환을 완료하려면 primary read/write와 TLS, 모든 runtime readiness, collector
+fleet의 DB 연결, Seoul의 standby/container/volume 부재, Osaka의 replication slot 부재를
+함께 확인합니다. 하나라도 확인하지 못하면 제거 완료로 간주하지 않습니다.
+
+API, alarm worker와 중앙 collector `c`는 Docker network의 `holo-postgres:5432`, 원격
+collector `a/b/d`는 Osaka Tailscale IP `100.100.1.8:5433`에 직접 연결합니다. 모든 연결은
+TLS `verify-full`을 사용하며 Osaka와 Seoul의 DB용 Tailscale Service 중계 route는 없습니다.
+Seoul의 failover timer와
+service는 `not-found/inactive`이고 apply drop-in도 없으며, standby container와 전용 PGDATA
+volume을 제거했습니다. Osaka의 `iris_seoul_standby` physical slot도 제거해 남은 replication
+slot은 0개입니다. primary는 재시작하지 않았으며 접속 설정을 반영한 consumer만 순차
+재기동했습니다.
+
+중앙 endpoint는 `hosts/hololive-osaka/hololive-bot/compose.env`의
+`HOLOLIVE_CENTRAL_POSTGRES_HOST=holo-postgres`, `HOLOLIVE_CENTRAL_POSTGRES_PORT=5432`가
+소유합니다. AP의 `ap-compose.env`는 host `100.100.1.8`, port `5433`을 사용합니다.
+host-native AP의 실제 실행 설정은 `/etc/hololive-bot/youtube-collector-host.env`이며,
+`ap-host-native-deploy.sh`도 같은 직접 연결 기본값을 생성합니다.
+
+이전 endpoint로 되돌릴 때는 먼저 Osaka의 service route를 복원하고 연결을 검증한 뒤
+consumer 설정을 순차 복원해야 합니다. 보존된 이전 release의 host env에는 폐기한 service
+DNS가 있을 수 있으므로 바이너리 rollback만으로 현재 접속 설정을 덮어쓰지 않습니다.
+
+## Inactive HA reference: safety model
+
+이 절과 Dependencies의 failover 설계는 production에서 비활성인 재활성화 참고 절차입니다.
+명시적 재승인, 새 base backup, fencing/route 재검증 없이 실행하지 않습니다. 아래 Stable
+database endpoint도 HA 재활성화 때 검토하는 참고 경로이며 현재 consumer는 사용하지 않습니다.
 
 자동 승격은 단순 연결 실패만으로 실행되지 않습니다. 다음 조건을 모두 만족해야 합니다.
 
@@ -61,19 +101,19 @@ commit됐지만 standby로 전송되기 전에 primary가 사라진 트랜잭션
 | fencing backend | 구 primary가 절대로 writer로 재등장하지 않게 하는 외부 증명입니다. SSH reference hook은 호스트가 reachable할 때만 유효합니다. 전원/호스트 상실까지 자동 처리하려면 hypervisor/cloud/PDU 같은 out-of-band fence hook이 필요합니다. |
 | route backend | Tailscale Service `svc:hololive-postgres`, client endpoint `hololive-postgres.tail742dd8.ts.net:5433`. old primary drain 뒤 새 primary의 tailnet IP/port를 광고하고 stable endpoint가 read/write인지 검증합니다. |
 
-## Stable database endpoint
+## Reactivation reference: Stable database endpoint
 
-모든 중앙·AP consumer는 다음 endpoint를 사용합니다. PostgreSQL container 내부 port와
-primary/standby 복제 주소는 그대로 유지합니다.
+HA를 재활성화할 때는 모든 중앙·AP consumer를 다음 service endpoint로 전환하는 방식을
+검토합니다. 현재 single-primary의 직접 연결 설정을 그대로 덮어쓰지 않습니다.
 
 ```text
 HOLOLIVE_CENTRAL_POSTGRES_HOST=hololive-postgres.tail742dd8.ts.net
 HOLOLIVE_CENTRAL_POSTGRES_PORT=5433
 ```
 
-먼저 Tailscale admin console의 Services에서 `hololive-postgres`를 만들고 허용 endpoint로
-`tcp:5433`을 정의합니다. service DNS가 생성되기 전이나 approval이 pending인 상태에서는 다음
-단계로 진행하지 않습니다.
+현재 두 DB host의 service route는 제거된 상태입니다. 재활성화할 때는 Tailscale admin
+console의 Service 정의·승인 상태와 `tcp:5433` endpoint를 다시 확인하고, 광고하는 primary
+target과 service DNS의 read/write probe가 일치하는지 검증합니다.
 
 Tailscale Service host는 tagged device여야 합니다. tailnet policy에는 service host 전용
 `tag:hololive-db`, service auto-approver, 그리고 PostgreSQL consumer에서 TCP 5433으로 가는
@@ -100,30 +140,34 @@ grant를 먼저 반영합니다. 기존 tag를 제거하지 않습니다.
 ```
 
 정책 전체를 위 조각으로 덮어쓰지 않습니다. 현재 tailnet policy에 병합하고 admin console의
-policy test를 통과시킨 뒤 적용합니다. 두 DB host가 `tag:hololive-db`를 광고하도록 승인한 뒤
-다음 순서로 service를 준비합니다.
+policy test를 통과시킨 뒤 적용합니다. 아래 설정은 복제와 service 중계를 명시적으로
+재활성화할 때만 적용하는 참고 절차입니다.
 
 ```bash
-# standby: 구성 직후 drain. consumer 전환 전이라 read-only endpoint가 노출되지 않습니다.
+# 재활성화 참고: standby는 구성 직후 drain해 read-only endpoint를 노출하지 않습니다.
 sudo tailscale serve --yes --service=svc:hololive-postgres --tcp=5433 tcp://100.100.1.5:5434
 sudo tailscale serve drain svc:hololive-postgres
 
-# current primary: 유일한 advertised service host
+# 재활성화 참고: primary만 service를 광고합니다.
 sudo tailscale serve --yes --service=svc:hololive-postgres --tcp=5433 tcp://100.100.1.8:5433
 ```
 
-`tailscale serve get-config --all`에서 두 host의 target을 각각 확인하고, standby는 drained,
-primary만 advertised 상태여야 합니다. service approval이 pending이거나 DNS가 해석되지 않으면
+재활성화 후 `tailscale serve get-config --all`에서 Osaka target이 advertised 상태이고 Seoul
+standby는 drained 상태인지 확인합니다. service approval이 pending이거나 DNS가 해석되지 않으면
 consumer를 전환하지 않습니다.
 
-Service는 raw TCP proxy입니다. `verify-full`을 유지하려면 primary와 standby의 PostgreSQL
-server certificate 모두 기존 SAN을 보존하면서
-`DNS:hololive-postgres.tail742dd8.ts.net`을 포함해야 합니다. route probe용 전용
+Service는 raw TCP proxy입니다. `verify-full`을 유지하려면 현재 primary의 PostgreSQL server
+certificate가 기존 SAN을 보존하면서 `DNS:hololive-postgres.tail742dd8.ts.net`을 포함해야
+합니다. standby를 재활성화할 때는 그 server certificate도 같은 service DNS를 포함해야
+합니다. route probe용 전용
 `route.pgpass`는 `0600 root:root`로 service DNS/5433과 `hololive_replicator`를 매치합니다.
 인증서와 pgpass는 stack-secrets master에서 변경하고 host sync 뒤 각 PostgreSQL에 HUP을
 보낸 다음 direct replication과 service endpoint를 모두 재검증합니다.
 
-## Bootstrap
+## Reactivation reference: Bootstrap
+
+이 절부터 문서 끝까지는 비활성 HA 재구축 참고 절차입니다. 현재 single-primary를 변경할
+권한을 주지 않으며, 명시적 재승인과 새 base backup 없이는 실행하지 않습니다.
 
 primary 준비가 끝난 뒤 standby 호스트에서 실행합니다.
 
@@ -167,7 +211,7 @@ HOLOLIVE_STANDBY_POSTGRES_PORT=5434
 
 방화벽은 필요한 tailnet source만 허용해야 합니다. public bind는 금지합니다.
 
-## Install the failover controller
+## Reactivation reference: Install the failover controller
 
 standby 호스트에 unit을 설치하되 처음에는 dry-run timer만 활성화합니다.
 
@@ -395,7 +439,7 @@ HOLOLIVE_POSTGRES_FAILOVER_INTEGRATION=1 \
 physical slot, TLS `verify-full`, zero-known-lag sample, durable fence, old primary 비쓰기,
 `pg_promote`, new primary `f|off`, route 멱등성, cleanup residue 0이 모두 통과해야 합니다.
 
-### Enable apply
+### Reactivation reference: Enable apply
 
 fence와 route의 fault-injection 검증이 끝난 뒤에만 apply drop-in을 설치합니다.
 
@@ -412,7 +456,7 @@ controller를 1회 실행하고 `primary_healthy`, `failure_count=0`,
 `promotion_state=monitoring`만 확인합니다. apply drop-in, SSH credentials, route config,
 Tailscale approval 중 하나라도 불완전하면 drop-in을 제거하고 dry-run으로 복귀합니다.
 
-## Smoke test
+## Reactivation reference: HA smoke test
 
 ```bash
 # primary: streaming과 slot
@@ -470,7 +514,7 @@ unfence한 뒤에만 정상 Compose lifecycle을 재개합니다.
 | `cannot drain Tailscale Service` | primary service가 미승인·미구성됐거나 tailscaled 오류 | DB stop 전에 중단된 상태입니다. service 승인/config를 복구하고 같은 fence generation을 재실행합니다. |
 | `Tailscale service PostgreSQL probe failed` | service DNS/ACL/certificate/pgpass/advertisement 불일치 | 새 primary와 old-primary fence를 유지하고 route만 복구합니다. direct old endpoint로 되돌리지 않습니다. |
 
-## Emergency execution
+## Reactivation reference: Emergency execution
 
 구 primary를 out-of-band로 이미 격리했더라도 `pg_promote()`를 직접 호출하지 않습니다.
 승격 intent, host health signal, route 재시도 상태를 controller 한 곳이 소유해야 crash recovery가
@@ -487,7 +531,7 @@ sudo systemctl start postgres-failover.timer
 못하면 데이터 손실 가능성을 운영자가 먼저 판단하고 별도 승인된 복구 절차를 작성해야 합니다.
 구 primary 상태가 불명확한 채 직접 승격하면 split brain입니다.
 
-## Rollback
+## Reactivation and retirement reference
 
 승격은 되돌릴 수 없습니다. 새 timeline으로 갈라진 구 primary는 그대로 재기동하지 않습니다.
 

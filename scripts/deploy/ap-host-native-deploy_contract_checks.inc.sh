@@ -31,11 +31,11 @@ else
   pass "ap-host-native does not use raw git rev-parse for revision"
 fi
 
-if grep -Fq 'AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-hololive-postgres.tail742dd8.ts.net}"' "${DEPLOY}" &&
+if grep -Fq 'AP_POSTGRES_HOST="${AP_POSTGRES_HOST:-100.100.1.8}"' "${DEPLOY}" &&
    grep -Fq "printf 'POSTGRES_HOST=%s\\n' \"\$AP_POSTGRES_HOST\"" "${DEPLOY}"; then
-  pass "ap-host-native uses stable PostgreSQL DNS"
+  pass "ap-host-native uses the direct Osaka PostgreSQL endpoint"
 else
-  record_fail "ap-host-native must use stable PostgreSQL DNS"
+  record_fail "ap-host-native must use the direct Osaka PostgreSQL endpoint"
 fi
 if grep -Eq 'CACHE_(HOST|PORT|SOCKET_PATH|PASSWORD)' "${DEPLOY}"; then
   record_fail "ap-host-native generated env must have 0 CACHE lines"

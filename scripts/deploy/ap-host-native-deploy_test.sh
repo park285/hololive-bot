@@ -28,7 +28,7 @@ if [[ -z "${write_host_env_fn}" ]]; then
 elif (
   export service="youtube-collector-a"
   export port="30005"
-  export AP_POSTGRES_HOST="hololive-postgres.tail742dd8.ts.net"
+  export AP_POSTGRES_HOST="100.100.1.8"
   export AP_POSTGRES_PORT="5433"
   export AP_SSH_HOST="100.100.1.6"
   eval "${write_host_env_fn}"
@@ -38,6 +38,9 @@ elif (
     record_fail "generated host env contents still include CACHE lines"
   elif grep -Eq '^SETTINGS_DIR=' "${generated_env}"; then
     record_fail "generated host env contents still include SETTINGS_DIR"
+  elif ! grep -Fxq 'POSTGRES_HOST=100.100.1.8' "${generated_env}" ||
+       ! grep -Fxq 'POSTGRES_PORT=5433' "${generated_env}"; then
+    record_fail "generated host env must use the direct Osaka PostgreSQL endpoint"
   else
     pass "generated host env contents have 0 CACHE lines"
     pass "generated host env contents have 0 SETTINGS_DIR lines"
