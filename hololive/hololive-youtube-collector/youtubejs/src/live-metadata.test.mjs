@@ -18,6 +18,86 @@ test("parseRawLiveMetadata reads the exact matching raw player schedule", () => 
   });
 });
 
+test("parseRawLiveMetadata recovers an upcoming schedule from the offline slate", () => {
+  const raw = {
+    videoDetails: {
+      videoId: "upcoming-offline-slate",
+      isUpcoming: true,
+      isLiveContent: true,
+    },
+    playabilityStatus: {
+      liveStreamability: {
+        liveStreamabilityRenderer: {
+          videoId: "upcoming-offline-slate",
+          offlineSlate: {
+            liveStreamOfflineSlateRenderer: { scheduledStartTime: "1788260400" },
+          },
+        },
+      },
+    },
+  };
+
+  assert.deepEqual(parseRawLiveMetadata(raw, "upcoming-offline-slate"), {
+    videoId: "upcoming-offline-slate",
+    isUpcoming: true,
+    isLiveContent: true,
+    startTimestamp: "2026-09-01T11:00:00.000Z",
+  });
+});
+
+test("parseRawLiveMetadata rejects malformed or contradictory offline slate schedules", () => {
+  const raw = {
+    videoDetails: { videoId: "upcoming-offline-slate", isUpcoming: true },
+    playabilityStatus: {
+      liveStreamability: {
+        liveStreamabilityRenderer: {
+          videoId: "upcoming-offline-slate",
+          offlineSlate: {
+            liveStreamOfflineSlateRenderer: { scheduledStartTime: "tomorrow" },
+          },
+        },
+      },
+    },
+  };
+
+  assert.throws(
+    () => parseRawLiveMetadata(raw, "upcoming-offline-slate"),
+    (error) => error.code === "parser_drift",
+  );
+  raw.playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate
+    .liveStreamOfflineSlateRenderer.scheduledStartTime = "1788260400000";
+  assert.throws(
+    () => parseRawLiveMetadata(raw, "upcoming-offline-slate"),
+    (error) => error.code === "parser_drift",
+  );
+  raw.playabilityStatus.liveStreamability.liveStreamabilityRenderer.videoId = "different-video";
+  raw.playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate
+    .liveStreamOfflineSlateRenderer.scheduledStartTime = "1788260400";
+  assert.throws(
+    () => parseRawLiveMetadata(raw, "upcoming-offline-slate"),
+    (error) => error.code === "parser_drift",
+  );
+});
+
+test("parseRawLiveMetadata rejects disagreeing machine-readable schedules", () => {
+  const raw = structuredClone(playerFixture);
+  raw.playabilityStatus = {
+    liveStreamability: {
+      liveStreamabilityRenderer: {
+        videoId: "upcoming-fixture",
+        offlineSlate: {
+          liveStreamOfflineSlateRenderer: { scheduledStartTime: "1788260460" },
+        },
+      },
+    },
+  };
+
+  assert.throws(
+    () => parseRawLiveMetadata(raw, "upcoming-fixture"),
+    (error) => error.code === "parser_drift",
+  );
+});
+
 test("parseRawLiveMetadata rejects identity, boolean, and timestamp drift", () => {
   assert.throws(
     () => parseRawLiveMetadata(playerFixture, "different-video"),

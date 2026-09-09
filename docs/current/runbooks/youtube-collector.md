@@ -96,7 +96,7 @@ YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player
 
 Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
 
-로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean, RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`만 해석합니다. 표시 문자열은 사용하지 않습니다. Content 목록의 premiere 분류도 같은 raw adapter를 사용하며 `isUpcoming=true`와 `isLiveContent=false`일 때만 content-owned premiere로 유지합니다.
+로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean을 검증합니다. 예정 시각은 RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`를 우선 사용하고, 이 값이 없으면 동일 video ID의 `playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime` epoch seconds를 사용합니다. 두 값이 모두 있으면 같은 시각이어야 합니다. 표시 문자열은 사용하지 않습니다. Content 목록의 premiere 분류도 같은 raw adapter를 사용하며 `isUpcoming=true`와 `isLiveContent=false`일 때만 content-owned premiere로 유지합니다.
 
 32개 후보 초과, identity/schema/time drift 또는 보강 뒤에도 시각이 없는 `UPCOMING`은 terminal `parser_drift`입니다. 해당 collection은 live observation과 checkpoint를 저장하지 않고 partial/empty success나 다른 provider로 전환하지 않습니다. `youtube_collection_attempts_total{provider="youtubejs",kind="live_snapshot",result=...}`와 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
 

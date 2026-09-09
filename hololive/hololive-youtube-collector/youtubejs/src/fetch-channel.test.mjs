@@ -178,6 +178,26 @@ test("fetchChannelFeed enriches a LockupView fixture without parsing display tex
   assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
 });
 
+test("fetchChannelFeed recovers a schedule from the raw player offline slate", async () => {
+  const response = rawPlayerResponse("offline-slate", { startTimestamp: undefined });
+  response.data.playabilityStatus = {
+    liveStreamability: {
+      liveStreamabilityRenderer: {
+        videoId: "offline-slate",
+        offlineSlate: {
+          liveStreamOfflineSlateRenderer: { scheduledStartTime: "1788260400" },
+        },
+      },
+    },
+  };
+  const result = await fetchChannelFeed({
+    channelId: "UC_TEST",
+    innertube: stubChannel({ videos: [{ id: "offline-slate", is_upcoming: true }] }, async () => response),
+  });
+
+  assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
+});
+
 test("fetchChannelFeed preserves list schedules and skips non-upcoming rows", async () => {
   let calls = 0;
   const feed = {
