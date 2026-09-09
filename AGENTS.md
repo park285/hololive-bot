@@ -1,7 +1,7 @@
 # AGENTS.md
 
-Cross-runtime project canon for the `hololive-bot` monorepo.
-Keep this file limited to always-needed project rules across runtimes.
+These project rules apply across agent runtimes in the `hololive-bot` monorepo.
+Keep module-specific rules in the relevant subtree guidance.
 
 ## Project Identity
 
@@ -19,7 +19,7 @@ The central runtime host is `hololive-osaka` (`aarch64`); builds, images, and te
 
 ## Verification Commands
 
-Choose checks relevant to the changed behavior; this list does not require every command. Documentation-only edits normally need diff inspection. Publish-time and explicitly required gates remain mandatory.
+Select checks for the changed behavior from the list below. Documentation-only edits normally need diff inspection. Run all checks required for an authorized publication or by applicable instructions.
 
 ```bash
 ./build-all.sh --no-bump
@@ -30,7 +30,7 @@ go test ./ ../shared-go/... ../iris-client-go/... ./admin-dashboard/backend/... 
 
 ## Runtime Commands
 
-Deployment changes runtime state and requires explicit authorization for its target and scope. Use `hololive-bot-ops` to select the local build and remote no-build procedure. The helper below builds before cutover and belongs on a build host, not a runtime host; it is not a validation command.
+Use `hololive-bot-ops` for the local build and remote no-build deployment procedure. Deployment changes runtime state; apply the global approval-scope rule and reuse authorization covering the target and effects. The helper below builds before cutover and must run on a build host. Treat it as a deployment command, not a validation check.
 
 ```bash
 ./scripts/deploy/compose-redeploy-service.sh <service>
@@ -38,17 +38,21 @@ Deployment changes runtime state and requires explicit authorization for its tar
 
 ## Repo Rules
 
-- Avoid code comments unless the code would be hard to understand without one; write necessary comments in Korean.
-- Keep CI weight placement fixed — do not regress it: the public repository runs a secret-free staged gate (`policy`, `go-modules`, `frontend`, aggregated by `fast-gate`) on pull requests and pushes to `main`, while `security.yml` remains non-PR (`push` to `main`, schedule, and manual dispatch). ALL verification still runs in the local pre-push gate (`scripts/ci/pre-push-gate.sh` → `scripts/ci/local-ci.sh`), including full tests, race detection, NilAway, the PGO-off production policy, workflow-boundary validation (`check-workflow-secrets.sh`), the `scripts/**` shell-syntax sweep, and push-time govulncheck. The gate follows the iris-stack `pre-push-gate-phases-v1` contract: commit-determined checks and conditionally run checker self-tests in `reusable`, `go list -m -u` plus govulncheck in `freshness`, the `go.work` sibling check in `ambient`; `local-ci.sh` itself runs no self-tests and no dependency hygiene. Do not move those blocking local checks into the PR fast gate or add a PR path to `security.yml`.
+- Document introduced or changed public APIs in Korean, including their contracts and side effects. Use internal comments to explain non-obvious reasons or invariants.
+- Preserve the current division of CI checks. The public repository runs a secret-free staged gate (`policy`, `go-modules`, `frontend`, aggregated by `fast-gate`) on pull requests and pushes to `main`, while `security.yml` remains non-PR (`push` to `main`, schedule, and manual dispatch).
+
+  All required verification still runs in the local pre-push gate (`scripts/ci/pre-push-gate.sh` → `scripts/ci/local-ci.sh`), including full tests, race detection, NilAway, the PGO-off production policy, workflow-boundary validation (`check-workflow-secrets.sh`), the `scripts/**` shell-syntax sweep, and push-time govulncheck.
+
+  The gate follows the iris-stack `pre-push-gate-phases-v1` contract: commit-determined checks and conditionally run checker self-tests in `reusable`, `go list -m -u` plus govulncheck in `freshness`, the `go.work` sibling check in `ambient`; `local-ci.sh` itself runs no self-tests and no dependency hygiene. Do not move those blocking local checks into the PR fast gate or add a PR path to `security.yml`.
 - Use `slog` for Go logging and mask sensitive data before logging.
-- Use `fmt.Errorf(\"action: context: %w\", err)` for wrapped errors.
+- Use `fmt.Errorf("action: context: %w", err)` for wrapped errors.
 - Pass `context.Context` as the first argument in Go service and repository flows.
 
 ## Quality Gate Discipline
 
 - Treat `golangci-lint`, NilAway, `go vet`, `staticcheck`, `gosec`, and race detector findings as design feedback first. Prefer fixing the underlying ownership, nil invariant, context propagation, resource lifetime, error wrapping, synchronization, or API boundary issue before adding a suppression.
 - Use `//nolint`, config exclusions, `RUN_NILAWAY=false`, `RUN_RACE_TESTS=false`, `--skip-local-ci`, or similar bypasses only for a narrow, named false positive or an explicitly approved emergency path. Keep the bypass scoped to the smallest file, linter, and command surface, and include a concrete reason.
-- When a stricter gate exposes existing debt, either make the smallest root-cause fix in the touched area or record the residual debt as a follow-up with the failing command and representative finding. Do not broaden blanket excludes to make a gate green.
+- When a stricter gate exposes existing debt, make the smallest root-cause fix in the affected area or record the remaining debt with the failing command and a representative finding. Do not expand exclusions merely to make checks pass.
 - If a suppression is unavoidable, require a specific linter name and explanation (`nolintlint` must stay enabled), then add or keep a verification command that would fail if the real bug reappears.
 
 ## Lint Ratchet Stages

@@ -1,8 +1,8 @@
-INHERIT: ../AGENTS.md
-
 # Admin Dashboard
 
-## L1: Context
+Read `../AGENTS.md` for repository-wide rules. This file adds dashboard-specific guidance.
+
+## Context
 
 | Item | Value |
 |------|-------|
@@ -31,13 +31,13 @@ INHERIT: ../AGENTS.md
 | Holo API proxy | `backend/internal/holo/` |
 | API client | `frontend/src/api/client.ts` |
 
-## L2: Standards
+## Standards
 
 ### Architecture Patterns
 
-- **Proxy Mode**: Authenticate once at dashboard and relay upstream Hololive Admin API with `X-API-Key` injection.
+- **Proxy Mode**: Authenticate requests at the dashboard, then forward them to the upstream Hololive Admin API with `X-API-Key` injection.
 - **Runtime Contract**: Admin dashboard backend is Go-only. `scripts/architecture/check-admin-dashboard-go-only.sh` fails when `admin-dashboard/backend` carries `*.rs`, `Cargo.toml`, or `Cargo.lock`, or when the backend or `admin-dashboard/Dockerfile` still references Rust-only tooling.
-- **WebSocket**: Real-time system stats stream is bounded by concurrency limit and origin validation.
+- **WebSocket**: Enforce concurrency limits and origin validation for the real-time system statistics stream.
 
 ### Security
 
@@ -48,20 +48,26 @@ INHERIT: ../AGENTS.md
 
 ### Commands
 
+Select checks for the changed behavior and run them from the `hololive-bot` repository root. Documentation-only edits normally need diff inspection; publication and explicitly required gates remain mandatory. Subshells keep each command's working directory independent.
+
 ```bash
 # Backend
-cd backend && make lint && make test && make build
-
-# Strict backend gate
-../../scripts/ci/admin-dashboard-go-ci.sh
+(cd admin-dashboard/backend && make lint && make test && make build)
 
 # Frontend
-cd frontend && npm run lint && npm run build
+(cd admin-dashboard/frontend && npm run lint && npm run build)
+```
+
+For full backend validation required by the publication workflow, applicable instructions, or the requested validation scope, use the gate below. It includes the Go-only architecture check, backend build, tests, and lint checks; do not repeat covered checks for the same unchanged inputs.
+
+```bash
+./scripts/ci/admin-dashboard-go-ci.sh
 ```
 
 ### Architecture Validation
 
+Run the Go-only check when changes affect backend language/tooling, `admin-dashboard/Dockerfile`, or dashboard membership in the Go workspace or CI module list. The full backend gate above already includes it.
+
 ```bash
 ./scripts/architecture/check-admin-dashboard-go-only.sh
-./scripts/ci/admin-dashboard-go-ci.sh
 ```
