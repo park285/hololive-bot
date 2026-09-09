@@ -2,10 +2,11 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 40건: proposed 0, accepted 29, rejected 0, withdrawn 2, superseded 9
+레코드 41건: proposed 0, accepted 30, rejected 0, withdrawn 2, superseded 9
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260908-hololive-single-primary-baseline](records/DEC-20260908-hololive-single-primary-baseline.json) | Hololive PostgreSQL은 Osaka 단일 primary와 별도 암호화 백업을 운영 기준으로 둔다 | accepted | implemented | hololive-bot | 2026-09-08 | - | - | [postgres-replication.md](../current/runbooks/postgres-replication.md) |
 | [DEC-20260906-hololive-mekpark-host-ml-evaluation](records/DEC-20260906-hololive-mekpark-host-ml-evaluation.json) | mekPark 분류 모델은 분리된 오프라인 평가로 검증한다 | accepted | verified | hololive-bot | 2026-09-06 | trigger | - | [2026-09-06-mekpark-host-ml-evaluation.md](../current/plans/2026-09-06-mekpark-host-ml-evaluation.md) |
 | [DEC-20260906-hololive-mekpark-title-host-attribution](records/DEC-20260906-hololive-mekpark-title-host-attribution.json) | mekPark 공유 채널의 방송자는 제목 근거로 표시한다 | accepted | verified | hololive-bot | 2026-09-06 | trigger | - | [2026-09-06-mekpark-title-host-attribution.md](../current/plans/2026-09-06-mekpark-title-host-attribution.md) |
 | [DEC-20260906-hololive-unit-b-member-subscriptions](records/DEC-20260906-hololive-unit-b-member-subscriptions.json) | UNIT B는 멤버별 구독을 보존하고 진행자 미상 제목은 구독 방 합집합에 알린다 | accepted | verified | hololive-bot | 2026-09-06 | trigger | - | [2026-09-06-unit-b-member-subscriptions.md](../current/plans/2026-09-06-unit-b-member-subscriptions.md) |

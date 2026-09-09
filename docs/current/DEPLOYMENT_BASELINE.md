@@ -24,15 +24,19 @@
 의도적으로 남았습니다 — `CLIPROXY_BASE_URL`과 `HOLOLIVE_OTLP_GRPC_ENDPOINT`가
 `<build-control-host>`를 가리키는 것은 이전 누락이 아니라 named exception입니다.
 둘째, 같은 호스트에 남아 있던 `holo-postgres`와 dump는 과거 복구용 사본입니다. 사용자
-지시로 2026-09-05 kapu의 주기적 논리 덤프와
-전체 복원을 종료했으며, user `hololive-db-backup.timer`는 `disabled`·`inactive`를
-유지합니다(`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 kapu의 `holo-postgres`
+지시로 2026-09-05 kapu의 기존 시간별 논리 덤프와 전체 복원을 종료했습니다
+(`DEC-20260905-kapu-db-backup-retirement`). 후속 승인으로 kapu의 `holo-postgres`
 container와 `hololive-bot_holo-pg-data` volume, 과거 dump 11개를 제거했습니다
 (`DEC-20260905-stack-disk-cleanup`). `/home/kapu/.local/share/hololive-db-backup/`의
 `hololive-20260905T004953Z.dump` 하나는 보존하지만 자동 갱신되지 않습니다. 현재 primary와
 같은 데이터로 취급하지 않으며 복구에는 별도 PostgreSQL과 archive restore가 필요합니다.
-`valkey-cache`는 이번 정리 대상에 포함하지 않았습니다. 자동 갱신 재개·보존 archive 삭제·복구는
-각 대상과 영향에 대한 승인이 필요합니다. `<build-control-host>`는 `x86_64`라 현재
+2026-09-08부터 같은 `hololive-db-backup.timer` 이름은 새 일일 암호화 백업에 사용하며
+현재 `enabled`·`active`입니다. 새 owner는 `~/.local/bin/hololive-db-backup`이고 매일
+03:30 Asia/Seoul에 최대 180초 jitter로 실행해 `~/.local/share/hololive-db-backup/daily/`에
+암호화된 성공 세대 7개를 보존합니다. 격리 복원으로 검증했으며 상시 로컬 DB나 전체 복원을
+재도입하지 않습니다(`iris-stack`의 `DEC-20260908-infrastructure-efficiency-with-retention`).
+`valkey-cache`는 이번 정리 대상에 포함하지 않았습니다. 구 시간별 복원 작업 재활성화·
+보존 archive 삭제·운영 복구는 각 대상과 영향에 대한 승인이 필요합니다. `<build-control-host>`는 `x86_64`라 현재
 `aarch64` primary의 물리 standby 역할을 맡지 않습니다.
 이 호스트의 `hololive-compose.service`는 `disabled`로 두어 재부팅이 두 번째 alarm
 dispatcher를 띄우지 못하게 합니다. 활성화는 명시적 롤백 결정을 요구합니다.

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260908-hololive-single-primary-baseline",
+  "title": "Hololive PostgreSQL은 Osaka 단일 primary와 별도 암호화 백업을 운영 기준으로 둔다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-08",
+  "summary": "기존 사용자 결정과 운영 문서에 기록된 Seoul physical standby 및 failover controller 퇴역을 정식 DEC에 연결한다. 권위 데이터는 Osaka primary에 두고 중앙 consumer는 Docker endpoint, 원격 AP는 Osaka tailnet endpoint와 TLS verify-full을 사용한다. 동기화된 standby 복구와 자동 승격은 제공하지 않으며 재활성화에는 새 승인·base backup·fencing 및 route 검증이 필요하다. 폐기된 시간별 local dump/restore와 후속 일일 암호화 백업을 구분한다. 이번 작업은 기록 정합화이며 추가 운영 변경을 승인하거나 실행하지 않는다.",
+  "sources": [
+    "docs/current/runbooks/postgres-replication.md#Current single-primary decision"
+  ],
+  "evidence": [
+    "docs/current/runbooks/postgres-replication.md",
+    "docs/current/DEPLOYMENT_BASELINE.md"
+  ],
+  "implementation": [
+    "scripts/deploy/ap-host-native-deploy.sh",
+    "docs/current/runbooks/postgres-replication.md"
+  ],
+  "supersedes": []
+}
