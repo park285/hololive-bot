@@ -26,4 +26,28 @@ Fallback delta: none. 새 의존성·공개 발급 endpoint·업무 변경 권�
 
 ## 운영 인수
 
-운영 반영과 실제 임시 계정 검증은 아직 실행하지 않았습니다. 정상 발행 이후 중앙 `admin-dashboard`만 반영하고, 로그인·7개 메뉴 조회·heartbeat CSRF·통계 WS를 검사합니다. 계정 폐기 후 동일 cookie와 새 로그인 거부, WS 종료, 계정 부재와 자격증명 파일 제거를 별도 기록해야 합니다. 기존 RSS 회복 검사의 예외는 이 기능의 검사로 해소됐다고 주장하지 않습니다.
+PR [#486](https://github.com/park285/hololive-bot/pull/486)의 정상 pre-push 검사는 전체 Go build/test/race/lint/NilAway, 프런트 175건·3개 엔진(skip 0), 모든 모듈의 실제 호출 취약점 0건을 확인했습니다. UTC 회귀를 수정한 최종 GitHub 실행 [34490464652](https://github.com/park285/hololive-bot/actions/runs/34490464652)은 11개 job과 fast-gate를 모두 통과했습니다. main에 반영된 `be4a48737036000ba8209340458c38921c2480a6`의 전체 source tree가 검사한 `2702ea41720fa496ad553682462c7ccba7644d95`와 같은지 확인했습니다.
+
+깨끗한 main source를 kapu의 `kapu-multiarch`에서 `linux/arm64`로 빌드했습니다. 검증·전송한 image는 `sha256:f7fd9b5a163d51839945b5164e8e379cc49479eea0a825439cb3fd9c345c08f6`이며 원격에서 architecture·40자리 revision·UID/GID를 다시 확인했습니다. 전송 묶음에는 image, SBOM, manifest, checksum, 상태 기준과 새 운영 CLI 설명만 포함했습니다. 중앙 release는 `/opt/hololive-bot/releases/admin-test-account-20260910T145155Z-be4a48737`입니다.
+
+2026-09-10 23:52:01 KST에 관리자 ingress를 정비 상태로 전환했습니다. 이전 BFF는 445ms 안에 exit 0·OOM 없이 종료됐고, `up -d --no-build --no-deps --force-recreate admin-dashboard`로 해당 서비스만 반영했습니다. health 통과 뒤 origin을 개방했습니다. 이전 image `sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef`는 `admin-dashboard:rollback-admin-test-account-20260910T145155Z-be4a48737` tag로, 이전 runbook은 release의 root 전용 `rollback/`에 보존했습니다.
+
+23:52:18 KST부터 공개 `https://admin.holoshi.com`에서 실제 Chrome을 사용했습니다. 정상 CLI로 15분 조회 계정을 한 번 발급하고 로그인 화면에서 제출했습니다. 자격증명은 컨테이너의 0600 파일과 검증 프로세스 메모리 안에서만 사용했으며 cookie·CSRF·응답 본문·화면·trace를 파일이나 출력에 남기지 않았습니다.
+
+| 실제 운영 검사 | 결과 |
+| --- | --- |
+| 로그인 화면에서 임시 계정 제출 | HTTP 200, 통계 화면 이동 |
+| stats·streams·members·calendar·alarms·rooms·settings | 7개 메뉴 렌더링, 11개 조회 요청 모두 200, 오류 alert 없음 |
+| CSRF 없는 / 유효 CSRF heartbeat | 403 / 200 |
+| 두 인증 cookie | HttpOnly·Secure·SameSite=Strict |
+| 통계 WebSocket | 정상 연결·2개 frame 수신·오류 0 |
+| 지정 계정 폐기 | `revoked`, 기존 WS close code 1008 |
+| 폐기 뒤 동일 cookie / 재로그인 | 401 / 401 |
+| 최종 계정·파일 | `absent`, 자격증명 파일과 소유한 임시 디렉터리 제거 |
+| 브라우저·CSP·업무 mutation | page error 0, CSP 위반 0, 업무 mutation 0 |
+
+검증은 300초 상한·`KillMode=control-group`·core dump 금지인 transient unit에서 16.727초 만에 성공 종료했습니다. 이는 로컬 브라우저 검증 프로세스의 실행 시간이며 서버 성능 표본이 아닙니다. 폐기된 세션 레코드는 기존 TTL까지 남을 수 있지만 모든 해당 인증 권한은 즉시 사라집니다.
+
+23:53:17 KST 재확인에서 운영 image가 위 revision과 일치하고 healthy·재시작 0·OOM 없음, 전환 이후 error/panic/fatal 계열 표지 0건, 테스트 계정 `absent`를 확인했습니다. 다른 7개 컨테이너의 ID·image·시작 시각·재시작 등 상태와 실제 Compose overlay 경로가 전환 전과 같습니다. 기존 관리자 파일 4개와 master env의 소유권·mode·크기·inode·mtime·ctime도 변하지 않았습니다. 기존 관리자 암호·서명 키 변경과 세션 prefix purge는 수행하지 않았습니다.
+
+이 실제 인수로 기존 교체 계획의 T11/AC11/V11에 남아 있던 로그인·조회·실시간 통계 검증을 충족했습니다. 기존 RSS 회복 검사의 실패와 사용자가 수용한 성능 예외는 유지하며 이 기능의 검사로 해소됐다고 주장하지 않습니다.
