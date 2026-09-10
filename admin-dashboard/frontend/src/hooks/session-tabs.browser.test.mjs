@@ -304,9 +304,20 @@ function fixture(state) {
 
 async function ready(page, url) {
   const errors = [];
+  const requests = [];
+  const failed = request => {
+    if (requests.length < 16) requests.push({ path: new URL(request.url()).pathname, failure: request.failure()?.errorText });
+  };
+  const responded = response => {
+    if (response.status() >= 400 && requests.length < 16) requests.push({ path: new URL(response.url()).pathname, status: response.status() });
+  };
   page.on("pageerror", error => { errors.push(error.message); });
-  await page.goto(url);
-  try { await page.waitForFunction(() => window.contract?.ready, undefined, { timeout: 10000 }); }
+  page.on("requestfailed", failed);
+  page.on("response", responded);
+  try {
+    await page.goto(url);
+    await page.waitForFunction(() => window.contract?.ready, undefined, { timeout: 10000 });
+  }
   catch (error) {
     const snapshot = await page.evaluate(() => ({
       readyState: document.readyState, visibility: document.visibilityState, href: location.href,
@@ -314,7 +325,10 @@ async function ready(page, url) {
       generation: window.contract?.generation?.(), sessionResolved: window.contract?.resolved?.(),
       resources: performance.getEntriesByType("resource").slice(-15).map(entry => ({ path: new URL(entry.name).pathname, duration: entry.duration, responseStatus: entry.responseStatus }))
     })).catch(error => ({ unavailable: error.message }));
-    throw new Error(`browser startup failed: ${errors.join("; ")}; snapshot=${JSON.stringify(snapshot)}`, { cause: error });
+    throw new Error(`browser startup failed: ${errors.join("; ")}; snapshot=${JSON.stringify(snapshot)}; requests=${JSON.stringify(requests)}`, { cause: error });
+  } finally {
+    page.off("requestfailed", failed);
+    page.off("response", responded);
   }
 }
 async function login(page) {
