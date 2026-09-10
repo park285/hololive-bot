@@ -1,25 +1,16 @@
-# AGENTS.md
+# Hololive repository guidance
 
-These project rules apply across agent runtimes in the `hololive-bot` monorepo.
-Keep module-specific rules in the relevant subtree guidance.
+These rules apply across agent runtimes. In an iris-stack checkout, also read `../AGENTS.md`. Run commands from this repository root; read deeper `AGENTS.md` and `CONVENTIONS.md` for the affected subtree. `docs/current/PROJECT_MAP.md` owns the current module/runtime map.
 
-## Project Identity
+## Ownership
 
-This repository is a Go monorepo with central and AP-host deployments.
-It includes the unified `hololive-api` runtime (bot/admin/llm planes in one process), the alarm worker, the YouTube collector module (`hololive/hololive-youtube-collector`, binary `youtube-collector`; fetch uses collector-owned Holodex, Official Schedule, and YouTube.js helpers), shared libraries, and the admin dashboard. The collector runs as a four-member AP fleet: Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`. External fetch, normalization, lease/checkpoint, and source-observation publishing remain collector-owned.
+The Go monorepo contains unified `hololive-api` (bot/admin/llm planes), alarm worker, `hololive/hololive-youtube-collector` (binary `youtube-collector`), shared libraries, and admin dashboard. The collector owns Holodex/Official Schedule/YouTube.js fetch, normalization, lease/checkpoint, and source-observation publishing. Its AP fleet is Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`.
 
-The central runtime host is `hololive-osaka` (`aarch64`); builds, images, and tests stay on the `kapu` workstation, which also hosts CLIProxy and the observability stack. Central bind addresses are owned by each host's `compose.env`, not by Compose defaults.
+Central runs on `hololive-osaka` (aarch64). Builds, images, and tests stay on `kapu`, also the CLIProxy/observability host; host `compose.env` owns bind addresses, not Compose defaults.
 
-## Working Defaults
+## Verification and deployment
 
-1. Run commands from the repository root.
-2. Use deeper subtree `AGENTS.md` files before changing code in specialized modules.
-3. Use subtree `CONVENTIONS.md` files when they exist.
-4. Use `docs/current/PROJECT_MAP.md` for the current module map and ownership boundaries.
-
-## Verification Commands
-
-Select checks for the changed behavior from the list below. Documentation-only edits normally need diff inspection. Run all checks required for an authorized publication or by applicable instructions.
+Choose checks matching the change; docs-only edits normally need diff inspection. Required publish gates still apply.
 
 ```bash
 ./build-all.sh --no-bump
@@ -28,41 +19,20 @@ go test ./ ../shared-go/... ../iris-client-go/... ./admin-dashboard/backend/... 
 (cd hololive/hololive-youtube-collector/youtubejs && npm test)
 ```
 
-## Runtime Commands
+Use `hololive-bot-ops` for local builds and remote no-build deployments under the global approval-scope rule. `./scripts/deploy/compose-redeploy-service.sh <service>` builds before cutover and must run on a build host; it is a deployment command, not validation.
 
-Use `hololive-bot-ops` for the local build and remote no-build deployment procedure. Deployment changes runtime state; apply the global approval-scope rule and reuse authorization covering the target and effects. The helper below builds before cutover and must run on a build host. Treat it as a deployment command, not a validation check.
+## CI boundaries
 
-```bash
-./scripts/deploy/compose-redeploy-service.sh <service>
-```
+PRs and main pushes run the secret-free staged gate (`policy`, `go-modules`, `frontend`, aggregated by `fast-gate`). `security.yml` remains non-PR (main push, schedule, manual dispatch).
 
-## Repo Rules
+`scripts/ci/pre-push-gate.sh` → `scripts/ci/local-ci.sh` owns required full tests, race detection, NilAway, PGO-off production policy, `check-workflow-secrets.sh`, the `scripts/**` shell-syntax sweep, and push-time govulncheck. Preserve `pre-push-gate-phases-v1`: commit-determined checks/conditional checker self-tests in `reusable`, `go list -m -u` and govulncheck in `freshness`, sibling `go.work` check in `ambient`. `local-ci.sh` runs neither self-tests nor dependency hygiene. Do not move blocking local checks into PR fast-gate or add a PR path to `security.yml`.
 
-- Document introduced or changed public APIs in Korean, including their contracts and side effects. Use internal comments to explain non-obvious reasons or invariants.
-- Preserve the current division of CI checks. The public repository runs a secret-free staged gate (`policy`, `go-modules`, `frontend`, aggregated by `fast-gate`) on pull requests and pushes to `main`, while `security.yml` remains non-PR (`push` to `main`, schedule, and manual dispatch).
+## Code and lint rules
 
-  All required verification still runs in the local pre-push gate (`scripts/ci/pre-push-gate.sh` → `scripts/ci/local-ci.sh`), including full tests, race detection, NilAway, the PGO-off production policy, workflow-boundary validation (`check-workflow-secrets.sh`), the `scripts/**` shell-syntax sweep, and push-time govulncheck.
+- Document new/changed public APIs in Korean with contracts and side effects; internal comments explain reasons/invariants. Use `slog` with sensitive data masked, `fmt.Errorf("action: context: %w", err)`, and `context.Context` first in service/repository flows.
+- Fix ownership, nil invariants, context, lifetime, wrapping, synchronization, and API-boundary causes before suppressing golangci-lint, NilAway, vet, staticcheck, gosec, or race findings. For exposed existing debt, make the smallest relevant fix or report the failing command and representative finding.
+- `//nolint`, config exclusions, `RUN_NILAWAY=false`, `RUN_RACE_TESTS=false`, `--skip-local-ci`, and similar bypasses require a narrow named false positive or explicitly approved emergency. Scope to the smallest file/linter/command and give a concrete reason. Suppress only safe code the tool cannot model, name the linter, keep `nolintlint`, and retain a check that catches a real regression.
+- Stage 3 remains blocking with all prerequisites: baseline `errcheck/govet/ineffassign/staticcheck/unused`; Stage 1 `bodyclose/noctx/errorlint/durationcheck/copyloopvar`; Stage 2 `gosec/exhaustive/contextcheck/unconvert/unparam/gocritic`; Stage 3 `errchkjson/makezero/prealloc/nestif/gocognit/nolintlint`.
+- Keep NilAway and race blocking in local CI, pre-push, and security validation where applicable. Test exclusions need a documented named false positive. Never hide entire directories, linter classes, or test files to pass/promote a gate; existing generated-code and third-party exclusions may remain.
 
-  The gate follows the iris-stack `pre-push-gate-phases-v1` contract: commit-determined checks and conditionally run checker self-tests in `reusable`, `go list -m -u` plus govulncheck in `freshness`, the `go.work` sibling check in `ambient`; `local-ci.sh` itself runs no self-tests and no dependency hygiene. Do not move those blocking local checks into the PR fast gate or add a PR path to `security.yml`.
-- Use `slog` for Go logging and mask sensitive data before logging.
-- Use `fmt.Errorf("action: context: %w", err)` for wrapped errors.
-- Pass `context.Context` as the first argument in Go service and repository flows.
-
-## Quality Gate Discipline
-
-- Treat `golangci-lint`, NilAway, `go vet`, `staticcheck`, `gosec`, and race detector findings as design feedback first. Prefer fixing the underlying ownership, nil invariant, context propagation, resource lifetime, error wrapping, synchronization, or API boundary issue before adding a suppression.
-- Use `//nolint`, config exclusions, `RUN_NILAWAY=false`, `RUN_RACE_TESTS=false`, `--skip-local-ci`, or similar bypasses only for a narrow, named false positive or an explicitly approved emergency path. Keep the bypass scoped to the smallest file, linter, and command surface, and include a concrete reason.
-- When a stricter gate exposes existing debt, make the smallest root-cause fix in the affected area or record the remaining debt with the failing command and a representative finding. Do not expand exclusions merely to make checks pass.
-- If a suppression is unavoidable, require a specific linter name and explanation (`nolintlint` must stay enabled), then add or keep a verification command that would fail if the real bug reappears.
-
-## Lint Ratchet Stages
-
-- Stage 3 is the current blocking `golangci-lint` gate. Keep the baseline (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`), Stage 1 (`bodyclose`, `noctx`, `errorlint`, `durationcheck`, `copyloopvar`), Stage 2 (`gosec`, `exhaustive`, `contextcheck`, `unconvert`, `unparam`, `gocritic`), and Stage 3 (`errchkjson`, `makezero`, `prealloc`, `nestif`, `gocognit`, `nolintlint`) enabled together.
-- Keep NilAway and race detector blocking in local CI, pre-push, and security validation where applicable. Do not exclude test files from NilAway or lint unless a named false positive is documented.
-- Clear new findings through root-cause code fixes first. Accept suppressions only when the code is already safe, the tool cannot model the invariant, and the line carries a concrete reason.
-- Do not promote or preserve a gate by hiding whole directories, broad linter classes, test files, or generated blanket exclusions. Generated code and third-party dependency directories may remain excluded.
-
-## Reference
-
-Use `docs/current/PROJECT_MAP.md` for structure and ownership.
-Use subtree guides such as `admin-dashboard/AGENTS.md` and subtree `CONVENTIONS.md` files (e.g. `hololive/hololive-api/scripts/migrations/CONVENTIONS.md`) for local module rules.
+Dashboard rules are in `admin-dashboard/AGENTS.md`; migration rules include `hololive/hololive-api/scripts/migrations/CONVENTIONS.md`.
