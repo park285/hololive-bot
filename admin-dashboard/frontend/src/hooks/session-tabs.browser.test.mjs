@@ -307,7 +307,15 @@ async function ready(page, url) {
   page.on("pageerror", error => { errors.push(error.message); });
   await page.goto(url);
   try { await page.waitForFunction(() => window.contract?.ready, undefined, { timeout: 10000 }); }
-  catch (error) { throw new Error(`browser startup failed: ${errors.join("; ")}`, { cause: error }); }
+  catch (error) {
+    const snapshot = await page.evaluate(() => ({
+      readyState: document.readyState, visibility: document.visibilityState, href: location.href,
+      contractPresent: !!window.contract, contractReady: window.contract?.ready,
+      generation: window.contract?.generation?.(), sessionResolved: window.contract?.resolved?.(),
+      resources: performance.getEntriesByType("resource").slice(-15).map(entry => ({ path: new URL(entry.name).pathname, duration: entry.duration, responseStatus: entry.responseStatus }))
+    })).catch(error => ({ unavailable: error.message }));
+    throw new Error(`browser startup failed: ${errors.join("; ")}; snapshot=${JSON.stringify(snapshot)}`, { cause: error });
+  }
 }
 async function login(page) {
   // 조회는 잠금을 기다릴 수 있으므로 그 조회가 끝난 뒤 명시적으로 로그인합니다.
@@ -753,10 +761,11 @@ async function exerciseReadPages(browser, base, state) {
   const context = await browser.newContext(); const page = await context.newPage();
   try {
     await ready(page, base + "/__session_test?tab=READS"); await login(page);
-    for (const feature of ["rooms", "streams", "calendar", "stats"]) {
+    for (const [feature, label] of [["rooms", "채팅방 접근 설정"], ["streams", "진행 중인 방송"], ["calendar", "기념일 달력"], ["stats", "Hololive 통계"]]) {
       state.readMode = "error";
       await page.evaluate(feature => window.contract.navigate("/dashboard/" + feature + "-view"), feature);
-      await expect(page.getByText("조회 결과를 확인하지 못했습니다.", { exact: true }).first()).toBeVisible();
+      // 이전 화면의 같은 오류 문구로 통과하면 새 query가 등록되기 전에 refetch할 수 있습니다.
+      await expect(page.getByRole("alert").filter({ has: page.getByText(label, { exact: true }) })).toContainText("조회 결과를 확인하지 못했습니다.");
       if (feature === "rooms") assert.equal(await page.getByRole("switch").count(), 0, "failed ACL reads cannot invent a switch state");
       if (feature === "stats") assert.equal(await page.getByText("등록된 멤버", { exact: true }).count(), 0, "failed stats cannot invent zero counters");
       state.readMode = "ok"; await page.evaluate(() => window.contract.refetchEditors());
