@@ -105,7 +105,7 @@ func TestCommandIssuesReportsAndRevokesWithoutPrintingCredentials(t *testing.T) 
 	require.Contains(t, output.String(), `"status":"revoked"`)
 	output.Reset()
 	require.NoError(t, Run(t.Context(), []string{statusCommand}, &output))
-	require.Contains(t, output.String(), `"status":"absent"`)
+	require.JSONEq(t, `{"status":"absent","expires_at_unix":0,"read_only":true}`, output.String())
 }
 
 func TestCredentialFileRejectsExistingFilesSymlinksAndPublicDirectories(t *testing.T) {

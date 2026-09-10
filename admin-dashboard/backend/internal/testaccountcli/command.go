@@ -29,7 +29,7 @@ type options struct {
 type receipt struct {
 	Status        string `json:"status"`
 	Username      string `json:"username,omitempty"`
-	ExpiresAtUnix int64  `json:"expires_at_unix,omitempty"`
+	ExpiresAtUnix int64  `json:"expires_at_unix"` // 만료가 없는 상태에도 기존의 0 필드를 유지합니다.
 	ReadOnly      bool   `json:"read_only"`
 }
 
