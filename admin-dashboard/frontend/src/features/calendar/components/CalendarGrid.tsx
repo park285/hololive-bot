@@ -1,4 +1,5 @@
 import type { CalendarEntry } from "../types";
+import { safeHTTPURL } from "@/lib/urls";
 
 interface CalendarGridProps {
 	entries: CalendarEntry[];
@@ -48,9 +49,9 @@ export const CalendarGrid = ({ entries, month }: CalendarGridProps) => {
 								key={`${entry.kind}-${entry.member.channelId}`}
 								className="flex items-center gap-3 rounded-xl bg-muted p-3 hover:bg-linear-to-r hover:from-rose-50/40 hover:to-transparent transition-colors"
 							>
-								{entry.member.photo && (
+								{safeHTTPURL(entry.member.photo) && (
 									<img
-										src={entry.member.photo}
+										src={safeHTTPURL(entry.member.photo)?.href}
 										alt={displayName(entry)}
 										className="h-10 w-10 rounded-full object-cover"
 									/>

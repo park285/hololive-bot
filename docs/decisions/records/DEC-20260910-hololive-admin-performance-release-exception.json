@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260910-hololive-admin-performance-release-exception",
+  "title": "관리자 교체의 RSS 회복 실패와 단축 성능 검증을 수용해 출시한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-10",
+  "summary": "사용자가 관찰된 RSS 회복 실패를 수용하고 적대적 리뷰 뒤 관리자 교체를 커밋·푸시·운영 반영하도록 승인했다. 앞선 장시간 대기 축소 지시를 유지하여 정규 12회/60분을 통과로 바꾸지 않고 단축 비교와 관찰 및 원래 실패를 보존한다. 이 예외는 이번 관리자 교체의 성능·자원 출시 판정에 한정하며 GC가 전체 증가 원인이라는 확정이나 누수 부재를 뜻하지 않는다. 코드·보안·계약·복구·공급망 검증과 로컬 빌드/원격 no-build 경계는 유지한다. 승인된 중앙 관리자 세대 교체와 관련 Git 발행을 완료한 뒤 실제 증거로 이행 상태를 갱신한다.",
+  "sources": ["docs/design/2026-09-10-admin-release-acceptance.md#관리자 교체의 성능 예외와 출시 승인"],
+  "evidence": ["admin-dashboard/docs/bigbang/performance-resolution.md", "admin-dashboard/docs/bigbang/release-review.md"],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "trigger": "이번 관리자 교체의 출시·rollback 수용 시점 또는 OOM·연결 누수·지속적인 메모리 증가·성능 예산 초과가 새로 관찰될 때 재검토한다"
+  }
+}

@@ -1,65 +1,46 @@
 # Admin Dashboard Docs
 
-이 디렉터리는 `admin-dashboard` 전용 문서를 둡니다.
-
-## 문서 인덱스
-
-- `README.md`: 문서 인덱스 및 현재 구조 개요
-- `openapi-pipeline.md`: OpenAPI SSOT(`spec.json`) → generated client 흐름
-- `SESSION_PREWARNING_BACKEND_CONTRACT.md`: 세션 pre-warning UX 백엔드 계약 / 프론트 handoff
-- `FRONTEND_IMPROVEMENTS.md`: 프런트엔드 개선 기록
-- `BOT_ONLY_MIGRATION_STATUS_20260309.md`: bot-only 전환 시점 기록 (Rust 백엔드 시절, 파일 경로 무효 — 문서 상단 주석 참고)
+관리자 UI와 Go BFF는 같은 contract generation으로 빌드하고 함께 전환합니다. 현재 작업과 출시 여부는 `DEC-20260909-hololive-admin-bigbang-replacement` 및 연결된 PLN이 소유합니다.
 
 ## 현재 구조
 
-- 백엔드는 Go입니다 (Go 1.27.1 toolchain, Gin 1.12 router on `net/http`). 모듈은 `admin-dashboard/backend`이고 진입점은 `backend/cmd/admin-dashboard/main.go`입니다.
-- 프런트엔드는 React + Vite (`admin-dashboard/frontend`)이며, generated API client는 백엔드 OpenAPI(`swagger.json`)에서 생성합니다.
-- 프런트 개발 프록시 기본 대상은 `http://localhost:30190`입니다. (실제 값은 `frontend/vite.config.ts` 확인)
+| 경계 | Owner |
+|---|---|
+| 실행과 자원 수명 | `backend/cmd/admin-dashboard/`, `backend/internal/bootstrap/` |
+| HTTP·인증·CSRF·generation·업무 admission·WS | `backend/internal/httpapi/` |
+| 명세·모델·접근 목록·Docker 정책 | `backend/internal/contract/` |
+| Holo·Docker 외부 I/O | `backend/internal/adapters/holo/`, `backend/internal/adapters/docker/` |
+| 세션·family·rotation·mutation 선점 | `backend/internal/session/` |
+| 상태 집계·샘플·구독 | `backend/internal/observations/` |
+| 설정 | `backend/internal/config/load.go`, `secrets.go`, `validate.go`; `config.go`는 타입과 기본값 |
+| 기존 인증·정적 파일 기능 | `backend/internal/auth/`, `backend/internal/httpx/`, `backend/internal/static/` |
+| 앱 조립 | `frontend/src/main.tsx`, `app/bootstrap.ts`, `App.tsx` |
+| 주입된 SDK·transport·오류 | `frontend/src/api/` |
+| 인증과 정책·CSRF의 단일 상태 | `frontend/src/session/` |
+| 조회·업무 변경·편집 초안 | `frontend/src/queries/`, `operations/`, `editors/` |
+| 전체 메뉴·Docker | `frontend/src/features/`; Docker는 설정 메뉴 안에서 제공 |
 
-## 백엔드 레이아웃
+공유 포트는 `30190`이고 Vite 개발 프록시는 `http://localhost:30190`의 `/admin/meta.json`과 `/admin/api`를 사용합니다. 버전 정본은 `backend/go.mod`, `frontend/package.json`과 lockfile입니다.
 
-- `backend/internal/app/`: Gin runtime 조립.
-  - `routes.go`: 라우트 테이블 — `/admin/api/*` 아래 public(login) / 인증(`r.auth()`) / CSRF(`r.csrf()`) 그룹, `/admin/docs`(Swagger UI)
-  - `handlers.go`: docker / status / health / WebSocket 핸들러
-  - `session_handlers.go`: auth 핸들러 (login, logout, heartbeat, session)
-  - `middleware.go`: auth / CSRF / ETag / security-header 미들웨어
-  - `responses.go`, `app.go`: 응답 헬퍼와 runtime 조립
-- `backend/internal/holo/`: hololive-api로 향하는 typed reverse proxy (`/admin/api/holo/*`)
-- `backend/internal/docker/client.go`: docker control. 컨테이너 목록/`restart`/`stop`/`start`. Container JSON은 `managed`·`stopBlocked` 필드를 포함하고, 인프라 컨테이너(`valkey`·`postgres`·`deunhealth`·`admin` prefix) `stop`은 403으로 거부하며 `restart`만 허용합니다.
-- `backend/internal/session/`: Valkey 기반 세션 store. `session.go`가 store/연결, `lifecycle.go`가 Lua CAS 스크립트로 refresh/rotate를 처리합니다.
-- `backend/internal/config/config.go`: 환경변수 로딩과 검증 (`SessionConfig`, `SecurityConfig` 등). `rotation_interval < expiry_duration`을 강제하고, `FORCE_HTTPS`가 켜졌는데 `TRUST_FORWARDED_HEADERS`/`TRUSTED_PROXY_CIDRS` 신뢰 설정이 없으면 시작 시 경고합니다.
-- `backend/internal/openapi/`: embed된 OpenAPI SSOT(`spec.json`)와 export 헬퍼
-- `backend/internal/auth/`, `backend/internal/status/`, `backend/internal/httpx/`, `backend/internal/static/`: 인증 토큰/쿠키, 상태 집계, HTTP 유틸, 정적 자산 서빙
-- `backend/cmd/`: `admin-dashboard`(서버), `export-openapi`(spec export), `healthcheck`
+## 계약과 문서
 
-## OpenAPI / generated client
+- [OpenAPI pipeline](openapi-pipeline.md): `backend/internal/contract/openapi.json` → Go embed·접근 목록·SDK·standalone validator.
+- [세션과 세대](bigbang/session-generation.md), [재전송의 효과·불확실성](bigbang/mutation-replay-evidence.md).
+- [범위 manifest](bigbang/endpoint-feature-parity.json), [기능별 현재 소비 경로](bigbang/candidate-parity.json), [제거 대상](bigbang/retirement.json).
+- [운영 runbook](../../docs/current/runbooks/admin-dashboard.md): secret 파일·로컬 빌드·원격 no-build·첫 전환·전체 복구.
 
-- SSOT는 손으로 관리하는 `backend/internal/openapi/spec.json`이며 빌드 타임에 embed됩니다.
-- 런타임에는 `EnableOpenAPI`일 때 `GET /admin/api/openapi.json`, `EnableSwaggerUI`일 때 `GET /admin/docs`로만 노출됩니다.
-- 파이프라인 전체는 `openapi-pipeline.md` 참고.
+`SESSION_PREWARNING_BACKEND_CONTRACT.md`, `FRONTEND_IMPROVEMENTS.md`, `BOT_ONLY_MIGRATION_STATUS_20260309.md`는 과거 구현·인계 기록입니다. 현재 실행 경로나 완료 판정의 정본으로 사용하지 않습니다.
 
-## 검증 명령
+## 검증
 
-```bash
-cd admin-dashboard/backend
-make lint    # gofmt + go vet + staticcheck
-make test
-make build
-```
-
-리포지토리 게이트 (meta-repo root 기준):
+`hololive-bot/`에서 실행합니다. 브라우저 시험은 세 엔진의 실행 환경이 필요하며 skip은 출시 통과가 아닙니다.
 
 ```bash
-bash scripts/ci/admin-dashboard-go-ci.sh              # staticcheck, golangci-lint, NilAway, race tests, govulncheck
-bash scripts/architecture/check-admin-dashboard-go-only.sh
+./scripts/ci/admin-dashboard-go-ci.sh
+./scripts/architecture/check-admin-contract.sh
+node scripts/architecture/check-admin-feature-parity.mjs
+(cd admin-dashboard/frontend && corepack npm run lint && corepack npm run build)
+(cd admin-dashboard/frontend && corepack npm test)
 ```
 
-프런트:
-
-```bash
-cd admin-dashboard/frontend
-corepack npm ci
-corepack npm run generate:api   # backend spec에서 swagger.json + generated client 재생성
-corepack npm run lint
-corepack npm run build
-```
+`corepack npm run generate:api`는 frontend 디렉터리에서 실행합니다. 생성 파일을 손으로 수정하거나 별도 Swagger mirror를 만들지 않습니다. production build의 모듈·파일 hash 목록은 `frontend/node_modules/.cache/admin-build-inventory.json`에 기록하며 공개 assets에 포함하지 않습니다.

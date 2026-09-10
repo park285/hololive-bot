@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/api/queryKeys";
+import { queryKeys } from "@/queries/keys";
 import { calendarApi } from "../api";
 
 function nowKST(): Date {

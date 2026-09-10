@@ -1,8 +1,9 @@
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { Button } from "@/components/ui/Button";
+import { QueryNotice } from "@/queries/QueryNotice";
+import { operations } from "@/app/bootstrap";
 import { RoomsAclSection } from "@/features/rooms/components/RoomsAclSection";
 import { RoomsListSection } from "@/features/rooms/components/RoomsListSection";
-import { useRoomsPage } from "@/features/rooms/hooks/useRoomsPage";
+import { MODE_LABELS, useRoomsPage } from "@/features/rooms/hooks/useRoomsPage";
 
 export const RoomsPage = () => {
 	const {
@@ -11,17 +12,12 @@ export const RoomsPage = () => {
 		removeModal,
 		setRemoveModal,
 		query,
+		view,
+		joinedQuery,
+		joinedView,
 		addRoomMutation,
 		removeRoomMutation,
 		setACLMutation,
-		rooms,
-		aclEnabled,
-		aclMode,
-		labels,
-		isBlacklist,
-		joinedRooms,
-		joinedLoading,
-		joinedUnavailable,
 		handleAddRoom,
 		handleAddRoomId,
 		confirmRemoveRoom,
@@ -29,48 +25,17 @@ export const RoomsPage = () => {
 		handleModeChange,
 	} = useRoomsPage();
 
-	if (query.isLoading) {
-		return (
-			<div
-				className="text-center py-24 text-muted-foreground"
-				aria-busy="true"
-				aria-label="데이터를 불러오는 중입니다…"
-			>
-				<div className="animate-spin inline-block w-8 h-8 border-4 border-sky-200 border-t-sky-500 rounded-full mb-4" />
-				<p>데이터를 불러오는 중입니다…</p>
-			</div>
-		);
-	}
-
-	if (query.isError) {
-		return (
-			<div
-				role="alert"
-				className="text-center py-12 bg-rose-50 rounded-2xl border border-rose-100"
-			>
-				<div className="text-rose-600 font-bold mb-2">
-					채팅방 목록을 불러올 수 없습니다
-				</div>
-				<div className="text-xs text-rose-500 mb-4">
-					{query.error instanceof Error
-						? query.error.message
-						: "알 수 없는 오류가 발생했습니다"}
-				</div>
-				<Button
-					onClick={() => {
-						void query.refetch();
-					}}
-					className="bg-rose-600 hover:bg-rose-700 text-white focus-visible:ring-2 focus-visible:ring-rose-200"
-					aria-label="데이터 다시 불러오기"
-				>
-					다시 시도
-				</Button>
-			</div>
-		);
-	}
+	const readState = <QueryNotice view={view} label="채팅방 접근 설정" onRetry={() => { void query.refetch(); }} />;
+	if (view.data === undefined) return readState;
+	const { rooms, aclEnabled, aclMode } = view.data;
+	const labels = MODE_LABELS[aclMode];
+	const isBlacklist = aclMode === "blacklist";
 
 	return (
 		<div className="space-y-6">
+			{readState}
+			<QueryNotice view={joinedView} label="참여 중인 채팅방" onRetry={() => { void joinedQuery.refetch(); }} />
+			<fieldset disabled={!view.current} className="space-y-6 min-w-0">
 			<RoomsAclSection
 				aclEnabled={aclEnabled}
 				aclMode={aclMode}
@@ -105,11 +70,13 @@ export const RoomsPage = () => {
 				}}
 				addPending={addRoomMutation.isPending}
 				removePending={removeRoomMutation.isPending}
-				joinedRooms={joinedRooms}
-				joinedLoading={joinedLoading}
-				joinedUnavailable={joinedUnavailable}
+				joinedRooms={joinedView.data?.rooms ?? []}
+				joinedLoading={joinedView.kind === "pending"}
+				joinedUnavailable={!joinedView.current}
 				actionError={addRoomMutation.error ?? removeRoomMutation.error}
 			/>
+
+			</fieldset>
 
 			<ConfirmModal
 				isOpen={removeModal.isOpen}
@@ -119,6 +86,7 @@ export const RoomsPage = () => {
 					}
 				}}
 				onConfirm={confirmRemoveRoom}
+				canConfirm={view.current}
 				title={isBlacklist ? "차단 해제" : "허용 해제"}
 				message={labels.removeConfirm}
 				confirmText={
@@ -141,7 +109,7 @@ export const RoomsPage = () => {
 						role="alert"
 						className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
 					>
-						변경사항을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.
+						{operations.failure(removeRoomMutation.error)?.message ?? "요청 결과를 확인하지 못했습니다. 현재 상태를 다시 조회해 주세요."}
 					</div>
 				)}
 			</ConfirmModal>

@@ -19,19 +19,19 @@ interface MembersGridProps {
 	totalCount: number;
 	canLoadMore: boolean;
 	onLoadMore: () => void;
-	onAddAlias: (memberId: number, type: "ko" | "ja", rawAlias: string) => void;
-	onRemoveAlias: (memberId: number, type: "ko" | "ja", alias: string) => void;
+	onAddAlias: (memberId: string, type: "ko" | "ja", rawAlias: string) => Promise<void>;
+	onRemoveAlias: (memberId: string, type: "ko" | "ja", alias: string) => void;
 	onToggleGraduation: (
-		memberId: number,
+		memberId: string,
 		memberName: string,
 		currentStatus: boolean,
 	) => void;
 	onEditChannel: (
-		memberId: number,
+		memberId: string,
 		memberName: string,
 		currentChannelId: string,
 	) => void;
-	onEditName: (memberId: number, currentName: string) => void;
+	onEditName: (memberId: string, currentName: string) => void;
 }
 
 export const MembersGrid = ({
@@ -65,7 +65,7 @@ export const MembersGrid = ({
 						itemClassName="pb-6"
 						renderItem={(row) => (
 							<div
-								className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+								className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-6"
 								role="list"
 							>
 								{row.map((member) => (

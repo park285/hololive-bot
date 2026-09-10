@@ -1,6 +1,10 @@
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
 import Save from "lucide-react/dist/esm/icons/save.mjs";
-import { type SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type SyntheticEvent, useRef, useState } from "react";
+import { useDraft } from "@/editors/useDraft";
+import { DraftConflict } from "@/editors/DraftConflict";
+import { RequestBlockedError } from "@/api/errors";
+import { operations } from "@/app/bootstrap";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,38 +13,37 @@ import { Label } from "@/components/ui/Label";
 interface EditNameModalProps {
 	isOpen: boolean;
 	onClose: () => void;
-	onSave: (newName: string) => void;
+	onSave: (newName: string) => Promise<void>;
+	canSubmit: boolean;
+	pending: boolean;
+	readState: ReactNode;
 	type: "room" | "user" | "member";
 	id: string;
-	currentName: string;
+	currentName: string | undefined;
 }
 
 export default function EditNameModal({
 	isOpen,
 	onClose,
 	onSave,
+	canSubmit,
+	pending,
+	readState,
 	type,
 	id,
 	currentName,
 }: EditNameModalProps) {
-	const [name, setName] = useState(currentName);
+	const draft = useDraft(currentName);
+	const name = draft.value;
 	const [error, setError] = useState("");
 	const nameInputRef = useRef<HTMLInputElement>(null);
 
-	useEffect(() => {
-		if (isOpen) {
-			setName(currentName);
-			setError("");
-		}
-	}, [currentName, isOpen]);
-
-	const isDirty = useMemo(
-		() => name.trim() !== currentName.trim(),
-		[currentName, name],
-	);
+	const isDirty = draft.dirty;
+	const blocked = !canSubmit || pending || draft.conflict;
 
 	const handleSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
 		event.preventDefault();
+		if (blocked) return;
 
 		if (!name.trim()) {
 			setError("이름을 입력해주세요.");
@@ -50,8 +53,9 @@ export default function EditNameModal({
 			return;
 		}
 
-		onSave(name.trim());
-		onClose();
+		void onSave(name.trim()).catch((cause: unknown) => {
+			setError(operations.failure(cause)?.message ?? (cause instanceof RequestBlockedError ? cause.message : "작업 결과를 확인하지 못했습니다. 현재 상태를 다시 조회해 주세요."));
+		});
 	};
 
 	const getTitle = () => {
@@ -77,6 +81,8 @@ export default function EditNameModal({
 			showHeaderBorder
 		>
 			<form onSubmit={handleSubmit} className="space-y-4" noValidate>
+				{readState}
+				{draft.conflict && <DraftConflict latest={draft.latest} useLatest={draft.useLatest} keepDraft={draft.keepDraft} />}
 				<div className="mb-4 rounded-lg border border-border-subtle bg-muted p-3">
 					<div className="mb-1 text-xs font-medium text-muted-foreground">
 						ID (변경 불가)
@@ -107,7 +113,7 @@ export default function EditNameModal({
 						autoComplete="off"
 						value={name}
 						onChange={(event) => {
-							setName(event.target.value);
+							draft.setValue(event.target.value);
 							setError("");
 						}}
 						placeholder="이름을 입력하세요"
@@ -131,7 +137,7 @@ export default function EditNameModal({
 					<Button type="button" variant="outline" onClick={onClose}>
 						취소
 					</Button>
-					<Button type="submit" disabled={!isDirty} className="gap-2">
+					<Button type="submit" disabled={!isDirty || blocked} aria-busy={pending} className="gap-2">
 						<Save size={16} aria-hidden="true" /> 저장
 					</Button>
 				</div>

@@ -1,0 +1,18 @@
+{
+  "services": {
+    "admin-docker-proxy": {
+      "labels": {
+        "io.hololive.admin.policy-sha256": "9e2e88cfd54c8836ff986e561fc542d874550fec5bab6d3b52cec6c8e7254d3a"
+      },
+      "command": [
+        "-loglevel=info",
+        "-listenip=0.0.0.0",
+        "-proxyport=2375",
+        "-allowfrom=0.0.0.0/0",
+        "-allowGET=(/v1\\.[0-9]+)?/(_ping|version|containers/json)",
+        "-allowHEAD=(/v1\\.[0-9]+)?/_ping",
+        "-allowPOST=(/v1\\.[0-9]+)?/containers/(admin-dashboard/(start|restart)|admin-dashboard-ingress/(start|restart)|admin-docker-proxy/(start|restart)|deunhealth/(start|restart)|holo-postgres/(start|restart)|hololive-alarm-worker/(start|stop|restart)|hololive-api/(start|stop|restart)|hololive-youtube-collector-c/(start|stop|restart)|valkey-cache/(start|restart))"
+      ]
+    }
+  }
+}

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/Label";
 const numberFormatter = new Intl.NumberFormat("ko-KR");
 
 interface MembersToolbarProps {
+	canAdd: boolean;
 	hideGraduated: boolean;
 	onToggleHideGraduated: () => void;
 	filteredCount: number;
@@ -17,6 +18,7 @@ interface MembersToolbarProps {
 }
 
 export const MembersToolbar = ({
+	canAdd,
 	hideGraduated,
 	onToggleHideGraduated,
 	filteredCount,
@@ -52,6 +54,7 @@ export const MembersToolbar = ({
 
 		<div className="flex flex-col md:flex-row gap-4 items-center justify-between">
 			<Button
+				disabled={!canAdd}
 				onMouseEnter={onAddModalIntent}
 				onFocus={onAddModalIntent}
 				onClick={onOpenAddModal}

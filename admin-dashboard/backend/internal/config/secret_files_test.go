@@ -20,35 +20,23 @@ func writeSecretForTest(t *testing.T, name, value string) string {
 	return path
 }
 
-func TestApplySecretFilesMaterializesAndRestores(t *testing.T) {
+func TestSecretInputsNeverMaterializeInProcessEnvironment(t *testing.T) {
 	path := writeSecretForTest(t, "session-secret", strings.Repeat("s", 32)+"\n")
 	t.Setenv("SESSION_SECRET_FILE", path)
 	t.Setenv("SESSION_SECRET", "")
 	t.Setenv("ADMIN_SECRET_KEY", "")
 
-	if err := os.Unsetenv("SESSION_SECRET"); err != nil {
+	in := readInputs()
+	if err := in.applySecretFiles(); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.Unsetenv("ADMIN_SECRET_KEY"); err != nil {
-		t.Fatal(err)
+	if in.values["SESSION_SECRET"] != strings.Repeat("s", 32) {
+		t.Fatal("file input was not loaded")
 	}
 
-	restore, err := applySecretFiles()
-	if err != nil {
-		t.Fatalf("applySecretFiles() error = %v", err)
-	}
-
-	if got := os.Getenv("SESSION_SECRET"); got != strings.Repeat("s", 32) {
-		t.Fatalf("SESSION_SECRET = %q", got)
-	}
-
-	if err := restore(); err != nil {
-		t.Fatalf("restore() error = %v", err)
-	}
-
-	if _, ok := os.LookupEnv("SESSION_SECRET"); ok {
-		t.Fatal("SESSION_SECRET must be removed after restore")
+	if os.Getenv("SESSION_SECRET") != "" || os.Getenv("ADMIN_SECRET_KEY") != "" {
+		t.Fatal("process environment was modified")
 	}
 }
 
@@ -57,7 +45,7 @@ func TestApplySecretFilesRejectsAmbiguousDirectSecret(t *testing.T) {
 	t.Setenv("SESSION_SECRET_FILE", path)
 	t.Setenv("SESSION_SECRET", strings.Repeat("d", 32))
 
-	if _, err := applySecretFiles(); err == nil {
+	if err := readInputs().applySecretFiles(); err == nil {
 		t.Fatal("direct secret plus *_FILE must fail")
 	}
 }
@@ -96,7 +84,7 @@ func TestLoadSecureRequires32ByteSessionSecret(t *testing.T) {
 	t.Setenv("SESSION_SECRET", strings.Repeat("x", 31))
 	t.Setenv("VALKEY_URL", "valkey-cache:6379")
 
-	if _, err := LoadSecure(); err == nil {
+	if _, err := Load(); err == nil {
 		t.Fatal("31-byte SESSION_SECRET must fail")
 	}
 }

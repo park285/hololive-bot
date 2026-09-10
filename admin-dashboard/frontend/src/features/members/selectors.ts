@@ -26,7 +26,7 @@ export function filterMembers(
 		return (
 			member.name.toLowerCase().includes(normalized) ||
 			member.channelId.toLowerCase().includes(normalized) ||
-			String(member.id).includes(normalized) ||
+			member.id.includes(normalized) ||
 			member.aliases.ko.some((alias) =>
 				alias.toLowerCase().includes(normalized),
 			) ||

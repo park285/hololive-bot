@@ -1,0 +1,324 @@
+package docker
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/kapu/admin-dashboard/internal/contract"
+)
+
+func awaitSignal(t *testing.T, signal <-chan struct{}, message string) {
+	t.Helper()
+
+	select {
+	case <-signal:
+	case <-time.After(time.Second):
+		t.Fatal(message)
+	}
+}
+
+func requireSingleContainer(t *testing.T, containers []Container, want string) {
+	t.Helper()
+
+	if len(containers) != 1 || containers[0].Name != want {
+		t.Fatalf("containers = %+v, want exactly one %q", containers, want)
+	}
+}
+
+func newStubTransportClient(transport http.RoundTripper) *Client {
+	return &Client{
+		baseURL:     "http://docker",
+		http:        &http.Client{Transport: transport},
+		listTimeout: time.Second,
+		cacheTTL:    time.Second,
+	}
+}
+
+type fencedListServer struct {
+	requests     atomic.Int32
+	firstStarted chan struct{}
+	release      chan struct{}
+	startOnce    sync.Once
+	releaseOnce  sync.Once
+}
+
+func newFencedListServer() *fencedListServer {
+	return &fencedListServer{firstStarted: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (s *fencedListServer) releaseFirstList() {
+	s.releaseOnce.Do(func() { close(s.release) })
+}
+
+func (s *fencedListServer) handler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/containers/json":
+			s.writeList(t, w)
+		case r.Method == http.MethodPost && r.URL.Path == "/containers/hololive-api/restart":
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}
+}
+
+func (s *fencedListServer) writeList(t *testing.T, w http.ResponseWriter) {
+	t.Helper()
+
+	requestNumber := s.requests.Add(1)
+	name := testBusinessContainerName
+
+	if requestNumber == 1 {
+		s.startOnce.Do(func() { close(s.firstStarted) })
+		<-s.release
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if _, err := fmt.Fprintf(w, `[{"Id":"%d","Names":["/%s"],"Image":"img","Status":"Up","State":"running","Created":1}]`, requestNumber, name); err != nil {
+		t.Errorf("write Docker list response: %v", err)
+	}
+}
+
+func TestContainerActionFencesOlderListRefreshFromCache(t *testing.T) {
+	server := newFencedListServer()
+
+	t.Cleanup(server.releaseFirstList)
+
+	client := newTestClient(t, server.handler(t))
+	firstResult := make(chan []Container, 1)
+	firstErr := make(chan error, 1)
+
+	go func() {
+		containers, err := client.ListContainers(t.Context())
+		firstResult <- containers
+
+		firstErr <- err
+	}()
+
+	awaitSignal(t, server.firstStarted, "first docker list refresh did not start")
+
+	if err := client.RestartContainer(t.Context(), testBusinessContainerName); err != nil {
+		t.Fatalf("RestartContainer() error = %v", err)
+	}
+
+	server.releaseFirstList()
+
+	if err := <-firstErr; err != nil {
+		t.Fatalf("first ListContainers() error = %v", err)
+	}
+
+	first := <-firstResult
+	requireSingleContainer(t, first, testBusinessContainerName)
+
+	if first[0].ID != "1" {
+		t.Fatal("held result did not retain the earlier container identity")
+	}
+
+	second, err := client.ListContainers(t.Context())
+	if err != nil {
+		t.Fatalf("second ListContainers() error = %v", err)
+	}
+
+	if got := server.requests.Load(); got != 2 {
+		t.Fatalf("docker list requests = %d, want 2 after action invalidated the in-flight refresh", got)
+	}
+
+	requireSingleContainer(t, second, testBusinessContainerName)
+
+	if second[0].ID != "2" {
+		t.Fatal("stale container identity returned after the action")
+	}
+}
+
+func canceledThenServedListTransport(requests *atomic.Int32, firstStarted chan struct{}) dockerRoundTripFunc {
+	return func(req *http.Request) (*http.Response, error) {
+		switch requests.Add(1) {
+		case 1:
+			close(firstStarted)
+			<-req.Context().Done()
+
+			return nil, req.Context().Err()
+		case 2:
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`[{"Id":"1","Names":["/hololive-api"],"Image":"img","Status":"Up","State":"running","Created":1}]`)),
+			}, nil
+		default:
+			return nil, errors.New("unexpected Docker list request")
+		}
+	}
+}
+
+func TestListContainersWaiterRetriesCanceledLeader(t *testing.T) {
+	var requests atomic.Int32
+
+	firstStarted := make(chan struct{})
+	client := newStubTransportClient(canceledThenServedListTransport(&requests, firstStarted))
+	leaderCtx, cancelLeader := context.WithCancel(t.Context())
+	leaderErr := make(chan error, 1)
+
+	go func() {
+		_, err := client.ListContainers(leaderCtx)
+		leaderErr <- err
+	}()
+
+	awaitSignal(t, firstStarted, "leader Docker list request did not start")
+
+	waiterCtx := &doneObservedContext{Context: t.Context(), observed: make(chan struct{})}
+	waiterResult := make(chan []Container, 1)
+	waiterErr := make(chan error, 1)
+
+	go func() {
+		containers, err := client.ListContainers(waiterCtx)
+		waiterResult <- containers
+
+		waiterErr <- err
+	}()
+
+	awaitSignal(t, waiterCtx.observed, "waiter did not attach to the in-flight refresh")
+
+	cancelLeader()
+
+	if err := <-leaderErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("leader ListContainers() error = %v, want context.Canceled", err)
+	}
+
+	if err := <-waiterErr; err != nil {
+		t.Fatalf("waiter ListContainers() error = %v", err)
+	}
+
+	requireSingleContainer(t, <-waiterResult, testBusinessContainerName)
+
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("Docker list requests = %d, want one canceled leader plus one bounded retry", got)
+	}
+}
+
+func TestDefaultContainerPolicyMatchesComposeOwnership(t *testing.T) {
+	client, err := NewClient("tcp://127.0.0.1:2375")
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	tests := map[string]struct {
+		managed     bool
+		stopBlocked bool
+	}{
+		testBusinessContainerName:      {managed: true},
+		"hololive-youtube-collector-c": {managed: true},
+		"hololive-youtube-collector-a": {},
+		"holo-postgres":                {managed: true, stopBlocked: true},
+		"valkey-cache":                 {managed: true, stopBlocked: true},
+		testAdminContainerName:         {managed: true, stopBlocked: true},
+		"deunhealth":                   {managed: true, stopBlocked: true},
+		"hololive-db-migrate":          {},
+		"hololive-api-init":            {},
+		"hololiveevil":                 {},
+		"administrator":                {},
+		"postgresql":                   {},
+	}
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := client.IsManaged(name); got != want.managed {
+				t.Fatalf("IsManaged(%q) = %v, want %v", name, got, want.managed)
+			}
+
+			if got := client.stopBlocked(name); got != want.stopBlocked {
+				t.Fatalf("stopBlocked(%q) = %v, want %v", name, got, want.stopBlocked)
+			}
+		})
+	}
+}
+
+func TestMigrationContainerActionsFailClosedBeforeDockerIO(t *testing.T) {
+	var requests atomic.Int32
+
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	err := client.RestartContainer(t.Context(), "hololive-db-migrate")
+	if err == nil {
+		t.Fatal("RestartContainer() error = nil for migration container")
+	}
+
+	appErr, ok := errors.AsType[*contract.AppError](err)
+	if !ok || appErr.Status != http.StatusNotFound {
+		t.Fatalf("RestartContainer() error = %v, want fail-closed 404", err)
+	}
+
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("Docker requests = %d, want 0 for excluded migration container", got)
+	}
+}
+
+func TestDockerListPreservesCancellationCause(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	client := newStubTransportClient(dockerRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, req.Context().Err()
+	}))
+
+	_, err := client.ListContainers(ctx)
+	if err == nil {
+		t.Fatal("ListContainers() error = nil")
+	}
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ListContainers() error = %v, want context.Canceled cause", err)
+	}
+}
+
+func TestUnsupportedDockerHostErrorDoesNotEchoInput(t *testing.T) {
+	sensitiveValue := t.Name()
+	host := fmt.Sprintf("ssh://operator:%s@docker.example", sensitiveValue)
+
+	_, _, err := dockerHTTPTransport(host)
+	if err == nil {
+		t.Fatal("dockerHTTPTransport() error = nil")
+	}
+
+	if strings.Contains(err.Error(), sensitiveValue) || strings.Contains(err.Error(), host) {
+		t.Fatalf("dockerHTTPTransport() error leaks host input: %v", err)
+	}
+}
+
+type doneObservedContext struct {
+	context.Context //nolint:containedctx // Done() 관측용 context 데코레이터라 context를 필드로 들고 있어야 한다.
+
+	once     sync.Once
+	observed chan struct{}
+}
+
+func (c *doneObservedContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.observed) })
+
+	return c.Context.Done()
+}
+
+type dockerRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f dockerRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
+}

@@ -24,7 +24,8 @@ COPY admin-dashboard/frontend/package.json admin-dashboard/frontend/package-lock
 RUN --mount=type=cache,target=/root/.npm corepack npm ci --no-audit --no-fund
 
 COPY admin-dashboard/frontend/ .
-RUN corepack npm run build
+COPY admin-dashboard/backend/internal/contract/openapi.json admin-dashboard/backend/internal/contract/operations_generated.go /app/backend/internal/contract/
+RUN node scripts/check-contract.mjs && corepack npm run build
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
@@ -88,6 +89,7 @@ WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link --chown=1000:1000 /dist ./
+COPY --from=frontend-builder --link /app/frontend/node_modules/ajv/LICENSE ./licenses/ajv.txt
 
 ENV GOGC=100 \
     GOMEMLIMIT=96MiB \

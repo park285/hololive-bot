@@ -1,4 +1,5 @@
-import Bell from "lucide-react/dist/esm/icons/bell.mjs";
+import { QueryNotice } from "@/queries/QueryNotice";
+import { RequestBlockedError } from "@/api/errors";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import EditNameModal from "@/components/EditNameModal";
 import { AlarmGroups } from "@/features/alarms/components/AlarmGroups";
@@ -17,10 +18,10 @@ export const AlarmsPage = () => {
 		setVisibleGroupCount,
 		editModal,
 		setEditModal,
-		groupedAlarms,
 		filteredGroups,
 		totalAlarms,
 		query,
+		view,
 		deleteAlarmMutation,
 		setNameMutation,
 	} = useAlarmsPage();
@@ -36,53 +37,35 @@ export const AlarmsPage = () => {
 	};
 
 	const confirmDelete = () => {
-		if (!alarmToDelete) return;
+		if (!alarmToDelete || !view.current) return;
 
-		void deleteAlarmMutation.mutateAsync({
+		deleteAlarmMutation.mutate({
 			roomId: alarmToDelete.roomId,
-			userId: alarmToDelete.userId,
 			channelId: alarmToDelete.channelId,
 		});
 		setAlarmToDelete(null);
 	};
 
-	const handleSaveName = (newName: string) => {
+	const handleSaveName = async (newName: string) => {
+		if (!view.current) throw new RequestBlockedError("CLIENT_NOT_READY", "최신 알람 목록을 먼저 조회해 주세요.");
 		if (!editModal) return;
 
-		void setNameMutation.mutateAsync({
+		await setNameMutation.mutateAsync({
 			type: editModal.type,
 			id: editModal.id,
 			name: newName,
 		});
+		setEditModal(current => current === editModal ? null : current);
 	};
 
-	if (query.isLoading) {
-		return (
-			<div
-				className="text-center py-24 text-muted-foreground"
-				aria-busy="true"
-				aria-label="알람 데이터를 불러오는 중입니다…"
-			>
-				<div className="animate-spin inline-block w-8 h-8 border-4 border-sky-200 border-t-sky-500 rounded-full mb-4" />
-				<p>로딩 중…</p>
-			</div>
-		);
-	}
-
-	if (groupedAlarms.length === 0) {
-		return (
-			<div className="text-center py-12 bg-card rounded-2xl border border-border-subtle shadow-sm">
-				<Bell
-					className="mx-auto h-12 w-12 text-slate-200 dark:text-slate-700 mb-4"
-					aria-hidden="true"
-				/>
-				<p className="text-muted-foreground font-medium">등록된 알람이 없습니다</p>
-			</div>
-		);
-	}
+	const readState = <QueryNotice view={view} label="알람 목록" onRetry={() => { void query.refetch(); }} />;
+	if (view.data === undefined) return readState;
+	const latestRoom = editModal ? query.data?.alarms.find(alarm => alarm.roomId === editModal.id) : undefined;
 
 	return (
 		<div className="space-y-6">
+			{readState}
+			{view.kind === "empty" && <p role="status">등록된 알람이 없습니다.</p>}
 			<AlarmsToolbar
 				search={search}
 				onSearchChange={setSearch}
@@ -90,6 +73,7 @@ export const AlarmsPage = () => {
 				alarmCount={totalAlarms}
 			/>
 
+			<fieldset disabled={!view.current} className="min-w-0">
 			<AlarmGroups
 				groups={filteredGroups}
 				expandedGroups={expandedGroups}
@@ -105,16 +89,22 @@ export const AlarmsPage = () => {
 				isDeleting={deleteAlarmMutation.isPending}
 			/>
 
-			<EditNameModal
-				isOpen={editModal !== null}
+			</fieldset>
+
+			{editModal && <EditNameModal
+				isOpen
+				key={editModal.id}
+				canSubmit={view.current && latestRoom !== undefined}
+				pending={setNameMutation.isPending}
+				readState={readState}
 				onClose={() => {
 					setEditModal(null);
 				}}
-				type={editModal?.type || "room"}
-				id={editModal?.id || ""}
-				currentName={editModal?.currentName || ""}
+				type={editModal.type}
+				id={editModal.id}
+				currentName={latestRoom?.roomName}
 				onSave={handleSaveName}
-			/>
+			/>}
 
 			<ConfirmModal
 				isOpen={alarmToDelete !== null}
@@ -122,9 +112,11 @@ export const AlarmsPage = () => {
 					setAlarmToDelete(null);
 				}}
 				onConfirm={confirmDelete}
+				canConfirm={view.current}
+				isPending={deleteAlarmMutation.isPending}
 				title="알람 삭제"
 				message={
-					alarmToDelete ? "다음 멤버의 알람 설정을 삭제하시겠습니까?" : ""
+					alarmToDelete ? "이 방에서 해당 채널의 알람 구독을 모두 삭제하시겠습니까?" : ""
 				}
 				confirmText="삭제"
 				confirmColor="danger"

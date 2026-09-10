@@ -1,11 +1,12 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { type SyntheticEvent, useState } from "react";
-import { queryKeys } from "@/api/queryKeys";
+import { queryKeys } from "@/queries/keys";
 import { streamsApi } from "@/features/streams/api";
 import { LiveStreamsSection } from "@/features/streams/components/LiveStreamsSection";
 import { UpcomingStreamsSection } from "@/features/streams/components/UpcomingStreamsSection";
 import type { StreamOrg } from "@/features/streams/types";
-import { type SectionStateProps, sectionStateProps } from "@/lib/queryState";
+import { queryView } from "@/queries/state";
+import { useOnline } from "@/queries/useOnline";
 
 export const StreamsPage = () => {
 	const [selectedOrg, setSelectedOrg] = useState<StreamOrg>("hololive");
@@ -23,7 +24,6 @@ export const StreamsPage = () => {
 		queryFn: () => streamsApi.getLive(selectedOrg),
 		refetchInterval: 60 * 1000,
 		staleTime: 1000 * 45,
-		placeholderData: keepPreviousData,
 	});
 
 	const upcomingQuery = useQuery({
@@ -31,20 +31,11 @@ export const StreamsPage = () => {
 		queryFn: () => streamsApi.getUpcoming(selectedOrg),
 		refetchInterval: 60 * 1000 * 5,
 		staleTime: 1000 * 60 * 4,
-		placeholderData: keepPreviousData,
 	});
 
-	const liveStreams = liveQuery.data?.streams ?? [];
-	const upcomingStreams = upcomingQuery.data?.streams ?? [];
-
-	const liveState: SectionStateProps = {
-		...sectionStateProps(liveQuery),
-		isError: liveQuery.isError && liveStreams.length === 0,
-	};
-	const upcomingState: SectionStateProps = {
-		...sectionStateProps(upcomingQuery),
-		isError: upcomingQuery.isError && upcomingStreams.length === 0,
-	};
+	const online = useOnline();
+	const liveView = queryView(liveQuery, online, data => data.streams.length === 0);
+	const upcomingView = queryView(upcomingQuery, online, data => data.streams.length === 0);
 
 	const handleThumbnailError = (event: SyntheticEvent<HTMLImageElement>) => {
 		const element = event.currentTarget;
@@ -66,14 +57,14 @@ export const StreamsPage = () => {
 			<LiveStreamsSection
 				selectedOrg={selectedOrg}
 				orgOptions={orgOptions}
-				liveStreams={liveStreams}
-				state={liveState}
+				view={liveView}
+				onRetry={() => { void liveQuery.refetch(); }}
 				onOrgChange={setSelectedOrg}
 				onThumbnailError={handleThumbnailError}
 			/>
 			<UpcomingStreamsSection
-				upcomingStreams={upcomingStreams}
-				state={upcomingState}
+				view={upcomingView}
+				onRetry={() => { void upcomingQuery.refetch(); }}
 				onThumbnailError={handleThumbnailError}
 			/>
 		</div>

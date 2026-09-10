@@ -1,10 +1,11 @@
+import { SystemStats as validateSystemStats } from "@/api/generated/validators/system-stats.mjs";
 import { CONFIG } from "@/config";
 import type { SystemStats } from "@/features/stats/types";
 
 export interface SystemStatsPoint extends SystemStats {
 	time: string;
 	timestamp: number;
-	serviceValues: Record<string, number>;
+	serviceValues: Record<string, number | null>;
 }
 
 export const MAX_DATA_POINTS = 30;
@@ -29,16 +30,6 @@ const SERVICE_FALLBACK_COLORS = [
 	"#6366f1",
 ];
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
-	typeof value === "object" && value !== null
-		? (value as Record<string, unknown>)
-		: null;
-
-const asNumber = (value: unknown): number | null => {
-	const parsed = typeof value === "number" ? value : Number(value);
-	return Number.isFinite(parsed) ? parsed : null;
-};
-
 export const shouldConnectSystemStatsStream = ({
 	isAuthenticated,
 	isAuthResolved,
@@ -46,99 +37,10 @@ export const shouldConnectSystemStatsStream = ({
 }: SystemStatsStreamAuthState) =>
 	isAuthenticated && isAuthResolved && isVisible;
 
+/** parseSystemStats는 현재 세대의 WS 정본만 검증하며 구형 이름·숫자 강제 변환을 허용하지 않습니다. */
 export const parseSystemStats = (value: unknown): SystemStats | null => {
-	const record = asRecord(value);
-	if (!record) return null;
-
-	const cpuUsage = asNumber(record["cpuUsage"] ?? record["cpu_usage"]);
-	const sampledAt =
-		asNumber(record["sampledAt"] ?? record["sampled_at"]) ?? Date.now();
-	const memoryUsage = asNumber(
-		record["memoryUsage"] ??
-			record["memory_usage"] ??
-			record["memory_usage_percent"],
-	);
-	const memoryTotal = asNumber(record["memoryTotal"] ?? record["memory_total"]);
-	const memoryUsed = asNumber(record["memoryUsed"] ?? record["memory_used"]);
-	const threadCount = asNumber(
-		record["threadCount"] ??
-			record["thread_count"] ??
-			record["goroutines"],
-	);
-	const totalGoGoroutines = asNumber(
-		record["totalGoGoroutines"] ??
-			record["total_go_goroutines"] ??
-			record["totalGoroutines"] ??
-			record["total_goroutines"] ??
-			record["goroutines"],
-	);
-	const totalRuntimeUnits = asNumber(
-		record["totalRuntimeUnits"] ??
-			record["total_runtime_units"] ??
-			record["totalGoroutines"] ??
-			record["total_goroutines"] ??
-			record["goroutines"],
-	);
-	const serviceRuntimeValue = Array.isArray(record["serviceRuntime"])
-		? record["serviceRuntime"]
-		: Array.isArray(record["service_runtime"])
-			? record["service_runtime"]
-			: Array.isArray(record["serviceGoroutines"])
-				? record["serviceGoroutines"]
-				: Array.isArray(record["service_goroutines"])
-					? record["service_goroutines"]
-					: [];
-
-	if (
-		cpuUsage === null ||
-		memoryUsage === null ||
-		memoryTotal === null ||
-		memoryUsed === null ||
-		threadCount === null ||
-		totalGoGoroutines === null ||
-		totalRuntimeUnits === null
-	) {
-		return null;
-	}
-
-	const serviceRuntime = serviceRuntimeValue
-		.map<SystemStats["serviceRuntime"][number] | null>((entry) => {
-			const item = asRecord(entry);
-			if (!item || typeof item["name"] !== "string") return null;
-
-			const count = asNumber(item["count"] ?? item["goroutines"]);
-			if (count === null || typeof item["available"] !== "boolean") {
-				return null;
-			}
-
-			const metricKind: SystemStats["serviceRuntime"][number]["metricKind"] =
-				item["metricKind"] === "thread" || item["metric_kind"] === "thread"
-					? "thread"
-					: "goroutine";
-
-			return {
-				name: item["name"],
-				count,
-				metricKind,
-				available: item["available"],
-				...(typeof item["error"] === "string"
-					? { error: item["error"] }
-					: {}),
-			};
-		})
-		.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
-	return {
-		sampledAt,
-		cpuUsage,
-		memoryUsage,
-		memoryTotal,
-		memoryUsed,
-		threadCount,
-		totalGoGoroutines,
-		totalRuntimeUnits,
-		serviceRuntime,
-	};
+	if (!validateSystemStats(value)) return null;
+	return value;
 };
 
 export const createSystemStatsPoint = (
@@ -146,9 +48,9 @@ export const createSystemStatsPoint = (
 	formattedTime: string,
 ): SystemStatsPoint => ({
 	...stats,
-	serviceValues: stats.serviceRuntime.reduce<Record<string, number>>(
+	serviceValues: stats.serviceRuntime.reduce<Record<string, number | null>>(
 		(values, service) => {
-			values[service.name] = service.available ? service.count : 0;
+			values[service.name] = service.available ? service.count : null;
 			return values;
 		},
 		{},

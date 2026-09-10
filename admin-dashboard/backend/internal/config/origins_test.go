@@ -40,7 +40,7 @@ func TestProductionSecurityModesMustEnforce(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := LoadSecurityConfig("production", false)
+			cfg := readInputs().security("production", false)
 			tt.mutate(&cfg)
 
 			if err := validateSecurityConfig("production", cfg); err == nil {
@@ -60,7 +60,7 @@ func TestNonProductionSecurityModesRemainAvailable(t *testing.T) {
 func TestProductionOriginsRequireExplicitNonLocalhost(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "")
 
-	cfg := LoadSecurityConfig("production", false)
+	cfg := readInputs().security("production", false)
 	if len(cfg.AllowedOrigins) != 0 {
 		t.Fatalf("AllowedOrigins = %v, want empty after production localhost filtering", cfg.AllowedOrigins)
 	}
@@ -75,7 +75,7 @@ func TestProductionOriginsRequireExplicitNonLocalhost(t *testing.T) {
 func TestProductionOriginsDropLocalhostAndNormalizeExternalOrigin(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "http://localhost:30190, https://admin.example.com/")
 
-	cfg := LoadSecurityConfig("production", false)
+	cfg := readInputs().security("production", false)
 	if err := validateAllowedOrigins("production", cfg.AllowedOrigins); err != nil {
 		t.Fatalf("validateAllowedOrigins() error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestProductionOriginsDropLocalhostAndNormalizeExternalOrigin(t *testing.T) 
 func TestDevelopmentOriginsUseLocalhostFallbackOnly(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "")
 
-	cfg := LoadSecurityConfig("development", false)
+	cfg := readInputs().security("development", false)
 	if len(cfg.AllowedOrigins) != 4 {
 		t.Fatalf("AllowedOrigins length = %d, want 4", len(cfg.AllowedOrigins))
 	}
@@ -107,7 +107,7 @@ func TestDevelopmentOriginsUseLocalhostFallbackOnly(t *testing.T) {
 func TestProductionOriginsAllowExplicitLocalhostEscapeHatch(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "")
 
-	cfg := LoadSecurityConfig("production", true)
+	cfg := readInputs().security("production", true)
 	if err := validateAllowedOrigins("production", cfg.AllowedOrigins); err != nil {
 		t.Fatalf("validateAllowedOrigins() error = %v", err)
 	}

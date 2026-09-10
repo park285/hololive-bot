@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "fixture_image": "sha256:33e63c550b62c099192034e7941e8d283251e0e5b2514d58f62872cbc9fb7a9e",
+  "generation": "c06bddfe3e2b69f6866e93426978bb55bfe3387510775be74e7e7394f251b118",
+  "phases": [
+    {
+      "name": "ingress_fence",
+      "elapsed_ms": 511,
+      "result": "administrator_ingress=503 shortlink_health=200 container=d49afe612d3de1fb4c65d9c12eb097bb7089089afaa8c8fb40c0c8b447a18ab9",
+      "new_upstream_effects": 0,
+      "shortlink": 302
+    },
+    {
+      "name": "old_drain_and_shutdown",
+      "elapsed_ms": 12245,
+      "client_status": 500,
+      "logical_outcome": "unknown",
+      "owner_effects": 1,
+      "business_replays": 0,
+      "direct_admission": "closed",
+      "ws": "closed"
+    },
+    {
+      "name": "admin_session_purge_and_new_secret",
+      "elapsed_ms": 2064,
+      "result": "admin_session_purge=completed prefix=session:admin: removed=3 scan_pages=1",
+      "non_admin_data": "preserved",
+      "secret": "new",
+      "metadata": "matched",
+      "old_cookie": "rejected"
+    },
+    {
+      "name": "candidate_open_and_smoke",
+      "elapsed_ms": 469,
+      "metadata": "matched",
+      "new_login": "PASS",
+      "websocket": "current_protocol",
+      "old_bundle_generation": "rejected",
+      "docker": "available",
+      "business_replays": 0
+    },
+    {
+      "name": "candidate_observation",
+      "elapsed_ms": 295006,
+      "window_limit_ms": 300000,
+      "cadence_ms": 5000,
+      "samples": 60,
+      "validated_frames": 147,
+      "invalid_frames": 0,
+      "business_effects": 0,
+      "shortlink": "preserved"
+    },
+    {
+      "name": "whole_rollback",
+      "elapsed_ms": 2624,
+      "result": "admin_session_purge=completed prefix=session:admin: removed=2 scan_pages=1",
+      "image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+      "secret": "new_again",
+      "old_secrets_reused": 0,
+      "cookies": "previous_generations_rejected",
+      "business_replays": 0
+    },
+    {
+      "name": "running_BFF_purge_denied",
+      "elapsed_ms": 128,
+      "status": "denied",
+      "cache_changes": 0
+    },
+    {
+      "name": "proxy_failure_keeps_maintenance",
+      "elapsed_ms": 30418,
+      "outcome": "NO-GO",
+      "maintenance": "confirmed",
+      "business_replays": 0,
+      "shortlink": 302
+    },
+    {
+      "name": "old_shutdown_timeout_preserves_unknown",
+      "elapsed_ms": 20282,
+      "outcome": "NO-GO",
+      "client_status": "connection_lost",
+      "logical_outcome": "unknown",
+      "owner_effects": 1,
+      "exit_code": "1",
+      "stop_ms": 20165,
+      "business_replays": 0,
+      "maintenance": "preserved"
+    }
+  ],
+  "production_effects": 0,
+  "old_proxy_command_sha256": "c7c322cc60bdd629e645159dcbd45c1101c55dea1fe7e24d18d5e1e554d04a4a",
+  "old_image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+  "status": "PASS_LOCAL_SEQUENCE",
+  "architecture": "arm64",
+  "remaining": [
+    "production O02 firewall evidence",
+    "reviewed committed release identity"
+  ]
+}

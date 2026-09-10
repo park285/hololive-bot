@@ -1,4 +1,4 @@
-import { adminClient } from "@/api/adminClient";
+import { adminClient } from "@/app/bootstrap";
 import type { AddRoomRequest, RemoveRoomRequest, SetACLRequest } from "./types";
 
 export const roomsApi = {

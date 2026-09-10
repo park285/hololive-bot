@@ -1,0 +1,890 @@
+{
+  "schema_version": 1,
+  "fixture_image": "sha256:5429c13e2a10713002975d3dc074a27d2ce7701224c6c3b6e7015f34bec07c45",
+  "generation": "c06bddfe3e2b69f6866e93426978bb55bfe3387510775be74e7e7394f251b118",
+  "proxy_image": "wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b",
+  "valkey_image": "valkey/valkey:9.1.2-alpine3.24@sha256:ccfa19b0d743e48927e1c8c14e39e0acb97b5cea347fef0bfe340247fea920cd",
+  "cases": [
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/_ping",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/version",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/containers/json",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/containers/json?all=true",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/v1.52/containers/json?all=1",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/containers/json?all=true&filters={}",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "HEAD",
+      "target": "/v1.52/_ping",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-dashboard/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-dashboard/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-dashboard/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-dashboard/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-dashboard/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-dashboard/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-dashboard-ingress/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-dashboard-ingress/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-dashboard-ingress/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-dashboard-ingress/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-dashboard-ingress/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-dashboard-ingress/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-docker-proxy/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-docker-proxy/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-docker-proxy/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-docker-proxy/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/admin-docker-proxy/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/admin-docker-proxy/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/deunhealth/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/deunhealth/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/deunhealth/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/deunhealth/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/deunhealth/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/deunhealth/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/holo-postgres/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/holo-postgres/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/holo-postgres/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/holo-postgres/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/holo-postgres/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/holo-postgres/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-alarm-worker/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-alarm-worker/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-alarm-worker/stop",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-alarm-worker/stop",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-alarm-worker/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-alarm-worker/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-api/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/stop",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-api/stop",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-api/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-youtube-collector-c/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-youtube-collector-c/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-youtube-collector-c/stop",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-youtube-collector-c/stop",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-youtube-collector-c/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/hololive-youtube-collector-c/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/valkey-cache/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/valkey-cache/start",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/valkey-cache/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/valkey-cache/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/valkey-cache/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/v1.52/containers/valkey-cache/restart",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/containers/hololive-api/json",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/containers/hololive-api/logs",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/events",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "GET",
+      "target": "/images/json",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/create",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/exec",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api-extra/start",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/restart/extra",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/0123456789abcdef/restart",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-youtube-collector-a/restart",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/../unmanaged/restart",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api%2f..%2funmanaged/restart",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "DELETE",
+      "target": "/containers/hololive-api",
+      "allowed": false,
+      "status": 405,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "PUT",
+      "target": "/containers/hololive-api/start",
+      "allowed": false,
+      "status": 405,
+      "fake_engine_calls": 0
+    },
+    {
+      "boundary": "proxy",
+      "method": "POST",
+      "target": "/containers/hololive-api/restart?t=30&x=1",
+      "allowed": true,
+      "status": 204,
+      "fake_engine_calls": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-dashboard/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-dashboard/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-dashboard/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-dashboard-ingress/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-dashboard-ingress/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-dashboard-ingress/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-docker-proxy/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-docker-proxy/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/admin-docker-proxy/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/deunhealth/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/deunhealth/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/deunhealth/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/holo-postgres/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/holo-postgres/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/holo-postgres/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-alarm-worker/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-alarm-worker/stop",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-alarm-worker/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-api/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-api/stop",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-api/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-youtube-collector-c/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-youtube-collector-c/stop",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/hololive-youtube-collector-c/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/valkey-cache/start",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/valkey-cache/stop",
+      "allowed": false,
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "target": "/admin/api/docker/containers/valkey-cache/restart",
+      "allowed": true,
+      "status": 200,
+      "fake_engine_effects": 1
+    },
+    {
+      "boundary": "BFF + proxy",
+      "name": "0123456789abcdef",
+      "allowed": false,
+      "status": 404,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "name": "hololive-api-extra",
+      "allowed": false,
+      "status": 404,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "name": "hololive-youtube-collector-a",
+      "allowed": false,
+      "status": 404,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF + proxy",
+      "name": "unmanaged",
+      "allowed": false,
+      "status": 404,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF authorization",
+      "kind": "auth",
+      "status": 401,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF authorization",
+      "kind": "csrf",
+      "status": 403,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF authorization",
+      "kind": "generation",
+      "status": 409,
+      "fake_engine_effects": 0
+    },
+    {
+      "boundary": "BFF authorization",
+      "kind": "mutation-id",
+      "status": 400,
+      "fake_engine_effects": 0
+    }
+  ],
+  "production_effects": 0,
+  "compose": {
+    "status": "PASS",
+    "overlays": [
+      "docker-compose.prod.yml",
+      "docker-compose.admin-security.yml",
+      "docker-compose.live-compat.yml"
+    ],
+    "env_files_read": 0,
+    "secret_values_in_candidate_environment": 0,
+    "admin_port": "127.0.0.1:30190",
+    "dedicated_proxy_network": true,
+    "healthcheck": [
+      "CMD",
+      "./bin/healthcheck",
+      "http://127.0.0.1:30190/health"
+    ],
+    "unrelated_services_activated": 0
+  },
+  "query_boundary": {
+    "proxy": "method and decoded URL.Path only; query forwarded",
+    "BFF": "fixed action path and t=30; caller query not forwarded"
+  },
+  "materialization": {
+    "files": 4,
+    "owner": 0,
+    "group": 1002,
+    "mode": "0640",
+    "unrelated_reader_denied": 4,
+    "candidate_file_authentication": "PASS"
+  },
+  "status": "PASS"
+}

@@ -1,3 +1,4 @@
+import { dialogFocusTargets, trapDialogTab } from "@/components/ui/dialogFocus";
 import clsx from "clsx";
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -32,16 +33,6 @@ const maxWidthClasses = {
 	xl: "max-w-xl",
 	"2xl": "max-w-2xl",
 };
-
-const focusableSelector = [
-	'a[href]',
-	'button:not([disabled])',
-	'input:not([disabled])',
-	'select:not([disabled])',
-	'textarea:not([disabled])',
-	'[contenteditable="true"]',
-	'[tabindex]:not([tabindex="-1"])',
-].join(",");
 
 interface ModalStackEntry extends LayeredModalStackEntry {
 	dialog: HTMLDivElement;
@@ -103,8 +94,7 @@ const focusModalEntry = (entry: ModalStackEntry) => {
 	const rememberedTarget = isValidFocusTarget(entry, entry.lastFocusedInside)
 		? entry.lastFocusedInside
 		: null;
-	const firstFocusableElement =
-		entry.dialog.querySelector<HTMLElement>(focusableSelector);
+	const [firstFocusableElement] = dialogFocusTargets(entry.dialog);
 	const focusTarget = rememberedTarget ?? firstFocusableElement ?? entry.dialog;
 
 	focusTarget.focus({ preventScroll: true });
@@ -215,29 +205,7 @@ export const BaseModal = ({
 		const dialog = dialogRef.current;
 		if (!dialog) return;
 
-		const focusableElements = Array.from(
-			dialog.querySelectorAll<HTMLElement>(focusableSelector),
-		);
-		if (focusableElements.length === 0) {
-			event.preventDefault();
-			dialog.focus();
-			return;
-		}
-
-		const [firstFocusableElement] = focusableElements;
-		const lastFocusableElement = focusableElements.at(-1);
-		const { activeElement } = document;
-
-		if (
-			event.shiftKey &&
-			(activeElement === firstFocusableElement || activeElement === dialog)
-		) {
-			event.preventDefault();
-			lastFocusableElement?.focus();
-		} else if (!event.shiftKey && activeElement === lastFocusableElement) {
-			event.preventDefault();
-			firstFocusableElement?.focus();
-		}
+		trapDialogTab(event, dialog);
 	};
 
 	if (!isOpen || !portalHost) {

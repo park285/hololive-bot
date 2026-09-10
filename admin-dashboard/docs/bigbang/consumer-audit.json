@@ -1,0 +1,732 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-09-09",
+  "authorization": "사용자: 니가 체크해봐; 기존 로컬 구현·검증 지시 유지",
+  "query_window": {
+    "from": "2026-08-26T00:00:00Z",
+    "to": "2026-09-09T05:10:00Z",
+    "retention_hours": 336,
+    "result_limit_per_source": 5000,
+    "truncated": false
+  },
+  "sources": [
+    {
+      "source": "loki_central",
+      "total_lines": 142,
+      "parsed_access_lines": 142,
+      "unparsed_or_nonaccess_lines": 0,
+      "formats": [
+        "combined"
+      ],
+      "json_keys": [],
+      "first_access": "2026-08-28T12:01:25.686Z",
+      "last_access": "2026-09-09T02:54:58.513Z",
+      "admin_api_and_docs_count": 142,
+      "first_admin_api_or_docs": "2026-08-28T12:01:25.686Z",
+      "last_admin_api_or_docs": "2026-09-09T02:54:58.513Z",
+      "counts": [
+        {
+          "route": "/admin/api/auth/heartbeat",
+          "method": "POST",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 29
+        },
+        {
+          "route": "/admin/api/auth/session",
+          "method": "GET",
+          "status": 401,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 14
+        },
+        {
+          "route": "/admin/api/auth/session",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/ws/system-stats",
+          "method": "GET",
+          "status": 101,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "missing",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/holo/streams/live",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/holo/members",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/holo/streams/upcoming",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 8
+        },
+        {
+          "route": "/admin/api/status",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 7
+        },
+        {
+          "route": "/admin/api/auth/login",
+          "method": "POST",
+          "status": 401,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 6
+        },
+        {
+          "route": "/admin/api/holo/stats",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 6
+        },
+        {
+          "route": "/admin/api/holo/members/calendar",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 6
+        },
+        {
+          "route": "/admin/api/auth/login",
+          "method": "POST",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/rooms",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/rooms/joined",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/members/{id}/aliases",
+          "method": "POST",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/holo/settings",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/docker/health",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/docker/containers",
+          "method": "GET",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/auth/logout",
+          "method": "POST",
+          "status": 403,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "method": "DELETE",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "admin_origin",
+          "count": 1
+        },
+        {
+          "route": "/admin/api/auth/login",
+          "method": "POST",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "missing",
+          "count": 1
+        },
+        {
+          "route": "/admin/api/auth/logout",
+          "method": "POST",
+          "status": 200,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "missing",
+          "count": 1
+        },
+        {
+          "route": "/admin/api/auth/session",
+          "method": "GET",
+          "status": 401,
+          "agent": "browser_identified",
+          "source": "seoul_gateway",
+          "host": "unavailable",
+          "referer": "missing",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "source": "loki_seoul",
+      "total_lines": 142,
+      "parsed_access_lines": 142,
+      "unparsed_or_nonaccess_lines": 0,
+      "formats": [
+        "json"
+      ],
+      "json_keys": [
+        "bytes_sent",
+        "edge_addr",
+        "gzip_ratio",
+        "host",
+        "limit_req_status",
+        "method",
+        "path",
+        "protocol",
+        "remote_addr",
+        "request_id",
+        "request_time",
+        "status",
+        "time",
+        "upstream_addr",
+        "upstream_connect_time",
+        "upstream_header_time",
+        "upstream_response_time",
+        "upstream_status"
+      ],
+      "first_access": "2026-08-28T12:01:25.700Z",
+      "last_access": "2026-09-09T02:54:58.528Z",
+      "admin_api_and_docs_count": 142,
+      "first_admin_api_or_docs": "2026-08-28T12:01:25.700Z",
+      "last_admin_api_or_docs": "2026-09-09T02:54:58.528Z",
+      "counts": [
+        {
+          "route": "/admin/api/auth/heartbeat",
+          "method": "POST",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 29
+        },
+        {
+          "route": "/admin/api/auth/session",
+          "method": "GET",
+          "status": 401,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 15
+        },
+        {
+          "route": "/admin/api/auth/session",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/ws/system-stats",
+          "method": "GET",
+          "status": 101,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/holo/streams/live",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/holo/members",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 9
+        },
+        {
+          "route": "/admin/api/holo/streams/upcoming",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 8
+        },
+        {
+          "route": "/admin/api/status",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 7
+        },
+        {
+          "route": "/admin/api/auth/login",
+          "method": "POST",
+          "status": 401,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 6
+        },
+        {
+          "route": "/admin/api/holo/stats",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 6
+        },
+        {
+          "route": "/admin/api/holo/members/calendar",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 6
+        },
+        {
+          "route": "/admin/api/auth/login",
+          "method": "POST",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 5
+        },
+        {
+          "route": "/admin/api/holo/rooms",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/rooms/joined",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 4
+        },
+        {
+          "route": "/admin/api/holo/members/{id}/aliases",
+          "method": "POST",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/holo/settings",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/docker/health",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/docker/containers",
+          "method": "GET",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/auth/logout",
+          "method": "POST",
+          "status": 403,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 2
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "method": "DELETE",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 1
+        },
+        {
+          "route": "/admin/api/auth/logout",
+          "method": "POST",
+          "status": 200,
+          "agent": "missing",
+          "source": "other_address",
+          "host": "admin_origin",
+          "referer": "missing",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "daily_log_presence": [
+    {
+      "host": "hololive-osaka",
+      "counts": [
+        {
+          "period_end": "2026-08-27T00:00:00Z",
+          "lines": "11543"
+        },
+        {
+          "period_end": "2026-08-28T00:00:00Z",
+          "lines": "14416"
+        },
+        {
+          "period_end": "2026-08-29T00:00:00Z",
+          "lines": "14599"
+        },
+        {
+          "period_end": "2026-08-30T00:00:00Z",
+          "lines": "14433"
+        },
+        {
+          "period_end": "2026-08-31T00:00:00Z",
+          "lines": "14787"
+        },
+        {
+          "period_end": "2026-09-01T00:00:00Z",
+          "lines": "14554"
+        },
+        {
+          "period_end": "2026-09-02T00:00:00Z",
+          "lines": "14441"
+        },
+        {
+          "period_end": "2026-09-03T00:00:00Z",
+          "lines": "15033"
+        },
+        {
+          "period_end": "2026-09-04T00:00:00Z",
+          "lines": "15152"
+        },
+        {
+          "period_end": "2026-09-05T00:00:00Z",
+          "lines": "14444"
+        },
+        {
+          "period_end": "2026-09-06T00:00:00Z",
+          "lines": "12124"
+        },
+        {
+          "period_end": "2026-09-07T00:00:00Z",
+          "lines": "11626"
+        },
+        {
+          "period_end": "2026-09-08T00:00:00Z",
+          "lines": "12097"
+        },
+        {
+          "period_end": "2026-09-09T00:00:00Z",
+          "lines": "11563"
+        }
+      ]
+    },
+    {
+      "host": "iris-seoul",
+      "counts": [
+        {
+          "period_end": "2026-08-27T00:00:00Z",
+          "lines": "29955"
+        },
+        {
+          "period_end": "2026-08-28T00:00:00Z",
+          "lines": "36938"
+        },
+        {
+          "period_end": "2026-08-29T00:00:00Z",
+          "lines": "37157"
+        },
+        {
+          "period_end": "2026-08-30T00:00:00Z",
+          "lines": "35376"
+        },
+        {
+          "period_end": "2026-08-31T00:00:00Z",
+          "lines": "42667"
+        },
+        {
+          "period_end": "2026-09-01T00:00:00Z",
+          "lines": "41246"
+        },
+        {
+          "period_end": "2026-09-02T00:00:00Z",
+          "lines": "37704"
+        },
+        {
+          "period_end": "2026-09-03T00:00:00Z",
+          "lines": "36973"
+        },
+        {
+          "period_end": "2026-09-04T00:00:00Z",
+          "lines": "43768"
+        },
+        {
+          "period_end": "2026-09-05T00:00:00Z",
+          "lines": "37169"
+        },
+        {
+          "period_end": "2026-09-06T00:00:00Z",
+          "lines": "36090"
+        },
+        {
+          "period_end": "2026-09-07T00:00:00Z",
+          "lines": "36044"
+        },
+        {
+          "period_end": "2026-09-08T00:00:00Z",
+          "lines": "40654"
+        },
+        {
+          "period_end": "2026-09-09T00:00:00Z",
+          "lines": "35971"
+        }
+      ]
+    }
+  ],
+  "request_count_interpretation": "동일 트래픽의 두 hop. 142+142를 별도 요청 284건으로 집계하지 않음; method/normalized path/status 집계가 일치함",
+  "configured_automation": {
+    "hosts": [
+      "kapu",
+      "hololive-osaka",
+      "iris-seoul"
+    ],
+    "remote_scopes": [
+      "/etc/systemd/system",
+      "/etc/cron.d",
+      "/usr/local/bin",
+      "/usr/local/sbin",
+      "/var/spool/cron/crontabs"
+    ],
+    "local_additional_scopes": [
+      "/home/kapu/.config/systemd/user",
+      "/home/kapu/.local/bin",
+      "iris-stack/tools"
+    ],
+    "patterns": [
+      "admin.holoshi.com",
+      "/admin/api/",
+      "30190",
+      "30191"
+    ],
+    "result": "별도 BFF 직접 호출 소비자 미발견; 원격 crontab 없음, 로컬 kapu crontab에 패턴 없음"
+  },
+  "bff_file_audit": {
+    "total_lines": 68,
+    "parsed_json": 68,
+    "first": "2026-08-09T20:30:13.845445292+09:00",
+    "last": "2026-09-09T11:55:01.350629824+09:00",
+    "events": [
+      {
+        "event": "admin.authentication.denied",
+        "status": 401,
+        "source": "other_address",
+        "count": 4
+      },
+      {
+        "event": "admin.login",
+        "status": 200,
+        "source": "other_address",
+        "count": 1
+      }
+    ]
+  },
+  "boundary": {
+    "bff_publish": "127.0.0.1:30190",
+    "nginx_admin_listener": "100.100.1.8:30191",
+    "nginx_allow": [
+      "127.0.0.1",
+      "100.100.1.8",
+      "100.100.1.5"
+    ],
+    "nginx_other_sources": "deny all",
+    "firewall_unit": {
+      "name": "admin-dashboard-ingress-firewall.service",
+      "loaded": true,
+      "active": false,
+      "enabled": false
+    },
+    "firewall_followup": "T09/G07: 문서의 활성 nft unit 전제와 실제 상태 불일치. 현재 조사에서 활성화/규칙 변경하지 않음"
+  },
+  "conclusion": {
+    "known_runtime_consumers": [
+      "동일 origin 관리자 웹 UI HTTP/WS",
+      "Dockerfile/Compose healthcheck (/health)",
+      "배포 health gate·상태 진단 (/health)"
+    ],
+    "external_business_consumer": "조사한 source·설치 automation·보관 기간에서 별도 소비자 미발견",
+    "openapi_docs_consumer": "보관 로그에서 /admin/docs와 /admin/api/openapi.json 호출 0건; 경로는 유지",
+    "scope_frozen_for": "T01→T02 로컬 구현",
+    "release_acceptance": "NOT RUN",
+    "limitations": [
+      "User-Agent는 식별 단서이며 인증 증거가 아님",
+      "로그 보관 이전·장기 비활성·관리되지 않는 개인 장치의 도구 부재는 증명하지 않음",
+      "일별 로그 존재는 매 순간의 수집 무손실을 증명하지 않음",
+      "신규 별도 소비자 발견 시 해당 종속 계약 작업만 재평가하고 기록을 갱신"
+    ]
+  }
+}

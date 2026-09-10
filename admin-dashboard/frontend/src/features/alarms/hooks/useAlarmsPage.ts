@@ -1,6 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryView } from "@/queries/state";
+import { useOnline } from "@/queries/useOnline";
+import { useBusinessMutation } from "@/operations/useBusinessMutation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { queryKeys } from "@/api/queryKeys";
+import { queryKeys } from "@/queries/keys";
 import { alarmsApi, namesApi } from "@/features/alarms/api";
 import { filterAlarmGroups, groupAlarms } from "@/features/alarms/selectors";
 import type { Alarm } from "@/features/alarms/types";
@@ -17,7 +20,7 @@ export function useAlarmsPage() {
 		ALARM_GROUP_PAGE_SIZE,
 	);
 	const [editModal, setEditModal] = useState<{
-		type: "room" | "user";
+		type: "room";
 		id: string;
 		currentName: string;
 	} | null>(null);
@@ -27,29 +30,27 @@ export function useAlarmsPage() {
 		queryFn: alarmsApi.getAll,
 	});
 
-	const deleteAlarmMutation = useMutation({
+	const view = queryView(query, useOnline(), data => data.alarms.length === 0);
+	const invalidate = () => { void queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all }); };
+
+	const deleteAlarmMutation = useBusinessMutation({
 		mutationFn: alarmsApi.delete,
-		onSuccess: () => {
-			void queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all });
-		},
+		onSuccess: invalidate,
+	onError: invalidate,
 	});
 
-	const setNameMutation = useMutation({
+	const setNameMutation = useBusinessMutation({
 		mutationFn: async ({
-			type,
 			id,
 			name,
 		}: {
-			type: "room" | "user";
+			type: "room";
 			id: string;
 			name: string;
 		}) =>
-			type === "room"
-				? namesApi.setRoomName(id, name)
-				: namesApi.setUserName(id, name),
-		onSuccess: () => {
-			void queryClient.invalidateQueries({ queryKey: queryKeys.alarms.all });
-		},
+			namesApi.setRoomName(id, name),
+		onSuccess: invalidate,
+	onError: invalidate,
 	});
 
 	useEffect(() => {
@@ -84,6 +85,7 @@ export function useAlarmsPage() {
 		filteredGroups,
 		totalAlarms,
 		query,
+		view,
 		deleteAlarmMutation,
 		setNameMutation,
 	};

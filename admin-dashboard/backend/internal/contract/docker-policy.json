@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "containers": [
+    { "name": "admin-dashboard", "actions": ["start", "restart"] },
+    { "name": "admin-dashboard-ingress", "actions": ["start", "restart"] },
+    { "name": "admin-docker-proxy", "actions": ["start", "restart"] },
+    { "name": "deunhealth", "actions": ["start", "restart"] },
+    { "name": "holo-postgres", "actions": ["start", "restart"] },
+    { "name": "hololive-alarm-worker", "actions": ["start", "stop", "restart"] },
+    { "name": "hololive-api", "actions": ["start", "stop", "restart"] },
+    { "name": "hololive-youtube-collector-c", "actions": ["start", "stop", "restart"] },
+    { "name": "valkey-cache", "actions": ["start", "restart"] }
+  ]
+}

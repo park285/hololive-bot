@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { statusApi } from "@/api/core";
-import { queryKeys } from "@/api/queryKeys";
+import { queryView } from "@/queries/state";
+import { useOnline } from "@/queries/useOnline";
+import { queryKeys } from "@/queries/keys";
 import { statsApi } from "@/features/stats/api";
 import {
 	buildCurrentServiceStats,
@@ -22,10 +23,14 @@ export function useStatsPage() {
 
 	const statusQuery = useQuery({
 		queryKey: queryKeys.status.aggregated,
-		queryFn: statusApi.get,
+		queryFn: statsApi.getStatus,
 		staleTime: 1000 * 15,
 		refetchInterval: 15000,
 	});
+
+	const online = useOnline();
+	const holoView = queryView(holoQuery, online, () => false);
+	const statusView = queryView(statusQuery, online, data => data.services.length === 0);
 
 	useEffect(() => {
 		if (statusQuery.data && statusQuery.data.services.length > 0) {
@@ -63,6 +68,8 @@ export function useStatsPage() {
 		selectedService,
 		setSelectedService,
 		holoQuery,
+		holoView,
+		statusView,
 		statusQuery,
 		currentServiceStats,
 		mainStats,

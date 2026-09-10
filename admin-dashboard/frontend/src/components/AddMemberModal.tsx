@@ -1,12 +1,15 @@
 import Save from "lucide-react/dist/esm/icons/save.mjs";
 import UserPlus from "lucide-react/dist/esm/icons/user-plus.mjs";
 import {
+	type ReactNode,
 	type SyntheticEvent,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
+import { RequestBlockedError } from "@/api/errors";
+import { operations } from "@/app/bootstrap";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -22,7 +25,10 @@ interface AddMemberFormValues {
 interface AddMemberModalProps {
 	isOpen: boolean;
 	onClose: () => void;
-	onAdd: (member: AddMemberFormValues) => void;
+	onAdd: (member: AddMemberFormValues) => Promise<void>;
+	canSubmit: boolean;
+	pending: boolean;
+	readState: ReactNode;
 }
 
 interface AddMemberErrors {
@@ -55,8 +61,12 @@ export default function AddMemberModal({
 	isOpen,
 	onClose,
 	onAdd,
+	canSubmit,
+	pending,
+	readState,
 }: AddMemberModalProps) {
 	const [values, setValues] = useState<AddMemberFormValues>(initialValues);
+	const [submitError, setSubmitError] = useState("");
 	const [errors, setErrors] = useState<AddMemberErrors>({});
 	const nameInputRef = useRef<HTMLInputElement>(null);
 	const channelIdInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +96,7 @@ export default function AddMemberModal({
 
 	const handleSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
 		event.preventDefault();
+		if (!canSubmit || pending) return;
 
 		const nextErrors = validate(values);
 		if (Object.keys(nextErrors).length > 0) {
@@ -100,13 +111,12 @@ export default function AddMemberModal({
 			return;
 		}
 
-		onAdd({
+		void onAdd({
 			name: values.name.trim(),
 			channelId: values.channelId.trim(),
 			nameKo: values.nameKo?.trim() ?? "",
 			nameJa: values.nameJa?.trim() ?? "",
-		});
-		onClose();
+		}).catch((cause: unknown) => { setSubmitError(operations.failure(cause)?.message ?? (cause instanceof RequestBlockedError ? cause.message : "작업 결과를 확인하지 못했습니다. 현재 상태를 다시 조회해 주세요.")); });
 	};
 
 	const title = (
@@ -125,6 +135,8 @@ export default function AddMemberModal({
 			showHeaderBorder
 		>
 			<form onSubmit={handleSubmit} className="space-y-4" noValidate>
+				{readState}
+				{submitError && <p role="alert">{submitError}</p>}
 				<div className="space-y-2">
 					<Label htmlFor="add-member-name">멤버 이름 (기본)</Label>
 					<Input
@@ -231,7 +243,7 @@ export default function AddMemberModal({
 					</Button>
 					<Button
 						type="submit"
-						disabled={!isDirty}
+						disabled={!isDirty || !canSubmit || pending} aria-busy={pending}
 						className="gap-2 bg-sky-600 hover:bg-sky-700 shadow-sm shadow-sky-200 focus-visible:ring-2 focus-visible:ring-sky-200"
 						aria-label="새 멤버 정보 저장 및 추가"
 					>

@@ -1,0 +1,1063 @@
+{
+  "schema_version": 1,
+  "status": "FAIL",
+  "fixture_run_id": "admin-lab-native-performance-817042-1789015535",
+  "diagnostic_only": true,
+  "full_gate": "NOT RUN",
+  "required_runs": 4,
+  "baseline_image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+  "candidate_image": "sha256:8ad05f1ea714fab16c0f5200d686af60ebb85d0787c4aedc90de9464da944378",
+  "host": {
+    "architecture": "x64",
+    "kernel": "7.0.0-31-generic",
+    "cpu": "AMD Ryzen 5 5600G with Radeon Graphics",
+    "node": "v24.20.0"
+  },
+  "corpus_sha256": "57a469803fd44e8edf8720cd9f22592f37519bd7cac12ef3a0dbbb7a04e80388",
+  "conditions": {
+    "cpus": 2,
+    "memory_bytes": 134217728,
+    "gomaxprocs": 2,
+    "gogc": 100,
+    "gomemlimit": "96MiB",
+    "warmup_seconds": 5,
+    "minimum_sample_seconds": 30,
+    "minimum_samples_per_route": 2000,
+    "concurrency": 8,
+    "fake_delay_ms": 10,
+    "transport": "direct fixture HTTP, one persistent keep-alive agent per client, no retries",
+    "response_validation": "every response; each of 8 independent clients owns network and validation and waits before its next GET",
+    "response_timing": "response end before body assembly; fake server and other clients do not share the receiving event loop",
+    "mutation_requests": 0
+  },
+  "runs": [
+    {
+      "variant": "baseline",
+      "cycle": 1,
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "started_at": "2026-09-10T04:45:37.715Z",
+      "cold": [
+        {
+          "route": "/admin/api/holo/members",
+          "status": 200,
+          "milliseconds": 13.699499000000287,
+          "bytes": 150917
+        },
+        {
+          "route": "/admin/api/holo/rooms",
+          "status": 200,
+          "milliseconds": 12.226737999999841,
+          "bytes": 1965
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "status": 200,
+          "milliseconds": 14.206211999999596,
+          "bytes": 259826
+        },
+        {
+          "route": "/admin/api/holo/settings",
+          "status": 200,
+          "milliseconds": 12.462886999999682,
+          "bytes": 53
+        },
+        {
+          "route": "/admin/api/holo/streams/live",
+          "status": 200,
+          "milliseconds": 11.751754000000346,
+          "bytes": 8124
+        },
+        {
+          "route": "/admin/api/holo/streams/upcoming",
+          "status": 200,
+          "milliseconds": 11.147416000000248,
+          "bytes": 16624
+        },
+        {
+          "route": "/admin/api/docker/containers",
+          "status": 200,
+          "milliseconds": 12.759520000000066,
+          "bytes": 2237
+        }
+      ],
+      "warmup": {
+        "elapsed_seconds": 5.0117086770000006,
+        "counts": [
+          558,
+          558,
+          558,
+          558,
+          558,
+          557,
+          557
+        ],
+        "client_seconds": [
+          5.004324637,
+          5.005823147,
+          5.010940087,
+          5.003035465999999,
+          5.010318144,
+          5.0101706329999995,
+          5.003153832,
+          5.002353779999999
+        ]
+      },
+      "samples": {
+        "/admin/api/holo/members": {
+          "count": 3410,
+          "p95_ms": 12.033831000000646
+        },
+        "/admin/api/holo/rooms": {
+          "count": 3410,
+          "p95_ms": 11.79465600000185
+        },
+        "/admin/api/holo/alarms": {
+          "count": 3410,
+          "p95_ms": 13.030376000002434
+        },
+        "/admin/api/holo/settings": {
+          "count": 3410,
+          "p95_ms": 11.873776000000362
+        },
+        "/admin/api/holo/streams/live": {
+          "count": 3409,
+          "p95_ms": 11.608462999996846
+        },
+        "/admin/api/holo/streams/upcoming": {
+          "count": 3409,
+          "p95_ms": 11.477203000002191
+        },
+        "/admin/api/docker/containers": {
+          "count": 3409,
+          "p95_ms": 0.5008020000022952
+        }
+      },
+      "rss": [
+        {
+          "milliseconds": 0.0075539999997999985,
+          "bytes": 61898752
+        },
+        {
+          "milliseconds": 1001.3118189999996,
+          "bytes": 61902848
+        },
+        {
+          "milliseconds": 2001.0822579999995,
+          "bytes": 62214144
+        },
+        {
+          "milliseconds": 3000.935474000001,
+          "bytes": 62214144
+        },
+        {
+          "milliseconds": 4000.9729799999996,
+          "bytes": 62214144
+        },
+        {
+          "milliseconds": 5002.105859,
+          "bytes": 62218240
+        },
+        {
+          "milliseconds": 6002.410903999999,
+          "bytes": 62218240
+        },
+        {
+          "milliseconds": 7001.802622,
+          "bytes": 62218240
+        },
+        {
+          "milliseconds": 8001.885224000001,
+          "bytes": 62218240
+        },
+        {
+          "milliseconds": 9002.541707,
+          "bytes": 62218240
+        },
+        {
+          "milliseconds": 10003.812769,
+          "bytes": 62746624
+        },
+        {
+          "milliseconds": 11005.662481,
+          "bytes": 62746624
+        },
+        {
+          "milliseconds": 12006.060862999999,
+          "bytes": 63131648
+        },
+        {
+          "milliseconds": 13006.395845,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 14005.904886,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 15006.449455999998,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 16007.476875,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 17008.762533999998,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 18009.323485999998,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 19009.139591,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 20010.013197,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 21010.618873,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 22011.174324,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 23011.248159,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 24013.432457,
+          "bytes": 63139840
+        },
+        {
+          "milliseconds": 25012.976746,
+          "bytes": 63201280
+        },
+        {
+          "milliseconds": 26013.108320999996,
+          "bytes": 63201280
+        },
+        {
+          "milliseconds": 27013.029115,
+          "bytes": 63201280
+        },
+        {
+          "milliseconds": 28013.01362,
+          "bytes": 63201280
+        },
+        {
+          "milliseconds": 29013.53713,
+          "bytes": 63205376
+        }
+      ],
+      "errors": [],
+      "measured_seconds": 30.010665856999996,
+      "client_seconds": [
+        30.002273519,
+        30.009382145000004,
+        30.007873015999998,
+        30.003269012000004,
+        30.006332286,
+        30.006803662000003,
+        30.001729224,
+        30.003792987999997
+      ],
+      "rss_median_bytes": 63139840,
+      "status": "PASS_SAMPLE",
+      "exit_code": 0
+    },
+    {
+      "variant": "candidate",
+      "cycle": 1,
+      "image": "sha256:8ad05f1ea714fab16c0f5200d686af60ebb85d0787c4aedc90de9464da944378",
+      "started_at": "2026-09-10T04:46:13.615Z",
+      "cold": [
+        {
+          "route": "/admin/api/holo/members",
+          "status": 200,
+          "milliseconds": 13.05211699999927,
+          "bytes": 152917
+        },
+        {
+          "route": "/admin/api/holo/rooms",
+          "status": 200,
+          "milliseconds": 11.081068999999843,
+          "bytes": 1965
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "status": 200,
+          "milliseconds": 13.764792000001762,
+          "bytes": 259826
+        },
+        {
+          "route": "/admin/api/holo/settings",
+          "status": 200,
+          "milliseconds": 11.043077000002086,
+          "bytes": 53
+        },
+        {
+          "route": "/admin/api/holo/streams/live",
+          "status": 200,
+          "milliseconds": 11.264709000002767,
+          "bytes": 7274
+        },
+        {
+          "route": "/admin/api/holo/streams/upcoming",
+          "status": 200,
+          "milliseconds": 11.623120000003837,
+          "bytes": 14924
+        },
+        {
+          "route": "/admin/api/docker/containers",
+          "status": 200,
+          "milliseconds": 11.756613000005018,
+          "bytes": 2237
+        }
+      ],
+      "warmup": {
+        "elapsed_seconds": 5.012632172999998,
+        "counts": [
+          543,
+          543,
+          543,
+          542,
+          542,
+          542,
+          542
+        ],
+        "client_seconds": [
+          5.005501995999999,
+          5.012068542000001,
+          5.005601043999995,
+          5.007410814999996,
+          5.006493491000001,
+          5.010532851000003,
+          5.001441395000001,
+          5.003695541000001
+        ]
+      },
+      "samples": {
+        "/admin/api/holo/members": {
+          "count": 3312,
+          "p95_ms": 13.21952600000077
+        },
+        "/admin/api/holo/rooms": {
+          "count": 3312,
+          "p95_ms": 11.724363000001176
+        },
+        "/admin/api/holo/alarms": {
+          "count": 3312,
+          "p95_ms": 14.398206999998365
+        },
+        "/admin/api/holo/settings": {
+          "count": 3312,
+          "p95_ms": 11.7991949999996
+        },
+        "/admin/api/holo/streams/live": {
+          "count": 3311,
+          "p95_ms": 11.570709999999963
+        },
+        "/admin/api/holo/streams/upcoming": {
+          "count": 3311,
+          "p95_ms": 11.608843000001798
+        },
+        "/admin/api/docker/containers": {
+          "count": 3311,
+          "p95_ms": 0.575673999999708
+        }
+      },
+      "rss": [
+        {
+          "milliseconds": 0.0058609999978216365,
+          "bytes": 32518144
+        },
+        {
+          "milliseconds": 1000.9407340000034,
+          "bytes": 32182272
+        },
+        {
+          "milliseconds": 2001.1036490000042,
+          "bytes": 32165888
+        },
+        {
+          "milliseconds": 3000.7907080000004,
+          "bytes": 32165888
+        },
+        {
+          "milliseconds": 4000.9655060000005,
+          "bytes": 32174080
+        },
+        {
+          "milliseconds": 5001.994016000004,
+          "bytes": 32231424
+        },
+        {
+          "milliseconds": 6002.475666999999,
+          "bytes": 32272384
+        },
+        {
+          "milliseconds": 7005.504030000004,
+          "bytes": 31907840
+        },
+        {
+          "milliseconds": 8006.273527999998,
+          "bytes": 31989760
+        },
+        {
+          "milliseconds": 9006.169495000002,
+          "bytes": 32067584
+        },
+        {
+          "milliseconds": 10006.567236000003,
+          "bytes": 31850496
+        },
+        {
+          "milliseconds": 11007.223599000004,
+          "bytes": 32411648
+        },
+        {
+          "milliseconds": 12007.668128999998,
+          "bytes": 31776768
+        },
+        {
+          "milliseconds": 13007.601096999999,
+          "bytes": 31809536
+        },
+        {
+          "milliseconds": 14008.480433000004,
+          "bytes": 31744000
+        },
+        {
+          "milliseconds": 15008.894736000002,
+          "bytes": 31625216
+        },
+        {
+          "milliseconds": 16010.214079999998,
+          "bytes": 31346688
+        },
+        {
+          "milliseconds": 17009.658799000004,
+          "bytes": 32370688
+        },
+        {
+          "milliseconds": 18009.822895999998,
+          "bytes": 31567872
+        },
+        {
+          "milliseconds": 19012.238434,
+          "bytes": 31924224
+        },
+        {
+          "milliseconds": 20011.753066000005,
+          "bytes": 32116736
+        },
+        {
+          "milliseconds": 21012.124798000004,
+          "bytes": 31944704
+        },
+        {
+          "milliseconds": 22011.722879,
+          "bytes": 31981568
+        },
+        {
+          "milliseconds": 23012.271337,
+          "bytes": 32161792
+        },
+        {
+          "milliseconds": 24013.510808000006,
+          "bytes": 32202752
+        },
+        {
+          "milliseconds": 25013.889924000003,
+          "bytes": 31875072
+        },
+        {
+          "milliseconds": 26014.866786,
+          "bytes": 32030720
+        },
+        {
+          "milliseconds": 27015.456703000003,
+          "bytes": 31801344
+        },
+        {
+          "milliseconds": 28015.758231,
+          "bytes": 32296960
+        },
+        {
+          "milliseconds": 29016.894176,
+          "bytes": 32227328
+        }
+      ],
+      "errors": [],
+      "measured_seconds": 30.013684416999997,
+      "client_seconds": [
+        30.003186216000003,
+        30.007900681,
+        30.003487770000007,
+        30.002489632000003,
+        30.009979443000002,
+        30.013073395999992,
+        30.007526930000008,
+        30.002699040000007
+      ],
+      "rss_median_bytes": 32049152,
+      "status": "PASS_SAMPLE",
+      "exit_code": 0
+    },
+    {
+      "variant": "candidate",
+      "cycle": 1,
+      "image": "sha256:8ad05f1ea714fab16c0f5200d686af60ebb85d0787c4aedc90de9464da944378",
+      "started_at": "2026-09-10T04:46:49.496Z",
+      "cold": [
+        {
+          "route": "/admin/api/holo/members",
+          "status": 200,
+          "milliseconds": 13.80871599999955,
+          "bytes": 152917
+        },
+        {
+          "route": "/admin/api/holo/rooms",
+          "status": 200,
+          "milliseconds": 10.87191200000234,
+          "bytes": 1965
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "status": 200,
+          "milliseconds": 13.579039000003831,
+          "bytes": 259826
+        },
+        {
+          "route": "/admin/api/holo/settings",
+          "status": 200,
+          "milliseconds": 10.898463000004995,
+          "bytes": 53
+        },
+        {
+          "route": "/admin/api/holo/streams/live",
+          "status": 200,
+          "milliseconds": 11.062655000001541,
+          "bytes": 7274
+        },
+        {
+          "route": "/admin/api/holo/streams/upcoming",
+          "status": 200,
+          "milliseconds": 11.509884000013699,
+          "bytes": 14924
+        },
+        {
+          "route": "/admin/api/docker/containers",
+          "status": 200,
+          "milliseconds": 11.660630999991554,
+          "bytes": 2237
+        }
+      ],
+      "warmup": {
+        "elapsed_seconds": 5.011244644999999,
+        "counts": [
+          542,
+          542,
+          542,
+          542,
+          542,
+          541,
+          541
+        ],
+        "client_seconds": [
+          5.010709988000002,
+          5.005327915000001,
+          5.0057635029999945,
+          5.001607541000005,
+          5.00279383699999,
+          5.0020220590000095,
+          5.00241678,
+          5.005896546000003
+        ]
+      },
+      "samples": {
+        "/admin/api/holo/members": {
+          "count": 3307,
+          "p95_ms": 13.236036999995122
+        },
+        "/admin/api/holo/rooms": {
+          "count": 3307,
+          "p95_ms": 11.805437000002712
+        },
+        "/admin/api/holo/alarms": {
+          "count": 3307,
+          "p95_ms": 14.441839999999502
+        },
+        "/admin/api/holo/settings": {
+          "count": 3306,
+          "p95_ms": 11.72710800000641
+        },
+        "/admin/api/holo/streams/live": {
+          "count": 3306,
+          "p95_ms": 11.604284999993979
+        },
+        "/admin/api/holo/streams/upcoming": {
+          "count": 3306,
+          "p95_ms": 11.639922999995179
+        },
+        "/admin/api/docker/containers": {
+          "count": 3306,
+          "p95_ms": 0.5927869999868562
+        }
+      },
+      "rss": [
+        {
+          "milliseconds": 0.0018430000054650009,
+          "bytes": 32366592
+        },
+        {
+          "milliseconds": 1001.3462949999957,
+          "bytes": 32190464
+        },
+        {
+          "milliseconds": 2003.5696670000034,
+          "bytes": 31907840
+        },
+        {
+          "milliseconds": 3004.1530709999934,
+          "bytes": 32337920
+        },
+        {
+          "milliseconds": 4005.0701289999997,
+          "bytes": 31682560
+        },
+        {
+          "milliseconds": 5006.289583000005,
+          "bytes": 31477760
+        },
+        {
+          "milliseconds": 6006.662265999999,
+          "bytes": 32313344
+        },
+        {
+          "milliseconds": 7007.193301000007,
+          "bytes": 32444416
+        },
+        {
+          "milliseconds": 8007.875092000002,
+          "bytes": 32133120
+        },
+        {
+          "milliseconds": 9008.227526999995,
+          "bytes": 32522240
+        },
+        {
+          "milliseconds": 10008.552981,
+          "bytes": 32075776
+        },
+        {
+          "milliseconds": 11008.485136999996,
+          "bytes": 31952896
+        },
+        {
+          "milliseconds": 12009.604359999998,
+          "bytes": 31944704
+        },
+        {
+          "milliseconds": 13009.581470999998,
+          "bytes": 31502336
+        },
+        {
+          "milliseconds": 14010.042442000005,
+          "bytes": 32321536
+        },
+        {
+          "milliseconds": 15010.557146000006,
+          "bytes": 32186368
+        },
+        {
+          "milliseconds": 16012.323879999996,
+          "bytes": 32321536
+        },
+        {
+          "milliseconds": 17013.189060000004,
+          "bytes": 32104448
+        },
+        {
+          "milliseconds": 18013.587161999996,
+          "bytes": 32223232
+        },
+        {
+          "milliseconds": 19013.780654999995,
+          "bytes": 31952896
+        },
+        {
+          "milliseconds": 20014.278516000006,
+          "bytes": 32186368
+        },
+        {
+          "milliseconds": 21015.630330999993,
+          "bytes": 32190464
+        },
+        {
+          "milliseconds": 22017.017013000004,
+          "bytes": 31576064
+        },
+        {
+          "milliseconds": 23016.667944,
+          "bytes": 32440320
+        },
+        {
+          "milliseconds": 24016.694359,
+          "bytes": 32018432
+        },
+        {
+          "milliseconds": 25016.842716,
+          "bytes": 32514048
+        },
+        {
+          "milliseconds": 26017.326029999997,
+          "bytes": 32256000
+        },
+        {
+          "milliseconds": 27018.348599000004,
+          "bytes": 32260096
+        },
+        {
+          "milliseconds": 28019.621574000004,
+          "bytes": 32366592
+        },
+        {
+          "milliseconds": 29019.930817,
+          "bytes": 32092160
+        }
+      ],
+      "errors": [],
+      "measured_seconds": 30.01309215,
+      "client_seconds": [
+        30.012727416000008,
+        30.008765834000005,
+        30.009120659000008,
+        30.00969520100001,
+        30.00187004299999,
+        30.005189142999996,
+        30.008986183,
+        30.012028586999993
+      ],
+      "rss_median_bytes": 32188416,
+      "status": "PASS_SAMPLE",
+      "exit_code": 0
+    },
+    {
+      "variant": "baseline",
+      "cycle": 1,
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "started_at": "2026-09-10T04:47:25.365Z",
+      "cold": [
+        {
+          "route": "/admin/api/holo/members",
+          "status": 200,
+          "milliseconds": 12.352927999992971,
+          "bytes": 150917
+        },
+        {
+          "route": "/admin/api/holo/rooms",
+          "status": 200,
+          "milliseconds": 10.29768000000331,
+          "bytes": 1965
+        },
+        {
+          "route": "/admin/api/holo/alarms",
+          "status": 200,
+          "milliseconds": 12.309886000002734,
+          "bytes": 259826
+        },
+        {
+          "route": "/admin/api/holo/settings",
+          "status": 200,
+          "milliseconds": 12.221137000000454,
+          "bytes": 53
+        },
+        {
+          "route": "/admin/api/holo/streams/live",
+          "status": 200,
+          "milliseconds": 11.399445000002743,
+          "bytes": 8124
+        },
+        {
+          "route": "/admin/api/holo/streams/upcoming",
+          "status": 200,
+          "milliseconds": 10.754958999998053,
+          "bytes": 16624
+        },
+        {
+          "route": "/admin/api/docker/containers",
+          "status": 200,
+          "milliseconds": 11.54723599999852,
+          "bytes": 2237
+        }
+      ],
+      "warmup": {
+        "elapsed_seconds": 5.011821140999993,
+        "counts": [
+          560,
+          560,
+          560,
+          560,
+          560,
+          560,
+          559
+        ],
+        "client_seconds": [
+          5.007777663000001,
+          5.000241162999999,
+          5.01129089199999,
+          5.011157990000007,
+          5.009548139999999,
+          5.003847870999991,
+          5.0044537929999935,
+          5.001818992999993
+        ]
+      },
+      "samples": {
+        "/admin/api/holo/members": {
+          "count": 3406,
+          "p95_ms": 12.17633200000273
+        },
+        "/admin/api/holo/rooms": {
+          "count": 3406,
+          "p95_ms": 11.915657000005012
+        },
+        "/admin/api/holo/alarms": {
+          "count": 3406,
+          "p95_ms": 13.069168999994872
+        },
+        "/admin/api/holo/settings": {
+          "count": 3406,
+          "p95_ms": 11.878587000013795
+        },
+        "/admin/api/holo/streams/live": {
+          "count": 3405,
+          "p95_ms": 11.679667000018526
+        },
+        "/admin/api/holo/streams/upcoming": {
+          "count": 3405,
+          "p95_ms": 11.524222000007285
+        },
+        "/admin/api/docker/containers": {
+          "count": 3405,
+          "p95_ms": 0.513877000004868
+        }
+      },
+      "rss": [
+        {
+          "milliseconds": 0.0020139999978709966,
+          "bytes": 61812736
+        },
+        {
+          "milliseconds": 1002.1449240000074,
+          "bytes": 62664704
+        },
+        {
+          "milliseconds": 2003.0781839999981,
+          "bytes": 62664704
+        },
+        {
+          "milliseconds": 3003.238333000001,
+          "bytes": 62664704
+        },
+        {
+          "milliseconds": 4003.524191000004,
+          "bytes": 62668800
+        },
+        {
+          "milliseconds": 5004.210671000008,
+          "bytes": 62668800
+        },
+        {
+          "milliseconds": 6005.2089540000015,
+          "bytes": 62668800
+        },
+        {
+          "milliseconds": 7005.6429440000065,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 8006.906952999998,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 9006.451591999998,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 10007.216582000008,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 11008.629893999998,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 12008.540168000007,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 13008.641165000008,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 14009.510192000002,
+          "bytes": 62799872
+        },
+        {
+          "milliseconds": 15010.50622000001,
+          "bytes": 62803968
+        },
+        {
+          "milliseconds": 16010.644488000005,
+          "bytes": 62803968
+        },
+        {
+          "milliseconds": 17010.821419,
+          "bytes": 62808064
+        },
+        {
+          "milliseconds": 18011.077219999992,
+          "bytes": 62808064
+        },
+        {
+          "milliseconds": 19011.934844999996,
+          "bytes": 62808064
+        },
+        {
+          "milliseconds": 20013.541064000005,
+          "bytes": 62808064
+        },
+        {
+          "milliseconds": 21014.152912000005,
+          "bytes": 62808064
+        },
+        {
+          "milliseconds": 22015.566074000017,
+          "bytes": 62808064
+        },
+        {
+          "milliseconds": 23016.10337000001,
+          "bytes": 62812160
+        },
+        {
+          "milliseconds": 24016.87208700001,
+          "bytes": 62812160
+        },
+        {
+          "milliseconds": 25017.171661000015,
+          "bytes": 62873600
+        },
+        {
+          "milliseconds": 26017.739715999996,
+          "bytes": 62873600
+        },
+        {
+          "milliseconds": 27018.144260000015,
+          "bytes": 62873600
+        },
+        {
+          "milliseconds": 28020.127695999996,
+          "bytes": 62873600
+        },
+        {
+          "milliseconds": 29021.241167999993,
+          "bytes": 62873600
+        }
+      ],
+      "errors": [],
+      "measured_seconds": 30.01066865899999,
+      "client_seconds": [
+        30.010161145000005,
+        30.007950440999995,
+        30.003458119,
+        30.008679999,
+        30.003289829,
+        30.004975816000005,
+        30.001771001999995,
+        30.01013171799999
+      ],
+      "rss_median_bytes": 62801920,
+      "status": "PASS_SAMPLE",
+      "exit_code": 0
+    }
+  ],
+  "errors": [],
+  "comparison": {
+    "routes": {
+      "/admin/api/holo/members": {
+        "baseline_p95_ms": 12.105081500001688,
+        "candidate_p95_ms": 13.227781499997946,
+        "ratio": 1.092746174405856,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/rooms": {
+        "baseline_p95_ms": 11.855156500003432,
+        "candidate_p95_ms": 11.764900000001944,
+        "ratio": 0.9923867306178994,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/alarms": {
+        "baseline_p95_ms": 13.049772499998653,
+        "candidate_p95_ms": 14.420023499998933,
+        "ratio": 1.1050019071214017,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/settings": {
+        "baseline_p95_ms": 11.876181500007078,
+        "candidate_p95_ms": 11.763151500003005,
+        "ratio": 0.9904826311382993,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/streams/live": {
+        "baseline_p95_ms": 11.644065000007686,
+        "candidate_p95_ms": 11.58749749999697,
+        "ratio": 0.9951419457027526,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/streams/upcoming": {
+        "baseline_p95_ms": 11.500712500004738,
+        "candidate_p95_ms": 11.624382999998488,
+        "ratio": 1.010753290284728,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/docker/containers": {
+        "baseline_p95_ms": 0.5073395000035816,
+        "candidate_p95_ms": 0.5842304999932821,
+        "ratio": 1.1515572905109057,
+        "budget_ratio": 1.15,
+        "status": "FAIL"
+      }
+    },
+    "rss": {
+      "baseline": 62970880,
+      "candidate": 32118784,
+      "budget_ratio": 1.1,
+      "ratio": 0.5100577282705911,
+      "status": "PASS"
+    }
+  },
+  "raw_evidence": {
+    "file": "native-performance-valkey-ring.json.gz",
+    "encoding": "gzip",
+    "uncompressed_sha256": "2a8a47ef10fb03f8fe59a2568fbd83ea56ccb7cd58f93b81c08cd4614978edc8"
+  },
+  "execution": {
+    "wrapper_exit": 1,
+    "source_artifact": "valkey-ring-native-artifact.json",
+    "binary_override": false,
+    "forced_gc": false
+  }
+}

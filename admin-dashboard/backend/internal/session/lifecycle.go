@@ -48,7 +48,9 @@ func (s *Store) refreshOnce(ctx context.Context, id string, idle bool) (RefreshR
 		return RefreshResult{}, false, fmt.Errorf("unmarshal: %w", unmarshalErr)
 	}
 
-	normalizeLegacySession(&sess)
+	if validationErr := validateStoredSession(&sess, id); validationErr != nil {
+		return RefreshResult{}, false, fmt.Errorf("validate stored session: %w", validationErr)
+	}
 
 	now := time.Now().UTC()
 
@@ -281,7 +283,9 @@ func (s *Store) rotateSource(ctx context.Context, oldID string) (data string, se
 		return "", Session{}, false, fmt.Errorf("unmarshal: %w", unmarshalErr)
 	}
 
-	normalizeLegacySession(&old)
+	if err := validateStoredSession(&old, oldID); err != nil {
+		return "", Session{}, false, fmt.Errorf("validate stored session: %w", err)
+	}
 
 	return oldData, old, true, nil
 }
@@ -382,10 +386,11 @@ local id = ARGV[4]
 local current_data = redis.call('GET', session_key)
 if not current_data then return 0 end
 if current_data ~= expected_data then return -1 end
-local family_current = redis.call('GET', family_key)
-if family_current and family_current ~= id then return -2 end
+local family_current = redis.call('HGET', family_key, 'token')
+if not family_current then return 0 end
+if family_current ~= id then return -2 end
 redis.call('SET', session_key, refreshed_data, 'EX', ttl)
-redis.call('SET', family_key, id, 'EX', ttl)
+redis.call('EXPIRE', family_key, ttl)
 return 1
 `
 
@@ -403,10 +408,12 @@ local old_id = ARGV[7]
 local old_data = redis.call('GET', old_key)
 if not old_data then return 0 end
 if old_data ~= expected_old_data then return 0 end
-local family_current = redis.call('GET', family_key)
-if family_current and family_current ~= old_id then return -1 end
+local family_current = redis.call('HGET', family_key, 'token')
+if not family_current then return 0 end
+if family_current ~= old_id then return -1 end
 redis.call('SET', new_key, new_data, 'EX', new_ttl)
 redis.call('SET', old_key, old_marker_data, 'EX', grace_ttl)
-redis.call('SET', family_key, new_id, 'EX', new_ttl)
+redis.call('HSET', family_key, 'token', new_id)
+redis.call('EXPIRE', family_key, new_ttl)
 return 1
 `

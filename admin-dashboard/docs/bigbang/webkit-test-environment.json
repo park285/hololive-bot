@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "purpose": "Playwright 1.63.0 WebKit test-only native libraries; no host package installation",
+  "directory": "/tmp/hololive-admin-webkit-deps.CS2ksX",
+  "architecture": "amd64",
+  "source": "Ubuntu resolute public archive and updates; authenticated ESM downloads failed and public ffmpeg 7:8.0.1-3ubuntu2 was used",
+  "packages": [
+    {
+      "name": "libva-x11-2",
+      "version": "2.23.0-1ubuntu1"
+    },
+    {
+      "name": "libvdpau1",
+      "version": "1.5-4"
+    },
+    {
+      "name": "libvpl2",
+      "version": "1:2.16.0-1"
+    },
+    {
+      "name": "ocl-icd-libopencl1",
+      "version": "2.3.4-1"
+    },
+    {
+      "name": "libavutil60",
+      "version": "7:8.0.1-3ubuntu2"
+    },
+    {
+      "name": "libcodec2-1.2",
+      "version": "1.2.0-4"
+    },
+    {
+      "name": "libdav1d7",
+      "version": "1.5.3-1"
+    },
+    {
+      "name": "libgsm1",
+      "version": "1.0.23-2"
+    },
+    {
+      "name": "librav1e0.8",
+      "version": "0.8.1-7"
+    },
+    {
+      "name": "libshine3",
+      "version": "3.1.1-3build1"
+    },
+    {
+      "name": "libsvtav1enc2",
+      "version": "2.3.0+dfsg-1build1"
+    },
+    {
+      "name": "libsoxr0",
+      "version": "0.1.3-4.1"
+    },
+    {
+      "name": "libswresample6",
+      "version": "7:8.0.1-3ubuntu2"
+    },
+    {
+      "name": "libx264-165",
+      "version": "2:0.165.3222+gitb35605ac-3build1"
+    },
+    {
+      "name": "libx265-215",
+      "version": "4.1-4"
+    },
+    {
+      "name": "libxvidcore4",
+      "version": "2:1.3.7-3"
+    },
+    {
+      "name": "libzvbi-common",
+      "version": "0.2.44-1ubuntu2"
+    },
+    {
+      "name": "libzvbi0t64",
+      "version": "0.2.44-1ubuntu2"
+    },
+    {
+      "name": "libavcodec62",
+      "version": "7:8.0.1-3ubuntu2"
+    },
+    {
+      "name": "libunibreak6",
+      "version": "6.1-3build1"
+    },
+    {
+      "name": "libass9",
+      "version": "1:0.17.4-2"
+    },
+    {
+      "name": "libudfread3",
+      "version": "1.2.0-2"
+    },
+    {
+      "name": "libbluray3",
+      "version": "1:1.4.1-1"
+    },
+    {
+      "name": "libchromaprint1",
+      "version": "1.6.0-2build1"
+    },
+    {
+      "name": "libdvdread8t64",
+      "version": "7.0.1-1"
+    },
+    {
+      "name": "libdvdnav4",
+      "version": "7.0.0-2"
+    },
+    {
+      "name": "libgme0",
+      "version": "0.6.4-1"
+    },
+    {
+      "name": "libvorbisfile3",
+      "version": "1.3.7-3build2"
+    },
+    {
+      "name": "libopenmpt0t64",
+      "version": "0.8.4-1"
+    },
+    {
+      "name": "librabbitmq4",
+      "version": "0.15.0-1ubuntu0.26.04.2"
+    },
+    {
+      "name": "libcjson1",
+      "version": "1.7.19-2"
+    },
+    {
+      "name": "libmbedcrypto16",
+      "version": "3.6.5-0.1ubuntu2"
+    },
+    {
+      "name": "librist4",
+      "version": "0.2.11+dfsg-1build1"
+    },
+    {
+      "name": "libsrt1.5-gnutls",
+      "version": "1.5.4-3"
+    },
+    {
+      "name": "libssh-4",
+      "version": "0.11.3-1ubuntu2.1"
+    },
+    {
+      "name": "libnorm1t64",
+      "version": "1.5.9+dfsg-4"
+    },
+    {
+      "name": "libpgm-5.3-0t64",
+      "version": "5.3.128~dfsg-2.1build2"
+    },
+    {
+      "name": "libzmq5",
+      "version": "4.3.5-1build3"
+    },
+    {
+      "name": "libavformat62",
+      "version": "7:8.0.1-3ubuntu2"
+    },
+    {
+      "name": "libbs2b0",
+      "version": "3.1.0+dfsg-8build1"
+    },
+    {
+      "name": "libflite1",
+      "version": "2.2-7build1"
+    },
+    {
+      "name": "libserd-0-0",
+      "version": "0.32.6-1"
+    },
+    {
+      "name": "libzix-0-0",
+      "version": "0.8.0-1"
+    },
+    {
+      "name": "libsord-0-0",
+      "version": "0.16.20-1"
+    },
+    {
+      "name": "libsratom-0-0",
+      "version": "0.6.20-1"
+    },
+    {
+      "name": "liblilv-0-0",
+      "version": "0.26.2-1"
+    },
+    {
+      "name": "libmysofa1",
+      "version": "1.3.3+dfsg-1ubuntu2"
+    },
+    {
+      "name": "libplacebo360",
+      "version": "7.360.0-3"
+    },
+    {
+      "name": "libfftw3-double3",
+      "version": "3.3.10-2fakesync1build3"
+    },
+    {
+      "name": "libsamplerate0",
+      "version": "0.2.2-4build2"
+    },
+    {
+      "name": "librubberband3",
+      "version": "4.0.0+dfsg-2ubuntu1"
+    },
+    {
+      "name": "libswscale9",
+      "version": "7:8.0.1-3ubuntu2"
+    },
+    {
+      "name": "libvidstab1.1",
+      "version": "1.1.0-2.1"
+    },
+    {
+      "name": "libzimg2",
+      "version": "3.0.6+ds1-1"
+    },
+    {
+      "name": "libavfilter11",
+      "version": "7:8.0.1-3ubuntu2"
+    },
+    {
+      "name": "gstreamer1.0-libav",
+      "version": "1.28.2-1"
+    },
+    {
+      "name": "libgav1-2",
+      "version": "0.20.0-2build1"
+    },
+    {
+      "name": "libyuv0",
+      "version": "0.0.1922.20260106-1"
+    },
+    {
+      "name": "libavif16",
+      "version": "1.3.0-1ubuntu4"
+    },
+    {
+      "name": "libhidapi-hidraw0",
+      "version": "0.15.0-2"
+    },
+    {
+      "name": "libmanette-0.2-0",
+      "version": "0.2.13-1"
+    }
+  ],
+  "archives": [
+    {
+      "sha256": "07dc3d35f2a4d1a52eaeb2bcadcfe67358697dc0cc7a63d5b4a59751fb117b6a",
+      "archive": "gstreamer1.0-libav_1.28.2-1_amd64.deb"
+    },
+    {
+      "sha256": "c6aec828d4b05dce30dc18f09da4a216ee082e7705bb40c39387af836e6203d7",
+      "archive": "libass9_1%3a0.17.4-2_amd64.deb"
+    },
+    {
+      "sha256": "3afab9dafae3b26b7c4cffcee92395c28c10ea026dece5ea1aaee2e72297ee9b",
+      "archive": "libavcodec62_7%3a8.0.1-3ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "0b1ee247df7e134f215f748b7753d1dcf4cb0dec0575712fb34352cbec4249c5",
+      "archive": "libavfilter11_7%3a8.0.1-3ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "1610ea1662bd52430cf850662e81baf9e17c3818525bf15ad259c6dacf4740e2",
+      "archive": "libavformat62_7%3a8.0.1-3ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "cbc5fcbdf15d94e679b72198994e37b96b25ff3cded9a2cdae0564927a78e969",
+      "archive": "libavif16_1.3.0-1ubuntu4_amd64.deb"
+    },
+    {
+      "sha256": "708566c7b998afc1665a531ba712bbd440e12d260e8c7d102a0d9fd655886c52",
+      "archive": "libavutil60_7%3a8.0.1-3ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "b7d30ca5c9c1482293a83c39d30ebaab723ba1962745bbe968fb3747aa80eda7",
+      "archive": "libbluray3_1%3a1.4.1-1_amd64.deb"
+    },
+    {
+      "sha256": "f1d2c89db3bc1d547b1beb2785d71449a06eefc4843393eba9c0329379b14d10",
+      "archive": "libbs2b0_3.1.0+dfsg-8build1_amd64.deb"
+    },
+    {
+      "sha256": "eff562e39c964044a830a61cd10ca2dae393f74b79eafe0ed63f55ca99b2f667",
+      "archive": "libchromaprint1_1.6.0-2build1_amd64.deb"
+    },
+    {
+      "sha256": "1c47d315a46d610708aecdcafbc5b2c59c28f174dfb8a562290a17620bda3549",
+      "archive": "libcjson1_1.7.19-2_amd64.deb"
+    },
+    {
+      "sha256": "1e585d61c9993704947df3fe2d1dedae4f9173d2eb087ad891ccb862c369c32e",
+      "archive": "libcodec2-1.2_1.2.0-4_amd64.deb"
+    },
+    {
+      "sha256": "d5171827e3b466f65ba50b886128ae3aaa7c28523293bdcd337e4a10a8929ebe",
+      "archive": "libdav1d7_1.5.3-1_amd64.deb"
+    },
+    {
+      "sha256": "dcf724e6405bfa7f951d438dab1a6705fbd13da4156b3d1d931ebebf993fefbe",
+      "archive": "libdvdnav4_7.0.0-2_amd64.deb"
+    },
+    {
+      "sha256": "116b19d8623328523b5326efae99f0ec9e2d5546d8771c9c896c52213f9ae8d7",
+      "archive": "libdvdread8t64_7.0.1-1_amd64.deb"
+    },
+    {
+      "sha256": "a4d8d0682aecb3a9414d8938518f48d4d7433239172b7fc1458eb9690b75a323",
+      "archive": "libfftw3-double3_3.3.10-2fakesync1build3_amd64.deb"
+    },
+    {
+      "sha256": "c43b7d1624664e581b09bdd3ba1782f08baea8239295f0fed39093bb41757f4a",
+      "archive": "libflite1_2.2-7build1_amd64.deb"
+    },
+    {
+      "sha256": "26c5dd6446f0007af9d939d56a1d0c376bcd152c4401b0b52f6d6d41233152de",
+      "archive": "libgav1-2_0.20.0-2build1_amd64.deb"
+    },
+    {
+      "sha256": "d3402c5b6069e995c8c9f58f602e879ad1b03e2b03f14a39e7cd08438d2779ea",
+      "archive": "libgme0_0.6.4-1_amd64.deb"
+    },
+    {
+      "sha256": "8c1d81d0275cd72fa35cf819ec3c8d7dc919d67461430ddd3ea5d534dcda75fd",
+      "archive": "libgsm1_1.0.23-2_amd64.deb"
+    },
+    {
+      "sha256": "839f3b4156a1c86d0353dac4f92deb4c910833dec49608635fc6a6f5eaba5e3b",
+      "archive": "libhidapi-hidraw0_0.15.0-2_amd64.deb"
+    },
+    {
+      "sha256": "52627b18dd620d988db2c54d623c971d7af3d7cae882329aaaa49f62e5ab17a4",
+      "archive": "liblilv-0-0_0.26.2-1_amd64.deb"
+    },
+    {
+      "sha256": "2e68b011e47dd553c3142794f0f1ad86bff4924b1f4072ef2be2a447c5d69631",
+      "archive": "libmanette-0.2-0_0.2.13-1_amd64.deb"
+    },
+    {
+      "sha256": "dd320215c1bd6e954d5aea07e640f7063865af9ef55bd64c5d9cd3cbd1bf7555",
+      "archive": "libmbedcrypto16_3.6.5-0.1ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "aac2968cb2ffa92b2dbf2093d446bc4d64dec6f585d0310dd30789a6464e7a58",
+      "archive": "libmysofa1_1.3.3+dfsg-1ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "c3d9277fa4e6b0685a906b573fe493ace87fcb798a638779f32cdb70f061bb8d",
+      "archive": "libnorm1t64_1.5.9+dfsg-4_amd64.deb"
+    },
+    {
+      "sha256": "e9ee7ae791853dfad79a06f2b9c1b195080fbf15135932b333abd69763fd39c3",
+      "archive": "libopenmpt0t64_0.8.4-1_amd64.deb"
+    },
+    {
+      "sha256": "69b1932266f59fec8cb0acb6f2cfeedd858a0e053fcfebb107d8061e8458409e",
+      "archive": "libpgm-5.3-0t64_5.3.128~dfsg-2.1build2_amd64.deb"
+    },
+    {
+      "sha256": "dec1297e1efb7ab9eedeb6a8f426023328bd89572680069fc532e0d6cd1807db",
+      "archive": "libplacebo360_7.360.0-3_amd64.deb"
+    },
+    {
+      "sha256": "33e1ae7ae44315ef8ee8ef2fa4504ad829116cf9fbdcf876ab63ab55ec4a0752",
+      "archive": "librabbitmq4_0.15.0-1ubuntu0.26.04.2_amd64.deb"
+    },
+    {
+      "sha256": "e6d97b85c9d5b253db981460e212e81e12b89d1992b73996169bf919a9644a69",
+      "archive": "librav1e0.8_0.8.1-7_amd64.deb"
+    },
+    {
+      "sha256": "8ac5e57d8c723da1803adbd65b8bd62908295cd0495e97637a0e881d17f94ab9",
+      "archive": "librist4_0.2.11+dfsg-1build1_amd64.deb"
+    },
+    {
+      "sha256": "8d6eebb5ee8e792447c2d562fe4ea5945b16cc83cfaf350acfe4414b3cb8493a",
+      "archive": "librubberband3_4.0.0+dfsg-2ubuntu1_amd64.deb"
+    },
+    {
+      "sha256": "c554aed04aa0c47928039dc158e26c2b6da44b4570d400574110dcdaedd03360",
+      "archive": "libsamplerate0_0.2.2-4build2_amd64.deb"
+    },
+    {
+      "sha256": "76c6367927acdf20b26a38711ce34e7d40c979ab9a08b4ab8c2e04ad794f29a7",
+      "archive": "libserd-0-0_0.32.6-1_amd64.deb"
+    },
+    {
+      "sha256": "db8512aab103ab04320acd50828b0ce3e89315e09257ddf0ec8134a48b9c34d2",
+      "archive": "libshine3_3.1.1-3build1_amd64.deb"
+    },
+    {
+      "sha256": "27efeb0eab898aa28296573a67f6ddb1f0694ec435bab12aeee30ef5a7de24e8",
+      "archive": "libsord-0-0_0.16.20-1_amd64.deb"
+    },
+    {
+      "sha256": "fea29b07ff35638b714c1607cf0969e238dceda43e1b44cee9bcefacfb5c988a",
+      "archive": "libsoxr0_0.1.3-4.1_amd64.deb"
+    },
+    {
+      "sha256": "48d042f16e7f5b85b92052af303b783763f1afe9808b53849b2c1c1aac314f67",
+      "archive": "libsratom-0-0_0.6.20-1_amd64.deb"
+    },
+    {
+      "sha256": "1109325c26d6359acf7251a12a78ba9a99ae1759e6ecf61087da921aa01b7b92",
+      "archive": "libsrt1.5-gnutls_1.5.4-3_amd64.deb"
+    },
+    {
+      "sha256": "f2c70d1f4c88e3209d858d5a59a36b667e7eb5aa19a10e49675cca89f9905239",
+      "archive": "libssh-4_0.11.3-1ubuntu2.1_amd64.deb"
+    },
+    {
+      "sha256": "921aba1d564804d521dea0898242bff4e3a33bba41811eb4a21960f8753a3106",
+      "archive": "libsvtav1enc2_2.3.0+dfsg-1build1_amd64.deb"
+    },
+    {
+      "sha256": "b29179c516389c54c0f5cc1fccdd572a8379ae97f932f44d5f75b378cacaa169",
+      "archive": "libswresample6_7%3a8.0.1-3ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "6c1357bac21631c09f5a2ddc3308a7889308c91a7477b190a799b7a9ae4682be",
+      "archive": "libswscale9_7%3a8.0.1-3ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "407c49e42154ac810db4e088287b4f8bbbcc308a21384a1d9ec6765bf2208145",
+      "archive": "libudfread3_1.2.0-2_amd64.deb"
+    },
+    {
+      "sha256": "b78cef94a5e33e3e507578a69ab93191e10cb41d44cbe7666b22fc843c8844a4",
+      "archive": "libunibreak6_6.1-3build1_amd64.deb"
+    },
+    {
+      "sha256": "247f651d07a0e3e237c6d48f2b7f3f9de9609b69a4c047c471f50147dd13286f",
+      "archive": "libva-x11-2_2.23.0-1ubuntu1_amd64.deb"
+    },
+    {
+      "sha256": "17eb769efb57cd6281b7cdb55587fd7e45e53816d4b1b89bbf9f78781ec46f15",
+      "archive": "libvdpau1_1.5-4_amd64.deb"
+    },
+    {
+      "sha256": "70d571e3e927adf5ef00c9b3b6b8af8a9f8b6c425822407b8a3def308a08bc67",
+      "archive": "libvidstab1.1_1.1.0-2.1_amd64.deb"
+    },
+    {
+      "sha256": "8cd42cc285e34f915e0e769bcffab29c4267fb6453295ed309d50f8f376eef37",
+      "archive": "libvorbisfile3_1.3.7-3build2_amd64.deb"
+    },
+    {
+      "sha256": "9eeeb743928a908c51b28752596dc1ebc7c12ec83fe8672f2df6e5329065e070",
+      "archive": "libvpl2_1%3a2.16.0-1_amd64.deb"
+    },
+    {
+      "sha256": "241892e87536b734becdae89571e22ad68db6fa3be8f274df7b1690afe9b7738",
+      "archive": "libx264-165_2%3a0.165.3222+gitb35605ac-3build1_amd64.deb"
+    },
+    {
+      "sha256": "42119a16e5382db41fa96ad779b0dc5771dce0f0d2109047132607ccd2be9ba3",
+      "archive": "libx265-215_4.1-4_amd64.deb"
+    },
+    {
+      "sha256": "8d16af6b2ad24eb312f471f7dbea7098947b25359a4c8f3f4a3e2e1065b96074",
+      "archive": "libxvidcore4_2%3a1.3.7-3_amd64.deb"
+    },
+    {
+      "sha256": "65cf0ddaf4728dbbd7d112960cc83c925283036f15b4f244900174aac3ccdd3c",
+      "archive": "libyuv0_0.0.1922.20260106-1_amd64.deb"
+    },
+    {
+      "sha256": "af4cba888a788407669d7dff5c7d1680c8878da0b0bc27ddc5f4068ae4937ecb",
+      "archive": "libzimg2_3.0.6+ds1-1_amd64.deb"
+    },
+    {
+      "sha256": "dbd8f28a5d3cfb24e6d1f95e90d8da31f7b5eb1a1c9c34601426cfcb30709920",
+      "archive": "libzix-0-0_0.8.0-1_amd64.deb"
+    },
+    {
+      "sha256": "73ca1de0bf1cb42dc071b0dbd8bb0647a400dbbf30d4f371fe467b7a0fa36d2c",
+      "archive": "libzmq5_4.3.5-1build3_amd64.deb"
+    },
+    {
+      "sha256": "64f20149bbd481893e74170564bc2203c94fe7a1089eaf25e28189e104cb3d37",
+      "archive": "libzvbi-common_0.2.44-1ubuntu2_all.deb"
+    },
+    {
+      "sha256": "fa7938ef744ac9f56548ed754af9d7e474e2dd35961c3268fca2d475ab8b87cb",
+      "archive": "libzvbi0t64_0.2.44-1ubuntu2_amd64.deb"
+    },
+    {
+      "sha256": "35e68bb0edf3e1a45c9461b2b311b60438fbf36b135c66f6da09a14dba7f5cf5",
+      "archive": "ocl-icd-libopencl1_2.3.4-1_amd64.deb"
+    }
+  ],
+  "private_loader_cache": {
+    "path": "/tmp/hololive-admin-webkit-deps.CS2ksX/ld.so.cache",
+    "sha256": "a9599b2698d6a11eefe55a2b065f5c751eba45ffb78f7bf944a3f888c5f45e72"
+  },
+  "isolation": "bounded systemd user service, bwrap mount namespace with private ld.so.cache and /dev; no host validation skip flags"
+}

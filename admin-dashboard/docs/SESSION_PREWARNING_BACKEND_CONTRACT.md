@@ -1,6 +1,6 @@
 # Session Pre-warning Frontend Handoff
 
-> **[superseded]** 이 문서의 "프론트엔드 모달/상태/UI 미구현" 전제는 소비 완료된 handoff 시점 스냅샷입니다. 세션 pre-warning 프론트는 이후 구현 완료되었습니다 — `frontend/src/App.tsx:77-92`(`useSessionWarnings` 훅 호출과 `SessionIdleWarningModal`/`SessionAbsoluteWarningModal` 마운트), `frontend/src/hooks/useSessionWarnings.ts`, `frontend/src/components/auth/SessionIdleWarningModal.tsx`, `frontend/src/components/auth/SessionAbsoluteWarningModal.tsx` 참조. 아래 본문은 당시 handoff 기록으로 보존합니다.
+> **[superseded]** 이 문서는 당시 pre-warning 구현 인계 기록입니다. 아래 파일 경로·응답 예시는 현재 계약이 아닙니다. 현재 명세는 `backend/internal/contract/openapi.json`, 인증·정책 상태는 `frontend/src/session/state.ts`, 앱 수명과 모달은 `frontend/src/session/AuthenticatedSession.tsx`가 소유합니다. [현재 구조](README.md)와 [세션·세대 계약](bigbang/session-generation.md)을 먼저 확인합니다.
 
 이 문서는 관리자 대시보드 세션 pre-warning UX를 프론트엔드 팀이 **이 문서만 보고 바로 구현**할 수 있도록 정리한 handoff 문서입니다.
 
@@ -529,24 +529,24 @@ useSessionWarnings(isIdle)
 ## 10. 백엔드 구현 위치
 
 - `backend/internal/config/config.go` — `SessionConfig`: heartbeat/idle/absolute/rotation 정책과 검증
-- `backend/internal/app/middleware.go` — auth / CSRF 미들웨어
-- `backend/internal/app/session_handlers.go` — login / logout / heartbeat / session 핸들러
+- `backend/internal/httpapi/auth.go` — auth / CSRF 미들웨어
+- `backend/internal/httpapi/session_handlers.go` — login / logout / heartbeat / session 핸들러
 - `backend/internal/session/session.go`, `backend/internal/session/lifecycle.go` — Valkey 세션 store, Lua CAS 기반 refresh/rotate
-- `backend/internal/openapi/spec.json` → `backend/docs/swagger.json` — OpenAPI SSOT와 미러
+- `backend/internal/contract/openapi.json` — OpenAPI SSOT와 직접 생성 SDK/validator
 
 ---
 
 ## 11. 백엔드 검증 근거
 
-핸들러 계약 (`backend/internal/app/app_test.go`):
+핸들러 계약 (`backend/internal/httpapi/api_test.go`):
 
-- `go test ./internal/app/ -run TestSessionStatusAuthenticated` — `GET /auth/session`가 `authenticated`/`username`/`session_policy`를 반환
-- `go test ./internal/app/ -run TestHeartbeatResultContract` — heartbeat의 refreshed / rotated / idle / absolute-expired / missing 계약 (`absolute_expires_at`, `csrf_token`, `idle_rejected`, `absolute_expired`)
-- `go test ./internal/app/ -run TestPlainHeartbeatReissuesSessionCookie` — 회전이 없는 일반 heartbeat도 세션 쿠키를 재발급하고 `absolute_expires_at`를 반환하며 `csrf_token`은 내리지 않음
-- `go test ./internal/app/ -run TestRotatedSessionOnlyAllowsHeartbeat` — 회전된 구 세션은 heartbeat만 허용하고 새 CSRF 토큰을 발급
-- `go test ./internal/app/ -run TestHeartbeatInvalidPayload` — malformed heartbeat body는 HTTP 400
-- `go test ./internal/app/ -run '^TestParseHeartbeat'` — 빈/공백 본문의 `idle=false` 처리, 1024-byte 경계, unknown field, JSON value 여러 개 거절
-- `go test ./internal/app/ -run TestLoginSuccessSetsCookies` — 로그인 성공 시 session/CSRF 쿠키 설정
+- `go test ./internal/httpapi/ -run TestSessionStatusAuthenticated` — `GET /auth/session`가 `authenticated`/`username`/`session_policy`를 반환
+- `go test ./internal/httpapi/ -run TestHeartbeatResultContract` — heartbeat의 refreshed / rotated / idle / absolute-expired / missing 계약 (`absolute_expires_at`, `csrf_token`, `idle_rejected`, `absolute_expired`)
+- `go test ./internal/httpapi/ -run TestPlainHeartbeatReissuesSessionCookie` — 회전이 없는 일반 heartbeat도 세션 쿠키를 재발급하고 `absolute_expires_at`를 반환하며 `csrf_token`은 내리지 않음
+- `go test ./internal/httpapi/ -run TestRotatedSessionOnlyAllowsHeartbeat` — 회전된 구 세션은 heartbeat만 허용하고 새 CSRF 토큰을 발급
+- `go test ./internal/httpapi/ -run TestHeartbeatInvalidPayload` — malformed heartbeat body는 HTTP 400
+- `go test ./internal/httpapi/ -run '^TestParseHeartbeat'` — 빈/공백 본문의 `idle=false` 처리, 1024-byte 경계, unknown field, JSON value 여러 개 거절
+- `go test ./internal/httpapi/ -run TestLoginSuccessSetsCookies` — 로그인 성공 시 session/CSRF 쿠키 설정
 
 세션 store 동작 (`backend/internal/session/store_integration_test.go`, Valkey 컨테이너 필요):
 

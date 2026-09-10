@@ -1,23 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
-
-const sourcePath = new URL(
-	"./media.ts",
-	import.meta.url,
-);
-const source = await readFile(sourcePath, "utf8");
-const transpiled = ts.transpileModule(source, {
-	compilerOptions: {
-		module: ts.ModuleKind.ESNext,
-		target: ts.ScriptTarget.ES2022,
-	},
-});
-
-const mod = await import(
-	`data:text/javascript;base64,${Buffer.from(transpiled.outputText).toString("base64")}`
-);
+import * as mod from "./media.ts";
 
 test("getThumbnailSource normalizes CHZZK template thumbnails", () => {
 	const thumbnail = mod.getThumbnailSource(
@@ -63,4 +46,15 @@ test("getStreamLinkMeta falls back to YouTube watch URL for YouTube streams", ()
 	assert.equal(linkMeta.href, "https://www.youtube.com/watch?v=abc123");
 	assert.equal(linkMeta.label, "Watch on YouTube");
 	assert.equal(linkMeta.badge, "YouTube");
+});
+
+test("unsafe URL schemes and credential URLs never become image or navigation targets", () => {
+ for (const link of ["javascript:alert(1)", "data:text/html,unsafe", "file:///etc/passwd", "https://user:password@example.test/path"]) {
+  assert.equal(mod.getStreamLinkMeta({ id: "fixture", link }).href, undefined);
+  assert.equal(mod.getThumbnailSource(link), undefined);
+ }
+ assert.equal(mod.getStreamLinkMeta({ id: "fixture", link: "https://example.test/chzzk.naver.com" }).badge, "Link");
+ const escaped = mod.getStreamLinkMeta({ id: "id&other=value#fragment" }).href;
+ assert.equal(new URL(escaped).searchParams.get("v"), "id&other=value#fragment");
+ assert.equal(new URL(escaped).searchParams.has("other"), false);
 });

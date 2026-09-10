@@ -4,7 +4,7 @@ import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
 import Server from "lucide-react/dist/esm/icons/server.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import { lazy, Suspense } from "react";
-import type { AggregatedStatus } from "@/api/core";
+import type { AggregatedStatus } from "@/api/generated/data-contracts";
 import { StatsQuickLinks } from "@/components/dashboard/StatsQuickLinks";
 
 const SystemStatsChart = lazy(() =>
@@ -22,7 +22,7 @@ const StatsSectionLoader = () => (
 
 export interface CurrentServiceStats {
 	name: string;
-	available: boolean;
+	available: boolean | undefined;
 	version: string;
 	uptime: string;
 }
@@ -88,7 +88,7 @@ export const StatsServicesSection = ({
 								Service Status
 							</div>
 							<div className="flex items-center gap-2">
-								{currentServiceStats.available ? (
+								{currentServiceStats.available === undefined ? <span className="text-muted-foreground">상태 확인 불가</span> : currentServiceStats.available ? (
 									<>
 										<span className="relative flex h-3 w-3">
 											<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />

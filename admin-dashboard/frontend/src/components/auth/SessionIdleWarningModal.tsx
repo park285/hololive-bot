@@ -2,23 +2,23 @@ import Clock from "lucide-react/dist/esm/icons/clock.mjs";
 import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
 import RefreshCcw from "lucide-react/dist/esm/icons/refresh-ccw.mjs";
 import { useEffect, useState } from "react";
-import { authApi } from "@/api/core";
+import { session } from "@/app/bootstrap";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
-import { clearClientSession } from "@/lib/sessionLifecycle";
 import toast from "@/lib/toast-api";
-import { useSessionWarningStore } from "@/stores/sessionWarningStore";
+import { useStore } from "zustand";
+import { warningState } from "@/session/warnings";
+import { useSessionSnapshot } from "@/session/useSession";
 
 export const SessionIdleWarningModal = () => {
 	const {
 		idleWarningOpen,
 		lastActivityAtMs,
-		policy,
 		closeIdleWarning,
 		markSessionActivity,
-		setAbsoluteExpiresAt,
-	} = useSessionWarningStore();
+	} = useStore(warningState);
 
+	const { policy } = useSessionSnapshot();
 	const [remainingSeconds, setRemainingSeconds] = useState(0);
 	const [isExtending, setIsExtending] = useState(false);
 	const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -47,17 +47,14 @@ export const SessionIdleWarningModal = () => {
 
 		setIsExtending(true);
 		try {
-			const response = await authApi.heartbeat(false);
+			const response = await session.heartbeat(false);
 
-			if (response.idle_rejected || response.absolute_expired || response.error) {
-				clearClientSession(true);
-				toast.error(response.error ?? "세션을 연장하지 못했습니다.");
+			if (response.status === "idle") {
+				await session.logout();
+				toast.error("세션을 연장하지 못했습니다.");
 				return;
 			}
 
-			if (response.absolute_expires_at !== undefined) {
-				setAbsoluteExpiresAt(response.absolute_expires_at);
-			}
 
 			markSessionActivity(Date.now());
 			closeIdleWarning();
@@ -76,12 +73,12 @@ export const SessionIdleWarningModal = () => {
 
 		setIsLoggingOut(true);
 		try {
-			await authApi.logout();
+			const result = await session.logout();
+			if (result.revocation === "unknown") toast.error("이 브라우저는 정리했지만 서버 세션 폐기를 확인하지 못했습니다.");
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "서버 세션 폐기를 확인하지 못했습니다.");
 		} finally {
 			setIsLoggingOut(false);
-			clearClientSession(true);
 		}
 	};
 

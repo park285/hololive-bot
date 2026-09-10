@@ -1,14 +1,16 @@
-import { http, HttpResponse } from "msw";
+import { contractJSON } from "@/mocks/contract";
+import { http } from "msw";
+import { CLIENT_GENERATION } from "@/api/generated/generation";
 
 const nowUnix = () => Math.floor(Date.now() / 1000);
 
 const dockerContainers = [
 	{
 		id: "container-1",
-		name: "hololive-admin-api",
+		name: "hololive-api",
 		state: "running",
 		status: "Up 2 hours",
-		image: "hololive-admin-api:latest",
+		image: "hololive-api:latest",
 		health: "healthy",
 		managed: true,
 		stopBlocked: false,
@@ -17,7 +19,7 @@ const dockerContainers = [
 	},
 	{
 		id: "container-2",
-		name: "hololive-bot",
+		name: "hololive-alarm-worker",
 		state: "running",
 		status: "Up 1 hour",
 		image: "hololive-bot:latest",
@@ -47,7 +49,7 @@ const members = {
 	status: "ok",
 	members: [
 		{
-			id: 1,
+			id: "1",
 			channelId: "UC4",
 			name: "Usada Pekora",
 			aliases: { ko: ["페코라"], ja: ["ぺこら"] },
@@ -56,7 +58,7 @@ const members = {
 			isGraduated: false,
 		},
 		{
-			id: 2,
+			id: "2",
 			channelId: "UC1",
 			name: "Hoshimachi Suisei",
 			aliases: { ko: ["스이세이"], ja: ["すいせい"] },
@@ -73,8 +75,6 @@ const alarms = {
 		{
 			roomId: "200000000000002",
 			roomName: "운영 방",
-			userId: "user-1",
-			userName: "관리자",
 			channelId: "UC4",
 			memberName: "Usada Pekora",
 		},
@@ -118,8 +118,9 @@ const upcomingStreams = {
 };
 
 export const handlers = [
+	http.get("*/admin/meta.json", () => contractJSON({ clientGeneration: CLIENT_GENERATION }, { headers: { "Cache-Control": "no-store" } })),
 	http.get("*/admin/api/auth/session", () =>
-		HttpResponse.json({
+		contractJSON({
 			status: "ok",
 			authenticated: true,
 			username: "admin",
@@ -135,31 +136,31 @@ export const handlers = [
 		}),
 	),
 	http.post("*/admin/api/auth/login", () =>
-		HttpResponse.json({ status: "ok", message: "logged in", csrf_token: "msw-token" }),
+		contractJSON({ status: "ok", message: "logged in", csrf_token: "msw-token" }),
 	),
 	http.post("*/admin/api/auth/logout", () =>
-		HttpResponse.json({ status: "ok", message: "logged out" }),
+		contractJSON({ status: "ok", message: "logged out" }),
 	),
 	http.post("*/admin/api/auth/heartbeat", () =>
-		HttpResponse.json({
+		contractJSON({
 			status: "ok",
-			rotated: false,
 			absolute_expires_at: nowUnix() + 60 * 60,
 		}),
 	),
 	http.get("*/admin/api/status", () =>
-		HttpResponse.json({
+		contractJSON({
 			services: [
 				{ name: "admin-dashboard", available: true, response_time_ms: 4, error: null },
 				{ name: "hololive-bot", available: true, response_time_ms: 12, error: null },
-				{ name: "hololive-admin-api", available: true, response_time_ms: 10, error: null },
+				{ name: "hololive-api", available: true, response_time_ms: 10, error: null },
 			],
 			uptime: "4h 12m",
 			version: "mock-admin-v1",
+			sampled_at: Date.now(),
 		}),
 	),
 	http.get("*/admin/api/holo/stats", () =>
-		HttpResponse.json({
+		contractJSON({
 			status: "ok",
 			members: members.members.length,
 			alarms: alarms.alarms.length,
@@ -169,33 +170,33 @@ export const handlers = [
 		}),
 	),
 	http.get("*/admin/api/docker/health", () =>
-		HttpResponse.json({ status: "ok", available: true }),
+		contractJSON({ status: "ok", available: true }),
 	),
 	http.get("*/admin/api/docker/containers", () =>
-		HttpResponse.json({ status: "ok", containers: dockerContainers }),
+		contractJSON({ status: "ok", containers: dockerContainers }),
 	),
 	http.post("*/admin/api/docker/containers/:name/restart", ({ params }) =>
-		HttpResponse.json({
+		contractJSON({
 			status: "ok",
 			message: `${String(params["name"])} restarted`,
 		}),
 	),
 	http.post("*/admin/api/docker/containers/:name/stop", ({ params }) =>
-		HttpResponse.json({
+		contractJSON({
 			status: "ok",
 			message: `${String(params["name"])} stopped`,
 		}),
 	),
 	http.post("*/admin/api/docker/containers/:name/start", ({ params }) =>
-		HttpResponse.json({
+		contractJSON({
 			status: "ok",
 			message: `${String(params["name"])} started`,
 		}),
 	),
-	http.get("*/admin/api/holo/settings", () => HttpResponse.json(settings)),
+	http.get("*/admin/api/holo/settings", () => contractJSON(settings)),
 	http.post("*/admin/api/holo/settings", async ({ request }) => {
 		const nextSettings = (await request.json()) as { alarmAdvanceMinutes?: number };
-		return HttpResponse.json({
+		return contractJSON({
 			status: "ok",
 			message: "Settings updated",
 			runtime: { alarm_applied: true, config_publish_alarm_advance_minutes: true },
@@ -205,11 +206,11 @@ export const handlers = [
 			},
 		});
 	}),
-	http.get("*/admin/api/holo/rooms", () => HttpResponse.json(rooms)),
-	http.get("*/admin/api/holo/members", () => HttpResponse.json(members)),
-	http.get("*/admin/api/holo/alarms", () => HttpResponse.json(alarms)),
-	http.get("*/admin/api/holo/streams/live", () => HttpResponse.json(liveStreams)),
+	http.get("*/admin/api/holo/rooms", () => contractJSON(rooms)),
+	http.get("*/admin/api/holo/members", () => contractJSON(members)),
+	http.get("*/admin/api/holo/alarms", () => contractJSON(alarms)),
+	http.get("*/admin/api/holo/streams/live", () => contractJSON(liveStreams)),
 	http.get("*/admin/api/holo/streams/upcoming", () =>
-		HttpResponse.json(upcomingStreams),
+		contractJSON(upcomingStreams),
 	),
 ];

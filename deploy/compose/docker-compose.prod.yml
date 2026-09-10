@@ -650,11 +650,11 @@ services:
         VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
         REVISION: ${REVISION:-unknown}
     container_name: admin-dashboard
-    # admin의 내부 graceful shutdown 예산(20s, app.go ShutdownTimeout)이 Docker 기본 10s에 잘리지 않도록 45s로 상향.
+    # bootstrap의 전체 종료 25s·HTTP drain 20s가 Docker 기본 10s에 잘리지 않도록 45s를 둡니다.
     stop_grace_period: 45s
     # 시크릿(ADMIN_PASS_HASH/SESSION_SECRET/VALKEY_URL/HOLO_BOT_API_KEY)은 다른 앱과 동일하게
     # /run 하위 env_file로 이동 — 호스트 .env와 `compose config` 렌더 결과에서 시크릿을 제거한다.
-    # (docker inspect의 Config.Env 노출까지 없애려면 앱의 *_FILE 로딩 지원이 필요 — 후속 과제)
+    # 필수 admin-security overlay가 env_file을 비우고 *_FILE mount만 사용합니다.
     # required:false — admin-dashboard는 central 전용인데 AP 배포도 전체 모델을 `config`로 검증하므로
     # AP 호스트의 파일 부재를 허용해야 한다. central 실재는 systemd-compose-up wait_for_file이 보장한다.
     env_file:

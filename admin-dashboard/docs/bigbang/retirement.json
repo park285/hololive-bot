@@ -1,0 +1,691 @@
+{
+  "schema_version": 1,
+  "decision": "DEC-20260909-hololive-admin-bigbang-replacement",
+  "source_revision": "2323f98c8446f42de581c6f8d2e67e408e3d92df",
+  "path_base": "admin-dashboard/ unless repository path explicitly named",
+  "entries": [
+    {
+      "id": "R01",
+      "old_owners": [
+        "backend/internal/app/"
+      ],
+      "new_owners": [
+        "backend/internal/bootstrap/",
+        "backend/internal/httpapi/",
+        "backend/internal/observations/"
+      ],
+      "consumers": [
+        "backend/cmd/admin-dashboard/main.go",
+        "backend/internal/app/*test.go"
+      ],
+      "reason": "Runtime/router/handler 수명과 책임을 분리하며 app wrapper를 남기지 않음",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R02",
+      "old_owners": [
+        "backend/internal/holo/"
+      ],
+      "new_owners": [
+        "backend/internal/adapters/holo/"
+      ],
+      "consumers": [
+        "backend/internal/app/routes.go"
+      ],
+      "reason": "ProxyGet/ProxyMutation/raw projection 경로를 endpoint별 DTO로 교체",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R03",
+      "old_owners": [
+        "backend/internal/docker/"
+      ],
+      "new_owners": [
+        "backend/internal/adapters/docker/"
+      ],
+      "consumers": [
+        "backend/internal/app/handlers.go",
+        "deploy/compose/docker-compose.admin-security.yml"
+      ],
+      "reason": "정확한 이름/행위 정책을 단일 정본으로 생성; broad prefix 정책 제거",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R04",
+      "old_owners": [
+        "backend/internal/status/"
+      ],
+      "new_owners": [
+        "backend/internal/observations/"
+      ],
+      "consumers": [
+        "backend/internal/app/app.go",
+        "backend/internal/app/handlers.go"
+      ],
+      "reason": "sampler/hub/WS 소유와 종료를 한 경로로 통합",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R05",
+      "old_owners": [
+        "backend/internal/config/config.go",
+        "backend/internal/config/secret_files.go"
+      ],
+      "new_owners": [
+        "backend/internal/config/load.go",
+        "backend/internal/config/secrets.go",
+        "backend/internal/config/validate.go"
+      ],
+      "consumers": [
+        "backend/cmd/admin-dashboard/main.go",
+        "backend/internal/session/session.go"
+      ],
+      "reason": "process env swap과 여러 loader 제거; 기존 설정 이름/alias 보존",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R06",
+      "old_owners": [
+        "backend/internal/openapi/",
+        "backend/cmd/export-openapi/",
+        "backend/docs/swagger.json"
+      ],
+      "new_owners": [
+        "backend/internal/contract/"
+      ],
+      "consumers": [
+        "frontend/package.json",
+        "scripts/ci/public-pr-frontend-gate.sh",
+        "backend/internal/app/app.go",
+        "docs/openapi-pipeline.md"
+      ],
+      "reason": "명세 정본 이관 및 수동 mirror/export 경로 제거",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R07",
+      "old_owners": [
+        "frontend/src/api/client.ts",
+        "frontend/src/api/adminClient.ts"
+      ],
+      "new_owners": [
+        "frontend/src/api/transport.ts",
+        "frontend/src/api/client.ts"
+      ],
+      "consumers": [
+        "frontend/src/features/*/api.ts",
+        "frontend/src/api/core.ts"
+      ],
+      "reason": "기존 파일의 import graph/동작을 폐기; client.ts는 새 생성 transport 주입 진입점으로 재작성",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R08",
+      "old_owners": [
+        "frontend/src/api/core.ts",
+        "frontend/src/api/index.ts"
+      ],
+      "new_owners": [
+        "frontend/src/session/",
+        "frontend/src/features/",
+        "frontend/src/api/errors.ts"
+      ],
+      "consumers": [
+        "frontend/src/hooks/",
+        "frontend/src/features/",
+        "frontend/src/components/settings/"
+      ],
+      "reason": "재노출 barrel/수동 DTO/직접 HTTP wrapper 제거",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R09",
+      "old_owners": [
+        "frontend/src/api/generated/Admin.ts",
+        "frontend/src/api/generated/data-contracts.ts",
+        "frontend/src/api/generated/http-client.ts"
+      ],
+      "new_owners": [
+        "frontend/src/api/generated/"
+      ],
+      "consumers": [
+        "frontend/src/api/adminClient.ts",
+        "frontend/src/features/*/types.ts"
+      ],
+      "reason": "같은 출력 디렉터리는 생성 교체; instance 재할당/별도 axios 생성자는 최종 산출물에서 제거",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R10",
+      "old_owners": [
+        "frontend/src/hooks/useAuthBootstrap.ts",
+        "frontend/src/hooks/useActivityDetection.ts",
+        "frontend/src/hooks/useHeartbeat.ts",
+        "frontend/src/hooks/useSessionWarnings.ts",
+        "frontend/src/hooks/useTabSync.ts",
+        "frontend/src/lib/sessionLifecycle.ts"
+      ],
+      "new_owners": [
+        "frontend/src/app/bootstrap.ts",
+        "frontend/src/session/"
+      ],
+      "consumers": [
+        "frontend/src/App.tsx",
+        "frontend/src/layouts/AppLayout.tsx",
+        "frontend/src/pages/LoginPage.tsx",
+        "frontend/src/api/core.ts"
+      ],
+      "reason": "중복 coordinator/transport→store/hook 역방향 import 제거",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R11",
+      "old_owners": [
+        "frontend/src/hooks/useWebSocket.ts"
+      ],
+      "new_owners": [
+        "frontend/src/queries/",
+        "frontend/src/features/stats/"
+      ],
+      "consumers": [
+        "frontend/src/features/stats/hooks/useStatsPage.ts"
+      ],
+      "reason": "generation/subprotocol/metadata 사건 경계와 구독 소유; 근거 있는 5회 재연결 상한 보존",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R12",
+      "old_owners": [
+        "frontend/src/stores/authStore.ts",
+        "frontend/src/stores/sessionWarningStore.ts"
+      ],
+      "new_owners": [
+        "frontend/src/session/"
+      ],
+      "consumers": [
+        "frontend/src/hooks/",
+        "frontend/src/pages/LoginPage.tsx"
+      ],
+      "reason": "authGeneration/csrfVersion 분리; 구형 store 재노출 금지",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R13",
+      "old_owners": [
+        "frontend/src/components/settings/SettingsForm.tsx",
+        "frontend/src/features/settings/components/SettingsFormSection.tsx"
+      ],
+      "new_owners": [
+        "frontend/src/features/settings/"
+      ],
+      "consumers": [
+        "frontend/src/features/settings/pages/SettingsPage.tsx"
+      ],
+      "reason": "base/latest/draft 소유와 설정 폼 wrapper 정리; 0~1440 읽기/1~60 편집 보존",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R14",
+      "old_owners": [
+        "frontend/src/components/settings/DockerContainerActions.tsx",
+        "frontend/src/components/settings/DockerContainerConfirmModal.tsx",
+        "frontend/src/components/settings/DockerContainerList.tsx",
+        "frontend/src/features/settings/components/DockerContainersSection.tsx"
+      ],
+      "new_owners": [
+        "frontend/src/features/docker/",
+        "frontend/src/operations/"
+      ],
+      "consumers": [
+        "frontend/src/features/settings/pages/SettingsPage.tsx"
+      ],
+      "reason": "Docker 결과/단일 변경 controller 소유; 설정 메뉴 안의 기능 유지",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R15",
+      "old_owners": [
+        "frontend/src/hooks/useMemberMutations.ts"
+      ],
+      "new_owners": [
+        "frontend/src/features/members/",
+        "frontend/src/operations/"
+      ],
+      "consumers": [
+        "frontend/src/features/members/hooks/useMembersPage.ts",
+        "frontend/src/features/members/pages/MembersPage.tsx"
+      ],
+      "reason": "기능별 mutation을 앱 단일 controller로 연결; 큐/자동 재실행 금지",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R16",
+      "old_owners": [
+        "frontend/src/lib/queryClient.ts",
+        "frontend/src/api/queryKeys.ts"
+      ],
+      "new_owners": [
+        "frontend/src/queries/",
+        "frontend/src/app/bootstrap.ts"
+      ],
+      "consumers": [
+        "frontend/src/App.tsx",
+        "frontend/src/features/"
+      ],
+      "reason": "Query 설정/키/cache 사건 소유를 분리; mutation 재시도 없음",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R17",
+      "old_owners": [
+        "frontend/src/features/stats/lib/systemStats.ts"
+      ],
+      "new_owners": [
+        "frontend/src/features/stats/",
+        "frontend/src/api/generated/"
+      ],
+      "consumers": [
+        "frontend/src/features/stats/hooks/useSystemStatsHistory.ts"
+      ],
+      "reason": "구형 goroutine payload 허용 분기를 신규 단일 validator/mapper로 대체",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R18",
+      "old_owners": [
+        "frontend/src/features/streams/api.ts"
+      ],
+      "new_owners": [
+        "frontend/src/features/streams/api.ts"
+      ],
+      "consumers": [
+        "frontend/src/features/streams/pages/StreamsPage.tsx"
+      ],
+      "reason": "malformed streams→[] 변환 제거; 계약상 빈 배열은 유지",
+      "owner": "T08 통합 담당",
+      "removal_condition": "대응 기능·보안 시험 이관 후 단일 후보에서 source/import/route/bundle/image 전부 대조",
+      "verification": [
+        "source_import_graph",
+        "registered_routes",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "PASS",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    },
+    {
+      "id": "R19",
+      "old_owners": [
+        "backend/internal/session/session.go#normalizeLegacySession",
+        "backend/internal/app/handlers.go#sessionStreamFamilyID"
+      ],
+      "new_owners": [
+        "backend/internal/session/",
+        "backend/internal/observations/"
+      ],
+      "consumers": [
+        "backend/internal/session/session.go#Get/Delete",
+        "backend/internal/session/lifecycle.go#Refresh/Rotate",
+        "backend/internal/app/handlers.go#handleSystemStatsWS"
+      ],
+      "reason": "FamilyID/LastRotatedAt 없는 구형 세션 보정과 WS session ID 대체를 명시적으로 추적. 새 세대의 필수 필드 검증으로 교체하며 기존 family/rotation 알고리즘은 보존",
+      "owner": "T03/T08 세션·통합 담당",
+      "removal_condition": "T09의 관리자 전용 세션 폐기·새 secret 전환 전제와 일치하고, 새 세대가 누락 필드 세션을 거부하는 회귀 및 실제 old/new bundle 시험을 통과할 때",
+      "verification": [
+        "session_missing_fields_rejected",
+        "rotation_family_regression",
+        "source_import_graph",
+        "production_bundle",
+        "image_file_inventory"
+      ],
+      "status": "pending",
+      "evidence": [
+        "retirement-progress.md"
+      ],
+      "local_verification": {
+        "source_import_graph": "PASS",
+        "registered_routes": "not_applicable",
+        "production_bundle": "PASS",
+        "image_file_inventory": "PASS"
+      }
+    }
+  ],
+  "preserved": [
+    {
+      "owner": "backend/internal/auth/",
+      "reason": "기존 검증된 bcrypt/HMAC/CSRF/cookie 알고리즘 재사용; MFA 제외"
+    },
+    {
+      "owner": "backend/internal/session/",
+      "reason": "TTL·회전·family 원자 폐기 알고리즘 보존; 첫 cutover의 구형 session compatibility 제거는 새 secret/prefix 폐기 증거와 함께 판단"
+    },
+    {
+      "owner": "frontend/src/components/ui/; frontend/src/lib/theme.ts; frontend/src/index.css",
+      "reason": "UI token/brand/focus/접근성 계약 유지; 필요한 소유 경로 이동만 적용"
+    },
+    {
+      "owner": "backend/internal/static/",
+      "reason": "embed/static MIME/cache 기능 보존; fallback 결함만 신규 HTTP 경계에서 수정"
+    },
+    {
+      "owner": "config environment aliases",
+      "reason": "ADMIN_PASS_BCRYPT, ADMIN_SECRET_KEY, HOLO_BOT_URL, API_SECRET_KEY는 문서화된 입력 계약; 신규 alias를 만들지 않고 기존 이름 보존"
+    },
+    {
+      "owner": "frontend/src/features/streams/lib/media.ts",
+      "reason": "명시된 썸네일 placeholder/플랫폼 링크 선택은 정상 표시 계약; 무조건 폐기하지 않음"
+    },
+    {
+      "owner": "deploy/nginx/admin-dashboard-ingress.conf.template:30192",
+      "reason": "동일 프로세스의 short-link listener 유지; 관리자 정비로 전체 ingress를 정지하지 않음"
+    },
+    {
+      "owner": "upstream /api/holo/** and business DB",
+      "reason": "BFF 교체 범위 밖; API-key/session 경계 보존"
+    }
+  ],
+  "checks": {
+    "implementation": "scripts/architecture/check-admin-retirement.sh",
+    "required_script": "scripts/architecture/check-admin-retirement.sh",
+    "candidate_status": "LOCAL_FIXTURE_PASS",
+    "evidence": "retirement-progress.md",
+    "release_status": "NOT RUN: T09/T10 candidate and release identity required"
+  }
+}

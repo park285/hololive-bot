@@ -68,8 +68,8 @@ export const RuntimeUnitsChart = ({
 						let stackOffset = 0;
 
 						return serviceNames.map((serviceName) => {
-							const value = point.serviceValues[serviceName] ?? 0;
-							if (value <= 0) {
+							const value = point.serviceValues[serviceName];
+							if (value === undefined || value === null || value <= 0) {
 								return null;
 							}
 

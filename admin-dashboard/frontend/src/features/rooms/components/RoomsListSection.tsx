@@ -1,3 +1,4 @@
+import { operations } from "@/app/bootstrap";
 import clsx from "clsx";
 import Info from "lucide-react/dist/esm/icons/info.mjs";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
@@ -152,7 +153,7 @@ export const RoomsListSection = ({
 						role="alert"
 						className="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-700"
 					>
-						변경사항을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.
+						{operations.failure(actionError)?.message ?? "요청 결과를 확인하지 못했습니다. 현재 상태를 다시 조회해 주세요."}
 					</div>
 				)}
 

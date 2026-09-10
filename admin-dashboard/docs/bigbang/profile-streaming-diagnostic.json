@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "diagnostic_only": true,
+  "full_gate": "NOT RUN",
+  "candidate_image": "sha256:c7132408cdb09c0d7daafac78a6d61448aed15669fa4a249c16f10921adf1172",
+  "source_input_sha256": "63887ae839596888b1cfceab809ab62b8cfb9b2bb6f2f53e0f8ef9778b08af7e",
+  "diagnostic_binary_sha256": "f0f407a71a38f9ee6997c8f9aca38766b8e74e177bb783e2bc6520babae9e9fd",
+  "cpu_profile_sha256": "096bb693f60f07cda2edb593cf0275d263dc6114d7102321e913a46f712c2f92",
+  "heap_profile_sha256": "cfd2caab40fcfc9dddf60ba8cfdd2b44c57b3869b43258d0b6783bc9b73e32d9",
+  "execution": "same source with a temporary Go overlay enabling CPU profiling and a post-GC heap profile; the fixture image was unchanged",
+  "profile_started_at": "2026-09-10T00:37:29Z",
+  "duration_seconds": 35,
+  "sampled_cpu_milliseconds": 24200,
+  "http_diagnostic": "8 clients over the same 7 read routes for 38 seconds; status 200 checked, response validation omitted only in this profiling experiment",
+  "cpu": {
+    "struct_decoding_cumulative_percent": 55.87,
+    "pointer_decoding_cumulative_percent": 36.07,
+    "overlap": "cumulative percentages overlap and must not be added"
+  },
+  "alloc_space": {
+    "reported_total": "6.29 GB",
+    "bytes_clone_percent": 23.35,
+    "reflect_growslice_percent": 18.47,
+    "slice_buffer_grow_percent": 15.12,
+    "string_allocation_percent": 12.57,
+    "reflect_unsafe_new_percent": 12.30
+  },
+  "post_gc_inuse_space": {
+    "reported_total": "24.79 MB",
+    "valkey_pipe_cumulative_percent": 91.93,
+    "valkey_pipe_cumulative_reported": "22.79 MB",
+    "existing_configuration": "Both native baseline and candidate use PipelineMultiplex=4 and the same default Valkey read/write buffer options."
+  },
+  "limits": [
+    "Profiling changes timing and is not a release performance comparison.",
+    "The post-GC heap snapshot was taken during a read load, not after WebSocket resource recovery.",
+    "Different diagnostics have different request counts; total allocation is not a normalized before/after improvement claim.",
+    "No Valkey settings or required/null field contracts were changed from these observations."
+  ],
+  "raw_evidence_directory": "/tmp/hololive-admin-profile/current"
+}
