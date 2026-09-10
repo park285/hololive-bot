@@ -850,11 +850,15 @@ async function exerciseLayout(browser, base, state) {
     await page.evaluate(() => window.contract.navigate("/dashboard/members"));
     await expect(page.getByRole("button", { name: "한글 멤버 000 이름 수정", exact: true })).toBeVisible();
     const list = page.getByRole("list").first();
-    await expect.poll(async () => {
+    const editName = page.getByRole("button", { name: "한글 멤버 047 이름 수정", exact: true });
+    await list.scrollIntoViewIfNeeded();
+    // overscan 행은 화면 밖에서도 isVisible()이 참입니다. 실제 노출과 측정이 끝난 뒤 한 번 클릭합니다.
+    await expect(async () => {
       await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
-      return page.getByRole("button", { name: "한글 멤버 047 이름 수정", exact: true }).isVisible();
-    }).toBe(true);
-    await page.getByRole("button", { name: "한글 멤버 047 이름 수정", exact: true }).click();
+      await expect(editName).toBeInViewport({ ratio: 1, timeout: 250 });
+    }).toPass({ timeout: 5000 });
+    await editName.hover();
+    await editName.click();
     const dialog = page.getByRole("dialog", { name: "멤버 이름 수정" });
     await expect(dialog).toContainText("9007199254741040");
     await expect(dialog.getByLabel("새로운 이름")).toHaveValue("한글 멤버 047");
