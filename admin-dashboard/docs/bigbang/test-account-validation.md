@@ -11,6 +11,7 @@
 | `bash scripts/ci/admin-dashboard-go-ci.sh` | Go-only, 모듈 정합성, gofmt, vet, staticcheck, golangci-lint 0건, NilAway, 전체 build/test/race 통과 |
 | 같은 CI의 govulncheck | 호출 경로 취약점 0건, import된 패키지 취약점 0건. require된 모듈에는 호출하지 않는 취약점 1건이 보고됨 |
 | `bash scripts/architecture/check-admin-contract.sh` | endpoint inventory·OpenAPI·생성된 클라이언트 계약 검사 통과 |
+| `bash scripts/ci/check-structure.sh --mode hard --format json` | CLI 파싱과 인자 제약 검증을 분리한 뒤 hard 위반 0건. 새 CLI 의존 관계 3개를 생성된 import graph에 반영 |
 | `internal/session/test_account_test.go` | 동시 발급 한 건, 중복 보존, 잘못된 식별자 폐기 거부, 만료·폐기·재발급·회전 경쟁과 저장소 오류 구분 |
 | `internal/auth/crypto_domain_test.go` | 기존 관리자 서명 유지, 임시 세션의 별도 HMAC 도메인과 구형 서명 검증기 거부 |
 | `internal/httpapi/test_account_test.go` | 정상 로그인·조회·CSRF·logout, 모든 업무 endpoint 403과 claim 미실행, 폐기 후 WS 1008·HTTP 401·재로그인 401, 관리자 실패 예산 보존 |

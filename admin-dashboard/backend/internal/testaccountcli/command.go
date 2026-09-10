@@ -106,15 +106,19 @@ func parseOptions(args []string) (options, error) {
 		return options{}, errors.New("invalid test-account arguments")
 	}
 
+	return opts, opts.validate()
+}
+
+func (opts options) validate() error {
 	if opts.action == "issue" && (!filepath.IsAbs(opts.output) || opts.ttl < time.Minute || opts.ttl > session.MaxTestAccountTTL || opts.ttl%time.Second != 0) {
-		return options{}, errors.New("issue requires an absolute credentials-file and a whole-second TTL of 1~60 minutes")
+		return errors.New("issue requires an absolute credentials-file and a whole-second TTL of 1~60 minutes")
 	}
 
 	if opts.action == "revoke" && opts.username == "" {
-		return options{}, errors.New("revoke requires username")
+		return errors.New("revoke requires username")
 	}
 
-	return opts, nil
+	return nil
 }
 
 func issue(ctx context.Context, store *session.Store, cfg *config.Config, opts options) (receipt, error) {
