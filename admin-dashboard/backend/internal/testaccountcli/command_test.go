@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -89,6 +90,7 @@ func TestCommandIssuesReportsAndRevokesWithoutPrintingCredentials(t *testing.T) 
 	require.NotContains(t, output.String(), credentials.Password)
 	require.NotContains(t, output.String(), "password")
 	require.Contains(t, output.String(), `"read_only":true`)
+	require.Contains(t, output.String(), `"expires_at_unix":`+strconv.FormatInt(credentials.ExpiresAtUnix, 10))
 
 	info, err := os.Stat(file)
 	require.NoError(t, err)
@@ -96,6 +98,7 @@ func TestCommandIssuesReportsAndRevokesWithoutPrintingCredentials(t *testing.T) 
 	output.Reset()
 	require.NoError(t, Run(t.Context(), []string{statusCommand}, &output))
 	require.Contains(t, output.String(), `"status":"active"`)
+	require.Contains(t, output.String(), `"expires_at_unix":`+strconv.FormatInt(credentials.ExpiresAtUnix, 10))
 	require.NotContains(t, output.String(), "password")
 
 	duplicate := filepath.Join(filepath.Dir(file), "second.json")
@@ -103,9 +106,10 @@ func TestCommandIssuesReportsAndRevokesWithoutPrintingCredentials(t *testing.T) 
 	output.Reset()
 	require.NoError(t, Run(t.Context(), []string{"revoke", "--username", credentials.Username}, &output))
 	require.Contains(t, output.String(), `"status":"revoked"`)
+	require.Contains(t, output.String(), `"expires_at_unix":0`)
 	output.Reset()
 	require.NoError(t, Run(t.Context(), []string{statusCommand}, &output))
-	require.Contains(t, output.String(), `"status":"absent"`)
+	require.JSONEq(t, `{"status":"absent","expires_at_unix":0,"read_only":true}`, output.String())
 }
 
 func TestCredentialFileRejectsExistingFilesSymlinksAndPublicDirectories(t *testing.T) {
