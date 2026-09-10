@@ -355,6 +355,8 @@ run_reusable_phase() {
   run_self_test scripts/deploy/test-compose-security-defaults.sh \
     deploy/compose deploy/nginx scripts/deploy/lib/public-bind-mounts.sh scripts/ci/python-runtime.sh
   run_self_test scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
+  run_self_test scripts/perf/check-youtube-plane-budget_test.sh \
+    scripts/perf/check-youtube-plane-budget.sh scripts/perf/perf-budget.yaml
   run_self_test scripts/runtime/pg-hotpath-explain-snapshot_test.sh \
     scripts/runtime/pg-hotpath-explain-snapshot.sh scripts/runtime/lib \
     hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries \
