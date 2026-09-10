@@ -1,0 +1,168 @@
+package holo
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/park285/shared-go/v2/pkg/httputil"
+
+	"github.com/kapu/admin-dashboard/internal/contract"
+)
+
+type holoRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f holoRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	out, err := f(req)
+	if err != nil {
+		return nil, fmt.Errorf("f: %w", err)
+	}
+
+	return out, nil
+}
+
+type holoCloseErrorBody struct {
+	io.Reader
+
+	err error
+}
+
+func (b holoCloseErrorBody) Close() error { return b.err }
+
+func TestProxyPreservesTransportCancellationCause(t *testing.T) {
+	client := &Client{
+		baseURL: "http://holo.test",
+		http: &http.Client{Transport: holoRoundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, context.Canceled
+		})},
+	}
+
+	err := client.request(t.Context(), http.MethodGet, "/status", nil, nil, http.StatusOK, new(any))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Proxy() error = %v, want context.Canceled cause", err)
+	}
+
+	appErr, ok := errors.AsType[*contract.AppError](err)
+	if !ok || appErr.Status != http.StatusBadGateway {
+		t.Fatalf("Proxy() error = %v (%T), want 502 AppError", err, err)
+	}
+
+	if appErr.Body.Error != "Service unavailable" {
+		t.Fatalf("Proxy() response error = %q, want existing bad-gateway contract", appErr.Body.Error)
+	}
+}
+
+func TestProxyRejectsOversizedResponseAndPreservesCause(t *testing.T) {
+	client := &Client{
+		baseURL: "http://holo.test",
+		http: &http.Client{Transport: holoRoundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"application/json"}},
+				Body:       io.NopCloser(io.MultiReader(strings.NewReader(`"`), io.LimitReader(infiniteByteReader{}, maxProxyBodyBytes), strings.NewReader(`"`))),
+			}, nil
+		})},
+	}
+
+	err := client.request(t.Context(), http.MethodGet, "/status", nil, nil, http.StatusOK, new(any))
+	if !errors.Is(err, httputil.ErrResponseBodyTooLarge) {
+		t.Fatalf("Proxy() error = %v, want httputil.ErrResponseBodyTooLarge cause", err)
+	}
+
+	appErr, ok := errors.AsType[*contract.AppError](err)
+	if !ok || appErr.Status != http.StatusBadGateway {
+		t.Fatalf("Proxy() error = %v (%T), want 502 AppError", err, err)
+	}
+}
+
+func TestProxyPreservesResponseCloseFailure(t *testing.T) {
+	wantErr := errors.New("close failed")
+	client := &Client{
+		baseURL: "http://holo.test",
+		http: &http.Client{Transport: holoRoundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       holoCloseErrorBody{Reader: strings.NewReader(`{"ok":true}`), err: wantErr},
+			}, nil
+		})},
+	}
+
+	err := client.request(t.Context(), http.MethodGet, "/status", nil, nil, http.StatusOK, new(any))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Proxy() error = %v, want close failure cause", err)
+	}
+}
+
+func TestProxyDrains5xxBodyForKeepAliveReuse(t *testing.T) {
+	var newConnections atomic.Int32
+
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+
+		if _, err := io.WriteString(w, "temporary upstream failure"); err != nil {
+			t.Errorf("write upstream failure response: %v", err)
+		}
+	}))
+
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			newConnections.Add(1)
+		}
+	}
+	server.Start()
+	t.Cleanup(server.Close)
+
+	client, err := NewClient(server.URL, "")
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	for range 2 {
+		proxyErr := client.request(t.Context(), http.MethodGet, "/status", nil, nil, http.StatusOK, new(any))
+
+		appErr, ok := errors.AsType[*contract.AppError](proxyErr)
+		if !ok || appErr.Status != http.StatusBadGateway {
+			t.Fatalf("Proxy() error = %v, want 502", proxyErr)
+		}
+	}
+
+	client.http.CloseIdleConnections()
+
+	if got := newConnections.Load(); got != 1 {
+		t.Fatalf("new connections = %d, want 1 after draining sequential 5xx responses", got)
+	}
+}
+
+func TestUpstreamErrorDoesNotExposeOriginalFields(t *testing.T) {
+	for _, raw := range []string{`{"error":"sensitive message","code":"PRIVATE","details":{"token":"private"}}`, "internal stack trace"} {
+		err := upstreamError(http.StatusBadRequest, []byte(raw))
+		if err.Body.Error != "The upstream service rejected the request" || err.Body.Code != "UPSTREAM_REJECTED" {
+			t.Fatalf("upstream error body = %+v", err.Body)
+		}
+	}
+}
+
+func TestUpstreamAuthenticationFailureDoesNotExpireBFFSession(t *testing.T) {
+	err := upstreamError(http.StatusUnauthorized, []byte("internal authentication error"))
+	if err.Status != http.StatusBadGateway || err.Body.Code != "UPSTREAM_AUTH_FAILED" {
+		t.Fatalf("upstream authentication error = %+v", err)
+	}
+}
+
+type infiniteByteReader struct{}
+
+func (infiniteByteReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+
+	return len(p), nil
+}

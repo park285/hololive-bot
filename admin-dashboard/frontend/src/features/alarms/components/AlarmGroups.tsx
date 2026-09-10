@@ -4,7 +4,6 @@ import ChevronUp from "lucide-react/dist/esm/icons/chevron-up.mjs";
 import Edit2 from "lucide-react/dist/esm/icons/edit-2.mjs";
 import MapPin from "lucide-react/dist/esm/icons/map-pin.mjs";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
-import User from "lucide-react/dist/esm/icons/user.mjs";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -18,8 +17,6 @@ const GROUPS_PER_ROW = 3;
 export interface AlarmGroup {
 	roomId: string;
 	roomName: string;
-	userId: string;
-	userName: string;
 	alarms: Alarm[];
 }
 
@@ -28,13 +25,13 @@ interface AlarmGroupsProps {
 	expandedGroups: Set<string>;
 	onToggleGroup: (groupKey: string) => void;
 	onDeleteAlarm: (alarm: Alarm) => void;
-	onEditName: (type: "room" | "user", id: string, currentName: string) => void;
+	onEditName: (type: "room", id: string, currentName: string) => void;
 	visibleGroupCount: number;
 	onLoadMore: () => void;
 	isDeleting: boolean;
 }
 
-const getGroupKey = (group: AlarmGroup) => `${group.roomId}:${group.userId}`;
+const getGroupKey = (group: AlarmGroup) => group.roomId;
 
 const chunkGroups = (groups: AlarmGroup[]): AlarmGroup[][] => {
 	const rows: AlarmGroup[][] = [];
@@ -111,7 +108,7 @@ export const AlarmGroups = ({
 										<button
 											type="button"
 											aria-expanded={isExpanded}
-											aria-label={`${group.roomName} ${group.userName} 알람 그룹 ${isExpanded ? "접기" : "펼치기"}`}
+											aria-label={`${group.roomName} 알람 그룹 ${isExpanded ? "접기" : "펼치기"}`}
 											onClick={() => {
 												onToggleGroup(groupKey);
 											}}
@@ -157,27 +154,7 @@ export const AlarmGroups = ({
 												</Button>
 											</div>
 
-											<div className="flex items-center justify-between gap-2 group/edit">
-												<Badge
-													variant="outline"
-													className="bg-indigo-50 text-indigo-700 border-indigo-200/60 gap-1.5 py-1 font-semibold flex-1 justify-start truncate"
-												>
-											<User size={14} className="text-indigo-500" aria-hidden="true" />
-													<span className="truncate">{group.userName}</span>
-												</Badge>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-7 w-7 text-subtle-foreground hover:text-indigo-600 hover:bg-indigo-100 focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
-													onClick={(event) => {
-														event.stopPropagation();
-														onEditName("user", group.userId, group.userName);
-													}}
-													aria-label={`${group.userName} 유저 이름 수정`}
-												>
-													<Edit2 size={14} aria-hidden="true" />
-												</Button>
-											</div>
+
 										</div>
 									</div>
 

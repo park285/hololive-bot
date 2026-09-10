@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "scope": "local native fixture; final retained source after excluding command-ring reduction experiment",
+  "candidate_image": "sha256:b9e9210af5c840bcb784a31c91c8db6e88fb8473d817b3a436d5daf80ac0b941",
+  "source_sha256": "0f92b2aeac3295dae3be863a47392d96fd1a3de520530c7bde1c4e1e28d9346a",
+  "source_manifest_matches_retained_artifact": true,
+  "source_artifact": "valkey-pool-native-artifact.json",
+  "native_performance": {
+    "evidence": "native-performance-valkey-pools.json",
+    "status": "PASS_DIAGNOSTIC",
+    "raw_evidence": "native-performance-valkey-pools.json.gz"
+  },
+  "resource_recovery": {
+    "evidence": "resource-soak-warmed.json",
+    "status": "FAIL",
+    "preparation_authorization": "2026-09-10 user approved beginning measurement after initialization; numerical thresholds unchanged"
+  },
+  "excluded_experiment": {
+    "source_artifact": "valkey-ring-native-artifact.json",
+    "native_evidence": "native-performance-valkey-ring.json",
+    "resource_evidence": "resource-soak-valkey-ring.json",
+    "reason": "RSS recovery still failed and Docker p95 exceeded the +15% budget; exclusion does not establish causal attribution"
+  },
+  "full_12_run_comparison": "NOT RUN",
+  "full_60_minute_soak": "NOT RUN",
+  "production_deployment": false,
+  "backend_ci": {
+    "command": "./scripts/ci/admin-dashboard-go-ci.sh",
+    "status": "PASS",
+    "source_sha256": "0f92b2aeac3295dae3be863a47392d96fd1a3de520530c7bde1c4e1e28d9346a",
+    "checks": {
+      "admin_dashboard_go_ci": "PASS including new concurrent session/limiter tests, race, NilAway and govulncheck"
+    },
+    "concurrent_session_readers": 32,
+    "concurrent_login_failures": 32
+  }
+}

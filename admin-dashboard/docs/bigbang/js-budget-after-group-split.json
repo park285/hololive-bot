@@ -1,0 +1,3947 @@
+{
+  "schema_version": 1,
+  "browser": "152.0.7977.82",
+  "browser_lifetime": "fresh browser and context per sample; fixed fixture topology",
+  "corpus_sha256": "57a469803fd44e8edf8720cd9f22592f37519bd7cac12ef3a0dbbb7a04e80388",
+  "initial_path": "/login",
+  "settled_path": "/dashboard/stats",
+  "compression": "identity for both variants",
+  "metric": "CDP Network.dataReceived.encodedDataLength for scripts, including canceled transfers",
+  "samples": [
+    {
+      "cycle": 0,
+      "variant": "baseline",
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "bytes": 508318,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "bytes": 239229,
+          "decoded_bytes": 239229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 239229,
+          "total_encoded_with_headers": 240136
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "bytes": 102162,
+          "decoded_bytes": 102162,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102162,
+          "total_encoded_with_headers": 103069
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "bytes": 28715,
+          "decoded_bytes": 28715,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28715,
+          "total_encoded_with_headers": 29647
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "bytes": 48847,
+          "decoded_bytes": 48847,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 48847,
+          "total_encoded_with_headers": 49779
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "bytes": 2329,
+          "decoded_bytes": 2329,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2329,
+          "total_encoded_with_headers": 3260
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "bytes": 9038,
+          "decoded_bytes": 9038,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 9038,
+          "total_encoded_with_headers": 9969
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "bytes": 8332,
+          "decoded_bytes": 8332,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8332,
+          "total_encoded_with_headers": 9263
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2466
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "bytes": 10463,
+          "decoded_bytes": 10463,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 10463,
+          "total_encoded_with_headers": 11395
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "bytes": 17970,
+          "decoded_bytes": 17970,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17970,
+          "total_encoded_with_headers": 18902
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "bytes": 444,
+          "decoded_bytes": 444,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 444,
+          "total_encoded_with_headers": 1374
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "bytes": 19273,
+          "decoded_bytes": 19273,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 19273,
+          "total_encoded_with_headers": 20204
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "status": 200,
+          "bytes": 9038,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "status": 200,
+          "bytes": 2329,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "status": 200,
+          "bytes": 28715,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "status": 200,
+          "bytes": 102162,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "status": 200,
+          "bytes": 48847,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "status": 200,
+          "bytes": 239229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "status": 200,
+          "bytes": 8332,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "status": 200,
+          "bytes": 10463,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "status": 200,
+          "bytes": 17970,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "status": 200,
+          "bytes": 444,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "status": 200,
+          "bytes": 19273,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 0,
+      "variant": "candidate",
+      "image": "sha256:80482ed755ab08ffd0132554fed10eed0fa18023c4e151642cb885f42c9040a8",
+      "bytes": 662326,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "bytes": 325280,
+          "decoded_bytes": 325280,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 325280,
+          "total_encoded_with_headers": 326187
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "bytes": 102149,
+          "decoded_bytes": 102149,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102149,
+          "total_encoded_with_headers": 103056
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "bytes": 27867,
+          "decoded_bytes": 27867,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 27867,
+          "total_encoded_with_headers": 28799
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "bytes": 28678,
+          "decoded_bytes": 28678,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28678,
+          "total_encoded_with_headers": 29610
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "bytes": 53459,
+          "decoded_bytes": 53459,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 53459,
+          "total_encoded_with_headers": 54391
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "bytes": 371,
+          "decoded_bytes": 371,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 371,
+          "total_encoded_with_headers": 1301
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "bytes": 7679,
+          "decoded_bytes": 7679,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 7679,
+          "total_encoded_with_headers": 8610
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "bytes": 8229,
+          "decoded_bytes": 8229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8229,
+          "total_encoded_with_headers": 9160
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2467
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "bytes": 1500,
+          "decoded_bytes": 1500,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1500,
+          "total_encoded_with_headers": 2431
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "bytes": 11913,
+          "decoded_bytes": 11913,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 11913,
+          "total_encoded_with_headers": 12845
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "bytes": 17982,
+          "decoded_bytes": 17982,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17982,
+          "total_encoded_with_headers": 18913
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "bytes": 2662,
+          "decoded_bytes": 2662,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2662,
+          "total_encoded_with_headers": 3593
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "bytes": 28929,
+          "decoded_bytes": 28929,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28929,
+          "total_encoded_with_headers": 29861
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "bytes": 24112,
+          "decoded_bytes": 24112,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 24112,
+          "total_encoded_with_headers": 25044
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "status": 200,
+          "bytes": 28678,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "status": 200,
+          "bytes": 27867,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "status": 200,
+          "bytes": 102149,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "status": 200,
+          "bytes": 325280,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "status": 200,
+          "bytes": 53459,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "status": 200,
+          "bytes": 371,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "status": 200,
+          "bytes": 7679,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "status": 200,
+          "bytes": 8229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "status": 200,
+          "bytes": 1500,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "status": 200,
+          "bytes": 11913,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "status": 200,
+          "bytes": 17982,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "status": 200,
+          "bytes": 2662,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "status": 200,
+          "bytes": 28929,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "status": 200,
+          "bytes": 24112,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 0,
+      "variant": "candidate",
+      "image": "sha256:80482ed755ab08ffd0132554fed10eed0fa18023c4e151642cb885f42c9040a8",
+      "bytes": 662326,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "bytes": 325280,
+          "decoded_bytes": 325280,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 325280,
+          "total_encoded_with_headers": 326187
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "bytes": 102149,
+          "decoded_bytes": 102149,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102149,
+          "total_encoded_with_headers": 103056
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "bytes": 27867,
+          "decoded_bytes": 27867,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 27867,
+          "total_encoded_with_headers": 28799
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "bytes": 28678,
+          "decoded_bytes": 28678,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28678,
+          "total_encoded_with_headers": 29610
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "bytes": 53459,
+          "decoded_bytes": 53459,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 53459,
+          "total_encoded_with_headers": 54391
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "bytes": 371,
+          "decoded_bytes": 371,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 371,
+          "total_encoded_with_headers": 1301
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "bytes": 7679,
+          "decoded_bytes": 7679,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 7679,
+          "total_encoded_with_headers": 8610
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "bytes": 8229,
+          "decoded_bytes": 8229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8229,
+          "total_encoded_with_headers": 9160
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2467
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "bytes": 1500,
+          "decoded_bytes": 1500,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1500,
+          "total_encoded_with_headers": 2431
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "bytes": 11913,
+          "decoded_bytes": 11913,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 11913,
+          "total_encoded_with_headers": 12845
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "bytes": 17982,
+          "decoded_bytes": 17982,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17982,
+          "total_encoded_with_headers": 18913
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "bytes": 2662,
+          "decoded_bytes": 2662,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2662,
+          "total_encoded_with_headers": 3593
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "bytes": 28929,
+          "decoded_bytes": 28929,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28929,
+          "total_encoded_with_headers": 29861
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "bytes": 24112,
+          "decoded_bytes": 24112,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 24112,
+          "total_encoded_with_headers": 25044
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "status": 200,
+          "bytes": 28678,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "status": 200,
+          "bytes": 102149,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "status": 200,
+          "bytes": 27867,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "status": 200,
+          "bytes": 325280,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "status": 200,
+          "bytes": 53459,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "status": 200,
+          "bytes": 371,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "status": 200,
+          "bytes": 7679,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "status": 200,
+          "bytes": 8229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "status": 200,
+          "bytes": 1500,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "status": 200,
+          "bytes": 11913,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "status": 200,
+          "bytes": 17982,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "status": 200,
+          "bytes": 2662,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "status": 200,
+          "bytes": 28929,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "status": 200,
+          "bytes": 24112,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 0,
+      "variant": "baseline",
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "bytes": 508318,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "bytes": 239229,
+          "decoded_bytes": 239229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 239229,
+          "total_encoded_with_headers": 240136
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "bytes": 102162,
+          "decoded_bytes": 102162,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102162,
+          "total_encoded_with_headers": 103069
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "bytes": 28715,
+          "decoded_bytes": 28715,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28715,
+          "total_encoded_with_headers": 29647
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "bytes": 48847,
+          "decoded_bytes": 48847,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 48847,
+          "total_encoded_with_headers": 49779
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "bytes": 2329,
+          "decoded_bytes": 2329,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2329,
+          "total_encoded_with_headers": 3260
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "bytes": 9038,
+          "decoded_bytes": 9038,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 9038,
+          "total_encoded_with_headers": 9969
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "bytes": 8332,
+          "decoded_bytes": 8332,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8332,
+          "total_encoded_with_headers": 9263
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2466
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "bytes": 10463,
+          "decoded_bytes": 10463,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 10463,
+          "total_encoded_with_headers": 11395
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "bytes": 17970,
+          "decoded_bytes": 17970,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17970,
+          "total_encoded_with_headers": 18902
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "bytes": 444,
+          "decoded_bytes": 444,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 444,
+          "total_encoded_with_headers": 1374
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "bytes": 19273,
+          "decoded_bytes": 19273,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 19273,
+          "total_encoded_with_headers": 20204
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "status": 200,
+          "bytes": 102162,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "status": 200,
+          "bytes": 28715,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "status": 200,
+          "bytes": 2329,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "status": 200,
+          "bytes": 48847,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "status": 200,
+          "bytes": 239229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "status": 200,
+          "bytes": 9038,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "status": 200,
+          "bytes": 8332,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "status": 200,
+          "bytes": 10463,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "status": 200,
+          "bytes": 17970,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "status": 200,
+          "bytes": 444,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "status": 200,
+          "bytes": 19273,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 1,
+      "variant": "baseline",
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "bytes": 508318,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "bytes": 239229,
+          "decoded_bytes": 239229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 239229,
+          "total_encoded_with_headers": 240136
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "bytes": 102162,
+          "decoded_bytes": 102162,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102162,
+          "total_encoded_with_headers": 103069
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "bytes": 28715,
+          "decoded_bytes": 28715,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28715,
+          "total_encoded_with_headers": 29647
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "bytes": 48847,
+          "decoded_bytes": 48847,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 48847,
+          "total_encoded_with_headers": 49779
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "bytes": 2329,
+          "decoded_bytes": 2329,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2329,
+          "total_encoded_with_headers": 3260
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "bytes": 9038,
+          "decoded_bytes": 9038,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 9038,
+          "total_encoded_with_headers": 9969
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "bytes": 8332,
+          "decoded_bytes": 8332,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8332,
+          "total_encoded_with_headers": 9263
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2466
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "bytes": 10463,
+          "decoded_bytes": 10463,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 10463,
+          "total_encoded_with_headers": 11395
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "bytes": 17970,
+          "decoded_bytes": 17970,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17970,
+          "total_encoded_with_headers": 18902
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "bytes": 444,
+          "decoded_bytes": 444,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 444,
+          "total_encoded_with_headers": 1374
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "bytes": 19273,
+          "decoded_bytes": 19273,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 19273,
+          "total_encoded_with_headers": 20204
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "status": 200,
+          "bytes": 9038,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "status": 200,
+          "bytes": 48847,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "status": 200,
+          "bytes": 102162,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "status": 200,
+          "bytes": 2329,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "status": 200,
+          "bytes": 28715,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "status": 200,
+          "bytes": 239229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "status": 200,
+          "bytes": 8332,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "status": 200,
+          "bytes": 10463,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "status": 200,
+          "bytes": 17970,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "status": 200,
+          "bytes": 444,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "status": 200,
+          "bytes": 19273,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 1,
+      "variant": "candidate",
+      "image": "sha256:80482ed755ab08ffd0132554fed10eed0fa18023c4e151642cb885f42c9040a8",
+      "bytes": 662326,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "bytes": 325280,
+          "decoded_bytes": 325280,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 325280,
+          "total_encoded_with_headers": 326187
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "bytes": 102149,
+          "decoded_bytes": 102149,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102149,
+          "total_encoded_with_headers": 103056
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "bytes": 27867,
+          "decoded_bytes": 27867,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 27867,
+          "total_encoded_with_headers": 28799
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "bytes": 28678,
+          "decoded_bytes": 28678,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28678,
+          "total_encoded_with_headers": 29610
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "bytes": 53459,
+          "decoded_bytes": 53459,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 53459,
+          "total_encoded_with_headers": 54391
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "bytes": 371,
+          "decoded_bytes": 371,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 371,
+          "total_encoded_with_headers": 1301
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "bytes": 7679,
+          "decoded_bytes": 7679,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 7679,
+          "total_encoded_with_headers": 8610
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "bytes": 8229,
+          "decoded_bytes": 8229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8229,
+          "total_encoded_with_headers": 9160
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2467
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "bytes": 1500,
+          "decoded_bytes": 1500,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1500,
+          "total_encoded_with_headers": 2431
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "bytes": 11913,
+          "decoded_bytes": 11913,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 11913,
+          "total_encoded_with_headers": 12845
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "bytes": 17982,
+          "decoded_bytes": 17982,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17982,
+          "total_encoded_with_headers": 18913
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "bytes": 2662,
+          "decoded_bytes": 2662,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2662,
+          "total_encoded_with_headers": 3593
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "bytes": 28929,
+          "decoded_bytes": 28929,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28929,
+          "total_encoded_with_headers": 29861
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "bytes": 24112,
+          "decoded_bytes": 24112,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 24112,
+          "total_encoded_with_headers": 25044
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "status": 200,
+          "bytes": 27867,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "status": 200,
+          "bytes": 28678,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "status": 200,
+          "bytes": 102149,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "status": 200,
+          "bytes": 325280,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "status": 200,
+          "bytes": 371,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "status": 200,
+          "bytes": 53459,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "status": 200,
+          "bytes": 7679,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "status": 200,
+          "bytes": 8229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "status": 200,
+          "bytes": 1500,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "status": 200,
+          "bytes": 11913,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "status": 200,
+          "bytes": 17982,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "status": 200,
+          "bytes": 2662,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "status": 200,
+          "bytes": 28929,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "status": 200,
+          "bytes": 24112,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 1,
+      "variant": "candidate",
+      "image": "sha256:80482ed755ab08ffd0132554fed10eed0fa18023c4e151642cb885f42c9040a8",
+      "bytes": 662326,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "bytes": 325280,
+          "decoded_bytes": 325280,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 325280,
+          "total_encoded_with_headers": 326187
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "bytes": 102149,
+          "decoded_bytes": 102149,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102149,
+          "total_encoded_with_headers": 103056
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "bytes": 27867,
+          "decoded_bytes": 27867,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 27867,
+          "total_encoded_with_headers": 28799
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "bytes": 28678,
+          "decoded_bytes": 28678,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28678,
+          "total_encoded_with_headers": 29610
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "bytes": 53459,
+          "decoded_bytes": 53459,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 53459,
+          "total_encoded_with_headers": 54391
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "bytes": 371,
+          "decoded_bytes": 371,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 371,
+          "total_encoded_with_headers": 1301
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "bytes": 7679,
+          "decoded_bytes": 7679,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 7679,
+          "total_encoded_with_headers": 8610
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "bytes": 8229,
+          "decoded_bytes": 8229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8229,
+          "total_encoded_with_headers": 9160
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2467
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "bytes": 1500,
+          "decoded_bytes": 1500,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1500,
+          "total_encoded_with_headers": 2431
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "bytes": 11913,
+          "decoded_bytes": 11913,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 11913,
+          "total_encoded_with_headers": 12845
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "bytes": 17982,
+          "decoded_bytes": 17982,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17982,
+          "total_encoded_with_headers": 18913
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "bytes": 2662,
+          "decoded_bytes": 2662,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2662,
+          "total_encoded_with_headers": 3593
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "bytes": 28929,
+          "decoded_bytes": 28929,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28929,
+          "total_encoded_with_headers": 29861
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "bytes": 24112,
+          "decoded_bytes": 24112,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 24112,
+          "total_encoded_with_headers": 25044
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "status": 200,
+          "bytes": 325280,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "status": 200,
+          "bytes": 27867,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "status": 200,
+          "bytes": 28678,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "status": 200,
+          "bytes": 102149,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "status": 200,
+          "bytes": 371,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "status": 200,
+          "bytes": 7679,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "status": 200,
+          "bytes": 53459,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "status": 200,
+          "bytes": 8229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "status": 200,
+          "bytes": 1500,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "status": 200,
+          "bytes": 11913,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "status": 200,
+          "bytes": 17982,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "status": 200,
+          "bytes": 2662,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "status": 200,
+          "bytes": 28929,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "status": 200,
+          "bytes": 24112,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 1,
+      "variant": "baseline",
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "bytes": 508318,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "bytes": 239229,
+          "decoded_bytes": 239229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 239229,
+          "total_encoded_with_headers": 240136
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "bytes": 102162,
+          "decoded_bytes": 102162,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102162,
+          "total_encoded_with_headers": 103069
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "bytes": 28715,
+          "decoded_bytes": 28715,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28715,
+          "total_encoded_with_headers": 29647
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "bytes": 48847,
+          "decoded_bytes": 48847,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 48847,
+          "total_encoded_with_headers": 49779
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "bytes": 2329,
+          "decoded_bytes": 2329,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2329,
+          "total_encoded_with_headers": 3260
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "bytes": 9038,
+          "decoded_bytes": 9038,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 9038,
+          "total_encoded_with_headers": 9969
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "bytes": 8332,
+          "decoded_bytes": 8332,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8332,
+          "total_encoded_with_headers": 9263
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2466
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "bytes": 10463,
+          "decoded_bytes": 10463,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 10463,
+          "total_encoded_with_headers": 11395
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "bytes": 17970,
+          "decoded_bytes": 17970,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17970,
+          "total_encoded_with_headers": 18902
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "bytes": 444,
+          "decoded_bytes": 444,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 444,
+          "total_encoded_with_headers": 1374
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "bytes": 19273,
+          "decoded_bytes": 19273,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 19273,
+          "total_encoded_with_headers": 20204
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "status": 200,
+          "bytes": 28715,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "status": 200,
+          "bytes": 48847,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "status": 200,
+          "bytes": 239229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "status": 200,
+          "bytes": 9038,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "status": 200,
+          "bytes": 2329,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "status": 200,
+          "bytes": 102162,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "status": 200,
+          "bytes": 8332,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "status": 200,
+          "bytes": 10463,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "status": 200,
+          "bytes": 17970,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "status": 200,
+          "bytes": 444,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "status": 200,
+          "bytes": 19273,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 2,
+      "variant": "baseline",
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "bytes": 508318,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "bytes": 239229,
+          "decoded_bytes": 239229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 239229,
+          "total_encoded_with_headers": 240136
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "bytes": 102162,
+          "decoded_bytes": 102162,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102162,
+          "total_encoded_with_headers": 103069
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "bytes": 28715,
+          "decoded_bytes": 28715,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28715,
+          "total_encoded_with_headers": 29647
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "bytes": 48847,
+          "decoded_bytes": 48847,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 48847,
+          "total_encoded_with_headers": 49779
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "bytes": 2329,
+          "decoded_bytes": 2329,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2329,
+          "total_encoded_with_headers": 3260
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "bytes": 9038,
+          "decoded_bytes": 9038,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 9038,
+          "total_encoded_with_headers": 9969
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "bytes": 8332,
+          "decoded_bytes": 8332,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8332,
+          "total_encoded_with_headers": 9263
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2466
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "bytes": 10463,
+          "decoded_bytes": 10463,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 10463,
+          "total_encoded_with_headers": 11395
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "bytes": 17970,
+          "decoded_bytes": 17970,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17970,
+          "total_encoded_with_headers": 18902
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "bytes": 444,
+          "decoded_bytes": 444,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 444,
+          "total_encoded_with_headers": 1374
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "bytes": 19273,
+          "decoded_bytes": 19273,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 19273,
+          "total_encoded_with_headers": 20204
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "status": 200,
+          "bytes": 28715,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "status": 200,
+          "bytes": 102162,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "status": 200,
+          "bytes": 48847,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "status": 200,
+          "bytes": 2329,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "status": 200,
+          "bytes": 9038,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "status": 200,
+          "bytes": 239229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "status": 200,
+          "bytes": 8332,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "status": 200,
+          "bytes": 10463,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "status": 200,
+          "bytes": 17970,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "status": 200,
+          "bytes": 444,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "status": 200,
+          "bytes": 19273,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 2,
+      "variant": "candidate",
+      "image": "sha256:80482ed755ab08ffd0132554fed10eed0fa18023c4e151642cb885f42c9040a8",
+      "bytes": 662326,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "bytes": 325280,
+          "decoded_bytes": 325280,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 325280,
+          "total_encoded_with_headers": 326187
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "bytes": 102149,
+          "decoded_bytes": 102149,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102149,
+          "total_encoded_with_headers": 103056
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "bytes": 27867,
+          "decoded_bytes": 27867,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 27867,
+          "total_encoded_with_headers": 28799
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "bytes": 28678,
+          "decoded_bytes": 28678,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28678,
+          "total_encoded_with_headers": 29610
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "bytes": 53459,
+          "decoded_bytes": 53459,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 53459,
+          "total_encoded_with_headers": 54391
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "bytes": 371,
+          "decoded_bytes": 371,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 371,
+          "total_encoded_with_headers": 1301
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "bytes": 7679,
+          "decoded_bytes": 7679,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 7679,
+          "total_encoded_with_headers": 8610
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "bytes": 8229,
+          "decoded_bytes": 8229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8229,
+          "total_encoded_with_headers": 9160
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2467
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "bytes": 1500,
+          "decoded_bytes": 1500,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1500,
+          "total_encoded_with_headers": 2431
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "bytes": 11913,
+          "decoded_bytes": 11913,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 11913,
+          "total_encoded_with_headers": 12845
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "bytes": 17982,
+          "decoded_bytes": 17982,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17982,
+          "total_encoded_with_headers": 18913
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "bytes": 2662,
+          "decoded_bytes": 2662,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2662,
+          "total_encoded_with_headers": 3593
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "bytes": 28929,
+          "decoded_bytes": 28929,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28929,
+          "total_encoded_with_headers": 29861
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "bytes": 24112,
+          "decoded_bytes": 24112,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 24112,
+          "total_encoded_with_headers": 25044
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "status": 200,
+          "bytes": 28678,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "status": 200,
+          "bytes": 102149,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "status": 200,
+          "bytes": 27867,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "status": 200,
+          "bytes": 325280,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "status": 200,
+          "bytes": 53459,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "status": 200,
+          "bytes": 371,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "status": 200,
+          "bytes": 7679,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "status": 200,
+          "bytes": 8229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "status": 200,
+          "bytes": 1500,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "status": 200,
+          "bytes": 11913,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "status": 200,
+          "bytes": 17982,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "status": 200,
+          "bytes": 2662,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "status": 200,
+          "bytes": 28929,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "status": 200,
+          "bytes": 24112,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 2,
+      "variant": "candidate",
+      "image": "sha256:80482ed755ab08ffd0132554fed10eed0fa18023c4e151642cb885f42c9040a8",
+      "bytes": 662326,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "bytes": 325280,
+          "decoded_bytes": 325280,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 325280,
+          "total_encoded_with_headers": 326187
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "bytes": 102149,
+          "decoded_bytes": 102149,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102149,
+          "total_encoded_with_headers": 103056
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "bytes": 27867,
+          "decoded_bytes": 27867,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 27867,
+          "total_encoded_with_headers": 28799
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "bytes": 28678,
+          "decoded_bytes": 28678,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28678,
+          "total_encoded_with_headers": 29610
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "bytes": 53459,
+          "decoded_bytes": 53459,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 53459,
+          "total_encoded_with_headers": 54391
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "bytes": 371,
+          "decoded_bytes": 371,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 371,
+          "total_encoded_with_headers": 1301
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "bytes": 7679,
+          "decoded_bytes": 7679,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 7679,
+          "total_encoded_with_headers": 8610
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "bytes": 8229,
+          "decoded_bytes": 8229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8229,
+          "total_encoded_with_headers": 9160
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2467
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "bytes": 1500,
+          "decoded_bytes": 1500,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1500,
+          "total_encoded_with_headers": 2431
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "bytes": 11913,
+          "decoded_bytes": 11913,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 11913,
+          "total_encoded_with_headers": 12845
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "bytes": 17982,
+          "decoded_bytes": 17982,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17982,
+          "total_encoded_with_headers": 18913
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "bytes": 2662,
+          "decoded_bytes": 2662,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2662,
+          "total_encoded_with_headers": 3593
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "bytes": 28929,
+          "decoded_bytes": 28929,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28929,
+          "total_encoded_with_headers": 29861
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "bytes": 24112,
+          "decoded_bytes": 24112,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 24112,
+          "total_encoded_with_headers": 25044
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-CgLt7NCz.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-BfXiNGba.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-C_WGW1da.js",
+          "status": 200,
+          "bytes": 102149,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/utils-C51Hynxx.js",
+          "status": 200,
+          "bytes": 27867,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-DS0KDn8O.js",
+          "status": 200,
+          "bytes": 28678,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-BJI3Hjex.js",
+          "status": 200,
+          "bytes": 325280,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/auth-D-hpQcCR.js",
+          "status": 200,
+          "bytes": 53459,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-PTb4Q88i-CjHFAIjg.js",
+          "status": 200,
+          "bytes": 371,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/shared-DN8plmL_-CZhUytz8.js",
+          "status": 200,
+          "bytes": 7679,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-e_zYV_Yp.js",
+          "status": 200,
+          "bytes": 8229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-Bl8FJRWq.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-BnXhK6PW.js",
+          "status": 200,
+          "bytes": 1500,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-Bl5ZaLJI.js",
+          "status": 200,
+          "bytes": 11913,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-nZxU5RO3.js",
+          "status": 200,
+          "bytes": 17982,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/keys-iQLdxeP8.js",
+          "status": 200,
+          "bytes": 2662,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-Cc0T62KM.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D7cAuaJB.js",
+          "status": 200,
+          "bytes": 28929,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/stats-Cd0HczJj.js",
+          "status": 200,
+          "bytes": 24112,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    },
+    {
+      "cycle": 2,
+      "variant": "baseline",
+      "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+      "bytes": 508318,
+      "transfers": [
+        {
+          "path": "/theme-init.js",
+          "bytes": 378,
+          "decoded_bytes": 378,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 378,
+          "total_encoded_with_headers": 1281
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "bytes": 239229,
+          "decoded_bytes": 239229,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 239229,
+          "total_encoded_with_headers": 240136
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "bytes": 716,
+          "decoded_bytes": 716,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 716,
+          "total_encoded_with_headers": 1646
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "bytes": 102162,
+          "decoded_bytes": 102162,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 102162,
+          "total_encoded_with_headers": 103069
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "bytes": 278,
+          "decoded_bytes": 278,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 278,
+          "total_encoded_with_headers": 1208
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "bytes": 28715,
+          "decoded_bytes": 28715,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 28715,
+          "total_encoded_with_headers": 29647
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "bytes": 48847,
+          "decoded_bytes": 48847,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 48847,
+          "total_encoded_with_headers": 49779
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "bytes": 2329,
+          "decoded_bytes": 2329,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 2329,
+          "total_encoded_with_headers": 3260
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "bytes": 9038,
+          "decoded_bytes": 9038,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 9038,
+          "total_encoded_with_headers": 9969
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "bytes": 13191,
+          "decoded_bytes": 13191,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 13191,
+          "total_encoded_with_headers": 14123
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "bytes": 8332,
+          "decoded_bytes": 8332,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 8332,
+          "total_encoded_with_headers": 9263
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "bytes": 1536,
+          "decoded_bytes": 1536,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 1536,
+          "total_encoded_with_headers": 2466
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "bytes": 10463,
+          "decoded_bytes": 10463,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 10463,
+          "total_encoded_with_headers": 11395
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "bytes": 17970,
+          "decoded_bytes": 17970,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 17970,
+          "total_encoded_with_headers": 18902
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "bytes": 444,
+          "decoded_bytes": 444,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 444,
+          "total_encoded_with_headers": 1374
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "bytes": 19273,
+          "decoded_bytes": 19273,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 19273,
+          "total_encoded_with_headers": 20204
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "bytes": 5417,
+          "decoded_bytes": 5417,
+          "cached": false,
+          "completed": true,
+          "status": 200,
+          "encoding": "identity",
+          "content_length": 5417,
+          "total_encoded_with_headers": 6348
+        }
+      ],
+      "proxy_transfer_diagnostics": [
+        {
+          "path": "/theme-init.js",
+          "status": 200,
+          "bytes": 378,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-query-5U7uWSvS.js",
+          "status": 200,
+          "bytes": 28715,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/compiler-runtime-BE4bVbeT.js",
+          "status": 200,
+          "bytes": 278,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/client-Dtz3VbTZ.js",
+          "status": 200,
+          "bytes": 9038,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-icons-FF3coa66.js",
+          "status": 200,
+          "bytes": 13191,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/typeUtils-Bw5n5kgR.js",
+          "status": 200,
+          "bytes": 48847,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/authStore-ByNOSWgQ.js",
+          "status": 200,
+          "bytes": 2329,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200,
+          "bytes": 716,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/vendor-router-CLgEqyG1.js",
+          "status": 200,
+          "bytes": 102162,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/index-DidwlR71.js",
+          "status": 200,
+          "bytes": 239229,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Label-BNt_658l.js",
+          "status": 200,
+          "bytes": 1536,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/LoginPage-ycPTqQ5u.js",
+          "status": 200,
+          "bytes": 8332,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/AppLayout-CQULPPVO.js",
+          "status": 200,
+          "bytes": 10463,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/StatsPage-Clv5kjMR.js",
+          "status": 200,
+          "bytes": 17970,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/queryKeys-Dd7T1DcS.js",
+          "status": 200,
+          "bytes": 444,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/SystemStatsChart-D2hGj2Wz.js",
+          "status": 200,
+          "bytes": 19273,
+          "encoding": "identity"
+        },
+        {
+          "path": "/assets/Card-CS3XuQ2P.js",
+          "status": 200,
+          "bytes": 5417,
+          "encoding": "identity"
+        }
+      ],
+      "proxy_diagnostics": [],
+      "failures": [],
+      "csp_violations": 0
+    }
+  ],
+  "budget_ratio": 1.1,
+  "baseline_median": 508318,
+  "candidate_median": 662326,
+  "ratio": 1.3029756963160857,
+  "status": "FAIL"
+}

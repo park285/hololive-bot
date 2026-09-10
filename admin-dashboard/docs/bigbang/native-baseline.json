@@ -1,0 +1,12 @@
+{
+  "source_revision": "6ba2ede142501eb5bc436f9d1af2587a3f1d81b0",
+  "source_archive_sha256": "8c32bfda42ec682f798ca8e0b4f9f478fe867db52bc269d8cfb19be2a73dbc5d",
+  "architecture": "amd64",
+  "toolchain": "go1.27.1",
+  "flags": "CGO_ENABLED=0 GOAMD64=v1 GOWORK=off -pgo=off -trimpath -buildvcs=false -s -w -buildid=",
+  "binary_sha256": "c15eb54d3cdd0266f6674c07b095ce34ff7a2e4bafdeb5de3243b69b9bed4d8e",
+  "image": "sha256:ffe386f42a1f5aad8ece2e381a07679aa37e9642df203a4ebfc5830530558d04",
+  "assets": "old-assets.json",
+  "directory": "/tmp/hololive-admin-native-baseline",
+  "purpose": "native performance baseline from exact old source and actual old served assets; not the deployed arm64 binary"
+}

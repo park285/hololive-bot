@@ -1,0 +1,221 @@
+[
+  {
+    "name": "large_string_id_unicode_oneOf_prefixItems_date_time",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "nullable",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": null,
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "required",
+    "data": {
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "numeric_large_id_no_coercion",
+    "data": {
+      "id": 9007199254740992,
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "extra_property_not_removed",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      },
+      "unknown": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "nested_oneOf_invalid",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": "0"
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid_date_time",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "not-a-date",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid_tuple_order",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        1,
+        "x"
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "invalid_tuple_extra",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1,
+        2
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "unevaluated_property",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1,
+        "b": 2
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "unicode_length",
+    "data": {
+      "id": "9007199254740993",
+      "name": "가😀나",
+      "result": {
+        "state": "ok",
+        "count": 0
+      },
+      "tuple": [
+        "x",
+        1
+      ],
+      "when": "2026-09-09T00:00:00Z",
+      "extra": {
+        "a": 1
+      }
+    },
+    "valid": false
+  }
+]

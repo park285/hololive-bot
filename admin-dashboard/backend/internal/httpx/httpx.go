@@ -1,6 +1,8 @@
 package httpx
 
 import (
+	"context"
+	"crypto/rand"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -8,94 +10,90 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/park285/shared-go/v2/pkg/ginjson"
+
+	"github.com/kapu/admin-dashboard/internal/contract"
 )
 
-type ErrorResponse struct {
-	Error           string  `json:"error"`
-	Code            string  `json:"code,omitempty"`
-	Details         any     `json:"details,omitempty"`
-	AbsoluteExpired *bool   `json:"absolute_expired,omitempty"`
-	RetryAfter      *uint64 `json:"retry_after,omitempty"`
-}
-
-type AppError struct {
-	Status int
-	Body   ErrorResponse
-	Cause  error
-}
-
-func (e *AppError) Error() string {
-	if e.Cause != nil {
-		return e.Cause.Error()
+// Error는 Gin 밖의 HTTP 경계에서도 같은 요청 ID와 안전한 오류 envelope를 사용합니다.
+func Error(w http.ResponseWriter, request *http.Request, err error) {
+	requestID, ok := request.Context().Value(requestIDContextKey{}).(string)
+	if !ok || requestID == "" {
+		requestID = rand.Text()
 	}
 
-	return e.Body.Error
-}
-
-func (e *AppError) Unwrap() error { return e.Cause }
-
-func NewError(status int, message string) *AppError {
-	return &AppError{Status: status, Body: ErrorResponse{Error: message}}
-}
-
-func Unauthorized() *AppError { return NewError(http.StatusUnauthorized, "Unauthorized") }
-func Forbidden() *AppError    { return NewError(http.StatusForbidden, "Forbidden") }
-func BadGateway() *AppError   { return NewError(http.StatusBadGateway, "Service unavailable") }
-func StoreUnavailable() *AppError {
-	return NewError(http.StatusServiceUnavailable, "Session store unavailable")
-}
-
-func BadRequest(message string) *AppError {
-	return &AppError{Status: http.StatusBadRequest, Body: ErrorResponse{Error: message, Code: "bad_request"}}
-}
-
-func Internal(err error) *AppError {
-	return &AppError{Status: http.StatusInternalServerError, Body: ErrorResponse{Error: "An internal error occurred"}, Cause: err}
-}
-
-func JSON(w http.ResponseWriter, status int, payload any) error {
-	body, err := jsonv2.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-
-	if _, err := w.Write(body); err != nil {
-		return fmt.Errorf("write response body: %w", err)
-	}
-
-	return nil
-}
-
-func Error(w http.ResponseWriter, err error) {
-	if appErr, ok := errors.AsType[*AppError](err); ok {
-		respondJSON(w, appErr.Status, appErr.Body)
+	if appErr, ok := errors.AsType[*contract.AppError](err); ok {
+		respondJSON(w, appErr.Status, errorBody(request.Context(), appErr.Status, appErr.Body, requestID))
 
 		return
 	}
 
-	respondJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "An internal error occurred"})
+	respondJSON(w, http.StatusInternalServerError, errorBody(request.Context(), http.StatusInternalServerError, contract.ErrorResponse{Error: "An internal error occurred"}, requestID))
 }
 
-func respondJSON(w http.ResponseWriter, status int, payload any) {
-	if err := JSON(w, status, payload); err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+func respondJSON(w http.ResponseWriter, status int, payload contract.ErrorResponse) {
+	response := jsonResponse{data: payload}
+	response.WriteContentType(w)
+	w.WriteHeader(status)
+
+	// 고정 DTO를 관리자 JSON renderer로 쓰며 I/O 실패 후 다른 응답을 덧붙이지 않습니다.
+	if err := response.Render(w); err != nil {
+		return
 	}
 }
 
 func Abort(c *gin.Context, err error) {
-	if appErr, ok := errors.AsType[*AppError](err); ok {
-		ginjson.Respond(c, appErr.Status, appErr.Body)
+	if appErr, ok := errors.AsType[*contract.AppError](err); ok {
+		Respond(c, appErr.Status, errorBody(c.Request.Context(), appErr.Status, appErr.Body, RequestID(c)))
 		c.Abort()
 
 		return
 	}
 
-	ginjson.Respond(c, http.StatusInternalServerError, ErrorResponse{Error: "An internal error occurred"})
+	Respond(c, http.StatusInternalServerError, errorBody(c.Request.Context(), http.StatusInternalServerError, contract.ErrorResponse{Error: "An internal error occurred"}, RequestID(c)))
 	c.Abort()
+}
+
+// RequestID는 요청별 서버 생성 감사 식별자를 한 번 발급하여 오류 응답과 공유합니다.
+func RequestID(c *gin.Context) string {
+	const key = "admin-request-id"
+
+	if id := c.GetString(key); id != "" {
+		return id
+	}
+
+	id := rand.Text()
+	c.Set(key, id)
+
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestIDContextKey{}, id))
+
+	return id
+}
+
+type requestIDContextKey struct{}
+
+func errorBody(ctx context.Context, status int, body contract.ErrorResponse, requestID string) contract.ErrorResponse {
+	body.RequestID = requestID
+	// 원문 오류가 제공한 근거를 신뢰하지 않고 최초 claim/dispatch context만 사용합니다.
+	body.NotDispatchedMutationID = contract.NotDispatchedMutationID(ctx)
+	if body.Code != "" {
+		return body
+	}
+
+	codes := map[int]string{
+		http.StatusBadRequest: "BAD_REQUEST", http.StatusUnauthorized: "UNAUTHORIZED",
+		http.StatusForbidden: "FORBIDDEN", http.StatusNotFound: "NOT_FOUND",
+		http.StatusMethodNotAllowed: "METHOD_NOT_ALLOWED", http.StatusConflict: "CONFLICT",
+		http.StatusRequestEntityTooLarge: "PAYLOAD_TOO_LARGE", http.StatusTooManyRequests: "RATE_LIMITED",
+		http.StatusBadGateway: "UPSTREAM_UNAVAILABLE", http.StatusServiceUnavailable: "SERVICE_UNAVAILABLE",
+	}
+
+	if code, ok := codes[status]; ok {
+		body.Code = code
+	} else {
+		body.Code = "INTERNAL_ERROR"
+	}
+
+	return body
 }
 
 func DecodeJSON(r *http.Request, dst any, maxBytes int64) error {

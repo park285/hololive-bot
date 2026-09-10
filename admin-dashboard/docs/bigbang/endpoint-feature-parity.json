@@ -1,0 +1,3111 @@
+{
+  "schema_version": 1,
+  "decision": "DEC-20260909-hololive-admin-bigbang-replacement",
+  "source_revision": "2323f98c8446f42de581c6f8d2e67e408e3d92df",
+  "path_base": "admin-dashboard/",
+  "spec_sha256": "3a03ecc29377818ff5fd7302e0dc338a1fc60973185723b9e2396b1e06bb7125",
+  "phase": "T01_baseline",
+  "operations": [
+    {
+      "method": "POST",
+      "path": "/admin/api/auth/heartbeat",
+      "operationId": "handle_heartbeat",
+      "feature": "auth",
+      "access": "session_csrf",
+      "business_mutation": false,
+      "owner": "backend/internal/app/session_handlers.go#handleHeartbeat",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1heartbeat/post",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "session_handlers.go의 endpoint별 decoding"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1heartbeat/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1heartbeat/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1heartbeat/post/responses/401",
+          "schema_present": false
+        },
+        {
+          "status": "503",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1heartbeat/post/responses/503",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#authApi.heartbeat",
+          "kind": "runtime",
+          "view": "frontend/src/hooks/useHeartbeat.ts"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/auth/heartbeat",
+        "backend_owner": "backend/internal/httpapi/auth.go",
+        "frontend_owner": "frontend/src/session/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/app/session_handlers_test.go",
+          "backend/internal/app/logout_family_test.go",
+          "frontend/src/api/auth-results.integration.test.ts",
+          "frontend/src/hooks/session-tabs.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/auth/login",
+      "operationId": "handle_login",
+      "feature": "auth",
+      "access": "public_login",
+      "business_mutation": false,
+      "owner": "backend/internal/app/session_handlers.go#handleLogin",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1login/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "session_handlers.go의 endpoint별 decoding"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1login/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1login/post/responses/401",
+          "schema_present": false
+        },
+        {
+          "status": "429",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1login/post/responses/429",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#authApi.login",
+          "kind": "runtime",
+          "view": "frontend/src/pages/LoginPage.tsx"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/auth/login",
+        "backend_owner": "backend/internal/httpapi/auth.go",
+        "frontend_owner": "frontend/src/session/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/app/session_handlers_test.go",
+          "backend/internal/app/logout_family_test.go",
+          "frontend/src/api/auth-results.integration.test.ts",
+          "frontend/src/hooks/session-tabs.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/auth/logout",
+      "operationId": "handle_logout",
+      "feature": "auth",
+      "access": "session_csrf",
+      "business_mutation": false,
+      "owner": "backend/internal/app/session_handlers.go#handleLogout",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1logout/post",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "session_handlers.go의 endpoint별 decoding"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1logout/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "503",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1logout/post/responses/503",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#authApi.logout",
+          "kind": "runtime",
+          "view": "frontend/src/lib/sessionLifecycle.ts"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/auth/logout",
+        "backend_owner": "backend/internal/httpapi/auth.go",
+        "frontend_owner": "frontend/src/session/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/app/session_handlers_test.go",
+          "backend/internal/app/logout_family_test.go",
+          "frontend/src/api/auth-results.integration.test.ts",
+          "frontend/src/hooks/session-tabs.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/auth/session",
+      "operationId": "handle_session_status",
+      "feature": "auth",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/app/session_handlers.go#handleSessionStatus",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1session/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "session_handlers.go의 endpoint별 decoding"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1session/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1session/get/responses/401",
+          "schema_present": false
+        },
+        {
+          "status": "503",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1auth~1session/get/responses/503",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#authApi.getSession",
+          "kind": "runtime",
+          "view": "frontend/src/hooks/useAuthBootstrap.ts"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/auth/session",
+        "backend_owner": "backend/internal/httpapi/auth.go",
+        "frontend_owner": "frontend/src/session/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/app/session_handlers_test.go",
+          "backend/internal/app/logout_family_test.go",
+          "frontend/src/api/auth-results.integration.test.ts",
+          "frontend/src/hooks/session-tabs.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/docker/containers",
+      "operationId": "handle_docker_containers",
+      "feature": "docker",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/app/handlers.go#handleDockerContainers",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "컨테이너 이름·동작 allowlist, body 없음"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "503",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers/get/responses/503",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#dockerApi.getContainers",
+          "kind": "runtime",
+          "view": "frontend/src/components/settings/DockerContainerActions.tsx"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/docker/containers",
+        "backend_owner": "backend/internal/adapters/docker/",
+        "frontend_owner": "frontend/src/features/docker/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/docker/client_http_test.go",
+          "backend/internal/docker/proxy_policy_test.go",
+          "frontend/src/api/docker-actions.integration.test.ts",
+          "frontend/src/components/settings/DockerContainerActions.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/docker/containers/{name}/restart",
+      "operationId": "handle_docker_restart",
+      "feature": "docker",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/app/handlers.go#handleDockerRestart",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1restart/post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Container name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "컨테이너 이름·동작 allowlist, body 없음"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1restart/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "404",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1restart/post/responses/404",
+          "schema_present": false
+        },
+        {
+          "status": "503",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1restart/post/responses/503",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#dockerApi.restartContainer",
+          "kind": "runtime",
+          "view": "frontend/src/components/settings/DockerContainerActions.tsx"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/docker/containers/{name}/restart",
+        "backend_owner": "backend/internal/adapters/docker/",
+        "frontend_owner": "frontend/src/features/docker/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/docker/client_http_test.go",
+          "backend/internal/docker/proxy_policy_test.go",
+          "frontend/src/api/docker-actions.integration.test.ts",
+          "frontend/src/components/settings/DockerContainerActions.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/docker/containers/{name}/start",
+      "operationId": "handle_docker_start",
+      "feature": "docker",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/app/handlers.go#handleDockerStart",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1start/post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Container name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "컨테이너 이름·동작 allowlist, body 없음"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1start/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "404",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1start/post/responses/404",
+          "schema_present": false
+        },
+        {
+          "status": "503",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1start/post/responses/503",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#dockerApi.startContainer",
+          "kind": "runtime",
+          "view": "frontend/src/components/settings/DockerContainerActions.tsx"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/docker/containers/{name}/start",
+        "backend_owner": "backend/internal/adapters/docker/",
+        "frontend_owner": "frontend/src/features/docker/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/docker/client_http_test.go",
+          "backend/internal/docker/proxy_policy_test.go",
+          "frontend/src/api/docker-actions.integration.test.ts",
+          "frontend/src/components/settings/DockerContainerActions.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/docker/containers/{name}/stop",
+      "operationId": "handle_docker_stop",
+      "feature": "docker",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/app/handlers.go#handleDockerStop",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1stop/post",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Container name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "컨테이너 이름·동작 allowlist, body 없음"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1stop/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "403",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1stop/post/responses/403",
+          "schema_present": false
+        },
+        {
+          "status": "404",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1stop/post/responses/404",
+          "schema_present": false
+        },
+        {
+          "status": "503",
+          "content_types": [],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1containers~1{name}~1stop/post/responses/503",
+          "schema_present": false
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#dockerApi.stopContainer",
+          "kind": "runtime",
+          "view": "frontend/src/components/settings/DockerContainerActions.tsx"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/docker/containers/{name}/stop",
+        "backend_owner": "backend/internal/adapters/docker/",
+        "frontend_owner": "frontend/src/features/docker/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/docker/client_http_test.go",
+          "backend/internal/docker/proxy_policy_test.go",
+          "frontend/src/api/docker-actions.integration.test.ts",
+          "frontend/src/components/settings/DockerContainerActions.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/docker/health",
+      "operationId": "handle_docker_health",
+      "feature": "docker",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/app/handlers.go#handleDockerHealth",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1health/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "컨테이너 이름·동작 allowlist, body 없음"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1docker~1health/get/responses/200",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#dockerApi.checkHealth",
+          "kind": "runtime",
+          "view": "frontend/src/components/settings/DockerContainerActions.tsx"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/docker/health",
+        "backend_owner": "backend/internal/adapters/docker/",
+        "frontend_owner": "frontend/src/features/docker/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/docker/client_http_test.go",
+          "backend/internal/docker/proxy_policy_test.go",
+          "frontend/src/api/docker-actions.integration.test.ts",
+          "frontend/src/components/settings/DockerContainerActions.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/alarms",
+      "operationId": "holoGetAlarms",
+      "feature": "alarms",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/alarms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/alarms/pages/AlarmsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/alarms",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/alarms",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/alarms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/alarms/selectors.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/holo/alarms",
+      "operationId": "holoDeleteAlarm",
+      "feature": "alarms",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/delete",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/delete/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/delete/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/delete/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1alarms/delete/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/alarms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/alarms/pages/AlarmsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "DELETE",
+        "path": "/api/holo/alarms",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/alarms",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/alarms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/alarms/selectors.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/members",
+      "operationId": "holoGetMembers",
+      "feature": "members",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/members",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/members",
+      "operationId": "holoAddMember",
+      "feature": "members",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/members",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/members/calendar",
+      "operationId": "holoGetCalendar",
+      "feature": "calendar",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1calendar/get",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "year/month만 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1calendar/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1calendar/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1calendar/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1calendar/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/calendar/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/calendar/pages/CalendarPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/members/calendar",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members/calendar",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/calendar/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/members/{id}/aliases",
+      "operationId": "holoAddAlias",
+      "feature": "members",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMemberMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/members/{id}/aliases",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members/{id}/aliases",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/holo/members/{id}/aliases",
+      "operationId": "holoRemoveAlias",
+      "feature": "members",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMemberMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/delete/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/delete/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/delete/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1aliases/delete/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "DELETE",
+        "path": "/api/holo/members/{id}/aliases",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members/{id}/aliases",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/api/holo/members/{id}/channel",
+      "operationId": "holoUpdateChannel",
+      "feature": "members",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMemberMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1channel/patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1channel/patch/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1channel/patch/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1channel/patch/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1channel/patch/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "PATCH",
+        "path": "/api/holo/members/{id}/channel",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members/{id}/channel",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/api/holo/members/{id}/graduation",
+      "operationId": "holoSetGraduation",
+      "feature": "members",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMemberMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1graduation/patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1graduation/patch/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1graduation/patch/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1graduation/patch/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1graduation/patch/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "PATCH",
+        "path": "/api/holo/members/{id}/graduation",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members/{id}/graduation",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "PATCH",
+      "path": "/admin/api/holo/members/{id}/name",
+      "operationId": "holoUpdateMemberName",
+      "feature": "members",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMemberMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1name/patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Member ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1name/patch/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1name/patch/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1name/patch/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1members~1{id}~1name/patch/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/members/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/members/pages/MembersPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "PATCH",
+        "path": "/api/holo/members/{id}/name",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/members/{id}/name",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/members/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/members/selectors.test.ts",
+          "frontend/src/features/members/members-page.performance.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/names/room",
+      "operationId": "holoSetRoomName",
+      "feature": "alarms",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1room/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1room/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1room/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1room/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1room/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/alarms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/alarms/pages/AlarmsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/names/room",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/names/room",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/alarms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/alarms/selectors.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/names/user",
+      "operationId": "holoSetUserName",
+      "feature": "alarms",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1user/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1user/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1user/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1user/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1names~1user/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/alarms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/alarms/pages/AlarmsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/names/user",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/names/user",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/alarms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/alarms/selectors.test.ts",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/rooms",
+      "operationId": "holoGetRooms",
+      "feature": "rooms",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/rooms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/rooms/pages/RoomsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/rooms",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/rooms",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/rooms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/rooms/rooms-page.test.ts",
+          "frontend/src/features/rooms/selectors.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/rooms",
+      "operationId": "holoAddRoom",
+      "feature": "rooms",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/rooms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/rooms/pages/RoomsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/rooms",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/rooms",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/rooms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/rooms/rooms-page.test.ts",
+          "frontend/src/features/rooms/selectors.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "DELETE",
+      "path": "/admin/api/holo/rooms",
+      "operationId": "holoRemoveRoom",
+      "feature": "rooms",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/delete",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/delete/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/delete/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/delete/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms/delete/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/rooms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/rooms/pages/RoomsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "DELETE",
+        "path": "/api/holo/rooms",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/rooms",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/rooms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/rooms/rooms-page.test.ts",
+          "frontend/src/features/rooms/selectors.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/rooms/joined",
+      "operationId": "holoGetRoomsJoined",
+      "feature": "rooms",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1joined/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1joined/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1joined/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1joined/get/responses/502",
+          "schema_present": true
+        },
+        {
+          "status": "503",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1joined/get/responses/503",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/rooms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/rooms/pages/RoomsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/rooms/joined",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/rooms/joined",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/rooms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/rooms/rooms-page.test.ts",
+          "frontend/src/features/rooms/selectors.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/rooms/acl",
+      "operationId": "holoSetAcl",
+      "feature": "rooms",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1acl/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1acl/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1acl/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1acl/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1rooms~1acl/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/rooms/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/rooms/pages/RoomsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/rooms/acl",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/rooms/acl",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/rooms/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/rooms/rooms-page.test.ts",
+          "frontend/src/features/rooms/selectors.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/settings",
+      "operationId": "holoGetSettings",
+      "feature": "settings",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/settings/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/settings/pages/SettingsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/settings",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/settings",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/settings/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/settings/api.integration.test.ts",
+          "frontend/src/components/settings/SettingsForm.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/api/holo/settings",
+      "operationId": "holoUpdateSettings",
+      "feature": "settings",
+      "access": "session_csrf_audit",
+      "business_mutation": true,
+      "owner": "backend/internal/holo/handlers.go#ProxyMutation",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/post",
+        "parameters": [],
+        "request_required": true,
+        "request_content_types": [
+          "application/json"
+        ],
+        "runtime_policy": "JSON 구문과 2 MiB 상한; 업무 입력 검증은 upstream"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/post/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/post/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/post/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1settings/post/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/settings/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/settings/pages/SettingsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "POST",
+        "path": "/api/holo/settings",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/settings",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/settings/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/settings/api.integration.test.ts",
+          "frontend/src/components/settings/SettingsForm.browser.test.mjs"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/stats",
+      "operationId": "holoGetStats",
+      "feature": "stats",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/stats/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/stats/pages/StatsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/stats",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/stats",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/stats/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/status/status_test.go",
+          "frontend/src/features/stats/lib/systemStats.test.ts",
+          "frontend/src/hooks/useWebSocket.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/stats/youtube/community-shorts",
+      "operationId": "holoGetYouTubeCommunityShortsOps",
+      "feature": "stats",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats~1youtube~1community-shorts/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats~1youtube~1community-shorts/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats~1youtube~1community-shorts/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats~1youtube~1community-shorts/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1stats~1youtube~1community-shorts/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/generated/Admin.ts#holoGetYouTubeCommunityShortsOps",
+          "kind": "generated_only_no_screen",
+          "view": null
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/stats/youtube/community-shorts",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/stats/youtube/community-shorts",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/stats/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/status/status_test.go",
+          "frontend/src/features/stats/lib/systemStats.test.ts",
+          "frontend/src/hooks/useWebSocket.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/streams/live",
+      "operationId": "holoGetLiveStreams",
+      "feature": "streams",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1live/get",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "org만 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1live/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1live/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1live/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1live/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/streams/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/streams/pages/StreamsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/streams/live",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/streams/live",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/streams/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/streams/lib/media.test.mjs",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/holo/streams/upcoming",
+      "operationId": "holoGetUpcomingStreams",
+      "feature": "streams",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/holo/handlers.go#ProxyGet",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1upcoming/get",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "org만 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1upcoming/get/responses/200",
+          "schema_present": true
+        },
+        {
+          "status": "400",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1upcoming/get/responses/400",
+          "schema_present": true
+        },
+        {
+          "status": "401",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1upcoming/get/responses/401",
+          "schema_present": true
+        },
+        {
+          "status": "502",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1holo~1streams~1upcoming/get/responses/502",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/features/streams/api.ts",
+          "kind": "runtime",
+          "view": "frontend/src/features/streams/pages/StreamsPage.tsx"
+        }
+      ],
+      "upstream": {
+        "method": "GET",
+        "path": "/api/holo/streams/upcoming",
+        "owner": "hololive/hololive-api/internal/planes/admin/app/http/registration.go",
+        "preserve": true
+      },
+      "target": {
+        "path": "/admin/api/holo/streams/upcoming",
+        "backend_owner": "backend/internal/adapters/holo/",
+        "frontend_owner": "frontend/src/features/streams/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "frontend/src/features/streams/lib/media.test.mjs",
+          "frontend/src/api/msw.integration.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/status",
+      "operationId": "handle_aggregated_status",
+      "feature": "stats",
+      "access": "session",
+      "business_mutation": false,
+      "owner": "backend/internal/app/handlers.go#handleAggregatedStatus",
+      "route_owner": "backend/internal/app/routes.go",
+      "input": {
+        "spec_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1status/get",
+        "parameters": [],
+        "request_required": false,
+        "request_content_types": [],
+        "runtime_policy": "query 그대로 전달"
+      },
+      "output": [
+        {
+          "status": "200",
+          "content_types": [
+            "application/json"
+          ],
+          "schema_ref": "backend/internal/openapi/spec.json#/paths/~1admin~1api~1status/get/responses/200",
+          "schema_present": true
+        }
+      ],
+      "consumers": [
+        {
+          "path": "frontend/src/api/core.ts#statusApi.get",
+          "kind": "runtime",
+          "view": "frontend/src/features/stats/hooks/useStatsPage.ts"
+        }
+      ],
+      "upstream": null,
+      "target": {
+        "path": "/admin/api/status",
+        "backend_owner": "backend/internal/observations/",
+        "frontend_owner": "frontend/src/features/stats/",
+        "transport": "frontend/src/api/transport.ts",
+        "status": "planned_T02_T07"
+      },
+      "verification": {
+        "route_and_access": "backend/internal/app/route_inventory_test.go#TestBaselineRouteInventory",
+        "existing_test_candidates": [
+          "backend/internal/status/status_test.go",
+          "frontend/src/features/stats/lib/systemStats.test.ts",
+          "frontend/src/hooks/useWebSocket.test.ts"
+        ],
+        "candidate_feature_status": "NOT RUN",
+        "scope_note": "기존 시험 파일은 관련 근거 후보이며 endpoint의 전체 성공·실패 검증을 의미하지 않음"
+      },
+      "external_consumer_status": "audited_no_separate_consumer_found_20260909",
+      "retirement": "구형 구현 owner만 교체; endpoint 제거 아님"
+    }
+  ],
+  "registered_exceptions": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "access": "public_liveness",
+      "owner": "backend/internal/app/handlers.go#handleHealth",
+      "consumer": "Dockerfile; backend/cmd/healthcheck/main.go; deploy/compose/docker-compose.prod.yml",
+      "target": "기존 계약 보존; generation/session 없음",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "method": "GET",
+      "path": "/favicon.svg",
+      "access": "public_static",
+      "owner": "backend/internal/static/static.go#ServeFavicon",
+      "consumer": "frontend/index.html",
+      "target": "static MIME/cache 검사",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "method": "GET",
+      "path": "/theme-init.js",
+      "access": "public_static",
+      "owner": "backend/internal/static/static.go#ServeThemeInit",
+      "consumer": "frontend/index.html",
+      "target": "CSP·theme 초기화",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "method": "GET",
+      "path": "/assets/*filepath",
+      "access": "public_static",
+      "owner": "backend/internal/static/static.go#ServeAsset",
+      "consumer": "frontend production bundle",
+      "target": "누락 asset 404·비 HTML",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/ws/system-stats",
+      "access": "session_origin_ws",
+      "owner": "backend/internal/app/handlers.go#handleSystemStatsWS",
+      "consumer": "frontend/src/hooks/useWebSocket.ts",
+      "target": "T05에서 admin-stats.<generation> 선택; 16/4 상한 보존",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/api/openapi.json",
+      "access": "session_feature_flag",
+      "owner": "backend/internal/app/handlers.go#handleOpenAPI",
+      "consumer": "backend/internal/app/handlers.go#handleDocs; OpenAPI 이용자 미확인",
+      "target": "T02 이후 generation 검사 대상",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/docs",
+      "access": "session_feature_flag",
+      "owner": "backend/internal/app/handlers.go#handleDocs",
+      "consumer": "문서 브라우저 사용자 미확인",
+      "target": "HTML auth 유지; 내부 spec fetch를 SDK로 교체",
+      "verification": "TestBaselineRouteInventory; backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    }
+  ],
+  "routing_cases": [
+    {
+      "id": "spa",
+      "owner": "backend/internal/app/routes.go#handleFallback",
+      "current": "non-/admin/api/ NoRoute returns index status 200",
+      "target": "known SPA navigation only; missing API/assets never HTML",
+      "verification": "backend/internal/app/app_test.go#TestSPAFallbackServesIndexWith200",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "id": "api_404",
+      "owner": "backend/internal/app/routes.go#handleFallback",
+      "current": "/admin/api/ prefix 404 JSON",
+      "target": "safe error envelope and generation/security headers",
+      "verification": "backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "id": "method_405",
+      "owner": "backend/internal/app/routes.go#Handler",
+      "current": "NoMethod JSON 405 for registered path",
+      "target": "safe error envelope and security headers",
+      "verification": "backend/internal/app/app_test.go",
+      "candidate_status": "NOT RUN"
+    },
+    {
+      "id": "bootstrap",
+      "owner": null,
+      "current": "absent",
+      "target": "/admin/meta.json public no-store; SDK validates before API/WS",
+      "verification": "T03/T05/T10 metadata fixtures",
+      "candidate_status": "NOT RUN"
+    }
+  ],
+  "features": [
+    {
+      "id": "alarms",
+      "menu_path": "/dashboard/alarms",
+      "current_owner": "frontend/src/features/alarms/",
+      "target_owner": "frontend/src/features/alarms/",
+      "operationIds": [
+        "holoGetAlarms",
+        "holoDeleteAlarm",
+        "holoSetRoomName",
+        "holoSetUserName"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale",
+        "rejected",
+        "unknown",
+        "busy",
+        "confirmation_cancel"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    },
+    {
+      "id": "members",
+      "menu_path": "/dashboard/members",
+      "current_owner": "frontend/src/features/members/",
+      "target_owner": "frontend/src/features/members/",
+      "operationIds": [
+        "holoGetMembers",
+        "holoAddMember",
+        "holoAddAlias",
+        "holoRemoveAlias",
+        "holoUpdateChannel",
+        "holoSetGraduation",
+        "holoUpdateMemberName"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale",
+        "rejected",
+        "unknown",
+        "busy",
+        "confirmation_cancel"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    },
+    {
+      "id": "rooms",
+      "menu_path": "/dashboard/rooms",
+      "current_owner": "frontend/src/features/rooms/",
+      "target_owner": "frontend/src/features/rooms/",
+      "operationIds": [
+        "holoGetRooms",
+        "holoAddRoom",
+        "holoRemoveRoom",
+        "holoGetRoomsJoined",
+        "holoSetAcl"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale",
+        "rejected",
+        "unknown",
+        "busy",
+        "confirmation_cancel"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    },
+    {
+      "id": "calendar",
+      "menu_path": "/dashboard/calendar",
+      "current_owner": "frontend/src/features/calendar/",
+      "target_owner": "frontend/src/features/calendar/",
+      "operationIds": [
+        "holoGetCalendar"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    },
+    {
+      "id": "settings",
+      "menu_path": "/dashboard/settings",
+      "current_owner": "frontend/src/features/settings/",
+      "target_owner": "frontend/src/features/settings/",
+      "operationIds": [
+        "holoGetSettings",
+        "holoUpdateSettings"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale",
+        "rejected",
+        "unknown",
+        "busy",
+        "confirmation_cancel"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    },
+    {
+      "id": "stats",
+      "menu_path": "/dashboard/stats",
+      "current_owner": "frontend/src/features/stats/",
+      "target_owner": "frontend/src/features/stats/",
+      "operationIds": [
+        "holoGetStats",
+        "holoGetYouTubeCommunityShortsOps"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    },
+    {
+      "id": "streams",
+      "menu_path": "/dashboard/streams",
+      "current_owner": "frontend/src/features/streams/",
+      "target_owner": "frontend/src/features/streams/",
+      "operationIds": [
+        "holoGetLiveStreams",
+        "holoGetUpcomingStreams"
+      ],
+      "required_states": [
+        "pending",
+        "error",
+        "empty",
+        "success",
+        "offline",
+        "stale"
+      ],
+      "candidate_tested": 0,
+      "candidate_total": null,
+      "status": "NOT RUN"
+    }
+  ],
+  "non_menu_features": [
+    {
+      "id": "auth",
+      "current_owner": "frontend/src/pages/LoginPage.tsx; frontend/src/hooks/useAuthBootstrap.ts",
+      "required_states": [
+        "login",
+        "session_refresh",
+        "idle_warning",
+        "absolute_warning",
+        "logout_revocation_failure",
+        "two_tabs",
+        "late_401",
+        "late_Set_Cookie"
+      ],
+      "status": "NOT RUN"
+    },
+    {
+      "id": "docker",
+      "menu_path": "/dashboard/settings",
+      "current_owner": "frontend/src/components/settings/DockerContainerActions.tsx",
+      "required_states": [
+        "list",
+        "health_error",
+        "confirmation_cancel",
+        "start",
+        "stop",
+        "restart",
+        "unknown",
+        "busy"
+      ],
+      "status": "NOT RUN"
+    },
+    {
+      "id": "theme_navigation",
+      "current_owner": "frontend/src/layouts/AppLayout.tsx; frontend/src/lib/theme.ts",
+      "required_states": [
+        "keyboard",
+        "mobile_drawer",
+        "zoom",
+        "dark",
+        "light",
+        "focus_restore"
+      ],
+      "status": "NOT RUN"
+    }
+  ],
+  "unresolved": [
+    {
+      "id": "D01",
+      "owner": "T09 운영 도구 담당",
+      "scope": "실제 구형 artifact로 첫 drain과 효과 판정 리허설",
+      "blocks": "T09/T10/G11",
+      "status": "NOT RUN"
+    },
+    {
+      "id": "O02",
+      "owner": "T09 운영 도구 담당",
+      "scope": "admin-dashboard-ingress-firewall.service disabled/inactive와 문서의 활성 전제 불일치",
+      "blocks": "T09/T10/G07 출시 준비",
+      "status": "observed_requires_reconciliation"
+    }
+  ],
+  "consumer_evidence": "consumer-audit.json",
+  "candidate_corrections": [
+    {
+      "id": "C01",
+      "subject": "Alarm and DeleteAlarmRequest user fields",
+      "baseline_preserved": true,
+      "evidence": "upstream-contract-reconciliation.md",
+      "candidate_behavior": "room/channel subscriptions; no fabricated user fields; names/user remains a separately verified API"
+    },
+    {
+      "id": "C02",
+      "subject": "Browser-native mutation replay admission",
+      "baseline_preserved": true,
+      "evidence": "mutation-replay-evidence.md",
+      "candidate_behavior": "16 business operations require UUIDv4 X-Admin-Mutation-ID; one atomic family claim; duplicate outcome_unknown; family eviction fails closed"
+    },
+    {
+      "id": "C03",
+      "subject": "ACL response enum and supported settings states",
+      "baseline_preserved": true,
+      "evidence": "upstream-contract-reconciliation.md",
+      "candidate_behavior": "ACL response enums match existing typed adapter checks; settings empty object is invalid and confirmation_cancel is not an implemented form flow"
+    },
+    {
+      "id": "C04",
+      "subject": "Logical mutation outcome after transport replay and drain rejection",
+      "baseline_preserved": true,
+      "evidence": "mutation-replay-evidence.md",
+      "candidate_behavior": "Only matching notDispatchedMutationId from the first atomic claim proves pre-dispatch rejection; unauthenticated, duplicate, drain, store and post-dispatch errors preserve unknown outcomes"
+    },
+    {
+      "id": "C05",
+      "subject": "Pinned socket-proxy checks decoded URL.Path, not query parameters",
+      "baseline_preserved": true,
+      "evidence": "docker-boundary-evidence.md",
+      "candidate_behavior": "Exact method/container/action policy; no claimed proxy query filtering; BFF fixes its own Docker path and t=30 independently"
+    },
+    {
+      "id": "C06",
+      "subject": "Existing Nginx clients survive a configuration reload",
+      "baseline_preserved": true,
+      "evidence": "cutover-progress.md",
+      "candidate_behavior": "Ingress 503 is not full admission closure; confirm old BFF listener shutdown before barrier, drain owned effects, and join previous nginx workers before declaring open"
+    },
+    {
+      "id": "C07",
+      "subject": "Initial JavaScript budget and bounded pre-dispatch validation loading",
+      "baseline_preserved": true,
+      "evidence": "performance-progress.md",
+      "candidate_behavior": "Shared boolean assertions and operation declarations; all response validators prepared before HTTP under the existing timeout, auth-generation and cancellation guards; no replay or validation bypass"
+    }
+  ]
+}

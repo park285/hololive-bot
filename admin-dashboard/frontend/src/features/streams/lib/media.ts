@@ -1,3 +1,4 @@
+import { safeHTTPURL } from "@/lib/urls";
 import type { Stream } from "@/features/streams/types";
 
 export type ThumbnailQuality = "max" | "sd" | "high";
@@ -8,8 +9,6 @@ export interface ThumbnailSource {
 	sizes?: string;
 	fallbackChain: string[];
 }
-
-type StreamPlatform = "youtube" | "chzzk" | "external";
 
 export const extractYouTubeVideoId = (url?: string): string | undefined => {
 	if (!url) return undefined;
@@ -49,20 +48,11 @@ const resolveChzzkThumbnailTemplate = (
 	};
 };
 
-const getStreamPlatform = (
-	stream: Pick<Stream, "id" | "link">,
-): StreamPlatform => {
-	const link = stream.link ?? "";
-
-	if (link.includes("chzzk.naver.com")) return "chzzk";
-	if (extractYouTubeVideoId(link) || stream.id) return "youtube";
-	return "external";
-};
-
 export const getThumbnailSource = (
 	url?: string,
 	quality: ThumbnailQuality = "high",
 ): ThumbnailSource | undefined => {
+	if (!safeHTTPURL(url)) return undefined;
 	if (!url) return undefined;
 
 	if (url.includes("{type}")) {
@@ -78,9 +68,9 @@ export const getThumbnailSource = (
 	}
 
 	const directUrls = {
-		max: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-		sd: `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
-		high: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+		max: `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/maxresdefault.jpg`,
+		sd: `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/sddefault.jpg`,
+		high: `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`,
 	};
 
 	if (quality === "max") {
@@ -107,29 +97,13 @@ export const getThumbnailSource = (
 	};
 };
 
+/** getStreamLinkMeta는 URL hostname으로 플랫폼을 구분하고 안전하지 않은 링크를 활성화하지 않습니다. */
 export const getStreamLinkMeta = (stream: Pick<Stream, "id" | "link">) => {
-	const platform = getStreamPlatform(stream);
-
-	switch (platform) {
-		case "chzzk":
-			return {
-				href: stream.link ?? "",
-				label: "Watch on CHZZK",
-				badge: "CHZZK",
-			};
-		case "youtube":
-			return {
-				href: stream.link || `https://www.youtube.com/watch?v=${stream.id}`,
-				label: "Watch on YouTube",
-				badge: "YouTube",
-			};
-		default:
-			return {
-				href: stream.link ?? "",
-				label: "Open link",
-				badge: "Link",
-			};
-	}
+	const url = safeHTTPURL(stream.link || (stream.id ? `https://www.youtube.com/watch?v=${encodeURIComponent(stream.id)}` : undefined));
+	if (url === undefined) return { href: undefined, label: "사용할 수 없는 방송 링크", badge: "확인 필요" };
+	if (url.hostname === "chzzk.naver.com") return { href: url.href, label: "Watch on CHZZK", badge: "CHZZK" };
+	if (url.hostname === "youtube.com" || url.hostname.endsWith(".youtube.com") || url.hostname === "youtu.be") return { href: url.href, label: "Watch on YouTube", badge: "YouTube" };
+	return { href: url.href, label: "Open link", badge: "Link" };
 };
 
 export const getStreamKey = (

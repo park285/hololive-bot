@@ -7,12 +7,11 @@ import Play from "lucide-react/dist/esm/icons/play.mjs";
 import User from "lucide-react/dist/esm/icons/user.mjs";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { authApi } from "@/api/core";
+import { session } from "@/app/bootstrap";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { applySessionStatus } from "@/lib/sessionLifecycle";
-import { queryClient } from "@/lib/queryClient";
+import { useSessionSnapshot } from "@/session/useSession";
 
 import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
 
@@ -21,21 +20,16 @@ const LoginPage = () => {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
+	const isAuthResolved = useSessionSnapshot().phase !== "pending";
 
 	const loginMutation = useMutation({
 		mutationFn: async () => {
 			const normalizedUsername = username.trim();
-			await authApi.login(normalizedUsername, password);
-			return authApi.getSession();
+			return session.login(normalizedUsername, password);
 		},
-		onSuccess: (session) => {
-			if (!session.authenticated) {
-				setError("로그인 세션을 확인하지 못했습니다. 다시 로그인해주세요.");
-				return;
-			}
-
-			queryClient.clear();
-			applySessionStatus(session);
+		retry: false,
+		networkMode: "always",
+		onSuccess: () => {
 			setPassword("");
 			void navigate("/dashboard/stats", { replace: true });
 		},
@@ -58,6 +52,7 @@ const LoginPage = () => {
 
 	const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
 		e.preventDefault();
+		if (!isAuthResolved || loginMutation.isPending) return;
 		setError("");
 
 		if (!username.trim() || !password) {
@@ -159,7 +154,7 @@ const LoginPage = () => {
 
 						<Button
 							type="submit"
-							disabled={loginMutation.isPending}
+							disabled={!isAuthResolved || loginMutation.isPending}
 							className="w-full relative overflow-hidden flex justify-center items-center py-6 px-4 bg-linear-to-r from-slate-800 to-slate-900 rounded-xl text-sm font-display font-bold text-white hover:from-slate-700 hover:to-slate-800 dark:from-slate-100 dark:to-slate-300 dark:text-slate-900 dark:hover:from-white dark:hover:to-slate-200 focus-visible:ring-4 focus-visible:ring-border disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 shadow-xl shadow-slate-300/60 dark:shadow-black/40 hover:shadow-2xl hover:shadow-sky-300/40 dark:hover:shadow-sky-900/40 hover:-translate-y-0.5 group"
 						>
 							<div className="relative z-10 flex items-center justify-center">

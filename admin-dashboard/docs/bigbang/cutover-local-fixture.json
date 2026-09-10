@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "fixture_image": "sha256:5429c13e2a10713002975d3dc074a27d2ce7701224c6c3b6e7015f34bec07c45",
+  "generation": "c06bddfe3e2b69f6866e93426978bb55bfe3387510775be74e7e7394f251b118",
+  "phases": [
+    {
+      "name": "ingress_fence",
+      "elapsed_ms": 298,
+      "result": "administrator_ingress=503 shortlink_health=200 container=46d528c2e1a53bd93d9acd62eacf60e46deed682854ce83d997c31ab92c0c3e6",
+      "new_upstream_effects": 0,
+      "shortlink": 302
+    },
+    {
+      "name": "old_drain_and_shutdown",
+      "elapsed_ms": 12229,
+      "client_status": 500,
+      "logical_outcome": "unknown",
+      "owner_effects": 1,
+      "business_replays": 0,
+      "direct_admission": "closed",
+      "ws": "closed"
+    },
+    {
+      "name": "admin_session_purge_and_new_secret",
+      "elapsed_ms": 1056,
+      "result": "admin_session_purge=completed prefix=session:admin: removed=3 scan_pages=1",
+      "non_admin_data": "preserved",
+      "secret": "new",
+      "metadata": "matched",
+      "old_cookie": "rejected"
+    },
+    {
+      "name": "candidate_open_and_smoke",
+      "elapsed_ms": 383,
+      "metadata": "matched",
+      "new_login": "PASS",
+      "websocket": "current_protocol",
+      "old_bundle_generation": "rejected",
+      "docker": "available",
+      "business_replays": 0
+    },
+    {
+      "name": "whole_rollback",
+      "elapsed_ms": 2078,
+      "result": "admin_session_purge=completed prefix=session:admin: removed=2 scan_pages=1",
+      "image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+      "secret": "new_again",
+      "old_secrets_reused": 0,
+      "cookies": "previous_generations_rejected",
+      "business_replays": 0
+    }
+  ],
+  "production_effects": 0,
+  "old_image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+  "status": "PASS_LOCAL_SEQUENCE",
+  "remaining": [
+    "injected timeout/proxy failure",
+    "arm64 candidate",
+    "300-second observation",
+    "production O02 firewall evidence",
+    "reviewed committed release identity"
+  ]
+}

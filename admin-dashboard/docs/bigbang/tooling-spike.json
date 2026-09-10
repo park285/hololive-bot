@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-09-09",
+  "task": "T02",
+  "scope": "격리된 생성 도구 호환성 spike; 실제 API 정본 이관·프로덕션 연결·G02/G09 통과 아님",
+  "validator": {
+    "versions": {
+      "ajv": "8.20.0",
+      "ajv_formats": "3.0.1",
+      "swagger_typescript_api": "13.12.6"
+    },
+    "validation": {
+      "fixtures": 11,
+      "passed": 11,
+      "dynamic_codegen": "disabled"
+    },
+    "standalone_bytes": 10962,
+    "bundle_bytes": 30970,
+    "helper_inputs": [
+      "node_modules/ajv/dist/runtime/ucs2length.js",
+      "node_modules/ajv-formats/dist/formats.js"
+    ],
+    "standalone_requires": [
+      "ajv/dist/runtime/ucs2length",
+      "ajv-formats/dist/formats"
+    ],
+    "production_compiler_included": false,
+    "production_integration": false
+  },
+  "sdk": {
+    "generator": "swagger-typescript-api@13.12.6",
+    "files": [
+      "Admin.ts",
+      "data-contracts.ts",
+      "http-client.ts"
+    ],
+    "repeated_generation": "byte_identical",
+    "transport_calls": 3,
+    "transport_injected_at_construction": true,
+    "large_string_id_preserved": true,
+    "production_integration": false
+  },
+  "playwright": {
+    "version": "1.63.0",
+    "package_installed": true,
+    "browsers_installed_by_this_task": false,
+    "browser_tests": "NOT RUN"
+  },
+  "audit": {
+    "scanner": "npm audit",
+    "scope": "isolated spike lockfile only",
+    "exit_code": 0,
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "dependencies": {
+        "prod": 1,
+        "dev": 9,
+        "optional": 0,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 9
+      }
+    },
+    "packages": [
+      {
+        "path": "node_modules/@playwright/test",
+        "version": "1.63.0",
+        "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.63.0.tgz",
+        "integrity": "sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==",
+        "license": "Apache-2.0"
+      },
+      {
+        "path": "node_modules/ajv",
+        "version": "8.20.0",
+        "resolved": "https://registry.npmjs.org/ajv/-/ajv-8.20.0.tgz",
+        "integrity": "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==",
+        "license": "MIT"
+      },
+      {
+        "path": "node_modules/ajv-formats",
+        "version": "3.0.1",
+        "resolved": "https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz",
+        "integrity": "sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==",
+        "license": "MIT"
+      },
+      {
+        "path": "node_modules/fast-deep-equal",
+        "version": "3.1.3",
+        "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+        "integrity": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
+        "license": "MIT"
+      },
+      {
+        "path": "node_modules/fast-uri",
+        "version": "3.1.7",
+        "resolved": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.7.tgz",
+        "integrity": "sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg==",
+        "license": "BSD-3-Clause"
+      },
+      {
+        "path": "node_modules/json-schema-traverse",
+        "version": "1.0.0",
+        "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
+        "integrity": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
+        "license": "MIT"
+      },
+      {
+        "path": "node_modules/playwright",
+        "version": "1.63.0",
+        "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.63.0.tgz",
+        "integrity": "sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==",
+        "license": "Apache-2.0"
+      },
+      {
+        "path": "node_modules/playwright-core",
+        "version": "1.63.0",
+        "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.63.0.tgz",
+        "integrity": "sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==",
+        "license": "Apache-2.0"
+      },
+      {
+        "path": "node_modules/require-from-string",
+        "version": "2.0.2",
+        "resolved": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
+        "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
+        "license": "MIT"
+      }
+    ]
+  },
+  "artifacts": {
+    "compatibility.mjs": {
+      "sha256": "c643c8b2819dca9d9c9f90fa6101138fc5f7fc13321f6b014cc09031119270ce"
+    },
+    "sdk.mjs": {
+      "sha256": "fed9c6607f4ea5478fb8c8e5c457538f42c291b572dd68a5ddf0b8a53e40deed"
+    },
+    "fixtures.json": {
+      "sha256": "ae2dfe4853eb0b562bb7d45b44e94780fd0b9b400e1ace0bcda579436e919fbe"
+    },
+    "validator.mjs": {
+      "sha256": "af20393cfa9509aa381f56ef1e2640469e245fdc5878650421b203809f1781fd"
+    },
+    "validator-bundle.mjs": {
+      "sha256": "8b79bec98083380d43a673b17cc3c41db917a62a49418e0581b9afe7c798443a"
+    },
+    "sdk-bundle.mjs": {
+      "sha256": "d283a48ca085a3d836470a5e53de5e7c42d13b8d3ee6cc22c26781e85d5352e1"
+    },
+    "package-lock.json": {
+      "sha256": "83bf6c306d70f31f38ef50b3e24ddefae72f7635217c94540a58251226636c3f"
+    }
+  },
+  "runtime_helper_authorization": {
+    "state": "approved",
+    "user_message": "승인 ㄱㄱ",
+    "packages": [
+      "ajv@8.20.0",
+      "ajv-formats@3.0.1"
+    ],
+    "effect": "standalone validator가 사용하는 ucs2length 및 formats helper를 브라우저 bundle에 포함",
+    "compiler": "빌드 전용; 브라우저 runtime 제외",
+    "production_manifest_changed_at_spike": false,
+    "canonical_integration_evidence": "contract-implementation.md"
+  },
+  "not_yet_verified_at_spike": [
+    "전체 operation의 query/path/header/status/content-type/inline schema 검증 연결",
+    "Go DTO와 같은 fixtures 대조",
+    "생성 계약의 production CSP 브라우저 시험",
+    "전체 후보 bundle 크기/성능",
+    "실제 Playwright Chromium/Firefox/WebKit 실행"
+  ]
+}

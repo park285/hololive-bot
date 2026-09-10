@@ -10,7 +10,8 @@ import {
 	getThumbnailSource,
 } from "@/features/streams/lib/media";
 import type { Stream, StreamOrg } from "@/features/streams/types";
-import type { SectionStateProps } from "@/lib/queryState";
+import type { QueryView } from "@/queries/state";
+import type { StreamsResponse } from "@/api/generated/data-contracts";
 
 const STREAMS_PER_ROW = 4;
 
@@ -22,8 +23,8 @@ interface OrgOption {
 interface LiveStreamsSectionProps {
 	selectedOrg: StreamOrg;
 	orgOptions: OrgOption[];
-	liveStreams: Stream[];
-	state: SectionStateProps;
+	view: QueryView<StreamsResponse>;
+	onRetry: () => void;
 	onOrgChange: (org: StreamOrg) => void;
 	onThumbnailError: (event: SyntheticEvent<HTMLImageElement>) => void;
 }
@@ -39,11 +40,12 @@ const chunkStreams = (streams: Stream[]): Stream[][] => {
 export const LiveStreamsSection = ({
 	selectedOrg,
 	orgOptions,
-	liveStreams,
-	state,
+	view,
+	onRetry,
 	onOrgChange,
 	onThumbnailError,
 }: LiveStreamsSectionProps) => {
+	const liveStreams = useMemo(() => view.data?.streams ?? [], [view.data]);
 	const streamRows = useMemo(() => chunkStreams(liveStreams), [liveStreams]);
 
 	return (
@@ -57,7 +59,7 @@ export const LiveStreamsSection = ({
 					<div>
 						<h3 className="text-xl font-bold text-foreground tracking-tight">Live Streams</h3>
 						<p className="text-sm text-muted-foreground font-medium">
-							{liveStreams.length} active {liveStreams.length === 1 ? "stream" : "streams"}
+							{view.data === undefined ? "방송 수 확인 중" : `${String(liveStreams.length)} active ${liveStreams.length === 1 ? "stream" : "streams"}`}
 						</p>
 					</div>
 				</div>
@@ -85,13 +87,14 @@ export const LiveStreamsSection = ({
 			</div>
 
 			<QuerySection
-				{...state}
+				view={view}
+				label="진행 중인 방송"
+				onRetry={onRetry}
 				skeleton={
 					<div className="h-48 flex items-center justify-center text-subtle-foreground text-sm animate-pulse rounded-xl border border-dashed border-border bg-muted">
 						Loading…
 					</div>
 				}
-				isEmpty={liveStreams.length === 0}
 				emptyContent={
 					<div className="h-48 flex flex-col items-center justify-center text-subtle-foreground text-sm rounded-xl border border-dashed border-border bg-muted">
 						<PlayCircle className="mb-2 opacity-50" size={24} />
@@ -112,7 +115,7 @@ export const LiveStreamsSection = ({
 					className="max-h-[42rem] pr-2 pb-2 custom-scrollbar"
 					itemClassName="pb-6"
 					renderItem={(row, rowIndex) => (
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+						<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-6">
 							{row.map((stream, columnIndex) => {
 								const streamIndex = rowIndex * STREAMS_PER_ROW + columnIndex;
 								const thumbnail = getThumbnailSource(
@@ -125,6 +128,7 @@ export const LiveStreamsSection = ({
 									<a
 										key={getStreamKey(stream, streamIndex)}
 										href={linkMeta.href}
+										aria-disabled={linkMeta.href === undefined}
 										target="_blank"
 										rel="noopener noreferrer"
 										className="group flex flex-col h-full relative rounded-2xl overflow-hidden border border-border bg-card hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"

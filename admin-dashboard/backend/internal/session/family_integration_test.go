@@ -21,7 +21,7 @@ func TestSessionFamilyLeaseTracksCreateRotateAndDelete(t *testing.T) {
 		LastRotatedAt:     now.Add(-time.Hour),
 	}
 	seedSession(t, mr, &old)
-	require.NoError(t, mr.Set(familyKey(old.FamilyID), old.ID))
+	mr.HSet(familyKey(old.FamilyID), "token", old.ID)
 	mr.SetTTL(familyKey(old.FamilyID), time.Hour)
 
 	active, err := store.FamilyActive(ctx, old.FamilyID)
@@ -33,8 +33,7 @@ func TestSessionFamilyLeaseTracksCreateRotateAndDelete(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, old.FamilyID, rotated.FamilyID)
 
-	familyCurrent, err := mr.Get(familyKey(old.FamilyID))
-	require.NoError(t, err)
+	familyCurrent := mr.HGet(familyKey(old.FamilyID), "token")
 	require.Equal(t, rotated.ID, familyCurrent)
 
 	// Deleting the grace-period marker must not revoke the authoritative token.
@@ -119,7 +118,7 @@ func TestConcurrentRotationConvergesOnSingleWinner(t *testing.T) {
 		LastRotatedAt:     now.Add(-time.Hour),
 	}
 	seedSession(t, mr, &old)
-	require.NoError(t, mr.Set(familyKey(old.FamilyID), old.ID))
+	mr.HSet(familyKey(old.FamilyID), "token", old.ID)
 	mr.SetTTL(familyKey(old.FamilyID), time.Hour)
 
 	winnerID := concurrentRotationWinner(t, store, &old)
@@ -130,8 +129,7 @@ func TestConcurrentRotationConvergesOnSingleWinner(t *testing.T) {
 	require.NotNil(t, marker.RotatedTo)
 	require.Equal(t, winnerID, *marker.RotatedTo)
 
-	familyCurrent, err := mr.Get(familyKey(old.FamilyID))
-	require.NoError(t, err)
+	familyCurrent := mr.HGet(familyKey(old.FamilyID), "token")
 	require.Equal(t, winnerID, familyCurrent)
 
 	winner, winnerOK, err := store.Get(ctx, winnerID)
@@ -140,30 +138,6 @@ func TestConcurrentRotationConvergesOnSingleWinner(t *testing.T) {
 	require.Equal(t, old.FamilyID, winner.FamilyID)
 	require.Equal(t, old.CreatedAt.Unix(), winner.CreatedAt.Unix())
 	require.Equal(t, old.AbsoluteExpiresAt.Unix(), winner.AbsoluteExpiresAt.Unix())
-}
-
-func TestLegacySessionGetsStableFamilyOnRefresh(t *testing.T) {
-	store, mr := newTestStore(t)
-	ctx := t.Context()
-	now := time.Now().UTC()
-	legacy := Session{
-		ID:                "legacy-session",
-		CreatedAt:         now.Add(-time.Minute),
-		ExpiresAt:         now.Add(20 * time.Minute),
-		AbsoluteExpiresAt: now.Add(7 * time.Hour),
-		LastRotatedAt:     now,
-	}
-	seedSession(t, mr, &legacy)
-
-	result, err := store.Refresh(ctx, legacy.ID, false)
-	require.NoError(t, err)
-	require.Equal(t, RefreshRefreshed, result.Kind)
-	require.NotNil(t, result.Session)
-	require.Equal(t, legacy.ID, result.Session.FamilyID)
-
-	familyCurrent, err := mr.Get(familyKey(legacy.ID))
-	require.NoError(t, err)
-	require.Equal(t, legacy.ID, familyCurrent)
 }
 
 func TestRevokeFamilySerializesWithRotation(t *testing.T) {

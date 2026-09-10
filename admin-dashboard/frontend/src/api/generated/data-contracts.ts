@@ -26,7 +26,13 @@ export interface AddMemberRequest {
 }
 
 export interface AddRoomRequest {
+  /** @minLength 1 */
   room: string;
+}
+
+export interface AdminMetadata {
+  /** @pattern ^[a-f0-9]{64}$ */
+  clientGeneration: string;
 }
 
 export interface AggregatedStatus {
@@ -42,13 +48,11 @@ export interface Alarm {
   memberName: string;
   roomId: string;
   roomName: string;
-  userId: string;
-  userName: string;
 }
 
 export interface AlarmsResponse {
   alarms: Alarm[];
-  status: string;
+  status: "ok";
 }
 
 export interface Aliases {
@@ -67,8 +71,8 @@ export interface CalendarEntry {
 
 export interface CalendarMember {
   channelId: string;
-  /** @format int64 */
-  id: number;
+  /** @pattern ^[1-9][0-9]*$ */
+  id: string;
   isGraduated?: boolean;
   name: string;
   nameKo?: string | null;
@@ -82,7 +86,7 @@ export interface CalendarResponse {
   entries: CalendarEntry[];
   /** @format int32 */
   month: number;
-  status: string;
+  status: "ok";
   /** @format int32 */
   year: number;
 }
@@ -102,50 +106,65 @@ export interface Container {
 }
 
 export interface DeleteAlarmRequest {
+  /** @minLength 1 */
   channelId: string;
+  /** @minLength 1 */
   roomId: string;
-  userId: string;
 }
 
-export interface DockerActionResponse {
-  message: string;
-  status: string;
+export interface DeleteAlarmResponse {
+  removed: boolean;
+  status: "ok";
 }
 
 export interface DockerContainerListResponse {
   containers: Container[];
-  status: string;
+  status: "ok";
 }
 
 export interface DockerHealthResponse {
   available: boolean;
-  status: string;
+  status: "ok";
 }
 
 export interface ErrorResponse {
-  absolute_expired?: boolean | null;
-  code?: string | null;
-  details?: any;
-  error: string;
+  absolute_expired?: boolean;
+  /** @pattern ^[A-Z][A-Z0-9_]*$ */
+  code: string;
+  message: string;
   /**
-   * @format int64
-   * @min 0
+   * Only the first atomic family claim may attest rejection before upstream dispatch. Must match the original X-Admin-Mutation-ID; absent evidence leaves the logical mutation outcome unknown.
+   * @pattern ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
    */
-  retry_after?: number | null;
+  notDispatchedMutationId?: string;
+  /** @minLength 1 */
+  requestId: string;
+  /** @min 0 */
+  retry_after?: number;
 }
 
 export interface HeartbeatRequest {
   idle?: boolean;
 }
 
-export interface HeartbeatResponse {
-  /** @format int64 */
-  absolute_expires_at?: number | null;
-  csrf_token?: string | null;
-  idle_rejected?: boolean | null;
-  rotated?: boolean | null;
-  status: string;
-}
+export type HeartbeatResponse =
+  | {
+      /** @min 0 */
+      absolute_expires_at: number;
+      status: "ok";
+    }
+  | {
+      /** @min 0 */
+      absolute_expires_at: number;
+      /** @minLength 1 */
+      csrf_token: string;
+      rotated: true;
+      status: "ok";
+    }
+  | {
+      idle_rejected: true;
+      status: "idle";
+    };
 
 export interface JoinedRoom {
   chatId: string;
@@ -156,7 +175,7 @@ export interface JoinedRoom {
 
 export interface JoinedRoomsResponse {
   rooms: JoinedRoom[];
-  status: string;
+  status: "ok";
 }
 
 export interface LoginRequest {
@@ -165,16 +184,17 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
+  /** @minLength 1 */
   csrf_token: string;
   message: string;
-  status: string;
+  status: "ok";
 }
 
 export interface Member {
   aliases: Aliases;
   channelId: string;
-  /** @format int64 */
-  id: number;
+  /** @pattern ^[1-9][0-9]*$ */
+  id: string;
   isGraduated: boolean;
   name: string;
   nameJa?: string | null;
@@ -183,7 +203,19 @@ export interface Member {
 
 export interface MembersResponse {
   members: Member[];
-  status: string;
+  status: "ok";
+}
+
+export interface OpenAPIDocument {
+  components: Record<string, any>;
+  info: {
+    title: string;
+    version: string;
+    [key: string]: any;
+  };
+  openapi: "3.1.0";
+  paths: Record<string, object>;
+  [key: string]: any;
 }
 
 export interface PortMapping {
@@ -207,19 +239,31 @@ export interface RemoveAliasRequest {
 }
 
 export interface RemoveRoomRequest {
+  /** @minLength 1 */
   room: string;
 }
 
 export interface RoomNameUpdateRequest {
+  /** @minLength 1 */
   roomId: string;
+  /** @minLength 1 */
   roomName: string;
 }
 
 export interface RoomsResponse {
   aclEnabled: boolean;
-  aclMode: string;
+  aclMode: "whitelist" | "blacklist";
   rooms: string[];
-  status: string;
+  status: "ok";
+}
+
+export interface ServiceRuntimeStats {
+  available: boolean;
+  /** @min 0 */
+  count: number;
+  error?: string | null;
+  metricKind: "goroutine" | "thread";
+  name: string;
 }
 
 export interface ServiceStatus {
@@ -264,10 +308,12 @@ export interface SessionPolicyResponse {
 export interface SessionStatusResponse {
   /** @format int64 */
   absolute_expires_at: number;
-  authenticated: boolean;
+  authenticated: true;
+  /** @minLength 1 */
   csrf_token: string;
   session_policy: SessionPolicyResponse;
-  status: string;
+  status: "ok";
+  /** @minLength 1 */
   username: string;
 }
 
@@ -278,8 +324,8 @@ export interface SetAclRequest {
 
 export interface SetAclResponse {
   enabled: boolean;
-  mode: string;
-  status: string;
+  mode: "whitelist" | "blacklist";
+  status: "ok";
 }
 
 export interface SetGraduationRequest {
@@ -287,13 +333,16 @@ export interface SetGraduationRequest {
 }
 
 export interface Settings {
-  /** @format int32 */
+  /**
+   * @min 0
+   * @max 1440
+   */
   alarmAdvanceMinutes: number;
 }
 
 export interface SettingsResponse {
   settings: Settings;
-  status: string;
+  status: "ok";
 }
 
 export interface SettingsRuntimeResult {
@@ -310,7 +359,7 @@ export interface SettingsUpdateResponse {
   message: string;
   runtime: SettingsRuntimeResult;
   settings: Settings;
-  status: string;
+  status: "ok";
 }
 
 export interface StatsResponse {
@@ -320,14 +369,14 @@ export interface StatsResponse {
   members: number;
   /** @format int32 */
   rooms: number;
-  status: string;
+  status: "ok";
   uptime: string;
   version: string;
 }
 
 export interface StatusOnlyResponse {
   message?: string | null;
-  status: string;
+  status: "ok";
 }
 
 export interface Stream {
@@ -344,20 +393,50 @@ export interface Stream {
 
 export interface StreamsResponse {
   org?: string | null;
-  status: string;
+  status: "ok";
   streams: Stream[];
 }
 
+export interface SystemStats {
+  /** @min 0 */
+  loadAvg1: number;
+  /** @min 0 */
+  loadAvg15: number;
+  /** @min 0 */
+  loadAvg5: number;
+  /** @min 0 */
+  cpuUsage: number;
+  /** @min 0 */
+  memoryTotal: number;
+  /** @min 0 */
+  memoryUsage: number;
+  /** @min 0 */
+  memoryUsed: number;
+  /** @min 0 */
+  sampledAt: number;
+  serviceRuntime: ServiceRuntimeStats[];
+  /** @min 0 */
+  threadCount: number;
+  /** @min 0 */
+  totalGoGoroutines: number;
+  /** @min 0 */
+  totalRuntimeUnits: number;
+}
+
 export interface UpdateChannelRequest {
+  /** @minLength 1 */
   channelId: string;
 }
 
 export interface UpdateMemberNameRequest {
+  /** @minLength 1 */
   name: string;
 }
 
 export interface UserNameUpdateRequest {
+  /** @minLength 1 */
   userId: string;
+  /** @minLength 1 */
   userName: string;
 }
 
@@ -436,7 +515,7 @@ export interface YouTubeCommunityShortsOpsResponse {
   overview: YouTubeCommunityShortsOpsOverview;
   /** @format int64 */
   slaThresholdMillis: number;
-  status: string;
+  status: "ok";
   windowEnd: string;
   /** @format int64 */
   windowHours: number;

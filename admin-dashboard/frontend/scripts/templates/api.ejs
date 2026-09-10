@@ -1,0 +1,16 @@
+<%
+const {utils, route, config, modelTypes} = it;
+const apiClassName = utils.pascalCase(route.moduleName);
+%>
+import type { HttpClient, RequestParams } from "./http-client";
+import { ContentType } from "./http-client";
+import type { <%= modelTypes.map(t=>t.name).join(', ') %> } from "./data-contracts";
+
+/** 생성 시 주입한 단일 transport로 관리자 계약을 호출합니다. */
+export class <%= apiClassName %> {
+  private readonly http: HttpClient;
+  constructor(http: HttpClient) { this.http = http; }
+  <% for (const item of route.routes) { %>
+  <%~ includeFile('./procedure-call.ejs', {...it, route:item}) %>
+  <% } %>
+}

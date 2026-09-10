@@ -41,7 +41,7 @@ fi
 
 fixture="${TMP_DIR}/fixture"
 mkdir -p "${fixture}/scripts/ci" "${fixture}/scripts/logs" "${fixture}/scripts/runtime" \
-  "${fixture}/fake-bin" "${fixture}/mod"
+  "${fixture}/fake-bin" "${fixture}/mod" "${fixture}/admin-dashboard/frontend"
 cp "${GATE}" "${fixture}/scripts/ci/pre-push-gate.sh"
 cp "${ROOT_DIR}/scripts/ci/python-runner.sh" "${ROOT_DIR}/scripts/ci/python-runtime.sh" \
   "${ROOT_DIR}/scripts/ci/go-tooling.sh" "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh" \
@@ -93,6 +93,11 @@ if [[ "${1:-}" == "-version" ]]; then
   exit 0
 fi
 printf 'govulncheck %s (pwd=%s)\n' "$*" "$(basename "${PWD}")" >>"${GATE_TEST_LOG}"
+SH
+cat >"${fixture}/fake-bin/corepack" <<'SH'
+#!/bin/bash
+printf 'corepack %s\n' "$*" >>"${GATE_TEST_LOG}"
+[[ "${GATE_TEST_FRONTEND_FAIL:-}" != 1 || "$*" != 'npm test' ]] || exit 23
 SH
 cat >"${fixture}/scripts/ci/local-ci.sh" <<'SH'
 #!/bin/bash
@@ -147,6 +152,19 @@ if grep -Fxq 'bash scripts/deploy/check-ap-rsync-manifest.sh' "${TMP_DIR}/reusab
 fi
 if grep -Fq 'scripts/ci/public-pr-collector-helper-gate.sh' "${TMP_DIR}/reusable.log"; then
   fail "fast mode must not run the collector helper gate for an unrelated path"
+fi
+
+# 브라우저가 끝나기 전에는 Docker interface를 만드는 Go 시험을 시작하지 않습니다.
+run_phase reusable-frontend --phase=reusable "${range[@]}" GATE_TEST_CHANGED_FILES=admin-dashboard/frontend/src/main.tsx
+frontend_line="$(grep -nFx 'corepack npm run build' "${TMP_DIR}/reusable-frontend.log" | cut -d: -f1)"
+go_line="$(grep -n '^local-ci ' "${TMP_DIR}/reusable-frontend.log" | cut -d: -f1)"
+[[ -n "${frontend_line}" && -n "${go_line}" && "${frontend_line}" -lt "${go_line}" ]] || fail "frontend must finish before Go/container tests"
+frontend_status=0
+run_phase reusable-frontend-failure --phase=reusable "${range[@]}" \
+  GATE_TEST_CHANGED_FILES=admin-dashboard/backend/main.go GATE_TEST_FRONTEND_FAIL=1 || frontend_status=$?
+[[ "${frontend_status}" == 23 ]] || fail "frontend failure must fail the gate"
+if grep -q '^local-ci ' "${TMP_DIR}/reusable-frontend-failure.log"; then
+  fail "Go tests started after frontend failure"
 fi
 
 # 검사기가 바뀌면 그 자기 테스트만 실행된다.

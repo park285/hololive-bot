@@ -1,0 +1,27 @@
+File: admin-dashboard
+Type: inuse_space
+Time: 2026-09-10 11:54:11 KST
+Showing nodes accounting for 16.62MB, 97.80% of 17MB total
+Dropped 58 nodes (cum <= 0.08MB)
+Showing top 20 nodes out of 81
+      flat  flat%   sum%        cum   cum%
+    4.74MB 27.87% 27.87%     7.49MB 44.07%  github.com/valkey-io/valkey-go.newRing
+    4.30MB 25.29% 53.16%     4.30MB 25.29%  bufio.NewReaderSize (inline)
+    4.20MB 24.70% 77.86%     4.20MB 24.70%  bufio.NewWriterSize
+    2.75MB 16.20% 94.06%     2.75MB 16.20%  sync.NewCond (inline)
+    0.29MB  1.70% 95.76%     0.29MB  1.70%  bytes.Clone (inline)
+    0.13MB  0.74% 96.50%     0.13MB  0.74%  runtime.mallocgc
+    0.12MB  0.71% 97.20%     0.12MB  0.71%  reflect.compiledTypelinks
+    0.10MB  0.59% 97.80%     0.10MB  0.59%  github.com/gorilla/websocket.newConn
+         0     0% 97.80%     0.10MB  0.59%  bufio.NewReader
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.buildTypeInfo
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.getBaseType
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.getType
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.getTypeInfo
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.implementsInterface
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.init
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.mustGetTypeInfo
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.newTypeObject
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.userType
+         0     0% 97.80%     0.12MB  0.71%  encoding/gob.validUserType
+         0     0% 97.80%     0.29MB  1.70%  encoding/json/v2.Marshal

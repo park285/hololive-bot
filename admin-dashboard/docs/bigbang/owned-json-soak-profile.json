@@ -1,0 +1,510 @@
+{
+  "schema_version": 1,
+  "status": "DIAGNOSTIC_ONLY",
+  "image": "sha256:328471ea4fa5eec037f510927224cdb3bd2bb703599f1b21df80d27560cbce69",
+  "binary": "temporary profiling overlay of the same source; not a release artifact",
+  "runtime_instrumentation": {
+    "mem_profile_rate_bytes": 32768,
+    "snapshots_seconds": [
+      30,
+      60,
+      120,
+      180
+    ],
+    "explicit_gc_and_os_release_after_seconds": 180,
+    "production_instrumentation": false
+  },
+  "profile_conditions": {
+    "duration_seconds": 210,
+    "cadence_seconds": 5,
+    "active_families": 4,
+    "streams_per_family": 4,
+    "reconnect_cycles": 30,
+    "churn_starts_seconds": 60,
+    "churn_period_seconds": 4,
+    "baseline_window": "first 30 seconds at 16 streams",
+    "recovery_window": "last 30 seconds at 16 streams after 30 cycles; diagnostic GC occurs in this window",
+    "recovery_criterion": "final-window median <= initial-window p95 for RSS, FD and goroutines",
+    "subscriptions": "active validated WS peers; final zero is corroborated by stopped subscriber-driven health polling and focused internal ownership tests",
+    "interpretation": "210-second instrumentation with 30 cycles; forced GC and OS memory release are diagnostic only, never an acceptance result"
+  },
+  "samples": [
+    {
+      "elapsed_ms": 3,
+      "rss_bytes": 37707776,
+      "fd": 50,
+      "goroutines": 98,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008673279
+    },
+    {
+      "elapsed_ms": 5000,
+      "rss_bytes": 38031360,
+      "fd": 49,
+      "goroutines": 99,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008677279
+    },
+    {
+      "elapsed_ms": 10002,
+      "rss_bytes": 38551552,
+      "fd": 49,
+      "goroutines": 99,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008683279
+    },
+    {
+      "elapsed_ms": 15001,
+      "rss_bytes": 38801408,
+      "fd": 49,
+      "goroutines": 99,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008687279
+    },
+    {
+      "elapsed_ms": 20000,
+      "rss_bytes": 39137280,
+      "fd": 49,
+      "goroutines": 101,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008693279
+    },
+    {
+      "elapsed_ms": 25002,
+      "rss_bytes": 39366656,
+      "fd": 49,
+      "goroutines": 101,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008697279
+    },
+    {
+      "elapsed_ms": 30000,
+      "rss_bytes": 39813120,
+      "fd": 49,
+      "goroutines": 101,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008703279
+    },
+    {
+      "elapsed_ms": 35003,
+      "rss_bytes": 40108032,
+      "fd": 49,
+      "goroutines": 101,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008705279
+    },
+    {
+      "elapsed_ms": 40000,
+      "rss_bytes": 40468480,
+      "fd": 49,
+      "goroutines": 101,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008713279
+    },
+    {
+      "elapsed_ms": 45002,
+      "rss_bytes": 40714240,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008717279
+    },
+    {
+      "elapsed_ms": 50001,
+      "rss_bytes": 41021440,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008723279
+    },
+    {
+      "elapsed_ms": 55001,
+      "rss_bytes": 41312256,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 0,
+      "frame_sampled_at": 1789008727279
+    },
+    {
+      "elapsed_ms": 60155,
+      "rss_bytes": 41660416,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 1,
+      "frame_sampled_at": 1789008731279
+    },
+    {
+      "elapsed_ms": 65153,
+      "rss_bytes": 41992192,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 2,
+      "frame_sampled_at": 1789008737279
+    },
+    {
+      "elapsed_ms": 70154,
+      "rss_bytes": 42385408,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 3,
+      "frame_sampled_at": 1789008743279
+    },
+    {
+      "elapsed_ms": 75154,
+      "rss_bytes": 42708992,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 4,
+      "frame_sampled_at": 1789008745279
+    },
+    {
+      "elapsed_ms": 80308,
+      "rss_bytes": 43175936,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 6,
+      "frame_sampled_at": 1789008753279
+    },
+    {
+      "elapsed_ms": 85154,
+      "rss_bytes": 43597824,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 7,
+      "frame_sampled_at": 1789008757280
+    },
+    {
+      "elapsed_ms": 90155,
+      "rss_bytes": 43843584,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 8,
+      "frame_sampled_at": 1789008761280
+    },
+    {
+      "elapsed_ms": 95152,
+      "rss_bytes": 44023808,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 9,
+      "frame_sampled_at": 1789008767280
+    },
+    {
+      "elapsed_ms": 100308,
+      "rss_bytes": 44187648,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 11,
+      "frame_sampled_at": 1789008773280
+    },
+    {
+      "elapsed_ms": 105154,
+      "rss_bytes": 44228608,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 12,
+      "frame_sampled_at": 1789008777279
+    },
+    {
+      "elapsed_ms": 110152,
+      "rss_bytes": 44273664,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 13,
+      "frame_sampled_at": 1789008781279
+    },
+    {
+      "elapsed_ms": 115154,
+      "rss_bytes": 44290048,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 14,
+      "frame_sampled_at": 1789008787279
+    },
+    {
+      "elapsed_ms": 120305,
+      "rss_bytes": 44367872,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 16,
+      "frame_sampled_at": 1789008793279
+    },
+    {
+      "elapsed_ms": 125153,
+      "rss_bytes": 44367872,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 17,
+      "frame_sampled_at": 1789008797279
+    },
+    {
+      "elapsed_ms": 130155,
+      "rss_bytes": 44376064,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 18,
+      "frame_sampled_at": 1789008801279
+    },
+    {
+      "elapsed_ms": 135154,
+      "rss_bytes": 44392448,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 19,
+      "frame_sampled_at": 1789008805279
+    },
+    {
+      "elapsed_ms": 140305,
+      "rss_bytes": 44457984,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 21,
+      "frame_sampled_at": 1789008813280
+    },
+    {
+      "elapsed_ms": 145155,
+      "rss_bytes": 44457984,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 22,
+      "frame_sampled_at": 1789008817279
+    },
+    {
+      "elapsed_ms": 150152,
+      "rss_bytes": 44466176,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 23,
+      "frame_sampled_at": 1789008821280
+    },
+    {
+      "elapsed_ms": 155154,
+      "rss_bytes": 44478464,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 24,
+      "frame_sampled_at": 1789008825279
+    },
+    {
+      "elapsed_ms": 160304,
+      "rss_bytes": 44482560,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 26,
+      "frame_sampled_at": 1789008831280
+    },
+    {
+      "elapsed_ms": 165154,
+      "rss_bytes": 44494848,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 27,
+      "frame_sampled_at": 1789008837279
+    },
+    {
+      "elapsed_ms": 170153,
+      "rss_bytes": 44503040,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 28,
+      "frame_sampled_at": 1789008841279
+    },
+    {
+      "elapsed_ms": 175154,
+      "rss_bytes": 44572672,
+      "fd": 49,
+      "goroutines": 103,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 29,
+      "frame_sampled_at": 1789008847279
+    },
+    {
+      "elapsed_ms": 180154,
+      "rss_bytes": 41005056,
+      "fd": 49,
+      "goroutines": 102,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 30,
+      "frame_sampled_at": 1789008853279
+    },
+    {
+      "elapsed_ms": 185000,
+      "rss_bytes": 41127936,
+      "fd": 49,
+      "goroutines": 102,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 30,
+      "frame_sampled_at": 1789008857280
+    },
+    {
+      "elapsed_ms": 190002,
+      "rss_bytes": 41357312,
+      "fd": 49,
+      "goroutines": 102,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 30,
+      "frame_sampled_at": 1789008861279
+    },
+    {
+      "elapsed_ms": 195000,
+      "rss_bytes": 41500672,
+      "fd": 49,
+      "goroutines": 102,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 30,
+      "frame_sampled_at": 1789008867280
+    },
+    {
+      "elapsed_ms": 200002,
+      "rss_bytes": 41713664,
+      "fd": 49,
+      "goroutines": 102,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 30,
+      "frame_sampled_at": 1789008871279
+    },
+    {
+      "elapsed_ms": 205002,
+      "rss_bytes": 41877504,
+      "fd": 49,
+      "goroutines": 102,
+      "active_validated_streams": 16,
+      "cumulative_cycles": 30,
+      "frame_sampled_at": 1789008875279
+    }
+  ],
+  "snapshots": [
+    {
+      "stage": "start",
+      "elapsed_ms": 0,
+      "heap_alloc": 1180280,
+      "heap_inuse": 2105344,
+      "heap_idle": 1761280,
+      "heap_released": 1695744,
+      "heap_objects": 4940,
+      "num_gc": 0,
+      "next_gc": 4194304,
+      "stack_inuse": 327680,
+      "total_alloc": 1180280
+    },
+    {
+      "stage": "30s",
+      "elapsed_ms": 30001,
+      "heap_alloc": 21534344,
+      "heap_inuse": 22765568,
+      "heap_idle": 5447680,
+      "heap_released": 5447680,
+      "heap_objects": 104667,
+      "num_gc": 4,
+      "next_gc": 30255402,
+      "stack_inuse": 1146880,
+      "total_alloc": 25082848
+    },
+    {
+      "stage": "60s",
+      "elapsed_ms": 60001,
+      "heap_alloc": 23129200,
+      "heap_inuse": 24428544,
+      "heap_idle": 3784704,
+      "heap_released": 3751936,
+      "heap_objects": 113337,
+      "num_gc": 4,
+      "next_gc": 30255402,
+      "stack_inuse": 1146880,
+      "total_alloc": 26677704
+    },
+    {
+      "stage": "120s",
+      "elapsed_ms": 120002,
+      "heap_alloc": 21574032,
+      "heap_inuse": 23224320,
+      "heap_idle": 4923392,
+      "heap_released": 1261568,
+      "heap_objects": 105451,
+      "num_gc": 5,
+      "next_gc": 39471882,
+      "stack_inuse": 1212416,
+      "total_alloc": 30617600
+    },
+    {
+      "stage": "180s",
+      "elapsed_ms": 180002,
+      "heap_alloc": 25580464,
+      "heap_inuse": 27009024,
+      "heap_idle": 5332992,
+      "heap_released": 5332992,
+      "heap_objects": 127077,
+      "num_gc": 5,
+      "next_gc": 39471882,
+      "stack_inuse": 1212416,
+      "total_alloc": 34624032
+    },
+    {
+      "stage": "after-gc",
+      "elapsed_ms": 180008,
+      "heap_alloc": 19428360,
+      "heap_inuse": 22536192,
+      "heap_idle": 9773056,
+      "heap_released": 3784704,
+      "heap_objects": 93805,
+      "num_gc": 6,
+      "next_gc": 39376346,
+      "stack_inuse": 1245184,
+      "total_alloc": 36007296
+    },
+    {
+      "stage": "after-release",
+      "elapsed_ms": 180014,
+      "heap_alloc": 19303360,
+      "heap_inuse": 22274048,
+      "heap_idle": 10035200,
+      "heap_released": 10027008,
+      "heap_objects": 93522,
+      "num_gc": 7,
+      "next_gc": 39126370,
+      "stack_inuse": 1245184,
+      "total_alloc": 37519504
+    }
+  ],
+  "errors": [],
+  "after_close": {
+    "active_streams": 0,
+    "subscriber_driven_health_calls_in_15_seconds": 0
+  },
+  "finding": "Live heap profile identifies separate LoginLimiter connections retaining the default read/write buffers. Forced GC/release exists only in this diagnostic overlay and does not make the recovery gate pass."
+}

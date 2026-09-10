@@ -4,13 +4,11 @@ import type { Alarm } from "@/features/alarms/types";
 export function groupAlarms(alarms: Alarm[]): AlarmGroup[] {
 	const groups = new Map<string, AlarmGroup>();
 	alarms.forEach((alarm) => {
-		const key = `${alarm.roomId}:${alarm.userId}`;
+		const key = alarm.roomId;
 		if (!groups.has(key)) {
 			groups.set(key, {
 				roomId: alarm.roomId,
 				roomName: alarm.roomName,
-				userId: alarm.userId,
-				userName: alarm.userName,
 				alarms: [],
 			});
 		}
@@ -21,7 +19,7 @@ export function groupAlarms(alarms: Alarm[]): AlarmGroup[] {
 		if (a.roomName !== b.roomName) {
 			return a.roomName.localeCompare(b.roomName, "ko");
 		}
-		return a.userName.localeCompare(b.userName, "ko");
+		return a.roomId.localeCompare(b.roomId);
 	});
 }
 
@@ -37,7 +35,6 @@ export function filterAlarmGroups(
 	return groups.filter(
 		(group) =>
 			group.roomName.toLowerCase().includes(normalized) ||
-			group.userName.toLowerCase().includes(normalized) ||
 			group.alarms.some((alarm) =>
 				alarm.memberName.toLowerCase().includes(normalized),
 			),

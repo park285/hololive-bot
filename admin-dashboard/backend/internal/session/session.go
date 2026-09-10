@@ -21,16 +21,31 @@ import (
 const (
 	keyPrefix       = "session:admin:"
 	familyKeyPrefix = "session:admin:family:"
+
+	valkeyConnectionBufferSize = 16 << 10
+	// 단일 서버의 valkey-go 기본값과 같이 client당 2^2개 연결을 사용합니다.
+	valkeyPipelineMultiplex = 2
 )
 
 type Session struct {
 	ID                string    `json:"id"`
-	FamilyID          string    `json:"family_id,omitempty"`
+	FamilyID          string    `json:"family_id"`
 	CreatedAt         time.Time `json:"created_at"`
 	ExpiresAt         time.Time `json:"expires_at"`
 	AbsoluteExpiresAt time.Time `json:"absolute_expires_at"`
 	LastRotatedAt     time.Time `json:"last_rotated_at"`
 	RotatedTo         *string   `json:"rotated_to,omitempty"`
+}
+
+// validateStoredSession은 새 세대의 필수 필드를 검증하며 구형 레코드를 보정하지 않습니다.
+func validateStoredSession(sess *Session, id string) error {
+	if sess.ID == "" || sess.ID != id || sess.FamilyID == "" || sess.CreatedAt.IsZero() ||
+		sess.ExpiresAt.IsZero() || sess.AbsoluteExpiresAt.IsZero() || sess.LastRotatedAt.IsZero() ||
+		(sess.RotatedTo != nil && *sess.RotatedTo == "") {
+		return errors.New("invalid stored session record")
+	}
+
+	return nil
 }
 
 type RefreshKind string
@@ -75,15 +90,18 @@ func NewStoreWithOptions(ctx context.Context, valkeyURL string, cfg *config.Sess
 		return nil, fmt.Errorf("parse valkey address: %w", err)
 	}
 
+	// 세션 명령의 연결마다 기본 1 MiB 버퍼를 보관하지 않습니다. 메시지 크기 상한은 바꾸지 않습니다.
 	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress:       []string{addr},
-		Password:          password,
-		PipelineMultiplex: 4,
-		BlockingPoolSize:  64,
-		Dialer:            net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second},
-		ConnWriteTimeout:  3 * time.Second,
-		DisableCache:      opts.DisableCache,
-		ForceSingleClient: opts.ForceSingleClient,
+		InitAddress:         []string{addr},
+		Password:            password,
+		PipelineMultiplex:   valkeyPipelineMultiplex,
+		BlockingPoolSize:    64,
+		ReadBufferEachConn:  valkeyConnectionBufferSize,
+		WriteBufferEachConn: valkeyConnectionBufferSize,
+		Dialer:              net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second},
+		ConnWriteTimeout:    3 * time.Second,
+		DisableCache:        opts.DisableCache,
+		ForceSingleClient:   opts.ForceSingleClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create valkey client: %w", err)
@@ -154,7 +172,9 @@ func (s *Store) Get(ctx context.Context, id string) (Session, bool, error) {
 		return Session{}, false, fmt.Errorf("unmarshal: %w", err)
 	}
 
-	normalizeLegacySession(&sess)
+	if err := validateStoredSession(&sess, id); err != nil {
+		return Session{}, false, fmt.Errorf("validate stored session: %w", err)
+	}
 
 	if isAbsolutelyExpiredAt(&sess, time.Now().UTC()) {
 		if err := s.deleteLoadedSession(ctx, &sess); err != nil {
@@ -183,7 +203,9 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("unmarshal: %w", err)
 	}
 
-	normalizeLegacySession(&sess)
+	if err := validateStoredSession(&sess, id); err != nil {
+		return fmt.Errorf("validate stored session: %w", err)
+	}
 
 	if err := s.deleteLoadedSession(ctx, &sess); err != nil {
 		return fmt.Errorf("delete loaded session: %w", err)
@@ -238,16 +260,13 @@ func (s *Store) FamilyActive(ctx context.Context, familyID string) (bool, error)
 		return false, nil
 	}
 
-	currentID, ok, err := s.getString(ctx, familyKey(familyID))
+	currentID, err := s.client.Do(ctx, s.client.B().Hget().Key(familyKey(familyID)).Field("token").Build()).ToString()
 	if err != nil {
-		return false, fmt.Errorf("get string: %w", err)
-	}
+		if util.IsValkeyNil(err) {
+			return false, nil
+		}
 
-	if !ok {
-		// family lease가 도입되기 전에 만들어진 세션을 위한 하위 호환 경로다. 그 시절에는
-		// familyID가 곧 토큰 ID였고, 첫 refresh나 회전이 내구성 있는 lease를 기록하면
-		// 이 분기는 더 이상 타지 않는다.
-		currentID = familyID
+		return false, fmt.Errorf("get string: %w", err)
 	}
 
 	out, err := s.tokenHoldsFamily(ctx, currentID, familyID)
@@ -285,25 +304,8 @@ func (s *Store) buildSession(id string, now time.Time) Session {
 }
 
 func (s *Store) getRaw(ctx context.Context, id string) (data string, ok bool, err error) {
-	out1, out2, err := s.getString(ctx, sessionKey(id))
-	if err != nil {
-		return out1, out2, fmt.Errorf("get string: %w", err)
-	}
-
-	return out1, out2, nil
-}
-
-func (s *Store) getString(ctx context.Context, key string) (data string, ok bool, err error) {
-	resp := s.client.Do(ctx, s.client.B().Get().Key(key).Build())
-	if callErr := resp.Error(); callErr != nil {
-		if util.IsValkeyNil(callErr) {
-			return "", false, nil
-		}
-
-		return "", false, fmt.Errorf("error: %w", callErr)
-	}
-
-	value, err := resp.ToString()
+	// family hash 유실은 인증도 닫아야 사용한 mutation ID가 없는 family로 복구되지 않습니다.
+	value, err := s.client.Do(ctx, s.client.B().Eval().Script(readSessionScript).Numkeys(1).Key(sessionKey(id)).Arg(familyKeyPrefix).Build()).ToString()
 	if err != nil {
 		if util.IsValkeyNil(err) {
 			return "", false, nil
@@ -329,16 +331,6 @@ func (s *Store) evalInt(ctx context.Context, script string, keys, args []string)
 	}
 
 	return out, nil
-}
-
-func normalizeLegacySession(sess *Session) {
-	if sess.FamilyID == "" {
-		sess.FamilyID = sess.ID
-	}
-
-	if sess.LastRotatedAt.IsZero() {
-		sess.LastRotatedAt = sess.CreatedAt
-	}
 }
 
 func sessionKey(id string) string { return keyPrefix + id }
@@ -391,8 +383,19 @@ local data = ARGV[1]
 local id = ARGV[2]
 local ttl = tonumber(ARGV[3])
 redis.call('SET', session_key, data, 'EX', ttl)
-redis.call('SET', family_key, id, 'EX', ttl)
+redis.call('HSET', family_key, 'token', id)
+redis.call('EXPIRE', family_key, ttl)
 return 1
+`
+
+const readSessionScript = `
+local data = redis.call('GET', KEYS[1])
+if not data then return nil end
+local session = cjson.decode(data)
+if not session.family_id or session.family_id == '' then return nil end
+local token = redis.call('HGET', ARGV[1] .. session.family_id, 'token')
+if not token or token ~= (session.rotated_to or session.id) then return nil end
+return data
 `
 
 const deleteSessionScript = `
@@ -400,16 +403,15 @@ local session_key = KEYS[1]
 local family_key = KEYS[2]
 local id = ARGV[1]
 local deleted = redis.call('DEL', session_key)
-if redis.call('GET', family_key) == id then
+if redis.call('HGET', family_key, 'token') == id then
   redis.call('DEL', family_key)
 end
 return deleted
 `
 
 // lease의 현재 토큰을 같은 Lua 실행에서 읽고 제거해야 auth snapshot 이후의 rotation도 폐기된다.
-// 원본 토큰도 제거하여 lease 도입 전 세션과 FamilyActive의 기존 legacy 조회를 함께 닫는다.
 const revokeFamilyScript = `
-local current_id = redis.call('GET', KEYS[1])
+local current_id = redis.call('HGET', KEYS[1], 'token')
 if current_id then
   redis.call('DEL', ARGV[1] .. current_id)
 end

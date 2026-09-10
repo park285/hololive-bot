@@ -10,7 +10,8 @@ import {
 	getThumbnailSource,
 } from "@/features/streams/lib/media";
 import type { Stream } from "@/features/streams/types";
-import type { SectionStateProps } from "@/lib/queryState";
+import type { QueryView } from "@/queries/state";
+import type { StreamsResponse } from "@/api/generated/data-contracts";
 
 const UPCOMING_ROW_SIZE = 2;
 
@@ -39,16 +40,17 @@ const formatScheduledTime = (value: string | null | undefined) => {
 };
 
 interface UpcomingStreamsSectionProps {
-	upcomingStreams: Stream[];
-	state: SectionStateProps;
+	view: QueryView<StreamsResponse>;
+	onRetry: () => void;
 	onThumbnailError: (event: SyntheticEvent<HTMLImageElement>) => void;
 }
 
 export const UpcomingStreamsSection = ({
-	upcomingStreams,
-	state,
+	view,
+	onRetry,
 	onThumbnailError,
 }: UpcomingStreamsSectionProps) => {
+	const upcomingStreams = useMemo(() => view.data?.streams ?? [], [view.data]);
 	const streamRows = useMemo(
 		() => chunkUpcomingStreams(upcomingStreams),
 		[upcomingStreams],
@@ -63,18 +65,19 @@ export const UpcomingStreamsSection = ({
 					Upcoming Streams (24h)
 				</h3>
 				<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-linear-to-r from-sky-400 to-cyan-400 text-white">
-					{upcomingStreams.length}
+					{view.data === undefined ? "확인 중" : upcomingStreams.length}
 				</span>
 			</div>
 
 			<QuerySection
-				{...state}
+				view={view}
+				label="예정된 방송"
+				onRetry={onRetry}
 				skeleton={
 					<div className="h-40 flex items-center justify-center text-subtle-foreground text-sm">
 						Loading…
 					</div>
 				}
-				isEmpty={upcomingStreams.length === 0}
 				emptyContent={
 					<p className="col-span-full text-center text-subtle-foreground text-sm py-10">
 						No upcoming streams found.
@@ -107,6 +110,7 @@ export const UpcomingStreamsSection = ({
 									<a
 										key={getStreamKey(stream, streamIndex)}
 										href={linkMeta.href}
+										aria-disabled={linkMeta.href === undefined}
 										target="_blank"
 										rel="noopener noreferrer"
 										className="flex items-center p-3 rounded-lg border border-border-subtle hover:bg-accent transition-colors group [content-visibility:auto] contain-intrinsic-size-[80px]"

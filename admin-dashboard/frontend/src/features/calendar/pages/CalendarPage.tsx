@@ -1,4 +1,6 @@
-import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
+import { queryView } from "@/queries/state";
+import { useOnline } from "@/queries/useOnline";
+import { QueryNotice } from "@/queries/QueryNotice";
 import { useCalendarPage } from "../hooks/useCalendarPage";
 import { CalendarToolbar } from "../components/CalendarToolbar";
 import { CalendarGrid } from "../components/CalendarGrid";
@@ -6,6 +8,7 @@ import { CalendarGrid } from "../components/CalendarGrid";
 export const CalendarPage = () => {
 	const { month, year, query, goToPreviousMonth, goToNextMonth, goToToday } =
 		useCalendarPage();
+	const view = queryView(query, useOnline(), data => data.entries.length === 0);
 
 	return (
 		<div className="space-y-6">
@@ -29,37 +32,8 @@ export const CalendarPage = () => {
 				onToday={goToToday}
 			/>
 
-			{query.isLoading ? (
-				<div className="flex justify-center items-center h-64 text-subtle-foreground">
-					<div className="animate-spin mr-2">
-						<Loader2 />
-					</div>
-					기념일 데이터를 불러오는 중…
-				</div>
-			) : query.isError ? (
-				<div className="rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-rose-600">
-					<p className="font-bold">
-						기념일 데이터를 불러오지 못했습니다.
-					</p>
-					<p className="mt-2 text-sm">
-						{query.error instanceof Error
-							? query.error.message
-							: "잠시 후 다시 시도해주세요."}
-					</p>
-					<button
-						type="button"
-						onClick={() => void query.refetch()}
-						className="mt-4 rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
-					>
-						다시 시도
-					</button>
-				</div>
-			) : (
-				<CalendarGrid
-					entries={query.data?.entries ?? []}
-					month={month}
-				/>
-			)}
+			<QueryNotice view={view} label="기념일 달력" onRetry={() => { void query.refetch(); }} />
+			{view.data !== undefined && (view.data.entries.length > 0 || view.kind === "empty") && <CalendarGrid entries={view.data.entries} month={month} />}
 		</div>
 	);
 };

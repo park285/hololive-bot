@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
-import type { AggregatedStatus } from "../../api/core";
+import type { AggregatedStatus } from "../../api/generated/data-contracts";
 import { buildCurrentServiceStats, buildMainStats } from "./selectors";
 import type { StatsResponse } from "./types";
 

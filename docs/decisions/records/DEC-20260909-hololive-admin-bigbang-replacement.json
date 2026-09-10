@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260909-hololive-admin-bigbang-replacement",
+  "title": "Hololive 관리자 구조를 단일 릴리스로 전면 교체하는 보완안",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-09",
+  "summary": "사용자의 2026-09-09 '리뷰후 작업문서화 해보자', 'mfa 관련은 x' 및 proposed 결정으로 인한 PLN 등록 차단의 해소 지시에 따라 보완 설계와 작업 계획을 확정한다. 관리자만 단일 릴리스로 교체하고 upstream API·업무 DB·기존 인증 경계를 보존한다. health 예외, WS subprotocol 세대 확인, 출시 전 gate와 운영 인수의 분리, 구형 첫 drain의 입증, 로그인·자원 방어 보존, 생성기 검증, 로컬 빌드·원격 no-build 전환을 적용한다. MFA 도입·연동·등록·복구·검증은 범위와 출시 조건에서 제외한다. 설계 확정과 PLN 등록은 코드 구현·새 runtime 의존성·breaking 계약 적용·운영 변경의 실행 승인 또는 이행 증거가 아니다.",
+  "sources": [
+    "docs/design/2026-09-09-admin-bigbang-review.md#검토 제안"
+  ],
+  "evidence": [
+    "admin-dashboard/docs/bigbang/upstream-contract-reconciliation.md",
+    "admin-dashboard/docs/bigbang/mutation-replay-evidence.md"
+  ],
+  "implementation": [],
+  "supersedes": [],
+  "review": {
+    "trigger": "소비자·첫 drain·세대 전환·복구 리허설이 단일 릴리스 전략의 변경 필요성을 보여 주거나 사용자가 MFA 제외 범위를 변경할 때"
+  }
+}

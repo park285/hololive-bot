@@ -33,18 +33,9 @@ services:
     image: ${DOCKER_SOCKET_PROXY_IMAGE:-wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b}
     container_name: admin-docker-proxy
     restart: unless-stopped
-    command:
-      - '-loglevel=info'
-      - '-listenip=0.0.0.0'
-      - '-proxyport=2375'
-      - '-allowfrom=0.0.0.0/0'
-      # BFF contract: list/version only. In particular this excludes events and
-      # GET /containers/<id>/json (inspect), which remain on deunhealth's proxy.
-      - '-allowGET=(/v1\.[0-9]+)?/(_ping|version|containers/json(\?.*)?)'
-      - '-allowHEAD=(/v1\.[0-9]+)?/_ping'
-      # 애플리케이션 검증을 우회해도 중앙의 명시된 컨테이너 이름만 제어할 수 있다.
-      # 인프라 컨테이너에는 애플리케이션의 stop 차단 계약도 같은 경계에서 적용한다.
-      - '-allowPOST=(/v1\.[0-9]+)?/containers/((hololive-alarm-worker|hololive-api|hololive-youtube-collector-c)/(start|stop|restart)|(holo-postgres|valkey-cache|deunhealth|admin-dashboard|admin-dashboard-ingress|admin-docker-proxy)/(start|restart))(\?.*)?'
+    extends:
+      file: admin-docker-policy.generated.json
+      service: admin-docker-proxy
     group_add:
       - "${DOCKER_SOCKET_GID:-107}"
     read_only: true

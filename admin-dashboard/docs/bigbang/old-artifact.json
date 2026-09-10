@@ -1,0 +1,28 @@
+{
+  "image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+  "architecture": "arm64",
+  "revision": "6ba2ede142501eb5bc436f9d1af2587a3f1d81b0",
+  "binary_sha256": "2ff3c83ae17863a12b8921e95652b8b6d4c583755a9fac47b1a2524ef25e37f0",
+  "extracted_at": "2026-09-09",
+  "binary_path": "/tmp/hololive-admin-old-artifact/admin-dashboard",
+  "source": "locally available image matching the read-only central runtime audit",
+  "qemu": {
+    "version": "10.2.1",
+    "package": "qemu-user=1:10.2.1+ds-1ubuntu3.2",
+    "sha256": "f0585a9676a039f46607f185b3657c1e78c1ba4187595724cc567fcc1ae0d1b9",
+    "url": "http://kr.archive.ubuntu.com/ubuntu/pool/universe/q/qemu/qemu-user_10.2.1+ds-1ubuntu3.2_amd64.deb",
+    "path": "/tmp/hololive-admin-qemu-fixture/usr/bin/qemu-aarch64",
+    "host_package_install": false,
+    "binfmt_registration": false,
+    "binary_sha256": "e1dc1eb07f2c205a22ac489240578d14d396d767a35bb3734a5ef12f1848ed20"
+  },
+  "asset_extraction": {
+    "status": "PASS",
+    "actual_server_architecture": "arm64",
+    "emulator": "private qemu-aarch64 10.2.1",
+    "assets": 39,
+    "inventory": "old-assets.json",
+    "directory": "/tmp/hololive-admin-old-artifact/dist",
+    "log": "/tmp/hololive-admin-t09-old-extraction.log"
+  }
+}

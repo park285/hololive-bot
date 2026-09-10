@@ -9,20 +9,20 @@ import (
 	"github.com/park285/shared-go/v2/pkg/runtime/automaxprocs"
 	"github.com/park285/shared-go/v2/pkg/runtime/bootstrap"
 
-	"github.com/kapu/admin-dashboard/internal/app"
+	adminbootstrap "github.com/kapu/admin-dashboard/internal/bootstrap"
 	"github.com/kapu/admin-dashboard/internal/config"
 )
 
 var Version = "dev"
 
 func main() {
-	os.Exit(bootstrap.Options[*config.Config, *app.Runtime]{
+	os.Exit(bootstrap.Options[*config.Config, *adminbootstrap.Runtime]{
 		Version: Version,
 		Initialize: func(string) {
 			automaxprocs.Init(nil)
 			gin.SetMode(gin.ReleaseMode)
 		},
-		LoadConfig:             config.LoadSecure,
+		LoadConfig:             config.Load,
 		LoadConfigErrorMessage: "Failed to load admin dashboard config",
 		LoggerConfig: func(cfg *config.Config) sharedlogging.Config {
 			return sharedlogging.Config{
@@ -40,7 +40,7 @@ func main() {
 		},
 		StartupMessage:    "Admin dashboard starting...",
 		BuildTimeout:      30 * time.Second,
-		BuildRuntime:      app.New,
+		BuildRuntime:      adminbootstrap.New,
 		BuildErrorMessage: "Failed to assemble admin dashboard runtime",
 	}.Run())
 }

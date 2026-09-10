@@ -35,13 +35,8 @@ grep -Fq 'limit_conn holoshi_shortlink_connections' "${PUBLIC_SHORTLINK}" \
   || fail "public shortlink ingress must apply a per-client connection limit"
 pass "shortlink ingress limits are keyed per client at both proxy hops"
 
-ADMIN_SECURITY_COMPOSE="${COMPOSE_DIR}/docker-compose.admin-security.yml"
-admin_proxy_post_contract='-allowPOST=(/v1\.[0-9]+)?/containers/((hololive-alarm-worker|hololive-api|hololive-youtube-collector-c)/(start|stop|restart)|(holo-postgres|valkey-cache|deunhealth|admin-dashboard|admin-dashboard-ingress|admin-docker-proxy)/(start|restart))(\?.*)?'
-grep -Fq -- "${admin_proxy_post_contract}" "${ADMIN_SECURITY_COMPOSE}" \
-  || fail "admin Docker proxy must scope POST actions by exact container name and operation"
-if grep -F -- '-allowPOST=' "${ADMIN_SECURITY_COMPOSE}" | grep -Fq '[^/]+'; then
-  fail "admin Docker proxy must not accept an arbitrary container name or ID"
-fi
+node "${ROOT_DIR}/scripts/architecture/generate-admin-docker-policy.mjs" --check \
+  || fail "admin Docker proxy generated exact-name policy is stale"
 pass "admin Docker proxy independently enforces container and operation scope"
 
 if ! docker compose version >/dev/null 2>&1; then
@@ -58,7 +53,7 @@ else
   fail "build-only compose render must use committed runtime env placeholders"
 fi
 
-merged="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml docker compose config --no-interpolate --format json 2>/dev/null)" \
+merged="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
   || fail "prod compose failed to render"
 
 "${CI_PYTHON_BIN}" - "${merged}" <<'PY'
@@ -116,7 +111,7 @@ if not any("127.0.0.1" in str(port) and "30190" in str(port) for port in ports):
 PY
 pass "prod compose security and PostgreSQL budget defaults are explicit"
 
-merged_live="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml docker compose config --no-interpolate --format json 2>/dev/null)" \
+merged_live="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
   || fail "prod+live-compat compose failed to render"
 
 "${CI_PYTHON_BIN}" - "${merged_live}" <<'PY'
@@ -215,7 +210,7 @@ docker run --rm \
   || fail "holoshi public ingress nginx -t failed"
 pass "holoshi public ingress template passes nginx -t with the pinned image"
 
-merged_main_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml COMPOSE_PROFILES=main-ap docker compose config --no-interpolate --format json 2>/dev/null)" \
+merged_main_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml COMPOSE_PROFILES=main-ap docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
   || fail "prod+main-ap compose failed to render"
 
 "${CI_PYTHON_BIN}" - "${merged_main_ap}" <<'PY'
@@ -258,7 +253,7 @@ PY
 pass "central runtimes alone join the external trace network without Jaeger or OTLP host ports"
 
 while read -r service compose_file; do
-  merged_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="docker-compose.prod.yml:${compose_file}" COMPOSE_PROFILES=oracle docker compose config --no-interpolate --format json 2>/dev/null)" \
+  merged_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="docker-compose.prod.yml:${compose_file}" COMPOSE_PROFILES=oracle docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
     || fail "prod+${compose_file} compose failed to render"
 
   "${CI_PYTHON_BIN}" - "${service}" "${merged_ap}" <<'PY'

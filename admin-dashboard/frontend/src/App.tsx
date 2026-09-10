@@ -1,29 +1,21 @@
+import { AuthenticatedSession } from "@/session/AuthenticatedSession";
+import { useSessionSnapshot } from "@/session/useSession";
 import { QueryClientProvider } from "@tanstack/react-query";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
-import { lazy, Suspense, useCallback } from "react";
+import { lazy, Suspense, useSyncExternalStore } from "react";
 import {
 	createBrowserRouter,
 	Navigate,
 } from "react-router";
 import { RouterProvider } from "react-router/dom";
-import { clearCSRFToken } from "@/api/client";
-import { SessionAbsoluteWarningModal } from "@/components/auth/SessionAbsoluteWarningModal";
-import { SessionIdleWarningModal } from "@/components/auth/SessionIdleWarningModal";
+import { bootstrapApplication, generation } from "@/app/bootstrap";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
-import { CONFIG } from "@/config";
-import { useActivityDetection } from "@/hooks/useActivityDetection";
-import { useAuthBootstrap } from "@/hooks/useAuthBootstrap";
-import { useHeartbeat } from "@/hooks/useHeartbeat";
-import { useSessionWarnings } from "@/hooks/useSessionWarnings";
-import { queryClient } from "@/lib/queryClient";
-import { clearClientSession, refreshClientSession } from "@/lib/sessionLifecycle";
+import { queryClient } from "@/queries/client";
 import { Toaster } from "@/lib/toast";
 import {
 	getLazyComponent,
 	ROUTE_DEFINITIONS,
 } from "@/routes/route-definitions";
-import { useAuthStore } from "@/stores/authStore";
-import { useSessionWarningStore } from "@/stores/sessionWarningStore";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const AppLayout = lazy(() =>
@@ -59,53 +51,11 @@ const FullPageLoader = () => (
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-	const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-	const isAuthResolved = useAuthStore((state) => state.isAuthResolved);
-	const policy = useSessionWarningStore((state) => state.policy);
-	const idleTimeoutMs =
-		policy?.idle_timeout_ms ?? CONFIG.heartbeat.idleTimeoutMs;
-	const activityEnabled = isAuthResolved && isAuthenticated;
-	const handleRemoteLogout = useCallback(() => {
-		clearClientSession();
-	}, []);
-	const handleSessionRefresh = useCallback(() => {
-		clearCSRFToken();
-		void refreshClientSession().catch((error: unknown) => {
-			if (!(error instanceof Error && error.name === "AbortError")) {
-				console.warn("다른 탭의 세션 변경을 확인하지 못했습니다.", error);
-			}
-		});
-	}, []);
-	const isIdle = useActivityDetection({
-		enabled: activityEnabled,
-		idleTimeoutMs,
-		onRemoteLogout: handleRemoteLogout,
-		onSessionRefresh: handleSessionRefresh,
-	});
-
-	useHeartbeat(isIdle);
-	useSessionWarnings(isIdle);
-
-	if (!isAuthResolved) {
-		return <FullPageLoader />;
-	}
-
-	if (!isAuthenticated) {
-		return <Navigate to="/login" replace />;
-	}
-
-	return (
-		<>
-			{children}
-			<SessionIdleWarningModal />
-			<SessionAbsoluteWarningModal />
-		</>
-	);
-};
-
-const AuthBootstrap = () => {
-	useAuthBootstrap();
-	return null;
+	const auth = useSessionSnapshot();
+	if (auth.phase === "pending") return <FullPageLoader />;
+	if (auth.phase === "signed_out") return <Navigate to="/login" replace />;
+	// 중간 pending 렌더가 묶여도 인증 세대 변경은 로컬 modal·timer·편집 상태를 폐기합니다.
+	return <AuthenticatedSession key={auth.authGeneration} policy={auth.policy}>{children}</AuthenticatedSession>;
 };
 
 const LazyRoute = ({ children }: { children: React.ReactNode }) => (
@@ -183,9 +133,8 @@ const toastOptions = {
 	},
 };
 
-const App = () => (
+const ReadyApp = () => (
 	<QueryClientProvider client={queryClient}>
-		<AuthBootstrap />
 		<Toaster
 			position="top-center"
 			reverseOrder={false}
@@ -201,5 +150,15 @@ const App = () => (
 		)}
 	</QueryClientProvider>
 );
+
+const App = () => {
+	const state = useSyncExternalStore(generation.subscribe, generation.snapshot);
+	if (state.phase === "ready") return <ReadyApp />;
+	return <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background p-6 text-foreground">
+		<p role={state.phase === "checking" ? "status" : "alert"}>{state.message}</p>
+		{state.phase === "incompatible" && <button className="rounded-lg bg-primary px-4 py-2 text-primary-foreground" onClick={() => { window.location.reload(); }}>새로고침</button>}
+		{state.phase === "unavailable" && <button className="rounded-lg bg-primary px-4 py-2 text-primary-foreground" onClick={() => { void bootstrapApplication(); }}>다시 확인</button>}
+	</main>;
+};
 
 export default App;

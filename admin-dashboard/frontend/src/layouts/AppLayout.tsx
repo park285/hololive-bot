@@ -5,13 +5,13 @@ import Play from "lucide-react/dist/esm/icons/play.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import { authApi } from "@/api/core";
+import { session } from "@/app/bootstrap";
 import { QueryErrorBoundary } from "@/components/QueryErrorBoundary";
 import { Button } from "@/components/ui/Button";
+import { trapDialogTab } from "@/components/ui/dialogFocus";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { broadcastSessionLogout } from "@/hooks/useActivityDetection";
-import { clearClientSession } from "@/lib/sessionLifecycle";
 import toast from "@/lib/toast-api";
+import { OperationNotice } from "@/operations/OperationNotice";
 import { NAV_GROUPS, prefetchRoute, ROUTE_MANIFEST } from "@/routes/manifest";
 
 export const AppLayout = () => {
@@ -36,14 +36,13 @@ export const AppLayout = () => {
 		setIsLoggingOut(true);
 		void (async () => {
 			try {
-				await authApi.logout();
+				const result = await session.logout();
+				if (result.revocation === "unknown") toast.error("이 브라우저는 정리했지만 서버 세션 폐기를 확인하지 못했습니다.");
+				void navigate("/login", { replace: true });
 			} catch (error) {
 				toast.error(error instanceof Error ? error.message : "서버 세션 폐기를 확인하지 못했습니다.");
 			} finally {
-				broadcastSessionLogout();
 				setIsLoggingOut(false);
-				clearClientSession();
-				void navigate("/login", { replace: true });
 			}
 		})();
 	};
@@ -131,6 +130,7 @@ export const AppLayout = () => {
 
 			<aside
 				ref={asideRef}
+				onKeyDown={event => { if (mobileDrawerOpen) trapDialogTab(event, event.currentTarget); }}
 				id="app-sidebar"
 				inert={!isDesktop && !isMobileNavOpen}
 				role={mobileDrawerOpen ? "dialog" : undefined}
@@ -139,7 +139,7 @@ export const AppLayout = () => {
 				className={clsx(
 					"fixed inset-y-0 left-0 z-40 w-[260px] flex flex-col bg-card/80 backdrop-blur-xl border-r border-border shadow-sm transition-transform duration-300 md:relative md:translate-x-0 md:transition-[width]",
 					isMobileNavOpen ? "translate-x-0" : "-translate-x-full",
-					isSidebarOpen ? "md:w-[260px]" : "md:w-20",
+					isSidebarOpen ? "md:w-64" : "md:w-20",
 				)}
 			>
 				<div className="h-20 flex items-center justify-between px-6 border-b border-border-subtle">
@@ -219,6 +219,7 @@ export const AppLayout = () => {
 										}
 										title={!expanded ? item.label : undefined}
 										aria-label={item.label}
+										onClick={() => { setIsMobileNavOpen(false); }}
 										onMouseEnter={() => {
 											prefetchRoute(item.id);
 										}}
@@ -326,6 +327,7 @@ export const AppLayout = () => {
 						</div>
 					</div>
 				</header>
+				<OperationNotice />
 
 				<div className="flex-1 overflow-auto p-6 sm:p-10 scroll-smooth">
 					<div className="max-w-7xl mx-auto w-full">

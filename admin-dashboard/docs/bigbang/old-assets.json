@@ -1,0 +1,162 @@
+{
+  "image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+  "binary_sha256": "2ff3c83ae17863a12b8921e95652b8b6d4c583755a9fac47b1a2524ef25e37f0",
+  "files": {
+    "assets/AddMemberModal-BPMJ-p-R.js": {
+      "bytes": 6475,
+      "sha256": "4702a7cc61f91af189b39570720793f8356ee5e8a86bf065cc46e2d5addf644a"
+    },
+    "assets/AlarmsPage-GSIDQMRw.js": {
+      "bytes": 16280,
+      "sha256": "310a6367a9bd3a0b69b9125d5366b0762ad7da22c1c682c182e02a6637e71ce0"
+    },
+    "assets/AppLayout-CQULPPVO.js": {
+      "bytes": 10463,
+      "sha256": "a9a1675e33c0909cb6dbc48edb71c29bd0dcae636378e0dd41a3e783616b42e6"
+    },
+    "assets/CalendarPage-D_ksLjNH.js": {
+      "bytes": 7225,
+      "sha256": "7ccab398cb7c9710af507c61be79cef6eca4900efaab4f3541b0e56c1c45dbef"
+    },
+    "assets/Card-CS3XuQ2P.js": {
+      "bytes": 5417,
+      "sha256": "0a19b6a60d734f5528ca08ebff05e52be10dff65d5f2b25e5f8541f6144614d2"
+    },
+    "assets/ChannelEditModal-CaBOhRGs.js": {
+      "bytes": 3923,
+      "sha256": "c508c379d8d2c49e6a128db85b52ca15c8baf303e8d55baf3d6308ab374f51cf"
+    },
+    "assets/ConfirmModal-gHGfohA5.js": {
+      "bytes": 1653,
+      "sha256": "448b3ed15e99faab89bfe3fcb1b37dbda7a1d62057bdf57b2f71ee81bc8f8c25"
+    },
+    "assets/EditNameModal-DYVYprwW.js": {
+      "bytes": 3931,
+      "sha256": "5499a4e74bb9cf9ae00e51b552af4e1f5df7aafabd429ef4993981c7fe84db2e"
+    },
+    "assets/ErrorPage-Dv_msfxq.js": {
+      "bytes": 4810,
+      "sha256": "761a20237589b713a5ebdf4f2f6e80f4dd31b785839a4a442605922dfa5b1a79"
+    },
+    "assets/Label-BNt_658l.js": {
+      "bytes": 1536,
+      "sha256": "8045470102f139b43e3560fbd8ced8aa65c788f2701e006f875406672ef5c626"
+    },
+    "assets/LoginPage-ycPTqQ5u.js": {
+      "bytes": 8332,
+      "sha256": "b31f6d42ae7aad76041708af735b3771b9af858cbf2c72b353d2139e654c8a83"
+    },
+    "assets/MembersPage-BBMXrSE6.js": {
+      "bytes": 29708,
+      "sha256": "75cbfca27b566af9b79fdf20964075f4ddbc13ab9a6f0b1e451b87597cbabb41"
+    },
+    "assets/QuerySection-BUyGCAQ2.js": {
+      "bytes": 1733,
+      "sha256": "157f607a9afbbbf062410d8d40625d0804021ff302e1d5f5d42345acf6ca67a0"
+    },
+    "assets/RoomsPage-BPv2lrJF.js": {
+      "bytes": 21619,
+      "sha256": "0c38e1d829cce12d167292d4e97b915aae18a4ba11ab8637455d70b084b8c36c"
+    },
+    "assets/SettingsPage-Ble49SAk.js": {
+      "bytes": 21512,
+      "sha256": "a06a78330562a506d6a3362567fc2126cfa0563d3caf187a2677cf8d6245eda6"
+    },
+    "assets/StatsPage-Clv5kjMR.js": {
+      "bytes": 17970,
+      "sha256": "b3d2945d13e3bdf0e9703f346b1368ef182cc8d7186414443249867b346b755a"
+    },
+    "assets/StreamsPage-BxMjzjmy.js": {
+      "bytes": 13976,
+      "sha256": "336674fd1f3e22746fc7d06333061b7bf19e37b62c1255f048d38d50d9c63314"
+    },
+    "assets/SystemStatsChart-D2hGj2Wz.js": {
+      "bytes": 19273,
+      "sha256": "44b4e7b762ea1e32e6848e6b3a6d6d4940d82f3b96629988fd8ac8fa69dc4c0f"
+    },
+    "assets/VirtualList-BjvWghjr.js": {
+      "bytes": 24550,
+      "sha256": "143901c5bcde4cc1704f79e7d151af6e417143fb6f9584bad6a8b02d2759f538"
+    },
+    "assets/adminClient-CQnxJKp4.js": {
+      "bytes": 5626,
+      "sha256": "7fe46868f87ae62a75af0ab33b8fd6e942de3504047b4273a1624f4784c96dcf"
+    },
+    "assets/authStore-ByNOSWgQ.js": {
+      "bytes": 2329,
+      "sha256": "9107e941f45f2e63a890dce239a337d256f14580c3180a8de4a6db0f45b6065e"
+    },
+    "assets/client-Dtz3VbTZ.js": {
+      "bytes": 9038,
+      "sha256": "5b1e06035e786b73e9a3f136df35c9047bbc5dc79365d8a4d1059e052147b94c"
+    },
+    "assets/compiler-runtime-BE4bVbeT.js": {
+      "bytes": 278,
+      "sha256": "768038101af0c4695f5d9fde594092b40d7b268112e17cb510ab285bb4008227"
+    },
+    "assets/index-B4A1jr89.css": {
+      "bytes": 112050,
+      "sha256": "41bd79a2807f5dd9d50d9c4a5ae0c667e0d3f97470c3dc1d2e65f82d9ae30898"
+    },
+    "assets/index-DidwlR71.js": {
+      "bytes": 239229,
+      "sha256": "dcaab1c233613f2fc9d8beadc32407b8716ae3e160c60fb4484e8fa6ef55480c"
+    },
+    "assets/outfit-latin-ext-wght-normal-DdQaqQDo.woff2": {
+      "bytes": 14808,
+      "sha256": "0f53d1c03b3918d744a843b5039001ee31695ca1e255e3914188df81beb461e9"
+    },
+    "assets/outfit-latin-wght-normal-Bc-8i84L.woff2": {
+      "bytes": 32292,
+      "sha256": "6c18d579fd87c3776be068b762cbc83fde3acb543d49eabd3ade842eb987e887"
+    },
+    "assets/plus-jakarta-sans-latin-ext-wght-normal-DmpS2jIq.woff2": {
+      "bytes": 21728,
+      "sha256": "38e3b8fd8045048eb311d90170a4429ed2c8f405852dc3d91b5af8452758703f"
+    },
+    "assets/plus-jakarta-sans-latin-wght-normal-eXO_dkmS.woff2": {
+      "bytes": 27348,
+      "sha256": "153fc85b70298beeb1d61a5f723331649e7f23bb77302a66e61cb3e2fbdb5e79"
+    },
+    "assets/plus-jakarta-sans-vietnamese-wght-normal-qRpaaN48.woff2": {
+      "bytes": 8352,
+      "sha256": "b275d1258601dda240fc6a1d4a6cad56e691d898f5cdf1b0e4fd6ca0022d8e40"
+    },
+    "assets/queryKeys-Dd7T1DcS.js": {
+      "bytes": 444,
+      "sha256": "93b94ad18f2beacd8a0ffd7bb38c02501e7a8a71fcd6cb1e369761f0429b71b9"
+    },
+    "assets/rolldown-runtime-hePW80VL.js": {
+      "bytes": 716,
+      "sha256": "580ad8c58061a4dde99bde0a56905e382f0568516ee2f5b84dbfb52085709021"
+    },
+    "assets/typeUtils-Bw5n5kgR.js": {
+      "bytes": 48847,
+      "sha256": "090849e0126c9d4f1755365786f8c372e32baf903029ceef4bfda0f16aea8525"
+    },
+    "assets/vendor-icons-FF3coa66.js": {
+      "bytes": 13191,
+      "sha256": "bee83da2dce1a4dbed16809aa1e841c613349b69897f475567a04d04588d3479"
+    },
+    "assets/vendor-query-5U7uWSvS.js": {
+      "bytes": 28715,
+      "sha256": "74981b929c583a79ab179128837245e677036d2f7013f640368d2f7534a7ba1c"
+    },
+    "assets/vendor-router-CLgEqyG1.js": {
+      "bytes": 102162,
+      "sha256": "34b003614d12006f1cf006fca7cd485ba97a613955910c5f9c14d2f499257f01"
+    },
+    "favicon.svg": {
+      "bytes": 495,
+      "sha256": "20e4368dc0aa9a2cf90535abc39655a3688c2bb50e2749fe94d46d1b085b8841"
+    },
+    "index.html": {
+      "bytes": 1489,
+      "sha256": "154f01447acae2dc95c3b9de3ff9d7367f93898d9331297a382ffb20e0079345"
+    },
+    "theme-init.js": {
+      "bytes": 378,
+      "sha256": "9f44ac50db651f44d7c0b32a6acc3be829fe12fe47b847819145d7214a7a08a3"
+    }
+  }
+}

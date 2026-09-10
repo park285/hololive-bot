@@ -1,4 +1,4 @@
-import { adminClient } from "@/api/adminClient";
+import { adminClient } from "@/app/bootstrap";
 import type { CalendarResponse } from "./types";
 
 export const calendarApi = {

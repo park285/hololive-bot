@@ -4,6 +4,8 @@ import ExternalLink from "lucide-react/dist/esm/icons/external-link.mjs";
 import GraduationCap from "lucide-react/dist/esm/icons/graduation-cap.mjs";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.mjs";
+import { operations } from "@/app/bootstrap";
+import { RequestBlockedError } from "@/api/errors";
 import { memo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -13,19 +15,19 @@ import type { Member } from "@/features/members/types";
 
 type MemberCardProps = {
 	member: Member;
-	onAddAlias: (memberId: number, type: "ko" | "ja", alias: string) => void;
-	onRemoveAlias: (memberId: number, type: "ko" | "ja", alias: string) => void;
+	onAddAlias: (memberId: string, type: "ko" | "ja", alias: string) => Promise<void>;
+	onRemoveAlias: (memberId: string, type: "ko" | "ja", alias: string) => void;
 	onToggleGraduation: (
-		memberId: number,
+		memberId: string,
 		memberName: string,
 		currentStatus: boolean,
 	) => void;
 	onEditChannel: (
-		memberId: number,
+		memberId: string,
 		memberName: string,
 		currentChannelId: string,
 	) => void;
-	onEditName: (memberId: number, currentName: string) => void;
+	onEditName: (memberId: string, currentName: string) => void;
 };
 
 const MemberCard = memo(
@@ -37,6 +39,7 @@ const MemberCard = memo(
 		onEditChannel,
 		onEditName,
 	}: MemberCardProps) => {
+		const [aliasError, setAliasError] = useState("");
 		const [koInput, setKoInput] = useState("");
 		const [jaInput, setJaInput] = useState("");
 
@@ -47,16 +50,20 @@ const MemberCard = memo(
 			const alias = koInput.trim();
 			if (!alias) return;
 
-			onAddAlias(member.id, "ko", alias);
-			setKoInput("");
+			void onAddAlias(member.id, "ko", alias).then(() => {
+				setKoInput(value => value.trim() === alias ? "" : value);
+				setAliasError("");
+			}).catch((cause: unknown) => { setAliasError(operations.failure(cause)?.message ?? (cause instanceof RequestBlockedError ? cause.message : "작업 결과를 확인하지 못했습니다. 초안을 보존했습니다.")); });
 		};
 
 		const handleAddJaAlias = () => {
 			const alias = jaInput.trim();
 			if (!alias) return;
 
-			onAddAlias(member.id, "ja", alias);
-			setJaInput("");
+			void onAddAlias(member.id, "ja", alias).then(() => {
+				setJaInput(value => value.trim() === alias ? "" : value);
+				setAliasError("");
+			}).catch((cause: unknown) => { setAliasError(operations.failure(cause)?.message ?? (cause instanceof RequestBlockedError ? cause.message : "작업 결과를 확인하지 못했습니다. 초안을 보존했습니다.")); });
 		};
 
 		return (
@@ -73,7 +80,7 @@ const MemberCard = memo(
 						<div>
 							<div className="mb-1 flex items-center gap-2">
 								<span className="text-xs font-mono text-subtle-foreground">
-									#{String(member.id).padStart(3, "0")}
+									#{member.id.padStart(3, "0")}
 								</span>
 								{member.isGraduated && (
 									<Badge
@@ -144,7 +151,7 @@ const MemberCard = memo(
 							<Edit2 size={12} aria-hidden="true" />
 						</button>
 						<a
-							href={`https://youtube.com/channel/${member.channelId}`}
+							href={`https://youtube.com/channel/${encodeURIComponent(member.channelId)}`}
 							target="_blank"
 							rel="noopener noreferrer"
 							className="rounded p-1 text-subtle-foreground shadow-sm outline-none transition-colors hover:bg-card hover:text-red-500 focus-visible:ring-2 focus-visible:ring-red-200"
@@ -157,9 +164,10 @@ const MemberCard = memo(
 				</Card.Header>
 
 				<Card.Body className="space-y-4 pt-2 flex-1 flex flex-col">
-					<section aria-labelledby={`ko-aliases-${String(member.id)}`}>
+					{aliasError && <p role="alert">{aliasError}</p>}
+					<section aria-labelledby={`ko-aliases-${member.id}`}>
 						<div
-							id={`ko-aliases-${String(member.id)}`}
+							id={`ko-aliases-${member.id}`}
 							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-subtle-foreground"
 						>
 							<span
@@ -220,11 +228,11 @@ const MemberCard = memo(
 						</div>
 					</section>
 
-					<section aria-labelledby={`ja-aliases-${String(member.id)}`}
+					<section aria-labelledby={`ja-aliases-${member.id}`}
 						className="flex-1"
 					>
 						<div
-							id={`ja-aliases-${String(member.id)}`}
+							id={`ja-aliases-${member.id}`}
 							className="mb-2 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-subtle-foreground"
 						>
 							<span

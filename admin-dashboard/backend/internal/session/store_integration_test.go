@@ -2,6 +2,7 @@ package session
 
 import (
 	jsonv2 "encoding/json/v2"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,13 @@ func newTestStore(t *testing.T) (*Store, *miniredis.Miniredis) {
 
 func seedSession(t *testing.T, mr *miniredis.Miniredis, sess *Session) {
 	t.Helper()
+
+	if sess.FamilyID == "" {
+		sess.FamilyID = sess.ID
+	}
+
+	mr.HSet(familyKey(sess.FamilyID), "token", sess.ID)
+	mr.SetTTL(familyKey(sess.FamilyID), time.Hour)
 
 	data, err := jsonv2.Marshal(sess)
 	require.NoError(t, err)
@@ -54,6 +62,18 @@ func TestStoreGetMissing(t *testing.T) {
 	_, ok, err := store.Get(t.Context(), "does-not-exist")
 	require.NoError(t, err)
 	require.False(t, ok)
+}
+
+func TestSessionTransportPreservesMessagesLargerThanConnectionBuffer(t *testing.T) {
+	store, _ := newTestStore(t)
+	payload := strings.Repeat("fixture\x00\r\n", 8192)
+	key := keyPrefix + "buffer-framing-test"
+
+	require.NoError(t, store.client.Do(t.Context(), store.client.B().Set().Key(key).Value(payload).Build()).Error())
+
+	actual, err := store.client.Do(t.Context(), store.client.B().Get().Key(key).Build()).ToString()
+	require.NoError(t, err)
+	require.Equal(t, payload, actual)
 }
 
 func TestStoreGetDropsAbsolutelyExpired(t *testing.T) {

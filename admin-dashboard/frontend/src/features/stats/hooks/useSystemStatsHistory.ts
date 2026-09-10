@@ -1,6 +1,8 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
-import { useWebSocket } from "@/hooks/useWebSocket";
-import { useAuthStore } from "@/stores/authStore";
+import { useWebSocket } from "@/queries/useWebSocket";
+import { generation, verifyMetadata, session } from "@/app/bootstrap";
+import { CLIENT_GENERATION } from "@/api/generated/generation";
+import { useSessionSnapshot } from "@/session/useSession";
 import type { SystemStats } from "@/features/stats/types";
 import {
 	MAX_DATA_POINTS,
@@ -20,11 +22,13 @@ const systemStatsTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
 export const useSystemStatsHistory = () => {
 	const [statsHistory, setStatsHistory] = useState<SystemStatsPoint[]>([]);
 	const [currentStats, setCurrentStats] = useState<SystemStats | null>(null);
+	const [invalidSample, setInvalidSample] = useState(false);
 	const [isVisible, setIsVisible] = useState(
 		() => typeof document === "undefined" || document.visibilityState === "visible",
 	);
-	const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-	const isAuthResolved = useAuthStore((state) => state.isAuthResolved);
+	const auth = useSessionSnapshot();
+	const isAuthenticated = auth.phase === "authenticated";
+	const isAuthResolved = auth.phase !== "pending";
 
 	useEffect(() => {
 		if (typeof document === "undefined") {
@@ -50,9 +54,15 @@ export const useSystemStatsHistory = () => {
 	});
 
 	const { isConnected } = useWebSocket<SystemStats>(wsUrl, {
+		protocol: `admin-stats.${CLIENT_GENERATION}`,
+		beforeConnect: verifyMetadata,
+		canConnect: () => generation.snapshot().phase === "ready" && session.state.snapshot().phase === "authenticated",
 		autoConnect: shouldConnect,
-		enablePing: false,
-		parseMessage: (data) => parseSystemStats(data),
+		parseMessage: (data) => {
+			const parsed = parseSystemStats(data);
+			setInvalidSample(parsed === null);
+			return parsed;
+		},
 		onMessage: (data) => {
 			const timeStr = systemStatsTimeFormatter.format(new Date(data.sampledAt));
 			const point: SystemStatsPoint = createSystemStatsPoint(data, timeStr);
@@ -83,6 +93,7 @@ export const useSystemStatsHistory = () => {
 	return {
 		currentStats,
 		isConnected,
+		invalidSample,
 		latestPoint,
 		serviceNames,
 		statsHistory,

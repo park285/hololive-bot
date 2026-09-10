@@ -1,24 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-	startTransition,
 	useCallback,
 	useDeferredValue,
 	useEffect,
 	useMemo,
-	useOptimistic,
 	useState,
 } from "react";
-import { queryKeys } from "@/api/queryKeys";
+import { queryKeys } from "@/queries/keys";
 import { membersApi } from "@/features/members/api";
 import {
 	cloneMembers,
 	filterMembers,
 	sortMembers,
 } from "@/features/members/selectors";
-import {
-	optimisticMemberReducer,
-	useMemberMutations,
-} from "@/hooks/useMemberMutations";
+import { useMemberMutations } from "@/features/members/hooks/mutations";
+import { queryView } from "@/queries/state";
+import { useOnline } from "@/queries/useOnline";
+import { RequestBlockedError } from "@/api/errors";
 
 const MEMBER_PAGE_SIZE = 48;
 
@@ -26,23 +24,23 @@ export type MembersModalState =
 	| { type: "none" }
 	| {
 			type: "removeAlias";
-			memberId: number;
+			memberId: string;
 			aliasType: "ko" | "ja";
 			alias: string;
 	  }
 	| {
 			type: "graduation";
-			memberId: number;
+			memberId: string;
 			memberName: string;
 			currentStatus: boolean;
 	  }
 	| {
 			type: "channelEdit";
-			memberId: number;
+			memberId: string;
 			memberName: string;
 			currentChannelId: string;
 	  }
-	| { type: "nameEdit"; memberId: number; currentName: string };
+	| { type: "nameEdit"; memberId: string; currentName: string };
 
 export function useMembersPage() {
 	const query = useQuery({
@@ -50,6 +48,7 @@ export function useMembersPage() {
 		queryFn: membersApi.getAll,
 	});
 
+	const view = queryView(query, useOnline(), data => data.members.length === 0);
 	const mutations = useMemberMutations();
 	const [searchTerm, setSearchTerm] = useState("");
 	const deferredSearchTerm = useDeferredValue(searchTerm);
@@ -58,18 +57,13 @@ export function useMembersPage() {
 		return saved !== null ? saved === "true" : true;
 	});
 	const [modal, setModal] = useState<MembersModalState>({ type: "none" });
-	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+	const [addModal, setAddModal] = useState<object | null>(null);
 	const [visibleCount, setVisibleCount] = useState(MEMBER_PAGE_SIZE);
 
 	const allMembers = useMemo(
 		() => cloneMembers(query.data?.members ?? []),
 		[query.data?.members],
 	);
-	const [optimisticMembers, setOptimisticMembers] = useOptimistic(
-		allMembers,
-		optimisticMemberReducer,
-	);
-
 	const toggleHideGraduated = () => {
 		const nextValue = !hideGraduated;
 		setHideGraduated(nextValue);
@@ -80,125 +74,54 @@ export function useMembersPage() {
 		setVisibleCount(MEMBER_PAGE_SIZE);
 	}, [deferredSearchTerm, hideGraduated]);
 
-	const handleAddAlias = useCallback(
-		(memberId: number, type: "ko" | "ja", rawAlias: string) => {
-			const alias = rawAlias.trim();
-			if (!alias) return;
-
-			setOptimisticMembers({
-				type: "addAlias",
-				memberId,
-				aliasType: type,
-				alias,
-			});
-			void mutations.addAlias.mutateAsync({ memberId, type, alias });
-		},
-		[mutations.addAlias, setOptimisticMembers],
-	);
-
-	const handleRemoveAlias = useCallback(
-		(memberId: number, type: "ko" | "ja", alias: string) => {
-			setModal({ type: "removeAlias", memberId, aliasType: type, alias });
-		},
-		[],
-	);
-
-	const confirmRemoveAlias = useCallback(() => {
-		if (modal.type !== "removeAlias") return;
-		const payload = {
-			memberId: modal.memberId,
-			aliasType: modal.aliasType,
-			alias: modal.alias,
-		};
+	const assertCurrent = () => {
+		if (!view.current) throw new RequestBlockedError("CLIENT_NOT_READY", "최신 멤버 목록을 먼저 조회해 주세요.");
+	};
+	const handleAddAlias = async (memberId: string, type: "ko" | "ja", rawAlias: string) => {
+		assertCurrent();
+		const alias = rawAlias.trim();
+		if (alias) await mutations.addAlias.mutateAsync({ memberId, type, alias });
+	};
+	const handleRemoveAlias = useCallback((memberId: string, type: "ko" | "ja", alias: string) => {
+		setModal({ type: "removeAlias", memberId, aliasType: type, alias });
+	}, []);
+	const confirmRemoveAlias = () => {
+		if (modal.type !== "removeAlias" || !view.current) return;
+		mutations.removeAlias.mutate({ memberId: modal.memberId, type: modal.aliasType, alias: modal.alias });
 		setModal({ type: "none" });
-		startTransition(() => {
-			setOptimisticMembers({
-				type: "removeAlias",
-				memberId: payload.memberId,
-				aliasType: payload.aliasType,
-				alias: payload.alias,
-			});
-		});
-		mutations.removeAlias.mutate({
-			memberId: payload.memberId,
-			type: payload.aliasType,
-			alias: payload.alias,
-		});
-	}, [modal, mutations.removeAlias, setOptimisticMembers]);
-
-	const handleUpdateChannel = useCallback(
-		(memberId: number, memberName: string, currentChannelId: string) => {
-			setModal({ type: "channelEdit", memberId, memberName, currentChannelId });
-		},
-		[],
-	);
-
-	const confirmUpdateChannel = useCallback(
-		(newChannelId: string) => {
-			if (modal.type !== "channelEdit") return;
-			setOptimisticMembers({
-				type: "updateChannel",
-				memberId: modal.memberId,
-				channelId: newChannelId,
-			});
-			void mutations.updateChannel.mutateAsync({
-				memberId: modal.memberId,
-				channelId: newChannelId,
-			});
-		},
-		[modal, mutations.updateChannel, setOptimisticMembers],
-	);
-
-	const handleEditName = useCallback(
-		(memberId: number, currentName: string) => {
-			setModal({ type: "nameEdit", memberId, currentName });
-		},
-		[],
-	);
-
-	const confirmEditName = useCallback(
-		(newName: string) => {
-			if (modal.type !== "nameEdit") return;
-			setOptimisticMembers({
-				type: "updateName",
-				memberId: modal.memberId,
-				name: newName,
-			});
-			void mutations.updateName.mutateAsync({
-				memberId: modal.memberId,
-				name: newName,
-			});
-		},
-		[modal, mutations.updateName, setOptimisticMembers],
-	);
-
-	const handleToggleGraduation = useCallback(
-		(memberId: number, memberName: string, currentStatus: boolean) => {
-			setModal({ type: "graduation", memberId, memberName, currentStatus });
-		},
-		[],
-	);
-
-	const confirmToggleGraduation = useCallback(() => {
-		if (modal.type !== "graduation") return;
-		const payload = {
-			memberId: modal.memberId,
-			isGraduated: !modal.currentStatus,
-		};
+	};
+	const handleUpdateChannel = useCallback((memberId: string, memberName: string, currentChannelId: string) => {
+		setModal({ type: "channelEdit", memberId, memberName, currentChannelId });
+	}, []);
+	const confirmUpdateChannel = async (channelId: string) => {
+		assertCurrent();
+		if (modal.type !== "channelEdit") return;
+		await mutations.updateChannel.mutateAsync({ memberId: modal.memberId, channelId });
+		setModal(current => current === modal ? { type: "none" } : current);
+	};
+	const handleEditName = useCallback((memberId: string, currentName: string) => {
+		setModal({ type: "nameEdit", memberId, currentName });
+	}, []);
+	const confirmEditName = async (name: string) => {
+		assertCurrent();
+		if (modal.type !== "nameEdit") return;
+		await mutations.updateName.mutateAsync({ memberId: modal.memberId, name });
+		setModal(current => current === modal ? { type: "none" } : current);
+	};
+	const handleToggleGraduation = useCallback((memberId: string, memberName: string, currentStatus: boolean) => {
+		setModal({ type: "graduation", memberId, memberName, currentStatus });
+	}, []);
+	const confirmToggleGraduation = () => {
+		if (modal.type !== "graduation" || !view.current) return;
+		const latest = allMembers.find(member => member.id === modal.memberId);
+		if (latest?.isGraduated !== modal.currentStatus) return;
+		mutations.setGraduation.mutate({ memberId: modal.memberId, isGraduated: !modal.currentStatus });
 		setModal({ type: "none" });
-		startTransition(() => {
-			setOptimisticMembers({
-				type: "graduation",
-				memberId: payload.memberId,
-				isGraduated: payload.isGraduated,
-			});
-		});
-		mutations.setGraduation.mutate(payload);
-	}, [modal, mutations.setGraduation, setOptimisticMembers]);
+	};
 
 	const filteredMembers = useMemo(
-		() => filterMembers(optimisticMembers, deferredSearchTerm, hideGraduated),
-		[deferredSearchTerm, hideGraduated, optimisticMembers],
+		() => filterMembers(allMembers, deferredSearchTerm, hideGraduated),
+		[deferredSearchTerm, hideGraduated, allMembers],
 	);
 	const sortedMembers = useMemo(
 		() => sortMembers(filteredMembers),
@@ -211,6 +134,7 @@ export function useMembersPage() {
 
 	return {
 		query,
+		view,
 		mutations,
 		searchTerm,
 		setSearchTerm,
@@ -218,8 +142,8 @@ export function useMembersPage() {
 		toggleHideGraduated,
 		modal,
 		setModal,
-		isAddModalOpen,
-		setIsAddModalOpen,
+		addModal,
+		setAddModal,
 		visibleCount,
 		setVisibleCount,
 		allMembers,

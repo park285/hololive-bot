@@ -14,6 +14,7 @@ export const SystemStatsChart = () => {
 	const {
 		currentStats,
 		isConnected,
+		invalidSample,
 		latestPoint,
 		serviceNames,
 		statsHistory,
@@ -27,7 +28,7 @@ export const SystemStatsChart = () => {
 					<h3 className="text-lg font-display font-bold text-foreground">
 						시스템 리소스
 					</h3>
-					{isConnected ? (
+					{isConnected && !invalidSample ? (
 						<span className="relative ml-2 flex h-2 w-2">
 							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
 							<span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -68,7 +69,8 @@ export const SystemStatsChart = () => {
 			</Card.Header>
 
 			<Card.Body className="relative p-0">
-				{statsHistory.length < 2 && <ChartSkeleton label="데이터 수집 중…" />}
+				{(invalidSample || !isConnected) && <p role="status" className="p-4 text-sm text-muted-foreground">{invalidSample ? "관측 응답 형식을 확인하지 못했습니다." : "관측 연결을 확인하지 못했습니다."} {currentStats ? "마지막으로 확인한 값을 표시합니다." : "표시할 관측값이 없습니다."}</p>}
+				{statsHistory.length < 2 && isConnected && !invalidSample && <ChartSkeleton label="데이터 수집 중…" />}
 
 				<div className="p-4">
 					<ResourceChart history={statsHistory} />

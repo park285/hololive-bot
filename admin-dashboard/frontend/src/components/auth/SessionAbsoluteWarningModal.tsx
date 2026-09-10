@@ -3,15 +3,18 @@ import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
 import { useEffect, useState } from "react";
 import { BaseModal } from "@/components/ui/BaseModal";
 import { Button } from "@/components/ui/Button";
-import { useSessionWarningStore } from "@/stores/sessionWarningStore";
+import { useStore } from "zustand";
+import { warningState } from "@/session/warnings";
+import { useSessionSnapshot } from "@/session/useSession";
 
 export const SessionAbsoluteWarningModal = () => {
 	const {
 		absoluteWarningOpen,
-		absoluteExpiresAt,
 		dismissAbsoluteWarning,
-	} = useSessionWarningStore();
+	} = useStore(warningState);
 
+	const { absoluteExpiresAt } = useSessionSnapshot();
+	const dismiss = () => { dismissAbsoluteWarning(absoluteExpiresAt); };
 	const [remainingSeconds, setRemainingSeconds] = useState(0);
 
 	useEffect(() => {
@@ -34,7 +37,7 @@ export const SessionAbsoluteWarningModal = () => {
 	return (
 		<BaseModal
 			isOpen={absoluteWarningOpen}
-			onClose={dismissAbsoluteWarning}
+			onClose={dismiss}
 			title={
 				<div className="flex items-center gap-2 text-red-600">
 					<ShieldAlert className="h-5 w-5" />
@@ -72,7 +75,7 @@ export const SessionAbsoluteWarningModal = () => {
 						variant="secondary"
 						fullWidth
 						className="bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
-						onClick={dismissAbsoluteWarning}
+						onClick={dismiss}
 					>
 						확인했습니다
 					</Button>

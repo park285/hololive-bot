@@ -1,0 +1,2080 @@
+{
+  "schema_version": 1,
+  "decision": "DEC-20260909-hololive-admin-bigbang-replacement",
+  "claim": "Source bindings and baseline route coverage; executable behavior and release gates require their separate evidence.",
+  "spec_sha256": "488e0c05888831dd4957622372869907776cabdf7fabc586e95b62d6e6542a61",
+  "provenance": "frontend/src/api/generated/provenance.json",
+  "counts": {
+    "baseline": 33,
+    "candidate": 35,
+    "business_mutations": 16,
+    "menus": 7
+  },
+  "bindings": [
+    {
+      "operationId": "handle_heartbeat",
+      "method": "POST",
+      "path": "/admin/api/auth/heartbeat",
+      "feature": "auth",
+      "hidden": false,
+      "mutation": false,
+      "access": "session_csrf",
+      "sdkMethod": "handleHeartbeat",
+      "frontendOwner": "frontend/src/session/controller.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_heartbeat",
+      "responseValidators": {
+        "200": {
+          "validator": "response_daff50d5a779875b",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_login",
+      "method": "POST",
+      "path": "/admin/api/auth/login",
+      "feature": "auth",
+      "hidden": false,
+      "mutation": false,
+      "access": "public_login",
+      "sdkMethod": "handleLogin",
+      "frontendOwner": "frontend/src/session/controller.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_login",
+      "responseValidators": {
+        "200": {
+          "validator": "response_a65f897a9e5bef22",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_logout",
+      "method": "POST",
+      "path": "/admin/api/auth/logout",
+      "feature": "auth",
+      "hidden": false,
+      "mutation": false,
+      "access": "session_csrf",
+      "sdkMethod": "handleLogout",
+      "frontendOwner": "frontend/src/session/controller.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_logout",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_session_status",
+      "method": "GET",
+      "path": "/admin/api/auth/session",
+      "feature": "auth",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "handleSessionStatus",
+      "frontendOwner": "frontend/src/session/controller.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_session_status",
+      "responseValidators": {
+        "200": {
+          "validator": "response_e413350db7dbab73",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_docker_containers",
+      "method": "GET",
+      "path": "/admin/api/docker/containers",
+      "feature": "docker",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "handleDockerContainers",
+      "frontendOwner": "frontend/src/features/docker/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_docker_containers",
+      "responseValidators": {
+        "200": {
+          "validator": "response_3c7c05c90472d258",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_docker_restart",
+      "method": "POST",
+      "path": "/admin/api/docker/containers/{name}/restart",
+      "feature": "docker",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "handleDockerRestart",
+      "frontendOwner": "frontend/src/features/docker/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_docker_restart",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_docker_start",
+      "method": "POST",
+      "path": "/admin/api/docker/containers/{name}/start",
+      "feature": "docker",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "handleDockerStart",
+      "frontendOwner": "frontend/src/features/docker/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_docker_start",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_docker_stop",
+      "method": "POST",
+      "path": "/admin/api/docker/containers/{name}/stop",
+      "feature": "docker",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "handleDockerStop",
+      "frontendOwner": "frontend/src/features/docker/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_docker_stop",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_docker_health",
+      "method": "GET",
+      "path": "/admin/api/docker/health",
+      "feature": "docker",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "handleDockerHealth",
+      "frontendOwner": "frontend/src/features/docker/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_docker_health",
+      "responseValidators": {
+        "200": {
+          "validator": "response_6aa9a0f0484f422f",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetAlarms",
+      "method": "GET",
+      "path": "/admin/api/holo/alarms",
+      "feature": "alarms",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetAlarms",
+      "frontendOwner": "frontend/src/features/alarms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetAlarms",
+      "responseValidators": {
+        "200": {
+          "validator": "response_9f8aa2ce64ef8e54",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoDeleteAlarm",
+      "method": "DELETE",
+      "path": "/admin/api/holo/alarms",
+      "feature": "alarms",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoDeleteAlarm",
+      "frontendOwner": "frontend/src/features/alarms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoDeleteAlarm",
+      "responseValidators": {
+        "200": {
+          "validator": "response_ee05f2ea05da7601",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetMembers",
+      "method": "GET",
+      "path": "/admin/api/holo/members",
+      "feature": "members",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetMembers",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetMembers",
+      "responseValidators": {
+        "200": {
+          "validator": "response_db38ab7f5a37380b",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoAddMember",
+      "method": "POST",
+      "path": "/admin/api/holo/members",
+      "feature": "members",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoAddMember",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoAddMember",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetCalendar",
+      "method": "GET",
+      "path": "/admin/api/holo/members/calendar",
+      "feature": "calendar",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetCalendar",
+      "frontendOwner": "frontend/src/features/calendar/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetCalendar",
+      "responseValidators": {
+        "200": {
+          "validator": "response_cbc9e95d048967ae",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoAddAlias",
+      "method": "POST",
+      "path": "/admin/api/holo/members/{id}/aliases",
+      "feature": "members",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoAddAlias",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoAddAlias",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoRemoveAlias",
+      "method": "DELETE",
+      "path": "/admin/api/holo/members/{id}/aliases",
+      "feature": "members",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoRemoveAlias",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoRemoveAlias",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoUpdateChannel",
+      "method": "PATCH",
+      "path": "/admin/api/holo/members/{id}/channel",
+      "feature": "members",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoUpdateChannel",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoUpdateChannel",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoSetGraduation",
+      "method": "PATCH",
+      "path": "/admin/api/holo/members/{id}/graduation",
+      "feature": "members",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoSetGraduation",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoSetGraduation",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoUpdateMemberName",
+      "method": "PATCH",
+      "path": "/admin/api/holo/members/{id}/name",
+      "feature": "members",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoUpdateMemberName",
+      "frontendOwner": "frontend/src/features/members/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoUpdateMemberName",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoSetRoomName",
+      "method": "POST",
+      "path": "/admin/api/holo/names/room",
+      "feature": "alarms",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoSetRoomName",
+      "frontendOwner": "frontend/src/features/alarms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoSetRoomName",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoSetUserName",
+      "method": "POST",
+      "path": "/admin/api/holo/names/user",
+      "feature": "alarms",
+      "hidden": true,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoSetUserName",
+      "frontendOwner": "frontend/src/features/alarms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoSetUserName",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetRooms",
+      "method": "GET",
+      "path": "/admin/api/holo/rooms",
+      "feature": "rooms",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetRooms",
+      "frontendOwner": "frontend/src/features/rooms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetRooms",
+      "responseValidators": {
+        "200": {
+          "validator": "response_06e829560cf77ac9",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoAddRoom",
+      "method": "POST",
+      "path": "/admin/api/holo/rooms",
+      "feature": "rooms",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoAddRoom",
+      "frontendOwner": "frontend/src/features/rooms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoAddRoom",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoRemoveRoom",
+      "method": "DELETE",
+      "path": "/admin/api/holo/rooms",
+      "feature": "rooms",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoRemoveRoom",
+      "frontendOwner": "frontend/src/features/rooms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoRemoveRoom",
+      "responseValidators": {
+        "200": {
+          "validator": "response_752e9496dd81504a",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetRoomsJoined",
+      "method": "GET",
+      "path": "/admin/api/holo/rooms/joined",
+      "feature": "rooms",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetRoomsJoined",
+      "frontendOwner": "frontend/src/features/rooms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetRoomsJoined",
+      "responseValidators": {
+        "200": {
+          "validator": "response_2d2c268d0d3a9dc4",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoSetAcl",
+      "method": "POST",
+      "path": "/admin/api/holo/rooms/acl",
+      "feature": "rooms",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoSetAcl",
+      "frontendOwner": "frontend/src/features/rooms/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoSetAcl",
+      "responseValidators": {
+        "200": {
+          "validator": "response_d2ed51f51f31f984",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetSettings",
+      "method": "GET",
+      "path": "/admin/api/holo/settings",
+      "feature": "settings",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetSettings",
+      "frontendOwner": "frontend/src/features/settings/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetSettings",
+      "responseValidators": {
+        "200": {
+          "validator": "response_68291d4fae3bd431",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoUpdateSettings",
+      "method": "POST",
+      "path": "/admin/api/holo/settings",
+      "feature": "settings",
+      "hidden": false,
+      "mutation": true,
+      "access": "session_csrf_audit",
+      "sdkMethod": "holoUpdateSettings",
+      "frontendOwner": "frontend/src/features/settings/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoUpdateSettings",
+      "responseValidators": {
+        "200": {
+          "validator": "response_bbe5335f8a8be186",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetStats",
+      "method": "GET",
+      "path": "/admin/api/holo/stats",
+      "feature": "stats",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetStats",
+      "frontendOwner": "frontend/src/features/stats/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetStats",
+      "responseValidators": {
+        "200": {
+          "validator": "response_ce715bb3531a7f0b",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetYouTubeCommunityShortsOps",
+      "method": "GET",
+      "path": "/admin/api/holo/stats/youtube/community-shorts",
+      "feature": "stats",
+      "hidden": true,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetYouTubeCommunityShortsOps",
+      "frontendOwner": "frontend/src/api/generated/Admin.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetYouTubeCommunityShortsOps",
+      "responseValidators": {
+        "200": {
+          "validator": "response_1b92dae3641e1c82",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetLiveStreams",
+      "method": "GET",
+      "path": "/admin/api/holo/streams/live",
+      "feature": "streams",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetLiveStreams",
+      "frontendOwner": "frontend/src/features/streams/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetLiveStreams",
+      "responseValidators": {
+        "200": {
+          "validator": "response_e61c8f3f519bf4fc",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "holoGetUpcomingStreams",
+      "method": "GET",
+      "path": "/admin/api/holo/streams/upcoming",
+      "feature": "streams",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "holoGetUpcomingStreams",
+      "frontendOwner": "frontend/src/features/streams/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_holoGetUpcomingStreams",
+      "responseValidators": {
+        "200": {
+          "validator": "response_e61c8f3f519bf4fc",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "handle_aggregated_status",
+      "method": "GET",
+      "path": "/admin/api/status",
+      "feature": "stats",
+      "hidden": false,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "handleAggregatedStatus",
+      "frontendOwner": "frontend/src/features/stats/api.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_handle_aggregated_status",
+      "responseValidators": {
+        "200": {
+          "validator": "response_5e735ea71bb5c41b",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "getAdminMetadata",
+      "method": "GET",
+      "path": "/admin/meta.json",
+      "feature": "auth",
+      "hidden": false,
+      "mutation": false,
+      "access": "public_metadata",
+      "sdkMethod": "getAdminMetadata",
+      "frontendOwner": "frontend/src/app/bootstrap.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_getAdminMetadata",
+      "responseValidators": {
+        "200": {
+          "validator": "response_09b0c71e1a33e540",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    },
+    {
+      "operationId": "getAdminOpenAPI",
+      "method": "GET",
+      "path": "/admin/api/openapi.json",
+      "feature": "openapi",
+      "hidden": true,
+      "mutation": false,
+      "access": "session",
+      "sdkMethod": "getAdminOpenApi",
+      "frontendOwner": "frontend/src/api/generated/Admin.ts",
+      "backendBindings": "backend/internal/httpapi/access.go",
+      "requestValidator": "request_getAdminOpenAPI",
+      "responseValidators": {
+        "200": {
+          "validator": "response_fc8e4c9ffb5b8281",
+          "contentType": "application/json"
+        },
+        "400": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "401": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "403": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "404": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "409": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "413": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "429": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "500": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "502": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        },
+        "503": {
+          "validator": "response_b7a2836f983b1f2d",
+          "contentType": "application/json"
+        }
+      }
+    }
+  ]
+}

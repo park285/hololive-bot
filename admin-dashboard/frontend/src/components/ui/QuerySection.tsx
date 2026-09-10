@@ -1,66 +1,21 @@
-import Loader2 from "lucide-react/dist/esm/icons/loader-2.mjs";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/Button";
-import { getErrorMessageFromUnknown } from "@/lib/typeUtils";
+import { QueryNotice } from "@/queries/QueryNotice";
+import type { QueryView } from "@/queries/state";
 
-interface QuerySectionProps {
-	isLoading: boolean;
-	isError: boolean;
-	error?: unknown;
-	onRetry?: () => void;
-	isEmpty?: boolean;
+interface QuerySectionProps<T> {
+	view: QueryView<T>;
+	label: string;
+	onRetry: () => void;
 	skeleton?: ReactNode;
-	emptyContent?: ReactNode;
+	emptyContent: ReactNode;
 	children: ReactNode;
 }
 
-const DefaultSkeleton = () => (
-	<div className="flex items-center justify-center h-48 text-subtle-foreground">
-		<Loader2 className="w-6 h-6 animate-spin mr-2" />
-		<span className="text-sm">불러오는 중…</span>
-	</div>
-);
-
-export const QuerySection = ({
-	isLoading,
-	isError,
-	error,
-	onRetry,
-	isEmpty = false,
-	skeleton,
-	emptyContent,
-	children,
-}: QuerySectionProps) => {
-	if (isLoading) {
-		return <>{skeleton ?? <DefaultSkeleton />}</>;
-	}
-
-	if (isError) {
-		return (
-			<div className="rounded-2xl border border-border-subtle bg-card p-8 text-center">
-				<p className="font-bold text-destructive">
-					데이터를 불러오지 못했습니다.
-				</p>
-				<p className="mt-2 text-sm text-muted-foreground">
-					{getErrorMessageFromUnknown(error)}
-				</p>
-				{onRetry ? (
-					<Button
-						variant="destructive"
-						size="sm"
-						className="mt-4"
-						onClick={onRetry}
-					>
-						다시 시도
-					</Button>
-				) : null}
-			</div>
-		);
-	}
-
-	if (isEmpty) {
-		return <>{emptyContent}</>;
-	}
-
-	return <>{children}</>;
-};
+/** QuerySection은 이전 값을 유지하되 오류·오프라인을 정상 empty로 표시하지 않습니다. */
+export function QuerySection<T>({ view, label, onRetry, skeleton, emptyContent, children }: QuerySectionProps<T>) {
+	return <div className="space-y-3">
+		<QueryNotice view={view} label={label} onRetry={onRetry} />
+		{view.kind === "pending" && skeleton}
+		{view.kind === "empty" ? emptyContent : view.data !== undefined && children}
+	</div>;
+}

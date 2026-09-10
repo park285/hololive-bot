@@ -1,0 +1,27 @@
+File: admin-dashboard
+Build ID: f110a169e84e7ccfb9bdfe6d0a2894398e60f508
+Type: inuse_space
+Time: 2026-09-10 13:29:06 KST
+Showing nodes accounting for 4.40MB, 100% of 4.40MB total
+Showing top 20 nodes out of 137
+      flat  flat%   sum%        cum   cum%
+    1.92MB 43.56% 43.56%     3.01MB 68.45%  github.com/valkey-io/valkey-go.newRing
+    1.09MB 24.89% 68.45%     1.09MB 24.89%  sync.NewCond (inline)
+    0.29MB  6.57% 75.02%     0.29MB  6.57%  bytes.Clone
+    0.24MB  5.55% 80.57%     0.24MB  5.55%  bufio.NewReaderSize (inline)
+    0.13MB  3.06% 83.63%     0.17MB  3.78%  github.com/gorilla/websocket.newConn
+    0.10MB  2.25% 85.88%     0.10MB  2.25%  net/http.init.func2
+    0.09MB  2.14% 88.02%     0.09MB  2.14%  runtime.mallocgc
+    0.07MB  1.66% 89.68%     0.07MB  1.66%  bufio.NewWriterSize
+    0.06MB  1.44% 91.11%     0.06MB  1.44%  net/textproto.MIMEHeader.Set
+    0.06MB  1.42% 92.54%     0.06MB  1.42%  context.(*cancelCtx).Done
+    0.05MB  1.05% 93.58%     0.05MB  1.05%  github.com/go-playground/validator/v10.map.init.7
+    0.03MB  0.72% 94.30%     0.03MB  0.72%  net/http.(*Transport).tryPutIdleConn
+    0.03MB  0.72% 95.02%     0.03MB  0.72%  time.goFunc
+    0.03MB  0.71% 95.73%     0.03MB  0.71%  encoding/json/v2.makeStructFields
+    0.03MB  0.71% 96.44%     0.03MB  0.71%  net/http.(*Transport).prepareTransportCancel
+    0.03MB  0.71% 97.15%     0.03MB  0.71%  github.com/gin-gonic/gin.(*node).addRoute
+    0.03MB  0.71% 97.87%     0.03MB  0.71%  net.(*Resolver).goLookupIPCNAMEOrder.func4
+    0.03MB  0.71% 98.58%     0.03MB  0.71%  net/http.(*Transport).dialConn
+    0.03MB  0.71% 99.29%     0.03MB  0.71%  github.com/gabriel-vasile/mimetype.newMIME
+    0.03MB  0.71%   100%     0.09MB  2.13%  context.withCancel

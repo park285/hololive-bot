@@ -3,7 +3,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
+// SDK 연결과 호출 횟수는 transport.test.ts와 msw.integration.test.ts의 실행형 시험으로 검증한다.
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const readSource = (filename: string) =>
@@ -23,13 +25,7 @@ const collectSourceFiles = (directory: string): string[] =>
 			: [];
 	});
 
-test("adminClient owns the single generated Admin instance wired to root api client", () => {
-	const source = readSource("adminClient.ts");
 
-	assert.match(source, /new Admin\(\)/);
-	assert.match(source, /createApiClient\(""\)/);
-	assert.equal(source.includes("adminClient.instance = apiClient"), false);
-});
 
 test("client 401 handler no longer exempts stale holo paths", () => {
 	const source = readSource("client.ts");
@@ -37,22 +33,9 @@ test("client 401 handler no longer exempts stale holo paths", () => {
 	assert.equal(source.includes('startsWith("/holo/")'), false);
 });
 
-test("critical-path api wrappers stay on the root axios client without an extra holoClient layer", () => {
-	const coreSource = readSource("core.ts");
 
-	assert.equal(coreSource.includes("handleSessionStatus"), false);
-	assert.equal(coreSource.includes("handleDockerHealth"), false);
-	assert.equal(coreSource.includes("handleAggregatedStatus"), false);
-	assert.match(coreSource, /from ["']\.\/client["']/);
-	assert.equal(existsSync(path.join(dirname, "holoClient.ts")), false);
-});
 
-test("stats api keeps dashboard reads on the root axios client", () => {
-	const statsSource = readSource("../features/stats/api.ts");
 
-	assert.equal(statsSource.includes("adminClient"), false);
-	assert.match(statsSource, /from ["']@\/api\/client["']/);
-});
 
 test("vite dev proxy forwards websocket upgrades for admin api routes", () => {
 	const viteConfigSource = readSource("../../vite.config.ts");
@@ -61,17 +44,7 @@ test("vite dev proxy forwards websocket upgrades for admin api routes", () => {
 	assert.match(viteConfigSource, /ws:\s*true/);
 });
 
-test("system stats websocket keeps the stream server-push only without client ping chatter", () => {
-	const systemStatsHistorySource = readSource(
-		"../features/stats/hooks/useSystemStatsHistory.ts",
-	);
-
-	assert.match(systemStatsHistorySource, /enablePing:\s*false/);
-	assert.match(systemStatsHistorySource, /visibilitychange/);
-	assert.match(systemStatsHistorySource, /isVisible/);
-	assert.match(systemStatsHistorySource, /startTransition/);
-	assert.match(systemStatsHistorySource, /Intl\.DateTimeFormat/);
-});
+// WS frame 수신·잘못된 schema 거부·visibility 수명은 실제 browser ledger로 검증합니다.
 
 test("dead SSR helpers are removed from the frontend bundle", () => {
 	assert.equal(existsSync(path.join(dirname, "../hooks/useSSRData.ts")), false);
@@ -103,7 +76,12 @@ test("frontend source keeps explicit any blocked while generated files stay isol
 
 	for (const file of sourceFiles) {
 		const source = readFileSync(file, "utf8");
-		assert.equal(/\bany\b/.test(source), false, file);
+		const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+		const visit = (node: ts.Node): void => {
+			assert.notEqual(node.kind, ts.SyntaxKind.AnyKeyword, file);
+			ts.forEachChild(node, visit);
+		};
+		visit(ast);
 	}
 });
 
@@ -119,7 +97,7 @@ test("development tooling wires react-query devtools and opt-in msw bootstrap", 
 
 test("large frontend lists route through the shared VirtualList helper", () => {
 	const alarmsSource = readSource("../features/alarms/components/AlarmGroups.tsx");
-	const dockerSource = readSource("../components/settings/DockerContainerList.tsx");
+	const dockerSource = readSource("../features/docker/components/ContainerList.tsx");
 	const roomsSource = readSource("../features/rooms/components/RoomsListSection.tsx");
 	const membersSource = readSource("../features/members/components/MembersGrid.tsx");
 	const liveSource = readSource("../features/streams/components/LiveStreamsSection.tsx");
@@ -156,21 +134,4 @@ test("repeated destructive controls have contextual accessible names", () => {
 	);
 });
 
-test("alarm group disclosure and edit controls have separate native action owners", () => {
-	const source = readSource("../features/alarms/components/AlarmGroups.tsx");
-
-	assert.equal(source.includes('role="button"'), false);
-	assert.equal(source.includes("tabIndex={0}"), false);
-	assert.equal(source.includes("onKeyDown={(event)"), false);
-	assert.match(
-		source,
-		/<button\s+type="button"\s+aria-expanded=\{isExpanded\}/,
-	);
-	assert.match(
-		source,
-		/aria-label=\{`\$\{group\.roomName\} \$\{group\.userName\} 알람 그룹 \$\{isExpanded \? "접기" : "펼치기"\}`\}/,
-	);
-	assert.match(source, /<\/button>\s+<div className="space-y-2">/);
-	assert.match(source, /aria-label=\{`\$\{group\.roomName\} 방 이름 수정`\}/);
-	assert.match(source, /aria-label=\{`\$\{group\.userName\} 유저 이름 수정`\}/);
-});
+// 알람 그룹의 native button·키보드·편집/펼침 분리는 session-tabs.browser.test.mjs에서 실제 렌더링으로 검증합니다.

@@ -1,0 +1,3747 @@
+{
+  "$id": "urn:hololive:admin:contract",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AddAliasRequest": {
+      "type": "object",
+      "required": [
+        "type",
+        "alias"
+      ],
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "examples": [
+            "ko"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AddMemberRequest": {
+      "type": "object",
+      "required": [
+        "name",
+        "channelId",
+        "aliases",
+        "isGraduated"
+      ],
+      "properties": {
+        "aliases": {
+          "$ref": "#/$defs/Aliases"
+        },
+        "channelId": {
+          "type": "string"
+        },
+        "isGraduated": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nameJa": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nameKo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AddRoomRequest": {
+      "type": "object",
+      "required": [
+        "room"
+      ],
+      "properties": {
+        "room": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "AggregatedStatus": {
+      "type": "object",
+      "required": [
+        "services",
+        "uptime",
+        "version",
+        "sampled_at"
+      ],
+      "properties": {
+        "sampled_at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceStatus"
+          }
+        },
+        "uptime": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Alarm": {
+      "type": "object",
+      "required": [
+        "roomId",
+        "roomName",
+        "channelId",
+        "memberName"
+      ],
+      "properties": {
+        "channelId": {
+          "type": "string"
+        },
+        "memberName": {
+          "type": "string"
+        },
+        "roomId": {
+          "type": "string"
+        },
+        "roomName": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AlarmsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "alarms"
+      ],
+      "properties": {
+        "alarms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Alarm"
+          }
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Aliases": {
+      "type": "object",
+      "required": [
+        "ko",
+        "ja"
+      ],
+      "properties": {
+        "ja": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ko": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CalendarEntry": {
+      "type": "object",
+      "required": [
+        "kind",
+        "member",
+        "day"
+      ],
+      "properties": {
+        "day": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "member": {
+          "$ref": "#/$defs/CalendarMember"
+        },
+        "ordinal": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CalendarMember": {
+      "type": "object",
+      "required": [
+        "id",
+        "channelId",
+        "name"
+      ],
+      "properties": {
+        "channelId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "isGraduated": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nameKo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "org": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "photo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shortKoreanName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suborg": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CalendarResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "month",
+        "year",
+        "entries"
+      ],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CalendarEntry"
+          }
+        },
+        "month": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "year": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Container": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "image",
+        "status",
+        "state",
+        "created",
+        "ports",
+        "managed",
+        "stopBlocked"
+      ],
+      "properties": {
+        "created": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "health": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "managed": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PortMapping"
+          }
+        },
+        "state": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stopBlocked": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DeleteAlarmRequest": {
+      "type": "object",
+      "required": [
+        "roomId",
+        "channelId"
+      ],
+      "properties": {
+        "channelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "roomId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "DockerContainerListResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "containers"
+      ],
+      "properties": {
+        "containers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Container"
+          }
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DockerHealthResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "available"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "requestId"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "absolute_expired": {
+          "type": "boolean"
+        },
+        "retry_after": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notDispatchedMutationId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "description": "Only the first atomic family claim may attest rejection before upstream dispatch. Must match the original X-Admin-Mutation-ID; absent evidence leaves the logical mutation outcome unknown."
+        }
+      }
+    },
+    "HeartbeatRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idle": {
+          "type": "boolean"
+        }
+      }
+    },
+    "HeartbeatResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "absolute_expires_at"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "ok"
+            },
+            "absolute_expires_at": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "absolute_expires_at",
+            "rotated",
+            "csrf_token"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "ok"
+            },
+            "absolute_expires_at": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rotated": {
+              "const": true
+            },
+            "csrf_token": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "idle_rejected"
+          ],
+          "properties": {
+            "status": {
+              "const": "idle"
+            },
+            "idle_rejected": {
+              "const": true
+            }
+          }
+        }
+      ]
+    },
+    "LoginRequest": {
+      "type": "object",
+      "required": [
+        "username",
+        "password"
+      ],
+      "properties": {
+        "password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LoginResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "message",
+        "csrf_token"
+      ],
+      "properties": {
+        "csrf_token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Member": {
+      "type": "object",
+      "required": [
+        "id",
+        "channelId",
+        "name",
+        "aliases",
+        "isGraduated"
+      ],
+      "properties": {
+        "aliases": {
+          "$ref": "#/$defs/Aliases"
+        },
+        "channelId": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "isGraduated": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nameJa": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nameKo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MembersResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "members"
+      ],
+      "properties": {
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Member"
+          }
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PortMapping": {
+      "type": "object",
+      "required": [
+        "private_port",
+        "port_type"
+      ],
+      "properties": {
+        "port_type": {
+          "type": "string"
+        },
+        "private_port": {
+          "type": "integer",
+          "format": "int32",
+          "minimum": 0
+        },
+        "public_port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "RemoveAliasRequest": {
+      "type": "object",
+      "required": [
+        "type",
+        "alias"
+      ],
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "examples": [
+            "ja"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RemoveRoomRequest": {
+      "type": "object",
+      "required": [
+        "room"
+      ],
+      "properties": {
+        "room": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoomNameUpdateRequest": {
+      "type": "object",
+      "required": [
+        "roomId",
+        "roomName"
+      ],
+      "properties": {
+        "roomId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "roomName": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoomsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "rooms",
+        "aclEnabled",
+        "aclMode"
+      ],
+      "properties": {
+        "aclEnabled": {
+          "type": "boolean"
+        },
+        "aclMode": {
+          "type": "string",
+          "enum": [
+            "whitelist",
+            "blacklist"
+          ]
+        },
+        "rooms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JoinedRoom": {
+      "type": "object",
+      "required": [
+        "chatId",
+        "name",
+        "type",
+        "memberCount"
+      ],
+      "properties": {
+        "chatId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "memberCount": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JoinedRoomsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "rooms"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "rooms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JoinedRoom"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ServiceStatus": {
+      "type": "object",
+      "required": [
+        "name",
+        "available"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "response_time_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionPolicyResponse": {
+      "type": "object",
+      "required": [
+        "heartbeat_interval_ms",
+        "idle_timeout_ms",
+        "idle_warning_timeout_ms",
+        "idle_session_ttl_ms",
+        "absolute_warning_window_ms"
+      ],
+      "properties": {
+        "absolute_warning_window_ms": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "heartbeat_interval_ms": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "idle_session_ttl_ms": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "idle_timeout_ms": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        },
+        "idle_warning_timeout_ms": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionStatusResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "authenticated",
+        "username",
+        "absolute_expires_at",
+        "session_policy",
+        "csrf_token"
+      ],
+      "properties": {
+        "absolute_expires_at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "authenticated": {
+          "type": "boolean",
+          "const": true
+        },
+        "csrf_token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_policy": {
+          "$ref": "#/$defs/SessionPolicyResponse"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "SetAclRequest": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SetAclResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "enabled",
+        "mode"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "whitelist",
+            "blacklist"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SetGraduationRequest": {
+      "type": "object",
+      "required": [
+        "isGraduated"
+      ],
+      "properties": {
+        "isGraduated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Settings": {
+      "type": "object",
+      "required": [
+        "alarmAdvanceMinutes"
+      ],
+      "properties": {
+        "alarmAdvanceMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        }
+      },
+      "additionalProperties": false
+    },
+    "SettingsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "settings"
+      ],
+      "properties": {
+        "settings": {
+          "$ref": "#/$defs/Settings"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "members",
+        "alarms",
+        "rooms",
+        "version",
+        "uptime"
+      ],
+      "properties": {
+        "alarms": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "members": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "rooms": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "uptime": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatusOnlyResponse": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Stream": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status",
+        "channel_id"
+      ],
+      "properties": {
+        "channel_id": {
+          "type": "string"
+        },
+        "channel_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "link": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start_actual": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start_scheduled": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "thumbnail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StreamsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "streams"
+      ],
+      "properties": {
+        "org": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Stream"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "UpdateChannelRequest": {
+      "type": "object",
+      "required": [
+        "channelId"
+      ],
+      "properties": {
+        "channelId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "UpdateMemberNameRequest": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "UserNameUpdateRequest": {
+      "type": "object",
+      "required": [
+        "userId",
+        "userName"
+      ],
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "YouTubeCommunityShortsOpsChannel": {
+      "type": "object",
+      "required": [
+        "channelId",
+        "detectedPostCount",
+        "alarmSentPostCount",
+        "successPostCount",
+        "failedPostCount",
+        "detectedUnsentPostCount",
+        "pendingPostCount",
+        "latencyMeasuredPostCount",
+        "withinTargetPostCount",
+        "exceededPostCount",
+        "communityPostCount",
+        "shortsPostCount"
+      ],
+      "properties": {
+        "alarmSentPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "averageLatencyMillis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "channelId": {
+          "type": "string"
+        },
+        "communityPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "detectedPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "detectedUnsentPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "earliestObservedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exceededPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "failedPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "latencyMeasuredPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "latestObservedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "maxLatencyMillis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "memberName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "shortsPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "successPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "withinTargetPostCount": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false
+    },
+    "YouTubeCommunityShortsOpsOverview": {
+      "type": "object",
+      "required": [
+        "channelCount",
+        "detectedPostCount",
+        "alarmSentPostCount",
+        "successPostCount",
+        "failedPostCount",
+        "detectedUnsentPostCount",
+        "pendingPostCount",
+        "latencyMeasuredPostCount",
+        "withinTargetPostCount",
+        "exceededPostCount",
+        "communityDetectedPostCount",
+        "shortsDetectedPostCount",
+        "communityExceededPostCount",
+        "shortsExceededPostCount"
+      ],
+      "properties": {
+        "alarmSentPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "averageLatencyMillis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "channelCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "communityDetectedPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "communityExceededPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "detectedPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "detectedUnsentPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "exceededPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "failedPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "latencyMeasuredPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "maxLatencyMillis": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "pendingPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "shortsDetectedPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "shortsExceededPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "successPostCount": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "withinTargetPostCount": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false
+    },
+    "YouTubeCommunityShortsOpsResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "generatedAt",
+        "windowStart",
+        "windowEnd",
+        "windowHours",
+        "observedAtBasis",
+        "slaThresholdMillis",
+        "overview",
+        "channels"
+      ],
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/YouTubeCommunityShortsOpsChannel"
+          }
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "observedAtBasis": {
+          "type": "string"
+        },
+        "overview": {
+          "$ref": "#/$defs/YouTubeCommunityShortsOpsOverview"
+        },
+        "slaThresholdMillis": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "windowEnd": {
+          "type": "string"
+        },
+        "windowHours": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "windowStart": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SettingsUpdateResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "message",
+        "settings",
+        "runtime"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "message": {
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings"
+        },
+        "runtime": {
+          "$ref": "#/$defs/SettingsRuntimeResult"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SettingsRuntimeResult": {
+      "type": "object",
+      "properties": {
+        "alarm_applied": {
+          "type": "boolean"
+        },
+        "alarm_requested_advance_minutes": {
+          "type": "integer"
+        },
+        "alarm_reason": {
+          "type": "string"
+        },
+        "alarm_target_minutes": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "config_publish_alarm_advance_minutes": {
+          "type": "boolean"
+        },
+        "config_publish_alarm_advance_minutes_error": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "AdminMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientGeneration"
+      ],
+      "properties": {
+        "clientGeneration": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "OpenAPIDocument": {
+      "type": "object",
+      "required": [
+        "openapi",
+        "info",
+        "paths",
+        "components"
+      ],
+      "properties": {
+        "openapi": {
+          "const": "3.1.0"
+        },
+        "info": {
+          "type": "object",
+          "required": [
+            "title",
+            "version"
+          ],
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "paths": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          }
+        },
+        "components": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "ServiceRuntimeStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "count",
+        "metricKind",
+        "available"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "metricKind": {
+          "type": "string",
+          "enum": [
+            "goroutine",
+            "thread"
+          ]
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SystemStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sampledAt",
+        "cpuUsage",
+        "memoryTotal",
+        "memoryUsed",
+        "memoryUsage",
+        "threadCount",
+        "totalGoGoroutines",
+        "totalRuntimeUnits",
+        "loadAvg1",
+        "loadAvg5",
+        "loadAvg15",
+        "serviceRuntime"
+      ],
+      "properties": {
+        "sampledAt": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cpuUsage": {
+          "type": "number",
+          "minimum": 0
+        },
+        "memoryTotal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "memoryUsed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "memoryUsage": {
+          "type": "number",
+          "minimum": 0
+        },
+        "threadCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalGoGoroutines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalRuntimeUnits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "loadAvg1": {
+          "type": "number",
+          "minimum": 0
+        },
+        "loadAvg5": {
+          "type": "number",
+          "minimum": 0
+        },
+        "loadAvg15": {
+          "type": "number",
+          "minimum": 0
+        },
+        "serviceRuntime": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceRuntimeStats"
+          }
+        }
+      }
+    },
+    "DeleteAlarmResponse": {
+      "type": "object",
+      "required": [
+        "status",
+        "removed"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "removed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "request_handle_heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/HeartbeatRequest"
+        }
+      }
+    },
+    "request_handle_login": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/LoginRequest"
+        }
+      }
+    },
+    "request_handle_logout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_session_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_docker_containers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_docker_restart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_docker_start": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_docker_stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_docker_health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoGetAlarms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoDeleteAlarm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/DeleteAlarmRequest"
+        }
+      }
+    },
+    "request_holoGetMembers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoAddMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/AddMemberRequest"
+        }
+      }
+    },
+    "request_holoGetCalendar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "month": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "year": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoAddAlias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/AddAliasRequest"
+        }
+      }
+    },
+    "request_holoRemoveAlias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/RemoveAliasRequest"
+        }
+      }
+    },
+    "request_holoUpdateChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/UpdateChannelRequest"
+        }
+      }
+    },
+    "request_holoSetGraduation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/SetGraduationRequest"
+        }
+      }
+    },
+    "request_holoUpdateMemberName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/UpdateMemberNameRequest"
+        }
+      }
+    },
+    "request_holoSetRoomName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/RoomNameUpdateRequest"
+        }
+      }
+    },
+    "request_holoSetUserName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/UserNameUpdateRequest"
+        }
+      }
+    },
+    "request_holoGetRooms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoAddRoom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/AddRoomRequest"
+        }
+      }
+    },
+    "request_holoRemoveRoom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/RemoveRoomRequest"
+        }
+      }
+    },
+    "request_holoGetRoomsJoined": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoSetAcl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/SetAclRequest"
+        }
+      }
+    },
+    "request_holoGetSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoUpdateSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "x-csrf-token": {
+              "type": "string",
+              "minLength": 1
+            },
+            "x-admin-mutation-id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation",
+            "x-csrf-token",
+            "x-admin-mutation-id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "$ref": "#/$defs/Settings"
+        }
+      }
+    },
+    "request_holoGetStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoGetYouTubeCommunityShortsOps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoGetLiveStreams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "org": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_holoGetUpcomingStreams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "org": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_handle_aggregated_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_getAdminMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "request_getAdminOpenAPI": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "query",
+        "headers"
+      ],
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-admin-client-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "x-admin-client-generation"
+          ],
+          "additionalProperties": false
+        },
+        "body": false
+      }
+    },
+    "response_daff50d5a779875b": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/HeartbeatResponse"
+        }
+      }
+    },
+    "response_b7a2836f983b1f2d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/ErrorResponse"
+        }
+      }
+    },
+    "response_a65f897a9e5bef22": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/LoginResponse"
+        }
+      }
+    },
+    "response_752e9496dd81504a": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/StatusOnlyResponse"
+        }
+      }
+    },
+    "response_e413350db7dbab73": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/SessionStatusResponse"
+        }
+      }
+    },
+    "response_3c7c05c90472d258": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/DockerContainerListResponse"
+        }
+      }
+    },
+    "response_6aa9a0f0484f422f": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/DockerHealthResponse"
+        }
+      }
+    },
+    "response_9f8aa2ce64ef8e54": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/AlarmsResponse"
+        }
+      }
+    },
+    "response_ee05f2ea05da7601": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/DeleteAlarmResponse"
+        }
+      }
+    },
+    "response_db38ab7f5a37380b": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/MembersResponse"
+        }
+      }
+    },
+    "response_cbc9e95d048967ae": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/CalendarResponse"
+        }
+      }
+    },
+    "response_06e829560cf77ac9": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/RoomsResponse"
+        }
+      }
+    },
+    "response_2d2c268d0d3a9dc4": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/JoinedRoomsResponse"
+        }
+      }
+    },
+    "response_d2ed51f51f31f984": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/SetAclResponse"
+        }
+      }
+    },
+    "response_68291d4fae3bd431": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/SettingsResponse"
+        }
+      }
+    },
+    "response_bbe5335f8a8be186": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/SettingsUpdateResponse"
+        }
+      }
+    },
+    "response_ce715bb3531a7f0b": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/StatsResponse"
+        }
+      }
+    },
+    "response_1b92dae3641e1c82": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/YouTubeCommunityShortsOpsResponse"
+        }
+      }
+    },
+    "response_e61c8f3f519bf4fc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/StreamsResponse"
+        }
+      }
+    },
+    "response_5e735ea71bb5c41b": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/AggregatedStatus"
+        }
+      }
+    },
+    "response_09b0c71e1a33e540": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/AdminMetadata"
+        }
+      }
+    },
+    "response_fc8e4c9ffb5b8281": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headers",
+        "body"
+      ],
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x-admin-server-generation"
+          ],
+          "properties": {
+            "x-admin-server-generation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/OpenAPIDocument"
+        }
+      }
+    }
+  }
+}

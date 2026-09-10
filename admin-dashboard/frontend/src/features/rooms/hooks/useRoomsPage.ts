@@ -1,6 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryView } from "@/queries/state";
+import { useOnline } from "@/queries/useOnline";
+import { useBusinessMutation } from "@/operations/useBusinessMutation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { queryKeys } from "@/api/queryKeys";
+import { queryKeys } from "@/queries/keys";
 import { roomsApi } from "@/features/rooms/api";
 import type { ACLMode } from "@/features/rooms/types";
 
@@ -54,63 +57,61 @@ export function useRoomsPage() {
 		staleTime: 1000 * 60,
 	});
 
-	const addRoomMutation = useMutation({
+	const online = useOnline();
+	const view = queryView(query, online, data => data.rooms.length === 0);
+	const joinedView = queryView(joinedQuery, online, data => data.rooms.length === 0);
+	const invalidate = () => { void queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all }); };
+
+	const addRoomMutation = useBusinessMutation({
 		mutationFn: roomsApi.add,
-		onSuccess: async () => {
-			await queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all });
-			setNewRoom("");
+		onSuccess: (_data, request) => {
+			setNewRoom(current => current.trim() === request.room ? "" : current);
+			 invalidate();
 		},
+		onError: invalidate,
 	});
 
-	const removeRoomMutation = useMutation({
+	const removeRoomMutation = useBusinessMutation({
 		mutationFn: roomsApi.remove,
-		onSuccess: async () => {
-			await queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all });
-			setRemoveModal({ isOpen: false, room: "" });
-		},
+		onSuccess: invalidate,
+		onError: invalidate,
 	});
 
-	const setACLMutation = useMutation({
+	const setACLMutation = useBusinessMutation({
 		mutationFn: roomsApi.setACL,
-		onSuccess: async () => {
-			await queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all });
-		},
+		onSuccess: invalidate,
+		onError: invalidate,
 	});
-
-	const rooms = query.data?.rooms ?? [];
-	const aclEnabled = query.data?.aclEnabled ?? true;
-	const aclMode = (query.data?.aclMode ?? "blacklist") as ACLMode;
-	const labels = MODE_LABELS[aclMode];
-	const isBlacklist = aclMode === "blacklist";
-
-	const joinedRooms = joinedQuery.data?.rooms ?? [];
 
 	const handleAddRoom = () => {
 		const room = newRoom.trim();
-		if (!room) return;
+		if (!room || !view.current) return;
 		removeRoomMutation.reset();
 		addRoomMutation.mutate({ room });
 	};
 
 	const handleAddRoomId = (chatId: string) => {
 		const room = chatId.trim();
-		if (!room) return;
+		if (!room || !view.current) return;
 		removeRoomMutation.reset();
 		addRoomMutation.mutate({ room });
 	};
 
 	const confirmRemoveRoom = () => {
-		if (!removeModal.room || removeRoomMutation.isPending) return;
+		if (!removeModal.room || removeRoomMutation.isPending || !view.current) return;
 		addRoomMutation.reset();
-		removeRoomMutation.mutate({ room: removeModal.room });
+		void removeRoomMutation.mutateAsync({ room: removeModal.room }).then(() => {
+			setRemoveModal(current => current === removeModal ? { isOpen: false, room: "" } : current);
+		}, () => { /* OperationNotice와 확인창이 결과를 표시하며 초안을 보존합니다. */ });
 	};
 
 	const handleToggleACL = () => {
-		setACLMutation.mutate({ enabled: !aclEnabled });
+		if (!view.current) return;
+		setACLMutation.mutate({ enabled: !view.data.aclEnabled });
 	};
 
 	const handleModeChange = (mode: ACLMode) => {
-		if (mode === aclMode) return;
+		if (!view.current || mode === view.data.aclMode) return;
 		setACLMutation.mutate({ mode });
 	};
 
@@ -120,17 +121,12 @@ export function useRoomsPage() {
 		removeModal,
 		setRemoveModal,
 		query,
+		view,
+		joinedQuery,
+		joinedView,
 		addRoomMutation,
 		removeRoomMutation,
 		setACLMutation,
-		rooms,
-		aclEnabled,
-		aclMode,
-		labels,
-		isBlacklist,
-		joinedRooms,
-		joinedLoading: joinedQuery.isLoading,
-		joinedUnavailable: joinedQuery.isError,
 		handleAddRoom,
 		handleAddRoomId,
 		confirmRemoveRoom,

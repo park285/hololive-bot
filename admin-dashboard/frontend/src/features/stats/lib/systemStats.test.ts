@@ -1,30 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
-
-const sourcePath = new URL("./systemStats.ts", import.meta.url);
-const source = await readFile(sourcePath, "utf8");
-const transpiled = ts.transpileModule(
-	source.replace(
-		'from "@/config"',
-		'from "data:text/javascript;base64,ZXhwb3J0IGNvbnN0IENPTkZJRz17dWk6e3NlcnZpY2VDb2xvcnM6e319fTs="',
-	),
-	{
-		compilerOptions: {
-			module: ts.ModuleKind.ESNext,
-			target: ts.ScriptTarget.ES2022,
-		},
-	},
-);
-
-const mod = await import(
-	`data:text/javascript;base64,${Buffer.from(transpiled.outputText).toString("base64")}`
-);
+import * as mod from "./systemStats";
 
 test("parseSystemStats supports new runtime contract", () => {
 	const parsed = mod.parseSystemStats({
 		sampledAt: 1_754_803_200_000,
+		loadAvg1: 0, loadAvg5: 0, loadAvg15: 0,
 		cpuUsage: 10,
 		memoryUsage: 20,
 		memoryTotal: 100,
@@ -48,6 +29,7 @@ test("parseSystemStats supports new runtime contract", () => {
 test("createSystemStatsPoint preserves backend sample time", () => {
 	const stats = mod.parseSystemStats({
 		sampledAt: 1_754_803_200_000,
+		loadAvg1: 0, loadAvg5: 0, loadAvg15: 0,
 		cpuUsage: 10,
 		memoryUsage: 20,
 		memoryTotal: 100,
@@ -56,7 +38,7 @@ test("createSystemStatsPoint preserves backend sample time", () => {
 		totalGoGoroutines: 42,
 		totalRuntimeUnits: 42,
 		serviceRuntime: [
-			{ name: "admin-dashboard", count: 7, available: true },
+			{ name: "admin-dashboard", count: 7, metricKind: "goroutine", available: true },
 		],
 	});
 	assert.ok(stats);
@@ -66,7 +48,7 @@ test("createSystemStatsPoint preserves backend sample time", () => {
 	assert.equal(point.serviceValues["admin-dashboard"], 7);
 });
 
-test("parseSystemStats still accepts legacy goroutine payload", () => {
+test("parseSystemStats rejects legacy goroutine payload without inventing sample time", () => {
 	const parsed = mod.parseSystemStats({
 		cpuUsage: 10,
 		memoryUsage: 20,
@@ -79,9 +61,7 @@ test("parseSystemStats still accepts legacy goroutine payload", () => {
 		],
 	});
 
-	assert.ok(parsed);
-	assert.equal(parsed?.threadCount, 7);
-	assert.equal(parsed?.serviceRuntime[0]?.count, 7);
+	assert.equal(parsed, null);
 });
 
 test("shouldConnectSystemStatsStream requires resolved auth state and a visible tab", () => {

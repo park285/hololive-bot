@@ -10,24 +10,40 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kapu/admin-dashboard/internal/contract"
 )
 
 func TestErrorMapsAppError(t *testing.T) {
 	rec := httptest.NewRecorder()
-	Error(rec, BadRequest("nope"))
+	Error(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody), contract.BadRequest("nope"))
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var body ErrorResponse
+	var body contract.ErrorResponse
 
 	require.NoError(t, jsonv2.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, "nope", body.Error)
-	require.Equal(t, "bad_request", body.Code)
+	require.Equal(t, "BAD_REQUEST", body.Code)
+}
+
+func TestMutationRejectionEvidenceComesOnlyFromRequestContext(t *testing.T) {
+	const id = "5ae58f70-51c4-4df2-bf70-683773e40638"
+
+	state := &contract.Dispatch{}
+	ctx := contract.WithDispatch(t.Context(), state)
+	input := contract.ErrorResponse{Code: "BAD_REQUEST", Error: "Refused", NotDispatchedMutationID: id}
+	require.Empty(t, errorBody(ctx, 400, input, "fixture").NotDispatchedMutationID)
+
+	contract.MarkMutationClaimed(ctx, id)
+	require.Equal(t, id, errorBody(ctx, 400, input, "fixture").NotDispatchedMutationID)
+	contract.MarkDispatched(ctx)
+	require.Empty(t, errorBody(ctx, 400, input, "fixture").NotDispatchedMutationID)
 }
 
 func TestErrorMapsUnknownErrorTo500(t *testing.T) {
 	rec := httptest.NewRecorder()
-	Error(rec, errors.New("boom"))
+	Error(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody), errors.New("boom"))
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	require.Contains(t, rec.Body.String(), "An internal error occurred")
@@ -41,7 +57,7 @@ func TestAbortMapsAppErrorAndStopsChain(t *testing.T) {
 
 	c.Request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", http.NoBody)
 
-	Abort(c, Forbidden())
+	Abort(c, contract.Forbidden())
 
 	require.True(t, c.IsAborted())
 	require.Equal(t, http.StatusForbidden, rec.Code)
@@ -50,7 +66,7 @@ func TestAbortMapsAppErrorAndStopsChain(t *testing.T) {
 
 func TestAppErrorUnwrap(t *testing.T) {
 	cause := errors.New("root cause")
-	err := Internal(cause)
+	err := contract.Internal(cause)
 
 	require.ErrorIs(t, err, cause)
 	require.Equal(t, "root cause", err.Error())

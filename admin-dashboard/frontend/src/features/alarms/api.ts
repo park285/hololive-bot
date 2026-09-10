@@ -1,5 +1,5 @@
 import type { DeleteAlarmRequest } from "@/api/generated/data-contracts";
-import { adminClient } from "@/api/adminClient";
+import { adminClient } from "@/app/bootstrap";
 
 export const alarmsApi = {
 	getAll: async () => (await adminClient.holoGetAlarms()).data,

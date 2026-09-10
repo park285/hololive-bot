@@ -1,7 +1,7 @@
 import Bell from "lucide-react/dist/esm/icons/bell.mjs";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
-import type { AggregatedStatus } from "@/api/core";
+import type { AggregatedStatus } from "@/api/generated/data-contracts";
 import type { StatsOverviewCard } from "@/features/stats/components/StatsOverviewSection";
 import type { StatsResponse } from "@/features/stats/types";
 
@@ -33,7 +33,7 @@ export function buildCurrentServiceStats(
 
 	return {
 		name: selectedService,
-		available: baseService?.available ?? false,
+		available: baseService?.available,
 		version: runtimeInfo.version ?? "-",
 		uptime: runtimeInfo.uptime ?? "-",
 	};
@@ -42,22 +42,23 @@ export function buildCurrentServiceStats(
 export function buildMainStats(
 	holoStats: StatsResponse | undefined,
 ): StatsOverviewCard[] {
+	if (holoStats === undefined) return [];
 	return [
 		{
 			label: "등록된 멤버",
-			value: holoStats?.members ?? 0,
+			value: holoStats.members,
 			variant: "cyan",
 			icon: <Users size={24} />,
 		},
 		{
 			label: "활성 알람",
-			value: holoStats?.alarms ?? 0,
+			value: holoStats.alarms,
 			variant: "rose",
 			icon: <Bell size={24} />,
 		},
 		{
 			label: "연동된 방",
-			value: holoStats?.rooms ?? 0,
+			value: holoStats.rooms,
 			variant: "indigo",
 			icon: <MessageSquare size={24} />,
 		},

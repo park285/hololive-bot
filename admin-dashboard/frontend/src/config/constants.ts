@@ -5,8 +5,6 @@ const serviceColors: Record<string, string> = {
 
 export const CONFIG = {
 	heartbeat: {
-		intervalMs: 5 * 60 * 1000,
-		idleTimeoutMs: 10 * 60 * 1000,
 		maxFailures: 3,
 	},
 
@@ -14,7 +12,6 @@ export const CONFIG = {
 		reconnectAttempts: 5,
 		reconnectIntervalMs: 3000,
 		maxBackoffMs: 30000,
-		pingIntervalMs: 30 * 1000,
 	},
 
 	query: {

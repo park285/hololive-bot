@@ -1,23 +1,29 @@
+import { contractJSON } from "@/mocks/contract";
 import assert from "node:assert/strict";
 import { after, afterEach, before, test } from "node:test";
 import { isAxiosError } from "axios";
+import { CLIENT_GENERATION } from "@/api/generated/generation";
 import { http, HttpResponse } from "msw";
-import apiClient, { clearCSRFToken, setCSRFToken } from "@/api/client";
-import { dockerApi } from "@/api/core";
+import { httpClient as apiClient, session, generation, operations } from "@/app/bootstrap";
+import { dockerApi } from "@/features/docker/api";
 import { server } from "@/mocks/server";
+
+function seedCSRF(token: string): void { generation.ready(); session.state.acceptCSRF(token, session.state.snapshot()); }
 
 const originalBaseURL = apiClient.defaults.baseURL;
 const baseURL = "http://localhost:30190/admin/api";
-const containerName = "test-worker";
+const containerName = "hololive-api";
 const actions = [
 	["restart", dockerApi.restartContainer],
 	["stop", dockerApi.stopContainer],
 	["start", dockerApi.startContainer],
 ] as const;
 
+const oldOnline = Object.getOwnPropertyDescriptor(navigator, "onLine");
 before(() => {
+	Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
 	apiClient.defaults.baseURL = baseURL;
-	setCSRFToken("docker-action-test-token");
+	seedCSRF("docker-action-test-token");
 	server.listen({ onUnhandledRequest: "error" });
 });
 
@@ -26,13 +32,14 @@ afterEach(() => {
 });
 
 after(() => {
+	if (oldOnline) Object.defineProperty(navigator, "onLine", oldOnline); else Reflect.deleteProperty(navigator, "onLine");
 	server.close();
 	apiClient.defaults.baseURL = originalBaseURL;
-	clearCSRFToken();
+	session.state.clearCSRF();
 });
 
 function isOutcomeUnknown(error: unknown): boolean {
-	return error instanceof Error && error.name === "DockerActionOutcomeUnknownError";
+	return operations.failure(error)?.kind === "unknown";
 }
 
 for (const [action, invoke] of actions) {
@@ -43,7 +50,7 @@ for (const [action, invoke] of actions) {
 		server.use(http.post(url, ({ request }) => {
 			requests += 1;
 			assert.equal(request.headers.get("x-csrf-token"), "docker-action-test-token");
-			return HttpResponse.json({ status: "ok", message: "confirmed", extra: true });
+			return contractJSON({ status: "ok", message: "confirmed" });
 		}));
 
 		assert.deepEqual(await invoke(containerName), { status: "ok", message: "confirmed" });
@@ -52,6 +59,7 @@ for (const [action, invoke] of actions) {
 
 	test(`docker ${action} rejects malformed success bodies without another POST`, async (t) => {
 		const cases = [
+			["unknown field", { status: "ok", extra: true }],
 			["empty object", {}],
 			["null", null],
 			["array", []],
@@ -68,7 +76,7 @@ for (const [action, invoke] of actions) {
 				let requests = 0;
 				server.use(http.post(url, () => {
 					requests += 1;
-					return HttpResponse.json(body);
+					return contractJSON(body);
 				}));
 				await assert.rejects(invoke(containerName), isOutcomeUnknown);
 				assert.equal(requests, 1);
@@ -79,7 +87,7 @@ for (const [action, invoke] of actions) {
 	test(`docker ${action} accepts an omitted or nullable optional message`, async (t) => {
 		for (const body of [{ status: "ok" }, { status: "ok", message: null }]) {
 			await t.test(JSON.stringify(body), async () => {
-				server.use(http.post(url, () => HttpResponse.json(body)));
+				server.use(http.post(url, () => contractJSON(body)));
 				assert.equal((await invoke(containerName)).status, "ok");
 			});
 		}
@@ -89,7 +97,7 @@ for (const [action, invoke] of actions) {
 		let requests = 0;
 		server.use(http.post(url, () => {
 			requests += 1;
-			return new HttpResponse(null, { status: 200 });
+			return new HttpResponse(null, { status: 200, headers: { "X-Admin-Server-Generation": CLIENT_GENERATION, "Content-Type": "application/json" } });
 		}));
 		await assert.rejects(invoke(containerName), isOutcomeUnknown);
 		assert.equal(requests, 1);
@@ -102,8 +110,8 @@ for (const [action, invoke] of actions) {
 				server.use(http.post(url, () => {
 					requests += 1;
 					return status === 204
-						? new HttpResponse(null, { status })
-						: HttpResponse.json({ status: "ok" }, { status });
+						? new HttpResponse(null, { status, headers: { "X-Admin-Server-Generation": CLIENT_GENERATION } })
+						: contractJSON({ status: "ok" }, { status });
 				}));
 				await assert.rejects(invoke(containerName), isOutcomeUnknown);
 				assert.equal(requests, 1);
@@ -115,7 +123,7 @@ for (const [action, invoke] of actions) {
 		let requests = 0;
 		server.use(http.post(url, () => {
 			requests += 1;
-			return HttpResponse.json({ error: "forbidden" }, { status: 403 });
+			return contractJSON({ code: "FORBIDDEN", message: "forbidden", requestId: "fixture-request" }, { status: 403 });
 		}));
 		await assert.rejects(invoke(containerName), (error: unknown) =>
 			isAxiosError(error) && error.response?.status === 403);
@@ -126,7 +134,7 @@ for (const [action, invoke] of actions) {
 		let requests = 0;
 		server.use(http.post(url, () => {
 			requests += 1;
-			return HttpResponse.json({ error: "upstream unavailable" }, { status: 502 });
+			return contractJSON({ code: "UPSTREAM_UNAVAILABLE", message: "upstream unavailable", requestId: "fixture-request" }, { status: 502 });
 		}));
 		await assert.rejects(invoke(containerName), isOutcomeUnknown);
 		assert.equal(requests, 1);
@@ -158,14 +166,13 @@ for (const [action, invoke] of actions) {
 		server.use(http.post(url, async () => {
 			requests += 1;
 			await responseGate;
-			return HttpResponse.json({ status: "ok" });
+			return contractJSON({ status: "ok" });
 		}));
 		apiClient.defaults.timeout = 500;
 
 		await assert.rejects(invoke(containerName), (error: unknown) =>
-			isOutcomeUnknown(error) && error instanceof Error &&
-			isAxiosError(error.cause) &&
-			(error.cause.code === "ECONNABORTED" || error.cause.code === "ETIMEDOUT"));
+			isOutcomeUnknown(error) && isAxiosError(error) &&
+			(error.code === "ECONNABORTED" || error.code === "ETIMEDOUT"));
 		assert.equal(requests, 1);
 	});
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"net/netip"
+	"os"
 	"testing"
 	"time"
 )
@@ -118,37 +119,6 @@ func TestSessionConfigValidateFailureBranches(t *testing.T) {
 	}
 }
 
-func TestForwardedTrustWarning(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name       string
-		forceHTTPS bool
-		trusted    bool
-		wantEmpty  bool
-	}{
-		{"https without trust warns", true, false, false},
-		{"https with trust silent", true, true, true},
-		{"plain http silent", false, false, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := Config{Security: SecurityConfig{ForceHTTPS: tc.forceHTTPS}, TrustedForwarders: tc.trusted}
-			got := cfg.ForwardedTrustWarning()
-
-			if tc.wantEmpty && got != "" {
-				t.Fatalf("ForwardedTrustWarning() = %q, want empty", got)
-			}
-
-			if !tc.wantEmpty && got == "" {
-				t.Fatal("ForwardedTrustWarning() = empty, want warning")
-			}
-		})
-	}
-}
-
 func TestSessionConfigValidateDefaultPasses(t *testing.T) {
 	t.Parallel()
 
@@ -196,7 +166,7 @@ func TestValidateTTLWindowsDefaultPasses(t *testing.T) {
 
 func TestAliasOrDefault(t *testing.T) {
 	t.Run("returns default when none set", func(t *testing.T) {
-		if got := aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "fallback" {
+		if got := testAliasInputs().aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "fallback" {
 			t.Fatalf("aliasOrDefault = %q, want fallback", got)
 		}
 	})
@@ -204,7 +174,7 @@ func TestAliasOrDefault(t *testing.T) {
 		t.Setenv("AO_PRIMARY", "primary-val")
 		t.Setenv("AO_SECONDARY", "secondary-val")
 
-		if got := aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "primary-val" {
+		if got := testAliasInputs().aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "primary-val" {
 			t.Fatalf("aliasOrDefault = %q, want primary-val", got)
 		}
 	})
@@ -212,7 +182,7 @@ func TestAliasOrDefault(t *testing.T) {
 		t.Setenv("AO_PRIMARY", "")
 		t.Setenv("AO_SECONDARY", "secondary-val")
 
-		if got := aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "secondary-val" {
+		if got := testAliasInputs().aliasOrDefault("fallback", "AO_PRIMARY", "AO_SECONDARY"); got != "secondary-val" {
 			t.Fatalf("aliasOrDefault = %q, want secondary-val", got)
 		}
 	})
@@ -220,7 +190,7 @@ func TestAliasOrDefault(t *testing.T) {
 
 func TestRequiredAlias(t *testing.T) {
 	t.Run("error when none set", func(t *testing.T) {
-		if _, err := requiredAlias("RA_PRIMARY", "RA_SECONDARY"); err == nil {
+		if _, err := testAliasInputs().requiredAlias("RA_PRIMARY", "RA_SECONDARY"); err == nil {
 			t.Fatal("requiredAlias error = nil, want error when no alias is set")
 		}
 	})
@@ -228,7 +198,7 @@ func TestRequiredAlias(t *testing.T) {
 		t.Setenv("RA_PRIMARY", "")
 		t.Setenv("RA_SECONDARY", "found")
 
-		got, err := requiredAlias("RA_PRIMARY", "RA_SECONDARY")
+		got, err := testAliasInputs().requiredAlias("RA_PRIMARY", "RA_SECONDARY")
 		if err != nil {
 			t.Fatalf("requiredAlias error = %v", err)
 		}
@@ -237,4 +207,14 @@ func TestRequiredAlias(t *testing.T) {
 			t.Fatalf("requiredAlias = %q, want found", got)
 		}
 	})
+}
+
+func testAliasInputs() *inputValues {
+	in := &inputValues{values: map[string]string{}}
+
+	for _, key := range []string{"AO_PRIMARY", "AO_SECONDARY", "RA_PRIMARY", "RA_SECONDARY"} {
+		in.values[key] = os.Getenv(key)
+	}
+
+	return in
 }

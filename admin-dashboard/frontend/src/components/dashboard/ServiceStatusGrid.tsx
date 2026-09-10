@@ -2,7 +2,7 @@ import Bot from "lucide-react/dist/esm/icons/bot.mjs";
 import Cpu from "lucide-react/dist/esm/icons/cpu.mjs";
 import Server from "lucide-react/dist/esm/icons/server.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
-import type { ServiceStatus } from "@/api/core";
+import type { ServiceStatus } from "@/api/generated/data-contracts";
 
 interface ServiceStatusGridProps {
 	services: ServiceStatus[];

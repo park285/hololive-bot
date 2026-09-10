@@ -32,7 +32,7 @@ export const AlarmsToolbar = ({
 				/>
 				<Input
 					id="alarm-search"
-					placeholder="방 이름, 유저 이름, 멤버 이름…"
+					placeholder="방 이름, 멤버 이름…"
 					value={search}
 					onChange={(event) => {
 						onSearchChange(event.target.value);

@@ -5,7 +5,7 @@ import type { Member } from "./types";
 
 const members: Member[] = [
 	{
-		id: 1,
+		id: "1",
 		name: "Suisei",
 		channelId: "UC1",
 		aliases: { ko: ["스이세이"], ja: ["すいせい"] },
@@ -14,7 +14,7 @@ const members: Member[] = [
 		isGraduated: false,
 	},
 	{
-		id: 2,
+		id: "2",
 		name: "Aloe",
 		channelId: "UC2",
 		aliases: { ko: ["알로에"], ja: ["アロエ"] },

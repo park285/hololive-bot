@@ -1,3 +1,4 @@
+import { CLIENT_GENERATION } from "../../api/generated/generation.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -14,12 +15,14 @@ const entry = String.raw`
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SettingsForm } from "/src/components/settings/SettingsForm.tsx";
-import { adminClient } from "/src/api/adminClient.ts";
-import { queryKeys } from "/src/api/queryKeys.ts";
+import { SettingsForm } from "/src/features/settings/components/SettingsForm.tsx";
+import { httpClient as apiClient, session, generation } from "/src/app/bootstrap.ts";
+import { queryKeys } from "/src/queries/keys.ts";
 import toast, { getToastItems } from "/src/lib/toast-api.ts";
-adminClient.instance.defaults.baseURL = location.origin;
-const client = new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false},mutations:{retry:2,retryDelay:0}}});
+apiClient.defaults.baseURL = location.origin + "/admin/api";
+generation.ready();
+session.state.acceptCSRF("fixture-csrf", session.state.snapshot());
+const client = new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false,staleTime:300000},mutations:{retry:2,retryDelay:0}}});
 const root = createRoot(document.getElementById("root"));
 const wait = async (fn, label) => { for(let i=0;i<300;i++){if(fn())return;await new Promise(r=>setTimeout(r,10));}throw new Error("timeout: "+label); };
 const expect = (value, label) => { if(!value)throw new Error(label); };
@@ -35,21 +38,25 @@ const refetch = () => client.invalidateQueries({queryKey:queryKeys.settings.all}
   expect(input().value==="" && input().disabled && button().disabled,"unknown value editable");
   expect(!document.body.textContent.includes("저장됨"),"unknown claimed saved");
   await control("fail-get");
-  await wait(()=>document.body.textContent.includes("설정을 조회하지 못했습니다"),"initial error");
+  await wait(()=>document.body.textContent.includes("조회 결과를 확인하지 못했습니다"),"initial error");
   expect(input().value==="" && button().disabled,"failed read displayed fallback");
   await control("malformed-get"); await refetch();
-  await wait(()=>document.body.textContent.includes("설정을 조회하지 못했습니다"),"malformed initial query error");
-  expect(input().value==="" && button().disabled && document.body.textContent.includes("설정을 조회하지 못했습니다"),"malformed initial response accepted");
+  await wait(()=>document.body.textContent.includes("조회 결과를 확인하지 못했습니다"),"malformed initial query error");
+  expect(input().value==="" && button().disabled,"malformed initial response accepted");
   await control("ok-get"); await refetch();
   await wait(()=>input().value==="15","loaded baseline");
   await control("malformed-get"); await refetch();
   await wait(()=>document.body.textContent.includes("마지막으로 확인한 값"),"stale error");
   expect(input().value==="15","stale baseline lost");
-  edit("20"); await wait(()=>!button().disabled,"dirty edit");
+  edit("20"); expect(button().disabled,"stale read allowed a save");
   await control("baseline-25"); await refetch();
   expect(input().value==="20","refetch overwrote edit");
-  for (const [mode,value,fragment] of [["publish-failed","21","전파하지 못했습니다"],["apply-failed","22","적용에 실패했습니다"],["confirmed","23","적용·전파했습니다"],["save-failed","24","저장 결과를 확인하지 못했습니다"],["bad-request","25","거절되어 변경되지 않았습니다"],["forbidden","26","거절되어 변경되지 않았습니다"]]) {
-   toast.dismiss(); await control(mode); edit(value); await wait(()=>!button().disabled,"edit "+mode); button().click();
+  await wait(()=>document.body.textContent.includes("편집 중 저장된 값이 변경되었습니다"),"external change conflict");
+  expect(button().disabled,"unacknowledged external change allowed a save");
+  [...document.querySelectorAll("button")].find(button=>button.textContent==="이 초안으로 계속").click();
+  await wait(()=>!button().disabled,"explicitly kept draft");
+  for (const [mode,value,fragment] of [["publish-failed","21","전파하지 못했습니다"],["apply-failed","22","적용에 실패했습니다"],["confirmed","23","적용·전파했습니다"],["save-failed","24","작업 결과를 확인하지 못했습니다"],["bad-request","25","서버가 요청을 거절했습니다"],["forbidden","26","서버가 요청을 거절했습니다"]]) {
+   toast.dismiss(); await control("ok-get"); await refetch(); await control(mode); edit(value); await wait(()=>!button().disabled,"edit "+mode); button().click();
    await wait(()=>getToastItems().some(t=>String(t.message).includes(fragment)),"result "+mode);
    await wait(()=>!input().disabled,"settled "+mode);
    expect(getToastItems().length===1,"mutation retried "+mode);
@@ -57,6 +64,7 @@ const refetch = () => client.invalidateQueries({queryKey:queryKeys.settings.all}
     await wait(()=>document.body.textContent.includes("마지막으로 확인한 값"),"failed refetch after save");
     expect(input().value===value && button().disabled,"confirmed saved value lost after read failure");
    }
+   else expect(input().value===value,"failed save erased the draft");
   }
   document.documentElement.dataset.testStatus="passed";
  } catch(error) {document.documentElement.dataset.testStatus="failed";document.getElementById("result").textContent=error?.stack??String(error);}
@@ -94,7 +102,7 @@ test("settings preserve unknown, stale, edited, saved and partially applied resu
      res.end("ok");return;
     }
     if(!pathname.endsWith("/settings"))return next();
-    res.setHeader("Content-Type","application/json");
+    res.setHeader("Content-Type","application/json"); res.setHeader("X-Admin-Server-Generation",CLIENT_GENERATION);
     if(req.method==="GET") {
      if(state.get==="malformed"){res.end(JSON.stringify({status:"ok",settings:null}));return;}
      const respond=()=>{if(state.get==="failed"){res.statusCode=503;res.end(JSON.stringify({error:"unavailable"}));}else res.end(JSON.stringify({status:"ok",settings:{alarmAdvanceMinutes:state.value}}));};
@@ -103,7 +111,7 @@ test("settings preserve unknown, stale, edited, saved and partially applied resu
     state.posts++;
     let body="";for await (const chunk of req)body+=chunk;
     if(state.mode==="save-failed"){res.statusCode=500;res.end(JSON.stringify({error:"save unavailable"}));return;}
-    if(state.mode==="bad-request" || state.mode==="forbidden"){res.statusCode=state.mode==="bad-request"?400:403;res.end(JSON.stringify({error:"refused"}));return;}
+    if(state.mode==="bad-request" || state.mode==="forbidden"){res.statusCode=state.mode==="bad-request"?400:403;res.end(JSON.stringify({notDispatchedMutationId:req.headers["x-admin-mutation-id"],code:state.mode==="bad-request"?"BAD_REQUEST":"FORBIDDEN",message:"refused",requestId:"fixture-request"}));return;}
     state.value=JSON.parse(body).alarmAdvanceMinutes;state.get="failed";
     res.end(JSON.stringify({status:"ok",message:"Settings updated",settings:{alarmAdvanceMinutes:state.value},runtime:{alarm_applied:state.mode!=="apply-failed",config_publish_alarm_advance_minutes:state.mode!=="publish-failed"}}));
    });},

@@ -1,6 +1,6 @@
-import apiClient from "@/api/client";
-import type { StatsResponse } from "./types";
+import { adminClient } from "@/app/bootstrap";
 
 export const statsApi = {
-	get: async () => (await apiClient.get<StatsResponse>("/holo/stats")).data,
+	getStatus: async () => (await adminClient.handleAggregatedStatus()).data,
+	get: async () => (await adminClient.holoGetStats()).data,
 };

@@ -221,6 +221,8 @@ test("BaseModal enforces browser focus, keyboard, nesting, and ARIA behavior", a
 	const server = await createServer({
 		configFile: path.join(frontendRoot, "vite.config.ts"),
 		root: frontendRoot,
+		// 병렬 session fixture의 의존성 캐시를 삭제·교체하지 않도록 실행별 경로를 소유합니다.
+		cacheDir: path.join(userDataDirectory, "vite-cache"),
 		logLevel: "error",
 		plugins: [browserFixturePlugin],
 		server: { host: "127.0.0.1", port: 0, strictPort: false },

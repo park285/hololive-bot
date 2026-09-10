@@ -22,7 +22,8 @@
     "typecheck": "node ./node_modules/@typescript/native/bin/tsc -p tsconfig.app.json --noEmit",
     "test": "tsx --tsconfig tsconfig.app.json --test 'src/**/*.test.ts' 'src/**/*.test.mjs'",
     "preview": "vite preview",
-    "generate:api": "mkdir -p ../backend/docs && (cd ../backend && go run ./cmd/export-openapi > docs/swagger.json) && swagger-typescript-api generate -p ../backend/docs/swagger.json -o src/api/generated --axios --modular"
+    "generate:api": "node scripts/generate-api.mjs",
+    "test:contract": "node --disallow-code-generation-from-strings --test scripts/contract.test.mjs && tsx --tsconfig tsconfig.app.json --test src/api/transport.test.ts"
   },
   "overrides": {
     "form-data": "^4.0.6",
@@ -68,6 +69,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query-devtools": "^5.102.8",
@@ -76,13 +78,15 @@
     "@types/react-dom": "^19.2.7",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@vitejs/plugin-react": "^6.1.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.4",
     "globals": "^17.12.0",
     "msw": "^2.15.0",
-    "swagger-typescript-api": "^13.12.6",
+    "swagger-typescript-api": "13.12.6",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.13",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

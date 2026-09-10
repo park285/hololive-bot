@@ -10,6 +10,7 @@ interface ConfirmModalProps {
 	confirmText?: string;
 	confirmColor?: "primary" | "danger";
 	isPending?: boolean;
+	canConfirm?: boolean;
 	children?: React.ReactNode;
 }
 
@@ -22,6 +23,7 @@ export function ConfirmModal({
 	confirmText = "확인",
 	confirmColor = "primary",
 	isPending = false,
+	canConfirm = true,
 	children,
 }: ConfirmModalProps) {
 	const buttonVariant = confirmColor === "danger" ? "destructive" : "default";
@@ -51,7 +53,7 @@ export function ConfirmModal({
 					type="button"
 					variant={buttonVariant}
 					onClick={onConfirm}
-					disabled={isPending}
+					disabled={isPending || !canConfirm}
 					aria-busy={isPending}
 				>
 					<span aria-live="polite">{confirmText}</span>

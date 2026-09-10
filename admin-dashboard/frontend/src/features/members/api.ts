@@ -1,4 +1,4 @@
-import { adminClient } from "@/api/adminClient";
+import { adminClient } from "@/app/bootstrap";
 import type {
 	AddAliasRequest,
 	AddMemberRequest,
@@ -21,14 +21,14 @@ export const membersApi = {
 		};
 		return (await adminClient.holoAddMember(request)).data;
 	},
-	addAlias: async (memberId: number, request: AddAliasRequest) =>
+	addAlias: async (memberId: string, request: AddAliasRequest) =>
 		(await adminClient.holoAddAlias(memberId, request)).data,
-	removeAlias: async (memberId: number, request: RemoveAliasRequest) =>
+	removeAlias: async (memberId: string, request: RemoveAliasRequest) =>
 		(await adminClient.holoRemoveAlias(memberId, request)).data,
-	setGraduation: async (memberId: number, request: SetGraduationRequest) =>
+	setGraduation: async (memberId: string, request: SetGraduationRequest) =>
 		(await adminClient.holoSetGraduation(memberId, request)).data,
-	updateChannel: async (memberId: number, request: UpdateChannelRequest) =>
+	updateChannel: async (memberId: string, request: UpdateChannelRequest) =>
 		(await adminClient.holoUpdateChannel(memberId, request)).data,
-	updateName: async (memberId: number, name: string) =>
+	updateName: async (memberId: string, name: string) =>
 		(await adminClient.holoUpdateMemberName(memberId, { name })).data,
 };

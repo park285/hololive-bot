@@ -23,12 +23,12 @@ Read `../AGENTS.md` for repository-wide rules. This file adds dashboard-specific
 
 | Task | Location |
 |------|----------|
-| Route assembly | `backend/internal/app/app.go` |
+| Route assembly | `backend/internal/httpapi/routes.go` |
 | Auth helpers | `backend/internal/auth/` |
 | Session store | `backend/internal/session/` |
-| Docker control | `backend/internal/docker/` |
+| Docker control | `backend/internal/adapters/docker/` |
 | Config | `backend/internal/config/` |
-| Holo API proxy | `backend/internal/holo/` |
+| Holo API proxy | `backend/internal/adapters/holo/` |
 | API client | `frontend/src/api/client.ts` |
 
 ## Standards
@@ -42,7 +42,7 @@ Read `../AGENTS.md` for repository-wide rules. This file adds dashboard-specific
 ### Security
 
 - **CSRF**: Token-based protection with enforce/monitor/off modes.
-- **Rate Limit**: In-memory per-IP login attempt limiting with lockout.
+- **Rate Limit**: Valkey-based per-IP, account, and global login attempt limits with lockout.
 - **Heartbeat**: Session refresh and token rotation every configured interval.
 - **Cookies**: HttpOnly session cookie, SameSite=Strict, Secure controlled by `FORCE_HTTPS`.
 

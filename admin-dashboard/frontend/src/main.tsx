@@ -4,6 +4,7 @@ import "@fontsource-variable/outfit/index.css";
 import "@fontsource-variable/plus-jakarta-sans/index.css";
 import "@/index.css";
 import App from "@/App";
+import { bootstrapApplication } from "@/app/bootstrap";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -38,4 +39,5 @@ void enableMocking()
 	})
 	.finally(() => {
 		renderApp();
+		void bootstrapApplication();
 	});
