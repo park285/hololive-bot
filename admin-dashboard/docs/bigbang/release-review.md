@@ -34,4 +34,8 @@
 
 `.gitignore`는 env·key·PEM을 제외하고 정적 secret 소비 절차가 있습니다. 현재 pre-commit은 Go 포맷 검사이며 별도 secret scanner는 아니고, 확인한 security workflow에도 전용 secret scan은 없습니다. 이번 변경에 새 scanner 의존성이나 광범위한 CI 정책 변경을 추가하지 않았습니다.
 
+## 발행 guard의 확인된 오탐
+
+`check-crosscutting-guardrails.py`는 같은 파일에 고정된 recovery 함수 이름이 있는지 문자열로 검사합니다. `httpapi/routes.go`는 `recoverPanics()`를 실제 미들웨어로 등록하지만 그 이름이 목록에 없어 차단됐습니다. 이 생성 한 줄에만 `crosscutting:allow`와 원인을 기록했습니다. `TestPanicResponseDoesNotDumpSecrets`가 등록된 라우터에서 panic의 500 JSON 응답과 panic·쿠키 값 비노출을 검증하며, 이 시험과 crosscutting 검사가 통과했습니다. 실제 미들웨어나 검사를 제거하거나 전역 제외 목록을 넓히지 않았습니다.
+
 Fallback delta: none. 읽기 오류 보존 수정에 retry·대체 경로·강제 GC는 추가하지 않았습니다. 기존 정비 개방 실패의 1회 보상 동작은 [전환 기록](cutover-progress.md)에 별도로 유지합니다.

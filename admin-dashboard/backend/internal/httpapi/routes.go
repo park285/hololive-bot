@@ -13,6 +13,7 @@ import (
 
 // Handler는 명세와 접근 선언이 일치하는 route만 등록합니다. 불일치는 시작을 중단합니다.
 func (r *API) Handler() http.Handler {
+	// crosscutting:allow 이름 기반 검사는 recoverPanics를 인식하지 못합니다. 아래 등록은 TestPanicResponseDoesNotDumpSecrets로 검증합니다.
 	engine := gin.New()
 
 	engine.HandleMethodNotAllowed = true
