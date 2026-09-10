@@ -43,8 +43,8 @@ func (r *API) auditMutation() gin.HandlerFunc {
 func (r *API) auditRequestAttrs(c *gin.Context, status int) []slog.Attr {
 	actor := "unauthenticated"
 
-	if _, ok := sessionFrom(c); ok {
-		actor = r.cfg.AdminUser
+	if sess, ok := sessionFrom(c); ok {
+		actor = r.sessionUsername(sess)
 	}
 
 	attrs := []slog.Attr{
@@ -114,7 +114,9 @@ func (r *API) auditLogin(c *gin.Context, result string, status int) {
 	actor := "unauthenticated"
 
 	if result == "success" {
-		actor = r.cfg.AdminUser
+		sess, _ := sessionFrom(c)
+
+		actor = r.sessionUsername(sess)
 	}
 
 	sharedlogging.Log(c.Request.Context(), r.logger, auditLevel(status), "admin.login", "admin login completed",

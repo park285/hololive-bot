@@ -32,9 +32,15 @@ type sessionRecords interface {
 type sessionStore interface {
 	sessionRecords
 	sessionLifecycle
+	testAccountSessions
 	ClaimMutation(ctx context.Context, sess session.Session, id string) (bool, error)
 
 	Close()
+}
+
+type testAccountSessions interface {
+	CurrentTestAccount(ctx context.Context) (session.TestAccount, bool, error)
+	CreateTestSession(ctx context.Context, expected session.TestAccount) (session.Session, bool, error)
 }
 
 type sessionLifecycle interface {

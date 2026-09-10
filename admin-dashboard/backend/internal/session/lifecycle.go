@@ -10,6 +10,7 @@ import (
 	"github.com/kapu/admin-dashboard/internal/auth"
 )
 
+// Refresh는 현재 계정 권한과 절대 만료를 유지하며 세션 TTL을 갱신하거나 idle TTL로 줄입니다.
 func (s *Store) Refresh(ctx context.Context, id string, idle bool) (RefreshResult, error) {
 	for range 2 {
 		result, retry, err := s.refreshOnce(ctx, id, idle)
@@ -104,7 +105,7 @@ func (s *Store) refreshCAS(ctx context.Context, id string, idle bool, data strin
 
 	result, err := s.evalInt(ctx, refreshCASScript,
 		[]string{sessionKey(id), familyKey(refreshed.FamilyID)},
-		[]string{data, string(refreshedData), fmt.Sprint(ttlSeconds(refreshed.ExpiresAt, now)), id})
+		[]string{data, string(refreshedData), fmt.Sprint(ttlSeconds(refreshed.ExpiresAt, now)), id, testAccountKey, fmt.Sprint(int64(MaxTestAccountTTL / time.Second))})
 	if err != nil {
 		return RefreshResult{}, false, fmt.Errorf("eval int: %w", err)
 	}
@@ -180,9 +181,8 @@ func (s *Store) refreshAfterCASMiss(ctx context.Context, id string, idle bool) (
 	return RefreshResult{Kind: RefreshRefreshed, Session: &current}, nil
 }
 
-// Rotate reports ok=false when no rotation was performed and that is the expected
-// outcome: the source token is gone, it was past its absolute deadline, or the
-// rotation interval has not elapsed. Callers must keep using the current token then.
+// Rotate는 계정 바인딩과 절대 만료를 유지하며 현재 세션을 교체합니다.
+// 원본 소실·권한 만료·미도래한 회전 주기는 교체하지 않은 정상 결과인 ok=false로 구분합니다.
 func (s *Store) Rotate(ctx context.Context, oldID string) (Session, bool, error) {
 	oldData, old, ok, err := s.rotateSource(ctx, oldID)
 	if err != nil {
@@ -296,9 +296,14 @@ func (s *Store) buildRotation(old *Session, now time.Time) (newSession, oldMarke
 		return Session{}, Session{}, fmt.Errorf("generate session ID: %w", err)
 	}
 
+	if old.TestAccount != "" {
+		newID = auth.TestSessionPrefix + newID
+	}
+
 	newSession = Session{
 		ID:                newID,
 		FamilyID:          old.FamilyID,
+		TestAccount:       old.TestAccount,
 		CreatedAt:         old.CreatedAt,
 		ExpiresAt:         cappedExpiresAt(now, s.cfg.ExpiryDuration, old.AbsoluteExpiresAt),
 		AbsoluteExpiresAt: old.AbsoluteExpiresAt,
@@ -333,6 +338,8 @@ func (s *Store) rotateExec(ctx context.Context, oldID, oldData string, newSessio
 			oldData,
 			newSession.ID,
 			oldID,
+			testAccountKey,
+			fmt.Sprint(int64(MaxTestAccountTTL / time.Second)),
 		})
 	if err != nil {
 		return out, fmt.Errorf("eval int: %w", err)
@@ -376,7 +383,7 @@ func (s *Store) refreshResultForRotatedTo(ctx context.Context, rotatedTo string)
 	return RefreshResult{Kind: RefreshRotated, Session: &replacement}, nil
 }
 
-const refreshCASScript = `
+const refreshCASScript = testAccountAccessScript + `
 local session_key = KEYS[1]
 local family_key = KEYS[2]
 local expected_data = ARGV[1]
@@ -386,6 +393,7 @@ local id = ARGV[4]
 local current_data = redis.call('GET', session_key)
 if not current_data then return 0 end
 if current_data ~= expected_data then return -1 end
+if not testAccountActive(cjson.decode(current_data), ARGV[5], tonumber(ARGV[6])) then return 0 end
 local family_current = redis.call('HGET', family_key, 'token')
 if not family_current then return 0 end
 if family_current ~= id then return -2 end
@@ -394,7 +402,7 @@ redis.call('EXPIRE', family_key, ttl)
 return 1
 `
 
-const rotateScript = `
+const rotateScript = testAccountAccessScript + `
 local old_key = KEYS[1]
 local new_key = KEYS[2]
 local family_key = KEYS[3]
@@ -408,6 +416,7 @@ local old_id = ARGV[7]
 local old_data = redis.call('GET', old_key)
 if not old_data then return 0 end
 if old_data ~= expected_old_data then return 0 end
+if not testAccountActive(cjson.decode(old_data), ARGV[8], tonumber(ARGV[9])) then return 0 end
 local family_current = redis.call('HGET', family_key, 'token')
 if not family_current then return 0 end
 if family_current ~= old_id then return -1 end
