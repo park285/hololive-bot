@@ -1,5 +1,5 @@
-name: GPT Pro PR Verification
-run-name: GPT Pro PR Verification · ${{ github.event.pull_request.head.sha || github.sha }}
+name: CI
+run-name: CI · ${{ github.event.pull_request.head.sha || github.sha }}
 
 # PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·frontend 검증은
 # GitHub Actions에서 독립적으로 증적을 남기고, 운영·배포·대용량 분석은 로컬 pre-push와
