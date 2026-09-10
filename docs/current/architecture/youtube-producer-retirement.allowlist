@@ -2,6 +2,12 @@
 # Historical snapshots, retired-name inventories, denylist tests, and the
 # retirement contract itself. No directory exclusion.
 
+# 관리자 최적화의 불변 빌드 입력 목록에 폐기 검증/기존 provider 파일 경로만 포함됩니다.
+# 원본 SHA 증거를 보존하며, 해당 목록을 폐기하거나 경로가 없어지면 항목도 제거합니다.
+admin-dashboard/docs/bigbang/all-valkey-native-artifact.json
+admin-dashboard/docs/bigbang/owned-json-native-artifact.json
+admin-dashboard/docs/bigbang/valkey-pool-native-artifact.json
+admin-dashboard/docs/bigbang/valkey-ring-native-artifact.json
 CHANGELOG.md
 docs/README.md
 docs/architecture/claim-cache-3-implementations-analysis-2026-05-22.md

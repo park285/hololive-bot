@@ -38,4 +38,6 @@
 
 `check-crosscutting-guardrails.py`는 같은 파일에 고정된 recovery 함수 이름이 있는지 문자열로 검사합니다. `httpapi/routes.go`는 `recoverPanics()`를 실제 미들웨어로 등록하지만 그 이름이 목록에 없어 차단됐습니다. 이 생성 한 줄에만 `crosscutting:allow`와 원인을 기록했습니다. `TestPanicResponseDoesNotDumpSecrets`가 등록된 라우터에서 panic의 500 JSON 응답과 panic·쿠키 값 비노출을 검증하며, 이 시험과 crosscutting 검사가 통과했습니다. 실제 미들웨어나 검사를 제거하거나 전역 제외 목록을 넓히지 않았습니다.
 
+폐기 이름 검사에서는 과거 native artifact 4개의 불변 입력 목록이 탐지됐습니다. 각 파일의 일치 4개가 `source_manifest.files[].path`의 기존 폐기 검증/provider 파일 경로뿐임을 JSON 구조로 확인했습니다. 원본과 SHA를 바꾸지 않고 기존 retirement 정책의 이력 자료 범주에 정확한 파일 4개를 등록했으며, 전체 retirement 검사가 통과했습니다. 실행 소스나 디렉터리 전체를 제외하지 않았습니다.
+
 Fallback delta: none. 읽기 오류 보존 수정에 retry·대체 경로·강제 GC는 추가하지 않았습니다. 기존 정비 개방 실패의 1회 보상 동작은 [전환 기록](cutover-progress.md)에 별도로 유지합니다.
