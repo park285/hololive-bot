@@ -13,6 +13,7 @@
 | `bash scripts/architecture/check-admin-contract.sh` | endpoint inventory·OpenAPI·생성된 클라이언트 계약 검사 통과 |
 | `bash scripts/ci/check-structure.sh --mode hard --format json` | CLI 파싱과 인자 제약 검증을 분리한 뒤 hard 위반 0건. 새 CLI 의존 관계 3개를 생성된 import graph에 반영 |
 | `internal/session/test_account_test.go` | 동시 발급 한 건, 중복 보존, 잘못된 식별자 폐기 거부, 만료·폐기·재발급·회전 경쟁과 저장소 오류 구분 |
+| UTC·Asia/Seoul 만료 시각 회귀 | GitHub에서 확인한 `Local`·`UTC` 표현 차이를 로컬 UTC에서 재현. 동일 시각을 오차 0으로 비교하도록 수정하고 두 시간대의 경쟁 상태 검사 통과 |
 | `internal/auth/crypto_domain_test.go` | 기존 관리자 서명 유지, 임시 세션의 별도 HMAC 도메인과 구형 서명 검증기 거부 |
 | `internal/httpapi/test_account_test.go` | 정상 로그인·조회·CSRF·logout, 모든 업무 endpoint 403과 claim 미실행, 폐기 후 WS 1008·HTTP 401·재로그인 401, 관리자 실패 예산 보존 |
 | `internal/testaccountcli/command_test.go` | 출력에 자격증명 없음, 새 0600 파일, 기존 파일·symlink·공개 디렉터리 거부, 결과 출력 실패 시 발급 파일 보존 및 정확한 계정 폐기 |

@@ -102,7 +102,8 @@ func TestTestAccountRevocationClosesEveryFamilyAndPreservesAdministrator(t *test
 	require.True(t, rotated)
 	require.Equal(t, account.Username, next.TestAccount)
 	require.Contains(t, next.ID, auth.TestSessionPrefix)
-	require.Equal(t, time.Unix(account.ExpiresAtUnix, 0), next.AbsoluteExpiresAt)
+	// JSON 왕복 전후의 Location 표현이 달라도 만료 시각은 정확히 같아야 합니다.
+	require.WithinDuration(t, time.Unix(account.ExpiresAtUnix, 0), next.AbsoluteExpiresAt, 0)
 
 	changed, err := store.RevokeTestAccount(t.Context(), account.Username)
 	require.NoError(t, err)
