@@ -46,6 +46,14 @@ func (*stoppingStore) Create(context.Context) (session.Session, error) {
 	return session.Session{}, errors.New("unexpected create")
 }
 
+func (*stoppingStore) CurrentTestAccount(context.Context) (session.TestAccount, bool, error) {
+	return session.TestAccount{}, false, errors.New("unexpected test account lookup")
+}
+
+func (*stoppingStore) CreateTestSession(context.Context, session.TestAccount) (session.Session, bool, error) {
+	return session.Session{}, false, errors.New("unexpected test session creation")
+}
+
 func (*stoppingStore) Delete(context.Context, string) error { return errors.New("unexpected delete") }
 
 func (*stoppingStore) FamilyActive(context.Context, string) (bool, error) {

@@ -12,9 +12,13 @@ import (
 )
 
 const (
-	sessionSigningContext = "admin-dashboard/session-signing/v1"
-	csrfSigningContext    = "admin-dashboard/csrf-signing/v1"
+	sessionSigningContext     = "admin-dashboard/session-signing/v1"
+	testSessionSigningContext = "admin-dashboard/test-session-signing/v1"
+	csrfSigningContext        = "admin-dashboard/csrf-signing/v1"
 )
+
+// TestSessionPrefix는 임시 계정 세션의 저장·서명 영역을 일반 관리자와 구분합니다.
+const TestSessionPrefix = "test-"
 
 func GenerateSessionID() (string, error) {
 	var b [32]byte
@@ -26,8 +30,16 @@ func GenerateSessionID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
+// SignSessionID는 ID에 대응하는 서명 영역으로 cookie 값을 만듭니다.
+// 임시 계정 영역은 구형 서버가 조회 전용 세션을 일반 관리자로 수용하지 못하게 합니다.
 func SignSessionID(sessionID, secret string) string {
-	mac := hmac.New(sha256.New, deriveSigningKey(secret, sessionSigningContext))
+	purpose := sessionSigningContext
+
+	if strings.HasPrefix(sessionID, TestSessionPrefix) {
+		purpose = testSessionSigningContext
+	}
+
+	mac := hmac.New(sha256.New, deriveSigningKey(secret, purpose))
 
 	_, _ = mac.Write([]byte(sessionID))
 
@@ -36,6 +48,7 @@ func SignSessionID(sessionID, secret string) string {
 	return sessionID + "." + sig
 }
 
+// ValidateSessionSignature는 ID의 관리자·임시 계정 서명 영역이 일치할 때만 원래 ID를 반환합니다.
 func ValidateSessionSignature(fullID, secret string) (string, bool) {
 	sessionID, sig, ok := strings.Cut(fullID, ".")
 	if !ok || sessionID == "" || sig == "" {

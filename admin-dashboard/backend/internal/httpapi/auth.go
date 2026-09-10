@@ -18,6 +18,28 @@ import (
 
 const heartbeatPath = "/admin/api/auth/heartbeat"
 
+func (r *API) sessionUsername(sess *session.Session) string {
+	if sess != nil && sess.TestAccount != "" {
+		return sess.TestAccount
+	}
+
+	return r.cfg.AdminUser
+}
+
+func (r *API) requireWriteAccess() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sess, ok := sessionFrom(c)
+		if !ok || sess.TestAccount != "" {
+			httpx.Abort(c, contract.Forbidden())
+			r.auditSecurityRejection(c, "admin.authorization.denied")
+
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func (r *API) auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID, sess, err := r.resolveSession(c.Request)

@@ -27,9 +27,11 @@ const (
 	valkeyPipelineMultiplex = 2
 )
 
+// Session은 세션 family와 만료 정보를 보관합니다. TestAccount가 있으면 해당 임시 계정의 조회 권한만 갖습니다.
 type Session struct {
 	ID                string    `json:"id"`
 	FamilyID          string    `json:"family_id"`
+	TestAccount       string    `json:"test_account,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 	ExpiresAt         time.Time `json:"expires_at"`
 	AbsoluteExpiresAt time.Time `json:"absolute_expires_at"`
@@ -43,6 +45,13 @@ func validateStoredSession(sess *Session, id string) error {
 		sess.ExpiresAt.IsZero() || sess.AbsoluteExpiresAt.IsZero() || sess.LastRotatedAt.IsZero() ||
 		(sess.RotatedTo != nil && *sess.RotatedTo == "") {
 		return errors.New("invalid stored session record")
+	}
+
+	if strings.HasPrefix(id, auth.TestSessionPrefix) != (sess.TestAccount != "") ||
+		strings.HasPrefix(sess.FamilyID, auth.TestSessionPrefix) != (sess.TestAccount != "") ||
+		(sess.TestAccount != "" && !validTestAccountName(sess.TestAccount)) ||
+		(sess.RotatedTo != nil && strings.HasPrefix(*sess.RotatedTo, auth.TestSessionPrefix) != (sess.TestAccount != "")) {
+		return errors.New("invalid session account binding")
 	}
 
 	return nil
@@ -156,6 +165,7 @@ func (s *Store) Create(ctx context.Context) (Session, error) {
 	return sess, nil
 }
 
+// Get은 family와 계정 권한을 확인해 세션을 읽고, 로드 후 절대 만료를 확인한 세션은 정리합니다.
 func (s *Store) Get(ctx context.Context, id string) (Session, bool, error) {
 	data, ok, err := s.getRaw(ctx, id)
 	if err != nil {
@@ -252,9 +262,8 @@ func (s *Store) deleteLoadedSession(ctx context.Context, sess *Session) error {
 	return nil
 }
 
-// FamilyActive checks the stable session-family lease. A family lease always
-// points at the currently authoritative token ID, so logout, expiry and
-// rotation are visible to long-lived WebSocket connections across processes.
+// FamilyActive는 family의 현재 토큰과 계정 권한·만료를 확인합니다.
+// 장기 WebSocket도 로그아웃·회전뿐 아니라 임시 계정 폐기를 같은 경로에서 관찰합니다.
 func (s *Store) FamilyActive(ctx context.Context, familyID string) (bool, error) {
 	if familyID == "" {
 		return false, nil
@@ -305,7 +314,7 @@ func (s *Store) buildSession(id string, now time.Time) Session {
 
 func (s *Store) getRaw(ctx context.Context, id string) (data string, ok bool, err error) {
 	// family hash 유실은 인증도 닫아야 사용한 mutation ID가 없는 family로 복구되지 않습니다.
-	value, err := s.client.Do(ctx, s.client.B().Eval().Script(readSessionScript).Numkeys(1).Key(sessionKey(id)).Arg(familyKeyPrefix).Build()).ToString()
+	value, err := s.client.Do(ctx, s.client.B().Eval().Script(readSessionScript).Numkeys(1).Key(sessionKey(id)).Arg(familyKeyPrefix, testAccountKey, fmt.Sprint(int64(MaxTestAccountTTL/time.Second))).Build()).ToString()
 	if err != nil {
 		if util.IsValkeyNil(err) {
 			return "", false, nil
@@ -388,13 +397,14 @@ redis.call('EXPIRE', family_key, ttl)
 return 1
 `
 
-const readSessionScript = `
+const readSessionScript = testAccountAccessScript + `
 local data = redis.call('GET', KEYS[1])
 if not data then return nil end
 local session = cjson.decode(data)
 if not session.family_id or session.family_id == '' then return nil end
 local token = redis.call('HGET', ARGV[1] .. session.family_id, 'token')
 if not token or token ~= (session.rotated_to or session.id) then return nil end
+if not testAccountActive(session, ARGV[2], tonumber(ARGV[3])) then return nil end
 return data
 `
 

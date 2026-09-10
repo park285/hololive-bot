@@ -101,7 +101,7 @@ func (r *API) accessHandlers(level access) gin.HandlersChain {
 	case sessionCSRF:
 		return gin.HandlersChain{r.auth(), r.csrf()}
 	case businessMutation:
-		return gin.HandlersChain{r.auth(), r.csrf(), r.auditMutation(), r.claimMutation()}
+		return gin.HandlersChain{r.auth(), r.csrf(), r.auditMutation(), r.requireWriteAccess(), r.claimMutation()}
 	default:
 		panic("unclassified admin access")
 	}
