@@ -857,8 +857,10 @@ async function exerciseLayout(browser, base, state) {
       await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
       await expect(editName).toBeInViewport({ ratio: 1, timeout: 250 });
     }).toPass({ timeout: 5000 });
-    await editName.hover();
-    await editName.click();
+    // 준비한 가상 목록 위치를 action 직전의 자동 scroll로 다시 바꾸지 않습니다.
+    // 화면 노출·안정성·활성화·hit target 검사는 Playwright가 그대로 수행합니다.
+    await editName.hover({ scroll: "none" });
+    await editName.click({ scroll: "none" });
     const dialog = page.getByRole("dialog", { name: "멤버 이름 수정" });
     await expect(dialog).toContainText("9007199254741040");
     await expect(dialog.getByLabel("새로운 이름")).toHaveValue("한글 멤버 047");
