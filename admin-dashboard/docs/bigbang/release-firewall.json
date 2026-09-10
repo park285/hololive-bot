@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "verified_at": "2026-09-10T10:31:14.049Z",
+  "service": "active/enabled",
+  "installed_unit_matches_reviewed_source": true,
+  "installed_rules_match_reviewed_source": true,
+  "probes": [
+    {
+      "port": 30191,
+      "allowed_source": "100.100.1.5",
+      "allowed_status": 200,
+      "denied_source": "100.100.1.3",
+      "denied_curl_exit": 7,
+      "denied_http_status": "000"
+    },
+    {
+      "port": 30192,
+      "allowed_source": "100.100.1.5",
+      "allowed_status": 200,
+      "denied_source": "100.100.1.3",
+      "denied_curl_exit": 7,
+      "denied_http_status": "000"
+    }
+  ],
+  "public_admin_health": 200
+}

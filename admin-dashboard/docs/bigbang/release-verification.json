@@ -1,0 +1,519 @@
+{
+  "schema_version": 1,
+  "source_revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+  "reviewed_and_tested_head": "fc4c715df600233964e15975db9cc2b8c4e6fa6a",
+  "complete_source_tree_equal": true,
+  "published_pull_request": "https://github.com/park285/hololive-bot/pull/483",
+  "published_main_at": "2026-09-10T10:25:39Z",
+  "github": {
+    "run": "https://github.com/park285/hololive-bot/actions/runs/34465125970",
+    "head": "fc4c715df600233964e15975db9cc2b8c4e6fa6a",
+    "status": "success",
+    "jobs": [
+      {
+        "name": "policy",
+        "conclusion": "success"
+      },
+      {
+        "name": "collector-helper",
+        "conclusion": "success"
+      },
+      {
+        "name": "frontend",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-.",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-admin-dashboard/backend",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-hololive/hololive-alarm-worker",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-hololive/hololive-api",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-hololive/hololive-shared",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-hololive/hololive-dbtest",
+        "conclusion": "success"
+      },
+      {
+        "name": "go-hololive/hololive-youtube-collector",
+        "conclusion": "success"
+      },
+      {
+        "name": "fast-gate",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "local_publish": {
+    "status": "PASS",
+    "log_sha256": "311ee8932f41a213a83701af119ff016c5f12bc884f678a04acc23387a430707",
+    "frontend": {
+      "tests": 175,
+      "passed": 175,
+      "skipped": 0,
+      "engines": [
+        "chromium",
+        "firefox",
+        "webkit"
+      ]
+    },
+    "go": [
+      "build",
+      "test",
+      "race",
+      "lint",
+      "NilAway"
+    ],
+    "reachable_vulnerabilities": 0,
+    "phases": [
+      "reusable",
+      "freshness",
+      "ambient"
+    ],
+    "hooks_skipped": false
+  },
+  "images": [
+    {
+      "architecture": "amd64",
+      "release": "sha256:49088679abed4b5d8ff7b6ce12adcd17e68e31bca7409beb84394812db69330a",
+      "revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+      "validated_image": "sha256:428c483ce80d89b945473ce4871a7453b8f084291d4ebb609fbb15c99459676e",
+      "validated_revision": "49abf20fc1ba5e1c6ecb0caf9c5e0acc142a028d",
+      "rootfs_equal": true,
+      "rootfs": {
+        "Type": "layers",
+        "Layers": [
+          "sha256:50abe06dfc0957e14cb8332ed242e8b884ef2563a9eb202e5172f243f62792f7",
+          "sha256:621c35e751a51a9a9dc3e80aa0b7fe8be2a93402ea6ccd307d30852cd7776cda",
+          "sha256:c8b007d0206e4b10ed4d3b3d99dfeab47c2648e82011989fd78a5731baf33fc3",
+          "sha256:bec7e6bb35e05d1284f28b10d2150c259717d91c658c4c10c08424bb9466caba",
+          "sha256:275a30dd8ce958b21daa9ad962c6fbc09f98306ee2f486b65c9075dc257b1412",
+          "sha256:4d049f83d9cf21d1f5cc0e11deaf36df02790d0e60c1a3829538fb4b61685368",
+          "sha256:af5aa97ebe6ce1604747ec1e21af7136ded391bcabe4acef882e718a87c86bcc",
+          "sha256:6f1cdceb6a3146f0ccb986521156bef8a422cdbb0863396f7f751f575ba308f4",
+          "sha256:bd3cdfae1d3fdd83a2231d608969b38b82349777c2fff9a7c12d54f8ac5c9b38",
+          "sha256:4cde6b0bb6f50a5f255eef7b2a42162c661cf776b803225dcac9a659e396bb6b",
+          "sha256:ad51d0769d16ba578106a177987dfe3d2e02c1668c852b795b2f6b024068242a",
+          "sha256:187cfc6d1e3e8a40a5e64653bcd3239c140807dcf1c09e48021178705a5a6139",
+          "sha256:5fd2536c39c0700be8b7b4344e375196da2f126842fd8ede66996a18860a3890",
+          "sha256:8bab418a481f86b4076112763564c03d2cb3e5c8b0997c7237a926272d412c5a",
+          "sha256:ba7af2761ae082615c2cbedd21fa5860e579574b1ee720c1f518ee55a39ec47b",
+          "sha256:85a2b40d8f3d623f7d3897f4028a98d0851fc3f8a0cbe1132b3581bb57addc36",
+          "sha256:d8896f6532ae0fc3fce02185ab100a1874abc9b8036ee4a41e39471441e0084c",
+          "sha256:3dfa8c80ee47bece758d10c07c23bbbc0d9aea680a1996c3b3e6416f2217e1b5"
+        ]
+      },
+      "configuration_equal_except_revision": true
+    },
+    {
+      "architecture": "arm64",
+      "release": "sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef",
+      "revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+      "validated_image": "sha256:2fa093270f8b39b49321a0f5a635b48023d8a873c2bd42d46c4f6a8e15775dbb",
+      "validated_revision": "49abf20fc1ba5e1c6ecb0caf9c5e0acc142a028d",
+      "rootfs_equal": true,
+      "rootfs": {
+        "Type": "layers",
+        "Layers": [
+          "sha256:169cc3415d0f5be1ca6f533fd91057bb5c58d213161f4990c87fcb12d0bc251b",
+          "sha256:621c35e751a51a9a9dc3e80aa0b7fe8be2a93402ea6ccd307d30852cd7776cda",
+          "sha256:c8b007d0206e4b10ed4d3b3d99dfeab47c2648e82011989fd78a5731baf33fc3",
+          "sha256:bec7e6bb35e05d1284f28b10d2150c259717d91c658c4c10c08424bb9466caba",
+          "sha256:275a30dd8ce958b21daa9ad962c6fbc09f98306ee2f486b65c9075dc257b1412",
+          "sha256:4d049f83d9cf21d1f5cc0e11deaf36df02790d0e60c1a3829538fb4b61685368",
+          "sha256:af5aa97ebe6ce1604747ec1e21af7136ded391bcabe4acef882e718a87c86bcc",
+          "sha256:6f1cdceb6a3146f0ccb986521156bef8a422cdbb0863396f7f751f575ba308f4",
+          "sha256:bd3cdfae1d3fdd83a2231d608969b38b82349777c2fff9a7c12d54f8ac5c9b38",
+          "sha256:4cde6b0bb6f50a5f255eef7b2a42162c661cf776b803225dcac9a659e396bb6b",
+          "sha256:ad51d0769d16ba578106a177987dfe3d2e02c1668c852b795b2f6b024068242a",
+          "sha256:187cfc6d1e3e8a40a5e64653bcd3239c140807dcf1c09e48021178705a5a6139",
+          "sha256:5fd2536c39c0700be8b7b4344e375196da2f126842fd8ede66996a18860a3890",
+          "sha256:b38586e826ddd17f3be574880464f2f727af7ba08df3504691cb95280166cb27",
+          "sha256:ba7af2761ae082615c2cbedd21fa5860e579574b1ee720c1f518ee55a39ec47b",
+          "sha256:85a2b40d8f3d623f7d3897f4028a98d0851fc3f8a0cbe1132b3581bb57addc36",
+          "sha256:13e3cc0d7512428d0933773587e03f88b439bf5f51d62f7b2065ecf58b761c7a",
+          "sha256:3dfa8c80ee47bece758d10c07c23bbbc0d9aea680a1996c3b3e6416f2217e1b5"
+        ]
+      },
+      "configuration_equal_except_revision": true
+    }
+  ],
+  "reports": {
+    "native-quick": {
+      "path": "release-native-quick.json.gz",
+      "sha256": "7913a720b66283f1b9051cc60a7c3a3032201cf468ff0c2ac102f34eee464857"
+    },
+    "production-browser": {
+      "path": "release-production-browser.json.gz",
+      "sha256": "f7ff3627057a35ca9a2e58f51e55a136e8ba79978743fee6217a9faed920b072"
+    },
+    "js-budget": {
+      "path": "release-js-budget.json.gz",
+      "sha256": "f184f33f22599b4816f37e8123e1967b14a5abe831fdbf203d1f06ec0b1c010b"
+    },
+    "cutover": {
+      "path": "release-cutover.json.gz",
+      "sha256": "e86f7a856fed086e65696f6b6561c1bc7c07b8fd043f39eb3b0e455cb319d092"
+    },
+    "boundaries": {
+      "path": "release-boundaries.json.gz",
+      "sha256": "c88e2c39d1d3673c7c55c43d867c24197dc1aaf4d9052aa337c5829979cdae5e"
+    },
+    "retirement": {
+      "path": "release-retirement.json.gz",
+      "sha256": "4ec23770f22ba2ab1cc800f47de9542c37b0d2f496fc10f991e7e8449d9c054d"
+    }
+  },
+  "source_changes_after_runtime_validation": [
+    "admin-dashboard/docs/bigbang/release-review.md",
+    "admin-dashboard/frontend/src/hooks/session-tabs.browser.test.mjs",
+    "scripts/ci/pre-push-gate-profile-v1_test.sh",
+    "scripts/ci/pre-push-gate.sh"
+  ],
+  "shortened_performance": {
+    "status": "PASS_DIAGNOSTIC",
+    "full_gate": "NOT RUN",
+    "runs": 4,
+    "rss": {
+      "baseline": 61820928,
+      "candidate": 35411968,
+      "budget_ratio": 1.1,
+      "ratio": 0.572815212350096,
+      "status": "PASS"
+    },
+    "routes": {
+      "/admin/api/holo/members": {
+        "baseline_p95_ms": 12.15577900000062,
+        "candidate_p95_ms": 13.196593499997107,
+        "ratio": 1.085623019305997,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/rooms": {
+        "baseline_p95_ms": 11.948740500003623,
+        "candidate_p95_ms": 11.770156000002316,
+        "ratio": 0.9850541151177187,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/alarms": {
+        "baseline_p95_ms": 12.938858999998047,
+        "candidate_p95_ms": 14.38280450000093,
+        "ratio": 1.111597591410734,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/settings": {
+        "baseline_p95_ms": 11.842483000005814,
+        "candidate_p95_ms": 11.782930000008491,
+        "ratio": 0.9949712404064845,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/streams/live": {
+        "baseline_p95_ms": 11.660577499998908,
+        "candidate_p95_ms": 11.565216499999224,
+        "ratio": 0.9918219316324862,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/holo/streams/upcoming": {
+        "baseline_p95_ms": 11.529623500000525,
+        "candidate_p95_ms": 11.604811000004702,
+        "ratio": 1.006521245034946,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      },
+      "/admin/api/docker/containers": {
+        "baseline_p95_ms": 0.5230245000002469,
+        "candidate_p95_ms": 0.5981829999982438,
+        "ratio": 1.1436997693185718,
+        "budget_ratio": 1.15,
+        "status": "PASS"
+      }
+    },
+    "waiver": "DEC-20260910-hololive-admin-performance-release-exception"
+  },
+  "production_browser": {
+    "status": "PASS_LOCAL_BROWSER",
+    "cases": 24,
+    "engines": [
+      {
+        "name": "chromium",
+        "version": "153.0.8010.36"
+      },
+      {
+        "name": "firefox",
+        "version": "155.0"
+      },
+      {
+        "name": "webkit",
+        "version": "26.6"
+      }
+    ],
+    "verified_assets": {
+      "candidate": 58,
+      "old": 39
+    }
+  },
+  "initial_javascript": {
+    "status": "PASS",
+    "samples": 12,
+    "baseline_median": 508318,
+    "candidate_median": 557805,
+    "ratio": 1.0973544120019358,
+    "budget_ratio": 1.1
+  },
+  "local_cutover": {
+    "status": "PASS_LOCAL_SEQUENCE",
+    "phases": [
+      {
+        "name": "ingress_fence",
+        "elapsed_ms": 315,
+        "result": "administrator_ingress=503 shortlink_health=200 container=bc6c3bc969c295eb0fea253be938395f5bfc1ee637babc267b07b0c313ebf319",
+        "new_upstream_effects": 0,
+        "shortlink": 302
+      },
+      {
+        "name": "old_drain_and_shutdown",
+        "elapsed_ms": 12221,
+        "client_status": 500,
+        "logical_outcome": "unknown",
+        "owner_effects": 1,
+        "business_replays": 0,
+        "direct_admission": "closed",
+        "ws": "closed"
+      },
+      {
+        "name": "admin_session_purge_and_new_secret",
+        "elapsed_ms": 2053,
+        "result": "admin_session_purge=completed prefix=session:admin: removed=3 scan_pages=1",
+        "non_admin_data": "preserved",
+        "secret": "new",
+        "metadata": "matched",
+        "old_cookie": "rejected"
+      },
+      {
+        "name": "candidate_open_and_smoke",
+        "elapsed_ms": 465,
+        "metadata": "matched",
+        "new_login": "PASS",
+        "websocket": "current_protocol",
+        "old_bundle_generation": "rejected",
+        "docker": "available",
+        "business_replays": 0
+      },
+      {
+        "name": "candidate_observation",
+        "elapsed_ms": 295004,
+        "window_limit_ms": 300000,
+        "cadence_ms": 5000,
+        "samples": 60,
+        "validated_frames": 147,
+        "invalid_frames": 0,
+        "business_effects": 0,
+        "shortlink": "preserved"
+      },
+      {
+        "name": "whole_rollback",
+        "elapsed_ms": 3422,
+        "result": "admin_session_purge=completed prefix=session:admin: removed=2 scan_pages=1",
+        "image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+        "secret": "new_again",
+        "old_secrets_reused": 0,
+        "cookies": "previous_generations_rejected",
+        "business_replays": 0
+      },
+      {
+        "name": "running_BFF_purge_denied",
+        "elapsed_ms": 134,
+        "status": "denied",
+        "cache_changes": 0
+      },
+      {
+        "name": "proxy_failure_keeps_maintenance",
+        "elapsed_ms": 30264,
+        "outcome": "NO-GO",
+        "maintenance": "confirmed",
+        "business_replays": 0,
+        "shortlink": 302
+      },
+      {
+        "name": "old_shutdown_timeout_preserves_unknown",
+        "elapsed_ms": 20673,
+        "outcome": "NO-GO",
+        "client_status": "connection_lost",
+        "logical_outcome": "unknown",
+        "owner_effects": 1,
+        "exit_code": "1",
+        "stop_ms": 20558,
+        "business_replays": 0,
+        "maintenance": "preserved"
+      }
+    ],
+    "production_effects": 0
+  },
+  "local_boundaries": {
+    "status": "PASS",
+    "cases": 111,
+    "materialization": {
+      "files": 4,
+      "owner": 0,
+      "group": 1002,
+      "mode": "0640",
+      "unrelated_reader_denied": 4,
+      "candidate_file_authentication": "PASS"
+    },
+    "production_effects": 0
+  },
+  "sbom": [
+    {
+      "architecture": "amd64",
+      "path": "release-sbom-amd64.json.gz",
+      "sha256": "6d9fcf225a0446ab61aced4346e05ca8c77a126406b69f0176ac93edd2437c3e",
+      "components": 997,
+      "tool": "syft 1.51.1"
+    },
+    {
+      "architecture": "arm64",
+      "path": "release-sbom-arm64.json.gz",
+      "sha256": "505849938bab5e197cbb01e5b940c34a4c142910da97cfa171ce0554a4251986",
+      "components": 997,
+      "tool": "syft 1.51.1"
+    }
+  ],
+  "deployment_manifest_sha256": "95f6bb292d18ff22cfbdee2660a7e899d9f1abcd53c9c9268d22762f8e2413a1",
+  "image_archive_sha256": "fe2044e7c9ec891fc0dbbb0d82b27645a8a9155b03a85e0478dcdf507f038af1",
+  "production": {
+    "status": "DEPLOYED_OBSERVED_AUTH_ACCEPTANCE_PENDING",
+    "evidence": "release-cutover-live.json",
+    "opened_at": "2026-09-10T10:36:51.300459323Z",
+    "observation": {
+      "status": "PASS",
+      "started_at": "2026-09-10T10:39:22.408Z",
+      "finished_at": "2026-09-10T10:44:17.774Z",
+      "elapsed_ms": 295365,
+      "samples": 60,
+      "rss": {
+        "minimum_bytes": 27328512,
+        "maximum_bytes": 29614080,
+        "last_bytes": 29614080,
+        "interpretation": "production observation only; not the waived long-duration recovery gate"
+      },
+      "path": "release-live-observation.json.gz",
+      "sha256": "e07cdbc4652acd649004112ca0d62df3883b703415b8b1485b39524c5c4d0cc5"
+    },
+    "firewall": {
+      "status": "PASS",
+      "verified_at": "2026-09-10T10:31:14.049Z",
+      "service": "active/enabled",
+      "installed_unit_matches_reviewed_source": true,
+      "installed_rules_match_reviewed_source": true,
+      "probes": [
+        {
+          "port": 30191,
+          "allowed_source": "100.100.1.5",
+          "allowed_status": 200,
+          "denied_source": "100.100.1.3",
+          "denied_curl_exit": 7,
+          "denied_http_status": "000"
+        },
+        {
+          "port": 30192,
+          "allowed_source": "100.100.1.5",
+          "allowed_status": 200,
+          "denied_source": "100.100.1.3",
+          "denied_curl_exit": 7,
+          "denied_http_status": "000"
+        }
+      ],
+      "public_admin_health": 200
+    },
+    "public_login_render": {
+      "status": "PASS_PUBLIC_LOGIN_RENDER",
+      "checked_at": "2026-09-10T10:44:16.795Z",
+      "url": "https://admin.holoshi.com/login",
+      "browser": "153.0.8010.36",
+      "page_errors": 0,
+      "csp_violations": 0,
+      "login_submissions": 0,
+      "assets": [
+        {
+          "path": "/assets/index-BFyYVdl7.css",
+          "status": 200
+        },
+        {
+          "path": "/assets/index-tqJi4-WG.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/rolldown-runtime-hePW80VL.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/vendor-query-PaejG4qT.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/vendor-router-H4QOFr4t.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/vendor-icons-BBnf1uwp.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/auth-getAdminMetadata-B1kNGs-e.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/shared-D64PDuVA-NiD0XVOj.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/plus-jakarta-sans-latin-wght-normal-eXO_dkmS.woff2",
+          "status": 200
+        },
+        {
+          "path": "/assets/auth-handle_session_status-0dkvBZhZ.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/shared-BfxFa9_q-ByQPA8gh.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/LoginPage-DtUUZZtf.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/typeUtils-jCyQtab_.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/Label-tNXp0WoJ.js",
+          "status": 200
+        },
+        {
+          "path": "/assets/outfit-latin-wght-normal-Bc-8i84L.woff2",
+          "status": 200
+        }
+      ],
+      "authenticated_login": "NOT_RUN"
+    },
+    "authenticated_login_csrf_websocket": "pending_user_acceptance"
+  },
+  "fallback_delta": "none"
+}

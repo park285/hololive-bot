@@ -150,6 +150,8 @@ sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env \
 `admin-dashboard-ingress-firewall.service`는 HTTP 파싱 전에 `30191`/`30192`의 source를
 loopback과 승인된 Tailscale peer로 제한하도록 정의되어 있습니다. unit 정의만으로 현재 적용을 주장하지 않습니다. 2026-09-09 읽기 전용 조사에서는 unit이 disabled/inactive이고 기대 nft table이 없어 O02로 기록했습니다. 2026-09-10 KST의 [재확인](../../../admin-dashboard/docs/bigbang/operational-boundary-refresh.json)에서도 같은 상태였습니다. 첫 전환 전에 실제 source 차단을 확인하고, 필요한 변경은 운영 권한 안에서 적용해야 합니다. [최초 조사 근거](../../../admin-dashboard/docs/bigbang/consumer-audit.json).
 
+2026-09-10 19:31 KST의 승인된 첫 전환 준비에서 이 기존 service를 enable/start했습니다. 실제 nft table과 Seoul의 `30191`/`30192` 200, kapu의 두 포트 TCP 거부를 확인하여 O02를 해소했습니다. [적용 증거](../../../admin-dashboard/docs/bigbang/release-firewall.json), [배포·관찰 기록](../../../admin-dashboard/docs/bigbang/release-progress.md). 이후 작업에서는 이 기록을 현재 상태로 추정하지 말고 실제 service·table·source 경계를 다시 확인합니다.
+
 Seoul Nginx는 admin과 short-link public origin을 분리합니다. `admin.holoshi.com`은 기존 admin upstream
 `100.100.1.8:30191`만 유지하고, `deploy/nginx/holoshi-public-shortlink.conf`가 전용
 `short.holoshi.com` TLS/HTTP3 server와 `shortlink_backend` upstream을 소유합니다. 해당 파일은

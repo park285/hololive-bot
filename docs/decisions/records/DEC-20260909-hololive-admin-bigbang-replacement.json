@@ -3,7 +3,7 @@
   "id": "DEC-20260909-hololive-admin-bigbang-replacement",
   "title": "Hololive 관리자 구조를 단일 릴리스로 전면 교체하는 보완안",
   "decision_status": "accepted",
-  "delivery_status": "planned",
+  "delivery_status": "implemented",
   "scope": [
     "hololive-bot"
   ],
@@ -14,9 +14,16 @@
   ],
   "evidence": [
     "admin-dashboard/docs/bigbang/upstream-contract-reconciliation.md",
-    "admin-dashboard/docs/bigbang/mutation-replay-evidence.md"
+    "admin-dashboard/docs/bigbang/mutation-replay-evidence.md",
+    "admin-dashboard/docs/bigbang/release-verification.json",
+    "admin-dashboard/docs/bigbang/release-cutover-live.json"
   ],
-  "implementation": [],
+  "implementation": [
+    "admin-dashboard/backend/internal/httpapi/routes.go",
+    "admin-dashboard/frontend/src/app/bootstrap.ts",
+    "docs/current/runbooks/admin-dashboard.md",
+    "admin-dashboard/docs/bigbang/release-progress.md"
+  ],
   "supersedes": [],
   "review": {
     "trigger": "소비자·첫 drain·세대 전환·복구 리허설이 단일 릴리스 전략의 변경 필요성을 보여 주거나 사용자가 MFA 제외 범위를 변경할 때"

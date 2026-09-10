@@ -1,0 +1,66 @@
+[
+  {
+    "architecture": "amd64",
+    "release": "sha256:49088679abed4b5d8ff7b6ce12adcd17e68e31bca7409beb84394812db69330a",
+    "revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+    "validated_image": "sha256:428c483ce80d89b945473ce4871a7453b8f084291d4ebb609fbb15c99459676e",
+    "validated_revision": "49abf20fc1ba5e1c6ecb0caf9c5e0acc142a028d",
+    "rootfs_equal": true,
+    "rootfs": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:50abe06dfc0957e14cb8332ed242e8b884ef2563a9eb202e5172f243f62792f7",
+        "sha256:621c35e751a51a9a9dc3e80aa0b7fe8be2a93402ea6ccd307d30852cd7776cda",
+        "sha256:c8b007d0206e4b10ed4d3b3d99dfeab47c2648e82011989fd78a5731baf33fc3",
+        "sha256:bec7e6bb35e05d1284f28b10d2150c259717d91c658c4c10c08424bb9466caba",
+        "sha256:275a30dd8ce958b21daa9ad962c6fbc09f98306ee2f486b65c9075dc257b1412",
+        "sha256:4d049f83d9cf21d1f5cc0e11deaf36df02790d0e60c1a3829538fb4b61685368",
+        "sha256:af5aa97ebe6ce1604747ec1e21af7136ded391bcabe4acef882e718a87c86bcc",
+        "sha256:6f1cdceb6a3146f0ccb986521156bef8a422cdbb0863396f7f751f575ba308f4",
+        "sha256:bd3cdfae1d3fdd83a2231d608969b38b82349777c2fff9a7c12d54f8ac5c9b38",
+        "sha256:4cde6b0bb6f50a5f255eef7b2a42162c661cf776b803225dcac9a659e396bb6b",
+        "sha256:ad51d0769d16ba578106a177987dfe3d2e02c1668c852b795b2f6b024068242a",
+        "sha256:187cfc6d1e3e8a40a5e64653bcd3239c140807dcf1c09e48021178705a5a6139",
+        "sha256:5fd2536c39c0700be8b7b4344e375196da2f126842fd8ede66996a18860a3890",
+        "sha256:8bab418a481f86b4076112763564c03d2cb3e5c8b0997c7237a926272d412c5a",
+        "sha256:ba7af2761ae082615c2cbedd21fa5860e579574b1ee720c1f518ee55a39ec47b",
+        "sha256:85a2b40d8f3d623f7d3897f4028a98d0851fc3f8a0cbe1132b3581bb57addc36",
+        "sha256:d8896f6532ae0fc3fce02185ab100a1874abc9b8036ee4a41e39471441e0084c",
+        "sha256:3dfa8c80ee47bece758d10c07c23bbbc0d9aea680a1996c3b3e6416f2217e1b5"
+      ]
+    },
+    "configuration_equal_except_revision": true
+  },
+  {
+    "architecture": "arm64",
+    "release": "sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef",
+    "revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+    "validated_image": "sha256:2fa093270f8b39b49321a0f5a635b48023d8a873c2bd42d46c4f6a8e15775dbb",
+    "validated_revision": "49abf20fc1ba5e1c6ecb0caf9c5e0acc142a028d",
+    "rootfs_equal": true,
+    "rootfs": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:169cc3415d0f5be1ca6f533fd91057bb5c58d213161f4990c87fcb12d0bc251b",
+        "sha256:621c35e751a51a9a9dc3e80aa0b7fe8be2a93402ea6ccd307d30852cd7776cda",
+        "sha256:c8b007d0206e4b10ed4d3b3d99dfeab47c2648e82011989fd78a5731baf33fc3",
+        "sha256:bec7e6bb35e05d1284f28b10d2150c259717d91c658c4c10c08424bb9466caba",
+        "sha256:275a30dd8ce958b21daa9ad962c6fbc09f98306ee2f486b65c9075dc257b1412",
+        "sha256:4d049f83d9cf21d1f5cc0e11deaf36df02790d0e60c1a3829538fb4b61685368",
+        "sha256:af5aa97ebe6ce1604747ec1e21af7136ded391bcabe4acef882e718a87c86bcc",
+        "sha256:6f1cdceb6a3146f0ccb986521156bef8a422cdbb0863396f7f751f575ba308f4",
+        "sha256:bd3cdfae1d3fdd83a2231d608969b38b82349777c2fff9a7c12d54f8ac5c9b38",
+        "sha256:4cde6b0bb6f50a5f255eef7b2a42162c661cf776b803225dcac9a659e396bb6b",
+        "sha256:ad51d0769d16ba578106a177987dfe3d2e02c1668c852b795b2f6b024068242a",
+        "sha256:187cfc6d1e3e8a40a5e64653bcd3239c140807dcf1c09e48021178705a5a6139",
+        "sha256:5fd2536c39c0700be8b7b4344e375196da2f126842fd8ede66996a18860a3890",
+        "sha256:b38586e826ddd17f3be574880464f2f727af7ba08df3504691cb95280166cb27",
+        "sha256:ba7af2761ae082615c2cbedd21fa5860e579574b1ee720c1f518ee55a39ec47b",
+        "sha256:85a2b40d8f3d623f7d3897f4028a98d0851fc3f8a0cbe1132b3581bb57addc36",
+        "sha256:13e3cc0d7512428d0933773587e03f88b439bf5f51d62f7b2065ecf58b761c7a",
+        "sha256:3dfa8c80ee47bece758d10c07c23bbbc0d9aea680a1996c3b3e6416f2217e1b5"
+      ]
+    },
+    "configuration_equal_except_revision": true
+  }
+]

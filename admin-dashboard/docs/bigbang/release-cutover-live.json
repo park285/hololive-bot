@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "status": "DEPLOYED_OBSERVED_AUTH_ACCEPTANCE_PENDING",
+  "stage": {
+    "status": "staged",
+    "revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+    "image": "sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef",
+    "rollback_image": "sha256:17b56c3a48b055fdab3d60691ec40e90de1f32e65691e1be0718b316b84e4fb7",
+    "rollback_tag": "admin-dashboard:rollback-20260910T102952Z-3f9e625c7",
+    "backup": "/opt/hololive-bot/releases/admin-bigbang-20260910T102952Z-3f9e625c7/rollback",
+    "runtime_activated": false
+  },
+  "drain": {
+    "status": "PASS",
+    "started_at": "2026-09-10T10:34:24.354368460Z",
+    "old_bff": "76949d2f4f352c2ae912f224e5bdca3a0a52afb7cc80018b0f832c677a27e838",
+    "drain_ms": 246,
+    "exit_code": 0,
+    "oom_killed": false,
+    "old_listener": "closed",
+    "host_connections_before": 0,
+    "mutation_audit_events_during_drain": 0,
+    "business_actions_replayed": 0
+  },
+  "session_purge": "admin_session_purge=completed prefix=session:admin: removed=0 scan_pages=1",
+  "smoke": {
+    "status": "PASS_UNAUTHENTICATED_SMOKE",
+    "revision": "3f9e625c72bf4937223608c05bf44a5c945883a0",
+    "image": "sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef",
+    "generation": "c06bddfe3e2b69f6866e93426978bb55bfe3387510775be74e7e7394f251b118",
+    "metadata_no_store": true,
+    "missing_generation_status": 409,
+    "anonymous_session_status": 401,
+    "anonymous_websocket_status": 401,
+    "proxy_policy": "matched",
+    "secret_file_metadata": "matched",
+    "other_service_identity": "unchanged",
+    "shortlink_health": 200,
+    "authenticated_login_csrf_websocket": "pending_user_acceptance"
+  },
+  "recreate": [
+    {
+      "service": "/admin-dashboard",
+      "id": "a144eeddb2b9136ebcd10cb8623d62c02e752f6fcf45768db05008c6fa25dc67",
+      "started_at": "2026-09-10T10:35:55.655778274Z",
+      "started_after_recreate": true,
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "service": "/admin-docker-proxy",
+      "id": "5736e7459538d9b10bf73a7b03503fb7fc0d51f9aa9bf0f090e0719084b7c4e9",
+      "started_at": "2026-09-10T10:35:55.43610587Z",
+      "started_after_recreate": true,
+      "restarts": 0,
+      "oom_killed": false
+    }
+  ],
+  "runtime": [
+    {
+      "name": "/admin-dashboard",
+      "id": "a144eeddb2b9136ebcd10cb8623d62c02e752f6fcf45768db05008c6fa25dc67",
+      "image": "sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-10T10:35:55.655778274Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/admin-docker-proxy",
+      "id": "5736e7459538d9b10bf73a7b03503fb7fc0d51f9aa9bf0f090e0719084b7c4e9",
+      "image": "sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b",
+      "status": "running",
+      "health": null,
+      "started_at": "2026-09-10T10:35:55.43610587Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/admin-dashboard-ingress",
+      "id": "1d0b2562505f68bdbc206313353e1166e0d8e62998ce176a15b9ccbabdb2edf2",
+      "image": "sha256:1870de6d59aafee152589b64404556d2535922cdd998e6dac1c4888c938ed8f9",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-05T02:47:05.59638363Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/hololive-api",
+      "id": "bf28f3545fc2a3071afb4438a5741e7bdd05230d72f7887b8533551c39a7f92b",
+      "image": "sha256:6a1d29b1aa998b8211e03a810a8bde1d457c5e3e4454ed2301db75c43b8cb828",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-08T11:28:27.70614681Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/hololive-alarm-worker",
+      "id": "b01be973ae3b6b3e10daa217980c7428933ce81189d6d41aaba713dc858171dd",
+      "image": "sha256:7a6efc25996fcab67a45bf38488ff577d7d8d10025f088c67913f93c6e70de3b",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-08T12:43:40.100007998Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/hololive-youtube-collector-c",
+      "id": "32e725f784040560ac4bc0e4c2a34e966142df3a5193201c4ac18030ce284049",
+      "image": "sha256:25f4c7e7b6fc3e96baa390ac59cf8b89d41e44c6527b3ca0aec30fb9b757ca76",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-09T16:11:14.116585678Z",
+      "restarts": 1,
+      "oom_killed": false
+    },
+    {
+      "name": "/holo-postgres",
+      "id": "d60fb92b893832101a53eba021c7c5e363dcabc42ea254ac57a9a2ae2ee3f14e",
+      "image": "sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-05T02:46:37.054252773Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/valkey-cache",
+      "id": "aae85243fdf2062d08985d0b138a86af11029c23e1e37f53975ea7ba395660ba",
+      "image": "sha256:ccfa19b0d743e48927e1c8c14e39e0acb97b5cea347fef0bfe340247fea920cd",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-05T03:18:20.732958402Z",
+      "restarts": 0,
+      "oom_killed": false
+    }
+  ],
+  "opened_at": "2026-09-10T10:36:51.300459323Z",
+  "authenticated_login_csrf_websocket": "pending_user_acceptance",
+  "runtime_final": [
+    {
+      "name": "/admin-dashboard",
+      "id": "a144eeddb2b9136ebcd10cb8623d62c02e752f6fcf45768db05008c6fa25dc67",
+      "image": "sha256:d22b9b83465e04f4c5976b4a2f1f71d699592827e43003dc7fb9bccb9e9c68ef",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-10T10:35:55.655778274Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/admin-docker-proxy",
+      "id": "5736e7459538d9b10bf73a7b03503fb7fc0d51f9aa9bf0f090e0719084b7c4e9",
+      "image": "sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b",
+      "status": "running",
+      "health": null,
+      "started_at": "2026-09-10T10:35:55.43610587Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/admin-dashboard-ingress",
+      "id": "1d0b2562505f68bdbc206313353e1166e0d8e62998ce176a15b9ccbabdb2edf2",
+      "image": "sha256:1870de6d59aafee152589b64404556d2535922cdd998e6dac1c4888c938ed8f9",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-05T02:47:05.59638363Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/hololive-api",
+      "id": "bf28f3545fc2a3071afb4438a5741e7bdd05230d72f7887b8533551c39a7f92b",
+      "image": "sha256:6a1d29b1aa998b8211e03a810a8bde1d457c5e3e4454ed2301db75c43b8cb828",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-08T11:28:27.70614681Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/hololive-alarm-worker",
+      "id": "b01be973ae3b6b3e10daa217980c7428933ce81189d6d41aaba713dc858171dd",
+      "image": "sha256:7a6efc25996fcab67a45bf38488ff577d7d8d10025f088c67913f93c6e70de3b",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-08T12:43:40.100007998Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/hololive-youtube-collector-c",
+      "id": "32e725f784040560ac4bc0e4c2a34e966142df3a5193201c4ac18030ce284049",
+      "image": "sha256:25f4c7e7b6fc3e96baa390ac59cf8b89d41e44c6527b3ca0aec30fb9b757ca76",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-09T16:11:14.116585678Z",
+      "restarts": 1,
+      "oom_killed": false
+    },
+    {
+      "name": "/holo-postgres",
+      "id": "d60fb92b893832101a53eba021c7c5e363dcabc42ea254ac57a9a2ae2ee3f14e",
+      "image": "sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-05T02:46:37.054252773Z",
+      "restarts": 0,
+      "oom_killed": false
+    },
+    {
+      "name": "/valkey-cache",
+      "id": "aae85243fdf2062d08985d0b138a86af11029c23e1e37f53975ea7ba395660ba",
+      "image": "sha256:ccfa19b0d743e48927e1c8c14e39e0acb97b5cea347fef0bfe340247fea920cd",
+      "status": "running",
+      "health": "healthy",
+      "started_at": "2026-09-05T03:18:20.732958402Z",
+      "restarts": 0,
+      "oom_killed": false
+    }
+  ],
+  "observation": {
+    "status": "PASS",
+    "started_at": "2026-09-10T10:39:22.408Z",
+    "finished_at": "2026-09-10T10:44:17.774Z",
+    "elapsed_ms": 295365,
+    "samples": 60,
+    "rss": {
+      "minimum_bytes": 27328512,
+      "maximum_bytes": 29614080,
+      "last_bytes": 29614080,
+      "interpretation": "production observation only; not the waived long-duration recovery gate"
+    },
+    "path": "release-live-observation.json.gz",
+    "sha256": "e07cdbc4652acd649004112ca0d62df3883b703415b8b1485b39524c5c4d0cc5"
+  },
+  "public_login_render": {
+    "status": "PASS_PUBLIC_LOGIN_RENDER",
+    "checked_at": "2026-09-10T10:44:16.795Z",
+    "url": "https://admin.holoshi.com/login",
+    "browser": "153.0.8010.36",
+    "page_errors": 0,
+    "csp_violations": 0,
+    "login_submissions": 0,
+    "assets": [
+      {
+        "path": "/assets/index-BFyYVdl7.css",
+        "status": 200
+      },
+      {
+        "path": "/assets/index-tqJi4-WG.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/rolldown-runtime-hePW80VL.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/vendor-query-PaejG4qT.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/vendor-router-H4QOFr4t.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/vendor-icons-BBnf1uwp.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/auth-getAdminMetadata-B1kNGs-e.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/shared-D64PDuVA-NiD0XVOj.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/plus-jakarta-sans-latin-wght-normal-eXO_dkmS.woff2",
+        "status": 200
+      },
+      {
+        "path": "/assets/auth-handle_session_status-0dkvBZhZ.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/shared-BfxFa9_q-ByQPA8gh.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/LoginPage-DtUUZZtf.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/typeUtils-jCyQtab_.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/Label-tNXp0WoJ.js",
+        "status": 200
+      },
+      {
+        "path": "/assets/outfit-latin-wght-normal-Bc-8i84L.woff2",
+        "status": 200
+      }
+    ],
+    "authenticated_login": "NOT_RUN"
+  },
+  "log_summary": [
+    {
+      "service": "admin-dashboard",
+      "structured_error_lines": 0,
+      "panic_fatal_markers": 0,
+      "successful_login_events": 0
+    },
+    {
+      "service": "admin-docker-proxy",
+      "structured_error_lines": 0,
+      "panic_fatal_markers": 0,
+      "successful_login_events": 0
+    }
+  ],
+  "static_secret_rotation": {
+    "changed_key": "SESSION_SECRET",
+    "other_master_bytes": "unchanged",
+    "master_mirror": "match",
+    "manifest_metadata_rows": 24,
+    "materialized_files": 4,
+    "materialized_owner": 0,
+    "materialized_group": 1002,
+    "materialized_mode": "0640",
+    "backup": {
+      "status": "success",
+      "artifact": "stack-secrets-20260910T103525Z.tar.gpg",
+      "target": "100.100.1.5:/var/backups/stack-secrets/",
+      "retention": 8,
+      "restore_test": "not_run_for_this_backup",
+      "key_custody": "existing_accepted_kapu_only"
+    },
+    "raw_values_or_hashes_in_report": false
+  },
+  "unrelated_services_unchanged": 6,
+  "business_actions_replayed": 0
+}
