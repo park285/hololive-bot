@@ -29,12 +29,13 @@ type options struct {
 type receipt struct {
 	Status        string `json:"status"`
 	Username      string `json:"username,omitempty"`
-	ExpiresAtUnix int64  `json:"expires_at_unix"` // 만료가 없는 상태에도 기존의 0 필드를 유지합니다.
+	ExpiresAtUnix int64  `json:"expires_at_unix"`
 	ReadOnly      bool   `json:"read_only"`
 }
 
 // Run은 기존 설정의 Valkey 연결을 사용하고 30초의 I/O 예산 안에서 한 명령을 수행합니다.
 // 자격증명은 명시한 비공개 파일에만 기록하며 출력에는 상태·식별자·만료만 포함합니다.
+// 계정이 없거나 폐기된 응답은 기존 출력과 같이 만료 시각 0을 포함합니다.
 // 발급의 불명 결과에서는 파일을 보존하므로 같은 계정의 status/revoke로 먼저 확인해야 합니다.
 func Run(ctx context.Context, args []string, output io.Writer) error {
 	opts, err := parseOptions(args)
