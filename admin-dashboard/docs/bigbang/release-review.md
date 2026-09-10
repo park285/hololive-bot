@@ -72,4 +72,6 @@ WebKit의 달력 조회 시나리오에서는 route 전환 직후 전역의 동�
 
 배포 후 증거 PR의 실행 `34468875076`은 WebKit의 가상 목록 편집 클릭 뒤 dialog가 나타나지 않아 실패했습니다. 같은 클릭 실패는 1 CPU 상한의 네 차례 반복에서 재현되지 않았습니다. 추가 진단에서는 기존 `isVisible()` 준비 판정 직후 버튼의 y 범위가 914.25~936.25px, viewport 높이는 844px이었습니다. overscan 행의 DOM 존재·표시가 실제 화면 내 노출을 보장하지 않는 전제 결함을 확인했습니다. 목록을 화면에 놓고 scroll·실측 뒤 버튼 전체가 viewport에 들어오는지 기존 5초 상한 안에서 확인한 후 hover와 단일 click을 수행합니다. dialog의 정확한 ID·초안 검사는 유지하며 click이나 업무 요청을 재시도하지 않습니다. 보완한 검사는 같은 1 CPU 상한의 네 차례 반복에서 통과했습니다. 이 전제 보완만으로 최초 CI 클릭 유실의 원인을 확정하지 않으며, 앱 소스와 배포 image는 변경하지 않습니다.
 
+실행 `34474772947`에서 같은 WebKit dialog 검사가 다시 실패했으므로 viewport 준비만으로 해결됐다고 판단하지 않습니다. 1 CPU에서 전체 시나리오와 layout 세 차례를 이어 실행한 진단은 통과했지만, 버튼이 준비된 뒤 pointerdown 직전 y=493.85에서 822.25px로 다시 이동하는 scroll을 관찰했습니다. 설치된 Playwright 1.63.0의 pointer action은 안정성을 검사한 뒤 별도 자동 scroll을 수행합니다. 이미 viewport 안에 준비한 가상 목록 버튼에는 [공식 `scroll: "none"` 옵션](https://playwright.dev/docs/api/class-locator#locator-click-option-scroll)을 hover·click에 지정하여 이 추가 이동을 없앱니다. 화면 노출·안정성·활성화·hit target 검사, 단일 click, 정확한 ID·초안·200% 글자 크기 검사는 유지합니다. 보완 후 같은 1 CPU 상한의 layout 네 차례가 98.9초에 통과했고, 각 pointerdown·pointerup·click에서 대상 버튼과 목록 위치가 유지됐습니다. 원격 실패의 모든 원인을 확정한 것으로 표현하지 않으며 앱 코드·운영 image·의존성·timeout은 변경하지 않습니다.
+
 Fallback delta: none. 읽기 오류 보존 수정에 retry·대체 경로·강제 GC는 추가하지 않았습니다. 기존 정비 개방 실패의 1회 보상 동작은 [전환 기록](cutover-progress.md)에 별도로 유지합니다.
