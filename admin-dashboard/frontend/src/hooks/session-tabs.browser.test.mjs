@@ -873,20 +873,22 @@ async function exerciseLayout(browser, base, state) {
 }
 
 if (process.env.ADMIN_SESSION_BROWSER_CGROUP !== "1") {
-  test("session and generation browser contracts run in a bounded transient cgroup", { timeout: 240000 }, async () => {
+  // CI에서 11개 시나리오가 엔진별 56~65초 이상 걸립니다. 개별 assertion 상한은 유지하고
+  // 전체는 엔진별 120초, cgroup은 세 엔진과 정리 15초, 바깥 대기는 각각 15초 여유를 둡니다.
+  test("session and generation browser contracts run in a bounded transient cgroup", { timeout: 405000 }, async () => {
     const unit = `iris-admin-session-contract-${process.pid}-${Date.now()}`;
     try {
       const selection = process.env.ADMIN_BROWSER_ENGINE ? [`--setenv=ADMIN_BROWSER_ENGINE=${process.env.ADMIN_BROWSER_ENGINE}`] : [];
       for (const name of ["LD_LIBRARY_PATH", "GST_PLUGIN_PATH"]) if (process.env[name]) selection.push(`--setenv=${name}=${process.env[name]}`);
       // Playwright의 dlopen 검사는 ldconfig cache를 읽으므로 테스트 namespace 안에서만 사설 cache를 제공합니다.
       const namespace = process.env.ADMIN_TEST_LDCACHE ? ["bwrap", "--bind", "/", "/", "--dev", "/dev", "--ro-bind", process.env.ADMIN_TEST_LDCACHE, "/etc/ld.so.cache"] : [];
-      const result = await run("systemd-run", ["--user", "--quiet", "--wait", "--pipe", "--collect", `--unit=${unit}`, "--property=RuntimeMaxSec=210", "--property=KillMode=control-group", "--property=TimeoutStopSec=5", `--working-directory=${root}`, "--setenv=ADMIN_SESSION_BROWSER_CGROUP=1", ...selection, ...namespace, process.execPath, "--test", fileURLToPath(import.meta.url)], { timeout: 225000, maxBuffer: 2 ** 20 });
+      const result = await run("systemd-run", ["--user", "--quiet", "--wait", "--pipe", "--collect", `--unit=${unit}`, "--property=RuntimeMaxSec=375", "--property=KillMode=control-group", "--property=TimeoutStopSec=5", `--working-directory=${root}`, "--setenv=ADMIN_SESSION_BROWSER_CGROUP=1", ...selection, ...namespace, process.execPath, "--test", fileURLToPath(import.meta.url)], { timeout: 390000, maxBuffer: 2 ** 20 });
       process.stdout.write(result.stdout);
       process.stderr.write(result.stderr);
     } finally { await run("systemctl", ["--user", "stop", unit], { timeout: 10000 }).catch(() => undefined); }
   });
 } else {
-  for (const type of [chromium, firefox, webkit].filter(browser => !process.env.ADMIN_BROWSER_ENGINE || browser.name() === process.env.ADMIN_BROWSER_ENGINE)) test(`${type.name()}: shared cookies, stale responses, heartbeat and metadata fences`, { timeout: 65000 }, async () => {
+  for (const type of [chromium, firefox, webkit].filter(browser => !process.env.ADMIN_BROWSER_ENGINE || browser.name() === process.env.ADMIN_BROWSER_ENGINE)) test(`${type.name()}: shared cookies, stale responses, heartbeat and metadata fences`, { timeout: 120000 }, async t => {
     const state = newState();
     const server = await createServer({ root, configFile: path.join(root, "vite.config.ts"), logLevel: "error", plugins: [fixture(state)], server: { host: "127.0.0.1", port: 0, proxy: { "/admin/api": { target: "http://127.0.0.1:1", ws: false } } } });
     // pinned Playwright 1.63.0이 이미 제공하는 WS server를 사용하며 새 의존성을 추가하지 않습니다.
@@ -909,17 +911,14 @@ if (process.env.ADMIN_SESSION_BROWSER_CGROUP !== "1") {
       const options = { headless: true };
       if (type === chromium) { await access("/usr/bin/google-chrome"); options.executablePath = "/usr/bin/google-chrome"; }
       browser = await type.launch(options);
-      await exerciseCookies(browser, base, state);
-      await exerciseValidationPreparation(browser, base, state);
-      await exerciseWarningLoading(browser, base);
-      await exerciseStreams(browser, base, state);
-      await exerciseAlarmControls(browser, base, state);
-      await exerciseBusinessMutations(browser, base, state);
-      await exerciseEditors(browser, base, state);
-      await exerciseDocker(browser, base, state);
-      await exerciseReadPages(browser, base, state);
-      await exerciseLayout(browser, base, state);
-      await exerciseMetadata(browser, base, state);
+      for (const exercise of [exerciseCookies, exerciseValidationPreparation, exerciseWarningLoading,
+        exerciseStreams, exerciseAlarmControls, exerciseBusinessMutations, exerciseEditors,
+        exerciseDocker, exerciseReadPages, exerciseLayout, exerciseMetadata]) {
+        t.diagnostic(`${exercise.name}: started`);
+        const started = performance.now();
+        await exercise(browser, base, state);
+        t.diagnostic(`${exercise.name}: ${Math.round(performance.now() - started)}ms`);
+      }
     } finally { state.release?.(); for (const socket of streams.clients) socket.terminate(); streams.close(); await browser?.close(); await server.close(); }
   });
 }
