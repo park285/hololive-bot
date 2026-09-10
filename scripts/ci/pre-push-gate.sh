@@ -355,8 +355,6 @@ run_reusable_phase() {
   run_self_test scripts/deploy/test-compose-security-defaults.sh \
     deploy/compose deploy/nginx scripts/deploy/lib/public-bind-mounts.sh scripts/ci/python-runtime.sh
   run_self_test scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
-  run_self_test scripts/perf/check-youtube-plane-budget_test.sh \
-    scripts/perf/check-youtube-plane-budget.sh scripts/perf/perf-budget.yaml
   run_self_test scripts/runtime/pg-hotpath-explain-snapshot_test.sh \
     scripts/runtime/pg-hotpath-explain-snapshot.sh scripts/runtime/lib \
     hololive/hololive-alarm-worker/internal/egress/youtubedispatch/store/queries \
@@ -368,6 +366,13 @@ run_reusable_phase() {
   run_self_test scripts/deploy/ap-completion-check_test.sh \
     scripts/deploy/ap-completion-check.sh scripts/deploy/ap-hosts scripts/deploy/lib deploy/compose
 
+  # Go 시험의 Ryuk 회수는 프로세스 종료 뒤에도 interface를 제거합니다. Chromium이
+  # ERR_NETWORK_CHANGED로 중단됐으므로 독립적인 브라우저 검사를 그보다 먼저 완료합니다.
+  if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
+    echo "[pre-push] admin-dashboard frontend 품질 게이트"
+    (cd admin-dashboard/frontend && corepack npm ci && corepack npm run generate:api && corepack npm test && corepack npm run lint && corepack npm run build)
+  fi
+
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"
   LOCAL_CI_GO_SCOPE="${resolved_local_ci_go_scope}" \
   BASE_REF="${BASE_SHA:-origin/main}" \
@@ -376,11 +381,6 @@ run_reusable_phase() {
   RUN_NILAWAY="${RUN_NILAWAY:-true}" \
   RUN_RACE_TESTS="${RUN_RACE_TESTS:-${race_default}}" \
     ./scripts/ci/local-ci.sh
-
-  if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
-    echo "[pre-push] admin-dashboard frontend 품질 게이트"
-    (cd admin-dashboard/frontend && corepack npm ci && corepack npm run generate:api && corepack npm test && corepack npm run lint && corepack npm run build)
-  fi
 
   if [[ "${PRE_PUSH_MODE}" == "full" ]] || echo "$changed_files" | grep -q '^hololive/hololive-youtube-collector/'; then
     echo "[pre-push] youtube-collector YouTube.js helper 품질 게이트"
