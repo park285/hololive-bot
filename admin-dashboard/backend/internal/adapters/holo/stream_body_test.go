@@ -112,12 +112,15 @@ func (r *onceFailedStream) Read(p []byte) (int, error) {
 	}
 
 	n := copy(p, r.data)
+
 	r.data = r.data[n:]
+
 	if len(r.data) != 0 {
 		return n, nil
 	}
 
 	err := r.err
+
 	r.err = nil
 
 	return n, err
@@ -167,6 +170,7 @@ func assertProjectedReadFailure(t *testing.T, reader io.Reader, closeErr error, 
 	err := decodeOwnedBody(response, http.StatusOK, target)
 
 	require.ErrorIs(t, err, context.Canceled, "read boundary %d", cut)
+
 	if closeErr != nil {
 		require.ErrorIs(t, err, closeErr, "read boundary %d", cut)
 	}

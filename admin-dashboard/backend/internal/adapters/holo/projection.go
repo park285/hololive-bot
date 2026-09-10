@@ -59,18 +59,10 @@ func writeHTMLSafeRow(w io.Writer, row jsontext.Value) error {
 			return fmt.Errorf("write projected row prefix: %w", err)
 		}
 
-		var escaped string
+		const hex = "0123456789abcdef"
 
-		switch row[index] {
-		case '<':
-			escaped = `\u003c`
-		case '>':
-			escaped = `\u003e`
-		case '&':
-			escaped = `\u0026`
-		}
-
-		if _, err := io.WriteString(w, escaped); err != nil {
+		escaped := [6]byte{'\\', 'u', '0', '0', hex[row[index]>>4], hex[row[index]&15]}
+		if _, err := w.Write(escaped[:]); err != nil {
 			return fmt.Errorf("write HTML escape: %w", err)
 		}
 
@@ -144,24 +136,14 @@ func decodeProjectedRows(dec *jsontext.Decoder, collection string, project func(
 			return nil, err
 		}
 
-		switch name.String() {
-		case "status":
-			if statusErr := readProjectedStatus(dec); statusErr != nil {
-				return nil, statusErr
-			}
+		projected, bit, err := readProjectedField(dec, name.String(), collection, buffer, project)
+		if err != nil {
+			return nil, err
+		}
 
-			seen |= 1
-		case collection:
-			rows, err = projectRowsArray(dec, buffer, project)
-			if err != nil {
-				return nil, err
-			}
-
-			seen |= 2
-		default:
-			if err := dec.SkipValue(); err != nil {
-				return nil, err
-			}
+		seen |= bit
+		if bit == 2 {
+			rows = projected
 		}
 	}
 
@@ -174,6 +156,18 @@ func decodeProjectedRows(dec *jsontext.Decoder, collection string, project func(
 	}
 
 	return rows, nil
+}
+
+func readProjectedField(dec *jsontext.Decoder, name, collection string, buffer *bytes.Buffer, project func(*jsontext.Decoder, *bytes.Buffer) error) ([]jsontext.Value, uint8, error) {
+	switch name {
+	case "status":
+		return nil, 1, readProjectedStatus(dec)
+	case collection:
+		rows, err := projectRowsArray(dec, buffer, project)
+		return rows, 2, err
+	default:
+		return nil, 0, dec.SkipValue()
+	}
 }
 
 func readProjectedStatus(dec *jsontext.Decoder) error {

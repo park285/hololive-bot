@@ -36,6 +36,18 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("credentials: %w", err)
 	}
 
+	if err := c.validateTrustedForwarders(); err != nil {
+		return err
+	}
+
+	if c.Logging.MaxSizeMB < 1 || c.Logging.MaxBackups < 0 || c.Logging.MaxAgeDays < 0 {
+		return errors.New("log limits must be nonnegative and LOG_MAX_SIZE_MB positive")
+	}
+
+	return nil
+}
+
+func (c *Config) validateTrustedForwarders() error {
 	if c.TrustedForwarders && len(c.TrustedProxyCIDRs) == 0 {
 		return errors.New("TRUST_FORWARDED_HEADERS requires TRUSTED_PROXY_CIDRS")
 	}
@@ -48,10 +60,6 @@ func (c *Config) Validate() error {
 
 	if strings.EqualFold(c.Env, "production") && !c.TrustedForwarders {
 		return errors.New("production requires TRUST_FORWARDED_HEADERS and explicit proxy CIDRs")
-	}
-
-	if c.Logging.MaxSizeMB < 1 || c.Logging.MaxBackups < 0 || c.Logging.MaxAgeDays < 0 {
-		return errors.New("log limits must be nonnegative and LOG_MAX_SIZE_MB positive")
 	}
 
 	return nil

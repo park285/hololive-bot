@@ -115,11 +115,7 @@ func projectMemberField(dec *jsontext.Decoder, buffer *bytes.Buffer, name string
 	case "aliases":
 		return memberAliasesSeen, projectMemberAliases(dec, buffer, written)
 	default:
-		if err := dec.SkipValue(); err != nil {
-			return 0, err
-		}
-
-		return 0, nil
+		return 0, dec.SkipValue()
 	}
 }
 
