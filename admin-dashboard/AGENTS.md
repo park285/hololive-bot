@@ -1,73 +1,39 @@
-# Admin Dashboard
+# Admin Dashboard guidance
 
-Read `../AGENTS.md` for repository-wide rules. This file adds dashboard-specific guidance.
+Read `../AGENTS.md` for Hololive rules. This dashboard uses a Go backend and React frontend on combined port `30190`. Versions belong to `backend/go.mod`, `frontend/package.json`, and their lockfiles.
 
-## Context
+## Ownership
 
-| Item | Value |
-|------|-------|
-| **Service** | Unified admin dashboard (Go backend + React frontend) |
-| **Entrypoints** | Backend: `backend/cmd/admin-dashboard/main.go`, Frontend: `frontend/src/main.tsx` |
-| **Ports** | :30190 (combined) |
+Backend: Gin/net/http, Valkey sessions, gorilla/websocket. Frontend: React, TypeScript, Vite, TailwindCSS, shadcn/ui, TanStack Query v5 for server state, and Zustand for client state.
 
-### Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | React, TypeScript, Vite, TailwindCSS, shadcn/ui; versions are owned by `frontend/package.json` and its lockfile |
-| **Backend** | Go 1.27.1 toolchain, Gin 1.12 on `net/http`, Valkey session store, gorilla/websocket |
-| **State** | TanStack Query v5 (server), Zustand (client) |
-| **Auth** | HMAC-signed session cookie, CSRF token, heartbeat rotation |
-
-### Key Files
-
-| Task | Location |
-|------|----------|
-| Route assembly | `backend/internal/httpapi/routes.go` |
-| Auth helpers | `backend/internal/auth/` |
-| Session store | `backend/internal/session/` |
-| Docker control | `backend/internal/adapters/docker/` |
+| Task | Owner |
+|---|---|
+| Entrypoints | `backend/cmd/admin-dashboard/main.go`, `frontend/src/main.tsx` |
+| Route assembly | `backend/internal/httpapi/routes.go`, `backend/internal/httpapi/access.go` |
+| Auth and sessions | `backend/internal/auth/`, `backend/internal/session/` |
+| Docker control | `backend/internal/adapters/docker/`, `backend/internal/contract/docker-policy.json` |
 | Config | `backend/internal/config/` |
-| Holo API proxy | `backend/internal/adapters/holo/` |
-| API client | `frontend/src/api/client.ts` |
+| Holo API adapter | `backend/internal/adapters/holo/` |
+| Contract and generated client | `backend/internal/contract/`, `frontend/scripts/generate-api.mjs` |
+| Frontend composition and transport | `frontend/src/app/bootstrap.ts`, `frontend/src/api/client.ts`, `frontend/src/api/transport.ts` |
+| Frontend session and server state | `frontend/src/session/`, `frontend/src/queries/` |
+| Business mutations and drafts | `frontend/src/operations/`, `frontend/src/editors/`, `frontend/src/features/` |
 
-## Standards
+## Contracts
 
-### Architecture Patterns
+- Authenticate at the dashboard before proxying to Hololive Admin API with `X-API-Key` injection.
+- Backend is Go-only. `scripts/architecture/check-admin-dashboard-go-only.sh` rejects backend Rust files/manifests/lockfiles and Rust tooling in the backend or `admin-dashboard/Dockerfile`.
+- Preserve WebSocket concurrency limits/origin validation, per-IP login rate limits/lockout, HMAC-signed session cookies, CSRF token protection (`enforce/monitor/off`), and configured heartbeat refresh/token rotation.
+- Session cookies remain HttpOnly and SameSite=Strict; `FORCE_HTTPS` controls Secure.
 
-- **Proxy Mode**: Authenticate requests at the dashboard, then forward them to the upstream Hololive Admin API with `X-API-Key` injection.
-- **Runtime Contract**: Admin dashboard backend is Go-only. `scripts/architecture/check-admin-dashboard-go-only.sh` fails when `admin-dashboard/backend` carries `*.rs`, `Cargo.toml`, or `Cargo.lock`, or when the backend or `admin-dashboard/Dockerfile` still references Rust-only tooling.
-- **WebSocket**: Enforce concurrency limits and origin validation for the real-time system statistics stream.
+## Verification
 
-### Security
-
-- **CSRF**: Token-based protection with enforce/monitor/off modes.
-- **Rate Limit**: Valkey-based per-IP, account, and global login attempt limits with lockout.
-- **Heartbeat**: Session refresh and token rotation every configured interval.
-- **Cookies**: HttpOnly session cookie, SameSite=Strict, Secure controlled by `FORCE_HTTPS`.
-
-### Commands
-
-Select checks for the changed behavior and run them from the `hololive-bot` repository root. Documentation-only edits normally need diff inspection; publication and explicitly required gates remain mandatory. Subshells keep each command's working directory independent.
-
-```bash
-# Backend
-(cd admin-dashboard/backend && make lint && make test && make build)
-
-# Frontend
-(cd admin-dashboard/frontend && npm run lint && npm run build)
-```
-
-For full backend validation required by the publication workflow, applicable instructions, or the requested validation scope, use the gate below. It includes the Go-only architecture check, backend build, tests, and lint checks; do not repeat covered checks for the same unchanged inputs.
+Run relevant checks from the Hololive root; docs-only edits normally need diff inspection. Required publication gates still apply.
 
 ```bash
 ./scripts/ci/admin-dashboard-go-ci.sh
+(cd admin-dashboard/frontend && corepack npm run lint && corepack npm run build)
+./scripts/architecture/check-admin-contract.sh
 ```
 
-### Architecture Validation
-
-Run the Go-only check when changes affect backend language/tooling, `admin-dashboard/Dockerfile`, or dashboard membership in the Go workspace or CI module list. The full backend gate above already includes it.
-
-```bash
-./scripts/architecture/check-admin-dashboard-go-only.sh
-```
+Full backend validation uses `./scripts/ci/admin-dashboard-go-ci.sh`, including build/tests/lint and the Go-only check; do not repeat covered checks for unchanged inputs. Run `./scripts/architecture/check-admin-dashboard-go-only.sh` when backend language/tooling, Dockerfile, or Go workspace/CI module membership changes, unless already covered by the full gate.
