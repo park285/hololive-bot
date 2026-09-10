@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,9 @@ func (r *API) handleLogin(c *gin.Context) {
 	}
 
 	ip := r.clientIP(c.Request)
-	if !r.admitLoginAttempt(c, ip) {
+	subject := r.loginLimiterSubject(body.Username)
+
+	if !r.admitLoginAttempt(c, ip, subject) {
 		return
 	}
 
@@ -45,16 +48,23 @@ func (r *API) handleLogin(c *gin.Context) {
 		return
 	}
 
-	credentialsMatch := r.loginCredentialsMatch(body)
+	testAccount, credentialsMatch, err := r.loginCredentialsMatch(c.Request.Context(), body)
 	r.releaseLoginHashSlot()
 
-	if !credentialsMatch {
-		r.rejectLoginAttempt(c, ip)
+	if err != nil {
+		r.logger.Error("test account lookup failed", slog.Any("error", err))
+		httpx.Abort(c, contract.StoreUnavailable())
 
 		return
 	}
 
-	r.completeLogin(c, ip)
+	if !credentialsMatch {
+		r.rejectLoginAttempt(c, ip, subject)
+
+		return
+	}
+
+	r.completeLogin(c, ip, subject, testAccount)
 }
 
 func (r *API) acquireLoginHashSlot(c *gin.Context) bool {
@@ -74,10 +84,10 @@ func (r *API) releaseLoginHashSlot() {
 	<-r.loginHashSlots
 }
 
-func (r *API) admitLoginAttempt(c *gin.Context, ip string) bool {
+func (r *API) admitLoginAttempt(c *gin.Context, ip, subject string) bool {
 	localAllowed, localRetryAfter := r.rateLimiter.IsAllowed(ip)
 
-	distributedRetryAfter, err := r.distributedLoginLimiter.Check(c.Request.Context(), ip, r.cfg.AdminUser)
+	distributedRetryAfter, err := r.distributedLoginLimiter.Check(c.Request.Context(), ip, subject)
 	if err != nil {
 		r.logger.Error("distributed login limiter check failed", slog.Any("error", err))
 		httpx.Abort(c, contract.StoreUnavailable())
@@ -98,17 +108,44 @@ func (r *API) admitLoginAttempt(c *gin.Context, ip string) bool {
 }
 
 // 사용자명이 틀려도 bcrypt 비교를 건너뛰지 않아야 응답 시간이 사용자명 존재 여부를 흘리지 않는다.
-func (r *API) loginCredentialsMatch(body loginRequest) bool {
+func (r *API) loginCredentialsMatch(ctx context.Context, body loginRequest) (*session.TestAccount, bool, error) {
 	usernameOK := httputil.ConstantTimeStringEqual(body.Username, r.cfg.AdminUser)
-	passwordOK := bcrypt.CompareHashAndPassword([]byte(r.cfg.AdminPassHash), []byte(body.Password)) == nil
+	hash := r.cfg.AdminPassHash
 
-	return usernameOK && passwordOK
+	var temporary *session.TestAccount
+
+	if !usernameOK && strings.HasPrefix(body.Username, session.TestAccountPrefix) {
+		account, found, err := r.sessions.CurrentTestAccount(ctx)
+		if err != nil {
+			return nil, false, fmt.Errorf("read test account: %w", err)
+		}
+
+		if found {
+			hash = account.PasswordHash
+			usernameOK = httputil.ConstantTimeStringEqual(body.Username, account.Username)
+			temporary = &account
+		}
+	}
+
+	// 존재하지 않는 이름도 같은 bcrypt 경계를 거치며 정상 관리자 실패를 임시 계정으로 재시도하지 않습니다.
+	passwordOK := bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)) == nil
+
+	return temporary, usernameOK && passwordOK, nil
 }
 
-func (r *API) rejectLoginAttempt(c *gin.Context, ip string) {
+func (r *API) loginLimiterSubject(username string) string {
+	if username != r.cfg.AdminUser && strings.HasPrefix(username, session.TestAccountPrefix) {
+		// 동시에 한 계정만 발급하므로 공격자가 임의 이름으로 Valkey key를 늘릴 수 없게 고정합니다.
+		return "test-account:" + r.cfg.AdminUser
+	}
+
+	return r.cfg.AdminUser
+}
+
+func (r *API) rejectLoginAttempt(c *gin.Context, ip, subject string) {
 	localCount := r.rateLimiter.RecordFailure(ip)
 
-	distributedCount, err := r.distributedLoginLimiter.RecordFailure(c.Request.Context(), ip, r.cfg.AdminUser)
+	distributedCount, err := r.distributedLoginLimiter.RecordFailure(c.Request.Context(), ip, subject)
 	if err != nil {
 		r.logger.Error("distributed login limiter failure record failed", slog.Any("error", err))
 		httpx.Abort(c, contract.StoreUnavailable())
@@ -128,8 +165,8 @@ func (r *API) rejectLoginAttempt(c *gin.Context, ip string) {
 	httpx.Abort(c, contract.Unauthorized())
 }
 
-func (r *API) completeLogin(c *gin.Context, ip string) {
-	if err := r.distributedLoginLimiter.RecordSuccess(c.Request.Context(), ip, r.cfg.AdminUser); err != nil {
+func (r *API) completeLogin(c *gin.Context, ip, subject string, temporary *session.TestAccount) {
+	if err := r.distributedLoginLimiter.RecordSuccess(c.Request.Context(), ip, subject); err != nil {
 		r.logger.Error("distributed login limiter success record failed", slog.Any("error", err))
 		httpx.Abort(c, contract.StoreUnavailable())
 
@@ -138,7 +175,26 @@ func (r *API) completeLogin(c *gin.Context, ip string) {
 
 	r.rateLimiter.RecordSuccess(ip)
 
-	sess, err := r.sessions.Create(c.Request.Context())
+	var (
+		sess session.Session
+		err  error
+	)
+
+	if temporary == nil {
+		sess, err = r.sessions.Create(c.Request.Context())
+	} else {
+		var found bool
+
+		sess, found, err = r.sessions.CreateTestSession(c.Request.Context(), *temporary)
+
+		if err == nil && !found {
+			httpx.Abort(c, contract.Unauthorized())
+			r.auditLogin(c, "denied", http.StatusUnauthorized)
+
+			return
+		}
+	}
+
 	if err != nil {
 		r.logger.Error("session create failed", slog.Any("error", err))
 		httpx.Abort(c, contract.StoreUnavailable())
@@ -153,9 +209,16 @@ func (r *API) completeLogin(c *gin.Context, ip string) {
 		return
 	}
 
-	auth.SetSessionCookie(c.Writer, auth.SignSessionID(sess.ID, r.cfg.SessionSecret), r.cfg.Session.ExpiryDuration, r.cfg.Security.ForceHTTPS)
+	maxAge := r.cfg.Session.ExpiryDuration
+
+	if sess.TestAccount != "" {
+		maxAge = min(maxAge, time.Until(sess.AbsoluteExpiresAt))
+	}
+
+	auth.SetSessionCookie(c.Writer, auth.SignSessionID(sess.ID, r.cfg.SessionSecret), maxAge, r.cfg.Security.ForceHTTPS)
 	auth.SetCSRFCookie(c.Writer, csrf, r.cfg.Security.ForceHTTPS)
 	httpx.Respond(c, http.StatusOK, loginResponse{Status: "ok", Message: "Login successful", CSRFToken: csrf})
+	c.Set(sessionObjKey, &sess)
 	r.auditLogin(c, "success", http.StatusOK)
 }
 
@@ -188,7 +251,7 @@ func (r *API) handleSessionStatus(c *gin.Context) {
 	httpx.Respond(c, http.StatusOK, sessionStatusResponse{
 		Status:            "ok",
 		Authenticated:     true,
-		Username:          r.cfg.AdminUser,
+		Username:          r.sessionUsername(sess),
 		AbsoluteExpiresAt: sess.AbsoluteExpiresAt.Unix(),
 		CSRFToken:         csrf,
 		SessionPolicy: sessionPolicy{

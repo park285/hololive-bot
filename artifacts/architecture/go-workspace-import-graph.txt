@@ -1,5 +1,6 @@
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/kapu/admin-dashboard/internal/bootstrap
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/kapu/admin-dashboard/internal/config
+github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/kapu/admin-dashboard/internal/testaccountcli
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/park285/shared-go/v2/pkg/logging
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/park285/shared-go/v2/pkg/runtime/automaxprocs
 github.com/kapu/admin-dashboard/cmd/admin-dashboard -> github.com/park285/shared-go/v2/pkg/runtime/bootstrap
@@ -46,6 +47,8 @@ github.com/kapu/admin-dashboard/internal/observations -> github.com/park285/shar
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/admin-dashboard/internal/auth
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/admin-dashboard/internal/config
 github.com/kapu/admin-dashboard/internal/session -> github.com/kapu/hololive-shared/pkg/util
+github.com/kapu/admin-dashboard/internal/testaccountcli -> github.com/kapu/admin-dashboard/internal/config
+github.com/kapu/admin-dashboard/internal/testaccountcli -> github.com/kapu/admin-dashboard/internal/session
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/kapu/hololive-alarm-worker/internal/app/workerapp
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/kapu/hololive-alarm-worker/internal/service/workerruntime
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/kapu/hololive-shared/pkg/config/settings

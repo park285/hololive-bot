@@ -53,6 +53,38 @@
 행위자, 클라이언트 IP, 작업, 결과가 기록됩니다. 세션·CSRF 토큰이나 내부 API 키는 감사
 필드에 포함하지 않습니다.
 
+## 임시 조회 계정
+
+운영 로그인 검증에는 기존 관리자 비밀번호 대신 `admin-dashboard test-account` CLI를 사용합니다. 공개 계정 발급 API는 없습니다. 기존 `*_FILE` 설정의 Valkey 연결을 내부에서 사용하며, 계정 발급·폐기에는 재시작이나 master secret 변경이 필요하지 않습니다. 동시에 한 계정만 발급할 수 있고 기본 15분, 최소 1분·최대 1시간 뒤 만료합니다. `--ttl`은 초 단위로 지정합니다.
+
+```bash
+# distroless image에는 shell이 없으므로 중앙 호스트에서 컨테이너의 tmpfs를 준비합니다.
+admin_id="$(docker inspect --format '{{.Id}}' admin-dashboard)"
+admin_pid="$(docker inspect --format '{{.State.Pid}}' admin-dashboard)"
+admin_user="$(docker inspect --format '{{.Config.User}}' admin-dashboard)"
+[[ "$admin_pid" =~ ^[1-9][0-9]*$ && "$admin_user" =~ ^[0-9]+(:[0-9]+)?$ ]]
+admin_dir="$(sudo mktemp -d "/proc/${admin_pid}/root/tmp/admin-test-verification.XXXXXX")"
+sudo chown "$admin_user" "$admin_dir"
+admin_file="/tmp/${admin_dir##*/}/credentials.json"
+docker exec admin-dashboard /app/bin/admin-dashboard test-account issue \
+  --ttl 15m --credentials-file "$admin_file"
+docker exec admin-dashboard /app/bin/admin-dashboard test-account status
+docker exec admin-dashboard /app/bin/admin-dashboard test-account revoke --username '<발급된 username>'
+# PID가 달라졌다면 이전 /proc 경로를 사용하지 말고 실제 상태부터 확인합니다.
+test "$(docker inspect --format '{{.Id}}' admin-dashboard)" = "$admin_id"
+test "$(docker inspect --format '{{.State.Pid}}' admin-dashboard)" = "$admin_pid"
+sudo rm -- "${admin_dir}/credentials.json"
+sudo rmdir -- "$admin_dir"
+```
+
+위 발급·폐기는 사용자 승인이 있는 운영 검증에서만 수행합니다. 출력에는 `status`, `username`, `expires_at_unix`, `read_only`만 포함되고, 무작위 비밀번호는 현재 실행 사용자 소유의 비공개 디렉터리 안에 새로 만드는 `0600` 파일에만 기록됩니다. 기존 파일·symlink는 덮지 않습니다. 검증 클라이언트가 자격증명 파일을 내부에서 읽어 기존 `/login` 화면에 사용하며, 비밀번호·cookie·CSRF를 터미널·브라우저 trace·검증 기록으로 내보내지 않습니다.
+
+계정은 메뉴 조회·통계 WebSocket과 자체 session heartbeat/logout만 허용합니다. 기존 화면의 업무 변경 버튼은 서버에서 403으로 거부되며 upstream과 mutation claim에 도달하지 않습니다. 실제 업무 변경 요청을 보내서 검증하지 않습니다. 정상 관리자 계정과 그 비밀번호·권한은 유지됩니다.
+
+발급은 자격증명 파일을 먼저 쓴 뒤 Valkey에 계정을 생성합니다. 파일이 남은 실패나 응답 유실은 자동 재발급하지 말고 `status`와 파일의 발급 식별자를 내부에서 비교합니다. 일치하는 본인 발급만 `revoke --username`으로 폐기하며, 다른 식별자를 가진 계정은 건드리지 않습니다. 폐기 응답이 유실돼도 같은 식별자의 재확인은 가능하고, 다른 발급을 덮거나 제거하지 않습니다. 결과를 확인하지 못하면 검증 완료로 기록하지 않습니다.
+
+폐기·만료 후 해당 계정의 HTTP 인증은 거부되고 기존 WS도 기존 family 검사 주기(1초)에 따라 종료됩니다. 세션·회전 marker는 기존 TTL까지 남을 수 있지만 재사용할 수 없으며, 이후 다른 테스트 계정을 발급해도 권한이 살아나지 않습니다. 임시 세션은 별도 ID·HMAC 영역을 사용하므로 구형 BFF에서도 일반 관리자 세션으로 수용되지 않습니다. 확인 후 자격증명 파일과 임시 디렉터리를 제거하고 계정 부재·기존 세션 401·WS 종료를 기록합니다.
+
 ## Build · Test · CI
 
 ```bash

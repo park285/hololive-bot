@@ -155,6 +155,14 @@ func (f *fakeSessions) Rotate(ctx context.Context, oldID string) (session.Sessio
 
 func (f *fakeSessions) Close() {}
 
+func (f *fakeSessions) CurrentTestAccount(context.Context) (session.TestAccount, bool, error) {
+	return session.TestAccount{}, false, nil
+}
+
+func (f *fakeSessions) CreateTestSession(context.Context, session.TestAccount) (session.Session, bool, error) {
+	return session.Session{}, false, errors.New("임시 세션을 지원하지 않는 검사 대역입니다")
+}
+
 func liveSession(id string) *session.Session {
 	now := time.Now().UTC()
 

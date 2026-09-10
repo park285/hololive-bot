@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -11,11 +13,22 @@ import (
 
 	adminbootstrap "github.com/kapu/admin-dashboard/internal/bootstrap"
 	"github.com/kapu/admin-dashboard/internal/config"
+	"github.com/kapu/admin-dashboard/internal/testaccountcli"
 )
 
 var Version = "dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "test-account" {
+		if err := testaccountcli.Run(context.Background(), os.Args[2:], os.Stdout); err != nil {
+			// 설정·저장소 오류가 자격증명 값을 포함할 수 있으므로 원문을 터미널로 내보내지 않습니다.
+			fmt.Fprintln(os.Stderr, "test-account failed; verify arguments, private output directory and current account status before retrying")
+			os.Exit(1)
+		}
+
+		return
+	}
+
 	os.Exit(bootstrap.Options[*config.Config, *adminbootstrap.Runtime]{
 		Version: Version,
 		Initialize: func(string) {
