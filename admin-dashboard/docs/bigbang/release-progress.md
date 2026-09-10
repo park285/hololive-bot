@@ -32,7 +32,7 @@
 
 공개 origin의 로그인 화면을 실제 Chromium으로 열어 입력·로그인 버튼과 자산 15개의 200, page error·CSP 위반 0건을 확인했습니다. 로그인 제출은 0회이며 인증된 동작의 시험으로 사용하지 않습니다. [공개 화면 검증](release-public-login.json). 운영 로그인·조회·실시간 통계는 사용자에게 확인을 요청한 상태이며 T11/AC11/V11의 인수는 아직 완료로 표시하지 않습니다.
 
-배포 image의 source revision은 위 `3f9e625c7…`입니다. 이후 문서·증거 커밋은 이 배포 source와 구분하며 문서 HEAD를 실행 image revision으로 바꾸지 않습니다. 구형 복구 tag와 root 전용 deploy backup은 유지합니다.
+배포 image의 source revision은 위 `3f9e625c7…`입니다. 이후 문서·증거와 브라우저 검증 전제의 보완은 이 배포 source와 구분하며 후속 HEAD를 실행 image revision으로 바꾸지 않습니다. 앱 실행 소스는 유지합니다. 구형 복구 tag와 root 전용 deploy backup은 유지합니다.
 
 성능 예외와 아래의 운영 로그인 확인 순서 밖의 출시 조건을 자동으로 면제하지 않습니다. 실제 전환 결과에 따라 이 기록 및 PLN/DEC를 갱신합니다.
 
