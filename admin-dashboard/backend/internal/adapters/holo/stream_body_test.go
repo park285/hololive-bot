@@ -169,6 +169,7 @@ func assertProjectedReadFailure(t *testing.T, reader io.Reader, closeErr error, 
 	response := &http.Response{StatusCode: http.StatusOK, Header: http.Header{streamContentTypeHeader: {streamJSONMediaType}}, Body: body}
 	err := decodeOwnedBody(response, http.StatusOK, target)
 
+	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled, "read boundary %d", cut)
 
 	if closeErr != nil {
