@@ -777,7 +777,8 @@ async function exerciseReadPages(browser, base, state) {
       await context.setOffline(true);
       await expect(page.getByText("오프라인입니다. 최신 상태를 확인할 수 없습니다.", { exact: true }).first()).toBeVisible();
       if (feature === "rooms") await expect(page.getByRole("switch")).toBeDisabled();
-      await context.setOffline(false); state.readMode = "empty"; await page.evaluate(() => window.contract.refetchEditors());
+      // 재연결 자체가 query를 재개하므로 연결을 열기 전에 응답 상태를 준비합니다.
+      state.readMode = "empty"; await context.setOffline(false); await page.evaluate(() => window.contract.refetchEditors());
       if (feature === "streams") await expect(page.getByText("No live streams currently.", { exact: true })).toBeVisible();
       if (feature === "calendar") await expect(page.getByText("이 달에 등록된 기념일이 없습니다.", { exact: true })).toBeVisible();
       if (feature === "rooms") await expect(page.getByText("관리할 채팅방이 없습니다.", { exact: true })).toBeVisible();
