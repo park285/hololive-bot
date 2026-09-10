@@ -37,7 +37,8 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   corepack npm exec -- playwright install --with-deps firefox webkit
   sudo -n loginctl enable-linger "$(id -un)"
   sudo -n systemctl start "user@$(id -u).service"
-  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  export XDG_RUNTIME_DIR
   export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
   [[ -S "${XDG_RUNTIME_DIR}/bus" && -x /usr/bin/google-chrome ]] || {
     echo "browser gate requires a user systemd bus and Google Chrome" >&2
