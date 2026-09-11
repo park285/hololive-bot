@@ -252,6 +252,10 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 	if len(metadataObservations) != 3 {
 		t.Fatalf("metadata observations = %#v", metadataObservations)
 	}
+
+	if len(fake.kinds) != 2 || fake.kinds[0] != "live" || fake.kinds[1] != "metadata" {
+		t.Fatalf("channel request kinds = %v", fake.kinds)
+	}
 }
 
 func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
@@ -787,10 +791,14 @@ func (f *contentFake) FetchContent(_ context.Context, request youtubejs.ContentR
 type channelFake struct {
 	result youtubejs.ChannelResult
 	calls  int
+	kinds  []string
 }
 
-func (f *channelFake) FetchChannel(context.Context, youtubejs.ChannelRequest) (youtubejs.ChannelResult, error) {
+func (f *channelFake) FetchChannel(_ context.Context, request youtubejs.ChannelRequest) (youtubejs.ChannelResult, error) {
 	f.calls++
+
+	f.kinds = append(f.kinds, request.Kind)
+
 	return f.result, nil
 }
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260901-hololive-youtube-live-metadata-adapter-ownership",
   "title": "YouTube 방송 예정 시각 계약은 collector 로컬 adapter가 소유하고 youtubei.js는 Innertube 기반층으로 유지한다",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"

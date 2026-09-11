@@ -257,9 +257,11 @@ type ContentResult struct {
 func (r *ContentResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 func (r *ContentResult) pagination() Pagination         { return r.Pagination }
 
+// ChannelRequest는 동일 bundle의 helper에 live 또는 metadata 수집만 요청합니다.
 type ChannelRequest struct {
 	ProtocolVersion         int16  `json:"protocol_version"`
 	ChannelID               string `json:"channel_id"`
+	Kind                    string `json:"kind"`
 	MaxPages                int    `json:"max_pages"`
 	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
 }
@@ -295,15 +297,24 @@ type ChannelPhotoVariant struct {
 	Height int    `json:"height"`
 }
 
+// UnavailableLiveSession은 시각이 가려진 영상의 관측 실패를 나타내며 canonical 상태를 바꾸지 않습니다.
+type UnavailableLiveSession struct {
+	VideoID   string `json:"video_id"`
+	ChannelID string `json:"channel_id"`
+	Reason    string `json:"reason"`
+}
+
+// ChannelResult는 수집 범위에 따른 결과와 접근 제한으로 확인하지 못한 영상을 구분합니다.
 type ChannelResult struct {
 	ProtocolMeta
 	Pagination
 
-	LiveSessions []LiveSessionItem     `json:"live_sessions"`
-	Stats        ChannelStatsItem      `json:"stats"`
-	Profile      ChannelProfileItem    `json:"profile"`
-	Photo        []ChannelPhotoVariant `json:"photo"`
-	MissingTab   bool                  `json:"missing_tab"`
+	LiveSessions            []LiveSessionItem        `json:"live_sessions"`
+	UnavailableLiveSessions []UnavailableLiveSession `json:"unavailable_live_sessions,omitempty"`
+	Stats                   ChannelStatsItem         `json:"stats"`
+	Profile                 ChannelProfileItem       `json:"profile"`
+	Photo                   []ChannelPhotoVariant    `json:"photo"`
+	MissingTab              bool                     `json:"missing_tab"`
 }
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }

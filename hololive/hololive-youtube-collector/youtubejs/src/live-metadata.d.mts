@@ -4,6 +4,7 @@ export interface RawLiveMetadata {
   isUpcoming?: boolean;
   isLiveContent?: boolean;
   startTimestamp?: string;
+  scheduleUnavailableReason?: "access_restricted";
 }
 
 export function fetchLiveMetadata(innertube: unknown, videoId: string): Promise<RawLiveMetadata>;

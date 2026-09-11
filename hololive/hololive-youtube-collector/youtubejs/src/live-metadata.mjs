@@ -34,7 +34,7 @@ export async function fetchLiveMetadata(innertube, videoId) {
   return parseRawLiveMetadata(response.data, id);
 }
 
-/** raw player 응답에서 요청 영상의 엄격한 live 상태와 기계가독 예정 시각만 추출합니다. */
+/** 요청 영상의 엄격한 live 상태·예정 시각과, 시각이 가려진 경우의 확인된 접근 제한 사유를 추출합니다. */
 export function parseRawLiveMetadata(raw, expectedVideoId) {
   if (!isRecord(raw)) {
     throw parserDrift("raw player data is not an object");
@@ -88,7 +88,28 @@ export function parseRawLiveMetadata(raw, expectedVideoId) {
     ...(isUpcoming == null ? {} : { isUpcoming }),
     ...(isLiveContent == null ? {} : { isLiveContent }),
     ...(startTimestamp == null ? {} : { startTimestamp }),
+    ...(startTimestamp == null && isUpcoming === true && isLiveContent === true && hasPaidAccessRestriction(raw.playabilityStatus)
+      ? { scheduleUnavailableReason: "access_restricted" }
+      : {}),
   };
+}
+
+// 멤버십 안내가 예정 시각을 가린 실제 응답만 분류하며 번역된 reason 문자열은 판정에 쓰지 않습니다.
+function hasPaidAccessRestriction(playabilityStatus) {
+  if (playabilityStatus?.status !== "UNPLAYABLE" || playabilityStatus.errorScreen == null) {
+    return false;
+  }
+  const screen = playabilityStatus.errorScreen;
+  if (!isRecord(screen)) {
+    throw parserDrift("raw player errorScreen is not an object");
+  }
+  if (!Object.hasOwn(screen, "playerLegacyDesktopYpcOfferRenderer")) {
+    return false;
+  }
+  if (!isRecord(screen.playerLegacyDesktopYpcOfferRenderer)) {
+    throw parserDrift("raw player paid offer renderer is not an object");
+  }
+  return true;
 }
 
 // 실제 UPCOMING 응답은 microformat 대신 offline slate에 epoch seconds를 제공할 수 있습니다.

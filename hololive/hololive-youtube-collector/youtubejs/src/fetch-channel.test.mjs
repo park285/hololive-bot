@@ -13,6 +13,76 @@ const lockupFixture = JSON.parse(
 const playerFixture = JSON.parse(
   await readFile(new URL("../testdata/player-upcoming.json", import.meta.url), "utf8"),
 );
+const restrictedFixture = JSON.parse(
+  await readFile(new URL("../testdata/player-members-only.json", import.meta.url), "utf8"),
+);
+
+test("one restricted schedule preserves normal upcoming and live rows through the RPC", async (t) => {
+  const logs = [];
+  t.mock.method(process.stderr, "write", (line) => { logs.push(JSON.parse(line)); return true; });
+  const calls = [];
+  const innertube = stubChannel({ videos: [
+    { id: "upcoming-a", is_upcoming: true },
+    { id: "restricted-fixture", is_upcoming: true },
+    { id: "upcoming-b", is_upcoming: true },
+    { id: "already-live", is_live: true },
+  ] }, async (_, { videoId }) => {
+    calls.push(videoId);
+    return videoId === "restricted-fixture"
+      ? { success: true, status_code: 200, data: restrictedFixture }
+      : rawPlayerResponse(videoId);
+  });
+  const result = await handleChannelRequest(
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
+    (options) => fetchChannelFeed({ ...options, innertube }),
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.live_sessions.map((item) => [item.video_id, item.status]), [
+    ["upcoming-a", "UPCOMING"], ["upcoming-b", "UPCOMING"], ["already-live", "LIVE"],
+  ]);
+  assert.deepEqual(result.body.unavailable_live_sessions, [
+    { video_id: "restricted-fixture", channel_id: "UC_TEST", reason: "access_restricted" },
+  ]);
+  assert.deepEqual(calls, ["upcoming-a", "restricted-fixture", "upcoming-b"]);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].event, "youtubejs_live_schedule_unavailable");
+  assert.deepEqual(logs[0].video_ids, ["restricted-fixture"]);
+});
+
+test("a restricted-only feed preserves its unresolved identity and is rechecked next poll", async (t) => {
+  t.mock.method(process.stderr, "write", () => true);
+  let calls = 0;
+  const innertube = stubChannel({ videos: [{ id: "restricted-fixture", is_upcoming: true }] }, async () => {
+    calls++;
+    return calls === 1 ? { success: true, status_code: 200, data: restrictedFixture } : rawPlayerResponse("restricted-fixture");
+  });
+  const first = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
+  assert.deepEqual(first.live_sessions, []);
+  assert.equal(first.unavailable_live_sessions[0].video_id, "restricted-fixture");
+  const second = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
+  assert.equal(second.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
+  assert.equal(second.unavailable_live_sessions, undefined);
+  assert.equal(calls, 2);
+});
+
+test("restricted filtering never hides a conflicting duplicate or foreign channel row", async (t) => {
+  t.mock.method(process.stderr, "write", () => true);
+  const conflicts = [
+    { id: "restricted-fixture", is_live: true },
+    { id: "restricted-fixture", is_upcoming: true, scheduled: "2026-09-11T03:00:00Z" },
+    { id: "restricted-fixture", is_upcoming: true, author: { id: "UC_OTHER" } },
+  ];
+  for (const conflict of conflicts) {
+    const innertube = stubChannel({ videos: [
+      conflict,
+      { id: "restricted-fixture", is_upcoming: true },
+    ] }, async () => ({ success: true, status_code: 200, data: restrictedFixture }));
+    await assert.rejects(
+      () => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }),
+      (error) => error.code === "parser_drift",
+    );
+  }
+});
 
 test("mapLiveSessions fail-closes on unknown statuses", () => {
   assert.throws(
@@ -65,7 +135,7 @@ test("fetchChannelFeed fail-closes when live rows lack status", async () => {
     }),
   };
   await assert.rejects(
-    () => fetchChannelFeed({ channelId: "UC_TEST", innertube }),
+    () => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }),
     (err) => err.code === "parser_drift",
   );
 });
@@ -79,11 +149,11 @@ test("fetchChannelFeed signals a typed missing streams tab without claiming live
       },
     }),
   };
-  const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
+  const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
   assert.equal(result.missing_tab, true);
-  assert.equal(result.stats.subscriber_count, 12);
-  assert.equal(result.profile.handle, "@test");
+  assert.deepEqual(result.stats, {});
+  assert.deepEqual(result.profile, {});
 });
 
 test("fetchChannelFeed signals an unsupported live streams tab without claiming live absence", async () => {
@@ -92,11 +162,11 @@ test("fetchChannelFeed signals an unsupported live streams tab without claiming 
       getAbout: async () => ({ subscriber_count: 7, handle: "@unsupported" }),
     }),
   };
-  const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
+  const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
   assert.deepEqual(result.live_sessions, []);
   assert.equal(result.missing_tab, true);
-  assert.equal(result.stats.subscriber_count, 7);
-  assert.equal(result.profile.handle, "@unsupported");
+  assert.deepEqual(result.stats, {});
+  assert.deepEqual(result.profile, {});
 });
 
 test("fetchChannelFeed propagates a typed error with a different message", async () => {
@@ -110,7 +180,7 @@ test("fetchChannelFeed propagates a typed error with a different message", async
     }),
   };
   await assert.rejects(
-    () => fetchChannelFeed({ channelId: "UC_TEST", innertube }),
+    () => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }),
     (err) => err === expected,
   );
 });
@@ -126,7 +196,7 @@ test("fetchChannelFeed propagates an untyped missing streams error", async () =>
     }),
   };
   await assert.rejects(
-    () => fetchChannelFeed({ channelId: "UC_TEST", innertube }),
+    () => fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }),
     (err) => err === expected,
   );
 });
@@ -148,21 +218,32 @@ test("mapPhoto maps avatar and banner variants", () => {
   assert.equal(variants[1].kind, "banner");
 });
 
-test("fetchChannelFeed returns typed channel fields from a stub", async () => {
+test("metadata collection returns channel fields without requesting streams or player", async () => {
   const innertube = {
     getChannel: async () => ({
       getAbout: async () => ({ subscriber_count: 12, handle: "@test", description: "hi" }),
-      getLiveStreams: async () => ({ videos: [{ id: "vid-1", is_upcoming: true }] }),
+      getLiveStreams: async () => { throw new Error("metadata requested streams"); },
     }),
     actions: {
-      execute: async () => rawPlayerResponse("vid-1"),
+      execute: async () => { throw new Error("metadata requested player"); },
     },
   };
-  const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
-  assert.equal(result.live_sessions[0].status, "UPCOMING");
+  const result = await fetchChannelFeed({ kind: "metadata", channelId: "UC_TEST", innertube });
+  assert.deepEqual(result.live_sessions, []);
   assert.equal(result.stats.subscriber_count, 12);
   assert.equal(result.profile.handle, "@test");
   assert.equal(result.exhausted, true);
+});
+
+test("live collection does not depend on the about endpoint", async () => {
+  const innertube = {
+    getChannel: async () => ({
+      getAbout: async () => { throw new Error("live requested about"); },
+      getLiveStreams: async () => ({ videos: [{ id: "live-1", is_live: true }] }),
+    }),
+  };
+  const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
+  assert.equal(result.live_sessions[0].status, "LIVE");
 });
 
 test("fetchChannelFeed enriches a LockupView fixture without parsing display text", async () => {
@@ -172,7 +253,7 @@ test("fetchChannelFeed enriches a LockupView fixture without parsing display tex
     return { success: true, status_code: 200, data: playerFixture };
   });
 
-  const result = await fetchChannelFeed({ channelId: "UC_TEST", innertube });
+  const result = await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube });
 
   assert.deepEqual(calls, [["/player", "upcoming-fixture"]]);
   assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
@@ -191,6 +272,7 @@ test("fetchChannelFeed recovers a schedule from the raw player offline slate", a
     },
   };
   const result = await fetchChannelFeed({
+    kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel({ videos: [{ id: "offline-slate", is_upcoming: true }] }, async () => response),
   });
@@ -209,6 +291,7 @@ test("fetchChannelFeed preserves list schedules and skips non-upcoming rows", as
     ],
   };
   const result = await fetchChannelFeed({
+    kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel(feed, async () => {
       calls += 1;
@@ -223,6 +306,7 @@ test("fetchChannelFeed preserves list schedules and skips non-upcoming rows", as
 test("fetchChannelFeed never accepts localized list text as a schedule", async () => {
   let calls = 0;
   const result = await fetchChannelFeed({
+    kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel({
       videos: [{ id: "localized", is_upcoming: true, scheduled: "September 1, 2026 8:00 PM" }],
@@ -246,6 +330,7 @@ test("fetchChannelFeed deduplicates missing schedules and preserves request orde
     ],
   };
   const result = await fetchChannelFeed({
+    kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel(feed, async (_endpoint, payload) => {
       requested.push(payload.videoId);
@@ -265,6 +350,7 @@ test("fetchChannelFeed permits exactly 32 metadata lookups", async () => {
   const requested = [];
   const feed = { videos: Array.from({ length: 32 }, (_, index) => ({ id: `video-${index}`, is_upcoming: true })) };
   await fetchChannelFeed({
+    kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel(feed, async (_endpoint, payload) => {
       requested.push(payload.videoId);
@@ -279,6 +365,7 @@ test("fetchChannelFeed rejects 33 candidates before a metadata request", async (
   const feed = { videos: Array.from({ length: 33 }, (_, index) => ({ id: `video-${index}`, is_upcoming: true })) };
   await assert.rejects(
     () => fetchChannelFeed({
+    kind: "live",
       channelId: "UC_TEST",
       innertube: stubChannel(feed, async () => {
         calls += 1;
@@ -297,6 +384,7 @@ test("fetchChannelFeed keeps a list-to-player LIVE transition catch-up eligible"
     startTimestamp: "2026-09-01T11:01:08Z",
   });
   const result = await fetchChannelFeed({
+    kind: "live",
     channelId: "UC_TEST",
     innertube: stubChannel({ videos: [{ id: "transitioned", is_upcoming: true }] }, async () => response),
   });
@@ -312,7 +400,7 @@ test("incomplete UPCOMING becomes a typed 422 RPC failure", async () => {
     async () => rawPlayerResponse("unresolved", { startTimestamp: undefined }),
   );
   const result = await handleChannelRequest(
-    JSON.stringify({ protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
     (options) => fetchChannelFeed({ ...options, innertube }),
   );
 
@@ -330,7 +418,7 @@ test("fetchChannelFeed cancellation remains a typed canceled RPC failure", async
   const result = await runWithRequestContext(
     { requestId: "channel-canceled", signal: controller.signal },
     () => handleChannelRequest(
-      JSON.stringify({ protocol_version: 1, channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1048576 }),
       (options) => fetchChannelFeed({ ...options, innertube }),
     ),
   );

@@ -37,6 +37,7 @@ func TestGoProtocolJSONTagsMatchContractsDTS(t *testing.T) {
 		{"ContentItem", ContentItem{}},
 		{"ContentResult", ContentResult{}},
 		{"LiveSessionItem", LiveSessionItem{}},
+		{"UnavailableLiveSession", UnavailableLiveSession{}},
 		{"ChannelStatsItem", ChannelStatsItem{}},
 		{"ChannelProfileItem", ChannelProfileItem{}},
 		{"ChannelPhotoVariant", ChannelPhotoVariant{}},

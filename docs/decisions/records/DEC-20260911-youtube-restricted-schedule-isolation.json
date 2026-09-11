@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260911-youtube-restricted-schedule-isolation",
+  "title": "YouTube 접근 제한 영상의 일정 부재를 격리하고 정상 방송과 채널 정보 수집을 지속한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-11",
+  "summary": "사용자가 재현된 일정 수집 장애의 수정을 요청했다. Collector 로컬 raw player adapter와 pinned youtubei.js 소유권은 유지하고, 관측된 UNPLAYABLE/paid-offer renderer와 엄격한 identity/upcoming/live-content 검증으로 확인되는 접근 제한만 별도 목록으로 기록한다. 해당 live observation은 유효 영상만 포함한 PARTIAL로 발행하여 정상 방송을 갱신하며 부재·종료 근거로 쓰지 않는다. channel RPC kind로 live/metadata 수집을 분리하고 기존 poll마다 다시 관측한다. 미지 schema·identity·시각 drift는 기존 실패를 유지하며 시각 추정·provider 추가·공용 generation 변경·운영 데이터 수정을 도입하지 않는다.",
+  "sources": ["docs/current/plans/2026-09-11-youtube-restricted-schedule-isolation.md#Execution capsule"],
+  "evidence": ["docs/current/plans/2026-09-11-youtube-restricted-schedule-isolation.md"],
+  "implementation": [
+    "hololive/hololive-youtube-collector/youtubejs/src/live-metadata.mjs",
+    "hololive/hololive-youtube-collector/youtubejs/src/fetch-channel.mjs",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/channel.go",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/validation.go",
+    "docs/current/runbooks/youtube-collector.md"
+  ],
+  "supersedes": ["DEC-20260901-hololive-youtube-live-metadata-adapter-ownership"],
+  "review": {"trigger": "관측된 paid-offer renderer가 바뀌거나 다른 접근 제한 유형의 독립 재현 근거가 생길 때 예외 범위를 재검토한다. raw Actions 제거 또는 두 번의 parser 소유권 장애 시 전체 fork 필요성을 다시 판단한다."}
+}

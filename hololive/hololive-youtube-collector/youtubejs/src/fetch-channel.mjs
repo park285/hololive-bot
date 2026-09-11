@@ -21,9 +21,13 @@ const responseReserveBytes = encodedSize({
   }),
 });
 
-/** @param {YouTubeJSFetchOptions} [options] */
+/**
+ * 지정한 live/metadata 범위만 조회합니다. 시각이 가려진 접근 제한 영상은 별도 목록과 WARN으로 남깁니다.
+ * @param {YouTubeJSFetchOptions} [options]
+ */
 export async function fetchChannelFeed({
   channelId,
+  kind,
   maxSuccessResponseBytes = Number.MAX_SAFE_INTEGER,
   innertube,
 } = {}) {
@@ -31,33 +35,38 @@ export async function fetchChannelFeed({
   if (id === "") {
     throw new Error("channel id is required");
   }
+  if (kind !== "live" && kind !== "metadata") {
+    throw new Error("channel kind must be live or metadata");
+  }
   if (innertube == null || typeof innertube.getChannel !== "function") {
     throw new Error("innertube client is required");
   }
   assertResponseBudget(maxSuccessResponseBytes, responseReserveBytes);
   const channel = await innertube.getChannel(id);
-  const about = typeof channel.getAbout === "function" ? await channel.getAbout() : {};
-  let liveFeed = { videos: [] };
-  let missingTab = false;
-  if (typeof channel.getLiveStreams === "function") {
-    try {
-      liveFeed = await channel.getLiveStreams();
-    } catch (err) {
-      if (!isMissingStreamsTab(err)) {
-        throw err;
-      }
-      missingTab = true;
-    }
-  } else {
-    missingTab = true;
-  }
+  // Metadata 작업은 streams/player 장애와 독립적이며 live 작업에는 about 조회가 필요 없습니다.
+  const about = kind === "metadata" && typeof channel.getAbout === "function" ? await channel.getAbout() : {};
+  const { liveFeed, missingTab } = kind === "live"
+    ? await fetchLiveFeed(channel)
+    : { liveFeed: { videos: [] }, missingTab: false };
   const liveSessions = mapLiveSessions(liveFeed, id);
-  await enrichUpcomingSchedules(liveSessions, innertube);
+  const unavailable = await enrichUpcomingSchedules(liveSessions, innertube);
+  const unavailableIDs = new Set(unavailable.map((item) => item.video_id));
+  // 접근 제한 행을 제외하기 전에 같은 ID의 상충하는 정상 관측을 확인해야 합니다.
+  if (liveSessions.some((session) => unavailableIDs.has(session.video_id) &&
+    (session.status !== "UPCOMING" || session.scheduled_at != null))) {
+    const error = new Error("unavailable live session conflicts with another row");
+    error.code = "parser_drift";
+    throw error;
+  }
+  if (unavailable.length > 0) {
+    logUnavailableSchedules(id, unavailable);
+  }
   return {
-    live_sessions: liveSessions,
-    stats: mapStats(channel, about),
-    profile: mapProfile(channel, about),
-    photo: mapPhoto(channel, about),
+    live_sessions: liveSessions.filter((session) => !unavailableIDs.has(session.video_id)),
+    ...(unavailable.length === 0 ? {} : { unavailable_live_sessions: unavailable }),
+    stats: kind === "metadata" ? mapStats(channel, about) : {},
+    profile: kind === "metadata" ? mapProfile(channel, about) : {},
+    photo: kind === "metadata" ? mapPhoto(channel, about) : [],
     ...paginationResult({
       pageCount: 1,
       reason: "exhausted",
@@ -65,6 +74,33 @@ export async function fetchChannelFeed({
     }),
     ...(missingTab ? { missing_tab: true } : {}),
   };
+}
+
+async function fetchLiveFeed(channel) {
+  if (typeof channel.getLiveStreams === "function") {
+    try {
+      return { liveFeed: await channel.getLiveStreams(), missingTab: false };
+    } catch (err) {
+      if (!isMissingStreamsTab(err)) {
+        throw err;
+      }
+    }
+  }
+  return { liveFeed: { videos: [] }, missingTab: true };
+}
+
+function logUnavailableSchedules(channelId, unavailable) {
+  process.stderr.write(`${JSON.stringify({
+    time: new Date().toISOString(),
+    level: "WARN",
+    source: "youtubejs/fetch-channel",
+    msg: "YouTube live schedules unavailable",
+    event: "youtubejs_live_schedule_unavailable",
+    channel_id: channelId,
+    reason: "access_restricted",
+    video_ids: unavailable.map((item) => item.video_id),
+    count: unavailable.length,
+  })}\n`);
 }
 
 async function enrichUpcomingSchedules(sessions, innertube) {
@@ -87,9 +123,18 @@ async function enrichUpcomingSchedules(sessions, innertube) {
   for (const videoId of candidateIds) {
     metadataByID.set(videoId, await fetchLiveMetadata(innertube, videoId));
   }
+  const unavailable = new Map();
   for (const session of sessions) {
     const metadata = metadataByID.get(session.video_id);
     if (session.status !== "UPCOMING" || session.scheduled_at != null || metadata == null) {
+      continue;
+    }
+    if (metadata.scheduleUnavailableReason === "access_restricted") {
+      unavailable.set(session.video_id, {
+        video_id: session.video_id,
+        channel_id: session.channel_id,
+        reason: metadata.scheduleUnavailableReason,
+      });
       continue;
     }
     if (metadata.isLive === true && metadata.isUpcoming !== true) {
@@ -107,11 +152,12 @@ async function enrichUpcomingSchedules(sessions, innertube) {
     session.scheduled_at = metadata.startTimestamp;
   }
 
-  if (sessions.some((session) => session.status === "UPCOMING" && session.scheduled_at == null)) {
+  if (sessions.some((session) => session.status === "UPCOMING" && session.scheduled_at == null && !unavailable.has(session.video_id))) {
     const error = new Error("upcoming live session remains incomplete");
     error.code = "parser_drift";
     throw error;
   }
+  return [...unavailable.values()];
 }
 
 function isMissingStreamsTab(err) {
@@ -146,9 +192,15 @@ export function mapLiveSessions(feed, channelId) {
     const title = videoTitleOf(row);
     const thumbnail = firstThumbnail(row?.thumbnails || row?.thumbnail || row?.content_image);
     const thumbnailURL = optionalHTTPSURL(thumbnail?.url);
+    const rowChannelID = textOf(row?.author?.id || channelId).trim() || channelId;
+    if (rowChannelID !== channelId) {
+      const error = new Error("live row channel identity does not match the request");
+      error.code = "parser_drift";
+      throw error;
+    }
     sessions.push({
       video_id: videoId,
-      channel_id: textOf(row?.author?.id || channelId).trim() || channelId,
+      channel_id: rowChannelID,
       status,
       ...(title === "" ? {} : { title }),
       ...(thumbnailURL === "" ? {} : { thumbnail_url: thumbnailURL }),
