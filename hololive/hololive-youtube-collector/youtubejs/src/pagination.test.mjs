@@ -329,3 +329,39 @@ test("EncodedArrayBudget stringifies each item once", () => {
   assert.equal(budget.count(), items.length);
   assert.deepEqual(budget.values(), items);
 });
+
+test("pagination accepts sync and async iterables and closes them at the result limit", async () => {
+  for (const asyncItems of [false, true]) {
+    let closed = false;
+    function* items() {
+      try {
+        yield { id: "selected" };
+        assert.fail("pagination requested another item after the result limit");
+      } finally {
+        closed = true;
+      }
+    }
+    async function* asyncValues() {
+      yield* items();
+    }
+    const result = await paginate(options({
+      maxResults: 1,
+      mapPage: () => ({ recognized_shape: true, items: asyncItems ? asyncValues() : items() }),
+    }));
+    assert.deepEqual(result.items, [{ id: "selected" }]);
+    assert.equal(result.termination_reason, "max_results");
+    assert.equal(closed, true);
+  }
+});
+
+test("pagination preserves async mapper failures for selected items", async () => {
+  const expected = Object.assign(new Error("selected row malformed"), { code: "parser_drift" });
+  async function* items() {
+    yield { id: "first" };
+    throw expected;
+  }
+  await assert.rejects(
+    () => paginate(options({ mapPage: () => ({ recognized_shape: true, items: items() }) })),
+    (error) => error === expected,
+  );
+});

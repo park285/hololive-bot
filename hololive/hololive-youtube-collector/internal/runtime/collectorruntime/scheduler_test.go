@@ -46,7 +46,7 @@ func TestLeaseConfigFromUsesCollectorBudgets(t *testing.T) {
 func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	seedRuntimeCommunityTarget(t, pool, testSubjectKey)
+	seedRuntimeCommunityTarget(t, pool)
 
 	config := runtimeLeaseConfig()
 
@@ -66,20 +66,19 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scheduler := &leaseScheduler{
+	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
-		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
 	spec := joblease.JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:UC_TEST",
 		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	scheduler.runSpec(ctx, &spec)
+	executor.runSpec(ctx, &spec)
 
 	var state string
 
@@ -97,7 +96,7 @@ func TestLeaseSchedulerDefersFailedCollect(t *testing.T) {
 func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
-	seedRuntimeCommunityTarget(t, pool, testSubjectKey)
+	seedRuntimeCommunityTarget(t, pool)
 
 	config := runtimeLeaseConfig()
 
@@ -118,20 +117,19 @@ func TestLeaseSchedulerDefersCooldownUntilRetryAt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scheduler := &leaseScheduler{
+	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
-		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
 	spec := joblease.JobSpec{
 		JobKey:   "collector:youtubejs:community_collect:UC_TEST",
 		Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
 		CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	scheduler.runSpec(ctx, &spec)
+	executor.runSpec(ctx, &spec)
 
 	var deferred time.Time
 
@@ -208,19 +206,18 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scheduler := &leaseScheduler{
+	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
 		collector: collectorconfig.DefaultConfig(),
 		gates:     defaultProviderGates(),
-		queued:    make(map[string]struct{}), queue: make(chan joblease.JobSpec, config.QueueCapacity),
 	}
 	spec := joblease.JobSpec{
 		JobKey: "collector:holodex:holodex_live:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
 		CollectionJobKind: "holodex_live", SubjectKey: "global:holodex_live", PollInterval: time.Minute,
 	}
-	scheduler.runSpec(ctx, &spec)
+	executor.runSpec(ctx, &spec)
 
 	var count int
 
@@ -257,19 +254,18 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scheduler := &leaseScheduler{
+	executor := &collectionExecutor{
 		repository: repository, registry: registry, publisher: NewPublisher(pool),
 		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
 		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
 		collector: collectorconfig.DefaultConfig(),
-		gates:     defaultProviderGates(), queued: make(map[string]struct{}),
-		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
+		gates:     defaultProviderGates(),
 	}
 	spec := joblease.JobSpec{
 		JobKey: "collector:youtubejs:youtubejs_content:UC_TEST", Provider: contract.ProviderYouTubeJS, Class: "SUBJECT",
 		CollectionJobKind: "youtubejs_content", SubjectKey: testSubjectKey, PollInterval: time.Minute,
 	}
-	scheduler.runSpec(ctx, &spec)
+	executor.runSpec(ctx, &spec)
 
 	var (
 		count int
@@ -295,7 +291,7 @@ func TestLeaseSchedulerPublishesPartialAndDefersAtomically(t *testing.T) {
 
 func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 	pool := dbtest.NewPool(t)
-	seedRuntimeCommunityTarget(t, pool, testSubjectKey)
+	seedRuntimeCommunityTarget(t, pool)
 
 	config := runtimeLeaseConfig()
 
@@ -310,12 +306,15 @@ func TestLeaseSchedulerStopJoinsWorkers(t *testing.T) {
 	}
 
 	scheduler := &leaseScheduler{
-		repository: repository, candidates: repository, registry: registry, publisher: NewPublisher(pool),
-		metrics: NewMetrics(prometheus.NewPedanticRegistry()),
-		owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
-		collector: collectorconfig.DefaultConfig(),
-		gates:     defaultProviderGates(),
-		state:     SchedulerNew, queued: make(map[string]struct{}),
+		executor: &collectionExecutor{
+			repository: repository, registry: registry, publisher: NewPublisher(pool),
+			metrics: NewMetrics(prometheus.NewPedanticRegistry()),
+			owner:   testOwnerInstance, logger: slog.New(slog.DiscardHandler), config: config,
+			collector: collectorconfig.DefaultConfig(),
+			gates:     defaultProviderGates(),
+		}, candidates: repository,
+
+		state: SchedulerNew, queued: make(map[string]struct{}),
 		queue: make(chan joblease.JobSpec, config.QueueCapacity), fatal: make(chan error, 1),
 	}
 	if err := scheduler.Start(t.Context()); err != nil {
@@ -338,14 +337,15 @@ func TestLeaseSchedulerStopTimeoutKeepsRunStateUntilJoin(t *testing.T) {
 	done := make(chan struct{})
 	_, cancel := context.WithCancel(t.Context())
 	scheduler := &leaseScheduler{
-		repository: new(joblease.Repository),
-		registry:   new(Registry),
-		config:     joblease.Config{WorkerCount: 1, QueueCapacity: 1},
-		state:      SchedulerRunning,
-		cancel:     cancel,
-		done:       done,
-		queued:     make(map[string]struct{}),
-		fatal:      make(chan error, 1),
+		executor: &collectionExecutor{
+			repository: new(joblease.Repository),
+			registry:   new(Registry),
+			config:     joblease.Config{WorkerCount: 1, QueueCapacity: 1},
+		}, state: SchedulerRunning,
+		cancel: cancel,
+		done:   done,
+		queued: make(map[string]struct{}),
+		fatal:  make(chan error, 1),
 	}
 	scheduler.wg.Go(func() {
 		<-release
@@ -500,9 +500,9 @@ type leaseSeed struct {
 	kind    contract.ObservationKind
 }
 
-func seedRuntimeCommunityTarget(t *testing.T, pool *pgxpool.Pool, subject string) {
+func seedRuntimeCommunityTarget(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	seedRuntimeTargets(t, pool, []leaseSeed{{subject, contract.KindCommunityPage}})
+	seedRuntimeTargets(t, pool, []leaseSeed{{testSubjectKey, contract.KindCommunityPage}})
 }
 
 func seedRuntimeTargets(t *testing.T, pool *pgxpool.Pool, targets []leaseSeed) {

@@ -128,12 +128,12 @@ func TestRDY003PendingCountUsesCapSentinel(t *testing.T) {
 func TestRDY004NoDataTerminalWaitsForHandoff(t *testing.T) {
 	t.Parallel()
 
-	scheduler := &leaseScheduler{readiness: &readinessTracker{}}
-	scheduler.recordTerminalSuccess(nil)
+	scheduler := &leaseScheduler{executor: &collectionExecutor{readiness: &readinessTracker{}}}
+	scheduler.executor.recordTerminalSuccess(nil)
 
 	deps := readyDeps()
 
-	deps.tracker = scheduler.readiness
+	deps.tracker = scheduler.executor.readiness
 
 	body := evaluateReadiness(t.Context(), &deps)
 
@@ -145,13 +145,13 @@ func TestRDY004NoDataTerminalWaitsForHandoff(t *testing.T) {
 func TestRDY005CollisionOnlyTerminalHasZeroCandidates(t *testing.T) {
 	t.Parallel()
 
-	scheduler := &leaseScheduler{readiness: &readinessTracker{}}
+	scheduler := &leaseScheduler{executor: &collectionExecutor{readiness: &readinessTracker{}}}
 	published := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
 		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishCollision, 0),
 	}}
-	scheduler.recordTerminalSuccess(&published)
+	scheduler.executor.recordTerminalSuccess(&published)
 
-	snap := scheduler.readiness.Snapshot()
+	snap := scheduler.executor.readiness.Snapshot()
 	if !snap.collectionSuccess || len(snap.candidateIDs) != 0 {
 		t.Fatalf("collision-only snap = %+v", snap)
 	}
@@ -160,15 +160,15 @@ func TestRDY005CollisionOnlyTerminalHasZeroCandidates(t *testing.T) {
 func TestRDY006InsertedAndDuplicateAreHandoffCandidates(t *testing.T) {
 	t.Parallel()
 
-	scheduler := &leaseScheduler{readiness: &readinessTracker{}}
+	scheduler := &leaseScheduler{executor: &collectionExecutor{readiness: &readinessTracker{}}}
 	published := sourceobservation.PublishBatchResult{Results: []sourceobservation.PublishedObservation{
 		sourceobservation.NewPublishedObservation(11, sourceobservation.PublishInserted, 0),
 		sourceobservation.NewPublishedObservation(12, sourceobservation.PublishDuplicate, 1),
 		sourceobservation.NewPublishedObservation(13, sourceobservation.PublishCollision, 2),
 	}}
-	scheduler.recordTerminalSuccess(&published)
+	scheduler.executor.recordTerminalSuccess(&published)
 
-	snap := scheduler.readiness.Snapshot()
+	snap := scheduler.executor.readiness.Snapshot()
 	if !snap.collectionSuccess || len(snap.candidateIDs) != 2 || snap.candidateIDs[0] != 11 || snap.candidateIDs[1] != 12 {
 		t.Fatalf("candidate snap = %+v", snap)
 	}

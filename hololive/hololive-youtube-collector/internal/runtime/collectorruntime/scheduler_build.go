@@ -101,9 +101,8 @@ func newLeaseScheduler(
 		return nil, fmt.Errorf("collector owner: %w", err)
 	}
 
-	return &leaseScheduler{
+	executor := &collectionExecutor{
 		repository:    repository,
-		candidates:    repository,
 		registry:      registry,
 		publisher:     NewPublisher(infra.postgres.GetPool()),
 		metrics:       NewMetrics(nil),
@@ -112,33 +111,29 @@ func newLeaseScheduler(
 		config:        *leaseConfig,
 		collector:     *collector,
 		gates:         newProviderGates(collector),
-		state:         SchedulerNew,
-		queued:        make(map[string]struct{}),
-		queuedAt:      make(map[string]time.Time),
-		queue:         make(chan joblease.JobSpec, collector.QueueCapacity),
-		fatal:         make(chan error, 1),
 		readiness:     tracker,
 		workerTracker: workercontract.NewExecutorTracker(),
 		workerTotals:  &workercontract.Counters{},
-	}, nil
+	}
+
+	return newScheduler(executor, repository), nil
 }
 
-func newCollectionExecutor(s *leaseScheduler) *collectionExecutor {
-	return &collectionExecutor{
-		repository:    s.repository,
-		registry:      s.registry,
-		publisher:     s.publisher,
-		metrics:       s.metrics,
-		owner:         s.owner,
-		logger:        s.logger,
-		config:        s.config,
-		collector:     s.collector,
-		gates:         s.gates,
-		readiness:     s.readiness,
-		workerTracker: s.workerTracker,
-		workerTotals:  s.workerTotals,
-		reportFatal:   s.reportFatal,
+// 실행 의존성은 구성 시 확정하며 모든 worker가 같은 executor와 admission gate를 사용합니다.
+func newScheduler(executor *collectionExecutor, candidates projectionCandidateSource) *leaseScheduler {
+	scheduler := &leaseScheduler{
+		executor:   executor,
+		candidates: candidates,
+		state:      SchedulerNew,
+		queued:     make(map[string]struct{}),
+		queuedAt:   make(map[string]time.Time),
+		queue:      make(chan joblease.JobSpec, executor.config.QueueCapacity),
+		fatal:      make(chan error, 1),
 	}
+
+	executor.reportFatal = scheduler.reportFatal
+
+	return scheduler
 }
 
 func newCollectorRegistry(

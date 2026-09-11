@@ -146,6 +146,16 @@ func (f runtimeAlarmSchedulerFunc) Start(ctx context.Context) error {
 	return nil
 }
 
+type runtimeAlarmServiceFunc func(context.Context) error
+
+func (f runtimeAlarmServiceFunc) Close(ctx context.Context) error {
+	if err := f(ctx); err != nil {
+		return fmt.Errorf("f: %w", err)
+	}
+
+	return nil
+}
+
 func TestAlarmWorkerRuntimeShutdownJoinsSchedulerExit(t *testing.T) {
 	schedulerStarted := make(chan struct{})
 	cancelObserved := make(chan struct{})
@@ -209,6 +219,10 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 	schedulerStarted := make(chan struct{})
 	release := make(chan struct{})
 	schedulerExited := make(chan struct{})
+	serviceErr := errors.New("alarm service close failed")
+
+	var serviceClosed atomic.Int32
+
 	runtime := &AlarmWorkerRuntime{
 		Scheduler: runtimeAlarmSchedulerFunc(func(context.Context) error {
 			close(schedulerStarted)
@@ -216,6 +230,11 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 			close(schedulerExited)
 
 			return nil
+		}),
+		AlarmService: runtimeAlarmServiceFunc(func(context.Context) error {
+			serviceClosed.Add(1)
+
+			return serviceErr
 		}),
 	}
 
@@ -244,7 +263,9 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 
 	select {
 	case err := <-shutdownDone:
-		require.NoError(t, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, serviceErr)
+		assert.Equal(t, int32(1), serviceClosed.Load())
 	case <-time.After(2 * time.Second):
 		t.Fatal("Shutdown blocked past its context deadline")
 	}
@@ -262,6 +283,27 @@ func TestAlarmWorkerRuntimeShutdownHonorsContextDeadline(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("scheduler did not exit after release")
 	}
+}
+
+func TestAlarmWorkerRuntimeWaitAlarmSchedulerReturnsContextCancellation(t *testing.T) {
+	runtime := &AlarmWorkerRuntime{schedulerDone: make(chan struct{})}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := runtime.waitAlarmScheduler(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestAlarmWorkerRuntimeWaitAlarmSchedulerPrefersAlreadyClosedDone(t *testing.T) {
+	done := make(chan struct{})
+
+	close(done)
+
+	runtime := &AlarmWorkerRuntime{schedulerDone: done}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	require.NoError(t, runtime.waitAlarmScheduler(ctx))
 }
 
 func TestAlarmWorkerRuntimeReportsSchedulerErrorOnErrCh(t *testing.T) {

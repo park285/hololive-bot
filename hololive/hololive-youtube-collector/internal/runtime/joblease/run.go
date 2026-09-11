@@ -108,7 +108,7 @@ func (r *Repository) finishAvailableRun(
 
 	return LeaseRunResult{
 		Outcome: LeaseRunReleasedAfterParentCancel,
-		Err:     fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), releaseErr, nonCancellationError(runErr))),
+		Err:     fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), releaseErr, runErr)),
 	}
 }
 
@@ -130,7 +130,7 @@ func (r *Repository) handleRunRenew(
 ) (LeaseRunResult, bool) {
 	select {
 	case err := <-result:
-		return finishRunResult(cancel, err), true
+		return r.finishAvailableRun(runCtx, cancel, lease, err), true
 	default:
 	}
 
@@ -138,6 +138,10 @@ func (r *Repository) handleRunRenew(
 	err := lease.Renew(renewCtx)
 
 	renewCancel()
+
+	if runCtx.Err() != nil {
+		return r.handleRunCancel(runCtx, cancel, lease, result), true
+	}
 
 	if err != nil {
 		return r.finishRenewFailure(runCtx, cancel, lease, result, err), true
@@ -164,15 +168,15 @@ func (r *Repository) finishRenewFailure(
 	defer cleanupCancel()
 
 	releaseErr := releaseWithTimeout(cleanupCtx, lease, ReleaseRenewFail, r.config.DBTimeout)
-	runErr := waitRunResult(cleanupCtx, result)
+	joined, runErr := waitRunResult(cleanupCtx, result)
 
-	if errors.Is(runErr, context.DeadlineExceeded) {
+	if !joined {
 		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after renew failure: %w", errors.Join(err, releaseErr, runErr))}
 	}
 
 	return LeaseRunResult{
 		Outcome: LeaseRunReleasedAfterRenewFailure,
-		Err:     fmt.Errorf("run collection job: renew lease: %w", errors.Join(err, releaseErr, nonCancellationError(runErr))),
+		Err:     fmt.Errorf("run collection job: renew lease: %w", errors.Join(err, releaseErr, runErr)),
 	}
 }
 
@@ -193,12 +197,12 @@ func (r *Repository) finishFenceLoss(
 
 	defer cleanupCancel()
 
-	runErr := waitRunResult(cleanupCtx, result)
-	if errors.Is(runErr, context.DeadlineExceeded) {
-		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", runErr)}
+	joined, runErr := waitRunResult(cleanupCtx, result)
+	if !joined {
+		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: join after fence loss: %w", errors.Join(ErrFenceLost, runErr))}
 	}
 
-	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: ErrFenceLost}
+	return LeaseRunResult{Outcome: LeaseRunFenceLost, Err: errors.Join(ErrFenceLost, runErr)}
 }
 
 func (r *Repository) handleRunCancel(
@@ -214,15 +218,15 @@ func (r *Repository) handleRunCancel(
 	defer cleanupCancel()
 
 	releaseErr := releaseWithTimeout(cleanupCtx, lease, ReleaseShutdown, r.config.DBTimeout)
-	runErr := waitRunResult(cleanupCtx, result)
+	joined, runErr := waitRunResult(cleanupCtx, result)
 
-	if errors.Is(runErr, context.DeadlineExceeded) {
+	if !joined {
 		return LeaseRunResult{Outcome: LeaseRunCleanupTimedOut, Err: fmt.Errorf("run collection job: canceled cleanup: %w", errors.Join(ctx.Err(), releaseErr, runErr))}
 	}
 
 	return LeaseRunResult{
 		Outcome: LeaseRunReleasedAfterParentCancel,
-		Err:     fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), releaseErr, nonCancellationError(runErr))),
+		Err:     fmt.Errorf("run collection job: canceled: %w", errors.Join(ctx.Err(), releaseErr, runErr)),
 	}
 }
 
@@ -237,19 +241,18 @@ func releaseWithTimeout(ctx context.Context, lease Lease, reason ReleaseReason, 
 	return nil
 }
 
-func nonCancellationError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return nil
-	}
-
-	return err
-}
-
-func waitRunResult(ctx context.Context, result <-chan error) error {
+func waitRunResult(ctx context.Context, result <-chan error) (bool, error) {
+	// Cleanup 기한이 지났더라도 이미 도착한 결과는 join 완료로 판정합니다.
 	select {
 	case runErr := <-result:
-		return runErr
+		return true, runErr
+	default:
+	}
+
+	select {
+	case runErr := <-result:
+		return true, runErr
 	case <-ctx.Done():
-		return fmt.Errorf("join collection job runner: %w", ctx.Err())
+		return false, fmt.Errorf("join collection job runner: %w", ctx.Err())
 	}
 }

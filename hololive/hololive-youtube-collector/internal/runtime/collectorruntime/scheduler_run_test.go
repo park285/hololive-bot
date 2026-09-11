@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"reflect"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/workercontract"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 
@@ -57,9 +55,9 @@ func TestSupersededReleaseUsesDetachedCleanupContext(t *testing.T) {
 
 	collector.CleanupTimeout = time.Second
 
-	scheduler := &leaseScheduler{collector: collector}
+	scheduler := &leaseScheduler{executor: &collectionExecutor{collector: collector}}
 
-	if err := scheduler.releaseSuperseded(ctx, lease); err != nil {
+	if err := scheduler.executor.releaseSuperseded(ctx, lease); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,8 +89,8 @@ func TestExpectedProjectionChurnUsesSupersededAttemptAndPublishMetrics(t *testin
 			metrics := NewMetrics(registerer)
 			metrics.ObserveAttempt(contract.ProviderYouTubeJS, testCommunityJobKind, attemptResult(err), time.Second)
 
-			scheduler := &leaseScheduler{metrics: metrics}
-			scheduler.observePublishError(
+			scheduler := &leaseScheduler{executor: &collectionExecutor{metrics: metrics}}
+			scheduler.executor.observePublishError(
 				&joblease.JobSpec{Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind},
 				testRunOutput(t, []contract.Envelope{{
 					Provider:        contract.ProviderYouTubeJS,
@@ -144,8 +142,8 @@ func TestUnknownPublishErrorRemainsFailedAndRejected(t *testing.T) {
 	metrics := NewMetrics(registerer)
 	metrics.ObserveAttempt(contract.ProviderYouTubeJS, testCommunityJobKind, attemptResult(err), time.Second)
 
-	scheduler := &leaseScheduler{metrics: metrics}
-	scheduler.observePublishError(
+	scheduler := &leaseScheduler{executor: &collectionExecutor{metrics: metrics}}
+	scheduler.executor.observePublishError(
 		&joblease.JobSpec{Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind},
 		testRunOutput(t, []contract.Envelope{{
 			Provider:        contract.ProviderYouTubeJS,
@@ -244,9 +242,9 @@ func TestLogFailureUsesStructuredSecretSafeDiagnostics(t *testing.T) {
 
 	var output bytes.Buffer
 
-	scheduler := &leaseScheduler{logger: slog.New(slog.NewJSONHandler(&output, nil))}
+	scheduler := &leaseScheduler{executor: &collectionExecutor{logger: slog.New(slog.NewJSONHandler(&output, nil))}}
 	spec := &joblease.JobSpec{JobKey: "job", Provider: contract.ProviderYouTubeJS, CollectionJobKind: testCommunityJobKind, SubjectKey: testSubjectKey}
-	scheduler.logFailure("collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
+	scheduler.executor.logFailure("collect", string(collecterr.Failed), "HelperError", "token=secret-value", spec, &contract.LeaseProof{})
 
 	if strings.Contains(output.String(), "secret-value") {
 		t.Fatalf("structured log leaked diagnostic credential: %s", output.String())
@@ -319,75 +317,6 @@ func metricLabelsMatch(labels []*dto.LabelPair, want map[string]string) bool {
 	}
 
 	return true
-}
-
-func TestNewCollectionExecutorMapsEverySchedulerField(t *testing.T) {
-	t.Parallel()
-
-	scheduler := newLifecycleScheduler(t)
-
-	scheduler.publisher = NewPublisher(nil)
-	scheduler.owner = "owner-test"
-	scheduler.gates = newProviderGates(&scheduler.collector)
-	scheduler.workerTracker = workercontract.NewExecutorTracker()
-	scheduler.workerTotals = &workercontract.Counters{}
-
-	executor := newCollectionExecutor(scheduler)
-
-	executorValue := reflect.ValueOf(executor).Elem()
-	schedulerValue := reflect.ValueOf(scheduler).Elem()
-
-	for i := range executorValue.NumField() {
-		field := executorValue.Type().Field(i)
-		got := executorValue.Field(i)
-
-		if got.IsZero() {
-			t.Fatalf("executor.%s = zero, want mapped from scheduler", field.Name)
-		}
-
-		if field.Type.Kind() == reflect.Func {
-			continue
-		}
-
-		assertExecutorFieldMirrorsScheduler(t, &field, got, schedulerValue.FieldByName(field.Name))
-	}
-
-	boom := errors.New("boom")
-	executor.reportFatal(boom)
-
-	select {
-	case err := <-scheduler.Fatal():
-		if !errors.Is(err, boom) {
-			t.Fatalf("fatal = %v, want wrapped %v", err, boom)
-		}
-	default:
-		t.Fatal("executor.reportFatal is not bound to the scheduler fatal channel")
-	}
-}
-
-func assertExecutorFieldMirrorsScheduler(t *testing.T, field *reflect.StructField, got, want reflect.Value) {
-	t.Helper()
-
-	if !want.IsValid() {
-		t.Fatalf("executor.%s has no scheduler field of the same name", field.Name)
-	}
-
-	if want.IsZero() {
-		t.Fatalf("scheduler.%s = zero, test fixture must populate every mapped field", field.Name)
-	}
-
-	switch {
-	case field.Type.Kind() == reflect.Pointer || field.Type.Kind() == reflect.Map:
-		if got.Pointer() != want.Pointer() {
-			t.Fatalf("executor.%s points to a different instance than scheduler.%s", field.Name, field.Name)
-		}
-	case field.Type.Comparable():
-		if !got.Equal(want) {
-			t.Fatalf("executor.%s = %v, want scheduler value %v", field.Name, got, want)
-		}
-	default:
-		t.Fatalf("executor.%s has unsupported kind %s, extend the mapping assertion", field.Name, field.Type.Kind())
-	}
 }
 
 type recordingLease struct {
@@ -680,5 +609,75 @@ func assertSupervisionFatal(t *testing.T, fatal []error, cause error, wantFatal 
 
 	if !errors.Is(fatal[0], cause) {
 		t.Fatalf("fatal report does not wrap the original error: %v", fatal[0])
+	}
+}
+
+func TestProviderAdmissionPreservesConfiguration(t *testing.T) {
+	var fatal []error
+
+	calls := 0
+	runner := stubJob(contract.ProviderYouTubeJS, testCommunityJobKind, contract.KindCommunityPage)
+
+	runner.collect = func(context.Context, *collectutil.RunInput) (collectutil.CollectResult, error) {
+		calls++
+
+		return collectutil.CollectResult{}, nil
+	}
+
+	executor, spec := newExecutorFixture(t, runner, &fatal)
+	lease, err := executor.acquireLease(t.Context(), spec)
+
+	if err != nil || lease == nil {
+		t.Fatalf("acquire fixture lease: %v", err)
+	}
+
+	executor.gates = nil
+
+	registration, _ := executor.registry.Lookup(spec.Provider, spec.CollectionJobKind)
+	proof := lease.Proof()
+
+	err = executor.collectAndPublish(t.Context(), registration, spec, lease, &proof)
+
+	if collecterr.CodeOf(err) != collecterr.Configuration || collecterr.IsUnclassified(err) {
+		t.Fatalf("missing gate = %v (%s), want classified configuration before runner access", err, collecterr.CodeOf(err))
+	}
+
+	if calls != 0 {
+		t.Fatalf("runner calls = %d, want 0", calls)
+	}
+}
+
+func TestSupervisionRetainsFatalCallbackAfterCancellation(t *testing.T) {
+	for _, outcome := range []joblease.LeaseRunOutcome{joblease.LeaseRunFenceLost, joblease.LeaseRunReleasedAfterParentCancel} {
+		t.Run(string(outcome), func(t *testing.T) {
+			var fatal []error
+
+			executor := newRunErrorExecutor(&fatal)
+			cause := collecterr.New(collecterr.Internal, collecterr.ClassInternal, "callback invariant")
+			err := errors.Join(context.Canceled, joblease.ErrFenceLost, cause)
+
+			if !executor.handleLeaseRunOutcome(joblease.LeaseRunResult{Outcome: outcome, Err: err}, &joblease.JobSpec{}, &contract.LeaseProof{}) {
+				t.Fatal("supervision outcome was not handled")
+			}
+
+			assertSupervisionFatal(t, fatal, cause, true)
+		})
+	}
+}
+
+func TestFatalCollectionErrorInspectsAllJoinedCauses(t *testing.T) {
+	cause := collecterr.New(collecterr.HelperProtocolMismatch, collecterr.ClassProtocol, "callback protocol")
+	transient := collecterr.New(collecterr.Failed, collecterr.ClassTransient, "release failure")
+
+	for _, err := range []error{errors.Join(transient, cause), errors.Join(cause, transient), fmt.Errorf("supervision: %w", errors.Join(transient, cause))} {
+		if !fatalCollectionError(err) {
+			t.Fatalf("classified joined fatal hidden: %v", err)
+		}
+	}
+
+	for _, err := range []error{errors.Join(context.Canceled, errors.New("raw callback")), errors.Join(transient, collecterr.FromContext(errors.New("raw callback")))} {
+		if fatalCollectionError(err) {
+			t.Fatalf("unclassified callback promoted: %v", err)
+		}
 	}
 }

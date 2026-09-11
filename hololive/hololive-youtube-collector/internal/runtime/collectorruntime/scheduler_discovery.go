@@ -32,7 +32,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		return
 	}
 
-	dbCtx, cancel := context.WithTimeout(ctx, s.collector.DBTimeout)
+	dbCtx, cancel := context.WithTimeout(ctx, s.executor.collector.DBTimeout)
 	generation, err := source.CurrentProjectionGeneration(dbCtx)
 
 	cancel()
@@ -57,7 +57,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 		runnerIDs: runnerIDs(runners),
 		start:     start,
 		remaining: free,
-		batch:     s.config.AcquisitionBatch,
+		batch:     s.executor.config.AcquisitionBatch,
 		excluded:  excluded,
 		query:     s.queryRunnerPage(ctx, source, generation, runners),
 		enqueue:   func(spec *joblease.JobSpec) EnqueueResult { return s.enqueueDiscovered(ctx, spec) },
@@ -73,7 +73,7 @@ func (s *leaseScheduler) discoverOnce(ctx context.Context) {
 
 func (s *leaseScheduler) enqueueDiscovered(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
 	result := s.enqueue(ctx, spec)
-	s.metrics.ObserveEnqueue(result)
+	s.executor.metrics.ObserveEnqueue(result)
 
 	return result
 }
@@ -82,14 +82,14 @@ func (s *leaseScheduler) warnQueueFullOnce() func() {
 	warned := false
 
 	return func() {
-		if warned || s.logger == nil {
+		if warned || s.executor.logger == nil {
 			return
 		}
 
 		warned = true
 
-		s.logger.Warn("YouTube collector local queue is full",
-			"queue_capacity", s.config.QueueCapacity,
+		s.executor.logger.Warn("YouTube collector local queue is full",
+			"queue_capacity", s.executor.config.QueueCapacity,
 		)
 	}
 }
@@ -99,15 +99,15 @@ func (s *leaseScheduler) projectionSource() projectionCandidateSource {
 		return s.candidates
 	}
 
-	return s.repository
+	return s.executor.repository
 }
 
 func (s *leaseScheduler) discoveryRunners() []RegisteredRunner {
-	if s.registry == nil {
+	if s.executor.registry == nil {
 		return nil
 	}
 
-	return s.registry.Runners()
+	return s.executor.registry.Runners()
 }
 
 func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, startCursor int) {
@@ -115,7 +115,7 @@ func (s *leaseScheduler) discoverySnapshot() (free int, excluded []string, start
 
 	queued := len(s.queued)
 
-	free = max(s.config.QueueCapacity-queued, 0)
+	free = max(s.executor.config.QueueCapacity-queued, 0)
 	excluded = make([]string, 0, queued)
 
 	for key := range s.queued {
@@ -195,8 +195,8 @@ func (s *leaseScheduler) finishCycle(started time.Time, code collecterr.Operatio
 	if rotate {
 		total := 0
 
-		if s.registry != nil {
-			total = len(s.registry.Runners())
+		if s.executor.registry != nil {
+			total = len(s.executor.registry.Runners())
 		}
 
 		if total > 0 {
@@ -224,5 +224,5 @@ func (s *leaseScheduler) logDiscoveryFailure(err error) {
 
 	spec := joblease.JobSpec{}
 	proof := contract.LeaseProof{}
-	s.logFailure("candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), &spec, &proof)
+	s.executor.logFailure("candidate_load", string(collecterr.CandidateFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), &spec, &proof)
 }

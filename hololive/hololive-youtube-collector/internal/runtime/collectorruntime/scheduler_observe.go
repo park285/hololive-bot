@@ -14,22 +14,6 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
 )
 
-func (s *leaseScheduler) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
-	s.exec().observePublishError(spec, output, err)
-}
-
-func (s *leaseScheduler) recordTerminalSuccess(published *sourceobservation.PublishBatchResult) {
-	if s == nil {
-		return
-	}
-
-	s.exec().recordTerminalSuccess(published)
-}
-
-func (s *leaseScheduler) logFailure(phase, code, class, detail string, spec *joblease.JobSpec, proof *contract.LeaseProof) {
-	s.exec().logFailure(phase, code, class, detail, spec, proof)
-}
-
 func (e *collectionExecutor) observePublishError(spec *joblease.JobSpec, output collectutil.RunOutput, err error) {
 	if supersededError(err) {
 		e.observePublishOutcome(spec.Provider, output, outcomeSuperseded)

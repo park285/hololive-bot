@@ -274,18 +274,7 @@ func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- engine.sendYouTubeOutboxKaring(t.Context(), sender, "room-timeout", &domain.YouTubeOutboxDispatchPayload{
-			OutboxIDs:  []int64{1},
-			Kind:       domain.OutboxKindNewVideo,
-			AlarmType:  domain.AlarmTypeLive,
-			ChannelID:  "UC_timeout",
-			MemberName: "member",
-			Items: []domain.YouTubeOutboxItem{{
-				OutboxID:  1,
-				ContentID: "video:timeout",
-				Payload:   `{"video_id":"timeout","title":"timeout"}`,
-			}},
-		})
+		done <- engine.acquireKaringSendSlot(t.Context())
 	}()
 
 	select {
@@ -293,13 +282,17 @@ func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
 		engine.karingMu.Unlock()
 
 		if err == nil || !strings.Contains(err.Error(), "timed out") {
-			t.Fatalf("sendYouTubeOutboxKaring() error = %v, want timeout", err)
+			t.Fatalf("acquireKaringSendSlot() error = %v, want timeout", err)
+		}
+
+		if !errors.Is(err, errDeliverySendTimeout) || errors.Is(err, errDeliverySendOutcomeUnknown) {
+			t.Fatalf("acquireKaringSendSlot() error = %v, want known admission timeout", err)
 		}
 	case <-time.After(100 * time.Millisecond):
 		engine.karingMu.Unlock()
 
 		err := <-done
-		t.Fatalf("sendYouTubeOutboxKaring() waited for mutex without timing out, later error = %v", err)
+		t.Fatalf("acquireKaringSendSlot() waited for mutex without timing out, later error = %v", err)
 	}
 }
 

@@ -78,17 +78,37 @@ func (d *SendEngine) dispatchClaimedKaring(
 		return
 	}
 
-	operation, begun := d.beginLifecycleOperation(ctx, rows, outboxes, result, mu)
+	// 직렬화 대기는 provider 부작용이 없으므로 SENDING lease를 시작하기 전에 끝낸다.
+	if err := d.acquireKaringSendSlot(ctx); err != nil {
+		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonTransport, result, mu) {
+			d.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
+		}
+
+		return
+	}
+
+	// 완료 DB 처리와 audit은 다른 방의 provider 진입을 막지 않는다.
+	operation, begun, sendErr := func() (store.StartedOperation, bool, error) {
+		defer d.karingMu.Unlock()
+
+		operation, begun := d.beginLifecycleOperation(ctx, rows, outboxes, result, mu)
+		if !begun {
+			return operation, false, nil
+		}
+
+		attemptStartedAt := time.Now().UTC()
+		d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, mode)
+
+		return operation, true, d.sendYouTubeOutboxKaring(ctx, sender, roomID, &payload)
+	}()
+
 	if !begun {
 		return
 	}
 
-	attemptStartedAt := time.Now().UTC()
-	d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, mode)
-
-	if err := d.sendYouTubeOutboxKaring(ctx, sender, roomID, &payload); err != nil {
+	if sendErr != nil {
 		d.handleKaringSendFailure(
-			ctx, operation, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu,
+			ctx, operation, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, sendErr, result, mu,
 		)
 
 		return
@@ -215,6 +235,30 @@ func isYouTubeOutboxKaringKind(kind domain.OutboxKind) bool {
 	}
 }
 
+// 성공한 호출자는 BeginSending 실패와 panic을 포함한 모든 반환 경로에서 잠금을 해제한다.
+func (d *SendEngine) acquireKaringSendSlot(ctx context.Context) error {
+	admissionCtx, cancel := d.karingSendContext(ctx)
+	defer cancel()
+
+	err := d.karingMu.LockContext(admissionCtx)
+	if err == nil {
+		// mutex와 Done이 동시에 준비되면 select가 잠금을 선택할 수 있다.
+		err = admissionCtx.Err()
+		if err == nil {
+			return nil
+		}
+
+		d.karingMu.Unlock()
+	}
+
+	if errors.Is(context.Cause(admissionCtx), errDeliverySendTimeout) {
+		return fmt.Errorf("wait for youtube outbox karing send slot timed out after %s: %w", d.config.DeliverySendTimeout, errors.Join(errDeliverySendTimeout, err))
+	}
+
+	return fmt.Errorf("wait for youtube outbox karing send slot: %w", err)
+}
+
+// 호출자는 Karing 잠금을 소유한다. Admission 대기와 별도로 provider·polling 예산을 시작한다.
 func (d *SendEngine) sendYouTubeOutboxKaring(
 	ctx context.Context,
 	sender YouTubeOutboxKaringSender,
@@ -224,11 +268,10 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 	sendCtx, cancel := d.karingSendContext(ctx)
 	defer cancel()
 
-	if err := d.karingMu.LockContext(sendCtx); err != nil {
-		return d.wrapKaringTimeoutError(sendCtx, "wait for youtube outbox karing send slot", err)
+	// BeginSending 중 취소된 경우에도 sender가 시작되지 않았다는 증거를 보존한다.
+	if err := sendCtx.Err(); err != nil {
+		return fmt.Errorf("before send youtube outbox karing: %w", err)
 	}
-
-	defer d.karingMu.Unlock()
 
 	if err := sender.SendYouTubeOutboxKaring(sendCtx, roomID, payload); err != nil {
 		return d.wrapKaringTimeoutError(sendCtx, "send youtube outbox karing", err)

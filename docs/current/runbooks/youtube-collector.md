@@ -42,9 +42,13 @@ Proxy 설정은 helper bootstrap에만 존재하며 collection RPC별 변경은 
 
 Holodex/Official HTTP는 collector-owned `providerhttp` transport입니다. Redirect follow는 없습니다. Holodex는 path prefix, Official은 origin-only입니다. `HOLODEX_TIMEOUT_SECONDS`와 `OFFICIAL_SCHEDULE_TIMEOUT_SECONDS`가 request ceiling이며 0/음수는 기동 실패입니다. 401/403은 `CONFIGURATION`, 429와 Retry-After가 있는 503은 `COOLDOWN`입니다.
 
-Scheduler는 `COMPLETE` output을 `PublishBatch`로 terminal complete하고, `PARTIAL` output은 `PublishBatchAndDefer`로 observation publish와 same-slot defer를 한 PostgreSQL transaction에서 커밋합니다. 성공한 terminal commit 뒤에는 두 번째 defer/release를 실행하지 않습니다. Release API는 shutdown/renew-fail/superseded reason별 state를 제공하고 durable `last_failure_*`는 유지합니다. mixed-version에서 migration 177 trigger가 채운 `legacy_collector`는 release transaction이 복원합니다.
+Scheduler는 `COMPLETE` output을 `PublishBatch`로 terminal complete하고, `PARTIAL` output은 `PublishBatchAndDefer`로 observation publish와 same-slot defer를 한 PostgreSQL transaction에서 커밋합니다. 성공한 callback은 추가 defer/release를 실행하지 않습니다. Supervisor가 callback 반환과 동시에 cancel/renew 실패를 처리하면 join 전에 release를 시도할 수 있지만, `ACTIVE` 및 owner/fence 조건이 terminal 상태의 재변경을 거부합니다. Release API는 shutdown/renew-fail/superseded reason별 state를 제공하고 durable `last_failure_*`는 유지합니다. mixed-version에서 migration 177 trigger가 채운 `legacy_collector`는 release transaction이 복원합니다.
 
-Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다. fatal은 first-wins이며 runner panic, result invariant, cleanup timeout, impossible queue/lease state만 process fatal입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다.
+`youtube_collection_last_success_timestamp_seconds`와 readiness의 첫 성공은 durable terminal commit을 기록하고, `youtube_collection_attempts_total`은 callback과 lease supervision을 포함한 실행 결과를 기록합니다. 따라서 commit 직후 종료·갱신 실패가 겹치면 마지막 성공 시각이 갱신된 실행도 canceled/failed attempt로 집계될 수 있습니다. 이것만으로 terminal commit의 실패나 observation 유실을 판단하지 않습니다. Renew fence loss보다 먼저 buffered callback 결과가 도착한 경우에는 기존 callback 결과 우선 계약을 적용합니다.
+
+Discovery는 due-only입니다. GLOBAL job도 lease due predicate를 통과한 경우에만 candidate가 되며 매 cycle 무조건 enqueue하지 않습니다. Local queue FULL은 성공이 아니라 explicit `EnqueueFull`이며 해당 discovery cycle의 남은 admission을 중단합니다. Scheduler instance는 single-use입니다. Start는 NEW에서만 성공하고 Stop 또는 fatal 이후 STOPPED instance는 재사용하지 않습니다. fatal은 first-wins이며 명시적으로 분류된 INTERNAL/PROTOCOL 오류와 runner panic·result invariant·불가능한 queue 상태가 대상입니다. Ordinary provider failure, timeout, cooldown, parser drift는 fatal이 아닙니다.
+
+Lease-run `CLEANUP_TIMED_OUT`은 cleanup 기한 안에 callback이 합류하지 못했다는 뜻입니다. 종료한 callback의 자체 deadline은 해당 cancel/renew/fence 결과의 원인으로 남으며 join timeout으로 분류하지 않습니다. Lease supervision timeout만으로 process fatal을 보고하지 않는 기존 정책을 유지하지만, 함께 보존된 classified fatal 오류는 보고합니다. 위의 helper process `CLEANUP_TIMED_OUT`과 같은 종료 정책으로 해석하지 않습니다.
 
 ## Live metadata contract activation
 

@@ -26,9 +26,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -140,43 +138,14 @@ func (r notificationEgressRunner) startRunners(ctx context.Context, runners []Na
 		)
 	}
 
-	runnerErrCh := r.startRunnerGroup(ctx, runners)
-
-	if err := r.handleRunnerGroupResult(<-runnerErrCh); err != nil {
-		return fmt.Errorf("handle runner group result: %w", err)
+	if err := runNamedSchedulers(ctx, r.logger, "notification-egress-", runners); err != nil {
+		return fmt.Errorf(
+			"handle runner group result: %w",
+			fmt.Errorf("notification egress runner stopped: %w", err),
+		)
 	}
 
 	return nil
-}
-
-func (r notificationEgressRunner) handleRunnerGroupResult(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	return fmt.Errorf("notification egress runner stopped: %w", err)
-}
-
-func (r notificationEgressRunner) startRunnerGroup(ctx context.Context, runners []NamedScheduler) <-chan error {
-	ch := make(chan error, 1)
-
-	go panicguard.Run(r.logger, panicguard.BackgroundTask, "notification-egress-runner-group", func() {
-		ch <- panicguard.RunE(r.logger, panicguard.BackgroundTask, "notification-egress-runner-group", func() error {
-			eg, egCtx := errgroup.WithContext(ctx)
-
-			for _, runner := range runners {
-				eg.Go(func() error {
-					return panicguard.RunE(r.logger, panicguard.BackgroundTask, "notification-egress-"+runner.Name, func() error {
-						return runner.Scheduler.Start(egCtx)
-					})
-				})
-			}
-
-			return eg.Wait()
-		})
-	})
-
-	return ch
 }
 
 func (r *AlarmWorkerRuntime) setAlarmSchedulerCancel(cancel context.CancelFunc) {
@@ -233,14 +202,22 @@ func (r *AlarmWorkerRuntime) alarmSchedulerDone() chan struct{} {
 	return done
 }
 
-func (r *AlarmWorkerRuntime) waitAlarmScheduler(ctx context.Context) {
+func (r *AlarmWorkerRuntime) waitAlarmScheduler(ctx context.Context) error {
 	done := r.alarmSchedulerDone()
 	if done == nil {
-		return
+		return nil
 	}
 
 	select {
 	case <-done:
+		return nil
+	default:
+	}
+
+	select {
+	case <-done:
+		return nil
 	case <-ctx.Done():
+		return ctx.Err()
 	}
 }

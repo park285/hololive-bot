@@ -229,3 +229,58 @@ function rawPlayerResponse(videoId, { isLiveContent, startTimestamp }) {
     },
   };
 }
+
+test("content result budget stops before hydrating or validating unselected rows", async () => {
+  const calls = [];
+  const innertube = {
+    getChannel: async () => ({ getVideos: async () => ({ videos: [
+      { id: "first", is_upcoming: true },
+      { id: "second", is_upcoming: true },
+      { title: "unselected malformed row" },
+    ] }) }),
+    actions: { execute: async (_, { videoId }) => {
+      calls.push(videoId);
+      return rawPlayerResponse(videoId, { isLiveContent: false });
+    } },
+  };
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxResults: 1, innertube });
+  assert.deepEqual(calls, ["first"]);
+  assert.equal(result.termination_reason, "max_results");
+  assert.equal(result.items.length, 1);
+});
+
+test("content byte budget stops metadata lookups after the overflowing candidate", async () => {
+  const calls = [];
+  const innertube = {
+    getChannel: async () => ({ getVideos: async () => ({ videos: [
+      { id: "first", is_upcoming: true },
+      { id: "overflow", title: "x".repeat(30000), is_upcoming: true },
+      { id: "unselected", is_upcoming: true },
+    ] }) }),
+    actions: { execute: async (_, { videoId }) => {
+      calls.push(videoId);
+      return rawPlayerResponse(videoId, { isLiveContent: false });
+    } },
+  };
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "videos", maxSuccessResponseBytes: 20000, innertube });
+  assert.deepEqual(calls, ["first", "overflow"]);
+  assert.equal(result.termination_reason, "max_success_response_bytes");
+  assert.equal(result.items.length, 1);
+});
+
+test("shorts result budget skips unselected normalization without metadata requests", async () => {
+  const innertube = {
+    getChannel: async () => ({ getShorts: async () => ({ videos: [
+      { id: "first", is_upcoming: true }, { title: "unselected malformed" },
+    ] }) }),
+    actions: { execute: async () => assert.fail("shorts must not request premiere metadata") },
+  };
+  const result = await fetchContentFeed({ channelId: "UC_TEST", kind: "shorts", maxResults: 1, innertube });
+  assert.equal(result.items[0].video_id, "first");
+  assert.equal(result.termination_reason, "max_results");
+});
+
+test("mapContentItems preserves fail-closed validation for sparse rows", () => {
+  assert.throws(() => mapContentItems({ videos: new Array(1) }, "UC_TEST"),
+    (error) => error.code === "parser_drift");
+});

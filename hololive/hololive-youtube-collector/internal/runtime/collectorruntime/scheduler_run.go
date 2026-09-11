@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"github.com/park285/shared-go/v2/pkg/workercontract"
 
 	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
@@ -33,22 +35,6 @@ type collectionExecutor struct {
 	reportFatal   func(error)
 }
 
-func (s *leaseScheduler) exec() *collectionExecutor {
-	return newCollectionExecutor(s)
-}
-
-func (s *leaseScheduler) runSpec(ctx context.Context, spec *joblease.JobSpec) {
-	s.exec().runSpec(ctx, spec)
-}
-
-func (s *leaseScheduler) releaseSuperseded(ctx context.Context, lease joblease.Lease) error {
-	if err := s.exec().releaseSuperseded(ctx, lease); err != nil {
-		return fmt.Errorf("release superseded: %w", err)
-	}
-
-	return nil
-}
-
 func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec) {
 	registration, ok := e.registry.Lookup(spec.Provider, spec.CollectionJobKind)
 	if !ok {
@@ -59,11 +45,11 @@ func (e *collectionExecutor) runSpec(ctx context.Context, spec *joblease.JobSpec
 	}
 
 	lease, err := e.acquireLease(ctx, spec)
-	if lease == nil {
+	if err != nil || lease == nil {
 		return
 	}
 
-	e.runAcquired(ctx, registration, spec, lease, err)
+	e.runAcquired(ctx, registration, spec, lease)
 }
 
 func (e *collectionExecutor) acquireLease(ctx context.Context, spec *joblease.JobSpec) (joblease.Lease, error) {
@@ -99,7 +85,7 @@ func (e *collectionExecutor) observeAcquireError(spec *joblease.JobSpec, err err
 	e.logFailure("acquire", string(collecterr.AcquireFailed), string(collecterr.ClassOf(err)), collecterr.DiagnosticOf(err).Detail(), spec, &proof)
 }
 
-func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease, _ error) {
+func (e *collectionExecutor) runAcquired(ctx context.Context, registration RegisteredRunner, spec *joblease.JobSpec, lease joblease.Lease) {
 	proof := lease.Proof()
 	started := time.Now()
 	attemptID := e.workerTracker.BeginAttempt(started)
@@ -133,12 +119,16 @@ func collectionAttemptOutcome(err error) workercontract.AttemptOutcome {
 }
 
 func (e *collectionExecutor) handleLeaseRunOutcome(runResult joblease.LeaseRunResult, spec *joblease.JobSpec, proof *contract.LeaseProof) bool {
-	if leaseRunCompletesWithoutAction(runResult.Outcome) {
+	if runResult.Outcome == joblease.LeaseRunCallbackCompleted {
 		return true
 	}
 
-	if runResult.Outcome == joblease.LeaseRunFenceLost {
-		e.observeFenceLost(spec, joblease.ErrFenceLost)
+	if runResult.Outcome == joblease.LeaseRunFenceLost || runResult.Outcome == joblease.LeaseRunReleasedAfterParentCancel {
+		e.observeFenceLost(spec, runResult.Err)
+
+		if fatalCollectionError(runResult.Err) {
+			e.failSupervision("cleanup", runResult.Err, spec, proof)
+		}
 
 		return true
 	}
@@ -172,10 +162,6 @@ func (e *collectionExecutor) failSupervision(phase string, err error, spec *jobl
 	}
 }
 
-func leaseRunCompletesWithoutAction(outcome joblease.LeaseRunOutcome) bool {
-	return outcome == joblease.LeaseRunCallbackCompleted || outcome == joblease.LeaseRunReleasedAfterParentCancel
-}
-
 func leaseRunIsSupervisionFailure(outcome joblease.LeaseRunOutcome) bool {
 	return outcome == joblease.LeaseRunReleasedAfterRenewFailure || outcome == joblease.LeaseRunCleanupTimedOut
 }
@@ -187,6 +173,18 @@ func (e *collectionExecutor) handleRunError(
 	proof *contract.LeaseProof,
 	err error,
 ) {
+	if failure, ok := errors.AsType[*FatalRuntimeError](err); ok && failure.Phase == "result_validation" {
+		// 검증 실패의 terminal 처리는 callback join 뒤 한 번만 수행합니다.
+		e.deferInvariant(ctx, lease, spec, proof, err)
+		e.reportFatal(failure)
+
+		return
+	}
+
+	if fatalCollectionError(err) {
+		e.reportFatal(&FatalRuntimeError{Phase: "collection", Err: err})
+	}
+
 	if supersededError(err) {
 		e.handleSuperseded(ctx, lease, spec, proof)
 
@@ -200,20 +198,27 @@ func (e *collectionExecutor) handleRunError(
 	}
 
 	e.deferFailedRun(ctx, lease, spec, proof, err)
-
-	if fatalCollectionError(err) {
-		e.reportFatal(&FatalRuntimeError{Phase: "collection", Err: err})
-	}
 }
 
 func fatalCollectionError(err error) bool {
-	if err == nil || collecterr.IsUnclassified(err) {
+	if err == nil {
 		return false
 	}
 
 	class := collecterr.ClassOf(err)
+	if !collecterr.IsUnclassified(err) && (class == collecterr.ClassInternal || class == collecterr.ClassProtocol) {
+		return true
+	}
 
-	return class == collecterr.ClassInternal || class == collecterr.ClassProtocol
+	// Join된 release/context 오류의 순서가 callback의 fatal 분류를 가리지 않게 합니다.
+	if joined, ok := errors.AsType[interface {
+		error
+		Unwrap() []error
+	}](err); ok {
+		return slices.ContainsFunc(joined.Unwrap(), fatalCollectionError)
+	}
+
+	return false
 }
 
 func (e *collectionExecutor) handleSuperseded(ctx context.Context, lease joblease.Lease, spec *joblease.JobSpec, proof *contract.LeaseProof) {
@@ -287,7 +292,7 @@ func (e *collectionExecutor) collectAndPublish(
 	admissionCancel()
 
 	if err != nil {
-		return errors.Join(providerAdmissionError(err))
+		return fmt.Errorf("provider admission: %w", err)
 	}
 
 	defer e.releaseProvider(spec.Provider)
@@ -302,21 +307,18 @@ func (e *collectionExecutor) collectAndPublish(
 	}
 
 	collectCtx, collectCancel := context.WithTimeout(ctx, registration.Profile().CollectTimeout())
-	result, fatal := registration.Runner().Collect(collectCtx, &input)
+	result, fatal := e.runCollector(collectCtx, registration.Runner(), &input)
 	collectErr := collectCtx.Err()
 
 	collectCancel()
 
 	if collectErr != nil {
 		result = collectutil.CollectResult{}
-		fatal = collectErr
+		fatal = errors.Join(fatal, collectErr)
 	}
 
 	if validationErr := ValidateCollectResult(&input, registration, &result, fatal); validationErr != nil {
-		e.deferInvariant(ctx, lease, spec, proof, validationErr)
-		e.reportFatal(&FatalRuntimeError{Phase: "result_validation", Err: validationErr})
-
-		return nil
+		return &FatalRuntimeError{Phase: "result_validation", Err: errors.Join(validationErr, fatal)}
 	}
 
 	if fatal != nil {
@@ -330,12 +332,29 @@ func (e *collectionExecutor) collectAndPublish(
 	return nil
 }
 
-func providerAdmissionError(err error) error {
-	if fromErr := collecterr.FromContext(err); fromErr != nil {
-		return fmt.Errorf("from context: %w", fromErr)
+func (e *collectionExecutor) runCollector(ctx context.Context, runner JobRunner, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+	var (
+		result     collectutil.CollectResult
+		collectErr error
+	)
+
+	returned := false
+	recoveredErr := panicguard.RunE(e.logger, panicguard.BackgroundTask, "youtube-collector-collect", func() error {
+		result, collectErr = runner.Collect(ctx, input)
+		returned = true
+
+		return nil
+	})
+	// 반환 오류의 분류는 provider가 소유합니다. 실제 panic만 실행 불변 위반으로 분류합니다.
+	if !returned {
+		return collectutil.CollectResult{}, collecterr.Wrap(collecterr.Internal, collecterr.ClassInternal, recoveredErr)
 	}
 
-	return nil
+	if collectErr != nil {
+		return result, fmt.Errorf("collect runner: %w", collectErr)
+	}
+
+	return result, nil
 }
 
 func (e *collectionExecutor) buildRunInput(

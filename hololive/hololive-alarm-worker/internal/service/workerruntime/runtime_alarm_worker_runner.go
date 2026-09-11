@@ -24,9 +24,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/park285/shared-go/v2/pkg/panicguard"
-	"golang.org/x/sync/errgroup"
-
 	applifecycle "github.com/kapu/hololive-shared/pkg/applifecycle"
 )
 
@@ -42,6 +39,8 @@ func (r *AlarmWorkerRuntime) Run() error {
 	return nil
 }
 
+// Start는 스케줄러, egress와 설정 구독의 실행을 시작합니다.
+// 시작한 백그라운드 작업의 취소와 종료 대기는 Shutdown이 소유합니다.
 func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 	if r == nil {
 		return
@@ -59,11 +58,6 @@ func (r *AlarmWorkerRuntime) Start(ctx context.Context, errCh chan<- error) {
 		StartAlarmScheduler: func(ctx context.Context) error {
 			return r.startBackgroundSchedulers(ctx)
 		},
-		RunConfigSubscriber: func(ctx context.Context) {
-			if r.ConfigSubscriber != nil {
-				r.ConfigSubscriber.Run(ctx)
-			}
-		},
 		StartHTTPServer:         r.StartHTTPServer,
 		SetAlarmSchedulerCancel: r.setAlarmSchedulerCancel,
 	})
@@ -75,45 +69,17 @@ func (r *AlarmWorkerRuntime) startBackgroundSchedulers(ctx context.Context) erro
 		defer close(done)
 	}
 
-	eg, egCtx := errgroup.WithContext(ctx)
-
-	if r.Scheduler != nil {
-		eg.Go(func() error {
-			return panicguard.RunE(r.Logger, panicguard.BackgroundTask, "alarm-worker-scheduler", func() error {
-				return r.Scheduler.Start(egCtx)
-			})
-		})
+	runners := []NamedScheduler{
+		{Name: "scheduler", Scheduler: r.Scheduler},
+		{Name: "notification-egress", Scheduler: r.NotificationEgress},
+		{Name: "celebration", Scheduler: r.CelebrationRunner},
+		{Name: "birthday-stream", Scheduler: r.BirthdayStreamRunner},
+	}
+	if r.ConfigSubscriber != nil {
+		runners = append(runners, NamedScheduler{Name: "config-subscriber", Scheduler: configSubscriberRunner{r.ConfigSubscriber}})
 	}
 
-	if r.NotificationEgress != nil {
-		eg.Go(func() error {
-			return panicguard.RunE(r.Logger, panicguard.BackgroundTask, "alarm-worker-notification-egress", func() error {
-				return r.NotificationEgress.Start(egCtx)
-			})
-		})
-	}
-
-	if r.CelebrationRunner != nil {
-		eg.Go(func() error {
-			return panicguard.RunE(r.Logger, panicguard.BackgroundTask, "alarm-worker-celebration", func() error {
-				return r.CelebrationRunner.Start(egCtx)
-			})
-		})
-	}
-
-	if r.BirthdayStreamRunner != nil {
-		eg.Go(func() error {
-			return panicguard.RunE(r.Logger, panicguard.BackgroundTask, "alarm-worker-birthday-stream", func() error {
-				return r.BirthdayStreamRunner.Start(egCtx)
-			})
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		return fmt.Errorf("wait: %w", err)
-	}
-
-	return nil
+	return runNamedSchedulers(ctx, r.Logger, "alarm-worker-", runners)
 }
 
 func (r *AlarmWorkerRuntime) StartHTTPServer(errCh chan<- error) {

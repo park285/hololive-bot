@@ -2,7 +2,6 @@ package dispatchoutbox
 
 import (
 	"context"
-	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -99,6 +98,11 @@ func NewConsumer(repository Repository, logger *slog.Logger, opts ...ConsumerOpt
 	return consumer
 }
 
+// DrainBatch는 만료 claim을 복구하고 최대 maxItems개 delivery를 claim해 발송 입력을 복원합니다.
+// 복원 불가능한 delivery는 worker 소유권을 검증해 DLQ로 확정한 뒤 해당 dedup 키를 해제합니다.
+// 복원 실패 시 부분 발송 입력을 반환하지 않고, 확정된 DLQ를 제외한 배치의 lease를
+// 요청 취소와 독립된 최대 5초의 정리로 반환합니다. 정리 오류는 원인 오류와 함께 반환하며
+// attempt, send-unit, 미발송 dedup 키와 이미 확정된 DLQ 전이는 유지합니다.
 func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.AlarmQueueEnvelope, error) {
 	if c == nil || c.repository == nil {
 		return nil, errors.New("drain outbox batch: repository is nil")
@@ -113,125 +117,39 @@ func (c *Consumer) DrainBatch(ctx context.Context, maxItems int) ([]domain.Alarm
 
 	events, err := c.repository.LoadEventsByID(ctx, distinctEventIDs(records))
 	if err != nil {
-		return nil, fmt.Errorf("drain outbox batch: load events: %w", err)
+		return nil, c.releaseFailedBatch(ctx, records, fmt.Errorf("drain outbox batch: load events: %w", err))
 	}
 
 	out, err := c.envelopesFromRecords(ctx, records, events)
 	if err != nil {
-		return out, fmt.Errorf("envelopes from records: %w", err)
+		return nil, c.releaseFailedBatch(ctx, records, fmt.Errorf("envelopes from records: %w", err))
 	}
 
 	return out, nil
 }
 
-func (c *Consumer) envelopesFromRecords(ctx context.Context, records []*Record, events map[int64]EventRecord) ([]domain.AlarmQueueEnvelope, error) {
-	envelopes := make([]domain.AlarmQueueEnvelope, 0, len(records))
+func (c *Consumer) releaseFailedBatch(ctx context.Context, records []*Record, cause error) error {
+	ids := make([]int64, 0, len(records))
 	for _, record := range records {
-		envelope, ok, err := c.envelopeFromRecord(ctx, record, events)
-		if err != nil {
-			return nil, fmt.Errorf("envelope from record: %w", err)
-		}
-
-		if !ok {
-			continue
-		}
-
-		envelopes = append(envelopes, envelope)
-	}
-
-	return envelopes, nil
-}
-
-func (c *Consumer) envelopeFromRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (domain.AlarmQueueEnvelope, bool, error) {
-	payload, ok, err := c.payloadForRecord(ctx, record, events)
-	if err != nil {
-		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("payload for record: %w", err)
-	}
-
-	if !ok {
-		return domain.AlarmQueueEnvelope{}, false, nil
-	}
-
-	envelope, ok, err := c.decodeEnvelopePayload(ctx, record, payload)
-	if err != nil {
-		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("decode envelope payload: %w", err)
-	}
-
-	if !ok {
-		return domain.AlarmQueueEnvelope{}, false, nil
-	}
-
-	ok, err = c.rehydrateEnvelope(ctx, record, &envelope)
-	if err != nil {
-		return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("rehydrate envelope: %w", err)
-	}
-
-	if !ok {
-		return domain.AlarmQueueEnvelope{}, false, nil
-	}
-
-	attachRecordMetadata(&envelope, record)
-
-	return envelope, true, nil
-}
-
-func (c *Consumer) decodeEnvelopePayload(ctx context.Context, record *Record, payload []byte) (domain.AlarmQueueEnvelope, bool, error) {
-	var envelope domain.AlarmQueueEnvelope
-
-	if err := jsonv2.Unmarshal(payload, &envelope); err != nil {
-		if dlqErr := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid payload: %v", err), "move invalid payload to dlq"); dlqErr != nil {
-			return domain.AlarmQueueEnvelope{}, false, fmt.Errorf("move record to DLQ: %w", dlqErr)
-		}
-
-		return domain.AlarmQueueEnvelope{}, false, nil
-	}
-
-	return envelope, true, nil
-}
-
-func (c *Consumer) rehydrateEnvelope(ctx context.Context, record *Record, envelope *domain.AlarmQueueEnvelope) (bool, error) {
-	if err := rehydrateDeliveryContext(envelope, record); err != nil {
-		if dlqErr := c.moveRecordToDLQ(ctx, record.ID, fmt.Sprintf("invalid delivery context: %v", err), "move invalid delivery context to dlq"); dlqErr != nil {
-			return false, fmt.Errorf("move record to DLQ: %w", dlqErr)
-		}
-
-		return false, nil
-	}
-
-	return true, nil
-}
-
-func attachRecordMetadata(envelope *domain.AlarmQueueEnvelope, record *Record) {
-	envelope.DispatchOutboxID = record.ID
-	envelope.DispatchGroupKey = record.DispatchGroupKey
-	envelope.SendUnitID = record.SendUnitID
-	envelope.ClientRequestID = record.ClientRequestID
-	envelope.ClaimKeys = record.ClaimKeys
-
-	if record.AttemptCount > 0 {
-		envelope.Retry = &domain.AlarmQueueRetryMetadata{
-			Attempt:       record.AttemptCount,
-			LastError:     record.Error,
-			LastErrorCode: record.ErrorCode,
+		if record.Status != StatusDLQ {
+			ids = append(ids, record.ID)
 		}
 	}
-}
 
-func (c *Consumer) payloadForRecord(ctx context.Context, record *Record, events map[int64]EventRecord) (result0 []byte, ok1 bool, err error) {
-	if record.EventID <= 0 {
-		return record.Payload, true, nil
+	if len(ids) == 0 {
+		return cause
 	}
 
-	event, ok := events[record.EventID]
-	if ok {
-		return event.Payload, true, nil
+	// send-unit의 일부만 반환하면 안 되므로 복원 전후의 미발송 claim을 함께 반환합니다.
+	// 확정 여부가 불명확한 전이는 저장소의 leased/worker fence로 보호합니다.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+
+	if err := c.repository.ReleaseLeased(cleanupCtx, ids, c.workerID); err != nil {
+		return errors.Join(cause, fmt.Errorf("release failed outbox batch: %w", err))
 	}
 
-	if err := c.moveRecordToDLQ(ctx, record.ID, "missing event payload", "move missing event to dlq"); err != nil {
-		return nil, false, fmt.Errorf("move record to DLQ: %w", err)
-	}
-
-	return nil, false, nil
+	return cause
 }
 
 func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error) {
@@ -243,17 +161,6 @@ func (c *Consumer) claimDue(ctx context.Context, maxItems int) ([]*Record, error
 	observePGClaimed(len(records))
 
 	return records, nil
-}
-
-func (c *Consumer) moveRecordToDLQ(ctx context.Context, id int64, terminalError, action string) error {
-	update := TerminalUpdate{ID: id, Error: sanitizeStoredError(terminalError), ErrorCode: ErrorCodePayload}
-	if err := c.repository.MoveToDLQ(ctx, []TerminalUpdate{update}, c.workerID); err != nil {
-		return fmt.Errorf("drain outbox batch: %s: %w", action, err)
-	}
-
-	observePGDLQ(1)
-
-	return nil
 }
 
 func (c *Consumer) maybeRecover(ctx context.Context) {
@@ -449,47 +356,6 @@ func (c *Consumer) Quarantine(ctx context.Context, envelopes []domain.AlarmQueue
 	}
 
 	observePGQuarantined(len(updates))
-
-	return nil
-}
-
-type deliveryContext struct {
-	Users []string `json:"users,omitempty"`
-}
-
-func distinctEventIDs(records []*Record) []int64 {
-	seen := make(map[int64]struct{}, len(records))
-	ids := make([]int64, 0, len(records))
-
-	for _, record := range records {
-		if record == nil || record.EventID <= 0 {
-			continue
-		}
-
-		if _, ok := seen[record.EventID]; ok {
-			continue
-		}
-
-		seen[record.EventID] = struct{}{}
-		ids = append(ids, record.EventID)
-	}
-
-	return ids
-}
-
-func rehydrateDeliveryContext(envelope *domain.AlarmQueueEnvelope, record *Record) error {
-	envelope.Notification.RoomID = record.RoomID
-	if len(record.DeliveryContext) == 0 {
-		return nil
-	}
-
-	var deliveryCtx deliveryContext
-
-	if err := jsonv2.Unmarshal(record.DeliveryContext, &deliveryCtx); err != nil {
-		return fmt.Errorf("unmarshal: %w", err)
-	}
-
-	envelope.Notification.Users = deliveryCtx.Users
 
 	return nil
 }

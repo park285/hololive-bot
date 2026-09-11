@@ -3,15 +3,11 @@ package collectorruntime
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/park285/shared-go/v2/pkg/panicguard"
-	"github.com/park285/shared-go/v2/pkg/workercontract"
 
-	collectorconfig "github.com/kapu/hololive-shared/pkg/config/settings/collector"
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/joblease"
@@ -65,16 +61,8 @@ type projectionCandidateSource interface {
 }
 
 type leaseScheduler struct {
-	repository *joblease.Repository
+	executor   *collectionExecutor
 	candidates projectionCandidateSource
-	registry   *Registry
-	publisher  *Publisher
-	metrics    *Metrics
-	owner      string
-	logger     *slog.Logger
-	config     joblease.Config
-	collector  collectorconfig.Config
-	gates      map[contract.Provider]chan struct{}
 
 	lifecycleMu            sync.Mutex
 	queueMu                sync.Mutex
@@ -88,7 +76,6 @@ type leaseScheduler struct {
 	fatal                  chan error
 	fatalOnce              sync.Once
 	wg                     sync.WaitGroup
-	readiness              *readinessTracker
 	rotationCursor         int
 	discovered             int
 	enqueued               int
@@ -99,12 +86,10 @@ type leaseScheduler struct {
 	cycleStartedAt         time.Time
 	lastCycleCompletedAt   time.Time
 	lastCycleOperationCode collecterr.OperationCode
-	workerTracker          *workercontract.ExecutorTracker
-	workerTotals           *workercontract.Counters
 }
 
 func (s *leaseScheduler) Start(parent context.Context) error {
-	if s == nil || s.repository == nil || s.registry == nil {
+	if s == nil || s.executor == nil || s.executor.repository == nil || s.executor.registry == nil {
 		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "start lease scheduler: scheduler is not configured")
 	}
 
@@ -122,24 +107,24 @@ func (s *leaseScheduler) Start(parent context.Context) error {
 	s.cancel = cancel
 	s.done = done
 	s.state = SchedulerRunning
-	s.workerTracker.StartWorkers(s.config.WorkerCount)
+	s.executor.workerTracker.StartWorkers(s.executor.config.WorkerCount)
 
-	for range s.config.WorkerCount {
+	for range s.executor.config.WorkerCount {
 		s.wg.Go(func() {
-			panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() {
+			panicguard.Run(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() {
 				s.worker(runCtx)
 			})
 		})
 	}
 
 	s.wg.Go(func() {
-		panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() {
+		panicguard.Run(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() {
 			s.discover(runCtx)
 		})
 	})
 	s.lifecycleMu.Unlock()
 
-	go panicguard.Run(s.logger, panicguard.BackgroundTask, "youtube-collector-join", func() {
+	go panicguard.Run(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-join", func() {
 		s.join(done)
 	})
 
@@ -220,7 +205,7 @@ func (s *leaseScheduler) waitDone(ctx context.Context, done chan struct{}) error
 
 func (s *leaseScheduler) join(done chan struct{}) {
 	s.wg.Wait()
-	s.workerTracker.StopWorkers(s.config.WorkerCount)
+	s.executor.workerTracker.StopWorkers(s.executor.config.WorkerCount)
 	s.drainQueue()
 	s.lifecycleMu.Lock()
 
@@ -230,8 +215,8 @@ func (s *leaseScheduler) join(done chan struct{}) {
 }
 
 func (s *leaseScheduler) discover(ctx context.Context) {
-	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() error {
-		ticker := time.NewTicker(s.config.PollCadence)
+	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-discovery", func() error {
+		ticker := time.NewTicker(s.executor.config.PollCadence)
 		defer ticker.Stop()
 
 		s.pollGuarded(ctx)
@@ -247,7 +232,7 @@ func (s *leaseScheduler) discover(ctx context.Context) {
 }
 
 func (s *leaseScheduler) pollGuarded(ctx context.Context) {
-	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-poll", func() error {
+	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-poll", func() error {
 		s.pollOnce(ctx)
 
 		return nil
@@ -278,13 +263,13 @@ func (s *leaseScheduler) waitPoll(ctx context.Context, ticker *time.Ticker) bool
 }
 
 func (s *leaseScheduler) refreshFreshness(now time.Time) {
-	if s.metrics == nil || s.registry == nil {
+	if s.executor.metrics == nil || s.executor.registry == nil {
 		return
 	}
 
-	for _, runner := range s.registry.Runners() {
+	for _, runner := range s.executor.registry.Runners() {
 		id := runner.Contract().ID()
-		s.metrics.ObserveFreshness(id.Provider, string(id.Kind), now)
+		s.executor.metrics.ObserveFreshness(id.Provider, string(id.Kind), now)
 	}
 }
 
@@ -323,7 +308,7 @@ func (s *leaseScheduler) reportFatal(err error) {
 	}
 
 	s.fatalOnce.Do(func() {
-		s.emitFatal(collecterr.Normalize(err))
+		s.emitFatal(err)
 	})
 }
 
@@ -389,7 +374,7 @@ func (s *leaseScheduler) Snapshot() SchedulerSnapshot {
 	return SchedulerSnapshot{
 		State:                  state,
 		QueueDepth:             depth,
-		QueueCapacity:          s.config.QueueCapacity,
+		QueueCapacity:          s.executor.config.QueueCapacity,
 		Discovered:             s.discovered,
 		Enqueued:               s.enqueued,
 		Deduped:                s.deduped,

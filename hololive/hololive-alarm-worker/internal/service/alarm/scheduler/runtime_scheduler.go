@@ -86,53 +86,57 @@ type RuntimeScheduler struct {
 	logger *slog.Logger
 }
 
-// NewRuntimeScheduler는 런타임 알람 스케줄러를 생성한다.
-func NewRuntimeScheduler(
-	cacheClient cache.Client,
-	holodexService *holodexprovider.Service,
-	chzzkClient *chzzk.Client,
-	twitchClient *twitch.Client,
-	alarmCRUD domain.AlarmCRUD,
-	postgres database.Client,
-	notifConfig settings.NotificationConfig,
-	outbox dispatchoutbox.Writer,
-	publishConfig queue.PublishConfig,
-	twitchEnabled bool,
-	logger *slog.Logger,
-) (*RuntimeScheduler, error) {
-	if err := validateRuntimeSchedulerDeps(cacheClient, holodexService, chzzkClient, twitchClient, alarmCRUD); err != nil {
+// Dependencies는 모듈 내부 스케줄러 조립에 필요한 서비스와 실행 설정입니다.
+// AlarmCRUD는 설정 갱신과 HTTP 경로에서 사용하는 동일 서비스여야 합니다.
+type Dependencies struct {
+	Cache          cache.Client
+	HolodexService *holodexprovider.Service
+	ChzzkClient    *chzzk.Client
+	TwitchClient   *twitch.Client
+	AlarmCRUD      domain.AlarmCRUD
+	Postgres       database.Client
+	Notification   settings.NotificationConfig
+	Outbox         dispatchoutbox.Writer
+	Publish        queue.PublishConfig
+	TwitchEnabled  bool
+	Logger         *slog.Logger
+}
+
+// NewRuntimeScheduler는 의존성을 검증하고 루프를 구성하며 실행은 시작하지 않습니다.
+func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
+	if err := validateRuntimeSchedulerDeps(deps.Cache, deps.HolodexService, deps.ChzzkClient, deps.TwitchClient, deps.AlarmCRUD); err != nil {
 		return nil, fmt.Errorf("validate runtime scheduler deps: %w", err)
 	}
 
-	logger = runtimeSchedulerLogger(logger)
+	logger := runtimeSchedulerLogger(deps.Logger)
 
-	targetMinutes := sharedchecker.NormalizeTargetMinutes(alarmCRUD.GetTargetMinutes())
-	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(notifConfig.CheckInterval)
+	targetMinutes := sharedchecker.NormalizeTargetMinutes(deps.AlarmCRUD.GetTargetMinutes())
+	youtubeInterval, youtubeEvaluationWindowCap := runtimeSchedulerYouTubeTiming(deps.Notification.CheckInterval)
 	tierScheduler := tier.NewTieredScheduler(logger)
-	dedupService := dedup.NewService(cacheClient, targetMinutes, logger)
-	queuePublisher := newRuntimeSchedulerQueuePublisher(cacheClient, logger, outbox, publishConfig)
+	dedupService := dedup.NewService(deps.Cache, targetMinutes, logger)
+	queuePublisher := newRuntimeSchedulerQueuePublisher(deps.Cache, logger, deps.Outbox, deps.Publish)
 
 	youtubeChecker, err := newRuntimeSchedulerYouTubeChecker(
-		cacheClient,
-		holodexService,
+		deps.Cache,
+		deps.HolodexService,
 		tierScheduler,
 		dedupService,
 		targetMinutes,
 		youtubeEvaluationWindowCap,
-		checking.NewPgYouTubeLiveSessionSource(postgres),
-		postgres,
+		checking.NewPgYouTubeLiveSessionSource(deps.Postgres),
+		deps.Postgres,
 		logger,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("runtime scheduler youtube checker: %w", err)
 	}
 
-	chzzkChecker, err := chzzk2.NewChzzkChecker(cacheClient, chzzkClient, logger)
+	chzzkChecker, err := chzzk2.NewChzzkChecker(deps.Cache, deps.ChzzkClient, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create chzzk checker: %w", err)
 	}
 
-	twitchResult := buildOptionalTwitchChecker(cacheClient, twitchClient, twitchEnabled, logger)
+	twitchResult := buildOptionalTwitchChecker(deps.Cache, deps.TwitchClient, deps.TwitchEnabled, logger)
 	if twitchResult.err != nil {
 		return nil, fmt.Errorf("build optional twitch checker: %w", twitchResult.err)
 	}
@@ -142,7 +146,7 @@ func NewRuntimeScheduler(
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
-	return newRuntimeSchedulerInstance(cacheClient, alarmCRUD, youtubeChecker, chzzkChecker, twitchResult.checker, notifierService, dedupService, youtubeInterval, logger), nil
+	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmCRUD, youtubeChecker, chzzkChecker, twitchResult.checker, notifierService, dedupService, youtubeInterval, logger), nil
 }
 
 type optionalTwitchCheckerResult struct {

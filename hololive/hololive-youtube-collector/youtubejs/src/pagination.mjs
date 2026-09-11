@@ -188,7 +188,7 @@ export async function paginate({
   while (feed != null) {
     assertParentRequestAlive();
     const mapped = await mapPage(feed);
-    if (Array.isArray(mapped) || mapped == null || mapped.recognized_shape !== true || !Array.isArray(mapped.items)) {
+    if (Array.isArray(mapped) || mapped == null || mapped.recognized_shape !== true || !isIterable(mapped.items)) {
       throw codedError(
         "helper_internal_invariant",
         "helper page mapper violated the recognized page contract",
@@ -201,11 +201,7 @@ export async function paginate({
       cursorStart = cursor;
     }
     cursorEnd = cursor;
-    for (const item of mapped.items) {
-      if (budget.count() >= resultLimit) {
-        reason = "max_results";
-        break;
-      }
+    for await (const item of mapped.items) {
       if (budget.tryAppend(item) === "WOULD_EXCEED") {
         if (budget.count() === 0) {
           throw codedError("response_too_large", "first valid item exceeds success response limit");
@@ -213,12 +209,13 @@ export async function paginate({
         reason = "max_success_response_bytes";
         break;
       }
+      // 다음 next()가 metadata 조회를 시작할 수 있으므로 채택 직후 멈춥니다.
+      if (budget.count() >= resultLimit) {
+        reason = "max_results";
+        break;
+      }
     }
     if (reason !== "") {
-      break;
-    }
-    if (budget.count() >= resultLimit) {
-      reason = "max_results";
       break;
     }
     if (!hasContinuation(feed)) {
@@ -267,6 +264,11 @@ export async function paginate({
     continuity: undefined,
   });
   return buildResult(budget.values(), pagination);
+}
+
+function isIterable(items) {
+  return items != null &&
+    (typeof items[Symbol.iterator] === "function" || typeof items[Symbol.asyncIterator] === "function");
 }
 
 function assertCursor(cursor) {

@@ -67,8 +67,8 @@ func TestSCH003QueueFullRollsBackMarkAndIncrementsMetric(t *testing.T) {
 	registerer := prometheus.NewPedanticRegistry()
 	scheduler := newLifecycleScheduler(t)
 
-	scheduler.metrics = NewMetrics(registerer)
-	scheduler.config.QueueCapacity = 1
+	scheduler.executor.metrics = NewMetrics(registerer)
+	scheduler.executor.config.QueueCapacity = 1
 	scheduler.queue = make(chan joblease.JobSpec, 1)
 
 	scheduler.queue <- joblease.JobSpec{JobKey: "filler"}
@@ -159,8 +159,8 @@ func TestSCH007AcceptedAndQueryLimitStayWithinCapacity(t *testing.T) {
 	scheduler := newLifecycleScheduler(t)
 
 	scheduler.candidates = stub
-	scheduler.config.QueueCapacity = capacity
-	scheduler.config.AcquisitionBatch = 10
+	scheduler.executor.config.QueueCapacity = capacity
+	scheduler.executor.config.AcquisitionBatch = 10
 	scheduler.queue = make(chan joblease.JobSpec, capacity)
 	scheduler.discoverOnce(t.Context())
 
@@ -591,20 +591,15 @@ func newLifecycleScheduler(t *testing.T) *leaseScheduler {
 
 	stub := newEmptyCandidateStub(t)
 
-	return &leaseScheduler{
+	return newScheduler(&collectionExecutor{
 		repository: new(joblease.Repository),
-		candidates: stub,
 		registry:   registry,
 		metrics:    NewMetrics(prometheus.NewPedanticRegistry()),
 		logger:     slog.New(slog.DiscardHandler),
 		config:     config,
 		collector:  collectorconfig.DefaultConfig(),
-		state:      SchedulerNew,
-		queued:     make(map[string]struct{}),
-		queue:      make(chan joblease.JobSpec, config.QueueCapacity),
-		fatal:      make(chan error, 1),
 		readiness:  &readinessTracker{},
-	}
+	}, stub)
 }
 
 func dueSpecs(prefix string, count int) []joblease.JobSpec {
@@ -630,7 +625,7 @@ func mustSchedulerJob(t *testing.T, provider contract.Provider, kind string) sou
 }
 
 func setRotationTo(scheduler *leaseScheduler, id sourceobservation.JobID) {
-	runners := scheduler.registry.Runners()
+	runners := scheduler.executor.registry.Runners()
 	for i, runner := range runners {
 		if runner.Contract().ID() == id {
 			scheduler.rotationCursor = i
