@@ -1,0 +1,406 @@
+{
+  "scope": "1차 비교에서 미분류였던 40개 영상의 검토 결과. 2026-09-11 고정 표본이며 미래 방송 정확도가 아니다.",
+  "rules_version": "2026-09-11.3",
+  "cases": [
+    {
+      "video_id": "JstSA5yRsj8",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "Prisuners, hello",
+      "type": "talk",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=JstSA5yRsj8",
+      "evidence_kind": "creator_tags",
+      "evidence": "공개 영상 태그가 free talk, talking stream, chat, Prisuners Night를 명시한다. 일반 제목 hello 자체를 잡담 규칙으로 사용하지 않는다."
+    },
+    {
+      "video_id": "Nwrl5RGOHsI",
+      "channel_id": "UCvN5h1ShZtc7nly3pezRayg",
+      "title": "【GUERILLA】READS YOU A BOOK (literally just reading a book that's it)",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=Nwrl5RGOHsI",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목에 책을 읽는 방송임을 명시한다. 기존 일본어 낭독과 같은 기타 유형이다."
+    },
+    {
+      "video_id": "HQx1pVAkQMw",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "#7 LANJUT BERDINKUM w/ @sammybollivienn & @sayaayaaulya",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=HQx1pVAkQMw",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에 Game Title: Dinkum과 공식 판매 페이지가 있다. 제목의 인도네시아어 접두형 BERDINKUM을 반영했다."
+    },
+    {
+      "video_id": "9r7QBE2gvLI",
+      "channel_id": "UC-WX1CXssCtCtc2TNIRnJzg",
+      "title": "【つむ飯】みんな、今週は何作ったー？🍚#５【ぶいすぽっ！ / 紡木こかげ】",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=9r7QBE2gvLI",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목의 つむ飯 시리즈와 시청자들이 만든 음식에 관한 주제로 식사·요리 기획을 식별한다."
+    },
+    {
+      "video_id": "pgjz49AXmvo",
+      "channel_id": "UCF_U2GCKHvDz52jWdizppIA",
+      "title": "【雑】夏休みキッズの為の自由配信α【空澄セナ/ぶいすぽっ！】",
+      "type": "talk",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=pgjz49AXmvo",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목 첫 태그 雑는 잡담의 약칭이다. 일반 단어의 雑에는 확대 적용하지 않는다."
+    },
+    {
+      "video_id": "qMxeqbCClQY",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "Hello (waving emoji)",
+      "type": "talk",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=qMxeqbCClQY",
+      "evidence_kind": "creator_tags",
+      "evidence": "공개 영상 태그에 free talk, talking stream, chatting, Prisuners Night가 함께 있다."
+    },
+    {
+      "video_id": "SrYExB6XHg8",
+      "channel_id": "UCLlJpxXt6L5d-XQ0cDdIyDQ",
+      "title": "【WINGMEN ONLY】FOREST GUMP WATCHPA  !【#VSPOEN #AryaKuroha】",
+      "type": "membership",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=SrYExB6XHg8",
+      "evidence_kind": "youtube_access",
+      "evidence": "YouTube player가 멤버 전용 콘텐츠임을 명시한다. 팬 이름 WINGMEN은 일반 멤버십 키워드로 확대하지 않고 해당 영상의 접근 제한 근거를 사용한다."
+    },
+    {
+      "video_id": "4j-QEUM52fI",
+      "channel_id": "UCJFZiqLMntJufDCHc6bQixg",
+      "title": "【画伯集合】オリジナル絵描き歌で以心伝心!?【#ホロ絵描き歌】",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=4j-QEUM52fI",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 오리지널 그림 노래를 만들고 종이·펜으로 함께 그리는 기획임을 명시한다."
+    },
+    {
+      "video_id": "raD2SDEffE8",
+      "channel_id": "UCzUNASdzI4PV5SlqtYwAkKQ",
+      "title": "さまーーーーーーーーーうぃーーーーーーーーー",
+      "type": "membership",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=raD2SDEffE8",
+      "evidence_kind": "youtube_access",
+      "evidence": "YouTube player가 이 영상을 members-only content로 명시한다. 콘텐츠 재생은 시도하지 않으며 Music 카테고리보다 접근 유형을 우선한다."
+    },
+    {
+      "video_id": "wFkI7hRhJGs",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "Monday Malam Malas on last day of August",
+      "type": "talk",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=wFkI7hRhJGs",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "공개 태그가 free talk·chatting과 Monday Malam Malas 프로그램을 함께 명시한다."
+    },
+    {
+      "video_id": "ksf9tm7eyI4",
+      "channel_id": "UCAoy6rzhSf4ydcYjJw3WoVg",
+      "title": "【Senin Produktif】Monday calls for Monday 【 iofi / hololiveID 】",
+      "type": "other",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=ksf9tm7eyI4",
+      "evidence_kind": "creator_thumbnail",
+      "evidence": "공개 썸네일에 お絵描き配信이 명시되어 있고 관측 주제도 drawing이다. Senin Produktif 시리즈 전체를 같은 유형으로 고정하지 않는다."
+    },
+    {
+      "video_id": "h5gzZkssz-w",
+      "channel_id": "UCMp55EbT_ZlqiMS3lCj01BQ",
+      "title": "朝から〇しはできない...Chillゲーする🌱【ぶいすぽっ！/神成きゅぴ】",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=h5gzZkssz-w",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "최신 공개 제목에 Leafy Corner가 추가됐고 설명도 해당 게임의 허가와 판매 페이지를 명시한다."
+    },
+    {
+      "video_id": "FOeakXr7j_A",
+      "channel_id": "UCuI_opAVX6qbxZY-a-AxFuQ",
+      "title": "【 #ニコらでん 】サウナロケに?!JFTを連れ出した!【虎金妃笑虎/儒烏風亭らでん】",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=FOeakXr7j_A",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목이 사우나 로케 촬영을 명시하는 외부 촬영 버라이어티 영상이다."
+    },
+    {
+      "video_id": "ht4M-Mj-lWA",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "#1 Peaceful Fishing Story : mimpi ikan",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=ht4M-Mj-lWA",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에 Game title: Peaceful Fishing Story와 Steam 판매 페이지가 있다."
+    },
+    {
+      "video_id": "wsSt8S9wRl4",
+      "channel_id": "UCENwRMx5Yh42zWpzURebzTw",
+      "title": "【holoX】夏なので丸裸！？ですか！？いいんですか！？【ラプラス・ダークネス/ホロライブ】",
+      "type": "other",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=wsSt8S9wRl4",
+      "evidence_kind": "creator_thumbnail",
+      "evidence": "공개 썸네일은 holoX 구성원들이 참여하는 丸裸ゲーム 기획을 표시한다. 특정 디지털 게임명·플레이 장면이 없는 그룹 버라이어티 기획으로 검토했다."
+    },
+    {
+      "video_id": "aUckTmwn8BI",
+      "channel_id": "UCPkKpOHxEDcwmUAnRpIu-Ng",
+      "title": "【おうち３D】ついにか！！！【ぶいすぽっ！/ 藍沢エマ】",
+      "type": "event",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=aUckTmwn8BI",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목과 썸네일이 おうち3D 공개 방송을 명시한다. 기존 3D 이벤트 유형에 연결한다."
+    },
+    {
+      "video_id": "xc7Y9rIuTB0",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【グミの日】今コンビニで買えるグミ、1番好きなのはどれ?🍬【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=xc7Y9rIuTB0",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 편의점 젤리를 모아 먹어 보고 1위를 정하는 시식 기획임을 명시한다."
+    },
+    {
+      "video_id": "nsn5iMARnQQ",
+      "channel_id": "UCX4WL24YEOUYd7qDsFSLDOw",
+      "title": "撮影会やるヶﾛ",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=nsn5iMARnQQ",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목이 촬영회를 명시한다. 기존 멤버십·공개 이벤트·게임 근거가 없는 촬영회는 기타로 둔다."
+    },
+    {
+      "video_id": "NHxXQ3GYZCc",
+      "channel_id": "UCs9_O1tRPMQTHQ-N_L6FU2g",
+      "title": "【話題沸騰！】はじめと自分好みの雪見だいふく食べてきた🍴【ルイ姉、今日なにする？】#3",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=NHxXQ3GYZCc",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명의 촬영 협력·편성·게스트가 루이의 식품 체험 로케 프로그램임을 명시한다."
+    },
+    {
+      "video_id": "sY3oRzO5JtQ",
+      "channel_id": "UC5LyYg6cCA4yHEYvtUsir3g",
+      "title": "夏が終わる",
+      "type": "talk",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=sY3oRzO5JtQ",
+      "evidence_kind": "viewer_reports",
+      "evidence": "공개 댓글 20건을 검토했다. 다수의 서로 다른 시청 후기가 잡담과 여러 이야기를 들은 방송이라고 일치한다. 기본 Gaming 카테고리와 달라 댓글 근거에 따른 검토 판정이며 영상 재생 검수는 아니다."
+    },
+    {
+      "video_id": "Ch_s7aIVHHo",
+      "channel_id": "UCdXAk5MpyLD8594lm_OvtGQ",
+      "title": "【 #喫茶barにこらでん 】お片付けしながら器紹介&実験!【儒烏風亭らでん/虎金妃笑虎】",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=Ch_s7aIVHHo",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 전날의 게스트 방문과 구분해 오늘은 공예품 소개 및 커피 필터 실험을 한다고 명시한다."
+    },
+    {
+      "video_id": "VEWucL1oGWY",
+      "channel_id": "UCIjdfjcSaEgdjwbgjxC3ZWg",
+      "title": "世にも珍しい朝雑【ぶいすぽ / 猫汰つな】",
+      "type": "talk",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=VEWucL1oGWY",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목의 朝雑는 아침 잡담의 약칭이다. morning 주제 전체를 잡담으로 고정하지 않는다."
+    },
+    {
+      "video_id": "UbE1V8D_lWc",
+      "channel_id": "UCgmPnx-EEeOrZSg5Tiw7ZRQ",
+      "title": "≪SlashZero DEMO≫ I can smell the chuuni",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=UbE1V8D_lWc",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에 SlashZero 데모 및 개발사 후원이 명시되고 해당 게임의 Steam 링크가 있다."
+    },
+    {
+      "video_id": "_IY8xsvkPf8",
+      "channel_id": "UCvUc0m317LWTTPZoBQV479A",
+      "title": "なつがおわりましたね",
+      "type": "talk",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=_IY8xsvkPf8",
+      "evidence_kind": "creator_thumbnail",
+      "evidence": "공개 썸네일에 雑談이 명시되어 있고 People & Blogs 카테고리도 부합한다. 여름이 끝났다는 제목 자체를 일반화하지 않는다."
+    },
+    {
+      "video_id": "0ko7LKM3yoU",
+      "channel_id": "UCu2n3qHuOuQIygREMnWeQWg",
+      "title": "【#FG駆け引きバトル】嘘、裏切り、騙し合い…滅多に見られない超心理戦が巻き起こる!?",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=0ko7LKM3yoU",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 FLOW GLOW 멤버들이 보상을 걸고 두 선택지를 두고 심리전을 벌이는 기획임을 명시한다."
+    },
+    {
+      "video_id": "bovldKh3f50",
+      "channel_id": "UCl69AEx4MdqMZH7Jtsm7Tig",
+      "title": "【SlashZero】BIG CAT ready to cause BIG TROUBLE!",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=bovldKh3f50",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에 SlashZero 데모, Steam 링크와 개발사 후원이 있다."
+    },
+    {
+      "video_id": "jUG_Asz9PSc",
+      "channel_id": "UChgTyjG-pdNvxxhdsXfHQ5Q",
+      "title": "Cozy Shop Sim! (The Willowmist Emporium of Antiques & Curiosities DEMO) #FallInLoveFestival",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=jUG_Asz9PSc",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에 The Willowmist Emporium of Antiques & Curiosities 데모 게임의 판매 링크가 있다."
+    },
+    {
+      "video_id": "KVI5yOzbjXg",
+      "channel_id": "UCCra1t-eIlO3ULyXQQMD9Xw",
+      "title": "【BOTchi CS2 Tournament】  May the best BOTchi win!   【#VSPOEN #RemiaAotsuki】",
+      "type": "event",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=KVI5yOzbjXg",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목의 BOTchi CS2 Tournament는 대회를 명시한다. 첫 태그의 대회와 게임 중 대회 언급을 구분한다."
+    },
+    {
+      "video_id": "KQZA-5FOgWQ",
+      "channel_id": "UCX4WL24YEOUYd7qDsFSLDOw",
+      "title": "腹痛カエル",
+      "type": "singing",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=KQZA-5FOgWQ",
+      "evidence_kind": "creator_tags_and_thumbnail",
+      "evidence": "공개 영상 태그가 歌枠를 명시하고 썸네일도 마이크로 노래하는 캐릭터와 음표를 표시한다."
+    },
+    {
+      "video_id": "GfuKjXV1AY8",
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "title": "#MMMalas : Monday Morning Malaszzzz",
+      "type": "talk",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=GfuKjXV1AY8",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "공개 태그가 free talk·chatting과 Monday Morning Malas 프로그램을 함께 명시한다."
+    },
+    {
+      "video_id": "SknkzBIVA9A",
+      "channel_id": "UCAWSyEs_Io8MtpY3m-zqILA",
+      "title": "【 復活 】インフルエンザから復活しましたませ~!おまたせしました!【 桃鈴ねね / hololive 】",
+      "type": "event",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=SknkzBIVA9A",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목이 인플루엔자 이후 복귀를 명시한다. 게임 중 캐릭터 부활과 구분되는 첫 태그의 복귀 행사다."
+    },
+    {
+      "video_id": "KOs-4rGfSsE",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "絶対音感なら100点だって余裕です…!?【 #UNIT_B / #清澄ライラ】",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=KOs-4rGfSsE",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 플레이할 게임을 声マネキング로 명시한다. Voice_Mimicry_Show 주제는 게임에 연결한다."
+    },
+    {
+      "video_id": "B3oFOpzvocY",
+      "channel_id": "UCKMWFR6lAstLa7Vbf5dH7ig",
+      "title": "【パドック通信】#1 モータースポーツを一緒にもっと楽しむ配信！【#輪堂千速 / #hololivedev_is #FLOWGLOW 】",
+      "type": "news",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=B3oFOpzvocY",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에서 모터스포츠 관심을 넓히기 위한 정보 방송을 시작한다고 명시한다."
+    },
+    {
+      "video_id": "seZvn7zCsAE",
+      "channel_id": "UCurEA8YoqFwimJcAuSHU0MQ",
+      "title": "４時だってよ",
+      "type": "talk",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=seZvn7zCsAE",
+      "evidence_kind": "viewer_reports",
+      "evidence": "공개 댓글 20건에서 새벽 잡담·고민 상담·수면 유도 잡담이라는 시청 후기가 일치한다. People & Blogs 카테고리와도 부합하며 영상 재생 검수는 아니다."
+    },
+    {
+      "video_id": "AvQlyDZvnh4",
+      "channel_id": "UCdXAk5MpyLD8594lm_OvtGQ",
+      "title": "【 #ミュージアムグッズプレゼン対決 】莉々華とミネルヴァさん（ヤマザキマリ先生）を満足させるのはどっちだ！大澤夏美さんvs儒烏風亭らでん【儒烏風亭らでん #ReGLOSS 】",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=AvQlyDZvnh4",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명에 박물관 상품 발표 대결의 출연자·심사위원과 세 번의 대결 방식이 명시되어 있다."
+    },
+    {
+      "video_id": "Kqc8NNMVXPo",
+      "channel_id": "UCF_U2GCKHvDz52jWdizppIA",
+      "title": "【深夜】添い寝ファイトタクティクス💤【空澄セナ/ぶいすぽっ！】",
+      "type": "game",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=Kqc8NNMVXPo",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "공개 태그의 TFT와 설명의 게임 허가/DrainSim에 모두 게임 근거가 있다. 게임명 상세를 확정하지 않고 방송 유형만 게임으로 둔다."
+    },
+    {
+      "video_id": "Z5pC5-L6rt8",
+      "channel_id": "UCgTzsBI0DIRopMylJEDqnog",
+      "title": "【 #ととうた 】のんびりうたうたう【 ぶいすぽ / 小雀とと 】",
+      "type": "singing",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=Z5pC5-L6rt8",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "제목의 개인 노래 태그와 설명의 가라오케 음원 협력·신청곡 안내가 노래 방송을 뒷받침한다."
+    },
+    {
+      "video_id": "5khIfZ6FmkI",
+      "channel_id": "UCKSpM183c85d5V2cW5qaUjA",
+      "title": "feel bleh",
+      "type": "membership",
+      "application": "reviewed_video",
+      "source_url": "https://www.youtube.com/watch?v=5khIfZ6FmkI",
+      "evidence_kind": "youtube_access",
+      "evidence": "YouTube player가 이 영상을 members-only content로 명시한다. 제목의 기분 표현이나 기본 Gaming 카테고리로 방송 유형을 추측하지 않는다."
+    },
+    {
+      "video_id": "ijTWZNQgxg4",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【本人閲覧禁止】墨汐さやなと琉海垣りららにラブレターを書くので手伝ってください💌【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=ijTWZNQgxg4",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 시청자 댓글을 뽑아 두 멤버에게 보낼 편지를 완성하는 참여형 창작 기획임을 명시한다."
+    },
+    {
+      "video_id": "RpX4HlK70jk",
+      "channel_id": "UCMwGHR0BTZuLsmjY_NT5Pwg",
+      "title": "【BLACK BALLOON MARKET x hololive】Going Over New Collab With @HakosBaelz !!!",
+      "type": "other",
+      "application": "title_or_topic_rule",
+      "source_url": "https://www.youtube.com/watch?v=RpX4HlK70jk",
+      "evidence_kind": "title_and_creator_metadata",
+      "evidence": "설명이 BLACK BALLOON MARKET 협업 의류와 예약 판매 페이지를 소개하는 상품 방송임을 명시한다."
+    }
+  ]
+}

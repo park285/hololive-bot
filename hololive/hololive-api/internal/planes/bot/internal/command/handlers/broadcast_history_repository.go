@@ -359,7 +359,7 @@ func scanBroadcastHistoryRow(row broadcastHistoryScanner) (handlercore.Broadcast
 		return handlercore.BroadcastHistoryEntry{}, fmt.Errorf("scan broadcast history row: %w", err)
 	}
 
-	classification := ClassifyBroadcastWithSource(entry.TopicID, entry.Title)
+	classification := ClassifyBroadcastVideo(entry.VideoID, entry.ChannelID, entry.TopicID, entry.Title)
 
 	entry.BroadcastType = string(classification.Type)
 	entry.BroadcastTypeSource = classification.Source

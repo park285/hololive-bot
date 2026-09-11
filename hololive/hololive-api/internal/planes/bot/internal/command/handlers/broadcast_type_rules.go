@@ -62,6 +62,10 @@ func validateBroadcastRules(rules *broadcastTypeRules) error {
 		return fmt.Errorf("validate broadcast rule set: %w", err)
 	}
 
+	if err := validateBroadcastVideoReviews(rules.ReviewedVideos); err != nil {
+		return fmt.Errorf("validate broadcast video reviews: %w", err)
+	}
+
 	return nil
 }
 
@@ -81,8 +85,8 @@ func validateBroadcastRuleSet(kind string, rules []broadcastTitleRule) error {
 			return fmt.Errorf("%s uses unknown type %q", kind, rule.Type)
 		}
 
-		if len(rule.Keywords) == 0 {
-			return fmt.Errorf("%s %q has no keywords", kind, rule.Type)
+		if len(rule.Keywords) == 0 && len(rule.ExactTags) == 0 {
+			return fmt.Errorf("%s %q has no keywords or exact tags", kind, rule.Type)
 		}
 	}
 
@@ -98,17 +102,20 @@ func normalizeBroadcastRules(rules *broadcastTypeRules) {
 	rules.Topics = topics
 	for i := range rules.TitleRules {
 		rules.TitleRules[i].Keywords = normalizeBroadcastKeywords(rules.TitleRules[i].Keywords)
+		rules.TitleRules[i].ExactTags = normalizeBroadcastTitleTags(rules.TitleRules[i].ExactTags)
 		rules.TitleRules[i].RejectKeywords = normalizeBroadcastKeywords(rules.TitleRules[i].RejectKeywords)
 	}
 
 	for i := range rules.Generic {
 		rules.Generic[i].Keywords = normalizeBroadcastKeywords(rules.Generic[i].Keywords)
+		rules.Generic[i].ExactTags = normalizeBroadcastTitleTags(rules.Generic[i].ExactTags)
 		rules.Generic[i].RejectKeywords = normalizeBroadcastKeywords(rules.Generic[i].RejectKeywords)
 	}
 
 	rules.GameTag.RejectKeywords = normalizeBroadcastKeywords(rules.GameTag.RejectKeywords)
 	rules.GameTag.Exact = normalizeBroadcastTitleTags(rules.GameTag.Exact)
 	rules.GameTag.Contains = normalizeBroadcastKeywords(rules.GameTag.Contains)
+	rules.GameTag.TagOnly = normalizeBroadcastKeywords(rules.GameTag.TagOnly)
 }
 
 func normalizeBroadcastKeywords(values []string) []string {

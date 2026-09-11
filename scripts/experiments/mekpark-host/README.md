@@ -6,8 +6,9 @@ DB와 공개 YouTube 제목을 합쳐 문자 TF-IDF + LogisticRegression을 실�
 
 ## 입력과 수집
 
-- `hololive/hololive-shared/pkg/domain/mekparkhost/testdata/title_corpus.json`: DB 제목 195건과
-  제목 근거를 검토한 기존 기대값이다. 실제 영상 독립 검수 정답은 아니다.
+- `hololive/hololive-shared/pkg/domain/mekparkhost/testdata/title_corpus.json`: 현재 DB 제목 회귀
+  표본 221건이다. 2026-09-06 실험 당시에는 195건이었으며 9월 11일에 26건을 추가했다.
+  제목 근거를 검토한 기대값이며 실제 영상 독립 검수 정답은 아니다.
 - `event-times.json`: read-only guard를 증명한 DB의 시작/예약/게시 시각이다.
 - `public-titles.json`: UNIT B와 ACHRORA의 videos/streams/shorts에서 직접 읽은 공개 제목
   312건이다. 6개 탭은 모두 마지막 페이지까지 수집했으며 player metadata 조회도 312건 성공했다.
@@ -37,6 +38,10 @@ cmp .tmp/mekpark-host-ml/dataset.json .tmp/mekpark-host-ml-reproduce/dataset.jso
 
 Python 3.14와 scikit-learn 1.9.0을 사용하며 PEP 723 metadata와 `experiment.py.lock`이 실험
 환경을 고정한다. Go 기준선은 `mekparkhost/cmd/classify-titles`로 실제 판별기를 호출한다.
+
+9월 6일 보고서는 당시 입력과 규칙으로 고정된 결과다. 현재 규칙·제목 표본으로 실행한 결과와
+입력 hash는 달라진다. 신규 표본의 시각을 `event-times.json`이나 공개 metadata에 반영하기
+전까지 기존 실험은 정확한 시각이 없는 신규 영상을 시간 분할에서 제외한다.
 
 2026-08-28 00:00 KST를 경계로 과거를 학습, 이후를 holdout으로 둔다. 두 유닛별로 같은
 제목 그룹이 fold나 holdout 양쪽에 들어가지 않도록 확인한다. 이름 제거 후 같은 제목도 같은

@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-29.1",
+  "version": "2026-09-11.3",
   "source_notes": [
     "JRA 2026 G1/J-G1 race names plus observed production broadcast titles",
     "NAR dirt graded races and major international races commonly covered by prediction streams",
@@ -11,9 +11,43 @@
     "Holodex topics drawing/announce/morning/endurance stay unmapped on purpose: production rows show them attached to game/variety streams, so titles must decide",
     "誕生日/爆誕 are generic (not strong) event keywords so in-game birthday titles (仁王2 秀吉爆誕) keep their game classification; ラジオ reject keeps numbered radio episodes talk",
     "strong news is split: program markers (昼ホロ/朝ミオ/朝こよ) precede asmr so show episodes beat body ASMR mentions, while announcement words (重大告知/announcement) stay last so 告知-carrying event/asmr streams keep their type",
-    "instrument words (ピアノ/guitar) are generic singing; singing/news override topics only at strong strength"
+    "instrument words (ピアノ/guitar) are generic singing; singing/news override topics only at strong strength",
+    "2026-09-11: compared predictions for 890 ENDED sessions since 2026-08-29 and reviewed 99 regression cases; retain unknown for insufficient evidence",
+    "hololive Dreams is a rhythm/RPG game (https://www.hololive-dreams.com/); gameplay is game, while explicit tournament/event lead tags retain their priority",
+    "ark/rust/peak are tag_only because the bare English words can describe non-game subjects",
+    "振り返り配信 identifies a dedicated retrospective even when its source topic names the game being discussed",
+    "2026-09-11 round 2: public metadata reviewed for all 40 remaining unknown broadcasts; exact video/channel-bound reviews supplement title/topic evidence. Reviewer evidence is versioned here, never inferred from a generic greeting or all channel profile keywords."
   ],
   "topics": {
+    "voice_mimicry_show": "game",
+    "an_eggstremely_hard_game": "game",
+    "ark": "game",
+    "bombanana!": "game",
+    "boku_no_natsuyasumi": "game",
+    "concert": "event",
+    "debut_stream": "event",
+    "don't_drop_the_cake": "game",
+    "elsword": "game",
+    "how_to_fish": "game",
+    "kugayama_shiori's_death_diary": "game",
+    "little_nightmares": "game",
+    "monhun": "game",
+    "mortal_shell": "game",
+    "mukbang": "other",
+    "music_production": "singing",
+    "onimusha": "game",
+    "pachisuro": "game",
+    "pokecolo_twins": "game",
+    "pragmata": "game",
+    "school_labyrinth": "game",
+    "story_of_seasons": "game",
+    "super_bunny_man": "game",
+    "the_death_game_report": "game",
+    "tomb_raider": "game",
+    "trickshot_simulator": "game",
+    "tsugunohi": "game",
+    "unpossess": "game",
+    "white_cat_project": "game",
     "3d_stream": "event",
     "apex": "game",
     "arknights:_endfield": "game",
@@ -88,7 +122,7 @@
     "fast_food_simulator": "game",
     "gartic_phone": "game",
     "happy's_humble_burgers": "game",
-    "hololive_dreams": "event",
+    "hololive_dreams": "game",
     "horse_racing": "horse_racing",
     "japan_stigmatized_property": "game",
     "keep_talking_and_nobody_explodes": "game",
@@ -120,15 +154,20 @@
   "title_rules": [
     {
       "type": "membership",
+      "exact_tags": [
+        "membership",
+        "メンバーシップ"
+      ],
       "keywords": [
         "メン限",
         "メンバー限定",
         "メンバー限定配信",
-        "メンバーシップ",
+        "メンバーシップ限定",
         "members only",
+        "memberships only",
         "member's only",
         "member only",
-        "membership",
+        "memberonly",
         "membersonly",
         "【member stream】",
         "【members】"
@@ -142,6 +181,7 @@
         "watch along",
         "watchparty",
         "watch party",
+        "watchpa",
         "watchpartylcp",
         "vctwatchparty",
         "future games show",
@@ -160,6 +200,8 @@
       "type": "singing",
       "keywords": [
         "歌枠",
+        "#ととうた",
+        "うたうたう",
         "縦型歌枠",
         "karaoke",
         "singing",
@@ -323,6 +365,8 @@
         "model reveal",
         "復帰",
         "初配信",
+        "企画説明会",
+        "リアル凸待ち",
         "debut",
         "redebut",
         "卒業",
@@ -334,10 +378,6 @@
         "学力テスト",
         "リニューアル衣装",
         "free preview",
-        "hololive dreams",
-        "ホロドリ",
-        "ホロライブ ドリームス",
-        "ホロライブドリームス",
         "#hologuidetokyo",
         "催眠regloss",
         "マイクラバーサス",
@@ -371,9 +411,20 @@
       "keywords": [
         "お知らせ",
         "重大告知",
+        "メンバーシップ解禁",
         "告知！",
         "announcement",
-        "新ボイス"
+        "新ボイス",
+        "チーム発表",
+        "パドック通信",
+        "チーム名発表",
+        "中間発表"
+      ]
+    },
+    {
+      "type": "talk",
+      "keywords": [
+        "振り返り配信"
       ]
     }
   ],
@@ -382,6 +433,7 @@
       "type": "game",
       "keywords": [
         "ホラゲ",
+        "chillゲー",
         "ホラーゲー",
         "神ゲー",
         "クソゲー",
@@ -416,6 +468,9 @@
       "keywords": [
         "企画",
         "大会",
+        "tournament",
+        "復活",
+        "おうち3d",
         "決定戦",
         "リーグ",
         "本配信",
@@ -429,6 +484,8 @@
     {
       "type": "singing",
       "keywords": [
+        "即興作曲",
+        "作編曲",
         "ピアノ",
         "エレクトーン",
         "ウクレレ",
@@ -440,6 +497,11 @@
       "type": "talk",
       "keywords": [
         "雑談",
+        "【雑】",
+        "朝雑",
+        "monday morning malas",
+        "monday malam malas",
+        "#mmmalas",
         "free talk",
         "freetalk",
         "zatsu",
@@ -509,6 +571,22 @@
     {
       "type": "other",
       "keywords": [
+        "朗読",
+        "reads you a book",
+        "reading a book",
+        "つむ飯",
+        "絵描き歌",
+        "サウナロケ",
+        "グミの日",
+        "撮影会",
+        "ルイ姉、今日なにする",
+        "喫茶barにこらでん",
+        "ミュージアムグッズプレゼン対決",
+        "fg駆け引きバトル",
+        "ラブレターを書く",
+        "black balloon market",
+        "work stream",
+        "signing postcards",
         "【vlog】",
         "vlog",
         "カメラ有",
@@ -578,6 +656,11 @@
     }
   ],
   "game_title_tag": {
+    "tag_only": [
+      "ark",
+      "rust",
+      "peak"
+    ],
     "reject_keywords": [
       "hololive",
       "ホロライブ",
@@ -618,6 +701,46 @@
       "dww"
     ],
     "contains": [
+      "berdinkum",
+      "leafy corner",
+      "peaceful fishing story",
+      "slashzero",
+      "the willowmist emporium",
+      "ファイトタクティクス",
+      "声マネキング",
+      "a way out",
+      "adorable adventures",
+      "an eggstremely hard game",
+      "bombanana",
+      "candy shop simulator",
+      "cult of pin",
+      "drainsim",
+      "final sentence",
+      "finding polka",
+      "her trees",
+      "hololive dreams",
+      "how to fish",
+      "imperial grace",
+      "kingdom hearts",
+      "mortal shell",
+      "onimusha",
+      "pragmata",
+      "super bunny man",
+      "tekken",
+      "trickshot simulator",
+      "unpossess",
+      "ホロドリ",
+      "ホロライブ ドリームス",
+      "ホロライブドリームス",
+      "ポカジャン",
+      "久我山栞の死様手帖",
+      "ぼくのなつやすみ",
+      "鬼武者",
+      "スーパーバニーマン",
+      "白猫プロジェクト",
+      "迷宮校舎",
+      "キングダムハーツ",
+      "デスゲームの報告書",
       "7 days to die",
       "777real",
       "ace attorney",
@@ -1007,5 +1130,95 @@
       "レーシングマスター",
       "リヴリーアイランド"
     ]
+  },
+  "reviewed_videos": {
+    "JstSA5yRsj8": {
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "type": "talk",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=JstSA5yRsj8",
+      "evidence_kind": "creator_tags",
+      "evidence": "공개 영상 태그가 free talk, talking stream, chat, Prisuners Night를 명시한다. 일반 제목 hello 자체를 잡담 규칙으로 사용하지 않는다."
+    },
+    "qMxeqbCClQY": {
+      "channel_id": "UCOyYb1c43VlX9rc_lT6NKQw",
+      "type": "talk",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=qMxeqbCClQY",
+      "evidence_kind": "creator_tags",
+      "evidence": "공개 영상 태그에 free talk, talking stream, chatting, Prisuners Night가 함께 있다."
+    },
+    "raD2SDEffE8": {
+      "channel_id": "UCzUNASdzI4PV5SlqtYwAkKQ",
+      "type": "membership",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=raD2SDEffE8",
+      "evidence_kind": "youtube_access",
+      "evidence": "YouTube player가 이 영상을 members-only content로 명시한다. 콘텐츠 재생은 시도하지 않으며 Music 카테고리보다 접근 유형을 우선한다."
+    },
+    "ksf9tm7eyI4": {
+      "channel_id": "UCAoy6rzhSf4ydcYjJw3WoVg",
+      "type": "other",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=ksf9tm7eyI4",
+      "evidence_kind": "creator_thumbnail",
+      "evidence": "공개 썸네일에 お絵描き配信이 명시되어 있고 관측 주제도 drawing이다. Senin Produktif 시리즈 전체를 같은 유형으로 고정하지 않는다."
+    },
+    "wsSt8S9wRl4": {
+      "channel_id": "UCENwRMx5Yh42zWpzURebzTw",
+      "type": "other",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=wsSt8S9wRl4",
+      "evidence_kind": "creator_thumbnail",
+      "evidence": "공개 썸네일은 holoX 구성원들이 참여하는 丸裸ゲーム 기획을 표시한다. 특정 디지털 게임명·플레이 장면이 없는 그룹 버라이어티 기획으로 검토했다."
+    },
+    "sY3oRzO5JtQ": {
+      "channel_id": "UC5LyYg6cCA4yHEYvtUsir3g",
+      "type": "talk",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=sY3oRzO5JtQ",
+      "evidence_kind": "viewer_reports",
+      "evidence": "공개 댓글 20건을 검토했다. 다수의 서로 다른 시청 후기가 잡담과 여러 이야기를 들은 방송이라고 일치한다. 기본 Gaming 카테고리와 달라 댓글 근거에 따른 검토 판정이며 영상 재생 검수는 아니다."
+    },
+    "_IY8xsvkPf8": {
+      "channel_id": "UCvUc0m317LWTTPZoBQV479A",
+      "type": "talk",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=_IY8xsvkPf8",
+      "evidence_kind": "creator_thumbnail",
+      "evidence": "공개 썸네일에 雑談이 명시되어 있고 People & Blogs 카테고리도 부합한다. 여름이 끝났다는 제목 자체를 일반화하지 않는다."
+    },
+    "KQZA-5FOgWQ": {
+      "channel_id": "UCX4WL24YEOUYd7qDsFSLDOw",
+      "type": "singing",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=KQZA-5FOgWQ",
+      "evidence_kind": "creator_tags_and_thumbnail",
+      "evidence": "공개 영상 태그가 歌枠를 명시하고 썸네일도 마이크로 노래하는 캐릭터와 음표를 표시한다."
+    },
+    "seZvn7zCsAE": {
+      "channel_id": "UCurEA8YoqFwimJcAuSHU0MQ",
+      "type": "talk",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=seZvn7zCsAE",
+      "evidence_kind": "viewer_reports",
+      "evidence": "공개 댓글 20건에서 새벽 잡담·고민 상담·수면 유도 잡담이라는 시청 후기가 일치한다. People & Blogs 카테고리와도 부합하며 영상 재생 검수는 아니다."
+    },
+    "5khIfZ6FmkI": {
+      "channel_id": "UCKSpM183c85d5V2cW5qaUjA",
+      "type": "membership",
+      "reviewed_at": "2026-09-11T08:46:33Z",
+      "source_url": "https://www.youtube.com/watch?v=5khIfZ6FmkI",
+      "evidence_kind": "youtube_access",
+      "evidence": "YouTube player가 이 영상을 members-only content로 명시한다. 제목의 기분 표현이나 기본 Gaming 카테고리로 방송 유형을 추측하지 않는다."
+    },
+    "SrYExB6XHg8": {
+      "channel_id": "UCLlJpxXt6L5d-XQ0cDdIyDQ",
+      "type": "membership",
+      "source_url": "https://www.youtube.com/watch?v=SrYExB6XHg8",
+      "evidence_kind": "youtube_access",
+      "evidence": "YouTube player가 멤버 전용 콘텐츠임을 명시한다. 팬 이름 WINGMEN은 일반 멤버십 키워드로 확대하지 않고 해당 영상의 접근 제한 근거를 사용한다.",
+      "reviewed_at": "2026-09-11T08:46:33Z"
+    }
   }
 }

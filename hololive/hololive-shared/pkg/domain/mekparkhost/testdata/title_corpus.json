@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-06",
+  "captured_at": "2026-09-11",
   "source": "hololive youtube_live_sessions + youtube_videos minus session-overlapping video_ids",
   "channel_ids": {
     "unit-b": "UC3OH5FKQ3qtl4uRme_vZTgA",
@@ -2712,9 +2712,400 @@
         "yuikawa-hinami"
       ],
       "guests": []
+    },
+    {
+      "video_id": "4YgKctWlM9o",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【#ホロドリ】#ポカジャン 最弱王決定戦👑🌀不遇からの脱却…倍プッシュだ……!【#琉海垣りらら 視点】",
+      "source": "live_session",
+      "event_time": "2026-09-10T11:30:14+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "4ZbRGGlrE-Q",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "【漢字でGO?】漢字得意なはずなのに…!!【 #UNIT_B / #清澄ライラ】",
+      "source": "live_session",
+      "event_time": "2026-09-08T09:58:33.896286+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "GPk7M71aKPg",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "【視聴者参加型】皆さんとポカジャン遊んでみたい。【 #UNIT_B / #清澄ライラ 】",
+      "source": "live_session",
+      "event_time": "2026-09-09T14:28:33.896286+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "GfpBEnTJ24Q",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【美少女に戻りたい】登録者が増えるたび美少女に戻るひよこASMR【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "source": "live_session",
+      "event_time": "2026-09-07T13:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "KCBnWCf92JE",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【UNDERTALE】#2 朝活、Gルート本日もプレイします 😭😭😭😭 #墨汐さやな #さやな時間",
+      "source": "live_session",
+      "event_time": "2026-09-10T19:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "KOs-4rGfSsE",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "絶対音感なら100点だって余裕です…!?【 #UNIT_B / #清澄ライラ】",
+      "source": "live_session",
+      "event_time": "2026-09-07T08:58:33.896286+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "L_GU4RJXFZc",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【#ホロドリ】ガチャで全員お迎えしてイベント走る!豪運なので余裕です👼✊【#由比河ひなみ】 #ACHRORA #ひなみ通信",
+      "source": "live_session",
+      "event_time": "2026-09-12T13:00:00+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "MVGgUUsHnwY",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "【応援してください】絶対クリアしたいです😿【 #UNIT_B / #玲銘ミラ】",
+      "source": "live_session",
+      "event_time": "2026-09-11T09:00:00+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "RtOigcv2NfI",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【鬼子母 Hariti】今年イチ怖いらしい😭💦ひとりじゃ絶対無理な本格ホラゲ、オフコラボならいけるよね(震え声)【#墨汐さやな × #琉海垣りらら 】",
+      "source": "live_session",
+      "event_time": "2026-09-08T10:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "rumigaki-rirara",
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "collab"
+    },
+    {
+      "video_id": "U-W3nrbMA7k",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【#ホロドリ】#ポカジャン 最弱王決定戦👑🌀 多分強いと思うので誰にも負けません😉知らんけど。【#墨汐さやな 視点】",
+      "source": "live_session",
+      "event_time": "2026-09-10T11:29:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "_basXjnEJZ0",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【Snowed Under | 雪葬 × ASMR】ヘッドホン推奨🎧鼓膜に注意!ホラーゲームASMR♡ #墨汐さやな #さやな時間",
+      "source": "live_session",
+      "event_time": "2026-09-11T11:00:00+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "drgtR2iT4B4",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【#ホロドリ】#ポカジャン 最弱王決定戦👑🌀私の豪運に震えなさい!【#由比河ひなみ 視点】",
+      "source": "live_session",
+      "event_time": "2026-09-10T11:29:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "hQYOcyVoMKI",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【#ホロドリ】視聴者参加型🫂不憫枠でも強くなりたい😿 #ポカジャン で一緒に遊ぼ❣ りら虐会場はこちら…⁉️ #琉海垣りらら #りららだいびんぐ",
+      "source": "live_session",
+      "event_time": "2026-09-09T12:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "ijTWZNQgxg4",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【本人閲覧禁止】墨汐さやなと琉海垣りららにラブレターを書くので手伝ってください💌【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "source": "live_session",
+      "event_time": "2026-09-10T02:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "kKjEgVLSaDs",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "【東方】ピアノで弾きたい!!【 #UNIT_B / #玲銘ミラ】",
+      "source": "live_session",
+      "event_time": "2026-09-09T12:00:33.896286+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "xvS6CLlkY-s",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "【視聴者参加型】ここで待ってます…!【 #UNIT_B / #清澄ライラ 】",
+      "source": "live_session",
+      "event_time": "2026-09-10T03:00:33.896286+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "ySFXxf3PvgU",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "【㊗️6万人】秋なので食べます。飲みます。歌います。ACHRORAです。【#ひなみ通信】#ACHRORA #由比河ひなみ",
+      "source": "live_session",
+      "event_time": "2026-09-08T02:59:40.932548+00:00",
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "zYAE5BlKDgg",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "【神ゲー】東方紅魔郷に初挑戦!!【 #UNIT_B / #玲銘ミラ】",
+      "source": "live_session",
+      "event_time": "2026-09-10T11:58:33.896286+00:00",
+      "unit": "unit-b",
+      "hosts": [
+        "reimei-mira"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "A_qj0RRDJ3A",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "ストゼロを飲んだ瞬間世界が鮮やかになる女🐳 #ACHRORA #琉海垣りらら #shorts #切り抜き #きりとりらら",
+      "source": "video",
+      "event_time": null,
+      "unit": "achrora",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "N9eS59gJNCI",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "ワムウと好きな女を語るさやな  #ACHRORA #墨汐さやな #shorts #切り抜き #さやなカット",
+      "source": "video",
+      "event_time": null,
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "WxOsF2lPeeo",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "『少女レイ』歌わせていただきました【 #UNIT_B / #清澄ライラ】",
+      "source": "video",
+      "event_time": null,
+      "unit": "unit-b",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "bW8Y2hNuLqQ",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "煮干しの正体を知らなかったギャル【 #UNIT_B / #宵凪ネオン】",
+      "source": "video",
+      "event_time": null,
+      "unit": "unit-b",
+      "hosts": [
+        "yoinagi-neon"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "fwDA-cQUKcU",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "ポンデリング🍩が言えないさやな #ACHRORA #墨汐さやな #mekpark #shorts #さやなカット",
+      "source": "video",
+      "event_time": null,
+      "unit": "achrora",
+      "hosts": [
+        "sumishio-sayana"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "muuf30Aalmo",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "ストゼロ🍺を箱で常備しているのがバレたりらら #ACHRORA #琉海垣りらら #mekpark #shorts #きりとりらら",
+      "source": "video",
+      "event_time": null,
+      "unit": "achrora",
+      "hosts": [
+        "rumigaki-rirara"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "xbBlYC_6rmA",
+      "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA",
+      "title": "『ギラギラ』歌わせていただきました【 #UNIT_B / #清澄ライラ】",
+      "source": "video",
+      "event_time": null,
+      "unit": "unit-b",
+      "hosts": [
+        "kiyosumi-lyra"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
+    },
+    {
+      "video_id": "y5hRDq28VqE",
+      "channel_id": "UChpRPsAeSZn5DistGacR3iA",
+      "title": "リスナーの髪が無くなっても大丈夫なひなみ😰 #ACHRORA #由比河ひなみ #mekpark #shorts #ぴよつまみ",
+      "source": "video",
+      "event_time": null,
+      "unit": "achrora",
+      "hosts": [
+        "yuikawa-hinami"
+      ],
+      "guests": [],
+      "reviewed_at": "2026-09-11",
+      "label_basis": "개인 해시태그 및 제목 문맥 검토. 편지 수신인은 출연자로 세지 않는다.",
+      "kind": "solo"
     }
   ],
-  "reviewed_at": "2026-09-06",
+  "reviewed_at": "2026-09-11",
   "label_basis": "Title evidence only; not independently video-verified training ground truth.",
   "initial_captured_at": "2026-08-28"
 }

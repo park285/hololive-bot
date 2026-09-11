@@ -77,7 +77,9 @@ var (
 	pairSpace = regexp.MustCompile(`[\s\p{Z}]*×[\s\p{Z}]*`)
 )
 
-// Identify는 두 mekPark 채널만 제목으로 판별한다. 입력이나 외부 상태를 변경하지 않는다.
+// Identify는 두 mekPark 채널의 제목에서 진행자와 게스트를 판별한다.
+// 채널 진행자의 개인 태그·역할·시리즈·합방 표기가 있으면 본문의 성명 언급은 제외한다.
+// 입력이나 외부 상태를 변경하지 않으며 근거가 없으면 개인을 특정하지 않는다.
 func Identify(channelID, title string) Result {
 	rules := loadRules()
 	result := Result{Unit: rules.unitForChannel(channelID)}
@@ -91,26 +93,36 @@ func Identify(channelID, title string) Result {
 	pairs := rules.pairEvidence(title)
 	primary := ""
 	participants := make([]Participant, 0, len(rules.Members))
+	explicitIDs := make(map[string]bool, len(rules.Members))
+	hasExplicitHost := false
 
 	for i := range rules.Members {
 		member := &rules.Members[i]
-		evidence, series := member.evidence(title, rules.Roles)
+		evidence, series, explicit := member.evidence(title, rules.Roles)
 
 		evidence = append(evidence, pairs[member.ID]...)
+		explicit = explicit || len(pairs[member.ID]) > 0
 
 		if len(evidence) == 0 {
 			continue
 		}
 
 		participants = append(participants, Participant{ID: member.ID, Name: member.Name, Evidence: evidence})
+		explicitIDs[member.ID] = explicit
+		hasExplicitHost = hasExplicitHost || (explicit && member.Unit == result.Unit)
+
 		if series && member.Unit == result.Unit {
 			primary = member.ID
 		}
 	}
 
 	for _, participant := range participants {
-		member := rules.member(participant.ID)
-		if member.Unit == result.Unit && (primary == "" || primary == participant.ID) {
+		// 편지 수신인처럼 본문에서 언급한 이름을 공동 진행자나 게스트로 만들지 않는다.
+		if hasExplicitHost && !explicitIDs[participant.ID] {
+			continue
+		}
+
+		if rules.member(participant.ID).isHost(result.Unit, primary) {
 			result.Hosts = append(result.Hosts, participant)
 		} else {
 			result.Guests = append(result.Guests, participant)
@@ -140,14 +152,21 @@ func (r ruleSet) member(id string) memberRule {
 	return memberRule{}
 }
 
-func (m memberRule) evidence(title string, roles []string) (tokens []string, series bool) {
+func (m memberRule) isHost(unit, primary string) bool {
+	// 개인 시리즈에서는 같은 유닛의 다른 출연자도 게스트로 구분한다.
+	return m.Unit == unit && (primary == "" || primary == m.ID)
+}
+
+func (m memberRule) evidence(title string, roles []string) (tokens []string, series, explicit bool) {
 	if strings.Contains(title, m.FullName) {
 		tokens = append(tokens, m.FullName)
+		explicit = containsStructuredToken(title, "#"+m.FullName, true)
 	}
 
 	for _, tag := range m.Tags {
 		if strings.Contains(title, tag) {
 			tokens = append(tokens, tag)
+			explicit = true
 		}
 	}
 
@@ -155,27 +174,50 @@ func (m memberRule) evidence(title string, roles []string) (tokens []string, ser
 		if strings.Contains(title, tag) {
 			tokens = append(tokens, tag)
 			series = true
+			explicit = true
 		}
 	}
 
 	for _, role := range roles {
 		token := m.GivenName + role
-		if containsStructuredToken(title, token) {
+		if containsStructuredToken(title, token, true) {
 			tokens = append(tokens, token)
+			explicit = true
 		}
 	}
 
-	return tokens, series
+	return tokens, series, explicit
 }
 
 func (r ruleSet) pairEvidence(title string) map[string][]string {
+	if !strings.Contains(title, "×") {
+		return nil
+	}
+
 	title = pairSpace.ReplaceAllString(strings.ReplaceAll(title, "#", ""), "×")
 
 	evidence := make(map[string][]string)
 
+	// 성명 사이의 ×는 해시 유무와 무관한 합방 근거다. 「A×Bの曲」의 인용은 제외한다.
+	for i := range r.Members {
+		left := &r.Members[i]
+		for j := range r.Members {
+			right := &r.Members[j]
+			if left.ID == right.ID {
+				continue
+			}
+
+			token := left.FullName + "×" + right.FullName
+			if containsStructuredToken(title, token, false) {
+				evidence[left.ID] = append(evidence[left.ID], token)
+				evidence[right.ID] = append(evidence[right.ID], token)
+			}
+		}
+	}
+
 	for _, pair := range r.Pairs {
 		token := r.member(pair.Left).GivenName + "×" + r.member(pair.Right).GivenName
-		if containsStructuredToken(title, token) {
+		if containsStructuredToken(title, token, true) {
 			evidence[pair.Left] = append(evidence[pair.Left], token)
 			evidence[pair.Right] = append(evidence[pair.Right], token)
 		}
@@ -198,7 +240,7 @@ func normalizeTitle(title string) string {
 	return hashSpace.ReplaceAllString(title, "#")
 }
 
-func containsStructuredToken(title, token string) bool {
+func containsStructuredToken(title, token string, allowPossessiveSuffix bool) bool {
 	for {
 		before, after, found := strings.Cut(title, token)
 		if !found {
@@ -209,7 +251,7 @@ func containsStructuredToken(title, token string) bool {
 		right, _ := utf8.DecodeRuneInString(after)
 		// 「りらら×ミラの…」는 이름 쌍이며 「りらら×ミラクル」처럼 뒤가 이어진 단어는 제외한다.
 		if !unicode.IsLetter(left) && !unicode.IsNumber(left) &&
-			(!unicode.IsLetter(right) && !unicode.IsNumber(right) || right == 'の') {
+			(!unicode.IsLetter(right) && !unicode.IsNumber(right) || allowPossessiveSuffix && right == 'の') {
 			return true
 		}
 
