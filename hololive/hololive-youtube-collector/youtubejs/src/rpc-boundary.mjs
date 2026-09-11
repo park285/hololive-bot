@@ -49,6 +49,7 @@ export async function handleChannelRequest(rawBody, fetchChannel, maximumSuccess
   return handleRpcRequest(rawBody, channelEndpoint, async (payload) => {
     return fetchChannel({
       channelId: payload.channel_id,
+      kind: payload.kind,
       maxPages: payload.max_pages,
       maxSuccessResponseBytes: payload.max_success_response_bytes,
     });

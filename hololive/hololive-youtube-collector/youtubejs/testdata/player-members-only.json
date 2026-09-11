@@ -1,0 +1,13 @@
+{
+  "videoDetails": {
+    "videoId": "restricted-fixture",
+    "isUpcoming": true,
+    "isLiveContent": true
+  },
+  "playabilityStatus": {
+    "status": "UNPLAYABLE",
+    "errorScreen": {
+      "playerLegacyDesktopYpcOfferRenderer": {}
+    }
+  }
+}

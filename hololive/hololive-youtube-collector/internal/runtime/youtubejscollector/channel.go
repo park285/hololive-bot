@@ -18,28 +18,31 @@ type ChannelClient interface {
 }
 
 type ChannelRunner struct {
-	client  ChannelClient
-	jobKind string
+	client ChannelClient
+	kind   string
 }
 
+// NewChannelLiveRunner는 방송 목록만 수집하고 접근 제한이 있으면 관측을 PARTIAL로 표시합니다.
 func NewChannelLiveRunner(client ChannelClient) *ChannelRunner {
 	return &ChannelRunner{
-		client:  client,
-		jobKind: "youtubejs_channel_live",
+		client: client,
+		kind:   "live",
 	}
 }
 
+// NewChannelMetadataRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
 func NewChannelMetadataRunner(client ChannelClient) *ChannelRunner {
 	return &ChannelRunner{
-		client:  client,
-		jobKind: "youtubejs_channel_metadata",
+		client: client,
+		kind:   "metadata",
 	}
 }
 
 func (r *ChannelRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: sourceobservation.JobKind(r.jobKind)}
+	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: sourceobservation.JobKind("youtubejs_channel_" + r.kind)}
 }
 
+// Collect는 수집 범위에 맞는 observation과 checkpoint를 구성하며 실제 DB 저장은 publisher에 맡깁니다.
 func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	if invalidChannelRunner(r) {
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
@@ -123,6 +126,7 @@ func anyChannelKindEnabled(enabled map[contract.ObservationKind]bool) bool {
 func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil.RunInput) (youtubejs.ChannelResult, contract.Completeness, contract.Continuity, error) {
 	result, err := r.client.FetchChannel(ctx, youtubejs.ChannelRequest{
 		ChannelID:               input.Spec().SubjectKey,
+		Kind:                    r.kind,
 		MaxPages:                input.MaxPages(),
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
@@ -134,9 +138,18 @@ func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("validate live identity: %w", validateErr)
 	}
 
+	if validateErr := validateUnavailableLiveSessions(input.Spec().SubjectKey, r.kind, &result); validateErr != nil {
+		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("validate unavailable live sessions: %w", validateErr)
+	}
+
 	completeness, continuity, err := collectutil.PaginationOf(&result.Pagination)
 	if err != nil {
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("pagination of: %w", err)
+	}
+
+	if len(result.UnavailableLiveSessions) > 0 {
+		// 목록 조회가 끝나도 시각이 가려진 영상은 부재 증거가 아닙니다. 다음 poll은 정상 진행합니다.
+		completeness = contract.CompletenessPartial
 	}
 
 	return result, completeness, continuity, nil

@@ -94,13 +94,21 @@ YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player
 
 ## YouTube.js live schedule metadata
 
+Channel RPC의 필수 `kind=live|metadata`가 수집 범위를 지정합니다. live 작업은 streams/player만, metadata 작업은 about과 채널 정보만 조회하므로 일정 접근 제한이 통계·프로필·사진 수집을 중단시키지 않습니다. 변경된 Go binary와 Node helper는 같은 bundle로 교체합니다.
+
 Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 helper가 같은 video ID의 raw `/player`를 순차 조회합니다. 목록 시각이 있으면 상세 조회는 0회이며, 누락된 고유 UPCOMING video ID당 1회, 한 channel collection당 최대 32회입니다. `LIVE`, `ENDED`, `CANCELLED`는 schedule 보강 대상이 아닙니다. 이 횟수는 transport의 transient 재시도 전 논리 요청 수이며, `/player`의 총 transport 시도는 위 정책에 따라 각 요청당 최대 2회입니다.
 
 로컬 adapter는 응답 성공 상태, 요청과 정확히 같은 `videoDetails.videoId`, 존재하는 live/upcoming boolean을 검증합니다. 예정 시각은 RFC3339 `microformat.playerMicroformatRenderer.liveBroadcastDetails.startTimestamp`를 우선 사용하고, 이 값이 없으면 동일 video ID의 `playabilityStatus.liveStreamability.liveStreamabilityRenderer.offlineSlate.liveStreamOfflineSlateRenderer.scheduledStartTime` epoch seconds를 사용합니다. 두 값이 모두 있으면 같은 시각이어야 합니다. 표시 문자열은 사용하지 않습니다. Content 목록의 premiere 분류도 같은 raw adapter를 사용하며 `isUpcoming=true`와 `isLiveContent=false`일 때만 content-owned premiere로 유지합니다.
 
-32개 후보 초과, identity/schema/time drift 또는 보강 뒤에도 시각이 없는 `UPCOMING`은 terminal `parser_drift`입니다. 해당 collection은 live observation과 checkpoint를 저장하지 않고 partial/empty success나 다른 provider로 전환하지 않습니다. `youtube_collection_attempts_total{provider="youtubejs",kind="live_snapshot",result=...}`와 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
+접근 제한 예외는 `UNPLAYABLE`과 `errorScreen.playerLegacyDesktopYpcOfferRenderer`, 정확한 video ID, `isUpcoming=true`, `isLiveContent=true`가 확인되며 두 예정 시각이 모두 없는 경우에만 적용합니다. 해당 행은 `unavailable_live_sessions`의 ID·채널·`access_restricted` 사유로 분리하고 helper가 `youtubejs_live_schedule_unavailable` WARN에 공개 식별자와 사유를 기록합니다. 번역된 가입 안내문으로 분류하지 않습니다. 멤버십 영상에도 기계가독 시각이 있으면 정상 수집합니다.
 
-`youtubei.js@18.0.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, 전체 helper test, typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260901-hololive-youtube-live-metadata-adapter-ownership`의 review trigger가 충족될 때만 다시 결정합니다.
+제한 목록은 중복·정상 sessions와의 중첩·다른 채널·미지 사유를 거부하며 최대 32개입니다. Go adapter는 유효 sessions만 `PARTIAL` live observation으로 발행하고 해당 poll을 완료합니다. 제한 행만 남은 빈 sessions도 PARTIAL입니다. 다음 기존 poll에서 다시 관측하며 추가 재시도·별도 provider·과거 시각 재사용을 하지 않습니다. 제한 영상의 canonical 상태와 마지막 확인 시각은 갱신하지 않습니다. PARTIAL의 부재는 종료·취소 근거가 아니며 개별 영상의 명시적 종료는 기존 consumer 규칙으로 처리합니다.
+
+`youtube_collection_completeness_total{provider="youtubejs",kind="live_snapshot",completeness="PARTIAL"}`와 위 WARN을 함께 확인합니다. poll 성공·readiness·freshness는 모든 영상의 일정 확보를 뜻하지 않습니다. helper WARN은 원천 관측 기록이며 실제 발행 여부는 observation publish 결과로 확인합니다. Collector 팀이 이 예외를 소유하며 renderer 변경 또는 다른 접근 제한의 독립 재현 근거가 생기면 `DEC-20260911-youtube-restricted-schedule-isolation`에 따라 범위를 재검토합니다.
+
+32개 후보 초과, identity/schema/time drift, 미지의 UNPLAYABLE 또는 위 접근 제한에 해당하지 않는 시각 부재는 terminal `parser_drift`입니다. 해당 collection은 observation과 checkpoint를 저장하지 않습니다. `youtube_collection_attempts_total`과 bounded `YouTube collection job failed` 로그로 판정합니다. 목록과 player 사이에 `LIVE`가 확인되거나 처음부터 `LIVE`로 발견된 방송은 예정 시각을 만들지 않고 정상 live catch-up 경로를 유지합니다.
+
+`youtubei.js@18.0.0`은 session, request context, browse/transport와 범용 parser 기반층으로 고정합니다. Upgrade 전 upstream release note와 로컬 사용 surface를 확인하고 `src/live-metadata.test.mjs`, 전체 helper test, typecheck를 실행합니다. raw field 변화가 있으면 sanitized fixture와 로컬 adapter만 함께 갱신합니다. 전체 fork나 vendoring은 `DEC-20260911-youtube-restricted-schedule-isolation`의 review trigger가 충족될 때만 다시 결정합니다.
 
 ## Logs
 

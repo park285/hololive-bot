@@ -86,6 +86,7 @@ func (c *RPC) FetchContent(ctx context.Context, request ContentRequest) (Content
 	return *result, nil
 }
 
+// FetchChannel은 필수 Kind에 지정된 범위만 조회하며 접근 제한 목록을 정상 sessions와 구분해 반환합니다.
 func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (ChannelResult, error) {
 	request.ProtocolVersion = ProtocolVersion
 

@@ -1,11 +1,45 @@
 package youtubejscollector
 
 import (
+	"strings"
+
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/collecterr"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
+
+const maxUnavailableLiveSessions = 32
+
+func validateUnavailableLiveSessions(channelID, kind string, result *youtubejs.ChannelResult) error {
+	unavailable := result.UnavailableLiveSessions
+	if len(unavailable) == 0 {
+		return nil
+	}
+
+	if kind != "live" || result.MissingTab || len(unavailable) > maxUnavailableLiveSessions {
+		return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live sessions are outside the collection scope")
+	}
+
+	seen := make(map[string]struct{}, len(result.LiveSessions)+len(unavailable))
+	for i := range result.LiveSessions {
+		seen[result.LiveSessions[i].VideoID] = struct{}{}
+	}
+
+	for _, item := range unavailable {
+		if item.ChannelID != channelID || strings.TrimSpace(item.VideoID) == "" || item.Reason != "access_restricted" {
+			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live session identity or reason is invalid")
+		}
+
+		if _, exists := seen[item.VideoID]; exists {
+			return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js unavailable live session overlaps another row")
+		}
+
+		seen[item.VideoID] = struct{}{}
+	}
+
+	return nil
+}
 
 func validateViewerIdentity(requestedVideoID string, result *youtubejs.ViewerResult) error {
 	if result == nil || result.VideoID != requestedVideoID {

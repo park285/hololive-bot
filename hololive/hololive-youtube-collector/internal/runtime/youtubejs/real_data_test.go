@@ -18,7 +18,7 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	ctx, rpc := startRealDataHelper(t)
 
 	channel, err := rpc.FetchChannel(ctx, ChannelRequest{
-		ChannelID: channelID, MaxPages: 1, MaxSuccessResponseBytes: 1 << 20,
+		ChannelID: channelID, Kind: "live", MaxPages: 1, MaxSuccessResponseBytes: 1 << 20,
 	})
 	if err != nil {
 		t.Fatalf("fetch real channel: %v", err)
@@ -73,6 +73,7 @@ func startRealDataHelper(t *testing.T) (context.Context, *RPC) {
 	helper, rpc, err := Start(ctx, &Config{
 		NodePath: nodePath, ScriptPath: scriptPath,
 		RuntimeBaseDir: t.TempDir(), RequestTimeout: 45 * time.Second,
+		MaxInflight: DefaultMaxInflight,
 	})
 	if err != nil {
 		cancel()

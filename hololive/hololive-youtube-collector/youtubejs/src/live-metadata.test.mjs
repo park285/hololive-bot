@@ -7,6 +7,56 @@ import { fetchLiveMetadata, parseRawLiveMetadata } from "./live-metadata.mjs";
 const playerFixture = JSON.parse(
   await readFile(new URL("../testdata/player-upcoming.json", import.meta.url), "utf8"),
 );
+const restrictedFixture = JSON.parse(
+  await readFile(new URL("../testdata/player-members-only.json", import.meta.url), "utf8"),
+);
+
+test("paid-access metadata preserves a known missing schedule without parsing localized reasons", () => {
+  const raw = structuredClone(restrictedFixture);
+  raw.playabilityStatus.reason = "채널 회원 전용 콘텐츠";
+  assert.deepEqual(parseRawLiveMetadata(raw, "restricted-fixture"), {
+    videoId: "restricted-fixture", isUpcoming: true, isLiveContent: true,
+    scheduleUnavailableReason: "access_restricted",
+  });
+});
+
+test("restricted streams with a machine-readable schedule still use that schedule", () => {
+  const raw = structuredClone(restrictedFixture);
+  raw.microformat = structuredClone(playerFixture.microformat);
+  const metadata = parseRawLiveMetadata(raw, "restricted-fixture");
+  assert.equal(metadata.startTimestamp, "2026-09-01T11:00:00.000Z");
+  assert.equal(metadata.scheduleUnavailableReason, undefined);
+});
+
+test("unknown restrictions and non-live content do not acquire the bounded exception", () => {
+  const cases = [
+    (raw) => { delete raw.playabilityStatus.errorScreen; },
+    (raw) => { raw.playabilityStatus.status = "LOGIN_REQUIRED"; },
+    (raw) => { delete raw.videoDetails.isUpcoming; },
+    (raw) => { raw.videoDetails.isUpcoming = false; },
+    (raw) => { raw.videoDetails.isLiveContent = false; },
+  ];
+  for (const change of cases) {
+    const raw = structuredClone(restrictedFixture);
+    change(raw);
+    assert.equal(parseRawLiveMetadata(raw, "restricted-fixture").scheduleUnavailableReason, undefined);
+  }
+});
+
+test("paid-access metadata never masks malformed identity, state, renderer, or schedule", () => {
+  const cases = [
+    (raw) => { raw.videoDetails.videoId = "wrong-video"; },
+    (raw) => { raw.videoDetails.isUpcoming = "true"; },
+    (raw) => { raw.videoDetails.isLive = true; },
+    (raw) => { raw.playabilityStatus.errorScreen.playerLegacyDesktopYpcOfferRenderer = null; },
+    (raw) => { raw.microformat = { playerMicroformatRenderer: { liveBroadcastDetails: { startTimestamp: "tomorrow" } } }; },
+  ];
+  for (const change of cases) {
+    const raw = structuredClone(restrictedFixture);
+    change(raw);
+    assert.throws(() => parseRawLiveMetadata(raw, "restricted-fixture"), (err) => err.code === "parser_drift");
+  }
+});
 
 test("parseRawLiveMetadata reads the exact matching raw player schedule", () => {
   assert.deepEqual(parseRawLiveMetadata(playerFixture, "upcoming-fixture"), {

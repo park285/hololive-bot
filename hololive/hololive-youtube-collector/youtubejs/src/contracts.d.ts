@@ -78,6 +78,7 @@ export interface ContentRequest extends CommunityRequest {
 export interface ChannelRequest {
   protocol_version: number;
   channel_id: string;
+  kind: "live" | "metadata";
   max_pages?: number;
   max_success_response_bytes: number;
 }
@@ -101,6 +102,7 @@ export interface ContentFetchOptions extends CommunityFetchOptions {
 
 export interface ChannelFetchOptions {
   channelId: string;
+  kind: "live" | "metadata";
   maxPages?: number;
   maxSuccessResponseBytes: number;
 }
@@ -256,10 +258,18 @@ export interface ChannelPhotoVariant {
 export interface ChannelResult extends Pagination {
   protocol_version: number;
   live_sessions: LiveSessionItem[];
+  unavailable_live_sessions?: UnavailableLiveSession[];
   stats: ChannelStatsItem;
   profile: ChannelProfileItem;
   photo: ChannelPhotoVariant[];
   missing_tab?: boolean;
+}
+
+/** 접근 제한으로 시각을 확인하지 못한 영상입니다. 정상 live_sessions와 중복될 수 없습니다. */
+export interface UnavailableLiveSession {
+  video_id: string;
+  channel_id: string;
+  reason: "access_restricted";
 }
 
 export interface ViewerResult extends Pagination {

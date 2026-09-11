@@ -220,10 +220,15 @@ export function validateContentRequest(value) {
 /** @param {unknown} value @returns {import("./contracts.d.ts").ChannelRequest} */
 export function validateChannelRequest(value) {
   const record = requestRecord(value);
-  assertRequestKeys(record, ["protocol_version", "channel_id", "max_success_response_bytes"], ["max_pages"]);
+  assertRequestKeys(record, ["protocol_version", "channel_id", "kind", "max_success_response_bytes"], ["max_pages"]);
+  const kind = requiredString(record, "kind");
+  if (kind !== "live" && kind !== "metadata") {
+    throw new RpcRequestError("kind must be live or metadata");
+  }
   return {
     protocol_version: protocolVersion(record),
     channel_id: requiredString(record, "channel_id"),
+    kind,
     ...optionalPositiveIntegers(record, ["max_pages"]),
     max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
   };
@@ -278,15 +283,32 @@ export function validateChannelResponse(value) {
   assertResponseKeys(
     record,
     ["protocol_version", "live_sessions", "stats", "profile", "photo", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["cursor_start", "cursor_end", "missing_tab"],
+    ["cursor_start", "cursor_end", "missing_tab", "unavailable_live_sessions"],
   );
   const stats = recordField(record, "stats");
   const profile = recordField(record, "profile");
   assertResponseKeys(stats, [], ["subscriber_count", "view_count", "video_count"]);
   assertResponseKeys(profile, [], ["handle", "description", "country", "joined_date"]);
+  const liveSessions = arrayField(record, "live_sessions").map(validateLiveSession);
+  const unavailable = Object.hasOwn(record, "unavailable_live_sessions")
+    ? arrayField(record, "unavailable_live_sessions").map(validateUnavailableLiveSession)
+    : undefined;
+  if (unavailable != null) {
+    if (unavailable.length > 32 || (record.missing_tab === true && unavailable.length > 0)) {
+      throw new RpcResponseError("unavailable live sessions are outside the collection scope");
+    }
+    const seen = new Set(liveSessions.map((item) => item.video_id));
+    for (const item of unavailable) {
+      if (seen.has(item.video_id)) {
+        throw new RpcResponseError("unavailable live session overlaps another row");
+      }
+      seen.add(item.video_id);
+    }
+  }
   return {
     protocol_version: responseProtocolVersion(record),
-    live_sessions: arrayField(record, "live_sessions").map(validateLiveSession),
+    live_sessions: liveSessions,
+    ...(unavailable == null ? {} : { unavailable_live_sessions: unavailable }),
     stats: {
       ...optionalNullableNonnegativeInteger(stats, "subscriber_count"),
       ...optionalNullableNonnegativeInteger(stats, "view_count"),
@@ -301,6 +323,20 @@ export function validateChannelResponse(value) {
     photo: arrayField(record, "photo").map(validatePhoto),
     ...validatePagination(record),
     ...optionalBoolean(record, "missing_tab"),
+  };
+}
+
+/** @param {unknown} value @returns {import("./contracts.d.ts").UnavailableLiveSession} */
+function validateUnavailableLiveSession(value) {
+  const record = responseRecord(value);
+  assertResponseKeys(record, ["video_id", "channel_id", "reason"], []);
+  if (record.reason !== "access_restricted") {
+    throw new RpcResponseError("unavailable live session reason is invalid");
+  }
+  return {
+    video_id: nonemptyStringField(record, "video_id"),
+    channel_id: nonemptyStringField(record, "channel_id"),
+    reason: record.reason,
   };
 }
 

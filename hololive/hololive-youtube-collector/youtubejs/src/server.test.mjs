@@ -65,7 +65,7 @@ test("handleCommunityRequest fail-closes when the fetcher throws", async () => {
 
 test("handleChannelRequest reports the typed parser response error class", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
     async () => ({ live_sessions: "not-an-array" }),
   );
   assert.equal(result.status, 422);
@@ -105,7 +105,7 @@ test("handleContentRequest requires kind", async () => {
 
 test("handleChannelRequest returns the injected channel payload", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
     async ({ channelId }) => ({
       live_sessions: [{ video_id: "vid-1", channel_id: channelId, status: "LIVE" }],
       stats: {},
@@ -121,9 +121,19 @@ test("handleChannelRequest returns the injected channel payload", async () => {
   assert.equal(result.body.live_sessions[0].video_id, "vid-1");
 });
 
+test("handleChannelRequest requires an explicit live or metadata kind", async () => {
+  for (const kind of [undefined, "all", "", 1]) {
+    const result = await handleChannelRequest(
+      rpcBody({ channel_id: "UC_TEST", ...(kind == null ? {} : { kind }) }),
+      async () => { throw new Error("invalid request reached fetcher"); },
+    );
+    assert.equal(result.status, 400);
+  }
+});
+
 test("handleChannelRequest rejects an unvalidated fetcher response", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
     async () => ({ live_sessions: "not-an-array" }),
   );
   assert.equal(result.status, 422);
@@ -132,7 +142,7 @@ test("handleChannelRequest rejects an unvalidated fetcher response", async () =>
 
 test("handleChannelRequest rejects fields outside the validated response contract", async () => {
   const result = await handleChannelRequest(
-    rpcBody({ channel_id: "UC_TEST" }),
+    rpcBody({ kind: "live", channel_id: "UC_TEST" }),
     async () => ({
       live_sessions: [], stats: {}, profile: {}, photo: [],
       page_count: 0, exhausted: true, continuity: "CONTIGUOUS",
