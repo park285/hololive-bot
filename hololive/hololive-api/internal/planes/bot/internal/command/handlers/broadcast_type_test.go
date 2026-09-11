@@ -10,7 +10,7 @@ import (
 func TestBroadcastRuleOrderPinned(t *testing.T) {
 	t.Parallel()
 
-	wantStrong := []broadcasttype.Type{broadcasttype.Membership, broadcasttype.Watchalong, broadcasttype.Singing, broadcasttype.News, broadcasttype.ASMR, broadcasttype.HorseRacing, broadcasttype.Event, broadcasttype.Event, broadcasttype.News}
+	wantStrong := []broadcasttype.Type{broadcasttype.Membership, broadcasttype.Watchalong, broadcasttype.Singing, broadcasttype.News, broadcasttype.ASMR, broadcasttype.HorseRacing, broadcasttype.Event, broadcasttype.Event, broadcasttype.News, broadcasttype.Talk}
 	gotStrong := make([]broadcasttype.Type, 0, len(broadcastRules.TitleRules))
 
 	for _, rule := range broadcastRules.TitleRules {
@@ -50,7 +50,7 @@ func TestClassifyBroadcastObservedTopics(t *testing.T) {
 		{name: "observed instrument topic", topic: "Musical_Instrument", want: broadcasttype.Singing},
 		{name: "observed puyo topic", topic: "Puyo_Puyo_Tetris", want: broadcasttype.Game},
 		{name: "observed study topic", topic: "Co-Working_&_Studying", want: broadcasttype.Other},
-		{name: "observed hololive dreams topic", topic: "Hololive_Dreams", want: broadcasttype.Event},
+		{name: "observed hololive dreams topic", topic: "Hololive_Dreams", want: broadcasttype.Game},
 		{name: "observed horse racing topic", topic: "Horse_Racing", want: broadcasttype.HorseRacing},
 		{name: "ambiguous announce topic falls through to title", topic: "announce", title: "【緊急ゲリラ】ガチャガチャ屋さんの店長になりました【Gacha Capsule Shop Simulator - Akihabara】", want: broadcasttype.Game},
 		{name: "ambiguous drawing topic falls through to title", topic: "drawing", title: "【めっちゃカメレオン】自分を塗って景色に溶け込むお絵描きかくれんぼゲーム!", want: broadcasttype.Game},

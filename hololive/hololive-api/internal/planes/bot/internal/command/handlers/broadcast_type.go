@@ -32,6 +32,7 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/broadcasttype"
 )
 
+// BroadcastClassification은 방송 유형과 판정 근거(topic/title/reviewed/unknown)를 담는다.
 type BroadcastClassification struct {
 	Type   broadcasttype.Type
 	Source string
@@ -45,6 +46,7 @@ var broadcastRules = mustLoadBroadcastRules(broadcastTypeRulesJSON)
 type broadcastTitleRule struct {
 	Type           broadcasttype.Type `json:"type"`
 	Keywords       []string           `json:"keywords"`
+	ExactTags      []string           `json:"exact_tags,omitempty"`
 	RejectKeywords []string           `json:"reject_keywords,omitempty"`
 }
 
@@ -52,15 +54,17 @@ type broadcastGameTagRules struct {
 	RejectKeywords []string `json:"reject_keywords"`
 	Exact          []string `json:"exact"`
 	Contains       []string `json:"contains"`
+	TagOnly        []string `json:"tag_only,omitempty"`
 }
 
 type broadcastTypeRules struct {
-	Version     string                        `json:"version"`
-	SourceNotes []string                      `json:"source_notes,omitempty"`
-	Topics      map[string]broadcasttype.Type `json:"topics"`
-	TitleRules  []broadcastTitleRule          `json:"title_rules"`
-	Generic     []broadcastTitleRule          `json:"generic_title_rules,omitempty"`
-	GameTag     broadcastGameTagRules         `json:"game_title_tag"`
+	Version        string                          `json:"version"`
+	SourceNotes    []string                        `json:"source_notes,omitempty"`
+	Topics         map[string]broadcasttype.Type   `json:"topics"`
+	TitleRules     []broadcastTitleRule            `json:"title_rules"`
+	Generic        []broadcastTitleRule            `json:"generic_title_rules,omitempty"`
+	GameTag        broadcastGameTagRules           `json:"game_title_tag"`
+	ReviewedVideos map[string]broadcastVideoReview `json:"reviewed_videos,omitempty"`
 }
 
 type broadcastTitleStrength int
@@ -87,16 +91,20 @@ var broadcastTitleAlwaysOverrides = map[broadcasttype.Type]struct{}{
 var broadcastTitleOverrideStrengths = map[broadcasttype.Type]map[broadcastTitleStrength]struct{}{
 	broadcasttype.Singing: {broadcastTitleStrengthStrong: {}},
 	broadcasttype.News:    {broadcastTitleStrengthStrong: {}},
+	broadcasttype.Talk:    {broadcastTitleStrengthStrong: {}},
 	broadcasttype.Event: {
 		broadcastTitleStrengthLead:   {},
 		broadcastTitleStrengthStrong: {},
 	},
 }
 
+// ClassifyBroadcast는 주제와 제목의 근거로 방송 유형을 반환하며 외부 상태를 변경하지 않는다.
 func ClassifyBroadcast(topicID, title string) broadcasttype.Type {
 	return ClassifyBroadcastWithSource(topicID, title).Type
 }
 
+// ClassifyBroadcastWithSource는 주제·제목 우선순위에 따라 유형과 근거를 반환한다.
+// 명시적인 멤버 한정 제목은 다른 주제보다 우선하며, 근거가 없으면 unknown을 유지한다.
 func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification {
 	topicType := classifyBroadcastTopic(topicID)
 	titleClass := classifyBroadcastTitle(title)
@@ -119,6 +127,10 @@ func ClassifyBroadcastWithSource(topicID, title string) BroadcastClassification 
 func broadcastTitleOverridesTopic(titleClass broadcastTitleClassification, topicType broadcasttype.Type) bool {
 	if titleClass.Type == broadcasttype.Unknown || topicType == broadcasttype.Unknown {
 		return false
+	}
+
+	if titleClass.Type == broadcasttype.Membership && topicType != broadcasttype.Membership {
+		return true
 	}
 
 	if !broadcastTopicAcceptsTitleOverride(topicType) {
@@ -167,12 +179,12 @@ func classifyBroadcastTitle(title string) broadcastTitleClassification {
 		rejectScope = normalized
 	}
 
-	if typ, ok := classifyBroadcastTitleByKeyword(normalized, rejectScope, broadcastRules.TitleRules); ok {
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, rejectScope, leadTag, broadcastRules.TitleRules); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthStrong}
 	}
 
 	if leadTag != "" {
-		if typ, ok := classifyBroadcastTitleByKeyword(leadTag, rejectScope, broadcastRules.Generic); ok {
+		if typ, ok := classifyBroadcastTitleByKeyword(leadTag, rejectScope, leadTag, broadcastRules.Generic); ok {
 			return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthLead}
 		}
 	}
@@ -181,20 +193,21 @@ func classifyBroadcastTitle(title string) broadcastTitleClassification {
 		return broadcastTitleClassification{Type: broadcasttype.Game, Strength: broadcastTitleStrengthStrong}
 	}
 
-	if typ, ok := classifyBroadcastTitleByKeyword(normalized, normalized, broadcastRules.Generic); ok {
+	if typ, ok := classifyBroadcastTitleByKeyword(normalized, normalized, leadTag, broadcastRules.Generic); ok {
 		return broadcastTitleClassification{Type: typ, Strength: broadcastTitleStrengthGeneric}
 	}
 
 	return broadcastTitleClassification{Type: broadcasttype.Unknown, Strength: broadcastTitleStrengthUnknown}
 }
 
-func classifyBroadcastTitleByKeyword(normalized, rejectScope string, rules []broadcastTitleRule) (broadcasttype.Type, bool) {
+func classifyBroadcastTitleByKeyword(normalized, rejectScope, leadTag string, rules []broadcastTitleRule) (broadcasttype.Type, bool) {
 	for _, rule := range rules {
 		if broadcastRejectScopeMatches(rejectScope, rule.RejectKeywords) {
 			continue
 		}
 
-		if containsAnyBroadcastKeyword(normalized, rule.Keywords) {
+		if containsAnyBroadcastKeyword(normalized, rule.Keywords) ||
+			(leadTag != "" && containsExactBroadcastKeyword(leadTag, rule.ExactTags)) {
 			return rule.Type, true
 		}
 	}
@@ -220,7 +233,8 @@ func titleLooksLikeGameBroadcast(normalized, leadTag string) bool {
 
 	if leadTag != "" &&
 		!containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.RejectKeywords) &&
-		containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.Contains) {
+		(containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.Contains) ||
+			containsAnyBroadcastKeyword(leadTag, broadcastRules.GameTag.TagOnly)) {
 		return true
 	}
 
