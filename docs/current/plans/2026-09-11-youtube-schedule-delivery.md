@@ -63,6 +63,35 @@ source pre-push hook의 reusable/freshness/ambient 및 meta의 CI/DB/retry/proje
 
 보완 후 helper 전체 149개 테스트와 typecheck가 통과했다. 실제 호스트 조회에서 native a/d는 x86_64와 Node v24.20.0, 중앙 c와 서울 b는 aarch64임을 확인했다. 기존 artifact architecture를 유지하며 toolchain/runtime 업그레이드는 하지 않는다.
 
+### 발행과 배포 결과
+
+[PR #491](https://github.com/park285/hololive-bot/pull/491)의 [CI](https://github.com/park285/hololive-bot/actions/runs/34568558326)는 fast-gate를 포함한 12개 check가 모두 성공했다. 로컬 full pre-push의 일반·race test, lint·NilAway·build·freshness·ambient도 통과했다. 리뷰 commit `bf7d9cb20bd15744c40d25122034d362c1fb7cfa`와 동일한 tree를 가진 main commit `214ff8ef73ab767b9092d7f18362829fa6527169`가 2026-09-11 06:16:24 UTC에 반영됐다. 최초 직접 push는 필수 원격 check 부재로 거부됐으며 PR 절차로 해소했다. Meta main `9a17c10f1`의 source pointer도 해당 main SHA와 일치한다.
+
+다음 시각은 UTC이며 모두 동일한 source revision `214ff8ef73ab767b9092d7f18362829fa6527169`를 실행한다.
+
+| Slot | 실행 방식 | 새 기동 시각 | 보존한 rollback |
+|---|---|---|---|
+| a / osaka1 | native amd64 | 2026-09-11 06:22:03 | release `20260907-session-27eddada-osaka-r2` |
+| b / iris-seoul | Compose arm64 | 2026-09-11 06:23:12.982468046 | image `rollback-20260911T062302Z`, `backups/seoul-collector-20260911T062302Z` |
+| c / hololive-osaka | Compose arm64 | 2026-09-11 06:28:27.846144243 | image `rollback-youtube-schedule-20260911-214ff8ef73ab`, 기존 `/opt/hololive-bot/compose/current` |
+| d / osaka2 | native amd64 | 2026-09-11 06:30:19 | release `20260907-session-27eddada-osaka2` |
+
+Native의 새 release는 각각 `20260911-youtube-schedule-214ff8ef73ab-osaka`와 `20260911-youtube-schedule-214ff8ef73ab-osaka2`다. 두 호스트의 실행 파일 SHA-256은 로컬 artifact와 같은 `b9095533397e7ce8e5c51880ac76a7d4f5681f2d3066ec5e3f80f539d1bb83c8`이다. 중앙·서울 ARM64 image archive SHA-256은 `a252ea233e38f59f31c103c5278c4f271f8076bb6f7422cef2d4907fc18811f8`, archive의 configuration digest는 `42acbc59955672fb44a6760dc775e8cb66e051c83e1f9d8d51c3b09f23c58355`다. 중앙과 로컬의 image ID는 `da02f7aec3f0e22cfa710ca899fcde81d813bc974226ce90b6805f1183ccf80a`이고 서울 engine은 configuration digest를 image ID로 보고한다. 중앙 전달 파일의 전체 해시, loaded image의 architecture·revision과 실제 container image ID를 대조했다.
+
+네 slot의 Node는 v24.20.0이다. 실제 helper의 `fetch-channel.mjs` SHA-256은 `3949c27c771c4ccc34d303b83381e605ab6ab1c43c2db044156ca9b9a400d9b5`, `live-metadata.mjs`는 `d51fa8f862c9df6aae2f814f2daba28de40a9b742bc91fbfa730b88ddf65bdd4`로 로컬과 일치했다. 모두 READY, helper ok, first_success=true, handoff PROCESSED를 확인했다. 중앙의 실제 prod/admin-security/live-compat/admin-web overlay 네 개를 유지하고 c만 `--no-build --no-deps --force-recreate`로 교체했다. wrapper와 Compose 파일 해시가 보존됐고 전후 container ID 차이는 c 한 개뿐이었다.
+
+### 운영 수집 근거와 남은 한계
+
+`transaction_read_only=on`, statement timeout 10초의 guarded query로 확인했다. 06:30:19 이후 새 관측은 a 175건, b 123건, c 114건, d 174건이며 각 slot의 마지막 observed_at은 06:34:24~25였다. 문제 채널 `UCKSpM183c85d5V2cW5qaUjA`의 live job은 06:33:41.584437, metadata job은 06:25:19.263974에 완료됐고 두 job 모두 IDLE이며 retry_not_before가 비어 있었다. 보존된 마지막 실패 시각은 모두 마지막 slot 배포 이전이다.
+
+최신 live 관측은 PARTIAL로 정상 sessions 29개를 발행했다. `Spraq2szAMA`와 `dAOcenyS3n8`의 일정은 각각 2026-12-09 03:00 UTC, 2026-09-13 03:00 UTC이며 projection의 last_seen_at이 새 수집으로 갱신됐다. 시각이 가려진 `ijnXjcoquTY`는 제외하고 기존 상태·last_seen_at(2026-09-10 09:57:38.011899 UTC)을 보존했다. 기존 예정 시각을 새 확인 결과로 재사용하지 않았다.
+
+과거 누락 `yK62q7V_JvE`는 첫 배포 이전인 06:05:35 UTC에 종료됐다. 06:31의 공개 player 조회는 실제 startTimestamp 03:02:15와 endTimestamp 06:05:35를 반환했고 새 collector도 ENDED fact를 발행했다. 그러나 기존 projection은 실제 LIVE 시작을 관측하지 못했다. 기존 `CanEnd`의 LastLivePositiveAt/SeenAt 필수 계약 때문에 이 과거 row는 UPCOMING으로 남는다. 이 한 건의 과거 상태 자동 정리와 지나간 알림 복구는 검증된 수집 복구 결과에 포함되지 않는다. 시작 관측을 소급 생성하거나 운영 DB를 직접 수정하지 않았다.
+
+처음의 과거 전체 관측 조회는 10초 timeout으로 종료됐다. 운영 index `(observation_kind, subject_key, scheduled_for DESC, id DESC)`와 최근 시각을 지정한 bounded query로 필요한 최신 PARTIAL 근거를 확인했다. 실제 YouTube 최종 probe는 45초 transient cgroup에서 정상 종료됐다.
+
+Fallback delta: 확인된 paid-access 시각 부재를 PARTIAL로 격리하는 예외 1개다. 추가 provider·추가 retry·시각 추정·과거 LIVE 관측 조작·수동 재전송은 없다. consumer와 공용 payload generation은 유지했다.
+
 ## 인계
 
-배포·Git 발행 권한은 이 세션에서 승인되었으며 사용자에게 재확인하지 않는다. 필수 gate 실패는 원인을 해결한 뒤 해당 경로를 다시 검증한다. 외부 부작용이 미확정이면 해당 slot에서 멈추고 상태를 조회한다. 수동 메시지 재전송은 수행하지 않는다.
+배포·Git 발행 권한은 이 세션에서 승인되었으며 네 collector의 배포와 운영 검증을 완료했다. 실행 중인 code revision은 `214ff8ef73ab767b9092d7f18362829fa6527169`이며 이후 문서 마무리 commit은 실행 파일 변경을 포함하지 않는다. 숨겨진 멤버십 시각과 위 과거 상태 한 건의 한계를 유지한다. 수동 메시지 재전송은 수행하지 않았다.
