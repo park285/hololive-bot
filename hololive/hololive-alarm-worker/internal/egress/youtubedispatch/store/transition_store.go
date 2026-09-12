@@ -362,20 +362,19 @@ func (s *TransitionStore) loadLogicalGroupRows(
 	}
 
 	ids := make([]int64, 0, len(requested))
-	roomIDs := make([]string, 0, len(requested))
-	kinds := make([]string, 0, len(requested))
+	roomIDs := make([]string, 0, len(requested)*3)
+	kinds := make([]string, 0, len(requested)*3)
 	candidates := make([]string, 0, len(requested)*3)
 
 	for i := range requested {
 		ids = append(ids, requested[i].delivery.ID)
-		roomIDs = append(roomIDs, requested[i].key.RoomID)
-		kinds = append(kinds, string(requested[i].key.Kind))
-		candidates = append(candidates, requested[i].candidate...)
+		// 배열의 같은 위치가 한 요청 조합입니다. 개별 중복 제거는 교차 조합까지 잠그게 합니다.
+		for _, candidate := range requested[i].candidate {
+			roomIDs = append(roomIDs, requested[i].key.RoomID)
+			kinds = append(kinds, string(requested[i].key.Kind))
+			candidates = append(candidates, candidate)
+		}
 	}
-
-	roomIDs = UniqueStrings(roomIDs)
-	kinds = UniqueStrings(kinds)
-	candidates = UniqueStrings(candidates)
 
 	limit := len(requested)*(s.config.LogicalGroupLimit+1) + len(ids)
 

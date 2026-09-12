@@ -8,6 +8,19 @@
 
 ## 미출시
 
+## v3.5.4 - 2026-09-12
+
+### 수정
+
+- iris-client-go v2.6.0을 소비 모듈에 고정해 API webhook 생성 시 HandlerOption을 한 번만
+  적용하며 기존 인증·nonce 저장소·durable admission 설정을 보존합니다.
+- YouTube delivery 전이가 요청한 방·알림 종류·identity tuple만 묶어 다른 요청의 교차 조합을
+  선택하지 않습니다. Raw·canonical identity 후보를 한 번씩 join하고 direct ID와 합쳐 중복을
+  제거하며 기존 정렬·조회 상한·행 잠금 계약을 유지합니다.
+- 실제 prepared custom/generic 계획에서 tuple-only sibling과 direct-only 행의 전체 ID·순서,
+  요청 관계의 반복 실행 상한을 회귀 검사합니다.
+- 이번 릴리즈의 API artifact 버전은 3.2.2, alarm-worker artifact 버전은 3.2.3입니다.
+
 ## v3.5.3 - 2026-09-11
 
 ### 수정
