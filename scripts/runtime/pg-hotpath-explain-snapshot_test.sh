@@ -17,6 +17,20 @@ require() {
   fi
 }
 
+require_twice() {
+  local token="$1"
+  local remaining="${sql}"
+  local count=0
+  while [[ "${remaining}" == *"${token}"* ]]; do
+    remaining="${remaining#*"${token}"}"
+    count=$((count + 1))
+  done
+  if (( count != 2 )); then
+    echo "start/finish SQL must both contain ${token}; found ${count}" >&2
+    exit 1
+  fi
+}
+
 require "EXPLAIN (ANALYZE, BUFFERS)"
 require "alarm_dispatch_deliveries"
 require "youtube_notification_outbox"
@@ -46,11 +60,13 @@ require "start_stats_since"
 require "finish_stats_since"
 require "start_stats_since IS DISTINCT FROM finish_stats_since"
 require "statement_stats_reset"
-require "statements.query ILIKE '%FOR UPDATE SKIP LOCKED%'"
-require "statements.query NOT ILIKE '%pg_stat_statements%'"
-require "statements.query NOT LIKE '%hololive-pg-hotpath-stats-observer%'"
+require_twice "statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm"
+require_twice "statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube"
+require_twice "statements.query !~* '(^|[^[:alnum:]_])EXPLAIN([^[:alnum:]_]|\$)'"
+require_twice "statements.query NOT ILIKE '%pg_stat_statements%'"
+require_twice "statements.query NOT LIKE '%hololive-pg-hotpath-stats-observer%'"
 require "hololive-pg-hotpath-stats-observer"
-require "fingerprint.is_alarm <> fingerprint.is_youtube"
+require_twice "fingerprint.is_alarm <> fingerprint.is_youtube"
 require "UPDATE[[:space:]]+alarm_dispatch_deliveries[[:space:]]+d[[:space:]]+SET"
 require "lock_expires_at[[:space:]]*=[[:space:]]*NOW"
 require "RETURNING[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id"
@@ -60,6 +76,11 @@ require "UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+
 require "FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id"
 require "RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind"
 require "outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload"
+
+if [[ "${sql}" == *"statements.query ILIKE '%FOR UPDATE SKIP LOCKED%'"* ]]; then
+  echo "a shared plain-lock filter excludes the actual YouTube OF outbox claim" >&2
+  exit 1
+fi
 
 if [[ "${sql}" == *"mean_exec_time"* ]]; then
   echo "printed SQL must evaluate interval deltas, not the cumulative lifetime mean" >&2
@@ -153,6 +174,49 @@ if [[ "${youtube_revive_source}" == *"), updated AS ("* \
   && "${youtube_revive_source}" == *"UPDATE youtube_notification_outbox AS outbox"* \
   && "${youtube_revive_source}" == *"RETURNING outbox.id, outbox.kind, outbox.channel_id, outbox.content_id"* ]]; then
   echo "youtube revive SQL must not satisfy the runtime claim fingerprint" >&2
+  exit 1
+fi
+
+# fake psql의 결과 행만 검사하면 SQL selector와 실제 런타임 구문의 차이를 놓친다.
+# 두 시점의 SQL guard를 위에서 고정하고 같은 원본 claim을 후단 matcher에도 직접 넣는다.
+# shellcheck source=scripts/runtime/lib/pg-hotpath-claim-window.sh
+source "${CLAIM_WINDOW_LIB}"
+# shellcheck source=scripts/runtime/lib/pg-hotpath-catalog-sql.sh
+source "${CATALOG_SQL_LIB}"
+
+claim_query_matches_target alarm_dispatch "${alarm_claim_source}"
+claim_query_matches_target youtube_outbox "${youtube_claim_source}"
+claim_query_matches_target alarm_dispatch "${alarm_claim_source,,}"
+claim_query_matches_target youtube_outbox "${youtube_claim_source,,}"
+
+assert_not_a_claim() {
+  local query="$1"
+  local target
+  for target in alarm_dispatch youtube_outbox; do
+    if claim_query_matches_target "${target}" "${query}"; then
+      echo "non-claim query was accepted as ${target}" >&2
+      exit 1
+    fi
+  done
+}
+
+for non_claim_source_path in \
+  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0010_01.sql" \
+  "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/queries/repository_maintenance_0035_02.sql"; do
+  assert_not_a_claim "$(compact_sql_file "${non_claim_source_path}")"
+done
+assert_not_a_claim "${youtube_revive_source}"
+assert_not_a_claim "$(alarm_claim_sql)"
+assert_not_a_claim "$(youtube_outbox_claim_sql)"
+assert_not_a_claim "/* hololive-pg-hotpath-stats-observer */ ${youtube_claim_source}"
+assert_not_a_claim "/* pg_stat_statements */ ${alarm_claim_source}"
+assert_not_a_claim "${alarm_claim_source} ${youtube_claim_source}"
+assert_not_a_claim "${youtube_claim_source/FOR UPDATE OF outbox SKIP LOCKED/FOR UPDATE OF other SKIP LOCKED}"
+assert_not_a_claim "${youtube_claim_source/FOR UPDATE OF outbox SKIP LOCKED/FOR UPDATE SKIP LOCKED}"
+assert_not_a_claim "${alarm_claim_source//FOR UPDATE SKIP LOCKED/FOR UPDATE OF other SKIP LOCKED}"
+if claim_query_matches_target alarm_dispatch "${youtube_claim_source}" \
+  || claim_query_matches_target youtube_outbox "${alarm_claim_source}"; then
+  echo "claim matcher accepted the other target's query" >&2
   exit 1
 fi
 
@@ -253,6 +317,13 @@ if [[ -n "$out_file" ]]; then
       fi
       if [[ "${FAKE_COUNTER_RECOVERED_AFTER_STATEMENT_RESET:-false}" == "true" ]]; then
         finish_stats_since="2026-07-10 00:00:30+00"
+      fi
+      if [[ "${FAKE_EXPLAIN_CLAIM:-false}" == "true" ]]; then
+        FAKE_YOUTUBE_QUERY="EXPLAIN (ANALYZE, BUFFERS) ${FAKE_YOUTUBE_QUERY:?}"
+      elif [[ "${FAKE_OBSERVER_CLAIM:-false}" == "true" ]]; then
+        FAKE_YOUTUBE_QUERY="/* hololive-pg-hotpath-stats-observer */ ${FAKE_YOUTUBE_QUERY:?}"
+      elif [[ "${FAKE_AMBIGUOUS_CLAIM:-false}" == "true" ]]; then
+        FAKE_YOUTUBE_QUERY="${FAKE_ALARM_QUERY:?} ${FAKE_YOUTUBE_QUERY:?}"
       fi
       : > "$out_file"
       append_record "$out_file" \
@@ -385,6 +456,9 @@ assert_gate_rejects FAKE_COUNTER_RECOVERED_AFTER_STATEMENT_RESET "claim statemen
 assert_gate_rejects FAKE_ALARM_EXPIRED_LEASE_COLLISION "claim statement fingerprint does not match its target"
 assert_gate_rejects FAKE_ALARM_STALE_SEND_COLLISION "claim statement fingerprint does not match its target"
 assert_gate_rejects FAKE_YOUTUBE_REVIVE_COLLISION "claim statement fingerprint does not match its target"
+assert_gate_rejects FAKE_EXPLAIN_CLAIM "claim statement fingerprint does not match its target"
+assert_gate_rejects FAKE_OBSERVER_CLAIM "claim statement fingerprint does not match its target"
+assert_gate_rejects FAKE_AMBIGUOUS_CLAIM "claim statement fingerprint does not match its target"
 assert_gate_rejects FAKE_DUPLICATE_WINDOW "claim statement window must contain exactly one window record"
 assert_gate_rejects FAKE_ROWS_REMOVED "Rows Removed by Filter exceeds 1000"
 

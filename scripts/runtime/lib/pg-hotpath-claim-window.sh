@@ -45,14 +45,16 @@ start_claims AS MATERIALIZED (
             AND statements.query ~* 'RETURNING[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id'
             AND statements.query ~* 'd[.]claim_keys'
             AND statements.query ~* 'd[.]delivery_context'
-            AND statements.query ~* 'FROM[[:space:]]+updated' AS is_alarm,
+            AND statements.query ~* 'FROM[[:space:]]+updated'
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
             statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
             AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id'
             AND statements.query ~* 'RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id'
             AND statements.query ~* 'outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload'
-            AND statements.query ~* 'FROM[[:space:]]+updated' AS is_youtube
+            AND statements.query ~* 'FROM[[:space:]]+updated'
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube
     ) AS fingerprint
     WHERE start_info.stats_reset IS NOT NULL
       AND statements.dbid = (
@@ -62,8 +64,7 @@ start_claims AS MATERIALIZED (
     )
       AND statements.queryid IS NOT NULL
       AND statements.stats_since IS NOT NULL
-      AND statements.query ILIKE '%FOR UPDATE SKIP LOCKED%'
-      AND statements.query NOT ILIKE '%EXPLAIN%FOR UPDATE SKIP LOCKED%'
+      AND statements.query !~* '(^|[^[:alnum:]_])EXPLAIN([^[:alnum:]_]|$)'
       AND statements.query NOT ILIKE '%pg_stat_statements%'
       AND statements.query NOT LIKE '%hololive-pg-hotpath-stats-observer%'
       AND fingerprint.is_alarm <> fingerprint.is_youtube
@@ -111,14 +112,16 @@ finish_claims AS MATERIALIZED (
             AND statements.query ~* 'RETURNING[[:space:]]+d[.]id[[:space:]]*,[[:space:]]*d[.]event_id'
             AND statements.query ~* 'd[.]claim_keys'
             AND statements.query ~* 'd[.]delivery_context'
-            AND statements.query ~* 'FROM[[:space:]]+updated' AS is_alarm,
+            AND statements.query ~* 'FROM[[:space:]]+updated'
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm,
             statements.query ~* 'WITH[[:space:]]+claim[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+AS[[:space:]]*[(]'
             AND statements.query ~* 'UPDATE[[:space:]]+youtube_notification_outbox[[:space:]]+AS[[:space:]]+outbox[[:space:]]+SET[[:space:]]+locked_at'
             AND statements.query ~* 'FROM[[:space:]]+claim[[:space:]]+WHERE[[:space:]]+outbox[.]id[[:space:]]*=[[:space:]]*claim[.]id'
             AND statements.query ~* 'RETURNING[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id'
             AND statements.query ~* 'outbox[.]payload::text[[:space:]]+AS[[:space:]]+payload'
-            AND statements.query ~* 'FROM[[:space:]]+updated' AS is_youtube
+            AND statements.query ~* 'FROM[[:space:]]+updated'
+            AND statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube
     ) AS fingerprint
     WHERE wait_for_window.claim_count >= 0
       AND statements.dbid = (
@@ -128,8 +131,7 @@ finish_claims AS MATERIALIZED (
     )
       AND statements.queryid IS NOT NULL
       AND statements.stats_since IS NOT NULL
-      AND statements.query ILIKE '%FOR UPDATE SKIP LOCKED%'
-      AND statements.query NOT ILIKE '%EXPLAIN%FOR UPDATE SKIP LOCKED%'
+      AND statements.query !~* '(^|[^[:alnum:]_])EXPLAIN([^[:alnum:]_]|$)'
       AND statements.query NOT ILIKE '%pg_stat_statements%'
       AND statements.query NOT LIKE '%hololive-pg-hotpath-stats-observer%'
       AND fingerprint.is_alarm <> fingerprint.is_youtube
@@ -298,10 +300,17 @@ query_matches_all_patterns() {
 claim_query_matches_target() {
   local claim_target="$1"
   local normalized_query="${2,,}"
+  local is_alarm=false
+  local is_youtube=false
 
-  case "${claim_target}" in
-    alarm_dispatch)
-      query_matches_all_patterns "${normalized_query}" \
+  # SQL selector와 같은 제외·배타 판정을 적용해 관측기나 EXPLAIN 결과를 발송 비용으로 세지 않는다.
+  if [[ "${normalized_query}" =~ (^|[^[:alnum:]_])explain([^[:alnum:]_]|$) \
+    || "${normalized_query}" == *pg_stat_statements* \
+    || "$2" == *hololive-pg-hotpath-stats-observer* ]]; then
+    return 1
+  fi
+
+  if query_matches_all_patterns "${normalized_query}" \
         'with[[:space:]]+legacy_head[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*due_window[[:space:]]+as[[:space:]]+materialized[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*locked_units[[:space:]]+as[[:space:]]*[(]' \
@@ -315,10 +324,10 @@ claim_query_matches_target() {
         'd[.]claim_keys' \
         'd[.]delivery_context' \
         'from[[:space:]]+updated' \
-        'for[[:space:]]+update[[:space:]]+skip[[:space:]]+locked'
-      ;;
-    youtube_outbox)
-      query_matches_all_patterns "${normalized_query}" \
+        'for[[:space:]]+update[[:space:]]+skip[[:space:]]+locked'; then
+    is_alarm=true
+  fi
+  if query_matches_all_patterns "${normalized_query}" \
         'with[[:space:]]+claim[[:space:]]+as[[:space:]]*[(]' \
         '[)][[:space:]]*,[[:space:]]*updated[[:space:]]+as[[:space:]]*[(]' \
         'update[[:space:]]+youtube_notification_outbox[[:space:]]+as[[:space:]]+outbox[[:space:]]+set[[:space:]]+locked_at' \
@@ -326,7 +335,17 @@ claim_query_matches_target() {
         'returning[[:space:]]+outbox[.]id[[:space:]]*,[[:space:]]*outbox[.]kind[[:space:]]*,[[:space:]]*outbox[.]channel_id[[:space:]]*,[[:space:]]*outbox[.]content_id' \
         'outbox[.]payload::text[[:space:]]+as[[:space:]]+payload' \
         'from[[:space:]]+updated' \
-        'for[[:space:]]+update[[:space:]]+of[[:space:]]+outbox[[:space:]]+skip[[:space:]]+locked'
+        'for[[:space:]]+update[[:space:]]+of[[:space:]]+outbox[[:space:]]+skip[[:space:]]+locked'; then
+    is_youtube=true
+  fi
+
+  [[ "${is_alarm}" != "${is_youtube}" ]] || return 1
+  case "${claim_target}" in
+    alarm_dispatch)
+      [[ "${is_alarm}" == true ]]
+      ;;
+    youtube_outbox)
+      [[ "${is_youtube}" == true ]]
       ;;
     *)
       return 1

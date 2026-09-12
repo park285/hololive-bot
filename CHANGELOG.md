@@ -19,6 +19,8 @@
   제거하며 기존 정렬·조회 상한·행 잠금 계약을 유지합니다.
 - 실제 prepared custom/generic 계획에서 tuple-only sibling과 direct-only 행의 전체 ID·순서,
   요청 관계의 반복 실행 상한을 회귀 검사합니다.
+- 배포 전 PG hot-path 검사가 YouTube claim의 `FOR UPDATE OF outbox SKIP LOCKED` 구문을
+  포함하고, EXPLAIN·관측기·혼합 fingerprint를 제외하도록 SQL·결과 분류를 일치시킵니다.
 - 이번 릴리즈의 API artifact 버전은 3.2.2, alarm-worker artifact 버전은 3.2.3입니다.
 
 ## v3.5.3 - 2026-09-11
