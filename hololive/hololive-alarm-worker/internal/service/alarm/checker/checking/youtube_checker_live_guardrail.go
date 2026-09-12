@@ -43,6 +43,12 @@ func (c *YouTubeChecker) observePersistedLiveGuardrails(
 
 	metas := persistedLiveGuardrailMetas(sessions, subscriberMap, now)
 	for _, meta := range metas {
+		// 병합 후 확정된 Premiere 분류까지 LIVE 알림 생성과 같은 기준으로 반영한다.
+		stream := findYouTubeStreamByID(streamsByChannel[meta.channelID], meta.streamID)
+		if stream != nil && !isLiveCatchupCandidate(stream) {
+			continue
+		}
+
 		rooms, err := c.guardrailSubscriberRooms(ctx, &meta, streamsByChannel)
 		if err != nil {
 			observeYouTubeLiveGuardrail("dispatch_check_error")
@@ -66,7 +72,7 @@ func currentLiveStreamIDs(streamsByChannel map[string][]*domain.Stream) []string
 	streamIDs := make([]string, 0, len(streamsByChannel))
 	for _, streams := range streamsByChannel {
 		for _, stream := range streams {
-			if stream == nil || !stream.IsLive() {
+			if !isLiveCatchupCandidate(stream) {
 				continue
 			}
 
@@ -335,7 +341,7 @@ func persistedLiveGuardrailMetaFromSession(
 	now time.Time,
 ) (persistedLiveGuardrailMeta, bool) {
 	stream := session.Stream
-	if stream == nil || !stream.IsLive() || stream.ID == "" {
+	if !isLiveCatchupCandidate(stream) || stream.ID == "" {
 		return persistedLiveGuardrailMeta{}, false
 	}
 
