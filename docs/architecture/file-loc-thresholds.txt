@@ -1,6 +1,6 @@
 # Advisory path exceptions for Structure Gate v2.
 # relative/path:ADVISORY_MAX_LINES; the canonical hard ceiling remains 800.
-admin-dashboard/frontend/src/components/dashboard/SystemStatsChart.tsx:140
+admin-dashboard/frontend/src/features/stats/components/SystemStatsChart.tsx:140
 scripts/logs/remote-sync-main-logs.sh:480
 hololive/hololive-api/scripts/bot.sh:560
 scripts/review/verify-full-bundle.sh:500
