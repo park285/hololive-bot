@@ -85,6 +85,10 @@ func TestTransitionLogicalGroupRowsPreservesIdentityCandidatesAndDirectIDs(t *te
 	requested, err := buildRequestedLogicalGroups([]domain.YouTubeNotificationDelivery{delivery}, map[int64]domain.YouTubeNotificationOutbox{outbox.ID: outbox})
 	require.NoError(t, err)
 
+	if requested == nil || len(requested) != 1 {
+		t.Fatalf("identity fixture must produce one requested group, got %d", len(requested))
+	}
+
 	wanted := make([]int64, 1, 5)
 
 	wanted[0] = delivery.ID
@@ -127,6 +131,11 @@ func TestTransitionLogicalGroupRowsPreservesIdentityCandidatesAndDirectIDs(t *te
 
 	rows, err := transition.loadLogicalGroupRows(t.Context(), tx, requested)
 	require.NoError(t, err)
+
+	if rows == nil || len(rows) != len(wanted) {
+		t.Fatalf("identity fixture must return %d rows, got %d", len(wanted), len(rows))
+	}
+
 	require.Equal(t, wanted, groupQueryRowIDs(rows), "duplicate tuples must not duplicate rows; direct IDs must not require identity candidates")
 
 	_, requestedSet := requestedLogicalKeys(requested[:1])
