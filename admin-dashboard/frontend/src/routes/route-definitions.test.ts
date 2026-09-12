@@ -73,3 +73,24 @@ test("route prefetch deduplicates repeated hover intent for the same route", asy
 		membersRoute.load = originalLoad;
 	}
 });
+
+test("failed prefetch is handled and only a new user intent starts another attempt", async () => {
+	const route = ROUTE_DEFINITIONS.find(route => route.id === "calendar");
+	assert.ok(route);
+	const originalLoad = route.load;
+	let attempts = 0;
+	route.load = async () => {
+		attempts++;
+		if (attempts === 1) throw new Error("fixture chunk unavailable");
+		return { default: () => null };
+	};
+	try {
+		prefetchRoute("calendar");
+		await new Promise(resolve => setImmediate(resolve));
+		assert.equal(attempts, 1);
+		prefetchRoute("calendar");
+		prefetchRoute("calendar");
+		await new Promise(resolve => setImmediate(resolve));
+		assert.equal(attempts, 2);
+	} finally { route.load = originalLoad; }
+});

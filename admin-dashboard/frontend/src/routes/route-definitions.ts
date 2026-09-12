@@ -96,6 +96,7 @@ export const getLazyComponent = (id: string) => {
 
 const prefetchedSet = new Set<string>();
 
+/** 사용자 의도에 따라 코드를 준비하고, 실패한 항목은 다음 명시적 의도에서 다시 시도할 수 있게 합니다. */
 export const prefetchRoute = (id: string) => {
 	if (prefetchedSet.has(id)) return;
 
@@ -103,5 +104,8 @@ export const prefetchRoute = (id: string) => {
 	if (!route) return;
 
 	prefetchedSet.add(id);
-	void route.load();
+	void route.load().catch(() => {
+		// 사전 로딩 실패는 화면 진입 시의 오류 경계가 표시하며 자동으로 재시도하지 않습니다.
+		prefetchedSet.delete(id);
+	});
 };

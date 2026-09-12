@@ -61,6 +61,10 @@ httpClient.interceptors.request.use(config => {
   return config;
 }, undefined, { synchronous: true });
 const testQueries = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 300000, refetchOnWindowFocus: false }, mutations: { retry: 2, retryDelay: 0 } } });
+const ModuleProbe = React.lazy(async () => {
+  if (sessionStorage.getItem("fixture-module-ready") !== "yes") throw new Error("fixture module unavailable");
+  return { default: () => React.createElement("p", null, "화면 코드 복구 완료") };
+});
 const MemberSubmit = () => {
   const mutation = useBusinessMutation({ mutationFn: () => { businessInvocations++; return adminClient.holoUpdateMemberName("9007199254740993", { name: "한글 새 이름" }); }, onSuccess: () => { businessCallbacks++; } });
   return React.createElement("button", { disabled: mutation.isPending, onClick: () => mutation.mutate(undefined) }, "이름 저장");
@@ -79,6 +83,7 @@ const Shell = () => {
     React.createElement(Route, { path: "/dashboard/member-editor", element: React.createElement(MembersPage) }),
     React.createElement(Route, { path: "/dashboard/alarm-editor", element: React.createElement(AlarmsPage) }),
     React.createElement(Route, { path: "/dashboard/docker-editor", element: React.createElement(ContainerList) }),
+    React.createElement(Route, { path: "/dashboard/module-probe", element: React.createElement(React.Suspense, { fallback: "화면 준비 중" }, React.createElement(ModuleProbe)) }),
     ...[["rooms", RoomsPage], ["streams", StreamsPage], ["calendar", CalendarPage], ["stats", StatsPage]].map(([name, component]) => React.createElement(Route, { key: name, path: "/dashboard/" + name + "-view", element: React.createElement(component) })),
     ...[["stats", StatsPage], ["streams", StreamsPage], ["calendar", CalendarPage], ["alarms", AlarmsPage], ["settings", SettingsPage]].map(([name, component]) => React.createElement(Route, { key: name, path: "/dashboard/" + name, element: params.get("tab") === "LAYOUT" ? React.createElement(component) : null })),
     React.createElement(Route, { path: "*", element: null })));
@@ -662,6 +667,7 @@ async function exerciseEditors(browser, base, state) {
     await dialog.getByRole("button", { name: "저장", exact: true }).click();
     await expect.poll(() => state.held).toBe(true);
     await expect(dialog).toBeVisible();
+    await expect(nameInput).toBeDisabled();
     await expect(dialog.getByRole("button", { name: "저장", exact: true })).toBeDisabled();
     await dialog.getByRole("button", { name: "취소", exact: true }).click();
     await page.getByRole("button", { name: "외부 변경 이름 이름 수정", exact: true }).click();
@@ -674,8 +680,13 @@ async function exerciseEditors(browser, base, state) {
     dialog = page.getByRole("dialog", { name: "채널 ID 수정" });
     await dialog.getByLabel("YouTube 채널 ID").fill("UC987654321098765432109876");
     state.businessMode = "reject";
+    state.hold = "channel";
     await dialog.getByRole("button", { name: "저장", exact: true }).click();
+    await expect.poll(() => state.held).toBe(true);
+    await expect(dialog.getByLabel("YouTube 채널 ID")).toBeDisabled();
+    state.release();
     await expect(dialog).toContainText("서버가 요청을 거절했습니다");
+    await expect(dialog.getByLabel("YouTube 채널 ID")).toBeEnabled();
     await expect(dialog.getByLabel("YouTube 채널 ID")).toHaveValue("UC987654321098765432109876");
     state.member.channelId = "UC555555555555555555555555";
     await page.evaluate(() => window.contract.refetchEditors());
@@ -828,6 +839,23 @@ async function exerciseReadPages(browser, base, state) {
 }
 
 
+async function exerciseModuleRecovery(browser, base, state) {
+  Object.assign(state, newState());
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await ready(page, base + "/__session_test?tab=MODULE"); await login(page);
+    await page.evaluate(() => window.contract.navigate("/dashboard/module-probe"));
+    const reload = page.getByRole("button", {name: "페이지 새로고침", exact: true});
+    await expect(reload).toBeVisible();
+    await page.evaluate(() => sessionStorage.setItem("fixture-module-ready", "yes"));
+    await Promise.all([page.waitForEvent("load"), reload.click()]);
+    await page.waitForFunction(() => window.contract?.ready);
+    await page.evaluate(() => window.contract.navigate("/dashboard/module-probe"));
+    await expect(page.getByText("화면 코드 복구 완료", {exact: true})).toBeVisible();
+  } finally { await context.close(); }
+}
+
 async function exerciseLayout(browser, base, state) {
   Object.assign(state, newState(), { readPages: true, editors: true, docker: true, memberCount: 120 });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } }); const page = await context.newPage();
@@ -919,7 +947,7 @@ if (process.env.ADMIN_SESSION_BROWSER_CGROUP !== "1") {
       browser = await type.launch(options);
       for (const exercise of [exerciseCookies, exerciseValidationPreparation, exerciseWarningLoading,
         exerciseStreams, exerciseAlarmControls, exerciseBusinessMutations, exerciseEditors,
-        exerciseDocker, exerciseReadPages, exerciseLayout, exerciseMetadata]) {
+        exerciseDocker, exerciseReadPages, exerciseModuleRecovery, exerciseLayout, exerciseMetadata]) {
         t.diagnostic(`${exercise.name}: started`);
         const started = performance.now();
         await exercise(browser, base, state);

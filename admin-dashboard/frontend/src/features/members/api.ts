@@ -1,4 +1,5 @@
 import { adminClient } from "@/app/bootstrap";
+import type { RequestParams } from "@/api/generated/http-client";
 import type {
 	AddAliasRequest,
 	AddMemberRequest,
@@ -8,8 +9,9 @@ import type {
 	UpdateChannelRequest,
 } from "./types";
 
+/** 멤버 조회는 호출자의 취소 신호를 SDK까지 전달합니다. */
 export const membersApi = {
-	getAll: async () => (await adminClient.holoGetMembers()).data,
+	getAll: async ({ signal }: RequestParams = {}) => (await adminClient.holoGetMembers({ signal })).data,
 	add: async (member: Partial<Member>) => {
 		const request: AddMemberRequest = {
 			name: member.name ?? "",

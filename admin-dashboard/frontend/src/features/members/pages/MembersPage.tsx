@@ -5,8 +5,8 @@ import { useMembersPage } from "@/features/members/hooks/useMembersPage";
 import { QueryNotice } from "@/queries/QueryNotice";
 import type { Member } from "@/features/members/types";
 
-const loadAddMemberModal = () => import("@/components/AddMemberModal");
-const loadChannelEditModal = () => import("@/components/ChannelEditModal");
+const loadAddMemberModal = () => import("@/features/members/components/AddMemberModal");
+const loadChannelEditModal = () => import("@/features/members/components/ChannelEditModal");
 const loadEditNameModal = () => import("@/components/EditNameModal");
 const loadConfirmModal = () =>
 	import("@/components/ConfirmModal").then((module) => ({
@@ -48,7 +48,7 @@ export const MembersPage = () => {
 	} = useMembersPage();
 
 	const preloadAddMemberModal = () => {
-		void loadAddMemberModal();
+		void loadAddMemberModal().catch(() => { /* 화면 진입의 오류 경계가 실패를 표시합니다. */ });
 	};
 
 	const openAddModal = () => {
@@ -61,7 +61,7 @@ export const MembersPage = () => {
 		type: "ko" | "ja",
 		alias: string,
 	) => {
-		void loadConfirmModal();
+		void loadConfirmModal().catch(() => { /* 화면 진입의 오류 경계가 실패를 표시합니다. */ });
 		handleRemoveAlias(memberId, type, alias);
 	};
 
@@ -70,7 +70,7 @@ export const MembersPage = () => {
 		memberName: string,
 		currentStatus: boolean,
 	) => {
-		void loadConfirmModal();
+		void loadConfirmModal().catch(() => { /* 화면 진입의 오류 경계가 실패를 표시합니다. */ });
 		handleToggleGraduation(memberId, memberName, currentStatus);
 	};
 
@@ -79,12 +79,12 @@ export const MembersPage = () => {
 		memberName: string,
 		currentChannelId: string,
 	) => {
-		void loadChannelEditModal();
+		void loadChannelEditModal().catch(() => { /* 화면 진입의 오류 경계가 실패를 표시합니다. */ });
 		handleUpdateChannel(memberId, memberName, currentChannelId);
 	};
 
 	const openNameEditModal = (memberId: string, currentName: string) => {
-		void loadEditNameModal();
+		void loadEditNameModal().catch(() => { /* 화면 진입의 오류 경계가 실패를 표시합니다. */ });
 		handleEditName(memberId, currentName);
 	};
 

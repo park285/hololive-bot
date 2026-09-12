@@ -2,7 +2,6 @@ import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
-import { queryClient } from "@/queries/client";
 
 interface ErrorBoundaryProps {
 	children: ReactNode;
@@ -33,9 +32,9 @@ export class QueryErrorBoundary extends Component<
 		this.props.onError?.(error, errorInfo);
 	}
 
+	/** 캐시된 lazy 로딩 실패도 해소하도록 명시적인 새로고침으로 앱을 다시 준비합니다. */
 	handleRetry = (): void => {
-		void queryClient.resetQueries();
-		this.setState({ hasError: false, error: null });
+		window.location.reload();
 	};
 
 	render(): ReactNode {
@@ -64,7 +63,7 @@ export class QueryErrorBoundary extends Component<
 						className="gap-2 pl-3 pr-4 h-10 shadow-sm hover:border-slate-300 dark:hover:border-slate-600 hover:bg-card transition-all"
 					>
 						<RefreshCw size={16} />
-						다시 시도
+						페이지 새로고침
 					</Button>
 				</div>
 			);

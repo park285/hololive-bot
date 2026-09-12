@@ -22,11 +22,11 @@ test("MembersPage lazy-loads modal bundles instead of statically importing them"
 
 	assert.match(
 		membersPageSource,
-		/const loadAddMemberModal = \(\) => import\("@\/components\/AddMemberModal"\);/,
+		/const loadAddMemberModal = \(\) => import\("@\/features\/members\/components\/AddMemberModal"\);/,
 	);
 	assert.match(
 		membersPageSource,
-		/const loadChannelEditModal = \(\) => import\("@\/components\/ChannelEditModal"\);/,
+		/const loadChannelEditModal = \(\) => import\("@\/features\/members\/components\/ChannelEditModal"\);/,
 	);
 	assert.match(
 		membersPageSource,

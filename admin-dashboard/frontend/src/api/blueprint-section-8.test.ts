@@ -120,7 +120,7 @@ test("large frontend lists route through the shared VirtualList helper", () => {
 
 test("repeated destructive controls have contextual accessible names", () => {
 	const badgeSource = readSource("../components/ui/Badge.tsx");
-	const memberCardSource = readSource("../components/MemberCard.tsx");
+	const memberCardSource = readSource("../features/members/components/MemberCard.tsx");
 
 	assert.equal(badgeSource.includes('aria-label="삭제"'), false);
 	assert.match(badgeSource, /aria-label=\{removeAriaLabel\}/);

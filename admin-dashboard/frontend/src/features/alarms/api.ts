@@ -1,8 +1,10 @@
 import type { DeleteAlarmRequest } from "@/api/generated/data-contracts";
 import { adminClient } from "@/app/bootstrap";
+import type { RequestParams } from "@/api/generated/http-client";
 
+/** 알람 조회는 호출자의 취소 신호를 SDK까지 전달합니다. */
 export const alarmsApi = {
-	getAll: async () => (await adminClient.holoGetAlarms()).data,
+	getAll: async ({ signal }: RequestParams = {}) => (await adminClient.holoGetAlarms({ signal })).data,
 	delete: async (request: DeleteAlarmRequest) =>
 		(await adminClient.holoDeleteAlarm(request)).data,
 };

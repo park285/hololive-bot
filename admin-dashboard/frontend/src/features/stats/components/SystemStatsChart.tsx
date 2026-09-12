@@ -2,7 +2,7 @@ import Activity from "lucide-react/dist/esm/icons/activity.mjs";
 import CircuitBoard from "lucide-react/dist/esm/icons/circuit-board.mjs";
 import Cpu from "lucide-react/dist/esm/icons/cpu.mjs";
 import Layers from "lucide-react/dist/esm/icons/layers.mjs";
-import { SystemServiceStatusBadges } from "@/components/dashboard/SystemServiceStatusBadges";
+import { SystemServiceStatusBadges } from "@/features/stats/components/SystemServiceStatusBadges";
 import { Card } from "@/components/ui/Card";
 import { ChartSkeleton } from "@/features/stats/components/ChartSkeleton";
 import { ResourceChart } from "@/features/stats/components/ResourceChart";

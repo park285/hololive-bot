@@ -21,14 +21,14 @@ export const StreamsPage = () => {
 
 	const liveQuery = useQuery({
 		queryKey: queryKeys.streams.live(selectedOrg),
-		queryFn: () => streamsApi.getLive(selectedOrg),
+		queryFn: ({ signal }) => streamsApi.getLive(selectedOrg, { signal }),
 		refetchInterval: 60 * 1000,
 		staleTime: 1000 * 45,
 	});
 
 	const upcomingQuery = useQuery({
 		queryKey: queryKeys.streams.upcoming(selectedOrg),
-		queryFn: () => streamsApi.getUpcoming(selectedOrg),
+		queryFn: ({ signal }) => streamsApi.getUpcoming(selectedOrg, { signal }),
 		refetchInterval: 60 * 1000 * 5,
 		staleTime: 1000 * 60 * 4,
 	});

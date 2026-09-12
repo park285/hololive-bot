@@ -223,6 +223,7 @@ export const AppLayout = () => {
 										onMouseEnter={() => {
 											prefetchRoute(item.id);
 										}}
+										onFocus={() => { prefetchRoute(item.id); }}
 									>
 										{({ isActive }) => (
 											<>

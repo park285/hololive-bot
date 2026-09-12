@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import MemberCard from "@/components/MemberCard";
+import MemberCard from "@/features/members/components/MemberCard";
 import { Button } from "@/components/ui/Button";
 import { VirtualList } from "@/components/ui/VirtualList";
 import type { Member } from "@/features/members/types";

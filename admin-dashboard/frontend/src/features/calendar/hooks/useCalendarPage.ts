@@ -16,7 +16,7 @@ export function useCalendarPage() {
 
 	const query = useQuery({
 		queryKey: queryKeys.calendar.monthly(month, year),
-		queryFn: () => calendarApi.getMonthly(month, year),
+		queryFn: ({ signal }) => calendarApi.getMonthly(month, year, { signal }),
 	});
 
 	const goToPreviousMonth = () => {

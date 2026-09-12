@@ -5,10 +5,10 @@ import Server from "lucide-react/dist/esm/icons/server.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import { lazy, Suspense } from "react";
 import type { AggregatedStatus } from "@/api/generated/data-contracts";
-import { StatsQuickLinks } from "@/components/dashboard/StatsQuickLinks";
+import { StatsQuickLinks } from "@/features/stats/components/StatsQuickLinks";
 
 const SystemStatsChart = lazy(() =>
-	import("@/components/dashboard/SystemStatsChart").then((m) => ({
+	import("@/features/stats/components/SystemStatsChart").then((m) => ({
 		default: m.SystemStatsChart,
 	})),
 );

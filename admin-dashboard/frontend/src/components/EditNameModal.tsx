@@ -112,6 +112,7 @@ export default function EditNameModal({
 						name="name"
 						autoComplete="off"
 						value={name}
+						disabled={pending}
 						onChange={(event) => {
 							draft.setValue(event.target.value);
 							setError("");

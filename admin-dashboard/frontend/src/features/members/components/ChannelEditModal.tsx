@@ -90,6 +90,7 @@ export default function ChannelEditModal({
 						autoComplete="off"
 						spellCheck={false}
 						value={channelId}
+						disabled={pending}
 						onChange={(event) => {
 							draft.setValue(event.target.value);
 							setError("");
