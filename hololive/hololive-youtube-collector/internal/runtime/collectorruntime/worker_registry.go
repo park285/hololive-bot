@@ -36,13 +36,13 @@ func newCollectorWorkerRegistry(
 
 	if scheduler != nil {
 		registration.ExecutorSnapshot = func() workercontract.ExecutorSnapshot {
-			return scheduler.workerTracker.Snapshot(time.Now())
+			return scheduler.executor.workerTracker.Snapshot(time.Now())
 		}
 		registration.QueueSnapshot = func() workercontract.QueueSnapshot {
 			snapshot := scheduler.Snapshot()
 			return workercontract.CurrentQueueSnapshot(int64(snapshot.QueueDepth), snapshot.OldestQueueAge, time.Now())
 		}
-		registration.Counters = scheduler.workerTotals
+		registration.Counters = scheduler.executor.workerTotals
 	}
 
 	if err := registry.Register(registration); err != nil {

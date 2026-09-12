@@ -37,8 +37,8 @@ export function paginate<T, R>(options: {
   firstPage: unknown;
   getContinuation?: (feed: any) => Promise<unknown>;
   mapPage: (feed: any) =>
-    | { recognized_shape: true; items: T[] }
-    | Promise<{ recognized_shape: true; items: T[] }>;
+    | { recognized_shape: true; items: Iterable<T> | AsyncIterable<T> }
+    | Promise<{ recognized_shape: true; items: Iterable<T> | AsyncIterable<T> }>;
   maxPages?: number;
   maxResults?: number;
   maxSuccessResponseBytes?: number;

@@ -14,13 +14,13 @@ import (
 
 func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) EnqueueResult {
 	if !validJobSpec(spec) {
-		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 
 		return EnqueueInvalid
 	}
 
 	if ctx.Err() != nil {
-		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 
 		return EnqueueCanceled
 	}
@@ -41,13 +41,13 @@ func (s *leaseScheduler) enqueue(ctx context.Context, spec *joblease.JobSpec) En
 func (s *leaseScheduler) recordEnqueueAdmission(result EnqueueResult) {
 	switch result {
 	case EnqueueAccepted:
-		s.workerTotals.RecordAdmission(workercontract.AdmissionAccepted)
+		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionAccepted)
 	case EnqueueDeduped:
-		s.workerTotals.RecordAdmission(workercontract.AdmissionDuplicate)
+		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionDuplicate)
 	case EnqueueFull, EnqueueCanceled, EnqueueInvalid:
-		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 	default:
-		s.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
+		s.executor.workerTotals.RecordAdmission(workercontract.AdmissionRejected)
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *leaseScheduler) sendQueued(ctx context.Context, spec *joblease.JobSpec)
 }
 
 func (s *leaseScheduler) worker(ctx context.Context) {
-	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() error {
+	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-worker", func() error {
 		for {
 			spec, ok := s.nextSpec(ctx)
 			if !ok {
@@ -98,8 +98,8 @@ func (s *leaseScheduler) runQueued(ctx context.Context, spec *joblease.JobSpec) 
 
 	defer s.unmarkQueued(spec.JobKey)
 
-	if err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "youtube-collector-job", func() error {
-		s.runSpec(ctx, spec)
+	if err := panicguard.RunE(s.executor.logger, panicguard.BackgroundTask, "youtube-collector-job", func() error {
+		s.executor.runSpec(ctx, spec)
 
 		return nil
 	}); err != nil {
@@ -158,7 +158,7 @@ func (s *leaseScheduler) markQueued(jobKey string) (EnqueueResult, bool) {
 	s.queued[jobKey] = struct{}{}
 	s.queuedAt[jobKey] = time.Now()
 
-	overflow := len(s.queued) > s.config.QueueCapacity
+	overflow := len(s.queued) > s.executor.config.QueueCapacity
 
 	if overflow {
 		delete(s.queued, jobKey)

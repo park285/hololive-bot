@@ -59,9 +59,7 @@ export async function fetchContentFeed({
     },
     mapPage: async (current) => ({
       recognized_shape: true,
-      items: contentKind === "videos"
-        ? await mapContentPage(current, id, innertube)
-        : mapContentItems(current, id),
+      items: mapContentPage(current, id, innertube, contentKind === "videos"),
     }),
     maxPages,
     maxResults,
@@ -73,7 +71,7 @@ export async function fetchContentFeed({
 }
 
 export function mapContentItems(feed, channelId) {
-  return mapContentRows(contentRows(feed), channelId);
+  return Array.from(contentRows(feed), (row) => mapContentRow(row, channelId));
 }
 
 function contentRows(feed) {
@@ -88,45 +86,37 @@ function contentRows(feed) {
   }
 }
 
-function mapContentRows(rows, channelId) {
-  const mapped = [];
-  for (const row of rows) {
-    const videoId = videoIDOf(row);
-    if (videoId === "") {
-      const err = new Error("content row is missing video id");
-      err.code = "parser_drift";
-      throw err;
-    }
-    mapped.push({
-      video_id: videoId,
-      channel_id: textOf(row?.author?.id || row?.channel_id || channelId).trim() || channelId,
-      title: videoTitleOf(row),
-      published_at: optionalTime(row?.published || row?.published_at),
-      scheduled_for: optionalTime(row?.scheduled || row?.scheduled_for),
-    });
+function mapContentRow(row, channelId) {
+  const videoId = videoIDOf(row);
+  if (videoId === "") {
+    const err = new Error("content row is missing video id");
+    err.code = "parser_drift";
+    throw err;
   }
-  return mapped;
+  return {
+    video_id: videoId,
+    channel_id: textOf(row?.author?.id || row?.channel_id || channelId).trim() || channelId,
+    title: videoTitleOf(row),
+    published_at: optionalTime(row?.published || row?.published_at),
+    scheduled_for: optionalTime(row?.scheduled || row?.scheduled_for),
+  };
 }
 
-async function mapContentPage(feed, channelId, innertube) {
-  const rows = contentRows(feed);
-  const items = mapContentRows(rows, channelId);
-
-  for (let index = 0; index < rows.length; index += 1) {
-    if (!isUpcomingContentRow(rows[index])) {
-      continue;
-    }
-    const metadata = await fetchLiveMetadata(innertube, items[index].video_id);
-    const premiere = premiereMetadata(metadata);
-    if (premiere != null) {
-      items[index].is_premiere = true;
-      if (premiere.scheduledFor != null) {
-        items[index].scheduled_for = premiere.scheduledFor;
+async function* mapContentPage(feed, channelId, innertube, enrichPremieres) {
+  for (const row of contentRows(feed)) {
+    const item = mapContentRow(row, channelId);
+    if (enrichPremieres && isUpcomingContentRow(row)) {
+      const metadata = await fetchLiveMetadata(innertube, item.video_id);
+      const premiere = premiereMetadata(metadata);
+      if (premiere != null) {
+        item.is_premiere = true;
+        if (premiere.scheduledFor != null) {
+          item.scheduled_for = premiere.scheduledFor;
+        }
       }
     }
+    yield item;
   }
-
-  return items;
 }
 
 function isUpcomingContentRow(row) {

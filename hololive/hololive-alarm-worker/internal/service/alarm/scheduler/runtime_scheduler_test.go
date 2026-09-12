@@ -121,3 +121,9 @@ func TestRuntimeSchedulerStart_TwitchLoopOptional(t *testing.T) {
 		}
 	})
 }
+
+func TestNewRuntimeSchedulerRejectsMissingDependencies(t *testing.T) {
+	scheduler, err := NewRuntimeScheduler(Dependencies{})
+	require.ErrorContains(t, err, "cache service is nil")
+	require.Nil(t, scheduler)
+}

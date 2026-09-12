@@ -233,7 +233,7 @@ func startAlarmScheduler(ctx context.Context, errCh chan<- error, hooks StartHoo
 		if err := panicguard.RunE(hooks.Logger, panicguard.BackgroundTask, "alarm-scheduler", func() error {
 			return hooks.StartAlarmScheduler(alarmCtx)
 		}); err != nil {
-			handleAlarmSchedulerError(err, errCh, hooks.Logger)
+			handleAlarmSchedulerError(alarmCtx, err, errCh, hooks.Logger)
 		}
 	}()
 
@@ -251,8 +251,8 @@ func alarmSchedulerContext(ctx context.Context, hooks StartHooks) context.Contex
 	return alarmCtx
 }
 
-func handleAlarmSchedulerError(err error, errCh chan<- error, logger *slog.Logger) {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+func handleAlarmSchedulerError(ctx context.Context, err error, errCh chan<- error, logger *slog.Logger) {
+	if ctx.Err() != nil && isContextTerminationTree(err) {
 		logInfo(logger, "Alarm runtime scheduler stopped")
 
 		return
@@ -261,11 +261,49 @@ func handleAlarmSchedulerError(err error, errCh chan<- error, logger *slog.Logge
 	wrapped := fmt.Errorf("alarm runtime scheduler error: %w", err)
 
 	if errCh != nil {
-		errCh <- wrapped
+		select {
+		case errCh <- wrapped:
+		case <-ctx.Done():
+			logError(logger, "Alarm runtime scheduler error during shutdown", wrapped)
+		}
+
 		return
 	}
 
 	logError(logger, "Alarm runtime scheduler error", wrapped)
+}
+
+func isContextTerminationTree(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		foundLeaf := false
+
+		for _, child := range joined.Unwrap() {
+			if child == nil {
+				continue
+			}
+
+			foundLeaf = true
+
+			if !isContextTerminationTree(child) {
+				return false
+			}
+		}
+
+		if foundLeaf {
+			return true
+		}
+	}
+
+	if unwrapped := errors.Unwrap(err); unwrapped != nil {
+		return isContextTerminationTree(unwrapped)
+	}
+
+	// 중간 원인의 취소 sentinel만으로 scheduler의 실제 말단 오류를 무시하지 않습니다.
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func startBot(ctx context.Context, errCh chan<- error, logger *slog.Logger, startBot func(ctx context.Context) error) {

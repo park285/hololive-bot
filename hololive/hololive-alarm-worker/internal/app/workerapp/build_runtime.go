@@ -17,8 +17,6 @@ import (
 	"github.com/kapu/hololive-alarm-worker/internal/service/workerruntime"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
-	"github.com/kapu/hololive-shared/pkg/constants"
-	contractssettings "github.com/kapu/hololive-shared/pkg/contracts/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
@@ -48,10 +46,8 @@ type alarmFoundation struct {
 	HolodexService *holodexprovider.Service
 	ChzzkClient    *chzzk.Client
 	TwitchClient   *twitch.Client
-	AlarmCRUD      domain.AlarmCRUD
 	AlarmService   *alarmservice.AlarmService
 	Outbox         dispatchoutbox.Writer
-	Postgres       database.Client
 }
 
 func failAlarmWorkerBuild(infra *sharedmodules.InfraModule, stage string, err error) error {
@@ -110,7 +106,7 @@ func buildAlarmWorkerRuntimeFromInfra(
 		return nil, failAlarmWorkerBuild(infra, "worker registry", err)
 	}
 
-	schedulerResult := buildOptionalRuntimeScheduler(appConfig.Config, infra.Cache, foundation, logger)
+	schedulerResult := buildOptionalRuntimeScheduler(appConfig.Config, infra, foundation, logger)
 	if schedulerResult.err != nil {
 		return nil, failAlarmWorkerBuild(infra, "scheduler", schedulerResult.err)
 	}
@@ -164,7 +160,7 @@ func newAlarmWorkerRuntime(
 		NotificationEgress:   parts.notificationEgress,
 		CelebrationRunner:    parts.backgroundRunners.celebration,
 		BirthdayStreamRunner: parts.backgroundRunners.birthdayStream,
-		ConfigSubscriber:     BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmCRUD, logger),
+		ConfigSubscriber:     BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmService, logger),
 		ServerAddr:           parts.servers.Addr(),
 		HTTPServers:          parts.servers,
 		AlarmService:         foundation.AlarmService,
@@ -180,7 +176,7 @@ type optionalRuntimeSchedulerResult struct {
 
 func buildOptionalRuntimeScheduler(
 	appConfig *settings.Config,
-	cacheClient cache.Client,
+	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 ) optionalRuntimeSchedulerResult {
@@ -188,7 +184,7 @@ func buildOptionalRuntimeScheduler(
 		return optionalRuntimeSchedulerResult{}
 	}
 
-	scheduler, err := buildRuntimeScheduler(appConfig, cacheClient, foundation, logger)
+	scheduler, err := buildRuntimeScheduler(appConfig, infra, foundation, logger)
 	if err != nil {
 		return optionalRuntimeSchedulerResult{err: fmt.Errorf("build runtime scheduler: %w", err)}
 	}
@@ -228,7 +224,7 @@ func buildAlarmWorkerHTTPRuntime(
 		InternalReadyResponder: readiness.InternalGinHandler(ctx, readyProbe),
 		RegisterRoutes: sharedalarm.NewInternalRouteRegistrar(
 			appConfig.Server.APIKey,
-			foundation.AlarmCRUD,
+			foundation.AlarmService,
 			logger,
 		),
 	})
@@ -269,6 +265,8 @@ func newAlarmWorkerReadyProbe(infra *sharedmodules.InfraModule) *sharedreadiness
 	)
 }
 
+// BuildAlarmWorkerConfigSubscriber는 build 취소와 분리된 관리 요청 상한으로 설정을 적용합니다.
+// 생성 시 구독은 시작하지 않으며 런타임이 Run의 취소와 종료 대기를 소유합니다.
 func BuildAlarmWorkerConfigSubscriber(
 	ctx context.Context,
 	cacheClient cache.Client,
@@ -280,20 +278,7 @@ func BuildAlarmWorkerConfigSubscriber(
 	}
 
 	applyFn := configsub.NewApplyFn(logger, configsub.ApplyHandlers{
-		AlarmAdvanceMinutes: func(payload contractssettings.AlarmAdvanceMinutesPayloadV1) {
-			applyCtx, cancel := context.WithTimeout(ctx, constants.RequestTimeout.AdminRequest)
-			defer cancel()
-
-			targets := alarmCRUD.UpdateAlarmAdvanceMinutes(applyCtx, payload.Minutes)
-
-			if logger != nil {
-				logger.Info(
-					"Alarm worker applied alarm advance minutes via pub/sub",
-					slog.Int("minutes", payload.Minutes),
-					slog.Any("targets", targets),
-				)
-			}
-		},
+		AlarmAdvanceMinutes: buildAlarmAdvanceMinutesHandler(ctx, alarmCRUD, logger),
 	})
 
 	return configsub.New(cacheClient.GetClient(), applyFn, logger)
@@ -317,46 +302,50 @@ func runtimeAllowsAlarmScheduler(runtimeRole, configuredRole string) bool {
 
 func buildRuntimeScheduler(
 	appConfig *settings.Config,
-	cacheClient cache.Client,
+	infra *sharedmodules.InfraModule,
 	foundation *alarmFoundation,
 	logger *slog.Logger,
 ) (workerruntime.Scheduler, error) {
-	if err := validateRuntimeSchedulerInputs(appConfig, foundation); err != nil {
-		return nil, fmt.Errorf("validate runtime scheduler inputs: %w", err)
+	if appConfig == nil {
+		return nil, errors.New("validate runtime scheduler inputs: config is required")
+	}
+
+	if foundation == nil {
+		return nil, errors.New("validate runtime scheduler inputs: alarm foundation is required")
+	}
+
+	if foundation.AlarmService == nil {
+		return nil, errors.New("validate runtime scheduler inputs: alarm service is required")
+	}
+
+	if infra == nil {
+		return nil, errors.New("validate runtime scheduler inputs: infrastructure is required")
+	}
+
+	if appConfig.AlarmWorkerProfile == nil {
+		return nil, errors.New("validate runtime scheduler inputs: alarm worker profile is required")
 	}
 
 	publishConfig := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
 
-	scheduler, err := alarmscheduler.NewRuntimeScheduler(
-		cacheClient,
-		foundation.HolodexService,
-		foundation.ChzzkClient,
-		foundation.TwitchClient,
-		foundation.AlarmCRUD,
-		foundation.Postgres,
-		appConfig.Notification,
-		foundation.Outbox,
-		publishConfig,
-		envutil.Bool("ALARM_TWITCH_ENABLED", true),
-		logger,
-	)
+	scheduler, err := alarmscheduler.NewRuntimeScheduler(alarmscheduler.Dependencies{
+		Cache:          infra.Cache,
+		HolodexService: foundation.HolodexService,
+		ChzzkClient:    foundation.ChzzkClient,
+		TwitchClient:   foundation.TwitchClient,
+		AlarmCRUD:      foundation.AlarmService,
+		Postgres:       infra.Postgres,
+		Notification:   appConfig.Notification,
+		Outbox:         foundation.Outbox,
+		Publish:        publishConfig,
+		TwitchEnabled:  envutil.Bool("ALARM_TWITCH_ENABLED", true),
+		Logger:         logger,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("new alarm worker runtime scheduler: %w", err)
 	}
 
 	return scheduler, nil
-}
-
-func validateRuntimeSchedulerInputs(appConfig *settings.Config, foundation *alarmFoundation) error {
-	if appConfig == nil {
-		return errors.New("config is required")
-	}
-
-	if foundation == nil {
-		return errors.New("alarm foundation is required")
-	}
-
-	return nil
 }
 
 func runtimeSchedulerDisabled(runtimeRole, configuredRole string, logger *slog.Logger) bool {
@@ -427,10 +416,8 @@ func buildAlarmFoundation(
 		HolodexService: holodexService,
 		ChzzkClient:    chzzkClient,
 		TwitchClient:   twitchClient,
-		AlarmCRUD:      alarmService,
 		AlarmService:   alarmService,
 		Outbox:         outboxRepository,
-		Postgres:       infra.Postgres,
 	}, nil
 }
 

@@ -880,7 +880,7 @@ func TestConsumerMoveRecordToDLQUsesPayloadCode(t *testing.T) {
 	repository := &consumerTestRepository{}
 	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
 
-	if err := consumer.moveRecordToDLQ(t.Context(), 3, "invalid payload: unexpected EOF", "move invalid payload to dlq"); err != nil {
+	if err := consumer.moveRecordToDLQ(t.Context(), &Record{ID: 3}, "invalid payload: unexpected EOF", "move invalid payload to dlq"); err != nil {
 		t.Fatalf("moveRecordToDLQ() error = %v", err)
 	}
 

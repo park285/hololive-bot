@@ -257,7 +257,7 @@ func (s *leaseScheduler) queryRunnerPage(
 			return joblease.CandidatePage{}, collecterr.New(collecterr.Internal, collecterr.ClassInternal, "discovery cycle: runner identity is missing")
 		}
 
-		dbCtx, cancel := context.WithTimeout(ctx, s.collector.DBTimeout)
+		dbCtx, cancel := context.WithTimeout(ctx, s.executor.collector.DBTimeout)
 
 		defer cancel()
 

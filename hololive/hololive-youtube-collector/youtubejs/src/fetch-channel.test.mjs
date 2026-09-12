@@ -461,3 +461,134 @@ function rawPlayerResponse(videoId, options = {}) {
     },
   };
 }
+
+test("oversized channel snapshot rejects before upcoming metadata hydration", async () => {
+  let calls = 0;
+  const innertube = stubChannel({ videos: [
+    { id: "upcoming", is_upcoming: true },
+    { id: "large-live", is_live: true, title: "x".repeat(2000) },
+  ] }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
+  const result = await handleChannelRequest(
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    (options) => fetchChannelFeed({ ...options, innertube }),
+  );
+  assert.equal(result.body.error.code, "response_too_large");
+  assert.equal(calls, 0);
+});
+
+test("restricted bulky duplicate rows may shrink below the channel budget", async (t) => {
+  t.mock.method(process.stderr, "write", () => true);
+  let calls = 0;
+  const innertube = stubChannel({ videos: Array.from({ length: 10 }, () => ({
+    id: "restricted-fixture", is_upcoming: true, title: "x".repeat(2000),
+  })) }, async () => { calls++; return { success: true, status_code: 200, data: restrictedFixture }; });
+  const result = await handleChannelRequest(
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    (options) => fetchChannelFeed({ ...options, innertube }),
+  );
+  assert.equal(result.status, 200);
+  assert.equal(result.body.unavailable_live_sessions.length, 1);
+  assert.equal(calls, 1);
+});
+
+for (const resolution of ["restricted", "scheduled", "LIVE"]) {
+  test(`${resolution} hydration stops player requests as soon as the response cannot fit`, async (t) => {
+    t.mock.method(process.stderr, "write", () => true);
+    const calls = [];
+    const innertube = stubChannel({ videos: ["first", "second", "third"].map((id) => ({
+      id, is_upcoming: true,
+    })) }, async (_, { videoId }) => {
+      calls.push(videoId);
+      if (resolution === "restricted") {
+        const data = structuredClone(restrictedFixture);
+        data.videoDetails.videoId = videoId;
+        return { success: true, status_code: 200, data };
+      }
+      return rawPlayerResponse(videoId, resolution === "LIVE" ? { isLive: true, isUpcoming: false } : {});
+    });
+    const result = await handleChannelRequest(
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 390 }),
+      (options) => fetchChannelFeed({ ...options, innertube }),
+    );
+    assert.equal(result.body.error.code, "response_too_large");
+    assert.deepEqual(calls, ["first", "second"]);
+  });
+
+  test(`${resolution} hydration preserves duplicate rows at the exact response budget`, async (t) => {
+    t.mock.method(process.stderr, "write", () => true);
+    let calls = 0;
+    const innertube = stubChannel({ videos: ["first", "first", "second"].map((id) => ({
+      id, is_upcoming: true, title: "한글",
+    })) }, async (_, { videoId }) => {
+      calls++;
+      if (resolution === "restricted") {
+        const data = structuredClone(restrictedFixture);
+        data.videoDetails.videoId = videoId;
+        return { success: true, status_code: 200, data };
+      }
+      return rawPlayerResponse(videoId, resolution === "LIVE" ? { isLive: true, isUpcoming: false } : {});
+    });
+    const expected = { protocol_version: 1, ...await fetchChannelFeed({ kind: "live", channelId: "UC_TEST", innertube }) };
+    const limit = Buffer.byteLength(JSON.stringify(expected), "utf8");
+    calls = 0;
+    const result = await handleChannelRequest(
+      JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: limit }),
+      (options) => fetchChannelFeed({ ...options, innertube }),
+    );
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, JSON.parse(JSON.stringify(expected)));
+    assert.equal(calls, 2);
+  });
+}
+
+test("resolved rows leave only identities for pending bulky restricted duplicates", async (t) => {
+  t.mock.method(process.stderr, "write", () => true);
+  const calls = [];
+  const innertube = stubChannel({ videos: [
+    { id: "already-live", is_live: true },
+    { id: "scheduled", is_upcoming: true },
+    ...Array.from({ length: 10 }, () => ({ id: "restricted-fixture", is_upcoming: true, title: "x".repeat(2000) })),
+  ] }, async (_, { videoId }) => {
+    calls.push(videoId);
+    return videoId === "restricted-fixture"
+      ? { success: true, status_code: 200, data: restrictedFixture }
+      : rawPlayerResponse(videoId);
+  });
+  const result = await handleChannelRequest(
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 500 }),
+    (options) => fetchChannelFeed({ ...options, innertube }),
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls, ["scheduled", "restricted-fixture"]);
+  assert.equal(result.body.live_sessions.length, 2);
+  assert.equal(result.body.unavailable_live_sessions.length, 1);
+});
+
+test("unique unresolved identities alone can exceed the channel budget before hydration", async () => {
+  let calls = 0;
+  const innertube = stubChannel({ videos: Array.from({ length: 32 }, (_, index) => ({
+    id: `upcoming-${index}`, is_upcoming: true,
+  })) }, async (_, { videoId }) => { calls++; return rawPlayerResponse(videoId); });
+  const result = await handleChannelRequest(
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    (options) => fetchChannelFeed({ ...options, innertube }),
+  );
+  assert.equal(result.body.error.code, "response_too_large");
+  assert.equal(calls, 0);
+});
+
+test("channel lower-bound overflow stops before reading the next raw row", async () => {
+  let nextRowReads = 0;
+  const videos = [{ id: "large-live", is_live: true, title: "x".repeat(2000) }];
+  Object.defineProperty(videos, 1, { get() {
+    nextRowReads++;
+    throw new Error("row after assured overflow must not be read");
+  } });
+  const innertube = stubChannel({ videos }, async () => assert.fail("metadata must not be requested"));
+  const result = await handleChannelRequest(
+    JSON.stringify({ protocol_version: 1, kind: "live", channel_id: "UC_TEST", max_success_response_bytes: 1000 }),
+    (options) => fetchChannelFeed({ ...options, innertube }),
+  );
+  assert.equal(result.body.error.code, "response_too_large");
+  assert.equal(nextRowReads, 0);
+});

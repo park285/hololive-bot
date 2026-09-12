@@ -34,10 +34,9 @@ func WithClaimKeyReleaser(releaser ClaimKeyReleaser) ConsumerOption {
 	}
 }
 
-// ReleaseClaimKeys는 전달이 확정 종료된(DLQ/quarantine/drop) envelope의 dedup claim 키를
-// 삭제한다. 호출부(alarm_dispatch_runner)는 RouteFailures/RouteSendingFailures로 dlq 전이가
-// 성공한 envelope에 대해서만 이를 호출하므로, 정상 전달 경로에서는 claim 키가 삭제되지 않아
-// 재알림이 발생하지 않는다.
+// ReleaseClaimKeys는 미발송이 확정된 DLQ/drop delivery의 dedup claim 키를 삭제합니다.
+// Consumer의 payload 거절 경로와 alarm_dispatch_runner는 worker 소유권을 검증한
+// DLQ 전이가 성공한 뒤에만 호출합니다. 성공·retry·전송 결과 불명에는 호출하지 않습니다.
 // 주입된 releaser가 없으면 no-op로 남아 기존 PG 모드 동작(TTL 만료 의존)을 보존한다.
 func (c *Consumer) ReleaseClaimKeys(ctx context.Context, claimKeys []string) error {
 	if c == nil || c.claimReleaser == nil {

@@ -9,7 +9,7 @@ import (
 
 func TestConfigurePreservesInjectedTracker(t *testing.T) {
 	tracker := &readinessTracker{}
-	readiness := &collectorReadiness{scheduler: &leaseScheduler{readiness: tracker}, tracker: tracker}
+	readiness := &collectorReadiness{scheduler: &leaseScheduler{executor: &collectionExecutor{readiness: tracker}}, tracker: tracker}
 	opts := &sharedserver.RuntimeRouterOptions{}
 
 	readiness.configure(opts)
@@ -24,14 +24,14 @@ func TestConfigurePreservesInjectedTracker(t *testing.T) {
 }
 
 func TestConfigureFeedsInjectedTrackerIntoReadinessEvaluation(t *testing.T) {
-	scheduler := &leaseScheduler{readiness: &readinessTracker{}, state: SchedulerRunning}
-	readiness := &collectorReadiness{scheduler: scheduler, tracker: scheduler.readiness}
+	scheduler := &leaseScheduler{executor: &collectionExecutor{readiness: &readinessTracker{}}, state: SchedulerRunning}
+	readiness := &collectorReadiness{scheduler: scheduler, tracker: scheduler.executor.readiness}
 	readiness.configure(&sharedserver.RuntimeRouterOptions{})
 
 	cfg := collectorconfig.DefaultConfig()
 	deps := readiness.deps(&cfg)
 
-	if deps.tracker != scheduler.readiness {
+	if deps.tracker != scheduler.executor.readiness {
 		t.Fatal("deps.tracker = distinct instance, want the tracker captured by configure")
 	}
 
@@ -43,7 +43,7 @@ func TestConfigureFeedsInjectedTrackerIntoReadinessEvaluation(t *testing.T) {
 		t.Fatalf("before first success = %+v, want WAITING_COLLECTION first_success", before)
 	}
 
-	scheduler.recordTerminalSuccess(nil)
+	scheduler.executor.recordTerminalSuccess(nil)
 
 	after := evaluateReadiness(t.Context(), &deps)
 	if !after.FirstSuccess || after.State != ReadyWaitingHandoff || after.Dependency != "observation_handoff" {

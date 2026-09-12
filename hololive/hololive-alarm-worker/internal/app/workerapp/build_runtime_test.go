@@ -9,6 +9,7 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
+	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 )
 
 func TestBuildAlarmWorkerRuntime_FailFastOnNilInputs(t *testing.T) {
@@ -63,4 +64,23 @@ func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
 	})
 	assert.True(t, appConfig.WakeupEnabled)
 	assert.Equal(t, 1000, appConfig.MaxDeliveriesPerBatch)
+}
+
+func TestRuntimeSchedulerRejectsMissingServiceBeforeInterfaceConversion(t *testing.T) {
+	_, err := buildRuntimeScheduler(&settings.Config{}, nil, &alarmFoundation{}, nil)
+	require.ErrorContains(t, err, "alarm service is required")
+}
+
+func TestRuntimeSchedulerDisabledSkipsDependencyConstruction(t *testing.T) {
+	t.Setenv(notificationSchedulerRoleEnv, schedulerRoleOff)
+
+	result := buildOptionalRuntimeScheduler(nil, nil, nil, nil)
+	require.NoError(t, result.err)
+	require.Nil(t, result.scheduler)
+}
+
+func TestRuntimeSchedulerRejectsMissingInfrastructure(t *testing.T) {
+	config := &settings.Config{AlarmWorkerProfile: &settings.AlarmWorkerProfile{}}
+	_, err := buildRuntimeScheduler(config, nil, &alarmFoundation{AlarmService: &alarmservice.AlarmService{}}, nil)
+	require.ErrorContains(t, err, "infrastructure is required")
 }

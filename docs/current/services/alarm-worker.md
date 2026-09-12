@@ -70,6 +70,16 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - Stop scheduler/checker loops gracefully.
 - Stop dispatch queue and YouTube outbox consumers during shutdown.
 
+Runtime은 scheduler·egress·celebration·birthday stream·설정 subscriber를 같은 취소 및 종료 대기 경계에서 관리합니다. 부모가 살아 있을 때 자식의 자체 timeout은 runtime 오류로 전달합니다. 종료 기한을 넘겨도 HTTP와 alarm service cleanup은 호출하며, 작업 대기 실패와 cleanup 오류를 함께 반환합니다. Subscriber의 연결 오류는 기존 log-only 정책을 유지합니다.
+
+부모 종료에 따른 순수 context 오류만 정상 종료로 처리합니다. 취소와 실제 오류가 함께 반환되면 오류 채널 또는 ERROR 로그에 원인을 남기며, 종료 중 소비되지 않는 오류 채널 때문에 작업이 멈추지 않도록 합니다.
+
+Karing은 전역 전송 슬롯 획득을 `BeginSending` 전에 끝내며, admission과 실제 sender·handoff polling은 각각 기존 `DeliverySendTimeout` 한도를 사용합니다. 부모의 전체 기한은 계속 적용됩니다. admission 실패는 sender 호출이 없다는 증거로 기존 retryable 전이를 사용하고, 실제 호출 뒤의 불명확한 결과는 SENDING을 보존합니다.
+
+Alarm dispatch payload/전달 문맥 복원 실패와 event 누락은 PostgreSQL worker fence 및 rows-affected 검증으로 DLQ 전이가 확인된 뒤 해당 delivery의 dedup 키를 해제합니다. 전이 실패·정상 전달·retry·결과 불명에서는 이 해제를 수행하지 않습니다.
+
+Event 조회나 복원·거절 정리 실패로 배치를 반환하지 못하면, 확정된 DLQ를 제외한 미발송 lease를 기존 `ReleaseLeased`로 반환합니다. 부분 발송 입력은 반환하지 않으며 attempt·send-unit·미발송 dedup 키를 유지합니다. 정리는 요청 취소와 독립된 최대 5초로 제한하고, 정리 실패도 원래 오류와 함께 반환합니다. 이미 terminal이거나 다른 worker가 소유한 row는 DB fence가 보호합니다.
+
 ## Observability
 
 - Logs: `./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml logs -f hololive-alarm-worker`

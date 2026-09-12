@@ -3,7 +3,7 @@ import { Utils } from "youtubei.js";
 import { textOf, thumbnailsOf } from "./map-posts.mjs";
 import { isVideoLockup, lockupBadgeTexts, videoIDOf, videoTitleOf } from "./map-lockup.mjs";
 import { fetchLiveMetadata } from "./live-metadata.mjs";
-import { assertResponseBudget, encodedSize, paginationResult } from "./pagination.mjs";
+import { assertResponseBudget, EncodedArrayBudget, encodedSize, paginationResult } from "./pagination.mjs";
 
 const maxScheduleMetadataLookups = 32;
 const rfc3339Pattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -48,16 +48,9 @@ export async function fetchChannelFeed({
   const { liveFeed, missingTab } = kind === "live"
     ? await fetchLiveFeed(channel)
     : { liveFeed: { videos: [] }, missingTab: false };
-  const liveSessions = mapLiveSessions(liveFeed, id);
-  const unavailable = await enrichUpcomingSchedules(liveSessions, innertube);
+  const { sessions: liveSessions, minimumBytes } = collectLiveSnapshot(liveFeed, id, maxSuccessResponseBytes);
+  const unavailable = await enrichUpcomingSchedules(liveSessions, innertube, minimumBytes, maxSuccessResponseBytes);
   const unavailableIDs = new Set(unavailable.map((item) => item.video_id));
-  // 접근 제한 행을 제외하기 전에 같은 ID의 상충하는 정상 관측을 확인해야 합니다.
-  if (liveSessions.some((session) => unavailableIDs.has(session.video_id) &&
-    (session.status !== "UPCOMING" || session.scheduled_at != null))) {
-    const error = new Error("unavailable live session conflicts with another row");
-    error.code = "parser_drift";
-    throw error;
-  }
   if (unavailable.length > 0) {
     logUnavailableSchedules(id, unavailable);
   }
@@ -103,53 +96,76 @@ function logUnavailableSchedules(channelId, unavailable) {
   })}\n`);
 }
 
-async function enrichUpcomingSchedules(sessions, innertube) {
-  const candidateIds = [];
-  const seen = new Set();
+async function enrichUpcomingSchedules(sessions, innertube, minimumBytes, maxSuccessResponseBytes) {
+  const candidates = new Map();
+  const confirmedIDs = new Set();
+  let liveRowCount = 0;
   for (const session of sessions) {
-    if (session.status !== "UPCOMING" || session.scheduled_at != null || seen.has(session.video_id)) {
+    if (session.status !== "UPCOMING" || session.scheduled_at != null) {
+      confirmedIDs.add(session.video_id);
+      liveRowCount++;
       continue;
     }
-    seen.add(session.video_id);
-    candidateIds.push(session.video_id);
+    const rows = candidates.get(session.video_id) ?? [];
+    rows.push(session);
+    candidates.set(session.video_id, rows);
   }
-  if (candidateIds.length > maxScheduleMetadataLookups) {
+  if (candidates.size > maxScheduleMetadataLookups) {
     const error = new Error("upcoming schedule metadata lookup limit exceeded");
     error.code = "parser_drift";
     throw error;
   }
 
-  const metadataByID = new Map();
-  for (const videoId of candidateIds) {
-    metadataByID.set(videoId, await fetchLiveMetadata(innertube, videoId));
-  }
   const unavailable = new Map();
-  for (const session of sessions) {
-    const metadata = metadataByID.get(session.video_id);
-    if (session.status !== "UPCOMING" || session.scheduled_at != null || metadata == null) {
-      continue;
-    }
+  let pendingCount = candidates.size;
+  for (const [videoId, rows] of candidates) {
+    const metadata = await fetchLiveMetadata(innertube, videoId);
+    const identity = { video_id: videoId, channel_id: rows[0].channel_id };
+    minimumBytes -= encodedSize(identity);
+    pendingCount--;
     if (metadata.scheduleUnavailableReason === "access_restricted") {
-      unavailable.set(session.video_id, {
-        video_id: session.video_id,
-        channel_id: session.channel_id,
-        reason: metadata.scheduleUnavailableReason,
-      });
-      continue;
-    }
-    if (metadata.isLive === true && metadata.isUpcoming !== true) {
-      session.status = "LIVE";
-      if (metadata.startTimestamp != null) {
-        session.started_at = metadata.startTimestamp;
+      // 같은 ID의 미해결 행은 함께 분류하므로 기존 정상 관측만 충돌할 수 있습니다.
+      // 접근 제한 행을 제외하기 전에 이 충돌을 확인해야 합니다.
+      if (confirmedIDs.has(videoId)) {
+        const error = new Error("unavailable live session conflicts with another row");
+        error.code = "parser_drift";
+        throw error;
       }
-      continue;
+      const item = {
+        ...identity,
+        reason: metadata.scheduleUnavailableReason,
+      };
+      unavailable.set(videoId, item);
+      minimumBytes += encodedSize(item);
+    } else {
+      for (const session of rows) {
+        if (metadata.isLive === true && metadata.isUpcoming !== true) {
+          session.status = "LIVE";
+          if (metadata.startTimestamp != null) {
+            session.started_at = metadata.startTimestamp;
+          }
+        } else {
+          if (metadata.isUpcoming === false || metadata.startTimestamp == null) {
+            const error = new Error("upcoming live session has no machine-readable schedule");
+            error.code = "parser_drift";
+            throw error;
+          }
+          session.scheduled_at = metadata.startTimestamp;
+        }
+        minimumBytes += encodedSize(session);
+      }
+      minimumBytes += rows.length - 1;
+      liveRowCount += rows.length;
     }
-    if (metadata.isUpcoming === false || metadata.startTimestamp == null) {
-      const error = new Error("upcoming live session has no machine-readable schedule");
-      error.code = "parser_drift";
+    // 원래 단일 배열 하한에서 identity만 실제 표현으로 교체합니다. 미해결 중복은
+    // 여전히 하나로 셉니다. 두 배열이 모두 차면 분리 지점의 쉼표 하나를 뺍니다.
+    const splitBytes = unavailable.size === 0 ? 0
+      : encodedSize({ unavailable_live_sessions: [] }) - 1 - (liveRowCount + pendingCount > 0 ? 1 : 0);
+    if (minimumBytes + splitBytes > maxSuccessResponseBytes) {
+      const error = new Error("live snapshot minimum exceeds success response limit");
+      error.code = "response_too_large";
       throw error;
     }
-    session.scheduled_at = metadata.startTimestamp;
   }
 
   if (sessions.some((session) => session.status === "UPCOMING" && session.scheduled_at == null && !unavailable.has(session.video_id))) {
@@ -165,6 +181,10 @@ function isMissingStreamsTab(err) {
 }
 
 export function mapLiveSessions(feed, channelId) {
+  return Array.from(liveSessionRows(feed, channelId));
+}
+
+function* liveSessionRows(feed, channelId) {
   let rows;
   if (Array.isArray(feed?.videos)) {
     rows = feed.videos;
@@ -175,7 +195,6 @@ export function mapLiveSessions(feed, channelId) {
     error.code = "parser_drift";
     throw error;
   }
-  const sessions = [];
   for (const row of rows) {
     const videoId = videoIDOf(row);
     const status = mapLiveStatus(row);
@@ -198,7 +217,7 @@ export function mapLiveSessions(feed, channelId) {
       error.code = "parser_drift";
       throw error;
     }
-    sessions.push({
+    yield {
       video_id: videoId,
       channel_id: rowChannelID,
       status,
@@ -207,9 +226,8 @@ export function mapLiveSessions(feed, channelId) {
       scheduled_at: optionalTime(row?.scheduled || row?.upcoming),
       started_at: optionalTime(row?.start_time || row?.started),
       ended_at: optionalTime(row?.end_time || row?.ended),
-    });
+    };
   }
-  return sessions;
 }
 
 export function mapStats(channel, about) {
@@ -314,4 +332,32 @@ function optionalHTTPSURL(value) {
   } catch {
     return "";
   }
+}
+
+function collectLiveSnapshot(feed, channelId, maxSuccessResponseBytes) {
+  const budget = new EncodedArrayBudget(maxSuccessResponseBytes, responseReserveBytes);
+  const unresolvedIDs = new Set();
+  const sessions = [];
+  for (const session of liveSessionRows(feed, channelId)) {
+    /** @type {Partial<typeof session> | null} */
+    let minimum = session;
+    if (session.status === "UPCOMING" && session.scheduled_at == null) {
+      // 제한 영상은 중복 행이 하나의 unavailable identity로 축소될 수 있습니다.
+      // LIVE 전환도 가능하므로 status/reason/제목 없이 고유 identity만 하한에 넣습니다.
+      if (unresolvedIDs.has(session.video_id)) {
+        minimum = null;
+      } else {
+        unresolvedIDs.add(session.video_id);
+        minimum = { video_id: session.video_id, channel_id: session.channel_id };
+      }
+    }
+    // 실제 두 배열로 나뉘면 추가되는 필드·괄호가 여기서 센 쉼표보다 큽니다.
+    if (minimum != null && budget.tryAppend(minimum) === "WOULD_EXCEED") {
+      const error = new Error("live snapshot minimum exceeds success response limit");
+      error.code = "response_too_large";
+      throw error;
+    }
+    sessions.push(session);
+  }
+  return { sessions, minimumBytes: responseReserveBytes + budget.encodedItemsBytes() };
 }
