@@ -129,7 +129,6 @@ func validateDomainHandlers(h *server.DomainHandlers) error {
 		{h.Stats == nil, "stats handler must not be nil"},
 		{h.Settings == nil, "settings handler must not be nil"},
 		{h.Template == nil, "template handler must not be nil"},
-		{h.Profile == nil, "profile handler must not be nil"},
 		{h.MajorEvent == nil, "major event handler must not be nil"},
 		{h.OAuth == nil, "oauth handler must not be nil"},
 	}

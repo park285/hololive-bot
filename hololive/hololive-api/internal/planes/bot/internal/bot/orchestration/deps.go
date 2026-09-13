@@ -71,7 +71,6 @@ type Dependencies struct {
 	Holodex               domain.StreamProvider
 	Chzzk                 *chzzk.Client
 	Twitch                *twitch.Client
-	Profiles              *member.ProfileService
 	Alarm                 domain.AlarmCRUD
 	Matcher               *matcher.Matcher
 	MembersData           domain.MemberDataProvider
@@ -112,7 +111,6 @@ type streamDependencies struct {
 	holodex     domain.StreamProvider
 	chzzk       *chzzk.Client
 	twitch      *twitch.Client
-	profiles    *member.ProfileService
 	alarm       domain.AlarmCRUD
 	matcher     *matcher.Matcher
 	membersData domain.MemberDataProvider
@@ -182,7 +180,6 @@ func (d *Dependencies) streamDeps() streamDependencies {
 		holodex:     d.Holodex,
 		chzzk:       d.Chzzk,
 		twitch:      d.Twitch,
-		profiles:    d.Profiles,
 		alarm:       d.Alarm,
 		matcher:     d.Matcher,
 		membersData: d.MembersData,

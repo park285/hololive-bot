@@ -36,9 +36,17 @@ func (c *Cache) snapshotOwnedChannelMemberLocked(
 		return nil
 	}
 
-	return c.snapshotOwnedPointMemberLocked(cached, generation, func(current *domain.Member) bool {
-		return current.ChannelID == channelID
-	})
+	snap := c.allMembersSnapshot.Load()
+	if !snapshotSuccessful(snap) || snap.generation != generation {
+		return nil
+	}
+
+	representative := channelRepresentatives(snap.members)[channelID]
+	if representative == nil || !samePointMemberIdentity(representative, cached) {
+		return nil
+	}
+
+	return representative
 }
 
 func (c *Cache) snapshotOwnedNameMemberLocked(

@@ -19,12 +19,12 @@ import (
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
-func buildScraperHolodexProfileFoundation(
+func buildScraperHolodexFoundation(
 	ctx context.Context,
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
 	logger *slog.Logger,
-) (*scraperHolodexProfileFoundation, error) {
+) (*scraperHolodexFoundation, error) {
 	memberServiceAdapter := providers.ProvideMemberServiceAdapter(ctx, infra.MemberCache, logger)
 
 	sharedRL, err := providers.ProvideYouTubeRateLimiter(infra.Cache, logger)
@@ -52,15 +52,9 @@ func buildScraperHolodexProfileFoundation(
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, memberServiceAdapter, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide profile service: %w", err)
-	}
-
-	return &scraperHolodexProfileFoundation{
+	return &scraperHolodexFoundation{
 		HolodexService:       holodexService,
 		MemberServiceAdapter: memberServiceAdapter,
-		ProfileService:       profileService,
 		SharedRL:             sharedRL,
 	}, nil
 }

@@ -119,20 +119,3 @@ func memberAdapterContext(ctx context.Context) context.Context {
 
 	return context.WithoutCancel(ctx)
 }
-
-// ProvideProfileService - 프로필 서비스 생성 (번역 사전 로드 포함).
-func ProvideProfileService(
-	ctx context.Context,
-	cacheClient cache.Client,
-	members domain.MemberDataProvider,
-	logger *slog.Logger,
-) (*member.ProfileService, error) {
-	service, err := member.NewProfileService(cacheClient, members, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create profile service: %w", err)
-	}
-
-	service.PreloadTranslations(ctx)
-
-	return service, nil
-}

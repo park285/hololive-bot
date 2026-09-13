@@ -60,7 +60,6 @@ type Config struct {
 	LLM                  LLMConfig
 	Exa                  ExaConfig
 	OfficialSchedule     OfficialScheduleConfig
-	OfficialProfile      OfficialProfileConfig
 	MaxResponseBodyBytes int64
 	LLMSchedulerURL      string
 	AlarmServiceURL      string
@@ -333,18 +332,5 @@ func loadOfficialScheduleConfig() OfficialScheduleConfig {
 		Timeout:      time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
 		CacheExpiry:  time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_CACHE_EXPIRY_SECONDS", int(d.CacheExpiry/time.Second))) * time.Second,
 		PageCacheTTL: time.Duration(sharedenv.Int("OFFICIAL_SCHEDULE_PAGE_CACHE_TTL_SECONDS", int(d.PageCacheTTL/time.Second))) * time.Second,
-	}
-}
-
-func loadOfficialProfileConfig() OfficialProfileConfig {
-	d := DefaultOfficialProfileConfig()
-
-	return OfficialProfileConfig{
-		BaseURL:        sharedenv.String("OFFICIAL_PROFILE_BASE_URL", d.BaseURL),
-		UserAgent:      sharedenv.String("OFFICIAL_PROFILE_USER_AGENT", d.UserAgent),
-		AcceptLanguage: sharedenv.String("OFFICIAL_PROFILE_ACCEPT_LANGUAGE", d.AcceptLanguage),
-		RequestTimeout: time.Duration(sharedenv.Int("OFFICIAL_PROFILE_REQUEST_TIMEOUT_SECONDS", int(d.RequestTimeout/time.Second))) * time.Second,
-		DelayBetween:   time.Duration(sharedenv.Int("OFFICIAL_PROFILE_DELAY_BETWEEN_MS", int(d.DelayBetween/time.Millisecond))) * time.Millisecond,
-		OutputFile:     sharedenv.String("OFFICIAL_PROFILE_OUTPUT_FILE", d.OutputFile),
 	}
 }

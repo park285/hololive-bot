@@ -37,32 +37,12 @@ var memberDirectoryPreferredOrder = []string{
 	"홀로라이브 4기생",
 	"홀로라이브 5기생",
 	"홀로라이브 게이머즈",
-	"홀로라이브 인도네시아",
+	"AREA15",
+	"holoro",
+	"holoh3ro",
+	"holoAN",
 	"mekPark",
 }
 
-// orgDirectoryGroups는 공식 프로필(유닛 데이터)이 없는 비-홀로라이브 소속을 org 값
-// 기준 그룹으로 묶어 표시하기 위한 매핑이다. 여기에 등재되지 않은 org는 기존 동작대로
-// "기타" 그룹으로 폴백한다(Stellive/VSPO 등은 의도적으로 제외).
-var orgDirectoryGroups = map[string]string{
-	"mekPark": "mekPark",
-}
-
-var memberDirectoryGroupAliases = map[string]string{
-	"秘密結社holoX":                       "비밀결사 holoX",
-	"ホロライブ0期生":                        "홀로라이브 0기생",
-	"ホロライブ1期生":                        "홀로라이브 1기생",
-	"ホロライブ2期生":                        "홀로라이브 2기생",
-	"ホロライブ3期生":                        "홀로라이브 3기생",
-	"ホロライブ4期生":                        "홀로라이브 4기생",
-	"ホロライブ5期生":                        "홀로라이브 5기생",
-	"ホロライブゲーマーズ":                      "홀로라이브 게이머즈",
-	"ホロライブインドネシア":                     "홀로라이브 인도네시아",
-	"ホロライブインドネシア（hololive Indonesia）": "홀로라이브 인도네시아",
-	"Myth（神話）":                        "Myth",
-	"Promise（約束）":                     "Promise",
-	"ホロライブEnglish -Myth-":             "Myth",
-	"ホロライブEnglish -Promise-":          "Promise",
-	"hololive English Myth":           "Myth",
-	"hololive English Promise":        "Promise",
-}
+// orgDirectoryGroups는 유닛 미등록 멤버의 기존 소속별 표시 그룹을 보존한다.
+var orgDirectoryGroups = map[string]string{"mekPark": "mekPark"}

@@ -209,7 +209,7 @@ func (c *Cache) GetByChannelID(ctx context.Context, channelID string) (*domain.M
 	}
 
 	if dbMember != nil {
-		c.cacheMember(ctx, dbMember, generation, "")
+		c.cacheMember(ctx, dbMember, generation, "", true)
 	}
 
 	return dbMember, nil
@@ -240,7 +240,7 @@ func (c *Cache) GetByName(ctx context.Context, name string) (*domain.Member, err
 	}
 
 	if dbMember != nil {
-		c.cacheMember(ctx, dbMember, generation, "")
+		c.cacheMember(ctx, dbMember, generation, "", false)
 	}
 
 	return dbMember, nil
@@ -305,6 +305,7 @@ func (c *Cache) loadChannelFromDistributedCache(ctx context.Context, channelID s
 	owned := c.snapshotOwnedChannelMemberLocked(channelID, &member, generation)
 	if owned != nil {
 		c.storePointMemberInMemoryLocked(owned, generation)
+		c.byChannelID.Store(channelID, &memoryMember{member: owned, generation: generation})
 	}
 
 	return owned
@@ -361,7 +362,7 @@ func (c *Cache) FindByAlias(ctx context.Context, alias string) (*domain.Member, 
 	}
 
 	if dbMember != nil {
-		c.cacheMember(ctx, dbMember, generation, alias)
+		c.cacheMember(ctx, dbMember, generation, alias, false)
 	}
 
 	return dbMember, nil

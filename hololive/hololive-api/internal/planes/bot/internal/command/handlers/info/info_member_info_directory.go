@@ -57,7 +57,7 @@ func (c *MemberInfoCommand) memberDirectoryMessage(ctx context.Context) (string,
 		return "", messaging.ErrNoMemberInfoFound
 	}
 
-	groupEntries := c.buildGroupEntries(ctx, activeMembers)
+	groupEntries := c.buildGroupEntries(activeMembers)
 	if len(groupEntries) == 0 {
 		return "", messaging.ErrNoMemberInfoFound
 	}
@@ -83,7 +83,7 @@ func (c *MemberInfoCommand) filterActiveMembers(members []*domain.Member) []*dom
 	return activeMembers
 }
 
-func (c *MemberInfoCommand) buildGroupEntries(ctx context.Context, members []*domain.Member) map[string]map[string]formatter.MemberDirectoryEntry {
+func (c *MemberInfoCommand) buildGroupEntries(members []*domain.Member) map[string]map[string]formatter.MemberDirectoryEntry {
 	groupEntries := make(map[string]map[string]formatter.MemberDirectoryEntry)
 
 	for _, member := range members {
@@ -95,14 +95,14 @@ func (c *MemberInfoCommand) buildGroupEntries(ctx context.Context, members []*do
 			PrimaryName:   PrimaryMemberName(member),
 			SecondaryName: member.Name,
 		}
-		addMemberDirectoryEntry(groupEntries, member.Name, entry, c.directoryGroupsForMember(ctx, member))
+		addMemberDirectoryEntry(groupEntries, member.Name, entry, c.directoryGroupsForMember(member))
 	}
 
 	return groupEntries
 }
 
-func (c *MemberInfoCommand) directoryGroupsForMember(ctx context.Context, member *domain.Member) []string {
-	groups := c.memberGroups(ctx, member)
+func (c *MemberInfoCommand) directoryGroupsForMember(member *domain.Member) []string {
+	groups := c.memberGroups(member)
 	if len(groups) == 0 {
 		return []string{DefaultMemberDirectoryGroup}
 	}

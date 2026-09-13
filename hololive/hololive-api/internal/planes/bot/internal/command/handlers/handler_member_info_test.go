@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -14,7 +15,6 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
@@ -44,21 +44,15 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		Name:      "Shirakami Fubuki",
 	}})
 
-	profiles, err := member.NewProfileService(nil, provider, slog.New(slog.DiscardHandler))
-	if err != nil {
-		t.Fatalf("NewProfileService() error = %v", err)
-	}
-
 	var (
 		textSent  string
 		imageSent bool
 	)
 
 	deps := &handlercore.Dependencies{
-		Matcher:          matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
-		MembersData:      provider,
-		OfficialProfiles: profiles,
-		Formatter:        formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
+		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		MembersData: provider,
+		Formatter:   formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
 			textSent = msg
 			return nil
@@ -75,7 +69,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		Logger: slog.New(slog.DiscardHandler),
 	}
 
-	err = info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
+	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{
 		paramMember: "Shirakami Fubuki",
 	})
 	if err != nil {
@@ -90,3 +84,74 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 		t.Fatal("image path must not be used for profile")
 	}
 }
+
+func TestMemberInfoCommandPrefersRequestedSharedChannelMember(t *testing.T) {
+	provider := newContextAwareMemberProvider([]*domain.Member{
+		{Name: "Izuki Michiru", ChannelID: "holoan-shared"},
+		{Name: "holoAN", ChannelID: "holoan-shared"},
+	})
+
+	var textSent string
+
+	deps := &handlercore.Dependencies{
+		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		MembersData: provider,
+		Formatter:   formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
+		SendMessage: func(_ context.Context, _, msg string) error { textSent = msg; return nil },
+
+		SendError: func(_ context.Context, _, msg string) error {
+			t.Fatalf("unexpected error: %s", msg)
+
+			return nil
+		},
+		Logger: slog.New(slog.DiscardHandler),
+	}
+
+	for _, params := range []map[string]any{
+		{"member": "Izuki Michiru", "channel_id": "holoan-shared"},
+		{"query": "Izuki Michiru"},
+		{"query": "Michiru"},
+		{"query": "IZUKI  MICHIRU"},
+	} {
+		if err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, params); err != nil {
+			t.Fatal(err)
+		}
+
+		if !strings.Contains(textSent, "Izuki Michiru") {
+			t.Fatalf("wrong shared-channel identity: %q", textSent)
+		}
+	}
+}
+
+type failedMemberInfoLoader struct{ domain.MemberDataProvider }
+
+func (p failedMemberInfoLoader) LoadAllMembers() ([]*domain.Member, error) {
+	return nil, errors.New("member DB unavailable")
+}
+
+func TestMemberInfoDoesNotTurnDatabaseFailureIntoNotFound(t *testing.T) {
+	deps := &handlercore.Dependencies{
+		MembersData: failedMemberInfoLoader{MemberDataProvider: newContextAwareMemberProvider(nil)},
+		Formatter:   formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
+
+		SendMessage: func(context.Context, string, string) error {
+			t.Fatal("database error reported as message")
+
+			return nil
+		},
+		SendError: func(context.Context, string, string) error {
+			t.Fatal("database error reported as not-found")
+
+			return nil
+		},
+		Logger: slog.New(slog.DiscardHandler),
+	}
+
+	// WithContext도 error-aware loader 계약을 보존해야 한다.
+	err := info.NewMemberInfoCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{"query": "Michiru"})
+	if err == nil || !strings.Contains(err.Error(), "member DB unavailable") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func (p failedMemberInfoLoader) WithContext(context.Context) domain.MemberDataProvider { return p }

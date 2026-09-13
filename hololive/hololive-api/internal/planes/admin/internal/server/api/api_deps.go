@@ -104,16 +104,6 @@ func (h *StatsHandler) requireStatsDeps(c *gin.Context) bool {
 	return true
 }
 
-func (h *ProfileHandler) requireProfiles(c *gin.Context) bool {
-	if h == nil || h.Handler == nil || h.profiles == nil {
-		respondServiceUnavailable(c, "Profile service unavailable")
-
-		return false
-	}
-
-	return true
-}
-
 func (h *TemplateHandler) requireTemplateAdmin(c *gin.Context) bool {
 	if h == nil || h.Handler == nil || h.templateAdmin == nil {
 		respondServiceUnavailable(c, "template service not available")

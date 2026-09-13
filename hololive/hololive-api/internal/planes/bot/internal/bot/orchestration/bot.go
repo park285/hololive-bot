@@ -45,7 +45,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
@@ -70,7 +69,6 @@ type Bot struct {
 	holodex               streamRuntime
 	chzzk                 *chzzk.Client
 	twitch                *twitch.Client
-	officialProfiles      *member.ProfileService
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
 	commandRegistry       *command.Registry
@@ -115,7 +113,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		holodex:              holodexRuntime,
 		chzzk:                stream.chzzk,
 		twitch:               stream.twitch,
-		officialProfiles:     stream.profiles,
 		alarm:                stream.alarm,
 		matcher:              stream.matcher,
 		acl:                  support.acl,
