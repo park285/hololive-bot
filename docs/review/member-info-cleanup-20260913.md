@@ -108,3 +108,12 @@ Fallback delta: 기존 번역 대체 경로를 제거했다. 기수 미등록 �
 마이그레이션 manifest 및 AP rsync manifest 검사, import graph 재생성, `git diff --check` 모두 통과했다.
 마지막 테스트 보조 코드 정리 후 member·handlers race도 재통과했다. 원본 checkout과 sibling worktree는 clean이다.
 작업 결과는 `refactor/profile-cleanup-20260913` 브랜치(기준 `ad6616250`)의 미커밋 diff로 보존했다.
+
+## 게시 준비 — 2026-09-14
+
+커밋·push·main 합류·운영 적용이 승인되어 T05를 시작했다.
+최초 push gate의 `GOWORK=off go mod tidy -diff`가 삭제된 수집 CLI의 goquery 직접 의존성 표기를 발견했다.
+API go.mod에서 같은 v1.13.0을 indirect로 이동했다. 버전과 go.sum 변경은 없다.
+배포 진입점 정적 계약 5종은 통과했다. 별도 실행한 meta-repo 검사 중 decision inventory는
+원본 iris-stack의 기존 INVENTORY.tsv stale 상태로 실패했다. hololive-bot 작업과 무관한 meta 생성물은 수정하지 않았다.
+저장소별 게시 게이트는 정상 hook으로 별도 실행하고 그 결과를 기준으로 게시한다.
