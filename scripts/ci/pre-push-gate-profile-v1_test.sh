@@ -13,6 +13,8 @@ unset BASE_SHA HEAD_SHA FULL_PRE_PUSH PRE_PUSH_MODE LOCAL_CI_GO_SCOPE
 unset RUN_RACE_TESTS RUN_ADMIN_TOUCH_GUARDRAIL GATE_TEST_CHANGED_FILES
 unset PRE_PUSH_LOCAL_REF PRE_PUSH_LOCAL_SHA PRE_PUSH_REMOTE_REF PRE_PUSH_REMOTE_SHA
 unset PRE_PUSH_PEELED_TAG_TARGET PRE_PUSH_UPDATE_KIND PRE_PUSH_GATE_MODE
+# 임시 history의 git init은 호출자가 -c로 선택한 실제 저장소 훅을 실행하면 안 된다.
+unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
 
 fail() {
   echo "[FAIL] $*" >&2
@@ -89,7 +91,7 @@ SH
 cat >"${fixture}/fake-bin/govulncheck" <<'SH'
 #!/bin/bash
 if [[ "${1:-}" == "-version" ]]; then
-  echo 'govulncheck@v1.7.0'
+  echo 'govulncheck@v1.8.0'
   exit 0
 fi
 printf 'govulncheck %s (pwd=%s)\n' "$*" "$(basename "${PWD}")" >>"${GATE_TEST_LOG}"
