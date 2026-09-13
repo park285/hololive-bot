@@ -23,14 +23,14 @@ package formatter
 import (
 	"context"
 	"net/url"
+	"slices"
 	"strings"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
+// CMD_PROFILE 사용자 템플릿의 기존 필드 계약은 유지한다. 소개문 필드는 항상 비어 있다.
 type profileTemplateData struct {
 	Names       []string
 	Catchphrase string
@@ -40,183 +40,23 @@ type profileTemplateData struct {
 	SocialLinks []profileSocialLink
 	OfficialURL string
 }
-
 type profileDataRow struct {
 	Label     string
 	Value     string
 	Multiline bool
 }
-
 type profileSocialLink struct {
 	Label string
 	URL   string
 }
 
-func getTranslatedText(translatedVal, rawVal string) string {
-	if trimmed := stringutil.TrimSpace(translatedVal); trimmed != "" {
-		return trimmed
-	}
-
-	return stringutil.TrimSpace(rawVal)
-}
-
-func profileCatchphrase(raw *domain.TalentProfile, translated *domain.Translated) string {
-	if translated != nil {
-		return getTranslatedText(translated.Catchphrase, raw.Catchphrase)
-	}
-
-	if raw != nil {
-		return stringutil.TrimSpace(raw.Catchphrase)
-	}
-
-	return ""
-}
-
-func profileSummary(raw *domain.TalentProfile, translated *domain.Translated) string {
-	if translated != nil {
-		return getTranslatedText(translated.Summary, raw.Description)
-	}
-
-	if raw != nil {
-		return stringutil.TrimSpace(raw.Description)
-	}
-
-	return ""
-}
-
-func profileHighlights(translated *domain.Translated) []string {
-	if translated == nil || len(translated.Highlights) == 0 {
-		return nil
-	}
-
-	highlights := make([]string, 0, len(translated.Highlights))
-
-	for _, highlight := range translated.Highlights {
-		if trimmed := stringutil.TrimSpace(highlight); trimmed != "" {
-			highlights = append(highlights, trimmed)
-		}
-	}
-
-	return highlights
-}
-
-func getProfileDataEntries(raw *domain.TalentProfile, translated *domain.Translated) []domain.TranslatedProfileDataRow {
-	if translated != nil && len(translated.Data) > 0 {
-		return translated.Data
-	}
-
-	if raw == nil || len(raw.DataEntries) == 0 {
-		return nil
-	}
-
-	entries := make([]domain.TranslatedProfileDataRow, 0)
-
-	for _, entry := range raw.DataEntries {
-		if stringutil.TrimSpace(entry.Label) == "" || stringutil.TrimSpace(entry.Value) == "" {
-			continue
-		}
-
-		entries = append(entries, domain.TranslatedProfileDataRow(entry))
-	}
-
-	return entries
-}
-
-func profileDataRows(raw *domain.TalentProfile, translated *domain.Translated) []profileDataRow {
-	entries := getProfileDataEntries(raw, translated)
-	if len(entries) == 0 {
-		return nil
-	}
-
-	maxRows := min(len(entries), 8)
-	rows := make([]profileDataRow, 0, maxRows)
-
-	for i := range maxRows {
-		label := stringutil.TrimSpace(entries[i].Label)
-
-		value := stringutil.TrimSpace(entries[i].Value)
-		if label == "" || value == "" {
-			continue
-		}
-
-		if strings.Contains(value, "\n") {
-			rows = append(rows, profileDataRow{
-				Label:     label,
-				Value:     "  " + strings.ReplaceAll(value, "\n", "\n  "),
-				Multiline: true,
-			})
-
-			continue
-		}
-
-		rows = append(rows, profileDataRow{Label: label, Value: value})
-	}
-
-	return rows
-}
-
-func (f *ResponseFormatter) profileSocialLinks(ctx context.Context, raw *domain.TalentProfile) []profileSocialLink {
-	if raw == nil || len(raw.SocialLinks) == 0 {
-		return nil
-	}
-
-	maxLinks := min(len(raw.SocialLinks), 4)
-	links := make([]profileSocialLink, 0, maxLinks)
-
-	for i := range maxLinks {
-		link := raw.SocialLinks[i]
-		linkURL := profileLinkURL(link.URL)
-
-		if stringutil.TrimSpace(link.Label) == "" || linkURL == "" {
-			continue
-		}
-
-		links = append(links, profileSocialLink{
-			Label: f.socialLinkLabel(ctx, link.Label),
-			URL:   linkURL,
-		})
-	}
-
-	return links
-}
-
-func profileOfficialURL(raw *domain.TalentProfile) string {
-	if raw == nil {
-		return ""
-	}
-
-	return profileLinkURL(raw.OfficialURL)
-}
-
-func profileLinkURL(raw string) string {
-	value := stringutil.TrimSpace(raw)
-	parsed, err := url.ParseRequestURI(value)
-
-	if err != nil || parsed.Host == "" {
-		return ""
-	}
-
-	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return ""
-	}
-
-	return parsed.String()
-}
-
-func (f *ResponseFormatter) FormatTalentProfile(ctx context.Context, raw *domain.TalentProfile, translated *domain.Translated) string {
-	if raw == nil {
+// FormatMemberInfo는 DB에 등록된 기본 정보만 표시한다. 미등록 날짜·링크는 생략하며 외부 조회를 수행하지 않는다.
+func (f *ResponseFormatter) FormatMemberInfo(ctx context.Context, member *domain.Member) string {
+	if member == nil {
 		return messagestrings.FallbackSentinel
 	}
 
-	data := profileTemplateData{
-		Names:       talentDisplayNames(raw, translated),
-		Catchphrase: profileCatchphrase(raw, translated),
-		Summary:     profileSummary(raw, translated),
-		Highlights:  profileHighlights(translated),
-		DataRows:    profileDataRows(raw, translated),
-		SocialLinks: f.profileSocialLinks(ctx, raw),
-		OfficialURL: profileOfficialURL(raw),
-	}
+	data := memberInfoTemplateData(member)
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdProfile, data)
 	if err != nil {
@@ -226,102 +66,55 @@ func (f *ResponseFormatter) FormatTalentProfile(ctx context.Context, raw *domain
 	return rendered
 }
 
-func (f *ResponseFormatter) socialLinkLabel(ctx context.Context, label string) string {
-	if translated := f.messageStrings.GetContext(ctx, messagestrings.NamespaceSocial, label); translated != "" {
-		return translated
-	}
-
-	return label
-}
-
-func talentDisplayNames(raw *domain.TalentProfile, translated *domain.Translated) []string {
-	var names []string
-
-	english := ""
-	japanese := ""
-
-	if raw != nil {
-		english = stringutil.TrimSpace(raw.EnglishName)
-		japanese = stringutil.TrimSpace(raw.JapaneseName)
-	}
-
-	display := ""
-
-	if translated != nil {
-		display = stringutil.TrimSpace(translated.DisplayName)
-	}
-
-	if english != "" {
-		addUniqueName(&names, english)
-	}
-
-	for _, candidate := range parseDisplayNameComponents(display) {
-		addUniqueName(&names, candidate)
-	}
-
-	if japanese != "" {
-		addUniqueName(&names, japanese)
-	}
-
-	return names
-}
-
-func parseDisplayNameComponents(display string) []string {
-	display = stringutil.TrimSpace(display)
-	if display == "" {
-		return nil
-	}
-
-	return splitDisplayNameParts(displayNameRawParts(display))
-}
-
-func displayNameRawParts(display string) []string {
-	beforeClose, afterClose, hasClose := strings.CutLast(display, ")")
-	beforeOpen, inside, hasOpen := strings.Cut(beforeClose, "(")
-
-	if !hasOpen || !hasClose {
-		return []string{display}
-	}
-
-	rawParts := make([]string, 0, 3)
-	appendDisplayNamePart(&rawParts, beforeOpen)
-	appendDisplayNamePart(&rawParts, inside)
-	appendDisplayNamePart(&rawParts, afterClose)
-
-	return rawParts
-}
-
-func appendDisplayNamePart(rawParts *[]string, part string) {
-	part = stringutil.TrimSpace(part)
-	if part != "" {
-		*rawParts = append(*rawParts, part)
-	}
-}
-
-func splitDisplayNameParts(rawParts []string) []string {
-	var result []string
-
-	for _, part := range rawParts {
-		segments := strings.SplitSeq(part, "/")
-		for segment := range segments {
-			appendDisplayNamePart(&result, segment)
+func memberInfoTemplateData(member *domain.Member) profileTemplateData {
+	data := profileTemplateData{OfficialURL: profileLinkURL(member.OfficialURL)}
+	for _, name := range []string{member.NameKo, member.Name, member.NameJa} {
+		name = strings.TrimSpace(name)
+		if name != "" && !slices.Contains(data.Names, name) {
+			data.Names = append(data.Names, name)
 		}
 	}
 
-	return result
+	if member.Org != "" {
+		data.DataRows = append(data.DataRows, profileDataRow{Label: "소속", Value: member.Org})
+	}
+
+	if len(member.Units) > 0 {
+		data.DataRows = append(data.DataRows, profileDataRow{Label: "기수·유닛", Value: strings.Join(member.Units, " / ")})
+	}
+
+	status := "활동 중"
+
+	if member.IsGraduated {
+		status = "졸업·활동 종료"
+	}
+
+	data.DataRows = append(data.DataRows, profileDataRow{Label: "활동 상태", Value: status})
+
+	if member.Birthday != nil {
+		data.DataRows = append(data.DataRows, profileDataRow{Label: "생일", Value: member.Birthday.Format("1월 2일")})
+	}
+
+	if member.DebutDate != nil {
+		data.DataRows = append(data.DataRows, profileDataRow{Label: "데뷔일", Value: member.DebutDate.Format("2006년 1월 2일")})
+	}
+
+	if member.ChannelID != "" {
+		data.SocialLinks = append(data.SocialLinks, profileSocialLink{Label: "YouTube", URL: "https://www.youtube.com/channel/" + url.PathEscape(member.ChannelID)})
+	}
+
+	if member.ChzzkChannelID != "" {
+		data.SocialLinks = append(data.SocialLinks, profileSocialLink{Label: "치지직", URL: member.GetChzzkLiveURL()})
+	}
+
+	return data
 }
 
-func addUniqueName(names *[]string, candidate string) {
-	candidate = stringutil.TrimSpace(candidate)
-	if candidate == "" {
-		return
+func profileLinkURL(raw string) string {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return ""
 	}
 
-	for _, existing := range *names {
-		if strings.EqualFold(existing, candidate) {
-			return
-		}
-	}
-
-	*names = append(*names, candidate)
+	return parsed.String()
 }

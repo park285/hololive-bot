@@ -95,9 +95,9 @@ func buildBotInfrastructureServices(
 	messageAdapter := messaging.NewMessageAdapter(appConfig.Bot.Prefix, appConfig.Bot.MentionPrefix)
 	formatter := messageformatter.NewResponseFormatter(appConfig.Bot.Prefix, templateRenderer, messageformatter.WithMessageStrings(messageStrings), messageformatter.WithSeeMoreFold(appConfig.Bot.SeeMoreFold))
 
-	foundation, err := InitScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
+	foundation, err := InitScraperHolodexFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("init scraper holodex profile foundation: %w", err)
+		return nil, nil, fmt.Errorf("init scraper holodex foundation: %w", err)
 	}
 
 	alarmYouTubeStack, err := InitAlarmYouTubeStack(ctx, appConfig, infra, foundation, irisClient, formatter, logger)
@@ -133,7 +133,7 @@ func buildBotInfrastructureServices(
 func provideBotDependenciesFromStacks(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *ScraperHolodexProfileFoundation,
+	foundation *ScraperHolodexFoundation,
 	alarmYouTubeStack *AlarmYouTubeStackComponents,
 	integrationServices *CoreIntegrationServices,
 	messageAdapter *messaging.MessageAdapter,

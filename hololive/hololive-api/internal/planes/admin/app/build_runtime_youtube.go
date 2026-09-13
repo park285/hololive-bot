@@ -15,7 +15,7 @@ func buildAdminAPIYouTubeStack(
 	ctx context.Context,
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *scraperHolodexProfileFoundation,
+	foundation *scraperHolodexFoundation,
 	logger *slog.Logger,
 ) *providers.YouTubeStack {
 	return sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{

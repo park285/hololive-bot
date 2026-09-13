@@ -13,7 +13,7 @@ import (
 
 func buildAdminAPISettingsApplier(
 	appConfig *settings.Config,
-	foundation *scraperHolodexProfileFoundation,
+	foundation *scraperHolodexFoundation,
 	alarmMode *alarmModeComponents,
 	ytStack *providers.YouTubeStack,
 	logger *slog.Logger,

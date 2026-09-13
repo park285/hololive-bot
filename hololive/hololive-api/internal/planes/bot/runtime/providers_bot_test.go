@@ -95,7 +95,6 @@ type botWiringFixture struct {
 	postgres         *database.PostgresService
 	memberRepository *member.Repository
 	memberCache      *member.Cache
-	profiles         *member.ProfileService
 	holodex          *holodexprovider.Service
 	chzzk            *chzzk.Client
 	twitch           *twitch.Client
@@ -123,7 +122,6 @@ func newBotWiringFixture() *botWiringFixture {
 		postgres:         &database.PostgresService{},
 		memberRepository: &member.Repository{},
 		memberCache:      &member.Cache{},
-		profiles:         &member.ProfileService{},
 		holodex:          &holodexprovider.Service{},
 		chzzk:            &chzzk.Client{},
 		twitch:           &twitch.Client{},
@@ -156,7 +154,6 @@ func (f *botWiringFixture) modules() *appbootstrap.BotDependencyModules {
 			Postgres:         f.postgres,
 			MemberRepository: f.memberRepository,
 			MemberCache:      f.memberCache,
-			Profiles:         f.profiles,
 			MembersData:      nil,
 		},
 		Stream: appbootstrap.BotStreamModule{

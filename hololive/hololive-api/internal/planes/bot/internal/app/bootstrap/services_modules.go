@@ -15,7 +15,6 @@ import (
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 )
@@ -23,7 +22,7 @@ import (
 func BuildBotDependencyModules(
 	appConfig *configsettings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *ScraperHolodexProfileFoundation,
+	foundation *ScraperHolodexFoundation,
 	alarmYouTubeStack *AlarmYouTubeStackComponents,
 	integrationServices *CoreIntegrationServices,
 	messageAdapter *messaging.MessageAdapter,
@@ -35,7 +34,7 @@ func BuildBotDependencyModules(
 	return BotDependencyModules{
 		Core:      buildBotCoreModule(appConfig, logger),
 		Messaging: buildBotMessagingModule(irisClient, messageAdapter, formatter, messageStrings, appConfig.Bot.MarkdownReplies),
-		Data:      buildBotDataModule(infra, alarmYouTubeStack.AlarmMode, foundation.ProfileService),
+		Data:      buildBotDataModule(infra, alarmYouTubeStack.AlarmMode),
 		Stream:    buildBotStreamModule(alarmYouTubeStack.AlarmMode, foundation.HolodexService, alarmYouTubeStack.Matcher, alarmYouTubeStack.YouTubeStack),
 		Support:   buildBotSupportModule(alarmYouTubeStack.ActivityLogger, alarmYouTubeStack.SettingsService, integrationServices.ACLService),
 		Feature:   buildBotFeatureModule(integrationServices.MajorEventRepository, integrationServices.MemberNewsService, integrationServices.CommandBuilders),
@@ -72,14 +71,12 @@ func buildBotMessagingModule(
 func buildBotDataModule(
 	infra *sharedmodules.InfraModule,
 	alarmMode *AlarmModeComponents,
-	profileService *member.ProfileService,
 ) BotDataModule {
 	return BotDataModule{
 		Cache:            infra.Cache,
 		Postgres:         infra.Postgres,
 		MemberRepository: infra.MemberRepository,
 		MemberCache:      infra.MemberCache,
-		Profiles:         profileService,
 		MembersData:      alarmMode.MemberDataSource,
 	}
 }

@@ -19,16 +19,14 @@ import (
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-type scraperHolodexProfileFoundation struct {
+type scraperHolodexFoundation struct {
 	HolodexService       *holodexprovider.Service
 	MemberServiceAdapter domain.MemberDataProvider
-	ProfileService       *member.ProfileService
 	SharedRL             *ratelimiter.RateLimiter
 }
 
@@ -51,7 +49,7 @@ func BuildAdminAPIRuntime(ctx context.Context, appConfig *settings.Config, logge
 		return nil, fmt.Errorf("build admin api runtime: build infra module: %w", err)
 	}
 
-	foundation, err := buildScraperHolodexProfileFoundation(ctx, appConfig, infra, logger)
+	foundation, err := buildScraperHolodexFoundation(ctx, appConfig, infra, logger)
 	if err != nil {
 		infra.Cleanup()
 
@@ -122,7 +120,7 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	ctx context.Context,
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *scraperHolodexProfileFoundation,
+	foundation *scraperHolodexFoundation,
 	alarmMode *alarmModeComponents,
 	logger *slog.Logger,
 ) (*AdminAPIRuntime, error) {
