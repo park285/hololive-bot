@@ -89,7 +89,7 @@ SH
 cat >"${fixture}/fake-bin/govulncheck" <<'SH'
 #!/bin/bash
 if [[ "${1:-}" == "-version" ]]; then
-  echo 'govulncheck@v1.7.0'
+  echo 'govulncheck@v1.8.0'
   exit 0
 fi
 printf 'govulncheck %s (pwd=%s)\n' "$*" "$(basename "${PWD}")" >>"${GATE_TEST_LOG}"
