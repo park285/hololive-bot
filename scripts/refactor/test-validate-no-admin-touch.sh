@@ -21,12 +21,12 @@ install_gate_stub() {
   local workdir="$1"
   local exit_code="$2"
   mkdir -p "${workdir}/scripts/ci"
-  cat >"${workdir}/scripts/ci/admin-dashboard-go-ci.sh" <<EOF
+  cat >"${workdir}/scripts/ci/public-pr-frontend-gate.sh" <<EOF
 #!/usr/bin/env bash
 touch "${workdir}/.gate-invoked"
 exit ${exit_code}
 EOF
-  chmod +x "${workdir}/scripts/ci/admin-dashboard-go-ci.sh"
+  chmod +x "${workdir}/scripts/ci/public-pr-frontend-gate.sh"
 }
 
 commit_all() {

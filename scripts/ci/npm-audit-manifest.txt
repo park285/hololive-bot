@@ -1,2 +1,1 @@
-admin-dashboard/frontend/package-lock.json
 hololive/hololive-youtube-collector/youtubejs/package-lock.json

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# local-ci.sh 와 admin-dashboard-go-ci.sh 가 source 해서 쓰는 Go 툴 설치·핀 검증 헬퍼.
+# local-ci.sh 가 source 해서 쓰는 Go 툴 설치·핀 검증 헬퍼.
 
 STATICCHECK_VERSION="${STATICCHECK_VERSION:-2026.2.1}"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.7.0}"

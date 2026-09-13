@@ -8,7 +8,6 @@ expected_module_version="1.27.1"
 expected_selector_version="1.27"
 module_files=(
   "go.mod"
-  "admin-dashboard/backend/go.mod"
   "hololive/hololive-alarm-worker/go.mod"
   "hololive/hololive-api/go.mod"
   "hololive/hololive-dbtest/go.mod"

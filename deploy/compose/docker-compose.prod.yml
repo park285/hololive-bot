@@ -642,69 +642,48 @@ services:
 
   admin-dashboard:
     <<: *app-service
-    image: admin-dashboard:prod
-    build:
-      <<: *go-build-base
-      dockerfile: admin-dashboard/Dockerfile
-      args:
-        VERSION: ${HOLO_API_VERSION:?HOLO_API_VERSION must be injected by scripts/deploy/compose.sh}
-        REVISION: ${REVISION:-unknown}
+    # 웹 이미지는 iris-admin/Dockerfile.hololive가 소유합니다.
+    image: ${ADMIN_DASHBOARD_IMAGE:-admin-dashboard:prod}
     container_name: admin-dashboard
-    # bootstrap의 전체 종료 25s·HTTP drain 20s가 Docker 기본 10s에 잘리지 않도록 45s를 둡니다.
     stop_grace_period: 45s
-    # 시크릿(ADMIN_PASS_HASH/SESSION_SECRET/VALKEY_URL/HOLO_BOT_API_KEY)은 다른 앱과 동일하게
-    # /run 하위 env_file로 이동 — 호스트 .env와 `compose config` 렌더 결과에서 시크릿을 제거한다.
-    # 필수 admin-security overlay가 env_file을 비우고 *_FILE mount만 사용합니다.
-    # required:false — admin-dashboard는 central 전용인데 AP 배포도 전체 모델을 `config`로 검증하므로
-    # AP 호스트의 파일 부재를 허용해야 한다. central 실재는 systemd-compose-up wait_for_file이 보장한다.
-    env_file:
-      - path: ${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}
-        required: false
     environment:
-      <<: *app-file-log-env
-      PORT: "30190"
-      ENV: "production"
-      FORCE_HTTPS: "true"
-      TRUST_FORWARDED_HEADERS: "true"
-      # hololive-net gateway 단일 신뢰: host 게시(127.0.0.1:30190) 트래픽만 docker-proxy를 거쳐
-      # 이 IP로 도달한다. 대역 전체(/12)를 신뢰하면 동거 컨테이너가 XFF로 client IP를 위조해
-      # 로그인 rate limit을 우회할 수 있다. 네트워크 재생성으로 게이트웨이가 바뀌면 XFF 무시로
-      # 안전하게 격하된다(단일 버킷 rate limit).
-      TRUSTED_PROXY_CIDRS: "172.23.0.1/32"
-      ALLOWED_ORIGINS: "https://admin.holoshi.com"
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      SESSION_TOKEN_ROTATION: "true"
-      DOCKER_HOST: tcp://docker-proxy:2375
-      HOLO_ADMIN_API_URL: https://hololive-api:30006
-      HOLO_BOT_URL: https://hololive-api:30006
-      HOLOLIVE_INTERNAL_H3_CA_CERT_FILE: ${HOLOLIVE_INTERNAL_H3_CA_CERT_FILE:-/run/hololive-bot/certs/hololive-h3.crt}
-      HOLOLIVE_INTERNAL_H3_SERVER_NAME: ${HOLOLIVE_INTERNAL_H3_SERVER_NAME:-127.0.0.1}
-      LOG_DIR: /app/logs
+      IRIS_ADMIN_WEB_SURFACE: hololive
+      IRIS_ADMIN_WEB_BIND: 0.0.0.0:30190
+      IRIS_ADMIN_WEB_TRUSTED_PROXY: 172.23.0.1
+      IRIS_ADMIN_WEB_ORIGIN: https://admin.holoshi.com
+      IRIS_ADMIN_WEB_USER_LOGIN: ${ADMIN_USER:-admin}
+      CREDENTIALS_DIRECTORY: /run/hololive-bot/iris-admin-credentials
+      IRIS_ADMIN_WEB_TEST_ACCOUNT_DIR: /run/hololive-bot/test-account
+      IRIS_ADMIN_WEB_HOLOLIVE_ORIGIN: https://hololive-api:30006
+      IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE: /run/hololive-bot/certs/hololive-h3.crt
     ports:
       - "127.0.0.1:30190:30190"
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run/hololive-bot/test-account:size=1m,uid=1000,gid=1000,mode=0700
     volumes:
-      - ../../logs:/app/logs
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
     group_add:
       - "${HOLOLIVE_RUNTIME_GID:-1002}"
-    extra_hosts: *host-extra-hosts
     depends_on:
-      valkey-cache:
-        condition: service_healthy
       hololive-api:
         condition: service_healthy
-      docker-proxy:
-        condition: service_started
-    deploy: *deploy-128m
+    # Rust와 128 MiB heap 상한의 SSR Node 프로세스를 함께 수용합니다.
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          pids: 128
     healthcheck:
-      <<: *go-healthcheck
-      # 코드 확인: FORCE_HTTPS는 쿠키 Secure/HSTS만 제어하고 리다이렉트하지 않으므로 HTTP /health 직검사가 안전하다.
-      test: ["CMD", "./bin/healthcheck", "http://127.0.0.1:30190/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+      test: ["CMD", "node", "/app/bin/healthcheck.ts"]
     networks:
       hololive-net:
         aliases:
           - admin-dashboard
-      docker-proxy-net: {}
 
   docker-proxy:
     <<: *restart-logging

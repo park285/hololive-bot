@@ -1,39 +1,11 @@
-# Admin Dashboard guidance
+# Admin Dashboard 배포 경계
 
-Read `../AGENTS.md` for Hololive rules. This dashboard uses a Go backend and React frontend on combined port `30190`. Versions belong to `backend/go.mod`, `frontend/package.json`, and their lockfiles.
+웹 구현·OpenAPI·인증·세션·변경 작업 보호는 `iris-admin` 저장소가 소유합니다.
+`hololive-web`은 홀로 디자인을 유지하며 공통 Rust gateway의 `hololive` 프로필과 React SSR·PWA를 사용합니다.
 
-## Ownership
+이 저장소에는 웹 backend/frontend를 다시 만들지 않습니다. 업무 로직은 `hololive/hololive-api`,
+배포 설정은 `deploy/compose`, 운영 절차는 `docs/current/runbooks/admin-dashboard.md`가 소유합니다.
+공개 서비스·이미지·실행 파일 이름 `admin-dashboard`와 포트 `30190`은 유지합니다.
 
-Backend: Gin/net/http, Valkey sessions, gorilla/websocket. Frontend: React, TypeScript, Vite, TailwindCSS, shadcn/ui, TanStack Query v5 for server state, and Zustand for client state.
-
-| Task | Owner |
-|---|---|
-| Entrypoints | `backend/cmd/admin-dashboard/main.go`, `frontend/src/main.tsx` |
-| Route assembly | `backend/internal/httpapi/routes.go`, `backend/internal/httpapi/access.go` |
-| Auth and sessions | `backend/internal/auth/`, `backend/internal/session/` |
-| Docker control | `backend/internal/adapters/docker/`, `backend/internal/contract/docker-policy.json` |
-| Config | `backend/internal/config/` |
-| Holo API adapter | `backend/internal/adapters/holo/` |
-| Contract and generated client | `backend/internal/contract/`, `frontend/scripts/generate-api.mjs` |
-| Frontend composition and transport | `frontend/src/app/bootstrap.ts`, `frontend/src/api/client.ts`, `frontend/src/api/transport.ts` |
-| Frontend session and server state | `frontend/src/session/`, `frontend/src/queries/` |
-| Business mutations and drafts | `frontend/src/operations/`, `frontend/src/editors/`, `frontend/src/features/` |
-
-## Contracts
-
-- Authenticate at the dashboard before proxying to Hololive Admin API with `X-API-Key` injection.
-- Backend is Go-only. `scripts/architecture/check-admin-dashboard-go-only.sh` rejects backend Rust files/manifests/lockfiles and Rust tooling in the backend or `admin-dashboard/Dockerfile`.
-- Preserve WebSocket concurrency limits/origin validation, per-IP login rate limits/lockout, HMAC-signed session cookies, CSRF token protection (`enforce/monitor/off`), and configured heartbeat refresh/token rotation.
-- Session cookies remain HttpOnly and SameSite=Strict; `FORCE_HTTPS` controls Secure.
-
-## Verification
-
-Run relevant checks from the Hololive root; docs-only edits normally need diff inspection. Required publication gates still apply.
-
-```bash
-./scripts/ci/admin-dashboard-go-ci.sh
-(cd admin-dashboard/frontend && corepack npm run lint && corepack npm run build)
-./scripts/architecture/check-admin-contract.sh
-```
-
-Full backend validation uses `./scripts/ci/admin-dashboard-go-ci.sh`, including build/tests/lint and the Go-only check; do not repeat covered checks for unchanged inputs. Run `./scripts/architecture/check-admin-dashboard-go-only.sh` when backend language/tooling, Dockerfile, or Go workspace/CI module membership changes, unless already covered by the full gate.
+검증: 이 저장소는 `bash scripts/ci/public-pr-frontend-gate.sh`, 웹 저장소는
+`bash scripts/verify-all.sh`를 실행합니다. 운영 적용은 별도 승인된 배포 절차를 따릅니다.

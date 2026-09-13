@@ -7,7 +7,10 @@ compose_service_resolve_build_target() {
         hololive-api) printf '%s\n' "hololive-api" ;;
         alarm-worker|hololive-alarm-worker) printf '%s\n' "hololive-alarm-worker" ;;
         youtube-collector|youtube-collector-c) printf '%s\n' "youtube-collector" ;;
-        admin-dashboard) printf '%s\n' "admin-dashboard" ;;
+        admin-dashboard)
+            echo "admin-dashboard is built by iris-admin/scripts/build-hololive-image.sh" >&2
+            return 1
+            ;;
         *) return 1 ;;
     esac
 }
@@ -16,8 +19,7 @@ compose_service_build_targets_text() {
     printf '%s\n' \
         "hololive-api" \
         "alarm-worker hololive-alarm-worker" \
-        "youtube-collector" \
-        "admin-dashboard"
+        "youtube-collector"
 }
 
 compose_service_resolve_redeploy_target() {

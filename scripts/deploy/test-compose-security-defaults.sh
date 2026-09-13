@@ -35,9 +35,7 @@ grep -Fq 'limit_conn holoshi_shortlink_connections' "${PUBLIC_SHORTLINK}" \
   || fail "public shortlink ingress must apply a per-client connection limit"
 pass "shortlink ingress limits are keyed per client at both proxy hops"
 
-node "${ROOT_DIR}/scripts/architecture/generate-admin-docker-policy.mjs" --check \
-  || fail "admin Docker proxy generated exact-name policy is stale"
-pass "admin Docker proxy independently enforces container and operation scope"
+bash "${ROOT_DIR}/scripts/ci/public-pr-frontend-gate.sh"
 
 if ! docker compose version >/dev/null 2>&1; then
   echo "[SKIP] docker compose unavailable" >&2
@@ -134,7 +132,7 @@ def env_map(svc):
     return env
 
 env = env_map(dashboard)
-origins = str(env.get("ALLOWED_ORIGINS", ""))
+origins = str(env.get("IRIS_ADMIN_WEB_ORIGIN", ""))
 if "100.100.1.3:30190" in origins:
     print("[FAIL] admin-dashboard live-compat default origins must not include Tailscale host")
     sys.exit(1)

@@ -248,7 +248,6 @@ run_fingerprint() {
     '.github/workflows/*.yml' \
     '.golangci.yml' \
     'go.mod' 'go.sum' \
-    'admin-dashboard/backend/go.mod' 'admin-dashboard/backend/go.sum' \
     'scripts/check-release-version.sh' \
     'scripts/architecture/check-structure-budget.py' \
     'scripts/architecture/check-structure-budget_test.py' \
@@ -309,13 +308,15 @@ run_reusable_phase() {
     deploy/compose/docker-compose.prod.yml
   run_self_test scripts/ci/local-ci-gofix_test.sh scripts/ci/local-ci-gofix.sh scripts/ci/local-ci-files.sh
   run_self_test scripts/ci/go-work-sync-drift_test.sh \
-    scripts/ci/go-work-sync-drift.sh scripts/ci/admin-dashboard-go-ci.sh
+    scripts/ci/go-work-sync-drift.sh
   run_self_test scripts/ci/nilaway-inputs_test.sh \
-    scripts/ci/nilaway-inputs.sh scripts/ci/local-ci.sh scripts/ci/admin-dashboard-go-ci.sh
+    scripts/ci/nilaway-inputs.sh scripts/ci/local-ci.sh
   run_self_test scripts/ci/race-parallel-guard_test.sh scripts/ci/local-ci.sh
+  run_self_test scripts/deploy/materialize-admin-dashboard-secrets_test.sh \
+    scripts/deploy/materialize-admin-dashboard-secrets.sh
   run_self_test scripts/refactor/grep-sensitive-logs_test.sh scripts/refactor/grep-sensitive-logs.sh
   run_self_test scripts/refactor/test-validate-no-admin-touch.sh \
-    scripts/refactor/validate-no-admin-touch.sh scripts/ci/admin-dashboard-go-ci.sh
+    scripts/refactor/validate-no-admin-touch.sh
   run_self_test scripts/ci/check-pgo-default_test.sh \
     scripts/ci/check-pgo-default.sh scripts/ci/pgo-off-policy.tsv scripts/build/build-youtube-collector-go.sh
   run_self_test scripts/ci/check-go-test-json_test.py scripts/ci/check-go-test-json.py
@@ -368,9 +369,8 @@ run_reusable_phase() {
 
   # Go 시험의 Ryuk 회수는 프로세스 종료 뒤에도 interface를 제거합니다. Chromium이
   # ERR_NETWORK_CHANGED로 중단됐으므로 독립적인 브라우저 검사를 그보다 먼저 완료합니다.
-  if echo "$changed_files" | grep -qE '^admin-dashboard/(frontend|backend)/'; then
-    echo "[pre-push] admin-dashboard frontend 품질 게이트"
-    (cd admin-dashboard/frontend && corepack npm ci && corepack npm run generate:api && corepack npm test && corepack npm run lint && corepack npm run build)
+  if echo "$changed_files" | grep -qE '^(admin-dashboard/|deploy/compose/|scripts/ci/public-pr-frontend-gate.sh)'; then
+    bash scripts/ci/public-pr-frontend-gate.sh
   fi
 
   echo "[pre-push] mode=${PRE_PUSH_MODE} local_ci_go_scope=${resolved_local_ci_go_scope}"

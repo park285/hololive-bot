@@ -31,7 +31,6 @@ func TestMonorepoModuleSuites(t *testing.T) {
 		"./",
 		"../shared-go/...",
 		"../iris-client-go/...",
-		"./admin-dashboard/backend/...",
 		"./hololive/hololive-shared/...",
 		"./hololive/hololive-api/...",
 		"./hololive/hololive-alarm-worker/...",

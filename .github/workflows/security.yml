@@ -65,7 +65,6 @@ jobs:
           cache-dependency-path: |
             hololive-bot/go.work.sum
             hololive-bot/go.sum
-            hololive-bot/admin-dashboard/backend/go.sum
             hololive-bot/hololive/*/go.sum
             shared-go/go.sum
             iris-client-go/go.sum
@@ -193,7 +192,6 @@ jobs:
           node-version: "24.20.0"
           cache: npm
           cache-dependency-path: |
-            hololive-bot/admin-dashboard/frontend/package-lock.json
             hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json
 
       - name: Python runtime

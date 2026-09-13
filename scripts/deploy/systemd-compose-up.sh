@@ -113,6 +113,12 @@ do
 done
 
 export COMPOSE_ENV_FILE ADMIN_DASHBOARD_ENV_FILE
+# 고정 Rust H3 transport는 URL의 hostname을 검증합니다. 인증서를 바꾸지 않고 사전 조건만 검사합니다.
+openssl x509 -in /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt -noout -ext subjectAltName |
+  tr ',' '\n' | sed 's/^[[:space:]]*//' | grep -qx 'DNS:hololive-api' || {
+    echo "[SECURITY] hololive-h3 certificate must include DNS SAN hololive-api before Rust web cutover" >&2
+    exit 1
+  }
 "${ROOT_DIR}/scripts/deploy/materialize-admin-dashboard-secrets.sh"
 
 base_files=(

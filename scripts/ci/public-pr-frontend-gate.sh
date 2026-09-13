@@ -1,77 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-FRONTEND_DIR="${ROOT_DIR}/admin-dashboard/frontend"
-NODE_VERSION_LIB="${ROOT_DIR}/scripts/deploy/lib/youtubejs-node-version.sh"
-
-# shellcheck source=scripts/deploy/lib/youtubejs-node-version.sh
-. "${NODE_VERSION_LIB}"
-
-[[ -f "${FRONTEND_DIR}/package-lock.json" ]] || {
-  echo "frontend package-lock.json is required" >&2
-  exit 1
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || {
-    echo "required command not found: $1" >&2
+# 공개 frontend PR job은 이 저장소가 소유하는 웹 배포 경계만 검증합니다.
+# 웹 소스·OpenAPI·SSR·브라우저 검사는 iris-admin/scripts/verify-all.sh가 소유합니다.
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+for retired in admin-dashboard/backend admin-dashboard/frontend admin-dashboard/Dockerfile; do
+  [[ ! -e "$root/$retired" ]] || {
+    echo "web implementation must be owned by iris-admin: $retired" >&2
     exit 1
   }
-}
-
-require_command node
-require_command corepack
-
-require_node_version node
-echo "[public-pr] Node.js $(node --version), Corepack-managed npm available"
-
-cd "${FRONTEND_DIR}"
-
-echo "[public-pr] corepack npm ci"
-npm_config_engine_strict=true corepack npm ci
-
-# GitHub의 일회성 runner에도 로컬 browser gate와 같은 세 엔진·user cgroup 실행 조건을 준비한다.
-if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
-  corepack npm exec -- playwright install --with-deps firefox webkit
-  sudo -n loginctl enable-linger "$(id -un)"
-  sudo -n systemctl start "user@$(id -u).service"
-  XDG_RUNTIME_DIR="/run/user/$(id -u)"
-  export XDG_RUNTIME_DIR
-  export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
-  [[ -S "${XDG_RUNTIME_DIR}/bus" && -x /usr/bin/google-chrome ]] || {
-    echo "browser gate requires a user systemd bus and Google Chrome" >&2
-    exit 1
-  }
-fi
-
-echo "[public-pr] generate API client"
-corepack npm run generate:api
-node "${ROOT_DIR}/scripts/architecture/generate-admin-docker-policy.mjs" --check
-
-generated_status="$(git -C "${ROOT_DIR}" status --porcelain -- \
-  admin-dashboard/backend/internal/contract/operations_generated.go \
-  admin-dashboard/frontend/src/api/generated)"
-if [[ -n "${generated_status}" ]]; then
-  git -C "${ROOT_DIR}" diff -- \
-    admin-dashboard/backend/internal/contract/operations_generated.go \
-    admin-dashboard/frontend/src/api/generated || true
-  printf '%s\n' "${generated_status}" >&2
-  echo "generated OpenAPI artifacts are stale; run corepack npm run generate:api and commit the result" >&2
-  exit 1
-fi
-
-echo "[public-pr] frontend tests"
-corepack npm test
-corepack npm run test:contract
-
-echo "[public-pr] frontend lint"
-corepack npm run lint
-
-echo "[public-pr] frontend build"
-corepack npm run build
-
-echo "[public-pr] source and production bundle retirement"
-bash "${ROOT_DIR}/scripts/architecture/check-admin-retirement.sh" --source-bundle
-node "${ROOT_DIR}/scripts/architecture/check-admin-feature-parity.mjs"
+done
+cd "$root/deploy/compose"
+docker compose -f docker-compose.prod.yml -f docker-compose.admin-security.yml \
+  config --no-interpolate --no-env-resolution --format json |
+  jq -e '
+    (.services["admin-dashboard"]) as $web |
+    ($web.build == null) and ($web.env_file == null or $web.env_file == []) and
+    ($web.read_only == true) and
+    ($web.environment.IRIS_ADMIN_WEB_SURFACE == "hololive") and
+    ($web.environment.IRIS_ADMIN_WEB_BIND == "0.0.0.0:30190") and
+    ($web.environment.IRIS_ADMIN_WEB_TRUSTED_PROXY == "172.23.0.1") and
+    ($web.environment.CREDENTIALS_DIRECTORY == "/run/hololive-bot/iris-admin-credentials") and
+    (($web.environment | keys | sort) == ([
+      "CREDENTIALS_DIRECTORY", "IRIS_ADMIN_WEB_BIND", "IRIS_ADMIN_WEB_SURFACE",
+      "IRIS_ADMIN_WEB_TRUSTED_PROXY", "IRIS_ADMIN_WEB_ORIGIN", "IRIS_ADMIN_WEB_USER_LOGIN",
+      "IRIS_ADMIN_WEB_HOLOLIVE_ORIGIN", "IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE",
+      "IRIS_ADMIN_WEB_TEST_ACCOUNT_DIR"
+    ] | sort)) and
+    (($web.networks | keys) == ["hololive-net"]) and
+    (($web.depends_on | keys) == ["hololive-api"]) and
+    ($web.environment.IRIS_ADMIN_WEB_TEST_ACCOUNT_DIR == "/run/hololive-bot/test-account") and
+    (all($web.ports[]; .host_ip == "127.0.0.1" and .target == 30190)) and
+    (all($web.volumes[]; .read_only == true)) and
+    (($web.volumes | map(.target) | sort) == [
+      "/run/hololive-bot/certs/hololive-h3.crt", "/run/hololive-bot/iris-admin-credentials"
+    ]) and
+    (.services["admin-docker-proxy"] == null) and
+    (.networks["admin-docker-proxy-net"] == null) and
+    (.services.deunhealth.environment.DOCKER_HOST == "tcp://docker-proxy:2375")
+  ' >/dev/null
+echo "[web-boundary] Iris-owned image, Holo-only credentials and no Docker/host resource capability"

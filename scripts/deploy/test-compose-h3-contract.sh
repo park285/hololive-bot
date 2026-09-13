@@ -231,10 +231,11 @@ for name in ("hololive-api", "hololive-alarm-worker"):
     check(f"{name} receives API_SECRET_KEY from scoped env_file", env.get("API_SECRET_KEY") == "stub")
 
 admin_env = (main.get("admin-dashboard") or {}).get("environment") or {}
-check("admin-dashboard receives ADMIN_PASS_HASH from scoped env_file", admin_env.get("ADMIN_PASS_HASH") == "stub")
+check("admin-dashboard loads mounted credentials without secret environment values",
+      admin_env.get("CREDENTIALS_DIRECTORY") == "/run/hololive-bot/iris-admin-credentials" and "ADMIN_PASS_HASH" not in admin_env)
 check(
-    "admin-dashboard single-target healthcheck timeout is 7s",
-    healthcheck_timeout(main.get("admin-dashboard") or {}) == "7s",
+    "admin-dashboard Rust/Node healthcheck timeout is 5s",
+    healthcheck_timeout(main.get("admin-dashboard") or {}) == "5s",
 )
 
 def h3_addr_aligned(svc, port):

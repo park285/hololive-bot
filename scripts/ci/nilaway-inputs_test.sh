@@ -74,18 +74,16 @@ else
 fi
 
 LOCAL_CI="${SCRIPT_DIR}/local-ci.sh"
-ADMIN_CI="${SCRIPT_DIR}/admin-dashboard-go-ci.sh"
 parallel_guard="validate_nilaway_parallel \"${dollar}{nilaway_parallel}\""
 memory_guard="validate_nilaway_gomemlimit \"${dollar}{nilaway_gomemlimit}\""
 if grep -Fq "${parallel_guard}" "${LOCAL_CI}" \
-  && grep -Fq "${memory_guard}" "${LOCAL_CI}" \
-  && grep -Fq "${memory_guard}" "${ADMIN_CI}"; then
-  printf '[PASS] both CI entrypoints invoke the shared validators\n'
+  && grep -Fq "${memory_guard}" "${LOCAL_CI}"; then
+  printf '[PASS] the Go CI entrypoint invoke the shared validators\n'
 else
   printf '[FAIL] a CI entrypoint does not invoke the shared validator\n' >&2
   failures=$((failures + 1))
 fi
-if grep -Eq 'bash -c.*NILAWAY_(PARALLEL|GOMEMLIMIT)' "${LOCAL_CI}" "${ADMIN_CI}"; then
+if grep -Eq 'bash -c.*NILAWAY_(PARALLEL|GOMEMLIMIT)' "${LOCAL_CI}"; then
   printf '[FAIL] a NilAway input is interpolated into bash -c\n' >&2
   failures=$((failures + 1))
 else

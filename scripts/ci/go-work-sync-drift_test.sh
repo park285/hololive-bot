@@ -10,14 +10,14 @@ trap 'rm -rf "${tmpdir}"' EXIT
 fixture="${tmpdir}/stack/hololive-bot"
 sibling="${tmpdir}/stack/iris-client-go"
 fakebin="${tmpdir}/bin"
-mkdir -p "${fixture}/admin-dashboard/backend" "${sibling}" "${fakebin}"
+mkdir -p "${fixture}/hololive/hololive-api" "${sibling}" "${fakebin}"
 
-printf 'go 1.26.6\nuse (\n\t.\n\t./admin-dashboard/backend\n\t../iris-client-go\n)\n' >"${fixture}/go.work"
+printf 'go 1.26.6\nuse (\n\t.\n\t./hololive/hololive-api\n\t../iris-client-go\n)\n' >"${fixture}/go.work"
 printf 'module example.com/root\n\ngo 1.26.6\n' >"${fixture}/go.mod"
 : >"${fixture}/go.sum"
 : >"${fixture}/go.work.sum"
-printf 'module example.com/admin\n\ngo 1.26.6\n' >"${fixture}/admin-dashboard/backend/go.mod"
-: >"${fixture}/admin-dashboard/backend/go.sum"
+printf 'module example.com/admin\n\ngo 1.26.6\n' >"${fixture}/hololive/hololive-api/go.mod"
+: >"${fixture}/hololive/hololive-api/go.sum"
 printf 'module example.com/client\n\ngo 1.26.6\n' >"${sibling}/go.mod"
 printf 'baseline\n' >"${sibling}/go.sum"
 
@@ -27,8 +27,10 @@ workspace_metadata_files() {
         go.work.sum \
         go.mod \
         go.sum \
-        admin-dashboard/backend/go.mod \
-        admin-dashboard/backend/go.sum \
+        retired/go.mod \
+        retired/go.sum \
+        hololive/hololive-api/go.mod \
+        hololive/hololive-api/go.sum \
         ../iris-client-go/go.mod \
         ../iris-client-go/go.sum
 }
@@ -62,10 +64,3 @@ fi
 grep -Fq '../iris-client-go/go.sum (go work sync)' "${tmpdir}/drift.out"
 [[ "$(sha256sum "${sibling}/go.sum")" == "${before}" ]]
 echo "[PASS] workspace drift is reported without mutating sibling metadata"
-
-if grep -Fq 'run_step "go work sync" go work sync' "${ROOT_DIR}/scripts/ci/admin-dashboard-go-ci.sh"; then
-    echo "admin dashboard gate must not sync the real workspace" >&2
-    exit 1
-fi
-grep -Fq 'verify_go_work_sync_drift' "${ROOT_DIR}/scripts/ci/admin-dashboard-go-ci.sh"
-echo "[PASS] standalone admin gate uses the read-only workspace drift check"

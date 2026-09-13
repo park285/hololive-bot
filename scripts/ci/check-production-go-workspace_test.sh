@@ -7,8 +7,6 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
 fixture_files=(
-  admin-dashboard/Dockerfile
-  admin-dashboard/backend/go.mod
   hololive/hololive-api/Dockerfile
   hololive/hololive-api/go.mod
   hololive/hololive-alarm-worker/Dockerfile

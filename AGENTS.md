@@ -4,7 +4,7 @@ These rules apply across agent runtimes. In an iris-stack checkout, also read `.
 
 ## Ownership
 
-The Go monorepo contains unified `hololive-api` (bot/admin/llm planes), alarm worker, `hololive/hololive-youtube-collector` (binary `youtube-collector`), shared libraries, and admin dashboard. The collector owns Holodex/Official Schedule/YouTube.js fetch, normalization, lease/checkpoint, and source-observation publishing. Its AP fleet is Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`.
+The Go monorepo contains unified `hololive-api` (bot/admin/llm planes), alarm worker, `hololive/hololive-youtube-collector` (binary `youtube-collector`), shared libraries. Web implementation and image builds belong to Iris Admin; this repository owns the dashboard Compose service. The collector owns Holodex/Official Schedule/YouTube.js fetch, normalization, lease/checkpoint, and source-observation publishing. Its AP fleet is Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`.
 
 Central runs on `hololive-osaka` (aarch64). Builds, images, and tests stay on `kapu`, also the CLIProxy/observability host; host `compose.env` owns bind addresses, not Compose defaults.
 
@@ -13,9 +13,9 @@ Central runs on `hololive-osaka` (aarch64). Builds, images, and tests stay on `k
 Choose checks matching the change; docs-only edits normally need diff inspection. Required publish gates still apply.
 
 ```bash
-./build-all.sh --no-bump
-go build ./ ../shared-go/... ../iris-client-go/... ./admin-dashboard/backend/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
-go test ./ ../shared-go/... ../iris-client-go/... ./admin-dashboard/backend/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
+./build-all.sh --build-only --no-bump
+go build ./ ../shared-go/... ../iris-client-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
+go test ./ ../shared-go/... ../iris-client-go/... ./hololive/hololive-shared/... ./hololive/hololive-api/... ./hololive/hololive-alarm-worker/... ./hololive/hololive-youtube-collector/...
 (cd hololive/hololive-youtube-collector/youtubejs && npm test)
 ```
 

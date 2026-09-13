@@ -95,8 +95,15 @@ verify_live_image_revision() {
         "live container for ${service}" \
         "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" \
         "${COMPOSE_FILE_ARGS[@]}" ps -q "${service}")"
-    deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
-    echo "[VERIFY] ${service} image revision=${REVISION}"
+    local expected_revision=""
+    if [[ "$service" == admin-dashboard ]]; then
+        expected_revision="$admin_revision"
+        deploy_verify_admin_container "$CONTAINER_CLI" "$container_id" "$admin_revision"
+    else
+        expected_revision="$REVISION"
+        deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
+    fi
+    echo "[VERIFY] ${service} image revision=${expected_revision}"
 }
 
 resolve_revision_services() {
@@ -104,7 +111,7 @@ resolve_revision_services() {
     LIVE_REVISION_SERVICES=()
 
     case "${TARGET}" in
-        hololive-api|hololive-alarm-worker|youtube-collector|admin-dashboard)
+        hololive-api|hololive-alarm-worker|youtube-collector)
             BUILT_REVISION_SERVICES=("${TARGET}")
             LIVE_REVISION_SERVICES=("${TARGET}")
             ;;
@@ -112,8 +119,8 @@ resolve_revision_services() {
             BUILT_REVISION_SERVICES=(hololive-db-migrate)
             ;;
         "")
-            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
-            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)
+            BUILT_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector)
+            LIVE_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector)
             ;;
     esac
 }
@@ -237,7 +244,7 @@ postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
 REVISION_ENABLED=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate|admin-dashboard|"")
+    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate|"")
         REVISION_ENABLED=true
         REVISION="$(deploy_source_revision "${ROOT_DIR}")"
         export REVISION
@@ -259,9 +266,15 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" config --quiet
 
+if [[ "$TARGET" == admin-dashboard || -z "$TARGET" ]]; then
+    admin_image="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" ADMIN_DASHBOARD_IMAGE)"
+    admin_revision="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" IRIS_ADMIN_REVISION)"
+    deploy_verify_admin_image "$CONTAINER_CLI" "${admin_image:-admin-dashboard:prod}" "$admin_revision"
+fi
+
 build_target=false
 case "${TARGET}" in
-    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate|admin-dashboard)
+    hololive-api|hololive-alarm-worker|youtube-collector|hololive-db-migrate)
         build_target=true
         ;;
     "")
@@ -323,11 +336,15 @@ else
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
-    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then
+    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector admin-dashboard; then
         echo "[ERROR] health gate failed after all-service redeploy" >&2
         exit 1
     fi
     if [[ "${REVISION_ENABLED}" == true ]]; then
         verify_cutover_image_revisions
     fi
+fi
+
+if [[ "$TARGET" == admin-dashboard || -z "$TARGET" ]]; then
+    verify_live_image_revision admin-dashboard
 fi

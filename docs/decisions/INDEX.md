@@ -2,14 +2,14 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 45건: proposed 0, accepted 33, rejected 0, withdrawn 2, superseded 10
+레코드 45건: proposed 0, accepted 31, rejected 0, withdrawn 2, superseded 12
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
 | [DEC-20260911-youtube-restricted-schedule-isolation](records/DEC-20260911-youtube-restricted-schedule-isolation.json) | YouTube 접근 제한 영상의 일정 부재를 격리하고 정상 방송과 채널 정보 수집을 지속한다 | accepted | verified | hololive-bot | 2026-09-11 | trigger | supersedes DEC-20260901-hololive-youtube-live-metadata-adapter-ownership | [2026-09-11-youtube-restricted-schedule-isolation.md](../current/plans/2026-09-11-youtube-restricted-schedule-isolation.md) |
 | [DEC-20260910-hololive-admin-performance-release-exception](records/DEC-20260910-hololive-admin-performance-release-exception.json) | 관리자 교체의 RSS 회복 실패와 단축 성능 검증을 수용해 출시한다 | accepted | implemented | hololive-bot | 2026-09-10 | trigger | - | [2026-09-10-admin-release-acceptance.md](../design/2026-09-10-admin-release-acceptance.md) |
-| [DEC-20260910-hololive-admin-temporary-test-account](records/DEC-20260910-hololive-admin-temporary-test-account.json) | 관리자 운영 검증에는 CLI가 발급하는 만료형 조회 전용 계정을 사용한다 | accepted | verified | hololive-bot | 2026-09-10 | trigger | - | - |
-| [DEC-20260909-hololive-admin-bigbang-replacement](records/DEC-20260909-hololive-admin-bigbang-replacement.json) | Hololive 관리자 구조를 단일 릴리스로 전면 교체하는 보완안 | accepted | implemented | hololive-bot | 2026-09-09 | trigger | - | [2026-09-09-admin-bigbang-review.md](../design/2026-09-09-admin-bigbang-review.md) |
+| [DEC-20260910-hololive-admin-temporary-test-account](records/DEC-20260910-hololive-admin-temporary-test-account.json) | 관리자 운영 검증에는 CLI가 발급하는 만료형 조회 전용 계정을 사용한다 | superseded | verified | hololive-bot | 2026-09-10 | trigger | superseded by DEC-20260913-admin-consolidation | - |
+| [DEC-20260909-hololive-admin-bigbang-replacement](records/DEC-20260909-hololive-admin-bigbang-replacement.json) | Hololive 관리자 구조를 단일 릴리스로 전면 교체하는 보완안 | superseded | implemented | hololive-bot | 2026-09-09 | trigger | superseded by DEC-20260913-admin-consolidation | [2026-09-09-admin-bigbang-review.md](../design/2026-09-09-admin-bigbang-review.md) |
 | [DEC-20260908-hololive-single-primary-baseline](records/DEC-20260908-hololive-single-primary-baseline.json) | Hololive PostgreSQL은 Osaka 단일 primary와 별도 암호화 백업을 운영 기준으로 둔다 | accepted | implemented | hololive-bot | 2026-09-08 | - | - | [postgres-replication.md](../current/runbooks/postgres-replication.md) |
 | [DEC-20260906-hololive-mekpark-host-ml-evaluation](records/DEC-20260906-hololive-mekpark-host-ml-evaluation.json) | mekPark 분류 모델은 분리된 오프라인 평가로 검증한다 | accepted | verified | hololive-bot | 2026-09-06 | trigger | - | [2026-09-06-mekpark-host-ml-evaluation.md](../current/plans/2026-09-06-mekpark-host-ml-evaluation.md) |
 | [DEC-20260906-hololive-mekpark-title-host-attribution](records/DEC-20260906-hololive-mekpark-title-host-attribution.json) | mekPark 공유 채널의 방송자는 제목 근거로 표시한다 | accepted | verified | hololive-bot | 2026-09-06 | trigger | - | [2026-09-06-mekpark-title-host-attribution.md](../current/plans/2026-09-06-mekpark-title-host-attribution.md) |
