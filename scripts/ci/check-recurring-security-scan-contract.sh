@@ -50,7 +50,8 @@ LIVE_LOGS_PATH=/tmp LIVE_DB_BACKUP_PATH=/tmp \
   docker compose --env-file deploy/compose/build-only.env.sample \
     -f deploy/compose/docker-compose.prod.yml \
     -f deploy/compose/docker-compose.security-scan.yml build --print >"$tmp_dir/security-scan-bake.json"
-if grep -Fq '"attest"' "$tmp_dir/security-scan-bake.json"; then
+# Compose 5는 비활성화도 disabled=true로 출력하므로 필드 존재만으로 판정하지 않는다.
+if ! jq -e -f scripts/ci/disabled-bake-attestations.jq "$tmp_dir/security-scan-bake.json" >/dev/null; then
   fail "disposable local-image scan builds must not request unsupported attestations"
 fi
 
