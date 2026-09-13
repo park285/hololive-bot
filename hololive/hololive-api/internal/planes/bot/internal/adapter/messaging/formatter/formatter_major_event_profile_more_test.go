@@ -21,11 +21,11 @@
 package formatter
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
@@ -126,119 +126,26 @@ const cmdProfileTestBody = `{{- if eq (len .Names) 0 -}}
 공식 프로필: {{.OfficialURL}}
 {{- end -}}`
 
-const cmdProfileGolden = `👤 Shirakami Fubuki (시라카미 후부키 / 白上フブキ)
-"친구야!"
-홀로라이브 1기생
+func TestFormatMemberInfoWithoutEmbeddedProfile(t *testing.T) {
+	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{domain.TemplateKeyCmdProfile: cmdProfileTestBody})
+	formatter := NewResponseFormatter("!", renderer)
+	member := &domain.Member{Name: "New Member", NameKo: "신규 멤버", Org: "New Org", Units: []string{"holoAN"}, ChannelID: "shared-channel", OfficialURL: "https://example.com/new"}
+	got := formatter.FormatMemberInfo(t.Context(), member)
 
-[하이라이트]
-- 고양이 아님
-- FOX
-
-[프로필]
-- 생일: 10월 5일
-- 특기:
-  노래
-  게임
-
-[링크]
-- 음악 플레이리스트: https://yt.example/playlist
-- Twitter: https://x.example/fubuki
-
-공식 프로필: https://hololive.example/fubuki`
-
-func newProfileTestFixture() (raw *domain.TalentProfile, translated *domain.Translated) {
-	raw = &domain.TalentProfile{
-		EnglishName:  "Shirakami Fubuki",
-		JapaneseName: "白上フブキ",
-		Catchphrase:  "Friend!",
-		Description:  "Fox VTuber",
-		DataEntries: []domain.TalentProfileEntry{
-			{Label: "생일", Value: "10월 5일"},
-			{Label: "", Value: "무시"},
-		},
-		SocialLinks: []domain.TalentSocialLink{
-			{Label: "歌の再生リスト", URL: "https://yt.example/playlist"},
-			{Label: "Twitter", URL: "https://x.example/fubuki"},
-			{Label: "invalid", URL: "javascript:alert(1)"},
-		},
-		OfficialURL: "https://hololive.example/fubuki",
-	}
-	translated = &domain.Translated{
-		DisplayName: "시라카미 후부키 (Shirakami Fubuki)",
-		Catchphrase: "친구야!",
-		Summary:     "홀로라이브 1기생",
-		Highlights:  []string{"고양이 아님", "FOX"},
-		Data: []domain.TranslatedProfileDataRow{
-			{Label: "생일", Value: "10월 5일"},
-			{Label: "특기", Value: "노래\n게임"},
-		},
+	for _, value := range []string{"신규 멤버", "New Member", "New Org", "holoAN", "활동 중", "https://example.com/new", "https://www.youtube.com/channel/shared-channel"} {
+		if !strings.Contains(got, value) {
+			t.Errorf("missing %q in %q", value, got)
+		}
 	}
 
-	return raw, translated
-}
+	for _, value := range []string{"생일", "데뷔일", "하이라이트", "친구야!"} {
+		if strings.Contains(got, value) {
+			t.Errorf("unregistered detail %q in %q", value, got)
+		}
+	}
 
-func TestProfileHelpers(t *testing.T) {
-	t.Parallel()
-
-	raw, translated := newProfileTestFixture()
-
-	assert.Equal(t, "친구야!", getTranslatedText("친구야!", "Friend!"))
-	assert.Equal(t, "Friend!", getTranslatedText(" ", "Friend!"))
-	assert.Equal(t, "친구야!", profileCatchphrase(raw, translated))
-	assert.Equal(t, "홀로라이브 1기생", profileSummary(raw, translated))
-	assert.Equal(t, []string{"고양이 아님", "FOX"}, profileHighlights(translated))
-	assert.Len(t, getProfileDataEntries(raw, translated), 2)
-
-	rows := profileDataRows(raw, translated)
-	require.Len(t, rows, 2)
-	assert.Equal(t, "생일", rows[0].Label)
-	assert.False(t, rows[0].Multiline)
-	assert.Equal(t, "특기", rows[1].Label)
-	assert.True(t, rows[1].Multiline)
-	assert.Equal(t, "  노래\n  게임", rows[1].Value)
-	assert.Equal(t, "https://hololive.example/fubuki", profileOfficialURL(raw))
-	assert.Empty(t, profileLinkURL("javascript:alert(1)"))
-	assert.Empty(t, profileLinkURL("/relative/path"))
-	assert.Empty(t, profileLinkURL("https://example.com/path)\n[bad](https://evil.example)"))
-	assert.Equal(t, "https://example.com/path", profileLinkURL(" https://example.com/path "))
-
-	parts := parseDisplayNameComponents("시라카미 후부키 (Shirakami Fubuki) / FBK")
-	require.NotEmpty(t, parts)
-	assert.Contains(t, parts, "시라카미 후부키")
-	assert.Contains(t, parts, "Shirakami Fubuki")
-	assert.Contains(t, parts, "FBK")
-
-	uniqueNames := []string{"A"}
-	addUniqueName(&uniqueNames, "a")
-	addUniqueName(&uniqueNames, "B")
-	assert.Equal(t, []string{"A", "B"}, uniqueNames)
-
-	assert.Contains(t, talentDisplayNames(raw, translated), "시라카미 후부키")
-}
-
-func TestFormatTalentProfile(t *testing.T) {
-	t.Parallel()
-
-	raw, translated := newProfileTestFixture()
-
-	store := setupFormatterTestStore(t)
-	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdProfile: cmdProfileTestBody,
-	})
-	formatter := NewResponseFormatter("!", renderer, WithMessageStrings(store))
-
-	assert.Equal(t, "공식 굿즈", formatter.socialLinkLabel(t.Context(), "公式グッズ"))
-	assert.Equal(t, "custom", formatter.socialLinkLabel(t.Context(), "custom"))
-
-	links := formatter.profileSocialLinks(t.Context(), raw)
-	require.Len(t, links, 2)
-	assert.Equal(t, "음악 플레이리스트", links[0].Label)
-	assert.Equal(t, "https://yt.example/playlist", links[0].URL)
-	assert.Equal(t, "Twitter", links[1].Label)
-
-	msg := formatter.FormatTalentProfile(t.Context(), raw, translated)
-	assert.Equal(t, cmdProfileGolden, msg)
-	assert.NotContains(t, msg, "\u200b")
-
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatTalentProfile(t.Context(), nil, translated))
+	member.IsGraduated = true
+	if got = formatter.FormatMemberInfo(t.Context(), member); !strings.Contains(got, "졸업·활동 종료") {
+		t.Fatalf("graduation missing: %q", got)
+	}
 }

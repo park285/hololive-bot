@@ -74,7 +74,7 @@ func TestBuildBotDependencyModulesAndProvideBotDependenciesWireRuntimeObjects(t 
 	modules := BuildBotDependencyModules(
 		appConfig,
 		(&sharedInfraForBootstrapTest{cacheClient: cacheClient, postgres: postgres}).module(),
-		&ScraperHolodexProfileFoundation{},
+		&ScraperHolodexFoundation{},
 		&AlarmYouTubeStackComponents{
 			AlarmMode: &AlarmModeComponents{
 				AlarmCRUD:        alarmCRUD,

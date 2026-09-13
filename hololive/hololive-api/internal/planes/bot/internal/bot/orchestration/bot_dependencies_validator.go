@@ -102,10 +102,6 @@ func validateStreamDependencies(stream *streamDependencies) error {
 		return errors.New("holodex dependency is required")
 	}
 
-	if stream.profiles == nil {
-		return errors.New("profile service dependency is required")
-	}
-
 	if stream.alarm == nil {
 		return errors.New("alarm service dependency is required")
 	}

@@ -102,7 +102,6 @@ func newBaseConfig(corsAllowedOrigins []string, corsMissingInProduction bool, op
 		LLM:                  LoadLLMConfig(),
 		Exa:                  LoadExaConfig(),
 		OfficialSchedule:     loadOfficialScheduleConfig(),
-		OfficialProfile:      loadOfficialProfileConfig(),
 		MaxResponseBodyBytes: int64(sharedenv.Int("MAX_RESPONSE_BODY_BYTES", int(DefaultMaxResponseBodyBytes))),
 		LLMSchedulerURL:      sharedenv.String("LLM_SCHEDULER_INTERNAL_URL", ""),
 		AlarmServiceURL:      sharedenv.String("ALARM_INTERNAL_URL", ""),

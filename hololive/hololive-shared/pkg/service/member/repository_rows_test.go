@@ -85,7 +85,7 @@ func TestCollectAllMembersFromRows_PreservesShortKoreanName(t *testing.T) {
 	repository := newTestMemberRepository()
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
-			if len(dest) != 15 {
+			if len(dest) != 20 {
 				return errors.New("scan destination count mismatch")
 			}
 

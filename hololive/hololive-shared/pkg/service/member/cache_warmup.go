@@ -50,6 +50,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 		return fmt.Errorf("failed to load all members: %w", errAllMembersGenerationChanged)
 	}
 
+	representatives := channelRepresentatives(members)
 	chunkSize := c.warmUpChunkSize
 	chunks := chunkMembers(members, chunkSize)
 
@@ -65,7 +66,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 
 				defer func() { <-semaphore }()
 
-				c.cacheChunk(ctx, chunk, warmupGeneration)
+				c.cacheChunk(ctx, chunk, warmupGeneration, representatives)
 			})
 		})
 	}
@@ -82,7 +83,7 @@ func (c *Cache) WarmUpCache(ctx context.Context) error {
 	return nil
 }
 
-func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, generation uint64) {
+func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, generation uint64, representatives map[string]*domain.Member) {
 	if len(members) == 0 {
 		return
 	}
@@ -97,7 +98,7 @@ func (c *Cache) cacheChunk(ctx context.Context, members []*domain.Member, genera
 		if member.ChannelID != "" {
 			channelKey := c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
 
-			pairs[channelKey] = member
+			pairs[channelKey] = representatives[member.ChannelID]
 		}
 
 		nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)

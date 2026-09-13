@@ -102,7 +102,6 @@ func registerAPIRoutes(
 	registerStreamRoutes(holoAPI, domains.Stream)
 	registerSettingsRoutes(holoAPI, domains.Settings)
 	registerTemplateRoutes(holoAPI, domains.Template)
-	registerProfileRoutes(holoAPI, domains.Profile)
 	registerMajorEventRoutes(holoAPI, domains.MajorEvent)
 
 	return nil

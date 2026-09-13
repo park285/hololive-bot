@@ -50,6 +50,9 @@ type memberRow struct {
 	twitchUserID    *string
 	birthday        *time.Time
 	debutDate       *time.Time
+	officialURL     *string
+	units           []string
+	chzzkChannelID  *string
 }
 
 type memberRowScanner interface {
@@ -74,6 +77,7 @@ func scanMemberQueryRow(scanner memberRowScanner) (memberRow, error) {
 		&row.suborg,
 		&row.syncSource,
 		&row.twitchUserID,
+		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
 	)
 	if err != nil {
 		return row, fmt.Errorf("scan member columns: %w", err)
@@ -101,6 +105,7 @@ func scanMemberFullRow(scanner memberRowScanner) (memberRow, error) {
 		&row.suborg,
 		&row.syncSource,
 		&row.twitchUserID,
+		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
 	)
 	if err != nil {
 		return row, fmt.Errorf("scan member full columns: %w", err)
@@ -126,6 +131,7 @@ func scanMemberPhotoQueryRow(scanner memberRowScanner) (memberRow, error) {
 		&row.suborg,
 		&row.syncSource,
 		&row.twitchUserID,
+		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
 	)
 	if err != nil {
 		return row, fmt.Errorf("scan member photo columns: %w", err)
@@ -154,6 +160,15 @@ func (r *Repository) parseMemberRow(row *memberRow) (*domain.Member, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan member: %w", err)
+	}
+
+	member.Units = row.units
+	if row.chzzkChannelID != nil {
+		member.ChzzkChannelID = *row.chzzkChannelID
+	}
+
+	if row.officialURL != nil {
+		member.OfficialURL = *row.officialURL
 	}
 
 	if row.birthday != nil {
@@ -185,6 +200,15 @@ func (r *Repository) parseMemberPhotoRow(row *memberRow) (*domain.Member, error)
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan member with photo: %w", err)
+	}
+
+	member.Units = row.units
+	if row.chzzkChannelID != nil {
+		member.ChzzkChannelID = *row.chzzkChannelID
+	}
+
+	if row.officialURL != nil {
+		member.OfficialURL = *row.officialURL
 	}
 
 	if row.birthday != nil {
@@ -273,7 +297,7 @@ func (r *Repository) collectMembersWithPhotoFromRows(rows pgx.Rows) (map[string]
 	result := make(map[string]*domain.Member)
 
 	for _, row := range collected {
-		if row.channelID != nil {
+		if row.channelID != nil && preferChannelMember(result[*row.channelID], row.member) {
 			result[*row.channelID] = row.member
 		}
 	}

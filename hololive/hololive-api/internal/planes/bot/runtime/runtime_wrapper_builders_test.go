@@ -52,32 +52,6 @@ func TestBuildDBIntegrationRuntime_ReturnsErrorOnNilLogger(t *testing.T) {
 	assert.Contains(t, err.Error(), "logger must not be nil")
 }
 
-func TestFetchProfilesRuntimeClose_CallsCleanupOnce(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-	runtime := &FetchProfilesRuntime{
-		Managed: lifecycle.NewManaged(func() { calls++ }),
-	}
-
-	runtime.Close()
-	assert.Equal(t, 1, calls)
-}
-
-func TestBuildFetchProfilesRuntime_WithNilContext(t *testing.T) {
-	t.Parallel()
-
-	runtime, err := BuildFetchProfilesRuntime(t.Context())
-	require.NoError(t, err)
-	require.NotNil(t, runtime)
-	require.NotNil(t, runtime.Logger)
-	require.NotNil(t, runtime.HTTPClient)
-	assert.Equal(t, settings.DefaultOfficialProfileConfig().RequestTimeout, runtime.HTTPClient.Timeout)
-	assert.NotNil(t, runtime.HTTPClient.Transport)
-
-	runtime.Close()
-}
-
 func TestBuildDBIntegrationRuntime_InitializesContextWhenNil(t *testing.T) {
 	t.Parallel()
 

@@ -31,6 +31,7 @@ type Aliases struct {
 	Ja []string `json:"ja"`
 }
 
+// Member는 등록된 멤버의 식별자와 기본 정보를 제공한다. 미등록 선택 정보는 비워 둔다.
 type Member struct {
 	ID              int        `json:"id"`
 	ChannelID       string     `json:"channelId"`
@@ -41,6 +42,8 @@ type Member struct {
 	ShortKoreanName string     `json:"shortKoreanName,omitempty"`
 	IsGraduated     bool       `json:"isGraduated"`
 	Photo           string     `json:"photo,omitempty"`          // YouTube 프로필 이미지 URL (고화질)
+	Units           []string   `json:"units,omitempty"`          // 기수·유닛 표시명. 복수 소속을 보존한다.
+	OfficialURL     string     `json:"officialUrl,omitempty"`    // 확인된 공식 멤버 페이지.
 	Org             string     `json:"org,omitempty"`            // 그룹명 (Hololive, Nijisanji, VSPO, Independents)
 	Suborg          string     `json:"suborg,omitempty"`         // 서브그룹 (예: EN, JP, KR)
 	SyncSource      string     `json:"sync_source,omitempty"`    // 동기화 소스 (holodex, manual)

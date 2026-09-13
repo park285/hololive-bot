@@ -24,14 +24,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
-	"github.com/kapu/hololive-api/internal/planes/bot/internal/privacylog"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	membersvc "github.com/kapu/hololive-shared/pkg/service/member"
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 type MemberInfoCommand struct {
@@ -47,10 +49,10 @@ func (c *MemberInfoCommand) Name() string {
 }
 
 func (c *MemberInfoCommand) Description() string {
-	return "홀로라이브 멤버 공식 프로필"
+	return "등록된 멤버 기본 정보"
 }
 
-// 쿼리가 없으면 멤버 디렉터리를, 있으면 개별 프로필을 표시합니다.
+// 쿼리가 없으면 멤버 디렉터리를, 있으면 개별 기본 정보를 표시합니다.
 func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandContext, params map[string]any) error {
 	if err := c.ensureDeps(); err != nil {
 		return fmt.Errorf("failed to ensure dependencies: %w", err)
@@ -89,7 +91,20 @@ func (c *MemberInfoCommand) Execute(ctx context.Context, cmdCtx *domain.CommandC
 }
 
 func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, channelID, englishCandidate, rawQuery string) (*domain.Member, error) {
-	member := c.resolveMember(ctx, channelID, englishCandidate, rawQuery)
+	member, err := c.resolveMember(ctx, channelID, englishCandidate, rawQuery)
+	if ambiguous, ok := errors.AsType[*matcher.AmbiguousMatchError](err); ok {
+		message := c.Deps().Formatter.FormatAmbiguousMembers(ctx, ambiguous.Candidates, "정보")
+		if sendErr := c.Deps().SendMessage(ctx, room, message); sendErr != nil {
+			return nil, fmt.Errorf("send ambiguous member information: %w", sendErr)
+		}
+
+		return nil, handlercore.ErrMemberLookupHandled
+	}
+
+	if err != nil && !errors.Is(err, membersvc.ErrMemberNotFound) {
+		return nil, fmt.Errorf("load requested member: %w", err)
+	}
+
 	if member != nil {
 		return member, nil
 	}
@@ -102,21 +117,7 @@ func (c *MemberInfoCommand) resolveRequestedMember(ctx context.Context, room, ch
 }
 
 func (c *MemberInfoCommand) sendMemberProfile(ctx context.Context, room string, member *domain.Member) error {
-	rawProfile, translated, err := c.Deps().OfficialProfiles.GetWithTranslation(ctx, member.Name)
-	if err != nil {
-		c.log().Error("Failed to load member profile",
-			slog.String("member", member.Name),
-			slog.Any("error", err),
-		)
-
-		if err := c.Deps().SendError(ctx, room, messaging.ErrMemberProfileLoadFailed); err != nil {
-			return fmt.Errorf("send error: %w", err)
-		}
-
-		return nil
-	}
-
-	message := c.Deps().Formatter.FormatTalentProfile(ctx, rawProfile, translated)
+	message := c.Deps().Formatter.FormatMemberInfo(ctx, member)
 	if message == "" {
 		if err := c.Deps().SendError(ctx, room, messaging.ErrMemberProfileBuildFailed); err != nil {
 			return fmt.Errorf("send error: %w", err)
@@ -160,75 +161,117 @@ func (c *MemberInfoCommand) ensureDeps() error {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().MembersData == nil ||
-		c.Deps().Formatter == nil || c.Deps().OfficialProfiles == nil {
+	if c.Deps().MembersData == nil ||
+		c.Deps().Formatter == nil {
 		return errors.New("member info command services not configured")
 	}
 
 	return nil
 }
 
-func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englishName, query string) *domain.Member {
-	provider := c.Deps().MembersData.WithContext(ctx)
-
-	if member := findMemberByChannelID(provider, channelID); member != nil {
-		return member
-	}
-
-	if member := findMemberByName(provider, englishName); member != nil {
-		return member
-	}
-
-	trimmed := stringutil.TrimSpace(query)
-	if trimmed == "" {
-		return nil
-	}
-
-	channel, found, err := c.Deps().Matcher.FindBestMatch(ctx, trimmed)
+func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englishName, query string) (*domain.Member, error) {
+	members, err := domain.LoadAllMembers(c.Deps().MembersData.WithContext(ctx))
 	if err != nil {
-		c.log().Warn("Member match failed",
-			slog.String("query_token", privacylog.Pseudonym(trimmed)),
-			slog.Any("error", err),
-		)
-
-		return nil
+		return nil, fmt.Errorf("load member information snapshot: %w", err)
 	}
 
-	if !found {
-		return nil
+	query = strings.TrimSpace(query)
+	if query == "" {
+		query = englishName
 	}
 
-	if channel == nil {
-		c.log().Error("Member matcher returned found without channel")
+	if query != "" {
+		candidates := memberInfoCandidates(members, query)
+		if len(candidates) > 1 {
+			return nil, matcher.NewAmbiguousMatchError(query, candidates)
+		}
 
-		return nil
+		if len(candidates) == 1 {
+			return candidates[0], nil
+		}
+
+		return nil, membersvc.ErrMemberNotFound
 	}
 
-	return provider.FindMemberByChannelID(channel.ID)
+	var representative *domain.Member
+
+	for _, member := range members {
+		if member != nil && member.ChannelID == channelID && (representative == nil || member.ID < representative.ID) {
+			representative = member
+		}
+	}
+
+	if representative == nil {
+		return nil, membersvc.ErrMemberNotFound
+	}
+
+	return representative, nil
 }
 
-func findMemberByChannelID(provider domain.MemberDataProvider, channelID string) *domain.Member {
-	if channelID == "" {
+// 개인 이름 조회는 채널 매처의 중복 채널 병합을 거치지 않는다. 부분 일치도 개인 ID를 보존한다.
+func memberInfoCandidates(members []*domain.Member, query string) []*domain.Member {
+	name, org := matcher.ParseNameWithOrg(query)
+	normalized := normalizeMemberInfoTerm(name)
+
+	if normalized == "" {
 		return nil
 	}
 
-	return provider.FindMemberByChannelID(channelID)
-}
+	bestRank := 0
 
-func findMemberByName(provider domain.MemberDataProvider, englishName string) *domain.Member {
-	if englishName == "" {
-		return nil
+	var matches []*domain.Member
+
+	for _, member := range members {
+		if member == nil || (org != "" && !strings.EqualFold(member.Org, org)) {
+			continue
+		}
+
+		rank := memberInfoMatchRank(member, normalized)
+		if rank == 0 || rank < bestRank {
+			continue
+		}
+
+		if rank > bestRank {
+			matches = nil
+			bestRank = rank
+		}
+
+		matches = append(matches, member)
 	}
 
-	return provider.FindMemberByName(englishName)
+	return matches
 }
 
-func (c *MemberInfoCommand) log() *slog.Logger {
-	if c.Deps() != nil && c.Deps().Logger != nil {
-		return c.Deps().Logger
+func memberInfoMatchRank(member *domain.Member, query string) int {
+	rank := 0
+
+	for _, name := range []string{member.Name, member.NameKo, member.NameJa} {
+		normalized := normalizeMemberInfoTerm(name)
+		if normalized == query {
+			return 4
+		}
+
+		if normalized != "" && strings.Contains(normalized, query) {
+			rank = 2
+		}
 	}
 
-	return slog.Default()
+	for _, alias := range member.GetAllAliases() {
+		normalized := normalizeMemberInfoTerm(alias)
+		if normalized == query {
+			return 3
+		}
+
+		if rank == 0 && normalized != "" && strings.Contains(normalized, query) {
+			rank = 1
+		}
+	}
+
+	return rank
+}
+
+func normalizeMemberInfoTerm(value string) string {
+	return strings.Join(strings.Fields(util.NormalizeSuffix(value)), " ")
 }
 
 func getStringParam(params map[string]any, key string) string {

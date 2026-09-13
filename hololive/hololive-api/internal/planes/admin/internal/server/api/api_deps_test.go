@@ -198,25 +198,6 @@ func TestRequireStatsDeps(t *testing.T) {
 	})
 }
 
-func TestRequireProfiles(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	t.Run("nil handler", func(t *testing.T) {
-		var h *ProfileHandler
-
-		ctx, rec := newAPITestContext(http.MethodGet, "/test", nil)
-		ok := h.requireProfiles(ctx)
-
-		if ok {
-			t.Fatal("requireProfiles returned true on nil handler")
-		}
-
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("status=%d want=%d", rec.Code, http.StatusServiceUnavailable)
-		}
-	})
-}
-
 func TestRequireTemplateAdmin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

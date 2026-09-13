@@ -26,8 +26,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/shared-go/v2/pkg/httputil"
-
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
@@ -100,18 +98,4 @@ func InitializeDBIntegrationRuntime(ctx context.Context, postgresConfig *setting
 	}
 
 	return runtime, cleanupDB, nil
-}
-
-// InitializeFetchProfilesRuntime - cmd/tools/fetch_profiles 전용.
-func InitializeFetchProfilesRuntime(_ context.Context) (*FetchProfilesRuntime, func(), error) {
-	logger := slog.Default()
-	cleanupLogger := func() {}
-	httpClient := httputil.NewExternalAPIClient(settings.DefaultOfficialProfileConfig().RequestTimeout)
-
-	runtime := &FetchProfilesRuntime{
-		Logger:     logger,
-		HTTPClient: httpClient,
-	}
-
-	return runtime, cleanupLogger, nil
 }

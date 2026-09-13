@@ -28,7 +28,7 @@ import (
 func buildAdminHandler(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *scraperHolodexProfileFoundation,
+	foundation *scraperHolodexFoundation,
 	alarmMode *alarmModeComponents,
 	aclService *acl.Service,
 	irisRoomClient server.IrisRoomLister,
@@ -48,7 +48,6 @@ func buildAdminHandler(
 		Member: server.MemberDeps{
 			Repository: infra.MemberRepository,
 			Cache:      infra.MemberCache,
-			Profiles:   foundation.ProfileService,
 		},
 		Stream: server.StreamDeps{
 			Holodex:     foundation.HolodexService,

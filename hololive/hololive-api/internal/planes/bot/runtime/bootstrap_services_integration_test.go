@@ -67,7 +67,7 @@ func TestCommandBuildersRemainNonNilThroughBootstrapAssembly(t *testing.T) {
 	modules := buildBotDependencyModules(
 		&settings.Config{},
 		&sharedmodules.InfraModule{},
-		&appbootstrap.ScraperHolodexProfileFoundation{},
+		&appbootstrap.ScraperHolodexFoundation{},
 		&appbootstrap.AlarmYouTubeStackComponents{AlarmMode: &appbootstrap.AlarmModeComponents{}},
 		integrationServices,
 		nil,

@@ -37,12 +37,6 @@
     ]
   },
   {
-    "path": "hololive/hololive-api/internal/planes/bot/cmd/fetch_profiles/main.go",
-    "must_contain": [
-      "botruntime.BuildFetchProfilesRuntime("
-    ]
-  },
-  {
     "path": "hololive/hololive-api/cmd/tools/verifyhash/main.go",
     "must_contain": [
       "bcrypt.CompareHashAndPassword("

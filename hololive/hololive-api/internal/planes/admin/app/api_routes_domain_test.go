@@ -124,10 +124,6 @@ func expectedAdminAPIDomainRoutes() map[string][]string {
 			"GET /api/holo/templates/:key/revisions",
 			"GET /api/holo/templates/:key/revisions/:id",
 		},
-		"profile": {
-			"GET /api/holo/profiles",
-			"GET /api/holo/profiles/name",
-		},
 		"major_event": {
 			"POST /api/holo/majorevent/trigger",
 			"POST /api/holo/majorevent/monthly-trigger",

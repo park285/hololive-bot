@@ -27,7 +27,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string) {
+func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generation uint64, alias string, channelLookup bool) {
 	c.snapshotMu.RLock()
 
 	if c.snapshotGeneration.Load() != generation {
@@ -36,7 +36,12 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generati
 		return
 	}
 
+	channelMember := c.channelMemberForPointLocked(member, generation, channelLookup)
 	c.storePointMemberInMemoryLocked(member, generation)
+
+	if channelMember != nil && channelMember.ChannelID != "" {
+		c.byChannelID.Store(channelMember.ChannelID, &memoryMember{member: channelMember, generation: generation})
+	}
 
 	if !c.distributedCacheUsable() {
 		c.snapshotMu.RUnlock()
@@ -46,8 +51,8 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generati
 
 	channelKey := ""
 
-	if member.ChannelID != "" {
-		channelKey = c.epochDataKey(memberChannelKeyPrefix + member.ChannelID)
+	if channelMember != nil && channelMember.ChannelID != "" {
+		channelKey = c.epochDataKey(memberChannelKeyPrefix + channelMember.ChannelID)
 	}
 
 	nameKey := c.epochDataKey(memberNameKeyPrefix + member.Name)
@@ -59,7 +64,10 @@ func (c *Cache) cacheMember(ctx context.Context, member *domain.Member, generati
 
 	c.snapshotMu.RUnlock()
 
-	c.cacheMemberByChannelID(ctx, channelKey, member)
+	if channelMember != nil {
+		c.cacheMemberByChannelID(ctx, channelKey, channelMember)
+	}
+
 	c.cacheMemberByName(ctx, nameKey, member)
 	c.cacheMemberByAlias(ctx, aliasKey, member, alias)
 }
@@ -104,9 +112,6 @@ func (c *Cache) cacheMemberByAlias(ctx context.Context, aliasKey string, member 
 
 func (c *Cache) storePointMemberInMemoryLocked(member *domain.Member, generation uint64) {
 	entry := &memoryMember{member: member, generation: generation}
-	if member.ChannelID != "" {
-		c.byChannelID.Store(member.ChannelID, entry)
-	}
 
 	c.byName.Store(member.Name, entry)
 }
