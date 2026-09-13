@@ -80,6 +80,12 @@ Production 반영은 대상 승인을 받은 뒤 exact arm64 artifact의 no-buil
 
 ## Metrics
 
+- `alarm_dispatch_pg_quarantined_rows`: DB에 보존된 격리 알림 수. 신규 격리 발생 counter와 구분한다.
+- `alarm_dispatch_pg_oldest_quarantined_age_seconds`: 가장 오래된 격리 시점부터의 경과.
+- `alarm_dispatch_pg_backlog_snapshot_success`: 마지막 발송·격리 집계 조회의 성공 여부. 0이면 건수·경과의 이전 값을 현재 상태로 해석하지 않는다.
+
+격리 현황은 Grafana Bot Drilldown에서 확인한다. 잔여 건수 경보는 전송 증거 검토를 위한 알림이며 자동 재발송·삭제 권한을 부여하지 않는다. 기존 보존 기간과 처분 계약을 유지한다.
+
 - `hololive_youtube_outbox_v3_handoff_total{mode,result}`: v1→v3 handoff delivery row 수.
 - `hololive_delivery_outbox_v3_handoff_total{mode,result}`: v2→v3 handoff delivery row 수.
 

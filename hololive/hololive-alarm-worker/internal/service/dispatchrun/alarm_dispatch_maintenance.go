@@ -47,10 +47,12 @@ type alarmDispatchMaintenanceDataStore interface {
 }
 
 type alarmDispatchBacklogSnapshot struct {
-	RowsByStatus            map[dispatchoutbox.Status]int64
-	OldestPendingAgeSeconds float64
-	OldestRetryAgeSeconds   float64
-	OldestSendingAgeSeconds float64
+	RowsByStatus                map[dispatchoutbox.Status]int64
+	OldestPendingAgeSeconds     float64
+	OldestRetryAgeSeconds       float64
+	OldestSendingAgeSeconds     float64
+	QuarantinedRows             int64
+	OldestQuarantinedAgeSeconds float64
 }
 
 type alarmDispatchMaintenanceRunner struct {
@@ -210,6 +212,8 @@ func (r *alarmDispatchMaintenanceRunner) deleteRetainedRows(ctx context.Context,
 func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, store alarmDispatchMaintenanceObserverStore) error {
 	snapshot, err := store.BacklogSnapshot(ctx)
 	if err != nil {
+		observeAlarmDispatchBacklogSnapshotSuccess(false)
+
 		return fmt.Errorf("backlog snapshot: %w", err)
 	}
 
@@ -227,6 +231,8 @@ func (r *alarmDispatchMaintenanceRunner) observeBacklog(ctx context.Context, sto
 		snapshot.OldestRetryAgeSeconds,
 		snapshot.OldestSendingAgeSeconds,
 	)
+	observeAlarmDispatchQuarantine(snapshot.QuarantinedRows, snapshot.OldestQuarantinedAgeSeconds)
+	observeAlarmDispatchBacklogSnapshotSuccess(true)
 
 	return nil
 }
@@ -419,6 +425,8 @@ func (s alarmDispatchMaintenancePgxStore) loadOldestAges(ctx context.Context, sn
 			&snapshot.OldestPendingAgeSeconds,
 			&snapshot.OldestRetryAgeSeconds,
 			&snapshot.OldestSendingAgeSeconds,
+			&snapshot.QuarantinedRows,
+			&snapshot.OldestQuarantinedAgeSeconds,
 		); err != nil {
 		return fmt.Errorf("scan: %w", err)
 	}

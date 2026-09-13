@@ -110,6 +110,7 @@ func assembleDisabledRuntime(
 		readiness.configure(options)
 
 		options.WorkerRegistry = workerRegistry
+		options.PreRouteUse = append(options.PreRouteUse, collectorTraceIdentity(appConfig.Collector.InstanceID).handle)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build disabled youtube collector router: %w", err)
@@ -154,6 +155,7 @@ func assembleRuntime(
 			readiness.configure(options)
 
 			options.WorkerRegistry = workerRegistry
+			options.PreRouteUse = append(options.PreRouteUse, collectorTraceIdentity(appConfig.Collector.InstanceID).handle)
 		},
 	)
 	if err != nil {

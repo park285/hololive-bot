@@ -857,6 +857,7 @@ hololive/hololive-youtube-collector/internal/runtime/collectorruntime/readiness_
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/registry.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/result_validation.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/runtime.go
+hololive/hololive-youtube-collector/internal/runtime/collectorruntime/trace_identity.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/worker_registry.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler.go
 hololive/hololive-youtube-collector/internal/runtime/collectorruntime/scheduler_build.go

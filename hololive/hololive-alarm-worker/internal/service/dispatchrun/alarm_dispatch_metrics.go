@@ -25,12 +25,28 @@ var (
 	alarmDispatchPGOldestPendingAgeSeconds       prometheus.Gauge
 	alarmDispatchPGOldestRetryAgeSeconds         prometheus.Gauge
 	alarmDispatchPGOldestSendingAgeSeconds       prometheus.Gauge
+	alarmDispatchPGQuarantinedRows               prometheus.Gauge
+	alarmDispatchPGOldestQuarantinedAgeSeconds   prometheus.Gauge
+	alarmDispatchPGBacklogSnapshotSuccess        prometheus.Gauge
 )
 
 func initAlarmDispatchRunnerMetrics() {
 	alarmDispatchRunnerMetricsOnce.Do(func() {
 		initAlarmDispatchRunnerLoopMetrics()
 		initAlarmDispatchRetentionMetrics()
+
+		alarmDispatchPGQuarantinedRows = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "alarm_dispatch_pg_quarantined_rows",
+			Help: "Retained quarantined alarm dispatch rows requiring disposition review.",
+		})
+		alarmDispatchPGOldestQuarantinedAgeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "alarm_dispatch_pg_oldest_quarantined_age_seconds",
+			Help: "Age of the oldest retained quarantined alarm dispatch row.",
+		})
+		alarmDispatchPGBacklogSnapshotSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "alarm_dispatch_pg_backlog_snapshot_success",
+			Help: "Whether the latest alarm dispatch backlog observation succeeded.",
+		})
 
 		alarmDispatchPGBacklogRows = promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -206,6 +222,34 @@ func observeAlarmDispatchBacklogObservationFailure() {
 func observeAlarmDispatchBacklogStatus(status string, rows int64) {
 	initAlarmDispatchRunnerMetrics()
 	alarmDispatchPGBacklogRows.WithLabelValues(status).Set(float64(rows))
+}
+
+func observeAlarmDispatchQuarantine(rows int64, oldestAgeSeconds float64) {
+	initAlarmDispatchRunnerMetrics()
+
+	if alarmDispatchPGQuarantinedRows == nil || alarmDispatchPGOldestQuarantinedAgeSeconds == nil {
+		return
+	}
+
+	alarmDispatchPGQuarantinedRows.Set(float64(rows))
+	alarmDispatchPGOldestQuarantinedAgeSeconds.Set(oldestAgeSeconds)
+}
+
+func observeAlarmDispatchBacklogSnapshotSuccess(success bool) {
+	initAlarmDispatchRunnerMetrics()
+
+	if alarmDispatchPGBacklogSnapshotSuccess == nil {
+		return
+	}
+
+	if success {
+		alarmDispatchPGBacklogSnapshotSuccess.Set(1)
+
+		return
+	}
+
+	// 실패 시 이전 관측값을 0으로 덮지 않고 유효성만 내린다.
+	alarmDispatchPGBacklogSnapshotSuccess.Set(0)
 }
 
 func observeAlarmDispatchOldestAges(pending, retry, sending float64) {

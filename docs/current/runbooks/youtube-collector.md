@@ -17,6 +17,11 @@ Completion is `scripts/deploy/ap-completion-check.sh <host>` for APs and compose
 
 ## Normal status
 
+HTTP trace는 `service.name=youtube-collector`를 유지하고
+`youtube.collector.instance_id` span 속성에 검증된 `YOUTUBE_COLLECTOR_INSTANCE_ID`를 기록합니다.
+Grafana Traces의 AP별 수신 패널과 `observability_trace_instance_*` 지표는 이 속성으로 Jaeger를 검색합니다.
+조회 실패와 성공했지만 trace가 없는 상태는 구분하며, 다른 AP의 trace로 누락 AP를 대체하지 않습니다.
+
 | Check | Expected |
 |---|---|
 | Health | `https://127.0.0.1:<port>/health` returns success over H3 |
