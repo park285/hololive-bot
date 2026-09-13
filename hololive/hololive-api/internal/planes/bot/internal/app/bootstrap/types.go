@@ -67,13 +67,6 @@ type ScraperHolodexFoundation struct {
 	SharedRL             *ratelimiter.RateLimiter
 }
 
-type ScraperHolodexProfileFoundation struct {
-	HolodexService       *holodexprovider.Service
-	MemberServiceAdapter domain.MemberDataProvider
-	ProfileService       *member.ProfileService
-	SharedRL             *ratelimiter.RateLimiter
-}
-
 type CoreIntegrationServices struct {
 	ACLService           *acl.Service
 	MajorEventRepository handlercore.MajorEventRepository
@@ -103,7 +96,6 @@ type BotDataModule struct {
 	Postgres         database.Client
 	MemberRepository *member.Repository
 	MemberCache      *member.Cache
-	Profiles         *member.ProfileService
 	MembersData      domain.MemberDataProvider
 }
 

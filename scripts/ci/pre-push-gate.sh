@@ -290,6 +290,8 @@ run_reusable_phase() {
     scripts/ci/check-workflow-ci-owner.py scripts/ci/workflow-ci-owner scripts/ci/workflow-gate-profile \
     scripts/ci/public-pr-go-gate.sh scripts/ci/public-pr-frontend-gate.sh .github/workflows
   bash scripts/ci/check-recurring-security-scan-contract.sh
+  run_self_test scripts/ci/disabled-bake-attestations_test.sh \
+    scripts/ci/disabled-bake-attestations.jq scripts/ci/check-recurring-security-scan-contract.sh
   if [[ "${PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE:-false}" != "true" ]]; then
     export PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE=true
     run_self_test scripts/ci/pre-push-gate-profile-v1_test.sh \

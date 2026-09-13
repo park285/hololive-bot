@@ -29,7 +29,6 @@ type (
 	StatsHandler       struct{ *Handler }
 	SettingsAPIHandler struct{ *Handler }
 	TemplateHandler    struct{ *Handler }
-	ProfileHandler     struct{ *Handler }
 	MajorEventHandler  struct{ *Handler }
 	OAuthHandler       struct{ *Handler }
 )
@@ -42,7 +41,6 @@ type DomainHandlers struct {
 	Stats      *StatsHandler
 	Settings   *SettingsAPIHandler
 	Template   *TemplateHandler
-	Profile    *ProfileHandler
 	MajorEvent *MajorEventHandler
 	OAuth      *OAuthHandler
 }
@@ -58,7 +56,6 @@ func (h *Handler) DomainHandlers() *DomainHandlers {
 		Stats:      &StatsHandler{Handler: h},
 		Settings:   &SettingsAPIHandler{Handler: h},
 		Template:   &TemplateHandler{Handler: h},
-		Profile:    &ProfileHandler{Handler: h},
 		MajorEvent: &MajorEventHandler{Handler: h},
 		OAuth:      &OAuthHandler{Handler: h},
 	}

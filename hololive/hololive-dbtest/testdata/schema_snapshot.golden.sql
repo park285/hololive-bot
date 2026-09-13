@@ -412,6 +412,8 @@ TABLE members
   COLUMN short_korean_name character varying(64)
   COLUMN birthday date
   COLUMN debut_date date
+  COLUMN units text[] NOT NULL DEFAULT '{}'::text[]
+  COLUMN official_link text
   CONSTRAINT chk_members_graduated_sync CHECK ((is_graduated = (status = 'graduated'::text)))
   CONSTRAINT chk_members_status_vocab CHECK ((status = ANY (ARRAY[('active'::character varying)::text, ('graduated'::character varying)::text])))
   CONSTRAINT members_pkey PRIMARY KEY (id)

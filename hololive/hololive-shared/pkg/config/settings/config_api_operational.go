@@ -38,15 +38,6 @@ type OfficialScheduleRuntimeConfig struct {
 	MaxResponseBodyBytes int64
 }
 
-type OfficialProfileConfig struct {
-	BaseURL        string
-	UserAgent      string
-	AcceptLanguage string
-	RequestTimeout time.Duration
-	DelayBetween   time.Duration
-	OutputFile     string
-}
-
 func DefaultHolodexOperationalConfig() HolodexConfig {
 	return HolodexConfig{
 		BaseURL:           "https://holodex.net/api/v2",
@@ -151,17 +142,6 @@ func (c *Config) OfficialScheduleRuntime() OfficialScheduleRuntimeConfig {
 	return OfficialScheduleRuntimeConfig{
 		OfficialSchedule:     c.OfficialSchedule,
 		MaxResponseBodyBytes: c.MaxResponseBodyBytes,
-	}
-}
-
-func DefaultOfficialProfileConfig() OfficialProfileConfig {
-	return OfficialProfileConfig{
-		BaseURL:        "https://hololive.hololivepro.com/talents",
-		UserAgent:      "Mozilla/5.0 (compatible; HololiveKakaoBot/1.0; +https://hololive.hololivepro.com)",
-		AcceptLanguage: "ja,en;q=0.8,ko;q=0.6",
-		RequestTimeout: 15 * time.Second,
-		DelayBetween:   350 * time.Millisecond,
-		OutputFile:     "../hololive-shared/pkg/domain/internal/model/data/official_profiles_raw.json",
 	}
 }
 

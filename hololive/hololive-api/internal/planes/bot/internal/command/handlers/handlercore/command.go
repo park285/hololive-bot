@@ -34,7 +34,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type Command interface {
@@ -128,7 +127,6 @@ type Dependencies struct {
 	Cache               cache.Client
 	Alarm               domain.AlarmCRUD
 	Matcher             *matcher.Matcher
-	OfficialProfiles    *member.ProfileService
 	MemberNews          MemberNewsService
 	BroadcastHistory    BroadcastHistoryRepository
 	ThumbnailDownloader BroadcastThumbnailDownloader

@@ -22,7 +22,7 @@
       "sha256": "2ec2be240d1a72e44d25f0b28b7a5c5a45882f7a7696dd3217c296ec810d998b",
       "entries": [
         {"syntax": "!멤버", "description": "전체 멤버 목록"},
-        {"syntax": "!정보 [멤버명]", "description": "멤버 프로필 조회"},
+        {"syntax": "!정보 [멤버명]", "description": "멤버 기본 정보 조회"},
         {"syntax": "!알람 추가 [멤버명]", "description": "방송 알람 추가"},
         {"syntax": "!알람 제거 [멤버명]", "description": "방송 알람 제거"},
         {"syntax": "!알람 목록", "description": "내 알람 목록"},

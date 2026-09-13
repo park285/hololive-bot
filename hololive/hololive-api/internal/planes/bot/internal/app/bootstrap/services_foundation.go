@@ -54,30 +54,6 @@ func InitScraperHolodexFoundation(
 	}, nil
 }
 
-func InitScraperHolodexProfileFoundation(
-	ctx context.Context,
-	appConfig *settings.Config,
-	infra *sharedmodules.InfraModule,
-	logger *slog.Logger,
-) (*ScraperHolodexProfileFoundation, error) {
-	foundation, err := InitScraperHolodexFoundation(ctx, appConfig, infra, logger)
-	if err != nil {
-		return nil, fmt.Errorf("init scraper holodex foundation: %w", err)
-	}
-
-	profileService, err := providers.ProvideProfileService(ctx, infra.Cache, foundation.MemberServiceAdapter, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide profile service: %w", err)
-	}
-
-	return &ScraperHolodexProfileFoundation{
-		HolodexService:       foundation.HolodexService,
-		MemberServiceAdapter: foundation.MemberServiceAdapter,
-		ProfileService:       profileService,
-		SharedRL:             foundation.SharedRL,
-	}, nil
-}
-
 func providersScraperProxyConfig(appConfig *settings.Config) scraper.ProxyConfig {
 	return scraper.ProxyConfig{Enabled: appConfig.Scraper.ProxyEnabled, URL: appConfig.Scraper.ProxyURL}
 }

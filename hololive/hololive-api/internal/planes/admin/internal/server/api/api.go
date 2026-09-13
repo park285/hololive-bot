@@ -55,7 +55,6 @@ type Handler struct {
 	repository                 *member.Repository
 	memberCache                *member.Cache
 	valkeyCache                cache.Client
-	profiles                   *member.ProfileService
 	alarm                      domain.AlarmCRUD
 	holodex                    *holodexprovider.Service
 	youtube                    youtube.Service
@@ -133,7 +132,6 @@ type CommonDeps struct {
 type MemberDeps struct {
 	Repository *member.Repository
 	Cache      *member.Cache
-	Profiles   *member.ProfileService
 }
 
 type StreamDeps struct {
@@ -193,7 +191,6 @@ func NewHandler(deps *HandlerDeps) *Handler {
 		repository:                 deps.Member.Repository,
 		memberCache:                deps.Member.Cache,
 		valkeyCache:                deps.Stream.ValkeyCache,
-		profiles:                   deps.Member.Profiles,
 		alarm:                      deps.Stats.Alarm,
 		holodex:                    deps.Stream.Holodex,
 		youtube:                    deps.Stream.YouTube,

@@ -55,11 +55,6 @@ func registerMajorEventRoutes(holoAPI *gin.RouterGroup, handler *api.MajorEventH
 	holoAPI.POST("/majorevent/monthly-trigger", handler.TriggerMajorEventMonthlyNotification)
 }
 
-func registerProfileRoutes(holoAPI *gin.RouterGroup, handler *api.ProfileHandler) {
-	holoAPI.GET("/profiles", handler.GetProfile)
-	holoAPI.GET("/profiles/name", handler.GetProfileByName)
-}
-
 func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsAPIHandler) {
 	holoAPI.GET("/logs", handler.GetLogs)
 	holoAPI.GET("/settings", handler.GetSettings)

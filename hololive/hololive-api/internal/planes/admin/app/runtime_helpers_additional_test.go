@@ -233,7 +233,7 @@ func TestBotSettingsApplierMemberNewsRunNowPaths(t *testing.T) {
 func TestBuildAdminAPISettingsApplierTriggerConfiguration(t *testing.T) {
 	t.Parallel()
 
-	foundation := &scraperHolodexProfileFoundation{}
+	foundation := &scraperHolodexFoundation{}
 	alarmMode := &alarmModeComponents{}
 	ytStack := &providers.YouTubeStack{}
 	logger := slog.New(slog.DiscardHandler)
@@ -276,7 +276,7 @@ func TestBuildAdminAPIRouterAndHandlerHelpers(t *testing.T) {
 	infra := &sharedmodules.InfraModule{
 		Postgres: &databasemocks.Client{},
 	}
-	foundation := &scraperHolodexProfileFoundation{}
+	foundation := &scraperHolodexFoundation{}
 	alarmMode := &alarmModeComponents{}
 	settingsApplier := sharedsettings.NewLocalSettingsApplier(nil, nil, nil, nil)
 

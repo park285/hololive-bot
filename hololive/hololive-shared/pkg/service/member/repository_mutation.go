@@ -23,6 +23,7 @@ package member
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -101,7 +102,12 @@ func (r *Repository) UpdateMemberName(ctx context.Context, memberID int, name st
 	return nil
 }
 
+// CreateMember는 멤버 기본 정보와 채널·기수·공식 링크·날짜를 저장한다. 캐시 갱신은 호출자가 수행한다.
 func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) error {
+	if member == nil {
+		return errors.New("member is required")
+	}
+
 	aliasesJSON, err := jsonv2.Marshal(member.Aliases)
 	if err != nil {
 		return fmt.Errorf("failed to marshal aliases: %w", err)
@@ -135,7 +141,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 	}
 
 	// org/sync_source 기본값 설정 (Task 1 요구사항)
-	org := "Hololive" // org가 없는 생성 요청의 canonical 기본값
+	org := member.GetOrg()
 	syncSource := "manual"
 	status := "active"
 
@@ -143,7 +149,7 @@ func (r *Repository) CreateMember(ctx context.Context, member *domain.Member) er
 		status = "graduated"
 	}
 
-	_, err = r.pool.Exec(ctx, mustSQL("repository_mutation_0175_06.sql"), slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource)
+	_, err = r.pool.Exec(ctx, mustSQL("repository_mutation_0175_06.sql"), slug, chIDPtr, member.Name, nameJaPtr, nameKoPtr, status, member.IsGraduated, string(aliasesJSON), org, syncSource, member.Units, member.OfficialURL, member.Birthday, member.DebutDate, member.ShortKoreanName, member.ChzzkChannelID, member.TwitchUserID)
 	if err != nil {
 		return fmt.Errorf("failed to create member: %w", err)
 	}

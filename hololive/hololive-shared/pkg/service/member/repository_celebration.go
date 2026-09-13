@@ -34,7 +34,7 @@ func scanCalendarRow(scanner memberRowScanner, kindStr *string, day *int) (membe
 		&row.englishName, &row.japaneseName, &row.koreanName, &row.shortKoreanName,
 		&row.status, &row.isGraduated, &row.aliasesJSON, &row.photo,
 		&row.org, &row.suborg, &row.syncSource, &row.twitchUserID,
-		&row.birthday, &row.debutDate,
+		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
 		kindStr, day,
 	)
 	if err != nil {
@@ -87,7 +87,7 @@ func scanCelebrationMemberRow(scanner memberRowScanner) (memberRow, error) {
 		&row.englishName, &row.japaneseName, &row.koreanName, &row.shortKoreanName,
 		&row.status, &row.isGraduated, &row.aliasesJSON, &row.photo,
 		&row.org, &row.suborg, &row.syncSource, &row.twitchUserID,
-		&row.birthday, &row.debutDate,
+		&row.birthday, &row.debutDate, &row.officialURL, &row.units, &row.chzzkChannelID,
 	)
 	if err != nil {
 		return row, fmt.Errorf("scan celebration member columns: %w", err)
@@ -98,7 +98,7 @@ func scanCelebrationMemberRow(scanner memberRowScanner) (memberRow, error) {
 
 const celebrationMemberColumns = `id, slug, channel_id, english_name, japanese_name, korean_name, short_korean_name,
 	status, is_graduated, aliases, photo, org, suborg, sync_source, twitch_user_id,
-	birthday, debut_date`
+	birthday, debut_date, official_link, units, chzzk_channel_id`
 
 func (r *Repository) FindMembersWithBirthdayOn(ctx context.Context, month, day int) ([]*domain.Member, error) {
 	query := fmt.Sprintf(mustSQL("repository_celebration_0094_02.sql"), celebrationMemberColumns)

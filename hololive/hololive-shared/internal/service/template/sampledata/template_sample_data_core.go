@@ -349,16 +349,15 @@ func addTemplateDirectoryMilestoneSamples(data map[domain.TemplateKey]any) {
 func templateProfileSample() map[string]any {
 	return map[string]any{
 		"Names":       []string{sampleMemberFubuki, "Shirakami Fubuki", "白上フブキ"},
-		"Catchphrase": "친구야!",
-		"Summary":     "홀로라이브 1기생 여우 VTuber",
-		"Highlights":  []string{"고양이 아님", "FOX"},
+		"Catchphrase": "",
+		"Summary":     "",
+		"Highlights":  []string{},
 		"DataRows": []map[string]any{
 			{"Label": "생일", "Value": "10월 5일", "Multiline": false},
-			{"Label": "특기", "Value": "  노래\n  게임", "Multiline": true},
+			{"Label": "기수·유닛", "Value": "홀로라이브 1기생 / 홀로라이브 게이머즈", "Multiline": false},
 		},
 		"SocialLinks": []map[string]any{
-			{"Label": "음악 플레이리스트", fieldURL: "https://www.youtube.com/playlist?list=example"},
-			{"Label": "Twitter", fieldURL: "https://x.com/shirakamifubuki"},
+			{"Label": "YouTube", fieldURL: "https://www.youtube.com/channel/UCdn5BQ06XqgXoAxIhbqw5Rg"},
 		},
 		"OfficialURL": "https://hololive.hololivepro.com/talents/shirakami-fubuki",
 	}

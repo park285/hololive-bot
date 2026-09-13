@@ -50,7 +50,8 @@ LIVE_LOGS_PATH=/tmp LIVE_DB_BACKUP_PATH=/tmp \
   docker compose --env-file deploy/compose/build-only.env.sample \
     -f deploy/compose/docker-compose.prod.yml \
     -f deploy/compose/docker-compose.security-scan.yml build --print >"$tmp_dir/security-scan-bake.json"
-if grep -Fq '"attest"' "$tmp_dir/security-scan-bake.json"; then
+# Compose 5는 비활성화도 disabled=true로 출력하므로 필드 존재만으로 판정하지 않는다.
+if ! jq -e -f scripts/ci/disabled-bake-attestations.jq "$tmp_dir/security-scan-bake.json" >/dev/null; then
   fail "disposable local-image scan builds must not request unsupported attestations"
 fi
 
@@ -63,8 +64,8 @@ for required in \
   'DOCKER_DEFAULT_PLATFORM: linux/arm64' \
   'TRIVY_VERSION: "0.74.0"' \
   'TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a' \
-  'DOCKER_COMPOSE_VERSION: v2.39.4' \
-  'DOCKER_COMPOSE_LINUX_X86_64_SHA256: 7af95166a730b87e172d4fc9aefea8725d3c6c7327d59149267b452114ddb7d4' \
+  'DOCKER_COMPOSE_VERSION: v5.5.1' \
+  'DOCKER_COMPOSE_LINUX_X86_64_SHA256: db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576' \
   'https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64' \
   'https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz' \
   'sha256sum --check -'; do
@@ -127,7 +128,7 @@ grep -Fq 'scan_args+=(--image-src remote --platform "$platform")' "$scanner" ||
 grep -Fq "actual_platform=\"\$(docker image inspect --format '{{.Os}}/{{.Architecture}}' \"\$image\")\"" "$scanner" ||
   fail "locally built images must be verified as the declared production platform"
 
-[[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v2.39.4' "$workflow")" -eq 2 ]] ||
+[[ "$(grep -Fc 'DOCKER_COMPOSE_VERSION: v5.5.1' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must install the exact Docker Compose release"
 # Python 부트스트랩은 저장소 composite action 이 소유하고, subdirectory checkout(path: hololive-bot)을
 # 쓰는 두 job 은 그 action 을 checkout 경로로 호출한다. action 사본 parity 와 핀 값은 iris-stack 이 본다.
@@ -136,12 +137,12 @@ python_runtime_action=.github/actions/python-runtime/action.yml
   fail "both recurring scan jobs must bootstrap Python through the repository python-runtime action"
 [[ "$(grep -Fc '          working-directory: hololive-bot' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must point the python-runtime action at the hololive-bot checkout"
-if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.7' -e 'python-runner.sh --print-interpreter' "$workflow"; then
+if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.13' -e 'python-runner.sh --print-interpreter' "$workflow"; then
   fail "recurring scan jobs must not inline the Python bootstrap"
 fi
 grep -Fq 'python-version-file: ${{ inputs.working-directory }}/.python-version' "$python_runtime_action" ||
   fail "python-runtime action must install the exact Python runtime from the checkout .python-version"
-grep -Fq 'uv==0.12.7' "$python_runtime_action" ||
+grep -Fq 'uv==0.12.13' "$python_runtime_action" ||
   fail "python-runtime action must install the exact uv release"
 grep -Fq 'interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"' "$python_runtime_action" ||
   fail "python-runtime action must initialize the exact Python interpreter"

@@ -39,7 +39,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
-	"github.com/kapu/hololive-shared/pkg/service/member"
 )
 
 type commandInitView struct {
@@ -49,7 +48,6 @@ type commandInitView struct {
 	postgres              database.Client
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
-	officialProfiles      *member.ProfileService
 	memberNews            handlercore.MemberNewsService
 	membersData           domain.MemberDataProvider
 	formatter             *formatter.ResponseFormatter
@@ -76,7 +74,6 @@ func (b *Bot) commandInitView() commandInitView {
 		postgres:              b.postgres,
 		alarm:                 b.alarm,
 		matcher:               b.matcher,
-		officialProfiles:      b.officialProfiles,
 		memberNews:            b.memberNews,
 		membersData:           b.membersData,
 		formatter:             b.formatter,
@@ -99,7 +96,6 @@ func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *ha
 		Cache:               v.cache,
 		Alarm:               v.alarm,
 		Matcher:             v.matcher,
-		OfficialProfiles:    v.officialProfiles,
 		MemberNews:          v.memberNews,
 		BroadcastHistory:    handlers.NewPgBroadcastHistoryRepository(v.postgres),
 		ThumbnailDownloader: handlers.NewYouTubeThumbnailDownloader(nil),

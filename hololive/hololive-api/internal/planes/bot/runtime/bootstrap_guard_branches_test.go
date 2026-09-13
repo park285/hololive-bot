@@ -164,9 +164,8 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			Notification: configsettings.NotificationConfig{AdvanceMinutes: []int{5}},
 		},
 		&sharedmodules.InfraModule{Cache: cacheService, Postgres: postgresService, MemberRepository: memberRepository, MemberCache: memberCache},
-		&appbootstrap.ScraperHolodexProfileFoundation{
+		&appbootstrap.ScraperHolodexFoundation{
 			HolodexService: &holodexprovider.Service{},
-			ProfileService: &member.ProfileService{},
 		},
 		&appbootstrap.AlarmYouTubeStackComponents{
 			AlarmMode:       &appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},

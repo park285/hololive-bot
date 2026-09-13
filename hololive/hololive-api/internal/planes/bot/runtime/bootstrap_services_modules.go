@@ -35,7 +35,7 @@ import (
 func buildBotDependencyModules(
 	appConfig *settings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *appbootstrap.ScraperHolodexProfileFoundation,
+	foundation *appbootstrap.ScraperHolodexFoundation,
 	alarmYouTubeStack *appbootstrap.AlarmYouTubeStackComponents,
 	integrationServices *appbootstrap.CoreIntegrationServices,
 	messageAdapter *messaging.MessageAdapter,

@@ -21,223 +21,39 @@
 package info
 
 import (
-	"context"
-	"log/slog"
 	"strings"
-
-	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func (c *MemberInfoCommand) memberGroups(ctx context.Context, member *domain.Member) []string {
+func (c *MemberInfoCommand) memberGroups(member *domain.Member) []string {
 	if member == nil {
 		return nil
 	}
 
-	profile, translated, err := c.Deps().OfficialProfiles.GetWithTranslation(ctx, member.Name)
-	if err != nil {
-		c.log().Debug("Failed to load profile for directory",
-			slog.String("member", member.Name),
-			slog.Any("error", err),
-		)
-
-		return orgFallbackGroups(member)
-	}
-
-	rawValues := ExtractUnitValues(profile, translated)
-	if len(rawValues) == 0 {
-		return orgFallbackGroups(member)
-	}
-
-	return normalizedMemberGroups(rawValues)
-}
-
-// orgFallbackGroups는 공식 프로필(유닛 데이터)이 없는 멤버를 org 값 기준 그룹으로
-// 분류한다. 예를 들어 mekPark처럼 홀로라이브 정규 소속이 아니어서 official_profiles가
-// 없는 경우에 쓰이며, 매핑되지 않은 org는 nil을 반환해 "기타" 그룹으로 폴백된다.
-func orgFallbackGroups(member *domain.Member) []string {
-	if member == nil {
-		return nil
+	if len(member.Units) != 0 {
+		return member.Units
 	}
 
 	if group, ok := orgDirectoryGroups[member.Org]; ok {
 		return []string{group}
 	}
 
-	return nil
-}
-
-func normalizedMemberGroups(rawValues []string) []string {
-	normalized := make([]string, 0, len(rawValues))
-	seen := make(map[string]bool)
-
-	for _, raw := range rawValues {
-		for _, token := range SplitGroupTokens(raw) {
-			normalized = appendMemberGroup(normalized, seen, token)
-		}
-	}
-
-	return normalized
-}
-
-func appendMemberGroup(groups []string, seen map[string]bool, token string) []string {
-	name := NormalizeMemberGroup(token)
-	if name == "" || seen[name] {
-		return groups
-	}
-
-	seen[name] = true
-
-	return append(groups, name)
-}
-
-func ExtractUnitValues(profile *domain.TalentProfile, translated *domain.Translated) []string {
-	values := make([]string, 0, 2)
-
-	if value, ok := translatedUnitValue(translated); ok {
-		values = append(values, value)
-	}
-
-	if len(values) == 0 {
-		values = append(values, profileUnitValues(profile)...)
-	}
-
-	return values
-}
-
-func translatedUnitValue(translated *domain.Translated) (string, bool) {
-	if translated == nil {
-		return "", false
-	}
-
-	for _, row := range translated.Data {
-		if strings.Contains(row.Label, "유닛") && stringutil.TrimSpace(row.Value) != "" {
-			return row.Value, true
-		}
-	}
-
-	return "", false
-}
-
-func profileUnitValues(profile *domain.TalentProfile) []string {
-	if profile == nil {
-		return nil
-	}
-
-	for _, entry := range profile.DataEntries {
-		if profileUnitLabel(entry.Label) {
-			return nonEmptyUnitValue(entry.Value)
-		}
+	if member.Org != "" {
+		return []string{member.Org + " (기수 미등록)"}
 	}
 
 	return nil
 }
 
-func profileUnitLabel(label string) bool {
-	return strings.Contains(label, "ユニット") || strings.Contains(label, "Unit")
-}
-
-func nonEmptyUnitValue(value string) []string {
-	if stringutil.TrimSpace(value) == "" {
-		return nil
-	}
-
-	return []string{value}
-}
-
-func SplitGroupTokens(raw string) []string {
-	clean := strings.ReplaceAll(raw, "／", "/")
-
-	clean = strings.ReplaceAll(clean, "、", "/")
-	clean = strings.ReplaceAll(clean, "・", "/")
-
-	tokens := strings.Split(clean, "/")
-	if len(tokens) == 0 {
-		return []string{raw}
-	}
-
-	result := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		token = stringutil.TrimSpace(token)
-		if token != "" {
-			result = append(result, token)
-		}
-	}
-
-	if len(result) == 0 {
-		return []string{raw}
-	}
-
-	return result
-}
-
-func NormalizeMemberGroup(name string) string {
-	trimmed := stringutil.TrimSpace(name)
-	if trimmed == "" {
-		return DefaultMemberDirectoryGroup
-	}
-
-	trimmed = stripMemberGroupAnnotation(trimmed)
-
-	if mapped, ok := memberDirectoryGroupAliases[trimmed]; ok {
-		return mapped
-	}
-
-	return normalizeEnglishMemberGroup(trimmed)
-}
-
-func stripMemberGroupAnnotation(name string) string {
-	if idx := strings.IndexAny(name, "（("); idx != -1 {
-		return stringutil.TrimSpace(name[:idx])
-	}
-
-	return name
-}
-
-func normalizeEnglishMemberGroup(name string) string {
-	if suffix, ok := japaneseEnglishMemberGroupSuffix(name); ok {
-		return suffix
-	}
-
-	if suffix, ok := englishMemberGroupSuffix(name); ok {
-		return suffix
-	}
-
-	return name
-}
-
-func japaneseEnglishMemberGroupSuffix(name string) (string, bool) {
-	if !strings.HasPrefix(name, "ホロライブEnglish -") {
-		return "", false
-	}
-
-	suffix := strings.Trim(name[len("ホロライブEnglish -"):], "-")
-
-	return suffix, suffix != ""
-}
-
-func englishMemberGroupSuffix(name string) (string, bool) {
-	after, ok := strings.CutPrefix(name, "hololive English")
-	if !ok {
-		return "", false
-	}
-
-	suffix := stringutil.TrimSpace(after)
-
-	suffix = strings.Trim(suffix, "-")
-
-	return suffix, suffix != ""
-}
-
+// PrimaryMemberName은 등록된 한국어 이름을 우선하고 없으면 원래 이름을 표시한다.
 func PrimaryMemberName(member *domain.Member) string {
 	if member == nil {
 		return ""
 	}
 
-	primary := strings.Trim(stringutil.TrimSpace(member.NameKo), ",")
-	if primary != "" {
-		return primary
+	if name := strings.TrimSpace(member.NameKo); name != "" {
+		return name
 	}
 
 	return member.Name

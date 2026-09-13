@@ -89,15 +89,15 @@ func TestCollectCalendarEntriesFromRows_ReturnsJoinedRowErrors(t *testing.T) {
 	rows := &fakeMemberRows{rows: []fakeMemberRow{
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 1, "Suisei", testChannelUC1, []byte("not-json"))
-			assignScanDest(dest[17], "birthday")
-			assignScanDest(dest[18], 3)
+			assignScanDest(dest[20], "birthday")
+			assignScanDest(dest[21], 3)
 
 			return nil
 		}},
 		{scan: func(dest ...any) error {
 			scanFullCelebrationRow(dest, 2, "Miko", testChannelUC2, []byte(`{"ko":["미코"]}`))
-			assignScanDest(dest[17], "birthday")
-			assignScanDest(dest[18], 4)
+			assignScanDest(dest[20], "birthday")
+			assignScanDest(dest[21], 4)
 
 			return nil
 		}},
@@ -128,8 +128,8 @@ func TestCollectCalendarEntriesFromRows_JoinsRowsErr(t *testing.T) {
 		rows: []fakeMemberRow{
 			{scan: func(dest ...any) error {
 				scanFullCelebrationRow(dest, 1, "Suisei", testChannelUC1, []byte(`{"ko":["스이세이"]}`))
-				assignScanDest(dest[17], "birthday")
-				assignScanDest(dest[18], 3)
+				assignScanDest(dest[20], "birthday")
+				assignScanDest(dest[21], 3)
 
 				return nil
 			}},

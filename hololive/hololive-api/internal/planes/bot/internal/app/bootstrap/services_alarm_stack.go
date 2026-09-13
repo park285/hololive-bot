@@ -28,7 +28,7 @@ func InitAlarmYouTubeStack(
 	ctx context.Context,
 	appConfig *configsettings.Config,
 	infra *sharedmodules.InfraModule,
-	foundation *ScraperHolodexProfileFoundation,
+	foundation *ScraperHolodexFoundation,
 	_ iris.Sender,
 	_ *messageformatter.ResponseFormatter,
 	logger *slog.Logger,
