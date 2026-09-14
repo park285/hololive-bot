@@ -179,7 +179,6 @@ case_default_policy_has_exact_rows() {
   local expected
   actual="$(awk -F'|' 'NF && $1 !~ /^#/ { print }' "${DEFAULT_POLICY}" | sort)"
   expected="$(printf '%s\n' \
-    'off|admin-dashboard/backend|./cmd/admin-dashboard|admin-dashboard' \
     'off|hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker' \
     'off|hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate' \
     'off|hololive/hololive-youtube-collector|./cmd/runtime/youtube-collector|youtube-collector' | sort)"

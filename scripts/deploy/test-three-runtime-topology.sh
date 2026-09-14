@@ -84,10 +84,8 @@ pass "production image build contract targets hololive-api only"
 
 grep -Fq 'ALARM_INTERNAL_URL: https://hololive-alarm-worker:30007' "${PROD_FILE}" \
     || fail "hololive-api does not target alarm-worker as the alarm provider"
-grep -Fq 'HOLO_ADMIN_API_URL: https://hololive-api:30006' "${PROD_FILE}" \
+grep -Fq 'IRIS_ADMIN_WEB_HOLOLIVE_ORIGIN: https://hololive-api:30006' "${PROD_FILE}" \
     || fail "admin-dashboard does not target the unified admin plane"
-grep -Fq 'HOLO_BOT_URL: https://hololive-api:30006' "${PROD_FILE}" \
-    || fail "admin-dashboard secondary API URL does not target hololive-api"
 pass "provider and dashboard URLs target the three-runtime topology"
 
 for port in 30001 30003 30006; do

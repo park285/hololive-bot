@@ -87,7 +87,6 @@ if [[ "${POLICY_FILE}" == "${DEFAULT_POLICY_FILE}" && "${COMPOSE_FILE}" == "${DE
 hololive/hololive-api|./cmd/hololive-api|hololive-api,hololive-db-migrate
 hololive/hololive-alarm-worker|./cmd/alarm-worker|hololive-alarm-worker
 hololive/hololive-youtube-collector|./cmd/runtime/youtube-collector|youtube-collector
-admin-dashboard/backend|./cmd/admin-dashboard|admin-dashboard
 EOF
   sort "${policy_rows_file}" -o "${policy_rows_file}"
   sort "${tmp_dir}/expected-policy-rows.tsv" -o "${tmp_dir}/expected-policy-rows.tsv"

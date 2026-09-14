@@ -24,5 +24,3 @@ tmp/
 node_modules/
 dist/
 coverage/
-admin-dashboard/backend/target/
-admin-dashboard/frontend/node_modules/

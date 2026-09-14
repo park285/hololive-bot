@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "DEC-20260909-hololive-admin-bigbang-replacement",
   "title": "Hololive 관리자 구조를 단일 릴리스로 전면 교체하는 보완안",
-  "decision_status": "accepted",
+  "decision_status": "superseded",
   "delivery_status": "implemented",
   "scope": [
     "hololive-bot"
@@ -19,9 +19,9 @@
     "admin-dashboard/docs/bigbang/release-cutover-live.json"
   ],
   "implementation": [
-    "admin-dashboard/backend/internal/httpapi/routes.go",
-    "admin-dashboard/frontend/src/app/bootstrap.ts",
-    "docs/current/runbooks/admin-dashboard.md",
+    "hololive-bot@3f9e625c72bf4937223608c05bf44a5c945883a0:admin-dashboard/backend/internal/httpapi/routes.go",
+    "hololive-bot@3f9e625c72bf4937223608c05bf44a5c945883a0:admin-dashboard/frontend/src/app/bootstrap.ts",
+    "hololive-bot@3f9e625c72bf4937223608c05bf44a5c945883a0:docs/current/runbooks/admin-dashboard.md",
     "admin-dashboard/docs/bigbang/release-progress.md"
   ],
   "supersedes": [],

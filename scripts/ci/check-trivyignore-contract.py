@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-EXPIRY = "2026-09-14"
+EXPIRY = "2026-09-21"
 
 
 @dataclass(frozen=True)
@@ -28,18 +28,24 @@ STATEMENTS = {
     ),
     "postgres": (
         "Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch "
-        "is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. Remove on a clean "
-        "official image rebuild."
+        "is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. The libuuid "
+        "inventory has neither util-linux mount nor nsenter; the reported privileged mount/cgroup "
+        "operations are absent. Reviewed 2026-09-14 in docs/current/architecture/image-scan-reachability-20260914.md. "
+        "Remove on a clean official image rebuild."
     ),
     "deunhealth": (
-        "Owner: hololive-bot. Exact source 37e5bd4 was reviewed: govulncheck excludes the "
-        "inventory-only calls, and the remaining reports require daemon-plugin or OTel baggage paths "
-        "absent from this client-only runtime. Remove on a clean upstream rebuild."
+        "Owner: hololive-bot. Exact source 37e5bd4 was reviewed with Go 1.25.5: govulncheck reports "
+        "reachable symbols, but the fixed loopback HTTP/1 health endpoint and plain Docker client "
+        "do not enable TLS, h2c, relative redirects, daemon-plugin/archive handlers, or baggage extraction. "
+        "Other reports require unused APIs. Runtime predicates and per-CVE evidence are recorded in "
+        "docs/current/architecture/image-scan-reachability-20260914.md. Remove on a clean upstream rebuild."
     ),
     "socket-proxy": (
-        "Owner: hololive-bot. Exact release source bcb95c8 passed govulncheck with no reachable "
-        "vulnerabilities; Trivy only inventories the Go 1.26.5 binary. Remove on an upstream release "
-        "built with a fixed Go toolchain."
+        "Owner: hololive-bot. Exact release source bcb95c8 was reviewed with Go 1.26.5: five "
+        "govulncheck symbol reports require TLS, h2c, relative redirects, or IDNA paths absent from "
+        "the fixed HTTP/1 Unix-socket transport and loopback health endpoint. Dynamic container "
+        "allowlists remain disabled. Evidence is recorded in "
+        "docs/current/architecture/image-scan-reachability-20260914.md. Remove on a fixed upstream rebuild."
     ),
 }
 
@@ -52,6 +58,8 @@ EXPECTED_IDS = {
         "CVE-2026-39820", "CVE-2026-39821", "CVE-2026-39822", "CVE-2026-39836",
         "CVE-2026-42499", "CVE-2026-42504", "CVE-2026-56853", "CVE-2026-56858",
         "CVE-2026-56859", "CVE-2026-56860", "CVE-2026-56862",
+        "CVE-2026-53612", "CVE-2026-53613", "CVE-2026-53614", "CVE-2026-76642",
+        "CVE-2026-78408", "CVE-2026-78409", "CVE-2026-78410",
     },
     "deunhealth": {
         "CVE-2025-61726", "CVE-2025-68121", "CVE-2026-25679", "CVE-2026-25681",
@@ -72,6 +80,10 @@ STDLIB_DEUNHEALTH = "pkg:golang/stdlib@v1.25.5"
 STDLIB_POSTGRES = "pkg:golang/stdlib@v1.24.6"
 STDLIB_SOCKET_PROXY = "pkg:golang/stdlib@v1.26.5"
 X_NET_DEUNHEALTH = "pkg:golang/golang.org/x/net@v0.47.0"
+LIBUUID_IDS = {
+    "CVE-2026-53612", "CVE-2026-53613", "CVE-2026-53614", "CVE-2026-76642",
+    "CVE-2026-78408", "CVE-2026-78409", "CVE-2026-78410",
+}
 
 
 def expected_purls(key: str, cve: str) -> tuple[str, ...]:
@@ -81,6 +93,8 @@ def expected_purls(key: str, cve: str) -> tuple[str, ...]:
             "pkg:apk/alpine/libssl3@3.5.7-r0",
         )
     if key == "postgres":
+        if cve in LIBUUID_IDS:
+            return ("pkg:apk/alpine/libuuid@2.42.1-r0",)
         return (STDLIB_POSTGRES,)
     if key == "socket-proxy":
         return (STDLIB_SOCKET_PROXY,)
@@ -183,6 +197,35 @@ def validate(root: Path) -> None:
     postgres_users = re.findall(r'^    user: (.+)$', postgres_match.group("body"), re.MULTILINE)
     if postgres_users != ['"999:999"']:
         raise ValueError('holo-postgres exception requires exact user: "999:999"')
+    standby = (root / "deploy" / "compose" / "docker-compose.standby.yml").read_text(encoding="utf-8")
+    if re.findall(r'^    user: (.+)$', standby, re.MULTILINE) != ['"999:999"']:
+        raise ValueError('postgres standby exception requires exact user: "999:999"')
+
+    # 정확한 source에 한정한 판단이므로 외부 목적지/transport를 바꾸는 설정은 재검토한다.
+    deunhealth_match = re.search(
+        r"(?ms)^  deunhealth:\n(?P<body>.*?)(?=^\S|^  [a-zA-Z0-9_-]+:\n)",
+        compose_sections[1],
+    )
+    if deunhealth_match is None:
+        raise ValueError("deunhealth exception requires its reviewed service")
+    deunhealth = deunhealth_match.group("body")
+    environment = re.search(r"(?ms)^    environment:\n(.*?)(?=^    \S)", deunhealth)
+    if environment is None or environment.group(1) != (
+        "      TZ: Asia/Seoul\n      LOG_LEVEL: info\n      DOCKER_HOST: tcp://docker-proxy:2375\n"
+    ) or re.search(r"(?m)^    (?:command|entrypoint|env_file|volumes|ports):", deunhealth):
+        raise ValueError("deunhealth exception requires the fixed plain Docker and loopback health configuration")
+
+    proxy_match = re.search(
+        r"(?ms)^  docker-proxy:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:\n)",
+        compose_sections[1],
+    )
+    if proxy_match is None:
+        raise ValueError("socket-proxy exception requires its reviewed service")
+    proxy = proxy_match.group("body")
+    if re.search(r"(?m)^    (?:environment|env_file|entrypoint|configs|ports):", proxy) or re.search(
+        r"(?i)-(?:proxycontainername|socketpath|proxysocketendpoint|allowhealthcheck)(?:=|\s)", proxy
+    ):
+        raise ValueError("socket-proxy exception requires the fixed Unix socket and disabled dynamic allowlists")
 
     ingress = (root / "deploy" / "nginx" / "admin-dashboard-ingress.conf.template").read_text(
         encoding="utf-8"

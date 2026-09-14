@@ -4,7 +4,6 @@ use (
 	../iris-client-go
 	../shared-go
 	./
-	./admin-dashboard/backend
 	./hololive/hololive-alarm-worker
 	./hololive/hololive-api
 	./hololive/hololive-dbtest

@@ -1,59 +1,13 @@
-# Mandatory central security overlay for admin-dashboard.
-# Keep this file after docker-compose.prod.yml and before optional live-compat overlays.
-
+# Mandatory central security overlay. The Rust gateway reads private mounted files.
 services:
   admin-dashboard:
-    # Secret values never enter Docker Config.Env. The app reads the mounted
-    # runtime files through the corresponding *_FILE variables.
     env_file: !override []
-    environment:
-      DOCKER_HOST: tcp://admin-docker-proxy:2375
-      ADMIN_PASS_HASH_FILE: /run/hololive-bot/admin-secrets/admin-pass-hash
-      SESSION_SECRET_FILE: /run/hololive-bot/admin-secrets/session-secret
-      VALKEY_URL_FILE: /run/hololive-bot/admin-secrets/valkey-url
-      HOLO_BOT_API_KEY_FILE: /run/hololive-bot/admin-secrets/holo-bot-api-key
     volumes:
-      - /run/hololive-bot/admin-secrets:/run/hololive-bot/admin-secrets:ro
+      - /run/hololive-bot/iris-admin-credentials:/run/hololive-bot/iris-admin-credentials:ro
     depends_on: !override
-      valkey-cache:
-        condition: service_healthy
       hololive-api:
         condition: service_healthy
-      admin-docker-proxy:
-        condition: service_started
-    # Remove membership in the shared deunhealth proxy network. Compromise of
-    # the BFF can only reach the admin-specific capability proxy below.
     networks: !override
       hololive-net:
         aliases:
           - admin-dashboard
-      admin-docker-proxy-net: {}
-
-  admin-docker-proxy:
-    image: ${DOCKER_SOCKET_PROXY_IMAGE:-wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b}
-    container_name: admin-docker-proxy
-    restart: unless-stopped
-    extends:
-      file: admin-docker-policy.generated.json
-      service: admin-docker-proxy
-    group_add:
-      - "${DOCKER_SOCKET_GID:-107}"
-    read_only: true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    deploy:
-      resources:
-        limits:
-          memory: 64m
-          pids: 64
-    networks:
-      - admin-docker-proxy-net
-
-networks:
-  admin-docker-proxy-net:
-    driver: bridge
-    internal: true

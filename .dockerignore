@@ -38,7 +38,7 @@ coverage.out
 **/vendor
 **/bin
 **/logs
-!admin-dashboard/backend/internal/logs
+!hololive/hololive-api/internal/logs
 **/.env*
 *.key
 *.pem

@@ -16,7 +16,7 @@ module="$1"
 stage="$2"
 
 case "${module}" in
-  .|admin-dashboard/backend|hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-youtube-collector)
+  .|hololive/hololive-api|hololive/hololive-alarm-worker|hololive/hololive-dbtest|hololive/hololive-shared|hololive/hololive-youtube-collector)
     ;;
   *)
     echo "unsupported public PR module: ${module}" >&2

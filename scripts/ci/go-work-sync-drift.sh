@@ -34,6 +34,10 @@ verify_go_work_sync_drift() (
 
     for file in "${sync_files[@]}"; do
         candidate="${temp_repo}/${file}"
+        # 삭제한 tracked module의 메타데이터가 양쪽에 없으면 sync로 생긴 차이가 아닙니다.
+        if [[ ! -e "${file}" && ! -L "${file}" && ! -e "${candidate}" && ! -L "${candidate}" ]]; then
+            continue
+        fi
         if cmp -s "${file}" "${candidate}"; then
             continue
         fi

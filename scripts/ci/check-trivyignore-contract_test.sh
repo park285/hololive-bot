@@ -18,6 +18,7 @@ make_fixture() {
   cp "$root_dir"/scripts/ci/trivyignore-*.yaml "$destination/scripts/ci/"
   cp "$root_dir/deploy/compose/docker-compose.prod.yml" "$destination/deploy/compose/"
   cp "$root_dir/deploy/compose/docker-compose.live-compat.yml" "$destination/deploy/compose/"
+  cp "$root_dir/deploy/compose/docker-compose.standby.yml" "$destination/deploy/compose/"
   cp "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template" "$destination/deploy/nginx/"
 }
 
@@ -53,9 +54,34 @@ make_fixture "$fixture"
 sed -i '0,/user: "999:999"/{s/user: "999:999"/user: "0:0"/;}' "$fixture/deploy/compose/docker-compose.prod.yml"
 expect_failure "reachable root postgres entrypoint" "$fixture"
 
+fixture="$tmp_dir/root-standby"
+make_fixture "$fixture"
+sed -i 's/user: "999:999"/user: "0:0"/' "$fixture/deploy/compose/docker-compose.standby.yml"
+expect_failure "reachable standby gosu" "$fixture"
+
 fixture="$tmp_dir/tls-ingress"
 make_fixture "$fixture"
 sed -i '0,/listen 127.0.0.1:30193;/{s/listen 127.0.0.1:30193;/listen 127.0.0.1:30193 ssl;/;}' "$fixture/deploy/nginx/admin-dashboard-ingress.conf.template"
 expect_failure "reachable nginx TLS listener" "$fixture"
+
+fixture="$tmp_dir/changed-libuuid"
+make_fixture "$fixture"
+sed -i 's/libuuid@2.42.1-r0/libmount@2.42.1-r0/' "$fixture/scripts/ci/trivyignore-postgres.yaml"
+expect_failure "different util-linux binary package" "$fixture"
+
+fixture="$tmp_dir/tls-docker-client"
+make_fixture "$fixture"
+sed -i 's|DOCKER_HOST: tcp://docker-proxy:2375|DOCKER_HOST: https://docker-proxy:2376|' "$fixture/deploy/compose/docker-compose.prod.yml"
+expect_failure "TLS Docker client" "$fixture"
+
+fixture="$tmp_dir/external-health"
+make_fixture "$fixture"
+sed -i '/DOCKER_HOST: tcp:\/\/docker-proxy:2375/a\      HEALTH_SERVER_ADDRESS: 0.0.0.0:9999' "$fixture/deploy/compose/docker-compose.prod.yml"
+expect_failure "externally bound health server" "$fixture"
+
+fixture="$tmp_dir/dynamic-proxy"
+make_fixture "$fixture"
+sed -i "/'-proxyport=2375'/a\      - '-proxycontainername=docker-proxy'" "$fixture/deploy/compose/docker-compose.prod.yml"
+expect_failure "dynamic proxy client path" "$fixture"
 
 echo "exact Trivy exception tuple mutation tests passed"

@@ -204,12 +204,12 @@ func assertNonEgressEnvFilePolicy(t *testing.T, service, block string) {
 		return
 	}
 
-	if !strings.Contains(block, "${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}") {
-		t.Fatal("admin-dashboard must inject its secrets via the scoped admin-dashboard.env env_file")
+	if strings.Contains(block, "env_file:") {
+		t.Fatal("admin-dashboard must read private files without an env_file")
 	}
 
-	if strings.Contains(block, "/etc/stack-secrets/hololive-bot/env") || strings.Contains(block, "COMPOSE_ENV_FILE") {
-		t.Fatal("admin-dashboard must not consume monolithic COMPOSE_ENV_FILE as env_file")
+	if !strings.Contains(block, "CREDENTIALS_DIRECTORY: /run/hololive-bot/iris-admin-credentials") {
+		t.Fatal("admin-dashboard must declare its Iris-owned private credential directory")
 	}
 }
 
@@ -220,7 +220,7 @@ func TestRepoComposeProdRenderedIsolation(t *testing.T) {
 	assertProdRenderedValkeySocketIsolation(t, cfg)
 	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-006
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
-	assertValkeyConsumersUnchanged(t, cfg) // CFG-009
+	assertValkeyConsumersIsolated(t, cfg) // CFG-009
 	assertProdRenderedNonEgressSecretIsolation(t, cfg)
 	assertProdRenderedEgressRuntimeKeys(t, cfg)
 	assertProdRenderedScopedProducerKeys(t, cfg)
@@ -307,7 +307,7 @@ func assertCollectorRenderedWithoutUnusedScraperEnv(t *testing.T, cfg renderedCo
 	}
 }
 
-func assertValkeyConsumersUnchanged(t *testing.T, cfg renderedCompose) {
+func assertValkeyConsumersIsolated(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	for _, service := range []string{serviceHololiveAPI, serviceAlarmWorker} {
@@ -334,8 +334,15 @@ func assertValkeyConsumersUnchanged(t *testing.T, cfg renderedCompose) {
 	}
 
 	adminEnv := composeEnvironment(t, cfg, serviceAdminDashboard)
-	if !strings.Contains(adminEnv["VALKEY_URL"], "valkey-cache") {
-		t.Fatalf("admin-dashboard VALKEY_URL = %q, want valkey-cache consumer", adminEnv["VALKEY_URL"])
+
+	for _, key := range []string{"VALKEY_URL", "VALKEY_URL_FILE", "SESSION_SECRET", "ADMIN_PASS_HASH", "DOCKER_HOST"} {
+		if _, present := adminEnv[key]; present {
+			t.Fatalf("admin-dashboard must not receive retired capability %s", key)
+		}
+	}
+
+	if _, present := composeDependsOn(t, cfg, serviceAdminDashboard)["valkey-cache"]; present {
+		t.Fatal("admin-dashboard must not depend on Valkey sessions")
 	}
 }
 

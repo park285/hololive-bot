@@ -39,7 +39,19 @@ mkdir -p "${fakebin}"
 cat >"${fakebin}/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "${FAKE_REVISION_LABEL:-}"
+if [[ "$*" == *'{{.Image}}'* ]]; then
+    printf '%s\n' sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    exit 0
+fi
+if [[ "$*" == *'.Architecture'* ]]; then
+    printf '%s\n' "${FAKE_ADMIN_ARCHITECTURE:-arm64}"
+    exit 0
+fi
+if [[ "$*" == *org.opencontainers.image.source* ]]; then
+    printf '%s\n' "${FAKE_ADMIN_SOURCE:-https://github.com/park285/iris-admin}"
+else
+    printf '%s\n' "${FAKE_REVISION_LABEL:-}"
+fi
 EOF
 cat >"${fakebin}/compose" <<'EOF'
 #!/usr/bin/env bash
@@ -71,6 +83,16 @@ expect_failure "mismatched image revision must fail" \
     verify_object_fixture 0000000000000000000000000000000000000000 "${expected_revision}"
 [[ "$(FAKE_COMPOSE_IDS=one "${fakebin}/compose")" == one ]] \
     || fail "fake compose fixture must emit one identifier"
+verify_admin_fixture() {
+    FAKE_REVISION_LABEL="${expected_revision}" FAKE_ADMIN_SOURCE="$1" FAKE_ADMIN_ARCHITECTURE="$2" \
+        deploy_verify_admin_image "${fakebin}/docker" admin-dashboard:fixture "${expected_revision}"
+}
+verify_admin_fixture https://github.com/park285/iris-admin arm64 || fail "Iris arm64 image revision must pass"
+expect_failure "Holo repository image cannot claim Iris ownership" \
+    verify_admin_fixture https://github.com/park285/hololive-bot arm64
+expect_failure "amd64 image cannot deploy to the arm64 central host" \
+    verify_admin_fixture https://github.com/park285/iris-admin amd64
+FAKE_REVISION_LABEL="${expected_revision}" deploy_verify_admin_container "${fakebin}/docker" container-one "${expected_revision}" || fail "running Iris image must be verified"
 expect_failure "missing compose mapping must fail" \
     single_identifier_fixture ""
 expect_failure "multiple compose mappings must fail" \
@@ -80,7 +102,6 @@ dockerfiles=(
     hololive/hololive-api/Dockerfile
     hololive/hololive-alarm-worker/Dockerfile
     hololive/hololive-youtube-collector/Dockerfile
-    admin-dashboard/Dockerfile
 )
 for dockerfile in "${dockerfiles[@]}"; do
     path="${ROOT_DIR}/${dockerfile}"
@@ -95,7 +116,7 @@ for dockerfile in "${dockerfiles[@]}"; do
 done
 
 compose_file="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
-for service in hololive-db-migrate hololive-alarm-worker hololive-api youtube-collector admin-dashboard; do
+for service in hololive-db-migrate hololive-alarm-worker hololive-api youtube-collector; do
     block="$(awk -v service="${service}" '
         $0 == "services:" { service_section = 1; next }
         service_section && $0 == "  " service ":" { found = 1; next }
@@ -133,7 +154,7 @@ grep -Fq "REVISION=\"${literal_dollar}(deploy_source_revision \"${literal_dollar
     || fail "build-all must derive a clean full revision"
 grep -Fq 'verify_build_services' "${build_all}" \
     || fail "build-all must verify built image labels"
-grep -Fq 'BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector admin-dashboard)' "${build_all}" \
+grep -Fq 'BUILD_REVISION_SERVICES=(hololive-api hololive-alarm-worker youtube-collector)' "${build_all}" \
     || fail "all-service build must verify the collector revision label"
 
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh"

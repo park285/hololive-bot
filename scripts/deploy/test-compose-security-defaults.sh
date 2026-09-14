@@ -35,9 +35,7 @@ grep -Fq 'limit_conn holoshi_shortlink_connections' "${PUBLIC_SHORTLINK}" \
   || fail "public shortlink ingress must apply a per-client connection limit"
 pass "shortlink ingress limits are keyed per client at both proxy hops"
 
-node "${ROOT_DIR}/scripts/architecture/generate-admin-docker-policy.mjs" --check \
-  || fail "admin Docker proxy generated exact-name policy is stale"
-pass "admin Docker proxy independently enforces container and operation scope"
+bash "${ROOT_DIR}/scripts/ci/public-pr-frontend-gate.sh"
 
 if ! docker compose version >/dev/null 2>&1; then
   echo "[SKIP] docker compose unavailable" >&2
@@ -134,7 +132,7 @@ def env_map(svc):
     return env
 
 env = env_map(dashboard)
-origins = str(env.get("ALLOWED_ORIGINS", ""))
+origins = str(env.get("IRIS_ADMIN_WEB_ORIGIN", ""))
 if "100.100.1.3:30190" in origins:
     print("[FAIL] admin-dashboard live-compat default origins must not include Tailscale host")
     sys.exit(1)
@@ -177,6 +175,34 @@ docker run --rm \
   nginx -t -c /etc/nginx/admin-dashboard-ingress.conf \
   || fail "admin-dashboard-ingress nginx -t failed"
 pass "admin-dashboard-ingress config passes nginx -t with the pinned image"
+
+# 실제 Nginx proxy가 Rust의 단일 IP 계약으로 전달하는지 격리된 loopback upstream으로 확인한다.
+sed '/^http {/a\    server { listen 127.0.0.1:30190; location / { return 200 "$http_x_forwarded_for"; } }' \
+  "${nginx_test_dir}/admin-dashboard-ingress.conf" >"${nginx_test_dir}/admin-client.test.conf"
+timeout 30 docker run --rm --network none --read-only \
+  --tmpfs /tmp:size=16m --tmpfs /var/cache/nginx:size=16m --tmpfs /var/run:size=1m \
+  -v "${nginx_test_dir}/admin-client.test.conf:/etc/nginx/admin-client.test.conf:ro" \
+  --entrypoint sh "${nginx_image}" -ec '
+    nginx -c /etc/nginx/admin-client.test.conf -g "daemon off;" &
+    nginx_pid=$!
+    trap '\''kill "$nginx_pid" 2>/dev/null || true; wait "$nginx_pid" 2>/dev/null || true'\'' EXIT
+    ready=false
+    for attempt in 1 2 3 4 5; do
+      if wget -q -O /dev/null http://127.0.0.1:30193/healthz; then ready=true; break; fi
+      sleep 1
+    done
+    test "$ready" = true
+    check_client() {
+      actual=$(wget -q -O - --header "X-Forwarded-For: $1" http://127.0.0.1:30191/)
+      test "$actual" = "$2"
+    }
+    check_client "203.0.113.11" "203.0.113.11"
+    check_client "198.51.100.6, 203.0.113.11" "203.0.113.11"
+    check_client "forged, 198.51.100.6, 2001:db8::9" "2001:db8::9"
+    check_client "203.0.113.22" "203.0.113.22"
+    test "$(wget -q -O - http://127.0.0.1:30191/)" = 127.0.0.1
+  ' || fail "admin ingress did not preserve one gateway-observed client address"
+pass "admin ingress forwards the gateway-observed client IP and ignores forged prefixes"
 
 sed \
   -e 's/listen 443 ssl;/listen 127.0.0.1:30999;/' \

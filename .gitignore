@@ -160,8 +160,6 @@ coverage/
 coverage.out
 cover.out
 coverage.html
-admin-dashboard/frontend/test-results/
-admin-dashboard/frontend/full-page.png
 
 # ============================================
 # Database
@@ -242,7 +240,5 @@ docs/closeout-process.md
 scripts/export-closeout-packet.sh
 
 # Build outputs
-admin-dashboard/backend/admin
-admin-dashboard/backend/admin-dashboard
 
 .worktrees/

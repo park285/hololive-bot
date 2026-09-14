@@ -50,7 +50,7 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 	assertLiveCompatRenderedPostgres(t, cfg)
 	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-007
 	assertCollectorRenderedWithoutUnusedScraperEnv(t, cfg, load.RuntimeYouTubeCollector)
-	assertValkeyConsumersUnchanged(t, cfg) // CFG-009
+	assertValkeyConsumersIsolated(t, cfg) // CFG-009
 	assertLiveCompatRenderedSecrets(t, cfg)
 	assertLiveCompatRenderedRuntimeConfig(t, cfg)
 }
@@ -231,12 +231,12 @@ func assertLiveCompatDashboardOrigin(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	dashboardEnv := composeEnvironment(t, cfg, serviceAdminDashboard)
-	if strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "100.100.1.3:30190") {
-		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want no default Tailnet origin", dashboardEnv["ALLOWED_ORIGINS"])
+	if strings.Contains(dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"], "100.100.1.3:30190") {
+		t.Fatalf("admin-dashboard IRIS_ADMIN_WEB_ORIGIN = %q, want no default Tailnet origin", dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"])
 	}
 
-	if !strings.Contains(dashboardEnv["ALLOWED_ORIGINS"], "https://admin.holoshi.com") {
-		t.Fatalf("admin-dashboard ALLOWED_ORIGINS = %q, want explicit HTTPS admin origin", dashboardEnv["ALLOWED_ORIGINS"])
+	if !strings.Contains(dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"], "https://admin.holoshi.com") {
+		t.Fatalf("admin-dashboard IRIS_ADMIN_WEB_ORIGIN = %q, want explicit HTTPS admin origin", dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"])
 	}
 }
 
