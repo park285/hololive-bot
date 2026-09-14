@@ -10,6 +10,7 @@
 
 - Iris Admin의 검증된 웹 image. `ADMIN_DASHBOARD_IMAGE`와 해당 저장소의 `IRIS_ADMIN_REVISION`으로 고정합니다.
 - Holo 업무 관리 API `https://hololive-api:30006`과 `DNS:hololive-api` SAN을 포함하는 내부 H3 인증서.
+- 웹의 신뢰 파일은 발급 CA bundle `certs/iris-ca.pem`입니다. 서버 leaf `hololive-h3.crt`를 Rust 신뢰 anchor로 사용하면 실제 CA 발급 인증서 연결이 실패합니다.
 - root 전용 admin secret source의 `ADMIN_PASS_HASH`(Iris CLI가 생성한 Argon2id)와 기존 `HOLO_BOT_API_KEY`.
 
 `materialize-admin-dashboard-secrets.sh`가 `/run/hololive-bot/iris-admin-credentials`에

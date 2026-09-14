@@ -20,6 +20,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.admin-security.yml \
     ($web.environment.IRIS_ADMIN_WEB_SURFACE == "hololive") and
     ($web.environment.IRIS_ADMIN_WEB_BIND == "0.0.0.0:30190") and
     ($web.environment.IRIS_ADMIN_WEB_TRUSTED_PROXY == "172.23.0.1") and
+    ($web.environment.IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE == "/run/hololive-bot/certs/iris-ca.pem") and
     ($web.environment.CREDENTIALS_DIRECTORY == "/run/hololive-bot/iris-admin-credentials") and
     (($web.environment | keys | sort) == ([
       "CREDENTIALS_DIRECTORY", "IRIS_ADMIN_WEB_BIND", "IRIS_ADMIN_WEB_SURFACE",
@@ -33,7 +34,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.admin-security.yml \
     (all($web.ports[]; .host_ip == "127.0.0.1" and .target == 30190)) and
     (all($web.volumes[]; .read_only == true)) and
     (($web.volumes | map(.target) | sort) == [
-      "/run/hololive-bot/certs/hololive-h3.crt", "/run/hololive-bot/iris-admin-credentials"
+      "/run/hololive-bot/certs/iris-ca.pem", "/run/hololive-bot/iris-admin-credentials"
     ]) and
     (.services["admin-docker-proxy"] == null) and
     (.networks["admin-docker-proxy-net"] == null) and
