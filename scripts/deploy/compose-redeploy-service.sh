@@ -95,15 +95,8 @@ verify_live_image_revision() {
         "live container for ${service}" \
         "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" \
         "${COMPOSE_FILE_ARGS[@]}" ps -q "${service}")"
-    local expected_revision=""
-    if [[ "$service" == admin-dashboard ]]; then
-        expected_revision="$admin_revision"
-        deploy_verify_admin_container "$CONTAINER_CLI" "$container_id" "$admin_revision"
-    else
-        expected_revision="$REVISION"
-        deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
-    fi
-    echo "[VERIFY] ${service} image revision=${expected_revision}"
+    deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
+    echo "[VERIFY] ${service} image revision=${REVISION}"
 }
 
 resolve_revision_services() {
@@ -238,7 +231,6 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
-compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
 postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
@@ -266,11 +258,6 @@ echo "[INFO] COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE}"
 
 "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" config --quiet
 
-if [[ "$TARGET" == admin-dashboard || -z "$TARGET" ]]; then
-    admin_image="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" ADMIN_DASHBOARD_IMAGE)"
-    admin_revision="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" IRIS_ADMIN_REVISION)"
-    deploy_verify_admin_image "$CONTAINER_CLI" "${admin_image:-admin-dashboard:prod}" "$admin_revision"
-fi
 
 build_target=false
 case "${TARGET}" in
@@ -336,15 +323,11 @@ else
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
-    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector admin-dashboard; then
+    if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then
         echo "[ERROR] health gate failed after all-service redeploy" >&2
         exit 1
     fi
     if [[ "${REVISION_ENABLED}" == true ]]; then
         verify_cutover_image_revisions
     fi
-fi
-
-if [[ "$TARGET" == admin-dashboard || -z "$TARGET" ]]; then
-    verify_live_image_revision admin-dashboard
 fi

@@ -46,6 +46,12 @@ func TestRepoComposeLiveCompatOverlayRestoresLiveWiringWithScopedNonEgress(t *te
 
 	cfg := renderComposeConfig(t, composeProdFile, composeLiveCompatFile)
 
+	for _, retired := range []string{"admin-dashboard", "admin-docker-proxy"} {
+		if _, present := cfg.Services[retired]; present {
+			t.Fatalf("live overlay restores retired admin service %s", retired)
+		}
+	}
+
 	assertLiveCompatRenderedPortsAndModes(t, cfg)
 	assertLiveCompatRenderedPostgres(t, cfg)
 	assertCollectorRenderedWithoutValkey(t, cfg, load.RuntimeYouTubeCollector) // CFG-007
@@ -79,7 +85,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 		}
 	}
 
-	for _, service := range []string{load.RuntimeYouTubeCollector, serviceAdminDashboard} {
+	for _, service := range []string{load.RuntimeYouTubeCollector} {
 		block := composeServiceBlock(t, overlay, service)
 		if strings.Contains(block, "env_file:") {
 			t.Fatalf("live overlay must keep nonEgress %s scoped without env_file", service)
@@ -103,7 +109,6 @@ func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
 	assertRenderedPort(t, cfg, "valkey-cache", "6379", "6379", "tcp")
-	assertRenderedPortOnHost(t, cfg, serviceAdminDashboard, "127.0.0.1", "30190", "30190", "tcp")
 	assertRenderedPort(t, cfg, serviceHoloPostgres, "5433", "5432", "tcp")
 	assertRenderedPort(t, cfg, serviceHololiveAPI, "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, serviceHololiveAPI, "30001", "30001", "udp")
@@ -188,7 +193,6 @@ func assertLiveCompatRenderedSecrets(t *testing.T, cfg renderedCompose) {
 
 	assertLiveCompatEgressSecrets(t, cfg)
 	assertLiveCompatNonEgressSecrets(t, cfg)
-	assertLiveCompatDashboardOrigin(t, cfg)
 }
 
 func assertLiveCompatEgressSecrets(t *testing.T, cfg renderedCompose) {
@@ -208,7 +212,7 @@ func assertLiveCompatEgressSecrets(t *testing.T, cfg renderedCompose) {
 func assertLiveCompatNonEgressSecrets(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{load.RuntimeYouTubeCollector, serviceAdminDashboard} {
+	for _, service := range []string{load.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 
 		for _, key := range []string{irisWebhookTokenEnv, irisBotTokenEnv} {
@@ -217,26 +221,11 @@ func assertLiveCompatNonEgressSecrets(t *testing.T, cfg renderedCompose) {
 			}
 		}
 
-		if service != serviceAdminDashboard {
-			for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
-				if _, ok := env[key]; ok {
-					t.Fatalf("nonEgress %s rendered with dashboard-only secret %s under live overlay", service, key)
-				}
+		for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
+			if _, ok := env[key]; ok {
+				t.Fatalf("nonEgress %s rendered with dashboard-only secret %s under live overlay", service, key)
 			}
 		}
-	}
-}
-
-func assertLiveCompatDashboardOrigin(t *testing.T, cfg renderedCompose) {
-	t.Helper()
-
-	dashboardEnv := composeEnvironment(t, cfg, serviceAdminDashboard)
-	if strings.Contains(dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"], "100.100.1.3:30190") {
-		t.Fatalf("admin-dashboard IRIS_ADMIN_WEB_ORIGIN = %q, want no default Tailnet origin", dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"])
-	}
-
-	if !strings.Contains(dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"], "https://admin.holoshi.com") {
-		t.Fatalf("admin-dashboard IRIS_ADMIN_WEB_ORIGIN = %q, want explicit HTTPS admin origin", dashboardEnv["IRIS_ADMIN_WEB_ORIGIN"])
 	}
 }
 

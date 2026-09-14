@@ -1,66 +1,43 @@
-# Admin Dashboard Runbook
+# 통합 관리자 앱 연결
 
-## Role
+관리자 앱의 대표 주소는 **https://admin.holoshi.com**입니다. Iris·ChatBotGo·홀로라이브 화면을
+iris-seoul의 단일 `iris-admin-web.service`가 제공합니다. 웹·SSR·인증·세션·PWA·native bundle은
+[Iris Admin](https://github.com/park285/iris-admin)이 소유하며 이 저장소에는 독립 `admin-dashboard` 서비스가 없습니다.
 
-`admin-dashboard`의 웹 소스·OpenAPI·인증·세션·보호된 변경 요청은 Iris Admin이 소유합니다.
-기존 홀로 디자인을 유지하는 React SSR·PWA와 Rust gateway를 사용합니다.
-이 저장소는 Compose 서비스·업무 API·배포 연결을 소유합니다. 서비스·기본 이미지·실행 파일 이름과 포트 30190은 유지합니다.
+## 계정과 권한
 
-## Dependencies
+로그인은 기존 Iris 계정 이름과 사용자가 TTY에서 설정한 새 비밀번호 하나로 통합합니다.
+모든 관리 화면의 세션과 재인증을 이 공통 계정이 소유하며 별도 홀로 계정은 없습니다.
+임시 조회 계정은 발급한 범위만 사용하며 변경·운영자 세션 제어를 할 수 없습니다.
+홀로 웹의 Docker·호스트 파일·원시 자원 관리 화면과 API·소켓·전용 프록시 연결은 폐기했습니다.
 
-- Iris Admin의 검증된 웹 image. `ADMIN_DASHBOARD_IMAGE`와 해당 저장소의 `IRIS_ADMIN_REVISION`으로 고정합니다.
-- Holo 업무 관리 API `https://hololive-api:30006`과 `DNS:hololive-api` SAN을 포함하는 내부 H3 인증서.
-- 웹의 신뢰 파일은 발급 CA bundle `certs/iris-ca.pem`입니다. 서버 leaf `hololive-h3.crt`를 Rust 신뢰 anchor로 사용하면 실제 CA 발급 인증서 연결이 실패합니다.
-- root 전용 admin secret source의 `ADMIN_PASS_HASH`(Iris CLI가 생성한 Argon2id)와 기존 `HOLO_BOT_API_KEY`.
+홀로의 화면 경로는 `/dashboard/stats`, `/dashboard/members`, `/dashboard/alarms`, `/dashboard/rooms`,
+`/dashboard/settings`, `/dashboard/streams`, `/dashboard/calendar`입니다. 기존 디자인과 업무 API 계약을 유지합니다.
+브라우저 쿠키·비밀 없는 탭 사건·cookie 변경 잠금·root manifest/service worker를 공통으로 사용합니다.
 
-`materialize-admin-dashboard-secrets.sh`가 `/run/hololive-bot/iris-admin-credentials`에
-`login-password-hash`·`bot-hololive` 두 0400 파일을 만듭니다. 비밀 값을 환경 변수에 넣지 않고 read-only mount합니다.
-Iris READ/OPS·Docker·Valkey 세션·다른 봇 자격증명은 새 웹에 제공하지 않습니다.
-웹 로그는 stdout/stderr이며 기존 host log bind mount를 받지 않습니다.
-임시 조회 계정용 `/run/hololive-bot/test-account`는 UID 1000의 0700 tmpfs입니다.
-기존 `admin-dashboard test-account` 명령은 Iris 공통 CLI의 디렉터리·계정 ID 인자를 사용합니다.
-계정은 동시에 한 개, 15분으로 고정되며 발급·폐기에 gateway 재시작은 필요하지 않습니다.
-운영자 계정은 유지하고 임시 계정에는 재인증·변경 ID 선점·업무 변경 권한을 주지 않습니다.
+## 중앙 호스트의 역할
 
-Compose 순서는 `docker-compose.prod.yml → docker-compose.admin-security.yml → docker-compose.live-compat.yml`입니다.
-호스트 127.0.0.1:30190 publish와 기존 HTTPS ingress를 유지합니다.
-신뢰 proxy는 고정 network gateway 172.23.0.1 한 개이며 정확한 origin 한 개를 사용합니다.
-공유 `docker-proxy`는 `deunhealth` 전용입니다.
+- `hololive-api`와 업무 봇은 Osaka에서 기존 이미지와 데이터·인증서를 사용합니다.
+- `docker-compose.admin-web.yml`은 중앙 H3 관리 API의 승인된 Tailscale publish입니다. 웹 컨테이너가 없더라도 유지합니다.
+- `admin-dashboard-ingress`는 기존 shortlink 소비자를 위해 이름을 유지합니다. 30192의 단축 링크와 30193의 health만 제공합니다.
+  이전 웹 포트 30190/30191, 웹 전용 Docker proxy와 secret materializer는 사용하지 않습니다.
+- 공유 `docker-proxy`·`deunhealth`, PostgreSQL·Valkey와 AP collector는 이 전환의 삭제 대상이 아닙니다.
 
-## Build and verification
+공개 HTTPS와 Certbot 갱신은 스택 `deploy/holoshi-nginx`가, 내부 신뢰는 기존 공통 CA와 서비스별 leaf가 소유합니다.
+공개 인증서를 내부 H3 private key와 공유하지 않으며 TLS 검증을 끄지 않습니다. 관리 API key와 공통 로그인 hash는
+Iris의 플랫폼 secret master/manifest를 거쳐 전달하며 여기에서 중간 파일을 만들지 않습니다.
 
-웹 빌드·계약·보안·브라우저 검사는 Iris Admin의 `scripts/verify-all.sh`가 소유합니다.
-웹 image는 해당 저장소의 `scripts/build-hololive-image.sh`에서 생성합니다.
-이 저장소의 `build-all.sh`는 Go 업무 image만 빌드합니다.
-`scripts/ci/public-pr-frontend-gate.sh`는 웹 소유권·자격증명·네트워크·Docker 권한 제거를 검사합니다.
-Go module·race·NilAway·배포 계약 검사는 기존 local-ci/pre-push 경로를 유지합니다.
+## 적용·검증과 복구
 
-## Common failure modes
+검증한 공통 앱 generation·계정 범위와 대표 origin이 먼저 준비돼야 독립 Osaka 웹을 종료할 수 있습니다.
+운영 변경은 승인된 효과에 한정하며, 기존 native generation·공개 ingress 설정·Osaka deploy snapshot과
+secret 복구 자료를 보존합니다. DB migration이나 봇 재시작은 이 웹 전환만으로 실행하지 않습니다.
 
-- 시작 실패: Argon2id hash·0400 파일·asset/SSR image를 확인합니다. 기존 bcrypt hash는 새 웹에서 받지 않습니다.
-- Holo 502/503: H3 readiness·토큰·CA 및 `hololive-api` SAN을 확인합니다. TLS hostname override로 우회하지 않습니다.
-- 세션 종료: 재시작·절대 만료·로그아웃 뒤 다시 로그인합니다. GET은 유효 시간을 연장하거나 쿠키를 바꾸지 않습니다.
-- 변경 403/409: CSRF·현재 쿠키·재인증·generation·중복 mutation 거부입니다. 자동 재전송하지 않습니다.
-- 일부 반영/결과 불명: 저장값과 runtime 상태를 다시 조회합니다. 실패 응답을 성공이나 무변경으로 추정하지 않습니다.
+`public-pr-frontend-gate.sh`는 독립 웹/전용 credential·Docker proxy 부재와 shortlink ingress 보존을 검사합니다.
+루트 local-ci/pre-push 및 Compose/실제 Nginx 검사를 마친 뒤 로컬 빌드 산출물만 호스트에 전송합니다.
+공통 인증 조회·SSR·권한 거절·logout/PWA와 기존 봇·단축 링크 상태를 확인하고 임시 조회 계정은 정확한 ID로 폐기합니다.
+실제 AI 호출·메시지/푸시 발송·iOS 실기기 검증을 자동 smoke에 포함하지 않습니다.
 
-## Smoke test
-
-먼저 로컬 fixture에서 Iris 전체 검사를 실행합니다. 운영 smoke는 승인된 image·origin에서 수행합니다.
-비밀이나 응답 body 전체를 기록하지 않고 health·metadata no-store·업무 SSR·로그아웃을 확인합니다.
-Docker/status/system-stats·다른 봇·Iris 관리 경로가 거부되는지 확인합니다.
-로그인 후 쿠키는 Secure·HttpOnly·SameSite=Strict이며 GET/SSR에는 Set-Cookie가 없어야 합니다.
-
-세션은 15분 rotation·이전 쿠키 30초 유예·서버 유휴 30분·절대 8시간입니다.
-논리 세션과 CSRF가 유지되어 초안·변경 ID가 회전으로 초기화되지 않습니다.
-새 mutation은 현재 쿠키로만 선점하고 family 전체 logout이 이전/현재 쿠키를 함께 폐기합니다.
-
-## Rollback
-
-전환 전 image ID·각 저장소 commit·Compose·이전 비밀 저장소 revision을 확보합니다.
-관리 origin의 정비 상태에서 이전 image와 일치하는 Compose·비밀 계약을 함께 복원하고 다시 로그인합니다.
-구형 웹 복원은 Docker 권한을 되살릴 수 있으므로 필요한 접근 제한을 함께 확인합니다.
-기존 H3 클라이언트에 영향을 주는 인증서 rollback은 별도 판단합니다.
-
-인증서 SAN 추가·Argon2id 전환·admin 전용 proxy 컨테이너 제거·PWA와 실기기 검증의 상세 순서는
-[Iris Admin 홀로 운영 문서](https://github.com/park285/iris-admin/blob/main/docs/operations/hololive-web.md)를 따릅니다.
-2026-09-14 코드 이관 작업에서는 운영 배포·재시작·실제 계정 변경을 실행하지 않았습니다.
+현재 전환 상태와 검증 근거는 스택의 `DEC-20260914-admin-unified-login`을, 자세한 native 적용은
+[Iris Admin 운영 문서](https://github.com/park285/iris-admin/blob/main/docs/operations/hololive-web.md)를 따릅니다.
+Fallback delta: none.

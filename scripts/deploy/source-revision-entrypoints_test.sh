@@ -44,12 +44,9 @@ compose_env_resolve_file() { printf '%s\n' "${COMPOSE_ENV_FILE}"; }
 compose_env_validate_file_format() { :; }
 compose_env_assert_shell_matches_all_file_keys() { :; }
 compose_env_assert_no_shell_shadow_for_compose_files() { :; }
-compose_env_assert_admin_dashboard_loopback_bind() { :; }
 compose_env_assert_live_compat_for_host_networked_postgres() { :; }
 compose_env_read_value_from_file() {
-    if [[ "$2" == IRIS_ADMIN_REVISION ]]; then
-        printf '%s\n' "${FAKE_REVISION_LABEL:-}"
-    elif [[ "$2" == IRIS_BASE_URL ]]; then
+    if [[ "$2" == IRIS_BASE_URL ]]; then
         printf '%s\n' http://fixture.invalid
     fi
 }
@@ -95,14 +92,6 @@ if [[ "${1:-}" == compose ]]; then
 fi
 if [[ "$*" == *'{{.Image}}'* ]]; then
     printf '%s\n' sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    exit 0
-fi
-if [[ "$*" == *'.Architecture'* ]]; then
-    printf '%s\n' "${FAKE_ADMIN_ARCHITECTURE:-arm64}"
-    exit 0
-fi
-if [[ "${1:-}" == image && "$*" == *org.opencontainers.image.source* ]]; then
-    printf '%s\n' 'https://github.com/park285/iris-admin'
     exit 0
 fi
 if [[ "${1:-}" == image ]]; then

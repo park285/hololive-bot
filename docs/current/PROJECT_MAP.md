@@ -14,7 +14,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.27 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
-| `admin-dashboard-web` | Rust 2024 / React SSR | Iris Admin repository | Holo-only gateway, authentication, session rotation, protected mutations and PWA | 30190 |
+| `iris-admin-web` | Rust 2024 / React SSR | Iris Admin repository, iris-seoul | Unified Iris/ChatBotGo/Hololive app with account scopes and one PWA | 8878 (loopback) |
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Production docker compose stack | - |
 | `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
@@ -36,7 +36,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `holo-postgres` | PostgreSQL data store | Bridge-networked PostgreSQL; live-compat explicitly publishes `<tailnet-central>:5433` to container `5432`; `ssl=on`; `iris-stack internal CA` server cert mounted read-only from `/etc/stack-secrets/hololive-bot/postgres-tls/` at `/run/hololive-bot/postgres-tls/` |
 | `hololive-db-migrate` | Migration bootstrap/apply job | Must complete before app runtime services start; `PGSSLMODE=verify-full` with `postgres-ca.pem` |
 | `valkey-cache` | Valkey cache, queue, Pub/Sub | TCP and Unix socket endpoints |
-| `admin-dashboard` | Dashboard (Iris-owned Rust gateway + React SSR/PWA) | Not part of the 3 app runtime set |
+| `admin-dashboard-ingress` | Central shortlink ingress (the web runs on iris-seoul) | Not part of the 3 app runtime set |
 | `docker-proxy` | Docker socket proxy | Used only by `deunhealth` (autoheal). Neither dashboard nor `hololive-api` receives access |
 | `deunhealth` | Container autoheal | Restarts unhealthy labeled containers |
 

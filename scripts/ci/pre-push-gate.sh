@@ -314,8 +314,6 @@ run_reusable_phase() {
   run_self_test scripts/ci/nilaway-inputs_test.sh \
     scripts/ci/nilaway-inputs.sh scripts/ci/local-ci.sh
   run_self_test scripts/ci/race-parallel-guard_test.sh scripts/ci/local-ci.sh
-  run_self_test scripts/deploy/materialize-admin-dashboard-secrets_test.sh \
-    scripts/deploy/materialize-admin-dashboard-secrets.sh
   run_self_test scripts/refactor/grep-sensitive-logs_test.sh scripts/refactor/grep-sensitive-logs.sh
   run_self_test scripts/refactor/test-validate-no-admin-touch.sh \
     scripts/refactor/validate-no-admin-touch.sh

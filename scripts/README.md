@@ -111,7 +111,7 @@ route hook을 모두 준비한 뒤 apply drop-in을 설치해야 합니다. 운�
 - `hololive-compose.service` (+ `hololive-compose.service.d/`)
 - `hololive-daily-log-rollup.service`/`.timer`, `hololive-osaka-daily-log-rollup.service`/`.timer`
 - `hololive-main-log-mirror@.service`/`.timer`
-- `admin-dashboard-ingress`는 Compose의 host-networked Nginx 서비스로 `100.100.1.8:30191`을 수신하고 `127.0.0.1:30190`으로 전달합니다.
+- `admin-dashboard-ingress`는 Compose의 host-networked Nginx 서비스로 중앙 단축 링크 `100.100.1.8:30192`만 제공합니다. 관리자 웹은 iris-seoul의 통합 Iris Admin이 소유합니다.
 
 정리 원칙:
 - retired/no-op 스크립트는 유지하지 않습니다.

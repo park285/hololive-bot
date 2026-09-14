@@ -157,7 +157,7 @@ if grep -Fq 'scripts/ci/public-pr-collector-helper-gate.sh' "${TMP_DIR}/reusable
 fi
 
 # 홀로 저장소의 frontend gate는 웹 런타임 배포 경계를 검사합니다.
-run_phase reusable-frontend --phase=reusable "${range[@]}" GATE_TEST_CHANGED_FILES=deploy/compose/docker-compose.admin-security.yml
+run_phase reusable-frontend --phase=reusable "${range[@]}" GATE_TEST_CHANGED_FILES=deploy/compose/docker-compose.prod.yml
 grep -Fq 'bash scripts/ci/public-pr-frontend-gate.sh' "${TMP_DIR}/reusable-frontend.log" ||
   fail "web runtime boundary gate was not invoked"
 

@@ -25,7 +25,6 @@ func TestRepoRemoteBuildCacheExportsOnlyFinalImageLayers(t *testing.T) {
 		serviceHololiveAPI,
 		serviceAlarmWorker,
 		load.RuntimeYouTubeCollector,
-		serviceAdminDashboard,
 	} {
 		block := composeServiceBlock(t, content, service)
 		if got := strings.Count(block, "mode=min"); got != 1 {

@@ -4,7 +4,7 @@ These rules apply across agent runtimes. In an iris-stack checkout, also read `.
 
 ## Ownership
 
-The Go monorepo contains unified `hololive-api` (bot/admin/llm planes), alarm worker, `hololive/hololive-youtube-collector` (binary `youtube-collector`), shared libraries. Web implementation and image builds belong to Iris Admin; this repository owns the dashboard Compose service. The collector owns Holodex/Official Schedule/YouTube.js fetch, normalization, lease/checkpoint, and source-observation publishing. Its AP fleet is Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`.
+The Go monorepo contains unified `hololive-api` (bot/admin/llm planes), alarm worker, `hololive/hololive-youtube-collector` (binary `youtube-collector`), shared libraries. The unified admin web, credentials and native deployment belong to Iris Admin on iris-seoul. This repository owns the Hololive business API and the central shortlink ingress; it has no standalone dashboard service. The collector owns Holodex/Official Schedule/YouTube.js fetch, normalization, lease/checkpoint, and source-observation publishing. Its AP fleet is Osaka `youtube-collector-a`, Seoul `youtube-collector-b`, central `youtube-collector` (`c`), and Osaka2 `youtube-collector-d`.
 
 Central runs on `hololive-osaka` (aarch64). Builds, images, and tests stay on `kapu`, also the CLIProxy/observability host; host `compose.env` owns bind addresses, not Compose defaults.
 

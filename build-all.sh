@@ -77,15 +77,8 @@ verify_live_revision() {
         "live container for ${service}" \
         "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" \
         "${COMPOSE_FILES[@]}" ps -q "${service}")"
-    local expected_revision=""
-    if [[ "$service" == admin-dashboard ]]; then
-        expected_revision="$admin_revision"
-        deploy_verify_admin_container "$CONTAINER_CLI" "$container_id" "$admin_revision"
-    else
-        expected_revision="$REVISION"
-        deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
-    fi
-    echo "[VERIFY] ${service} live image revision=${expected_revision}"
+    deploy_verify_object_revision "${CONTAINER_CLI}" container "${container_id}" "${REVISION}"
+    echo "[VERIFY] ${service} live image revision=${REVISION}"
 }
 
 verify_build_services() {
@@ -244,7 +237,6 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
-compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 postgres_capacity_assert_target "${REPO_ROOT}" "${COMPOSE_ENV_FILE}"
 
 should_bump() {
@@ -388,22 +380,18 @@ else
         echo "[ERROR] host bind-mount preflight failed before cutover; aborting (no containers changed)" >&2
         exit 1
     fi
-    admin_image="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" ADMIN_DASHBOARD_IMAGE)"
-    admin_revision="$(compose_env_read_value_from_file "$COMPOSE_ENV_FILE" IRIS_ADMIN_REVISION)"
-    deploy_verify_admin_image "$CONTAINER_CLI" "${admin_image:-admin-dashboard:prod}" "$admin_revision"
     removed_runtime_cleanup_before_cutover
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --no-build
 
     echo "[VERIFY] Compose service state"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" ps
-    if ! cutover_health_gate hololive-api hololive-alarm-worker admin-dashboard; then
+    if ! cutover_health_gate hololive-api hololive-alarm-worker; then
         echo "[ERROR] health gate failed after cutover up" >&2
         exit 1
     fi
     verify_live_revision hololive-api
     verify_live_revision hololive-alarm-worker
-    verify_live_revision admin-dashboard
     echo "[DONE] Build and deployment complete"
 fi
 

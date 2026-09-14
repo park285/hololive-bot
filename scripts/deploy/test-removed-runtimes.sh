@@ -103,6 +103,7 @@ compose_file="${tmpdir}/docker-compose.yml"
 mkdir -p "${tmpdir}/shared-go" "${tmpdir}/iris-client-go"
 cat >"${env_file}" <<'EOF'
 TEST_VALUE=ok
+HOLOLIVE_BOT_PORT_BIND_IP=127.0.0.1
 EOF
 cat >"${compose_file}" <<'EOF'
 services:
@@ -176,8 +177,9 @@ COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
 HOLOLIVE_APP_UID="$(id -u)" \
 HOLOLIVE_APP_GID="$(id -g)" \
-    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d admin-dashboard >"${tmpdir}/dashboard.out" 2>&1
+HOLOLIVE_INGRESS_CONF="${tmpdir}/ingress.conf" \
+    "${ROOT_DIR}/scripts/deploy/compose.sh" -f "${compose_file}" up -d admin-dashboard-ingress >"${tmpdir}/ingress.out" 2>&1
 if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
-    fail "admin-dashboard-only start must not stop retired API-plane runtimes"
+    fail "shortlink ingress-only start must not stop retired API-plane runtimes"
 fi
-pass "admin-dashboard-only start does not trigger API-plane cutover cleanup"
+pass "shortlink ingress-only start does not trigger API-plane cutover cleanup"

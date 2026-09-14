@@ -174,24 +174,24 @@ assert_count "live-compat Iris allowlist" 2 "IRIS_BASE_URL_ALLOWED_HOSTS:-$seoul
 assert_count "live-compat H3 identity" 1 "HOLOLIVE_H3_SERVER_NAME:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat H3 bind" 2 "HOLOLIVE_API_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 
-assert_count "central ingress source" 2 "allow $seoul;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
-assert_count "central ingress loopback" 2 "allow 127.0.0.1;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
-assert_count "central ingress bind owner" 2 "allow @BIND_IP@;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
-[[ "$(grep -Ec '^[[:space:]]*allow[[:space:]]+' "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template")" -eq 6 ]] ||
+assert_count "central ingress source" 1 "allow $seoul;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
+assert_count "central ingress loopback" 1 "allow 127.0.0.1;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
+assert_count "central ingress bind owner" 1 "allow @BIND_IP@;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
+[[ "$(grep -Ec '^[[:space:]]*allow[[:space:]]+' "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template")" -eq 3 ]] ||
   fail "central ingress allow directive set"
 assert_count "central firewall source" 1 "ip saddr $seoul tcp dport" "$root_dir/scripts/systemd/admin-dashboard-ingress.nft"
 [[ "$(grep -Ec 'ip saddr' "$root_dir/scripts/systemd/admin-dashboard-ingress.nft")" -eq 1 ]] ||
   fail "central firewall source directive set"
 printf '%s\n' \
-  'iifname "lo" tcp dport { 30191, 30192 } accept' \
-  "iifname \"tailscale0\" ip saddr $seoul tcp dport { 30191, 30192 } accept" \
+  'iifname "lo" tcp dport 30192 accept' \
+  "iifname \"tailscale0\" ip saddr $seoul tcp dport 30192 accept" \
   'tcp dport { 30191, 30192 } reject with tcp reset' | LC_ALL=C sort >"$tmpdir/expected-nft-ports"
 awk '/tcp dport/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
   "$root_dir/scripts/systemd/admin-dashboard-ingress.nft" | LC_ALL=C sort >"$tmpdir/actual-nft-ports"
 cmp -s "$tmpdir/expected-nft-ports" "$tmpdir/actual-nft-ports" || fail "central firewall target-port rule set"
 printf '%s\n' \
-  'iifname "lo" tcp dport { 30191, 30192 } accept' \
-  "iifname \"tailscale0\" ip saddr $seoul tcp dport { 30191, 30192 } accept" | LC_ALL=C sort >"$tmpdir/expected-nft-accepts"
+  'iifname "lo" tcp dport 30192 accept' \
+  "iifname \"tailscale0\" ip saddr $seoul tcp dport 30192 accept" | LC_ALL=C sort >"$tmpdir/expected-nft-accepts"
 awk '/[[:space:]]accept([[:space:]]|$)/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
   "$root_dir/scripts/systemd/admin-dashboard-ingress.nft" | LC_ALL=C sort >"$tmpdir/actual-nft-accepts"
 cmp -s "$tmpdir/expected-nft-accepts" "$tmpdir/actual-nft-accepts" || fail "central firewall accept verdict set"
@@ -199,8 +199,8 @@ printf '%s\n' \
   'table inet admin_dashboard_ingress {' \
   'chain input {' \
   'type filter hook input priority -20; policy accept;' \
-  'iifname "lo" tcp dport { 30191, 30192 } accept' \
-  "iifname \"tailscale0\" ip saddr $seoul tcp dport { 30191, 30192 } accept" \
+  'iifname "lo" tcp dport 30192 accept' \
+  "iifname \"tailscale0\" ip saddr $seoul tcp dport 30192 accept" \
   'tcp dport { 30191, 30192 } reject with tcp reset' \
   '}' \
   '}' >"$tmpdir/expected-nft-grammar"

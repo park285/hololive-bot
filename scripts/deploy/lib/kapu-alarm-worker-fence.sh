@@ -78,7 +78,7 @@ compose_action_starts_alarm_worker() {
         fi
         if [[ "${no_deps}" == false ]]; then
             case "${target}" in
-                hololive-api|admin-dashboard|admin-dashboard-ingress)
+                hololive-api|admin-dashboard-ingress)
                     return 0
                     ;;
             esac

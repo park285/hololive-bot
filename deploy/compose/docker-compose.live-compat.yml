@@ -27,6 +27,9 @@ services:
     cap_drop:
       - ALL
     read_only: true
+    depends_on:
+      hololive-api:
+        condition: service_healthy
     network_mode: host
     volumes:
       - ${HOLOLIVE_INGRESS_CONF:-/run/hololive-bot/admin-dashboard-ingress.conf}:/etc/nginx/admin-dashboard-ingress.conf:ro
@@ -35,9 +38,6 @@ services:
       - /tmp:size=16m,mode=1777,uid=101,gid=101
       - /var/cache/nginx:size=16m,mode=0755,uid=101,gid=101
       - /var/run:size=1m,mode=0755,uid=101,gid=101
-    depends_on:
-      admin-dashboard:
-        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -142,14 +142,8 @@ services:
     networks:
       observability-traces: {}
 
-  admin-dashboard:
-    environment:
-      IRIS_ADMIN_WEB_ORIGIN: ${IRIS_ADMIN_WEB_ORIGIN:-https://admin.holoshi.com}
-    ports:
-      - "${ADMIN_DASHBOARD_PORT_BIND_IP:-127.0.0.1}:30190:30190"
-
 networks:
-  # 게이트웨이 고정: admin-dashboard IRIS_ADMIN_WEB_TRUSTED_PROXY(172.23.0.1)의 전제. down→up 재생성에서
+  # 기존 central network 주소를 유지합니다. down→up 재생성에서
   # 두 네트워크가 대역을 서로 맞바꿔 잡은 사례(2026-07-05)가 있어 둘 다 핀한다. central/main-ap
   # 전용 오버레이라 AP 호스트의 동적 할당에는 영향 없다.
   hololive-net:

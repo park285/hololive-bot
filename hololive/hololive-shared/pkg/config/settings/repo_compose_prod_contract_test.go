@@ -164,52 +164,15 @@ func assertProdComposeEgressEnvFiles(t *testing.T, content string) {
 func assertProdComposeNonEgressIsolation(t *testing.T, content string) {
 	t.Helper()
 
-	nonEgress := []string{load.RuntimeYouTubeCollector, serviceAdminDashboard}
-	for _, service := range nonEgress {
-		block := composeServiceBlock(t, content, service)
-		assertNonEgressEnvFilePolicy(t, service, block)
-
-		for _, pattern := range []string{"*iris-env", irisWebhookTokenEnv, irisBotTokenEnv} {
-			if strings.Contains(block, pattern) {
-				t.Fatalf("%s contains Iris egress pattern %q", service, pattern)
-			}
-		}
-
-		if service != serviceAdminDashboard {
-			for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
-				if strings.Contains(block, key) {
-					t.Fatalf("%s contains dashboard-only secret %q", service, key)
-				}
-			}
-		}
-	}
-}
-
-func assertNonEgressEnvFilePolicy(t *testing.T, service, block string) {
-	t.Helper()
-
-	if service == load.RuntimeYouTubeCollector {
-		if !strings.Contains(block, "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}") {
-			t.Fatal("youtube-collector must inject secrets via the scoped youtube-collector.env env_file")
-		}
-
-		return
+	block := composeServiceBlock(t, content, load.RuntimeYouTubeCollector)
+	if !strings.Contains(block, "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}") {
+		t.Fatal("youtube-collector must inject secrets via its scoped env_file")
 	}
 
-	if service != serviceAdminDashboard {
-		if strings.Contains(block, "env_file:") {
-			t.Fatalf("%s must not define env_file in hardened docker-compose.prod.yml", service)
+	for _, pattern := range []string{"*iris-env", irisWebhookTokenEnv, irisBotTokenEnv, "ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
+		if strings.Contains(block, pattern) {
+			t.Fatalf("collector contains unrelated credential pattern %q", pattern)
 		}
-
-		return
-	}
-
-	if strings.Contains(block, "env_file:") {
-		t.Fatal("admin-dashboard must read private files without an env_file")
-	}
-
-	if !strings.Contains(block, "CREDENTIALS_DIRECTORY: /run/hololive-bot/iris-admin-credentials") {
-		t.Fatal("admin-dashboard must declare its Iris-owned private credential directory")
 	}
 }
 
@@ -333,16 +296,10 @@ func assertValkeyConsumersIsolated(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	adminEnv := composeEnvironment(t, cfg, serviceAdminDashboard)
-
-	for _, key := range []string{"VALKEY_URL", "VALKEY_URL_FILE", "SESSION_SECRET", "ADMIN_PASS_HASH", "DOCKER_HOST"} {
-		if _, present := adminEnv[key]; present {
-			t.Fatalf("admin-dashboard must not receive retired capability %s", key)
+	for _, retired := range []string{"admin-dashboard", "admin-docker-proxy"} {
+		if _, present := cfg.Services[retired]; present {
+			t.Fatalf("standalone admin infrastructure remains: %s", retired)
 		}
-	}
-
-	if _, present := composeDependsOn(t, cfg, serviceAdminDashboard)["valkey-cache"]; present {
-		t.Fatal("admin-dashboard must not depend on Valkey sessions")
 	}
 }
 
@@ -374,7 +331,7 @@ func assertProdRenderedPostgresIsolation(t *testing.T, cfg renderedCompose) {
 func assertProdRenderedNonEgressSecretIsolation(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	for _, service := range []string{load.RuntimeYouTubeCollector, serviceAdminDashboard} {
+	for _, service := range []string{load.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 
 		for _, key := range []string{irisWebhookTokenEnv, irisBotTokenEnv} {
@@ -383,11 +340,9 @@ func assertProdRenderedNonEgressSecretIsolation(t *testing.T, cfg renderedCompos
 			}
 		}
 
-		if service != serviceAdminDashboard {
-			for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
-				if _, ok := env[key]; ok {
-					t.Fatalf("%s rendered with dashboard-only secret %s", service, key)
-				}
+		for _, key := range []string{"ADMIN_PASS_BCRYPT", "ADMIN_PASS_HASH", "ADMIN_SECRET_KEY", "SESSION_SECRET"} {
+			if _, ok := env[key]; ok {
+				t.Fatalf("%s rendered with dashboard-only secret %s", service, key)
 			}
 		}
 	}
@@ -461,7 +416,7 @@ func assertProdRenderedNoRuntimeConfigMount(t *testing.T, cfg renderedCompose) {
 		}
 	}
 
-	for _, service := range []string{load.RuntimeYouTubeCollector, serviceAdminDashboard} {
+	for _, service := range []string{load.RuntimeYouTubeCollector} {
 		for _, target := range composeVolumeTargets(t, cfg, service) {
 			if target == "/app/runtime-config" {
 				t.Fatalf("%s still mounts runtime-config", service)

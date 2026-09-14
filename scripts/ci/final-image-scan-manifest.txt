@@ -1,4 +1,3 @@
-local|linux/arm64|admin-dashboard:prod
 local|linux/arm64|hololive-alarm-worker:prod
 local|linux/arm64|hololive-api:prod
 local|linux/arm64|hololive-youtube-collector:prod
