@@ -7,10 +7,6 @@ compose_service_resolve_build_target() {
         hololive-api) printf '%s\n' "hololive-api" ;;
         alarm-worker|hololive-alarm-worker) printf '%s\n' "hololive-alarm-worker" ;;
         youtube-collector|youtube-collector-c) printf '%s\n' "youtube-collector" ;;
-        admin-dashboard)
-            echo "admin-dashboard is built by iris-admin/scripts/build-hololive-image.sh" >&2
-            return 1
-            ;;
         *) return 1 ;;
     esac
 }
@@ -33,7 +29,6 @@ compose_service_resolve_redeploy_target() {
         valkey-cache|valkey) printf '%s\n' "valkey-cache" ;;
         hololive-db-migrate|migrate) printf '%s\n' "hololive-db-migrate" ;;
         docker-proxy) printf '%s\n' "docker-proxy" ;;
-        admin-dashboard|admin) printf '%s\n' "admin-dashboard" ;;
         deunhealth) printf '%s\n' "deunhealth" ;;
         all) printf '%s\n' "" ;;
         *) return 1 ;;
@@ -49,7 +44,6 @@ compose_service_redeploy_usage_lines() {
         "  valkey-cache | valkey" \
         "  hololive-db-migrate | migrate" \
         "  docker-proxy" \
-        "  admin-dashboard | admin" \
         "  deunhealth" \
         "  all"
 }

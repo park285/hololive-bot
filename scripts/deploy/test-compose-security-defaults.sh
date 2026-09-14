@@ -101,11 +101,10 @@ if valkey.get("user") != "999:1000":
     print("[FAIL] valkey-cache must run as 999:1000 so the unix socket stays gid-1000/0660")
     sys.exit(1)
 
-dashboard = services.get("admin-dashboard", {})
-ports = dashboard.get("ports", []) or []
-if not any("127.0.0.1" in str(port) and "30190" in str(port) for port in ports):
-    print("[FAIL] admin-dashboard prod default must bind 30190 to loopback")
+if "admin-dashboard" in services or "admin-docker-proxy" in services:
+    print("[FAIL] central must not contain a standalone admin web or its Docker proxy")
     sys.exit(1)
+
 PY
 pass "prod compose security and PostgreSQL budget defaults are explicit"
 
@@ -116,25 +115,8 @@ merged_live="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docke
 import json, sys
 
 merged = json.loads(sys.argv[1])
-dashboard = merged.get("services", {}).get("admin-dashboard", {})
-ports = dashboard.get("ports", []) or []
-if not any("127.0.0.1" in str(port) and "30190" in str(port) for port in ports):
-    print("[FAIL] admin-dashboard live-compat default must stay loopback; Tailscale exposure is opt-in")
-    sys.exit(1)
-def env_map(svc):
-    env = svc.get("environment", {}) or {}
-    if isinstance(env, list):
-        out = {}
-        for item in env:
-            key, sep, value = str(item).partition("=")
-            out[key] = value if sep else None
-        return out
-    return env
-
-env = env_map(dashboard)
-origins = str(env.get("IRIS_ADMIN_WEB_ORIGIN", ""))
-if "100.100.1.3:30190" in origins:
-    print("[FAIL] admin-dashboard live-compat default origins must not include Tailscale host")
+if "admin-dashboard" in merged.get("services", {}):
+    print("[FAIL] live-compat must not restore the standalone admin web")
     sys.exit(1)
 
 ingress = merged.get("services", {}).get("admin-dashboard-ingress", {})
@@ -143,7 +125,7 @@ if not health or health[0] != "CMD" or any("HOLOLIVE_BOT_PORT_BIND_IP" in str(it
     print("[FAIL] admin-dashboard-ingress healthcheck must avoid shell interpolation of the bind address")
     sys.exit(1)
 PY
-pass "live-compat dashboard exposure is opt-in by default"
+pass "live-compat preserves shortlink ingress without a standalone admin web"
 
 nginx_image="$("${CI_PYTHON_BIN}" - "${COMPOSE_DIR}/docker-compose.live-compat.yml" <<'PY'
 import re, sys
@@ -176,8 +158,8 @@ docker run --rm \
   || fail "admin-dashboard-ingress nginx -t failed"
 pass "admin-dashboard-ingress config passes nginx -t with the pinned image"
 
-# 실제 Nginx proxy가 Rust의 단일 IP 계약으로 전달하는지 격리된 loopback upstream으로 확인한다.
-sed '/^http {/a\    server { listen 127.0.0.1:30190; location / { return 200 "$http_x_forwarded_for"; } }' \
+# 남은 shortlink ingress는 Seoul이 마지막에 기록한 IP로 제한 예산을 구분합니다.
+sed '/location \^~ \/l\//i\        location = /__client { return 200 "$shortlink_client"; }' \
   "${nginx_test_dir}/admin-dashboard-ingress.conf" >"${nginx_test_dir}/admin-client.test.conf"
 timeout 30 docker run --rm --network none --read-only \
   --tmpfs /tmp:size=16m --tmpfs /var/cache/nginx:size=16m --tmpfs /var/run:size=1m \
@@ -193,16 +175,15 @@ timeout 30 docker run --rm --network none --read-only \
     done
     test "$ready" = true
     check_client() {
-      actual=$(wget -q -O - --header "X-Forwarded-For: $1" http://127.0.0.1:30191/)
+      actual=$(wget -q -O - --header "X-Forwarded-For: $1" http://127.0.0.1:30192/__client)
       test "$actual" = "$2"
     }
     check_client "203.0.113.11" "203.0.113.11"
     check_client "198.51.100.6, 203.0.113.11" "203.0.113.11"
     check_client "forged, 198.51.100.6, 2001:db8::9" "2001:db8::9"
     check_client "203.0.113.22" "203.0.113.22"
-    test "$(wget -q -O - http://127.0.0.1:30191/)" = 127.0.0.1
-  ' || fail "admin ingress did not preserve one gateway-observed client address"
-pass "admin ingress forwards the gateway-observed client IP and ignores forged prefixes"
+  ' || fail "shortlink ingress did not use the gateway-observed client address"
+pass "shortlink ingress rate-limit key ignores forged client prefixes"
 
 sed \
   -e 's/listen 443 ssl;/listen 127.0.0.1:30999;/' \

@@ -112,7 +112,6 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"HOLOLIVE_API_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
-		"ADMIN_DASHBOARD_ENV_FILE="+writeAdminDashboardEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
 		"IRIS_WEBHOOK_TOKEN=dummy",
@@ -219,7 +218,6 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 	}),
 		"COMPOSE_ENV_FILE="+writeAPComposeEnvFile(t),
 		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
-		"ADMIN_DASHBOARD_ENV_FILE="+writeAdminDashboardEnvFile(t),
 		"DB_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
 		"ADMIN_PASS_BCRYPT=dummy",
@@ -273,19 +271,6 @@ func writeCentralComposeEnvFile(t *testing.T) string {
 		"IRIS_WEBHOOK_TOKEN=dummy",
 		"IRIS_BOT_TOKEN=dummy",
 		"SESSION_SECRET=dummy",
-	})
-}
-
-// /etc/stack-secrets/hololive-bot/admin-dashboard.env는 0600 root 렌더 파일이라 kapu로 도는 테스트는
-// 기본 경로를 열 수 없다(required:false는 부재만 허용). 셸 테스트와 동일하게 스텁으로 대체한다.
-func writeAdminDashboardEnvFile(t *testing.T) string {
-	t.Helper()
-
-	return writeTempEnvFile(t, "admin-dashboard-*.env", []string{
-		"ADMIN_PASS_HASH=dummy",
-		"SESSION_SECRET=dummy",
-		"VALKEY_URL=:dummy@valkey-cache:6379",
-		"HOLO_BOT_API_KEY=dummy",
 	})
 }
 

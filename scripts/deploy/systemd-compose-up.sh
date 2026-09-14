@@ -31,7 +31,6 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   exec_tree=(
     "${verifier}"
     "${ROOT_DIR}/scripts/deploy/systemd-compose-up.sh"
-    "${ROOT_DIR}/scripts/deploy/materialize-admin-dashboard-secrets.sh"
     "${ROOT_DIR}/scripts/deploy/compose.sh"
     "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
     "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
@@ -78,7 +77,6 @@ wait_for_file() {
 }
 
 COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
-ADMIN_DASHBOARD_ENV_FILE="${ADMIN_DASHBOARD_ENV_FILE:-/etc/stack-secrets/hololive-bot/admin-dashboard.env}"
 wait_for_file "$COMPOSE_ENV_FILE"
 
 bind_ip="$(sed -n 's/^HOLOLIVE_BOT_PORT_BIND_IP=[[:space:]]*//p' "$COMPOSE_ENV_FILE" | head -1)"
@@ -101,7 +99,6 @@ for file in \
   /etc/stack-secrets/hololive-bot/bot.env \
   /etc/stack-secrets/hololive-bot/alarm-worker.env \
   /etc/stack-secrets/hololive-bot/youtube-collector.env \
-  "${ADMIN_DASHBOARD_ENV_FILE}" \
   /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   /etc/stack-secrets/hololive-bot/certs/hololive-h3.key \
   /etc/stack-secrets/hololive-bot/certs/iris-ca.pem \
@@ -112,18 +109,10 @@ do
   wait_for_file "$file"
 done
 
-export COMPOSE_ENV_FILE ADMIN_DASHBOARD_ENV_FILE
-# 고정 Rust H3 transport는 URL의 hostname을 검증합니다. 인증서를 바꾸지 않고 사전 조건만 검사합니다.
-openssl x509 -in /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt -noout -ext subjectAltName |
-  tr ',' '\n' | sed 's/^[[:space:]]*//' | grep -qx 'DNS:hololive-api' || {
-    echo "[SECURITY] hololive-h3 certificate must include DNS SAN hololive-api before Rust web cutover" >&2
-    exit 1
-  }
-"${ROOT_DIR}/scripts/deploy/materialize-admin-dashboard-secrets.sh"
+export COMPOSE_ENV_FILE
 
 base_files=(
   -f deploy/compose/docker-compose.prod.yml
-  -f deploy/compose/docker-compose.admin-security.yml
 )
 if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
   base_files+=(-f deploy/compose/docker-compose.live-compat.yml)

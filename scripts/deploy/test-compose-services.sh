@@ -63,7 +63,7 @@ expect_eq "$(compose_service_resolve_build_target alarm-worker)" "hololive-alarm
 expect_eq "$(compose_service_resolve_build_target hololive-alarm-worker)" "hololive-alarm-worker" "build target hololive-alarm-worker"
 expect_eq "$(compose_service_resolve_build_target youtube-collector)" "youtube-collector" "build target youtube-collector"
 expect_eq "$(compose_service_resolve_build_target youtube-collector-c)" "youtube-collector" "build alias youtube-collector-c"
-expect_fail "web image is built by Iris Admin" compose_service_resolve_build_target admin-dashboard
+expect_fail "standalone web build removed" compose_service_resolve_build_target admin-dashboard
 for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-api llm llm-scheduler dispatcher-go; do
     expect_fail "build target rejects retired runtime ${removed}" compose_service_resolve_build_target "${removed}"
 done
@@ -71,7 +71,8 @@ done
 expect_eq "$(compose_service_resolve_redeploy_target hololive-api)" "hololive-api" "redeploy target hololive-api"
 expect_eq "$(compose_service_resolve_redeploy_target alarm-worker)" "hololive-alarm-worker" "redeploy alias alarm-worker"
 expect_eq "$(compose_service_resolve_redeploy_target postgres)" "holo-postgres" "redeploy alias postgres"
-expect_eq "$(compose_service_resolve_redeploy_target admin)" "admin-dashboard" "redeploy alias admin-dashboard"
+expect_fail "standalone admin redeploy removed" compose_service_resolve_redeploy_target admin
+expect_fail "standalone admin service removed" compose_service_resolve_redeploy_target admin-dashboard
 expect_eq "$(compose_service_resolve_redeploy_target all)" "" "redeploy all sentinel"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector-c)" "youtube-collector" "redeploy alias youtube-collector-c"
 expect_eq "$(compose_service_resolve_redeploy_target youtube-collector)" "youtube-collector" "redeploy target youtube-collector"

@@ -11,33 +11,23 @@ for retired in admin-dashboard/backend admin-dashboard/frontend admin-dashboard/
   }
 done
 cd "$root/deploy/compose"
-docker compose -f docker-compose.prod.yml -f docker-compose.admin-security.yml \
+docker compose -f docker-compose.prod.yml -f docker-compose.live-compat.yml \
   config --no-interpolate --no-env-resolution --format json |
   jq -e '
-    (.services["admin-dashboard"]) as $web |
-    ($web.build == null) and ($web.env_file == null or $web.env_file == []) and
-    ($web.read_only == true) and
-    ($web.environment.IRIS_ADMIN_WEB_SURFACE == "hololive") and
-    ($web.environment.IRIS_ADMIN_WEB_BIND == "0.0.0.0:30190") and
-    ($web.environment.IRIS_ADMIN_WEB_TRUSTED_PROXY == "172.23.0.1") and
-    ($web.environment.IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE == "/run/hololive-bot/certs/iris-ca.pem") and
-    ($web.environment.CREDENTIALS_DIRECTORY == "/run/hololive-bot/iris-admin-credentials") and
-    (($web.environment | keys | sort) == ([
-      "CREDENTIALS_DIRECTORY", "IRIS_ADMIN_WEB_BIND", "IRIS_ADMIN_WEB_SURFACE",
-      "IRIS_ADMIN_WEB_TRUSTED_PROXY", "IRIS_ADMIN_WEB_ORIGIN", "IRIS_ADMIN_WEB_USER_LOGIN",
-      "IRIS_ADMIN_WEB_HOLOLIVE_ORIGIN", "IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE",
-      "IRIS_ADMIN_WEB_TEST_ACCOUNT_DIR"
-    ] | sort)) and
-    (($web.networks | keys) == ["hololive-net"]) and
-    (($web.depends_on | keys) == ["hololive-api"]) and
-    ($web.environment.IRIS_ADMIN_WEB_TEST_ACCOUNT_DIR == "/run/hololive-bot/test-account") and
-    (all($web.ports[]; .host_ip == "127.0.0.1" and .target == 30190)) and
-    (all($web.volumes[]; .read_only == true)) and
-    (($web.volumes | map(.target) | sort) == [
-      "/run/hololive-bot/certs/iris-ca.pem", "/run/hololive-bot/iris-admin-credentials"
-    ]) and
+    (.services["admin-dashboard"] == null) and
     (.services["admin-docker-proxy"] == null) and
     (.networks["admin-docker-proxy-net"] == null) and
-    (.services.deunhealth.environment.DOCKER_HOST == "tcp://docker-proxy:2375")
+    (.services.deunhealth.environment.DOCKER_HOST == "tcp://docker-proxy:2375") and
+    (.services["admin-dashboard-ingress"].network_mode == "host") and
+    ((.services["admin-dashboard-ingress"].depends_on // {} | has("admin-dashboard")) | not) and
+    all(.services[];
+      (.environment == null or
+        ((.environment | type) == "array" and
+          (.environment | all(.[]; type == "string" and (startswith("IRIS_ADMIN_WEB_") | not)))) or
+        ((.environment | type) == "object" and
+          (.environment | keys | all(.[]; startswith("IRIS_ADMIN_WEB_") | not)))) and
+      all(.volumes[]?; .target != "/run/hololive-bot/iris-admin-credentials"))
   ' >/dev/null
-echo "[web-boundary] Iris-owned image, Holo-only credentials and no Docker/host resource capability"
+! grep -Eq '30190|30191|ADMIN_MAINTENANCE' "$root/deploy/nginx/admin-dashboard-ingress.conf.template"
+grep -Eq 'listen @BIND_IP@:30192;' "$root/deploy/nginx/admin-dashboard-ingress.conf.template"
+echo "[web-boundary] unified Iris app owns the web; central retains business H3 and shortlinks"

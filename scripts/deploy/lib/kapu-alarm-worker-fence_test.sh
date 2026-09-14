@@ -18,7 +18,7 @@ assert_allowed() {
 assert_blocked 0 up
 assert_blocked 0 up -d hololive-alarm-worker
 assert_blocked 0 up -d hololive-api
-assert_blocked 0 up -d admin-dashboard
+assert_blocked 0 up -d admin-dashboard-ingress
 assert_blocked 0 run --rm hololive-api
 assert_blocked 0 start
 assert_blocked 0 restart hololive-alarm-worker

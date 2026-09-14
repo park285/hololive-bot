@@ -44,9 +44,6 @@ services:
     profiles: !override ["central-only"]
     env_file: !override []
 
-  admin-dashboard:
-    profiles: !override ["central-only"]
-
   docker-proxy:
     profiles: !override ["central-only"]
 

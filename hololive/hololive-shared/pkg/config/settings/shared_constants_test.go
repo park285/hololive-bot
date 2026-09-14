@@ -1,10 +1,9 @@
 package settings
 
 const (
-	serviceHololiveAPI    = "hololive-api"
-	serviceAlarmWorker    = "hololive-alarm-worker"
-	serviceAdminDashboard = "admin-dashboard"
-	serviceHoloPostgres   = "holo-postgres"
+	serviceHololiveAPI  = "hololive-api"
+	serviceAlarmWorker  = "hololive-alarm-worker"
+	serviceHoloPostgres = "holo-postgres"
 
 	runtimeCertsDir    = "/run/hololive-bot/certs"
 	hololiveH3KeyPath  = "/run/hololive-bot/certs/hololive-h3.key"

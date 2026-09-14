@@ -172,7 +172,7 @@ compose_env_is_allowed_shell_control_key() {
         COMPOSE_ENV_FILE|STACK_SECRETS_HOLOLIVE_ENV_FILE|COMPOSE_PROFILES|COMPOSE_PROJECT_NAME)
             return 0
             ;;
-        HOLOLIVE_API_ENV_FILE|HOLOLIVE_ALARM_WORKER_ENV_FILE|HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE|ADMIN_DASHBOARD_ENV_FILE)
+        HOLOLIVE_API_ENV_FILE|HOLOLIVE_ALARM_WORKER_ENV_FILE|HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE)
             return 0
             ;;
         SHARED_GO_WORKSPACE_PATH|IRIS_CLIENT_GO_WORKSPACE_PATH)
@@ -217,43 +217,6 @@ compose_env_assert_no_shell_shadow_for_compose_files() {
             return 1
         fi
     done < <(compose_env_list_interpolation_keys_from_files "$@")
-}
-
-compose_env_admin_dashboard_bind_ip() {
-    local env_file="$1"
-    local value=""
-
-    if [[ -n "${ADMIN_DASHBOARD_PORT_BIND_IP+x}" ]]; then
-        printf '%s\n' "${ADMIN_DASHBOARD_PORT_BIND_IP}"
-        return
-    fi
-
-    if [[ -n "${env_file}" && -r "${env_file}" ]] \
-       && compose_env_key_exists_in_file "${env_file}" "ADMIN_DASHBOARD_PORT_BIND_IP"; then
-        value="$(compose_env_read_value_from_file "${env_file}" "ADMIN_DASHBOARD_PORT_BIND_IP")"
-        printf '%s\n' "${value}"
-        return
-    fi
-
-    printf '%s\n' "127.0.0.1"
-}
-
-compose_env_assert_admin_dashboard_loopback_bind() {
-    local env_file="${1:-}"
-    local bind_ip=""
-    bind_ip="$(compose_env_admin_dashboard_bind_ip "${env_file}")"
-
-    case "${bind_ip}" in
-        127.0.0.1|::1|"")
-            return 0
-            ;;
-    esac
-
-    echo "[ERROR] ADMIN_DASHBOARD_PORT_BIND_IP must bind admin-dashboard to loopback" >&2
-    echo "        (127.0.0.1 or ::1), got: ${bind_ip}." >&2
-    echo "        The dashboard has no edge auth in front of the bind; expose it via a" >&2
-    echo "        reverse proxy on loopback instead of binding to a routable address." >&2
-    return 1
 }
 
 compose_postgres_runtime_network_mode() {

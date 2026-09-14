@@ -19,7 +19,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
 fi
 
 endpoint_root="$(mktemp -d)"
-for endpoint_name in app alarm-worker youtube-collector admin-dashboard; do
+for endpoint_name in app alarm-worker youtube-collector; do
     : >"${endpoint_root}/${endpoint_name}.env"
 done
 cat >"${endpoint_root}/override.env" <<EOF
@@ -31,7 +31,6 @@ LIVE_LOGS_PATH=/srv/hololive-logs-fixture
 HOLOLIVE_API_ENV_FILE=${endpoint_root}/app.env
 HOLOLIVE_ALARM_WORKER_ENV_FILE=${endpoint_root}/alarm-worker.env
 HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE=${endpoint_root}/youtube-collector.env
-ADMIN_DASHBOARD_ENV_FILE=${endpoint_root}/admin-dashboard.env
 HOLOLIVE_CENTRAL_CACHE_HOST=cache.service.fixture
 HOLOLIVE_CENTRAL_POSTGRES_HOST=postgres.service.fixture
 HOLOLIVE_CENTRAL_POSTGRES_PORT=15432

@@ -12,9 +12,8 @@ STUB_COLLECTOR_DISABLED_ENV="$(mktemp)"
 STUB_AP_COMPOSE_ENV="$(mktemp)"
 STUB_APP_ENV="$(mktemp)"
 STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
-STUB_ADMIN_DASHBOARD_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_COLLECTOR_DISABLED_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}" "${STUB_ADMIN_DASHBOARD_ENV}"
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_COLLECTOR_DISABLED_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}"
 }
 trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
@@ -59,12 +58,6 @@ SCRAPER_PROXY_URL=http://proxy.invalid
 YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z
 YOUTUBE_ENABLE_QUOTA_BUILDING=true
 EOF
-cat >"${STUB_ADMIN_DASHBOARD_ENV}" <<'EOF'
-ADMIN_PASS_HASH=stub
-SESSION_SECRET=stub
-VALKEY_URL=:stub@valkey-cache:6379
-HOLO_BOT_API_KEY=stub
-EOF
 
 PROD_OVERLAYS=(
     -f deploy/compose/docker-compose.prod.yml
@@ -88,7 +81,6 @@ render() {
         HOLOLIVE_API_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_ALARM_WORKER_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="${STUB_YOUTUBE_PRODUCER_ENV}" \
-        ADMIN_DASHBOARD_ENV_FILE="${STUB_ADMIN_DASHBOARD_ENV}" \
         COMPOSE_PROFILES="${profiles}" \
         "${ROOT_DIR}/scripts/deploy/compose.sh" "$@" config --format json
 }
@@ -230,13 +222,7 @@ for name in ("hololive-api", "hololive-alarm-worker"):
     env = (main.get(name) or {}).get("environment") or {}
     check(f"{name} receives API_SECRET_KEY from scoped env_file", env.get("API_SECRET_KEY") == "stub")
 
-admin_env = (main.get("admin-dashboard") or {}).get("environment") or {}
-check("admin-dashboard loads mounted credentials without secret environment values",
-      admin_env.get("CREDENTIALS_DIRECTORY") == "/run/hololive-bot/iris-admin-credentials" and "ADMIN_PASS_HASH" not in admin_env)
-check(
-    "admin-dashboard Rust/Node healthcheck timeout is 5s",
-    healthcheck_timeout(main.get("admin-dashboard") or {}) == "5s",
-)
+check("central does not contain a standalone admin web", "admin-dashboard" not in main)
 
 def h3_addr_aligned(svc, port):
     return (svc.get("environment") or {}).get("HOLOLIVE_H3_ADDR") == f":{port}"

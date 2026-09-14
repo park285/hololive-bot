@@ -237,7 +237,6 @@ case "${collector_disable_value}" in
 esac
 
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
-compose_env_assert_admin_dashboard_loopback_bind "${COMPOSE_ENV_FILE}"
 
 if [[ "${compose_requires_capacity}" == true ]]; then
     postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${compose_scale_overrides[@]}"
@@ -303,7 +302,7 @@ if [[ "${compose_invokes_up}" == true ]]; then
                 break
             fi
         done
-        gate_targets=(hololive-api hololive-alarm-worker admin-dashboard)
+        gate_targets=(hololive-api hololive-alarm-worker)
         if [[ "${collector_disabled}" == false ]]; then
             gate_targets+=(youtube-collector)
         fi

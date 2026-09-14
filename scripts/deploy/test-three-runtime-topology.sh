@@ -56,7 +56,7 @@ for expected in hololive-api hololive-alarm-worker youtube-collector; do
 done
 pass "production Compose defines all three application runtimes"
 
-for removed in hololive-bot hololive-admin-api llm-scheduler; do
+for removed in hololive-bot hololive-admin-api llm-scheduler admin-dashboard; do
     for file in "${ACTIVE_COMPOSE_FILES[@]}"; do
         if list_services "${file}" | grep -Fxq "${removed}"; then
             fail "active Compose file still defines retired service ${removed}: ${file}"
@@ -84,9 +84,7 @@ pass "production image build contract targets hololive-api only"
 
 grep -Fq 'ALARM_INTERNAL_URL: https://hololive-alarm-worker:30007' "${PROD_FILE}" \
     || fail "hololive-api does not target alarm-worker as the alarm provider"
-grep -Fq 'IRIS_ADMIN_WEB_HOLOLIVE_ORIGIN: https://hololive-api:30006' "${PROD_FILE}" \
-    || fail "admin-dashboard does not target the unified admin plane"
-pass "provider and dashboard URLs target the three-runtime topology"
+pass "the business API targets alarm-worker as the alarm provider"
 
 for port in 30001 30003 30006; do
     grep -Fq "127.0.0.1:${port}:${port}" "${PROD_FILE}" \

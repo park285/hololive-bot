@@ -9,7 +9,7 @@ trap 'rm -rf "${tmpdir}"' EXIT
 
 mkdir -p "${tmpdir}/deploy/nginx"
 template="${tmpdir}/deploy/nginx/admin-dashboard-ingress.conf.template"
-printf 'events {}\nhttp { server { listen @BIND_IP@:30191; allow @BIND_IP@; } }\n' >"${template}"
+printf 'events {}\nhttp { server { listen @BIND_IP@:30192; allow @BIND_IP@; } }\n' >"${template}"
 
 config="${tmpdir}/rendered/admin-dashboard-ingress.conf"
 export HOLOLIVE_INGRESS_CONF="${config}"
@@ -18,7 +18,7 @@ unset COMPOSE_ENV_FILE
 
 prepare_admin_dashboard_ingress_bind_mount "${tmpdir}"
 [[ "$(stat -c '%a' "${config}")" == "644" ]]
-grep -q 'listen 100.100.1.9:30191;' "${config}"
+grep -q 'listen 100.100.1.9:30192;' "${config}"
 grep -q 'allow 100.100.1.9;' "${config}"
 ! grep -q '@BIND_IP@' "${config}"
 echo "[PASS] public ingress config is rendered from the template at the configured bind IP"
@@ -26,7 +26,7 @@ echo "[PASS] public ingress config is rendered from the template at the configur
 printf 'stale\n' >"${config}"
 export HOLOLIVE_BOT_PORT_BIND_IP="100.100.1.7"
 prepare_admin_dashboard_ingress_bind_mount "${tmpdir}"
-grep -q 'listen 100.100.1.7:30191;' "${config}"
+grep -q 'listen 100.100.1.7:30192;' "${config}"
 ! grep -q 'stale' "${config}"
 echo "[PASS] re-render replaces a stale config instead of appending"
 
@@ -51,7 +51,7 @@ fi
 echo "[PASS] symlinked public ingress template fails closed"
 
 rm -f "${template}"
-printf 'events {}\nhttp { server { listen @BIND_IP@:30191; } }\n' >"${template}"
+printf 'events {}\nhttp { server { listen @BIND_IP@:30192; } }\n' >"${template}"
 unset HOLOLIVE_BOT_PORT_BIND_IP
 if prepare_admin_dashboard_ingress_bind_mount "${tmpdir}" >/dev/null 2>&1; then
     echo "[FAIL] missing bind IP was accepted" >&2
@@ -71,7 +71,7 @@ printf 'HOLOLIVE_BOT_PORT_BIND_IP=100.100.1.7\n' >"${env_file}"
 unset HOLOLIVE_BOT_PORT_BIND_IP
 export COMPOSE_ENV_FILE="${env_file}"
 prepare_admin_dashboard_ingress_bind_mount "${tmpdir}"
-grep -q 'listen 100.100.1.7:30191;' "${config}"
+grep -q 'listen 100.100.1.7:30192;' "${config}"
 echo "[PASS] bind IP falls back to COMPOSE_ENV_FILE"
 
 echo "public ingress bind mount checks passed"
