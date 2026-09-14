@@ -207,6 +207,22 @@ jobs:
             "${GITHUB_EVENT_NAME}" "${EXPECTED_SHA}" "${actual_sha}"
           test "${actual_sha}" = "${EXPECTED_SHA}"
 
+      - name: Setup Docker Compose for web ownership validation
+        env:
+          DOCKER_COMPOSE_VERSION: v5.5.1
+          DOCKER_COMPOSE_LINUX_X86_64_SHA256: db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576
+        run: |
+          compose_dir="${HOME}/.docker/cli-plugins"
+          compose_bin="${compose_dir}/docker-compose"
+          download="${RUNNER_TEMP}/docker-compose-linux-x86_64"
+          mkdir -p "${compose_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+            --output "${download}"
+          printf '%s  %s\n' "${DOCKER_COMPOSE_LINUX_X86_64_SHA256}" "${download}" | sha256sum --check -
+          install -m 0755 "${download}" "${compose_bin}"
+          test "$(docker compose version --short)" = "${DOCKER_COMPOSE_VERSION#v}"
+
       - name: Web runtime ownership and capability gate
         run: bash scripts/ci/public-pr-frontend-gate.sh
 
