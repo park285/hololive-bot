@@ -92,9 +92,9 @@ check_exception() {
     fail "$key exception must contain exactly $expected_count vulnerabilities"
   duplicate_ids="$(sed -n 's/^[[:space:]]*- id: \(CVE-[0-9-]*\)$/\1/p' "$ignore" | LC_ALL=C sort | uniq -d)"
   [[ -z "$duplicate_ids" ]] || fail "$key exception contains duplicate vulnerability IDs"
-  [[ "$(grep -Fc 'expired_at: 2026-09-14' "$ignore")" -eq "$expected_count" ]] ||
+  [[ "$(grep -Fc 'expired_at: 2026-09-21' "$ignore")" -eq "$expected_count" ]] ||
     fail "$key exception entries must all have the bounded expiry"
-  [[ "$(date -u -d '2026-09-14' +%s)" -gt "$(date -u +%s)" ]] ||
+  [[ "$(date -u -d '2026-09-21' +%s)" -gt "$(date -u +%s)" ]] ||
     fail "$key vulnerability exception has expired"
   grep -Fq "${key}_exception_target='remote|linux/arm64|$image'" "$scanner" ||
     fail "$key exception must be bound to the exact linux/arm64 scanned image"
@@ -109,7 +109,7 @@ check_exception \
 check_exception \
   postgres \
   'postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2' \
-  trivyignore-postgres.yaml 23 'root-only gosu branch is unreachable'
+  trivyignore-postgres.yaml 30 'root-only gosu branch is unreachable'
 check_exception \
   deunhealth \
   'qmcgaw/deunhealth@sha256:db1e4fcd3aceeb0da34a83f7a8a5432df586e6d0388ddb6ad8dd7b479e4aa25d' \
@@ -117,7 +117,7 @@ check_exception \
 check_exception \
   socket_proxy \
   'wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b' \
-  trivyignore-socket-proxy.yaml 8 'Exact release source bcb95c8 passed govulncheck'
+  trivyignore-socket-proxy.yaml 8 'Exact release source bcb95c8 was reviewed with Go 1.26.5'
 
 [[ "$(grep -Fc -- '--ignorefile' "$scanner")" -eq 1 ]] ||
   fail "final-image scanning must have exactly one bounded ignore path"
