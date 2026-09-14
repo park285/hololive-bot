@@ -655,14 +655,15 @@ services:
       CREDENTIALS_DIRECTORY: /run/hololive-bot/iris-admin-credentials
       IRIS_ADMIN_WEB_TEST_ACCOUNT_DIR: /run/hololive-bot/test-account
       IRIS_ADMIN_WEB_HOLOLIVE_ORIGIN: https://hololive-api:30006
-      IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE: /run/hololive-bot/certs/hololive-h3.crt
+      IRIS_ADMIN_WEB_HOLOLIVE_CA_FILE: /run/hololive-bot/certs/iris-ca.pem
     ports:
       - "127.0.0.1:30190:30190"
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /run/hololive-bot/test-account:size=1m,uid=1000,gid=1000,mode=0700
     volumes:
-      - /etc/stack-secrets/hololive-bot/certs/hololive-h3.crt:/run/hololive-bot/certs/hololive-h3.crt:ro
+      # Rust TLS는 서버 leaf가 아닌 발급 CA로 신뢰 체인을 검증합니다.
+      - /etc/stack-secrets/hololive-bot/certs/iris-ca.pem:/run/hololive-bot/certs/iris-ca.pem:ro
     group_add:
       - "${HOLOLIVE_RUNTIME_GID:-1002}"
     depends_on:
