@@ -22,7 +22,7 @@
 
 ## Routing
 
-- Alarm-worker runtime은 확인된 오픈채팅에서만 `BOT_MARKDOWN_REPLIES=true`일 때 Markdown message lane을 사용합니다.
+- Alarm-worker runtime은 기본값 `BOT_MARKDOWN_REPLIES=false`에서 오픈채팅도 기존 `kakaoformat.Render` 변환 렌더러를 사용합니다. 명시적으로 `true`를 설정한 경우에만 확인된 오픈채팅에서 네이티브 Markdown message lane을 사용합니다.
 - 일반채팅과 방 유형 미확인 알림은 `kakaoformat.Render`를 거친 일반 텍스트로 전송합니다. Runtime sender에는 Markdown용 오픈채팅 resolver만 연결하므로 일반채팅 resolver가 true여도 Karing eligibility는 비활성화되어 있습니다.
 - `BOT_MARKDOWN_REPLIES=false`이면 오픈채팅도 일반 텍스트를 사용합니다. 아래 template 및 handoff 계약은 남아 있는 Karing 구현을 설명하며, 이전 전송의 결과 불명확 기록을 다른 lane으로 재발송하지 않습니다.
 

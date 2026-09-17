@@ -1418,6 +1418,25 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 	})
 }
 
+func TestLoadBotConfig_MarkdownReplies(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "default renders plaintext"},
+		{name: "explicit plaintext", value: "false"},
+		{name: "explicit native markdown", value: "true", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("BOT_MARKDOWN_REPLIES", tc.value)
+			if got := loadBotConfig().MarkdownReplies; got != tc.want {
+				t.Fatalf("MarkdownReplies = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
 	t.Setenv("BOT_CALENDAR_IMAGE_CACHE_DIR", "/tmp/calendar-cache")
 	t.Setenv("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", "3600")

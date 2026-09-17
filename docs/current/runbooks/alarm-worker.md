@@ -32,7 +32,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `NOTIFICATION_SCHEDULER_ROLE` | scheduler enablement | yes |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
 | `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` | `off`, `shadow`, `cutover`; v1 delivery rows를 v3 ledger로 넘기는 모드 | no; default `off` |
-| `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅 알림의 Markdown lane 사용 여부; 기본값 `true` | no |
+| `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
 | `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
 | `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
@@ -42,7 +42,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 
 ## Notification egress
 
-Alarm-worker는 방 유형을 확인한 뒤 오픈채팅에만 Markdown lane을 선택합니다. 일반채팅 resolver는 runtime sender에 연결하지 않아 Karing eligibility는 비활성화합니다.
+Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kakaoformat.Render` 변환 렌더러로 전송합니다. 카카오톡 자체 Markdown 렌더링에 의존하지 않도록 운영 설정도 `BOT_MARKDOWN_REPLIES=false`로 맞춥니다. 기존 환경에 명시한 `true`는 기본값 변경보다 우선하므로 배포 시 확인해야 합니다. 일반채팅 resolver는 runtime sender에 연결하지 않아 Karing eligibility는 비활성화합니다.
 
 | Room / notification | Egress |
 |---|---|
