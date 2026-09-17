@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1426,10 +1427,11 @@ func TestLoadBotConfig_MarkdownReplies(t *testing.T) {
 	}{
 		{name: "default renders plaintext"},
 		{name: "explicit plaintext", value: "false"},
-		{name: "explicit native markdown", value: "true", want: true},
+		{name: "explicit native markdown", value: strconv.FormatBool(true), want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("BOT_MARKDOWN_REPLIES", tc.value)
+
 			if got := loadBotConfig().MarkdownReplies; got != tc.want {
 				t.Fatalf("MarkdownReplies = %t, want %t", got, tc.want)
 			}
