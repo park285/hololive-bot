@@ -140,6 +140,10 @@ type hotpathRecordingTx struct {
 }
 
 func (tx *hotpathRecordingTx) Exec(_ context.Context, _ string, args ...any) (pgconn.CommandTag, error) {
+	if len(args) == 0 {
+		return pgconn.CommandTag{}, errors.New("missing first argument")
+	}
+
 	id, ok := args[0].(string)
 	if !ok {
 		return pgconn.CommandTag{}, fmt.Errorf("unexpected first argument %T", args[0])
