@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1416,6 +1417,26 @@ func TestLoadLLMConfig_ConsensusModelFallback(t *testing.T) {
 			t.Errorf("ConsensusReviewerModel = %q, want gpt-4.1-mini", config.LLM.MemberNews.ReviewerModel)
 		}
 	})
+}
+
+func TestLoadBotConfig_MarkdownReplies(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "default renders plaintext"},
+		{name: "explicit plaintext", value: "false"},
+		{name: "explicit native markdown", value: strconv.FormatBool(true), want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("BOT_MARKDOWN_REPLIES", tc.value)
+
+			if got := loadBotConfig().MarkdownReplies; got != tc.want {
+				t.Fatalf("MarkdownReplies = %t, want %t", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
