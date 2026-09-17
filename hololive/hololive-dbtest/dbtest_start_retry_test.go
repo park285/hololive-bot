@@ -77,6 +77,27 @@ func TestProvisionPostgresContainerDoesNotRetryPermanentStartError(t *testing.T)
 	require.Equal(t, 1, starts)
 }
 
+func TestProvisionPostgresContainerDoesNotStartAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	starts := 0
+	_, err := provisionPostgresContainer(
+		ctx,
+		"postgres:test",
+		func(context.Context, string) (*postgres.PostgresContainer, error) {
+			starts++
+
+			return &postgres.PostgresContainer{}, nil
+		},
+		func(context.Context) error { return nil },
+		func(context.Context) error { return nil },
+	)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 0, starts)
+}
+
 func TestProvisionPostgresContainerExhaustsTransientStartRetries(t *testing.T) {
 	prevInterval := containerStartRetryInterval
 

@@ -28,7 +28,7 @@ func preferChannelMember(current, candidate *domain.Member) bool {
 func (c *Cache) channelMemberForPointLocked(member *domain.Member, generation uint64, channelLookup bool) *domain.Member {
 	snap := c.allMembersSnapshot.Load()
 	if snapshotSuccessful(snap) && snap.generation == generation {
-		return channelRepresentatives(snap.members)[member.ChannelID]
+		return snap.pointLookup().representatives[member.ChannelID]
 	}
 
 	// 스냅샷이 없을 때는 SQL의 채널 대표 조회 결과만 채널 인덱스를 채울 수 있다.

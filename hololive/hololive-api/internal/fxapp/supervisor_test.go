@@ -3,6 +3,8 @@ package fxapp
 import (
 	"errors"
 	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,6 +105,26 @@ func TestSupervisorPreservesFirstFatalAndDrainsLaterReports(t *testing.T) {
 	}
 }
 
+func TestSupervisorConvertsMonitorPanicToFatalShutdown(t *testing.T) {
+	shutdowner := newSupervisorPanicOnceShutdowner()
+	supervisor := newSupervisorWithShutdowner(shutdowner, supervisorTestLogger())
+	errCh := make(chan error, 1)
+	supervisor.Start(errCh)
+
+	errCh <- nil
+
+	call := receiveShutdownCall(t, shutdowner.calls)
+	if call.optionCount != 1 {
+		t.Fatalf("Shutdown() option count after panic = %d, want failure exit option", call.optionCount)
+	}
+
+	supervisor.Stop()
+
+	if err := supervisor.Err(); err == nil || !strings.Contains(err.Error(), "shutdown panic") {
+		t.Fatalf("Err() = %v, want recovered shutdown panic", err)
+	}
+}
+
 type supervisorTestShutdownCall struct {
 	optionCount int
 }
@@ -116,6 +138,31 @@ func newSupervisorTestShutdowner() *supervisorTestShutdowner {
 }
 
 func (s *supervisorTestShutdowner) Shutdown(options ...fx.ShutdownOption) error {
+	s.calls <- supervisorTestShutdownCall{optionCount: len(options)}
+
+	return nil
+}
+
+type supervisorPanicOnceShutdowner struct {
+	panicOnce sync.Once
+	calls     chan supervisorTestShutdownCall
+}
+
+func newSupervisorPanicOnceShutdowner() *supervisorPanicOnceShutdowner {
+	return &supervisorPanicOnceShutdowner{calls: make(chan supervisorTestShutdownCall, 1)}
+}
+
+func (s *supervisorPanicOnceShutdowner) Shutdown(options ...fx.ShutdownOption) error {
+	shouldPanic := false
+
+	s.panicOnce.Do(func() {
+		shouldPanic = true
+	})
+
+	if shouldPanic {
+		panic("shutdown panic")
+	}
+
 	s.calls <- supervisorTestShutdownCall{optionCount: len(options)}
 
 	return nil

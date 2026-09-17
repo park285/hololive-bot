@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/retry"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -27,22 +28,36 @@ func provisionPostgresContainer(
 	holdReaper func(context.Context) error,
 	verifyReaper func(context.Context) error,
 ) (*postgres.PostgresContainer, error) {
-	var attemptErr error
+	var (
+		container   *postgres.PostgresContainer
+		attemptErr  error
+		shouldRetry bool
+	)
 
-	for range postgresProvisionAttempts() {
-		container, retry, err := runPostgresProvisionAttempt(ctx, image, start, holdReaper, verifyReaper)
-		if err == nil {
-			return container, nil
+	retryErr := retry.WithRetry(ctx, retry.RetryOptions{
+		MaxAttempts: postgresProvisionAttempts(),
+		ShouldRetry: func(error) bool {
+			return shouldRetry
+		},
+	}, func(ctx context.Context) error {
+		var err error
+
+		container, shouldRetry, err = runPostgresProvisionAttempt(ctx, image, start, holdReaper, verifyReaper)
+		if err != nil {
+			attemptErr = errors.Join(attemptErr, err)
 		}
 
-		attemptErr = errors.Join(attemptErr, err)
-
-		if !retry {
+		return err
+	})
+	if retryErr != nil {
+		if attemptErr != nil {
 			return nil, attemptErr
 		}
+
+		return nil, fmt.Errorf("retry postgres container provisioning: %w", retryErr)
 	}
 
-	return nil, attemptErr
+	return container, nil
 }
 
 func postgresProvisionAttempts() int {
@@ -60,9 +75,9 @@ func runPostgresProvisionAttempt(
 	holdReaper func(context.Context) error,
 	verifyReaper func(context.Context) error,
 ) (*postgres.PostgresContainer, bool, error) {
-	container, retry, err := tryStartPostgres(ctx, image, start, holdReaper)
+	container, shouldRetry, err := tryStartPostgres(ctx, image, start, holdReaper)
 	if err != nil {
-		return nil, retry, fmt.Errorf("try start postgres: %w", err)
+		return nil, shouldRetry, fmt.Errorf("try start postgres: %w", err)
 	}
 
 	verified, verifyRetry, verifyErr := tryVerifyPostgres(ctx, container, verifyReaper)

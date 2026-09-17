@@ -40,12 +40,14 @@ const (
 )
 
 type allMembersState struct {
-	members       []*domain.Member
-	loadedAt      time.Time
-	retryAfter    time.Time
-	loadErr       error
-	generation    uint64
-	hasSuccessful bool
+	pointIndexOnce sync.Once
+	pointIndex     *memberPointIndex
+	members        []*domain.Member
+	loadedAt       time.Time
+	retryAfter     time.Time
+	loadErr        error
+	generation     uint64
+	hasSuccessful  bool
 }
 
 var errAllMembersGenerationChanged = errors.New("member snapshot generation changed")
@@ -289,6 +291,7 @@ func (c *Cache) deferAllMembersSnapshotReload(snap *allMembersState, generation 
 
 	if snapshotSuccessful(snap) {
 		deferred.members = snap.members
+		deferred.pointIndex = snap.pointLookup()
 		deferred.loadedAt = snap.loadedAt
 		deferred.hasSuccessful = true
 	}
@@ -324,6 +327,7 @@ func (c *Cache) logAllMembersSnapshotRecovery(snap *allMembersState, memberCount
 
 func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation uint64, members []*domain.Member) bool {
 	snapshot, channelIDs := prepareAllMembersSnapshot(members)
+	pointIndex := buildMemberPointIndex(snapshot)
 
 	c.snapshotMu.Lock()
 	defer c.snapshotMu.Unlock()
@@ -337,6 +341,7 @@ func (c *Cache) storeAllMembersSnapshot(previous *allMembersState, generation ui
 	c.allMembers.Store(allChannelIDsKey, channelIDs)
 	c.snapshotGeneration.Store(nextGeneration)
 	c.allMembersSnapshot.Store(&allMembersState{
+		pointIndex:    pointIndex,
 		members:       snapshot,
 		loadedAt:      time.Now(),
 		generation:    nextGeneration,
