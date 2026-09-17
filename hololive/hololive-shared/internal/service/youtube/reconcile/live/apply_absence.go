@@ -1,9 +1,8 @@
 package live
 
 import (
+	"slices"
 	"time"
-
-	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
 func pendingFromFact(session *reduceSession, fact *SessionFact, kind EndEvidenceKind) PendingEnd {
@@ -72,7 +71,7 @@ func applyAbsenceToKnownSession(session *reduceSession, existing *SessionState, 
 		return
 	}
 
-	covers := contract.LiveCoverageCoversSession(slot.Coverage, existing.ChannelID, string(existing.Status))
+	covers := session.absenceCovers(slot, existing)
 	if !covers {
 		return
 	}
@@ -170,4 +169,88 @@ func countAbsenceSlot(entity *SessionState, slot *AbsenceSlot) {
 		entity.Clock.ConsecutiveAbsenceSlots = 2
 	default:
 	}
+}
+
+// 한 reducer 호출에서 같은 coverage를 세션마다 다시 선형 탐색하지 않는다.
+// 빈 statuses는 모든 상태를 허용하지만 빈 channels는 아무 채널도 허용하지 않는다.
+type liveCoverageIndex struct {
+	channels map[string]struct{}
+	statuses map[string]struct{}
+}
+
+func newLiveCoverageIndex(channels, statuses []string) liveCoverageIndex {
+	index := liveCoverageIndex{
+		channels: make(map[string]struct{}, len(channels)),
+		statuses: make(map[string]struct{}, len(statuses)),
+	}
+	for _, channelID := range channels {
+		index.channels[channelID] = struct{}{}
+	}
+	for _, status := range statuses {
+		index.statuses[status] = struct{}{}
+	}
+	return index
+}
+
+func (i liveCoverageIndex) covers(channelID, status string) bool {
+	if channelID == "" {
+		return false
+	}
+	if _, ok := i.channels[channelID]; !ok {
+		return false
+	}
+	if len(i.statuses) == 0 {
+		return true
+	}
+	_, ok := i.statuses[status]
+	return ok
+}
+
+const liveCoverageLinearReadBudget = 32
+
+// coverage는 reducer가 복제한 불변 상태에서 빌린다. 작은 작업에 해시맵 할당을
+// 강제하지 않고, 선형 탐색 횟수를 고정 상한으로 제한한 뒤 인덱스로 전환한다.
+type liveCoverageMatcher struct {
+	channels    []string
+	statuses    []string
+	linearReads int
+	index       liveCoverageIndex
+}
+
+func newLiveCoverageMatcher(channels, statuses []string) liveCoverageMatcher {
+	return liveCoverageMatcher{channels: channels, statuses: statuses}
+}
+
+func (m *liveCoverageMatcher) covers(channelID, status string) bool {
+	if m.index.channels != nil {
+		return m.index.covers(channelID, status)
+	}
+	if channelID == "" {
+		return false
+	}
+	if len(m.channels) <= 8 && len(m.statuses) <= 8 {
+		return m.coversLinearly(channelID, status)
+	}
+	if m.linearReads < liveCoverageLinearReadBudget {
+		m.linearReads++
+		return m.coversLinearly(channelID, status)
+	}
+	m.index = newLiveCoverageIndex(m.channels, m.statuses)
+	m.channels, m.statuses = nil, nil
+	return m.index.covers(channelID, status)
+}
+
+func (m *liveCoverageMatcher) coversLinearly(channelID, status string) bool {
+	return slices.Contains(m.channels, channelID) &&
+		(len(m.statuses) == 0 || slices.Contains(m.statuses, status))
+}
+
+func (s *reduceSession) absenceCovers(slot *AbsenceSlot, existing *SessionState) bool {
+	// 부재 적용은 slot을 바깥 루프에서 순회한다. 현재 slot만 유지하여
+	// 긴 이력 전체에 대한 O(H*C) 보조 메모리를 만들지 않는다.
+	if s.absenceCoverageSlot != slot {
+		s.absenceCoverage = newLiveCoverageMatcher(slot.Coverage.RequestedChannelIDs, slot.Coverage.Filters.Statuses)
+		s.absenceCoverageSlot = slot
+	}
+	return s.absenceCoverage.covers(existing.ChannelID, string(existing.Status))
 }

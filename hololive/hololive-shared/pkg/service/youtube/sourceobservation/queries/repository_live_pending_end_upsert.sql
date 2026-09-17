@@ -13,3 +13,12 @@ ON CONFLICT (video_id) DO UPDATE SET
     ended_at = EXCLUDED.ended_at,
     negative_eligible = EXCLUDED.negative_eligible,
     scope_covers = EXCLUDED.scope_covers
+WHERE (youtube_live_pending_ends.channel_id, youtube_live_pending_ends.kind,
+       youtube_live_pending_ends.observation_id, youtube_live_pending_ends.effective_at,
+       youtube_live_pending_ends.received_at, youtube_live_pending_ends.scheduled_for,
+       youtube_live_pending_ends.ended_at, youtube_live_pending_ends.negative_eligible,
+       youtube_live_pending_ends.scope_covers)
+      IS DISTINCT FROM
+      (EXCLUDED.channel_id, EXCLUDED.kind, EXCLUDED.observation_id, EXCLUDED.effective_at,
+       EXCLUDED.received_at, EXCLUDED.scheduled_for, EXCLUDED.ended_at,
+       EXCLUDED.negative_eligible, EXCLUDED.scope_covers)

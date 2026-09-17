@@ -69,11 +69,13 @@ WHERE
                 excluded.thumbnail_url <> ''
                 AND excluded.thumbnail_url IS DISTINCT FROM youtube_live_sessions.thumbnail_url
             )
-            OR excluded.scheduled_start_time IS DISTINCT FROM youtube_live_sessions.scheduled_start_time
+            OR COALESCE(excluded.scheduled_start_time, youtube_live_sessions.scheduled_start_time)
+                IS DISTINCT FROM youtube_live_sessions.scheduled_start_time
             OR (youtube_live_sessions.started_at IS NULL AND excluded.started_at IS NOT NULL)
             OR (youtube_live_sessions.ended_at IS NULL AND excluded.ended_at IS NOT NULL)
             OR (youtube_live_sessions.live_first_seen_at IS NULL AND excluded.live_first_seen_at IS NOT NULL)
-            OR excluded.last_seen_at IS DISTINCT FROM youtube_live_sessions.last_seen_at
+            OR GREATEST(youtube_live_sessions.last_seen_at, excluded.last_seen_at)
+                IS DISTINCT FROM youtube_live_sessions.last_seen_at
             OR (youtube_live_sessions.is_premiere IS NULL AND excluded.is_premiere IS NOT NULL)
         )
     )
