@@ -80,6 +80,19 @@ for removed in bot hololive-bot hololive-kakao-bot-go admin-api hololive-admin-a
     expect_fail "redeploy target rejects retired runtime ${removed}" compose_service_resolve_redeploy_target "${removed}"
 done
 
+# 7693d0b93에서 정적 멤버 프로필이 제거됐으므로 생산 패키징이 삭제된 경로를 다시 요구하면 안 됩니다.
+if rg -n 'hololive-shared/pkg/domain/internal/model/data|internal/domain/data' \
+    "${ROOT_DIR}/hololive/hololive-api/Dockerfile" \
+    "${ROOT_DIR}/hololive/hololive-alarm-worker/Dockerfile" \
+    "${ROOT_DIR}/hololive/hololive-youtube-collector/Dockerfile" \
+    "${ROOT_DIR}/scripts/deploy/ap-host-native-deploy.sh" \
+    "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" \
+    "${ROOT_DIR}/scripts/deploy/lib/ap-host-native-remote-apply.sh" \
+    "${ROOT_DIR}/scripts/deploy/lib/ap-host-native-rollback-check.sh"; then
+    fail "production packaging still requires removed static member profile data"
+fi
+pass "production packaging no longer requires removed static member profile data"
+
 for ap_overlay in docker-compose.osaka.yml docker-compose.osaka2.yml docker-compose.seoul.yml; do
     expect_fail_contains "${ap_overlay} rejects explicit collector redeploy" \
         "youtube-collector is central-only" \

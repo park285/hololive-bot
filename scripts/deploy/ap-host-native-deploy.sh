@@ -110,7 +110,7 @@ write_wrapper() {
   chmod 0755 "$dest"
 }
 
-mkdir -p "$artifact_dir/bin" "$artifact_dir/internal/domain"
+mkdir -p "$artifact_dir/bin"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
 
@@ -129,8 +129,6 @@ sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_
   --goarch amd64 \
   --goamd64 "${GOAMD64:-v1}"
 write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
-rm -rf "$artifact_dir/internal/domain/data"
-cp -R "$REPO_ROOT/hololive/hololive-shared/pkg/domain/internal/model/data" "$artifact_dir/internal/domain/data"
 rm -rf "$artifact_dir/youtubejs"
 mkdir -p "$artifact_dir/youtubejs"
 cp "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/package.json" \

@@ -86,27 +86,21 @@ elif (
 
   normal="${permission_fixture}/normal"
   external="${permission_fixture}/external"
-  mkdir -p "${normal}/internal/domain/data" "${normal}/youtubejs/src" "${external}"
-  printf 'fixture\n' >"${normal}/internal/domain/data/member.json"
+  mkdir -p "${normal}/youtubejs/src" "${external}"
   printf 'export {}\n' >"${normal}/youtubejs/src/server.mjs"
   printf 'sentinel\n' >"${external}/sentinel"
-  chmod 0700 "${normal}/internal" "${normal}/internal/domain" \
-    "${normal}/internal/domain/data" "${normal}/youtubejs" "${normal}/youtubejs/src" "${external}"
-  chmod 0600 "${normal}/internal/domain/data/member.json" \
-    "${normal}/youtubejs/src/server.mjs" "${external}/sentinel"
+  chmod 0700 "${normal}/youtubejs" "${normal}/youtubejs/src" "${external}"
+  chmod 0600 "${normal}/youtubejs/src/server.mjs" "${external}/sentinel"
   ln -s "${external}" "${normal}/youtubejs/external-link"
   ln -s "${external}/sentinel" "${normal}/youtubejs/external-file"
 
   eval "${permission_fn}"
   normalize_runtime_payload_permissions "${normal}" || exit 1
-  [[ "$(stat -c '%a' "${normal}/internal")" == 755 ]] || exit 1
-  [[ "$(stat -c '%a' "${normal}/internal/domain")" == 755 ]] || exit 1
-  [[ "$(stat -c '%a' "${normal}/internal/domain/data/member.json")" == 644 ]] || exit 1
   [[ "$(stat -c '%a' "${normal}/youtubejs/src/server.mjs")" == 644 ]] || exit 1
   [[ "$(stat -c '%a' "${external}/sentinel")" == 600 ]] || exit 1
 
   bad="${permission_fixture}/bad"
-  mkdir -p "${bad}/internal/domain/data"
+  mkdir -p "${bad}"
   ln -s "${external}" "${bad}/youtubejs"
   if normalize_runtime_payload_permissions "${bad}"; then
     exit 1
@@ -274,7 +268,7 @@ else
 fi
 
 mkdir -p "${tmp}/rollback-bin" "${tmp}/rollback-fixture/bin" \
-  "${tmp}/rollback-fixture/internal/domain/data" "${tmp}/rollback-fixture/rollback-contract"
+  "${tmp}/rollback-fixture/rollback-contract"
 cat > "${tmp}/rollback-bin/sudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -300,7 +294,6 @@ printf 'export {}\n' > "${rollback_fixture}/youtubejs/src/server.mjs"
 chmod +x "${rollback_fixture}/bin/youtube-collector" \
   "${rollback_fixture}/bin/youtube-collector-wrapper" \
   "${rollback_fixture}/bin/healthcheck"
-printf 'fixture-data\n' > "${rollback_fixture}/internal/domain/data/members.json"
 printf 'APP_ENV=production\n' > "${rollback_fixture}/rollback-contract/youtube-collector-host.env"
 printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/hololive-youtube-collector@.service"
 (
@@ -311,7 +304,6 @@ printf '[Unit]\nDescription=fixture\n' > "${rollback_fixture}/rollback-contract/
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
-    internal/domain/data/members.json \
     > rollback-contract/SHA256SUMS
 )
 
@@ -351,7 +343,6 @@ printf 'INVALID_UNIT\n' >> "${rollback_fixture}/rollback-contract/hololive-youtu
     bin/healthcheck \
     rollback-contract/youtube-collector-host.env \
     rollback-contract/hololive-youtube-collector@.service \
-    internal/domain/data/members.json \
     > rollback-contract/SHA256SUMS
 )
 if PATH="${tmp}/rollback-bin:${PATH}" native_rollback_validate "${rollback_fixture}" >"${tmp}/invalid-unit.out" 2>"${tmp}/invalid-unit.err"; then

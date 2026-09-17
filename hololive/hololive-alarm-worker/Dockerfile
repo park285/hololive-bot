@@ -57,9 +57,7 @@ RUN \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/youtube-delivery-ledger-backfill ./cmd/youtube-delivery-ledger-backfill && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck && \
-    mkdir -p /dist/internal/domain && \
-    cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck
 
 FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
 

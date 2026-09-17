@@ -72,9 +72,7 @@ RUN \
       --goos "${TARGETOS:-linux}" \
       --goarch "${TARGETARCH:-$(go env GOARCH)}" \
       --goamd64 "${GOAMD64}" \
-      $extra && \
-    mkdir -p /dist/internal/domain && \
-    cp -r ../hololive-shared/pkg/domain/internal/model/data /dist/internal/domain/
+      $extra
 
 FROM scratch
 
