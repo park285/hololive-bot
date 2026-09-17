@@ -23,19 +23,14 @@ normalize_runtime_payload_permissions() {
   local root="$1"
   local required
 
-  for required in \
-    "$root/internal" \
-    "$root/internal/domain" \
-    "$root/internal/domain/data" \
-    "$root/youtubejs"; do
+  for required in "$root/youtubejs"; do
     sudo -n test -d "$required" || return
     sudo -n test ! -L "$required" || return
   done
 
-  # 서비스 계정은 root 소유 release의 정적 데이터와 helper graph를 읽고 순회할 수 있어야 한다.
-  sudo -n chmod a+rx -- "$root/internal" "$root/internal/domain" || return
+  # 서비스 계정은 root 소유 helper graph를 읽고 순회할 수 있어야 한다.
   # AP 호스트의 chmod는 -P를 지원하지 않으므로 find가 링크를 제외하고 순회합니다.
-  sudo -n find -P "$root/internal/domain/data" "$root/youtubejs" \
+  sudo -n find -P "$root/youtubejs" \
     \( -type d -o -type f \) -exec chmod a+rX -- {} +
 }
 
@@ -137,7 +132,6 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
   sudo -n test -x "$old_target/bin/youtube-collector"
   sudo -n test -x "$old_target/bin/youtube-collector-wrapper"
   sudo -n test -x "$old_target/bin/healthcheck"
-  sudo -n test -d "$old_target/internal/domain/data"
   sudo -n test -f "$old_target/youtubejs/src/server.mjs"
   rollback_contract_dir="$old_target/rollback-contract"
   sudo -n install -d -m 0755 -o root -g root "$rollback_contract_dir"
@@ -153,7 +147,7 @@ if [[ -n "$old_target" && -d "$old_target" ]]; then
         bin/healthcheck \
         rollback-contract/youtube-collector-host.env \
         rollback-contract/hololive-youtube-collector@.service
-      find internal/domain/data youtubejs/src -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+      find youtubejs/src -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
     } > rollback-contract/SHA256SUMS
     chmod 0644 rollback-contract/SHA256SUMS
   ' sh "$old_target"

@@ -15,11 +15,6 @@ native_rollback_validate() {
       return 1
     fi
   done
-  if ! sudo -n test -d "$previous_target/internal/domain/data" ||
-     ! sudo -n find "$previous_target/internal/domain/data" -type f -print -quit | grep -q .; then
-    echo "previous host-native runtime data is missing or empty" >&2
-    return 1
-  fi
   if ! sudo -n test -f "$previous_target/youtubejs/src/server.mjs"; then
     echo "previous host-native youtubejs helper is missing" >&2
     return 1

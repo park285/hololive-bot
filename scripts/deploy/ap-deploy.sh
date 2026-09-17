@@ -58,7 +58,6 @@ while IFS= read -r path; do
       ;;
   esac
   case "$path" in
-    hololive/hololive-shared/pkg/domain/internal/model/data/*) ;;
     data|data/*|*/data/*)
       echo "files-from list contains unapproved data path: $path" >&2
       exit 1
@@ -113,7 +112,7 @@ rsync_preview() {
 validate_preview() {
   local preview_file="$1"
   "$REPO_ROOT/scripts/deploy/check-ap-rsync-preview.sh" "$preview_file" "$REMOTE_REPO_DIR"
-  if rg -n '(^|/)data/' "$preview_file" | rg -v 'hololive/hololive-shared/pkg/domain/internal/model/data/'; then
+  if rg -n '(^|/)data/' "$preview_file"; then
     echo "rsync preview contains unapproved data path" >&2
     exit 1
   fi
