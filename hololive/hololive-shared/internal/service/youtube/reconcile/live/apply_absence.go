@@ -186,9 +186,11 @@ func newLiveCoverageIndex(channels, statuses []string) liveCoverageIndex {
 	for _, channelID := range channels {
 		index.channels[channelID] = struct{}{}
 	}
+
 	for _, status := range statuses {
 		index.statuses[status] = struct{}{}
 	}
+
 	return index
 }
 
@@ -196,13 +198,17 @@ func (i liveCoverageIndex) covers(channelID, status string) bool {
 	if channelID == "" {
 		return false
 	}
+
 	if _, ok := i.channels[channelID]; !ok {
 		return false
 	}
+
 	if len(i.statuses) == 0 {
 		return true
 	}
+
 	_, ok := i.statuses[status]
+
 	return ok
 }
 
@@ -225,18 +231,23 @@ func (m *liveCoverageMatcher) covers(channelID, status string) bool {
 	if m.index.channels != nil {
 		return m.index.covers(channelID, status)
 	}
+
 	if channelID == "" {
 		return false
 	}
+
 	if len(m.channels) <= 8 && len(m.statuses) <= 8 {
 		return m.coversLinearly(channelID, status)
 	}
+
 	if m.linearReads < liveCoverageLinearReadBudget {
 		m.linearReads++
 		return m.coversLinearly(channelID, status)
 	}
+
 	m.index = newLiveCoverageIndex(m.channels, m.statuses)
 	m.channels, m.statuses = nil, nil
+
 	return m.index.covers(channelID, status)
 }
 
@@ -252,5 +263,6 @@ func (s *reduceSession) absenceCovers(slot *AbsenceSlot, existing *SessionState)
 		s.absenceCoverage = newLiveCoverageMatcher(slot.Coverage.RequestedChannelIDs, slot.Coverage.Filters.Statuses)
 		s.absenceCoverageSlot = slot
 	}
+
 	return s.absenceCoverage.covers(existing.ChannelID, string(existing.Status))
 }

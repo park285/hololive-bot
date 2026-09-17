@@ -128,6 +128,7 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 	for i := range decision.PendingEnds {
 		pendingIDs[i] = decision.PendingEnds[i].VideoID
 	}
+
 	if err := persistPendingLiveEnds(ctx, tx, decision.PendingEnds); err != nil {
 		return fmt.Errorf("persist pending ends: %w", err)
 	}
@@ -164,12 +165,15 @@ func persistPendingLiveEnds(ctx context.Context, tx dbx.Tx, pending []live.Pendi
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("persist pending live ends at %d: %w", start, err)
 		}
+
 		end := min(start+pendingLiveEndBatchSize, len(pending))
 		statements := pendingLiveEndStatements(pending[start:end])
+
 		if err := dbx.ExecStatements(ctx, tx, statements); err != nil {
 			return fmt.Errorf("persist pending live end batch at %d: %w", start, err)
 		}
 	}
+
 	return nil
 }
 
@@ -177,6 +181,7 @@ func pendingLiveEndStatements(pending []live.PendingEnd) []dbx.Statement {
 	statements := make([]dbx.Statement, 0, len(pending))
 	for i := range pending {
 		item := &pending[i]
+
 		statements = append(statements, dbx.Statement{
 			Operation: "upsert pending live end",
 			SQL:       mustSQL("repository_live_pending_end_upsert.sql"),
@@ -186,5 +191,6 @@ func pendingLiveEndStatements(pending []live.PendingEnd) []dbx.Statement {
 			},
 		})
 	}
+
 	return statements
 }

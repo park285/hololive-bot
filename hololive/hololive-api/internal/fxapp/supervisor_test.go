@@ -154,9 +154,11 @@ func newSupervisorPanicOnceShutdowner() *supervisorPanicOnceShutdowner {
 
 func (s *supervisorPanicOnceShutdowner) Shutdown(options ...fx.ShutdownOption) error {
 	shouldPanic := false
+
 	s.panicOnce.Do(func() {
 		shouldPanic = true
 	})
+
 	if shouldPanic {
 		panic("shutdown panic")
 	}

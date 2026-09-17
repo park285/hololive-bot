@@ -152,9 +152,11 @@ func pointKey(member *domain.Member) pointMemberKey {
 	if member.ID != 0 {
 		return pointMemberKey{id: member.ID}
 	}
+
 	if member.ChannelID != "" {
 		return pointMemberKey{channelID: member.ChannelID}
 	}
+
 	return pointMemberKey{name: member.Name}
 }
 
@@ -167,9 +169,12 @@ func buildMemberPointIndex(members []*domain.Member) *memberPointIndex {
 		if member == nil {
 			continue
 		}
+
 		key := pointKey(member)
+
 		index.byIdentity[key] = append(index.byIdentity[key], member)
 	}
+
 	return index
 }
 
@@ -180,5 +185,6 @@ func (s *allMembersState) pointLookup() *memberPointIndex {
 			s.pointIndex = buildMemberPointIndex(s.members)
 		}
 	})
+
 	return s.pointIndex
 }

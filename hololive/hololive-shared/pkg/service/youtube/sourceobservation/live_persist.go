@@ -21,9 +21,11 @@ func persistLiveDecision(ctx context.Context, tx dbx.Tx, decision *live.Decision
 	if err := persistLiveSessions(ctx, tx, decision.Sessions); err != nil {
 		return fmt.Errorf("persist live sessions and heads: %w", err)
 	}
+
 	if err := persistLiveEvidence(ctx, tx, decision); err != nil {
 		return fmt.Errorf("persist live evidence: %w", err)
 	}
+
 	return nil
 }
 
@@ -33,12 +35,15 @@ func persistLiveSessions(ctx context.Context, tx dbx.Tx, sessions []live.Session
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("persist live sessions at %d: %w", start, err)
 		}
+
 		end := min(start+liveSessionBatchSize, len(sessions))
 		statements := liveDecisionStatements(sessions[start:end])
+
 		if err := dbx.ExecStatements(ctx, tx, statements); err != nil {
 			return fmt.Errorf("persist live session batch at %d: %w", start, err)
 		}
 	}
+
 	return nil
 }
 
@@ -49,9 +54,11 @@ func liveDecisionStatements(sessions []live.SessionState) []dbx.Statement {
 		if session.ChannelID != "" {
 			statements = append(statements, liveSessionStatement(session, false))
 		}
+
 		// session A → head A → session B → head B의 기존 순서를 바꾸지 않는다.
 		statements = append(statements, liveHeadStatement(session))
 	}
+
 	return statements
 }
 
@@ -59,6 +66,7 @@ func upsertLiveSession(ctx context.Context, tx dbx.Tx, session *live.SessionStat
 	if err := executeLiveSessionUpsert(ctx, tx, session, false); err != nil {
 		return fmt.Errorf("execute live session upsert: %w", err)
 	}
+
 	return nil
 }
 
@@ -66,6 +74,7 @@ func upsertConfirmedPremiereSession(ctx context.Context, tx dbx.Tx, session *liv
 	if err := executeLiveSessionUpsert(ctx, tx, session, true); err != nil {
 		return fmt.Errorf("execute confirmed Premiere session upsert: %w", err)
 	}
+
 	return nil
 }
 
@@ -73,13 +82,16 @@ func executeLiveSessionUpsert(ctx context.Context, tx dbx.Tx, session *live.Sess
 	if session == nil {
 		return errors.New("upsert live session: session state is nil")
 	}
+
 	if session.ChannelID == "" {
 		return nil
 	}
+
 	statement := liveSessionStatement(session, classificationOnlyOnConflict)
 	if _, err := tx.Exec(ctx, statement.SQL, statement.Args...); err != nil {
 		return fmt.Errorf("upsert live session: %w", err)
 	}
+
 	return nil
 }
 
@@ -96,17 +108,20 @@ func liveSessionStatement(session *live.SessionState, classificationOnlyOnConfli
 	}
 }
 
-// 호출자는 sessions의 실제 원소만 전달한다. nil 오류를 만들고 다시 전달하지 않는다.
+// 호출자는 sessions의 실제 원소만 전달한다. Nil 오류를 만들고 다시 전달하지 않는다.
 func liveHeadStatement(session *live.SessionState) dbx.Statement {
 	var kind, observationID, nextCheck, reason any
+
 	if session.Clock.EndCandidateKind != nil && session.Clock.EndCandidateObservationID != nil && session.Clock.NextEndCheckAt != nil {
 		kind = string(*session.Clock.EndCandidateKind)
 		observationID = *session.Clock.EndCandidateObservationID
 		nextCheck = *session.Clock.NextEndCheckAt
 	}
+
 	if session.EndReason != nil {
 		reason = string(*session.EndReason)
 	}
+
 	return dbx.Statement{
 		Operation: "upsert live head",
 		SQL:       mustSQL("repository_live_head_upsert_0048_48.sql"),

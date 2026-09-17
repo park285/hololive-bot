@@ -54,7 +54,7 @@ func provisionPostgresContainer(
 			return nil, attemptErr
 		}
 
-		return nil, retryErr
+		return nil, fmt.Errorf("retry postgres container provisioning: %w", retryErr)
 	}
 
 	return container, nil
@@ -75,9 +75,9 @@ func runPostgresProvisionAttempt(
 	holdReaper func(context.Context) error,
 	verifyReaper func(context.Context) error,
 ) (*postgres.PostgresContainer, bool, error) {
-	container, retry, err := tryStartPostgres(ctx, image, start, holdReaper)
+	container, shouldRetry, err := tryStartPostgres(ctx, image, start, holdReaper)
 	if err != nil {
-		return nil, retry, fmt.Errorf("try start postgres: %w", err)
+		return nil, shouldRetry, fmt.Errorf("try start postgres: %w", err)
 	}
 
 	verified, verifyRetry, verifyErr := tryVerifyPostgres(ctx, container, verifyReaper)

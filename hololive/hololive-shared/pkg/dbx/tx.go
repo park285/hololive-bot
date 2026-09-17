@@ -136,7 +136,7 @@ type statementBatchSender interface {
 }
 
 // ExecStatements는 호출자가 소유한 트랜잭션에서 입력 순서대로 SQL을 실행한다.
-// pgx 트랜잭션이면 최대 128개씩 전송하고, 배치를 지원하지 않으면 순차 실행한다.
+// Pgx 트랜잭션이면 최대 128개씩 전송하고, 배치를 지원하지 않으면 순차 실행한다.
 // 커밋/롤백은 호출자 책임이며, 오류 후에는 반드시 롤백해야 한다.
 // 기존 테이블의 DML 전용이다. 선행 DDL에 의존하는 문장은 별도 Exec로 실행한다.
 // 빈 입력은 I/O 없이 성공한다. 실행 결과는 다음 배치나 반환 전에 항상 닫는다.
@@ -144,24 +144,30 @@ func ExecStatements(ctx context.Context, tx Tx, statements []Statement) error {
 	if len(statements) == 0 {
 		return nil
 	}
+
 	if tx == nil {
 		return errors.New("execute statements: transaction is nil")
 	}
+
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("execute statements: %w", err)
 	}
+
 	if sender, ok := tx.(statementBatchSender); ok {
 		return execStatementBatches(ctx, sender, statements)
 	}
+
 	for i := range statements {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("execute statement %d: %w", i, err)
 		}
+
 		statement := &statements[i]
 		if _, err := tx.Exec(ctx, statement.SQL, statement.Args...); err != nil {
 			return fmt.Errorf("execute statement %d (%s): %w", i, statement.Operation, err)
 		}
 	}
+
 	return nil
 }
 
@@ -170,33 +176,40 @@ func execStatementBatches(ctx context.Context, sender statementBatchSender, stat
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("execute statement batch at %d: %w", start, err)
 		}
+
 		end := min(start+maxHotpathBatchStatements, len(statements))
 		if err := execStatementBatch(ctx, sender, statements[start:end], start); err != nil {
 			return fmt.Errorf("execute statement batch: %w", err)
 		}
 	}
+
 	return nil
 }
 
 func execStatementBatch(ctx context.Context, sender statementBatchSender, statements []Statement, offset int) (err error) {
 	batch := &pgx.Batch{}
+
 	for i := range statements {
 		batch.Queue(statements[i].SQL, statements[i].Args...)
 	}
+
 	results := sender.SendBatch(ctx, batch)
 	if results == nil {
 		return errors.New("execute statement batch: results are nil")
 	}
+
 	// 정상 반환과 오류뿐 아니라 panic에서도 남은 응답을 회수한다.
 	defer func() {
 		if closeErr := results.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close statement batch at %d: %w", offset, closeErr))
 		}
 	}()
+
 	for i := range statements {
 		if _, executeErr := results.Exec(); executeErr != nil {
 			return fmt.Errorf("execute statement %d (%s): %w", offset+i, statements[i].Operation, executeErr)
 		}
 	}
+
 	return nil
 }
