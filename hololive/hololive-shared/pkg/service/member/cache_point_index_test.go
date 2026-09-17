@@ -48,11 +48,9 @@ func TestPointIndexConcurrentInitialization(t *testing.T) {
 	var group sync.WaitGroup
 	results := make(chan *memberPointIndex, 64)
 	for i := 0; i < cap(results); i++ {
-		group.Add(1)
-		go func() {
-			defer group.Done()
+		group.Go(func() {
 			results <- snapshot.pointLookup()
-		}()
+		})
 	}
 	group.Wait()
 	close(results)

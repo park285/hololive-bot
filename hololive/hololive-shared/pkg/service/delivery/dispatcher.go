@@ -301,7 +301,11 @@ func (d *Dispatcher) processBatchConcurrent(ctx context.Context, items []domain.
 
 		roomItems := itemsByRoom[roomID]
 
-		wg.Go(func() { d.processRoomBatchAsync(ctx, roomItems, sem) })
+		wg.Go(func() {
+			panicguard.Run(d.logger, panicguard.BackgroundTask, "delivery-dispatch-room", func() {
+				d.processRoomBatchAsync(ctx, roomItems, sem)
+			})
+		})
 	}
 
 	wg.Wait()

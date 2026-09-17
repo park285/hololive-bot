@@ -72,7 +72,7 @@ func BenchmarkLiveCoverageSlotBuildAndRead(b *testing.B) {
 		b.Run(fmt.Sprintf("scan/reads-%d", reads), func(b *testing.B) {
 			b.ReportAllocs()
 			for n := 0; n < b.N; n++ {
-				for i := 0; i < reads; i++ {
+				for i := range reads {
 					if !slices.Contains(channels, channels[(i*31+255)%len(channels)]) {
 						b.Fatal("missing channel")
 					}
@@ -83,7 +83,7 @@ func BenchmarkLiveCoverageSlotBuildAndRead(b *testing.B) {
 			b.ReportAllocs()
 			for n := 0; n < b.N; n++ {
 				index := newLiveCoverageIndex(channels, []string{"LIVE"})
-				for i := 0; i < reads; i++ {
+				for i := range reads {
 					if !index.covers(channels[(i*31+255)%len(channels)], "LIVE") {
 						b.Fatal("missing channel")
 					}
@@ -99,7 +99,7 @@ func TestLiveCoverageMatcherPromotesOnlyAfterReadBudget(t *testing.T) {
 		channels[i] = fmt.Sprintf("UC-%06d", i)
 	}
 	matcher := newLiveCoverageMatcher(channels, []string{"LIVE"})
-	for i := 0; i < liveCoverageLinearReadBudget; i++ {
+	for range liveCoverageLinearReadBudget {
 		if !matcher.covers(channels[255], "LIVE") || matcher.index.channels != nil {
 			t.Fatal("small workloads must not allocate an index")
 		}
@@ -144,7 +144,7 @@ func BenchmarkLiveCoverageAdaptiveSlot(b *testing.B) {
 			b.ReportAllocs()
 			for n := 0; n < b.N; n++ {
 				matcher := newLiveCoverageMatcher(channels, []string{"LIVE"})
-				for i := 0; i < reads; i++ {
+				for i := range reads {
 					if !matcher.covers(channels[(i*31+255)%len(channels)], "LIVE") {
 						b.Fatal("missing channel")
 					}

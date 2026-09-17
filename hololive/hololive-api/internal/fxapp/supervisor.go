@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/park285/shared-go/v2/pkg/panicguard"
 	"go.uber.org/fx"
 )
 
@@ -46,8 +47,21 @@ func (s *supervisor) Start(errCh <-chan error) {
 	}
 
 	s.startOnce.Do(func() {
-		go s.monitor(errCh)
+		go s.runMonitor(errCh)
 	})
+}
+
+func (s *supervisor) runMonitor(errCh <-chan error) {
+	defer close(s.doneCh)
+
+	err := panicguard.RunE(s.logger, panicguard.BackgroundTask, "hololive-api-supervisor", func() error {
+		s.monitor(errCh)
+
+		return nil
+	})
+	if err != nil {
+		s.handleTerminal(fmt.Errorf("monitor runtime errors: %w", err))
+	}
 }
 
 func (s *supervisor) Stop() {
@@ -73,8 +87,6 @@ func (s *supervisor) Err() error {
 }
 
 func (s *supervisor) monitor(errCh <-chan error) {
-	defer close(s.doneCh)
-
 	for {
 		select {
 		case err := <-errCh:
