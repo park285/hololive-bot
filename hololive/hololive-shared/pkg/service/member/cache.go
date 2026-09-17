@@ -373,19 +373,19 @@ func (c *Cache) getAliasFromCache(ctx context.Context, alias string, generation 
 		return nil
 	}
 
-	c.snapshotMu.RLock()
-
-	defer c.snapshotMu.RUnlock()
-
-	if c.snapshotGeneration.Load() != generation {
-		return nil
-	}
-
 	cacheKey := c.epochDataKey(memberAliasKeyPrefix + alias)
 
 	var member domain.Member
 
+	// 원격 I/O가 snapshot 교체/epoch 무효화를 막지 않도록 잠금 밖에서 읽는다.
 	if err := c.cache.Get(ctx, cacheKey, &member); err != nil || member.Name == "" {
+		return nil
+	}
+
+	c.snapshotMu.RLock()
+	defer c.snapshotMu.RUnlock()
+
+	if c.snapshotGeneration.Load() != generation {
 		return nil
 	}
 

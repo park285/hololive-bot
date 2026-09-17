@@ -124,17 +124,12 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 		sessionIDs = append(sessionIDs, decision.Sessions[i].VideoID)
 	}
 
-	pendingIDs := make([]string, 0, len(decision.PendingEnds))
+	pendingIDs := make([]string, len(decision.PendingEnds))
 	for i := range decision.PendingEnds {
-		pending := &decision.PendingEnds[i]
-
-		pendingIDs = append(pendingIDs, pending.VideoID)
-
-		if _, err := tx.Exec(ctx, mustSQL("repository_live_pending_end_upsert.sql"),
-			pending.VideoID, pending.ChannelID, pending.Kind, pending.ObservationID, pending.EffectiveAt,
-			pending.ReceivedAt, pending.ScheduledFor, pending.EndedAt, pending.NegativeEligible, pending.ScopeCovers); err != nil {
-			return fmt.Errorf("persist pending end: %w", err)
-		}
+		pendingIDs[i] = decision.PendingEnds[i].VideoID
+	}
+	if err := persistPendingLiveEnds(ctx, tx, decision.PendingEnds); err != nil {
+		return fmt.Errorf("persist pending ends: %w", err)
 	}
 
 	// Decision에 없는 전역 pending을 지우면 다른 채널의 아직 도착하지 않은 positive를 잃는다.
@@ -160,4 +155,36 @@ func persistLiveEvidence(ctx context.Context, tx dbx.Tx, decision *live.Decision
 	}
 
 	return nil
+}
+
+const pendingLiveEndBatchSize = 128
+
+func persistPendingLiveEnds(ctx context.Context, tx dbx.Tx, pending []live.PendingEnd) error {
+	for start := 0; start < len(pending); start += pendingLiveEndBatchSize {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("persist pending live ends at %d: %w", start, err)
+		}
+		end := min(start+pendingLiveEndBatchSize, len(pending))
+		statements := pendingLiveEndStatements(pending[start:end])
+		if err := dbx.ExecStatements(ctx, tx, statements); err != nil {
+			return fmt.Errorf("persist pending live end batch at %d: %w", start, err)
+		}
+	}
+	return nil
+}
+
+func pendingLiveEndStatements(pending []live.PendingEnd) []dbx.Statement {
+	statements := make([]dbx.Statement, 0, len(pending))
+	for i := range pending {
+		item := &pending[i]
+		statements = append(statements, dbx.Statement{
+			Operation: "upsert pending live end",
+			SQL:       mustSQL("repository_live_pending_end_upsert.sql"),
+			Args: []any{
+				item.VideoID, item.ChannelID, item.Kind, item.ObservationID, item.EffectiveAt,
+				item.ReceivedAt, item.ScheduledFor, item.EndedAt, item.NegativeEligible, item.ScopeCovers,
+			},
+		})
+	}
+	return statements
 }

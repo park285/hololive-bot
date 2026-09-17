@@ -41,7 +41,7 @@ func (c *Cache) snapshotOwnedChannelMemberLocked(
 		return nil
 	}
 
-	representative := channelRepresentatives(snap.members)[channelID]
+	representative := snap.pointLookup().representatives[channelID]
 	if representative == nil || !samePointMemberIdentity(representative, cached) {
 		return nil
 	}
@@ -91,7 +91,7 @@ func (c *Cache) snapshotOwnedPointMemberLocked(
 		return nil
 	}
 
-	for _, current := range snap.members {
+	for _, current := range snap.pointLookup().byIdentity[pointKey(cached)] {
 		if current != nil && matches(current) && samePointMemberIdentity(current, cached) {
 			return current
 		}
@@ -131,5 +131,54 @@ func memberMatchesPointAlias(member *domain.Member, alias string) bool {
 		return true
 	}
 
-	return slices.Contains(member.GetAllAliases(), alias)
+	return member.Aliases != nil &&
+		(slices.Contains(member.Aliases.Ko, alias) || slices.Contains(member.Aliases.Ja, alias))
+}
+
+// ID가 있으면 ID만 식별에 사용한다. ID가 없는 호환 데이터는 채널, 이름 순이다.
+// 각 버킷의 순서를 보존하여 중복 ID를 가진 테스트/호환 데이터도 기존 탐색과 일치한다.
+type pointMemberKey struct {
+	id        int
+	channelID string
+	name      string
+}
+
+type memberPointIndex struct {
+	byIdentity      map[pointMemberKey][]*domain.Member
+	representatives map[string]*domain.Member
+}
+
+func pointKey(member *domain.Member) pointMemberKey {
+	if member.ID != 0 {
+		return pointMemberKey{id: member.ID}
+	}
+	if member.ChannelID != "" {
+		return pointMemberKey{channelID: member.ChannelID}
+	}
+	return pointMemberKey{name: member.Name}
+}
+
+func buildMemberPointIndex(members []*domain.Member) *memberPointIndex {
+	index := &memberPointIndex{
+		byIdentity:      make(map[pointMemberKey][]*domain.Member, len(members)),
+		representatives: channelRepresentatives(members),
+	}
+	for _, member := range members {
+		if member == nil {
+			continue
+		}
+		key := pointKey(member)
+		index.byIdentity[key] = append(index.byIdentity[key], member)
+	}
+	return index
+}
+
+func (s *allMembersState) pointLookup() *memberPointIndex {
+	// 런타임은 게시 전에 준비한다. 직접 생성한 스냅샷도 동시 읽기에서 한 번만 구성한다.
+	s.pointIndexOnce.Do(func() {
+		if s.pointIndex == nil {
+			s.pointIndex = buildMemberPointIndex(s.members)
+		}
+	})
+	return s.pointIndex
 }
