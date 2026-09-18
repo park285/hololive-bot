@@ -28,7 +28,7 @@ expect_rejected() {
   fi
 }
 
-for name in ap ap_comment env_comment env_prefix invalid_owner malformed_owner duplicate_owner unregistered dynamic_unregistered compose compose_comment compose_extra nginx nft hba extra_nginx extra_nft extra_hba broad_nft broad_nft_no_port nonssl_hba; do
+for name in ap ap_comment env_comment env_prefix invalid_owner malformed_owner duplicate_owner unregistered dynamic_unregistered compose compose_comment compose_extra nginx nft hba extra_nginx extra_nft extra_hba broad_nft broad_nft_no_port nonssl_hba forward_dnat forward_reject; do
   make_fixture "$tmpdir/$name"
 done
 
@@ -121,3 +121,8 @@ printf 'host all all 0.0.0.0/0 trust\n' >>"$tmpdir/nonssl_hba/deploy/compose/pos
 expect_rejected "non-loopback non-SSL HBA source" "$tmpdir/nonssl_hba"
 
 echo "[PASS] topology owner, registration, and consumer mutations are rejected"
+
+sed -i 's/ct status dnat ct original proto-dst 5433 //' "$tmpdir/forward_dnat/scripts/systemd/admin-dashboard-ingress.nft"
+expect_rejected "missing Docker original destination fence" "$tmpdir/forward_dnat"
+sed -i '/ct status dnat.*5433.*reject/d' "$tmpdir/forward_reject/scripts/systemd/admin-dashboard-ingress.nft"
+expect_rejected "missing Docker forward terminal rejection" "$tmpdir/forward_reject"

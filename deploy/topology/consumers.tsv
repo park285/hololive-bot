@@ -12,4 +12,4 @@ deploy/nginx/holoshi-public-shortlink.conf	central
 scripts/deploy/ap-hosts/osaka.conf	osaka
 scripts/deploy/ap-hosts/osaka2.conf	osaka2
 scripts/deploy/ap-hosts/seoul.conf	seoul
-scripts/systemd/admin-dashboard-ingress.nft	seoul
+scripts/systemd/admin-dashboard-ingress.nft	central,workstation,seoul,osaka,osaka2

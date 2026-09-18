@@ -169,7 +169,7 @@ assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/c
 assert_count "prod Iris host aliases" 2 ":$seoul\"" "$root_dir/deploy/compose/docker-compose.prod.yml"
 assert_count "standby primary default" 1 "HOLOLIVE_PRIMARY_HOST:-$central" "$root_dir/deploy/compose/docker-compose.standby.yml"
 assert_count "live-compat PostgreSQL bind" 1 "POSTGRES_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
-assert_count "live-compat Valkey bind" 1 "VALKEY_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
+assert_count "retired tailnet Valkey bind" 0 "VALKEY_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat Iris allowlist" 2 "IRIS_BASE_URL_ALLOWED_HOSTS:-$seoul" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat H3 identity" 1 "HOLOLIVE_H3_SERVER_NAME:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat H3 bind" 2 "HOLOLIVE_API_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
@@ -179,32 +179,36 @@ assert_count "central ingress loopback" 1 "allow 127.0.0.1;" "$root_dir/deploy/n
 assert_count "central ingress bind owner" 1 "allow @BIND_IP@;" "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template"
 [[ "$(grep -Ec '^[[:space:]]*allow[[:space:]]+' "$root_dir/deploy/nginx/admin-dashboard-ingress.conf.template")" -eq 3 ]] ||
   fail "central ingress allow directive set"
-assert_count "central firewall source" 1 "ip saddr $seoul tcp dport" "$root_dir/scripts/systemd/admin-dashboard-ingress.nft"
-[[ "$(grep -Ec 'ip saddr' "$root_dir/scripts/systemd/admin-dashboard-ingress.nft")" -eq 1 ]] ||
-  fail "central firewall source directive set"
-printf '%s\n' \
-  'iifname "lo" tcp dport 30192 accept' \
-  "iifname \"tailscale0\" ip saddr $seoul tcp dport 30192 accept" \
-  'tcp dport { 30191, 30192 } reject with tcp reset' | LC_ALL=C sort >"$tmpdir/expected-nft-ports"
-awk '/tcp dport/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
-  "$root_dir/scripts/systemd/admin-dashboard-ingress.nft" | LC_ALL=C sort >"$tmpdir/actual-nft-ports"
-cmp -s "$tmpdir/expected-nft-ports" "$tmpdir/actual-nft-ports" || fail "central firewall target-port rule set"
-printf '%s\n' \
-  'iifname "lo" tcp dport 30192 accept' \
-  "iifname \"tailscale0\" ip saddr $seoul tcp dport 30192 accept" | LC_ALL=C sort >"$tmpdir/expected-nft-accepts"
-awk '/[[:space:]]accept([[:space:]]|$)/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
-  "$root_dir/scripts/systemd/admin-dashboard-ingress.nft" | LC_ALL=C sort >"$tmpdir/actual-nft-accepts"
-cmp -s "$tmpdir/expected-nft-accepts" "$tmpdir/actual-nft-accepts" || fail "central firewall accept verdict set"
-printf '%s\n' \
-  'table inet admin_dashboard_ingress {' \
-  'chain input {' \
-  'type filter hook input priority -20; policy accept;' \
-  'iifname "lo" tcp dport 30192 accept' \
-  "iifname \"tailscale0\" ip saddr $seoul tcp dport 30192 accept" \
-  'tcp dport { 30191, 30192 } reject with tcp reset' \
-  '}' \
-  '}' >"$tmpdir/expected-nft-grammar"
-awk 'NF { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
+# 전체 문법과 순서를 고정해 source/target/DNAT 조건의 삭제나 넓은 accept를 거절한다.
+postgres_sources="$(printf '%s\n' "$central" "$workstation" "$seoul" "$osaka" "$osaka2" | LC_ALL=C sort | paste -sd, - | sed 's/,/, /g')"
+cat >"$tmpdir/expected-nft-grammar" <<EOF
+table inet admin_dashboard_ingress {
+set postgres_sources {
+type ipv4_addr
+elements = { $postgres_sources }
+}
+chain input {
+type filter hook input priority -20; policy accept;
+iifname "lo" tcp dport 30192 accept
+iifname "tailscale0" ip saddr $seoul tcp dport 30192 accept
+tcp dport { 30191, 30192 } reject with tcp reset
+iifname "lo" udp dport 30006 accept
+iifname "tailscale0" ip saddr $seoul udp dport 30006 accept
+udp dport 30006 reject
+iifname "lo" tcp dport 5433 accept
+iifname "tailscale0" ip saddr @postgres_sources tcp dport 5433 accept
+tcp dport 5433 reject with tcp reset
+}
+chain forward {
+type filter hook forward priority -20; policy accept;
+ct status dnat ct original proto-dst 30006 udp dport 30006 iifname "tailscale0" ip saddr $seoul accept
+ct status dnat ct original proto-dst 30006 udp dport 30006 reject
+ct status dnat ct original proto-dst 5433 tcp dport 5432 iifname "tailscale0" ip saddr @postgres_sources accept
+ct status dnat ct original proto-dst 5433 tcp dport 5432 reject with tcp reset
+}
+}
+EOF
+awk 'NF && $1 !~ /^#/ { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); gsub(/[[:space:]]+/, " "); print }' \
   "$root_dir/scripts/systemd/admin-dashboard-ingress.nft" >"$tmpdir/actual-nft-grammar"
 cmp -s "$tmpdir/expected-nft-grammar" "$tmpdir/actual-nft-grammar" || fail "central firewall full grammar and ordering"
 assert_count "public shortlink upstream" 1 "server $central:30192;" "$root_dir/deploy/nginx/holoshi-public-shortlink.conf"
