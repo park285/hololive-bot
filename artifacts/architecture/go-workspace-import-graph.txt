@@ -303,7 +303,6 @@ github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololi
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
-github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/park285/shared-go/v2/pkg/envutil
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/park285/shared-go/v2/pkg/panicguard
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/park285/shared-go/v2/pkg/runtime/bootstrap
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/park285/shared-go/v2/pkg/runtime/lifecycle
@@ -929,6 +928,7 @@ github.com/kapu/hololive-shared/pkg/config/settings -> github.com/kapu/hololive-
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/kapu/hololive-shared/pkg/contracts/shortlink
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/shared-go/v2/pkg/envutil
+github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/shared-go/v2/pkg/h3
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/shared-go/v2/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/config/settings -> github.com/park285/shared-go/v2/pkg/workercontract
 github.com/kapu/hololive-shared/pkg/config/settings/alarmworker -> github.com/kapu/hololive-shared/pkg/config/settings
@@ -1089,6 +1089,7 @@ github.com/kapu/hololive-shared/pkg/service/database -> github.com/kapu/hololive
 github.com/kapu/hololive-shared/pkg/service/database -> github.com/park285/shared-go/v2/pkg/db/pgxdb
 github.com/kapu/hololive-shared/pkg/service/database/mocks -> github.com/kapu/hololive-shared/pkg/service/database
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-dbtest
+github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/privacylog
 github.com/kapu/hololive-shared/pkg/service/delivery -> github.com/kapu/hololive-shared/pkg/service/alarm/handoff
@@ -1123,7 +1124,7 @@ github.com/kapu/hololive-shared/pkg/service/holodex/provider -> github.com/park2
 github.com/kapu/hololive-shared/pkg/service/holodex/provider -> github.com/park285/shared-go/v2/pkg/retry
 github.com/kapu/hololive-shared/pkg/service/holodex/provider -> github.com/park285/shared-go/v2/pkg/runtime/lifecycle
 github.com/kapu/hololive-shared/pkg/service/holodex/provider -> github.com/park285/shared-go/v2/pkg/stringutil
-github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/v2/pkg/envutil
+github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/v2/pkg/h3
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/v2/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/kapu/hololive-shared/pkg/sqlassets
@@ -1165,6 +1166,7 @@ github.com/kapu/hololive-shared/pkg/service/notification/alarmservice -> github.
 github.com/kapu/hololive-shared/pkg/service/notification/alarmservice -> github.com/park285/shared-go/v2/pkg/stringutil
 github.com/kapu/hololive-shared/pkg/service/officialidentity -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/officialidentity -> github.com/park285/shared-go/v2/pkg/stringutil
+github.com/kapu/hololive-shared/pkg/service/ratelimit -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/service/ratelimit -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/service/settings -> github.com/kapu/hololive-shared/pkg/service/alarm/checker
 github.com/kapu/hololive-shared/pkg/service/shortlink -> github.com/kapu/hololive-shared/pkg/contracts/shortlink
