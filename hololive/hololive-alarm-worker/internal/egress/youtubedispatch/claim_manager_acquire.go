@@ -13,7 +13,6 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
-	yttimestamp "github.com/kapu/hololive-shared/pkg/service/youtube/timestamp"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation"
 )
 
@@ -27,7 +26,8 @@ func (d *ClaimManager) tryClaimDelivery(
 	}
 
 	repository := observation.NewRepositoryContext(ctx, d.db)
-	claimAt := resolveDeliveryClaimTime(row, outbox)
+	// lease 시각은 event/schedule metadata와 분리한다. 과거·미래 재시도 시각으로 lock 수명을 바꾸면 안 된다.
+	claimAt := time.Now().UTC().Truncate(time.Microsecond)
 	postID := strings.TrimSpace(telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload))
 
 	if postID == "" {
@@ -71,41 +71,6 @@ func shouldSkipDeliveryClaim(d *ClaimManager, outbox *domain.YouTubeNotification
 	}
 
 	return d == nil || deliverysql.IsNilDB(d.db) || !telemetry.IsCommunityShortsDeliveryAuditKind(outbox.Kind)
-}
-
-func resolveDeliveryClaimTime(row *domain.YouTubeNotificationDelivery, outbox *domain.YouTubeNotificationOutbox) time.Time {
-	for _, candidate := range deliveryClaimTimeCandidates(row, outbox) {
-		if !candidate.IsZero() {
-			return normalizeDeliveryClaimTime(candidate)
-		}
-	}
-
-	return normalizeDeliveryClaimTime(time.Now())
-}
-
-func deliveryClaimTimeCandidates(row *domain.YouTubeNotificationDelivery, outbox *domain.YouTubeNotificationOutbox) []time.Time {
-	if outbox == nil {
-		return []time.Time{time.Now()}
-	}
-
-	return []time.Time{
-		outbox.NextAttemptAt,
-		deliveryRowCreatedAt(row),
-		outbox.CreatedAt,
-		time.Now(),
-	}
-}
-
-func deliveryRowCreatedAt(row *domain.YouTubeNotificationDelivery) time.Time {
-	if row == nil {
-		return time.Time{}
-	}
-
-	return row.CreatedAt
-}
-
-func normalizeDeliveryClaimTime(value time.Time) time.Time {
-	return yttimestamp.Normalize(value).Truncate(time.Microsecond)
 }
 
 func deliveryClaimIdentityForOutbox(outbox *domain.YouTubeNotificationOutbox) (string, error) {

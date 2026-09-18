@@ -9,6 +9,7 @@ EXCLUDES="${EXCLUDES:-$REPO_ROOT/scripts/deploy/ap-rsync-excludes.txt}"
 AP_ROLLBACK_TAG_KEEP="${AP_ROLLBACK_TAG_KEEP:-5}"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+. "$REPO_ROOT/scripts/deploy/lib/ap-prechange-config.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
 
 AP_HOST_ARG="${1:-}"
@@ -214,17 +215,8 @@ docker ps -a --filter label=com.docker.compose.project=hololive --format '{{json
 sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
 sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
 test -w /var/run/docker.sock || groups | grep -qw docker
-prechange_config_err=\$(mktemp)
-if ! sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet 2>\"\$prechange_config_err\"; then
-  if grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/etc/stack-secrets/hololive-bot/(bot|alarm-worker)\.env' \"\$prechange_config_err\"; then
-    echo 'AP prechange compose config skipped: token-free ap-compose.env is incompatible with pre-rsync compose; post-rsync config remains required' >&2
-  else
-    cat \"\$prechange_config_err\" >&2
-    rm -f \"\$prechange_config_err\"
-    exit 1
-  fi
-fi
-rm -f \"\$prechange_config_err\"
+$(declare -f ap_prechange_config)
+ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
 echo backup_dir='$backup_dir'"
 
 rsync -ai \

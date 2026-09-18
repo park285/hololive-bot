@@ -119,6 +119,7 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
 		"LIVE_LOGS_PATH=/srv/hololive-logs-dummy",
+		"HOLOLIVE_OTLP_GRPC_ENDPOINT=100.100.1.2:4317",
 		"HOLOLIVE_RUNTIME_GID=1002",
 		"HOLO_API_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-api/VERSION")),
 		"HOLO_ALARM_WORKER_VERSION="+strings.TrimSpace(readRepoFile(t, "hololive/hololive-alarm-worker/VERSION")),

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -21,6 +23,7 @@ type youtubeOutboxKaringTestSender struct {
 	mu         sync.Mutex
 	messages   []string
 	payloads   []domain.YouTubeOutboxDispatchPayload
+	planned    map[string]domain.YouTubeOutboxDispatchPayload
 	failErr    error
 	calls      int
 	nonRegular bool
@@ -39,17 +42,29 @@ func (s *youtubeOutboxKaringTestSender) SendMessage(_ context.Context, roomID, m
 	return nil
 }
 
-func (s *youtubeOutboxKaringTestSender) SendYouTubeOutboxKaring(_ context.Context, _ string, payload *domain.YouTubeOutboxDispatchPayload) error {
+func (s *youtubeOutboxKaringTestSender) PrepareYouTubeOutboxKaring(_ context.Context, _ string, payload *domain.YouTubeOutboxDispatchPayload, id string) (*iris.KaringContentListRequest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.planned == nil {
+		s.planned = make(map[string]domain.YouTubeOutboxDispatchPayload)
+	}
+
+	s.planned[id] = *payload
+
+	return &iris.KaringContentListRequest{ClientRequestID: new(id)}, nil
+}
+
+func (s *youtubeOutboxKaringTestSender) SendYouTubeOutboxKaring(_ context.Context, _ string, req *iris.KaringContentListRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.calls++
-
 	if s.failErr != nil {
 		return s.failErr
 	}
 
-	s.payloads = append(s.payloads, *payload)
+	s.payloads = append(s.payloads, s.planned[*req.ClientRequestID])
 
 	return nil
 }
@@ -319,7 +334,11 @@ func (*blockingKaringSender) RegularChat(context.Context, string) bool {
 	return true
 }
 
-func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *domain.YouTubeOutboxDispatchPayload) error {
+func (*blockingKaringSender) PrepareYouTubeOutboxKaring(_ context.Context, _ string, _ *domain.YouTubeOutboxDispatchPayload, id string) (*iris.KaringContentListRequest, error) {
+	return &iris.KaringContentListRequest{ClientRequestID: new(id)}, nil
+}
+
+func (s *blockingKaringSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *iris.KaringContentListRequest) error {
 	active := s.active.Add(1)
 	defer s.active.Add(-1)
 

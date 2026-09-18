@@ -121,7 +121,7 @@ func TestResolvePersistedTargetMinutes_PreservesExplicitTargetsAcrossUnrelatedUp
 	}
 }
 
-func TestResolvePersistedTargetMinutes_HealsLegacyStoredTargetMinutes(t *testing.T) {
+func TestResolvePersistedTargetMinutes_PreservesExplicitStoredTargetMinutes(t *testing.T) {
 	settingsPath := filepath.Join(t.TempDir(), "settings.json")
 
 	logger := slog.New(slog.DiscardHandler)
@@ -131,7 +131,7 @@ func TestResolvePersistedTargetMinutes_HealsLegacyStoredTargetMinutes(t *testing
 	}
 
 	got := ResolvePersistedTargetMinutes(settingsPath, []int{9, 5, 1}, false, logger)
-	want := []int{5, 3, 1}
+	want := []int{5, 1}
 
 	if len(got) != len(want) {
 		t.Fatalf("ResolvePersistedTargetMinutes() len = %d, want %d (%v)", len(got), len(want), got)

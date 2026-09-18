@@ -273,11 +273,13 @@ func TestResolvePersistedTargetMinutes(t *testing.T) {
 		input               []int
 		expect              []int
 	}{
+		{name: "absent uses runtime default", alarmAdvanceMinutes: 20, expect: []int{20, 3, 1}},
+		{name: "explicit single minute stays single", alarmAdvanceMinutes: 20, input: []int{5}, expect: []int{5}},
 		{
-			name:                "heals legacy five one pair",
+			name:                "preserves explicit five one pair",
 			alarmAdvanceMinutes: 5,
 			input:               []int{5, 1},
-			expect:              []int{5, 3, 1},
+			expect:              []int{5, 1},
 		},
 		{
 			name:                "does not heal explicit multi target",

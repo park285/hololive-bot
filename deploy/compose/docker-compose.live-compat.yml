@@ -59,9 +59,9 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 && psql -U $$POSTGRES_USER -d $$POSTGRES_DB -p 5432 -c 'SELECT 1' -q -t"]
 
   valkey-cache:
-    ports:
-      - "${VALKEY_PORT_BIND_IP:-100.100.1.3}:6379:6379"
-    # command 오버라이드는 prod의 gid 1000/0660 소켓 정책을 그대로 상속하고 tailnet publish만 남긴다.
+    # AP collector는 cache를 소비하지 않는다. 중앙 unix socket/내부망과 loopback만 유지한다.
+    ports: !override
+      - "127.0.0.1:6379:6379"
 
   hololive-db-migrate:
     environment:
@@ -77,6 +77,8 @@ services:
       IRIS_BASE_URL_ALLOWED_HOSTS: ${IRIS_BASE_URL_ALLOWED_HOSTS:-100.100.1.5}
       HEALTHCHECK_SERVER_NAME: ${HOLOLIVE_H3_SERVER_NAME:-100.100.1.3}
       HOLOLIVE_SHORT_LINK_ADDR: ":30101"
+      # API를 observability peer와 분리하므로 승인된 host/Tailscale OTLP 주소를 명시한다.
+      HOLOLIVE_OTLP_GRPC_ENDPOINT: ${HOLOLIVE_OTLP_GRPC_ENDPOINT:?approved host or Tailscale OTLP endpoint is required}
     ports: !override
       - "${HOLOLIVE_API_PORT_BIND_IP:-100.100.1.3}:30001:30001"
       - "${HOLOLIVE_API_PORT_BIND_IP:-100.100.1.3}:30001:30001/udp"
@@ -97,8 +99,7 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/worker-profiles/hololive-api.json:/run/hololive-bot/worker-profiles/hololive-api.json:ro
       - valkey-cache-socket:/var/run/valkey:ro
-    networks:
-      observability-traces: {}
+
 
   hololive-alarm-worker:
     env_file: !override

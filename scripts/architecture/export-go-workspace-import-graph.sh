@@ -10,14 +10,7 @@ source "${ROOT_DIR}/scripts/ci/go-workspace-modules.sh"
 require_git_checkout "${ROOT_DIR}"
 
 resolve_shared_go_dir() {
-  local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
-  if [[ -z "${candidate}" ]]; then
-    if [[ -d "${ROOT_DIR}/shared-go" ]]; then
-      candidate="${ROOT_DIR}/shared-go"
-    elif [[ -d "${ROOT_DIR}/../shared-go" ]]; then
-      candidate="${ROOT_DIR}/../shared-go"
-    fi
-  fi
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/../shared-go}"
   if [[ ! -d "${candidate}" ]]; then
     echo "error: active shared-go dir not found" >&2
     exit 1

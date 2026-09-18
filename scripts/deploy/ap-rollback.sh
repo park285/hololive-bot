@@ -5,6 +5,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 BACKUP_DIR="${BACKUP_DIR:-}"
 
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
+. "$REPO_ROOT/scripts/deploy/lib/ap-prechange-config.sh"
 
 AP_HOST_ARG="${1:-}"
 MODE="${2:---dry-run}"
@@ -112,7 +113,8 @@ echo backup_dir='$BACKUP_DIR'
 echo rollback_image_tag=\"\$rollback_image_tag\"
 echo would_restore=\"\$prod_backup_file\"
 echo would_restore=\"\$ap_backup_file\"
-sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet"
+$(declare -f ap_prechange_config)
+ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet"
 
 if [[ "$MODE" == "--dry-run" ]]; then
   echo "[DRY-RUN] Rollback preflight passed; no remote files or containers changed."

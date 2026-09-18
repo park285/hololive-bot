@@ -64,13 +64,18 @@ func (s YouTubeOutboxKaringSender) SendMessageWithClientRequestID(ctx context.Co
 	return nil
 }
 
-func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error {
+// PrepareYouTubeOutboxKaring는 provider 호출 없이 한 chunk의 payload를 요청으로 변환한다.
+func (s YouTubeOutboxKaringSender) PrepareYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload, clientRequestID string) (*iris.KaringContentListRequest, error) {
 	if err := s.requireSender(); err != nil {
-		return err
+		return nil, err
 	}
 
 	if payload == nil {
-		return errors.New("youtube outbox karing sender: payload is nil")
+		return nil, errors.New("youtube outbox karing sender: payload is nil")
+	}
+
+	if len(payload.Items) > alarmDispatchKaringMaxItemsPerRequest {
+		return nil, errors.New("youtube outbox karing sender: payload exceeds one chunk")
 	}
 
 	envelope := domain.AlarmQueueEnvelope{
@@ -88,13 +93,30 @@ func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, 
 		envelopes: []domain.AlarmQueueEnvelope{envelope},
 	})
 	if err != nil {
-		return fmt.Errorf("build youtube outbox karing request: %w", err)
+		return nil, fmt.Errorf("build youtube outbox karing request: %w", err)
 	}
 
-	for i := range requests {
-		if err := s.sender.SendKaringContentList(ctx, roomID, &requests[i]); err != nil {
-			return fmt.Errorf("send youtube outbox karing request %d: %w", i, err)
-		}
+	if len(requests) != 1 || clientRequestID == "" {
+		return nil, errors.New("youtube outbox karing request must be one identified chunk")
+	}
+
+	requests[0].ClientRequestID = new(clientRequestID)
+
+	return &requests[0], nil
+}
+
+// SendYouTubeOutboxKaring는 준비된 한 chunk만 보내며 분할/재시도하지 않는다.
+func (s YouTubeOutboxKaringSender) SendYouTubeOutboxKaring(ctx context.Context, roomID string, request *iris.KaringContentListRequest) error {
+	if err := s.requireSender(); err != nil {
+		return err
+	}
+
+	if request == nil {
+		return errors.New("youtube outbox karing request is nil")
+	}
+
+	if err := s.sender.SendKaringContentList(ctx, roomID, request); err != nil {
+		return fmt.Errorf("send youtube outbox karing chunk: %w", err)
 	}
 
 	return nil

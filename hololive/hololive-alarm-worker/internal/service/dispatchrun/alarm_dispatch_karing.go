@@ -13,13 +13,14 @@ import (
 
 	"github.com/park285/iris-client-go/v2/iris"
 
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 const (
-	alarmDispatchKaringMaxItemsPerRequest = 4
+	alarmDispatchKaringMaxItemsPerRequest = youtubedispatch.KaringMaxItemsPerRequest
 	// Iris admission dedup의 canonical idempotency namespace다. 재시도 identity bytes를 유지한다.
 	alarmDispatchClientRequestIDNamespace = "hololive-alarm:"
 )

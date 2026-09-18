@@ -173,6 +173,14 @@ base_ref="$(git -C "${workdir}" rev-parse HEAD)"
 printf '# changed\n' >"${workdir}/scripts/ci/local-ci.sh"
 expect_scope "changed ci gate script" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
 
+for input in local-ci-nilaway.sh nilaway-inputs.sh; do
+  workdir="${tmpdir}/${input}"
+  setup_repo "${workdir}"
+  base_ref="$(git -C "${workdir}" rev-parse HEAD)"
+  printf '# changed\n' >"${workdir}/scripts/ci/${input}"
+  expect_scope "changed ${input}" "$(run_scope "${workdir}" changed "${base_ref}")" "${full_scope}"
+done
+
 workdir="${tmpdir}/scripts-only"
 setup_repo "${workdir}"
 base_ref="$(git -C "${workdir}" rev-parse HEAD)"

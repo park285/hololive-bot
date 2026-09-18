@@ -289,6 +289,10 @@ run_reusable_phase() {
   run_self_test scripts/ci/check-workflow-ci-owner_test.py \
     scripts/ci/check-workflow-ci-owner.py scripts/ci/workflow-ci-owner scripts/ci/workflow-gate-profile \
     scripts/ci/public-pr-go-gate.sh scripts/ci/public-pr-frontend-gate.sh .github/workflows
+  run_self_test scripts/ci/check-merge-candidate_test.py .github/workflows/ci.yml
+  run_self_test scripts/deploy/admin-bind_test.sh scripts/deploy/lib/admin-bind.sh scripts/deploy/compose.sh \
+    scripts/deploy/compose-redeploy-service.sh build-all.sh scripts/systemd/admin-dashboard-ingress.nft
+  run_self_test scripts/deploy/admin-network_test.sh deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
   bash scripts/ci/check-recurring-security-scan-contract.sh
   run_self_test scripts/ci/disabled-bake-attestations_test.sh \
     scripts/ci/disabled-bake-attestations.jq scripts/ci/check-recurring-security-scan-contract.sh
@@ -312,7 +316,10 @@ run_reusable_phase() {
   run_self_test scripts/ci/go-work-sync-drift_test.sh \
     scripts/ci/go-work-sync-drift.sh
   run_self_test scripts/ci/nilaway-inputs_test.sh \
-    scripts/ci/nilaway-inputs.sh scripts/ci/local-ci.sh
+    scripts/ci/nilaway-inputs.sh scripts/ci/local-ci.sh scripts/ci/local-ci-nilaway.sh
+  run_self_test scripts/ci/local-ci-nilaway_test.sh \
+    scripts/ci/local-ci-nilaway.sh scripts/ci/local-ci.sh scripts/ci/nilaway-inputs.sh \
+    scripts/ci/go-tooling.sh go.mod go.sum
   run_self_test scripts/ci/race-parallel-guard_test.sh scripts/ci/local-ci.sh
   run_self_test scripts/refactor/grep-sensitive-logs_test.sh scripts/refactor/grep-sensitive-logs.sh
   run_self_test scripts/refactor/test-validate-no-admin-touch.sh \
@@ -333,6 +340,15 @@ run_reusable_phase() {
     hololive/hololive-youtube-collector/go.mod
   run_self_test scripts/deploy/check-ap-rsync-manifest_test.sh \
     scripts/deploy/check-ap-rsync-manifest.sh scripts/deploy/ap-rsync-files.txt
+  run_self_test scripts/deploy/lib/ap-prechange-config_test.sh \
+    scripts/deploy/lib/ap-prechange-config.sh scripts/deploy/ap-deploy.sh scripts/deploy/ap-rollback.sh
+  run_self_test scripts/deploy/test-removed-runtimes.sh \
+    scripts/deploy/lib/removed-runtimes.sh scripts/deploy/compose.sh scripts/deploy/compose-redeploy-service.sh build-all.sh
+  run_self_test scripts/architecture/shared-go-workspace_test.sh \
+    scripts/architecture/check-shared-go-boundary.sh scripts/architecture/check-shared-go-packages.sh \
+    scripts/architecture/export-go-workspace-import-graph.sh scripts/architecture/check-error-contracts.sh \
+    scripts/architecture/check-go-trigger-route-hardcoding.sh scripts/architecture/check-go-generic-internal-package-names.sh \
+    scripts/architecture/check-internal-route-hardcoding.sh
   run_self_test scripts/ci/check-postgres-capacity_test.sh \
     scripts/ci/check-postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
     deploy/compose/docker-compose.prod.yml

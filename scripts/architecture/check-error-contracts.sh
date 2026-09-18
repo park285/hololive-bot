@@ -3,9 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-}"
-if [[ -z "${SHARED_GO_DIR}" && -d "${ROOT_DIR}/shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/shared-go"; fi
-if [[ -z "${SHARED_GO_DIR}" && -d "${ROOT_DIR}/../shared-go" ]]; then SHARED_GO_DIR="${ROOT_DIR}/../shared-go"; fi
+SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/../shared-go}"
 [[ -d "${SHARED_GO_DIR}" ]] || { echo "error: active shared-go dir not found" >&2; exit 1; }
 SHARED_GO_DIR="$(cd "${SHARED_GO_DIR}" && pwd)"
 ERROR_DOC="${ROOT_DIR}/docs/current/ERROR_CONTRACT.md"

@@ -7,6 +7,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDeliveryCollisionFilteringPreservesRetryInputs(t *testing.T) {
+	deliveries := []deliveryInsert{
+		{EventKey: "event", PayloadHash: "different", RoomID: "rejected"},
+		{EventKey: "event", PayloadHash: "winner", RoomID: "accepted"},
+	}
+
+	for range 2 {
+		accepted, err := assignDeliveryEventIDs(deliveries, map[string]int64{"event": 7}, map[string]string{"event": "winner"})
+		require.NoError(t, err)
+		require.Len(t, accepted, 1)
+		require.Equal(t, "accepted", accepted[0].RoomID)
+		require.Equal(t, int64(7), accepted[0].EventID)
+		require.Equal(t, "different", deliveries[0].PayloadHash)
+		require.Zero(t, deliveries[1].EventID)
+	}
+}
+
 func TestTruncateHash(t *testing.T) {
 	t.Parallel()
 

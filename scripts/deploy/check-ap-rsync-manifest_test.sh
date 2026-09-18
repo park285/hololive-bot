@@ -50,10 +50,23 @@ expect_failure \
   "$symlink_root/scripts/deploy/check-ap-rsync-manifest.sh"
 
 missing_dependency_manifest="$TMP_DIR/missing-dependency.txt"
-grep -vxF '../shared-go/pkg/panicguard/panicguard.go' "$MANIFEST" > "$missing_dependency_manifest"
+grep -vxF 'hololive/hololive-youtube-collector/cmd/runtime/youtube-collector/main.go' "$MANIFEST" > "$missing_dependency_manifest"
 expect_failure \
-  "missing shared panicguard dependency must fail closed" \
-  "../shared-go/pkg/panicguard/panicguard.go" \
+  "missing collector entrypoint dependency must fail closed" \
+  "hololive/hololive-youtube-collector/cmd/runtime/youtube-collector/main.go" \
   "$missing_dependency_manifest"
 
 echo "[PASS] AP rsync manifest mutation checks"
+
+GO_CMD=/bin/false expect_failure "unusable Go shim must fail" "Go executable preflight failed" "$MANIFEST"
+cat >"$TMP_DIR/go-shim" <<'EOF'
+#!/usr/bin/env bash
+[[ "$GOWORK" == off ]] || exit 92
+if [[ "$1" == version ]]; then echo 'go version fixture'; exit 0; fi
+echo 'fixture dependency enumeration failure' >&2
+exit 91
+EOF
+chmod +x "$TMP_DIR/go-shim"
+GO_CMD="$TMP_DIR/go-shim" expect_failure "dependency error must retain stderr" "fixture dependency enumeration failure" "$MANIFEST"
+GO_CMD="$TMP_DIR/go-shim" expect_failure "dependency error must diagnose action" "Go dependency enumeration failed" "$MANIFEST"
+SHARED_GO_WORKSPACE_PATH="$TMP_DIR/missing" expect_failure "missing workspace must fail" "shared-go workspace missing" "$MANIFEST"

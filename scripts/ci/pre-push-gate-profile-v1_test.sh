@@ -168,6 +168,12 @@ grep -Fq 'bash scripts/logs/daily-rollup-logs_test.sh' "${TMP_DIR}/reusable-chan
 grep -Fq 'self-test skipped (inputs unchanged): scripts/runtime/set-iris-base-url_test.sh' "${TMP_DIR}/reusable-changed.out" || \
   fail "unrelated self-test was not skipped"
 
+run_phase reusable-nilaway --phase=reusable "${range[@]}" GATE_TEST_CHANGED_FILES=scripts/ci/local-ci-nilaway.sh
+grep -Fq 'bash scripts/ci/local-ci-nilaway_test.sh' "${TMP_DIR}/reusable-nilaway.log" || \
+  fail "changed NilAway driver did not trigger the real analyzer self-test"
+grep -Fq 'bash scripts/ci/nilaway-inputs_test.sh' "${TMP_DIR}/reusable-nilaway.log" || \
+  fail "changed NilAway driver did not trigger the input guard self-test"
+
 # full 모드는 skip 조건을 전부 해제한다.
 run_phase reusable-full --phase=reusable "${range[@]}" "${code_change[@]}" PRE_PUSH_MODE=full
 grep -Fq 'bash scripts/logs/daily-rollup-logs_test.sh' "${TMP_DIR}/reusable-full.log" || fail "full mode skipped a self-test"

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260914-local-ci-nilaway-driver",
+  "title": "로컬 NilAway 분석은 동일한 고정 바이너리와 Go vet 드라이버로 패키지 사실을 재사용한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-14",
+  "summary": "사용자가 로컬 CI 최적화 구현을 요청했다. 모듈마다 반복하는 NilAway standalone 분석을 동일 버전 바이너리의 go vet -vettool 실행으로 바꾼다. 선택된 소유 패키지, 테스트 파일과 의존성 분석, 저장소 루트 기준 진단 범위, 실패 차단을 유지한다. Go 자체의 분석 fact 캐시를 사용하고 별도 성공 판정 캐시나 include-pkgs 제외를 추가하지 않는다. NILAWAY_PARALLEL의 1/2 제한은 Go 분석 프로세스 동시성 상한으로 유지한다. 교차 패키지·테스트 진단과 캐시 무효화 검증이 선행하며 실제 로컬 비용을 비교한다. Actions, 운영, 새 의존성, 도구 핀, 다른 필수 검사는 변경하지 않는다. 커밋·통합·push는 포함하지 않는다.",
+  "sources": ["docs/current/plans/2026-09-14-local-ci-nilaway-driver.md#Execution capsule"],
+  "evidence": ["docs/history/2026-09-14-local-ci-nilaway-driver.md"],
+  "implementation": ["scripts/ci/local-ci-nilaway.sh", "scripts/ci/local-ci-nilaway_test.sh", "scripts/ci/local-ci.sh", "scripts/ci/pre-push-gate.sh", "scripts/ci/local-ci-packages.sh"],
+  "supersedes": [],
+  "review": {"trigger": "Go 또는 NilAway 갱신으로 진단·fact 캐시·프로세스 상한의 동등성이 깨질 때"}
+}

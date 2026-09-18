@@ -153,6 +153,10 @@ func (mm *Matcher) findBestMatchImpl(ctx context.Context, query string) (*domain
 		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
 
+	if snapshot.dynamicLoadErr != nil && len(snapshot.exactNames[queryNorm]) == 0 && len(snapshot.exactAliases[queryNorm]) == 0 {
+		return nil, false, snapshot.dynamicLoadErr
+	}
+
 	channel := mm.finalizeCandidate(ctx, mm.resolveSnapshotCandidate(snapshot, queryNorm))
 	if channel == nil {
 		mm.logger.Debug("No match found in internal data",
@@ -195,13 +199,13 @@ func (mm *Matcher) FindBestMatchWithCandidates(ctx context.Context, query string
 		return nil, false, fmt.Errorf("get member matcher snapshot: %w", err)
 	}
 
-	if snapshot.dynamicLoadErr != nil {
-		return nil, false, snapshot.dynamicLoadErr
-	}
-
 	candidates := mm.exactNameMembers(snapshot, nameNorm, org)
 
 	if len(candidates) == 0 {
+		if snapshot.dynamicLoadErr != nil {
+			return nil, false, snapshot.dynamicLoadErr
+		}
+
 		out, found, err := mm.FindBestMatch(ctx, query)
 		if err != nil {
 			return nil, false, fmt.Errorf("find best match: %w", err)

@@ -252,7 +252,7 @@ func TestDispatchDeliveryRowsClaimsCommunityPostBeforeSending(t *testing.T) {
 func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaim(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, time.April, 11, 1, 11, 12, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	sender := &claimGateTestSender{failRoom: map[string]bool{}}
 	dispatcher, db := newClaimGateTestDispatcher(t, sender, &dispatchstate.Config{LockTimeout: 5 * time.Minute})
 	row, outbox, postID := newShortClaimGateFixture(now, "recent-claim")

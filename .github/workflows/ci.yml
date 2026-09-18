@@ -1,5 +1,5 @@
 name: CI
-run-name: CI · ${{ github.event.pull_request.head.sha || github.sha }}
+run-name: CI · ${{ github.sha }}
 
 # PUBLIC 저장소의 canonical PR gate. 비밀이 필요 없는 정책·Go·frontend 검증은
 # GitHub Actions에서 독립적으로 증적을 남기고, 운영·배포·대용량 분석은 로컬 pre-push와
@@ -34,12 +34,12 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show verification context
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
           actual_sha="$(git rev-parse HEAD)"
           printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
@@ -63,12 +63,15 @@ jobs:
           go env GOOS GOARCH GOMOD GOWORK CGO_ENABLED
 
       - name: Workflow PR boundary and gate ownership
-        run: bash scripts/ci/check-workflow-secrets.sh
+        run: |
+          bash scripts/ci/check-workflow-secrets.sh
+          bash scripts/ci/check-workflow-secrets_test.sh
 
       - name: Workflow CI ownership contract
         run: |
           "$CI_PYTHON_BIN" scripts/ci/check-workflow-ci-owner.py
           "$CI_PYTHON_BIN" scripts/ci/check-workflow-ci-owner_test.py
+          "$CI_PYTHON_BIN" scripts/ci/check-merge-candidate_test.py
 
       - name: Shell syntax
         run: bash scripts/ci/shell-syntax-sweep.sh
@@ -99,12 +102,12 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show verification context
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
           actual_sha="$(git rev-parse HEAD)"
           printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
@@ -195,12 +198,12 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show verification context
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
           actual_sha="$(git rev-parse HEAD)"
           printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \
@@ -238,12 +241,12 @@ jobs:
       - name: Checkout hololive-bot
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Show verification context
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
           actual_sha="$(git rev-parse HEAD)"
           printf 'event=%s\nexpected_sha=%s\nchecked_out_sha=%s\n' \

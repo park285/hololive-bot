@@ -18,7 +18,7 @@ const transientNetworkCodes = new Set([
   "UND_ERR_BODY_TIMEOUT",
   "UND_ERR_SOCKET",
 ]);
-const retryableStatusCodes = new Set([500, 502, 503, 504]);
+const retryableStatusCodes = new Set([500, 503]);
 const retryableYouTubePaths = new Map([
   ["/youtubei/v1/browse", "browse"],
   ["/youtubei/v1/next", "next"],

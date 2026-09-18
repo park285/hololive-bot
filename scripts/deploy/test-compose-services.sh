@@ -176,8 +176,8 @@ for ap_script in scripts/logs/ap-smoke.sh scripts/logs/ap-status.sh; do
     fi
 done
 pass "ap active-active smoke/status use AP compose env and safe remote argv"
-grep -q 'AP prechange compose config skipped' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy allows token-free transition prechange config only with explicit marker"
-grep -Fq "grep -Eq 'IRIS_(WEBHOOK|BOT)_TOKEN|SESSION_SECRET|ADMIN_PASS_BCRYPT|HOLO_BOT_API_KEY|/etc/stack-secrets/hololive-bot/(bot|alarm-worker)\\.env'" "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy prechange config bypass is limited to AP token/env-file/admin-secret transition"
+grep -q 'ap_prechange_config sudo' "${ROOT_DIR}/scripts/deploy/ap-deploy.sh" || fail "ap deploy allows token-free transition prechange config only with explicit marker"
+bash "${ROOT_DIR}/scripts/deploy/lib/ap-prechange-config_test.sh" || fail "AP prechange exact-error contract"
 pass "ap active-active deploy handles token-free prechange transition"
 bash "${ROOT_DIR}/scripts/deploy/ap-deploy-version_test.sh" \
     || fail "ap deploy propagates the validated Compose release version"

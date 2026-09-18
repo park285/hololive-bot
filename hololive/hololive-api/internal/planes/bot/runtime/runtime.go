@@ -76,3 +76,12 @@ func BuildRuntime(ctx context.Context, appConfig *settings.Config, logger *slog.
 
 	return runtime, nil
 }
+
+// Close는 nil outer runtime에서도 안전하며 등록된 자원 정리를 한 번만 실행한다.
+func (r *BotRuntime) Close() {
+	if r == nil {
+		return
+	}
+
+	r.Managed.Close()
+}

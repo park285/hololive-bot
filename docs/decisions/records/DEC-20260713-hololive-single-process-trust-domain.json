@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260713-hololive-single-process-trust-domain",
+  "title": "Hololive bot·admin·LLM은 단일 프로세스 trust domain을 공유한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-07-13",
+  "summary": "기존 Hololive a9f896402의 #023 결정을 카탈로그에 복원한다. 하나의 hololive-api address space가 모든 plane credential을 공유함을 수용하며 route 인증을 OS 격리로 간주하지 않는다. Admin/LLM listener 제한, Docker 제어망·socket 접근 금지, native command/plugin 실행 금지와 bounded template 해석 계약을 유지한다. 2026-09-17 플랜의 20260710 ID는 존재하지 않는 날짜 참조였으므로 실제 결정일로 정정한다.",
+  "sources": ["docs/current/architecture/hololive-api-trust-domain.md#Decision"],
+  "evidence": ["docs/current/architecture/hololive-api-trust-domain.md"],
+  "implementation": ["docs/current/architecture/hololive-api-trust-domain.md"],
+  "supersedes": [],
+  "review": {"trigger": "admin 또는 LLM plane 침해 후 bot egress credential 격리가 요구되면 별도 process/container 분리 계획과 rollout 승인을 수행한다."}
+}

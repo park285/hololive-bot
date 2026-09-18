@@ -33,7 +33,7 @@ func (d *SendEngine) dispatchClaimedRowsWithHandoff(
 		return false
 	}
 
-	payload, err := d.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
+	payload, err := d.formatter.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
 	if err != nil {
 		if d.handoffMode == handoff.ModeShadow {
 			d.logger.Warn("YouTube outbox shadow handoff payload build failed",

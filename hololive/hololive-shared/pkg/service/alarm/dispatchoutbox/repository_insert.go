@@ -25,6 +25,7 @@ type eventInsert struct {
 }
 
 type deliveryInsert struct {
+	PayloadHash      string
 	EventID          int64
 	EventKey         string
 	RoomID           string
@@ -226,10 +227,6 @@ func prepareInsertBatchRows(envelopes []domain.AlarmQueueEnvelope, status Status
 		}
 	}
 
-	if status == StatusPending {
-		assignSendUnits(deliveries)
-	}
-
 	eventRows := make([]eventInsert, 0, len(events))
 	for key := range events {
 		eventRows = append(eventRows, events[key])
@@ -253,8 +250,12 @@ func appendPreparedBatchRow(
 
 	collision := addPreparedEvent(events, &event, result)
 
-	if _, exists := seenDeliveries[delivery.DedupeKey]; !exists {
-		seenDeliveries[delivery.DedupeKey] = struct{}{}
+	delivery.PayloadHash = event.PayloadHash
+	// 같은 room/event의 서로 다른 payload 후보도 DB winner와 대조하기 전에는 합치지 않는다.
+	candidateKey := delivery.DedupeKey + "\x00" + delivery.PayloadHash
+	if _, exists := seenDeliveries[candidateKey]; !exists {
+		seenDeliveries[candidateKey] = struct{}{}
+
 		*deliveries = append(*deliveries, delivery)
 	}
 
@@ -358,25 +359,55 @@ func prepareBatchDeliveriesForInsert(
 		return nil, nil, fmt.Errorf("insert prepared events: %w", err)
 	}
 
-	collisions = append(preflightCollisions, collisions...)
-	if len(collisions) > 0 {
-		logEventCollisions(logger, collisions)
-		bindCollisionWinners(collisions, eventIDs)
+	winnerHashes := make(map[string]string, len(eventRows))
+	for i := range eventRows {
+		winnerHashes[eventRows[i].EventKey] = eventRows[i].PayloadHash
 	}
 
-	assignDeliveryEventIDs(deliveries, eventIDs)
+	// DB에 이미 있는 event 및 concurrent insert winner의 hash가 권위자다.
+	for i := range collisions {
+		winnerHashes[collisions[i].Event.EventKey] = collisions[i].ExistingPayloadHash
+	}
+
+	collisions = append(preflightCollisions, collisions...)
+	collisions = resolveEventCollisions(collisions, eventIDs, winnerHashes, result)
+
+	if len(collisions) > 0 {
+		logEventCollisions(logger, collisions)
+	}
+
+	deliveries, err = assignDeliveryEventIDs(deliveries, eventIDs, winnerHashes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("bind delivery payload identity: %w", err)
+	}
+
+	// 거절한 entry는 정상 delivery의 분할 경계나 멱등성 ID에도 영향을 주지 않는다.
+	if len(deliveries) > 0 && deliveries[0].Status == StatusPending {
+		assignSendUnits(deliveries)
+	}
 
 	return collisions, deliveries, nil
 }
 
-func bindCollisionWinners(collisions []eventCollision, eventIDs map[string]int64) {
+func resolveEventCollisions(collisions []eventCollision, eventIDs map[string]int64, winnerHashes map[string]string, result *PublishBatchResult) []eventCollision {
+	// Deadlock 재시도는 같은 prepared 입력을 다시 사용하므로 원본을 압축하지 않는다.
+	resolved := make([]eventCollision, 0, len(collisions))
 	for i := range collisions {
-		if collisions[i].ExistingEventID > 0 {
+		collision := collisions[i]
+		winnerHash := winnerHashes[collision.Event.EventKey]
+
+		if collision.Event.PayloadHash == winnerHash {
+			// 앞선 batch 후보와 충돌했어도 실제 DB winner와 같은 payload는 정상 entry다.
+			result.HashConflictEvents--
 			continue
 		}
 
-		collisions[i].ExistingEventID = eventIDs[collisions[i].Event.EventKey]
+		collision.ExistingEventID = eventIDs[collision.Event.EventKey]
+		collision.ExistingPayloadHash = winnerHash
+		resolved = append(resolved, collision)
 	}
+
+	return resolved
 }
 
 func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInsert, result *PublishBatchResult) (map[string]int64, []eventCollision, error) {
@@ -421,8 +452,24 @@ func insertPreparedEvents(ctx context.Context, tx pgx.Tx, eventRows []eventInser
 	return eventIDs, collisions, nil
 }
 
-func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64) {
+func assignDeliveryEventIDs(deliveries []deliveryInsert, eventIDs map[string]int64, winnerHashes map[string]string) ([]deliveryInsert, error) {
+	accepted := make([]deliveryInsert, 0, len(deliveries))
 	for i := range deliveries {
-		deliveries[i].EventID = eventIDs[deliveries[i].EventKey]
+		delivery := deliveries[i]
+		eventID := eventIDs[delivery.EventKey]
+		winnerHash := winnerHashes[delivery.EventKey]
+
+		if eventID <= 0 || winnerHash == "" || delivery.PayloadHash == "" {
+			return nil, errors.New("delivery event identity is unresolved")
+		}
+
+		if delivery.PayloadHash != winnerHash {
+			continue
+		}
+
+		delivery.EventID = eventID
+		accepted = append(accepted, delivery)
 	}
+
+	return accepted, nil
 }

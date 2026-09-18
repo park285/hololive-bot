@@ -19,7 +19,6 @@ import (
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/config/settings/alarmworker"
-	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -39,7 +38,7 @@ func (rooms workerappTestRooms) OpenChat(_ context.Context, roomID string) bool 
 
 type youtubeOutboxKaringCapableSender interface {
 	RegularChat(ctx context.Context, roomID string) bool
-	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
+	SendYouTubeOutboxKaring(ctx context.Context, roomID string, request *iris.KaringContentListRequest) error
 }
 
 type clientRequestIDRecordingIrisSender struct {
@@ -64,7 +63,7 @@ func (s *clientRequestIDRecordingIrisSender) SendMarkdown(_ context.Context, roo
 	s.markdownMessage = message
 	s.markdownOpts = len(opts)
 
-	return &iris.ReplyAcceptedResponse{}, nil
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: "queued", RequestID: "request-1"}, nil
 }
 
 func (*clientRequestIDRecordingIrisSender) SendKaringContentList(context.Context, iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
@@ -177,6 +176,15 @@ func TestBuildNotificationSenderPreservesClientRequestIDValue(t *testing.T) {
 	var requestBody string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/reply-status/reply-1" {
+			w.Header().Set("Content-Type", "application/json")
+
+			_, err := io.WriteString(w, `{"requestId":"reply-1","state":"handoff_completed"}`)
+			assert.NoError(t, err)
+
+			return
+		}
+
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read request body: %v", err)

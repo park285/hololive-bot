@@ -10,10 +10,18 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// ErrEventPayloadConflict는 같은 event key에 다른 payload가 들어와 delivery를 거부했음을 나타낸다.
+var ErrEventPayloadConflict = errors.New("dispatch event payload conflict")
+
+// InsertPending은 pending delivery를 저장한다. Payload 충돌은 audit만 기록하고 기존 record를 반환하지 않는다.
 func (r *PgxRepository) InsertPending(ctx context.Context, envelope *domain.AlarmQueueEnvelope) (*Record, InsertResult, error) {
 	result, err := r.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{*envelope}, Status: StatusPending})
 	if err != nil {
 		return nil, "", fmt.Errorf("insert batch: %w", err)
+	}
+
+	if result.HashConflictEvents > 0 {
+		return nil, "", ErrEventPayloadConflict
 	}
 
 	record, err := r.findByDedupeKey(ctx, BuildDedupeKeyFromEnvelope(envelope))
@@ -47,6 +55,8 @@ func insertDuplicateResult(status Status) InsertResult {
 	}
 }
 
+// InsertBatch는 정상 entry와 collision audit을 함께 commit한다. 충돌 entry는 delivery를 만들지 않으며
+// 호출자는 error가 nil이어도 HashConflictEvents를 확인해야 한다.
 func (r *PgxRepository) InsertBatch(ctx context.Context, input PublishBatchInput) (PublishBatchResult, error) {
 	if r == nil || r.pool == nil {
 		return PublishBatchResult{}, errors.New("insert dispatch ledger batch: postgres pool is nil")

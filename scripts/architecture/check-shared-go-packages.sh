@@ -6,14 +6,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ALLOWLIST_FILE="${1:-${ROOT_DIR}/docs/architecture/shared-go-package-allowlist.txt}"
 
 resolve_shared_go_pkg_dir() {
-  local candidate="${SHARED_GO_WORKSPACE_PATH:-}"
-  if [[ -z "${candidate}" ]]; then
-    if [[ -d "${ROOT_DIR}/shared-go" ]]; then
-      candidate="${ROOT_DIR}/shared-go"
-    elif [[ -d "${ROOT_DIR}/../shared-go" ]]; then
-      candidate="${ROOT_DIR}/../shared-go"
-    fi
-  fi
+  local candidate="${SHARED_GO_WORKSPACE_PATH:-${ROOT_DIR}/../shared-go}"
   if [[ ! -d "${candidate}/pkg" ]]; then
     echo "error: active shared-go pkg dir not found" >&2
     exit 1

@@ -76,6 +76,26 @@ than a keyless metrics mode.
 `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` variables
 are rejected instead of being reinterpreted with a second URL grammar.
 
+The live API does not join `observability-traces`. Its approved host/Tailscale OTLP
+endpoint must be explicitly present in `compose.env`; a container DNS endpoint on
+the removed network will not work. Other observability peers cannot reach the API
+through that external network. Admin/LLM loopback bindings remain unchanged.
+`HOLOLIVE_ADMIN_API_PORT_BIND_IP` must match `tailscale ip --assert` on the deployment
+host before any build/start/restart. The approved current IPv4 binding remains
+`100.100.1.8:30006/udp`. Admin sources are loopback and Iris Admin `100.100.1.5/32`;
+broad private CIDRs and wildcard source overrides fail preflight.
+
+AP collectors no longer use Valkey (see the collector cache-topology contract).
+The obsolete tailnet 6379 publish is removed; central private Unix socket, internal
+network/password authentication and loopback remain. PostgreSQL AP access retains
+TLS with `verify-full`/SCRAM and the existing exact host source list from `pg_hba.conf`.
+The tracked ingress nftables policy now filters both host input and Docker DNAT
+forward paths for admin UDP 30006 and PostgreSQL TCP 5433. Mutation preflight requires
+the reviewed installed file, active firewall unit, and loaded DB source/forward rules.
+An empty source set, stale unit, or unavailable firewall inspection stops cutover.
+Applying the firewall, host OTLP configuration, or Compose changes requires the
+separately authorized service deployment workflow; source validation activates none of them.
+
 Collector compatibility env pairs use `${NEW-${OLD-default}}` / `${OLD-${NEW-default}}` interpolation. This preserves explicit empty values so the collector loader fails closed, while unset, new-only, old-only, equal, and conflicting inputs retain the truth table documented in [`youtube-collector.md`](../../docs/current/runbooks/youtube-collector.md#key-environment-variables).
 
 Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mirrored

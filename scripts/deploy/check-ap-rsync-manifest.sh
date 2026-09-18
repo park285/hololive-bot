@@ -14,6 +14,10 @@ if ! command -v "$GO_CMD" >/dev/null 2>&1; then
   echo "[FAIL] required Go command not found: $GO_CMD" >&2
   exit 1
 fi
+if ! GOWORK=off "$GO_CMD" version; then
+  echo "[FAIL] Go executable preflight failed: $GO_CMD version" >&2
+  exit 1
+fi
 if [[ ! -r "$MANIFEST" ]]; then
   echo "[FAIL] manifest not readable: $MANIFEST" >&2
   exit 1
@@ -46,10 +50,19 @@ for path in "${required_context_files[@]}"; do
   fi
 done
 
-SHARED_GO_DIR="$(cd "$ROOT_DIR/../shared-go" 2>/dev/null && pwd || true)"
+SHARED_GO_DIR="${SHARED_GO_WORKSPACE_PATH:-$ROOT_DIR/../shared-go}"
+if [[ ! -d "$SHARED_GO_DIR" ]]; then
+  echo "[FAIL] shared-go workspace missing: $SHARED_GO_DIR" >&2
+  exit 1
+fi
+SHARED_GO_DIR="$(cd "$SHARED_GO_DIR" && pwd)"
 build_targets=(./cmd/runtime/youtube-collector ./cmd/runtime/healthcheck)
-missing="$(cd "$ROOT_DIR/hololive/hololive-youtube-collector" &&
-  "$GO_CMD" list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}" 2>/dev/null |
+if ! dependencies="$(cd "$ROOT_DIR/hololive/hololive-youtube-collector" &&
+  GOWORK=off "$GO_CMD" list -deps -f '{{if and .Module (not .Standard)}}{{range .GoFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{range .EmbedFiles}}{{$.Dir}}/{{.}}{{"\n"}}{{end}}{{end}}' "${build_targets[@]}")"; then
+  echo "[FAIL] Go dependency enumeration failed: $GO_CMD list -deps (GOWORK=off)" >&2
+  exit 1
+fi
+missing="$(printf '%s\n' "$dependencies" |
   sed "s#^$ROOT_DIR/##; s#^$SHARED_GO_DIR/#../shared-go/#" |
   grep -E '^(hololive/|\.\./shared-go/)' |
   sort -u |
@@ -57,7 +70,7 @@ missing="$(cd "$ROOT_DIR/hololive/hololive-youtube-collector" &&
 
 if [[ -n "$missing" ]]; then
   echo "[FAIL] ap-rsync-files.txt missing youtube-collector build deps:" >&2
-  echo "$missing" | sed 's/^/ - /' >&2
+  while IFS= read -r missing_file; do printf ' - %s\n' "$missing_file" >&2; done <<< "$missing"
   exit 1
 fi
 echo "[PASS] ap-rsync-files.txt covers youtube-collector build deps"

@@ -32,6 +32,40 @@ Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic no
 - HTTP JSON for `/internal/alarm/*`
 - Valkey list/sorted set/list for dispatch queue, delayed retry, DLQ
 
+### Iris admission and Karing chunk completion
+
+Markdown and Karing admission both retain the exact Iris request ID and poll its
+reply status. Only `handoff_completed` succeeds; confirmed failure and an unknown
+or timed-out outcome retain their distinct failure/claim semantics.
+
+YouTube Karing egress plans at most four items per provider call before entering
+`SENDING`. Each plan owns an exact outbox/delivery/claim subset and completes that
+subset independently. A later chunk failure never retries or quarantines a
+completed chunk. An unknown attempted chunk remains `SENDING`; unattempted chunks
+return through the existing prepared retry transition after durable confirmation.
+The sender does not split or loop over requests.
+
+The request ID binds the room, persisted source payloads, sorted outbox IDs, and a
+stable ordinal (the first persisted outbox ID). Removing earlier completed chunks
+does not renumber that ordinal or change a retry ID. Display-only member-cache
+changes do not alter the source identity. Rollout must preserve unknown claims;
+do not reset delivery state when changing this request-ID derivation.
+
+Community/shorts authorization leases use acquisition wall-clock UTC (PostgreSQL
+microsecond precision). Event detection, creation and next-attempt timestamps do
+not determine the lease epoch. Stale recovery releases only the exact old token.
+
+An existing event key with a different payload hash is a collision, not a content
+substitution. The transaction records the collision and admits only delivery
+entries matching the committed event payload; matching entries in the same batch
+remain eligible. Rejected entries do not affect send-unit boundaries or request
+IDs. `InsertBatch` exposes `HashConflictEvents`; `InsertPending` returns
+`ErrEventPayloadConflict` and no existing record for a conflicting single input.
+
+Persisted target minutes are explicit policy. `[5, 1]` remains `[5, 1]`, and a
+persisted single target is not expanded. Runtime defaults are generated only when
+the stored target list is absent/empty under the existing settings contract.
+
 ## Endpoint / Event / Queue
 
 | Field | Value |

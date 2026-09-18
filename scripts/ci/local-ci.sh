@@ -9,6 +9,7 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.27.1+auto}"
 source "${SCRIPT_DIR}/go-workspace-modules.sh"
 source "${SCRIPT_DIR}/go-tooling.sh"
 source "${SCRIPT_DIR}/nilaway-inputs.sh"
+source "${SCRIPT_DIR}/local-ci-nilaway.sh"
 cd "${ROOT_DIR}"
 
 GO_MODULES=("${GO_WORKSPACE_MODULES[@]}")
@@ -169,65 +170,6 @@ check_golangci_lint() {
     golangci_lint_bin="$(ensure_golangci_lint)"
 
     run_step "golangci-lint" "${golangci_lint_bin}" run -c .golangci.yml "${packages[@]}"
-}
-
-check_nilaway() {
-    if [[ "${RUN_NILAWAY}" != "true" ]]; then
-        echo "[LOCAL CI] Skip NilAway: RUN_NILAWAY=${RUN_NILAWAY}"
-        echo
-        return 0
-    fi
-
-    local packages=()
-    mapfile -t packages < <(owned_go_package_patterns)
-    if (( ${#packages[@]} == 0 )); then
-        echo "[LOCAL CI] Skip NilAway: no owned Go packages in scope"
-        echo
-        return 0
-    fi
-
-    local nilaway_bin
-    nilaway_bin="$(ensure_nilaway)"
-
-    # NilAway는 패턴당 10~16GB RSS까지 자란다 — 3병렬이 2026-07-04 호스트 global OOM(~40GB 스파이크)을 냈다.
-    local nilaway_parallel="${NILAWAY_PARALLEL:-1}"
-    local nilaway_gomemlimit="${NILAWAY_GOMEMLIMIT:-10GiB}"
-    validate_nilaway_parallel "${nilaway_parallel}" || return 1
-    validate_nilaway_gomemlimit "${nilaway_gomemlimit}" || return 1
-    local nilaway_tmp_parent="${LOCAL_CI_TMPDIR:-${ROOT_DIR}/.tmp/local-ci}"
-    mkdir -p "${nilaway_tmp_parent}"
-    local nilaway_tmp
-    nilaway_tmp="$(mktemp -d "${nilaway_tmp_parent%/}/nilaway.XXXXXX")"
-
-    local nilaway_fail=0
-    local running=0
-    local package_pattern
-    for package_pattern in "${packages[@]}"; do
-        env GOMEMLIMIT="${nilaway_gomemlimit}" GOFLAGS="${GOFLAGS:+${GOFLAGS} }-mod=readonly" \
-            "${nilaway_bin}" -pretty-print "${package_pattern}" \
-            >"${nilaway_tmp}/$(printf '%s' "${package_pattern}" | tr './' '__').log" 2>&1 &
-        running=$(( running + 1 ))
-        if (( running >= nilaway_parallel )); then
-            wait -n || nilaway_fail=1
-            running=$(( running - 1 ))
-        fi
-    done
-    while (( running > 0 )); do
-        wait -n || nilaway_fail=1
-        running=$(( running - 1 ))
-    done
-
-    for package_pattern in "${packages[@]}"; do
-        echo "[LOCAL CI] NilAway: ${package_pattern}"
-        cat "${nilaway_tmp}/$(printf '%s' "${package_pattern}" | tr './' '__').log"
-        echo
-    done
-    rm -rf "${nilaway_tmp}"
-
-    if (( nilaway_fail != 0 )); then
-        echo "NilAway failed or reported issues for at least one package pattern" >&2
-        return 1
-    fi
 }
 
 

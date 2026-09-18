@@ -294,7 +294,7 @@ test("unsafe Innertube endpoint is never retried", async () => {
 });
 
 test("rate limits and non-transient 5xx statuses are never retried", async () => {
-  const statuses = [429, 501];
+  const statuses = [429, 501, 502, 504];
   const events = [];
   let calls = 0;
   class ProxyAgent {
@@ -322,14 +322,18 @@ test("rate limits and non-transient 5xx statuses are never retried", async () =>
     });
     assert.equal(limited.status, 429);
     await limited.text();
-    await assert.rejects(
-      transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
-        method: "POST",
-        body: "{}",
-      }),
-      (error) => error.code === "collection_failed",
-    );
-    assert.equal(calls, 2);
+    for (const status of statuses.slice(1)) {
+      const before = calls;
+      await assert.rejects(
+        transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
+          method: "POST",
+          body: "{}",
+        }),
+        (error) => error.code === "collection_failed",
+      );
+      assert.equal(calls, before + 1, `HTTP ${status} must not retry`);
+    }
+    assert.equal(calls, statuses.length);
     assert.deepEqual(events, []);
   } finally {
     await transport.close();

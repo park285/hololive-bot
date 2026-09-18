@@ -96,6 +96,39 @@ func readRepoMigration(t *testing.T, relative string) string {
 	return string(raw)
 }
 
+func TestPgxRepositoryInsertBatchKeepsCanonicalPayloadAfterConflictingCandidate(t *testing.T) {
+	repository, pool := setupDispatchOutboxIntegration(t)
+	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
+	seed := domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive, RoomID: testRoomID, Channel: &domain.Channel{ID: testChannelID},
+			Stream: &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "winner"},
+		},
+		Version: 1,
+	}
+	_, _, err := repository.InsertPending(t.Context(), &seed)
+	require.NoError(t, err)
+	conflict := seed
+	conflict.Notification.RoomID = testOtherRoomID
+	conflict.Notification.Stream = &domain.Stream{ID: testStreamID, ChannelID: testChannelID, StartScheduled: &start, Title: "conflicting"}
+	matching := seed
+	matching.Notification.RoomID = testOtherRoomID
+	result, err := repository.InsertBatch(t.Context(), PublishBatchInput{
+		Envelopes: []domain.AlarmQueueEnvelope{conflict, matching}, Status: StatusPending,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.HashConflictEvents)
+	require.Equal(t, 1, result.InsertedDeliveries)
+	var payload []byte
+	require.NoError(t, pool.QueryRow(t.Context(), `SELECT e.payload FROM alarm_dispatch_deliveries d
+		JOIN alarm_dispatch_events e ON e.id=d.event_id WHERE d.room_id=$1`, testOtherRoomID).Scan(&payload))
+	require.Contains(t, string(payload), "winner")
+	require.NotContains(t, string(payload), "conflicting")
+	record, _, err := repository.InsertPending(t.Context(), &conflict)
+	require.ErrorIs(t, err, ErrEventPayloadConflict)
+	require.Nil(t, record, "a rejected single entry must not receive the winner record")
+}
+
 func TestPgxRepositoryInsertBatch_SetBasedPath(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
@@ -171,8 +204,8 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	if result.InsertedEvents != 1 {
 		t.Fatalf("InsertedEvents = %d, want 1 committed event", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 2 {
-		t.Fatalf("InsertedDeliveries = %d, want 2 (conflicting room re-pointed to winner event)", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 1 {
+		t.Fatalf("InsertedDeliveries = %d, want 1 (conflicting payload excluded)", result.InsertedDeliveries)
 	}
 
 	var eventCount, deliveryCount int
@@ -182,22 +215,13 @@ func TestPgxRepositoryInsertBatch_RecordsSameBatchHashConflict(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if eventCount != 1 || deliveryCount != 2 {
-		t.Fatalf("stored counts after conflict events=%d deliveries=%d, want 1/2", eventCount, deliveryCount)
+	if eventCount != 1 || deliveryCount != 1 {
+		t.Fatalf("stored counts after conflict events=%d deliveries=%d, want 1/1", eventCount, deliveryCount)
 	}
 
-	firstEvent, _, _ := buildLedgerRows(&first, StatusPending)
-	var room2Hash string
-	if err := pool.QueryRow(ctx, `
-		SELECT e.payload_hash
-		FROM alarm_dispatch_deliveries d
-		JOIN alarm_dispatch_events e ON e.id = d.event_id
-		WHERE d.room_id='room-2'`).Scan(&room2Hash); err != nil {
-		t.Fatalf("load room-2 delivery event hash: %v", err)
-	}
-	if room2Hash != firstEvent.PayloadHash {
-		t.Fatalf("room-2 delivery event hash = %q, want winner %q (first-wins content)", room2Hash, firstEvent.PayloadHash)
-	}
+	var rejectedRoom int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-2'").Scan(&rejectedRoom))
+	require.Zero(t, rejectedRoom, "conflicting payload must never become sender input")
 
 	var collisionCount int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_event_collisions").Scan(&collisionCount); err != nil {
@@ -241,8 +265,8 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	if result.InsertedEvents != 0 {
 		t.Fatalf("InsertedEvents = %d, want 0", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 1 {
-		t.Fatalf("InsertedDeliveries = %d, want 1 (conflicting room re-pointed to existing event)", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 0 {
+		t.Fatalf("InsertedDeliveries = %d, want 0 (conflicting payload excluded)", result.InsertedDeliveries)
 	}
 
 	var eventCount int
@@ -266,16 +290,16 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if deliveryCount != 2 {
-		t.Fatalf("delivery count = %d, want original plus re-pointed conflicting room", deliveryCount)
+	if deliveryCount != 1 {
+		t.Fatalf("delivery count = %d, want original delivery only", deliveryCount)
 	}
 
 	var room2Count int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-2'").Scan(&room2Count); err != nil {
 		t.Fatalf("count room-2 deliveries: %v", err)
 	}
-	if room2Count != 1 {
-		t.Fatalf("room-2 delivery count = %d, want 1 (conflicting room must not be silently lost)", room2Count)
+	if room2Count != 0 {
+		t.Fatalf("room-2 delivery count = %d, want 0 (conflicting payload cannot be delivered)", room2Count)
 	}
 
 	secondEvent, _, _ := buildLedgerRows(&second, StatusPending)
@@ -295,7 +319,7 @@ func TestPgxRepositoryInsertBatch_RecordsExistingEventHashConflict(t *testing.T)
 	}
 }
 
-func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversAllRooms(t *testing.T) {
+func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversOnlyMatchingPayloads(t *testing.T) {
 	repository, pool := setupDispatchOutboxIntegration(t)
 	ctx := context.Background()
 	start := time.Date(2026, 5, 12, 3, 0, 0, 0, time.UTC)
@@ -341,8 +365,8 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversAll
 	if result.InsertedEvents != 1 {
 		t.Fatalf("InsertedEvents = %d, want 1 committed non-conflicting event", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 2 {
-		t.Fatalf("InsertedDeliveries = %d, want 2 (conflicting room re-pointed + non-conflicting room)", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 1 {
+		t.Fatalf("InsertedDeliveries = %d, want 1 (only non-conflicting room)", result.InsertedDeliveries)
 	}
 
 	var eventCount int
@@ -357,30 +381,13 @@ func TestPgxRepositoryInsertBatch_ExistingConflictRecordsCollisionAndDeliversAll
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if deliveryCount != 3 {
-		t.Fatalf("delivery count = %d, want original plus conflicting plus non-conflicting delivery", deliveryCount)
+	if deliveryCount != 2 {
+		t.Fatalf("delivery count = %d, want original plus non-conflicting delivery", deliveryCount)
 	}
 
-	eventAEvent, _, _ := buildLedgerRows(&eventA, StatusPending)
-	var room2Count int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-2'").Scan(&room2Count); err != nil {
-		t.Fatalf("count room-2 deliveries: %v", err)
-	}
-	if room2Count != 1 {
-		t.Fatalf("room-2 delivery count = %d, want 1 (conflicting room must not be silently lost)", room2Count)
-	}
-
-	var room2Hash string
-	if err := pool.QueryRow(ctx, `
-		SELECT e.payload_hash
-		FROM alarm_dispatch_deliveries d
-		JOIN alarm_dispatch_events e ON e.id = d.event_id
-		WHERE d.room_id='room-2'`).Scan(&room2Hash); err != nil {
-		t.Fatalf("load room-2 delivery event hash: %v", err)
-	}
-	if room2Hash != eventAEvent.PayloadHash {
-		t.Fatalf("room-2 delivery event hash = %q, want existing %q (first-wins content)", room2Hash, eventAEvent.PayloadHash)
-	}
+	var rejectedRoom int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-2'").Scan(&rejectedRoom))
+	require.Zero(t, rejectedRoom)
 
 	var room3Count int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries WHERE room_id='room-3'").Scan(&room3Count); err != nil {
@@ -436,16 +443,16 @@ func TestPgxRepositoryInsertBatch_CoalescesRepeatedConflictCollisions(t *testing
 	if result.ProcessedDeliveries != 3 {
 		t.Fatalf("ProcessedDeliveries = %d, want 3", result.ProcessedDeliveries)
 	}
-	if result.InsertedDeliveries != 3 {
-		t.Fatalf("InsertedDeliveries = %d, want 3 (all conflicting rooms re-pointed to existing event)", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 0 {
+		t.Fatalf("InsertedDeliveries = %d, want 0 (all conflicting payloads excluded)", result.InsertedDeliveries)
 	}
 
 	var deliveryCount int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if deliveryCount != 4 {
-		t.Fatalf("delivery count = %d, want 4 (seed plus three re-pointed conflicting rooms)", deliveryCount)
+	if deliveryCount != 1 {
+		t.Fatalf("delivery count = %d, want 1 (seed only)", deliveryCount)
 	}
 
 	var collisionCount int
@@ -488,8 +495,8 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	if result.InsertedEvents != 1 {
 		t.Fatalf("InsertedEvents = %d, want 1", result.InsertedEvents)
 	}
-	if result.InsertedDeliveries != 3 {
-		t.Fatalf("InsertedDeliveries = %d, want 3 (all rooms delivered, drifted rooms re-pointed to winner)", result.InsertedDeliveries)
+	if result.InsertedDeliveries != 1 {
+		t.Fatalf("InsertedDeliveries = %d, want 1 (only matching payload delivered)", result.InsertedDeliveries)
 	}
 
 	var eventCount, deliveryCount int
@@ -499,8 +506,8 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alarm_dispatch_deliveries").Scan(&deliveryCount); err != nil {
 		t.Fatalf("count deliveries: %v", err)
 	}
-	if eventCount != 1 || deliveryCount != 3 {
-		t.Fatalf("stored counts events=%d deliveries=%d, want 1/3", eventCount, deliveryCount)
+	if eventCount != 1 || deliveryCount != 1 {
+		t.Fatalf("stored counts events=%d deliveries=%d, want 1/1", eventCount, deliveryCount)
 	}
 
 	winnerEvent, _, _ := buildLedgerRows(&winner, StatusPending)
@@ -512,7 +519,7 @@ func TestPgxRepositoryInsertBatch_DedupesMixedHashSameBatchCollisionRecords(t *t
 		t.Fatalf("count distinct delivery event hashes: %v", err)
 	}
 	if distinctHashes != 1 {
-		t.Fatalf("distinct delivery event hashes = %d, want 1 (all rooms first-wins)", distinctHashes)
+		t.Fatalf("distinct delivery event hashes = %d, want 1 (only winner payload)", distinctHashes)
 	}
 	var storedHash string
 	if err := pool.QueryRow(ctx, "SELECT payload_hash FROM alarm_dispatch_events LIMIT 1").Scan(&storedHash); err != nil {

@@ -56,7 +56,7 @@ func TestYouTubeOutboxKaringSenderNilInnerReturnsPinnedError(t *testing.T) {
 		"youtube outbox karing sender: sender is nil")
 	require.EqualError(t, sender.SendMessageWithClientRequestID(t.Context(), testAlarmRoomID, "hi", "req-1"),
 		"youtube outbox karing sender: sender is nil")
-	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), testAlarmRoomID, &domain.YouTubeOutboxDispatchPayload{}),
+	require.EqualError(t, sender.SendYouTubeOutboxKaring(t.Context(), testAlarmRoomID, &iris.KaringContentListRequest{}),
 		"youtube outbox karing sender: sender is nil")
 	assert.False(t, sender.RegularChat(t.Context(), testAlarmRoomID))
 }
@@ -108,10 +108,24 @@ func TestYouTubeOutboxKaringSenderForwardsKaringChunks(t *testing.T) {
 		}},
 	}
 
-	require.NoError(t, sender.SendYouTubeOutboxKaring(t.Context(), "464252100463241", &payload))
+	request, err := sender.PrepareYouTubeOutboxKaring(t.Context(), "464252100463241", &payload, "synthetic-chunk")
+	require.NoError(t, err)
+	require.Empty(t, stub.karingRequests)
+	require.NoError(t, sender.SendYouTubeOutboxKaring(t.Context(), "464252100463241", request))
+	require.Equal(t, "synthetic-chunk", *stub.karingRequests[0].ClientRequestID)
 
 	require.Len(t, stub.karingRequests, 1)
 	assert.Equal(t, int64(464252100463241), stub.karingRequests[0].ReceiverRoomID)
 	require.Len(t, stub.karingRequests[0].Items, 1)
 	assert.Equal(t, "새 영상 제목", stub.karingRequests[0].Items[0].Title)
+}
+
+func TestYouTubeOutboxKaringSenderRejectsHiddenChunking(t *testing.T) {
+	stub := &karingSenderStubIrisSender{}
+	sender := NewYouTubeOutboxKaringSender(stub, nil)
+	payload := domain.YouTubeOutboxDispatchPayload{Items: make([]domain.YouTubeOutboxItem, 5)}
+	request, err := sender.PrepareYouTubeOutboxKaring(t.Context(), testAlarmRoomID, &payload, "synthetic-chunk")
+	require.ErrorContains(t, err, "exceeds one chunk")
+	require.Nil(t, request)
+	require.Empty(t, stub.karingRequests)
 }

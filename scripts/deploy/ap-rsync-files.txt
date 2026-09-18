@@ -789,3 +789,4 @@ scripts/deploy/lib/removed-runtimes.sh
 scripts/deploy/lib/require-quic-udp-buffer.sh
 scripts/deploy/lib/retired-producer-cutover.sh
 scripts/deploy/lib/youtubejs-node-version.sh
+scripts/deploy/lib/admin-bind.sh

@@ -13,6 +13,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/public-bind-mounts.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/admin-bind.sh"
 
 compose_export_release_versions "${ROOT_DIR}"
 
@@ -239,6 +240,7 @@ esac
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
 
 if [[ "${compose_requires_capacity}" == true ]]; then
+    admin_network_preflight "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${compose_files[@]}"
     postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${compose_scale_overrides[@]}"
 fi
 
@@ -368,6 +370,10 @@ if [[ "${compose_invokes_up}" == true ]]; then
     fi
 
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${compose_args[@]}"
+
+    if [[ "${removed_runtime_cleanup_required}" == true ]]; then
+        removed_runtime_assert_absent
+    fi
 
     if [[ ${#gate_targets[@]} -gt 0 ]] && ! cutover_health_gate "${gate_targets[@]}"; then
         echo "[ERROR] health gate failed after cutover up" >&2

@@ -14,9 +14,9 @@ import (
 const karingStatusPollInterval = 250 * time.Millisecond
 
 var (
-	// ErrKaringOutcomeUnknown은 Iris 접수 뒤 Kakao handoff 결과를 확정할 수 없음을 나타냅니다.
+	// ErrKaringOutcomeUnknown은 Karing/Markdown의 Iris 접수 뒤 Kakao handoff 결과를 확정할 수 없음을 나타냅니다.
 	ErrKaringOutcomeUnknown = errors.New("iris karing outcome unknown")
-	// ErrKaringStatusFailed는 Iris가 Kakao handoff 실패를 확정했음을 나타냅니다.
+	// ErrKaringStatusFailed는 Karing/Markdown에서 Iris가 Kakao handoff 실패를 확정했음을 나타냅니다.
 	ErrKaringStatusFailed = errors.New("iris karing handoff failed")
 )
 
@@ -92,16 +92,34 @@ func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *I
 
 func (s *IrisMessageSender) send(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
 	if s.useMarkdown(ctx, roomID) {
-		if _, err := s.client.SendMarkdown(ctx, roomID, message, opts...); err != nil {
-			return fmt.Errorf("iris send message: %w", err)
-		}
-
-		return nil
+		return s.sendMarkdown(ctx, roomID, message, opts...)
 	}
 
 	message = kakaoformat.Render(message)
 	if err := s.client.SendMessage(ctx, roomID, message, opts...); err != nil {
 		return fmt.Errorf("iris send message: %w", err)
+	}
+
+	return nil
+}
+
+func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message string, opts ...iris.SendOption) error {
+	accepted, err := s.client.SendMarkdown(ctx, roomID, message, opts...)
+	if err != nil {
+		return fmt.Errorf("iris send message: %w", err)
+	}
+
+	if accepted == nil {
+		return fmt.Errorf("%w: markdown admission response is empty", ErrKaringOutcomeUnknown)
+	}
+
+	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
+	if err != nil {
+		return fmt.Errorf("validate iris markdown admission: %w", err)
+	}
+
+	if err := s.waitForReplyHandoff(ctx, requestID); err != nil {
+		return fmt.Errorf("confirm iris markdown handoff: %w", err)
 	}
 
 	return nil
@@ -117,6 +135,7 @@ func (s *IrisMessageSender) RegularChat(ctx context.Context, roomID string) bool
 }
 
 // SendMessage는 방 유형에 따라 오픈채팅 Markdown 또는 Kakao 일반 텍스트로 전송합니다.
+// Markdown은 접수 ID의 handoff 완료까지 확인하며 불명 결과는 성공으로 바꾸지 않습니다.
 func (s *IrisMessageSender) SendMessage(ctx context.Context, roomID, message string) error {
 	if s == nil || s.client == nil {
 		return errors.New("iris message sender: client is nil")
@@ -167,7 +186,7 @@ func (s *IrisMessageSender) SendKaringContentList(ctx context.Context, roomID st
 		return fmt.Errorf("validate iris karing admission: %w", err)
 	}
 
-	if err := s.waitForKaringHandoff(ctx, requestID); err != nil {
+	if err := s.waitForReplyHandoff(ctx, requestID); err != nil {
 		return fmt.Errorf("confirm iris karing handoff: %w", err)
 	}
 
@@ -179,11 +198,15 @@ func acceptedKaringRequestID(accepted *iris.KaringDryRunResponse) (string, error
 		return "", fmt.Errorf("%w: admission response is empty", ErrKaringOutcomeUnknown)
 	}
 
-	if !accepted.Success || !strings.EqualFold(strings.TrimSpace(accepted.Delivery), "queued") {
+	return acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
+}
+
+func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string, error) {
+	if !success || !strings.EqualFold(strings.TrimSpace(delivery), "queued") {
 		return "", fmt.Errorf("%w: admission response is not queued", ErrKaringOutcomeUnknown)
 	}
 
-	requestID := strings.TrimSpace(accepted.RequestID)
+	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {
 		return "", fmt.Errorf("%w: admission response has no request id", ErrKaringOutcomeUnknown)
 	}
@@ -191,7 +214,7 @@ func acceptedKaringRequestID(accepted *iris.KaringDryRunResponse) (string, error
 	return requestID, nil
 }
 
-func (s *IrisMessageSender) waitForKaringHandoff(ctx context.Context, requestID string) error {
+func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID string) error {
 	interval := s.karingStatusPollInterval
 	if interval <= 0 {
 		interval = karingStatusPollInterval

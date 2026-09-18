@@ -166,7 +166,7 @@ func TestTargetMinutePolicy_Constructors(t *testing.T) {
 	}{
 		{name: "configured", policy: NewTargetMinutePolicyFromConfigured([]int{15, 15, 5, 0}), want: []int{15, 5}},
 		{name: "runtime", policy: runtime, want: []int{5, 3, 1}},
-		{name: "persisted", policy: NewTargetMinutePolicyFromPersisted(5, []int{5, 1}), want: []int{5, 3, 1}},
+		{name: "persisted", policy: NewTargetMinutePolicyFromPersisted(5, []int{5, 1}), want: []int{5, 1}},
 		{name: "two-minute persisted", policy: NewTargetMinutePolicyFromPersisted(2, []int{2, 1}), want: []int{2, 1}},
 	}
 

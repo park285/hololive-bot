@@ -27,6 +27,7 @@ cp "${ROOT_DIR}/scripts/deploy/compose-redeploy-service.sh" "${repo}/scripts/dep
 cp "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh" "${repo}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 cp "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh" "${repo}/scripts/deploy/lib/ap-compose-version.sh"
 cp "${ROOT_DIR}/scripts/deploy/lib/source-revision.sh" "${repo}/scripts/deploy/lib/source-revision.sh"
+cp "${ROOT_DIR}/scripts/deploy/lib/admin-bind.sh" "${repo}/scripts/deploy/lib/admin-bind.sh"
 printf 'services: {}\n' >"${repo}/deploy/compose/docker-compose.prod.yml"
 printf 'fixture=1\n' >"${repo}/deploy/compose/build-only.env.sample"
 printf '1.2.3\n' >"${repo}/hololive/hololive-api/VERSION"
@@ -45,6 +46,7 @@ compose_env_validate_file_format() { :; }
 compose_env_assert_shell_matches_all_file_keys() { :; }
 compose_env_assert_no_shell_shadow_for_compose_files() { :; }
 compose_env_assert_live_compat_for_host_networked_postgres() { :; }
+compose_env_key_exists_in_file() { return 1; }
 compose_env_read_value_from_file() {
     if [[ "$2" == IRIS_BASE_URL ]]; then
         printf '%s\n' http://fixture.invalid
@@ -61,6 +63,7 @@ EOF
 cat >"${repo}/scripts/deploy/lib/removed-runtimes.sh" <<'EOF'
 #!/usr/bin/env bash
 removed_runtime_cleanup_before_cutover() { :; }
+removed_runtime_assert_absent() { :; }
 EOF
 cat >"${repo}/scripts/deploy/lib/health-gate.sh" <<'EOF'
 #!/usr/bin/env bash

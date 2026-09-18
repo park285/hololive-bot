@@ -73,7 +73,7 @@ else
   printf '[PASS] validation does not execute injection payloads\n'
 fi
 
-LOCAL_CI="${SCRIPT_DIR}/local-ci.sh"
+LOCAL_CI="${SCRIPT_DIR}/local-ci-nilaway.sh"
 parallel_guard="validate_nilaway_parallel \"${dollar}{nilaway_parallel}\""
 memory_guard="validate_nilaway_gomemlimit \"${dollar}{nilaway_gomemlimit}\""
 if grep -Fq "${parallel_guard}" "${LOCAL_CI}" \

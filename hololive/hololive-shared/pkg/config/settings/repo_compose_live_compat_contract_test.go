@@ -108,7 +108,7 @@ func assertLiveCompatOverlayText(t *testing.T, overlay string) {
 func assertLiveCompatRenderedPortsAndModes(t *testing.T, cfg renderedCompose) {
 	t.Helper()
 
-	assertRenderedPort(t, cfg, "valkey-cache", "6379", "6379", "tcp")
+	assertRenderedPortOnHost(t, cfg, "valkey-cache", "127.0.0.1", "6379", "6379", "tcp")
 	assertRenderedPort(t, cfg, serviceHoloPostgres, "5433", "5432", "tcp")
 	assertRenderedPort(t, cfg, serviceHololiveAPI, "30001", "30001", "tcp")
 	assertRenderedPort(t, cfg, serviceHololiveAPI, "30001", "30001", "udp")

@@ -5,19 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
+	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
 type YouTubeOutboxKaringSender interface {
 	RegularChat(ctx context.Context, roomID string) bool
-	SendYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload) error
+	PrepareYouTubeOutboxKaring(ctx context.Context, roomID string, payload *domain.YouTubeOutboxDispatchPayload, clientRequestID string) (*iris.KaringContentListRequest, error)
+	SendYouTubeOutboxKaring(ctx context.Context, roomID string, request *iris.KaringContentListRequest) error
 }
 
 func (d *SendEngine) dispatchClaimedRowsWithKaringIfSupported(
@@ -71,20 +74,95 @@ func (d *SendEngine) dispatchClaimedKaring(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	payload, sendReq, prepared := d.prepareKaringDispatch(
-		ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, result, mu,
-	)
-	if !prepared {
+	chunks, err := d.formatter.planKaringChunks(ctx, roomID, channelID, kind, outboxes)
+	if err != nil {
+		d.handleKaringRequestBuildFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu)
+
 		return
 	}
 
+	stopped := false
+
+	for i := range chunks {
+		chunk := &chunks[i]
+		chunkRows, chunkTokens := karingChunkClaims(rows, claimTokens, chunk.outboxes)
+
+		sendReq, err := buildDeliveryKaringSendRequest(roomID, chunk.outboxes)
+		if err != nil {
+			d.handleKaringRequestBuildFailure(ctx, roomID, channelID, kind, chunkRows, chunk.outboxes, chunkTokens, mode, err, result, mu)
+
+			stopped = true
+
+			continue
+		}
+
+		if stopped {
+			// 앞 chunk의 결과와 무관하게 이 subset은 provider를 호출하지 않았음이 확정돼 있다.
+			if d.applyPreparedLifecycleFailure(ctx, chunkRows, chunk.outboxes, lifecycle.FailureRetryable, lifecycleReasonTransport, result, mu) {
+				d.recordKaringSendFailure(ctx, roomID, channelID, kind, chunkRows, chunk.outboxes, sendReq, chunkTokens, mode, errors.New("prior karing chunk did not complete; this chunk was not sent"), result, mu)
+			}
+
+			continue
+		}
+
+		request, err := sender.PrepareYouTubeOutboxKaring(ctx, roomID, &chunk.payload, chunk.clientRequestID)
+		if err != nil || request == nil {
+			if err == nil {
+				err = errors.New("karing formatter returned an empty request")
+			}
+
+			d.handleKaringRequestBuildFailure(ctx, roomID, channelID, kind, chunkRows, chunk.outboxes, chunkTokens, mode, err, result, mu)
+
+			stopped = true
+
+			continue
+		}
+
+		stopped = !d.dispatchKaringChunk(ctx, sender, roomID, channelID, kind, chunkRows, chunk.outboxes, chunkTokens, mode, request, sendReq, result, mu)
+	}
+}
+
+func karingChunkClaims(rows []domain.YouTubeNotificationDelivery, tokens []dispatchstate.ClaimToken, outboxes []domain.YouTubeNotificationOutbox) ([]domain.YouTubeNotificationDelivery, []dispatchstate.ClaimToken) {
+	ids := make(map[int64]bool, len(outboxes))
+	posts := make(map[string]domain.OutboxKind, len(outboxes))
+
+	for i := range outboxes {
+		ids[outboxes[i].ID] = true
+		posts[telemetry.ResolveTelemetryPostID(outboxes[i].Kind, outboxes[i].ContentID, outboxes[i].Payload)] = outboxes[i].Kind
+	}
+
+	selectedRows := make([]domain.YouTubeNotificationDelivery, 0, len(outboxes))
+
+	for i := range rows {
+		if ids[rows[i].OutboxID] {
+			selectedRows = append(selectedRows, rows[i])
+		}
+	}
+
+	selectedTokens := make([]dispatchstate.ClaimToken, 0, len(tokens))
+	for _, token := range tokens {
+		if kind, ok := posts[token.PostID]; ok && kind == token.Kind {
+			selectedTokens = append(selectedTokens, token)
+		}
+	}
+
+	return selectedRows, selectedTokens
+}
+
+func (d *SendEngine) dispatchKaringChunk(
+	ctx context.Context, sender YouTubeOutboxKaringSender, roomID, channelID string,
+	kind domain.OutboxKind, rows []domain.YouTubeNotificationDelivery,
+	outboxes []domain.YouTubeNotificationOutbox, claimTokens []dispatchstate.ClaimToken,
+	mode string, request *iris.KaringContentListRequest, sendReq deliverySendRequest,
+	result *dispatchstate.DispatchResult, mu *sync.Mutex,
+) bool {
 	// 직렬화 대기는 provider 부작용이 없으므로 SENDING lease를 시작하기 전에 끝낸다.
 	if err := d.acquireKaringSendSlot(ctx); err != nil {
 		if d.applyPreparedLifecycleFailure(ctx, rows, outboxes, lifecycle.FailureRetryable, lifecycleReasonTransport, result, mu) {
 			d.recordKaringSendFailure(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, err, result, mu)
 		}
 
-		return
+		return false
 	}
 
 	// 완료 DB 처리와 audit은 다른 방의 provider 진입을 막지 않는다.
@@ -99,11 +177,11 @@ func (d *SendEngine) dispatchClaimedKaring(
 		attemptStartedAt := time.Now().UTC()
 		d.logCommunityShortsDeliveryAttemptStarted(rows, outboxes, attemptStartedAt, mode)
 
-		return operation, true, d.sendYouTubeOutboxKaring(ctx, sender, roomID, &payload)
+		return operation, true, d.sendYouTubeOutboxKaring(ctx, sender, roomID, request)
 	}()
 
 	if !begun {
-		return
+		return false
 	}
 
 	if sendErr != nil {
@@ -111,47 +189,16 @@ func (d *SendEngine) dispatchClaimedKaring(
 			ctx, operation, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, sendErr, result, mu,
 		)
 
-		return
+		return false
 	}
 
 	if !d.completeLifecycleSent(ctx, operation, claimTokens, result, mu) {
-		return
+		return false
 	}
 
 	d.recordKaringSuccess(ctx, roomID, channelID, kind, rows, outboxes, sendReq, claimTokens, mode, result, mu)
-}
 
-func (d *SendEngine) prepareKaringDispatch(
-	ctx context.Context,
-	roomID string,
-	channelID string,
-	kind domain.OutboxKind,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	claimTokens []dispatchstate.ClaimToken,
-	mode string,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
-) (domain.YouTubeOutboxDispatchPayload, deliverySendRequest, bool) {
-	payload, err := d.buildYouTubeOutboxKaringPayload(ctx, channelID, kind, outboxes)
-	if err != nil {
-		d.handleKaringRequestBuildFailure(
-			ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu,
-		)
-
-		return domain.YouTubeOutboxDispatchPayload{}, deliverySendRequest{}, false
-	}
-
-	sendReq, err := buildDeliveryKaringSendRequest(roomID, outboxes)
-	if err != nil {
-		d.handleKaringRequestBuildFailure(
-			ctx, roomID, channelID, kind, rows, outboxes, claimTokens, mode, err, result, mu,
-		)
-
-		return domain.YouTubeOutboxDispatchPayload{}, deliverySendRequest{}, false
-	}
-
-	return payload, sendReq, true
+	return true
 }
 
 func (d *SendEngine) handleKaringRequestBuildFailure(
@@ -263,7 +310,7 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 	ctx context.Context,
 	sender YouTubeOutboxKaringSender,
 	roomID string,
-	payload *domain.YouTubeOutboxDispatchPayload,
+	request *iris.KaringContentListRequest,
 ) error {
 	sendCtx, cancel := d.karingSendContext(ctx)
 	defer cancel()
@@ -273,7 +320,7 @@ func (d *SendEngine) sendYouTubeOutboxKaring(
 		return fmt.Errorf("before send youtube outbox karing: %w", err)
 	}
 
-	if err := sender.SendYouTubeOutboxKaring(sendCtx, roomID, payload); err != nil {
+	if err := sender.SendYouTubeOutboxKaring(sendCtx, roomID, request); err != nil {
 		return d.wrapKaringTimeoutError(sendCtx, "send youtube outbox karing", err)
 	}
 
@@ -298,41 +345,6 @@ func (d *SendEngine) wrapKaringTimeoutError(ctx context.Context, action string, 
 	}
 
 	return fmt.Errorf("%s: %w", action, err)
-}
-
-func (d *SendEngine) buildYouTubeOutboxKaringPayload(
-	ctx context.Context,
-	channelID string,
-	kind domain.OutboxKind,
-	outboxes []domain.YouTubeNotificationOutbox,
-) (domain.YouTubeOutboxDispatchPayload, error) {
-	memberName, err := d.formatter.getMemberName(ctx, channelID)
-	if err != nil || strings.TrimSpace(memberName) == "" {
-		memberName = d.formatter.vtuberFallback(ctx)
-	}
-
-	payload := domain.YouTubeOutboxDispatchPayload{
-		OutboxIDs:  make([]int64, 0, len(outboxes)),
-		Kind:       kind,
-		AlarmType:  kind.ToAlarmType(),
-		ChannelID:  channelID,
-		MemberName: strings.TrimSpace(memberName),
-		Items:      make([]domain.YouTubeOutboxItem, 0, len(outboxes)),
-	}
-	for i := range outboxes {
-		payload.OutboxIDs = append(payload.OutboxIDs, outboxes[i].ID)
-		payload.Items = append(payload.Items, domain.YouTubeOutboxItem{
-			OutboxID:  outboxes[i].ID,
-			ContentID: outboxes[i].ContentID,
-			Payload:   outboxes[i].Payload,
-		})
-	}
-
-	if err := payload.Validate(); err != nil {
-		return domain.YouTubeOutboxDispatchPayload{}, fmt.Errorf("build youtube outbox karing payload: %w", err)
-	}
-
-	return payload, nil
 }
 
 func buildDeliveryKaringSendRequest(roomID string, outboxes []domain.YouTubeNotificationOutbox) (deliverySendRequest, error) {

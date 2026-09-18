@@ -9,8 +9,9 @@ One process is one trust domain.
 
 ## Required controls
 
-- Admin과 LLM listener는 host의 `127.0.0.1`에만 TCP/UDP로 publish하고 기본 transport를
-  `h3`로 유지합니다.
+- LLM listener는 host loopback에만 publish합니다. Admin은 loopback 또는 host가 실제
+  소유한 승인된 Tailscale 주소에만 publish하며 정확한 source allowlist와 host firewall을
+  함께 검증합니다. 기본 transport는 `h3`로 유지합니다.
 - Admin과 LLM internal route는 비어 있지 않은 `API_SECRET_KEY`를 요구합니다.
 - `hololive-api`는 `docker-proxy-net`에 가입하거나 Docker socket 또는 `DOCKER_HOST`를
   받아서는 안 됩니다.

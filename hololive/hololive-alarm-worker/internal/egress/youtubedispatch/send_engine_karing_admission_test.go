@@ -8,6 +8,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
+
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/lifecycle"
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
@@ -59,7 +61,7 @@ type karingCallbackSender struct {
 	send func(context.Context) error
 }
 
-func (s *karingCallbackSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *domain.YouTubeOutboxDispatchPayload) error {
+func (s *karingCallbackSender) SendYouTubeOutboxKaring(ctx context.Context, _ string, _ *iris.KaringContentListRequest) error {
 	s.calls++
 	return s.send(ctx)
 }

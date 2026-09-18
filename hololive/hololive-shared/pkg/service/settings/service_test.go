@@ -100,7 +100,7 @@ func TestSettingsService_PreservesTargetMinutesOnReload(t *testing.T) {
 	}
 }
 
-func TestSettingsService_HealsLegacyStoredTargetMinutesOnReload(t *testing.T) {
+func TestSettingsService_PreservesExplicitStoredTargetMinutesOnReload(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
 	logger := slog.New(slog.DiscardHandler)
@@ -111,7 +111,7 @@ func TestSettingsService_HealsLegacyStoredTargetMinutesOnReload(t *testing.T) {
 
 	reloaded := NewSettingsService(filePath, Settings{}, logger)
 	got := reloaded.Get()
-	want := []int{5, 3, 1}
+	want := []int{5, 1}
 
 	if len(got.TargetMinutes) != len(want) {
 		t.Fatalf("expected target minutes len %d, got %d (%v)", len(want), len(got.TargetMinutes), got.TargetMinutes)
@@ -124,12 +124,13 @@ func TestSettingsService_HealsLegacyStoredTargetMinutesOnReload(t *testing.T) {
 	}
 }
 
-func TestSettingsService_RewritesHealedLegacyTargetMinutesOnReload(t *testing.T) {
+func TestSettingsService_DoesNotRewriteExplicitTargetMinutesOnReload(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "settings.json")
 	logger := slog.New(slog.DiscardHandler)
 
-	if err := os.WriteFile(filePath, []byte(`{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`), 0o600); err != nil {
+	original := `{"alarmAdvanceMinutes":5,"scraperProxyEnabled":false,"targetMinutes":[5,1]}`
+	if err := os.WriteFile(filePath, []byte(original), 0o600); err != nil {
 		t.Fatalf("write settings: %v", err)
 	}
 
@@ -140,8 +141,8 @@ func TestSettingsService_RewritesHealedLegacyTargetMinutesOnReload(t *testing.T)
 		t.Fatalf("read settings: %v", err)
 	}
 
-	if string(raw) != "{\"alarmAdvanceMinutes\":5,\"scraperProxyEnabled\":false,\"targetMinutes\":[5,3,1]}" {
-		t.Fatalf("expected healed settings file, got %q", string(raw))
+	if string(raw) != original {
+		t.Fatalf("expected explicit settings file unchanged, got %q", string(raw))
 	}
 }
 

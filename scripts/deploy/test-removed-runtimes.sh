@@ -40,9 +40,11 @@ case "$1" in
     exit "${MOCK_DOCKER_COMPOSE_EXIT:-0}"
     ;;
   ps)
+    [[ "${MOCK_DOCKER_PS_EXIT:-0}" == 0 ]] || exit "${MOCK_DOCKER_PS_EXIT}"
     filter="${*: -1}"
     name="${filter#name=^}"
     name="${name%\$}"
+    [[ ! -f "${MOCK_DOCKER_LOG}.${name}.removed" ]] || exit 0
     for present in ${MOCK_DOCKER_PRESENT_NAMES:-}; do
       if [[ "${present}" == "${name}" ]]; then
         printf '%s\n' "mock-${name}"
@@ -54,6 +56,8 @@ case "$1" in
     exit "${MOCK_DOCKER_STOP_EXIT:-0}"
     ;;
   rm)
+    [[ "${MOCK_DOCKER_KEEP_CONTAINER:-0}" == 0 ]] && touch "${MOCK_DOCKER_LOG}.${*: -1}.removed"
+    exit 0
     ;;
   inspect)
     _fmt=""
@@ -79,6 +83,7 @@ export MOCK_DOCKER_LOG="${tmpdir}/docker.log"
 export HOLOLIVE_KAPU_ALARM_WORKER_ROLLBACK_APPROVED=1
 
 : >"${MOCK_DOCKER_LOG}"
+rm -f "${MOCK_DOCKER_LOG}."*.removed
 MOCK_DOCKER_PRESENT_NAMES="" removed_runtime_cleanup_before_cutover
 if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
     fail "cleanup issued stop/rm when retired containers are absent"
@@ -86,6 +91,7 @@ fi
 pass "absent retired runtime cleanup is a no-op"
 
 : >"${MOCK_DOCKER_LOG}"
+rm -f "${MOCK_DOCKER_LOG}."*.removed
 retired_names="$(removed_runtime_container_names | tr '\n' ' ')"
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" MOCK_DOCKER_STOP_EXIT=1 removed_runtime_cleanup_before_cutover
 while IFS= read -r name; do
@@ -117,6 +123,7 @@ EOF
 mkdir -p "${ROOT_DIR}/logs" "${ROOT_DIR}/data"
 
 : >"${MOCK_DOCKER_LOG}"
+rm -f "${MOCK_DOCKER_LOG}."*.removed
 MOCK_DOCKER_PRESENT_NAMES="hololive-kakao-bot-go hololive-admin-api hololive-llm-scheduler hololive-dispatcher-go" \
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
@@ -140,6 +147,7 @@ fi
 pass "unified API cutover builds dependencies before cleanup and starts last"
 
 : >"${MOCK_DOCKER_LOG}"
+rm -f "${MOCK_DOCKER_LOG}."*.removed
 unset IRIS_CLIENT_GO_WORKSPACE_PATH
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
 COMPOSE_ENV_FILE="${env_file}" \
@@ -158,6 +166,7 @@ grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/collect
 pass "collector-only AP start neither requires iris-client-go nor triggers central cutover cleanup"
 
 : >"${MOCK_DOCKER_LOG}"
+rm -f "${MOCK_DOCKER_LOG}."*.removed
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
@@ -172,6 +181,7 @@ grep -Fq "[PREFLIGHT] Verifying host bind-mount write access" "${tmpdir}/alarm-w
 pass "alarm-worker-only start does not trigger API-plane cutover cleanup"
 
 : >"${MOCK_DOCKER_LOG}"
+rm -f "${MOCK_DOCKER_LOG}."*.removed
 MOCK_DOCKER_PRESENT_NAMES="${retired_names}" \
 COMPOSE_ENV_FILE="${env_file}" \
 SHARED_GO_WORKSPACE_PATH="${tmpdir}/shared-go" \
@@ -183,3 +193,10 @@ if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then
     fail "shortlink ingress-only start must not stop retired API-plane runtimes"
 fi
 pass "shortlink ingress-only start does not trigger API-plane cutover cleanup"
+
+: >"${MOCK_DOCKER_LOG}"
+if MOCK_DOCKER_PS_EXIT=71 removed_runtime_cleanup_before_cutover; then fail "inspection failure treated as absence"; fi
+if grep -Eq '^(stop|rm -f) ' "${MOCK_DOCKER_LOG}"; then fail "mutation after inspection failure"; fi
+rm -f "${MOCK_DOCKER_LOG}."*.removed
+if MOCK_DOCKER_PRESENT_NAMES=admin-dashboard MOCK_DOCKER_KEEP_CONTAINER=1 removed_runtime_cleanup_before_cutover; then fail "leftover retired dashboard accepted"; fi
+pass "inspection errors and remaining exact dashboard fail closed"

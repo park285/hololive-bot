@@ -20,6 +20,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${REPO_ROOT}/scripts/deploy/lib/compose-env.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/compose-services.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/removed-runtimes.sh"
+. "${REPO_ROOT}/scripts/deploy/lib/admin-bind.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/health-gate.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/postgres-capacity.sh"
 . "${REPO_ROOT}/scripts/deploy/lib/source-revision.sh"
@@ -237,6 +238,9 @@ export COMPOSE_ENV_FILE
 compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
+if [[ "${LIVE_DEPLOY_MODE}" == true ]]; then
+    admin_network_preflight "${REPO_ROOT}" "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
+fi
 postgres_capacity_assert_target "${REPO_ROOT}" "${COMPOSE_ENV_FILE}"
 
 should_bump() {
@@ -383,6 +387,7 @@ else
     removed_runtime_cleanup_before_cutover
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" up -d --no-build
+    removed_runtime_assert_absent
 
     echo "[VERIFY] Compose service state"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILES[@]}" ps

@@ -9,6 +9,7 @@ export GIT_OPTIONAL_LOCKS=0
 . "${ROOT_DIR}/scripts/deploy/lib/compose-services.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/ap-compose-version.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
+. "${ROOT_DIR}/scripts/deploy/lib/admin-bind.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/kapu-alarm-worker-fence.sh"
 . "${ROOT_DIR}/scripts/deploy/lib/postgres-capacity.sh"
@@ -232,6 +233,7 @@ compose_env_validate_file_format "${COMPOSE_ENV_FILE}"
 compose_env_assert_shell_matches_all_file_keys "${COMPOSE_ENV_FILE}"
 compose_env_assert_no_shell_shadow_for_compose_files "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
 compose_env_assert_live_compat_for_host_networked_postgres "${COMPOSE_FILE_PATHS[@]}"
+admin_network_preflight "${ROOT_DIR}" "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_PATHS[@]}"
 postgres_capacity_assert_target "${ROOT_DIR}" "${COMPOSE_ENV_FILE}"
 
 REVISION_ENABLED=false
@@ -308,6 +310,7 @@ if [[ -n "${TARGET}" ]]; then
     fi
     up_args+=("${TARGET}")
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" "${up_args[@]}"
+    if [[ "${TARGET}" == "hololive-api" ]]; then removed_runtime_assert_absent; fi
     echo "[PS] ${TARGET}"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps "${TARGET}"
     if ! cutover_health_gate "${TARGET}"; then
@@ -321,6 +324,7 @@ else
     cutover_capture_restart_baseline hololive-api hololive-alarm-worker youtube-collector
     echo "[UP] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" up -d --no-build
+    removed_runtime_assert_absent
     echo "[PS] all services"
     "${COMPOSE_CMD[@]}" --env-file "${COMPOSE_ENV_FILE}" "${COMPOSE_FILE_ARGS[@]}" ps
     if ! cutover_health_gate hololive-api hololive-alarm-worker youtube-collector; then

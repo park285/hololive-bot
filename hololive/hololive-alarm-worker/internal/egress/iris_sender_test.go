@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	irisSenderQueued           = "queued"
 	testIrisSenderRoomID       = "room-1"
 	testIrisSenderOpenRoomKind = "open"
 )
@@ -24,16 +25,18 @@ type irisSenderTestCall struct {
 }
 
 type irisSenderTestClient struct {
-	karingRequests []iris.KaringContentListRequest
-	textCalls      []irisSenderTestCall
-	markdownCalls  []irisSenderTestCall
-	statusCalls    int
-	textErr        error
-	markdownErr    error
-	karingErr      error
-	accepted       *iris.KaringDryRunResponse
-	acceptedSet    bool
-	getStatus      func(int, string) (*iris.ReplyStatusSnapshot, error)
+	karingRequests      []iris.KaringContentListRequest
+	textCalls           []irisSenderTestCall
+	markdownCalls       []irisSenderTestCall
+	statusCalls         int
+	textErr             error
+	markdownErr         error
+	karingErr           error
+	accepted            *iris.KaringDryRunResponse
+	acceptedSet         bool
+	markdownAccepted    *iris.ReplyAcceptedResponse
+	markdownAcceptedSet bool
+	getStatus           func(int, string) (*iris.ReplyStatusSnapshot, error)
 }
 
 func (c *irisSenderTestClient) SendMessage(_ context.Context, roomID, message string, opts ...iris.SendOption) error {
@@ -47,7 +50,11 @@ func (c *irisSenderTestClient) SendMarkdown(_ context.Context, roomID, markdown 
 		return nil, c.markdownErr
 	}
 
-	return &iris.ReplyAcceptedResponse{}, nil
+	if c.markdownAcceptedSet {
+		return c.markdownAccepted, nil
+	}
+
+	return &iris.ReplyAcceptedResponse{Success: true, Delivery: irisSenderQueued, RequestID: "markdown-request-1"}, nil
 }
 
 func (c *irisSenderTestClient) SendKaringContentList(_ context.Context, req iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error) {
@@ -73,7 +80,7 @@ func (c *irisSenderTestClient) GetReplyStatus(_ context.Context, requestID strin
 }
 
 func acceptedKaringTestResponse(requestID string) *iris.KaringDryRunResponse {
-	return &iris.KaringDryRunResponse{Success: true, Delivery: "queued", RequestID: requestID}
+	return &iris.KaringDryRunResponse{Success: true, Delivery: irisSenderQueued, RequestID: requestID}
 }
 
 func karingTestStatus(requestID, state string) *iris.ReplyStatusSnapshot {
@@ -301,9 +308,9 @@ func TestIrisMessageSenderRejectsInvalidAdmissionAsOutcomeUnknown(t *testing.T) 
 		accepted *iris.KaringDryRunResponse
 	}{
 		{name: "empty response"},
-		{name: "not successful", accepted: &iris.KaringDryRunResponse{Delivery: "queued", RequestID: "request-1"}},
+		{name: "not successful", accepted: &iris.KaringDryRunResponse{Delivery: irisSenderQueued, RequestID: "request-1"}},
 		{name: "not queued", accepted: &iris.KaringDryRunResponse{Success: true, Delivery: "sending", RequestID: "request-1"}},
-		{name: "missing request id", accepted: &iris.KaringDryRunResponse{Success: true, Delivery: "queued"}},
+		{name: "missing request id", accepted: &iris.KaringDryRunResponse{Success: true, Delivery: irisSenderQueued}},
 	}
 
 	for _, tc := range testCases {
