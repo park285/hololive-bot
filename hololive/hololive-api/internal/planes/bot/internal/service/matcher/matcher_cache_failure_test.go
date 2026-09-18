@@ -24,12 +24,22 @@ func TestStaticExactMatchesSurviveDynamicCacheFailure(t *testing.T) {
 		channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), query)
 		require.NoError(t, err)
 		require.True(t, found)
+
+		if channel == nil {
+			t.Fatal("static match must return its channel during a cache outage")
+		}
+
 		require.Equal(t, testChannelHolo, channel.ID)
 	}
 
 	channel, found, err := matcher.FindBestMatch(t.Context(), testMemberAqua)
 	require.NoError(t, err)
 	require.True(t, found)
+
+	if channel == nil {
+		t.Fatal("static match must return its channel during a cache outage")
+	}
+
 	require.Equal(t, testChannelHolo, channel.ID)
 
 	for _, query := range []string{"unknown", "Aq"} {
