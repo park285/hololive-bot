@@ -13,6 +13,8 @@ import (
 	"syscall"
 
 	"github.com/park285/iris-client-go/v2/iris"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const (
@@ -178,17 +180,14 @@ func validateRuntimeIrisBaseURLHost(host string, opts runtimeIrisBaseURLValidati
 }
 
 func runtimeIrisBaseURLHostAllowlistConfigured() bool {
-	return strings.TrimSpace(os.Getenv(irisH3ServerNameEnv)) != "" ||
-		strings.TrimSpace(os.Getenv(irisBaseURLAllowedHostsEnv)) != ""
+	return settings.LoadIrisRuntimeValidationConfig().HostAllowlistConfigured()
 }
 
 func runtimeIrisAllowedBaseURLHosts() map[string]struct{} {
 	allowedHosts := make(map[string]struct{})
+	config := settings.LoadIrisRuntimeValidationConfig()
 
-	for _, rawHost := range append(
-		[]string{os.Getenv(irisH3ServerNameEnv)},
-		strings.Split(os.Getenv(irisBaseURLAllowedHostsEnv), ",")...,
-	) {
+	for _, rawHost := range append([]string{config.ServerName}, config.AllowedHosts...) {
 		host := normalizeRuntimeIrisHost(rawHost)
 		if host == "" {
 			continue
@@ -217,11 +216,7 @@ func normalizeRuntimeIrisHost(raw string) string {
 }
 
 func shouldValidateRuntimeIrisBaseURLFileStat() bool {
-	if !strings.EqualFold(strings.TrimSpace(os.Getenv(appEnvKey)), appEnvProduction) {
-		return false
-	}
-
-	return !strings.EqualFold(strings.TrimSpace(os.Getenv(irisBaseURLFileSkipStatChecksEnv)), "true")
+	return settings.LoadIrisRuntimeValidationConfig().ValidateFileStat
 }
 
 func normalizeRuntimeIrisBaseURLFilePath(path string, strict bool) (string, error) {

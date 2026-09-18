@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewClientForURLStrictReturnsErrorWhenH3ClientConfigFails(t *testing.T) {
-	t.Setenv(internalH3CACertFileEnv, filepath.Join(t.TempDir(), "missing-ca.pem"))
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
 
 	client, err := NewClientForURLStrict("https://hololive-admin-api:30006", time.Second, nil)
 	if err == nil {
@@ -20,7 +20,7 @@ func TestNewClientForURLStrictReturnsErrorWhenH3ClientConfigFails(t *testing.T) 
 }
 
 func TestNewClientForURLStrictKeepsPlainHTTPClient(t *testing.T) {
-	t.Setenv(internalH3CACertFileEnv, filepath.Join(t.TempDir(), "missing-ca.pem"))
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", filepath.Join(t.TempDir(), "missing-ca.pem"))
 
 	client, err := NewClientForURLStrict("http://localhost:30190", time.Second, nil)
 	if err != nil {

@@ -35,6 +35,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -262,7 +263,7 @@ func (l *SlidingWindowLimiter) memberID(nowMS int64) string {
 }
 
 func resolveInstanceID() string {
-	if value := strings.TrimSpace(os.Getenv("INSTANCE_ID")); value != "" {
+	if value := settings.RateLimiterInstanceID(); value != "" {
 		return sanitizeInstanceID(value)
 	}
 

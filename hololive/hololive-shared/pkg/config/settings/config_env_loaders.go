@@ -72,6 +72,7 @@ func LoadServerConfigWithAPIKey(apiKey string) ServerConfig {
 	port := sharedenv.Int("SERVER_PORT", 30001)
 
 	return ServerConfig{
+		AuthBcryptCost:          sharedenv.Int("AUTH_BCRYPT_COST", 0),
 		Port:                    port,
 		APIKey:                  apiKey,
 		HTTPTransports:          load.CommaSeparated(sharedenv.String("HOLOLIVE_HTTP_TRANSPORTS", "h3")),

@@ -23,6 +23,8 @@ package settings
 import "time"
 
 type ServerConfig struct {
+	// AuthBcryptCost는 AUTH_BCRYPT_COST 원값이며 범위 검증·기본값은 auth service가 소유한다.
+	AuthBcryptCost int
 	Port           int
 	APIKey         string // API 인증용 시크릿 키 (X-API-Key 헤더로 검증)
 	HTTPTransports []string

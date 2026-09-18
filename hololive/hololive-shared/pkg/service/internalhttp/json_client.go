@@ -8,16 +8,10 @@ import (
 	"strings"
 	"time"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 	"github.com/park285/shared-go/v2/pkg/httputil"
-)
 
-const (
-	internalH3CACertFileEnv = "HOLOLIVE_INTERNAL_H3_CA_CERT_FILE"
-	hololiveH3CertFileEnv   = "HOLOLIVE_H3_CERT_FILE"
-	internalH3ServerNameEnv = "HOLOLIVE_INTERNAL_H3_SERVER_NAME"
-	hololiveH3ServerNameEnv = "HOLOLIVE_H3_SERVER_NAME"
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 // NewJSONClient는 내부 서비스 URL scheme에 맞는 JSON client를 생성합니다.
@@ -49,10 +43,7 @@ func NewClientForURLStrict(rawURL string, timeout time.Duration, _ *slog.Logger)
 
 	// sharedh3의 closeFn은 transport.Close() 래퍼이고 그 transport는 반환된 client에 실려 있다.
 	// 소유자가 CloseClient로 회수하므로 핸들을 호출 경로마다 들고 다니지 않는다.
-	client, _, err := sharedh3.NewClient(timeout, sharedh3.ClientOptions{
-		CACertFile: sharedenv.StringAny(internalH3CACertFileEnv, hololiveH3CertFileEnv),
-		ServerName: sharedenv.StringAny(internalH3ServerNameEnv, hololiveH3ServerNameEnv),
-	})
+	client, _, err := sharedh3.NewClient(timeout, settings.LoadInternalH3ClientOptions())
 	if err != nil {
 		return nil, fmt.Errorf("configure internal H3 client for %s: %w", rawURL, err)
 	}

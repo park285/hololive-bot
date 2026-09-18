@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strings"
+
+	"github.com/kapu/hololive-shared/pkg/config/settings"
 )
 
 const (
@@ -72,7 +73,7 @@ func runtimeIrisValidationTransport(explicit string) string {
 		return transport
 	}
 
-	return normalizeRuntimeIrisTransport(os.Getenv("IRIS_TRANSPORT"))
+	return normalizeRuntimeIrisTransport(settings.LoadIrisRuntimeValidationConfig().Transport)
 }
 
 func normalizeRuntimeIrisTransport(raw string) string {

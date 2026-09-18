@@ -134,7 +134,7 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 	ytStack := buildAdminAPIYouTubeStack(ctx, appConfig, infra, foundation, logger)
 	templateAdmin := buildAdminAPITemplateAdmin(infra, logger)
 
-	authService, err := buildAdminAPIAuthService(ctx, infra, logger)
+	authService, err := buildAdminAPIAuthService(ctx, appConfig, infra, logger)
 	if err != nil {
 		infra.Cleanup()
 
