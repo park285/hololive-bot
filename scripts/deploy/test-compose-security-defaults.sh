@@ -237,9 +237,17 @@ participants = {
     for name, service in services.items()
     if "observability-traces" in (service.get("networks", {}) or {})
 }
-expected = {"hololive-api", "hololive-alarm-worker", "youtube-collector"}
+expected = {"hololive-alarm-worker", "youtube-collector"}
 if participants != expected:
     print(f"[FAIL] observability-traces participants: expected {sorted(expected)}, got {sorted(participants)}")
+    sys.exit(1)
+
+environment = services["hololive-api"]["environment"]
+if isinstance(environment, list):
+    environment = dict(entry.split("=", 1) for entry in environment)
+endpoint = environment["HOLOLIVE_OTLP_GRPC_ENDPOINT"]
+if not endpoint.startswith("${HOLOLIVE_OTLP_GRPC_ENDPOINT:?"):
+    print("[FAIL] isolated API must require an explicit approved host OTLP endpoint")
     sys.exit(1)
 
 forbidden_ports = {4317, 4318, 8888, 13133, 16685, 16686}
@@ -257,7 +265,7 @@ for name, service in services.items():
             print(f"[FAIL] {name} publishes forbidden Jaeger/OTLP port(s): {sorted(blocked)}")
             sys.exit(1)
 PY
-pass "central runtimes alone join the external trace network without Jaeger or OTLP host ports"
+pass "worker/collector trace network excludes the API and no Jaeger or OTLP host ports are published"
 
 while read -r service compose_file; do
   merged_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE="docker-compose.prod.yml:${compose_file}" COMPOSE_PROFILES=oracle docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
