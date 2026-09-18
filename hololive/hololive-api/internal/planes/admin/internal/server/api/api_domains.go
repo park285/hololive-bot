@@ -22,8 +22,11 @@ package api
 
 // route group별로 API 책임을 나눈 domain handler들이다.
 type (
-	MemberHandler      struct{ *Handler }
-	AlarmHandler       struct{ *Handler }
+	MemberHandler struct{ *Handler }
+	AlarmHandler  struct {
+		*Handler
+		dispatchOps DispatchOperations
+	}
 	RoomHandler        struct{ *Handler }
 	StreamHandler      struct{ *Handler }
 	StatsHandler       struct{ *Handler }
