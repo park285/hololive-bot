@@ -118,6 +118,7 @@ hololive/hololive-shared/pkg/config/settings/config_youtube_producer_retired.go
 hololive/hololive-shared/pkg/config/settings/runtime_inputs.go
 hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go
 hololive/hololive-shared/pkg/config/settings/server_transport.go
+hololive/hololive-shared/pkg/config/settings/runtime_clients.go
 hololive/hololive-shared/pkg/config/settings/stack_worker_profile.go
 hololive/hololive-shared/pkg/config/settings/stack_worker_profile_types.go
 hololive/hololive-shared/pkg/config/settings/tracing.go
