@@ -114,9 +114,7 @@ func TestLiveStatementBatchFailureRollsBack(t *testing.T) {
 		})
 	})
 
-	var databaseError *pgconn.PgError
-
-	if !errors.As(err, &databaseError) || databaseError.Code != "23505" {
+	if databaseError, ok := errors.AsType[*pgconn.PgError](err); !ok || databaseError.Code != "23505" {
 		t.Fatalf("expected PostgreSQL unique violation, got %v", err)
 	}
 

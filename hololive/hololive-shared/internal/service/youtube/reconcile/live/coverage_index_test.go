@@ -52,7 +52,7 @@ func BenchmarkLiveCoverageMembership(b *testing.B) {
 		b.Run(fmt.Sprintf("scan/%d", n), func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				if !slices.Contains(channels, key) {
 					b.Fatal("missing channel")
 				}
@@ -61,7 +61,7 @@ func BenchmarkLiveCoverageMembership(b *testing.B) {
 		b.Run(fmt.Sprintf("index/%d", n), func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				if !index.covers(key, testLiveStatus) {
 					b.Fatal("missing channel")
 				}
@@ -81,7 +81,7 @@ func BenchmarkLiveCoverageSlotBuildAndRead(b *testing.B) {
 		b.Run(fmt.Sprintf("scan/reads-%d", reads), func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				for i := range reads {
 					if !slices.Contains(channels, channels[(i*31+255)%len(channels)]) {
 						b.Fatal("missing channel")
@@ -92,7 +92,7 @@ func BenchmarkLiveCoverageSlotBuildAndRead(b *testing.B) {
 		b.Run(fmt.Sprintf("index/reads-%d", reads), func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				index := newLiveCoverageIndex(channels, []string{testLiveStatus})
 
 				for i := range reads {
@@ -164,7 +164,7 @@ func BenchmarkLiveCoverageAdaptiveSlot(b *testing.B) {
 		b.Run(fmt.Sprintf("reads-%d", reads), func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				matcher := newLiveCoverageMatcher(channels, []string{testLiveStatus})
 
 				for i := range reads {

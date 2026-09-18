@@ -109,7 +109,7 @@ func BenchmarkPointOwnershipIndex(b *testing.B) {
 		b.Run(fmt.Sprintf("members-%d", n), func(b *testing.B) {
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				if cache.snapshotOwnedNameMemberLocked(cached.Name, cached, 1) != cached {
 					b.Fatal("unexpected owner")
 				}

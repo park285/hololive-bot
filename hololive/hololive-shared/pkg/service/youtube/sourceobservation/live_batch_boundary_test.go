@@ -36,9 +36,7 @@ func TestLiveStatementBatchFailureRollsBackEarlierChunks(t *testing.T) {
 		return dbx.ExecStatements(ctx, tx, statements)
 	})
 
-	var databaseError *pgconn.PgError
-
-	if !errors.As(err, &databaseError) || databaseError.Code != "23505" {
+	if databaseError, ok := errors.AsType[*pgconn.PgError](err); !ok || databaseError.Code != "23505" {
 		t.Fatalf("expected second-batch unique violation, got %v", err)
 	}
 
