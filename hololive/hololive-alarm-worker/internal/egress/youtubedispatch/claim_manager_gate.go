@@ -283,9 +283,12 @@ func appendProceedingDeliveryClaim(
 ) {
 	rowClaimTokens := []dispatchstate.ClaimToken(nil)
 
-	if claimToken != nil && !reused {
+	if claimToken != nil {
 		token := *claimToken
 
+		token.Reused = reused
+
+		// 다른 room이 먼저 끝나도 같은 epoch의 완료 증명이 필요하다. 해제 소유권과 구분한다.
 		selection.claimTokens = append(selection.claimTokens, token)
 		rowClaimTokens = []dispatchstate.ClaimToken{token}
 	}

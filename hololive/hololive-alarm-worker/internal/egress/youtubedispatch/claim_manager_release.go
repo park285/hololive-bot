@@ -165,6 +165,10 @@ func (d *ClaimManager) releaseDeliveryClaims(ctx context.Context, claims []dispa
 	repository := observation.NewRepositoryContext(ctx, d.db)
 
 	for i := range claims {
+		if claims[i].Reused {
+			continue
+		}
+
 		if _, err := repository.ReleaseAlarmStateClaim(ctx, claims[i].Kind, claims[i].PostID, claims[i].AuthorizedAt); err != nil {
 			return fmt.Errorf("release claim at index %d: %w", i, err)
 		}

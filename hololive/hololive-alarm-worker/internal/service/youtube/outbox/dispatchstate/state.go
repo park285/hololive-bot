@@ -30,6 +30,8 @@ type ClaimToken struct {
 	Kind         domain.OutboxKind
 	PostID       string
 	AuthorizedAt time.Time
+	// Reused는 같은 dispatch round가 가진 claim의 완료 증명이며 해제 권한은 없다.
+	Reused bool
 }
 
 type DispatchResult struct {

@@ -550,11 +550,14 @@ func TestSelectClaimedDeliveriesTracksRowClaimOwnership(t *testing.T) {
 	)
 
 	require.Len(t, selection.sendRows, 3)
-	require.Len(t, selection.claimTokens, 2)
+	require.Len(t, selection.claimTokens, 3)
 	require.Len(t, selection.rowClaimTokens, 3)
 	require.Len(t, selection.rowClaimTokens[0], 1)
 	require.Len(t, selection.rowClaimTokens[1], 1)
-	require.Empty(t, selection.rowClaimTokens[2])
+	require.Len(t, selection.rowClaimTokens[2], 1)
+	require.False(t, selection.rowClaimTokens[0][0].Reused)
+	require.True(t, selection.rowClaimTokens[2][0].Reused)
+	require.Equal(t, selection.rowClaimTokens[0][0].AuthorizedAt, selection.rowClaimTokens[2][0].AuthorizedAt)
 }
 
 func TestSelectClaimedDeliveriesHandlesNilInputs(t *testing.T) {
