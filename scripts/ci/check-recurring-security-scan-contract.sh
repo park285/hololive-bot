@@ -142,8 +142,10 @@ if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.13' -e 'python-runner.sh --p
 fi
 grep -Fq 'python-version-file: ${{ inputs.working-directory }}/.python-version' "$python_runtime_action" ||
   fail "python-runtime action must install the exact Python runtime from the checkout .python-version"
-grep -Fq 'uv==0.12.13' "$python_runtime_action" ||
-  fail "python-runtime action must install the exact uv release"
+grep -Fq 'run: bash "${{ github.action_path }}/install-uv.sh"' "$python_runtime_action" ||
+  fail "python-runtime action must use the hash-verified uv installer"
+# 설치기 전체 byte와 release hash는 workflow CI owner 검사와 스택 parity 검사가 검증한다.
+bash scripts/ci/python-runner.sh -- scripts/ci/check-workflow-ci-owner.py
 grep -Fq 'interpreter="$(bash scripts/ci/python-runner.sh --print-interpreter)"' "$python_runtime_action" ||
   fail "python-runtime action must initialize the exact Python interpreter"
 grep -Fq "CI_PYTHON_BIN=%s" "$python_runtime_action" ||
