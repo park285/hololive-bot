@@ -21,12 +21,8 @@ swapfile="/swapfile"
 
 normalize_runtime_payload_permissions() {
   local root="$1"
-  local required
-
-  for required in "$root/youtubejs"; do
-    sudo -n test -d "$required" || return
-    sudo -n test ! -L "$required" || return
-  done
+  sudo -n test -d "$root/youtubejs" || return
+  sudo -n test ! -L "$root/youtubejs" || return
 
   # 서비스 계정은 root 소유 helper graph를 읽고 순회할 수 있어야 한다.
   # AP 호스트의 chmod는 -P를 지원하지 않으므로 find가 링크를 제외하고 순회합니다.
