@@ -342,7 +342,7 @@ func TestDispatcher_PerRoomMode_Success(t *testing.T) {
 }
 
 func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
-	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(30*time.Millisecond))
+	env := newDispatcherIntegrationEnv(t, newIntegrationDispatchConfig(time.Minute))
 
 	env.sender.setFailRoom("roomB")
 	setupChannelSubscribers(t, env.cacheService, "alarm:channel_subscribers:UCperroom_retry", []string{"roomA", "roomB"})
@@ -381,7 +381,13 @@ func TestDispatcher_PerRoomMode_PartialFailureThenRetry(t *testing.T) {
 		t.Fatalf("Expected 2 delivery rows, got %d", len(deliveries))
 	}
 
-	time.Sleep(40 * time.Millisecond)
+	// 첫 cycle의 DB 처리 시간과 무관하게 부분 실패를 관측한 뒤 재시도를 허용한다.
+	updated, err := env.db.Exec(t.Context(),
+		`UPDATE youtube_notification_delivery SET next_attempt_at = $1
+		 WHERE outbox_id = $2 AND room_id = $3 AND status = $4`,
+		time.Now().UTC().Add(-time.Second), item.ID, "roomB", domain.OutboxStatusPending)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, updated.RowsAffected())
 	env.dispatcher.ProcessOnceForTest(t.Context())
 
 	var second domain.YouTubeNotificationOutbox
