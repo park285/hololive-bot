@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260919-hololive-x-spaces",
+  "title": "홀로봇 스페이스는 무료 웹 내부 API와 기존 발송 원장으로 처리한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-19",
+  "summary": "사용자의 비용 발생 절대 금지 및 구현 요청에 따라 cookie 기반 avatar_content/AudioSpaceById를 검증한다. 첫 버전은 명시적 멤버 계정 매핑과 기존 LIVE 구독자를 대상으로 개설자의 시작 링크를 발송한다. 사용자 정정에 따라 실계정 세션 연결과 발송 설정까지 구현 범위에 포함한다. 윈도우 Edge에 기존 세션이 있으며 봇 인증의 지속성이 핵심 검증 항목이다. 고정 쿠키의 무인 장기 유지나 자동 재로그인 성공을 가정하지 않는다.",
+  "sources": ["docs/current/plans/2026-09-19-x-spaces.md#X 스페이스 무료 감지와 시작 알림"],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": [],
+  "review": {"trigger": "X 내부 API의 응답/인증 변경 또는 스페이스 구독 분리가 필요할 때"}
+}

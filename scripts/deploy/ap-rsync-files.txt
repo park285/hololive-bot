@@ -184,6 +184,7 @@ hololive/hololive-shared/pkg/domain/stream.go
 hololive/hololive-shared/pkg/domain/stream_interfaces.go
 hololive/hololive-shared/pkg/domain/stream_next.go
 hololive/hololive-shared/pkg/domain/stream_url.go
+hololive/hololive-shared/pkg/domain/x_space.go
 hololive/hololive-shared/pkg/domain/youtube_content.go
 hololive/hololive-shared/pkg/domain/youtube_content_thumbnails.go
 hololive/hololive-shared/pkg/domain/youtube_delivery.go

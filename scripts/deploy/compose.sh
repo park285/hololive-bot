@@ -203,6 +203,35 @@ if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_ADMIN_API_PORT
     fi
 fi
 
+# 호스트의 명시적 활성화 값으로 재부팅·수동 배포의 세션 키와 대상 설정을 유지한다.
+x_spaces_value="0"
+if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_ENABLED"; then
+    x_spaces_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_ENABLED")"
+fi
+case "${x_spaces_value}" in
+    0) ;;
+    1)
+        x_spaces_overlay="deploy/compose/docker-compose.x-spaces.yml"
+        x_spaces_present=false
+        for file in "${compose_files[@]}"; do
+            if [[ "${file##*/}" == "${x_spaces_overlay##*/}" ]]; then
+                x_spaces_present=true
+                break
+            fi
+        done
+        if [[ "${x_spaces_present}" == false ]]; then
+            compose_files+=("${x_spaces_overlay}")
+            if (( compose_command_index >= 0 )); then
+                compose_args=("${compose_args[@]:0:compose_command_index}" -f "${x_spaces_overlay}" "${compose_args[@]:compose_command_index}")
+                compose_command_index=$((compose_command_index + 2))
+            else
+                compose_args+=(-f "${x_spaces_overlay}")
+            fi
+        fi
+        ;;
+    *) echo "[ERROR] HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" >&2; exit 1 ;;
+esac
+
 collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then
     collector_disable_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR")"

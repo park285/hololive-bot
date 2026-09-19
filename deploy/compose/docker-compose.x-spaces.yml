@@ -1,0 +1,14 @@
+# 세션 암호화 키와 감시 대상을 준비한 배포에서만 명시적으로 적용한다.
+services:
+  hololive-api:
+    environment:
+      X_SPACES_KEY_FILE: /run/hololive-bot/x-spaces/key
+    volumes:
+      - /etc/stack-secrets/hololive-bot/x-spaces/key:/run/hololive-bot/x-spaces/key:ro
+  hololive-alarm-worker:
+    environment:
+      X_SPACES_KEY_FILE: /run/hololive-bot/x-spaces/key
+      X_SPACES_CONFIG_FILE: /run/hololive-bot/x-spaces/config.json
+    volumes:
+      - /etc/stack-secrets/hololive-bot/x-spaces/key:/run/hololive-bot/x-spaces/key:ro
+      - /etc/stack-secrets/hololive-bot/x-spaces/config.json:/run/hololive-bot/x-spaces/config.json:ro

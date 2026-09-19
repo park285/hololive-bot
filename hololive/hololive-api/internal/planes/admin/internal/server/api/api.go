@@ -38,6 +38,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
+	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
@@ -72,7 +73,11 @@ type Handler struct {
 	startTime                  time.Time
 	streamState                *sharedserver.StreamState
 	memberIndexLoader          func(context.Context) ([]*domain.Member, error)
+	xSpaceSessions             *xspaces.Store
 }
+
+// SetXSpaceSessions는 시작 단계에서만 관리자 세션 저장소를 연결한다. Secret은 응답하지 않는다.
+func (h *Handler) SetXSpaceSessions(store *xspaces.Store) { h.xSpaceSessions = store }
 
 type statusMessageResponse struct {
 	Status  string `json:"status"`

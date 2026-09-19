@@ -240,6 +240,10 @@ func alarmDispatchGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 }
 
 func alarmDispatchSourceGroupKey(envelope *domain.AlarmQueueEnvelope) (string, bool) {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
+		return fmt.Sprintf("%s|source|x_space|%s", envelope.Notification.RoomID, envelope.XSpace.SpaceID), true
+	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return alarmDispatchCelebrationGroupKey(envelope), true
 	}
@@ -298,6 +302,10 @@ func alarmDispatchKaringGroupKey(envelope *domain.AlarmQueueEnvelope) string {
 		return ""
 	}
 
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
+		return alarmDispatchGroupKey(envelope)
+	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		return alarmDispatchGroupKey(envelope)
 	}
@@ -343,7 +351,7 @@ func alarmDispatchEnvelopeEgressPath(
 	}
 
 	switch envelope.SourceKind {
-	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest:
+	case domain.AlarmDispatchSourceKindCelebration, domain.AlarmDispatchSourceKindDeliveryDigest, domain.AlarmDispatchSourceKindXSpace:
 		return alarmDispatchEgressText, false, nil
 	case domain.AlarmDispatchSourceKindYouTubeOutbox:
 		return alarmDispatchYouTubeOutboxEgressPath(ctx, rooms, envelope)

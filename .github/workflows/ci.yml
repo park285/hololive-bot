@@ -263,6 +263,11 @@ jobs:
       - name: YouTube.js helper tests
         run: bash scripts/ci/public-pr-collector-helper-gate.sh
 
+      - name: X Spaces helper tests
+        run: |
+          npm ci --ignore-scripts --prefix hololive/hololive-alarm-worker/xspaces
+          npm test --prefix hololive/hololive-alarm-worker/xspaces
+
   fast-gate:
     name: fast-gate
     if: always()

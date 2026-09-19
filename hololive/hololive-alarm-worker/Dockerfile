@@ -15,6 +15,16 @@
 
 ARG GO_VERSION=1.27.1
 ARG ALPINE_VERSION=3.24
+ARG NODE_VERSION=24
+
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS xspaces-build
+WORKDIR /app/xspaces
+COPY hololive/hololive-alarm-worker/xspaces/package.json hololive/hololive-alarm-worker/xspaces/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY hololive/hololive-alarm-worker/xspaces/src ./src
+RUN rm -f ./src/*.test.mjs
+
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS xspaces-runtime
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
 
@@ -77,6 +87,11 @@ WORKDIR /app
 COPY --from=builder --link /tmp/passwd /etc/passwd
 COPY --from=builder --link /tmp/group /etc/group
 COPY --from=builder --link --chown=1000:1000 /dist ./
+COPY --from=xspaces-runtime --link /lib/ld-musl-*.so.1 /lib/
+COPY --from=xspaces-runtime --link /usr/lib/libgcc_s.so.1 /usr/lib/
+COPY --from=xspaces-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
+COPY --from=xspaces-runtime --link /usr/local/bin/node /usr/local/bin/node
+COPY --from=xspaces-build --link --chown=1000:1000 /app/xspaces ./xspaces
 
 ENV GOGC=100 \
     GOMEMLIMIT=320MiB \
