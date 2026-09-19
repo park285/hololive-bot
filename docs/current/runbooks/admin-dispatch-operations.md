@@ -6,10 +6,12 @@
 감사 가능한 재처리를 추가합니다. 기존 worker만 실제 메시지를 전송하며,
 관리 API는 payload를 변경하거나 직접 외부 발송을 호출하지 않습니다.
 
-**아직 Iris Admin 화면에 연결된 완성 기능이 아닙니다.** 실제 UI는 `park285/iris-admin`이
-소유합니다. 이 API를 노출하려면 그 저장소의 OpenAPI 정본, 생성된 gateway/browser 계약,
-세션별 Query/OperationRegistry, CSRF·비밀번호 증명 및 화면을 함께 연결해야 합니다.
-폐기된 `admin-dashboard`에 새 화면을 만들거나 gateway의 허용 목록을 우회하지 않습니다.
+Iris Admin은 `/dashboard/dispatch`에서 이 API를 노출합니다. `park285/iris-admin`의 OpenAPI
+정본과 생성 gateway/browser 계약이 허용 경로를 소유하고, gateway가 공통 세션·CSRF·비밀번호
+증명·mutation ID를 확인한 뒤 세션 audit ID를 `operatorId`로 결합합니다. 브라우저 요청 schema는
+`operatorId`를 허용하지 않습니다. 조회한 묶음 리비전과 중복 위험 확인은 OperationRegistry의
+단회 변경으로 전송되며 결과 불명 뒤 자동 재실행하지 않습니다. 폐기된 `admin-dashboard`나
+gateway 허용 목록 우회 경로는 사용하지 않습니다.
 
 ## HTTP 계약
 
