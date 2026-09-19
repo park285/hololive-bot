@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:embed sql/*.sql
+//go:embed queries/*.sql
 var queries embed.FS
 
 // Repository는 기존 dispatch 테이블을 사용하며 스키마 변경이나 외부 발송을 수행하지 않습니다.
@@ -30,7 +30,7 @@ func (r *Repository) available() error {
 }
 
 func querySQL(name string) string {
-	content, err := queries.ReadFile("sql/" + name + ".sql")
+	content, err := queries.ReadFile("queries/" + name + ".sql")
 	if err != nil {
 		panic(fmt.Sprintf("dispatch operation SQL missing: %s", name))
 	}
@@ -206,11 +206,11 @@ func readDeliveries(rows pgx.Rows) ([]Delivery, error) {
 }
 
 func loadGroup(ctx context.Context, tx pgx.Tx, id int64, lock bool) ([]Delivery, error) {
-	query := querySQL("group")
+	queryName := "group"
 	if lock {
-		query += "\nFOR UPDATE OF d"
+		queryName = "group_locked"
 	}
-	rows, err := tx.Query(ctx, query, id, MaxReplaySize+1)
+	rows, err := tx.Query(ctx, querySQL(queryName), id, MaxReplaySize+1)
 	if err != nil {
 		return nil, fmt.Errorf("query dispatch replay group: %w", err)
 	}
