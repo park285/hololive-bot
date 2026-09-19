@@ -135,7 +135,9 @@ jobs:
         with:
           node-version: "24.20.0"
           cache: npm
-          cache-dependency-path: hololive/hololive-youtube-collector/youtubejs/package-lock.json
+          cache-dependency-path: |
+            hololive/hololive-youtube-collector/youtubejs/package-lock.json
+            hololive/hololive-alarm-worker/xspaces/package-lock.json
 
       - name: Install collector helper dependencies
         if: matrix.module == 'hololive/hololive-youtube-collector'
@@ -264,9 +266,7 @@ jobs:
         run: bash scripts/ci/public-pr-collector-helper-gate.sh
 
       - name: X Spaces helper tests
-        run: |
-          npm ci --ignore-scripts --prefix hololive/hololive-alarm-worker/xspaces
-          npm test --prefix hololive/hololive-alarm-worker/xspaces
+        run: bash scripts/ci/public-pr-x-spaces-helper-gate.sh
 
   fast-gate:
     name: fast-gate
