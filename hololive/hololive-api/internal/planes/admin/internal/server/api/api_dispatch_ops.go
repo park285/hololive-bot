@@ -195,8 +195,7 @@ func (h *AlarmHandler) RequeueDispatchDelivery(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, dispatchOpsMaxBody)
 	var request dispatchops.RequeueRequest
 	if err := jsonv2.UnmarshalRead(c.Request.Body, &request, jsonv2.RejectUnknownMembers(true)); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			sharedserver.RespondError(c, 413, "dispatch request body too large", nil)
 		} else {
 			sharedserver.RespondError(c, 400, "invalid dispatch request body", nil)

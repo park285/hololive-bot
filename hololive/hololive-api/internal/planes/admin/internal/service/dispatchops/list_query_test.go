@@ -17,7 +17,7 @@ import (
 var testListProjection string
 
 func TestListQueryAllFilterCombinations(t *testing.T) {
-	for mask := 0; mask < 16; mask++ {
+	for mask := range 16 {
 		t.Run(fmt.Sprintf("filters_%04b", mask), func(t *testing.T) {
 			filter := Filter{}
 			wantPredicates := make([]string, 0, 4)
