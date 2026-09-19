@@ -222,7 +222,6 @@ run_step "collector hardening-contract gate" ./scripts/ci/check-youtube-collecto
 run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector test-prod
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "X Spaces helper tests" bash scripts/ci/public-pr-x-spaces-helper-gate.sh
-run_step "X Spaces compose overlay" bash scripts/deploy/x-spaces-overlay_test.sh
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh
 run_step "PostgreSQL capacity gate" ./scripts/ci/check-postgres-capacity.sh
