@@ -124,12 +124,14 @@ func buildAdminAPIRouter(
 	handler *server.Handler,
 	logger *slog.Logger,
 ) (*gin.Engine, error) {
-	readyProbe := sharedreadiness.NewProbe("admin",
+	readyProbe := sharedreadiness.NewProbe(
+		"admin",
 		sharedreadiness.PostgresCheck(infra.Postgres),
 		sharedreadiness.ValkeyCheck(infra.Cache),
 	)
 
 	domains := handler.DomainHandlers()
+
 	if infra.Postgres != nil {
 		domains.Alarm.SetDispatchOperations(dispatchops.NewRepository(infra.Postgres.GetPool()))
 	}
