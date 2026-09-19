@@ -279,9 +279,8 @@ func rollback(ctx context.Context, tx pgx.Tx) {
 }
 
 func conflictError(err error) error {
-	var postgres *pgconn.PgError
-
-	if errors.As(err, &postgres) && (postgres.Code == "40001" || postgres.Code == "40P01") {
+	if postgres, ok := errors.AsType[*pgconn.PgError](err); ok &&
+		(postgres.Code == "40001" || postgres.Code == "40P01") {
 		return fmt.Errorf("concurrent dispatch operation: %w", ErrConflict)
 	}
 
