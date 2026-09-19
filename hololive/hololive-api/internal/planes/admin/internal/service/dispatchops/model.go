@@ -29,9 +29,9 @@ var (
 	ErrUnavailable = errors.New("dispatch operations unavailable")
 )
 
-var statuses = [...]string{"shadowed", "pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"}
+var statuses = [...]string{"shadowed", "pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
 
-// Delivery는 본문과 전송용 내부 식별자를 제외한 발송 상태입니다. bigint는 문자열로 유지합니다.
+// Delivery는 본문과 전송용 내부 식별자를 제외한 발송 상태입니다. Bigint는 문자열로 유지합니다.
 type Delivery struct {
 	ID            string     `json:"id"`
 	EventID       string     `json:"eventId"`
@@ -58,7 +58,7 @@ type Delivery struct {
 // 비어 있는 Status는 DLQ와 격리 상태를 함께 조회합니다.
 type Filter struct{ Status, RoomID, ChannelID, BeforeID string }
 
-// Page는 ID 내림차순 조회 결과입니다. nextBeforeId가 비어 있으면 마지막 페이지입니다.
+// Page는 ID 내림차순 조회 결과입니다. NextBeforeId가 비어 있으면 마지막 페이지입니다.
 type Page struct {
 	Items        []Delivery `json:"items"`
 	NextBeforeID string     `json:"nextBeforeId"`
@@ -77,14 +77,14 @@ type Summary struct {
 	ObservedAt time.Time     `json:"observedAt"`
 }
 
-// Revision은 확인한 행의 낙관적 잠금 토큰입니다. updatedAt의 소수초를 보존해야 합니다.
+// Revision은 확인한 행의 낙관적 잠금 토큰입니다. UpdatedAt의 소수초를 보존해야 합니다.
 type Revision struct {
 	ID        string    `json:"id"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Detail은 현재 발송 항목과 외부 발송 묶음 전체의 재처리 검토 대상입니다.
-// replayBlocked가 비어 있을 때만 replayTargets를 그대로 사용해 재처리할 수 있습니다.
+// ReplayBlocked가 비어 있을 때만 replayTargets를 그대로 사용해 재처리할 수 있습니다.
 type Detail struct {
 	Delivery       Delivery   `json:"delivery"`
 	Group          []Delivery `json:"group"`
@@ -94,7 +94,7 @@ type Detail struct {
 }
 
 // RequeueRequest는 묶음 전체에 대한 명시적 재처리 요청입니다.
-// OperatorID는 API key 보유자가 전달하는 감사 식별자입니다. gateway에서는 반드시
+// OperatorID는 API key 보유자가 전달하는 감사 식별자입니다. Gateway에서는 반드시
 // 인증된 사용자에 결합해야 하며 브라우저 입력을 그대로 전달해서는 안 됩니다.
 type RequeueRequest struct {
 	OperatorID       string     `json:"operatorId"`
@@ -133,6 +133,7 @@ func ParseID(value string) (int64, error) {
 	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != value {
 		return 0, fmt.Errorf("delivery id: %w", ErrInvalidInput)
 	}
+
 	return id, nil
 }
 
@@ -141,14 +142,17 @@ func (f Filter) Validate() error {
 	if f.Status != "" && !knownStatus(f.Status) {
 		return fmt.Errorf("status: %w", ErrInvalidInput)
 	}
+
 	if !validText(f.RoomID, 100) || !validText(f.ChannelID, 64) {
 		return fmt.Errorf("filter: %w", ErrInvalidInput)
 	}
+
 	if f.BeforeID != "" {
 		if _, err := ParseID(f.BeforeID); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -158,11 +162,12 @@ func knownStatus(status string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
-func validText(value string, max int) bool {
-	return utf8.ValidString(value) && utf8.RuneCountInString(value) <= max &&
+func validText(value string, maxRunes int) bool {
+	return utf8.ValidString(value) && utf8.RuneCountInString(value) <= maxRunes &&
 		strings.TrimSpace(value) == value && strings.IndexFunc(value, unicode.IsControl) < 0
 }
 
@@ -171,9 +176,11 @@ func (r RequeueRequest) Validate(id string) error {
 	if _, err := ParseID(id); err != nil {
 		return err
 	}
+
 	if err := r.validateAudit(); err != nil {
 		return err
 	}
+
 	return r.validateTargets(id)
 }
 
@@ -181,6 +188,7 @@ func (r RequeueRequest) validateAudit() error {
 	if !r.DuplicateRiskAck || r.OperatorID == "" || r.Reason == "" || !validText(r.OperatorID, 128) || !validText(r.Reason, 1024) {
 		return fmt.Errorf("operator, reason or acknowledgement: %w", ErrInvalidInput)
 	}
+
 	return nil
 }
 
@@ -188,22 +196,28 @@ func (r RequeueRequest) validateTargets(addressedID string) error {
 	if len(r.Targets) == 0 || len(r.Targets) > MaxReplaySize {
 		return fmt.Errorf("target count: %w", ErrInvalidInput)
 	}
+
 	seen := make(map[string]struct{}, len(r.Targets))
 	for _, target := range r.Targets {
 		if _, err := ParseID(target.ID); err != nil {
 			return err
 		}
+
 		if target.UpdatedAt.IsZero() || target.UpdatedAt.Year() < 1 || target.UpdatedAt.Year() > 9999 {
 			return fmt.Errorf("revision: %w", ErrInvalidInput)
 		}
+
 		if _, duplicate := seen[target.ID]; duplicate {
 			return fmt.Errorf("duplicate target: %w", ErrInvalidInput)
 		}
+
 		seen[target.ID] = struct{}{}
 	}
+
 	if _, found := seen[addressedID]; !found {
 		return fmt.Errorf("addressed delivery missing: %w", ErrInvalidInput)
 	}
+
 	return nil
 }
 
@@ -211,19 +225,25 @@ func replayBlock(group []Delivery) string {
 	if len(group) == 0 {
 		return "not_found"
 	}
+
 	if len(group) > MaxReplaySize {
 		return "group_too_large"
 	}
-	first := group[0]
-	for _, item := range group {
+
+	first := &group[0]
+	for index := range group {
+		item := &group[index]
+
 		if (item.Status != "dlq" && item.Status != "quarantined") || item.SentAt != nil || item.CancelledAt != nil {
 			return "group_not_terminal_failure"
 		}
+
 		// 이전 형식의 단일 발송은 자체 묶음입니다. 서로 다른 발송 식별자를 섞지 않습니다.
 		if item.RoomID != first.RoomID || item.SendUnitID != first.SendUnitID || (first.SendUnitID == "" && len(group) != 1) {
 			return "group_identity_mismatch"
 		}
 	}
+
 	return ""
 }
 
@@ -231,14 +251,19 @@ func validateReplay(group []Delivery, request RequeueRequest) error {
 	if replayBlock(group) != "" || len(group) != len(request.Targets) {
 		return ErrConflict
 	}
+
 	revisions := make(map[string]time.Time, len(request.Targets))
 	for _, target := range request.Targets {
 		revisions[target.ID] = target.UpdatedAt
 	}
-	for _, item := range group {
+
+	for index := range group {
+		item := &group[index]
+
 		if expected, ok := revisions[item.ID]; !ok || !item.UpdatedAt.Equal(expected) {
 			return ErrConflict
 		}
 	}
+
 	return nil
 }

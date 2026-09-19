@@ -25,6 +25,7 @@ type (
 	MemberHandler struct{ *Handler }
 	AlarmHandler  struct {
 		*Handler
+
 		dispatchOps DispatchOperations
 	}
 	RoomHandler        struct{ *Handler }

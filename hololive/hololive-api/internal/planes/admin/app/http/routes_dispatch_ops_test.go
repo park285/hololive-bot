@@ -1,6 +1,7 @@
 package apphttp
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -16,6 +17,7 @@ func TestDispatchRoutesRequireAPIKey(t *testing.T) {
 	group := router.Group("/api/holo")
 	group.Use(middleware.APIKeyAuthMiddleware("dispatch-ops-test-key"))
 	registerAlarmRoutes(group, (&api.Handler{}).DomainHandlers().Alarm)
+
 	for _, route := range []struct{ method, path string }{
 		{"GET", "/api/holo/dispatch/summary"},
 		{"GET", "/api/holo/dispatch/deliveries"},
@@ -24,19 +26,25 @@ func TestDispatchRoutesRequireAPIKey(t *testing.T) {
 		{"POST", "/api/holo/dispatch/deliveries/1/requeue"},
 	} {
 		for _, key := range []string{"", "wrong-key", "dispatch-ops-test-key"} {
-			request := httptest.NewRequest(route.method, route.path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), route.method, route.path, http.NoBody)
+
 			if key != "" {
 				request.Header.Set(common.APIKeyHeader, key)
 			}
+
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
+
 			want := 401
+
 			if key == "wrong-key" {
 				want = 403
 			}
+
 			if key == "dispatch-ops-test-key" {
 				want = 503
 			}
+
 			if response.Code != want {
 				t.Fatalf("%s %s authenticated=%v: got %d want %d", route.method, route.path, key == "dispatch-ops-test-key", response.Code, want)
 			}
