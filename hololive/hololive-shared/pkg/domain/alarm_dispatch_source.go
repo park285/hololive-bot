@@ -16,6 +16,8 @@ const (
 	AlarmDispatchSourceKindYouTubeOutbox  AlarmDispatchSourceKind = "youtube_outbox"
 	AlarmDispatchSourceKindCelebration    AlarmDispatchSourceKind = "celebration"
 	AlarmDispatchSourceKindDeliveryDigest AlarmDispatchSourceKind = "delivery_digest"
+	// AlarmDispatchSourceKindXSpace는 X 스페이스 시작 알림을 기존 LIVE 구독으로 전달한다.
+	AlarmDispatchSourceKindXSpace AlarmDispatchSourceKind = "x_space"
 
 	maxYouTubeOutboxIdentityItems   = 1000
 	maxYouTubeOutboxContentIDBytes  = 512
@@ -27,6 +29,7 @@ var canonicalDispatchValidators = map[AlarmDispatchSourceKind]func(*AlarmQueueEn
 	AlarmDispatchSourceKindYouTubeOutbox:  (*AlarmQueueEnvelope).validateYouTubeOutboxDispatch,
 	AlarmDispatchSourceKindCelebration:    (*AlarmQueueEnvelope).validateCelebrationDispatch,
 	AlarmDispatchSourceKindDeliveryDigest: (*AlarmQueueEnvelope).validateDeliveryDigestDispatch,
+	AlarmDispatchSourceKindXSpace:         (*AlarmQueueEnvelope).validateXSpaceDispatch,
 }
 
 type DeliveryDigestDispatchPayload struct {

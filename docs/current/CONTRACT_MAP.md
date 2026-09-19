@@ -8,6 +8,7 @@
 
 | Contract ID | Provider | Consumer | Transport | Path/Event/Queue | Contract package | Version | Tests | Detail |
 |---|---|---|---|---|---|---|---|---|
+| `x.spaces.session` | `hololive-api` admin plane | Iris Admin, alarm-worker | HTTP JSON + PostgreSQL | `/api/holo/x-spaces/session`; `x_space_session` | `hololive/hololive-shared/pkg/service/xspaces` | revision fenced candidate/active | session DB tests, generated web contracts | `services/x-spaces.md` |
 | `membernews.digest` | `hololive-api` | `hololive-api` | HTTP JSON | `/internal/membernews/digest` | `hololive/hololive-shared/pkg/contracts/membernews` | route constants, unversioned HTTP body | provider/client route tests | `contracts/membernews.md` |
 | `membernews.subscription` | `hololive-api` | `hololive-api` | HTTP JSON | `/internal/membernews/subscriptions` | `hololive/hololive-shared/pkg/contracts/membernews` | route constants, unversioned HTTP body | provider/client route tests | `contracts/membernews.md` |
 | `majorevent.subscription` | `hololive-api` | `hololive-api` | HTTP JSON | `/internal/majorevent/subscriptions` | `hololive/hololive-shared/pkg/contracts/majorevent` | route constants, unversioned HTTP body | provider/client route tests | `contracts/majorevent.md` |

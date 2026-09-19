@@ -56,3 +56,5 @@
 056 195_unit_b_member_subscription_index.sql
 057 196_unit_b_member_subscription_identity.sql
 058 197_member_info_units.sql
+059 198_x_space_sessions.sql
+060 199_x_space_starts_retention_index.sql

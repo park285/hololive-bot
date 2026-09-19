@@ -59,6 +59,8 @@ func registerSettingsRoutes(holoAPI *gin.RouterGroup, handler *api.SettingsAPIHa
 	holoAPI.GET("/logs", handler.GetLogs)
 	holoAPI.GET("/settings", handler.GetSettings)
 	holoAPI.POST("/settings", handler.UpdateSettings)
+	holoAPI.GET("/x-spaces/session", handler.GetXSpaceSession)
+	holoAPI.POST("/x-spaces/session", handler.SubmitXSpaceSession)
 	holoAPI.POST("/settings/llm", handler.UpdateLLMSettings)
 	holoAPI.POST("/names/room", handler.SetRoomName)
 	holoAPI.POST("/names/user", handler.SetUserName)

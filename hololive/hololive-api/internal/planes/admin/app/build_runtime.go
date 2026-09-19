@@ -21,6 +21,7 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/twitch"
+	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
@@ -150,6 +151,15 @@ func buildAdminAPIRuntimeAfterAlarmMode(
 		communityShortsOpsRepository, settingsApplier, systemCollector,
 		templateAdmin, majorEventTriggerClient, logger,
 	)
+	xSpaceSessions, err := xspaces.LoadStore(infra.Postgres.GetPool())
+
+	if err != nil && !errors.Is(err, xspaces.ErrDisabled) {
+		infra.Cleanup()
+
+		return nil, fmt.Errorf("build admin X session store: %w", err)
+	}
+
+	handler.SetXSpaceSessions(xSpaceSessions)
 
 	runtime, err := buildAdminAPIHTTPRuntime(ctx, appConfig, infra, authService, handler, logger)
 	if err != nil {

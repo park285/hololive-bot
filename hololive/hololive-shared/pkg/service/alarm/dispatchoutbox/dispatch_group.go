@@ -38,6 +38,10 @@ func dispatchGroupKeyParts(envelope *domain.AlarmQueueEnvelope) []string {
 }
 
 func dispatchGroupSourceParts(envelope *domain.AlarmQueueEnvelope) []string {
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
+		return []string{"x-space", envelope.XSpace.SpaceID}
+	}
+
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
 		memberIdentity := envelope.Celebration.ChannelID
 		if envelope.Celebration.MemberID > 0 {

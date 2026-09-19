@@ -36,3 +36,5 @@
 **/*.tmp
 **/*.out
 **/*.test
+**/node_modules/
+**/cookies*.json

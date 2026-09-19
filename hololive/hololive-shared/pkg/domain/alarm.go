@@ -236,6 +236,7 @@ type AlarmQueueEnvelope struct {
 	YouTubeOutbox     *YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
 	Celebration       *CelebrationDispatchPayload    `json:"celebration,omitempty"`
 	DeliveryDigest    *DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
+	XSpace            *XSpaceDispatchPayload         `json:"x_space,omitempty"`
 	ClaimKeys         []string                       `json:"claim_keys"`
 	EnqueuedAt        string                         `json:"enqueued_at"`
 	Version           uint8                          `json:"version"`
@@ -271,6 +272,7 @@ type alarmQueueEnvelopeWire struct {
 	YouTubeOutbox    *YouTubeOutboxDispatchPayload      `json:"youtube_outbox,omitempty"`
 	Celebration      *CelebrationDispatchPayload        `json:"celebration,omitempty"`
 	DeliveryDigest   *DeliveryDigestDispatchPayload     `json:"delivery_digest,omitempty"`
+	XSpace           *XSpaceDispatchPayload             `json:"x_space,omitempty"`
 	ClaimKeys        []string                           `json:"claim_keys"`
 	EnqueuedAt       string                             `json:"enqueued_at"`
 	Version          uint8                              `json:"version"`
@@ -340,6 +342,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		YouTubeOutbox:    wire.YouTubeOutbox,
 		Celebration:      wire.Celebration,
 		DeliveryDigest:   wire.DeliveryDigest,
+		XSpace:           wire.XSpace,
 		ClaimKeys:        wire.ClaimKeys,
 		EnqueuedAt:       wire.EnqueuedAt,
 		Version:          wire.Version,

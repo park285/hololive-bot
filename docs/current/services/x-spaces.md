@@ -1,0 +1,44 @@
+# X 스페이스 감지와 관리자 재연결
+
+`DEC-20260919-hololive-x-spaces`, `DEC-20260919-x-spaces-admin-reconnect`를 따른다.
+
+alarm-worker가 X 웹 내부 API를 조회하고, 직접 개설한 스페이스의 시작 링크를 해당 멤버의 기존 `LIVE` 구독 방에 보낸다. 공식 유료 API·유료 공급자·녹음·게스트 참여 추적은 사용하지 않는다. X 세션은 무효화될 수 있으며 영구 인증이나 자동 로그인 성공을 보장하지 않는다.
+
+## 관리자 복구
+
+Iris Admin → 홀로봇 → 설정 → X 스페이스 연결에서 상태, 마지막 감지 성공 시각과 후보 검증 결과를 확인한다. `auth_required`이면 X 브라우저에 로그인하여 필요한 확인을 마친 뒤 `auth_token`과 `ct0`를 관리자 입력란으로 제출한다. 이 값은 채팅·명령 인자에 넣지 않는다. 관리자 변경은 기존 비밀번호 재확인·권한·CSRF·단회 mutation 경계를 사용한다.
+
+API는 후보를 AES-256-GCM으로 암호화해 DB에 저장한다. worker는 실제 읽기 요청의 성공을 확인한 뒤에만 후보를 활성 세션으로 교체한다. 후보 인증 거부는 기존 세션을 보존한다. 일시 오류는 인증 거부로 바꾸지 않고 다음 확인 시각까지 기다린다. 세대 비교로 늦게 끝난 이전 요청이 새 세션을 덮어쓰지 못한다. 인증 필요 상태의 활성 세션에는 반복 요청하지 않는다.
+
+관리자 GET 응답에는 cookie와 암호문이 없다. 평문 cookie는 관리자 HTTPS 제출 처리와 API·worker 메모리 및 단발 Node helper의 stdin에서만 사용하며, 인자·환경 변수·파일·로그에 기록하지 않는다. Node stderr 원문은 노출하지 않고 고정 오류 코드만 보고한다.
+
+## 실행 설정
+
+`X_SPACES_CONFIG_FILE`이 없으면 worker 수집은 비활성화된다. `X_SPACES_KEY_FILE`이 없으면 관리자 연결 제출도 비활성화된다. 잘못된 설정·키는 시작 오류다.
+
+키는 32바이트 난수를 hex 64자로 인코딩한 private regular file이다. API와 worker가 같은 키를 읽는다. static-secret master와 host manifest를 통해 `/etc/stack-secrets/hololive-bot/x-spaces/key`에 배포하며 실행 UID만 읽을 수 있는 `0600`을 사용한다. 키 교체 시 기존 암호문을 새 키로 읽을 수 없으므로 세션 재설정을 포함한 별도 변경이 필요하다. 키를 자동 생성하거나 오류 시 다른 키로 대체하지 않는다.
+
+인증 값을 제외한 config 예시:
+
+```json
+{
+  "poll_seconds": 120,
+  "targets": [
+    { "user_id": "X의 숫자 계정 ID", "channel_id": "기존 YouTube 채널 ID", "member_name": "표시할 멤버 이름" }
+  ]
+}
+```
+
+사용자 ID와 채널 매핑은 검증된 실제 값을 넣는다. 최대 100개 계정, 조회 간격 120~3600초이며 계정·채널 중복은 허용하지 않는다. 호스트 `compose.env`의 `HOLOLIVE_X_SPACES_ENABLED=1`로 활성화하면 기존 Compose 진입점이 `deploy/compose/docker-compose.x-spaces.yml`을 추가한다. 기본값은 비활성이며 재부팅·수동 배포에서도 같은 구성을 유지한다. 새 DB migration을 먼저 적용하고 API·worker·관리자 웹의 호환 버전을 함께 배포한다. cookie 자체는 배포 파일에 포함하지 않고 관리자에서 연결한다.
+
+## 발송과 실패 경계
+
+관측은 `avatar_content` → `AudioSpaceById` 한 경로다. 쿠키를 보내는 요청은 `https://x.com/i/api/`의 두 읽기 경로로 고정한다. 요청 ID 생성은 `x-client-transaction-id` 0.3.1을 재사용하며 공개 home·정적 JS만 추가 조회한다. redirect와 임의 대상·쓰기 메서드는 거부한다. 개별 요청은 10초, helper 전체는 90초이고 외부 응답은 2 MiB를 넘지 못한다. API 형식 변경은 오류이며 빈 목록으로 대체하지 않는다.
+
+시작 후 15분 이내의 현재 스페이스만 발송 대상으로 삼는다. 장애 중 끝난 스페이스와 오래된 방송은 소급 발송하지 않는다. `x_space_starts`가 최초 제목·멤버 표시명을 고정하고 기존 dispatch 원장이 `x-space:start:<space-id>` 이벤트와 방별 delivery를 중복 제거한다. X 스페이스는 전용 source를 사용하므로 YouTube 알림과 합쳐지지 않으며 텍스트 링크로 보낸다. 발송 결과 불명·재시도는 기존 dispatch 계약을 유지한다. 30일이 지난 최초 관측 자료는 회당 최대 100개 정리한다.
+
+Fallback delta: none. 재로그인 대체 경로와 유료 대체 공급자가 없다. 현재 활성 세션을 보존하는 후보 검증은 같은 인증 설정의 교체 절차이며 다른 수집 공급자로 전환하지 않는다.
+
+## 검증
+
+Node 모의 응답 테스트는 비용 경로·redirect·응답 크기·호스트·상태·인증 오류를 검사한다. Go DB 테스트는 후보 실패 보존, 세대 경쟁, 암호문 변조, 재시작·제목 변경 후 중복 제거를 검사한다. 실계정 성공과 지정 방 발송 확인은 별도 실제 증거로 기록한다.

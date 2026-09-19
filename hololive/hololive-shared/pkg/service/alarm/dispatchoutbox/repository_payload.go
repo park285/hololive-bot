@@ -19,6 +19,7 @@ type eventPayloadEnvelope struct {
 	YouTubeOutbox  *domain.YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
 	Celebration    *domain.CelebrationDispatchPayload    `json:"celebration,omitempty"`
 	DeliveryDigest *domain.DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
+	XSpace         *domain.XSpaceDispatchPayload         `json:"x_space,omitempty"`
 	Version        uint8                                 `json:"version"`
 }
 
@@ -136,6 +137,7 @@ func marshalEventPayload(envelope *domain.AlarmQueueEnvelope) ([]byte, error) {
 		YouTubeOutbox:  envelope.YouTubeOutbox,
 		Celebration:    envelope.Celebration,
 		DeliveryDigest: envelope.DeliveryDigest,
+		XSpace:         envelope.XSpace,
 		Version:        envelope.Version,
 	}
 

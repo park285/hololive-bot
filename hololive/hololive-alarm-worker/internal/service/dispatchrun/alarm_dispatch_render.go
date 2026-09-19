@@ -54,6 +54,23 @@ func renderAlarmDispatchGroupSource(ctx context.Context, renderer *template.Rend
 	}
 
 	renderers := map[domain.AlarmDispatchSourceKind]sourceRenderer{
+		domain.AlarmDispatchSourceKindXSpace: {
+			action: "render x space start",
+			run: func() (string, error) {
+				if validationErr := envelope.ValidateCanonicalDispatch(); validationErr != nil {
+					return "", fmt.Errorf("validate x space: %w", validationErr)
+				}
+
+				p := envelope.XSpace
+				lines := []string{p.MemberName + " 스페이스 시작"}
+
+				if p.Title != "" {
+					lines = append(lines, p.Title)
+				}
+
+				return strings.Join(append(lines, p.URL()), "\n"), nil
+			},
+		},
 		domain.AlarmDispatchSourceKindCelebration: {
 			action: "render celebration message",
 			run:    func() (string, error) { return renderCelebrationMessage(ctx, renderer, envelope) },
