@@ -171,9 +171,20 @@ func (r RequeueRequest) Validate(id string) error {
 	if _, err := ParseID(id); err != nil {
 		return err
 	}
+	if err := r.validateAudit(); err != nil {
+		return err
+	}
+	return r.validateTargets(id)
+}
+
+func (r RequeueRequest) validateAudit() error {
 	if !r.DuplicateRiskAck || r.OperatorID == "" || r.Reason == "" || !validText(r.OperatorID, 128) || !validText(r.Reason, 1024) {
 		return fmt.Errorf("operator, reason or acknowledgement: %w", ErrInvalidInput)
 	}
+	return nil
+}
+
+func (r RequeueRequest) validateTargets(addressedID string) error {
 	if len(r.Targets) == 0 || len(r.Targets) > MaxReplaySize {
 		return fmt.Errorf("target count: %w", ErrInvalidInput)
 	}
@@ -190,7 +201,7 @@ func (r RequeueRequest) Validate(id string) error {
 		}
 		seen[target.ID] = struct{}{}
 	}
-	if _, found := seen[id]; !found {
+	if _, found := seen[addressedID]; !found {
 		return fmt.Errorf("addressed delivery missing: %w", ErrInvalidInput)
 	}
 	return nil
