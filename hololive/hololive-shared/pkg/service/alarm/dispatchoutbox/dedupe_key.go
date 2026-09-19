@@ -65,6 +65,10 @@ func buildEventKey(input *DedupeInput, canonicalYouTubeIdentity string) string {
 }
 
 func buildRawEventKey(input *DedupeInput, canonicalYouTubeIdentity string) string {
+	if input.SourceKind == domain.AlarmDispatchSourceKindXSpace {
+		return "x-space:start:" + input.SourceIdentity
+	}
+
 	if input.SourceKind == domain.AlarmDispatchSourceKindCelebration {
 		return "celebration:" + input.SourceIdentity
 	}
@@ -157,6 +161,14 @@ func EnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) DedupeInput {
 
 func prepareEnvelopeDedupeInput(envelope *domain.AlarmQueueEnvelope) preparedDedupeInput {
 	input := envelopeNotificationDedupeInput(&envelope.Notification)
+	if envelope.SourceKind == domain.AlarmDispatchSourceKindXSpace && envelope.XSpace != nil {
+		input.SourceKind = envelope.SourceKind
+		input.SourceIdentity = envelope.XSpace.SpaceID
+		input.ChannelID = envelope.XSpace.ChannelID
+		input.StreamID = envelope.XSpace.SpaceID
+		input.Category = string(envelope.SourceKind)
+	}
+
 	applyCelebrationDedupeSource(&input, envelope)
 
 	canonicalYouTubeIdentity := applyYouTubeOutboxDedupeSource(&input, envelope)

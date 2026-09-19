@@ -29,6 +29,7 @@ type AlarmQueueEnvelope struct {
     SourcePayload string                               `json:"source_payload,omitempty"`
     SourceKind    domain.AlarmDispatchSourceKind       `json:"source_kind,omitempty"`
     YouTubeOutbox *domain.YouTubeOutboxDispatchPayload `json:"youtube_outbox,omitempty"`
+    XSpace       *domain.XSpaceDispatchPayload        `json:"x_space,omitempty"`
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -51,6 +52,15 @@ Consumer behavior:
 - Retry scheduling stores wrapped members in `alarm:dispatch:retry`.
 - Retry metadata fields are `attempt`, `retry_after_ms`, `next_visible_at`, `last_error`, and optional `last_error_code`; consumers must round-trip unknown envelope fields when possible.
 - `last_error_code` values are `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, `lease_expired`, `stale_sending`, and `lease_released`.
+
+## X 스페이스 시작 알림
+
+X 스페이스 시작 알림은 `source_kind=x_space`와 전용 `x_space` payload를 사용하며
+기존 PostgreSQL dispatch outbox를 통해 발송합니다. 이벤트 키는
+`x-space:start:<space_id>`이고, 각 방의 delivery는 기존 원장에 기록합니다.
+`x_space_starts`가 첫 payload를 보존하므로 재관측·재시작·제목 변경으로
+새 이벤트를 만들지 않습니다. 다른 스페이스 및 YouTube 알림과 묶지 않고
+텍스트 경로로 처리합니다. 신규 발송 재시도 경로는 없습니다.
 
 ## Settings Pub/Sub
 

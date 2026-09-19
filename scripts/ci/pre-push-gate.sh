@@ -371,6 +371,8 @@ run_reusable_phase() {
   run_self_test scripts/deploy/lib/public-bind-mounts_test.sh scripts/deploy/lib/public-bind-mounts.sh deploy/nginx
   run_self_test scripts/deploy/test-compose-security-defaults.sh \
     deploy/compose deploy/nginx scripts/deploy/lib/public-bind-mounts.sh scripts/ci/python-runtime.sh
+  run_self_test scripts/deploy/x-spaces-overlay_test.sh \
+    scripts/deploy/compose.sh scripts/deploy/lib deploy/compose/docker-compose.x-spaces.yml
   run_self_test scripts/runtime/set-iris-base-url_test.sh scripts/runtime/set-iris-base-url.sh
   run_self_test scripts/runtime/pg-hotpath-explain-snapshot_test.sh \
     scripts/runtime/pg-hotpath-explain-snapshot.sh scripts/runtime/lib \

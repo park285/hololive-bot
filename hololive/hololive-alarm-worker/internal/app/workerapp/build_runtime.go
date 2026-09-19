@@ -160,6 +160,7 @@ func newAlarmWorkerRuntime(
 		NotificationEgress:   parts.notificationEgress,
 		CelebrationRunner:    parts.backgroundRunners.celebration,
 		BirthdayStreamRunner: parts.backgroundRunners.birthdayStream,
+		XSpacesRunner:        parts.backgroundRunners.xSpaces,
 		ConfigSubscriber:     BuildAlarmWorkerConfigSubscriber(ctx, infra.Cache, foundation.AlarmService, logger),
 		ServerAddr:           parts.servers.Addr(),
 		HTTPServers:          parts.servers,
@@ -207,6 +208,7 @@ func closeAlarmServiceOnBuildFailure(ctx context.Context, foundation *alarmFound
 type alarmWorkerBackgroundRunners struct {
 	celebration    workerruntime.Scheduler
 	birthdayStream workerruntime.Scheduler
+	xSpaces        workerruntime.Scheduler
 }
 
 func buildAlarmWorkerHTTPRuntime(
@@ -233,10 +235,16 @@ func buildAlarmWorkerHTTPRuntime(
 	}
 
 	publishConfig := loadAlarmDispatchPublishConfig(appConfig.AlarmWorkerProfile)
+	xSpaces := buildXSpacesRunner(infra, foundation, publishConfig, logger)
+
+	if xSpaces.err != nil {
+		return nil, alarmWorkerBackgroundRunners{}, "X spaces", xSpaces.err
+	}
 
 	runners = alarmWorkerBackgroundRunners{
 		celebration:    buildCelebrationRunnerScheduler(infra, foundation, publishConfig, logger),
 		birthdayStream: buildBirthdayStreamRunnerScheduler(infra, foundation, publishConfig, logger),
+		xSpaces:        xSpaces.scheduler,
 	}
 
 	servers, err = sharedserver.NewRuntimeHTTPServers(ctx, &appConfig.Server, router, "hololive-alarm-worker.http",

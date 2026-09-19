@@ -1,4 +1,5 @@
 # id|provider|consumers|transport|target|package|doc
+x.spaces.session|hololive-api|iris-admin-web,alarm-worker|http_json+postgres_table|/api/holo/x-spaces/session;x_space_session|hololive/hololive-shared/pkg/service/xspaces|docs/current/services/x-spaces.md
 membernews.digest|hololive-api|hololive-api|http_json|/internal/membernews/digest|hololive/hololive-shared/pkg/contracts/membernews|docs/current/contracts/membernews.md
 membernews.subscription|hololive-api|hololive-api|http_json|/internal/membernews/subscriptions|hololive/hololive-shared/pkg/contracts/membernews|docs/current/contracts/membernews.md
 majorevent.subscription|hololive-api|hololive-api|http_json|/internal/majorevent/subscriptions|hololive/hololive-shared/pkg/contracts/majorevent|docs/current/contracts/majorevent.md

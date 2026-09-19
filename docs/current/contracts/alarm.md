@@ -4,6 +4,8 @@
 
 Alarm domain currently has HTTP JSON APIs, the Valkey dispatch queue, generic notification delivery outbox egress, and the YouTube notification outbox egress path owned by `alarm-worker`.
 
+X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한다. 기존 `LIVE` 구독을 사용하되 YouTube stream payload와 섞지 않는다. 이벤트 키는 `x-space:start:<space-id>`, delivery는 기존 방별 키이며 최초 관측 스냅샷을 사용해 제목 변경에 따른 payload 충돌을 막는다. 발송은 기존 텍스트 egress와 receipt·미상 결과 계약을 따른다. [인증·관측·보존 경계](../services/x-spaces.md).
+
 ## Contract IDs
 
 - `alarm.http`

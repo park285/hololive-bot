@@ -724,6 +724,32 @@ TABLE source_reconciliation_conflicts
   CONSTRAINT source_reconciliation_conflicts_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_reconciliation_conflict UNIQUE (observation_id, entity_kind, entity_key, field_name)
 
+TABLE x_space_session
+  COLUMN id integer NOT NULL
+  COLUMN revision bigint NOT NULL DEFAULT 0
+  COLUMN active_revision bigint NOT NULL DEFAULT 0
+  COLUMN active_ciphertext bytea
+  COLUMN candidate_ciphertext bytea
+  COLUMN state text NOT NULL DEFAULT 'unconfigured'::text
+  COLUMN candidate_state text NOT NULL DEFAULT 'idle'::text
+  COLUMN last_error text NOT NULL DEFAULT ''::text
+  COLUMN candidate_error text NOT NULL DEFAULT ''::text
+  COLUMN last_checked_at timestamp with time zone
+  COLUMN last_success_at timestamp with time zone
+  COLUMN next_check_at timestamp with time zone
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_x_space_session_candidate_state_vocab CHECK ((candidate_state = ANY (ARRAY['idle'::text, 'pending'::text, 'accepted'::text, 'rejected'::text])))
+  CONSTRAINT chk_x_space_session_state_vocab CHECK ((state = ANY (ARRAY['unconfigured'::text, 'connected'::text, 'auth_required'::text, 'rate_limited'::text, 'error'::text])))
+  CONSTRAINT x_space_session_id_check CHECK ((id = 1))
+  CONSTRAINT x_space_session_pkey PRIMARY KEY (id)
+
+TABLE x_space_starts
+  COLUMN space_id character varying(64) NOT NULL
+  COLUMN payload jsonb NOT NULL
+  COLUMN first_seen_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT x_space_starts_pkey PRIMARY KEY (space_id)
+  INDEX CREATE INDEX idx_x_space_starts_first_seen ON public.x_space_starts USING btree (first_seen_at)
+
 TABLE youtube_channel_latest_stats
   COLUMN channel_id character varying(64) NOT NULL
   COLUMN member_name text
