@@ -13,6 +13,7 @@ import (
 	triggerclient "github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger"
 	server "github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	authsvc "github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth"
+	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops"
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/service/system"
 	sharedsettings "github.com/kapu/hololive-api/internal/server/settings"
 	"github.com/kapu/hololive-api/internal/service/acl"
@@ -123,16 +124,23 @@ func buildAdminAPIRouter(
 	handler *server.Handler,
 	logger *slog.Logger,
 ) (*gin.Engine, error) {
-	readyProbe := sharedreadiness.NewProbe("admin",
+	readyProbe := sharedreadiness.NewProbe(
+		"admin",
 		sharedreadiness.PostgresCheck(infra.Postgres),
 		sharedreadiness.ValkeyCheck(infra.Cache),
 	)
+
+	domains := handler.DomainHandlers()
+
+	if infra.Postgres != nil {
+		domains.Alarm.SetDispatchOperations(dispatchops.NewRepository(infra.Postgres.GetPool()))
+	}
 
 	router, err := apphttp.ProvideAPIRouter(
 		ctx,
 		appConfig,
 		logger,
-		handler.DomainHandlers(),
+		domains,
 		server.NewAuthHandler(authService, logger),
 		infra.Cache,
 		readyProbe,

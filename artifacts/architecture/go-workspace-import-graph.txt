@@ -279,6 +279,7 @@ github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololi
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/server/api
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth
+github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/system
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/server/settings
 github.com/kapu/hololive-api/internal/planes/admin/app -> github.com/kapu/hololive-api/internal/service/acl
@@ -327,6 +328,7 @@ github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger -> gi
 github.com/kapu/hololive-api/internal/planes/admin/internal/client/trigger -> github.com/park285/shared-go/v2/pkg/httputil
 github.com/kapu/hololive-api/internal/planes/admin/internal/server/api -> github.com/kapu/hololive-api/internal/planes/admin/internal/server/api
 github.com/kapu/hololive-api/internal/planes/admin/internal/server/api -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/auth
+github.com/kapu/hololive-api/internal/planes/admin/internal/server/api -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/dispatchops
 github.com/kapu/hololive-api/internal/planes/admin/internal/server/api -> github.com/kapu/hololive-api/internal/planes/admin/internal/service/system
 github.com/kapu/hololive-api/internal/planes/admin/internal/server/api -> github.com/kapu/hololive-api/internal/server/settings
 github.com/kapu/hololive-api/internal/planes/admin/internal/server/api -> github.com/kapu/hololive-api/internal/service/acl
