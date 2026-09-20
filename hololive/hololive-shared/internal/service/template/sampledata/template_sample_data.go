@@ -97,6 +97,7 @@ var allTemplateKeys = []domain.TemplateKey{
 	domain.TemplateKeyCelebrationBirthdayStream,
 	domain.TemplateKeyAlarmDispatchNotification,
 	domain.TemplateKeyAlarmDispatchNotificationGroup,
+	domain.TemplateKeyXSpaceStarted,
 	domain.TemplateKeyCmdMajorEventWeeklySummary,
 	domain.TemplateKeyCmdMajorEventMonthlySummary,
 	domain.TemplateKeyCmdMajorEventSubscribed,
