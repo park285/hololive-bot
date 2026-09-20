@@ -223,6 +223,8 @@ run_step "collector production default JSON tests" bash ./scripts/ci/public-pr-g
 run_step "collector production build" bash ./scripts/ci/public-pr-go-gate.sh hololive/hololive-youtube-collector build-prod
 run_step "X Spaces helper dependencies" npm ci --ignore-scripts --prefix hololive/hololive-alarm-worker/xspaces
 run_step "X Spaces helper tests" npm test --prefix hololive/hololive-alarm-worker/xspaces
+run_step "X Spaces login dependencies" npm ci --ignore-scripts --prefix hololive/hololive-alarm-worker/xspaces-login
+run_step "X Spaces login tests" npm test --prefix hololive/hololive-alarm-worker/xspaces-login
 run_step "X Spaces compose overlay" bash scripts/deploy/x-spaces-overlay_test.sh
 run_step "production Go workspace gate" ./scripts/ci/check-production-go-workspace.sh
 run_step "AP rsync manifest gate" ./scripts/deploy/check-ap-rsync-manifest.sh

@@ -52,15 +52,16 @@ func (c Cookies) Validate() error {
 
 // Status는 secret을 제외한 관리자용 인증 상태다. 시각 부재는 확인되지 않았음을 뜻한다.
 type Status struct {
-	Available      bool       `json:"available"`
-	Revision       string     `json:"revision"`
-	State          string     `json:"state"`
-	CandidateState string     `json:"candidateState"`
-	LastError      string     `json:"lastError"`
-	CandidateError string     `json:"candidateError"`
-	LastCheckedAt  *time.Time `json:"lastCheckedAt"`
-	LastSuccessAt  *time.Time `json:"lastSuccessAt"`
-	NextCheckAt    *time.Time `json:"nextCheckAt"`
+	Available      bool         `json:"available"`
+	Revision       string       `json:"revision"`
+	State          string       `json:"state"`
+	CandidateState string       `json:"candidateState"`
+	LastError      string       `json:"lastError"`
+	CandidateError string       `json:"candidateError"`
+	LastCheckedAt  *time.Time   `json:"lastCheckedAt"`
+	LastSuccessAt  *time.Time   `json:"lastSuccessAt"`
+	NextCheckAt    *time.Time   `json:"nextCheckAt"`
+	Recovery       *LoginStatus `json:"recovery,omitempty"`
 }
 
 // Snapshot은 worker 한 번의 관측에 사용한다. Revision 조건으로 오래된 결과의 반영을 막는다.
@@ -209,6 +210,13 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, fmt.Errorf("read X session status: %w", err)
 	}
+
+	recovery, err := s.LoginStatus(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+
+	status.Recovery = &recovery
 
 	return status, nil
 }
