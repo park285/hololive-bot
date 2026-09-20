@@ -257,6 +257,7 @@ case "${login_value}" in
         ;;
     *) echo "[ERROR] HOLOLIVE_X_SPACES_LOGIN_ENABLED must be 0 or 1" >&2; exit 1 ;;
 esac
+
 collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then
     collector_disable_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR")"
