@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-19",
+  "main": "f74ed443ddfc",
+  "source": "hololive-bot#508@065f1decf359",
+  "pairedPR": "park285/iris-admin#10",
+  "environment": {"go": "1.23.2", "workspace": "isolated exact-source file set; not the production workspace"},
+  "sourceBlobVerification": "unmodified model.go and model_test.go matched GitHub blobs; repository.go matched before the targeted List edit",
+  "raceTests": {"status": "passed", "topLevelRunners": 14, "passEventsIncludingSubtestsAndSeeds": 89, "failures": 0},
+  "vet": "passed for model and query-builder file set",
+  "coverage": {"statementPercent": 98.7, "scope": ["model.go", "list_query.go"]},
+  "fuzz": {"name": "FuzzListQueryBindings", "requestedSeconds": 3, "workers": 2, "executions": 92687, "status": "passed"},
+  "notRun": ["full Go 1.27 workspace build and tests", "HTTP and routing tests", "PostgreSQL repository integration and concurrency tests", "EXPLAIN ANALYZE", "NilAway", "govulncheck", "repository local/pre-push gates", "complete Iris Admin UI/gateway contract integration"],
+  "publication": "draft; no runtime-version or verification-policy changes"
+}

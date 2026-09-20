@@ -29,6 +29,11 @@ import (
 func registerAlarmRoutes(holoAPI *gin.RouterGroup, handler *api.AlarmHandler) {
 	holoAPI.GET("/alarms", handler.GetAlarms)
 	holoAPI.DELETE("/alarms", handler.DeleteAlarm)
+	holoAPI.GET("/dispatch/summary", handler.GetDispatchSummary)
+	holoAPI.GET("/dispatch/deliveries", handler.GetDispatchDeliveries)
+	holoAPI.GET("/dispatch/deliveries/:id", handler.GetDispatchDelivery)
+	holoAPI.GET("/dispatch/deliveries/:id/actions", handler.GetDispatchActions)
+	holoAPI.POST("/dispatch/deliveries/:id/requeue", handler.RequeueDispatchDelivery)
 }
 
 func registerMemberRoutes(holoAPI *gin.RouterGroup, handler *api.MemberHandler) {

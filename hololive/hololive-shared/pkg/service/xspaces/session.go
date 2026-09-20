@@ -217,7 +217,6 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 	}
 
 	status.Recovery = &recovery
-
 	return status, nil
 }
 

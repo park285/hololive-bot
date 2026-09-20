@@ -740,7 +740,6 @@ TABLE x_space_login_attempts
   CONSTRAINT x_space_login_attempts_pkey PRIMARY KEY (id)
   CONSTRAINT uq_x_space_login_attempts_generation UNIQUE (configuration_revision, session_revision)
   INDEX CREATE INDEX idx_x_space_login_attempts_started_at ON public.x_space_login_attempts USING btree (started_at)
-
 TABLE x_space_session
   COLUMN id integer NOT NULL
   COLUMN revision bigint NOT NULL DEFAULT 0
