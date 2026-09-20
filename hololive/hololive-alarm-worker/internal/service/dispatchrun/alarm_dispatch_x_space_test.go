@@ -64,6 +64,7 @@ func TestXSpaceDispatchUsesTextAndRecordsCompletion(t *testing.T) {
 
 func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 	renderer := newAlarmDispatchTestRenderer(t)
+
 	for _, title := range []string{"", "[제목](https://example.com) **강조** _밑줄_"} {
 		t.Run(title, func(t *testing.T) {
 			payload := &domain.XSpaceDispatchPayload{
@@ -78,10 +79,13 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 			message, handled, err := renderAlarmDispatchGroupSource(t.Context(), renderer, nil, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 			require.NoError(t, err)
 			require.True(t, handled)
+
 			link := payload.URL()
+
 			if title != "" {
 				link = "[" + util.MarkdownNeutralize(title) + "](" + link + ")"
 			}
+
 			require.Equal(t, "## 🔴 **"+util.MarkdownNeutralize(payload.MemberName)+"** 스페이스 시작\n"+link, message)
 		})
 	}
@@ -96,6 +100,7 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 	}
 	_, err := pool.Exec(t.Context(), `UPDATE notification_templates SET body = '{{.MemberName}}: {{.URL}}' WHERE template_key = $1 AND channel_id IS NULL`, domain.TemplateKeyXSpaceStarted)
 	require.NoError(t, err)
+
 	group := alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}}
 	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, group)
 	require.NoError(t, err)
@@ -104,6 +109,7 @@ func TestXSpaceUsesDatabaseTemplateAndPreservesMissingError(t *testing.T) {
 
 	_, err = pool.Exec(t.Context(), `DELETE FROM notification_templates WHERE template_key = $1`, domain.TemplateKeyXSpaceStarted)
 	require.NoError(t, err)
+
 	message, handled, err = renderAlarmDispatchGroupSource(t.Context(), template.NewRenderer(pool, slog.Default()), nil, group)
 	require.ErrorIs(t, err, template.ErrTemplateNotFound)
 	require.True(t, handled)
