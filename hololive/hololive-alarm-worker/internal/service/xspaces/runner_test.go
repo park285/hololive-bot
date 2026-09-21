@@ -101,9 +101,48 @@ func verifyRunnerReconnection(t *testing.T, store *sessions.Store, collector *fa
 
 	status, err := store.Status(ctx)
 	require.NoError(t, err)
+	require.Equal(t, "error", status.State)
+	require.Equal(t, "authentication_pending", status.LastError)
+
+	// 재시작 직후에도 DB의 대기 시각을 지키고, 다음 조회 성공만으로 재인증 없이 복구한다.
+	calls := collector.calls
+
+	require.NoError(t, makeRunner().RunOnce(ctx))
+	require.Equal(t, calls, collector.calls)
+
+	collector.err = nil
+	*now = now.Add(3 * time.Minute)
+
+	require.NoError(t, makeRunner().RunOnce(ctx))
+
+	status, err = store.Status(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "connected", status.State)
+	require.Empty(t, status.LastError)
+
+	// 네트워크 장애가 끼면 이전 인증 거부와 연속된 것으로 세지 않는다.
+	for _, code := range []string{"authentication", "upstream", "authentication"} {
+		collector.err = &CollectionError{Code: code}
+		*now = now.Add(3 * time.Minute)
+
+		require.Error(t, makeRunner().RunOnce(ctx))
+
+		status, err = store.Status(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "error", status.State)
+	}
+
+	// 두 번의 연속 거부는 서로 다른 runner에서도 확정하고 이후 요청을 멈춘다.
+	collector.err = &CollectionError{Code: "authentication"}
+	*now = now.Add(3 * time.Minute)
+
+	require.Error(t, makeRunner().RunOnce(ctx))
+
+	status, err = store.Status(ctx)
+	require.NoError(t, err)
 	require.Equal(t, "auth_required", status.State)
 
-	calls := collector.calls
+	calls = collector.calls
 
 	*now = now.Add(3 * time.Minute)
 

@@ -1,2 +1,2 @@
-SELECT revision, active_revision, active_ciphertext, candidate_ciphertext, next_check_at, state
+SELECT revision, active_revision, active_ciphertext, candidate_ciphertext, next_check_at, state, last_error
 FROM x_space_session WHERE id = 1

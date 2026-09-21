@@ -63,7 +63,7 @@ type Status struct {
 	NextCheckAt    *time.Time `json:"nextCheckAt"`
 }
 
-// Snapshot은 worker 한 번의 관측에 사용한다. Revision 조건으로 오래된 결과의 반영을 막는다.
+// Snapshot은 worker 한 번의 관측과 마지막 오류를 제공한다. Revision 조건으로 오래된 결과의 반영을 막는다.
 type Snapshot struct {
 	Revision       int64
 	ActiveRevision int64
@@ -71,6 +71,7 @@ type Snapshot struct {
 	Candidate      *Cookies
 	NextCheckAt    *time.Time
 	State          string
+	LastError      string
 }
 
 // Store는 API의 후보 제출과 worker의 검증·승격을 공유한다.
@@ -245,7 +246,7 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 		active, candidate []byte
 	)
 
-	err := s.pool.QueryRow(ctx, mustSQL("snapshot.sql")).Scan(&snapshot.Revision, &snapshot.ActiveRevision, &active, &candidate, &snapshot.NextCheckAt, &snapshot.State)
+	err := s.pool.QueryRow(ctx, mustSQL("snapshot.sql")).Scan(&snapshot.Revision, &snapshot.ActiveRevision, &active, &candidate, &snapshot.NextCheckAt, &snapshot.State, &snapshot.LastError)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return snapshot, nil
@@ -322,10 +323,10 @@ func (s *Store) Observe(ctx context.Context, activeRevision int64, code string, 
 	return result.RowsAffected() == 1, nil
 }
 
-// ValidErrorCode는 비밀 값이 없는 고정된 helper 오류 코드만 허용한다.
+// ValidErrorCode는 비밀 값이 없는 helper 오류와 worker의 인증 확인 대기 코드만 허용한다.
 func ValidErrorCode(code string) bool {
 	switch code {
-	case "", "authentication", "api_error", "rate_limited", "upstream", "invalid_response", "unexpected_user", "invalid_targets", "invalid_cookies", "forbidden_endpoint", "forbidden_credentials", "redirect", "response_too_large", "collector_failed", "timeout":
+	case "", "authentication", "authentication_pending", "api_error", "rate_limited", "upstream", "invalid_response", "unexpected_user", "invalid_targets", "invalid_cookies", "forbidden_endpoint", "forbidden_credentials", "redirect", "response_too_large", "collector_failed", "timeout":
 		return true
 	default:
 		return false
