@@ -40,25 +40,7 @@ func videoListEnvelope(
 		t.Fatalf("marshal video list payload: %v", err)
 	}
 
-	envelope, err := contract.PrepareEnvelope(contract.Envelope{
-		Provider:           contract.ProviderYouTubeJS,
-		ObservationKind:    contract.KindVideoList,
-		SubjectKey:         testChannelID,
-		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: 1,
-		ScheduledFor:       proof.ScheduledFor,
-		ObservedAt:         proof.ScheduledFor.Add(time.Second),
-		Completeness:       completeness,
-		Continuity:         contract.ContinuityContiguous,
-		Payload:            payload,
-		CollectorInstance:  proof.OwnerInstance,
-		Lease:              *proof,
-	})
-	if err != nil {
-		t.Fatalf("prepare video list envelope: %v", err)
-	}
-
-	return &envelope
+	return prepareContentListEnvelope(t, proof, contract.KindVideoList, completeness, payload)
 }
 
 func contentClaimOptions() ClaimOptions {
@@ -74,7 +56,6 @@ func contentClaimOptions() ClaimOptions {
 func shortsListEnvelope(
 	t *testing.T,
 	proof *contract.LeaseProof,
-	generation int64,
 	completeness contract.Completeness,
 	videoIDs ...string,
 ) *contract.Envelope {
@@ -102,12 +83,18 @@ func shortsListEnvelope(
 		t.Fatalf("marshal shorts list payload: %v", err)
 	}
 
+	return prepareContentListEnvelope(t, proof, contract.KindShortsList, completeness, payload)
+}
+
+func prepareContentListEnvelope(t *testing.T, proof *contract.LeaseProof, kind contract.ObservationKind, completeness contract.Completeness, payload []byte) *contract.Envelope {
+	t.Helper()
+
 	envelope, err := contract.PrepareEnvelope(contract.Envelope{
 		Provider:           contract.ProviderYouTubeJS,
-		ObservationKind:    contract.KindShortsList,
+		ObservationKind:    kind,
 		SubjectKey:         testChannelID,
 		SchemaVersion:      contract.SchemaVersionV1,
-		ContractGeneration: generation,
+		ContractGeneration: 1,
 		ScheduledFor:       proof.ScheduledFor,
 		ObservedAt:         proof.ScheduledFor.Add(time.Second),
 		Completeness:       completeness,
@@ -117,7 +104,7 @@ func shortsListEnvelope(
 		Lease:              *proof,
 	})
 	if err != nil {
-		t.Fatalf("prepare shorts list envelope: %v", err)
+		t.Fatalf("prepare %s envelope: %v", kind, err)
 	}
 
 	return &envelope

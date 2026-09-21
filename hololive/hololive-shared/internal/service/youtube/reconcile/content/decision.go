@@ -32,6 +32,7 @@ func canNotifyNewContent(session *reduceSession, firstPositiveAt time.Time) bool
 	}
 
 	earliest := session.state.EarliestCompleteAt
+
 	return earliest != nil && firstPositiveAt.After(*earliest)
 }
 
