@@ -83,6 +83,25 @@ WITH replay_epoch AS MATERIALIZED (
           FROM replay_epoch AS epoch
           WHERE observation.received_at < epoch.cutoff_received_at
       )
+      AND (
+          observation.observation_kind <> 'shorts_list'
+          OR NOT EXISTS (
+              -- 같은 채널의 후속 목록이 최초 목록을 추월하여 신규 쇼츠를 baseline으로 삼지 못하게 합니다.
+              SELECT 1
+              FROM source_observation_queue AS predecessor_queue
+              JOIN source_observations AS predecessor
+                ON predecessor.id = predecessor_queue.observation_id
+              WHERE predecessor.observation_kind = 'shorts_list'
+                AND predecessor.subject_key = observation.subject_key
+                AND (predecessor.scheduled_for, predecessor.id) < (observation.scheduled_for, observation.id)
+                AND predecessor_queue.status IN ('PENDING', 'PROCESSING')
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM replay_epoch AS epoch
+                    WHERE predecessor.received_at < epoch.cutoff_received_at
+                )
+          )
+      )
     ORDER BY queue.available_at, queue.observation_id
     LIMIT $2
     FOR UPDATE OF queue SKIP LOCKED
