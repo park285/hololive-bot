@@ -37,10 +37,45 @@ test('빈 조회와 깨진 응답·인증 실패·부분 오류를 구분한다'
   for (const [response, code] of [[{}, 'invalid_response'], [{ users: null }, 'invalid_response'], [{ users: {}, errors: [{ code: 1 }] }, 'api_error'], [{ users: { unexpected: {} } }, 'unexpected_user']]) {
     await assert.rejects(collectSpaces(['123'], cookies, transaction, async () => json(response)), { code });
   }
-  for (const status of [401, 403]) {
-    await assert.rejects(collectSpaces(['123'], cookies, transaction, async () => json({ secret: cookies.auth_token }, status)), { code: 'authentication' });
-  }
+  await assert.rejects(collectSpaces(['123'], cookies, transaction, async () => json({ secret: cookies.auth_token }, 401)), { code: 'authentication' });
   await assert.rejects(collectSpaces(['123'], cookies, transaction, async () => json({}, 429, { 'retry-after': '600' })), (error) => error.code === 'rate_limited' && error.cooldownSeconds === 600);
+});
+
+test('403 접근 거부와 X 인증 오류 번호를 구분하고 숫자 진단만 남긴다', async () => {
+  for (const status of [200, 401, 403]) {
+    for (const code of [32, 89]) {
+      await assert.rejects(collectSpaces(['123'], cookies, transaction,
+        async () => json({ errors: [{ code, message: cookies.auth_token }] }, status)),
+      (error) => {
+        assert.equal(error.code, 'authentication');
+        assert.equal(error.httpStatus, status);
+        assert.deepEqual(error.apiCodes, [code]);
+        assert.ok(!JSON.stringify(error).includes(cookies.auth_token));
+        return true;
+      });
+    }
+  }
+  for (const body of [{}, { errors: [{ code: 326, message: cookies.auth_token }] }]) {
+    await assert.rejects(collectSpaces(['123'], cookies, transaction, async () => json(body, 403)),
+      (error) => error.code === 'api_error' && error.httpStatus === 403 && !JSON.stringify(error).includes(cookies.auth_token));
+  }
+  await assert.rejects(collectSpaces(['123'], cookies, transaction,
+    async () => new Response('<html>denied</html>', { status: 403 })), { code: 'api_error', httpStatus: 403 });
+  await assert.rejects(collectSpaces(['123'], cookies, transaction,
+    async () => new Response('<html>denied</html>', { status: 401 })), { code: 'authentication', httpStatus: 401 });
+});
+
+test('상류 진단 코드의 타입과 개수를 제한한다', async () => {
+  const codes = [cookies.auth_token, null, -1, 65536, 1.5, ...Array.from({ length: 12 }, (_, i) => i + 100)];
+  await assert.rejects(collectSpaces(['123'], cookies, transaction,
+    async () => json({ errors: codes.map((code) => ({ code, message: cookies.ct0 })) }, 403)),
+  (error) => {
+    assert.equal(error.code, 'api_error');
+    assert.deepEqual(error.apiCodes, [100, 101, 102, 103, 104, 105, 106, 107]);
+    assert.ok(!JSON.stringify(error).includes(cookies.ct0));
+    assert.ok(!JSON.stringify(error).includes(cookies.auth_token));
+    return true;
+  });
 });
 
 test('잘못된 상태·시각·식별자와 중복 대상은 성공으로 바뀌지 않는다', async () => {

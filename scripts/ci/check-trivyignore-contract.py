@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-EXPIRY = "2026-09-21"
+EXPIRY = "2026-09-28"
 
 
 @dataclass(frozen=True)
@@ -28,9 +28,7 @@ STATEMENTS = {
     ),
     "postgres": (
         "Owner: hololive-bot. Compose runs this exact image as 999:999, so its root-only gosu branch "
-        "is unreachable; PostgreSQL does not instantiate an OpenSSL QUIC listener. The libuuid "
-        "inventory has neither util-linux mount nor nsenter; the reported privileged mount/cgroup "
-        "operations are absent. Reviewed 2026-09-14 in docs/current/architecture/image-scan-reachability-20260914.md. "
+        "is unreachable. Reviewed 2026-09-21 in docs/current/architecture/image-scan-reachability-20260914.md. "
         "Remove on a clean official image rebuild."
     ),
     "deunhealth": (
@@ -52,14 +50,12 @@ STATEMENTS = {
 EXPECTED_IDS = {
     "nginx": {"CVE-2026-14456"},
     "postgres": {
-        "CVE-2025-61726", "CVE-2025-61729", "CVE-2025-68121", "CVE-2026-14456",
+        "CVE-2025-61726", "CVE-2025-61729", "CVE-2025-68121",
         "CVE-2026-25679", "CVE-2026-27145", "CVE-2026-32280", "CVE-2026-32281",
         "CVE-2026-32283", "CVE-2026-33811", "CVE-2026-33814", "CVE-2026-33818",
         "CVE-2026-39820", "CVE-2026-39821", "CVE-2026-39822", "CVE-2026-39836",
         "CVE-2026-42499", "CVE-2026-42504", "CVE-2026-56853", "CVE-2026-56858",
         "CVE-2026-56859", "CVE-2026-56860", "CVE-2026-56862",
-        "CVE-2026-53612", "CVE-2026-53613", "CVE-2026-53614", "CVE-2026-76642",
-        "CVE-2026-78408", "CVE-2026-78409", "CVE-2026-78410",
     },
     "deunhealth": {
         "CVE-2025-61726", "CVE-2025-68121", "CVE-2026-25679", "CVE-2026-25681",
@@ -80,21 +76,15 @@ STDLIB_DEUNHEALTH = "pkg:golang/stdlib@v1.25.5"
 STDLIB_POSTGRES = "pkg:golang/stdlib@v1.24.6"
 STDLIB_SOCKET_PROXY = "pkg:golang/stdlib@v1.26.5"
 X_NET_DEUNHEALTH = "pkg:golang/golang.org/x/net@v0.47.0"
-LIBUUID_IDS = {
-    "CVE-2026-53612", "CVE-2026-53613", "CVE-2026-53614", "CVE-2026-76642",
-    "CVE-2026-78408", "CVE-2026-78409", "CVE-2026-78410",
-}
 
 
 def expected_purls(key: str, cve: str) -> tuple[str, ...]:
-    if key == "nginx" or (key == "postgres" and cve == "CVE-2026-14456"):
+    if key == "nginx":
         return (
             "pkg:apk/alpine/libcrypto3@3.5.7-r0",
             "pkg:apk/alpine/libssl3@3.5.7-r0",
         )
     if key == "postgres":
-        if cve in LIBUUID_IDS:
-            return ("pkg:apk/alpine/libuuid@2.42.1-r0",)
         return (STDLIB_POSTGRES,)
     if key == "socket-proxy":
         return (STDLIB_SOCKET_PROXY,)

@@ -4,7 +4,7 @@ set -euo pipefail
 root_dir="$(git rev-parse --show-toplevel)"
 manifest="$root_dir/scripts/ci/final-image-scan-manifest.txt"
 nginx_exception_target='remote|linux/arm64|nginx:1.31.4-alpine-slim@sha256:1870de6d59aafee152589b64404556d2535922cdd998e6dac1c4888c938ed8f9'
-postgres_exception_target='remote|linux/arm64|postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
+postgres_exception_target='remote|linux/arm64|postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873'
 deunhealth_exception_target='remote|linux/arm64|qmcgaw/deunhealth@sha256:db1e4fcd3aceeb0da34a83f7a8a5432df586e6d0388ddb6ad8dd7b479e4aa25d'
 socket_proxy_exception_target='remote|linux/arm64|wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
 

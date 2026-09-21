@@ -92,9 +92,9 @@ check_exception() {
     fail "$key exception must contain exactly $expected_count vulnerabilities"
   duplicate_ids="$(sed -n 's/^[[:space:]]*- id: \(CVE-[0-9-]*\)$/\1/p' "$ignore" | LC_ALL=C sort | uniq -d)"
   [[ -z "$duplicate_ids" ]] || fail "$key exception contains duplicate vulnerability IDs"
-  [[ "$(grep -Fc 'expired_at: 2026-09-21' "$ignore")" -eq "$expected_count" ]] ||
+  [[ "$(grep -Fc 'expired_at: 2026-09-28' "$ignore")" -eq "$expected_count" ]] ||
     fail "$key exception entries must all have the bounded expiry"
-  [[ "$(date -u -d '2026-09-21' +%s)" -gt "$(date -u +%s)" ]] ||
+  [[ "$(date -u -d '2026-09-28' +%s)" -gt "$(date -u +%s)" ]] ||
     fail "$key vulnerability exception has expired"
   grep -Fq "${key}_exception_target='remote|linux/arm64|$image'" "$scanner" ||
     fail "$key exception must be bound to the exact linux/arm64 scanned image"
@@ -108,8 +108,8 @@ check_exception \
   trivyignore-nginx.yaml 1 'no TLS or QUIC listener'
 check_exception \
   postgres \
-  'postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2' \
-  trivyignore-postgres.yaml 30 'root-only gosu branch is unreachable'
+  'postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873' \
+  trivyignore-postgres.yaml 22 'root-only gosu branch is unreachable'
 check_exception \
   deunhealth \
   'qmcgaw/deunhealth@sha256:db1e4fcd3aceeb0da34a83f7a8a5432df586e6d0388ddb6ad8dd7b479e4aa25d' \

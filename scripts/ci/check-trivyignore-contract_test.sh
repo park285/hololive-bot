@@ -64,11 +64,6 @@ make_fixture "$fixture"
 sed -i '0,/listen 127.0.0.1:30193;/{s/listen 127.0.0.1:30193;/listen 127.0.0.1:30193 ssl;/;}' "$fixture/deploy/nginx/admin-dashboard-ingress.conf.template"
 expect_failure "reachable nginx TLS listener" "$fixture"
 
-fixture="$tmp_dir/changed-libuuid"
-make_fixture "$fixture"
-sed -i 's/libuuid@2.42.1-r0/libmount@2.42.1-r0/' "$fixture/scripts/ci/trivyignore-postgres.yaml"
-expect_failure "different util-linux binary package" "$fixture"
-
 fixture="$tmp_dir/tls-docker-client"
 make_fixture "$fixture"
 sed -i 's|DOCKER_HOST: tcp://docker-proxy:2375|DOCKER_HOST: https://docker-proxy:2376|' "$fixture/deploy/compose/docker-compose.prod.yml"
