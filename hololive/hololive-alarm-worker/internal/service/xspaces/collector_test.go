@@ -10,9 +10,11 @@ import (
 func TestCollectionOutputDiagnosticBoundary(t *testing.T) {
 	_, err := decodeCollectionOutput([]byte(`{"error":"authentication","http_status":403,"api_codes":[32]}`), errors.New("process failed"))
 	failure, ok := errors.AsType[*CollectionError](err)
+
 	if !ok || failure == nil {
 		t.Fatalf("expected CollectionError, got %T", err)
 	}
+
 	require.Equal(t, "authentication", failure.Code)
 	require.Equal(t, 403, failure.HTTPStatus)
 	require.Equal(t, []int{32}, failure.APICodes)
@@ -31,9 +33,11 @@ func TestCollectionOutputDiagnosticBoundary(t *testing.T) {
 	} {
 		_, err := decodeCollectionOutput([]byte(raw), nil)
 		failure, ok := errors.AsType[*CollectionError](err)
+
 		if !ok || failure == nil {
 			t.Fatalf("expected CollectionError, got %T", err)
 		}
+
 		require.Contains(t, []string{"invalid_response", "collector_failed"}, failure.Code)
 		require.NotContains(t, failure.Error(), "secret")
 	}
