@@ -20,6 +20,7 @@ type reduceSession struct {
 	applications  []Application
 }
 
+// Reduce는 입력을 변경하지 않고 관측을 조정하며, Shorts 알림은 저장된 기준 목록이나 complete 근거가 있을 때만 생성합니다.
 func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, error) {
 	if evidence.Kind != contract.KindVideoList && evidence.Kind != contract.KindShortsList {
 		return Decision{}, fmt.Errorf("content reducer received kind %q", evidence.Kind)
@@ -35,6 +36,13 @@ func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, erro
 
 	session.state.Kind = evidence.Kind
 	session.state.ChannelID = channelIDOf(session.state, session.evidence)
+
+	// 구버전의 빈 PARTIAL은 기준이 아니지만, 다른 종류로 저장된 영상도 last_content_id가 있으면 유효한 기준 목록입니다.
+	if evidence.Kind == contract.KindShortsList && session.state.LastContentID == "" &&
+		len(session.state.Videos) == 0 && session.state.EarliestCompleteAt == nil {
+		session.state.Initialized = false
+	}
+
 	applyPositives(&session)
 
 	if scopedNegative(session.evidence) {
