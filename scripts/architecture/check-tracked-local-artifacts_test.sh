@@ -74,6 +74,26 @@ setup_fixture "${staged_rename}"
 git -C "${staged_rename}" mv .env.osaka allowed.txt
 expect_gate_failure_for_env_osaka "staged forbidden artifact rename fails" "${staged_rename}"
 
+source_patch="${TMP_DIR}/source-patch"
+setup_fixture "${source_patch}"
+git -C "${source_patch}" rm -q .env.osaka
+mkdir -p "${source_patch}/deploy/images/deunhealth"
+printf 'source patch fixture\n' >"${source_patch}/deploy/images/deunhealth/client.patch"
+git -C "${source_patch}" add deploy/images/deunhealth/client.patch
+git -C "${source_patch}" commit -q -m "source fixture"
+if "${source_patch}/scripts/architecture/check-tracked-local-artifacts.sh"; then
+  pass "exact deunhealth source patch is accepted"
+else
+  record_fail "exact deunhealth source patch must be accepted"
+fi
+printf 'unowned patch fixture\n' >"${source_patch}/deploy/images/deunhealth/local.patch"
+git -C "${source_patch}" add deploy/images/deunhealth/local.patch
+if "${source_patch}/scripts/architecture/check-tracked-local-artifacts.sh" >/dev/null 2>&1; then
+  record_fail "adjacent local patch must remain forbidden"
+else
+  pass "adjacent local patch remains forbidden"
+fi
+
 if (( failures > 0 )); then
   echo "[FAIL] tracked local artifact tests failed: ${failures}" >&2
   exit 1
