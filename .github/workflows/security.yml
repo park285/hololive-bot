@@ -166,7 +166,9 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           DOCKER_DEFAULT_PLATFORM: linux/arm64
-        run: ./build-all.sh --no-bump --build-only --security-scan --skip-local-ci
+        run: |
+          bash scripts/ci/test-infra-images.sh
+          ./build-all.sh --no-bump --build-only --security-scan --skip-local-ci
 
       - name: Scan every final production image
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

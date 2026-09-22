@@ -1,4 +1,12 @@
 services:
+  holo-postgres:
+    build:
+      provenance: false
+      sbom: false
+  deunhealth:
+    build:
+      provenance: false
+      sbom: false
   hololive-alarm-worker:
     build:
       provenance: false
