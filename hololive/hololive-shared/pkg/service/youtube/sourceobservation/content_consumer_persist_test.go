@@ -56,7 +56,7 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
 	consumer := newContentTestConsumer(pool, repo, 0)
 
-	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, 1, contract.CompletenessComplete, "vid-s"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, contract.CompletenessComplete, "vid-s"))); err != nil {
 		t.Fatalf("publish first: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestContentConsumerDoesNotRearmFailedShort(t *testing.T) {
 	}
 
 	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, 1, contract.CompletenessComplete, "vid-s"))); err != nil {
+	if _, err := repo.PublishBatch(ctx, publishInput(shortsListEnvelope(t, &proof, contract.CompletenessComplete, "vid-s"))); err != nil {
 		t.Fatalf("publish later: %v", err)
 	}
 

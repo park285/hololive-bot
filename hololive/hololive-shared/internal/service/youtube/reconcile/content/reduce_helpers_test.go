@@ -133,10 +133,10 @@ func mustReduceAll(t *testing.T, state *State, evidence []Evidence, grace time.D
 func stateFromDecision(previous *State, decision *Decision, evidence *Evidence) State {
 	next := previous.clone()
 
-	next.Initialized = true
 	next.Kind = evidence.Kind
 
 	if decision.Watermark != nil {
+		next.Initialized = decision.Watermark.Initialized
 		next.ChannelID = decision.Watermark.ChannelID
 		next.LastContentID = decision.Watermark.LastContentID
 	}
