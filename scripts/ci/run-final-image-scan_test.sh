@@ -57,6 +57,7 @@ reason=vulnerable_code_not_present
 id=GO-TEST-1
 purl=pkg:golang/example.test/lib@v1.0.0
 case "$SCAN_CASE" in
+  encoded-absence) purl=pkg:golang/example.test%2Flib@v1.0.0 ;;
   affected) status=affected ;;
   unreachable) reason=vulnerable_code_not_in_execute_path ;;
   unknown-id) id=GO-TEST-2 ;;
@@ -70,12 +71,12 @@ SH
 chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH" TMPDIR="$fixture/reports" FIXTURE_CLEANUP="$fixture/cleanup"
 cd "$fixture/repo"
-for scenario in clean absent affected unreachable unknown-id wrong-module wrong-version missing-statements stripped wrong-arch extract-error analysis-error missing-binary trivy-error malformed empty-report non-go; do
+for scenario in clean absent encoded-absence affected unreachable unknown-id wrong-module wrong-version missing-statements stripped wrong-arch extract-error analysis-error missing-binary trivy-error malformed empty-report non-go; do
   status=0
   SCAN_CASE="$scenario" bash scripts/ci/run-final-image-scan.sh >"$fixture/$scenario.log" 2>&1 || status=$?
   if [[ "$scenario" == clean ]]; then
     [[ "$status" == 0 ]] || { cat "$fixture/$scenario.log"; exit 1; }
-  elif [[ "$scenario" == absent ]]; then
+  elif [[ "$scenario" == absent || "$scenario" == encoded-absence ]]; then
     [[ "$status" == 0 ]] || { cat "$fixture/$scenario.log"; exit 1; }
     report_dir="$(awk '/^final image scan evidence:/ {print $NF}' "$fixture/$scenario.log")"
     jq -e '.Results[0].Vulnerabilities | length == 1' "$report_dir/1.trivy.json" >/dev/null
