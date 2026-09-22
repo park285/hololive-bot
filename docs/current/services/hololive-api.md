@@ -62,6 +62,7 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - 구버전이 빈 부분 목록에 남긴 `initialized=true`만으로는 기준 목록을 인정하지 않습니다. `SHORT` watermark의 `last_content_id`, 저장된 쇼츠, complete 근거가 모두 없으면 현재 관측 적용 전에 미초기화로 판단하고 첫 유효 목록을 알림 없이 저장합니다. 일반 영상으로 먼저 저장된 ID도 유효한 Shorts 기준 목록과 canonical 중복 판정에서 제외하지 않으며, 영상 종류를 강제로 변경하지 않습니다. 이미 저장된 목록이나 complete-empty 기준은 유지합니다.
 - 초기화 이후 새 canonical video ID만 기존 `NEW_SHORT` outbox로 전달합니다. 이미 저장된 쇼츠는 알림 이력이 없어도 자동 backfill하지 않습니다. 기존 영상·watermark·전송 이력을 지우거나 가짜 `SENT`를 만들지 않습니다.
 - `shorts_list` claim은 같은 채널의 더 앞선 `(scheduled_for, id)` 관측이 replay epoch 안에서 유효하고 `PENDING` 또는 `PROCESSING`이면 후속 관측을 선택하지 않습니다. 대기 중인 후속 관측의 attempt는 증가하지 않습니다. 다른 채널과 다른 kind는 이 순서 제약의 대상이 아니며, 기존 retry/lease recovery/dead-letter 정책은 유지합니다.
+- 선행 관측 조회는 기존 queue partial index로 활성 Shorts 집합을 먼저 materialize합니다. 각 후보마다 완료된 관측 이력을 순회하지 않으며, custom/generic plan 모두 보존 이력 증가에 따른 조회 증폭을 회귀 검사합니다.
 - 관측 순서 제약을 적용하는 첫 배포에서는 기존 YouTube consumer를 drain한 뒤 교체해야 합니다. 이미 구버전에서 claim된 작업까지 새 claim SQL이 재정렬하지는 않습니다. source replay epoch 변경이나 과거 관측 일괄 replay는 배포 절차에 포함하지 않습니다.
 - 부분 목록은 삭제·비공개 근거가 아니며 `earliest_complete_effective_at`을 채우지 않습니다. 일반 영상과 Premiere의 기존 알림 정책은 변경하지 않습니다. 최초 목록 이전의 관측이나 수집 범위 밖의 영상까지 복구한다는 보장은 하지 않습니다.
 

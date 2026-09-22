@@ -2,6 +2,18 @@ WITH replay_epoch AS MATERIALIZED (
     SELECT cutoff_received_at
     FROM source_observation_replay_epoch
     WHERE singleton
+), active_shorts AS MATERIALIZED (
+    -- 채널의 보존 이력을 후보마다 훑지 않도록 활성 queue를 partial index로 먼저 좁힌다.
+    SELECT observation.id, observation.subject_key, observation.scheduled_for
+    FROM source_observation_queue AS queue
+    JOIN source_observations AS observation ON observation.id = queue.observation_id
+    WHERE (queue.status = 'PENDING' OR queue.status = 'PROCESSING')
+      AND observation.observation_kind = 'shorts_list'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM replay_epoch AS epoch
+          WHERE observation.received_at < epoch.cutoff_received_at
+      )
 ), replay_expired_candidates AS MATERIALIZED (
     SELECT queue.observation_id
     FROM source_observation_queue AS queue
@@ -88,18 +100,9 @@ WITH replay_epoch AS MATERIALIZED (
           OR NOT EXISTS (
               -- 같은 채널의 후속 목록이 최초 목록을 추월하여 신규 쇼츠를 baseline으로 삼지 못하게 합니다.
               SELECT 1
-              FROM source_observation_queue AS predecessor_queue
-              JOIN source_observations AS predecessor
-                ON predecessor.id = predecessor_queue.observation_id
-              WHERE predecessor.observation_kind = 'shorts_list'
-                AND predecessor.subject_key = observation.subject_key
+              FROM active_shorts AS predecessor
+              WHERE predecessor.subject_key = observation.subject_key
                 AND (predecessor.scheduled_for, predecessor.id) < (observation.scheduled_for, observation.id)
-                AND predecessor_queue.status IN ('PENDING', 'PROCESSING')
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM replay_epoch AS epoch
-                    WHERE predecessor.received_at < epoch.cutoff_received_at
-                )
           )
       )
     ORDER BY queue.available_at, queue.observation_id
