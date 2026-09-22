@@ -19,7 +19,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG REVISION=unknown
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -mod=readonly -trimpath -buildvcs=false \
-    -ldflags="-s -w -X main.version=37e5bd4-security-refresh -X main.commit=$REVISION" \
+    -ldflags="-w -X main.version=37e5bd4-security-refresh -X main.commit=$REVISION" \
     -o /out/app ./cmd/app
 
 FROM scratch

@@ -56,16 +56,16 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false \
-      -ldflags="-s -w -buildid= -X main.Version=${VERSION}" \
+      -ldflags="-w -buildid= -X main.Version=${VERSION}" \
       -o /dist/bin/hololive-api ./cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/db-migrate ./cmd/db-migrate && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/source-observation-replay-epoch ./cmd/source-observation-replay-epoch && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/healthcheck ./cmd/healthcheck
 
 FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278

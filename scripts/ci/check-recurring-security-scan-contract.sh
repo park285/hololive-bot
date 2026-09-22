@@ -81,6 +81,11 @@ grep -Fq -- '--config /dev/null --ignorefile /dev/null --ignore-unfixed=false --
   fail "final-image scanning must fail on findings without vulnerability exceptions"
 grep -Fq -- '--severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"' "$scanner" ||
   fail "final-image scanning must retain every vulnerability severity"
+for required in '-mode=extract' '-mode=binary -scan=package -format=openvex' 'check-go-image-vex.jq' 'pkgSymbols' 'sha256sum'; do
+  grep -Fq -- "$required" "$scanner" || fail "Go image finding proof is missing: $required"
+done
+grep -Fq 'vulnerable_code_not_present' scripts/ci/check-go-image-vex.jq ||
+  fail "Go module findings require package absence, not a reachability exception"
 if grep -Eq -- 'trivyignore-|exception_target|--skip-files|--skip-dirs|--ignore-policy' "$scanner"; then
   fail "final-image scanning must not suppress package or vulnerability findings"
 fi
