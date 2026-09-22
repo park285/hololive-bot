@@ -268,6 +268,15 @@ async function waitBeforeRetry(signal, delayMs) {
 }
 
 async function classifyUpstreamResponse(response) {
+  if (response.status === 429) {
+    // youtubei.js가 HTTP status 없는 InnertubeError로 바꾸기 전에 기존 cooldown 계약을 보존합니다.
+    await discardUpstreamResponse(response);
+    throw new FetchTransportError(
+      "cooldown",
+      "COOLDOWN",
+      "upstream request failed with status code 429",
+    );
+  }
   if (response.status < 500 || response.status > 599) {
     return response;
   }

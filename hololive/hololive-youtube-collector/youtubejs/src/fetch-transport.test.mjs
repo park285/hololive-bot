@@ -293,8 +293,60 @@ test("unsafe Innertube endpoint is never retried", async () => {
   }
 });
 
-test("rate limits and non-transient 5xx statuses are never retried", async () => {
-  const statuses = [429, 501, 502, 504];
+test("upstream 429 reaches RPC cooldown without retry or response-body disclosure", async (t) => {
+  for (const enabled of [false, true]) {
+    await t.test(`proxy enabled=${enabled}`, async (t) => {
+      let calls = 0;
+      let canceled = 0;
+      const events = [];
+      const fetch = async () => {
+        calls += 1;
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("private upstream response"));
+          },
+          cancel() { canceled += 1; },
+        }), { status: 429 });
+      };
+      class ProxyAgent {
+        async close() {}
+        destroy() {}
+      }
+      t.mock.method(globalThis, "fetch", fetch);
+      const transport = await createFetchTransport({
+        proxy: enabled ? { enabled, url: "http://proxy.test:8080" } : { enabled },
+        currentSignal: () => undefined,
+        retryDelayMs: 0,
+        observeRetry: (event) => events.push(event),
+        loadUndici: async () => ({ ProxyAgent, fetch }),
+      });
+      try {
+        await assert.rejects(
+          transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
+            method: "POST", body: "{}",
+          }),
+          (error) => {
+            const result = rpcErrorResultFor(error);
+            assert.equal(result.status, 429);
+            assert.equal(result.body.error.code, "cooldown");
+            assert.equal(result.body.error.class, "COOLDOWN");
+            assert.deepEqual(result.body.error.retry, { kind: "default" });
+            assert.equal(JSON.stringify(result).includes("private upstream response"), false);
+            return true;
+          },
+        );
+        assert.equal(calls, 1);
+        assert.equal(canceled, 1);
+        assert.deepEqual(events, []);
+      } finally {
+        await transport.close();
+      }
+    });
+  }
+});
+
+test("non-transient 5xx statuses are never retried", async () => {
+  const statuses = [501, 502, 504];
   const events = [];
   let calls = 0;
   class ProxyAgent {
@@ -316,13 +368,7 @@ test("rate limits and non-transient 5xx statuses are never retried", async () =>
     }),
   });
   try {
-    const limited = await transport.fetch("https://www.youtube.com/youtubei/v1/browse", {
-      method: "POST",
-      body: "{}",
-    });
-    assert.equal(limited.status, 429);
-    await limited.text();
-    for (const status of statuses.slice(1)) {
+    for (const status of statuses) {
       const before = calls;
       await assert.rejects(
         transport.fetch("https://www.youtube.com/youtubei/v1/browse", {

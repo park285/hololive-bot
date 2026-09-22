@@ -97,6 +97,8 @@ Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR
 
 ## YouTube.js transient recovery
 
+HTTP `429`는 fetch transport에서 응답 body를 폐기한 뒤 기존 `cooldown/COOLDOWN` RPC로 전달합니다. youtubei.js가 status 없는 `InnertubeError`로 바꾸어 내부 치명 오류로 오분류하지 않도록 합니다. 즉시 재전송은 없으며 기존 collection profile의 default same-slot defer를 사용합니다. 응답 body나 URL을 오류 메시지에 넣지 않습니다. Provider rate limit 자체의 해소나 성공 관측을 뜻하지 않습니다.
+
 YouTube.js transport는 `https://www.youtube.com/youtubei/v1/{browse,next,player}`의 `POST`만 읽기 전용 재전송 대상으로 봅니다. 알려진 transient network code 또는 HTTP `500`, `503`이 발생하면 `100`~`300ms` jitter 뒤 정확히 한 번 재시도하므로 총 시도 수는 최대 2회입니다. 재생할 수 없는 request body, 다른 host/path/method, HTTP `429`, `501`, `502`, `504`와 그 밖의 status, parser/protocol failure에는 transport retry를 적용하지 않습니다. 두 번째 시도 실패는 기존 typed failure와 scheduler defer 계약을 그대로 사용하고 complete-empty나 alternate provider로 바꾸지 않습니다.
 
 각 추가 시도는 `youtubejs_upstream_retry_scheduled` INFO event에 endpoint, trigger, delay, attempt를 기록합니다. 같은 시간대의 `YouTube collection job failed` WARN이 없으면 transport 안에서 복구된 것이며, WARN이 이어지면 bounded retry가 소진된 것입니다. 배포 후 24시간 동안 exhausted `collection_failed` 비율이 감소하지 않거나 `429`, request timeout, upstream request volume이 증가하면 이 정책을 재검토합니다.
