@@ -7,3 +7,4 @@ youtube-plane|hololive-api|YOUTUBE_PLANE_POSTGRES_POOL_MAX_CONNS|YOUTUBE_PLANE_P
 alarm-worker|hololive-alarm-worker|POSTGRES_POOL_MAX_CONNS|ALARM_WORKER_POSTGRES_POOL_MAX_CONNS|1|8
 youtube-collector|youtube-collector|POSTGRES_POOL_MAX_CONNS|YOUTUBE_COLLECTOR_POSTGRES_POOL_MAX_CONNS|4|8
 db-migrate|hololive-db-migrate|||1|1
+x-space-login|hololive-x-space-login|||1|1

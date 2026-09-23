@@ -1,0 +1,113 @@
+--- a/assertion/function/assertiontree/function_context.go
++++ b/assertion/function/assertiontree/function_context.go
+@@ -75,0 +76,3 @@
++
++	// Append sites must keep their identities across backpropagation iterations.
++	appendSites map[ast.Expr]appendResultSite
+@@ -115,0 +119 @@
++		appendSites:             make(map[ast.Expr]appendResultSite),
+--- a/assertion/function/assertiontree/parse_expr_producer.go
++++ b/assertion/function/assertiontree/parse_expr_producer.go
+@@ -307,9 +307,5 @@
+-				// The following block implements the basic support for append function where it has
+-				// only two arguments and the first argument is the same as the lhs of assignment.
+-				// Since in Go it is allowed to have only one argument in the append method, we need
+-				// to have a check to make sure that len(expr.Args) > 1
+-				if r.ObjectOf(fun) == typeshelper.BuiltinAppend && len(expr.Args) > 1 {
+-					// TODO: handle the correlation of return type of append with its first argument .
+-					// TODO: iterate over the arguments of the append call if it has more than two args
+-					rec, producers := r.ParseExprAsProducer(expr.Args[1], false)
+-					return rec, producers
++				if r.ObjectOf(fun) == typeshelper.BuiltinAppend {
++					if len(expr.Args) == 1 {
++						return r.ParseExprAsProducer(expr.Args[0], doNotTrack)
++					}
++					return nil, []producer.ParsedProducer{r.appendProducer(expr)}
+@@ -536,0 +533,3 @@
++		if typeshelper.IsDeeplyType[*types.Slice](r.Pass().TypesInfo.TypeOf(expr)) && needsSliceElementModel(r.Pass().TypesInfo.TypeOf(expr)) {
++			return nil, []producer.ParsedProducer{r.sliceLiteralProducer(expr)}
++		}
+@@ -585,0 +585,8 @@
++		}
++		// A value struct cannot be nil, even when its companion error is non-nil.
++		if _, isValue := funcObj.Signature().Results().At(i).Type().Underlying().(*types.Struct); isValue {
++			shallowAnnotation.SetNeedsGuard(false)
++		}
++		// net/http.Client.Do guarantees a non-nil Response when the error is nil.
++		if i == 0 && funcObj.FullName() == "(*net/http.Client).Do" {
++			shallowAnnotation = &annotation.TrustedFuncNonnil{ProduceTriggerNever: &annotation.ProduceTriggerNever{NeedsGuard: true}}
+--- a/assertion/function/assertiontree/root_assertion_node.go
++++ b/assertion/function/assertiontree/root_assertion_node.go
+@@ -616,0 +617,3 @@
++		if fun, ok := ast.Unparen(expr.Fun).(*ast.Ident); ok && r.ObjectOf(fun) == typeshelper.BuiltinAppend {
++			r.bindAppendInputs(expr)
++		}
+@@ -800,0 +804 @@
++		r.bindSliceLiteralInputs(expr)
+@@ -1277 +1281 @@
+-	return r.isSafeSliceIndex(expr.Low, expr.X) &&
++	return (r.isSafeSliceIndex(expr.Low, expr.X) &&
+@@ -1279 +1283 @@
+-		r.isSafeSliceIndex(expr.Max, expr.X)
++		r.isSafeSliceIndex(expr.Max, expr.X)) || r.isDirectCapacityGuardedSlice(expr)
+--- a/assertion/function/assertiontree/backprop.go
++++ b/assertion/function/assertiontree/backprop.go
+@@ -289,0 +290 @@
++		rootNode.bindAssignedSliceInputs(lhs, rhs)
+@@ -814,0 +816,14 @@
++			switch consumeTrigger.(type) {
++			case *annotation.ParamAssignDeep, *annotation.VariadicParamAssignDeep:
++				if typeshelper.IsDeeplyType[*types.Slice](rootNode.Pass().TypesInfo.TypeOf(lhsVal)) {
++					_, values := rootNode.ParseExprAsProducer(rhsVal, true)
++					if len(values) == 1 && values[0].GetDeep() != nil {
++						rootNode.AddNewTriggers(annotation.FullTrigger{
++							Producer: values[0].GetDeep(), Consumer: &annotation.ConsumeTrigger{
++								Annotation: consumeTrigger, Expr: rhsVal, Guards: guard.NoGuards(),
++							},
++						})
++					}
++					continue
++				}
++			}
+--- a/assertion/function/testdata/src/go.uber.org/backprop/fixpoint.go
++++ b/assertion/function/testdata/src/go.uber.org/backprop/fixpoint.go
+@@ -160 +160,2 @@
+-func (s *myString) testNamedType() { // expect_fixpoint: 2 1 3
++func (s *myString) testNamedType() { // expect_fixpoint: 2 1 4
++	// The local slice alias adds a deep-element constraint without another fixpoint round.
+--- a/testdata/src/go.uber.org/slices/slices.go
++++ b/testdata/src/go.uber.org/slices/slices.go
+@@ -1025 +1025 @@
+-	_ = a[len(a)-1] //want "sliced into"
++	_ = a[len(a)-1]
+@@ -1034 +1034 @@
+-	_ = a[len(a)-1] //want "sliced into"
++	_ = a[len(a)-1]
+@@ -1042 +1042 @@
+-	print(*a[len(a)-1]) //want "sliced into"
++	print(*a[len(a)-1]) //want "dereferenced"
+@@ -1046 +1046 @@
+-	print(*a[len(a)-1]) //want "sliced into"
++	print(*a[len(a)-1]) //want "dereferenced"
+@@ -1062 +1062 @@
+-	print(*a[len(a)-1]) //want "sliced into"
++	print(*a[len(a)-1]) //want "dereferenced" "dereferenced"
+@@ -1069,2 +1069,2 @@
+-	a = append(b, &t) // TODO: this will be handled once we fix
+-	print(*a[0])
++	a = append(b, &t)
++	print(*a[0]) //want "dereferenced"
+@@ -1084,2 +1084,2 @@
+-func testMultipleAppendArgs(a []*int, nilablevar, nonnilvar *int) {
+-	a = append(a, nonnilvar, nilablevar, nil) // TODO: this will be handled once we fix
++func testMultipleAppendArgs(a []*int, nilablevar, nonnilvar *int) { //want "assigned deeply" "assigned deeply"
++	a = append(a, nonnilvar, nilablevar, nil)
+@@ -1091 +1091 @@
+-	print(*a[0]) //want "literal `nil` sliced into"
++	print(*a[0]) //want "dereferenced"
+@@ -1098 +1098 @@
+-	print(*a[0]) //want "literal `nil` sliced into"
++	print(*a[0]) //want "dereferenced"
+@@ -1101 +1101 @@
+-	print(*a[0]) //want "literal `nil` sliced into"
++	_ = a[0] //want "literal `nil` sliced into"

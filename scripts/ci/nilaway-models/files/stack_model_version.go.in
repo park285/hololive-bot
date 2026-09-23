@@ -1,0 +1,21 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+)
+
+var stackSourceVersion, stackModelProfile string
+
+func init() {
+	if len(os.Args) != 2 || os.Args[1] != "-stack-model-version" {
+		return
+	}
+	if stackSourceVersion == "" || stackModelProfile == "" {
+		fmt.Fprintln(os.Stderr, "NilAway model build identity is missing")
+		os.Exit(1)
+	}
+	fmt.Printf("%s %s %s\n", stackSourceVersion, stackModelProfile, runtime.Version())
+	os.Exit(0)
+}

@@ -80,6 +80,10 @@ func verifyCandidateReplacement(t *testing.T, store *Store, cookies Cookies) {
 	require.NoError(t, err)
 	require.False(t, current)
 
+	current, err = store.Observe(ctx, 1, "authentication_pending", time.Now())
+	require.NoError(t, err)
+	require.False(t, current)
+
 	status, err := store.Status(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "connected", status.State)
@@ -102,6 +106,38 @@ func verifyCandidateReplacement(t *testing.T, store *Store, cookies Cookies) {
 
 	_, err = store.open(sealed)
 	require.Error(t, err)
+}
+
+func TestAuthenticationConfirmationSurvivesStoreRestart(t *testing.T) {
+	pool := dbtest.NewPool(t)
+	key := bytes.Repeat([]byte{3}, 32)
+	store, err := NewStore(pool, key)
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	cookies := Cookies{AuthToken: strings.Repeat("a", 40), CSRFToken: strings.Repeat("b", 64)}
+	accepted, err := store.Submit(ctx, cookies, "0")
+	require.NoError(t, err)
+	require.True(t, accepted)
+
+	promoted, err := store.ResolveCandidate(ctx, 1, "")
+	require.NoError(t, err)
+	require.True(t, promoted)
+
+	next := time.Now().UTC().Add(2 * time.Minute).Truncate(time.Microsecond)
+	current, err := store.Observe(ctx, 1, "authentication_pending", next)
+	require.NoError(t, err)
+	require.True(t, current)
+
+	store, err = NewStore(pool, key)
+	require.NoError(t, err)
+
+	snapshot, err := store.Snapshot(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "error", snapshot.State)
+	require.Equal(t, "authentication_pending", snapshot.LastError)
+	require.Equal(t, next, snapshot.NextCheckAt.UTC())
+	require.Equal(t, cookies, *snapshot.Active)
 }
 
 func TestSessionCipherNoncesAndSafeErrors(t *testing.T) {

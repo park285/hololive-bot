@@ -1,0 +1,6 @@
+{
+  "source_version": "v0.0.0-20260918162853-acb8859b9031",
+  "source_sum": "h1:WRbdrL7q1+PV8w97QZDQUlCnyM0aKHrpMizqHM+reWc=",
+  "source_zip_sha256": "1ab52656fcf6cb0dacbd792ae43cfcdc3912f99d02c46ae441eabc3c1dc0f4cc",
+  "go_version": "go1.27.1"
+}

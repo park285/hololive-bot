@@ -3,11 +3,11 @@ module github.com/kapu/hololive-dbtest
 go 1.27.1
 
 require (
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/moby/moby/api v1.56.0
-	github.com/moby/moby/client v0.5.1
-	github.com/park285/shared-go/v2 v2.5.2
+	github.com/moby/moby/client v0.6.0
+	github.com/park285/shared-go/v2 v2.6.3
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
@@ -51,19 +51,19 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/park285/iris-client-go/v2 v2.6.0 // indirect
+	github.com/park285/iris-client-go/v2 v2.6.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.61.0 // indirect
+	github.com/quic-go/quic-go v0.62.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.8 // indirect
 	github.com/sirupsen/logrus v1.10.1 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
-	github.com/valkey-io/valkey-go v1.0.77 // indirect
+	github.com/valkey-io/valkey-go v1.0.78 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
@@ -71,11 +71,11 @@ require (
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.56.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 

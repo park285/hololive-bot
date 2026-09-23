@@ -73,6 +73,7 @@ func (r *Runner) Start(ctx context.Context) error {
 }
 
 // RunOnce는 검증 성공한 후보만 승격하고 새 세대가 아닌 결과는 폐기한다.
+// 활성 세션의 인증 거부는 다음 조회 주기에 한 번 더 확인한 뒤 재연결을 요구한다.
 func (r *Runner) RunOnce(ctx context.Context) error {
 	snapshot, err := r.sessions.Snapshot(ctx)
 	if err != nil {
@@ -102,6 +103,14 @@ func (r *Runner) RunOnce(ctx context.Context) error {
 	}
 
 	observations, collectErr := r.collector.Collect(ctx, *snapshot.Active, userIDs)
+	// 단일 401/403 뒤 같은 쿠키가 정상 동작한 사례가 있어, 첫 거부만으로 수집을 멈추지 않는다.
+	// DB에 대기를 남겨 재시작도 확인 횟수를 초기화하지 못하게 한다.
+	if failure, ok := errors.AsType[*CollectionError](collectErr); ok && failure.Code == "authentication" && snapshot.LastError != "authentication_pending" {
+		pending := *failure
+
+		pending.Code = "authentication_pending"
+		collectErr = &pending
+	}
 
 	return r.finish(ctx, snapshot.ActiveRevision, observations, collectErr)
 }

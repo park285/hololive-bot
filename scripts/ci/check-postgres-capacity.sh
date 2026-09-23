@@ -90,7 +90,13 @@ if verify_compose:
 used = 0
 seen = set()
 scaled_services_seen = set()
-expected_owner_inventory_sha256 = "73c0d2caaa84f46159d651c06ddcf81b010e5d2054c6ddd84715d70487eba27e"
+expected_owner_inventory_sha256 = "2dc9c0371d13ea68ea6d2b651fcbfbfb8b64b7e3d0080b896792d7801d3bf162"
+# 로그인 서비스는 별도 opt-in overlay에만 존재하며 DB pool은 코드에서 1로 고정합니다.
+login_enabled = target_override("HOLOLIVE_X_SPACES_LOGIN_ENABLED")
+if login_enabled is None:
+    login_enabled = "0"
+if login_enabled not in {"0", "1"}:
+    raise SystemExit("[pg-capacity] HOLOLIVE_X_SPACES_LOGIN_ENABLED must be 0 or 1")
 for line in policy:
     if not line or line.startswith("#") or line.startswith("@"):
         continue
@@ -104,7 +110,9 @@ for line in policy:
     instances, default = int(instances_text), int(default_text)
     if instances <= 0 or default <= 0:
         raise SystemExit(f"[pg-capacity] non-positive capacity row: {line}")
-    if verify_compose:
+    if owner == "x-space-login" and login_enabled == "0":
+        continue
+    if verify_compose and owner != "x-space-login":
         service = services.get(service_name)
         if service is None:
             raise SystemExit(f"[pg-capacity] missing Compose service: {service_name}")
@@ -157,5 +165,5 @@ reserve = server_limit - used
 if reserve < 5:
     raise SystemExit(f"[pg-capacity] connection budget exhausted: max={server_limit} allocated={used} reserve={reserve}, want reserve >= 5")
 source = f"target-env:{target_env_path}" if target_env_path is not None else "compose-defaults"
-print(f"[pg-capacity] source={source} max={server_limit} allocated={used} reserve={reserve}; all central and four AP pools are inventoried")
+print(f"[pg-capacity] source={source} max={server_limit} allocated={used} reserve={reserve}; central, optional X login and four AP pools are inventoried")
 PY

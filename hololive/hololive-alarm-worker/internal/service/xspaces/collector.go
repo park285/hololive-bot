@@ -13,6 +13,8 @@ import (
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
 )
 
+const invalidResponseCode = "invalid_response"
+
 // Observation은 helper가 확인한 직접 개설 스페이스다. 방·채널 정보는 worker가 결정한다.
 type Observation struct {
 	SpaceID   string    `json:"space_id"`
@@ -21,19 +23,32 @@ type Observation struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
-// CollectionError는 secret이 없는 고정 오류 코드와 재조회 가능 시각만 전달한다.
+// CollectionError는 secret이 없는 고정 오류 코드, 재조회 간격과 숫자 HTTP 진단만 전달한다.
 type CollectionError struct {
-	Code     string
-	Cooldown time.Duration
+	Code       string
+	Cooldown   time.Duration
+	HTTPStatus int
+	APICodes   []int
 }
 
-func (e *CollectionError) Error() string { return "X spaces collection: " + e.Code }
+// Error는 upstream 원문 대신 검증된 숫자 진단만 포함한 로그 메시지를 반환한다.
+func (e *CollectionError) Error() string {
+	return fmt.Sprintf("X spaces collection: %s (http_status=%d api_codes=%v)", e.Code, e.HTTPStatus, e.APICodes)
+}
 
 // ProcessCollector는 단발 Node helper의 stdin으로만 인증 값을 전달한다.
 // 취소·timeout 시 프로세스를 종료하고 기다리며 stderr 원문을 노출하지 않는다.
 type ProcessCollector struct{}
 
 type boundedOutput struct{ bytes.Buffer }
+
+type collectionResult struct {
+	Spaces          *[]Observation `json:"spaces"`
+	Error           string         `json:"error"`
+	CooldownSeconds int            `json:"cooldown_seconds"`
+	HTTPStatus      int            `json:"http_status"`
+	APICodes        []int          `json:"api_codes"`
+}
 
 func (b *boundedOutput) Write(p []byte) (int, error) {
 	if b.Len()+len(p) > 256*1024 {
@@ -84,22 +99,18 @@ func (p ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies,
 		return nil, &CollectionError{Code: "timeout"}
 	}
 
-	var result struct {
-		Spaces          *[]Observation `json:"spaces"`
-		Error           string         `json:"error"`
-		CooldownSeconds int            `json:"cooldown_seconds"`
-	}
+	return decodeCollectionOutput(output.Bytes(), runErr)
+}
 
-	if err := jsonv2.Unmarshal(output.Bytes(), &result, jsonv2.RejectUnknownMembers(true)); err != nil {
+func decodeCollectionOutput(output []byte, runErr error) ([]Observation, error) {
+	var result collectionResult
+
+	if err := jsonv2.Unmarshal(output, &result, jsonv2.RejectUnknownMembers(true)); err != nil {
 		return nil, &CollectionError{Code: "collector_failed"}
 	}
 
 	if result.Error != "" {
-		if !sessions.ValidErrorCode(result.Error) || result.CooldownSeconds < 0 || result.CooldownSeconds > 86400 {
-			return nil, &CollectionError{Code: "invalid_response"}
-		}
-
-		return nil, &CollectionError{Code: result.Error, Cooldown: time.Duration(result.CooldownSeconds) * time.Second}
+		return nil, result.failure()
 	}
 
 	if runErr != nil || result.Spaces == nil || len(*result.Spaces) > 100 {
@@ -107,6 +118,32 @@ func (p ProcessCollector) Collect(ctx context.Context, cookies sessions.Cookies,
 	}
 
 	return *result.Spaces, nil
+}
+
+func (r collectionResult) failure() error {
+	if !sessions.ValidErrorCode(r.Error) || r.Error == "authentication_pending" {
+		return &CollectionError{Code: invalidResponseCode}
+	}
+
+	if r.CooldownSeconds < 0 || r.CooldownSeconds > 86400 {
+		return &CollectionError{Code: invalidResponseCode}
+	}
+
+	if r.HTTPStatus != 0 && (r.HTTPStatus < 100 || r.HTTPStatus > 599) {
+		return &CollectionError{Code: invalidResponseCode}
+	}
+
+	if len(r.APICodes) > 8 {
+		return &CollectionError{Code: invalidResponseCode}
+	}
+
+	for _, code := range r.APICodes {
+		if code < 0 || code > 65535 {
+			return &CollectionError{Code: invalidResponseCode}
+		}
+	}
+
+	return &CollectionError{Code: r.Error, Cooldown: time.Duration(r.CooldownSeconds) * time.Second, HTTPStatus: r.HTTPStatus, APICodes: r.APICodes}
 }
 
 func collectionFailure(err error) (string, time.Duration) {

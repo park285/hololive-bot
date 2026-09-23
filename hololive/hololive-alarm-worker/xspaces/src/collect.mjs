@@ -19,6 +19,8 @@ try {
   // 라이브러리 오류의 메시지·stack·요청 객체에는 인증 정보가 포함될 수 있다.
   const code = error instanceof CollectionError ? error.code : 'collector_failed';
   const cooldownSeconds = error instanceof CollectionError ? error.cooldownSeconds : 0;
-  process.stdout.write(JSON.stringify({ error: code, cooldown_seconds: cooldownSeconds }));
+  const httpStatus = error instanceof CollectionError ? error.httpStatus : 0;
+  const apiCodes = error instanceof CollectionError ? error.apiCodes : [];
+  process.stdout.write(JSON.stringify({ error: code, cooldown_seconds: cooldownSeconds, http_status: httpStatus, api_codes: apiCodes }));
   process.exitCode = 1;
 }

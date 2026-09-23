@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/go-tooling.sh"
 source "${SCRIPT_DIR}/nilaway-inputs.sh"
 source "${SCRIPT_DIR}/local-ci-nilaway.sh"
+bash "${SCRIPT_DIR}/nilaway-models/build_test.sh"
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT

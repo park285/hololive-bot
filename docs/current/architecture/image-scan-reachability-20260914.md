@@ -1,5 +1,9 @@
 # 고정 인프라 이미지의 취약점 도달 조건 재검토
 
+> 역사 기록입니다. 현재 이미지는 [예외 없는 이미지 빌드](image-remediation-20260921.md)를 따르며, 아래 예외 YAML과 checker는 제거됐습니다. 이 문서는 현재 취약점 허용 근거가 아닙니다.
+
+2026-09-21 재검토에서는 예외 만료와 Valkey 신규 보고를 확인하고 일부 digest와 예외 기한을 갱신했으나, 후속 무예외 이미지 경로가 이를 대체했습니다.
+
 2026-09-14에 기존 예외가 만료되어 관리 웹 발행 검사가 멈췄다. 이미지나 운영 의존성을
 변경하지 않고 기존 정확한 ARM64 digest의 보고를 다시 검사했다. 이 문서는 2026-09-21 UTC까지의
 명명된 오탐 판단 근거이며, 제품 전체의 무취약성 보고가 아니다. 소유자는 hololive-bot이다.
@@ -10,8 +14,9 @@
 
 Trivy 0.74.0의 갱신한 DB로 `run-final-image-scan.sh`에 적힌 정확한 remote digest를
 `--platform linux/arm64 --image-src remote --scanners vuln`로 검사했다. HIGH/CRITICAL의
-고유 CVE는 Nginx 1, PostgreSQL 30, deunhealth 28, socket-proxy 8개다.
-기존 PostgreSQL 예외 23개에 libuuid의 util-linux 도구 관련 보고 7개가 추가됐다.
+고유 CVE는 Nginx 1, PostgreSQL 22, deunhealth 28, socket-proxy 8개다. 새 PostgreSQL
+digest는 OpenSSL 3.5.8-r0과 libuuid 2.42.3-r1을 포함해 기존 8개 보고를 제거했다.
+새 Valkey digest는 HIGH/CRITICAL 보고가 없다.
 허용 tuple은 각 YAML과 `check-trivyignore-contract.py`의 CVE·package version·statement·expiry에 한정된다.
 그 밖의 보고는 기존 severity gate에서 계속 실패한다.
 
@@ -29,20 +34,13 @@ GOWORK=off GOTOOLCHAIN=go1.26.5 GOOS=linux GOARCH=arm64 govulncheck ./...
 
 ## Nginx와 PostgreSQL
 
-- CVE-2026-14456: Nginx는 고정 ingress 파일의 HTTP listener만 사용한다. PostgreSQL도
-  OpenSSL QUIC 서버를 만들지 않는다. [OpenSSL 설명](https://www.openssl-library.org/news/vulnerabilities-3.6/)의
+- CVE-2026-14456: Nginx는 고정 ingress 파일의 HTTP listener만 사용한다.
+  [OpenSSL 설명](https://www.openssl-library.org/news/vulnerabilities-3.6/)의
   QUIC-server 조건이 없다. TLS·QUIC·include directive를 추가하면 기존 checker가 거절한다.
 - PostgreSQL의 Go stdlib 보고 22개는 `usr/local/bin/gosu`에 속한다. prod와 standby는
   `user: "999:999"`로 시작하므로 이미지 entrypoint의 root 전용 gosu 실행 분기에 들어가지 않는다.
   앱이 이 Go 바이너리로 네트워크 요청·인증서를 처리하지 않는다. 이 판단은 임의의 root 컨테이너에
   동일 이미지를 사용하는 경우에는 적용하지 않는다.
-- CVE-2026-53612/53613/53614/76642/78409/78410은 util-linux mount의 특권·post-hook·경로 처리,
-  CVE-2026-78408은 nsenter `--join-cgroup`에 관한 보고다.
-  [mount upstream advisory](https://github.com/util-linux/util-linux/security/advisories/GHSA-g8wm-75wr-g2vh),
-  [nsenter upstream advisory](https://github.com/util-linux/util-linux/security/advisories/GHSA-55fx-f4gg-cfhj).
-  정확한 ARM64 package inventory에는 `libuuid@2.42.1-r0`과 BusyBox가 있고 util-linux mount,
-  libmount, nsenter package가 없다. libuuid API에는 보고된 CLI 실행 경로가 없다.
-  예외 purl은 libuuid에만 한정하며 libmount로 넓히는 변경을 mutation test가 거절한다.
 
 ## deunhealth
 
@@ -93,5 +91,5 @@ localhost HTTP의 고정 `/health`와 HEAD만 사용한다. TLS 또는 h2c를 �
 ## 제거와 재검토 조건
 
 수정된 고정 upstream 이미지의 검증 후 해당 CVE tuple을 제거한다. 자동 기한 연장은 없으며
-2026-09-21 UTC에는 재검토 없이는 gate가 다시 실패한다. 그 이전에도 새로운 CVE/package,
+2026-09-28 UTC에는 재검토 없이는 gate가 다시 실패한다. 그 이전에도 새로운 CVE/package,
 source/image digest, CLI 설정, health bind, TLS/h2c 또는 입력 출처 변경은 이 판단에 포함되지 않는다.

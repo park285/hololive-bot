@@ -2,11 +2,17 @@
 set -euo pipefail
 
 root_dir="$(git rev-parse --show-toplevel)"
-manifest="$root_dir/scripts/ci/final-image-scan-manifest.txt"
-nginx_exception_target='remote|linux/arm64|nginx:1.31.4-alpine-slim@sha256:1870de6d59aafee152589b64404556d2535922cdd998e6dac1c4888c938ed8f9'
-postgres_exception_target='remote|linux/arm64|postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2'
-deunhealth_exception_target='remote|linux/arm64|qmcgaw/deunhealth@sha256:db1e4fcd3aceeb0da34a83f7a8a5432df586e6d0388ddb6ad8dd7b479e4aa25d'
-socket_proxy_exception_target='remote|linux/arm64|wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
+# 로컬 후보는 별도 manifest로 검사하여 공유 production 태그를 바꾸지 않는다.
+[[ "$#" -le 1 ]] || { echo "usage: $0 [manifest]" >&2; exit 2; }
+manifest="${1:-$root_dir/scripts/ci/final-image-scan-manifest.txt}"
+. "$root_dir/scripts/ci/go-tooling.sh"
+GOVULNCHECK_VERSION=v1.8.0
+govulncheck_bin="$(ensure_govulncheck)"
+report_dir="$(mktemp -d "${TMPDIR:-/tmp}/hololive-image-scan.XXXXXX")"
+container_id=
+trap 'if [[ -n "$container_id" ]]; then docker rm "$container_id" >/dev/null; fi' EXIT
+echo "final image scan evidence: $report_dir"
+image_index=0
 
 if [[ "$(trivy --version | sed -n 's/^Version: //p')" != "0.74.0" ]]; then
   echo "final image scan requires Trivy 0.74.0" >&2
@@ -14,8 +20,12 @@ if [[ "$(trivy --version | sed -n 's/^Version: //p')" != "0.74.0" ]]; then
 fi
 
 while IFS='|' read -r source platform image; do
-  [[ -n "$source" && -n "$platform" && -n "$image" ]] || continue
-  scan_args=(image --exit-code 1 --no-progress --scanners vuln --severity "HIGH,CRITICAL")
+  [[ -n "$source$platform$image" ]] || continue
+  [[ -n "$source" && -n "$platform" && -n "$image" ]] || {
+    echo "incomplete final image scan manifest entry" >&2
+    exit 1
+  }
+  scan_args=(image --config /dev/null --ignorefile /dev/null --ignore-unfixed=false --exit-code 1 --no-progress --scanners vuln --severity "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL")
   [[ "$platform" == linux/arm64 ]] || {
     echo "unsupported final image scan platform: $platform" >&2
     exit 1
@@ -28,8 +38,14 @@ while IFS='|' read -r source platform image; do
         exit 1
       }
       scan_args+=(--image-src docker --platform "$platform")
+      # 태그가 바뀌어도 Trivy와 바이너리 추출이 같은 불변 이미지를 사용한다.
+      image="$(docker image inspect --format '{{.Id}}' "$image")"
       ;;
     remote)
+      [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || {
+        echo "remote final image scan requires an immutable digest" >&2
+        exit 1
+      }
       scan_args+=(--image-src remote --platform "$platform")
       ;;
     *)
@@ -38,21 +54,56 @@ while IFS='|' read -r source platform image; do
       ;;
   esac
   echo "trivy image: $source $platform $image"
-  ignore_file=
-  case "$source|$platform|$image" in
-    "$nginx_exception_target")
-      ignore_file="$root_dir/scripts/ci/trivyignore-nginx.yaml"
-      ;;
-    "$postgres_exception_target")
-      ignore_file="$root_dir/scripts/ci/trivyignore-postgres.yaml"
-      ;;
-    "$deunhealth_exception_target")
-      ignore_file="$root_dir/scripts/ci/trivyignore-deunhealth.yaml"
-      ;;
-    "$socket_proxy_exception_target")
-      ignore_file="$root_dir/scripts/ci/trivyignore-socket-proxy.yaml"
-      ;;
-  esac
-  [[ -z "$ignore_file" ]] || scan_args+=(--ignorefile "$ignore_file")
-  trivy "${scan_args[@]}" "$image"
+  image_index=$((image_index + 1))
+  report="$report_dir/$image_index.trivy.json"
+  status=0
+  trivy "${scan_args[@]}" --format json --output "$report" "$image" || status=$?
+  [[ "$status" == 0 || "$status" == 1 ]] || exit "$status"
+  jq -e '.SchemaVersion == 2 and (.Results | type == "array" and length > 0)
+    and all(.Results[]; (.Target | type == "string") and (.Type | type == "string")
+      and (.Vulnerabilities == null or (.Vulnerabilities | type == "array")))' "$report" >/dev/null
+  count="$(jq '[.Results[].Vulnerabilities[]?] | length' "$report")"
+  if [[ "$status" == 0 && "$count" != 0 || "$status" == 1 && "$count" == 0 ]]; then
+    echo "inconsistent Trivy exit/report: $image" >&2
+    exit 1
+  fi
+  if ! jq -e 'all(.Results[]; .Type == "gobinary" or ((.Vulnerabilities // []) | length == 0))' "$report" >/dev/null; then
+    echo "non-Go vulnerability finding: $report" >&2
+    exit 1
+  fi
+  jq -r '.Results[] | select(.Type == "gobinary" and ((.Vulnerabilities // []) | length > 0)) | .Target' "$report" >"$report_dir/$image_index.targets"
+  binary_index=0
+  while IFS= read -r target; do
+    [[ "$target" =~ ^[A-Za-z0-9_./-]+$ && "$target" != /* && "/$target/" != *"/../"* ]] || {
+      echo "unsafe Go target path: $report" >&2
+      exit 1
+    }
+    if [[ -z "$container_id" ]]; then
+      if [[ "$source" == remote ]]; then docker pull --platform "$platform" "$image"; fi
+      container_id="$(docker create --platform "$platform" "$image")"
+    fi
+    binary_index=$((binary_index + 1))
+    artifact="$report_dir/$image_index.$binary_index"
+    printf '%s\n' "$image" "$target" >"$artifact.identity"
+    docker cp "$container_id:/$target" "$artifact.bin"
+    [[ -f "$artifact.bin" && ! -L "$artifact.bin" ]]
+    sha256sum "$artifact.bin" >"$artifact.sha256"
+    "$govulncheck_bin" -mode=extract "$artifact.bin" >"$artifact.extract.json"
+    # stripped binary의 module-level fallback은 코드 부재의 증명이 아니다.
+    jq -se 'length == 2 and .[0].name == "govulncheck-extract" and .[0].version == "0.1.0"
+      and .[1].goos == "linux" and .[1].goarch == "arm64"
+      and (.[1].pkgSymbols | type == "array" and length > 0)' "$artifact.extract.json" >/dev/null
+    "$govulncheck_bin" -mode=binary -scan=package -format=openvex "$artifact.bin" >"$artifact.vex.json"
+    jq -e --slurpfile scan "$report" --arg target "$target" \
+      -f "$root_dir/scripts/ci/check-go-image-vex.jq" "$artifact.vex.json" >/dev/null || {
+      echo "Go finding lacks exact package-absence proof: $artifact.vex.json" >&2
+      exit 1
+    }
+    echo "Go package-absence verified: $target (raw findings retained in $report)"
+  done <"$report_dir/$image_index.targets"
+  if [[ -n "$container_id" ]]; then
+    docker rm "$container_id" >/dev/null
+    container_id=
+  fi
 done <"$manifest"
+[[ "$image_index" -gt 0 ]] || { echo "empty final image scan manifest" >&2; exit 1; }

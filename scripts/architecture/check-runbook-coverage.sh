@@ -12,6 +12,7 @@ required_runtimes=(
   hololive-api
   alarm-worker
   youtube-collector
+  x-space-login
 )
 
 required_sections=(

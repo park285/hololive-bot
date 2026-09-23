@@ -212,6 +212,22 @@ func TestTryExactValkeyMatch_PrefersHololiveCandidate(t *testing.T) {
 	assert.Equal(t, "valkey-exact", candidate.source)
 }
 
+func TestTryExactValkeyMatchRejectsEmptyChannelCandidate(t *testing.T) {
+	t.Parallel()
+
+	provider := newStubMemberProvider([]*domain.Member{
+		{ChannelID: testChannelID1, Name: testMemberAqua, Org: "Nijisanji"},
+	})
+	matcher := &Matcher{logger: newMatcherTestLogger()}
+	candidate := matcher.tryExactValkeyMatch(provider, testMemberAqua, map[string]string{
+		"aqua": "",
+		"AQUA": testChannelID1,
+	})
+	require.NotNil(t, candidate)
+	assert.Equal(t, testChannelID1, candidate.channelID)
+	assert.Equal(t, "valkey-exact", candidate.source)
+}
+
 func TestTryPartialValkeyAndAliasMatch(t *testing.T) {
 	t.Parallel()
 

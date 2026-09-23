@@ -3,21 +3,16 @@ package content
 import (
 	"time"
 
+	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
 func refreshNotifications(session *reduceSession) {
-	earliest := session.state.EarliestCompleteAt
-
 	session.notifications = session.notifications[:0]
-
-	if earliest == nil {
-		return
-	}
 
 	for videoID, entity := range session.applied {
 		state, ok := session.state.Videos[videoID]
-		if !ok || !state.FirstPositiveEffectiveAt.After(*earliest) {
+		if !ok || !canNotifyNewContent(session, state.FirstPositiveEffectiveAt) {
 			continue
 		}
 
@@ -30,11 +25,22 @@ func refreshNotifications(session *reduceSession) {
 	}
 }
 
+func canNotifyNewContent(session *reduceSession, firstPositiveAt time.Time) bool {
+	if session.evidence.Kind == contract.KindShortsList {
+		// 알림 기준 목록은 전체 이력 수집이 아니라 앞선 유효 목록의 저장으로 확정됩니다.
+		return session.state.Initialized
+	}
+
+	earliest := session.state.EarliestCompleteAt
+
+	return earliest != nil && firstPositiveAt.After(*earliest)
+}
+
 func watermarkOf(state *State, evidence *Evidence) *domain.YouTubeContentWatermark {
 	watermark := &domain.YouTubeContentWatermark{
 		ChannelID:     state.ChannelID,
 		WatermarkType: watermarkType(evidence.Kind),
-		Initialized:   true,
+		Initialized:   contentWindowInitialized(state, evidence),
 		LastContentID: state.LastContentID,
 	}
 	if id := newestContentID(evidence); id != "" {
@@ -42,6 +48,15 @@ func watermarkOf(state *State, evidence *Evidence) *domain.YouTubeContentWaterma
 	}
 
 	return watermark
+}
+
+func contentWindowInitialized(state *State, evidence *Evidence) bool {
+	if evidence.Kind != contract.KindShortsList {
+		return true
+	}
+
+	// 부분 목록은 존재를 증명하지만 빈 부분 목록은 최초 기준 목록이 될 수 없습니다.
+	return state.Initialized || len(evidence.Videos) > 0 || completeEligible(evidence)
 }
 
 func newestContentID(evidence *Evidence) string {

@@ -19,12 +19,14 @@ const features = {
   responsive_web_enhance_cards_enabled: false,
 };
 
-/** 원문·쿠키 없이 호출자에게 전달할 수 있는 고정 오류 코드다. */
+/** 원문·쿠키 없이 고정 오류 코드와 제한된 HTTP 진단 정보만 전달한다. */
 export class CollectionError extends Error {
-  constructor(code, cooldownSeconds = 0) {
+  constructor(code, cooldownSeconds = 0, httpStatus = 0, apiCodes = []) {
     super(code);
     this.code = code;
     this.cooldownSeconds = cooldownSeconds;
+    this.httpStatus = httpStatus;
+    this.apiCodes = apiCodes;
   }
 }
 
@@ -100,18 +102,30 @@ export async function collectSpaces(userIDs, cookies, transaction, fetchImpl) {
       'x-twitter-active-user': 'yes', 'x-twitter-auth-type': 'OAuth2Session',
       'x-twitter-client-language': 'en', 'user-agent': userAgent, accept: 'application/json',
     } });
-    if (res.status === 401 || res.status === 403) throw new CollectionError('authentication');
     if (res.status === 429) {
       const reset = Number(res.headers.get('x-rate-limit-reset')) - Date.now() / 1000;
       const delay = Number(res.headers.get('retry-after'));
       const cooldown = Math.ceil(Math.max(120, Number.isFinite(reset) ? reset : 0, Number.isFinite(delay) ? delay : 0));
-      throw new CollectionError('rate_limited', Math.min(cooldown, 86400));
+      throw new CollectionError('rate_limited', Math.min(cooldown, 86400), res.status);
     }
-    if (!res.ok) throw new CollectionError('upstream');
     let data;
-    try { data = object(await res.json()); } catch { throw new CollectionError('invalid_response'); }
+    try { data = object(await res.json()); } catch {
+      if (res.status === 401) throw new CollectionError('authentication', 0, res.status);
+      if (res.status === 403) throw new CollectionError('api_error', 0, res.status);
+      throw new CollectionError(res.ok ? 'invalid_response' : 'upstream', 0, res.status);
+    }
+    // 403은 접근 거부도 포함한다. 메시지 원문은 버리고 문서화된 인증 오류 번호만 판정한다.
+    const apiCodes = Array.isArray(data.errors)
+      ? [...new Set(data.errors.map((error) => error?.code)
+        .filter((code) => Number.isSafeInteger(code) && code >= 0 && code <= 65535))].slice(0, 8)
+      : [];
+    if (res.status === 401 || apiCodes.some((code) => code === 32 || code === 89)) {
+      throw new CollectionError('authentication', 0, res.status, apiCodes);
+    }
+    if (res.status === 403) throw new CollectionError('api_error', 0, res.status, apiCodes);
+    if (!res.ok) throw new CollectionError('upstream', 0, res.status, apiCodes);
     if (data.errors !== undefined && (!Array.isArray(data.errors) || data.errors.length > 0)) {
-      throw new CollectionError('api_error');
+      throw new CollectionError('api_error', 0, res.status, apiCodes);
     }
     return data;
   }

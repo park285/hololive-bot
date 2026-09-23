@@ -1,0 +1,166 @@
+package assertiontree
+
+import (
+	"go/ast"
+	"go/token"
+	"go/types"
+
+	"go.uber.org/nilaway/annotation"
+	"go.uber.org/nilaway/assertion/function/producer"
+	"go.uber.org/nilaway/guard"
+	"go.uber.org/nilaway/util/asthelper"
+	"go.uber.org/nilaway/util/typeshelper"
+)
+
+type appendResultSite struct {
+	elements  *types.Var
+	container *types.Var
+}
+
+// Scalar and value-struct elements cannot be nil; retain modeling for unknown generic elements.
+func needsSliceElementModel(typ types.Type) bool {
+	slice, ok := typ.Underlying().(*types.Slice)
+	if !ok {
+		return true
+	}
+	switch element := slice.Elem().Underlying().(type) {
+	case *types.Basic:
+		return element.Kind() == types.UnsafePointer
+	case *types.Struct, *types.Array:
+		return false
+	default:
+		return true
+	}
+}
+
+func (r *RootAssertionNode) appendSite(call ast.Expr) appendResultSite {
+	if site, ok := r.functionContext.appendSites[call]; ok {
+		return site
+	}
+	typ := r.Pass().TypesInfo.TypeOf(call)
+	site := appendResultSite{
+		elements:  types.NewVar(call.Pos(), r.Pass().Pkg, "$append_elements", typ),
+		container: types.NewVar(call.Pos(), r.Pass().Pkg, "$append_container", types.NewSlice(typ)),
+	}
+	r.functionContext.appendSites[call] = site
+	return site
+}
+
+func (r *RootAssertionNode) sliceLiteralProducer(literal *ast.CompositeLit) producer.ParsedProducer {
+	site := r.appendSite(literal)
+	return producer.DeepParsedProducer{
+		ShallowProducer: &annotation.ProduceTrigger{Annotation: &annotation.ProduceTriggerNever{}, Expr: literal},
+		DeepProducer:    appendSiteProducer(site.elements, literal),
+	}
+}
+
+func (r *RootAssertionNode) bindSliceLiteralInputs(literal *ast.CompositeLit) {
+	if !typeshelper.IsDeeplyType[*types.Slice](r.Pass().TypesInfo.TypeOf(literal)) ||
+		!needsSliceElementModel(r.Pass().TypesInfo.TypeOf(literal)) {
+		return
+	}
+	for _, element := range literal.Elts {
+		if keyed, ok := element.(*ast.KeyValueExpr); ok {
+			element = keyed.Value
+		}
+		r.AddConsumption(appendSiteConsumer(r.appendSite(literal).elements, element))
+	}
+}
+
+// Preserve element facts through local slice assignments as well as indexed writes.
+func (r *RootAssertionNode) bindAssignedSliceInputs(lhs, rhs []ast.Expr) {
+	for i, left := range lhs {
+		ident, ok := ast.Unparen(left).(*ast.Ident)
+		if !ok || asthelper.IsEmptyExpr(ident) {
+			continue
+		}
+		variable, ok := r.ObjectOf(ident).(*types.Var)
+		if !ok || !typeshelper.IsDeeplyType[*types.Slice](variable.Type()) || !needsSliceElementModel(variable.Type()) {
+			continue
+		}
+		var expression ast.Expr
+		result := 0
+		if len(lhs) == len(rhs) {
+			expression = rhs[i]
+		} else if len(rhs) == 1 {
+			expression, result = rhs[0], i
+		} else {
+			continue
+		}
+		_, values := r.ParseExprAsProducer(expression, true)
+		if result < len(values) && values[result].GetDeep() != nil {
+			// Reuse indexed-write classification for local, parameter and global element sites.
+			consumer, err := exprAsAssignmentConsumer(r, &ast.IndexExpr{
+				X: left, Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+			}, expression)
+			if err != nil {
+				r.Pass().Panic(err.Error(), left.Pos())
+			}
+			if consumer == nil {
+				continue
+			}
+			r.AddNewTriggers(annotation.FullTrigger{
+				Producer: values[result].GetDeep(), Consumer: &annotation.ConsumeTrigger{
+					Annotation: consumer, Expr: expression, Guards: guard.NoGuards(),
+				},
+			})
+		}
+	}
+}
+
+func appendSiteProducer(site *types.Var, expr ast.Expr) *annotation.ProduceTrigger {
+	return &annotation.ProduceTrigger{
+		Annotation: &annotation.LocalVarReadDeep{TriggerIfDeepNilable: &annotation.TriggerIfDeepNilable{
+			Ann: &annotation.LocalVarAnnotationKey{VarDecl: site},
+		}},
+		Expr: expr,
+	}
+}
+
+func appendSiteConsumer(site *types.Var, expr ast.Expr) *annotation.ConsumeTrigger {
+	return &annotation.ConsumeTrigger{
+		Annotation: &annotation.LocalVarAssignDeep{TriggerIfDeepNonNil: &annotation.TriggerIfDeepNonNil{
+			Ann: &annotation.LocalVarAnnotationKey{VarDecl: site},
+		}},
+		Expr: expr, Guards: guard.NoGuards(),
+	}
+}
+
+func (r *RootAssertionNode) appendProducer(call *ast.CallExpr) producer.ParsedProducer {
+	site := r.appendSite(call)
+	shallow := &annotation.ProduceTrigger{Annotation: &annotation.ProduceTriggerNever{}, Expr: call}
+	if call.Ellipsis.IsValid() {
+		// The original slice is a conservative nilness source when no element is guaranteed added.
+		shallow = appendSiteProducer(site.container, call)
+	}
+	if !needsSliceElementModel(r.Pass().TypesInfo.TypeOf(call)) {
+		return producer.ShallowParsedProducer{Producer: shallow}
+	}
+	return producer.DeepParsedProducer{ShallowProducer: shallow, DeepProducer: appendSiteProducer(site.elements, call)}
+}
+
+// Bind after assignment propagation so append(dst, value) reads the old dst, not its result.
+func (r *RootAssertionNode) bindAppendInputs(call *ast.CallExpr) {
+	if len(call.Args) == 1 {
+		return
+	}
+	site := r.appendSite(call)
+	if call.Ellipsis.IsValid() {
+		r.AddConsumption(appendSiteConsumer(site.container, call.Args[0]))
+	}
+	if !needsSliceElementModel(r.Pass().TypesInfo.TypeOf(call)) {
+		return
+	}
+	for i, arg := range call.Args {
+		if i > 0 && !call.Ellipsis.IsValid() {
+			r.AddConsumption(appendSiteConsumer(site.elements, arg))
+			continue
+		}
+		_, values := r.ParseExprAsProducer(arg, true)
+		if len(values) == 1 && values[0].GetDeep() != nil {
+			r.AddNewTriggers(annotation.FullTrigger{
+				Producer: values[0].GetDeep(), Consumer: appendSiteConsumer(site.elements, arg),
+			})
+		}
+	}
+}
