@@ -94,6 +94,26 @@ else
   pass "adjacent local patch remains forbidden"
 fi
 
+nilaway_patch="${TMP_DIR}/nilaway-patch"
+setup_fixture "${nilaway_patch}"
+git -C "${nilaway_patch}" rm -q .env.osaka
+mkdir -p "${nilaway_patch}/scripts/ci/nilaway-models"
+printf 'pinned source patch fixture\n' >"${nilaway_patch}/scripts/ci/nilaway-models/models.patch"
+git -C "${nilaway_patch}" add scripts/ci/nilaway-models/models.patch
+git -C "${nilaway_patch}" commit -q -m "NilAway source fixture"
+if "${nilaway_patch}/scripts/architecture/check-tracked-local-artifacts.sh"; then
+  pass "exact NilAway source patch is accepted"
+else
+  record_fail "exact NilAway source patch must be accepted"
+fi
+printf 'unowned patch fixture\n' >"${nilaway_patch}/scripts/ci/nilaway-models/local.patch"
+git -C "${nilaway_patch}" add scripts/ci/nilaway-models/local.patch
+if "${nilaway_patch}/scripts/architecture/check-tracked-local-artifacts.sh" >/dev/null 2>&1; then
+  record_fail "adjacent NilAway patch must remain forbidden"
+else
+  pass "adjacent NilAway patch remains forbidden"
+fi
+
 if (( failures > 0 )); then
   echo "[FAIL] tracked local artifact tests failed: ${failures}" >&2
   exit 1
