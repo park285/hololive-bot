@@ -12,7 +12,7 @@ node_version_supported() {
   major="${BASH_REMATCH[1]}"
   minor="${BASH_REMATCH[2]}"
   patch="${BASH_REMATCH[3]}"
-  (( 10#$major == 24 && (10#$minor > 20 || (10#$minor == 20 && 10#$patch >= 0)) ))
+  (( 10#$major == 24 && (10#$minor > 21 || (10#$minor == 21 && 10#$patch >= 0)) ))
 }
 
 require_node_version() {
@@ -25,7 +25,7 @@ require_node_version() {
   }
   version="$("$node_path" --version)"
   node_version_supported "$version" || {
-    echo "Node runtime $version does not satisfy ^24.20.0" >&2
+    echo "Node runtime $version does not satisfy ^24.21.0" >&2
     return 1
   }
 }

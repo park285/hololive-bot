@@ -1,0 +1,15 @@
+package contract
+
+import (
+	"errors"
+	"net/http"
+)
+
+func pointerResult() (*http.Client, error) {
+	return nil, errors.New("initialization failed")
+}
+
+func uncheckedPointer() int64 {
+	client, _ := pointerResult()
+	return int64(client.Timeout)
+}

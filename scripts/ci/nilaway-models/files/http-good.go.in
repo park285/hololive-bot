@@ -1,0 +1,23 @@
+package contract
+
+import (
+	"errors"
+	"net/http"
+)
+
+func checked(req *http.Request) int {
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0
+	}
+	return response.StatusCode
+}
+
+func valueResult() (http.Client, error) {
+	return http.Client{}, errors.New("initialization failed")
+}
+
+func valueAddress() *http.Client {
+	client, _ := valueResult()
+	return &client
+}

@@ -10,6 +10,8 @@ github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/park285/sha
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/park285/shared-go/v2/pkg/runtime/bootstrap
 github.com/kapu/hololive-alarm-worker/cmd/alarm-worker -> github.com/park285/shared-go/v2/pkg/telemetry
 github.com/kapu/hololive-alarm-worker/cmd/healthcheck -> github.com/park285/shared-go/v2/pkg/healthprobe
+github.com/kapu/hololive-alarm-worker/cmd/x-space-login-agent -> github.com/kapu/hololive-alarm-worker/internal/service/xspaces
+github.com/kapu/hololive-alarm-worker/cmd/x-space-login-agent -> github.com/kapu/hololive-shared/pkg/service/xspaces
 github.com/kapu/hololive-alarm-worker/cmd/youtube-delivery-ledger-backfill -> github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/backfill
 github.com/kapu/hololive-alarm-worker/cmd/youtube-delivery-ledger-backfill -> github.com/kapu/hololive-shared/pkg/config/settings/alarmworker
 github.com/kapu/hololive-alarm-worker/cmd/youtube-delivery-ledger-backfill -> github.com/kapu/hololive-shared/pkg/providers
@@ -1195,6 +1197,7 @@ github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/kapu/hololive-s
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/v2/pkg/httputil
 github.com/kapu/hololive-shared/pkg/service/twitch -> github.com/park285/shared-go/v2/pkg/logging
 github.com/kapu/hololive-shared/pkg/service/xspaces -> github.com/kapu/hololive-dbtest
+github.com/kapu/hololive-shared/pkg/service/xspaces -> github.com/kapu/hololive-shared/pkg/pgxutil
 github.com/kapu/hololive-shared/pkg/service/xspaces -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/youtube/alarmtiming -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
 github.com/kapu/hololive-shared/pkg/service/youtube/contentid -> github.com/kapu/hololive-shared/pkg/domain

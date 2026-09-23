@@ -1,0 +1,50 @@
+# 전용 계정과 연결 예산을 준비한 중앙 호스트에서만 명시적으로 추가합니다.
+services:
+  hololive-x-space-login:
+    image: hololive-x-space-login:prod
+    container_name: hololive-x-space-login
+    init: true
+    user: "1000:1000"
+    restart: "on-failure:3"
+    stop_grace_period: 15s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=/opt/hololive-bot/compose/current/deploy/compose/seccomp/x-space-login.json
+    environment:
+      PGHOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
+      PGPORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
+      PGDATABASE: hololive
+      PGUSER: ${HOLOLIVE_DB_USER:-hololive_runtime}
+      PGPASSWORD: ${HOLOLIVE_DB_PASSWORD:-${DB_PASSWORD}}
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /run/hololive-bot/certs/postgres-ca.pem
+      X_SPACES_KEY_FILE: /run/hololive-bot/x-spaces/key
+      X_SPACES_LOGIN_FILE: /run/hololive-bot/x-spaces/login.json
+    volumes:
+      - /etc/stack-secrets/hololive-bot/x-spaces/key:/run/hololive-bot/x-spaces/key:ro
+      - /etc/stack-secrets/hololive-bot/x-spaces/login.json:/run/hololive-bot/x-spaces/login.json:ro
+      - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m,uid=1000,gid=1000
+      - /run/x-space-login:rw,nosuid,nodev,noexec,size=1m,mode=0700,uid=1000,gid=1000
+    shm_size: 256m
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    pids_limit: 128
+    cpus: 1.0
+    ulimits:
+      core: 0
+    healthcheck:
+      test: ["CMD", "/usr/bin/node", "-e", "process.exit(Date.now()-require('node:fs').statSync('/run/x-space-login/heartbeat').mtimeMs<180000?0:1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [hololive-net]

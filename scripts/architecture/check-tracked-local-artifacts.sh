@@ -26,6 +26,10 @@ forbidden_patterns=(
 is_allowed_exception() {
   local path="$1"
   case "${path}" in
+    # Dockerfile이 소비하는 고정 upstream 보안 소스이며 로컬 diff 산출물이 아니다.
+    deploy/images/deunhealth/client.patch)
+      return 0
+      ;;
     artifacts/architecture/go-workspace-import-graph.txt|\
     logs/.gitkeep|\
     runtime-config/.gitkeep|\

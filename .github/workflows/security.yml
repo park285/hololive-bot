@@ -20,7 +20,7 @@ env:
   GOTMPDIR: /tmp
   GOVULNCHECK_VERSION: v1.8.0
   GOSEC_VERSION: v2.29.0
-  NILAWAY_VERSION: v0.0.0-20260808063849-8649a03c818a
+  NILAWAY_VERSION: v0.0.0-20260918162853-acb8859b9031
 
 jobs:
   dependency-security:
@@ -75,7 +75,8 @@ jobs:
           mkdir -p "${GOBIN}"
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
-          go install "go.uber.org/nilaway/cmd/nilaway@${NILAWAY_VERSION}"
+          nilaway_bin="$(bash scripts/ci/nilaway-models/build.sh)"
+          printf 'NILAWAY_BIN=%s\n' "${nilaway_bin}" >> "${GITHUB_ENV}"
           echo "${GOBIN}" >> "${GITHUB_PATH}"
 
       - name: Resolve workspace package patterns
@@ -117,7 +118,7 @@ jobs:
           done
           for pkg in "${owned_pkgs[@]}"; do
             echo "nilaway ${pkg}"
-            nilaway -pretty-print "${pkg}"
+            "${NILAWAY_BIN}" -pretty-print "${pkg}"
           done
 
       - name: govulncheck
@@ -166,7 +167,9 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           DOCKER_DEFAULT_PLATFORM: linux/arm64
-        run: ./build-all.sh --no-bump --build-only --security-scan --skip-local-ci
+        run: |
+          bash scripts/ci/test-infra-images.sh
+          ./build-all.sh --no-bump --build-only --security-scan --skip-local-ci
 
       - name: Scan every final production image
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -189,7 +192,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24.20.0"
+          node-version: "24.21.0"
           cache: npm
           cache-dependency-path: |
             hololive-bot/hololive/hololive-youtube-collector/youtubejs/package-lock.json

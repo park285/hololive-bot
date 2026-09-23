@@ -58,6 +58,26 @@ func TestShortsEmptyPartialDoesNotInitialize(t *testing.T) {
 	assertNotifications(t, got)
 }
 
+func TestShortsLegacyEmptyPartialWatermarkDoesNotEstablishBaseline(t *testing.T) {
+	state := &State{ChannelID: testChannelID, Kind: contract.KindShortsList, Initialized: true}
+	empty := mustReduceAll(t, state, []Evidence{shortsAt(1)}, 0)
+
+	if empty.Watermark.Initialized {
+		t.Fatal("legacy empty partial watermark must not establish a baseline")
+	}
+
+	baseline := shortsAt(2, "known")
+	first := mustReduceAll(t, state, []Evidence{baseline}, 0)
+	assertNotifications(t, first)
+
+	if !first.Watermark.Initialized || first.EarliestCompleteAt != nil {
+		t.Fatal("first valid partial list must establish a silent baseline")
+	}
+
+	got := mustReduceAll(t, state, []Evidence{baseline, shortsAt(3, "known", "new")}, 0)
+	assertNotifications(t, got, "short:new")
+}
+
 func TestShortsCompleteEmptyBaselineAllowsFirstContent(t *testing.T) {
 	state := &State{ChannelID: testChannelID, Kind: contract.KindShortsList}
 	baseline := shortsAt(1)

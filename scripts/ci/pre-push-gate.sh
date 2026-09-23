@@ -294,6 +294,8 @@ run_reusable_phase() {
     scripts/deploy/compose-redeploy-service.sh build-all.sh scripts/systemd/admin-dashboard-ingress.nft
   run_self_test scripts/deploy/admin-network_test.sh deploy/compose/docker-compose.prod.yml deploy/compose/docker-compose.live-compat.yml
   bash scripts/ci/check-recurring-security-scan-contract.sh
+  run_self_test scripts/ci/run-final-image-scan_test.sh \
+    scripts/ci/run-final-image-scan.sh scripts/ci/check-go-image-vex.jq scripts/ci/go-tooling.sh
   run_self_test scripts/ci/disabled-bake-attestations_test.sh \
     scripts/ci/disabled-bake-attestations.jq scripts/ci/check-recurring-security-scan-contract.sh
   if [[ "${PRE_PUSH_PROFILE_CONTRACT_TEST_ACTIVE:-false}" != "true" ]]; then

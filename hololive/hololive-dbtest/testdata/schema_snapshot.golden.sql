@@ -724,6 +724,23 @@ TABLE source_reconciliation_conflicts
   CONSTRAINT source_reconciliation_conflicts_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_reconciliation_conflict UNIQUE (observation_id, entity_kind, entity_key, field_name)
 
+TABLE x_space_login_attempts
+  COLUMN id bigint NOT NULL GENERATED ALWAYS AS IDENTITY
+  COLUMN configuration_revision bigint NOT NULL
+  COLUMN session_revision bigint NOT NULL
+  COLUMN submitted_revision bigint
+  COLUMN status text NOT NULL
+  COLUMN error_code text NOT NULL DEFAULT ''::text
+  COLUMN started_at timestamp with time zone NOT NULL DEFAULT now()
+  COLUMN finished_at timestamp with time zone
+  CONSTRAINT chk_x_space_login_attempts_error_code_vocab CHECK ((error_code = ANY (ARRAY[''::text, 'additional_authentication'::text, 'login_rejected'::text, 'browser_failed'::text, 'outcome_unknown'::text, 'interrupted'::text, 'candidate_rejected'::text, 'manual_override'::text])))
+  CONSTRAINT chk_x_space_login_attempts_status_vocab CHECK ((status = ANY (ARRAY['running'::text, 'submitted'::text, 'connected'::text, 'login_required'::text, 'outcome_unknown'::text, 'manual_override'::text])))
+  CONSTRAINT x_space_login_attempts_configuration_revision_check CHECK ((configuration_revision > 0))
+  CONSTRAINT x_space_login_attempts_session_revision_check CHECK ((session_revision >= 0))
+  CONSTRAINT x_space_login_attempts_pkey PRIMARY KEY (id)
+  CONSTRAINT uq_x_space_login_attempts_generation UNIQUE (configuration_revision, session_revision)
+  INDEX CREATE INDEX idx_x_space_login_attempts_started_at ON public.x_space_login_attempts USING btree (started_at)
+
 TABLE x_space_session
   COLUMN id integer NOT NULL
   COLUMN revision bigint NOT NULL DEFAULT 0
@@ -1507,6 +1524,8 @@ SEQUENCE source_observation_replay_requests_id_seq AS bigint START 1 INCREMENT 1
 SEQUENCE source_observations_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_observations.id
 
 SEQUENCE source_reconciliation_conflicts_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY source_reconciliation_conflicts.id
+
+SEQUENCE x_space_login_attempts_id_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY x_space_login_attempts.id
 
 SEQUENCE youtube_collection_projection_generations_generation_seq AS bigint START 1 INCREMENT 1 MIN 1 MAX 9223372036854775807 CACHE 1 CYCLE false OWNED BY youtube_collection_projection_generations.generation
 

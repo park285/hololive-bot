@@ -16,7 +16,7 @@
 ARG GO_VERSION=1.27.1
 ARG ALPINE_VERSION=3.24
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown
@@ -56,19 +56,19 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
     go build -pgo=off -trimpath -buildvcs=false \
-      -ldflags="-s -w -buildid= -X main.Version=${VERSION}" \
+      -ldflags="-w -buildid= -X main.Version=${VERSION}" \
       -o /dist/bin/hololive-api ./cmd/hololive-api && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/db-migrate ./cmd/db-migrate && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/source-observation-replay-epoch ./cmd/source-observation-replay-epoch && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" \
       -o /dist/bin/healthcheck ./cmd/healthcheck
 
-FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
+FROM gcr.io/distroless/static-debian13@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
 
 ARG VERSION=dev
 ARG REVISION=unknown

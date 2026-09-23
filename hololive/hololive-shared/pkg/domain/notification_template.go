@@ -39,6 +39,9 @@ const (
 	TemplateKeyAlarmDispatchNotification      TemplateKey = "ALARM_DISPATCH_NOTIFICATION"
 	TemplateKeyAlarmDispatchNotificationGroup TemplateKey = "ALARM_DISPATCH_NOTIFICATION_GROUP"
 
+	// TemplateKeyXSpaceStarted는 멤버가 개설한 X 스페이스의 시작 알림 템플릿입니다.
+	TemplateKeyXSpaceStarted TemplateKey = "X_SPACE_STARTED"
+
 	// CMD_* : 명령어 응답 (adapter formatter).
 	TemplateKeyCmdAlarmList              TemplateKey = "CMD_ALARM_LIST"
 	TemplateKeyCmdAlarmNotification      TemplateKey = "CMD_ALARM_NOTIFICATION"

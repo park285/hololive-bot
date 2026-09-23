@@ -1,2 +1,3 @@
+hololive/hololive-alarm-worker/xspaces-login/package-lock.json
 hololive/hololive-alarm-worker/xspaces/package-lock.json
 hololive/hololive-youtube-collector/youtubejs/package-lock.json

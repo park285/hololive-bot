@@ -44,7 +44,8 @@ postgres_capacity_assert_policy_target() {
     local scale raw line owner service_name _env_key source_key instances default_value
     local pipes effective_instances capacity reserve
     local server_limit="" server_limit_rows=0 used=0 owner_inventory=""
-    local expected_owner_inventory=$'bot\nadmin-api\nllm-scheduler\nyoutube-plane\nalarm-worker\nyoutube-collector\ndb-migrate\n'
+    local expected_owner_inventory=$'bot\nadmin-api\nllm-scheduler\nyoutube-plane\nalarm-worker\nyoutube-collector\ndb-migrate\nx-space-login\n'
+    local login_enabled=0
     local -A scale_overrides=() scaled_services_seen=() seen_owners=()
     shift 2
 
@@ -54,6 +55,15 @@ postgres_capacity_assert_policy_target() {
     }
     [[ -f "${target_env_file}" && -r "${target_env_file}" ]] || {
         echo "[pg-capacity] target env file is not readable: ${target_env_file}" >&2
+        return 1
+    }
+
+    postgres_capacity_read_override "${target_env_file}" "HOLOLIVE_X_SPACES_LOGIN_ENABLED"
+    if [[ "${POSTGRES_CAPACITY_OVERRIDE_FOUND}" == true ]]; then
+        login_enabled="${POSTGRES_CAPACITY_OVERRIDE_VALUE}"
+    fi
+    [[ "${login_enabled}" == 0 || "${login_enabled}" == 1 ]] || {
+        echo "[pg-capacity] HOLOLIVE_X_SPACES_LOGIN_ENABLED must be 0 or 1" >&2
         return 1
     }
 
@@ -105,6 +115,9 @@ postgres_capacity_assert_policy_target() {
             return 1
         fi
 
+        if [[ "${owner}" == x-space-login && "${login_enabled}" == 0 ]]; then
+            continue
+        fi
         if [[ -v "scale_overrides[${service_name}]" ]]; then
             effective_instances=$((instances + scale_overrides[${service_name}] - 1))
             scaled_services_seen["${service_name}"]=1
@@ -154,7 +167,7 @@ postgres_capacity_assert_policy_target() {
         echo "[pg-capacity] connection budget exhausted: max=${server_limit} allocated=${used} reserve=${reserve}, want reserve >= 5" >&2
         return 1
     fi
-    echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} allocated=${used} reserve=${reserve}; all central and four AP pools are inventoried"
+    echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} allocated=${used} reserve=${reserve}; central, optional X login and four AP pools are inventoried"
 }
 
 postgres_capacity_assert_target() {
