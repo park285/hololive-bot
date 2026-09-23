@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
@@ -33,6 +34,9 @@ func (emptyRows) Scan(...any) error                            { return nil }
 func (emptyRows) Values() ([]any, error)                       { return nil, nil }
 func (emptyRows) RawValues() [][]byte                          { return nil }
 func (emptyRows) Conn() *pgx.Conn                              { return nil }
+
+// TypeMap은 값이 없는 Rows의 pgx 계약에 따라 nil을 반환한다.
+func (emptyRows) TypeMap() *pgtype.Map { return nil }
 
 type emptyQuerier struct{}
 

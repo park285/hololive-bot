@@ -17,16 +17,16 @@ ARG GO_VERSION=1.27.1
 ARG ALPINE_VERSION=3.24
 ARG NODE_VERSION=24
 
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS xspaces-build
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS xspaces-build
 WORKDIR /app/xspaces
 COPY hololive/hololive-alarm-worker/xspaces/package.json hololive/hololive-alarm-worker/xspaces/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY hololive/hololive-alarm-worker/xspaces/src ./src
 RUN rm -f ./src/*.test.mjs
 
-FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS xspaces-runtime
+FROM --platform=$TARGETPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS xspaces-runtime
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION}@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown
@@ -63,13 +63,13 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid= -X main.Version=${VERSION}" -o /dist/bin/alarm-worker ./cmd/alarm-worker && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/youtube-delivery-ledger-backfill ./cmd/youtube-delivery-ledger-backfill && \
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" -o /dist/bin/youtube-delivery-ledger-backfill ./cmd/youtube-delivery-ledger-backfill && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-$(go env GOARCH)} GOAMD64=${GOAMD64} \
-    go build -pgo=off -trimpath -buildvcs=false -ldflags="-s -w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck
+    go build -pgo=off -trimpath -buildvcs=false -ldflags="-w -buildid=" -o /dist/bin/healthcheck ./cmd/healthcheck
 
-FROM gcr.io/distroless/static-debian13@sha256:9197324ba51d9cd071af8505989365c006adf9d6d2067eada25aef00abbb5278
+FROM gcr.io/distroless/static-debian13@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
 
 ARG VERSION=dev
 ARG REVISION=unknown

@@ -206,6 +206,12 @@ func (r *PgxBatchRepository) persistReconciledVideosTx(
 	trackingRows []*domain.YouTubeContentAlarmTracking,
 	watermark *domain.YouTubeContentWatermark,
 ) ([]*domain.YouTubeContentAlarmTracking, error) {
+	// 종류별 reducer 상태에 없는 영상도 다른 종류로 이미 저장되어 있으면 Shorts로 소급 알리지 않습니다.
+	notifications, trackingRows, err := r.dropAlreadyKnownShortArtifacts(ctx, tx, notifications, trackingRows)
+	if err != nil {
+		return nil, fmt.Errorf("drop already-known short artifacts: %w", err)
+	}
+
 	if err := r.batchUpsertVideos(ctx, tx, videos); err != nil {
 		return nil, fmt.Errorf("batch upsert videos: %w", err)
 	}

@@ -1,0 +1,150 @@
+package assertiontree
+
+import (
+	"go/ast"
+	"go/token"
+	"go/types"
+
+	"go.uber.org/nilaway/util/typeshelper"
+)
+
+func (r *RootAssertionNode) capacityProofBody() *ast.BlockStmt {
+	if r.functionContext.funcLit != nil {
+		return r.functionContext.funcLit.Body
+	}
+	if r.functionContext.funcDecl != nil {
+		return r.functionContext.funcDecl.Body
+	}
+	return nil
+}
+
+// Only a direct guarded return/assignment is accepted; intervening writes invalidate the bound.
+func (r *RootAssertionNode) isDirectCapacityGuardedSlice(expr *ast.SliceExpr) bool {
+	if !typeshelper.IsDeeplyType[*types.Slice](r.Pass().TypesInfo.TypeOf(expr.X)) ||
+		(expr.Low != nil && !r.Pass().IsZero(expr.Low)) || expr.High == nil || expr.Max != nil {
+		return false
+	}
+	if _, simple := ast.Unparen(expr.X).(*ast.Ident); !simple {
+		return false
+	}
+	if _, simple := ast.Unparen(expr.High).(*ast.Ident); !simple {
+		if _, constant := r.Pass().ConstInt(expr.High); !constant {
+			return false
+		}
+	}
+	body := r.capacityProofBody()
+	if body == nil || !r.nonNegativeSliceBound(expr.High, make(map[types.Object]bool)) {
+		return false
+	}
+	direct := func(block *ast.BlockStmt) bool {
+		if block == nil || len(block.List) != 1 {
+			return false
+		}
+		switch statement := block.List[0].(type) {
+		case *ast.ReturnStmt:
+			return len(statement.Results) == 1 && ast.Unparen(statement.Results[0]) == expr
+		case *ast.AssignStmt:
+			if len(statement.Lhs) != 1 || len(statement.Rhs) != 1 {
+				return false
+			}
+			_, simple := ast.Unparen(statement.Lhs[0]).(*ast.Ident)
+			return simple && ast.Unparen(statement.Rhs[0]) == expr
+		}
+		return false
+	}
+	matched := false
+	ast.Inspect(body, func(node ast.Node) bool {
+		statement, ok := node.(*ast.IfStmt)
+		if !ok || matched {
+			return !matched
+		}
+		condition, ok := ast.Unparen(statement.Cond).(*ast.BinaryExpr)
+		if !ok {
+			return true
+		}
+		call, ok := ast.Unparen(condition.X).(*ast.CallExpr)
+		if !ok || len(call.Args) != 1 {
+			return true
+		}
+		fun, ok := ast.Unparen(call.Fun).(*ast.Ident)
+		if !ok || r.ObjectOf(fun) != types.Universe.Lookup("cap") ||
+			!r.eqStable(call.Args[0], expr.X) || !r.eqStable(condition.Y, expr.High) {
+			return true
+		}
+		switch condition.Op {
+		case token.GEQ, token.GTR:
+			matched = direct(statement.Body)
+		case token.LSS, token.LEQ:
+			alternative, _ := statement.Else.(*ast.BlockStmt)
+			matched = direct(alternative)
+		}
+		return !matched
+	})
+	return matched
+}
+
+func (r *RootAssertionNode) nonNegativeSliceBound(expr ast.Expr, visiting map[types.Object]bool) bool {
+	expr = ast.Unparen(expr)
+	if value, ok := r.Pass().ConstInt(expr); ok {
+		return value >= 0
+	}
+	switch expr := expr.(type) {
+	case *ast.CallExpr:
+		if len(expr.Args) != 1 {
+			return false
+		}
+		switch fun := ast.Unparen(expr.Fun).(type) {
+		case *ast.Ident:
+			return r.ObjectOf(fun) == types.Universe.Lookup("len") || r.ObjectOf(fun) == types.Universe.Lookup("cap")
+		case *ast.SelectorExpr:
+			function, ok := r.ObjectOf(fun.Sel).(*types.Func)
+			return ok && function.FullName() == "(*encoding/base64.Encoding).DecodedLen" &&
+				r.nonNegativeSliceBound(expr.Args[0], visiting)
+		}
+	case *ast.Ident:
+		object := r.ObjectOf(expr)
+		body := r.capacityProofBody()
+		if object == nil || body == nil || object.Pos() < body.Pos() || visiting[object] {
+			return false
+		}
+		visiting[object] = true
+		defer delete(visiting, object)
+		matches := func(expression ast.Expr) bool {
+			ident, ok := ast.Unparen(expression).(*ast.Ident)
+			return ok && r.ObjectOf(ident) == object
+		}
+		var initial ast.Expr
+		writes, escaped := 0, false
+		ast.Inspect(body, func(node ast.Node) bool {
+			switch statement := node.(type) {
+			case *ast.ValueSpec:
+				for _, name := range statement.Names {
+					if matches(name) {
+						writes++
+						if len(statement.Names) == 1 && len(statement.Values) == 1 {
+							initial = statement.Values[0]
+						}
+					}
+				}
+			case *ast.AssignStmt:
+				for _, left := range statement.Lhs {
+					if matches(left) {
+						writes++
+						if len(statement.Lhs) == 1 && len(statement.Rhs) == 1 {
+							initial = statement.Rhs[0]
+						}
+					}
+				}
+			case *ast.IncDecStmt:
+				if matches(statement.X) {
+					writes++
+				}
+			case *ast.UnaryExpr:
+				escaped = escaped || statement.Op == token.AND && matches(statement.X)
+			}
+			return true
+		})
+		return !escaped && writes == 1 && initial != nil && r.nonNegativeSliceBound(initial, visiting)
+	}
+	return false
+}

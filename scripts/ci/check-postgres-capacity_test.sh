@@ -133,4 +133,28 @@ if "${root}/scripts/ci/check-postgres-capacity.sh" \
 fi
 grep -q 'connection budget exhausted' "${tmp}/out"
 
+printf 'HOLOLIVE_X_SPACES_LOGIN_ENABLED=1\n' >"${tmp}/login.env"
+source "${root}/scripts/deploy/lib/postgres-capacity.sh"
+postgres_capacity_assert_policy_target "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/default.env" >"${tmp}/shell-out"
+grep -q 'allocated=55 reserve=5' "${tmp}/shell-out"
+if postgres_capacity_assert_policy_target "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/login.env" >"${tmp}/shell-out" 2>&1; then
+  echo "runtime capacity gate ignored the X login connection" >&2
+  exit 1
+fi
+grep -q 'connection budget exhausted' "${tmp}/shell-out"
+if "${root}/scripts/ci/check-postgres-capacity.sh" \
+  "${root}/deploy/compose/docker-compose.prod.yml" "${root}/scripts/ci/postgres-capacity-policy.tsv" \
+  "${tmp}/login.env" --target-env-only >"${tmp}/out" 2>&1; then
+  echo "capacity gate ignored the X login connection" >&2
+  exit 1
+fi
+grep -q 'connection budget exhausted' "${tmp}/out"
+printf 'HOLOLIVE_X_SPACES_LOGIN_ENABLED=1\nALARM_WORKER_POSTGRES_POOL_MAX_CONNS=7\n' >"${tmp}/login.env"
+"${root}/scripts/ci/check-postgres-capacity.sh" \
+  "${root}/deploy/compose/docker-compose.prod.yml" "${root}/scripts/ci/postgres-capacity-policy.tsv" \
+  "${tmp}/login.env" --target-env-only >"${tmp}/out"
+grep -q 'allocated=55 reserve=5' "${tmp}/out"
+postgres_capacity_assert_policy_target "${root}/scripts/ci/postgres-capacity-policy.tsv" "${tmp}/login.env" >"${tmp}/shell-out"
+grep -q 'allocated=55 reserve=5' "${tmp}/shell-out"
+
 echo "ok: PostgreSQL capacity gate rejects unsafe and heterogeneous target overrides"

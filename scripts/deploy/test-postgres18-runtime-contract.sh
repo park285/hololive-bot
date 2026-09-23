@@ -8,19 +8,21 @@ COMPOSE_PATH="${ROOT_DIR}/deploy/compose/docker-compose.prod.yml"
 BOOTSTRAP_CONTRACT_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/00-assert-pg18-runtime.sql"
 EXTENSION_BOOTSTRAP_PATH="${ROOT_DIR}/hololive/hololive-api/scripts/init-db/05-create-pg-stat-statements.sql"
 RUNTIME_AUDIT_PATH="${ROOT_DIR}/scripts/maintenance/pg18_runtime_contract.sql"
+IMAGE_RECIPE_PATH="${ROOT_DIR}/deploy/images/postgres/Dockerfile"
 
 "${CI_PYTHON_BIN}" - \
   "${COMPOSE_PATH}" \
   "${BOOTSTRAP_CONTRACT_PATH}" \
   "${EXTENSION_BOOTSTRAP_PATH}" \
-  "${RUNTIME_AUDIT_PATH}" <<'PY'
+  "${RUNTIME_AUDIT_PATH}" \
+  "${IMAGE_RECIPE_PATH}" <<'PY'
 from __future__ import annotations
 
 import pathlib
 import re
 import sys
 
-compose_path, bootstrap_contract_path, extension_bootstrap_path, runtime_audit_path = map(
+compose_path, bootstrap_contract_path, extension_bootstrap_path, runtime_audit_path, image_recipe_path = map(
     pathlib.Path,
     sys.argv[1:],
 )
@@ -28,17 +30,23 @@ compose = compose_path.read_text(encoding="utf-8")
 bootstrap_contract = bootstrap_contract_path.read_text(encoding="utf-8")
 extension_bootstrap = extension_bootstrap_path.read_text(encoding="utf-8")
 runtime_audit = runtime_audit_path.read_text(encoding="utf-8")
+image_recipe = image_recipe_path.read_text(encoding="utf-8")
 errors: list[str] = []
 
 image_pattern = re.compile(
-    r"^[ \t]*image:[ \t]*\$\{POSTGRES_IMAGE:-postgres:18\.([0-9]+)(?:-[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}\}[ \t]*$",
+    r"^FROM postgres:18\.([0-9]+)(?:-[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}[ \t]*$",
     re.MULTILINE,
 )
-image_matches = image_pattern.findall(compose)
+image_matches = image_pattern.findall(image_recipe)
 if len(image_matches) != 1:
-    errors.append("expected exactly one digest-pinned PostgreSQL 18 image default")
+    errors.append("expected exactly one digest-pinned PostgreSQL 18 base image")
 elif int(image_matches[0]) < 6:
     errors.append(f"PostgreSQL image default must be 18.6 or newer, got 18.{image_matches[0]}")
+
+if compose.count("image: ${POSTGRES_IMAGE:-hololive-postgres:prod}") != 1 or "context: ../images/postgres" not in compose:
+    errors.append("PostgreSQL must use the source-built gosu-hardened image")
+if "COPY --from=gosu --chmod=0755 /out/gosu /usr/local/bin/gosu" not in image_recipe:
+    errors.append("PostgreSQL image must replace the vulnerable upstream gosu binary")
 
 pgdata_pattern = re.compile(
     r"^[ \t]*PGDATA:[ \t]*/var/lib/postgresql/pgdata[ \t]*$",

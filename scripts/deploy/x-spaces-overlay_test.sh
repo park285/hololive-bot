@@ -9,9 +9,11 @@ services:
     image: example.invalid/api:fixture
   hololive-alarm-worker:
     image: example.invalid/worker:fixture
+networks:
+  hololive-net: {}
 YAML
 export COMPOSE_ENV_FILE="$fixture/host.env"
-unset HOLOLIVE_X_SPACES_ENABLED
+unset HOLOLIVE_X_SPACES_ENABLED HOLOLIVE_X_SPACES_LOGIN_ENABLED
 : > "$COMPOSE_ENV_FILE"
 bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --format json > "$fixture/disabled.json"
 jq -e '.services["hololive-api"].environment.X_SPACES_KEY_FILE == null' "$fixture/disabled.json" >/dev/null
@@ -24,6 +26,14 @@ for selection in implicit explicit; do
     .services["hololive-alarm-worker"].environment.X_SPACES_CONFIG_FILE == "/run/hololive-bot/x-spaces/config.json" and
     (.services["hololive-alarm-worker"].volumes | length == 2 and all(.[]; .read_only == true))' "$fixture/$selection.json" >/dev/null
 done
+printf 'HOLOLIVE_X_SPACES_ENABLED=1\nHOLOLIVE_X_SPACES_LOGIN_ENABLED=1\nDB_PASSWORD=fixture\n' > "$COMPOSE_ENV_FILE"
+bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --format json > "$fixture/login.json"
+jq -e '.services["hololive-x-space-login"] | .user == "1000:1000" and .read_only == true and (.ports == null) and (.cap_drop == ["ALL"]) and .environment.X_SPACES_LOGIN_FILE == "/run/hololive-bot/x-spaces/login.json"' "$fixture/login.json" >/dev/null
+printf 'HOLOLIVE_X_SPACES_LOGIN_ENABLED=1\n' > "$COMPOSE_ENV_FILE"
+if bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --quiet > "$fixture/login-invalid.log" 2>&1; then
+  echo 'X login was enabled without X Spaces' >&2
+  exit 1
+fi
 printf 'HOLOLIVE_X_SPACES_ENABLED=invalid\n' > "$COMPOSE_ENV_FILE"
 if bash "$repo_root/scripts/deploy/compose.sh" -f "$fixture/compose.yml" config --quiet > "$fixture/invalid.log" 2>&1; then
   echo 'invalid X Spaces activation was accepted' >&2

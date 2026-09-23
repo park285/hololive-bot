@@ -38,7 +38,9 @@ func (mm *Matcher) tryExactValkeyMatch(provider domain.MemberDataProvider, query
 
 	for name, channelID := range dynamicMembers {
 		if strings.EqualFold(name, query) {
-			candidates = append(candidates, mm.candidateFromDynamic(provider, name, channelID, "valkey-exact"))
+			if candidate := mm.candidateFromDynamic(provider, name, channelID, "valkey-exact"); candidate != nil {
+				candidates = append(candidates, candidate)
+			}
 		}
 	}
 

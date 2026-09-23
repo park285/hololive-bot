@@ -4,7 +4,7 @@
 STATICCHECK_VERSION="${STATICCHECK_VERSION:-2026.2.1}"
 GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.8.0}"
 GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.13.2}"
-NILAWAY_VERSION="${NILAWAY_VERSION:-v0.0.0-20260808063849-8649a03c818a}"
+NILAWAY_VERSION="${NILAWAY_VERSION:-v0.0.0-20260918162853-acb8859b9031}"
 
 go_bin_tool() {
     local tool="$1"
@@ -74,41 +74,6 @@ ensure_pinned_go_tool() {
     printf '%s\n' "${bin}"
 }
 
-tool_module_version_matches() {
-    local bin="$1"
-    local module="$2"
-    local version="$3"
-
-    go version -m "${bin}" 2>/dev/null | awk \
-        -v module="${module}" \
-        -v version="${version}" \
-        '$1 == "mod" && $2 == module && $3 == version { found = 1 } END { exit !found }'
-}
-
-ensure_go_module_tool() {
-    local tool="$1"
-    local install_module="$2"
-    local build_module="$3"
-    local version="$4"
-
-    local bin
-    bin="$(go_bin_tool "${tool}" || true)"
-    if [[ -z "${bin}" ]] || ! tool_module_version_matches "${bin}" "${build_module}" "${version}"; then
-        echo "[GO TOOLING] Installing ${tool}@${version}" >&2
-        go install "${install_module}@${version}"
-        bin="$(go_tool_install_path "${tool}")"
-        echo >&2
-    fi
-
-    if ! tool_module_version_matches "${bin}" "${build_module}" "${version}"; then
-        echo "expected ${tool} ${build_module}@${version}, got:" >&2
-        go version -m "${bin}" >&2 || true
-        exit 1
-    fi
-
-    printf '%s\n' "${bin}"
-}
-
 ensure_staticcheck() {
     ensure_pinned_go_tool staticcheck "honnef.co/go/tools/cmd/staticcheck" \
         "${STATICCHECK_VERSION}" "staticcheck ${STATICCHECK_VERSION}"
@@ -140,6 +105,7 @@ ensure_golangci_lint() {
 }
 
 ensure_nilaway() {
-    ensure_go_module_tool nilaway "go.uber.org/nilaway/cmd/nilaway" \
-        "go.uber.org/nilaway" "${NILAWAY_VERSION}"
+    local tooling_dir
+    tooling_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || return 1
+    NILAWAY_VERSION="${NILAWAY_VERSION}" bash "${tooling_dir}/nilaway-models/build.sh"
 }
