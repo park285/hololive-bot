@@ -61,3 +61,10 @@
 061 200_x_space_start_template.sql
 062 201_x_space_login_attempts.sql
 063 202_x_space_login_attempts_started_index.sql
+064 203_asobi_mawaritai_members.sql
+065 204_chat_template_readability.sql
+066 205_message_readability_completion.sql
+067 206_copyable_command_prefix.sql
+068 207_copyable_member_argument.sql
+069 208_template_displayline.sql
+070 209_template_row_version.sql

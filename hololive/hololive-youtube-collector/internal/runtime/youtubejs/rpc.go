@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
@@ -21,6 +22,7 @@ type RPC struct {
 	endpoint  string
 	limiter   *ratelimiter.RateLimiter
 	bodyLimit int64
+	metrics   *rpcMetrics
 }
 
 func NewRPC(httpClient *http.Client, endpoint string, limiter *ratelimiter.RateLimiter) *RPC {
@@ -145,7 +147,7 @@ func (c *RPC) successLimit(requested int) (int, error) {
 	return requested, nil
 }
 
-func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, successLimit int64) (*T, error) {
+func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, successLimit int64) (result *T, resultErr error) {
 	if c == nil || c.http == nil {
 		return nil, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js client is not configured")
 	}
@@ -154,7 +156,7 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 		return nil, collecterr.New(collecterr.ResponseTooLarge, collecterr.ClassResourceLimit, "youtube.js helper success response metadata exceeds requested limit")
 	}
 
-	if err := c.waitLimiter(ctx); err != nil {
+	if err := c.observeLimiterWait(ctx, path); err != nil {
 		return nil, fmt.Errorf("wait limiter: %w", err)
 	}
 
@@ -162,6 +164,12 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 	if err != nil {
 		return nil, fmt.Errorf("JSON request: %w", err)
 	}
+
+	started := time.Now()
+
+	c.metrics.begin(path, "helper")
+
+	defer func() { c.metrics.end(path, "helper", started, resultErr) }()
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -179,6 +187,16 @@ func (c *RPC) doJSON[T any](ctx context.Context, path string, request any, succe
 	}
 
 	return response, nil
+}
+
+func (c *RPC) observeLimiterWait(ctx context.Context, path string) (err error) {
+	started := time.Now()
+
+	c.metrics.begin(path, "rate_limit")
+
+	defer func() { c.metrics.end(path, "rate_limit", started, err) }()
+
+	return c.waitLimiter(ctx)
 }
 
 func invalidHelperHTTPResponse(resp *http.Response) bool {

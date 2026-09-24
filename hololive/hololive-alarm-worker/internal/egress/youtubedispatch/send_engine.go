@@ -74,8 +74,12 @@ func newSendEngine(
 	claims ClaimResolver,
 	auditLogger *AuditLogger,
 	metricsRecorder *MetricsRecorder,
-	transitions ...deliveryTransition,
+	transition deliveryTransition,
 ) *SendEngine {
+	if transition == nil {
+		panic("youtube send engine requires delivery transition")
+	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -89,10 +93,7 @@ func newSendEngine(
 		claims:          claims,
 		auditLogger:     auditLogger,
 		metricsRecorder: metricsRecorder,
-	}
-
-	if len(transitions) > 0 {
-		engine.transition = transitions[0]
+		transition:      transition,
 	}
 
 	return engine

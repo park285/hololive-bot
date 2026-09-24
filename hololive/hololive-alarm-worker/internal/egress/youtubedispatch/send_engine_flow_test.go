@@ -148,7 +148,7 @@ func (s *flowTestSender) SendMessage(ctx context.Context, _, _ string) error {
 func newFlowTestSendEngine(sender *flowTestSender, timeout time.Duration) *SendEngine {
 	return newSendEngine(sender, &MessageFormatter{}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliverySendTimeout: timeout,
-	}, nil, nil, nil)
+	}, nil, nil, nil, &lifecycleTransitionSpy{})
 }
 
 func flowTestSendRequest(roomID string) deliverySendRequest {

@@ -25,14 +25,6 @@
     ]
   },
   {
-    "path": "hololive/hololive-alarm-worker/cmd/x-space-login-agent/main.go",
-    "must_contain": [
-      "store.ClaimLogin(",
-      "xspaces.ProcessLogin(",
-      "store.FinishLogin("
-    ]
-  },
-  {
     "path": "hololive/hololive-alarm-worker/cmd/youtube-delivery-ledger-backfill/main.go",
     "must_contain": [
       "backfill.New("

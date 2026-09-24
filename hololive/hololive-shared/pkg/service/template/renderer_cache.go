@@ -7,13 +7,14 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// templateCacheMaxEntries 는 cache 의 size-bound. 키가 (templateKey, channelID) 조합이라
-// 채널 수에 비례해 unbounded 성장 위험이 있다.
+// templateCacheMaxEntries는 채널 override와 이전 버전의 파싱 결과를 함께 제한합니다.
 const templateCacheMaxEntries = 256
 
 type cacheKey struct {
 	templateKey domain.TemplateKey
 	channelID   string
+	id          int64
+	version     int64
 }
 
 type cacheEntry struct {
@@ -25,6 +26,10 @@ func (r *Renderer) storeTemplateAt(ck cacheKey, tmpl *template.Template, now tim
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 
+	r.storeTemplateLocked(ck, tmpl, now)
+}
+
+func (r *Renderer) storeTemplateLocked(ck cacheKey, tmpl *template.Template, now time.Time) {
 	if _, exists := r.cache[ck]; !exists {
 		for len(r.cache) >= templateCacheMaxEntries {
 			if !r.evictOldestLocked() {

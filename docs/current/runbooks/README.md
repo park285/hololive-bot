@@ -9,7 +9,6 @@
 | `hololive-api` | `hololive-api.md` |
 | `alarm-worker` | `alarm-worker.md` |
 | `youtube-collector` | `youtube-collector.md` |
-| `x-space-login` (선택형) | `x-space-login.md` |
 | `admin-dashboard` | `admin-dashboard.md` |
 
 ## Infra And Release

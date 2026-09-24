@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260924-hololive-template-cache-load-bounds",
+  "title": "템플릿 소스 재확인은 1회로 제한하고 파싱을 캐시 잠금과 분리한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-24",
+  "summary": "사용자가 삭제 경합, 초기 조회 시간 제한, 공용 잠금 파싱 개선을 승인했다. override 선택 후 삭제 시 기본값이 있어도 실패한 격리 DB 재현과 풀 고갈 시 5.25초 이상 대기 재현에 근거한다. Render의 템플릿 획득 대기는 최초 버전 조회부터 최대 5초이며 더 짧은 caller deadline을 보존한다. 선택한 소스의 본문 조회가 pgx.ErrNoRows인 경우만 원래 key/channel로 1회 재확인한다(최대 2회 선택, 같은 5초 예산). 두 번째 소스 소실은 명시적 한도 오류, 실제 미존재·DB·파싱 오류는 즉시 전파하고 stale 결과를 사용하지 않는다. 횟수·소스 변경과 최종 실패를 기존 logger의 구조화 이벤트로 관측한다. 실제 id/version별 singleflight로 파싱을 공유하고 공용 cache 잠금은 조회·저장에만 사용한다. 개별 취소와 독립된 공유 조회는 각각 최대 5초다. 표준 template 파싱 CPU 작업 자체는 선점 취소하지 않는다. 소유자는 hololive-shared template이며 재확인 한도 변경 또는 저장 경로 변경 시 계약과 회귀를 재검토한다. 운영 적용은 별도 승인이다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-shared/pkg/service/template/renderer_load_bounds_test.go",
+    "hololive/hololive-shared/pkg/service/template/renderer_consistency_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/template/renderer_load.go",
+    "hololive/hololive-shared/pkg/service/template/renderer.go"
+  ],
+  "supersedes": []
+}

@@ -36,6 +36,11 @@ if [[ -z "${map_paths}" ]]; then
   exit 1
 fi
 
+if ! grep -Fq '| `iris-console` | TypeScript gateway / React SSR | `../iris-console/` (iris-stack submodule) |' "${MAP_FILE}"; then
+  echo "[FAIL] project map must identify Iris Console as the TypeScript web owner"
+  exit 1
+fi
+
 missing=0
 while IFS= read -r module; do
   [[ -z "${module}" ]] && continue

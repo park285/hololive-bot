@@ -1,8 +1,8 @@
 # 통합 관리자 앱 연결
 
 관리자 앱의 대표 주소는 **https://admin.holoshi.com**입니다. Iris·ChatBotGo·홀로라이브 화면을
-iris-seoul의 단일 `iris-admin-web.service`가 제공합니다. 웹·SSR·인증·세션·PWA·native bundle은
-[Iris Admin](https://github.com/park285/iris-admin)이 소유하며 이 저장소에는 독립 `admin-dashboard` 서비스가 없습니다.
+iris-seoul의 단일 `iris-console.service`가 제공합니다. 웹·SSR·인증·세션·PWA·native bundle은
+Iris Console이 소유하며 이 저장소에는 독립 `admin-dashboard` 서비스가 없습니다.
 
 ## 계정과 권한
 
@@ -39,5 +39,5 @@ secret 복구 자료를 보존합니다. DB migration이나 봇 재시작은 이
 실제 AI 호출·메시지/푸시 발송·iOS 실기기 검증을 자동 smoke에 포함하지 않습니다.
 
 현재 전환 상태와 검증 근거는 스택의 `DEC-20260914-admin-unified-login`을, 자세한 native 적용은
-[Iris Admin 운영 문서](https://github.com/park285/iris-admin/blob/main/docs/operations/hololive-web.md)를 따릅니다.
+Iris Console의 운영 문서를 따릅니다.
 Fallback delta: none.

@@ -45,7 +45,7 @@ func templateMemberNewsDigestItems() []map[string]any {
 	return []map[string]any{
 		{
 			"Member":    sampleMemberMiko,
-			"Category":  "birthday_live",
+			"Category":  "생일 라이브",
 			fieldTitle:  "さくらみこ生誕ライブ2026",
 			"DateText":  "2026-02-20",
 			"Summary":   "생일 기념 라이브 진행 예정",
@@ -53,7 +53,7 @@ func templateMemberNewsDigestItems() []map[string]any {
 		},
 		{
 			"Member":    sampleMemberFubuki,
-			"Category":  "event",
+			"Category":  "이벤트",
 			fieldTitle:  "hololive SUPER EXPO 2026",
 			"DateText":  "2026-03-07",
 			"Summary":   "엑스포 참여 소식",

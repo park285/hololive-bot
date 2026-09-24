@@ -209,9 +209,13 @@ func assertHololiveAPITemplateInterpretationContract(t *testing.T) {
 			"tmpl.Execute(&buf, sampleData)",
 		},
 		"hololive/hololive-shared/pkg/service/template/renderer.go": {
-			"body, err := r.loadTemplateBody(ctx, key, channelID)",
-			".Parse(body)",
+			"tmpl, err := r.getTemplate(ctx, key, channelID)",
 			"tmpl.Execute(&buf, data)",
+		},
+		"hololive/hololive-shared/pkg/service/template/renderer_load.go": {
+			"r.pool.QueryRow(ctx, mustSQL(\"renderer_resolve.sql\")",
+			"r.pool.QueryRow(ctx, mustSQL(\"renderer_load.sql\")",
+			".Parse(body)",
 		},
 	} {
 		content := readRepoFile(t, path)

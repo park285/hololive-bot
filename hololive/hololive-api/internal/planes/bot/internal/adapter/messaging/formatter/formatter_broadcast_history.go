@@ -26,6 +26,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -78,9 +82,10 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 
 	for i := range entries {
 		if i > 0 {
-			b.WriteByte('\n')
+			b.WriteString("\n──────────\n")
 		}
 
+		b.WriteByte('\n')
 		f.writeBroadcastHistoryEntry(ctx, &b, i+1, &entries[i])
 	}
 
@@ -88,7 +93,7 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 }
 
 func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *strings.Builder, index int, entry *BroadcastHistoryEntry) {
-	fmt.Fprintf(b, "%d. [%s] %s\n", index, entry.TypeLabel, entry.MemberName)
+	fmt.Fprintf(b, "%d · [%s] %s\n", index, broadcastHistoryDisplayLine(entry.TypeLabel), broadcastHistoryDisplayLine(entry.MemberName))
 	writeBroadcastHistoryTitle(b, entry.Type, entry.Title)
 	writeBroadcastHistoryTime(ctx, f, b, entry)
 	writeBroadcastHistoryURL(b, entry.URL)
@@ -98,8 +103,18 @@ func (f *ResponseFormatter) writeBroadcastHistoryEntry(ctx context.Context, b *s
 func writeBroadcastHistoryTitle(b *strings.Builder, broadcastType, title string) {
 	title = broadcastHistoryDisplayTitle(broadcastType, title)
 	if title != "" {
-		fmt.Fprintf(b, "   %s\n", title)
+		title = strings.Join(strings.Fields(strings.ReplaceAll(title, util.KakaoZeroWidthSpace, "")), " ")
+		if utf8.RuneCountInString(title) > 64 {
+			title = stringutil.TruncateString(title, 61)
+		}
+
+		// 줄 첫 위치의 번호·인용 기호도 표시 문자로 보존합니다.
+		fmt.Fprintf(b, "%s%s\n", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(title))
 	}
+}
+
+func broadcastHistoryDisplayLine(value string) string {
+	return util.MarkdownNeutralize(strings.Join(strings.Fields(value), " "))
 }
 
 func broadcastHistoryDisplayTitle(broadcastType, title string) string {
@@ -148,10 +163,10 @@ func cleanBroadcastHistoryMembershipTag(tag string) string {
 }
 
 func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *strings.Builder, entry *BroadcastHistoryEntry) {
-	fmt.Fprintf(b, "   %s", broadcastHistoryTime(ctx, f, entry.Time))
+	fmt.Fprintf(b, "⏰ %s", broadcastHistoryTime(ctx, f, entry.Time))
 
 	if entry.TopicID != "" {
-		fmt.Fprintf(b, " | topic: %s", entry.TopicID)
+		fmt.Fprintf(b, " · topic: %s", broadcastHistoryDisplayLine(entry.TopicID))
 	}
 
 	b.WriteByte('\n')
@@ -159,13 +174,13 @@ func writeBroadcastHistoryTime(ctx context.Context, f *ResponseFormatter, b *str
 
 func writeBroadcastHistoryURL(b *strings.Builder, url string) {
 	if url != "" {
-		fmt.Fprintf(b, "   %s\n", url)
+		fmt.Fprintf(b, "%s\n", url)
 	}
 }
 
 func writeBroadcastHistoryThumbnail(b *strings.Builder, prefix string, entry *BroadcastHistoryEntry) {
 	if entry.HasThumbnail && entry.VideoID != "" {
-		fmt.Fprintf(b, "   %s썸네일 %s\n", prefix, entry.VideoID)
+		fmt.Fprintf(b, "썸네일: %s\n", kakaoformat.EscapeMarkdown(prefix+"썸네일 "+entry.VideoID))
 	}
 }
 
@@ -191,15 +206,15 @@ func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 	parts := make([]string, 0, 4)
 
 	if filter.MemberName != "" {
-		parts = append(parts, "멤버: "+filter.MemberName)
+		parts = append(parts, "멤버: "+broadcastHistoryDisplayLine(filter.MemberName))
 	}
 
 	if filter.TypeLabel != "" {
-		parts = append(parts, "타입: "+filter.TypeLabel)
+		parts = append(parts, "타입: "+broadcastHistoryDisplayLine(filter.TypeLabel))
 	}
 
 	if filter.TopicID != "" {
-		parts = append(parts, "topic: "+filter.TopicID)
+		parts = append(parts, "topic: "+broadcastHistoryDisplayLine(filter.TopicID))
 	}
 
 	if filter.IncludeAll {

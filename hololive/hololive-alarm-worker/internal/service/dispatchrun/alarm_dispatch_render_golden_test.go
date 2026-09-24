@@ -84,23 +84,16 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 
 	var b strings.Builder
 
-	if groupMinutesUntil < 0 {
-		b.WriteString("## ")
-	}
-
 	switch {
 	case goldenAlarmDispatchNotificationIsStarting(n):
-		fmt.Fprintf(&b, "🔴 **%s** %s 시작", member, label)
+		fmt.Fprintf(&b, "🔴 %s %s 시작", member, label)
 	case groupMinutesUntil > 0 && n.MinutesUntil == groupMinutesUntil:
-		fmt.Fprintf(&b, "⏰ **%s** %s 예정", member, label)
+		fmt.Fprintf(&b, "⏰ %s %s 예정", member, label)
 	default:
-		fmt.Fprintf(&b, "⏰ **%s** %s %d분 전", member, label, n.MinutesUntil)
+		fmt.Fprintf(&b, "⏰ %s %s %d분 전", member, label, n.MinutesUntil)
 	}
 
-	linkable := title != "" && url != "" && !strings.Contains(url, " | ")
-	if linkable {
-		fmt.Fprintf(&b, "\n[%s](%s)", title, url)
-	} else if title != "" {
+	if title != "" {
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, title)
 	}
 
@@ -112,8 +105,8 @@ func goldenAlarmDispatchItem(n *domain.AlarmNotification, groupMinutesUntil int)
 		fmt.Fprintf(&b, "\n%s%s", util.KakaoZeroWidthSpace, util.MarkdownNeutralize(scheduleMessage))
 	}
 
-	if url != "" && !linkable {
-		fmt.Fprintf(&b, "\n%s", url)
+	if url != "" {
+		fmt.Fprintf(&b, "\n%s", strings.ReplaceAll(url, " | ", "\n"))
 	}
 
 	return b.String()
@@ -157,13 +150,17 @@ func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	var b strings.Builder
 
 	if goldenAlarmDispatchGroupAllStarting(group) {
-		fmt.Fprintf(&b, "## 🔴 %s 시작", label)
+		fmt.Fprintf(&b, "🔴 %s 시작 · %d개", label, len(group.notifications))
 	} else {
-		fmt.Fprintf(&b, "## ⏰ %s %d분 전", label, group.minutesUntil)
+		fmt.Fprintf(&b, "⏰ %s %d분 전 · %d개", label, group.minutesUntil, len(group.notifications))
 	}
 
 	for i := range group.notifications {
-		b.WriteString("\n\n")
+		if i > 0 {
+			b.WriteString("\n\n──────────")
+		}
+
+		fmt.Fprintf(&b, "\n\n%d · ", i+1)
 		b.WriteString(goldenAlarmDispatchItem(&group.notifications[i], group.minutesUntil))
 	}
 

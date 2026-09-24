@@ -78,8 +78,8 @@ func TestDispatchDeliveryRows_CapturesSuccessAndFailureBuckets(t *testing.T) {
 		t.Fatalf("failedDeliveries = %d, want 2", result.FailedDeliveries)
 	}
 
-	if !reflect.DeepEqual(result.FailureBuckets[deliveryReasonSendMessage], []int64{2}) {
-		t.Fatalf("send message failures = %#v, want []int64{2}", result.FailureBuckets[deliveryReasonSendMessage])
+	if !reflect.DeepEqual(result.FailureBuckets[deliveryReasonRateLimited], []int64{2}) {
+		t.Fatalf("rate-limited failures = %#v, want []int64{2}", result.FailureBuckets[deliveryReasonRateLimited])
 	}
 
 	if !reflect.DeepEqual(result.FailureBuckets["outbox row not found"], []int64{3}) {

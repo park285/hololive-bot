@@ -22,6 +22,8 @@ package util
 
 import "strings"
 
+// MarkdownNeutralize는 인라인 서식·엔티티·자동 링크·이스케이프 마커 뒤에 단발 ZWSP를 넣어 가시 문자를 보존합니다.
+// 줄 첫 위치의 목록·인용 해석은 호출자가 별도로 보호합니다.
 // 외부 유입 ZWSP를 남기면 FoldForSeeMore의 연속-ZWSP 패딩 판정이 오작동하고, 결과가 ZWSP로
 // 시작할 수 있어 조각 연결(`{{mdsafe .A}}{{mdsafe .B}}`) 경계에 연속 ZWSP가 생기므로 전부 제거한다.
 // 같은 이유로 FoldForSeeMore를 거친 텍스트에 적용하면 패딩이 삭제되어 접기가 풀린다 — fold 이전 필드 단위로만 쓴다.
@@ -85,7 +87,7 @@ func markdownScan(s string) (inserts int, hasZeroWidth bool) {
 
 func isMarkdownMarker(c byte) bool {
 	switch c {
-	case '*', '_', '`', '~', ']', '#':
+	case '*', '_', '`', '~', ']', '#', '&', '<', '\\':
 		return true
 	default:
 		return false

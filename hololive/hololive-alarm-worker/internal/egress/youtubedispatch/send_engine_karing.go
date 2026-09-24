@@ -236,7 +236,7 @@ func (d *SendEngine) handleKaringSendFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	if d.transition != nil && !d.applyKaringLifecycleFailure(ctx, operation, roomID, channelID, kind, rows, err, result, mu) {
+	if !d.applyKaringLifecycleFailure(ctx, operation, roomID, channelID, kind, rows, err, result, mu) {
 		return
 	}
 

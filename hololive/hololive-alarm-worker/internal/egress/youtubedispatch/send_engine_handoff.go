@@ -153,22 +153,20 @@ func (d *SendEngine) handleCutoverPublishFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	if d.transition != nil {
-		failureKind, reason, retryAfter := lifecycleProviderFailure(publishErr, lifecycleReasonHandoff)
-		if failureKind == lifecycle.FailureOutcomeUnknown {
-			d.logger.Warn("YouTube outbox cutover handoff outcome unknown, preserving SENDING logical groups",
-				slog.String("room_id", roomID),
-				slog.String("channel_id", channelID),
-				slog.String("kind", string(kind)),
-				slog.Int("count", len(rows)),
-				slog.Any("error", publishErr))
+	failureKind, reason, retryAfter := lifecycleProviderFailure(publishErr, lifecycleReasonHandoff)
+	if failureKind == lifecycle.FailureOutcomeUnknown {
+		d.logger.Warn("YouTube outbox cutover handoff outcome unknown, preserving SENDING logical groups",
+			slog.String("room_id", roomID),
+			slog.String("channel_id", channelID),
+			slog.String("kind", string(kind)),
+			slog.Int("count", len(rows)),
+			slog.Any("error", publishErr))
 
-			return true
-		}
+		return true
+	}
 
-		if !d.applyStartedLifecycleFailure(ctx, operation, failureKind, reason, retryAfter, result, mu) {
-			return true
-		}
+	if !d.applyStartedLifecycleFailure(ctx, operation, failureKind, reason, retryAfter, result, mu) {
+		return true
 	}
 
 	d.recordHandoffFailure(ctx, roomID, channelID, kind, rows, outboxes, claimTokens, "publish", publishErr, result, mu)

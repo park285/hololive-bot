@@ -22,7 +22,7 @@ func TestXSpaceRenderingAndIsolation(t *testing.T) {
 	message, handled, err := renderAlarmDispatchGroupSource(t.Context(), newAlarmDispatchTestRenderer(t), nil, alarmDispatchGroup{envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, "## 🔴 **소라** 스페이스 시작\n[이야기](https://x.com/i/spaces/1abc)", message)
+	require.Equal(t, "🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc", message)
 
 	path, _, err := alarmDispatchEnvelopeEgressPath(t.Context(), nil, &envelope)
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestXSpaceDispatchUsesTextAndRecordsCompletion(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, processed)
 	require.Equal(t, testAlarmRoomID, sender.roomID)
-	require.Equal(t, []string{"## 🔴 **소라** 스페이스 시작\n[이야기](https://x.com/i/spaces/1abc)"}, sender.messages)
+	require.Equal(t, []string{"🔴 소라 스페이스 시작\n\u200b이야기\nhttps://x.com/i/spaces/1abc"}, sender.messages)
 	require.Empty(t, sender.karingRequests)
 	require.Len(t, consumer.markSending, 1)
 	require.Len(t, consumer.markDispatched, 1)
@@ -83,10 +83,10 @@ func TestXSpaceTemplateTitleAndMarkdown(t *testing.T) {
 			link := payload.URL()
 
 			if title != "" {
-				link = "[" + util.MarkdownNeutralize(title) + "](" + link + ")"
+				link = util.KakaoZeroWidthSpace + util.MarkdownNeutralize(title) + "\n" + link
 			}
 
-			require.Equal(t, "## 🔴 **"+util.MarkdownNeutralize(payload.MemberName)+"** 스페이스 시작\n"+link, message)
+			require.Equal(t, "🔴 "+util.MarkdownNeutralize(payload.MemberName)+" 스페이스 시작\n"+link, message)
 		})
 	}
 }

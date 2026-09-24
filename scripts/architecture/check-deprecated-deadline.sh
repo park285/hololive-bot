@@ -6,11 +6,23 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 . "${ROOT_DIR}/scripts/ci/python-runtime.sh"
 repo_python_init
 TODAY="${1:-$(date -u +%F)}"
+shift $(( $# > 0 ? 1 : 0 ))
 
-"${CI_PYTHON_BIN}" - "$TODAY" \
-    "${ROOT_DIR}/hololive/hololive-shared/pkg" \
-    "${ROOT_DIR}/hololive/hololive-api/internal" \
-    "${ROOT_DIR}/hololive/hololive-youtube-collector/internal" <<'PY'
+if (( $# > 0 )); then
+    roots=("$@")
+else
+    roots=(
+        "${ROOT_DIR}/hololive/hololive-shared/pkg"
+        "${ROOT_DIR}/hololive/hololive-api/internal"
+        "${ROOT_DIR}/hololive/hololive-api/cmd"
+        "${ROOT_DIR}/hololive/hololive-youtube-collector/internal"
+        "${ROOT_DIR}/hololive/hololive-youtube-collector/cmd"
+        "${ROOT_DIR}/hololive/hololive-alarm-worker/internal"
+        "${ROOT_DIR}/hololive/hololive-alarm-worker/cmd"
+    )
+fi
+
+"${CI_PYTHON_BIN}" - "$TODAY" "${roots[@]}" <<'PY'
 import datetime
 import re
 import sys
@@ -27,6 +39,7 @@ except ValueError as err:
     sys.exit(2)
 
 roots = [Path(arg) for arg in sys.argv[2:]]
+print("scan_roots=" + ",".join(str(root) for root in roots))
 patterns = [
     ("todo", re.compile(r"TODO\((\d{4}-\d{2}-\d{2})\)")),
     ("remove_after", re.compile(r"remove_after\s*=\s*\"(\d{4}-\d{2}-\d{2})\"")),
@@ -39,7 +52,8 @@ pending = []
 
 for root in roots:
     if not root.exists():
-        continue
+        print(f"ERROR: deprecated scan root missing: {root}", file=sys.stderr)
+        sys.exit(2)
 
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix not in allowed_suffixes:

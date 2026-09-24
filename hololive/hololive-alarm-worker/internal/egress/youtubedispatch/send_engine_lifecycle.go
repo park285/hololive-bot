@@ -37,10 +37,6 @@ func (d *SendEngine) beginLifecycleOperation(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) (store.StartedOperation, bool) {
-	if d.transition == nil {
-		return store.StartedOperation{}, true
-	}
-
 	operation, applied, err := d.transition.BeginSending(ctx, rows, outboxMap(outboxes))
 	observeLifecycleApply("begin_sending", applied, err, len(rows))
 
@@ -64,10 +60,6 @@ func (d *SendEngine) applyPreparedLifecycleFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	if d.transition == nil {
-		return true
-	}
-
 	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0)
 	observeLifecycleApply("prepared_failure", applied, err, len(rows))
 
@@ -91,10 +83,6 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	if d.transition == nil {
-		return true
-	}
-
 	applied, err := d.transition.ApplyStartedFailure(ctx, operation, kind, reason, retryAfter)
 	observeLifecycleApply("provider_failure", applied, err, operation.OwnerCount())
 
@@ -116,10 +104,6 @@ func (d *SendEngine) completeLifecycleSent(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	if d.transition == nil {
-		return true
-	}
-
 	applied, err := d.transition.CompleteSent(ctx, operation, claimTokens)
 	observeLifecycleApply("complete_sent", applied, err, operation.OwnerCount())
 
@@ -142,26 +126,6 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 	mu *sync.Mutex,
 ) {
 	if selection == nil {
-		return
-	}
-
-	if d.transition == nil {
-		for i := range selection.retryRows {
-			d.recordDeliveryFailure(
-				result,
-				mu,
-				deliveryFailureReasonPreSendClaim,
-				selection.retryRows[i].ID,
-				selection.retryRows[i].OutboxID,
-			)
-		}
-
-		mu.Lock()
-
-		result.SuccessDeliveryIDs = append(result.SuccessDeliveryIDs, selection.alreadySentDeliveryIDs...)
-		result.TouchedOutboxIDs = append(result.TouchedOutboxIDs, selection.alreadySentOutboxIDs...)
-		mu.Unlock()
-
 		return
 	}
 

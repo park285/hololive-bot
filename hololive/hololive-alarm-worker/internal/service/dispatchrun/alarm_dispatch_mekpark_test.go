@@ -25,7 +25,7 @@ func TestMekParkLiveAndUpcomingRendering(t *testing.T) {
 		}
 		message, err := renderAlarmDispatchNotification(t.Context(), renderer, store, nil, notification)
 		require.NoError(t, err)
-		require.Contains(t, message, "**유닛 B · 미라**")
+		require.Contains(t, message, "유닛 B · 미라")
 
 		item := buildAlarmDispatchNotificationKaringContentItem(t.Context(), store, notification)
 		require.Equal(t, "유닛 B · 미라", item.MemberName)
