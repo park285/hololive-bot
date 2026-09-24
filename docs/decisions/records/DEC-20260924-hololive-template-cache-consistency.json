@@ -17,7 +17,7 @@
   "implementation": [
     "hololive/hololive-shared/pkg/service/template/renderer_load.go",
     "hololive/hololive-shared/pkg/service/template/renderer_cache.go",
-    "hololive/hololive-api/scripts/migrations/208_template_row_version.sql"
+    "hololive/hololive-api/scripts/migrations/209_template_row_version.sql"
   ],
   "supersedes": []
 }
