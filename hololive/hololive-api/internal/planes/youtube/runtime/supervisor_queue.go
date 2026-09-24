@@ -13,8 +13,12 @@ type queueObservationThrottle struct {
 }
 
 func (t *queueObservationThrottle) acquire(now time.Time) bool {
+	return t.acquireEvery(now, queueObservationMinInterval)
+}
+
+func (t *queueObservationThrottle) acquireEvery(now time.Time, interval time.Duration) bool {
 	last := t.last.Load()
-	if elapsed := now.Sub(time.Unix(0, last)); elapsed >= 0 && elapsed < queueObservationMinInterval {
+	if elapsed := now.Sub(time.Unix(0, last)); elapsed >= 0 && elapsed < interval {
 		return false
 	}
 
@@ -26,6 +30,10 @@ var queueObservation queueObservationThrottle
 func (r *Runtime) observePendingQueue(ctx context.Context) {
 	if r == nil || r.pool == nil {
 		return
+	}
+
+	if r.collectionObservation.acquireEvery(r.now(), 30*time.Second) {
+		r.observeCollectionTargets(ctx)
 	}
 
 	if cap(r.workCh) > 0 {

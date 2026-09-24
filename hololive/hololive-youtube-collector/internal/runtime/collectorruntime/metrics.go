@@ -62,7 +62,7 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 	metrics.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "youtube_collection_duration_seconds",
 		Help:    "YouTube collection duration by provider and kind.",
-		Buckets: prometheus.DefBuckets,
+		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15, 30, 60, 120, 300},
 	}, []string{labelProvider, labelKind})
 	metrics.lastSuccess = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "youtube_collection_last_success_timestamp_seconds",

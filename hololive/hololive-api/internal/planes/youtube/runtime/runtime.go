@@ -96,6 +96,8 @@ type Runtime struct {
 	workerTracker *workercontract.ExecutorTracker
 	workerTotals  *workercontract.Counters
 	workerSampler *workercontract.QueueSampler
+
+	collectionObservation queueObservationThrottle
 }
 
 func Build(ctx context.Context, plane *apiplane.YouTubePlaneConfig, postgresConfig *settings.PostgresConfig, logger *slog.Logger) (*Runtime, error) {
