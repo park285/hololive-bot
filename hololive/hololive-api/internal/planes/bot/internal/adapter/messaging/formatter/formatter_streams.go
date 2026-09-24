@@ -23,6 +23,7 @@ package formatter
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
@@ -219,6 +220,9 @@ func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domai
 }
 
 func (f *ResponseFormatter) truncateTitle(title string) string {
+	// 표시용 공백을 먼저 정리해야 선행 패딩이 제목의 길이 예산을 소모하지 않습니다.
+	title = strings.Join(strings.Fields(strings.ReplaceAll(title, util.KakaoZeroWidthSpace, "")), " ")
+
 	return stringutil.TruncateString(title, constants.StringLimits.StreamTitle)
 }
 

@@ -122,10 +122,10 @@ func buildAlarmDispatchVideoOutboxKaringContentItem(
 	memberName := mekparkhost.DisplayName(payload.ChannelID, data.Title, channelName)
 
 	return iris.KaringContentItem{
-		Title:        firstNonEmptyString(data.Title, alarmDispatchMessageString(ctx, messageStrings, "alarm_no_title", "제목 없음")),
+		Title:        karingDisplayTitle(firstNonEmptyString(data.Title, alarmDispatchMessageString(ctx, messageStrings, "alarm_no_title", "제목 없음"))),
 		URL:          alarmDispatchVideoOutboxURL(payload.Kind, videoID),
-		MemberName:   memberName,
-		ChannelName:  channelName,
+		MemberName:   karingDisplayLine(memberName),
+		ChannelName:  karingDisplayLine(channelName),
 		Status:       alarmDispatchVideoOutboxStatus(ctx, messageStrings, payload.Kind, data),
 		StartAt:      alarmDispatchKaringTimeString(util.FirstNonNilTime(data.ScheduledStartAt, data.PublishedAt)),
 		ThumbnailURL: bestKaringThumbnailURL(data.Thumbnail),
@@ -169,10 +169,10 @@ func buildAlarmDispatchCommunityOutboxKaringContentItem(
 	postID := firstNonEmptyString(data.PostID, item.ContentID)
 
 	return iris.KaringContentItem{
-		Title:        firstNonEmptyString(cleanCommunityOutboxTitle(data.ContentText), messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "item_title_community_fallback", "커뮤니티 알림")),
+		Title:        karingDisplayTitle(firstNonEmptyString(cleanCommunityOutboxTitle(data.ContentText), messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "item_title_community_fallback", "커뮤니티 알림"))),
 		URL:          fmt.Sprintf("https://www.youtube.com/post/%s", postID),
-		MemberName:   memberName,
-		ChannelName:  memberName,
+		MemberName:   karingDisplayLine(memberName),
+		ChannelName:  karingDisplayLine(memberName),
 		Status:       iris.KaringStreamStatus(messageStrings.GetOrContext(ctx, messagestrings.NamespaceKaring, "status_community", "커뮤니티")),
 		StartAt:      alarmDispatchKaringTimeString(data.PublishedAt),
 		ThumbnailURL: communityOutboxThumbnailURL(&data),

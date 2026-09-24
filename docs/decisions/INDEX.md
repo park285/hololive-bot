@@ -2,10 +2,12 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 48건: proposed 0, accepted 34, rejected 0, withdrawn 2, superseded 12
+레코드 50건: proposed 0, accepted 36, rejected 0, withdrawn 2, superseded 12
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260924-hololive-template-cache-consistency](records/DEC-20260924-hololive-template-cache-consistency.json) | 템플릿 렌더링은 저장 완료 후 DB 버전을 확인한다 | accepted | verified | hololive-bot | 2026-09-24 | - | - | - |
+| [DEC-20260924-hololive-template-cache-load-bounds](records/DEC-20260924-hololive-template-cache-load-bounds.json) | 템플릿 소스 재확인은 1회로 제한하고 파싱을 캐시 잠금과 분리한다 | accepted | verified | hololive-bot | 2026-09-24 | - | - | - |
 | [DEC-20260919-hololive-x-spaces](records/DEC-20260919-hololive-x-spaces.json) | 홀로봇 스페이스는 무료 웹 내부 API와 기존 발송 원장으로 처리한다 | accepted | implemented | hololive-bot | 2026-09-19 | trigger | - | [2026-09-19-x-spaces.md](../current/plans/2026-09-19-x-spaces.md) |
 | [DEC-20260914-local-ci-nilaway-driver](records/DEC-20260914-local-ci-nilaway-driver.json) | 로컬 NilAway 분석은 동일한 고정 바이너리와 Go vet 드라이버로 패키지 사실을 재사용한다 | accepted | verified | hololive-bot | 2026-09-14 | trigger | - | [2026-09-14-local-ci-nilaway-driver.md](../current/plans/2026-09-14-local-ci-nilaway-driver.md) |
 | [DEC-20260911-youtube-restricted-schedule-isolation](records/DEC-20260911-youtube-restricted-schedule-isolation.json) | YouTube 접근 제한 영상의 일정 부재를 격리하고 정상 방송과 채널 정보 수집을 지속한다 | accepted | verified | hololive-bot | 2026-09-11 | trigger | supersedes DEC-20260901-hololive-youtube-live-metadata-adapter-ownership | [2026-09-11-youtube-restricted-schedule-isolation.md](../current/plans/2026-09-11-youtube-restricted-schedule-isolation.md) |

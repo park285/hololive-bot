@@ -61,3 +61,9 @@
 061 200_x_space_start_template.sql
 062 201_x_space_login_attempts.sql
 063 202_x_space_login_attempts_started_index.sql
+064 203_chat_template_readability.sql
+065 204_message_readability_completion.sql
+066 205_copyable_command_prefix.sql
+067 206_copyable_member_argument.sql
+068 207_template_displayline.sql
+069 208_template_row_version.sql

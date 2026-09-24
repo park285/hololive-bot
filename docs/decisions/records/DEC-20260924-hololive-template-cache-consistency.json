@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260924-hololive-template-cache-consistency",
+  "title": "템플릿 렌더링은 저장 완료 후 DB 버전을 확인한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-24",
+  "summary": "2026-09-24 사용자 캐시 결함 해소 및 최적화 요청과 독립 Renderer stale 재현에 근거한다. 각 Render는 override 우선 DB id/row_version을 확인한다. 저장 완료 뒤 시작한 호출은 이전 버전을 사용하지 않는다. 파싱 캐시는 실제 소스 id/version별 256개로 제한하고 동일 버전 본문 조회를 singleflight로 공유한다. 공유 조회는 5초 한도이며 개별 취소는 다른 대기자를 취소하지 않는다. DB 오류 시 stale 본문을 반환하지 않는다. NOTIFY/TTL에 정확성을 의존하지 않는다. 운영 반영은 별도 승인이다.",
+  "sources": [],
+  "evidence": [
+    "hololive/hololive-shared/pkg/service/template/renderer_consistency_test.go",
+    "hololive/hololive-dbtest/template_row_version_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/template/renderer_load.go",
+    "hololive/hololive-shared/pkg/service/template/renderer_cache.go",
+    "hololive/hololive-api/scripts/migrations/208_template_row_version.sql"
+  ],
+  "supersedes": []
+}

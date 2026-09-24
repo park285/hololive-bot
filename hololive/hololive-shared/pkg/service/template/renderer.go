@@ -35,8 +35,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -47,6 +48,8 @@ type Renderer struct {
 	logger  *slog.Logger
 	cache   map[cacheKey]cacheEntry
 	cacheMu sync.RWMutex
+	loads   singleflight.Group
+	parses  singleflight.Group
 }
 
 func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
@@ -57,6 +60,9 @@ func NewRenderer(pool *pgxpool.Pool, logger *slog.Logger) *Renderer {
 	}
 }
 
+// Render는 DB에서 현재 버전을 확인한 뒤 파싱 결과를 재사용합니다.
+// 저장 완료 후 시작한 호출은 새 버전을 사용하며, 저장과 겹친 호출은 이전 버전을 사용할 수 있습니다.
+// 템플릿 획득 대기는 최대 5초이며 더 짧은 호출자 deadline을 보존합니다.
 func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID string, data any) (string, error) {
 	tmpl, err := r.getTemplate(ctx, key, channelID)
 	if err != nil {
@@ -72,75 +78,15 @@ func (r *Renderer) Render(ctx context.Context, key domain.TemplateKey, channelID
 	return buf.String(), nil
 }
 
-func (r *Renderer) getTemplate(ctx context.Context, key domain.TemplateKey, channelID string) (*template.Template, error) {
-	ck := cacheKey{templateKey: key, channelID: channelID}
-
-	r.cacheMu.RLock()
-
-	if entry, ok := r.cache[ck]; ok {
-		r.cacheMu.RUnlock()
-
-		return entry.tmpl, nil
-	}
-
-	r.cacheMu.RUnlock()
-
-	body, err := r.loadTemplateBody(ctx, key, channelID)
-	if err != nil {
-		return nil, fmt.Errorf("load template body: %w", err)
-	}
-
-	tmpl, err := template.New(string(key)).Funcs(templateFuncs).Parse(body)
-	if err != nil {
-		return nil, fmt.Errorf("parse template: %w", err)
-	}
-
-	r.storeTemplateAt(ck, tmpl, time.Now())
-
-	return tmpl, nil
-}
-
-var ErrTemplateNotFound = errors.New("template not found in database")
-
-func (r *Renderer) loadTemplateBody(ctx context.Context, key domain.TemplateKey, channelID string) (string, error) {
-	var body string
-
-	if channelID != "" {
-		err := r.pool.QueryRow(ctx,
-			mustSQL("renderer_0105_01.sql"),
-			key,
-			channelID,
-		).Scan(&body)
-		if err == nil {
-			return body, nil
-		}
-
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf("query channel template: %w", err)
-		}
-	}
-
-	err := r.pool.QueryRow(ctx,
-		mustSQL("renderer_0118_02.sql"),
-		key,
-	).Scan(&body)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf("%w: %s", ErrTemplateNotFound, key)
-		}
-
-		return "", fmt.Errorf("query default template: %w", err)
-	}
-
-	return body, nil
-}
-
 func (r *Renderer) InvalidateCache(key domain.TemplateKey, channelID string) {
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 
-	ck := cacheKey{templateKey: key, channelID: channelID}
-	delete(r.cache, ck)
+	for ck := range r.cache {
+		if ck.templateKey == key && ck.channelID == channelID {
+			delete(r.cache, ck)
+		}
+	}
 }
 
 func (r *Renderer) InvalidateKey(key domain.TemplateKey) {
@@ -155,18 +101,8 @@ func (r *Renderer) InvalidateKey(key domain.TemplateKey) {
 }
 
 var templateFuncs = template.FuncMap{
-	"truncate": func(maxLen int, s string) string {
-		runes := []rune(s)
-		if len(runes) <= maxLen {
-			return s
-		}
-
-		if maxLen <= 3 {
-			return string(runes[:maxLen])
-		}
-
-		return string(runes[:maxLen-3]) + "..."
-	},
+	"truncate":       truncateTemplateText,
+	"displayline":    normalizeTemplateDisplayLine,
 	"trim":           strings.TrimSpace,
 	"upper":          strings.ToUpper,
 	"lower":          strings.ToLower,
@@ -185,7 +121,9 @@ var templateFuncs = template.FuncMap{
 	"stripTags":      stripTags,
 	"urlEncode":      urlEncode,
 	"mdsafe":         util.MarkdownNeutralize,
-	"add":            func(a, b int) int { return a + b },
+	// 복사할 명령어는 숨은 문자를 삽입하지 않고 Markdown 이스케이프로 보호합니다.
+	"mdescape": kakaoformat.EscapeMarkdown,
+	"add":      func(a, b int) int { return a + b },
 	"dict": func(values ...any) (map[string]any, error) {
 		if len(values)%2 != 0 {
 			return nil, errors.New("dict requires even number of arguments")

@@ -4,6 +4,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
+
+	"github.com/kapu/hololive-shared/pkg/util"
 )
 
 func TestBroadcastHistoryShowsLimitFilter(t *testing.T) {
@@ -47,7 +51,7 @@ func TestBroadcastHistoryShowsThumbnailShortcut(t *testing.T) {
 		},
 	})
 
-	if want := "   !썸네일 MKjXgiJSB_o"; !strings.Contains(got, want) {
+	if want := "썸네일: !썸네일 MKjXgiJSB_o"; !strings.Contains(kakaoformat.Render(got), want) {
 		t.Fatalf("BroadcastHistory() missing %q in:\n%s", want, got)
 	}
 
@@ -71,7 +75,7 @@ func TestBroadcastHistoryOmitsRedundantMembershipTitleTag(t *testing.T) {
 		},
 	})
 
-	if want := "   ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】"; !strings.Contains(got, want) {
+	if want := util.KakaoZeroWidthSpace + util.MarkdownNeutralize("ちょこっとカラオケするよ~~ん【ホロライブ/さくらみこ】"); !strings.Contains(got, want) {
 		t.Fatalf("BroadcastHistory() missing cleaned membership title %q in:\n%s", want, got)
 	}
 

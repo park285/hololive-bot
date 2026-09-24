@@ -198,12 +198,12 @@ func addTemplateCommandStreamSamples(data map[domain.TemplateKey]any) {
 	}
 	data[domain.TemplateKeyCmdLiveStreams] = map[string]any{
 		fieldEmoji: map[string]string{"Live": "🔴"},
-		fieldCount: 3,
+		fieldCount: 2,
 		"Streams":  templateLiveStreamSamples(),
 	}
 	data[domain.TemplateKeyCmdUpcomingStreams] = map[string]any{
 		fieldEmoji: map[string]string{"Calendar": "📅"},
-		fieldCount: 2,
+		fieldCount: 1,
 		"Hours":    24,
 		"Streams":  templateUpcomingStreamSamples(),
 	}
@@ -211,7 +211,7 @@ func addTemplateCommandStreamSamples(data map[domain.TemplateKey]any) {
 		fieldEmoji:       map[string]string{"Calendar": "📅"},
 		fieldChannelName: sampleMemberMiko,
 		"Days":           7,
-		fieldCount:       5,
+		fieldCount:       2,
 		"Streams":        templateChannelScheduleSamples(),
 	}
 }
@@ -239,7 +239,7 @@ func templateChannelScheduleSamples() []map[string]any {
 func addTemplateCommandAlarmSamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyCmdAlarmList] = map[string]any{
 		fieldEmoji:  map[string]string{fieldBell: "🔔"},
-		fieldCount:  3,
+		fieldCount:  1,
 		fieldPrefix: "!",
 		"Alarms":    []map[string]any{templateAlarmListItem()},
 	}
@@ -333,7 +333,7 @@ func templateAlarmNotificationSample(minutesUntil int) map[string]any {
 func addTemplateDirectoryMilestoneSamples(data map[domain.TemplateKey]any) {
 	data[domain.TemplateKeyCmdMemberDirectory] = map[string]any{
 		fieldEmoji: map[string]string{"Star": "⭐"},
-		"Total":    50,
+		"Total":    2,
 		"Groups":   []map[string]any{templateMemberDirectoryGroup()},
 	}
 	data[domain.TemplateKeyCmdProfile] = templateProfileSample()

@@ -52,6 +52,9 @@ func TestMarkdownNeutralize(t *testing.T) {
 			{"strike", "~~취소선~~", "~~"},
 			{"link", "[제목](https://example.com)", "]("},
 			{"heading", "# 제목", "# "},
+			{"entity", "Fish &amp; Chips", "&amp;"},
+			{"autolink", "<someone@example.invalid>", "<someone"},
+			{"escape", `a\\b`, `\\`},
 		}
 
 		for _, tc := range cases {

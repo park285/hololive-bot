@@ -22,12 +22,12 @@ package template
 
 import (
 	"bytes"
-	"slices"
 	"strings"
 	"testing"
 	texttemplate "text/template"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/internal/service/template/sampledata"
@@ -40,9 +40,15 @@ import (
 // 시드 본문 그대로 렌더해, 시드-샘플-변수 계약 위반을 배포 전에 유일하게 차단한다.
 
 const (
-	fieldMemberName = "MemberName"
-	fieldTitle      = "Title"
-	fieldURL        = "URL"
+	fieldScheduledKST = "ScheduledKST"
+	fieldIsPremiere   = "IsPremiere"
+	fieldMinutesUntil = "MinutesUntil"
+	fieldNextStream   = "NextStream"
+	fieldCount        = "Count"
+	fieldChannelName  = "ChannelName"
+	fieldMemberName   = "MemberName"
+	fieldTitle        = "Title"
+	fieldURL          = "URL"
 )
 
 func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
@@ -109,6 +115,8 @@ func TestSeedTemplates_RenderAllKeysWithSampleData(t *testing.T) {
 		if strings.Contains(buf.String(), "<no value>") {
 			t.Errorf("%s: 렌더 결과에 <no value> 노출", key)
 		}
+
+		t.Logf("KAKAO_AUDIT %s\n%s\nEND_AUDIT", key, kakaoformat.Render(buf.String()))
 	}
 
 	for key := range seeds {
@@ -141,15 +149,15 @@ func TestSeedTemplates_NeutralizeDynamicMarkdownFields(t *testing.T) {
 
 	liveBody := seedBody(t, pool, domain.TemplateKeyCmdLiveStreams)
 	live := renderSeedBody(t, domain.TemplateKeyCmdLiveStreams, liveBody, map[string]any{
-		"Count": 1,
+		fieldCount: 1,
 		"Streams": []map[string]any{
-			{"ChannelName": markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0},
+			{fieldChannelName: markerName, fieldTitle: markerName, fieldURL: markerURL, "ViewerCount": 0},
 		},
 	})
 
-	wantLink := "[" + util.MarkdownNeutralize(markerName) + "](" + markerURL + ")"
-	if !strings.Contains(live, wantLink) {
-		t.Errorf("CMD_LIVE_STREAMS: 라벨 링크 %q 없음: %q", wantLink, live)
+	wantTitleURL := util.MarkdownNeutralize(markerName) + "\n" + markerURL
+	if !strings.Contains(live, wantTitleURL) {
+		t.Errorf("CMD_LIVE_STREAMS: 제목과 URL 분리 %q 없음: %q", wantTitleURL, live)
 	}
 
 	if !strings.Contains(live, markerURL) {
@@ -167,34 +175,33 @@ func TestSeedTemplates_AlarmListNextStreamLiveBranch(t *testing.T) {
 
 	body := seedBody(t, pool, domain.TemplateKeyCmdAlarmList)
 	out := renderSeedBody(t, domain.TemplateKeyCmdAlarmList, body, map[string]any{
-		"Count":  3,
-		"Prefix": "!",
+		fieldCount: 3,
+		"Prefix":   "!",
 		"Alarms": []map[string]any{
-			{fieldMemberName: "사쿠라 미코", "TypesLabel": "라이브", "NextStream": liveNextStreamSample(markerTitle, streamURL)},
-			{fieldMemberName: "호시마치 스이세이", "TypesLabel": "", "NextStream": liveNextStreamSample(markerTitle, "")},
-			{fieldMemberName: "시라카미 후부키", "TypesLabel": "", "NextStream": liveNextStreamSample("", streamURL)},
+			{fieldMemberName: "사쿠라 미코", "TypesLabel": "라이브", fieldNextStream: liveNextStreamSample(markerTitle, streamURL)},
+			{fieldMemberName: "호시마치 스이세이", "TypesLabel": "", fieldNextStream: liveNextStreamSample(markerTitle, "")},
+			{fieldMemberName: "시라카미 후부키", "TypesLabel": "", fieldNextStream: liveNextStreamSample("", streamURL)},
 		},
 	})
 
 	safeTitle := util.MarkdownNeutralize(markerTitle)
-	lines := strings.Split(out, "\n")
 	hasLine := func(want string) bool {
-		return slices.Contains(lines, want)
+		return hasSeedLine(out, want)
 	}
 
-	if !hasLine("   🔴 방송 중") {
+	if !hasLine("🔴 방송 중") {
 		t.Fatalf("CMD_ALARM_LIST: live 분기가 렌더되지 않음: %q", out)
 	}
 
-	if !hasLine("   [" + safeTitle + "](" + streamURL + ")") {
-		t.Errorf("CMD_ALARM_LIST: 라벨 링크 분기 없음: %q", out)
+	if !hasLine(safeTitle) || !hasLine(streamURL) {
+		t.Errorf("CMD_ALARM_LIST: 제목과 URL 분리 없음: %q", out)
 	}
 
-	if !hasLine("   " + safeTitle) {
+	if !hasLine(safeTitle) {
 		t.Errorf("CMD_ALARM_LIST: Title-only fallback 없음: %q", out)
 	}
 
-	if !hasLine("   " + streamURL) {
+	if !hasLine(streamURL) {
 		t.Errorf("CMD_ALARM_LIST: URL-only fallback 없음: %q", out)
 	}
 
@@ -203,7 +210,7 @@ func TestSeedTemplates_AlarmListNextStreamLiveBranch(t *testing.T) {
 	}
 }
 
-func TestSeedTemplates_OutboxVideoLabelLinkBranches(t *testing.T) {
+func TestSeedTemplates_OutboxVideoSeparateTitleURLBranches(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
 	const (
@@ -215,26 +222,26 @@ func TestSeedTemplates_OutboxVideoLabelLinkBranches(t *testing.T) {
 	body := seedBody(t, pool, domain.TemplateKeyOutboxVideo)
 	render := func(title, url string) string {
 		return renderSeedBody(t, domain.TemplateKeyOutboxVideo, body, map[string]any{
-			"Kind":               "NEW_VIDEO",
+			"Kind":               string(domain.OutboxKindNewVideo),
 			fieldMemberName:      markerMember,
 			fieldTitle:           title,
 			fieldURL:             url,
-			"IsPremiere":         false,
+			fieldIsPremiere:      false,
 			"IsUpcomingPremiere": false,
 		})
 	}
 
 	safeMember := util.MarkdownNeutralize(markerMember)
 	safeTitle := util.MarkdownNeutralize(markerTitle)
-	wantHeader := "🔔 **" + safeMember + "** 새 영상"
+	wantHeader := "🔔 " + safeMember + " 새 영상"
 
 	both := render(markerTitle, videoURL)
 	if !hasSeedLine(both, wantHeader) {
 		t.Errorf("OUTBOX_VIDEO: 헤더 라인 %q 없음: %q", wantHeader, both)
 	}
 
-	if !hasSeedLine(both, "["+safeTitle+"]("+videoURL+")") {
-		t.Errorf("OUTBOX_VIDEO: 라벨 링크 분기 없음: %q", both)
+	if !hasSeedLine(both, safeTitle) || !hasSeedLine(both, videoURL) {
+		t.Errorf("OUTBOX_VIDEO: 제목과 URL 분리 없음: %q", both)
 	}
 
 	if !strings.Contains(both, videoURL) {
@@ -274,8 +281,8 @@ func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
 	body := seedBody(t, pool, domain.TemplateKeyOutboxVideoGroup)
 	out := renderSeedBody(t, domain.TemplateKeyOutboxVideoGroup, body, map[string]any{
 		fieldMemberName: "사쿠라 미코",
-		"Kind":          "NEW_VIDEO",
-		"Count":         3,
+		"Kind":          string(domain.OutboxKindNewVideo),
+		fieldCount:      3,
 		"Items": []map[string]any{
 			{fieldTitle: "", fieldURL: ""},
 			{fieldTitle: "제목1", fieldURL: "https://youtu.be/v1"},
@@ -283,13 +290,13 @@ func TestSeedTemplates_OutboxVideoGroupNumbersRenderedItems(t *testing.T) {
 		},
 	})
 
-	want := "## 🔔 사쿠라 미코 새 영상 (3)\n1. [제목1](https://youtu.be/v1)\n2. [제목2](https://youtu.be/v2)"
+	want := "🔔 사쿠라 미코 새 영상 · 3개\n\n1 · 제목1\nhttps://youtu.be/v1\n\n──────────\n\n2 · 제목2\nhttps://youtu.be/v2\n\n전체 3개 중 2개 표시"
 	if out != want {
 		t.Errorf("OUTBOX_VIDEO_GROUP: skip 항목 뒤 번호가 연속되지 않음\n got=%q\nwant=%q", out, want)
 	}
 }
 
-func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
+func TestSeedTemplates_AlarmNotificationGroupSeparateEntries(t *testing.T) {
 	pool := dbtest.NewPool(t)
 
 	const (
@@ -300,13 +307,13 @@ func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
 
 	body := seedBody(t, pool, domain.TemplateKeyCmdAlarmNotificationGroup)
 	out := renderSeedBody(t, domain.TemplateKeyCmdAlarmNotificationGroup, body, map[string]any{
-		"Count":          3,
-		"MinutesUntil":   5,
-		"ScheduledTimes": []string{"21:00"},
+		fieldCount:        3,
+		fieldMinutesUntil: 5,
+		"ScheduledTimes":  []string{"21:00"},
 		"Entries": []map[string]any{
-			{"Index": 1, "ChannelName": markerChannel, "ScheduledKST": "21:00", fieldTitle: markerTitle, fieldURL: streamURL},
-			{"Index": 2, "ChannelName": markerChannel, "ScheduledKST": "", fieldTitle: markerTitle, fieldURL: ""},
-			{"Index": 3, "ChannelName": "", "ScheduledKST": "", fieldTitle: "", fieldURL: streamURL},
+			{"Index": 1, fieldChannelName: markerChannel, fieldScheduledKST: "21:00", fieldTitle: markerTitle, fieldURL: streamURL},
+			{"Index": 2, fieldChannelName: markerChannel, fieldScheduledKST: "", fieldTitle: markerTitle, fieldURL: ""},
+			{"Index": 3, fieldChannelName: "", fieldScheduledKST: "", fieldTitle: "", fieldURL: streamURL},
 		},
 	})
 
@@ -314,14 +321,15 @@ func TestSeedTemplates_AlarmNotificationGroupEntryLabelLink(t *testing.T) {
 	safeTitle := util.MarkdownNeutralize(markerTitle)
 
 	for _, want := range []string{
-		"## 🔔 방송 알림 (3)",
+		"🔔 방송 알림 · 3개",
 		"⏰ 21:00",
-		"1. **" + safeChannel + "** (21:00)",
-		"   [" + safeTitle + "](" + streamURL + ")",
-		"2. **" + safeChannel + "**",
-		"   " + safeTitle,
-		"3. **알 수 없는 채널**",
-		"   " + streamURL,
+		"1 · " + safeChannel + " (21:00)",
+		safeTitle,
+		streamURL,
+		"2 · " + safeChannel,
+		safeTitle,
+		"3 · 알 수 없는 채널",
+		streamURL,
 	} {
 		if !hasSeedLine(out, want) {
 			t.Errorf("CMD_ALARM_NOTIFICATION_GROUP: 라인 %q 없음: %q", want, out)
@@ -347,9 +355,9 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 
 	body := seedBody(t, pool, domain.TemplateKeyAlarmDispatchNotificationGroup)
 	out := renderSeedBody(t, domain.TemplateKeyAlarmDispatchNotificationGroup, body, map[string]any{
-		"MinutesUntil": 5,
-		"IsStarting":   false,
-		"AllPremiere":  false,
+		fieldMinutesUntil: 5,
+		"IsStarting":      false,
+		"AllPremiere":     false,
 		"Entries": []map[string]any{
 			{
 				fieldMemberName:   "유닛 B",
@@ -357,17 +365,16 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 				fieldURL:          shortURL,
 				"CollabMembers":   "",
 				"ScheduleMessage": "",
-				"MinutesUntil":    5,
+				fieldMinutesUntil: 5,
 				"IsStarting":      false,
 				"IsScheduled":     true,
-				"IsPremiere":      false,
+				fieldIsPremiere:   false,
 			},
 		},
 	})
 
-	wantLink := "[" + util.MarkdownNeutralize(markerTitle) + "](" + shortURL + ")"
-	if !hasSeedLine(out, wantLink) {
-		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: short-link label link %q 없음: %q", wantLink, out)
+	if !hasSeedLine(out, util.MarkdownNeutralize(markerTitle)) || !hasSeedLine(out, shortURL) {
+		t.Errorf("ALARM_DISPATCH_NOTIFICATION_GROUP: 제목 또는 원본 short-link 줄 없음: %q", out)
 	}
 
 	if !strings.Contains(out, shortURL) {
@@ -376,17 +383,23 @@ func TestSeedTemplates_AlarmDispatchGroupPreservesShortLink(t *testing.T) {
 }
 
 func hasSeedLine(out, want string) bool {
-	return slices.Contains(strings.Split(out, "\n"), want)
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.TrimPrefix(line, util.KakaoZeroWidthSpace) == want {
+			return true
+		}
+	}
+
+	return false
 }
 
 func liveNextStreamSample(title, url string) map[string]any {
 	return map[string]any{
-		"Status":       string(domain.NextStreamStatusLive),
-		fieldTitle:     title,
-		fieldURL:       url,
-		"ScheduledKST": "",
-		"TimeDetail":   "",
-		"StartingSoon": false,
+		"Status":          string(domain.NextStreamStatusLive),
+		fieldTitle:        title,
+		fieldURL:          url,
+		fieldScheduledKST: "",
+		"TimeDetail":      "",
+		"StartingSoon":    false,
 	}
 }
 

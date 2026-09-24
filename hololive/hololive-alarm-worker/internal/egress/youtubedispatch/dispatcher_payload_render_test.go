@@ -31,7 +31,7 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 		t.Fatalf("FormatYouTubeOutboxPayload(single) error = %v", err)
 	}
 
-	wantSingle := "🔔 **멤버** 새 쇼츠\n[테스트 쇼츠](https://www.youtube.com/shorts/abc)"
+	wantSingle := "🔔 멤버 새 쇼츠\n\u200b테스트 쇼츠\nhttps://www.youtube.com/shorts/abc"
 	if single != wantSingle {
 		t.Fatalf("single message = %q, want %q", single, wantSingle)
 	}
@@ -51,7 +51,7 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 		t.Fatalf("FormatYouTubeOutboxPayload(grouped) error = %v", err)
 	}
 
-	wantGrouped := "## 🔔 멤버 커뮤니티 글 (2)\n1. 첫 글\n   [커뮤니티 글 보기](https://www.youtube.com/post/post-a)\n2. 둘째 글\n   [커뮤니티 글 보기](https://www.youtube.com/post/post-b)"
+	wantGrouped := "🔔 멤버 커뮤니티 글 · 2개\n\n1 · 첫 글\nhttps://www.youtube.com/post/post-a\n\n──────────\n\n2 · 둘째 글\nhttps://www.youtube.com/post/post-b"
 	if grouped != wantGrouped {
 		t.Fatalf("grouped message = %q, want %q", grouped, wantGrouped)
 	}
@@ -91,7 +91,7 @@ func TestFormatYouTubeOutboxPayloadRendersPremiereCountdown(t *testing.T) {
 		t.Fatalf("FormatYouTubeOutboxPayload(premiere) error = %v", err)
 	}
 
-	if !strings.HasPrefix(premiere, "🔔 **아크로라** 30분 후 공개 예정\n") {
+	if !strings.HasPrefix(premiere, "🔔 아크로라 30분 후 공개 예정\n") {
 		t.Fatalf("premiere message = %q", premiere)
 	}
 }

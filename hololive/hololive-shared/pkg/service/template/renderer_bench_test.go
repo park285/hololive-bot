@@ -21,6 +21,7 @@
 package template
 
 import (
+	"bytes"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -41,18 +42,16 @@ func benchRenderer(b *testing.B) (*Renderer, *template.Template) {
 	return r, tmpl
 }
 
-func BenchmarkGetTemplateCacheHit(b *testing.B) {
+func BenchmarkParsedTemplateCacheHit(b *testing.B) {
 	r, tmpl := benchRenderer(b)
 	ck := cacheKey{templateKey: "bench", channelID: "ch-hit"}
 	r.storeTemplateAt(ck, tmpl, time.Now())
 
-	ctx := b.Context()
-
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := r.getTemplate(ctx, "bench", "ch-hit"); err != nil {
-			b.Fatalf("getTemplate cache hit: %v", err)
+		if r.cachedTemplate(ck) != tmpl {
+			b.Fatal("parsed cache miss")
 		}
 	}
 }
@@ -78,12 +77,11 @@ func BenchmarkStoreTemplateAtFullCache(b *testing.B) {
 	}
 }
 
-func BenchmarkRenderCachedTemplate(b *testing.B) {
+func BenchmarkExecuteParsedTemplate(b *testing.B) {
 	r, tmpl := benchRenderer(b)
 	ck := cacheKey{templateKey: "bench", channelID: "ch-render"}
 	r.storeTemplateAt(ck, tmpl, time.Now())
 
-	ctx := b.Context()
 	data := struct {
 		Name    string
 		Viewers int
@@ -92,7 +90,9 @@ func BenchmarkRenderCachedTemplate(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := r.Render(ctx, "bench", "ch-render", data); err != nil {
+		var buf bytes.Buffer
+
+		if err := tmpl.Execute(&buf, data); err != nil {
 			b.Fatalf("render cached template: %v", err)
 		}
 	}
