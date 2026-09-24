@@ -99,8 +99,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/park285/iris-client-go/v2 v2.6.2 h1:W2pceYkLUohGR28MQn/IgOgZW6k96Y4TK+UChUzrnjI=
 github.com/park285/iris-client-go/v2 v2.6.2/go.mod h1:XVCx9dDejx9HIgioYbqrI+NtZ6QZDcxSBd7bB9n+95Q=
-github.com/park285/shared-go/v2 v2.6.4 h1:RgvesWL40E6W2fvd9idWyxW9RzF92jjOq+jNttBPmpg=
-github.com/park285/shared-go/v2 v2.6.4/go.mod h1:+8px4mpjvD0D5gJp0hsANHCLGHytzbf3EOt90Afxpk8=
+github.com/park285/shared-go/v2 v2.7.0 h1:wvmIEHUdjdu+ZgU/OeQBGIYh6jKxNWg27Hsr6MjnsMk=
+github.com/park285/shared-go/v2 v2.7.0/go.mod h1:+8px4mpjvD0D5gJp0hsANHCLGHytzbf3EOt90Afxpk8=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=

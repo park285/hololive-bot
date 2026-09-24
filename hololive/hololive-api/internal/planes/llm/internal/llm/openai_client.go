@@ -71,10 +71,9 @@ func NewClient(baseURL, apiKey, model string, logger *slog.Logger, opts ...Optio
 	}
 
 	generator, err := sharedllm.NewOpenAICompatibleJSONGenerator(sharedllm.OpenAICompatibleConfig{
-		BaseURL:                      baseURL,
-		APIKey:                       apiKey,
-		HTTPClient:                   newLLMHTTPClient(),
-		AllowChatCompletionsFallback: false,
+		BaseURL:    baseURL,
+		APIKey:     apiKey,
+		HTTPClient: newLLMHTTPClient(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create openai compatible json generator: %w", err)
