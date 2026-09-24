@@ -103,7 +103,7 @@ python_runtime_action=.github/actions/python-runtime/action.yml
   fail "both recurring scan jobs must bootstrap Python through the repository python-runtime action"
 [[ "$(grep -Fc '          working-directory: hololive-bot' "$workflow")" -eq 2 ]] ||
   fail "both recurring scan jobs must point the python-runtime action at the hololive-bot checkout"
-if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.17' -e 'python-runner.sh --print-interpreter' "$workflow"; then
+if grep -Fq -e 'actions/setup-python@' -e 'uv==0.12.18' -e 'python-runner.sh --print-interpreter' "$workflow"; then
   fail "recurring scan jobs must not inline the Python bootstrap"
 fi
 grep -Fq 'python-version-file: ${{ inputs.working-directory }}/.python-version' "$python_runtime_action" ||

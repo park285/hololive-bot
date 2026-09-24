@@ -5,18 +5,18 @@ go 1.27.1
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/georgysavva/scany/v2 v2.1.4
-	github.com/gin-contrib/cors v1.7.8
+	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/kapu/hololive-dbtest v0.0.0
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/mmcdole/gofeed v1.4.2
-	github.com/openai/openai-go/v3 v3.64.0
-	github.com/park285/iris-client-go/v2 v2.6.1
-	github.com/park285/shared-go/v2 v2.6.3
+	github.com/openai/openai-go/v3 v3.66.0
+	github.com/park285/iris-client-go/v2 v2.6.2
+	github.com/park285/shared-go/v2 v2.6.4
 	github.com/prometheus/client_golang v1.24.1
-	github.com/quic-go/quic-go v0.62.0
+	github.com/quic-go/quic-go v0.63.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/stretchr/testify v1.12.1
 	github.com/valkey-io/valkey-go v1.0.78
@@ -55,7 +55,7 @@ require (
 	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
-	github.com/gin-contrib/gzip v1.2.7 // indirect
+	github.com/gin-contrib/gzip v1.2.8 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -134,7 +134,7 @@ require (
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
