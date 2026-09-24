@@ -236,11 +236,18 @@ func TestRendererBlockedParseDoesNotBlockOtherCacheKeys(t *testing.T) {
 
 		release := make(chan struct{})
 
-		owner := r.parses.DoChan(fmt.Sprintf("%d/%d", blocked.id, blocked.version), func() (any, error) { <-release; return expected, nil })
+		owner := r.parses.DoChan(fmt.Sprintf("%d/%d", blocked.id, blocked.version), func() (any, error) {
+			<-release
+
+			return expected, nil
+		})
 		done := make(chan parsedCacheResult, 2)
 
 		for range 2 {
-			go func() { tmpl, err := r.parseTemplate(blocked, "{{invalid"); done <- parsedCacheResult{tmpl, err} }()
+			go func() {
+				tmpl, err := r.parseTemplate(blocked, "{{invalid")
+				done <- parsedCacheResult{tmpl, err}
+			}()
 		}
 
 		synctest.Wait()
