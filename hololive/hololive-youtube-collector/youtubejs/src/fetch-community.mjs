@@ -5,7 +5,6 @@ import {
   paginationEnvelopeReserve,
   paginationResult,
 } from "./pagination.mjs";
-import { applyAttachmentRunLengthFix } from "./youtubei-attachment-run-fix.mjs";
 
 const responseReserveBytes = paginationEnvelopeReserve({ protocol_version: 1, posts: [] });
 
@@ -119,8 +118,7 @@ export function emptyCommunityPage() {
 
 /** @param {YouTubeJSFetchOptions} [options] */
 export async function createInnertube({ fetchImpl } = {}) {
-  const { Innertube, Misc } = await import("youtubei.js");
-  applyAttachmentRunLengthFix(Misc.Text);
+  const { Innertube } = await import("youtubei.js");
   return Innertube.create({
     retrieve_player: false,
     generate_session_locally: true,

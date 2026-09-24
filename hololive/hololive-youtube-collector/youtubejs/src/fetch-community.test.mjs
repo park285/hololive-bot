@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { upstreamFromAttributedOf } from "./youtubei-attachment-run-fix.mjs";
-
 import {
-  createInnertube,
   fetchCommunityFeed,
   fetchCommunityPosts,
   isMissingCommunity,
@@ -138,12 +135,23 @@ test("fetchCommunityFeed preserves continuation metadata across pages", async ()
   assert.equal(result.cursor_start, "page-2");
 });
 
-test("createInnertube installs the attachment run length shim", async () => {
+test("youtubei.js preserves attachment runs without length", async (t) => {
   const { Misc } = await import("youtubei.js");
-  await createInnertube({
-    fetchImpl: async () => {
-      throw new Error("offline");
-    },
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  t.after(() => {
+    console.warn = originalWarn;
   });
-  assert.equal(typeof upstreamFromAttributedOf(Misc.Text), "function");
+
+  const parsed = Misc.Text.fromAttributed({
+    content: "Lui ch. and Laplus ch.",
+    attachmentRuns: [{ startIndex: 8, element: { type: {}, properties: {} }, alignment: "ALIGNMENT_VERTICAL_CENTER" }],
+  });
+
+  assert.deepEqual(warnings, []);
+  assert.equal(parsed.text, "Lui ch. and Laplus ch.");
+  assert.equal(parsed.runs.length, 1);
+  assert.equal(parsed.runs[0].attachment.startIndex, 8);
+  assert.equal(parsed.runs[0].attachment.length, 0);
 });

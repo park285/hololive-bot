@@ -7,7 +7,7 @@ require (
 	github.com/kapu/hololive-shared v0.0.0
 	github.com/moby/moby/api v1.56.0
 	github.com/moby/moby/client v0.6.0
-	github.com/park285/shared-go/v2 v2.6.3
+	github.com/park285/shared-go/v2 v2.6.4
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
@@ -51,14 +51,14 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/park285/iris-client-go/v2 v2.6.1 // indirect
+	github.com/park285/iris-client-go/v2 v2.6.2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.62.0 // indirect
+	github.com/quic-go/quic-go v0.63.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.8 // indirect
 	github.com/sirupsen/logrus v1.10.1 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect

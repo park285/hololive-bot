@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p jsconfig.json"
   },
   "dependencies": {
-    "undici": "8.10.2",
-    "youtubei.js": "18.0.0"
+    "undici": "8.11.0",
+    "youtubei.js": "18.1.0"
   },
   "devDependencies": {
     "@types/node": "24.13.6",
