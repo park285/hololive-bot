@@ -131,6 +131,7 @@ echo
 echo "[CI] Run M6 deprecated deadline gate"
 echo "[M6] Deprecated removal deadline gate"
 "${SCRIPT_DIR}/check-deprecated-deadline.sh"
+bash "${SCRIPT_DIR}/check-deprecated-deadline-self-test.sh"
 echo
 
 echo "[M6] Release governance assets gate"

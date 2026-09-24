@@ -137,6 +137,19 @@ provision_integration_test_valkey() {
         return 1
     fi
 
+    ready=false
+    for _ in {1..60}; do
+        if (exec 3<>"/dev/tcp/127.0.0.1/${published_port}") 2>/dev/null; then
+            ready=true
+            break
+        fi
+        sleep 1
+    done
+    if [[ "${ready}" != "true" ]]; then
+        echo "integration test Valkey published port did not become ready" >&2
+        return 1
+    fi
+
     export TEST_VALKEY_ADDR="127.0.0.1:${published_port}"
 }
 

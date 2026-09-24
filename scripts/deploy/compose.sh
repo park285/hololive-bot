@@ -232,31 +232,10 @@ case "${x_spaces_value}" in
     *) echo "[ERROR] HOLOLIVE_X_SPACES_ENABLED must be 0 or 1" >&2; exit 1 ;;
 esac
 
-login_value="0"
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_LOGIN_ENABLED"; then
-    login_value="$(compose_env_read_value_from_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_X_SPACES_LOGIN_ENABLED")"
+    echo "[ERROR] HOLOLIVE_X_SPACES_LOGIN_ENABLED is retired; remove it from the host environment" >&2
+    exit 1
 fi
-case "${login_value}" in
-    0) ;;
-    1)
-        [[ "${x_spaces_value}" == 1 ]] || { echo "[ERROR] X login requires X Spaces enabled" >&2; exit 1; }
-        login_overlay="deploy/compose/docker-compose.x-space-login.yml"
-        login_present=false
-        for file in "${compose_files[@]}"; do
-            if [[ "${file##*/}" == "${login_overlay##*/}" ]]; then login_present=true; break; fi
-        done
-        if [[ "${login_present}" == false ]]; then
-            compose_files+=("${login_overlay}")
-            if (( compose_command_index >= 0 )); then
-                compose_args=("${compose_args[@]:0:compose_command_index}" -f "${login_overlay}" "${compose_args[@]:compose_command_index}")
-                compose_command_index=$((compose_command_index + 2))
-            else
-                compose_args+=(-f "${login_overlay}")
-            fi
-        fi
-        ;;
-    *) echo "[ERROR] HOLOLIVE_X_SPACES_LOGIN_ENABLED must be 0 or 1" >&2; exit 1 ;;
-esac
 
 collector_disable_value="${HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR:-}"
 if compose_env_key_exists_in_file "${COMPOSE_ENV_FILE}" "HOLOLIVE_DISABLE_YOUTUBE_COLLECTOR"; then

@@ -52,33 +52,6 @@ Fallback delta: 활성 세션의 첫 인증 거부에 동일한 읽기 경로로
 [가볍게 이야기해요](https://x.com/i/spaces/1sample)
 ```
 
-## Linux 전용 계정의 자동 복구
-
-아래 내용은 운영 비활성 상태로 보존하는 선택형 구현의 기술 기록입니다.
-`DEC-20260920-x-spaces-linux-recovery`는 `DEC-20260924-x-spaces-manual-cookie-reconnect`로 대체됐으며,
-이 절의 설정·기동을 운영 복구 절차로 실행하지 않습니다. 현재 절차는 위 관리자 복구를 따릅니다.
-
-선택형 `hololive-x-space-login` 서비스는 로그인만 담당합니다. Node/Playwright 1.63.0과 같은 버전의 Chromium을 고정하고 비루트·read-only·전체 capability 제거·sandbox 활성 상태로 실행합니다. browser는 매 시도 후 종료하고 쿠키는 기존 암호화 DB 후보 경로에만 저장합니다. 비밀번호·쿠키를 환경·인자·콘솔·스크린샷·HAR·trace에 기록하지 않습니다.
-
-보호된 계정 파일은 static-secret master의 `hosts/hololive-osaka/hololive-bot/x-spaces/login.json`에 생성하고 해당 host manifest에 `0600 1000 1000 hololive-bot/x-spaces/login.json`으로 등록한 후 정본 sync 절차로 전달합니다. 계정은 아이디(선행 @ 제외)와 비밀번호 방식입니다. 최초 입력은 사용자의 TTY에서 아래 명령으로 수행하며 비밀번호를 표시하지 않고 기존 파일을 거부합니다. 비밀 값을 셸 인자나 채팅에 넣지 않습니다.
-
-```bash
-node hololive/hololive-alarm-worker/xspaces-login/configure-login.mjs \
-  /home/kapu/work/stack-secrets/hosts/hololive-osaka/hololive-bot/x-spaces/login.json 1
-```
-
-파일은 `revision`(양의 정수), `username`, `password`만 받습니다. 관리자가 계정·비밀번호를 변경하거나 중단된 시도를 재개할 때는 보호된 편집 절차로 revision을 올립니다. 새 설정 세대는 기존 세션이 정상이어도 전용 계정 연결을 한 번 시도하지만, 새 쿠키 검증 전에는 기존 활성 세션을 덮어쓰지 않습니다. 이후에는 이 서비스가 연결한 세션의 `auth_required`에서만 다시 로그인합니다. 수동으로 다른 쿠키를 제출하면 자동 복구는 해당 설정 세대에서 중단됩니다.
-
-`HOLOLIVE_X_SPACES_LOGIN_ENABLED=1`은 `HOLOLIVE_X_SPACES_ENABLED=1`과 함께 사용하며 Compose 진입점이 전용 overlay를 추가합니다. 기본은 비활성입니다. 별도 이미지와 migration 201·202 적용이 선행되어야 합니다. SQL은 db-migrate 바이너리에 내장되므로 host의 SQL 파일만 복사하면 적용되지 않습니다.
-
-로그인 서비스의 DB pool은 최대 1개입니다. 기존 기본 연결 예산은 55/60에 reserve 5이므로 이 서비스를 활성화하려면 다른 단일 인스턴스 풀에서 1개를 배정해야 합니다. 예를 들어 중앙 alarm-worker의 최대 연결을 8→7로 조정하고 실제 워커 설정까지 반영하면 전체 예산은 그대로입니다. 전용 서비스 활성화만 하고 예산을 조정하지 않으면 정본 capacity gate가 거부합니다. 이 문서만으로 운영 pool을 변경하지 않으며 기존 ops 배포 절차를 따릅니다.
-
-로그인은 같은 설정·세션 세대당 한 번, 최근 1시간에 최대 1회, 최근 24시간에 최대 3회입니다. 시도 소유권을 DB에 먼저 기록하므로 다중 프로세스와 재시작도 상한을 우회하지 못합니다. helper 전체는 120초이며 부모/컨테이너 종료로 하위 프로세스를 회수합니다. 결과 없이 5분 지난 실행은 `outcome_unknown`으로 남고 자동 재시도하지 않습니다. 새로운 쿠키와 완료 원장은 한 트랜잭션으로 저장하며 기존 worker의 실제 API 검증 후에만 승격합니다.
-
-Iris Admin은 `running`, `submitted`, `connected`, `login_required`, `outcome_unknown`, `manual_override`를 구분합니다. CAPTCHA·추가 인증·잘못된 비밀번호는 중단 상태입니다. 2단계 인증이 미설정이어도 X의 추가 확인은 발생할 수 있습니다. 보호된 Linux 브라우저의 사용자 개입 경로와 실계정 로그인은 실제로 검증하기 전까지 완료로 간주하지 않습니다.
-
-Fallback delta: 전용 계정의 인증 거부 시에만 위 상한을 가진 재로그인을 추가합니다. 네트워크/제한 오류에 로그인하지 않고, 새 공급자·유료 API·CAPTCHA 해결 서비스로 전환하지 않습니다. 원장과 복구 코드는 Hololive Bot이 소유하며 X 로그인 화면·인증 계약 변경 시 재검토합니다.
-
 ## 검증
 
 Node 모의 응답 테스트는 비용 경로·redirect·응답 크기·호스트·상태·인증 오류를 검사한다. Go DB 테스트는 후보 실패 보존, 세대 경쟁, 암호문 변조, 재시작·제목 변경 후 중복 제거를 검사한다. 실계정 성공과 지정 방 발송 확인은 별도 실제 증거로 기록한다.

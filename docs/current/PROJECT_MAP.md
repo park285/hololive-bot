@@ -14,7 +14,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `hololive-youtube-collector` | Go 1.27 + collector-owned YouTube.js helper | `hololive/hololive-youtube-collector/` | AP-fleet YouTube collector: Holodex / Official / YouTube.js fetch, normalize, collection lease, checkpoint, and observation Publish. No canonical tables, no notification outbox, no egress | 30005/30015/30025/30035 |
 | `hololive-shared` | Go 1.27 | `hololive/hololive-shared/` | Shared Go library (hololive domain, contracts, shared services) | - |
 | `shared-go` | Go 1.27 | `../shared-go/` (iris-stack submodule) | Shared Go utilities | - |
-| `iris-admin-web` | Rust 2024 / React SSR | Iris Admin repository, iris-seoul | Unified Iris/ChatBotGo/Hololive app with account scopes and one PWA | 8878 (loopback) |
+| `iris-console` | TypeScript gateway / React SSR | `../iris-console/` (iris-stack submodule) | Unified Iris/ChatBotGo/Hololive app with account scopes and one PWA; host control API `iris-admin` belongs to Iris | 8878 (loopback) |
 | `deploy/compose/docker-compose.prod.yml` | YAML | `deploy/compose/docker-compose.prod.yml` | Production docker compose stack | - |
 | `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
@@ -49,7 +49,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 - YouTube notification split: `youtube-collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
 - Birthday stream split: collector publishes live evidence; `hololive-api` YouTube plane owns live session/end reconciliation; `alarm-worker` resolves recipients from `status='sent'` deliveries of the matching birthday greeting event and relies on the dispatch ledger for late-room convergence.
 - X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Admin은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
-- X 전용 계정의 선택형 `x-space-login`은 같은 alarm-worker 모듈의 `cmd/x-space-login-agent`와 별도 Chromium/Playwright 이미지로 로그인만 담당하는 과거 선택형 구현이다. Compose 서비스는 `hololive-x-space-login`이며 외부 리스너와 발송 권한이 없다. 기본 3개 앱 런타임에 포함하지 않으며 운영 비활성 상태를 유지한다. 현재 복구는 `DEC-20260924-x-spaces-manual-cookie-reconnect`에 따라 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 보존 구현은 `runbooks/x-space-login.md`에서 설명한다.
+- X Spaces 연결 복구는 `DEC-20260924-x-spaces-auto-login-fadeout`에 따라 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 과거 자동 로그인 시도 이력은 연결 상태의 읽기 전용 정보로 남긴다.
 
 ## Maintenance
 
