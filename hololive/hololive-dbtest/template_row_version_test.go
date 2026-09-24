@@ -48,7 +48,7 @@ func TestTemplateRowVersionMigration(t *testing.T) {
 	}
 
 	for range 2 {
-		if err := applyMigrationFile(ctx, pool, dir, "208_template_row_version.sql"); err != nil {
+		if err := applyMigrationFile(ctx, pool, dir, "209_template_row_version.sql"); err != nil {
 			t.Fatal(err)
 		}
 	}

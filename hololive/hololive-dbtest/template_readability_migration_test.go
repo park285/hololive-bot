@@ -41,7 +41,7 @@ WHERE template_key = 'CMD_LIVE_STREAMS' AND channel_id IS NULL;`)
 	before := snapshot()
 
 	for range 2 {
-		if err := applyMigrationFile(t.Context(), pool, dir, "203_chat_template_readability.sql"); err != nil {
+		if err := applyMigrationFile(t.Context(), pool, dir, "204_chat_template_readability.sql"); err != nil {
 			t.Fatal(err)
 		}
 

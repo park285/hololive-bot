@@ -8,8 +8,8 @@ import (
 
 func TestCopyableCommandMigrationPreservesOverridesAndReplay(t *testing.T) {
 	for _, tc := range []struct{ file, key string }{
-		{"205_copyable_command_prefix.sql", "CMD_HELP"},
-		{"206_copyable_member_argument.sql", "CMD_AMBIGUOUS_MEMBER"},
+		{"206_copyable_command_prefix.sql", "CMD_HELP"},
+		{"207_copyable_member_argument.sql", "CMD_AMBIGUOUS_MEMBER"},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			testCopyableCommandMigration(t, tc.file, tc.key)

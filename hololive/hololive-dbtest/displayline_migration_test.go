@@ -9,7 +9,7 @@ import (
 func TestDisplayLineMigrationUpgradePreservesCustomBodiesAndReplay(t *testing.T) {
 	pool := NewPool(t)
 
-	const file = "207_template_displayline.sql"
+	const file = "208_template_displayline.sql"
 
 	bodies := loadTemplateMigrationBodies(t, file)
 

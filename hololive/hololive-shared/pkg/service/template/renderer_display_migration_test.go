@@ -22,7 +22,7 @@ func loadDisplayLineSeeds(tb testing.TB) map[domain.TemplateKey]displayLineSeedP
 
 	dir := filepath.Join("..", "..", "..", "..", "hololive-api", "scripts", "migrations")
 
-	raw, err := fs.ReadFile(os.DirFS(dir), "207_template_displayline.sql")
+	raw, err := fs.ReadFile(os.DirFS(dir), "208_template_displayline.sql")
 	if err != nil {
 		tb.Fatal(err)
 	}

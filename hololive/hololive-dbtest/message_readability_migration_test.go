@@ -16,7 +16,7 @@ func TestMessageReadabilityMigrationUpgradePreservesOverridesAndReplay(t *testin
 
 	expectedBody, previousBody := prepareReadabilityUpgrade(t, pool)
 
-	if err := applyMigrationFile(t.Context(), pool, dir, "204_message_readability_completion.sql"); err != nil {
+	if err := applyMigrationFile(t.Context(), pool, dir, "205_message_readability_completion.sql"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +50,7 @@ func TestMessageReadabilityMigrationUpgradePreservesOverridesAndReplay(t *testin
 	before := snapshot()
 
 	for range 2 {
-		if err := applyMigrationFile(t.Context(), pool, dir, "204_message_readability_completion.sql"); err != nil {
+		if err := applyMigrationFile(t.Context(), pool, dir, "205_message_readability_completion.sql"); err != nil {
 			t.Fatal(err)
 		}
 
@@ -63,7 +63,7 @@ func TestMessageReadabilityMigrationUpgradePreservesOverridesAndReplay(t *testin
 func prepareReadabilityUpgrade(t *testing.T, pool *pgxpool.Pool) (string, string) {
 	t.Helper()
 
-	body, ok := loadTemplateMigrationBodies(t, "204_message_readability_completion.sql")["X_SPACE_STARTED"]
+	body, ok := loadTemplateMigrationBodies(t, "205_message_readability_completion.sql")["X_SPACE_STARTED"]
 	if !ok {
 		t.Fatal("204 migration is missing X_SPACE_STARTED")
 	}
