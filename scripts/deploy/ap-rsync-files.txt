@@ -760,6 +760,7 @@ hololive/hololive-youtube-collector/internal/runtime/youtubejs/config.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/health.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/helper.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/lifecycle.go
+hololive/hololive-youtube-collector/internal/runtime/youtubejs/metrics.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/protocol.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/rpc.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejs/rpc_failure.go
