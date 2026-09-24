@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/park285/iris-client-go/v2/iris"
@@ -1726,11 +1727,7 @@ func TestSendDeliveryMessageUsesParentDeadlineErrorPath(t *testing.T) {
 func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t *testing.T) {
 	t.Parallel()
 
-	parentCtx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
-	defer cancel()
-
-	sender := &parentDeadlineBeforeReturnSender{parentDone: parentCtx.Done()}
-
+	sender := &parentDeadlineBeforeReturnSender{}
 	dispatcher := newDispatcherForTest(t, nil,
 		cachemocks.NewLenientClient(),
 		sender,
@@ -1738,26 +1735,33 @@ func TestSendDeliveryMessageUsesConfiguredTimeoutWhenParentExpiresBeforeReturn(t
 		slog.New(slog.DiscardHandler), &dispatchstate.Config{DeliverySendTimeout: 5 * time.Millisecond},
 	)
 
-	err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
-		roomID:     "room-child-timeout-first",
-		message:    testMessageHello,
-		dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
+	synctest.Test(t, func(t *testing.T) {
+		parentCtx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
+		defer cancel()
+
+		sender.parentDone = parentCtx.Done()
+
+		err := dispatcher.send.sendDeliveryMessage(parentCtx, deliverySendRequest{
+			roomID:     "room-child-timeout-first",
+			message:    testMessageHello,
+			dedupeKeys: []string{"youtube-notification:NEW_SHORT:short-child-timeout-first"},
+		})
+		if err == nil {
+			t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
+		}
+
+		if sender.parentDoneBeforeChild.Load() {
+			t.Fatal("parent deadline expired before configured delivery timeout")
+		}
+
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
+		}
+
+		if !strings.Contains(err.Error(), "timed out after 5ms") {
+			t.Fatalf("sendDeliveryMessage() error = %q, want configured-timeout-specific message", err)
+		}
 	})
-	if err == nil {
-		t.Fatal("sendDeliveryMessage() error = nil, want configured timeout")
-	}
-
-	if sender.parentDoneBeforeChild.Load() {
-		t.Fatal("parent deadline expired before configured delivery timeout")
-	}
-
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("sendDeliveryMessage() error = %v, want context deadline exceeded", err)
-	}
-
-	if !strings.Contains(err.Error(), "timed out after 5ms") {
-		t.Fatalf("sendDeliveryMessage() error = %q, want configured-timeout-specific message", err)
-	}
 }
 
 func TestNewDispatcherAppliesDeliveryDefaults(t *testing.T) {
