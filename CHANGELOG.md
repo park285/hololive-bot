@@ -18,6 +18,7 @@
 
 - 게시된 shared-go v2.6.4와 iris-client-go v2.6.2를 모든 Go 소비 모듈에 고정하고 QUIC 0.63.0 및 OpenAI 클라이언트 패치를 적용했습니다.
 - YouTube.js 18.1.0과 undici 8.11.0을 고정하고 업스트림에서 해결된 attachment-run 보정 코드를 제거했습니다.
+- 앞서 main에 병합된 YouTube 429 cooldown 수정을 중앙 collector 이미지에 포함합니다.
 - 중앙 Valkey 9.1.2의 Alpine 3.24.2 이미지를 검증된 digest로 고정하고, CI Python 실행기와 uv 부트스트랩을 0.12.18로 정렬했습니다.
 - X Spaces 로그인 이미지는 Chromium headless shell만 보존하도록 재구성하고 Node 24.21.0을 사용합니다.
 - 이번 릴리즈의 API artifact 버전은 3.2.3, alarm-worker artifact 버전은 3.2.4입니다.
