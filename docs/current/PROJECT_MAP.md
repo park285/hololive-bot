@@ -49,7 +49,7 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 - YouTube notification split: `youtube-collector` AP fleet owns external fetch/normalize/collection lease/checkpoint/`source_observation` Publish; `hololive-api` YouTube plane owns observation consume, canonical persist, notification intent, live-end finalizer, and retention/replay; `alarm-worker` owns room resolution, rendering, retry, delivery rows, and Iris/Kakao egress.
 - Birthday stream split: collector publishes live evidence; `hololive-api` YouTube plane owns live session/end reconciliation; `alarm-worker` resolves recipients from `status='sent'` deliveries of the matching birthday greeting event and relies on the dispatch ledger for late-room convergence.
 - X Spaces: alarm-worker의 선택적 Node helper가 무료 웹 내부 API 관측을 수행하고 기존 dispatch ledger로 LIVE 구독 방에 시작 링크를 보낸다. Iris Admin은 후보 세션 제출·상태 화면을, hololive-api는 암호화된 후보 저장을, worker는 검증·승격을 소유한다. 상세 계약은 `services/x-spaces.md`를 따른다.
-- X 전용 계정의 선택형 `x-space-login`은 같은 alarm-worker 모듈의 `cmd/x-space-login-agent`와 별도 Chromium/Playwright 이미지로 로그인만 담당한다. Compose 서비스는 `hololive-x-space-login`이며 외부 리스너와 발송 권한이 없다. 상태는 DB 시도 원장과 `/run/x-space-login/heartbeat`로 확인하며 `runbooks/x-space-login.md`를 따른다. 기본 3개 앱 런타임에는 포함하지 않고 전용 계정·연결 예산을 준비한 배포에서만 활성화한다.
+- X 전용 계정의 선택형 `x-space-login`은 같은 alarm-worker 모듈의 `cmd/x-space-login-agent`와 별도 Chromium/Playwright 이미지로 로그인만 담당하는 과거 선택형 구현이다. Compose 서비스는 `hololive-x-space-login`이며 외부 리스너와 발송 권한이 없다. 기본 3개 앱 런타임에 포함하지 않으며 운영 비활성 상태를 유지한다. 현재 복구는 `DEC-20260924-x-spaces-manual-cookie-reconnect`에 따라 관리 앱의 수동 쿠키 제출과 worker 후보 검증을 사용한다. 보존 구현은 `runbooks/x-space-login.md`에서 설명한다.
 
 ## Maintenance
 

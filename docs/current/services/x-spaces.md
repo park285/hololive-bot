@@ -1,12 +1,16 @@
 # X 스페이스 감지와 관리자 재연결
 
-`DEC-20260919-hololive-x-spaces`, `DEC-20260919-x-spaces-admin-reconnect`를 따른다.
+`DEC-20260919-hololive-x-spaces`, `DEC-20260919-x-spaces-admin-reconnect`,
+`DEC-20260924-x-spaces-manual-cookie-reconnect`를 따른다.
 
 alarm-worker가 X 웹 내부 API를 조회하고, 직접 개설한 스페이스의 시작 링크를 해당 멤버의 기존 `LIVE` 구독 방에 보낸다. 공식 유료 API·유료 공급자·녹음·게스트 참여 추적은 사용하지 않는다. X 세션은 무효화될 수 있으며 영구 인증이나 자동 로그인 성공을 보장하지 않는다.
 
 ## 관리자 복구
 
-Iris Admin → 홀로봇 → 설정 → X 스페이스 연결에서 상태, 마지막 감지 성공 시각과 후보 검증 결과를 확인한다. `auth_required`이면 X 브라우저에 로그인하여 필요한 확인을 마친 뒤 `auth_token`과 `ct0`를 관리자 입력란으로 제출한다. 이 값은 채팅·명령 인자에 넣지 않는다. 관리자 변경은 기존 비밀번호 재확인·권한·CSRF·단회 mutation 경계를 사용한다.
+Iris Console → 홀로봇 → 설정 → X 스페이스 연결에서 상태, 마지막 감지 성공 시각과 후보 검증 결과를 확인한다. `auth_required`이면 사용자가 직접 X 브라우저에 로그인하여 필요한 확인을 마친 뒤 `auth_token`과 `ct0`를 관리자 입력란으로 제출한다. 이 값은 채팅·명령 인자에 넣지 않는다. 관리자 변경은 기존 비밀번호 재확인·권한·CSRF·단회 mutation 경계를 사용한다.
+
+운영 복구는 사용자의 수동 쿠키 제출과 worker의 자동 후보 검증을 결합한다.
+전용 계정 비밀번호로 자동 재로그인하는 서비스는 활성화하지 않는다.
 
 API는 후보를 AES-256-GCM으로 암호화해 DB에 저장한다. worker는 실제 읽기 요청의 성공을 확인한 뒤에만 후보를 활성 세션으로 교체한다. 후보 인증 거부는 기존 세션을 보존한다. 일시 오류는 인증 거부로 바꾸지 않고 다음 확인 시각까지 기다린다. 세대 비교로 늦게 끝난 이전 요청이 새 세션을 덮어쓰지 못한다. 확정된 인증 필요 상태의 활성 세션에는 반복 요청하지 않는다.
 
@@ -50,7 +54,11 @@ Fallback delta: 활성 세션의 첫 인증 거부에 동일한 읽기 경로로
 
 ## Linux 전용 계정의 자동 복구
 
-`DEC-20260920-x-spaces-linux-recovery`에 따라 선택형 `hololive-x-space-login` 서비스가 로그인만 담당합니다. Node/Playwright 1.63.0과 같은 버전의 Chromium을 고정하고 비루트·read-only·전체 capability 제거·sandbox 활성 상태로 실행합니다. browser는 매 시도 후 종료하고 쿠키는 기존 암호화 DB 후보 경로에만 저장합니다. 비밀번호·쿠키를 환경·인자·콘솔·스크린샷·HAR·trace에 기록하지 않습니다.
+아래 내용은 운영 비활성 상태로 보존하는 선택형 구현의 기술 기록입니다.
+`DEC-20260920-x-spaces-linux-recovery`는 `DEC-20260924-x-spaces-manual-cookie-reconnect`로 대체됐으며,
+이 절의 설정·기동을 운영 복구 절차로 실행하지 않습니다. 현재 절차는 위 관리자 복구를 따릅니다.
+
+선택형 `hololive-x-space-login` 서비스는 로그인만 담당합니다. Node/Playwright 1.63.0과 같은 버전의 Chromium을 고정하고 비루트·read-only·전체 capability 제거·sandbox 활성 상태로 실행합니다. browser는 매 시도 후 종료하고 쿠키는 기존 암호화 DB 후보 경로에만 저장합니다. 비밀번호·쿠키를 환경·인자·콘솔·스크린샷·HAR·trace에 기록하지 않습니다.
 
 보호된 계정 파일은 static-secret master의 `hosts/hololive-osaka/hololive-bot/x-spaces/login.json`에 생성하고 해당 host manifest에 `0600 1000 1000 hololive-bot/x-spaces/login.json`으로 등록한 후 정본 sync 절차로 전달합니다. 계정은 아이디(선행 @ 제외)와 비밀번호 방식입니다. 최초 입력은 사용자의 TTY에서 아래 명령으로 수행하며 비밀번호를 표시하지 않고 기존 파일을 거부합니다. 비밀 값을 셸 인자나 채팅에 넣지 않습니다.
 
