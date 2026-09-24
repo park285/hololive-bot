@@ -49,8 +49,8 @@ type Dependencies struct {
 
 // NewDispatcher는 의존성을 연결하고 전이 저장소 초기화 오류를 반환한다. 작업 루프는 시작하지 않는다.
 func NewDispatcher(deps Dependencies, logger *slog.Logger, config *dispatchstate.Config) (*Dispatcher, error) {
-	if deps.DB != nil && deliverysql.IsNilDB(deps.DB) {
-		return nil, errors.New("initialize youtube dispatcher: db contains a nil value")
+	if deps.DB == nil || deliverysql.IsNilDB(deps.DB) {
+		return nil, errors.New("initialize youtube dispatcher: db is required")
 	}
 
 	initOutboxMetrics()
@@ -59,15 +59,9 @@ func NewDispatcher(deps Dependencies, logger *slog.Logger, config *dispatchstate
 
 	normalizedConfig := normalizedDispatcherConfig(config)
 
-	var transitionStore *store.TransitionStore
-
-	if deps.DB != nil {
-		var err error
-
-		transitionStore, err = newDispatcherTransitionStore(deps.DB, logger, normalizedConfig)
-		if err != nil {
-			return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
-		}
+	transitionStore, err := newDispatcherTransitionStore(deps.DB, logger, normalizedConfig)
+	if err != nil {
+		return nil, fmt.Errorf("initialize youtube dispatcher: %w", err)
 	}
 
 	telemetryRepository := newDispatcherTelemetryRepository(deps.DB)
@@ -140,7 +134,7 @@ func assembleDispatcher(
 	claimManager := newClaimManager(deps.DB, logger, &config, deliveryRepo, transitionStore, nil, grouper, al)
 	metricsRecorder := newMetricsRecorder(logger, al, claimManager)
 	sendEngine := newSendEngine(
-		deps.Sender, formatter, logger, &config, claimManager, al, metricsRecorder, dispatcherTransitions(transitionStore)...,
+		deps.Sender, formatter, logger, &config, claimManager, al, metricsRecorder, transitionStore,
 	)
 	claimManager.setExecutor(sendEngine)
 	claimManager.setMetricsRecorder(metricsRecorder)
@@ -155,12 +149,4 @@ func assembleDispatcher(
 		logger:    logger,
 		config:    config,
 	}
-}
-
-func dispatcherTransitions(transitionStore *store.TransitionStore) []deliveryTransition {
-	if transitionStore == nil {
-		return nil
-	}
-
-	return []deliveryTransition{transitionStore}
 }

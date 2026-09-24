@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -98,7 +99,7 @@ func (s *testSender) SendMessage(_ context.Context, roomID, message string) erro
 			return s.failErr
 		}
 
-		return assert.AnError
+		return iris.ErrRateLimited
 	}
 
 	s.messages = append(s.messages, roomID+":"+message)
@@ -115,7 +116,7 @@ func (s *testSender) SendMessageWithClientRequestID(_ context.Context, roomID, m
 			return s.failErr
 		}
 
-		return assert.AnError
+		return iris.ErrRateLimited
 	}
 
 	s.messages = append(s.messages, roomID+":"+message)
@@ -133,7 +134,7 @@ func (s *failFirstSendTestSender) SendMessage(_ context.Context, roomID, message
 	s.messages = append(s.messages, roomID+":"+message)
 
 	if s.attempts == 1 {
-		return assert.AnError
+		return iris.ErrRateLimited
 	}
 
 	return nil

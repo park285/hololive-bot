@@ -297,7 +297,7 @@ func (d *SendEngine) handlePerRoomSendFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	if d.transition != nil && !d.applyPerRoomLifecycleFailure(ctx, operation, row, sendReq, sendErr, result, mu) {
+	if !d.applyPerRoomLifecycleFailure(ctx, operation, row, sendReq, sendErr, result, mu) {
 		return
 	}
 
@@ -408,36 +408,6 @@ func (d *SendEngine) handleGroupedSendFailure(
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
-	if d.transition != nil {
-		d.handleVersionedGroupedSendFailure(
-			ctx, operation, group, rows, outboxes, sendReq, formattedMessages, formatFailures,
-			claimTokens, rowClaimTokens, sendErr, result, mu,
-		)
-
-		return
-	}
-
-	d.handleLegacyGroupedSendFailure(
-		ctx, group, rows, outboxes, sendReq, formattedMessages, formatFailures,
-		claimTokens, rowClaimTokens, sendErr, result, mu,
-	)
-}
-
-func (d *SendEngine) handleVersionedGroupedSendFailure(
-	ctx context.Context,
-	operation store.StartedOperation,
-	group *deliveryGroup,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	formattedMessages map[int64]string,
-	formatFailures map[int64]bool,
-	claimTokens []dispatchstate.ClaimToken,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
-	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
-) {
 	kind, reason, retryAfter := lifecycleProviderFailure(sendErr, lifecycleReasonUnknownError)
 	if kind == lifecycle.FailureOutcomeUnknown {
 		d.recordGroupedSendOutcomeUnknown(group, rows, sendReq, sendErr)
@@ -446,7 +416,7 @@ func (d *SendEngine) handleVersionedGroupedSendFailure(
 	}
 
 	if kind == lifecycle.FailurePermanent && shouldFallbackGroupedSend(sendErr) {
-		d.logGroupedSendFallback(group, rows, sendReq, sendErr, true)
+		d.logGroupedSendFallback(group, rows, sendReq, sendErr)
 		d.dispatchStartedRowsIndividually(
 			ctx, operation, rows, outboxes, formattedMessages, formatFailures, rowClaimTokens, result, mu,
 		)
@@ -461,52 +431,13 @@ func (d *SendEngine) handleVersionedGroupedSendFailure(
 	d.recordGroupedSendFailure(ctx, group, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
 }
 
-func (d *SendEngine) handleLegacyGroupedSendFailure(
-	ctx context.Context,
-	group *deliveryGroup,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sendReq deliverySendRequest,
-	formattedMessages map[int64]string,
-	formatFailures map[int64]bool,
-	claimTokens []dispatchstate.ClaimToken,
-	rowClaimTokens [][]dispatchstate.ClaimToken,
-	sendErr error,
-	result *dispatchstate.DispatchResult,
-	mu *sync.Mutex,
-) {
-	if errors.Is(sendErr, errDeliverySendOutcomeUnknown) {
-		d.recordGroupedSendOutcomeUnknown(group, rows, sendReq, sendErr)
-
-		return
-	}
-
-	if shouldFallbackGroupedSend(sendErr) {
-		d.logGroupedSendFallback(group, rows, sendReq, sendErr, false)
-		d.dispatchClaimedRowsIndividually(
-			ctx, rows, outboxes, formattedMessages, formatFailures, rowClaimTokens, result, mu,
-		)
-
-		return
-	}
-
-	d.recordGroupedSendFailure(ctx, group, rows, outboxes, sendReq, claimTokens, sendErr, result, mu)
-}
-
 func (d *SendEngine) logGroupedSendFallback(
 	group *deliveryGroup,
 	rows []domain.YouTubeNotificationDelivery,
 	sendReq deliverySendRequest,
 	sendErr error,
-	versionFenced bool,
 ) {
-	message := "Grouped delivery send failed, falling back to individual deliveries"
-
-	if versionFenced {
-		message = "Grouped delivery send failed, falling back to version-fenced individual deliveries"
-	}
-
-	d.logger.Warn(message,
+	d.logger.Warn("Grouped delivery send failed, falling back to version-fenced individual deliveries",
 		slog.String("room_id", group.roomID),
 		slog.String("channel_id", group.channelID),
 		slog.String("kind", string(group.kind)),

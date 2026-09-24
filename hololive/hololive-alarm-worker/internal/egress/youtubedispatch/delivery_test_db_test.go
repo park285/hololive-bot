@@ -35,15 +35,6 @@ func newDeliveryPool(tb testing.TB) *pgxpool.Pool {
 
 	pool := dbtest.NewPool(tb)
 
-	for _, statement := range []string{
-		`ALTER TABLE youtube_notification_delivery DROP CONSTRAINT IF EXISTS youtube_notification_delivery_outbox_id_fkey`,
-		`ALTER TABLE youtube_notification_delivery_telemetry DROP CONSTRAINT IF EXISTS youtube_notification_delivery_telemetry_outbox_id_fkey`,
-	} {
-		if _, err := pool.Exec(tb.Context(), statement); err != nil {
-			tb.Fatalf("delivery test db: relax legacy unit-test constraint: %v", err)
-		}
-	}
-
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if _, err := pool.Exec(tb.Context(), `
 		INSERT INTO youtube_notification_delivery_ledger_state (
@@ -57,6 +48,32 @@ func newDeliveryPool(tb testing.TB) *pgxpool.Pool {
 	}
 
 	return pool
+}
+
+func TestDeliveryPoolKeepsOutboxForeignKey(t *testing.T) {
+	t.Parallel()
+
+	pool := newDeliveryPool(t)
+
+	var present bool
+
+	err := pool.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'youtube_notification_delivery_outbox_id_fkey' AND contype = 'f')`).Scan(&present)
+	require.NoError(t, err)
+	require.True(t, present)
+
+	outbox := domain.YouTubeNotificationOutbox{
+		Kind: domain.OutboxKindLiveStream, ChannelID: "fk-fixture", ContentID: "fk-fixture",
+		Payload: `{}`,
+	}
+	require.NoError(t, insertDeliveryTestRows(pool, &outbox).Error)
+
+	delivery := domain.YouTubeNotificationDelivery{OutboxID: outbox.ID, RoomID: "fk-room"}
+	require.NoError(t, insertDeliveryTestRows(pool, &delivery).Error)
+
+	_, err = pool.Exec(t.Context(), `INSERT INTO youtube_notification_delivery
+		(outbox_id, room_id, status, attempt_count, next_attempt_at, created_at)
+		VALUES (-1, 'missing-parent', 'PENDING', 0, now(), now())`)
+	require.ErrorContains(t, err, "youtube_notification_delivery_outbox_id_fkey")
 }
 
 func newDeliveryExecModePool(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {

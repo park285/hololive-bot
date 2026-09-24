@@ -37,6 +37,7 @@ func (s *lifecycleTestSender) SendMessage(context.Context, string, string) error
 
 type lifecycleTransitionSpy struct {
 	beginCalls          atomic.Int32
+	beginErr            error
 	startedFailureCalls atomic.Int32
 	completeCalls       atomic.Int32
 	complete            store.ApplyResult
@@ -57,6 +58,10 @@ func (s *lifecycleTransitionSpy) BeginSending(
 	map[int64]domain.YouTubeNotificationOutbox,
 ) (store.StartedOperation, store.ApplyResult, error) {
 	s.beginCalls.Add(1)
+
+	if s.beginErr != nil {
+		return store.StartedOperation{}, store.ApplyResult{Outcome: store.ApplyIndeterminate}, s.beginErr
+	}
 
 	return store.StartedOperation{}, store.ApplyResult{Outcome: store.ApplyApplied}, nil
 }
@@ -92,6 +97,64 @@ func (s *lifecycleTransitionSpy) CompleteSent(
 	s.completeCalls.Add(1)
 
 	return s.complete, s.completeErr
+}
+
+func TestDispatchClaimedDeliveryRequiresConfirmedBeginAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	row := domain.YouTubeNotificationDelivery{ID: 101, OutboxID: 1, RoomID: testRoom1}
+	outbox := domain.YouTubeNotificationOutbox{
+		ID: 1, ChannelID: testChannelCh1, Kind: domain.OutboxKindNewVideo,
+		ContentID: "video-lifecycle-confirmed", Payload: `{"video_id":"video-lifecycle-confirmed"}`,
+	}
+
+	for _, tc := range []struct {
+		name          string
+		beginErr      error
+		wantSend      int32
+		wantComplete  int32
+		wantSuccessID bool
+	}{
+		{name: "begin unconfirmed", beginErr: errors.New("begin commit result unavailable")},
+		{name: "completed", wantSend: 1, wantComplete: 1, wantSuccessID: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sender := &lifecycleTestSender{}
+			engine, _ := newOutcomeUnknownTestEngine(sender, nil, time.Second)
+
+			transition := &lifecycleTransitionSpy{
+				beginErr: tc.beginErr,
+				complete: store.ApplyResult{Outcome: store.ApplyApplied},
+			}
+
+			engine.transition = transition
+
+			result := dispatchstate.DispatchResult{FailureBuckets: make(map[string][]int64)}
+
+			var mu sync.Mutex
+
+			engine.dispatchClaimedDeliveryRow(t.Context(), &row, &outbox,
+				map[int64]string{outbox.ID: testMessageHello}, nil, nil, &result, &mu)
+
+			if got := sender.calls.Load(); got != tc.wantSend {
+				t.Fatalf("sender calls = %d, want %d", got, tc.wantSend)
+			}
+
+			if got := transition.beginCalls.Load(); got != 1 {
+				t.Fatalf("begin calls = %d, want 1", got)
+			}
+
+			if got := transition.completeCalls.Load(); got != tc.wantComplete {
+				t.Fatalf("complete calls = %d, want %d", got, tc.wantComplete)
+			}
+
+			if got := len(result.SuccessDeliveryIDs); (got == 1) != tc.wantSuccessID {
+				t.Fatalf("success delivery IDs = %v, want success=%v", result.SuccessDeliveryIDs, tc.wantSuccessID)
+			}
+		})
+	}
 }
 
 func TestDispatchClaimedDeliveryResponseLostAfterProviderSuccessDoesNotResend(t *testing.T) {

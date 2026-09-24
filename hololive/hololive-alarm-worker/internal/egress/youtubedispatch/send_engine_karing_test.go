@@ -207,7 +207,7 @@ func TestDispatcherFallsBackToTextForUnsupportedKaringKind(t *testing.T) {
 func TestDispatcherKaringFailureDoesNotFallBackToDuplicateText(t *testing.T) {
 	t.Parallel()
 
-	sender := &youtubeOutboxKaringTestSender{failErr: errors.New("karing failed")}
+	sender := &youtubeOutboxKaringTestSender{failErr: egress.ErrKaringStatusFailed}
 	dispatcher := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliveryParallelism: 1,
 		DeliverySendTimeout: time.Second,
@@ -283,7 +283,7 @@ func TestSendEngineKaringMutexWaitUsesDeliverySendTimeout(t *testing.T) {
 	sender := &youtubeOutboxKaringTestSender{}
 	engine := newSendEngine(sender, &MessageFormatter{}, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		DeliverySendTimeout: 20 * time.Millisecond,
-	}, nil, newAuditLogger(nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{}, nil), nil)
+	}, nil, newAuditLogger(nil, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{}, nil), nil, &lifecycleTransitionSpy{})
 	engine.karingMu.Lock()
 
 	done := make(chan error, 1)

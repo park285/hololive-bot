@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/park285/iris-client-go/v2/iris"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/logschema"
@@ -603,7 +604,8 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 
 	renderer := newShortsGroupAndSingleTemplateRenderer(t)
 	sender := &groupedPermanentFailureSender{}
-	d := newDispatcherForTest(t, nil, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
+	db := newDeliveryPool(t)
+	d := newDispatcherForTest(t, db, cachemocks.NewLenientClient(), sender, renderer, slog.New(slog.DiscardHandler), &dispatchstate.Config{
 		BatchSize:           10,
 		LockTimeout:         time.Minute,
 		PollInterval:        time.Second,
@@ -619,6 +621,25 @@ func TestDispatchDeliveryRows_GroupedPermanentFailureFallsBackIndividually(t *te
 	rows := []domain.YouTubeNotificationDelivery{
 		{ID: 101, OutboxID: 1, RoomID: testRoom1},
 		{ID: 102, OutboxID: 2, RoomID: testRoom1},
+	}
+
+	for _, id := range []int64{1, 2} {
+		outbox := outboxByID[id]
+		require.NoError(t, insertDeliveryTestRows(db, &outbox).Error)
+
+		outboxByID[id] = outbox
+	}
+
+	require.NoError(t, insertDeliveryTestRows(db, rows).Error)
+
+	claimedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	for i := range rows {
+		rows[i].RowVersion = 1
+		rows[i].LockedAt = &claimedAt
+		require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
+			"row_version": 1, "locked_at": claimedAt,
+		}, "id = ?", rows[i].ID).Error)
 	}
 
 	result := d.send.dispatchDeliveryRows(t.Context(), rows, outboxByID)
@@ -790,7 +811,7 @@ func TestDispatchDeliveryRows_MultiRoomPartialFailureIsolatesHealthyRoom(t *test
 		t.Fatalf("failedDeliveries = %d, want 1 (failing room only)", result.FailedDeliveries)
 	}
 
-	failedIDs := result.FailureBuckets[deliveryReasonSendMessage]
+	failedIDs := result.FailureBuckets[deliveryReasonRateLimited]
 	if len(failedIDs) != 1 || failedIDs[0] != 102 {
 		t.Fatalf("failure bucket = %#v, want [102] (failing room only)", result.FailureBuckets)
 	}
@@ -819,7 +840,7 @@ func TestDispatchDeliveryRows_RetryResendsOnlyFailedRowsNotHealthyRooms(t *testi
 		t.Fatalf("first pass successDeliveryIDs = %#v, want [101]", got)
 	}
 
-	failedIDs := first.FailureBuckets[deliveryReasonSendMessage]
+	failedIDs := first.FailureBuckets[deliveryReasonRateLimited]
 	if len(failedIDs) != 1 || failedIDs[0] != 102 {
 		t.Fatalf("first pass failure bucket = %#v, want [102]", first.FailureBuckets)
 	}
@@ -1181,7 +1202,7 @@ func TestDispatchDeliveryRows_PerRoomFailureLogsCommunityShortsResult(t *testing
 	assertSendLogStringField(t, entry, logschema.FieldChannelID, testChannelCh1)
 	assertSendLogStringField(t, entry, deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 	assertSendLogStringField(t, entry, deliveryAuditSendResultLogField, sendResultFailure)
-	assertSendLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)
+	assertSendLogStringField(t, entry, deliveryAuditFailureReasonLogField, deliveryReasonRateLimited)
 	assertSendLogStringField(t, entry, deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
 	assertSendLogStringField(t, entry, deliveryAuditModeLogField, deliveryModePerRoom)
 	assertSendLogStringField(t, entry, logschema.FieldRoomID, testRoom1)
@@ -1316,7 +1337,7 @@ func TestDispatchDeliveryRows_GroupedFailureLogsCommunityShortsAudit(t *testing.
 	for i := range entries {
 		assertSendLogStringField(t, entries[i], deliveryAuditAlarmTypeLogField, string(domain.AlarmTypeCommunity))
 		assertSendLogStringField(t, entries[i], deliveryAuditSendResultLogField, sendResultFailure)
-		assertSendLogStringField(t, entries[i], deliveryAuditFailureReasonLogField, deliveryReasonSendMessage)
+		assertSendLogStringField(t, entries[i], deliveryAuditFailureReasonLogField, deliveryReasonRateLimited)
 		assertSendLogStringField(t, entries[i], deliveryAuditPathLogField, telemetry.CommunityShortsDeliveryPath)
 		assertSendLogStringField(t, entries[i], deliveryAuditModeLogField, deliveryModeGrouped)
 		assertSendLogSentAtField(t, entries[i])
@@ -1802,7 +1823,7 @@ func newOutcomeUnknownTestEngine(sender messagedelivery.MessageSender, renderer 
 	spy := &outcomeUnknownClaimSpy{}
 	auditLogger := newAuditLogger(nil, nil, logger, cfg, nil)
 	formatter := newMessageFormatter(renderer, cachemocks.NewLenientClient(), logger, nil)
-	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy))
+	engine := newSendEngine(sender, formatter, logger, cfg, spy, auditLogger, newMetricsRecorder(logger, auditLogger, spy), &lifecycleTransitionSpy{})
 
 	return engine, spy
 }

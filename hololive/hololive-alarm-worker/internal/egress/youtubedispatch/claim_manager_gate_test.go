@@ -2,16 +2,17 @@ package youtubedispatch
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/park285/iris-client-go/v2/iris"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/claim"
+	"github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch/store"
 	"github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
@@ -28,7 +29,7 @@ func (s *claimGateTestSender) SendMessage(_ context.Context, roomID, message str
 	defer s.mu.Unlock()
 
 	if s.failRoom[roomID] {
-		return errors.New(testSendFailedMessage)
+		return fmt.Errorf("%s: %w", testSendFailedMessage, iris.ErrRateLimited)
 	}
 
 	s.messages = append(s.messages, roomID+":"+message)
@@ -92,7 +93,7 @@ func newClaimGateTestDispatcher(t *testing.T, sender *claimGateTestSender, confi
 	)
 
 	dispatcher.telemetry = nil
-	dispatcher.send.transition = nil
+	dispatcher.send.transition = &lifecycleTransitionSpy{complete: store.ApplyResult{Outcome: store.ApplyApplied}}
 
 	return dispatcher, db
 }
@@ -134,7 +135,7 @@ func newClaimGateTestDispatcherWithDB(t *testing.T, db *deliveryTestDB, sender *
 	)
 
 	dispatcher.telemetry = nil
-	dispatcher.send.transition = nil
+	dispatcher.send.transition = &lifecycleTransitionSpy{complete: store.ApplyResult{Outcome: store.ApplyApplied}}
 
 	return dispatcher
 }
@@ -365,7 +366,7 @@ func TestDispatchDeliveryRowsReleasesClaimAfterSendFailure(t *testing.T) {
 	require.Zero(t, sender.messageCount())
 	require.Empty(t, result.SuccessDeliveryIDs)
 	require.Equal(t, 1, result.FailedDeliveries)
-	require.Equal(t, []int64{row.ID}, result.FailureBuckets[deliveryReasonSendMessage])
+	require.Equal(t, []int64{row.ID}, result.FailureBuckets[deliveryReasonRateLimited])
 
 	var state domain.YouTubeCommunityShortsAlarmState
 
@@ -627,7 +628,7 @@ func TestDispatchClaimedRowsIndividuallyReleasesOnlyOwnedClaimsOnFailure(t *test
 
 	require.Equal(t, 2, sender.messageCount())
 	require.ElementsMatch(t, []int64{firstRow.ID, secondRow.ID}, result.SuccessDeliveryIDs)
-	require.Equal(t, []int64{duplicateRow.ID}, result.FailureBuckets[deliveryReasonSendMessage])
+	require.Equal(t, []int64{duplicateRow.ID}, result.FailureBuckets[deliveryReasonRateLimited])
 
 	var firstState domain.YouTubeCommunityShortsAlarmState
 
@@ -801,6 +802,8 @@ func TestDispatchDeliveryRowsSkipsShortWhenAnotherExecutionOwnsRecentClaimDefers
 	row.NextAttemptAt = now.Add(-time.Minute)
 	row.AttemptCount = 1
 	row.RowVersion = 1
+
+	require.NoError(t, insertDeliveryTestRows(db, &outbox).Error)
 	require.NoError(t, insertDeliveryTestRows(db, &row).Error)
 	require.NoError(t, updateDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, map[string]any{
 		"row_version": 1,
