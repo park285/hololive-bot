@@ -10,7 +10,7 @@
 기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `gofmt`, `go fix` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, stage-3 `golangci-lint`, NilAway, `go build`, PGO-off production policy, `go test -count=1`, race detector, `govulncheck`를 포함합니다. PostgreSQL integration test는 `TEST_DATABASE_URL`이 설정된 경우 추가 실행합니다.
 
 ## 2. architecture/
-PR/릴리스 전 경계 게이트와 릴리스 노트 렌더링 도구입니다.
+PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니다. 공개 GitHub Release 본문은 [릴리즈 runbook](../docs/current/runbooks/release.md)의 GitHub 자동 생성 절차를 따릅니다. `render-release-notes.sh`는 별도 운영 기록용입니다.
 
 - 표준 진입점: `./scripts/architecture/ci-boundary-gate.sh`
 - 세부 체크:

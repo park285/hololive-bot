@@ -20,7 +20,7 @@
 - [ ] `./scripts/architecture/ci-boundary-gate.sh` 실행 성공
 - [ ] 필수 게이트(M0/M1/M2/M4/M6) 통과 확인
 - [ ] 실행 로그 또는 CI 성공 링크를 본 PR에 첨부
-- [ ] 릴리즈 노트 작성 시 `docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md` 사용
+- [ ] GitHub Release는 `docs/current/runbooks/release.md`의 자동 생성 형식 사용; 운영 검증 기록은 `docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`에 분리
 
 ## Contract / Runtime 문서 영향
 
