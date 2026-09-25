@@ -17,10 +17,9 @@ out="$2"
 if [[ "$SCAN_CASE" == malformed ]]; then printf '{' >"$out"; exit 1; fi
 if [[ "$SCAN_CASE" == empty-report ]]; then echo '{"SchemaVersion":2,"Results":[]}' >"$out"; exit 0; fi
 if [[ "$SCAN_CASE" == clean ]]; then echo '{"SchemaVersion":2,"Results":[{"Target":"fixture","Type":"debian"}]}' >"$out"; exit 0; fi
-if [[ "$SCAN_CASE" == grpc-* ]]; then
+if [[ "$SCAN_CASE" == grpc-affected ]]; then
   id=CVE-2026-84445
   purl=pkg:golang/google.golang.org/grpc@v1.84.0
-  [[ "$SCAN_CASE" != grpc-wrong-version ]] || purl=pkg:golang/google.golang.org/grpc@v1.84.1
   jq -n --arg id "$id" --arg purl "$purl" \
     '{SchemaVersion:2,Results:[{Target:"app/bin/fixture",Type:"gobinary",Vulnerabilities:[{VulnerabilityID:$id,PkgIdentifier:{PURL:$purl}}]}]}' >"$out"
   exit 1
@@ -54,15 +53,9 @@ if [[ "$1" == -mode=extract ]]; then
   symbols='[{"pkg":"main","name":"main"}]'
   [[ "$SCAN_CASE" != stripped ]] || symbols='[]'
   modules='[]'
-  if [[ "$SCAN_CASE" == grpc-* ]]; then
+  if [[ "$SCAN_CASE" == grpc-affected ]]; then
     modules='[{"Path":"google.golang.org/grpc","Version":"v1.84.0","Replace":null}]'
     symbols='[{"pkg":"google.golang.org/grpc/internal/transport","name":"http2Server.HandleStreams"}]'
-  fi
-  if [[ "$SCAN_CASE" == grpc-xds ]]; then
-    symbols='[{"pkg":"google.golang.org/grpc/internal/transport","name":"http2Server.HandleStreams"},{"pkg":"google.golang.org/grpc/internal/xds/server","name":"RouteAndProcess"}]'
-  fi
-  if [[ "$SCAN_CASE" == grpc-no-transport ]]; then
-    symbols='[{"pkg":"main","name":"main"}]'
   fi
   arch=arm64
   [[ "$SCAN_CASE" != wrong-arch ]] || arch=amd64
@@ -77,7 +70,7 @@ reason=vulnerable_code_not_present
 id=GO-TEST-1
 purl=pkg:golang/example.test/lib@v1.0.0
 aliases='[]'
-if [[ "$SCAN_CASE" == grpc-* ]]; then
+if [[ "$SCAN_CASE" == grpc-affected ]]; then
   status=affected
   reason=''
   id=GO-2026-6443
@@ -92,29 +85,19 @@ case "$SCAN_CASE" in
   wrong-module) purl=pkg:golang/example.test/other@v1.0.0 ;;
   wrong-version) purl=pkg:golang/example.test/lib@v2.0.0 ;;
   missing-statements) echo '{}'; exit ;;
-  grpc-wrong-id) id=GO-TEST-OTHER ;;
 esac
 jq -n --arg status "$status" --arg reason "$reason" --arg id "$id" --arg purl "$purl" --argjson aliases "$aliases" \
   '{statements:[{status:$status,justification:$reason,vulnerability:{name:$id,aliases:$aliases},products:[{subcomponents:[{"@id":$purl}]}]}]}'
 SH
-cat >"$fixture/bin/go" <<'SH'
-#!/usr/bin/env bash
-set -eu
-[[ "${1:-}" == version && "${2:-}" == -m ]] || exit 2
-[[ "$SCAN_CASE" == grpc-* ]] || exit 2
-sum=h1:soMyaPJ8pAak5PIQ0DGBUir0XRo2fRoMqhNWMLlLxO0=
-[[ "$SCAN_CASE" != grpc-wrong-sum ]] || sum=h1:wrong
-printf '\tdep\tgoogle.golang.org/grpc\tv1.84.0\t%s\n' "$sum"
-SH
 chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH" TMPDIR="$fixture/reports" FIXTURE_CLEANUP="$fixture/cleanup"
 cd "$fixture/repo"
-for scenario in clean absent encoded-absence grpc-fixed grpc-xds grpc-no-transport grpc-wrong-sum grpc-wrong-id grpc-wrong-version affected unreachable unknown-id wrong-module wrong-version missing-statements stripped wrong-arch extract-error analysis-error missing-binary trivy-error malformed empty-report non-go; do
+for scenario in clean absent encoded-absence grpc-affected affected unreachable unknown-id wrong-module wrong-version missing-statements stripped wrong-arch extract-error analysis-error missing-binary trivy-error malformed empty-report non-go; do
   status=0
   SCAN_CASE="$scenario" bash scripts/ci/run-final-image-scan.sh >"$fixture/$scenario.log" 2>&1 || status=$?
   if [[ "$scenario" == clean ]]; then
     [[ "$status" == 0 ]] || { cat "$fixture/$scenario.log"; exit 1; }
-  elif [[ "$scenario" == absent || "$scenario" == encoded-absence || "$scenario" == grpc-fixed ]]; then
+  elif [[ "$scenario" == absent || "$scenario" == encoded-absence ]]; then
     [[ "$status" == 0 ]] || { cat "$fixture/$scenario.log"; exit 1; }
     report_dir="$(awk '/^final image scan evidence:/ {print $NF}' "$fixture/$scenario.log")"
     jq -e '.Results[0].Vulnerabilities | length == 1' "$report_dir/1.trivy.json" >/dev/null

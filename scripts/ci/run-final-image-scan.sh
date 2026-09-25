@@ -94,17 +94,9 @@ while IFS='|' read -r source platform image; do
       and .[1].goos == "linux" and .[1].goarch == "arm64"
       and (.[1].pkgSymbols | type == "array" and length > 0)' "$artifact.extract.json" >/dev/null
     "$govulncheck_bin" -mode=binary -scan=package -format=openvex "$artifact.bin" >"$artifact.vex.json"
-    grpc_release=""
-    if jq -e --arg target "$target" 'any(.Results[];
-      .Type == "gobinary" and .Target == $target and any(.Vulnerabilities[]?;
-        .VulnerabilityID == "CVE-2026-84445"
-        and .PkgIdentifier.PURL == "pkg:golang/google.golang.org/grpc@v1.84.0"))' "$report" >/dev/null; then
-      grpc_release="$(go version -m "$artifact.bin" | awk '$1 == "dep" && $2 == "google.golang.org/grpc" { print $3 " " $4 }')"
-    fi
-    jq -e --slurpfile scan "$report" --slurpfile extract "$artifact.extract.json" \
-      --arg target "$target" --arg grpc_release "$grpc_release" \
+    jq -e --slurpfile scan "$report" --arg target "$target" \
       -f "$root_dir/scripts/ci/check-go-image-vex.jq" "$artifact.vex.json" >/dev/null || {
-      echo "Go finding lacks exact package-absence or fixed-release proof: $artifact.vex.json" >&2
+      echo "Go finding lacks exact package-absence proof: $artifact.vex.json" >&2
       exit 1
     }
     echo "Go finding verified: $target (raw findings retained in $report)"

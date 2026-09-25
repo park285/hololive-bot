@@ -199,9 +199,32 @@ The stats window is fresh only when at least one `alarm_dispatch_deliveries` cla
 
 ## 릴리즈 노트
 
-Use:
+GitHub Release 제목은 tag와 같은 `v<version>`으로 쓰고, 본문은
+[`v3.5.0`](https://github.com/park285/hololive-bot/releases/tag/v3.5.0)처럼 GitHub가
+생성한 `What's Changed`, PR 제목·작성자·링크, `Full Changelog` 형식을 사용합니다.
+수동 운영 요약이나 `CHANGELOG.md` 복사본으로 대체하지 않습니다.
 
-- `docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`
+`previous_tag`는 직전 게시 릴리즈로 명시하여, tag만 있고 Release가 없는 중간 버전의
+변경도 누락하지 않습니다. 첫 게시 릴리즈는 직전 app tag를 기준으로 합니다.
+승인된 tag 게시 후 생성 예:
+
+```bash
+gh release create "$tag" --repo park285/hololive-bot --verify-tag \
+  --title "$tag" --generate-notes --notes-start-tag "$previous_tag"
+```
+
+기존 본문의 수정은 원문을 보존한 뒤 같은 tag 구간으로 생성합니다. 태그·첨부물·
+draft/prerelease 상태는 변경하지 않습니다.
+
+```bash
+gh api repos/park285/hololive-bot/releases/generate-notes \
+  -f tag_name="$tag" -f previous_tag_name="$previous_tag" --jq .body > "$notes_file"
+gh release edit "$tag" --repo park285/hololive-bot --title "$tag" --notes-file "$notes_file"
+```
+
+배포·검증·롤백 근거는 `docs/runbook_execution/RELEASE_NOTES_TEMPLATE_20260303.md`와
+`scripts/architecture/render-release-notes.sh`를 이용해 별도 운영 기록으로 유지합니다.
+이 양식은 공개 GitHub Release 본문 생성기가 아닙니다.
 
 ## Smoke test
 
