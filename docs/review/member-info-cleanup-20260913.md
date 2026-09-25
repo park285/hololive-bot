@@ -117,3 +117,42 @@ API go.mod에서 같은 v1.13.0을 indirect로 이동했다. 버전과 go.sum �
 배포 진입점 정적 계약 5종은 통과했다. 별도 실행한 meta-repo 검사 중 decision inventory는
 원본 iris-stack의 기존 INVENTORY.tsv stale 상태로 실패했다. hololive-bot 작업과 무관한 meta 생성물은 수정하지 않았다.
 저장소별 게시 게이트는 정상 hook으로 별도 실행하고 그 결과를 기준으로 게시한다.
+
+## 게시와 운영 반영 확인 — 2026-09-25
+
+이 절은 위 2026-09-13~14의 미커밋·미배포 메모 뒤에 확보한 읽기 전용 관측이다.
+[PR #499](https://github.com/park285/hololive-bot/pull/499)는 `2026-09-13T16:17:05Z`에 병합되었다.
+2026-09-25 관측 당시 `git ls-remote origin refs/heads/main`은
+`909f876d0c9c4dd34207afdb5b6376198a214a87`을 반환했다. 이후 main의 이동과 구분한다.
+`git merge-base --is-ancestor`로 멤버 정리 병합 `7693d0b936dfc702ca9515d14a6498fd176a1970`이
+아래 두 운영 revision에 포함됨을 각각 확인했다.
+
+| 운영 대상 | 관측 당시 source revision | 확인 결과 |
+| --- | --- | --- |
+| 중앙 API, 수집기 c | `909f876d0c9c4dd34207afdb5b6376198a214a87` | container healthy, restarts 0, H3 readiness 성공 |
+| 중앙 alarm-worker | `4d81838a4c143d48896e4d728809a76738f31854` | container healthy, restarts 0, H3 readiness 성공 |
+| AP 수집기 b | `909f876d0c9c4dd34207afdb5b6376198a214a87` | container healthy, restarts 0, H3 readiness 성공 |
+| AP 수집기 a | 설치 manifest `909f876d0c9c4dd34207afdb5b6376198a214a87` | native active/running, 누적 NRestarts 2, H3 readiness 성공 |
+| AP 수집기 d | 설치 manifest `909f876d0c9c4dd34207afdb5b6376198a214a87` | native active/running, NRestarts 0, H3 readiness 성공 |
+
+worker의 revision 차이는 기록대로 보존한다. 두 소스 모두 이 변경을 포함하지만 원래 T05의
+main/revision 일치를 이 관측에서 충족한 것으로 판정하지 않는다. 최초 배포 당시의 일치도
+이번 조회로 복원할 수 없다. 이번 문서 정리를 위해 재배포하지 않았다.
+native 설치 manifest와 현재 readiness를 확인했으며, 누적 재시작 2회를 0회로 표시하거나 원인을 추정하지 않는다.
+
+Hololive 정본 PostgreSQL의 관리 소켓에서
+`PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=2000'`,
+`psql --no-psqlrc -v ON_ERROR_STOP=1`로만 조회했다. 선행 guard 및 각 조회의
+`SHOW transaction_read_only` 결과는 모두 `on`이었다.
+
+- `schema_migrations`의 `197_member_info_units.sql` 적용 시각은 `2026-09-13 16:20:40.033934+00`이다.
+- 저장된 SHA-256 `9573f2ce0eeac6ad454ee455f015395a4151ba3f2294723a64d49a201dffa295`가 현재 migration 파일의 `sha256sum`과 일치했다.
+- holoAN 개인은 정확히 3행·서로 다른 slug 3개다. 공용 채널·Hololive 소속·`holoAN` unit·공식 링크·공개 데뷔일이 모두 일치하고 생일은 모두 NULL이다.
+- `holoan-room`은 1행이며 같은 채널의 최소 영속 ID로 대표를 유지한다.
+- `shirakami-fubuki`는 1행이며 기수 배열 길이 2를 유지한다.
+- 관측 당시 Hololive 분류는 89행, 기수 등록은 82행이다. 이를 착수 당시의 81행과 혼동하지 않는다.
+
+T05 관련 게시·기능 반영·데이터의 후속 근거를 보완했으며, 원래 모든 완료 조건의 재검증을 뜻하지 않는다.
+기존 로컬 회귀와 보존 검증은 앞 절의 결과를 유지한다.
+이번에는 배포·migration 재실행, DB/Valkey 쓰기, 과거 번역 캐시 삭제나 실제 `!정보` 메시지 발송을 하지 않았다.
+현재 조회만으로 과거의 모든 데이터 변경 이력이나 Valkey namespace 삭제를 증명한다고 주장하지 않는다.

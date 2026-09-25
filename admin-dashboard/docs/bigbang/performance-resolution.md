@@ -113,3 +113,25 @@ Docker 지연은 +15% 경계에 가깝습니다. 이 짧은 결과로 정규 반
 60분 관찰과 정규 12회 비교는 사용자의 대기 시간 축소 요청에 따라 미실행으로 유지합니다. T10/V06·AC08·AC10의 전체 출시 검증을 완료한 것으로 변경하지 않습니다.
 
 Fallback delta: none. 입력/응답 검증 생략, 업무 재시도, 새 호환 경로, upstream·업무 DB 변경은 없습니다.
+
+## 2026-09-25 현행 대체 서비스 확인
+
+이 기록의 Go BFF·Valkey client·WS 부하와 RSS 회복 실패는 퇴역한 독립 관리자 세대의 결과다.
+`DEC-20260915-admin-typescript` 이후 웹 구현은 Iris Console의 TypeScript gateway와 React SSR이
+소유한다. 현재 `admin-dashboard/`에는 문서만 남고 독립 backend/frontend 소스는 없다.
+현재 운영 절차는 [Iris Console](https://github.com/park285/iris-console/blob/main/docs/operations/hololive-web.md)을 따른다.
+
+읽기 전용 점검 당시 중앙 환경의 실행 container 목록에 독립 `admin-dashboard`는 없고,
+`admin-dashboard-ingress`만 단축 링크 ingress로 남아 있었다.
+`iris-console.service`는 active/running, NRestarts 0이었으며 `/health`는 `status=ok`였다.
+당시 `SOURCE_REVISION`은 `a9179a6e512f4aa025900c805ec254620ec91fc6`이고 주 process의
+실행 파일도 해당 generation의 `node`로 확인했다. 공개 페이지는 Iris Console 로그인 화면을 제공했다.
+
+그 시점 cgroup의 MemoryCurrent는 186,892,288 bytes, MemoryPeak는 274,423,808 bytes,
+MemoryMax는 infinity였다. 이는 새 gateway·자식 process의 cgroup 관측이며 기존 Go BFF의
+동일 부하 process RSS·128 MiB container 비교나 정규 60분 회복 검사의 결과가 아니다.
+새 구현의 장시간 RSS 회복이나 누수 부재를 이 단일 관측으로 주장하지 않는다.
+
+원래 AC08/AC10/V06과 실패·단축 검증 기록은 변경하지 않는다. 퇴역한 BFF의 성능 예외를
+현재 서비스의 미구현 작업으로 다시 등록하거나 옛 실행 경로를 복원하지 않는다.
+현행 Console에 새 자원 문제가 관찰되면 현재 artifact·부하·수명 계약으로 별도 조사한다.

@@ -2,8 +2,8 @@
 
 ## Execution capsule
 **Goal:** `!정보`의 내장 소개문 의존성을 제거하고 기수와 기본 정보, 신규 멤버 조회를 보존한다.
-**Context:** members는 소속만 저장하며 기수는 원문/번역 JSON에서 추출한다. holoAN 개인 3명이 운영 DB에서 누락되어 있다.
-**Constraints:** 기존 ID·채널·구독·졸업 상태를 보존한다. 공식 미공개 값은 추측하지 않는다. 로컬 구현과 검증 및 누락 멤버 보완 요청이 승인되었다. 애플리케이션 배포·push는 별도 범위이다.
+**Context:** 2026-09-13 착수 당시 members는 소속만 저장하고 기수는 원문/번역 JSON에서 추출했으며, holoAN 개인 3명이 운영 DB에서 누락되어 있었다. 현재 반영 근거와 검증 한계는 아래 T05 후속 대조를 따른다.
+**Constraints:** 기존 ID·채널·구독·졸업 상태를 보존한다. 공식 미공개 값은 추측하지 않는다. 최초 범위는 로컬 구현·검증과 누락 멤버 보완이며, 게시·운영 적용은 후속 T05의 별도 승인 범위로 진행했다.
 **Evidence:** main ad6616250; 2026-09-13 hololive-osaka 읽기 전용 조회; hololive.hololivepro.com/en/talents/ 및 holoAN 공식 개인 페이지.
 **Success:** DB에만 있는 멤버도 조회되고 기수 미등록 멤버는 목록에서 누락되지 않는다. 소개문 JSON/서비스/캐시/관리자 API/수집 도구가 제거되고 회귀 검사가 통과한다.
 **Output:** refactor/profile-cleanup-20260913 작업 트리, 멱등 migration, 코드 및 검증 기록. Hololive 계획 루트는 catalog의 legacy 모드이며 별도 PLN은 사용하지 않는다.
@@ -38,7 +38,7 @@ bot info/formatter/handlers, admin app/http/api, bootstrap/runtime의 관련 테
 ## 실행 근거
 
 로컬 구현과 검증 결과는 [멤버 정보 정리 검증](../../review/member-info-cleanup-20260913.md)에 기록하였다.
-T01/T02 및 AC01/AC02/V01/V02를 검증했다. T03/AC03/V03의 로컬 단계는 완료했고 운영 적용은 아직 수행하지 않았다.
+2026-09-13 당시 T01/T02 및 AC01/AC02/V01/V02를 검증했고 T03/AC03/V03의 로컬 단계는 완료했다. 당시 미수행이던 운영 적용의 후속 근거는 아래 T05 대조 절에 연결한다.
 
 ### T04 적대적 리뷰 결함 수정
 리뷰에서 확인한 채널 대표 오염, 기본 날짜 이관 누락, 생성 입력 손실, wildcard 조회를 수정한다.
@@ -57,7 +57,7 @@ member repository/cache, info command, admin member 생성 경로, migration의 
 이전 검증 완료 기록은 AC04에 대한 증거가 아니며 새 결과로 보완한다.
 
 2026-09-14: T04/AC04/V04는 추가 재현 검사와 독립 리뷰어 2명의 재검토로 검증했다.
-운영 적용은 수행하지 않았고 로컬 검증 결과 및 남은 배포 범위는 위 검증 기록의 적대적 리뷰 수정 절에 남겼다.
+2026-09-14 리뷰 수정 시점에는 운영 적용 전이었으며, 해당 시점의 로컬 검증 결과는 위 검증 기록의 적대적 리뷰 수정 절에 보존한다.
 
 ### T05 게시 및 운영 적용 — 2026-09-14 승인
 사용자가 작업 결과의 커밋·push·메인 합류·라이브 반영을 승인했다. 대상은 hololive-bot 저장소와
@@ -69,3 +69,14 @@ member repository/cache, info command, admin member 생성 경로, migration의 
 → 기존 운영 이미지/배포 트리 보존 → 중앙 migration → 중앙 및 AP 순차 교체 → revision/readiness/DB 사후 확인.
 완료 조건은 원격 main과 실행 revision 일치, migration ledger 성공, 데이터 보존 및 신규 개인 조회,
 모든 대상 health/readiness 성공이다. 운영 결과 증거는 검증 기록에 남긴다.
+
+## T05 후속 대조 — 2026-09-25
+
+PR #499의 main 병합과 운영 반영을 [후속 읽기 전용 검증](../../review/member-info-cleanup-20260913.md#게시와-운영-반영-확인--2026-09-25)으로 대조했다.
+API와 수집기 a/b/c/d의 source revision `909f876d0c9c4dd34207afdb5b6376198a214a87`,
+worker의 `4d81838a4c143d48896e4d728809a76738f31854`는 모두 멤버 정리 병합을 포함한다.
+운영 migration 197의 체크섬, holoAN 개인 3명과 공용 채널 대표, 복수 기수 및 여섯 runtime의 readiness를 확인했다.
+기능 반영을 확인한 참고 기록으로 분류하며 같은 migration·배포를 다시 실행하지 않는다.
+worker의 revision 차이 때문에 원래 T05의 main/revision 일치를 이번 관측의 PASS로 표시하지 않는다.
+최초 배포 당시의 실행 시각·revision 일치는 이 후속 조회로 복원하지 못한다.
+원문 메시지 발송이나 DB·Valkey 변경을 수행하지 않았다.
