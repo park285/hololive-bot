@@ -116,6 +116,23 @@ func TestAdminService_Save(t *testing.T) {
 	})
 }
 
+func TestAdminService_LiveStreamsRejectViewerCount(t *testing.T) {
+	t.Parallel()
+
+	service := &template.AdminService{}
+	body := "{{range .Streams}}{{.ViewerCount}}{{end}}"
+
+	_, err := service.Save(t.Context(), domain.TemplateKeyCmdLiveStreams, nil, body)
+	require.ErrorIs(t, err, template.ErrTemplateRenderError)
+	require.ErrorContains(t, err, "ViewerCount")
+
+	rendered, data, err := service.Preview(t.Context(), domain.TemplateKeyCmdLiveStreams, body)
+	require.ErrorIs(t, err, template.ErrTemplateRenderError)
+	require.ErrorContains(t, err, "ViewerCount")
+	assert.Empty(t, rendered)
+	assert.Nil(t, data)
+}
+
 func TestAdminService_DeleteOverride(t *testing.T) {
 	service, templateRepo := setupTestService(t)
 	ctx := t.Context()

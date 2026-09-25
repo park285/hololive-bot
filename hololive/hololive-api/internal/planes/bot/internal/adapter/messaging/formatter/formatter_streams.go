@@ -38,7 +38,6 @@ type liveStreamView struct {
 	ChannelName string
 	Title       string
 	URL         string
-	ViewerCount int
 }
 
 const streamListDisplayLimit = 100
@@ -108,17 +107,10 @@ func (f *ResponseFormatter) liveStreamViews(ctx context.Context, streams []*doma
 }
 
 func (f *ResponseFormatter) liveStreamView(ctx context.Context, stream *domain.Stream) liveStreamView {
-	viewerCount := 0
-
-	if stream.ViewerCount != nil {
-		viewerCount = *stream.ViewerCount
-	}
-
 	return liveStreamView{
 		ChannelName: f.formatChannelName(ctx, stream),
 		Title:       f.truncateTitle(stream.Title),
 		URL:         stream.GetYouTubeURL(),
-		ViewerCount: viewerCount,
 	}
 }
 
