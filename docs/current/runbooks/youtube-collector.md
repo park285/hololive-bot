@@ -97,17 +97,27 @@ Worker count, local queue capacity, acquisition cadence/batch, lease/renew/clean
 
 `iris_stack_worker_in_flight / iris_stack_worker_configured_workers`는 작업 슬롯 점유율입니다. CPU 사용률이 아니며, provider admission과 YouTube.js 호출 제한 대기도 포함합니다. AP별 `YOUTUBE_COLLECTOR_REQUEST_INTERVAL_SECONDS`는 **helper RPC 전체가 공유하는 간격**입니다. 기본 2초이면 AP 한 대의 명목 상한은 시간당 1,800 RPC입니다. 워커 수만 늘려 이 상한을 늘릴 수 없습니다. 한 RPC가 외부 HTTP 요청 여러 번을 수행할 수 있으므로 외부 API 호출량과 동일시하지 않습니다.
 
-- `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/viewer/unknown, outcome은 success/timeout/canceled/error입니다.
+- `youtubejs_rpc_phase_duration_seconds{operation,phase,outcome}`: `rate_limit` 대기와 `helper` 수행·응답 해석을 분리한 histogram. helper 내부의 외부 응답·파싱 시간은 합산입니다. operation은 community/content/channel/unknown, outcome은 success/timeout/canceled/error입니다.
 - `youtubejs_rpc_phase_in_flight{operation,phase}`와 `youtubejs_rpc_request_interval_seconds`: 현재 기다리는 호출, 수행 중인 호출과 설정된 호출 간격입니다. helper phase count는 제한을 통과한 RPC 시도 수입니다.
 - `youtube_collection_duration_seconds`: 15/30/60/120/300초 버킷까지 포함합니다. 기존 10초 상한을 넘는 content job의 p95를 10초로 해석하지 않습니다. 롤링 배포 중에는 AP별 histogram을 확인하고 모든 AP가 같은 버킷으로 전환되기 전 fleet 합산 quantile을 해석하지 않습니다.
-- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target만 job별로 묶어 집계합니다. `targets`, `stale_targets`(완료 시각이 poll interval보다 오래됨), `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. 미완료를 완료 경과 0초로 해석하지 않습니다. due에는 AP 로컬 큐에 들어오지 않은 대상과 만료 lease도 포함됩니다. 없던 lease의 due 기준은 현재 target의 created_at입니다.
-- `hololive_youtube_collection_viewer_targets{state}`는 LIVE/UPCOMING/other를 분리합니다. `viewer_review_targets{reason}`의 state_mismatch, scheduled_before_now, scheduled_overdue_7d는 겹칠 수 있는 검토 대상이며 종료 증거가 아닙니다. 예정 시각 경과만으로 ENDED로 바꾸거나 알림을 발송하지 않습니다.
+- API가 노출하는 `hololive_youtube_collection_*`: 현재 유효한 projection의 enabled target을 community/content/channel-live/channel-metadata 네 작업으로 묶어 집계합니다. `targets`, `stale_targets`(완료 시각이 poll interval보다 오래됨), `never_completed_targets`, `due_targets`, `oldest_completion_age_seconds`, `oldest_due_age_seconds`, `required_rpc_rate`를 함께 확인합니다. 미완료를 완료 경과 0초로 해석하지 않습니다. due에는 AP 로컬 큐에 들어오지 않은 대상과 만료 lease도 포함됩니다. 없던 lease의 due 기준은 현재 target의 created_at입니다. 퇴역 viewer 작업의 과거 lease·지표는 현재 수요에 포함하지 않습니다.
+- `hololive_youtube_collection_live_states{state}`와 `live_state_review_targets{reason}`는 현재 유효한 `live_snapshot` 채널 대상에 속한 서로 다른 영상 중 head 또는 서비스 상태가 LIVE/UPCOMING인 집합을 진단합니다. 상태는 head 기준이며 missing/그 밖의 상태는 other입니다. 양방향 상태 불일치를 포함하고, 채널 식별자가 없는 head-only 항목과 양쪽 모두 종료된 이력은 제외합니다. state_mismatch, scheduled_before_now, scheduled_overdue_7d는 겹칠 수 있으며 종료 증거가 아닙니다.
 
 API 집계는 기존 claim 관측 경로에서 최대 30초마다, DB admission을 포함해 1초 예산으로 실행합니다. 실패·유효 projection 부재는 `hololive_youtube_collection_snapshot_success=0`이며 이전 숫자와 마지막 성공 시각을 보존합니다. 성공 지표가 1이고 마지막 성공이 120초 이내일 때만 대상 숫자를 현재값으로 사용합니다. 기존 `youtube_collection_freshness_seconds`는 해당 provider/kind 중 마지막 성공 하나의 경과이며 전체 대상의 신선도를 보장하지 않습니다.
 
-Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailable`, `HololiveCollectionTargetsStale`, `HololiveCollectionCallBudgetPressure`, `HololiveCollectionViewerStateMismatch`를 확인합니다. 명목 수요가 가동 AP 상한의 85%를 10분 넘게 사용하면 대상·주기·장애 시 여유를 검토합니다. 이 경계값은 초기 운영 기준이며 수집 정책을 자동 변경하지 않습니다. 관측 배포는 API와 AP 계측을 먼저 검증하고 Grafana 생성물·경보를 반영합니다.
+Bot Drilldown의 수집 처리량 섹션과 `HololiveCollectionSnapshotUnavailable`, `HololiveCollectionTargetsStale`, `HololiveCollectionCallBudgetPressure`, `HololiveCollectionLiveStateMismatch`를 확인합니다. 명목 수요가 가동 AP 상한의 85%를 10분 넘게 사용하면 대상·주기·장애 시 여유를 검토합니다. 이 경계값은 초기 운영 기준이며 수집 정책을 자동 변경하지 않습니다. 관측 배포는 API와 AP 계측을 먼저 검증하고 Grafana 생성물·경보를 반영합니다.
 
 Collector loader와 Compose는 canonical env만 읽습니다. `YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS`와 `YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES`는 폐기되었고, 설정되어 있어도 무시됩니다. Canonical 값이 없으면 documented default(`30`, `1048576`)를 씁니다. 명시적 empty는 startup fail입니다.
+
+### Viewer 수집 중단 반영과 검증
+
+새 생산은 YouTube.js와 Holodex 양쪽에서 중단하되, 기존 viewer 관측의 소비·재처리는 유지합니다. 적용 순서는 검증된 Go binary와 Node helper를 같은 bundle로 모든 AP에 반영 → 신규 viewer 발행 중단 및 기존 큐 처리 확인 → migration 210과 API의 네 작업 projection/지표 반영 → Grafana dashboard·경보 반영입니다. API projection을 먼저 바꾸면 구형 collector의 viewer가 섞인 Holodex batch 전체가 target 검증에서 거절될 수 있습니다. 롤백은 API의 기존 viewer 대상 복원과 projection 확인을 먼저 하고 구형 AP bundle을 복원합니다.
+
+`YouTubeCollectorFreshnessStale/Unavailable`에서 퇴역 작업을 제외하므로 보존된 viewer 성공 지표가 장애 경보로 남지 않습니다. 기존 상태 불일치 감시는 새 live-state 지표로 유지합니다. 큐가 한 번 0이라는 사실만으로 모든 AP의 신규 생산 중단을 대신하지 않습니다. 과거 계약 row·표본·공유 큐를 삭제하지 않으며 기존 보존 정책은 계속 적용됩니다.
+
+2026-09-25 로컬 자원 비교: 같은 합성 100영상·20채널 응답을 500회 처리했습니다. HTTPS 요청은 전후 1회/배치, live 관측은 20개로 같고 viewer 관측은 100→0, checkpoint는 120→20입니다. DB 저장을 제외한 정규화·관측 생성은 14.086→3.584ms/배치, 누적 할당은 7,207,041→1,767,077bytes/배치였습니다. 로컬 HTTPS를 포함한 실행은 14.338→3.820ms/배치였습니다. 이는 해당 fixture의 측정이며 운영 CPU/RSS나 외부 응답 지연 개선율이 아닙니다.
+
+검증은 collector·API projection/metrics·공유 과거 관측·템플릿의 race 검사, helper protocol/type 검사, 30,000개 종료 이력을 추가한 실제 EXPLAIN 접근량 회귀, schema snapshot과 관측 규칙 검사를 포함합니다. 호출 간격·worker 수·운영 데이터·서비스는 이 로컬 구현에서 변경하지 않았습니다. Fallback delta: none.
 
 ## YouTube.js transient recovery
 
