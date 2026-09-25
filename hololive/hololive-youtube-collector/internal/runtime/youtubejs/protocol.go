@@ -319,21 +319,3 @@ type ChannelResult struct {
 
 func (r *ChannelResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
 func (r *ChannelResult) pagination() Pagination         { return r.Pagination }
-
-type ViewerRequest struct {
-	ProtocolVersion         int16  `json:"protocol_version"`
-	VideoID                 string `json:"video_id"`
-	MaxSuccessResponseBytes int    `json:"max_success_response_bytes"`
-}
-
-type ViewerResult struct {
-	ProtocolMeta
-	Pagination
-
-	VideoID      string `json:"video_id"`
-	ViewerCount  *int64 `json:"viewer_count"`
-	Availability string `json:"availability"`
-}
-
-func (r *ViewerResult) protocolMetadata() ProtocolMeta { return r.ProtocolMeta }
-func (r *ViewerResult) pagination() Pagination         { return r.Pagination }

@@ -1205,6 +1205,7 @@ TABLE youtube_live_reconciliation_heads
   CONSTRAINT youtube_live_reconciliation_heads_pkey PRIMARY KEY (video_id)
   INDEX CREATE INDEX idx_youtube_live_reconciliation_due ON public.youtube_live_reconciliation_heads USING btree (next_end_check_at, video_id) WHERE (next_end_check_at IS NOT NULL)
   INDEX CREATE INDEX idx_youtube_live_reconciliation_end_candidate ON public.youtube_live_reconciliation_heads USING btree (end_candidate_observation_id) WHERE (end_candidate_observation_id IS NOT NULL)
+  INDEX CREATE INDEX idx_youtube_live_reconciliation_heads_active_video ON public.youtube_live_reconciliation_heads USING btree (video_id) WHERE (status = ANY (ARRAY['LIVE'::text, 'UPCOMING'::text]))
 
 TABLE youtube_live_sessions
   COLUMN video_id character varying(20) NOT NULL

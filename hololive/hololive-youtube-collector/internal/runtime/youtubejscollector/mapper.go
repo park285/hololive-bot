@@ -1,8 +1,6 @@
 package youtubejscollector
 
 import (
-	"time"
-
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser"
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
@@ -225,21 +223,6 @@ func channelPhotoPayload(channelID string, variants []youtubejs.ChannelPhotoVari
 			Variants:  kinds,
 		},
 	}, true
-}
-
-func viewerPayload(videoID string, result *youtubejs.ViewerResult, windowStart time.Time, windowSeconds int) contract.ViewerSampleV1 {
-	return contract.ViewerSampleV1{
-		VideoID:             videoID,
-		ViewerCount:         result.ViewerCount,
-		Availability:        result.Availability,
-		SampleWindowStart:   windowStart,
-		SampleWindowSeconds: windowSeconds,
-		Coverage: contract.ViewerSampleCoverageV1{
-			VideoID:             videoID,
-			SampleWindowStart:   windowStart,
-			SampleWindowSeconds: windowSeconds,
-		},
-	}
 }
 
 func thumbnails(values []parser.Thumbnail) []contract.Thumbnail {

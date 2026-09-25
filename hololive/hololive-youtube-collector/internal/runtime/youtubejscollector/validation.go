@@ -41,14 +41,6 @@ func validateUnavailableLiveSessions(channelID, kind string, result *youtubejs.C
 	return nil
 }
 
-func validateViewerIdentity(requestedVideoID string, result *youtubejs.ViewerResult) error {
-	if result == nil || result.VideoID != requestedVideoID {
-		return collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "youtube.js viewer response identity does not match request")
-	}
-
-	return nil
-}
-
 func validateContentIdentity(requestedChannelID string, items []youtubejs.ContentItem) error {
 	for i := range items {
 		if items[i].ChannelID != requestedChannelID {

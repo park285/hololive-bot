@@ -2,7 +2,6 @@
 import { createInnertube, fetchCommunityFeed } from "./fetch-community.mjs";
 import { fetchContentFeed } from "./fetch-content.mjs";
 import { fetchChannelFeed } from "./fetch-channel.mjs";
-import { fetchViewerFeed } from "./fetch-viewer.mjs";
 
 /** @typedef {import("./contracts.d.ts").FetcherSet} FetcherSet */
 /** @typedef {import("./upstream-feeds.d.ts").InnertubeFetch} InnertubeFetch */
@@ -52,12 +51,6 @@ export function createRealFetchers(options = {}) {
         innertube: await innertubeClient(),
       });
     },
-    async fetchViewer(fetchOptions) {
-      return fetchViewerFeed({
-        ...fetchOptions,
-        innertube: await innertubeClient(),
-      });
-    },
     async close() {},
   };
 }
@@ -88,17 +81,6 @@ export const stubFetchers = {
       stats: {},
       profile: {},
       photo: [],
-      page_count: 1,
-      exhausted: true,
-      continuity: "NOT_APPLICABLE",
-      termination_reason: "exhausted",
-    };
-  },
-  fetchViewer(fetchOptions) {
-    return {
-      video_id: fetchOptions.videoId,
-      viewer_count: null,
-      availability: "UNAVAILABLE",
       page_count: 1,
       exhausted: true,
       continuity: "NOT_APPLICABLE",

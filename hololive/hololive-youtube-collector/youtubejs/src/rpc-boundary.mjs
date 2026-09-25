@@ -4,7 +4,6 @@ import {
   communityEndpoint,
   contentEndpoint,
   handleRpcRequest,
-  viewerEndpoint,
 } from "./rpc-validation.mjs";
 
 /**
@@ -51,20 +50,6 @@ export async function handleChannelRequest(rawBody, fetchChannel, maximumSuccess
       channelId: payload.channel_id,
       kind: payload.kind,
       maxPages: payload.max_pages,
-      maxSuccessResponseBytes: payload.max_success_response_bytes,
-    });
-  }, maximumSuccessResponseBytes);
-}
-
-/**
- * @param {string} rawBody
- * @param {import("./contracts.d.ts").ViewerFetcher} fetchViewer
- * @param {number} [maximumSuccessResponseBytes]
- */
-export async function handleViewerRequest(rawBody, fetchViewer, maximumSuccessResponseBytes) {
-  return handleRpcRequest(rawBody, viewerEndpoint, async (payload) => {
-    return fetchViewer({
-      videoId: payload.video_id,
       maxSuccessResponseBytes: payload.max_success_response_bytes,
     });
   }, maximumSuccessResponseBytes);

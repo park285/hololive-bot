@@ -1,7 +1,6 @@
 WITH mapping(kind, observation_kinds, rpc_calls) AS (
     VALUES
         ('youtubejs_channel_live', ARRAY['live_snapshot'], 1),
-        ('youtubejs_viewer', ARRAY['viewer_sample'], 1),
         ('community_collect', ARRAY['community_page'], 1),
         ('youtubejs_content', ARRAY['video_list', 'shorts_list'], 2),
         ('youtubejs_channel_metadata', ARRAY['channel_stats', 'channel_profile', 'channel_photo'], 1)
@@ -17,36 +16,48 @@ WITH mapping(kind, observation_kinds, rpc_calls) AS (
     WHERE t.enabled AND t.valid_until > statement_timestamp()
     GROUP BY m.kind, m.rpc_calls, t.subject_key
 ), samples AS (
-    SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, t.created_at, l.last_completed_at,
+    SELECT t.kind, t.rpc_calls, t.subject_key, t.interval_ms, l.last_completed_at,
            CASE
                WHEN l.job_key IS NULL THEN t.created_at
                WHEN l.slot_state = 'IDLE' THEN l.next_due_at
                WHEN l.slot_state = 'DEFERRED' THEN l.retry_not_before
                WHEN l.slot_state = 'ACTIVE' THEN l.lease_expires_at
-           END AS due_at,
-           h.status AS viewer_state, product.status AS product_state,
-           product.scheduled_start_time
+           END AS due_at
     FROM targets t
     LEFT JOIN youtube_collection_job_leases l
       ON l.job_key = 'collector:youtubejs:' || t.kind || ':' || t.subject_key
-    LEFT JOIN youtube_live_reconciliation_heads h
-      ON t.kind = 'youtubejs_viewer' AND h.video_id = t.subject_key
-    LEFT JOIN youtube_live_sessions product
-      ON t.kind = 'youtubejs_viewer' AND product.video_id = t.subject_key
+), active_live_videos AS (
+    SELECT video_id FROM youtube_live_reconciliation_heads WHERE status IN ('LIVE', 'UPCOMING')
+    UNION
+    SELECT video_id FROM youtube_live_sessions WHERE status IN ('LIVE', 'UPCOMING')
+), live_states AS (
+    SELECT v.video_id, h.status AS state, product.status AS product_state, product.scheduled_start_time
+    FROM active_live_videos v
+    JOIN youtube_live_sessions product ON product.video_id = v.video_id
+    JOIN targets t ON t.kind = 'youtubejs_channel_live' AND t.subject_key = product.channel_id
+    LEFT JOIN youtube_live_reconciliation_heads h ON h.video_id = v.video_id
+), live_summary AS (
+    SELECT COUNT(video_id) FILTER (WHERE state = 'LIVE') AS live,
+           COUNT(video_id) FILTER (WHERE state = 'UPCOMING') AS upcoming,
+           COUNT(video_id) FILTER (WHERE state IS NULL OR state NOT IN ('LIVE', 'UPCOMING')) AS other,
+           COUNT(video_id) FILTER (WHERE state IS DISTINCT FROM product_state) AS state_mismatch,
+           COUNT(video_id) FILTER (WHERE state = 'UPCOMING' AND scheduled_start_time < statement_timestamp()) AS past_due,
+           COUNT(video_id) FILTER (WHERE state = 'UPCOMING' AND scheduled_start_time < statement_timestamp() - INTERVAL '7 days') AS past_due_7d
+    FROM live_states
+), target_summary AS (
+    SELECT m.kind, EXISTS(SELECT 1 FROM current_projection) AS projection_valid,
+           COUNT(s.subject_key) AS targets,
+           COUNT(s.subject_key) FILTER (WHERE s.last_completed_at IS NULL) AS never_completed,
+           COUNT(s.subject_key) FILTER (WHERE s.last_completed_at < statement_timestamp() - s.interval_ms * INTERVAL '1 millisecond') AS stale,
+           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.last_completed_at), 0)), 0)::double precision AS oldest_completion_age,
+           COUNT(s.subject_key) FILTER (WHERE s.due_at <= statement_timestamp()) AS due,
+           COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.due_at), 0)), 0)::double precision AS oldest_due_age,
+           COALESCE(SUM(s.rpc_calls * 1000.0 / s.interval_ms), 0)::double precision AS required_rpc_rate
+    FROM mapping m LEFT JOIN samples s ON s.kind = m.kind
+    GROUP BY m.kind
 )
-SELECT m.kind, EXISTS(SELECT 1 FROM current_projection) AS projection_valid,
-       COUNT(s.subject_key) AS targets,
-       COUNT(s.subject_key) FILTER (WHERE s.last_completed_at IS NULL) AS never_completed,
-       COUNT(s.subject_key) FILTER (WHERE s.last_completed_at < statement_timestamp() - s.interval_ms * INTERVAL '1 millisecond') AS stale,
-       COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.last_completed_at), 0)), 0)::double precision AS oldest_completion_age,
-       COUNT(s.subject_key) FILTER (WHERE s.due_at <= statement_timestamp()) AS due,
-       COALESCE(MAX(GREATEST(EXTRACT(EPOCH FROM statement_timestamp() - s.due_at), 0)), 0)::double precision AS oldest_due_age,
-       COALESCE(SUM(s.rpc_calls * 1000.0 / s.interval_ms), 0)::double precision AS required_rpc_rate,
-       COUNT(s.subject_key) FILTER (WHERE s.viewer_state = 'LIVE') AS viewer_live,
-       COUNT(s.subject_key) FILTER (WHERE s.viewer_state = 'UPCOMING') AS viewer_upcoming,
-       COUNT(s.subject_key) FILTER (WHERE s.viewer_state IS NULL OR s.viewer_state NOT IN ('LIVE', 'UPCOMING')) AS viewer_other,
-       COUNT(s.subject_key) FILTER (WHERE s.product_state IS NOT NULL AND s.viewer_state IS DISTINCT FROM s.product_state) AS viewer_state_mismatch,
-       COUNT(s.subject_key) FILTER (WHERE s.viewer_state = 'UPCOMING' AND s.scheduled_start_time < statement_timestamp()) AS viewer_past_due,
-       COUNT(s.subject_key) FILTER (WHERE s.viewer_state = 'UPCOMING' AND s.scheduled_start_time < statement_timestamp() - INTERVAL '7 days') AS viewer_past_due_7d
-FROM mapping m LEFT JOIN samples s ON s.kind = m.kind
-GROUP BY m.kind ORDER BY m.kind;
+SELECT t.kind, t.projection_valid, t.targets, t.never_completed, t.stale,
+       t.oldest_completion_age, t.due, t.oldest_due_age, t.required_rpc_rate,
+       l.live, l.upcoming, l.other, l.state_mismatch, l.past_due, l.past_due_7d
+FROM target_summary t CROSS JOIN live_summary l
+ORDER BY t.kind;

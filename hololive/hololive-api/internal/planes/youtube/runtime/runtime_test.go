@@ -753,7 +753,3 @@ func (emptyRosterReader) NotificationChannelIDs(context.Context, dbx.Tx) ([]stri
 func (emptyRosterReader) OperationalChannelIDs(context.Context, dbx.Tx) ([]string, error) {
 	return nil, nil
 }
-
-func (emptyRosterReader) ViewerVideoIDs(context.Context, dbx.Tx) ([]string, error) {
-	return nil, nil
-}

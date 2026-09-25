@@ -185,8 +185,8 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedRuntimeTargets(t, pool, []leaseSeed{
-		{testSubjectKey, contract.KindLiveSnapshot},
-		{"vid-1", contract.KindViewerSample},
+		{testSubjectKey, contract.KindChannelStats},
+		{testSubjectKey, contract.KindChannelPhoto},
 	})
 
 	config := runtimeLeaseConfig()
@@ -196,10 +196,10 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	holodex := stubJob(contract.ProviderHolodex, "holodex_live",
-		contract.KindLiveSnapshot, contract.KindViewerSample)
+	holodex := stubJob(contract.ProviderHolodex, "holodex_metadata",
+		contract.KindChannelStats, contract.KindChannelPhoto)
 
-	holodex.collect = collectHolodexLiveAndViewer
+	holodex.collect = collectHolodexMetadata
 
 	registry, err := NewRegistry(withOverride(holodex)...)
 	if err != nil {
@@ -214,8 +214,8 @@ func TestLeaseSchedulerPublishesOneBatchForMultipleKinds(t *testing.T) {
 		gates:     defaultProviderGates(),
 	}
 	spec := joblease.JobSpec{
-		JobKey: "collector:holodex:holodex_live:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
-		CollectionJobKind: "holodex_live", SubjectKey: "global:holodex_live", PollInterval: time.Minute,
+		JobKey: "collector:holodex:holodex_metadata:global", Provider: contract.ProviderHolodex, Class: "GLOBAL",
+		CollectionJobKind: "holodex_metadata", SubjectKey: "global:holodex_metadata", PollInterval: time.Minute,
 	}
 	executor.runSpec(ctx, &spec)
 
@@ -391,17 +391,18 @@ const (
 	testOwnerInstance    = "collector-a"
 )
 
-func collectHolodexLiveAndViewer(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
+func collectHolodexMetadata(_ context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
 	lease := input.Lease()
 
-	live, err := collectutil.Envelope(
-		contract.ProviderHolodex, contract.KindLiveSnapshot, testSubjectKey, 1, &lease,
+	subscriberCount := int64(9)
+
+	stats, err := collectutil.Envelope(
+		contract.ProviderHolodex, contract.KindChannelStats, testSubjectKey, 1, &lease,
 		contract.CompletenessPartial, contract.ContinuityNotApplicable,
-		contract.LiveSnapshotV1{
-			Sessions: []contract.LiveSessionV1{{VideoID: "vid-1", ChannelID: testSubjectKey, Status: "LIVE"}},
-			Coverage: contract.GlobalChannelCoverageV1{
-				RequestedChannelIDs: []string{testSubjectKey},
-				Filters:             contract.LiveFiltersV1{Statuses: []string{"LIVE"}},
+		contract.ChannelStatsV1{
+			ChannelID: testSubjectKey, SubscriberCount: &subscriberCount,
+			Coverage: contract.ChannelStatsCoverageV1{
+				ChannelID: testSubjectKey, Fields: []string{"subscriber_count"},
 			},
 		},
 	)
@@ -409,16 +410,14 @@ func collectHolodexLiveAndViewer(_ context.Context, input *collectutil.RunInput)
 		return collectutil.CollectResult{}, fmt.Errorf("envelope: %w", err)
 	}
 
-	viewerCount := int64(9)
-
-	viewer, err := collectutil.Envelope(
-		contract.ProviderHolodex, contract.KindViewerSample, "vid-1", 1, &lease,
-		contract.CompletenessComplete, contract.ContinuityNotApplicable,
-		contract.ViewerSampleV1{
-			VideoID: "vid-1", ViewerCount: &viewerCount, Availability: "AVAILABLE",
-			SampleWindowStart: lease.ScheduledFor, SampleWindowSeconds: 60,
-			Coverage: contract.ViewerSampleCoverageV1{
-				VideoID: "vid-1", SampleWindowStart: lease.ScheduledFor, SampleWindowSeconds: 60,
+	photo, err := collectutil.Envelope(
+		contract.ProviderHolodex, contract.KindChannelPhoto, testSubjectKey, 1, &lease,
+		contract.CompletenessPartial, contract.ContinuityNotApplicable,
+		contract.ChannelPhotoV1{
+			ChannelID: testSubjectKey,
+			Variants:  []contract.PhotoVariantV1{{Kind: "avatar", URL: "https://img.test/avatar.jpg"}},
+			Coverage: contract.ChannelPhotoCoverageV1{
+				ChannelID: testSubjectKey, Variants: []string{"avatar"},
 			},
 		},
 	)
@@ -426,7 +425,7 @@ func collectHolodexLiveAndViewer(_ context.Context, input *collectutil.RunInput)
 		return collectutil.CollectResult{}, fmt.Errorf("envelope: %w", err)
 	}
 
-	complete, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{live, viewer}, time.Now())
+	complete, err := collectutil.CompleteFromEnvelopes([]contract.Envelope{stats, photo}, time.Now())
 	if err != nil {
 		return collectutil.CollectResult{}, fmt.Errorf("complete from envelopes: %w", err)
 	}
