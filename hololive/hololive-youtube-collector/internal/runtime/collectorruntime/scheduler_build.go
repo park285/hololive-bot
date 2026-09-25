@@ -165,7 +165,6 @@ func collectorRunners(infra *collectorInfrastructure) []JobRunner {
 		youtubejscollector.NewContentRunner(infra.youtubejsRPC, maxResults),
 		youtubejscollector.NewChannelLiveRunner(infra.youtubejsRPC),
 		youtubejscollector.NewChannelMetadataRunner(infra.youtubejsRPC),
-		youtubejscollector.NewViewerRunner(infra.youtubejsRPC),
 		holodexcollector.NewLiveRunner(infra.holodex),
 		holodexcollector.NewMetadataRunner(infra.holodex),
 		holodexcollector.NewScheduleRunner(infra.holodex),

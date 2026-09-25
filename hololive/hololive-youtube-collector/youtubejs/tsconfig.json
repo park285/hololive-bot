@@ -27,7 +27,6 @@
     "src/upstream-feeds.d.ts",
     "src/fetch-community.d.mts",
     "src/fetch-content.d.mts",
-    "src/fetch-channel.d.mts",
-    "src/fetch-viewer.d.mts"
+    "src/fetch-channel.d.mts"
   ]
 }

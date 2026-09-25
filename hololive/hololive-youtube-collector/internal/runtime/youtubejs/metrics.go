@@ -65,8 +65,6 @@ func rpcOperation(path string) string {
 		return "content"
 	case "/v1/channel":
 		return "channel"
-	case "/v1/viewer":
-		return "viewer"
 	default:
 		return "unknown"
 	}

@@ -100,7 +100,7 @@ func TestCandidatesForProjectionEmptyWhenTargetsMissingOrDisabled(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	job := mustTestJob(t, contract.ProviderYouTubeJS, "youtubejs_viewer")
+	job := mustTestJob(t, contract.ProviderYouTubeJS, "youtubejs_channel_live")
 	empty, err := repository.CandidatesForProjection(ctx, generation, job, nil, 4)
 
 	if err != nil || len(empty.Jobs) != 0 || empty.Truncated {

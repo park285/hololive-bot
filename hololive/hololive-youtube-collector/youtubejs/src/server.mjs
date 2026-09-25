@@ -11,7 +11,6 @@ import {
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
-  handleViewerRequest,
 } from "./rpc-boundary.mjs";
 import { rpcErrorResult, rpcErrorResultFor } from "./rpc-validation.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
@@ -21,7 +20,6 @@ export {
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
-  handleViewerRequest,
   RuntimeState,
 };
 
@@ -196,8 +194,7 @@ function isCollectionPath(req) {
   return req.method === "POST" && (
     req.url === "/v1/community" ||
     req.url === "/v1/content" ||
-    req.url === "/v1/channel" ||
-    req.url === "/v1/viewer"
+    req.url === "/v1/channel"
   );
 }
 
@@ -217,10 +214,7 @@ async function dispatchCollection(url, raw, fetchers, maximumSuccessResponseByte
   if (url === "/v1/content") {
     return handleContentRequest(raw, fetchers.fetchContent, maximumSuccessResponseBytes);
   }
-  if (url === "/v1/channel") {
-    return handleChannelRequest(raw, fetchers.fetchChannel, maximumSuccessResponseBytes);
-  }
-  return handleViewerRequest(raw, fetchers.fetchViewer, maximumSuccessResponseBytes);
+  return handleChannelRequest(raw, fetchers.fetchChannel, maximumSuccessResponseBytes);
 }
 
 /** @param {ServerResponse} res @param {number} status @param {unknown} body */

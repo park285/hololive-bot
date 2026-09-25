@@ -4,7 +4,6 @@ interface Error {
 
 interface YouTubeJSFetchOptions {
   channelId?: string;
-  videoId?: string;
   kind?: string;
   maxResults?: number;
   maxPages?: number;

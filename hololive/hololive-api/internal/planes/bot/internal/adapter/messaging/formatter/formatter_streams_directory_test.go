@@ -37,7 +37,7 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	t.Parallel()
 
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
-		domain.TemplateKeyCmdLiveStreams:     "라이브 목록\n{{range .Streams}}{{.ChannelName}}|{{.Title}}|{{.URL}}|{{.ViewerCount}}\n{{end}}",
+		domain.TemplateKeyCmdLiveStreams:     "라이브 목록 {{.Count}}개\n{{range .Streams}}{{.ChannelName}}|{{.Title}}|{{.URL}}\n{{end}}",
 		domain.TemplateKeyCmdUpcomingStreams: "예정 목록\n{{range .Streams}}{{.ChannelName}}|{{.TimeInfo}}|{{.URL}}\n{{end}}",
 		domain.TemplateKeyCmdChannelSchedule: "채널 일정\n{{range .Streams}}{{if .IsLive}}LIVE{{else}}{{.TimeInfo}}{{end}}|{{.Title}}|{{.URL}}\n{{end}}",
 	})
@@ -60,10 +60,12 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	}
 
 	live := formatter.FormatLiveStreams(t.Context(), streams)
-	assert.Contains(t, live, "라이브 목록")
+	assert.Contains(t, live, "라이브 목록 1개")
 	assert.Contains(t, live, testMemberSakuraMiko)
 	assert.NotContains(t, live, "[Holo]")
 	assert.Contains(t, live, "https://youtube.com/watch?v=abc123")
+	assert.Contains(t, live, formatter.truncateTitle(longTitle))
+	assert.NotContains(t, live, "1234")
 	assert.NotContains(t, live, "\u200b")
 
 	upcoming := formatter.UpcomingStreams(t.Context(), streams, 12)
@@ -78,7 +80,7 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	assert.NotContains(t, schedule, "\u200b")
 
 	emptyLive := formatter.FormatLiveStreams(t.Context(), nil)
-	assert.Equal(t, "라이브 목록", emptyLive)
+	assert.Equal(t, "라이브 목록 0개", emptyLive)
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)

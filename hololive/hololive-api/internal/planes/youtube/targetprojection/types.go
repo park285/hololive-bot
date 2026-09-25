@@ -52,13 +52,11 @@ type Schedule struct {
 type PolicyInputs struct {
 	NotificationChannelIDs []string
 	OperationalChannelIDs  []string
-	ViewerVideoIDs         []string
 }
 
 type InputReader interface {
 	NotificationChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 	OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
-	ViewerVideoIDs(ctx context.Context, tx dbx.Tx) ([]string, error)
 }
 
 type PolicyBuilder struct {
@@ -81,15 +79,9 @@ func (b PolicyBuilder) Build(ctx context.Context, tx dbx.Tx, _ time.Time) ([]Tar
 		return nil, nil, fmt.Errorf("%w: load operational channels: %w", ErrInputRead, err)
 	}
 
-	videos, err := b.Reader.ViewerVideoIDs(ctx, tx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: load viewer videos: %w", ErrInputRead, err)
-	}
-
 	out1, out2, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: notification,
 		OperationalChannelIDs:  operational,
-		ViewerVideoIDs:         videos,
 	}, b.Schedules)
 	if err != nil {
 		return out1, out2, fmt.Errorf("build policy targets: %w", err)
@@ -112,14 +104,6 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 		return nil, nil, fmt.Errorf("append group: %w", err)
 	}
 
-	if err := rejectChannelViewerSubjects(inputs.ViewerVideoIDs); err != nil {
-		return nil, nil, fmt.Errorf("reject channel viewer subjects: %w", err)
-	}
-
-	if err := builder.appendGroup(inputs.ViewerVideoIDs, []contract.ObservationKind{contract.KindViewerSample}, "viewer_roster"); err != nil {
-		return nil, nil, fmt.Errorf("append group: %w", err)
-	}
-
 	if err := builder.appendGlobalSchedule(); err != nil {
 		return nil, nil, fmt.Errorf("append global schedule: %w", err)
 	}
@@ -129,8 +113,7 @@ func BuildPolicyTargets(inputs PolicyInputs, schedules map[contract.ObservationK
 
 func policyInputOverflow(inputs PolicyInputs) bool {
 	return len(inputs.NotificationChannelIDs) > MaxInputChannelCount ||
-		len(inputs.OperationalChannelIDs) > MaxInputChannelCount ||
-		len(inputs.ViewerVideoIDs) > MaxInputChannelCount
+		len(inputs.OperationalChannelIDs) > MaxInputChannelCount
 }
 
 func notificationPolicyKinds() []contract.ObservationKind {
@@ -195,16 +178,6 @@ func (b *policyTargetBuilder) appendSubjectKinds(subject string, kinds []contrac
 	return nil
 }
 
-func rejectChannelViewerSubjects(videoIDs []string) error {
-	for _, rawVideoID := range videoIDs {
-		if looksLikeYouTubeChannelID(rawVideoID) {
-			return fmt.Errorf("%w: viewer_sample subject %q is a channel id", ErrInvalidProjection, strings.TrimSpace(rawVideoID))
-		}
-	}
-
-	return nil
-}
-
 func (b *policyTargetBuilder) appendGlobalSchedule() error {
 	schedule, ok := b.schedules[contract.KindSchedule]
 	if !ok {
@@ -223,9 +196,4 @@ func (b *policyTargetBuilder) appendGlobalSchedule() error {
 	})
 
 	return nil
-}
-
-func looksLikeYouTubeChannelID(value string) bool {
-	id := strings.TrimSpace(value)
-	return strings.HasPrefix(id, "UC") && len(id) >= 22
 }

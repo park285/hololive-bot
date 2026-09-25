@@ -42,7 +42,6 @@ export interface HealthResponse {
 }
 
 export type Continuity = "CONTIGUOUS" | "GAP_UNRESOLVED" | "NOT_APPLICABLE";
-export type ViewerAvailability = "AVAILABLE" | "HIDDEN" | "UNAVAILABLE";
 export type LiveStatus = "LIVE" | "UPCOMING" | "ENDED" | "CANCELLED";
 export type PhotoKind = "avatar" | "banner";
 export type ContentKind = "videos" | "shorts";
@@ -83,12 +82,6 @@ export interface ChannelRequest {
   max_success_response_bytes: number;
 }
 
-export interface ViewerRequest {
-  protocol_version: number;
-  video_id: string;
-  max_success_response_bytes: number;
-}
-
 export interface CommunityFetchOptions {
   channelId: string;
   maxResults?: number;
@@ -107,21 +100,14 @@ export interface ChannelFetchOptions {
   maxSuccessResponseBytes: number;
 }
 
-export interface ViewerFetchOptions {
-  videoId: string;
-  maxSuccessResponseBytes: number;
-}
-
 export type CommunityFetcher = (options: CommunityFetchOptions) => Awaitable<Omit<CommunityResult, "protocol_version">>;
 export type ContentFetcher = (options: ContentFetchOptions) => Awaitable<Omit<ContentResult, "protocol_version">>;
 export type ChannelFetcher = (options: ChannelFetchOptions) => Awaitable<Omit<ChannelResult, "protocol_version">>;
-export type ViewerFetcher = (options: ViewerFetchOptions) => Awaitable<Omit<ViewerResult, "protocol_version">>;
 
 export interface FetcherSet {
   fetchCommunity: CommunityFetcher;
   fetchContent: ContentFetcher;
   fetchChannel: ChannelFetcher;
-  fetchViewer: ViewerFetcher;
   close?: () => Awaitable<void>;
 }
 
@@ -270,11 +256,4 @@ export interface UnavailableLiveSession {
   video_id: string;
   channel_id: string;
   reason: "access_restricted";
-}
-
-export interface ViewerResult extends Pagination {
-  protocol_version: number;
-  video_id: string;
-  viewer_count?: number | null;
-  availability: ViewerAvailability;
 }

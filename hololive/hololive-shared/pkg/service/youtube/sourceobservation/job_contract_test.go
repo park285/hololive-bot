@@ -61,11 +61,15 @@ func TestAPI007JobContractSetDefinitionUsesJobID(t *testing.T) {
 		t.Fatalf("Definition(%s) = %#v ok=%t", id, job, ok)
 	}
 
-	if !set.Allows(id, contract.KindLiveSnapshot) || set.Allows(id, contract.KindCommunityPage) {
+	if !set.Allows(id, contract.KindLiveSnapshot) || set.Allows(id, contract.KindCommunityPage) || set.Allows(id, contract.KindViewerSample) {
 		t.Fatal("Allows mismatch")
 	}
 
-	if got := set.IDs(); len(got) != 9 {
+	if _, exists := set.Definition(JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_viewer"}); exists {
+		t.Fatal("retired viewer job remains executable")
+	}
+
+	if got := set.IDs(); len(got) != 8 {
 		t.Fatalf("IDs() = %d", len(got))
 	}
 }
@@ -143,13 +147,6 @@ func subjectJobContractFixtures() []jobContractFixture {
 			[]contract.ObservationKind{contract.KindChannelPhoto, contract.KindChannelProfile, contract.KindChannelStats},
 			nil,
 		},
-		{
-			mustJobID(contract.ProviderYouTubeJS, "youtubejs_viewer"),
-			JobClassSubject, JobMembershipExactSubject, "",
-			[]contract.ObservationKind{contract.KindViewerSample},
-			[]contract.ObservationKind{contract.KindViewerSample},
-			nil,
-		},
 	}
 }
 
@@ -158,8 +155,8 @@ func globalJobContractFixtures() []jobContractFixture {
 		{
 			mustJobID(contract.ProviderHolodex, "holodex_live"),
 			JobClassGlobal, JobMembershipCurrentProjection, "global:holodex_live",
-			[]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
-			[]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample},
+			[]contract.ObservationKind{contract.KindLiveSnapshot},
+			[]contract.ObservationKind{contract.KindLiveSnapshot},
 			[]contract.ObservationKind{contract.KindLiveSnapshot},
 		},
 		{

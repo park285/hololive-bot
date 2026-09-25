@@ -234,17 +234,6 @@ export function validateChannelRequest(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ViewerRequest} */
-export function validateViewerRequest(value) {
-  const record = requestRecord(value);
-  assertRequestKeys(record, ["protocol_version", "video_id", "max_success_response_bytes"], []);
-  return {
-    protocol_version: protocolVersion(record),
-    video_id: requiredString(record, "video_id"),
-    max_success_response_bytes: positiveInteger(record, "max_success_response_bytes"),
-  };
-}
-
 /** @param {unknown} value @returns {import("./contracts.d.ts").CommunityResult} */
 export function validateCommunityResponse(value) {
   const record = responseRecord(value);
@@ -340,23 +329,6 @@ function validateUnavailableLiveSession(value) {
   };
 }
 
-/** @param {unknown} value @returns {import("./contracts.d.ts").ViewerResult} */
-export function validateViewerResponse(value) {
-  const record = responseRecord(value);
-  assertResponseKeys(
-    record,
-    ["protocol_version", "video_id", "availability", "page_count", "exhausted", "continuity", "termination_reason"],
-    ["viewer_count", "cursor_start", "cursor_end"],
-  );
-  return {
-    protocol_version: responseProtocolVersion(record),
-    video_id: nonemptyStringField(record, "video_id"),
-    ...optionalNullableNonnegativeInteger(record, "viewer_count"),
-    availability: validateViewerAvailability(record),
-    ...validatePagination(record),
-  };
-}
-
 /** @type {import("./contracts.d.ts").RpcEndpoint<import("./contracts.d.ts").CommunityRequest, import("./contracts.d.ts").CommunityResult>} */
 export const communityEndpoint = {
   validateRequest: validateCommunityRequest,
@@ -399,21 +371,6 @@ export const channelEndpoint = {
     stats: {},
     profile: {},
     photo: [],
-    page_count: 1,
-    exhausted: true,
-    continuity: "NOT_APPLICABLE",
-    termination_reason: "exhausted",
-  })),
-};
-
-/** @type {import("./contracts.d.ts").RpcEndpoint<import("./contracts.d.ts").ViewerRequest, import("./contracts.d.ts").ViewerResult>} */
-export const viewerEndpoint = {
-  validateRequest: validateViewerRequest,
-  validateResponse: validateViewerResponse,
-  minimumSuccessResponseBytes: Buffer.byteLength(JSON.stringify({
-    protocol_version: 1,
-    video_id: "x",
-    availability: "UNAVAILABLE",
     page_count: 1,
     exhausted: true,
     continuity: "NOT_APPLICABLE",
@@ -676,15 +633,6 @@ function validateContinuity(record) {
     return value;
   }
   throw new RpcResponseError("continuity is invalid");
-}
-
-/** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").ViewerAvailability} */
-function validateViewerAvailability(record) {
-  const value = nonemptyStringField(record, "availability");
-  if (value === "AVAILABLE" || value === "HIDDEN" || value === "UNAVAILABLE") {
-    return value;
-  }
-  throw new RpcResponseError("viewer availability is invalid");
 }
 
 /** @param {Record<string, unknown>} record @returns {import("./contracts.d.ts").LiveStatus} */

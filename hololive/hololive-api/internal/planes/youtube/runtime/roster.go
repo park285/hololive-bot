@@ -28,15 +28,6 @@ func (rosterReader) OperationalChannelIDs(ctx context.Context, tx dbx.Tx) ([]str
 	return out, nil
 }
 
-func (rosterReader) ViewerVideoIDs(ctx context.Context, tx dbx.Tx) ([]string, error) {
-	out, err := targetprojection.LiveHeadViewerVideoIDs(ctx, tx)
-	if err != nil {
-		return out, fmt.Errorf("live head viewer video IDs: %w", err)
-	}
-
-	return out, nil
-}
-
 func loadChannelIDs(ctx context.Context, tx dbx.Tx, queryName, label string) ([]string, error) {
 	if tx == nil {
 		return nil, fmt.Errorf("%w: transaction is not configured", targetprojection.ErrInputRead)

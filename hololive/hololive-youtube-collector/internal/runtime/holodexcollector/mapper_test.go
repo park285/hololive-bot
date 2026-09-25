@@ -39,8 +39,6 @@ func TestParseLiveRowsSkipsMalformedRowsAndDeduplicates(t *testing.T) {
 		{"id":"video-conflict","status":"live","channel_id":"UC_A","channel":{"id":"UC_B"}},
 		{"id":"video-nochannel","status":"live"},
 		{"id":"video-badtime","status":"live","channel_id":"UC_A","start_scheduled":"14/08/2026 10:00"},
-		{"id":"video-negviewers","status":"live","channel_id":"UC_A","live_viewers":-1},
-		{"id":"video-strviewers","status":"live","channel_id":"UC_A","live_viewers":"hidden"},
 		{"id":"video-a","status":"upcoming","channel_id":"UC_A"},
 		{"id":"video-b","status":"past","channel_id":"UC_B"}
 	]`)

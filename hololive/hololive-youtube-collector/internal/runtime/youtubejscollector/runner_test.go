@@ -5,7 +5,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"io/fs"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -455,64 +454,6 @@ func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 	}
 }
 
-func TestViewerRunnerRejectsChannelSubject(t *testing.T) {
-	t.Parallel()
-
-	runner := NewViewerRunner(&viewerFake{})
-	_, err := runner.Collect(t.Context(), youtubeInput(t,
-		"UCoperationalchannel0001", "youtubejs_viewer", contract.KindViewerSample,
-	))
-
-	if err == nil || !strings.Contains(err.Error(), "video id") {
-		t.Fatalf("error = %v, want video id rejection", err)
-	}
-}
-
-func TestViewerRunnerKeepsHiddenCountTyped(t *testing.T) {
-	t.Parallel()
-
-	var result youtubejs.ViewerResult
-
-	loadJSON(t, "viewer_hidden.json", &result)
-
-	runner := NewViewerRunner(&viewerFake{result: result})
-
-	output, err := runner.Collect(t.Context(), youtubeInput(t, "vid-1", "youtubejs_viewer", contract.KindViewerSample))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	observations := output.Output().Observations()
-	if len(observations) != 1 {
-		t.Fatalf("observations = %#v, want exactly one", observations)
-
-		return
-	}
-
-	var payload contract.ViewerSampleV1
-
-	if err := jsonv2.Unmarshal(observations[0].Payload, &payload); err != nil {
-		t.Fatal(err)
-	}
-
-	if payload.Availability != "HIDDEN" || payload.ViewerCount != nil {
-		t.Fatalf("payload = %#v", payload)
-	}
-}
-
-func TestViewerRunnerRejectsMismatchedResponseIdentity(t *testing.T) {
-	t.Parallel()
-
-	result := youtubejs.ViewerResult{VideoID: "different-video"}
-	output, err := NewViewerRunner(&viewerFake{result: result}).Collect(
-		t.Context(), youtubeInput(t, "requested-video", "youtubejs_viewer", contract.KindViewerSample),
-	)
-
-	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
-		t.Fatalf("error=%v output=%#v", err, output)
-	}
-}
-
 func TestContentRunnerRejectsMismatchedResponseIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -564,50 +505,6 @@ func TestCommunityRunnerRejectsNullRows(t *testing.T) {
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
-	}
-}
-
-func TestViewerRunnerSameSlotRetryKeepsSampleIdentity(t *testing.T) {
-	t.Parallel()
-
-	var result youtubejs.ViewerResult
-
-	loadJSON(t, "viewer_hidden.json", &result)
-
-	runner := NewViewerRunner(&viewerFake{result: result})
-	input := youtubeInput(t, "vid-1", "youtubejs_viewer", contract.KindViewerSample)
-
-	first, err := runner.Collect(t.Context(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	second, err := runner.Collect(t.Context(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var payload contract.ViewerSampleV1
-
-	firstObservations := first.Output().Observations()
-	secondObservations := second.Output().Observations()
-
-	if len(firstObservations) != 1 || len(secondObservations) != 1 {
-		t.Fatalf("first=%#v second=%#v, want one observation each", firstObservations, secondObservations)
-
-		return
-	}
-
-	if err := jsonv2.Unmarshal(firstObservations[0].Payload, &payload); err != nil {
-		t.Fatal(err)
-	}
-
-	if !payload.SampleWindowStart.Equal(input.Lease().ScheduledFor) {
-		t.Fatalf("sample window = %s, want lease %s", payload.SampleWindowStart, input.Lease().ScheduledFor)
-	}
-
-	if firstObservations[0].ObservationKey != secondObservations[0].ObservationKey {
-		t.Fatalf("retry changed observation key %s vs %s", firstObservations[0].ObservationKey, secondObservations[0].ObservationKey)
 	}
 }
 
@@ -799,13 +696,5 @@ func (f *channelFake) FetchChannel(_ context.Context, request youtubejs.ChannelR
 
 	f.kinds = append(f.kinds, request.Kind)
 
-	return f.result, nil
-}
-
-type viewerFake struct {
-	result youtubejs.ViewerResult
-}
-
-func (f *viewerFake) FetchViewer(context.Context, youtubejs.ViewerRequest) (youtubejs.ViewerResult, error) {
 	return f.result, nil
 }

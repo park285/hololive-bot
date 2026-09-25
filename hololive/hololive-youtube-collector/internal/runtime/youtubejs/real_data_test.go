@@ -42,17 +42,6 @@ func TestRealYouTubeDataRoundTrip(t *testing.T) {
 	if len(content.Items) == 0 {
 		t.Fatal("real channel returned no video items")
 	}
-
-	viewer, err := rpc.FetchViewer(ctx, ViewerRequest{
-		VideoID: content.Items[0].VideoID, MaxSuccessResponseBytes: 1 << 20,
-	})
-	if err != nil {
-		t.Fatalf("fetch real viewer: %v", err)
-	}
-
-	if viewer.VideoID != content.Items[0].VideoID || viewer.Availability == "" {
-		t.Fatalf("invalid viewer result: %#v", viewer)
-	}
 }
 
 func startRealDataHelper(t *testing.T) (context.Context, *RPC) {

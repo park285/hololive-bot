@@ -11,19 +11,19 @@ import (
 )
 
 type collectionTargetSample struct {
-	kind                                                string
-	valid                                               bool
-	targets, neverCompleted, stale, due                 int64
-	oldestCompletionAge, oldestDueAge, requiredRate     float64
-	viewerLive, viewerUpcoming, viewerOther             int64
-	viewerStateMismatch, viewerPastDue, viewerPastDue7d int64
+	kind                                            string
+	valid                                           bool
+	targets, neverCompleted, stale, due             int64
+	oldestCompletionAge, oldestDueAge, requiredRate float64
+	live, upcoming, other                           int64
+	stateMismatch, pastDue, pastDue7d               int64
 }
 
 type collectionTargetMetrics struct {
 	targets, neverCompleted, stale, due             *prometheus.GaugeVec
 	oldestCompletionAge, oldestDueAge, requiredRate *prometheus.GaugeVec
-	viewerState                                     *prometheus.GaugeVec
-	viewerReview                                    *prometheus.GaugeVec
+	liveState                                       *prometheus.GaugeVec
+	liveReview                                      *prometheus.GaugeVec
 	success, lastSuccess                            prometheus.Gauge
 }
 
@@ -44,12 +44,12 @@ func newCollectionTargetMetrics(reg prometheus.Registerer) *collectionTargetMetr
 		oldestCompletionAge: gauge("oldest_completion_age_seconds", "Maximum age of a completed collection among active subjects; see never_completed_targets separately."),
 		oldestDueAge:        gauge("oldest_due_age_seconds", "Maximum elapsed time past effective discovery due time among active subjects."),
 		requiredRate:        gauge("required_rpc_rate", "Nominal YouTube.js helper RPC calls per second required by active target polling intervals; excludes retries."),
-		viewerState:         prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_viewer_targets", Help: "Active viewer targets by reconciliation state; other includes missing heads."}, []string{"state"}),
-		viewerReview:        prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_viewer_review_targets", Help: "Active viewer targets requiring state or schedule review; reasons overlap and do not prove a broadcast ended."}, []string{"reason"}),
+		liveState:           prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_states", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection where the head or product session is LIVE/UPCOMING, by reconciliation head state; other includes missing or terminal heads."}, []string{"state"}),
+		liveReview:          prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "hololive_youtube_collection_live_state_review_targets", Help: "Distinct live-session videos on enabled, unexpired live_snapshot channel targets in a current, unexpired projection with a LIVE/UPCOMING head or product session requiring review: head/product mismatch or an UPCOMING head with product schedule before now/over 7 days overdue; reasons overlap and do not prove a broadcast ended."}, []string{"reason"}),
 		success:             prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_success", Help: "Whether the latest target snapshot completed with a current valid projection."}),
 		lastSuccess:         prometheus.NewGauge(prometheus.GaugeOpts{Name: "hololive_youtube_collection_snapshot_last_success_timestamp_seconds", Help: "Unix time of the last complete valid target snapshot."}),
 	}
-	reg.MustRegister(m.viewerState, m.viewerReview, m.success, m.lastSuccess)
+	reg.MustRegister(m.liveState, m.liveReview, m.success, m.lastSuccess)
 
 	return m
 }
@@ -83,8 +83,8 @@ func scanCollectionTargets(rows pgx.Rows) ([]collectionTargetSample, error) {
 
 		if err := rows.Scan(&s.kind, &s.valid, &s.targets, &s.neverCompleted, &s.stale,
 			&s.oldestCompletionAge, &s.due, &s.oldestDueAge, &s.requiredRate,
-			&s.viewerLive, &s.viewerUpcoming, &s.viewerOther,
-			&s.viewerStateMismatch, &s.viewerPastDue, &s.viewerPastDue7d); err != nil {
+			&s.live, &s.upcoming, &s.other,
+			&s.stateMismatch, &s.pastDue, &s.pastDue7d); err != nil {
 			return nil, fmt.Errorf("scan collection target snapshot: %w", err)
 		}
 
@@ -103,7 +103,7 @@ func scanCollectionTargets(rows pgx.Rows) ([]collectionTargetSample, error) {
 }
 
 func (m *collectionTargetMetrics) observe(samples []collectionTargetSample, now time.Time, err error) {
-	if err != nil || len(samples) != 5 {
+	if err != nil || len(samples) != 4 {
 		m.success.Set(0)
 
 		return
@@ -118,16 +118,16 @@ func (m *collectionTargetMetrics) observe(samples []collectionTargetSample, now 
 		m.oldestCompletionAge.WithLabelValues(s.kind).Set(s.oldestCompletionAge)
 		m.oldestDueAge.WithLabelValues(s.kind).Set(s.oldestDueAge)
 		m.requiredRate.WithLabelValues(s.kind).Set(s.requiredRate)
-
-		if s.kind == "youtubejs_viewer" {
-			m.viewerState.WithLabelValues("LIVE").Set(float64(s.viewerLive))
-			m.viewerState.WithLabelValues("UPCOMING").Set(float64(s.viewerUpcoming))
-			m.viewerState.WithLabelValues("other").Set(float64(s.viewerOther))
-			m.viewerReview.WithLabelValues("state_mismatch").Set(float64(s.viewerStateMismatch))
-			m.viewerReview.WithLabelValues("scheduled_before_now").Set(float64(s.viewerPastDue))
-			m.viewerReview.WithLabelValues("scheduled_overdue_7d").Set(float64(s.viewerPastDue7d))
-		}
 	}
+
+	// 방송 상태 진단은 작업 종류별 수요가 아니라 동일 SQL 스냅샷의 운영 채널 집계입니다.
+	live := &samples[0]
+	m.liveState.WithLabelValues("LIVE").Set(float64(live.live))
+	m.liveState.WithLabelValues("UPCOMING").Set(float64(live.upcoming))
+	m.liveState.WithLabelValues("other").Set(float64(live.other))
+	m.liveReview.WithLabelValues("state_mismatch").Set(float64(live.stateMismatch))
+	m.liveReview.WithLabelValues("scheduled_before_now").Set(float64(live.pastDue))
+	m.liveReview.WithLabelValues("scheduled_overdue_7d").Set(float64(live.pastDue7d))
 
 	m.lastSuccess.Set(float64(now.Unix()))
 	m.success.Set(1)

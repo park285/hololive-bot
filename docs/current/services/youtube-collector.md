@@ -23,6 +23,16 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 - DB job lease/fence and `PublishBatch` (checkpoint + observation insert)
 - Collector DB role `hololive_scraper`
 
+## 시청자 수 전용 수집
+
+`DEC-20260925-hololive-viewer-collection-retirement`에 따라 신규 `viewer_sample`을 수집하지 않습니다. YouTube.js의 `youtubejs_viewer` 작업과 `/v1/viewer` RPC를 제거했으며, `holodex_live`는 `live_snapshot`만 발행합니다. Holodex의 기존 `/live` 조회와 방송 상태·일정·채널 메타데이터는 유지합니다. 응답에 포함된 시청자 수를 표본으로 만드는 비용은 별개이므로 더 이상 viewer envelope·checkpoint·queue를 생성하지 않습니다.
+
+공유 viewer payload/소비·재처리·보존 경로는 이미 저장된 관측과 기존 큐를 처리하는 계약입니다. 과거 표본·스키마를 삭제하거나 보존 기간을 바꾸지 않습니다. 현재 publisher는 양 공급자의 신규 viewer 발행을 거절하며, 기존 consumer는 과거 관측을 처리할 수 있습니다.
+
+사용자용 라이브 템플릿과 미리보기에는 `ViewerCount`가 없습니다. 미지원 변수는 기존 템플릿 오류로 거절하고 0명으로 대체하지 않습니다. 별도 Holodex 조회를 쓰는 Go Stream API의 `viewer_count`와 Twitch/Chzzk 데이터는 그대로입니다.
+
+Holodex live/schedule 작업은 채널 통계·사진 payload를 만들지 않습니다. 요청한 metadata 작업에서의 충돌은 계속 오류이며, 무관한 metadata 충돌이 방송·일정 관측을 중단시키지 않습니다.
+
 ## Atomic publish
 
 `PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 `DEFERRED` 및 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177 trigger가 DEFERRED release를 `legacy_collector`로 덮으면 같은 release transaction이 잠근 값을 복원합니다.

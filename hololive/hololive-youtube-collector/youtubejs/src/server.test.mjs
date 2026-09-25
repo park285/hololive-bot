@@ -6,7 +6,6 @@ import {
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
-  handleViewerRequest,
 } from "./server.mjs";
 import { currentRequestSignal } from "./request-context.mjs";
 
@@ -151,12 +150,6 @@ test("handleChannelRequest rejects fields outside the validated response contrac
   );
   assert.equal(result.status, 422);
   assert.equal(result.body.error.code, "parser_drift");
-});
-
-test("handleViewerRequest requires video_id", async () => {
-  const result = await handleViewerRequest(rpcBody({}), async () => ({}));
-  assert.equal(result.status, 400);
-  assert.match(result.body.error.message, /video_id/);
 });
 
 test("health is 503 until bootstrap and collection is helper_not_ready", async () => {

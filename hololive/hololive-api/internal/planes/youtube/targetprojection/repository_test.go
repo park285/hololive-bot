@@ -321,13 +321,12 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 	targets, reasons, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: []string{"channel:notify"},
 		OperationalChannelIDs:  []string{"channel:ops"},
-		ViewerVideoIDs:         []string{"vid-live-1"},
 	}, schedules)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(targets) != 9 || len(reasons) != 9 {
+	if len(targets) != 8 || len(reasons) != 8 {
 		t.Fatalf("targets/reasons = %d/%d", len(targets), len(reasons))
 	}
 
@@ -336,7 +335,6 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 		"channel:notify/video_list":                  true,
 		"channel:notify/shorts_list":                 true,
 		"channel:ops/live_snapshot":                  true,
-		"vid-live-1/viewer_sample":                   true,
 		"channel:ops/channel_stats":                  true,
 		"channel:ops/channel_profile":                true,
 		"channel:ops/channel_photo":                  true,
@@ -352,27 +350,7 @@ func TestBuildPolicyTargetsMaintainsSourceMapping(t *testing.T) {
 	}
 }
 
-func TestBuildPolicyTargetsDoesNotPlantViewerSampleOnChannelIDs(t *testing.T) {
-	targets, _, err := BuildPolicyTargets(PolicyInputs{
-		OperationalChannelIDs: []string{"UCoperationalchannel0001"},
-		ViewerVideoIDs:        []string{"vid-live-1"},
-	}, defaultPolicySchedules())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, target := range targets {
-		if target.ObservationKind != contract.KindViewerSample {
-			continue
-		}
-
-		if target.SubjectKey != "vid-live-1" {
-			t.Fatalf("viewer_sample subject = %q, want video id", target.SubjectKey)
-		}
-	}
-}
-
-func TestBuildPolicyTargetsEmptyViewerRosterSucceeds(t *testing.T) {
+func TestBuildPolicyTargetsDoesNotCollectViewers(t *testing.T) {
 	targets, _, err := BuildPolicyTargets(PolicyInputs{
 		NotificationChannelIDs: []string{"UC_NOTIFY"},
 		OperationalChannelIDs:  []string{"UC_OPS"},
@@ -383,17 +361,69 @@ func TestBuildPolicyTargetsEmptyViewerRosterSucceeds(t *testing.T) {
 
 	for _, target := range targets {
 		if target.ObservationKind == contract.KindViewerSample {
-			t.Fatalf("empty viewer roster planted viewer_sample on %q", target.SubjectKey)
+			t.Fatalf("policy planted retired viewer_sample on %q", target.SubjectKey)
 		}
 	}
 }
 
-func TestBuildPolicyTargetsRejectsChannelIDAsViewerVideo(t *testing.T) {
-	_, _, err := BuildPolicyTargets(PolicyInputs{
-		ViewerVideoIDs: []string{"UCoperationalchannel0001"},
-	}, defaultPolicySchedules())
-	if !errors.Is(err, ErrInvalidProjection) {
-		t.Fatalf("error = %v, want invalid projection", err)
+func TestRefreshRetiresViewerTargetsWithoutDeletingHistoricalGeneration(t *testing.T) {
+	pool := dbtest.NewPool(t)
+
+	refresher, err := NewRefresher(pool, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	targets, reasons, err := BuildPolicyTargets(PolicyInputs{
+		NotificationChannelIDs: []string{"channel:notify"},
+		OperationalChannelIDs:  []string{"channel:ops"},
+	}, DefaultPolicySchedules())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	historicalViewer := TargetSpec{
+		SubjectKey: "vid-live-1", ObservationKind: contract.KindViewerSample,
+		Priority: 20, PollInterval: 2 * time.Minute, Enabled: true,
+	}
+	previous := mustRefresh(t, refresher, staticBuilder{
+		targets: append(targets, historicalViewer),
+		reasons: append(reasons, TargetReason{
+			SubjectKey: historicalViewer.SubjectKey, ObservationKind: historicalViewer.ObservationKind,
+			ReasonKind: "viewer_roster", ReasonKey: historicalViewer.SubjectKey,
+		}),
+	}, projectionNow, "historical viewer projection")
+	current := mustRefresh(t, refresher, staticBuilder{targets: targets, reasons: reasons},
+		projectionNow.Add(time.Minute), "viewer retirement")
+
+	if !current.Changed || current.Generation == previous.Generation || current.RowCount != 8 {
+		t.Fatalf("retirement did not rotate projection: previous=%+v current=%+v", previous, current)
+	}
+
+	assertGenerationStatus(t, pool, previous.Generation, "RETIRED")
+	assertGenerationStatus(t, pool, current.Generation, "CURRENT")
+	assertTargetCount(t, pool, previous.Generation, 9)
+	assertTargetCount(t, pool, current.Generation, 8)
+
+	var historicalViewers, currentViewers int
+
+	if err := pool.QueryRow(t.Context(), `
+		SELECT COUNT(*) FILTER (WHERE projection_generation = $1),
+		       COUNT(*) FILTER (WHERE projection_generation = $2)
+		FROM youtube_collection_targets
+		WHERE observation_kind = 'viewer_sample'
+	`, previous.Generation, current.Generation).Scan(&historicalViewers, &currentViewers); err != nil {
+		t.Fatal(err)
+	}
+
+	if historicalViewers != 1 || currentViewers != 0 {
+		t.Fatalf("viewer targets: historical=%d current=%d", historicalViewers, currentViewers)
+	}
+
+	refreshed := mustRefresh(t, refresher, staticBuilder{targets: targets, reasons: reasons},
+		projectionNow.Add(2*time.Minute), "unchanged retired policy")
+	if refreshed.Changed || refreshed.Generation != current.Generation {
+		t.Fatalf("unchanged policy rotated generation: %+v", refreshed)
 	}
 }
 
@@ -402,7 +432,7 @@ func defaultPolicySchedules() map[contract.ObservationKind]Schedule {
 
 	for _, kind := range []contract.ObservationKind{
 		contract.KindCommunityPage, contract.KindVideoList, contract.KindShortsList,
-		contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindChannelStats,
+		contract.KindLiveSnapshot, contract.KindChannelStats,
 		contract.KindChannelProfile, contract.KindChannelPhoto, contract.KindSchedule,
 	} {
 		schedules[kind] = Schedule{Priority: 50, PollInterval: time.Minute, Enabled: true}

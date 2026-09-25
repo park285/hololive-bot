@@ -50,7 +50,7 @@ func TestNewRegistryAcceptsCompleteAdapterSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(registry.Runners()) != 9 {
+	if len(registry.Runners()) != 8 {
 		t.Fatalf("runners = %d", len(registry.Runners()))
 	}
 }
@@ -91,8 +91,7 @@ func completeStubRunners() []JobRunner {
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_live", contract.KindLiveSnapshot),
 		stubJob(contract.ProviderYouTubeJS, "youtubejs_channel_metadata",
 			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
-		stubJob(contract.ProviderYouTubeJS, "youtubejs_viewer", contract.KindViewerSample),
-		stubJob(contract.ProviderHolodex, "holodex_live", contract.KindLiveSnapshot, contract.KindViewerSample),
+		stubJob(contract.ProviderHolodex, "holodex_live", contract.KindLiveSnapshot),
 		stubJob(contract.ProviderHolodex, "holodex_metadata", contract.KindChannelStats, contract.KindChannelPhoto),
 		stubJob(contract.ProviderHolodex, "holodex_schedule", contract.KindSchedule),
 		stubJob(contract.ProviderHololiveOfficial, "official_schedule", contract.KindSchedule),

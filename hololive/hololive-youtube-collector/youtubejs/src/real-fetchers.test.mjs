@@ -11,8 +11,8 @@ test("rejected Innertube init clears the promise", async () => {
       throw new Error("init failed");
     },
   });
-  await assert.rejects(() => fetchers.fetchViewer({ videoId: "vid-1" }), /init failed/);
-  await assert.rejects(() => fetchers.fetchViewer({ videoId: "vid-1" }), /init failed/);
+  await assert.rejects(() => fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 }), /init failed/);
+  await assert.rejects(() => fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 }), /init failed/);
   assert.equal(calls, 2);
 });
 
@@ -29,8 +29,8 @@ test("concurrent Innertube init shares one promise", async () => {
       return { getChannel() {} };
     },
   });
-  const first = fetchers.fetchViewer({ videoId: "vid-1" });
-  const second = fetchers.fetchViewer({ videoId: "vid-2" });
+  const first = fetchers.fetchChannel({ channelId: "UC_TEST", kind: "live", maxSuccessResponseBytes: 1 << 20 });
+  const second = fetchers.fetchChannel({ channelId: "UC_OTHER", kind: "live", maxSuccessResponseBytes: 1 << 20 });
   release();
   await Promise.allSettled([first, second]);
   assert.equal(calls, 1);

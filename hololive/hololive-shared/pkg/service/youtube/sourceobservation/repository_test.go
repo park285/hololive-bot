@@ -122,11 +122,11 @@ func TestPublishBatchSamePayloadNextScheduledSlotCreatesTwoObservations(t *testi
 	assertTableCount(t, pool, "source_observation_queue", 2)
 }
 
-func TestPublishBatchViewerEqualValueNextWindowCreatesTwoObservations(t *testing.T) {
+func TestHistoricalViewerPublishEqualValueNextWindowCreatesTwoObservations(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	firstProof := seedPublishLease(t.Context(), t, pool, contract.ProviderHolodex, contract.KindViewerSample, "video-1", "holodex_live")
-	repo := NewRepository(pool)
+	repo := historicalViewerPublisher(pool)
 	first := viewerEnvelope(t, &firstProof, 1, 100)
 
 	if _, err := repo.PublishBatch(ctx, publishInput(first)); err != nil {
@@ -1063,7 +1063,7 @@ func TestPublishBatchGlobalBundleVerifiesEveryTarget(t *testing.T) {
 
 	first := viewerEnvelopeFor(t, &proof, 1, "video-1", 100)
 	second := viewerEnvelopeFor(t, &proof, 1, "video-2", 200)
-	_, err := NewRepository(pool).PublishBatch(ctx, &PublishBatchInput{
+	_, err := historicalViewerPublisher(pool).PublishBatch(ctx, &PublishBatchInput{
 		Lease: proof,
 		Checkpoint: CheckpointUpdate{
 			Entries:           []CheckpointEntry{checkpointForEnvelope(first), checkpointForEnvelope(second)},
@@ -1290,7 +1290,7 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 
 	counter.queries.Store(0)
 
-	if err := (sqlPublishFenceVerifier{jobs: InitialJobContracts()}).Verify(ctx, tx, &proof, observations); err != nil {
+	if err := (sqlPublishFenceVerifier{jobs: historicalViewerJobContracts()}).Verify(ctx, tx, &proof, observations); err != nil {
 		t.Fatalf("verify max batch: %v", err)
 	}
 
@@ -1326,7 +1326,7 @@ func TestPublishBatchStatementCountIsConstant(t *testing.T) {
 	}
 	defer tracedPool.Close()
 
-	repository := NewRepository(tracedPool)
+	repository := historicalViewerPublisher(tracedPool)
 
 	for _, size := range []int{1, 361, MaxPublishBatchSize} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {

@@ -17,17 +17,16 @@ import (
 const officialScheduleSubject = "global:hololive-schedule"
 
 type liveRow struct {
-	ID             string         `json:"id"`
-	Title          string         `json:"title"`
-	TopicID        string         `json:"topic_id"`
-	Thumbnail      string         `json:"thumbnail"`
-	ChannelID      string         `json:"channel_id"`
-	Status         string         `json:"status"`
-	StartScheduled string         `json:"start_scheduled"`
-	StartActual    string         `json:"start_actual"`
-	EndActual      string         `json:"end_actual"`
-	LiveViewers    jsontext.Value `json:"live_viewers"`
-	Channel        liveChannel    `json:"channel"`
+	ID             string      `json:"id"`
+	Title          string      `json:"title"`
+	TopicID        string      `json:"topic_id"`
+	Thumbnail      string      `json:"thumbnail"`
+	ChannelID      string      `json:"channel_id"`
+	Status         string      `json:"status"`
+	StartScheduled string      `json:"start_scheduled"`
+	StartActual    string      `json:"start_actual"`
+	EndActual      string      `json:"end_actual"`
+	Channel        liveChannel `json:"channel"`
 }
 
 type liveChannel struct {
@@ -82,7 +81,7 @@ func parseLiveRows(body []byte) ([]parsedLive, error) {
 
 func decodeLiveRows(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
-	if !jsontext.Value(trimmed).IsValid() || len(trimmed) == 0 || trimmed[0] != '[' {
+	if len(trimmed) == 0 || trimmed[0] != '[' {
 		return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex live response is not a JSON array")
 	}
 
@@ -124,9 +123,6 @@ func parseLiveRow(raw jsontext.Value) (parsedLive, error) {
 	parsed := parsedLive{
 		row: row, channelID: channelID, status: status,
 		scheduled: scheduled, started: started, ended: ended,
-	}
-	if _, _, err := viewerAvailability(&parsed); err != nil {
-		return parsedLive{}, fmt.Errorf("viewer availability: %w", err)
 	}
 
 	return parsed, nil
@@ -222,50 +218,6 @@ func subjectAllowed(input *collectutil.RunInput, kind contract.ObservationKind, 
 	}
 
 	return out, nil
-}
-
-func viewerPayload(row *parsedLive, windowStart time.Time, windowSeconds int) (contract.ViewerSampleV1, error) {
-	availability, count, err := viewerAvailability(row)
-	if err != nil {
-		return contract.ViewerSampleV1{}, fmt.Errorf("viewer availability: %w", err)
-	}
-
-	return contract.ViewerSampleV1{
-		VideoID:             row.row.ID,
-		ViewerCount:         count,
-		Availability:        availability,
-		SampleWindowStart:   windowStart,
-		SampleWindowSeconds: windowSeconds,
-		Coverage: contract.ViewerSampleCoverageV1{
-			VideoID:             row.row.ID,
-			SampleWindowStart:   windowStart,
-			SampleWindowSeconds: windowSeconds,
-		},
-	}, nil
-}
-
-//nolint:nilnil // 시청자 수가 없는 상태(HIDDEN/UNAVAILABLE)는 availability로 표현되며 오류가 아니다.
-func viewerAvailability(row *parsedLive) (availability string, viewerCount *int64, parseErr error) {
-	raw := bytes.TrimSpace(row.row.LiveViewers)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		if row.status == "LIVE" {
-			return "HIDDEN", nil, nil
-		}
-
-		return "UNAVAILABLE", nil, nil
-	}
-
-	var count int64
-
-	if err := jsonv2.Unmarshal(raw, &count); err != nil {
-		return "", nil, collecterr.Wrap(collecterr.ParserDrift, collecterr.ClassDataContract, fmt.Errorf("decode holodex viewer count: %w", err))
-	}
-
-	if count < 0 {
-		return "", nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex viewer count is negative")
-	}
-
-	return "AVAILABLE", &count, nil
 }
 
 func httpsURL(raw string) (string, bool) {
@@ -368,8 +320,12 @@ func uniqueStatsCount(rows []parsedLive, field string, valueOf func(*liveChannel
 			continue
 		}
 
-		if selected != nil && *selected != *value {
-			return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel "+field+" metadata conflicts across rows")
+		if selected != nil {
+			if *selected != *value {
+				return nil, collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "holodex channel "+field+" metadata conflicts across rows")
+			}
+
+			continue
 		}
 
 		copied := *value

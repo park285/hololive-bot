@@ -349,19 +349,6 @@ func PaginationOf(page *youtubejs.Pagination) (contract.Completeness, contract.C
 	return completeness, continuity, nil
 }
 
-func SampleWindowSeconds(interval time.Duration) int {
-	seconds := int(interval / time.Second)
-	if seconds < 1 {
-		return 60
-	}
-
-	if seconds > 86400 {
-		return 86400
-	}
-
-	return seconds
-}
-
 func DefaultMaxResults() int {
 	return 10
 }

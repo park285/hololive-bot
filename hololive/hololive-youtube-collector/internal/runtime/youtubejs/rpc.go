@@ -107,24 +107,6 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 	return *result, nil
 }
 
-func (c *RPC) FetchViewer(ctx context.Context, request ViewerRequest) (ViewerResult, error) {
-	request.ProtocolVersion = ProtocolVersion
-
-	limit, err := c.successLimit(request.MaxSuccessResponseBytes)
-	if err != nil {
-		return ViewerResult{}, fmt.Errorf("success limit: %w", err)
-	}
-
-	request.MaxSuccessResponseBytes = limit
-
-	result, err := c.doJSON[ViewerResult](ctx, "/v1/viewer", &request, int64(request.MaxSuccessResponseBytes))
-	if err != nil {
-		return ViewerResult{}, err
-	}
-
-	return *result, nil
-}
-
 func (c *RPC) successLimit(requested int) (int, error) {
 	configured := defaultHelperBodyLimit
 
@@ -209,8 +191,6 @@ func minimumSuccessResponseBytes(path string) int64 {
 		return 124
 	case "/v1/channel":
 		return 171
-	case "/v1/viewer":
-		return 161
 	default:
 		return 1
 	}

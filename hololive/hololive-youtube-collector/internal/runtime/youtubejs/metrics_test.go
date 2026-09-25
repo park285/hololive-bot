@@ -27,12 +27,12 @@ func TestRPCMetricsSeparateLimiterWaitFromHelper(t *testing.T) {
 		client := NewRPC(&http.Client{Transport: metricsTransport(func(*http.Request) (*http.Response, error) {
 			time.Sleep(50 * time.Millisecond)
 
-			return jsonResponse(http.StatusOK, `{"protocol_version":1,"video_id":"private-video","viewer_count":null,"availability":"HIDDEN","page_count":1,"exhausted":true,"continuity":"NOT_APPLICABLE","termination_reason":"exhausted"}`), nil
+			return jsonResponse(http.StatusOK, `{"protocol_version":1,"items":[],"page_count":1,"exhausted":true,"continuity":"NOT_APPLICABLE","termination_reason":"exhausted"}`), nil
 		})}, "http://helper", limiter)
 		reg := prometheus.NewPedanticRegistry()
 		client.EnableMetrics(reg, 2*time.Second)
 
-		if _, err := client.FetchViewer(t.Context(), ViewerRequest{VideoID: "private-video"}); err != nil {
+		if _, err := client.FetchContent(t.Context(), ContentRequest{ChannelID: "private-channel", Kind: "videos"}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -40,7 +40,7 @@ func TestRPCMetricsSeparateLimiterWaitFromHelper(t *testing.T) {
 		assertRPCPhase(t, reg, "helper", "success", 0.05)
 
 		for _, phase := range []string{"rate_limit", "helper"} {
-			if got := testutil.ToFloat64(client.metrics.inFlight.WithLabelValues("viewer", phase)); got != 0 {
+			if got := testutil.ToFloat64(client.metrics.inFlight.WithLabelValues("content", phase)); got != 0 {
 				t.Fatalf("%s in-flight = %v", phase, got)
 			}
 		}
@@ -66,13 +66,13 @@ func TestRPCMetricsCanceledAdmissionDoesNotCallHelper(t *testing.T) {
 
 		defer cancel()
 
-		if _, err := client.FetchViewer(ctx, ViewerRequest{VideoID: "private-video"}); err == nil {
+		if _, err := client.FetchContent(ctx, ContentRequest{ChannelID: "private-channel", Kind: "videos"}); err == nil {
 			t.Fatal("admission timeout was lost")
 		}
 
 		assertRPCPhase(t, reg, "rate_limit", "timeout", 1)
 
-		if got := testutil.ToFloat64(client.metrics.inFlight.WithLabelValues("viewer", "rate_limit")); got != 0 {
+		if got := testutil.ToFloat64(client.metrics.inFlight.WithLabelValues("content", "rate_limit")); got != 0 {
 			t.Fatalf("canceled wait left in-flight = %v", got)
 		}
 	})
@@ -98,7 +98,7 @@ func assertRPCPhase(t *testing.T, reg *prometheus.Registry, phase, outcome strin
 				labels[label.GetName()] = label.GetValue()
 			}
 
-			if len(labels) != 3 || labels["operation"] != "viewer" {
+			if len(labels) != 3 || labels["operation"] != "content" {
 				t.Fatalf("unexpected metric labels: %v", labels)
 			}
 

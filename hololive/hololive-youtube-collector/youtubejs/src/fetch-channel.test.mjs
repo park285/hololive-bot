@@ -280,12 +280,12 @@ test("fetchChannelFeed recovers a schedule from the raw player offline slate", a
   assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
 });
 
-test("fetchChannelFeed preserves list schedules and skips non-upcoming rows", async () => {
+test("fetchChannelFeed preserves live states and schedules regardless of raw viewer counts", async () => {
   let calls = 0;
   const feed = {
     videos: [
-      { id: "scheduled", is_upcoming: true, scheduled: new Date("2026-09-01T20:00:00+09:00") },
-      { id: "live", is_live: true },
+      { id: "scheduled", is_upcoming: true, scheduled: new Date("2026-09-01T20:00:00+09:00"), viewer_count: "hidden" },
+      { id: "live", is_live: true, viewer_count: -1, view_count: { unexpected: true } },
       { id: "ended", status: "ENDED" },
       { id: "canceled", status: "CANCELLED" },
     ],
@@ -301,6 +301,12 @@ test("fetchChannelFeed preserves list schedules and skips non-upcoming rows", as
 
   assert.equal(calls, 0);
   assert.equal(result.live_sessions[0].scheduled_at, "2026-09-01T11:00:00.000Z");
+  assert.deepEqual(result.live_sessions.map((item) => [item.video_id, item.status]), [
+    ["scheduled", "UPCOMING"], ["live", "LIVE"], ["ended", "ENDED"], ["canceled", "CANCELLED"],
+  ]);
+  for (const session of result.live_sessions) {
+    assert.equal(Object.hasOwn(session, "viewer_count"), false);
+  }
 });
 
 test("fetchChannelFeed never accepts localized list text as a schedule", async () => {

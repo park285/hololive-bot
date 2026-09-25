@@ -218,8 +218,8 @@ func addTemplateCommandStreamSamples(data map[domain.TemplateKey]any) {
 
 func templateLiveStreamSamples() []map[string]any {
 	return []map[string]any{
-		{fieldChannelName: sampleMemberMiko, fieldTitle: "마인크래프트 건축 배틀", fieldURL: "https://youtu.be/live123", "ViewerCount": 15000},
-		{fieldChannelName: "오오조라 스바루", fieldTitle: "잡담 방송", fieldURL: "https://youtu.be/live456", "ViewerCount": 8500},
+		{fieldChannelName: sampleMemberMiko, fieldTitle: "마인크래프트 건축 배틀", fieldURL: "https://youtu.be/live123"},
+		{fieldChannelName: "오오조라 스바루", fieldTitle: "잡담 방송", fieldURL: "https://youtu.be/live456"},
 	}
 }
 

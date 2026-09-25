@@ -3,6 +3,7 @@ package holodexcollector
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
@@ -87,25 +88,26 @@ func (r *Runner) buildBatch(input *collectutil.RunInput, rows []parsedLive) ([]c
 
 	allowed := requestedSet(requested)
 
-	envelopes, err := r.channelEnvelopes(input, groupByRequestedChannel(rows, allowed))
-	if err != nil {
-		return nil, fmt.Errorf("channel envelopes: %w", err)
+	job := input.Job()
+
+	var envelopes []contract.Envelope
+
+	if job.Emits(contract.KindLiveSnapshot) || job.Emits(contract.KindChannelStats) || job.Emits(contract.KindChannelPhoto) {
+		envelopes, err = r.channelEnvelopes(input, job, groupByRequestedChannel(rows, allowed))
+		if err != nil {
+			return nil, fmt.Errorf("channel envelopes: %w", err)
+		}
 	}
 
-	viewers, err := r.viewerEnvelopes(input, rows, allowed)
-	if err != nil {
-		return nil, fmt.Errorf("viewer envelopes: %w", err)
-	}
+	if job.Emits(contract.KindSchedule) {
+		schedule, err := r.scheduleEnvelope(input, rows, allowed)
+		if err != nil {
+			return nil, fmt.Errorf("schedule envelope: %w", err)
+		}
 
-	schedule, err := r.scheduleEnvelope(input, rows, allowed)
-	if err != nil {
-		return nil, fmt.Errorf("schedule envelope: %w", err)
-	}
-
-	envelopes = append(envelopes, viewers...)
-
-	if schedule != nil {
-		envelopes = append(envelopes, *schedule)
+		if schedule != nil {
+			envelopes = append(envelopes, *schedule)
+		}
 	}
 
 	return envelopes, nil
@@ -126,25 +128,33 @@ func groupByRequestedChannel(rows []parsedLive, allowed map[string]struct{}) map
 	return byChannel
 }
 
-func (r *Runner) channelEnvelopes(input *collectutil.RunInput, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
-	envelopes := make([]contract.Envelope, 0)
+func (r *Runner) channelEnvelopes(input *collectutil.RunInput, job sourceobservation.JobContract, byChannel map[string][]parsedLive) ([]contract.Envelope, error) {
+	kindCount := 0
 
-	for _, channelID := range collectutil.UniqueSorted(keys(byChannel)) {
-		added, err := r.channelEnvelopesFor(input, channelID, byChannel[channelID])
+	for _, kind := range [...]contract.ObservationKind{contract.KindLiveSnapshot, contract.KindChannelStats, contract.KindChannelPhoto} {
+		if job.Emits(kind) {
+			kindCount++
+		}
+	}
+
+	envelopes := make([]contract.Envelope, 0, len(byChannel)*kindCount)
+	channelIDs := keys(byChannel)
+	slices.Sort(channelIDs)
+
+	for _, channelID := range channelIDs {
+		var err error
+
+		envelopes, err = r.channelEnvelopesFor(input, job, envelopes, channelID, byChannel[channelID])
 		if err != nil {
 			return nil, fmt.Errorf("channel envelopes for: %w", err)
 		}
-
-		envelopes = append(envelopes, added...)
 	}
 
 	return envelopes, nil
 }
 
-func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
-	var envelopes []contract.Envelope
-
-	if input.Job().Emits(contract.KindLiveSnapshot) {
+func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, job sourceobservation.JobContract, envelopes []contract.Envelope, channelID string, sessions []parsedLive) ([]contract.Envelope, error) {
+	if job.Emits(contract.KindLiveSnapshot) {
 		liveGeneration, err := input.Generation(contract.KindLiveSnapshot)
 		if err != nil {
 			return nil, fmt.Errorf("live snapshot generation: %w", err)
@@ -163,27 +173,32 @@ func (r *Runner) channelEnvelopesFor(input *collectutil.RunInput, channelID stri
 		}
 	}
 
-	stats, ok, err := statsPayload(channelID, sessions)
-	if err != nil {
-		return nil, fmt.Errorf("stats payload: %w", err)
+	// 다른 작업의 메타데이터 충돌로 방송·일정 관측을 막지 않고 불필요한 순회도 피합니다.
+	if job.Emits(contract.KindChannelStats) {
+		stats, ok, err := statsPayload(channelID, sessions)
+		if err != nil {
+			return nil, fmt.Errorf("stats payload: %w", err)
+		}
+
+		envelopes, err = r.appendChannelKind(input, envelopes, contract.KindChannelStats, channelID, stats, ok)
+		if err != nil {
+			return nil, fmt.Errorf("append channel kind: %w", err)
+		}
 	}
 
-	envelopes, err = r.appendChannelKind(input, envelopes, contract.KindChannelStats, channelID, stats, ok)
-	if err != nil {
-		return nil, fmt.Errorf("append channel kind: %w", err)
+	if job.Emits(contract.KindChannelPhoto) {
+		photo, ok, err := photoPayload(channelID, sessions)
+		if err != nil {
+			return nil, fmt.Errorf("photo payload: %w", err)
+		}
+
+		envelopes, err = r.appendChannelKind(input, envelopes, contract.KindChannelPhoto, channelID, photo, ok)
+		if err != nil {
+			return nil, fmt.Errorf("append channel kind: %w", err)
+		}
 	}
 
-	photo, ok, err := photoPayload(channelID, sessions)
-	if err != nil {
-		return nil, fmt.Errorf("photo payload: %w", err)
-	}
-
-	out, err := r.appendChannelKind(input, envelopes, contract.KindChannelPhoto, channelID, photo, ok)
-	if err != nil {
-		return out, fmt.Errorf("append channel kind: %w", err)
-	}
-
-	return out, nil
+	return envelopes, nil
 }
 
 func (r *Runner) appendChannelKind(
@@ -194,7 +209,7 @@ func (r *Runner) appendChannelKind(
 	payload any,
 	ok bool,
 ) ([]contract.Envelope, error) {
-	if !input.Job().Emits(kind) || !ok {
+	if !ok {
 		return envelopes, nil
 	}
 
@@ -215,61 +230,12 @@ func (r *Runner) appendChannelKind(
 	return append(envelopes, envelope), nil
 }
 
-func (r *Runner) viewerEnvelopes(
-	input *collectutil.RunInput,
-	rows []parsedLive,
-	allowed map[string]struct{},
-) ([]contract.Envelope, error) {
-	if !input.Job().Emits(contract.KindViewerSample) {
-		return nil, nil
-	}
-
-	lease := input.Lease()
-	windowStart := lease.ScheduledFor.UTC()
-	windowSeconds := collectutil.SampleWindowSeconds(input.Spec().PollInterval)
-	envelopes := make([]contract.Envelope, 0)
-
-	for i := range rows {
-		row := &rows[i]
-		if _, ok := allowed[row.channelID]; !ok {
-			continue
-		}
-
-		isAllowed, err := subjectAllowed(input, contract.KindViewerSample, row.row.ID)
-		if err != nil {
-			return nil, fmt.Errorf("subject allowed: %w", err)
-		}
-
-		if !isAllowed {
-			continue
-		}
-
-		payload, err := viewerPayload(row, windowStart, windowSeconds)
-		if err != nil {
-			return nil, fmt.Errorf("viewer payload: %w", err)
-		}
-
-		envelope, err := r.envelope(input, contract.KindViewerSample, row.row.ID, payload)
-		if err != nil {
-			return nil, fmt.Errorf("envelope: %w", err)
-		}
-
-		envelopes = append(envelopes, envelope)
-	}
-
-	return envelopes, nil
-}
-
 //nolint:nilnil // 방출 대상이 아니면 봉투 없이 건너뛴다는 뜻이라 오류가 아니다.
 func (r *Runner) scheduleEnvelope(
 	input *collectutil.RunInput,
 	rows []parsedLive,
 	allowed map[string]struct{},
 ) (*contract.Envelope, error) {
-	if !input.Job().Emits(contract.KindSchedule) {
-		return nil, nil
-	}
-
 	allowedSubject, err := subjectAllowed(input, contract.KindSchedule, officialScheduleSubject)
 	if err != nil {
 		return nil, fmt.Errorf("subject allowed: %w", err)

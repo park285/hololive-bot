@@ -770,7 +770,6 @@ hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/communit
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/content.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/mapper.go
 hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/validation.go
-hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/viewer.go
 scripts/build/build-youtube-collector-go.sh
 scripts/ci/postgres-capacity-policy.tsv
 scripts/deploy/ap-hosts/osaka.conf
