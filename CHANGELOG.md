@@ -13,6 +13,7 @@
 - live consume의 현재 absence slot 재조회에 `scheduled_for` 인덱스(migration 212)를 추가합니다. 채널 GIN이 해당 채널의 무기한 보존 이력 전체를 heap에서 다시 검사하던 비용을 slot 한 행으로 줄입니다. absence slot 보존 계약과 조회 결과는 바꾸지 않습니다.
 - 운영 조회가 선택하지 않는 source observation·queue 인덱스 네 개를 `DROP INDEX CONCURRENTLY`로 제거합니다(migration 213–216). 보존 기간과 보존 삭제·claim 경로는 유지합니다.
 - 로컬 통합 검사가 PostgreSQL·Valkey 일회용 컨테이너를 지울 때 이미지가 선언한 익명 volume도 함께 지웁니다.
+- 중앙 compose wrapper의 release version export 검사를 gate에 연결된 `ap-deploy-version_test.sh`로 옮깁니다. `compose-version-contract_test.sh`는 어떤 gate에도 연결되지 않은 채 2026-09-14 admin 통합 이후 Compose 문구 개수 불일치로 실패해 왔으므로 삭제합니다. 두 VERSION 읽기와 호출자 버전 불일치의 fail-closed는 계속 검사합니다.
 
 ## v4.0.1 - 2026-09-25
 
