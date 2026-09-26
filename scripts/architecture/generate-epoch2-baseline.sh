@@ -59,7 +59,7 @@ if [[ -z "${SOURCE_COMMIT}" ]]; then
 fi
 
 cleanup() {
-  docker rm -f "${NAME}" >/dev/null 2>&1 || true
+  docker rm -f -v "${NAME}" >/dev/null 2>&1 || true
   rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT

@@ -11,6 +11,7 @@
 - X가 로그아웃 상태의 `/home`을 로그인 화면으로 redirect하여 X 스페이스 수집이 요청 ID 초기화 단계에서 `collector_failed`로 반복 실패하던 문제를 수정합니다. `x-client-transaction-id`를 `0.3.2`로 올리고, helper 허용 목록을 인증 없는 앱 셸 `https://x.com/i/jf/`로 바꿉니다. 쿠키 전송 경로·오류 계약·런타임 설정은 변경하지 않습니다.
 - live consume의 현재 absence slot 재조회에 `scheduled_for` 인덱스(migration 212)를 추가합니다. 채널 GIN이 해당 채널의 무기한 보존 이력 전체를 heap에서 다시 검사하던 비용을 slot 한 행으로 줄입니다. absence slot 보존 계약과 조회 결과는 바꾸지 않습니다.
 - 운영 조회가 선택하지 않는 source observation·queue 인덱스 네 개를 `DROP INDEX CONCURRENTLY`로 제거합니다(migration 213–216). 보존 기간과 보존 삭제·claim 경로는 유지합니다.
+- 로컬 통합 검사가 PostgreSQL·Valkey 일회용 컨테이너를 지울 때 이미지가 선언한 익명 volume도 함께 지웁니다.
 
 ## v4.0.1 - 2026-09-25
 
