@@ -159,3 +159,5 @@ repository의 새 8개 반례 중 4개가 수정 전 SQL에서 실패했다. 수
 | 위 조건 + 미관측 pending 5만, 멤버 | 60.40ms | 64.90ms | 75.34ms | 4171 / 0 |
 
 미관측 pending의 영상별 상태 join을 생략해 같은 전체 조회 p95를 272.2ms에서 123.4ms로 줄였다. partial/미확인 진단은 유지한다. reviewer가 이 마지막 최적화도 재검토해 추가 correctness 결함 없음을 확인했으며 최종 영향 NilAway도 통과했다. pending에는 channel index가 없으므로 이 비용은 이력과 무관하지 않다. 새 인덱스나 writer 변경 없이 위 분포에서 1초 query deadline을 만족했으며 운영 부하나 무제한 이력의 성능을 보장하지 않는다.
+
+후속 전체 publish gate에서 collector가 공유하는 cache-fill 소스의 AP rsync manifest 누락을 발견해 `ap-rsync-files.txt`에 추가했다. AP 실행 코드나 운영 AP를 변경하는 작업은 아니며, 기존 전송 목록의 실제 Go dependency 검사가 이 누락을 차단했다.

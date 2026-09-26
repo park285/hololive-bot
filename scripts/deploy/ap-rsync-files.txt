@@ -335,6 +335,7 @@ hololive/hololive-shared/pkg/service/holodex/provider/service_channels_live_fetc
 hololive/hololive-shared/pkg/service/holodex/provider/service_channels_search.go
 hololive/hololive-shared/pkg/service/holodex/provider/service_fallback.go
 hololive/hololive-shared/pkg/service/holodex/provider/service_streams.go
+hololive/hololive-shared/pkg/service/holodex/provider/service_streams_cache_fill.go
 hololive/hololive-shared/pkg/service/holodex/provider/service_streams_fallback.go
 hololive/hololive-shared/internal/service/holodex/provider/streammapping/filter.go
 hololive/hololive-shared/internal/service/holodex/provider/streammapping/mapper.go
