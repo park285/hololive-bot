@@ -7,7 +7,7 @@ DB와 공개 YouTube 제목을 합쳐 문자 TF-IDF + LogisticRegression을 실�
 ## 입력과 수집
 
 - `hololive/hololive-shared/pkg/domain/mekparkhost/testdata/title_corpus.json`: 현재 DB 제목 회귀
-  표본 221건이다. 2026-09-06 실험 당시에는 195건이었으며 9월 11일에 26건을 추가했다.
+  표본 226건이다. 2026-09-06 실험 당시에는 195건이었으며 9월 11일에 26건, 9월 26일에 5건을 추가했다.
   제목 근거를 검토한 기대값이며 실제 영상 독립 검수 정답은 아니다.
 - `event-times.json`: read-only guard를 증명한 DB의 시작/예약/게시 시각이다.
 - `public-titles.json`: UNIT B와 ACHRORA의 videos/streams/shorts에서 직접 읽은 공개 제목
