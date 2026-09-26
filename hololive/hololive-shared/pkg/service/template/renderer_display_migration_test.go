@@ -43,6 +43,7 @@ func loadDisplayLineSeeds(tb testing.TB) map[domain.TemplateKey]displayLineSeedP
 func TestDisplayLineMigrationPreservesAllSeedOutput(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	pairs := loadDisplayLineSeeds(t)
+	compacted := loadCompactSeparatorSeeds(t)
 	previousFuncs := legacyTemplateFunctions()
 
 	for _, key := range sampledata.GetAllTemplateKeys() {
@@ -51,11 +52,20 @@ func TestDisplayLineMigrationPreservesAllSeedOutput(t *testing.T) {
 			previous := current
 
 			if pair, changed := pairs[key]; changed {
-				if current != pair.newBody {
+				want := pair.newBody
+				// 217이 이어서 바꾼 키는 217 결과를 확인하고, 208 자체의 표시 보존은 208 본문으로 비교한다.
+				if next, rewritten := compacted[key]; rewritten {
+					want = next.newBody
+				}
+
+				if current != want {
 					t.Fatal("standard default was not migrated")
 				}
 
 				previous = pair.oldBody
+				current = pair.newBody
+			} else if _, rewritten := compacted[key]; rewritten {
+				t.Fatal("217 rewrote a key that 208 did not standardize")
 			}
 
 			data := sampledata.GetTemplateSampleData(key)

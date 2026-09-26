@@ -28,8 +28,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
+func isAllAlarmTypes(types domain.AlarmTypes) bool {
+	return len(types) == 0 || len(types) == len(domain.AllAlarmTypes)
+}
+
 func (f *ResponseFormatter) formatAlarmTypesLabel(ctx context.Context, types domain.AlarmTypes) string {
-	if len(types) == 0 || len(types) == len(domain.AllAlarmTypes) {
+	if isAllAlarmTypes(types) {
 		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceAlarmType, "ALL")
 	}
 

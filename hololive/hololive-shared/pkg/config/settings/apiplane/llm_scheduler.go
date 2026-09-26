@@ -105,8 +105,9 @@ func buildLLMSchedulerConfig() *LLMSchedulerConfig {
 		Postgres: settings.LoadPostgresConfig(),
 		Logging:  settings.LoadLoggingConfig(),
 		Bot: settings.BotConfig{
-			Prefix:   sharedenv.String("BOT_PREFIX", "!"),
-			SelfUser: sharedenv.String("BOT_SELF_USER", "iris"),
+			Prefix:      sharedenv.String("BOT_PREFIX", "!"),
+			SelfUser:    sharedenv.String("BOT_SELF_USER", "iris"),
+			SeeMoreFold: settings.LoadSeeMoreFold(),
 		},
 		Environment: load.AppEnvironment(),
 		LLMProvider: strings.ToLower(strings.TrimSpace(sharedenv.String("LLM_PROVIDER", settings.LLMProviderCliproxy))),

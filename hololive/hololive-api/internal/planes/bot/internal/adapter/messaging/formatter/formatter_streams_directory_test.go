@@ -21,6 +21,7 @@
 package formatter
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -59,7 +60,7 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 		},
 	}
 
-	live := formatter.FormatLiveStreams(t.Context(), streams)
+	live := formatLiveStreams(t.Context(), formatter, streams)
 	assert.Contains(t, live, "라이브 목록 1개")
 	assert.Contains(t, live, testMemberSakuraMiko)
 	assert.NotContains(t, live, "[Holo]")
@@ -79,12 +80,12 @@ func TestFormatLiveStreamsAndUpcomingAndSchedule(t *testing.T) {
 	assert.Contains(t, schedule, "https://youtube.com/watch?v=abc123")
 	assert.NotContains(t, schedule, "\u200b")
 
-	emptyLive := formatter.FormatLiveStreams(t.Context(), nil)
+	emptyLive := formatLiveStreams(t.Context(), formatter, nil)
 	assert.Equal(t, "라이브 목록 0개", emptyLive)
 
 	errorRenderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
 	errorFormatter := NewResponseFormatter("!", errorRenderer)
-	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.FormatLiveStreams(t.Context(), streams))
+	assert.Equal(t, messagestrings.FallbackSentinel, formatLiveStreams(t.Context(), errorFormatter, streams))
 	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.UpcomingStreams(t.Context(), streams, 12))
 	assert.Equal(t, messagestrings.FallbackSentinel, errorFormatter.ChannelSchedule(t.Context(), channel, streams, 7))
 }
@@ -104,7 +105,7 @@ func TestStreamListFormattersCapRenderedViews(t *testing.T) {
 		streams[i] = &domain.Stream{ID: "stream", Title: "title", ChannelName: "channel"}
 	}
 
-	live := formatter.FormatLiveStreams(t.Context(), streams)
+	live := formatLiveStreams(t.Context(), formatter, streams)
 	assert.Contains(t, live, "live count=105")
 	assert.Equal(t, streamListDisplayLimit, strings.Count(live, "L title"))
 
@@ -266,4 +267,14 @@ func TestFormatChannelName_IndependentsOrg(t *testing.T) {
 			assert.Equal(t, tt.want, f.formatChannelName(t.Context(), tt.stream))
 		})
 	}
+}
+
+// formatLiveStreams는 LiveQuery의 항목 변환 없이 !라이브 목록 레이아웃만 검증하는 테스트 진입점이다.
+func formatLiveStreams(ctx context.Context, f *ResponseFormatter, streams []*domain.Stream) string {
+	rendered, ok := f.renderLiveStreams(ctx, streams)
+	if !ok {
+		return messagestrings.FallbackSentinel
+	}
+
+	return f.foldSeeMore(rendered)
 }

@@ -1115,7 +1115,7 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 1분 전 · 2개\n\n"+
-		"1 · ⏰ Member1 방송 3분 전\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n\n──────────\n\n"+
+		"1 · ⏰ Member1 방송 3분 전\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n──────────\n"+
 		"2 · ⏰ Member2 방송 예정\n\u200bTitle2\nhttps://youtube.com/watch?v=def", message)
 }
 
@@ -1145,7 +1145,7 @@ func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t 
 
 	require.NoError(t, err)
 	assert.Equal(t, "🔴 방송 시작 · 2개\n\n"+
-		"1 · 🔴 Member1 방송 시작\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n\n──────────\n\n"+
+		"1 · 🔴 Member1 방송 시작\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n──────────\n"+
 		"2 · 🔴 Member2 방송 시작\n\u200bTitle2\nhttps://youtube.com/watch?v=def", message)
 }
 
@@ -1175,7 +1175,7 @@ func TestRenderAlarmDispatchNotificationGroupMixedCatchupKeepsConservativeHeader
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 5분 전 · 2개\n\n"+
-		"1 · 🔴 LiveMember 방송 시작\n\u200bLive Title\nhttps://youtube.com/watch?v=live\n\n──────────\n\n"+
+		"1 · 🔴 LiveMember 방송 시작\n\u200bLive Title\nhttps://youtube.com/watch?v=live\n──────────\n"+
 		"2 · ⏰ UpcomingMember 방송 예정\n\u200bUpcoming Title\nhttps://youtube.com/watch?v=upcoming", message)
 }
 

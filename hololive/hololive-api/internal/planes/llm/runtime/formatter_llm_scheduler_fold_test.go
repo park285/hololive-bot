@@ -37,7 +37,7 @@ func TestRenderOrError_SeeMoreFoldToggle(t *testing.T) {
 
 	on := newLLMSchedulerFormatter("!", renderer, nil, true)
 	folded := on.renderOrError(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
-	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\n"))
+	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\u200b"), "padding must follow the head line")
 	assert.Contains(t, folded, "\u200b")
 
 	off := newLLMSchedulerFormatter("!", renderer, nil, false)

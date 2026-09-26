@@ -156,11 +156,13 @@ func goldenAlarmDispatchGroup(group alarmDispatchGroup) string {
 	}
 
 	for i := range group.notifications {
-		if i > 0 {
-			b.WriteString("\n\n──────────")
+		if i == 0 {
+			b.WriteString("\n\n")
+		} else {
+			b.WriteString("\n──────────\n")
 		}
 
-		fmt.Fprintf(&b, "\n\n%d · ", i+1)
+		fmt.Fprintf(&b, "%d · ", i+1)
 		b.WriteString(goldenAlarmDispatchItem(&group.notifications[i], group.minutesUntil))
 	}
 

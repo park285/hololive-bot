@@ -73,6 +73,7 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `MAJOREVENT_*` | major event scrape/schedule config | partial |
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/api` profile for `bot_webhook_inbox`, `bot_reply_outbox`, `source_observation` | yes |
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
+| `BOT_SEE_MORE_FOLD` | bot·llm plane의 긴 목록 응답을 머리 문단과 카카오톡 '전체보기'로 접음; 기본값 `true`, `false`는 접기를 끄는 운영 스위치 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
 
 ## Logs

@@ -34,9 +34,14 @@ func TestSeedTemplates_KakaoReadabilitySamples(t *testing.T) {
 				t.Errorf("기본 강조나 제목 링크가 남음: %q", out)
 			}
 
-			// 한 줄짜리 동명이인 선택지는 간결한 목록을 유지합니다.
-			if key != domain.TemplateKeyCmdAmbiguousMember && strings.Contains(out, "2 · ") && !strings.Contains(out, "\n\n──────────\n\n2 · ") {
-				t.Errorf("항목 사이 빈 줄이 사라짐: %q", out)
+			// 한 줄짜리 동명이인 선택지와 다음 방송 없는 알람은 구분선 없이 간결한 목록을 유지합니다.
+			if key != domain.TemplateKeyCmdAmbiguousMember && key != domain.TemplateKeyCmdAlarmList &&
+				strings.Contains(out, "2 · ") && !strings.Contains(out, "\n──────────\n2 · ") {
+				t.Errorf("항목 사이 구분선이 사라짐: %q", out)
+			}
+
+			if strings.Contains(out, "\n\n──────────") || strings.Contains(out, "──────────\n\n") {
+				t.Errorf("구분선 주변에 빈 줄이 남음: %q", out)
 			}
 
 			t.Logf("KAKAO_PREVIEW %s\n%s\nEND_PREVIEW", key, out)
@@ -68,7 +73,7 @@ func TestSeedTemplates_KakaoLiveLongTitlesAndMissingFields(t *testing.T) {
 			})
 			out := kakaoformat.Render(rendered)
 
-			for _, required := range []string{"\n\n1 · Kureiji Ollie Ch. hololive", "\n" + url + "\n\n──────────\n\n2 · 두 번째 채널\n\u200b제목만 있음\n\n──────────\n\n3 · 세 번째 채널"} {
+			for _, required := range []string{"\n\n1 · Kureiji Ollie Ch. hololive", "\n" + url + "\n──────────\n2 · 두 번째 채널\n\u200b제목만 있음\n──────────\n3 · 세 번째 채널"} {
 				if !strings.Contains(out, required) {
 					t.Errorf("최종 출력에 필수 줄/간격 없음: %q", out)
 				}

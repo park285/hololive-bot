@@ -30,12 +30,15 @@ const (
 	// KakaoSeeMorePadding: 카카오톡 '전체 보기' 기능을 위한 패딩 길이.
 	KakaoSeeMorePadding   = 500
 	KakaoSeeMoreThreshold = 250
-	KakaoZeroWidthSpace   = "\u200b"
+	// KakaoSeeMoreHeadMaxLines: 접힌 화면에 남기는 머리 문단의 최대 줄 수.
+	KakaoSeeMoreHeadMaxLines = 4
+	KakaoZeroWidthSpace      = "\u200b"
 )
 
-// FoldForSeeMore는 첫 줄 뒤에 zero-width space 패딩을 삽입해 KakaoTalk이
-// 본문을 '전체보기'로 접게 만든다. 임계 이하·한 줄짜리·이미 패딩된 텍스트는
-// 그대로 반환한다(멱등).
+// FoldForSeeMore는 머리 문단 끝에 zero-width space 패딩을 붙여 KakaoTalk이
+// 머리 문단과 '전체보기'만 보이도록 접게 만든다. 머리 문단은 첫 빈 줄 앞의 줄이며,
+// KakaoSeeMoreHeadMaxLines 안에 빈 줄이 없으면 첫 줄만 남긴다.
+// 임계 이하·한 줄짜리·이미 패딩된 텍스트는 그대로 반환한다(멱등).
 func FoldForSeeMore(text string, threshold int) string {
 	if threshold <= 0 || utf8.RuneCountInString(text) <= threshold {
 		return text
@@ -46,10 +49,39 @@ func FoldForSeeMore(text string, threshold int) string {
 		return text
 	}
 
-	head, rest, found := strings.Cut(text, "\n")
+	head, rest, found := cutSeeMoreHead(text)
 	if !found || strings.TrimSpace(rest) == "" {
 		return text
 	}
 
-	return head + "\n" + strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
+	// 패딩을 머리 문단 마지막 줄에 붙여야 접힌 화면에 빈 줄이 따로 생기지 않는다.
+	return head + strings.Repeat(KakaoZeroWidthSpace, KakaoSeeMorePadding) + "\n" + rest
+}
+
+// 개수·기간·표시 한도 안내가 제목 다음 줄에 있어도 접힌 화면에 남도록 머리 문단 단위로 자른다.
+func cutSeeMoreHead(text string) (head, rest string, found bool) {
+	firstEnd := strings.IndexByte(text, '\n')
+	if firstEnd < 0 {
+		return text, "", false
+	}
+
+	end := firstEnd
+
+	for range KakaoSeeMoreHeadMaxLines {
+		next := text[end+1:]
+
+		line, _, _ := strings.Cut(next, "\n")
+		if strings.TrimSpace(line) == "" {
+			return text[:end], next, true
+		}
+
+		lineEnd := strings.IndexByte(next, '\n')
+		if lineEnd < 0 {
+			break
+		}
+
+		end += 1 + lineEnd
+	}
+
+	return text[:firstEnd], text[firstEnd+1:], true
 }

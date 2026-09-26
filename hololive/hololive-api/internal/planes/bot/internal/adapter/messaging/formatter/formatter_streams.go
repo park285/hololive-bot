@@ -74,15 +74,14 @@ type channelScheduleTemplateData struct {
 	Streams     []scheduleEntryView
 }
 
-func (f *ResponseFormatter) FormatLiveStreams(ctx context.Context, streams []*domain.Stream) string {
-	data := f.liveStreamsTemplateData(ctx, streams)
-
-	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, data)
+// renderLiveStreams는 접기 전 본문을 돌려주어 LiveQuery가 머리 문단 안내를 더한 뒤 한 번만 접게 한다.
+func (f *ResponseFormatter) renderLiveStreams(ctx context.Context, streams []*domain.Stream) (string, bool) {
+	rendered, err := f.render(ctx, domain.TemplateKeyCmdLiveStreams, f.liveStreamsTemplateData(ctx, streams))
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return "", false
 	}
 
-	return f.foldSeeMore(rendered)
+	return rendered, true
 }
 
 func (f *ResponseFormatter) liveStreamsTemplateData(ctx context.Context, streams []*domain.Stream) liveStreamsTemplateData {

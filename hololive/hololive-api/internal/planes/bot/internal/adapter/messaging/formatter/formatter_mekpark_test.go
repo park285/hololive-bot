@@ -29,7 +29,7 @@ func TestMekParkStreamAndAlarmDisplays(t *testing.T) {
 	original := *stream
 	streams := []*domain.Stream{stream}
 
-	require.Contains(t, f.FormatLiveStreams(t.Context(), streams), "유닛 B · 미라|")
+	require.Contains(t, formatLiveStreams(t.Context(), f, streams), "유닛 B · 미라|")
 	require.Contains(t, f.UpcomingStreams(t.Context(), streams, 24), "유닛 B · 미라|")
 	require.Contains(t, f.ChannelSchedule(t.Context(), channel, streams, 7), "유닛 B\n미라 ·")
 

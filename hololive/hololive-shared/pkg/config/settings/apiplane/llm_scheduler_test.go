@@ -38,6 +38,20 @@ func TestLoadLLMProviderConfigDefaultsToCliproxy(t *testing.T) {
 	}
 }
 
+func TestBuildLLMSchedulerConfigSharesSeeMoreFoldSwitch(t *testing.T) {
+	t.Setenv("BOT_SEE_MORE_FOLD", "")
+
+	if !buildLLMSchedulerConfig().Bot.SeeMoreFold {
+		t.Fatal("llm plane must fold long digests by default like the bot plane")
+	}
+
+	t.Setenv("BOT_SEE_MORE_FOLD", "false")
+
+	if buildLLMSchedulerConfig().Bot.SeeMoreFold {
+		t.Fatal("BOT_SEE_MORE_FOLD=false must disable llm plane folding")
+	}
+}
+
 func TestValidateLLMProviderGemini(t *testing.T) {
 	cfg := settings.LLMProviderConfig{
 		Name: settings.LLMProviderGemini,

@@ -68,6 +68,16 @@ type Result struct {
 	Truncated bool
 }
 
+// ReasonCounts는 채널별 조회 사유를 운영 진단용 개수로 모은다.
+func (r Result) ReasonCounts() map[Reason]int {
+	counts := make(map[Reason]int, len(r.Channels))
+	for _, channel := range r.Channels {
+		counts[channel.Reason]++
+	}
+
+	return counts
+}
+
 type Reader interface {
 	Query(ctx context.Context, request Request) (Result, error)
 }

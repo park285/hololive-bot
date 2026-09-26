@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
@@ -110,6 +111,16 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 		}
 
 		return nil
+	}
+
+	if result.Status != livequery.Complete {
+		// 사용자 응답에서 뺀 조회 범위 진단은 운영자가 부분·미확인 결과를 추적하도록 로그로 남긴다.
+		c.Deps().Logger.InfoContext(ctx, "live query incomplete",
+			slog.String("status", string(result.Status)),
+			slog.Any("reasons", result.ReasonCounts()),
+			slog.Int("items", len(result.Items)),
+			slog.Time("as_of", result.AsOf),
+		)
 	}
 
 	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.LiveQuery(ctx, result, request.MemberName)); err != nil {
