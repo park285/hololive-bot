@@ -33,6 +33,19 @@ printf '9.8.7\n' > "$fixture_root/VERSION"
 printf 'release-2.0.46\n' > "$fixture_root/hololive/hololive-api/VERSION"
 expect_failure "invalid runtime VERSION must fail closed" ap_compose_release_version "$fixture_root"
 
+# 중앙 compose wrapper의 export는 두 runtime VERSION을 읽고, 호출자가 넘긴 다른 API 버전은 거부한다.
+export_root="$fixture_root/export"
+mkdir -p "$export_root/hololive/hololive-api" "$export_root/hololive/hololive-alarm-worker"
+printf '2.1.3\n' > "$export_root/hololive/hololive-api/VERSION"
+printf '3.2.1\n' > "$export_root/hololive/hololive-alarm-worker/VERSION"
+unset HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
+compose_export_release_versions "$export_root"
+[[ "$HOLO_API_VERSION" == 2.1.3 ]] || fail "API version must be read from its VERSION file"
+[[ "$HOLO_ALARM_WORKER_VERSION" == 3.2.1 ]] || fail "alarm worker version must be read from its VERSION file"
+HOLO_API_VERSION=9.9.9
+expect_failure "mismatched caller-provided API version must fail closed" compose_export_release_versions "$export_root"
+unset HOLO_API_VERSION HOLO_ALARM_WORKER_VERSION
+
 deploy_script="$ROOT_DIR/scripts/deploy/ap-deploy.sh"
 rsync_manifest="$ROOT_DIR/scripts/deploy/ap-rsync-files.txt"
 preview_checker="$ROOT_DIR/scripts/deploy/check-ap-rsync-preview.sh"
