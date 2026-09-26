@@ -611,7 +611,6 @@ TABLE source_observation_queue
   CONSTRAINT source_observation_queue_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_source_observation_queue_claim ON public.source_observation_queue USING btree (available_at, observation_id) WHERE (status = 'PENDING'::text)
   INDEX CREATE INDEX idx_source_observation_queue_lease_recovery ON public.source_observation_queue USING btree (lease_expires_at, observation_id) WHERE (status = 'PROCESSING'::text)
-  INDEX CREATE INDEX idx_source_observation_queue_terminal_retention ON public.source_observation_queue USING btree (status, updated_at, observation_id) WHERE (status = ANY (ARRAY['PROCESSED'::text, 'DEAD_LETTER'::text]))
 
 TABLE source_observation_replay_epoch
   COLUMN singleton boolean NOT NULL DEFAULT true
@@ -697,10 +696,7 @@ TABLE source_observations
   CONSTRAINT fk_source_observation_contract FOREIGN KEY (provider, observation_kind) REFERENCES observation_contract_generations(provider, observation_kind) ON DELETE RESTRICT
   CONSTRAINT source_observations_pkey PRIMARY KEY (id)
   CONSTRAINT uq_source_observation_identity UNIQUE (provider, observation_kind, subject_key, observation_key, schema_version, contract_generation)
-  INDEX CREATE INDEX idx_source_observations_kind_id ON public.source_observations USING btree (observation_kind, id)
   INDEX CREATE INDEX idx_source_observations_kind_received_id ON public.source_observations USING btree (observation_kind, received_at, id)
-  INDEX CREATE INDEX idx_source_observations_received ON public.source_observations USING btree (received_at, id)
-  INDEX CREATE INDEX idx_source_observations_subject_time ON public.source_observations USING btree (observation_kind, subject_key, scheduled_for DESC, id DESC)
 
 TABLE source_reconciliation_conflicts
   COLUMN id bigint NOT NULL DEFAULT nextval('source_reconciliation_conflicts_id_seq'::regclass)
@@ -1158,6 +1154,7 @@ TABLE youtube_live_absence_slots
   CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
   INDEX CREATE INDEX idx_youtube_live_absence_slots_live_time ON public.youtube_live_absence_slots USING btree (effective_at DESC) WHERE (((coverage -> 'filters'::text) -> 'statuses'::text) ? 'LIVE'::text)
+  INDEX CREATE INDEX idx_youtube_live_absence_slots_scheduled_for ON public.youtube_live_absence_slots USING btree (scheduled_for)
 
 TABLE youtube_live_pending_ends
   COLUMN video_id text NOT NULL

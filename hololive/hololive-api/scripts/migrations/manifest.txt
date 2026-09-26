@@ -70,3 +70,8 @@
 070 209_template_row_version.sql
 071 210_youtube_live_active_head_index.sql
 072 211_live_query_coverage_time_index.sql
+073 212_live_absence_slot_scheduled_index.sql
+074 213_drop_source_observations_subject_time_index.sql
+075 214_drop_source_observations_received_index.sql
+076 215_drop_source_observations_kind_id_index.sql
+077 216_drop_source_observation_queue_terminal_retention_index.sql

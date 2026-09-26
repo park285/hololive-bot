@@ -27,7 +27,7 @@ cleanup_integration_test_database() {
 
     local container="${INTEGRATION_TEST_DB_CONTAINER}"
     INTEGRATION_TEST_DB_CONTAINER=""
-    if ! docker rm --force "${container}" >/dev/null; then
+    if ! docker rm --force --volumes "${container}" >/dev/null; then
         echo "failed to remove integration test PostgreSQL container ${container}" >&2
         return 1
     fi
@@ -40,7 +40,7 @@ cleanup_integration_test_valkey() {
 
     local container="${INTEGRATION_TEST_VALKEY_CONTAINER}"
     INTEGRATION_TEST_VALKEY_CONTAINER=""
-    if ! docker rm --force "${container}" >/dev/null; then
+    if ! docker rm --force --volumes "${container}" >/dev/null; then
         echo "failed to remove integration test Valkey container ${container}" >&2
         return 1
     fi
