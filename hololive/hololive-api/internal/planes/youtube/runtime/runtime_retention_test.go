@@ -105,35 +105,51 @@ func TestRetentionTickKeepsSourceWhenProjectionFails(t *testing.T) {
 }
 
 func TestEvidenceRetentionAgesCoversEveryObservationKind(t *testing.T) {
-	age := 24 * time.Hour
+	day := 24 * time.Hour
 	cfg := apiplane.YouTubePlaneRetentionConfig{
-		CommunityPageAge:    age,
-		VideoListAge:        age,
-		ShortsListAge:       age,
-		LiveSnapshotAge:     age,
-		ViewerSampleAge:     age,
-		ChannelStatsAge:     age,
-		ChannelProfileAge:   age,
-		ChannelPhotoAge:     age,
-		ScheduleSnapshotAge: age,
+		CommunityPageAge:    1 * day,
+		VideoListAge:        2 * day,
+		ShortsListAge:       3 * day,
+		LiveSnapshotAge:     4 * day,
+		ViewerSampleAge:     5 * day,
+		ChannelStatsAge:     6 * day,
+		ChannelProfileAge:   7 * day,
+		ChannelPhotoAge:     8 * day,
+		ScheduleSnapshotAge: 9 * day,
+		ChannelLiveCheckAge: 10 * day,
+		VideoLiveCheckAge:   11 * day,
 	}
 	ages := evidenceRetentionAges(&cfg)
-	wantKinds := []contract.ObservationKind{
-		contract.KindCommunityPage,
-		contract.KindVideoList,
-		contract.KindShortsList,
-		contract.KindLiveSnapshot,
-		contract.KindViewerSample,
-		contract.KindChannelStats,
-		contract.KindChannelProfile,
-		contract.KindChannelPhoto,
-		contract.KindSchedule,
+	want := map[contract.ObservationKind]time.Duration{
+		contract.KindCommunityPage:    cfg.CommunityPageAge,
+		contract.KindVideoList:        cfg.VideoListAge,
+		contract.KindShortsList:       cfg.ShortsListAge,
+		contract.KindLiveSnapshot:     cfg.LiveSnapshotAge,
+		contract.KindViewerSample:     cfg.ViewerSampleAge,
+		contract.KindChannelStats:     cfg.ChannelStatsAge,
+		contract.KindChannelProfile:   cfg.ChannelProfileAge,
+		contract.KindChannelPhoto:     cfg.ChannelPhotoAge,
+		contract.KindSchedule:         cfg.ScheduleSnapshotAge,
+		contract.KindChannelLiveCheck: cfg.ChannelLiveCheckAge,
+		contract.KindVideoLiveCheck:   cfg.VideoLiveCheckAge,
 	}
 
-	for _, kind := range wantKinds {
+	for kind, age := range want {
 		if ages[kind] != age {
 			t.Fatalf("retention age for %s = %s, want %s", kind, ages[kind], age)
 		}
+	}
+
+	// claim하는 모든 kind는 evidence 보존 기간을 가져야 무기한 누적되지 않는다.
+	for _, kind := range youtubePlaneClaimKinds() {
+		if _, ok := ages[kind]; !ok {
+			t.Fatalf("claimed kind %s has no evidence retention age", kind)
+		}
+	}
+
+	cfg.ChannelLiveCheckAge = 0
+	if _, ok := evidenceRetentionAges(&cfg)[contract.KindChannelLiveCheck]; ok {
+		t.Fatal("disabled channel live check retention must not delete evidence")
 	}
 }
 

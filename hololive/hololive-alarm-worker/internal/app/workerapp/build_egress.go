@@ -284,6 +284,7 @@ func alarmDispatchRunnerConfig(appConfig *settings.Config) dispatchrun.RunnerCon
 
 	return dispatchrun.RunnerConfig{
 		ShortLinkBaseURL:  appConfig.Notification.AlarmShortLinkBaseURL,
+		SeeMoreFold:       appConfig.Bot.SeeMoreFold,
 		MaxBatch:          profile.MaxBatch,
 		MaxBatchesPerWake: profile.MaxBatchesPerWake,
 		AttemptTimeout:    time.Duration(*worker.Executor.AttemptTimeout.Milliseconds) * time.Millisecond,
@@ -403,7 +404,7 @@ func newYouTubeOutboxDispatcher(
 	pool := infra.Postgres.GetPool()
 
 	dispatcher, err := youtubedispatch.NewDispatcher(youtubedispatch.Dependencies{
-		DB: pool, Cache: infra.Cache, Sender: sender,
+		DB: pool, Cache: infra.Cache, Sender: sender, SeeMoreFold: appConfig.Bot.SeeMoreFold,
 		Renderer: template.NewRenderer(pool, logger), MessageStrings: messagestrings.NewStore(pool, logger),
 	}, logger, &dispatchConfig)
 	if err != nil {

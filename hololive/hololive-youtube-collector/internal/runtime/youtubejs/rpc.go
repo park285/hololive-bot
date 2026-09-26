@@ -107,6 +107,54 @@ func (c *RPC) FetchChannel(ctx context.Context, request ChannelRequest) (Channel
 	return *result, nil
 }
 
+// FetchChannelLiveCheck는 채널 /live 확인을 한 번 요청합니다. 응답 예산은 MaxLiveCheckResponseBytes 이하로 제한하며
+// 반환 channel_id와 요청 subject의 대조는 호출자가 소유합니다.
+func (c *RPC) FetchChannelLiveCheck(ctx context.Context, request ChannelLiveCheckRequest) (ChannelLiveCheckResult, error) {
+	request.ProtocolVersion = ProtocolVersion
+
+	limit, err := c.liveCheckSuccessLimit(request.MaxSuccessResponseBytes)
+	if err != nil {
+		return ChannelLiveCheckResult{}, fmt.Errorf("live check success limit: %w", err)
+	}
+
+	request.MaxSuccessResponseBytes = limit
+
+	result, err := c.doJSON[ChannelLiveCheckResult](ctx, "/v1/channel_live_check", &request, int64(limit))
+	if err != nil {
+		return ChannelLiveCheckResult{}, err
+	}
+
+	return *result, nil
+}
+
+// FetchVideoLiveCheck는 영상 player 확인을 한 번 요청합니다. 반환 video_id와 요청 subject의 대조는 호출자가 소유합니다.
+func (c *RPC) FetchVideoLiveCheck(ctx context.Context, request VideoLiveCheckRequest) (VideoLiveCheckResult, error) {
+	request.ProtocolVersion = ProtocolVersion
+
+	limit, err := c.liveCheckSuccessLimit(request.MaxSuccessResponseBytes)
+	if err != nil {
+		return VideoLiveCheckResult{}, fmt.Errorf("live check success limit: %w", err)
+	}
+
+	request.MaxSuccessResponseBytes = limit
+
+	result, err := c.doJSON[VideoLiveCheckResult](ctx, "/v1/video_live_check", &request, int64(limit))
+	if err != nil {
+		return VideoLiveCheckResult{}, err
+	}
+
+	return *result, nil
+}
+
+func (c *RPC) liveCheckSuccessLimit(requested int) (int, error) {
+	limit, err := c.successLimit(requested)
+	if err != nil {
+		return 0, fmt.Errorf("success limit: %w", err)
+	}
+
+	return min(limit, MaxLiveCheckResponseBytes), nil
+}
+
 func (c *RPC) successLimit(requested int) (int, error) {
 	configured := defaultHelperBodyLimit
 
@@ -191,6 +239,10 @@ func minimumSuccessResponseBytes(path string) int64 {
 		return 124
 	case "/v1/channel":
 		return 171
+	case "/v1/channel_live_check":
+		return 97
+	case "/v1/video_live_check":
+		return 139
 	default:
 		return 1
 	}
@@ -300,22 +352,28 @@ func oversizedHelperResponse(status int) error {
 	return nil
 }
 
+// helperSuccess는 성공 응답 유형마다 자신의 결과 계약을 검증하게 합니다.
+// 목록 RPC는 pagination을, 확인 RPC는 평탄한 판정 어휘를 검증합니다.
+type helperSuccess interface {
+	protocolMetadata() ProtocolMeta
+	validateSuccess() error
+}
+
 func decodeHelperSuccess(payload []byte, response any) error {
 	if err := strictDecode(payload, response); err != nil {
 		return errors.Join(protocolMismatchError(fmt.Errorf("decode youtube.js helper success response: %w", err)))
 	}
 
-	meta, ok := protocolMetaOf(response)
-	if !ok || meta.ProtocolVersion != ProtocolVersion {
+	success, ok := response.(helperSuccess)
+	if !ok {
+		return collecterr.New(collecterr.Internal, collecterr.ClassInternal, "youtube.js helper success response type has no result contract")
+	}
+
+	if success.protocolMetadata().ProtocolVersion != ProtocolVersion {
 		return errors.Join(protocolMismatchError(errors.New("youtube.js helper success protocol version mismatch")))
 	}
 
-	pagination, ok := paginationOf(response)
-	if !ok {
-		return errors.Join(protocolMismatchError(errors.New("youtube.js helper success pagination is missing")))
-	}
-
-	if err := pagination.Validate(); err != nil {
+	if err := success.validateSuccess(); err != nil {
 		return errors.Join(protocolMismatchError(err))
 	}
 
@@ -340,24 +398,6 @@ func strictDecode(payload []byte, dst any) error {
 	}
 
 	return nil
-}
-
-func protocolMetaOf(response any) (ProtocolMeta, bool) {
-	value, ok := response.(interface{ protocolMetadata() ProtocolMeta })
-	if !ok {
-		return ProtocolMeta{}, false
-	}
-
-	return value.protocolMetadata(), true
-}
-
-func paginationOf(response any) (Pagination, bool) {
-	value, ok := response.(interface{ pagination() Pagination })
-	if !ok {
-		return Pagination{}, false
-	}
-
-	return value.pagination(), true
 }
 
 func validateJSONContentType(raw string) error {

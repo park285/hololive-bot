@@ -3,7 +3,7 @@
   "id": "DEC-20260926-hololive-live-absence-evidence",
   "title": "!라이브의 방송 없음 안내는 공개 방송 /live 확인과 영상별 확인을 근거로 하고 보존 종료 증거는 채널 차단에서 분리한다",
   "decision_status": "accepted",
-  "delivery_status": "planned",
+  "delivery_status": "verified",
   "scope": [
     "hololive-bot"
   ],
@@ -13,9 +13,17 @@
     "docs/current/plans/2026-09-26-live-absence-evidence.md#결정 범위"
   ],
   "evidence": [
-    "docs/current/plans/2026-09-26-live-absence-evidence.md"
+    "docs/current/plans/2026-09-26-live-absence-evidence.md",
+    "docs/review/live-absence-evidence-20260926.md"
   ],
-  "implementation": [],
+  "implementation": [
+    "hololive/hololive-api/internal/planes/bot/internal/service/livequery/queries/snapshot.sql",
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/live_check_consumer.go",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/live_check.go",
+    "hololive/hololive-api/scripts/migrations/218_live_absence_evidence_contract.sql",
+    "hololive/hololive-api/scripts/migrations/220_live_query_confirmed_empty_message.sql",
+    "docs/current/runbooks/youtube-collector.md"
+  ],
   "supersedes": [
     "DEC-20260926-hololive-live-query-read-model"
   ],

@@ -28,7 +28,7 @@ func TestCommunityRunnerPublishesExhaustedFixture(t *testing.T) {
 
 	runner := NewCommunityRunner(&communityFake{result: result}, 10)
 
-	output, err := runner.Collect(t.Context(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage))
+	output, err := runner.Collect(t.Context(), youtubeInput(t, restrictedTestChannelID, "community_collect", contract.KindCommunityPage))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestContentRunnerEmitsVideosAndShortsFromOneJob(t *testing.T) {
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: videos, contentTabShorts: shorts}}
 	runner := NewContentRunner(fake, 10)
 
-	output, err := runner.Collect(t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
+	output, err := runner.Collect(t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestContentRunnerOmitsMissingShortsTab(t *testing.T) {
 	}}
 	runner := NewContentRunner(fake, 10)
 
-	output, err := runner.Collect(t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
+	output, err := runner.Collect(t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestContentRunnerReturnsExplicitPartialAfterShortsTimeout(t *testing.T) {
 
 	result, err := NewContentRunner(fake, 10).Collect(
 		t.Context(),
-		youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
+		youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +181,7 @@ func TestContentRunnerDoesNotPublishPartialForNonDegradableFailures(t *testing.T
 			}
 			result, err := NewContentRunner(fake, 10).Collect(
 				t.Context(),
-				youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
+				youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
 			)
 
 			if err == nil || !result.IsZero() || collecterr.ClassOf(err) != collecterr.ClassOf(tt.err) {
@@ -199,10 +199,10 @@ func TestContentRunnerFetchesAndEmitsOnlyEnabledKind(t *testing.T) {
 	loadJSON(t, "videos.json", &videos)
 
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: videos}}
-	input := youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
+	input := youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList)
 
 	input = withEnabled(t, input, map[contract.ObservationKind][]string{
-		contract.KindVideoList:  {"UC_TEST"},
+		contract.KindVideoList:  {restrictedTestChannelID},
 		contract.KindShortsList: {},
 	})
 
@@ -226,15 +226,13 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 
 	fake := &channelFake{result: result}
 
-	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), youtubeInput(t,
-		"UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot,
-	))
+	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	metadata, err := NewChannelMetadataRunner(fake).Collect(t.Context(), youtubeInput(t,
-		"UC_TEST", "youtubejs_channel_metadata",
+		restrictedTestChannelID, "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
@@ -252,8 +250,8 @@ func TestChannelRunnersKeepLiveAndMetadataEmissionsSeparate(t *testing.T) {
 		t.Fatalf("metadata observations = %#v", metadataObservations)
 	}
 
-	if len(fake.kinds) != 2 || fake.kinds[0] != "live" || fake.kinds[1] != "metadata" {
-		t.Fatalf("channel request kinds = %v", fake.kinds)
+	if len(fake.kinds) != 2 || fake.kinds[0] != "live" || fake.kinds[1] != "metadata" || fake.checkCalls != 0 {
+		t.Fatalf("channel request kinds = %v, live checks = %d", fake.kinds, fake.checkCalls)
 	}
 }
 
@@ -264,13 +262,7 @@ func TestChannelLiveRunnerPublishesMetadataWithGenerationTwo(t *testing.T) {
 
 	loadJSON(t, "channel.json", &result)
 
-	input := youtubeInputWithLiveGeneration(
-		t,
-		"UC_TEST",
-		"youtubejs_channel_live",
-		contract.LiveSnapshotMetadataContractGeneration,
-		contract.KindLiveSnapshot,
-	)
+	input := channelLiveInput(t, contract.LiveSnapshotMetadataContractGeneration)
 
 	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), input)
 	if err != nil {
@@ -305,9 +297,7 @@ func TestChannelLiveRunnerRejectsIncompleteUpcomingWithoutOutput(t *testing.T) {
 
 	result.LiveSessions[0].ScheduledAt = nil
 
-	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(
-		t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot),
-	)
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t, 1))
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
@@ -324,7 +314,7 @@ func TestChannelMetadataRunnerDoesNotRequireLiveSchedule(t *testing.T) {
 	result.LiveSessions[0].ScheduledAt = nil
 
 	output, err := NewChannelMetadataRunner(&channelFake{result: result}).Collect(
-		t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_channel_metadata",
+		t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_channel_metadata",
 			contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto),
 	)
 	if err != nil {
@@ -347,15 +337,13 @@ func TestChannelRunnersSkipMissingLiveTabButKeepMetadata(t *testing.T) {
 
 	fake := &channelFake{result: result}
 
-	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), youtubeInput(t,
-		"UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot,
-	))
+	live, err := NewChannelLiveRunner(fake).Collect(t.Context(), channelLiveInput(t, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	metadata, err := NewChannelMetadataRunner(fake).Collect(t.Context(), youtubeInput(t,
-		"UC_TEST", "youtubejs_channel_metadata",
+		restrictedTestChannelID, "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
@@ -381,7 +369,7 @@ func TestChannelPhotoDoesNotFetchMediaOrSynthesizeFingerprint(t *testing.T) {
 	fake := &channelFake{result: result}
 
 	output, err := NewChannelMetadataRunner(fake).Collect(t.Context(), youtubeInput(t,
-		"UC_TEST", "youtubejs_channel_metadata",
+		restrictedTestChannelID, "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	))
 	if err != nil {
@@ -433,12 +421,12 @@ func TestChannelRunnerEmitsOnlyEnabledKinds(t *testing.T) {
 
 	fake := &channelFake{result: result}
 	input := youtubeInput(t,
-		"UC_TEST", "youtubejs_channel_metadata",
+		restrictedTestChannelID, "youtubejs_channel_metadata",
 		contract.KindChannelStats, contract.KindChannelProfile, contract.KindChannelPhoto,
 	)
 
 	input = withEnabled(t, input, map[contract.ObservationKind][]string{
-		contract.KindChannelStats:   {"UC_TEST"},
+		contract.KindChannelStats:   {restrictedTestChannelID},
 		contract.KindChannelProfile: {},
 		contract.KindChannelPhoto:   {},
 	})
@@ -465,7 +453,7 @@ func TestContentRunnerRejectsMismatchedResponseIdentity(t *testing.T) {
 
 	fake := &contentFake{results: map[string]youtubejs.ContentResult{contentTabVideos: videos}}
 	output, err := NewContentRunner(fake, 10).Collect(
-		t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
+		t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList),
 	)
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
@@ -482,9 +470,7 @@ func TestChannelRunnerRejectsMismatchedLiveIdentity(t *testing.T) {
 
 	result.LiveSessions[0].ChannelID = "UC_OTHER"
 
-	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(
-		t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_channel_live", contract.KindLiveSnapshot),
-	)
+	output, err := NewChannelLiveRunner(&channelFake{result: result}).Collect(t.Context(), channelLiveInput(t, 1))
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
@@ -500,7 +486,7 @@ func TestCommunityRunnerRejectsNullRows(t *testing.T) {
 		TerminationReason: youtubejs.TerminationExhausted,
 	}
 	output, err := NewCommunityRunner(&communityFake{result: result}, 10).Collect(
-		t.Context(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage),
+		t.Context(), youtubeInput(t, restrictedTestChannelID, "community_collect", contract.KindCommunityPage),
 	)
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
@@ -512,7 +498,7 @@ func TestContentRunnerDoesNotPublishOnParserDrift(t *testing.T) {
 	t.Parallel()
 
 	runner := NewContentRunner(&contentFake{err: collecterr.New(collecterr.ParserDrift, collecterr.ClassDataContract, "content row is missing video id")}, 10)
-	output, err := runner.Collect(t.Context(), youtubeInput(t, "UC_TEST", "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
+	output, err := runner.Collect(t.Context(), youtubeInput(t, restrictedTestChannelID, "youtubejs_content", contract.KindVideoList, contract.KindShortsList))
 
 	if err == nil || collecterr.CodeOf(err) != collecterr.ParserDrift || !output.IsZero() {
 		t.Fatalf("error=%v output=%#v", err, output)
@@ -534,7 +520,7 @@ func mustCollectCommunity(t *testing.T, result *youtubejs.CommunityResult) contr
 	t.Helper()
 
 	output, err := NewCommunityRunner(&communityFake{result: *result}, 10).Collect(
-		t.Context(), youtubeInput(t, "UC_TEST", "community_collect", contract.KindCommunityPage),
+		t.Context(), youtubeInput(t, restrictedTestChannelID, "community_collect", contract.KindCommunityPage),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -604,6 +590,13 @@ func youtubeInputWithLiveGeneration(
 	}
 
 	return &input
+}
+
+func channelLiveInput(tb testing.TB, liveGeneration int64) *collectutil.RunInput {
+	tb.Helper()
+
+	return youtubeInputWithLiveGeneration(tb, restrictedTestChannelID, "youtubejs_channel_live", liveGeneration,
+		contract.KindLiveSnapshot)
 }
 
 func withEnabled(tb testing.TB, input *collectutil.RunInput, enabled map[contract.ObservationKind][]string) *collectutil.RunInput {
@@ -686,9 +679,13 @@ func (f *contentFake) FetchContent(_ context.Context, request youtubejs.ContentR
 }
 
 type channelFake struct {
-	result youtubejs.ChannelResult
-	calls  int
-	kinds  []string
+	result     youtubejs.ChannelResult
+	err        error
+	check      youtubejs.ChannelLiveCheckResult
+	checkErr   error
+	calls      int
+	checkCalls int
+	kinds      []string
 }
 
 func (f *channelFake) FetchChannel(_ context.Context, request youtubejs.ChannelRequest) (youtubejs.ChannelResult, error) {
@@ -696,5 +693,21 @@ func (f *channelFake) FetchChannel(_ context.Context, request youtubejs.ChannelR
 
 	f.kinds = append(f.kinds, request.Kind)
 
+	if f.err != nil {
+		return youtubejs.ChannelResult{}, f.err
+	}
+
 	return f.result, nil
+}
+
+func (f *channelFake) FetchChannelLiveCheck(context.Context, youtubejs.ChannelLiveCheckRequest) (youtubejs.ChannelLiveCheckResult, error) {
+	f.checkCalls++
+
+	return f.check, f.checkErr
+}
+
+func channelPageCheck(subject string) youtubejs.ChannelLiveCheckResult {
+	return youtubejs.ChannelLiveCheckResult{
+		ChannelID: subject, Outcome: contract.ChannelLiveCheckChannelPage, ChannelIdentityConfirmed: true,
+	}
 }

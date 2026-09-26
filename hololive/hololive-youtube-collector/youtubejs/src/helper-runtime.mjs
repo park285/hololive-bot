@@ -35,10 +35,14 @@ export class HelperHTTPError extends Error {
  * @param {{
  *   createTransport?: (proxy: { enabled: boolean, url: string }) => Promise<{
  *     fetch: import("./upstream-feeds.d.ts").InnertubeFetch,
+ *     singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch,
  *     close: () => Promise<void>,
  *     agentCount: number,
  *   }>,
- *   createFetchers?: (fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch) => import("./contracts.d.ts").FetcherSet,
+ *   createFetchers?: (
+ *     fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+ *     singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+ *   ) => import("./contracts.d.ts").FetcherSet,
  *   transportCloseTimeoutMs?: number,
  * }} [options]
  */
@@ -51,10 +55,14 @@ export class HelperRuntime {
    * @param {{
    *   createTransport?: (proxy: { enabled: boolean, url: string }) => Promise<{
    *     fetch: import("./upstream-feeds.d.ts").InnertubeFetch,
+   *     singleAttemptFetch: import("./upstream-feeds.d.ts").InnertubeFetch,
    *     close: () => Promise<void>,
    *     agentCount: number,
    *   }>,
-   *   createFetchers?: (fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch) => import("./contracts.d.ts").FetcherSet,
+   *   createFetchers?: (
+   *     fetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+   *     singleAttemptFetchImpl: import("./upstream-feeds.d.ts").InnertubeFetch,
+   *   ) => import("./contracts.d.ts").FetcherSet,
    *   transportCloseTimeoutMs?: number,
    * }} [options]
    */
@@ -176,7 +184,10 @@ export class HelperRuntime {
       const transport = await this.createTransport(parsed.proxy);
       this.transport = transport;
       const fetchers = this.createFetchers
-        ? this.createFetchers(/** @type {import("./upstream-feeds.d.ts").InnertubeFetch} */ (transport.fetch))
+        ? this.createFetchers(
+          /** @type {import("./upstream-feeds.d.ts").InnertubeFetch} */ (transport.fetch),
+          /** @type {import("./upstream-feeds.d.ts").InnertubeFetch} */ (transport.singleAttemptFetch),
+        )
         : null;
       this.fetchers = fetchers;
       this.agentCount = transport.agentCount;

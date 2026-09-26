@@ -478,11 +478,13 @@ func runtimeLeaseConfig() joblease.Config {
 	}
 }
 
-func withOverride(override JobRunner) []JobRunner {
+func withOverride(overrides ...JobRunner) []JobRunner {
 	runners := completeStubRunners()
 	for i, runner := range runners {
-		if runner.JobID() == override.JobID() {
-			runners[i] = override
+		for _, override := range overrides {
+			if runner.JobID() == override.JobID() {
+				runners[i] = override
+			}
 		}
 	}
 
@@ -506,6 +508,11 @@ func seedRuntimeCommunityTarget(t *testing.T, pool *pgxpool.Pool) {
 
 func seedRuntimeTargets(t *testing.T, pool *pgxpool.Pool, targets []leaseSeed) {
 	t.Helper()
+	seedRuntimeTargetsEvery(t, pool, time.Minute, targets)
+}
+
+func seedRuntimeTargetsEvery(t *testing.T, pool *pgxpool.Pool, interval time.Duration, targets []leaseSeed) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -525,8 +532,8 @@ func seedRuntimeTargets(t *testing.T, pool *pgxpool.Pool, targets []leaseSeed) {
 			INSERT INTO youtube_collection_targets (
 				projection_generation, subject_key, observation_kind,
 				priority, poll_interval_ms, enabled, valid_until
-			) VALUES ($1, $2, $3, 50, 60000, TRUE, clock_timestamp() + INTERVAL '1 hour')
-		`, generation, target.subject, target.kind); err != nil {
+			) VALUES ($1, $2, $3, 50, $4, TRUE, clock_timestamp() + INTERVAL '1 hour')
+		`, generation, target.subject, target.kind, interval.Milliseconds()); err != nil {
 			t.Fatal(err)
 		}
 	}

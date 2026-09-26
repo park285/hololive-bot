@@ -20,6 +20,7 @@ const (
 	MaxCollectionLatency = 24 * time.Hour
 	maxErrorCodeBytes    = 128
 	maxErrorTextBytes    = 2048
+	maxClaimKinds        = 11
 )
 
 var (
@@ -65,6 +66,8 @@ func InitialSupportedContracts() StaticSupportedContracts {
 		{contract.ProviderYouTubeJS, contract.KindChannelStats, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelProfile, 1, 1},
 		{contract.ProviderYouTubeJS, contract.KindChannelPhoto, 1, 1},
+		{contract.ProviderYouTubeJS, contract.KindChannelLiveCheck, 1, contract.LiveCheckContractGeneration},
+		{contract.ProviderYouTubeJS, contract.KindVideoLiveCheck, 1, contract.LiveCheckContractGeneration},
 		{contract.ProviderHolodex, contract.KindLiveSnapshot, 1, 1},
 		{contract.ProviderHolodex, contract.KindLiveSnapshot, 1, contract.LiveSnapshotMetadataContractGeneration},
 		{contract.ProviderHolodex, contract.KindViewerSample, 1, 1},
@@ -305,8 +308,8 @@ func (o ClaimOptions) validate() error {
 }
 
 func validateClaimKinds(kinds []contract.ObservationKind) error {
-	if len(kinds) == 0 || len(kinds) > 9 {
-		return errors.New("validate source observation claim: kind count must be between 1 and 9")
+	if len(kinds) == 0 || len(kinds) > maxClaimKinds {
+		return fmt.Errorf("validate source observation claim: kind count must be between 1 and %d", maxClaimKinds)
 	}
 
 	seen := make(map[contract.ObservationKind]struct{}, len(kinds))

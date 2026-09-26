@@ -58,8 +58,10 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 
 ## Live query behavior
 
-- `!라이브`는 기존 bot DB pool의 단일 snapshot으로 확정 방송과 수집 coverage를 읽습니다. 무인자는 우이를 포함한 활성 등록 Hololive 채널, 멤버 지정은 해석된 채널을 직접 조회합니다. freshness는 대상 주기의 두 배에 30초를 더하되 최대 5분이며 DB 조회 예산은 1초입니다. `DEC-20260926-hololive-live-query-read-model`과 [실행 계획](../plans/2026-09-26-live-query-read-model.md)이 소유합니다. 운영 migration·배포는 별도 승인과 coverage 확인 뒤 수행합니다.
-- fresh positive만 표시합니다. 미수집·만료·종료 확인 중·저장 상태 불일치 채널의 진단과 조회 시각은 사용자 응답에 붙이지 않고 `live query incomplete` 운영 로그로 남깁니다(`DEC-20260926-hololive-list-reply-fold-default`). fresh 목록 0건을 방송 없음으로 바꾸지 않으며, 전체 scope가 확인되지 않은 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'로 표시합니다. 전체 scope가 확인된 빈 결과만 방송 없음이며 표시 한도는 100개입니다. `!예정`·`!일정`과 Stream HTTP API는 기존 Holodex 원천과 조직·기간·5분 캐시·응답 계약을 유지합니다.
+- `!라이브`는 기존 bot DB pool의 단일 snapshot으로 확정 방송과 채널 확인 최신값을 읽으며 원천을 호출하지 않습니다. 무인자는 우이를 포함한 활성 등록 Hololive 채널, 멤버 지정은 해석된 채널을 직접 조회합니다. freshness는 `min(5분, 2×poll interval+30초)`, 기본 270초이며 DB 조회 예산은 1초입니다. `DEC-20260926-hololive-live-absence-evidence`와 [실행 계획](../plans/2026-09-26-live-absence-evidence.md)이 소유합니다.
+- 공개·멤버 한정·최초공개의 fresh positive는 `/live`가 예정 영상이나 채널 페이지를 고르더라도 표시합니다. 방송 탭·Holodex 누락·absence slot은 채널 coverage가 아닙니다. 모든 채널의 신선한 음성 확인과 해소된 현재 후보가 갖춰진 빈 결과만 '현재 방송 중인 멤버가 없습니다.'로 안내합니다. 그 밖의 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'입니다. 멤버 지정 빈 결과의 `CMD_MEMBER_NOT_LIVE`와 100개 표시 한도는 유지합니다.
+- 세션·head 없는 EXPLICIT_END와 session=ENDED는 완전성을 막지 않고 `live query incomplete`의 `nonblocking_diagnostics`로 남깁니다. LIVE/head 없음은 계속 차단합니다. 신선한 공개 불가 사실은 정상 head가 있는 stale LIVE 후보만 제외하며, 만료나 후속 UNKNOWN은 다시 차단합니다. pending을 삭제하거나 표시 전용 종료 상태를 만들지 않습니다. 사용자 응답에는 조회 사유·기준 시각·범위 설명을 붙이지 않습니다(`DEC-20260926-hololive-list-reply-fold-default`).
+- YouTube plane은 `channel_live_check`를 최신값에만 저장하고 reducer로 보내지 않습니다. `video_live_check`의 identity가 맞고 유효한 upstream 종료 시각이 있을 때만 기존 명시적 종료 경로로 반영합니다. 공개 불가·해석 불가 UNKNOWN만으로 수명 상태를 바꾸지 않습니다. `!예정`·`!일정`과 Stream HTTP API는 기존 Holodex 원천·조직·기간·5분 캐시·응답 계약을 유지합니다.
 - Holodex live/upcoming 목록은 Service 인스턴스 안에서 같은 cache key의 미스를 조정합니다. owner가 조회·저장을 마치면 대기 caller가 캐시를 다시 읽습니다. caller의 취소/기한을 유지하고 결과 포인터나 오류를 공유하지 않습니다. cache write 실패·원천 실패·서로 다른 인스턴스의 요청까지 한 번으로 합친다는 보장은 없습니다.
 - `DEC-20260926-youtube-only-stream-providers`에 따라 `!라이브`는 YouTube만 조회합니다. Chzzk·Twitch client/설정/DI와 명령 내 플랫폼 병합은 제거했습니다. YouTube 조회 실패는 기존 조회 실패 응답으로 전달합니다. 멤버 저장 데이터와 프로필의 정적 링크, Stream HTTP JSON 필드는 보존하며 해당 필드가 제공자 지원을 뜻하지는 않습니다.
 - 새로운 자동 재시도·DB 실패 시 원천 전환·부분 결과 fallback은 추가하지 않습니다. 기존 org=all의 부분 캐시와 예약 retry 의미도 이번 cache-fill 개선에서는 변경하지 않습니다.

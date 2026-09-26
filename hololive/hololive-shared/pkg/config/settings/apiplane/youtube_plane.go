@@ -36,6 +36,8 @@ type YouTubePlaneRetentionConfig struct {
 	ChannelProfileAge     time.Duration
 	ChannelPhotoAge       time.Duration
 	ScheduleSnapshotAge   time.Duration
+	ChannelLiveCheckAge   time.Duration
+	VideoLiveCheckAge     time.Duration
 }
 
 type YouTubePlaneReplayConfig struct {

@@ -430,7 +430,7 @@ func newLiveTestConsumer(pool *pgxpool.Pool, repo *Repository, grace time.Durati
 func liveClaimOptions() ClaimOptions {
 	return ClaimOptions{
 		ConsumerName:  "youtube-live-processor",
-		LeaseOwner:    "api-a",
+		LeaseOwner:    testAPILeaseOwner,
 		Kinds:         []contract.ObservationKind{contract.KindLiveSnapshot, contract.KindViewerSample, contract.KindSchedule},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,

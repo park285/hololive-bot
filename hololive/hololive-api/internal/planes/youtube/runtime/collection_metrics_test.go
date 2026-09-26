@@ -33,8 +33,8 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 		t.Fatal(err)
 	}
 
-	if len(samples) != 4 {
-		t.Fatalf("sample count = %d", len(samples))
+	if len(samples) < 3 {
+		t.Fatalf("snapshot cannot exercise full and truncated observations: %+v", samples)
 	}
 
 	assertExecutableCollectionSamples(t, samples)
@@ -52,7 +52,7 @@ func TestCollectionTargetSnapshotIncludesUnqueuedAndExcludesInactive(t *testing.
 	m.observe(samples, now, nil)
 
 	if testutil.ToFloat64(m.success) != 1 {
-		t.Fatal("four executable jobs did not produce a successful snapshot")
+		t.Fatal("all executable jobs did not produce a successful snapshot")
 	}
 
 	assertCollectionSnapshotMetrics(t, m, now)
@@ -79,6 +79,9 @@ func assertCollectionSnapshotMetrics(t *testing.T, m *collectionTargetMetrics, n
 
 	if testutil.ToFloat64(m.targets.WithLabelValues("youtubejs_channel_live")) != 4 ||
 		testutil.ToFloat64(m.requiredRate.WithLabelValues("youtubejs_content")) != 2.0/120 ||
+		testutil.ToFloat64(m.requiredRate.WithLabelValues("youtubejs_channel_live")) != 4.0/120 ||
+		testutil.ToFloat64(m.requiredRate.WithLabelValues("youtubejs_channel_live_check")) != 2.0/120 ||
+		testutil.ToFloat64(m.requiredRate.WithLabelValues("youtubejs_video_live")) != 1.0/120 ||
 		testutil.ToFloat64(m.lastSuccess) != float64(now.Unix()) {
 		t.Fatal("observation replaced target demand or last successful timestamp")
 	}
@@ -198,11 +201,15 @@ func collectionStateVisits(node collectionStatePlanNode) float64 {
 func assertExecutableCollectionSamples(t *testing.T, samples []collectionTargetSample) {
 	t.Helper()
 
+	// 방송 탭 snapshot과 채널 /live 확인은 채널마다 각자 job으로 RPC 1회를 보낸다.
+	// disabled 채널 확인 target은 수요에 들어가지 않는다.
 	wantRates := map[string]float64{
-		"community_collect":          1.0 / 120,
-		"youtubejs_content":          2.0 / 120,
-		"youtubejs_channel_live":     4.0 / 120,
-		"youtubejs_channel_metadata": 1.0 / 120,
+		"community_collect":            1.0 / 120,
+		"youtubejs_content":            2.0 / 120,
+		"youtubejs_channel_live":       4.0 / 120,
+		"youtubejs_channel_live_check": 2.0 / 120,
+		"youtubejs_channel_metadata":   1.0 / 120,
+		"youtubejs_video_live":         1.0 / 120,
 	}
 
 	for i := range samples {
@@ -215,17 +222,32 @@ func assertExecutableCollectionSamples(t *testing.T, samples []collectionTargetS
 
 		delete(wantRates, s.kind)
 
-		if s.kind == "youtubejs_channel_live" {
-			got := [...]int64{s.targets, s.stale, s.neverCompleted, s.due}
-			if got != [...]int64{4, 2, 1, 2} || s.oldestCompletionAge < 600 || s.oldestDueAge < 600 {
-				t.Fatalf("live collection snapshot = %+v", s)
-			}
-		} else if s.targets != 1 || s.neverCompleted != 1 || s.stale != 0 || s.due != 1 || s.oldestCompletionAge != 0 {
-			t.Fatalf("uncompleted bundled collection snapshot = %+v", s)
-		}
+		assertCollectionJobProgress(t, s)
 	}
 
 	if len(wantRates) != 0 {
 		t.Fatalf("missing executable jobs: %v", wantRates)
+	}
+}
+
+func assertCollectionJobProgress(t *testing.T, s *collectionTargetSample) {
+	t.Helper()
+
+	switch s.kind {
+	case "youtubejs_channel_live":
+		got := [...]int64{s.targets, s.stale, s.neverCompleted, s.due}
+		if got != [...]int64{4, 2, 1, 2} || s.oldestCompletionAge < 600 || s.oldestDueAge < 600 {
+			t.Fatalf("live collection snapshot = %+v", s)
+		}
+	case "youtubejs_channel_live_check":
+		// 같은 채널의 오래된 방송 탭 완료가 확인 job의 최근 완료·다음 슬롯을 가리지 않는다.
+		got := [...]int64{s.targets, s.stale, s.neverCompleted, s.due}
+		if got != [...]int64{2, 0, 1, 1} || s.oldestCompletionAge < 30 || s.oldestCompletionAge >= 600 || s.oldestDueAge < 600 {
+			t.Fatalf("channel live check collection snapshot = %+v", s)
+		}
+	default:
+		if s.targets != 1 || s.neverCompleted != 1 || s.stale != 0 || s.due != 1 || s.oldestCompletionAge != 0 {
+			t.Fatalf("uncompleted bundled collection snapshot = %+v", s)
+		}
 	}
 }

@@ -493,7 +493,7 @@ TABLE observation_contract_generations
   COLUMN current_generation bigint NOT NULL
   COLUMN updated_by text NOT NULL
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_observation_contract_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
   CONSTRAINT chk_observation_contract_updated_by CHECK (((length(updated_by) >= 1) AND (length(updated_by) <= 128)))
   CONSTRAINT observation_contract_generations_current_generation_check CHECK ((current_generation > 0))
@@ -583,7 +583,7 @@ TABLE source_observation_consumer_offsets
   COLUMN last_processed_at timestamp with time zone
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_source_observation_consumer_offset_bounds CHECK (((length(consumer_name) >= 1) AND (length(consumer_name) <= 128)))
-  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT source_observation_consumer_offsets_last_processed_id_check CHECK ((last_processed_id >= 0))
   CONSTRAINT source_observation_consumer_offsets_pkey PRIMARY KEY (consumer_name, observation_kind)
 
@@ -774,6 +774,31 @@ TABLE youtube_channel_latest_stats
   COLUMN time timestamp with time zone NOT NULL
   COLUMN updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
   CONSTRAINT youtube_channel_latest_stats_pkey PRIMARY KEY (channel_id)
+
+TABLE youtube_channel_live_checks
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN outcome text NOT NULL
+  COLUMN selected_video_id character varying(20)
+  COLUMN channel_identity_confirmed boolean NOT NULL
+  COLUMN unknown_reason text
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_channel_live_checks_effective_clock CHECK ((effective_at = scheduled_for))
+  CONSTRAINT chk_youtube_channel_live_checks_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_youtube_channel_live_checks_identity CHECK ((((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64)) AND ((selected_video_id IS NULL) OR ((length((selected_video_id)::text) >= 1) AND (length((selected_video_id)::text) <= 20)))))
+  CONSTRAINT chk_youtube_channel_live_checks_outcome_shape CHECK ((((outcome = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((outcome = 'UNKNOWN'::text) OR channel_identity_confirmed) AND ((outcome <> 'CHANNEL_PAGE'::text) OR (selected_video_id IS NULL)) AND ((outcome <> ALL (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text])) OR (selected_video_id IS NOT NULL)) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT channel_identity_confirmed))))
+  CONSTRAINT chk_youtube_channel_live_checks_outcome_vocab CHECK ((outcome = ANY (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text, 'CHANNEL_PAGE'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_youtube_channel_live_checks_provider CHECK ((provider = 'youtubejs'::text))
+  CONSTRAINT chk_youtube_channel_live_checks_unknown_reason_vocab CHECK (((unknown_reason IS NULL) OR (unknown_reason = ANY (ARRAY['identity_missing'::text, 'identity_mismatch'::text, 'contradictory_fields'::text, 'structure_unrecognized'::text, 'not_waiting_state'::text, 'login_required_unclassified'::text, 'error_unclassified'::text, 'request_failed'::text]))))
+  CONSTRAINT fk_youtube_channel_live_checks_observation FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_channel_live_checks_pkey PRIMARY KEY (channel_id)
+  CONSTRAINT uq_youtube_channel_live_checks_observation UNIQUE (observation_id)
 
 TABLE youtube_channel_photo_heads
   COLUMN channel_id text NOT NULL
@@ -998,7 +1023,7 @@ TABLE youtube_collection_targets
   COLUMN enabled boolean NOT NULL
   COLUMN valid_until timestamp with time zone NOT NULL
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_youtube_collection_target_subject CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256)))
   CONSTRAINT youtube_collection_targets_poll_interval_ms_check CHECK (((poll_interval_ms >= 1000) AND (poll_interval_ms <= 86400000)))
   CONSTRAINT youtube_collection_targets_priority_check CHECK (((priority >= 0) AND (priority <= 100)))
@@ -1153,7 +1178,6 @@ TABLE youtube_live_absence_slots
   CONSTRAINT chk_youtube_live_absence_slots_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (jsonb_typeof((coverage -> 'requested_channel_ids'::text)) = 'array'::text)))
   CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
-  INDEX CREATE INDEX idx_youtube_live_absence_slots_live_time ON public.youtube_live_absence_slots USING btree (effective_at DESC) WHERE (((coverage -> 'filters'::text) -> 'statuses'::text) ? 'LIVE'::text)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_scheduled_for ON public.youtube_live_absence_slots USING btree (scheduled_for)
 
 TABLE youtube_live_pending_ends
@@ -1456,6 +1480,33 @@ TABLE youtube_stream_stats
   COLUMN sample_count integer NOT NULL DEFAULT 0
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT youtube_stream_stats_pkey PRIMARY KEY (video_id)
+
+TABLE youtube_video_availability
+  COLUMN video_id character varying(20) NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN identity_confirmed boolean NOT NULL
+  COLUMN availability text NOT NULL
+  COLUMN method text NOT NULL
+  COLUMN unknown_reason text
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_video_availability_availability_vocab CHECK ((availability = ANY (ARRAY['PUBLIC'::text, 'MEMBERS_ONLY'::text, 'PUBLIC_UNAVAILABLE'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_youtube_video_availability_effective_clock CHECK ((effective_at = scheduled_for))
+  CONSTRAINT chk_youtube_video_availability_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_youtube_video_availability_identity CHECK ((((length((video_id)::text) >= 1) AND (length((video_id)::text) <= 20)) AND ((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64))))
+  CONSTRAINT chk_youtube_video_availability_method_vocab CHECK ((method = ANY (ARRAY['player_public'::text, 'player_members_only'::text, 'player_private'::text, 'unknown'::text])))
+  CONSTRAINT chk_youtube_video_availability_provider CHECK ((provider = 'youtubejs'::text))
+  CONSTRAINT chk_youtube_video_availability_shape CHECK (((((availability = 'PUBLIC'::text) AND (method = 'player_public'::text)) OR ((availability = 'MEMBERS_ONLY'::text) AND (method = 'player_members_only'::text)) OR ((availability = 'PUBLIC_UNAVAILABLE'::text) AND (method = 'player_private'::text)) OR ((availability = 'UNKNOWN'::text) AND (method = 'unknown'::text))) AND ((availability = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((availability = 'UNKNOWN'::text) OR identity_confirmed) AND ((unknown_reason IS DISTINCT FROM 'availability_unclassified'::text) OR identity_confirmed) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT identity_confirmed))))
+  CONSTRAINT chk_youtube_video_availability_unknown_reason_vocab CHECK (((unknown_reason IS NULL) OR (unknown_reason = ANY (ARRAY['identity_missing'::text, 'identity_mismatch'::text, 'contradictory_fields'::text, 'structure_unrecognized'::text, 'not_waiting_state'::text, 'login_required_unclassified'::text, 'error_unclassified'::text, 'request_failed'::text, 'availability_unclassified'::text]))))
+  CONSTRAINT fk_youtube_video_availability_observation FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_video_availability_pkey PRIMARY KEY (video_id)
+  CONSTRAINT uq_youtube_video_availability_observation UNIQUE (observation_id)
 
 TABLE youtube_videos
   COLUMN video_id character varying(20) NOT NULL

@@ -13,38 +13,32 @@ import (
 	"github.com/kapu/hololive-youtube-collector/internal/runtime/youtubejs"
 )
 
+const (
+	channelKindLive     = "live"
+	channelKindMetadata = "metadata"
+)
+
 type ChannelClient interface {
 	FetchChannel(ctx context.Context, request youtubejs.ChannelRequest) (youtubejs.ChannelResult, error)
 }
 
+// ChannelRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
 type ChannelRunner struct {
 	client ChannelClient
-	kind   string
-}
-
-// NewChannelLiveRunner는 방송 목록만 수집하고 접근 제한이 있으면 관측을 PARTIAL로 표시합니다.
-func NewChannelLiveRunner(client ChannelClient) *ChannelRunner {
-	return &ChannelRunner{
-		client: client,
-		kind:   "live",
-	}
 }
 
 // NewChannelMetadataRunner는 방송 일정 조회 없이 채널 통계·프로필·사진만 수집합니다.
 func NewChannelMetadataRunner(client ChannelClient) *ChannelRunner {
-	return &ChannelRunner{
-		client: client,
-		kind:   "metadata",
-	}
+	return &ChannelRunner{client: client}
 }
 
 func (r *ChannelRunner) JobID() sourceobservation.JobID {
-	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: sourceobservation.JobKind("youtubejs_channel_" + r.kind)}
+	return sourceobservation.JobID{Provider: contract.ProviderYouTubeJS, Kind: "youtubejs_channel_" + channelKindMetadata}
 }
 
 // Collect는 수집 범위에 맞는 observation과 checkpoint를 구성하며 실제 DB 저장은 publisher에 맡깁니다.
 func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput) (collectutil.CollectResult, error) {
-	if invalidChannelRunner(r) {
+	if r == nil || r.client == nil {
 		return collectutil.CollectResult{}, collecterr.New(collecterr.Configuration, collecterr.ClassConfiguration, "youtube.js channel client is not configured")
 	}
 
@@ -59,24 +53,18 @@ func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput
 		return collectutil.CollectResult{}, fmt.Errorf("enabled channel kinds: %w", err)
 	}
 
-	if !anyChannelKindEnabled(enabled) {
+	if !enabled[contract.KindChannelStats] && !enabled[contract.KindChannelProfile] && !enabled[contract.KindChannelPhoto] {
 		out, completeErr := completeEmptyCollection(started)
 
 		return out, errors.Join(completeErr)
 	}
 
-	result, completeness, continuity, err := r.fetchChannelPage(ctx, input)
+	result, completeness, continuity, err := fetchChannelPage(ctx, r.client, input, channelKindMetadata)
 	if err != nil {
 		return collectutil.CollectResult{}, fmt.Errorf("fetch channel page: %w", err)
 	}
 
-	if enabled[contract.KindLiveSnapshot] {
-		if validateErr := validateLiveSchedules(result.LiveSessions); validateErr != nil {
-			return collectutil.CollectResult{}, fmt.Errorf("validate live schedules: %w", validateErr)
-		}
-	}
-
-	envelopes, err := r.channelEnvelopes(input, &result, enabled, completeness, continuity)
+	envelopes, err := channelMetadataEnvelopes(input, &result, enabled, completeness, continuity)
 	if err != nil {
 		return collectutil.CollectResult{}, fmt.Errorf("channel envelopes: %w", err)
 	}
@@ -87,10 +75,6 @@ func (r *ChannelRunner) Collect(ctx context.Context, input *collectutil.RunInput
 	}
 
 	return out, nil
-}
-
-func invalidChannelRunner(r *ChannelRunner) bool {
-	return r == nil || r.client == nil
 }
 
 func completeEmptyCollection(started time.Time) (collectutil.CollectResult, error) {
@@ -118,15 +102,15 @@ func enabledChannelKinds(input *collectutil.RunInput, kinds []contract.Observati
 	return enabled, nil
 }
 
-func anyChannelKindEnabled(enabled map[contract.ObservationKind]bool) bool {
-	return enabled[contract.KindLiveSnapshot] || enabled[contract.KindChannelStats] ||
-		enabled[contract.KindChannelProfile] || enabled[contract.KindChannelPhoto]
-}
-
-func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil.RunInput) (youtubejs.ChannelResult, contract.Completeness, contract.Continuity, error) {
-	result, err := r.client.FetchChannel(ctx, youtubejs.ChannelRequest{
+func fetchChannelPage(
+	ctx context.Context,
+	client ChannelClient,
+	input *collectutil.RunInput,
+	kind string,
+) (youtubejs.ChannelResult, contract.Completeness, contract.Continuity, error) {
+	result, err := client.FetchChannel(ctx, youtubejs.ChannelRequest{
 		ChannelID:               input.Spec().SubjectKey,
-		Kind:                    r.kind,
+		Kind:                    kind,
 		MaxPages:                input.MaxPages(),
 		MaxSuccessResponseBytes: input.MaxSuccessResponseBytes(),
 	})
@@ -138,7 +122,7 @@ func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("validate live identity: %w", validateErr)
 	}
 
-	if validateErr := validateUnavailableLiveSessions(input.Spec().SubjectKey, r.kind, &result); validateErr != nil {
+	if validateErr := validateUnavailableLiveSessions(input.Spec().SubjectKey, kind, &result); validateErr != nil {
 		return youtubejs.ChannelResult{}, "", "", fmt.Errorf("validate unavailable live sessions: %w", validateErr)
 	}
 
@@ -155,123 +139,35 @@ func (r *ChannelRunner) fetchChannelPage(ctx context.Context, input *collectutil
 	return result, completeness, continuity, nil
 }
 
-func (r *ChannelRunner) channelEnvelopes(
+func channelMetadataEnvelopes(
 	input *collectutil.RunInput,
 	result *youtubejs.ChannelResult,
 	enabled map[contract.ObservationKind]bool,
 	completeness contract.Completeness,
 	continuity contract.Continuity,
 ) ([]contract.Envelope, error) {
-	envelopes := make([]contract.Envelope, 0, 4)
-	if err := r.appendLiveEnvelope(input, result, enabled, completeness, continuity, &envelopes); err != nil {
-		return nil, fmt.Errorf("append live envelope: %w", err)
-	}
+	subject := input.Spec().SubjectKey
+	envelopes := make([]contract.Envelope, 0, 3)
 
-	if err := r.appendChannelStats(input, result, enabled, completeness, continuity, &envelopes); err != nil {
+	stats, ok := channelStatsPayload(subject, result.Stats)
+	if err := appendBuiltEnvelope(input, contract.KindChannelStats, enabled, completeness, continuity, stats, ok, &envelopes); err != nil {
 		return nil, fmt.Errorf("append channel stats: %w", err)
 	}
 
-	if err := r.appendChannelProfile(input, result, enabled, completeness, continuity, &envelopes); err != nil {
+	profile, ok := channelProfilePayload(subject, result.Profile)
+	if err := appendBuiltEnvelope(input, contract.KindChannelProfile, enabled, completeness, continuity, profile, ok, &envelopes); err != nil {
 		return nil, fmt.Errorf("append channel profile: %w", err)
 	}
 
-	if err := r.appendChannelPhoto(input, result, enabled, completeness, continuity, &envelopes); err != nil {
+	photo, ok := channelPhotoPayload(subject, result.Photo)
+	if err := appendBuiltEnvelope(input, contract.KindChannelPhoto, enabled, completeness, continuity, photo, ok, &envelopes); err != nil {
 		return nil, fmt.Errorf("append channel photo: %w", err)
 	}
 
 	return envelopes, nil
 }
 
-func (r *ChannelRunner) appendLiveEnvelope(
-	input *collectutil.RunInput,
-	result *youtubejs.ChannelResult,
-	enabled map[contract.ObservationKind]bool,
-	completeness contract.Completeness,
-	continuity contract.Continuity,
-	envelopes *[]contract.Envelope,
-) error {
-	if !enabled[contract.KindLiveSnapshot] {
-		return nil
-	}
-
-	if result.MissingTab {
-		return nil
-	}
-
-	liveGeneration, err := input.Generation(contract.KindLiveSnapshot)
-	if err != nil {
-		return fmt.Errorf("live snapshot generation: %w", err)
-	}
-
-	live, err := r.envelope(
-		input,
-		contract.KindLiveSnapshot,
-		completeness,
-		continuity,
-		liveSnapshotPayload(
-			input.Spec().SubjectKey,
-			result.LiveSessions,
-			liveGeneration == contract.LiveSnapshotMetadataContractGeneration,
-		),
-	)
-	if err != nil {
-		return fmt.Errorf("envelope: %w", err)
-	}
-
-	*envelopes = append(*envelopes, live)
-
-	return nil
-}
-
-func (r *ChannelRunner) appendChannelStats(
-	input *collectutil.RunInput,
-	result *youtubejs.ChannelResult,
-	enabled map[contract.ObservationKind]bool,
-	completeness contract.Completeness,
-	continuity contract.Continuity,
-	envelopes *[]contract.Envelope,
-) error {
-	payload, ok := channelStatsPayload(input.Spec().SubjectKey, result.Stats)
-	if err := r.appendBuiltEnvelope(input, contract.KindChannelStats, enabled, completeness, continuity, payload, ok, envelopes); err != nil {
-		return fmt.Errorf("append built envelope: %w", err)
-	}
-
-	return nil
-}
-
-func (r *ChannelRunner) appendChannelProfile(
-	input *collectutil.RunInput,
-	result *youtubejs.ChannelResult,
-	enabled map[contract.ObservationKind]bool,
-	completeness contract.Completeness,
-	continuity contract.Continuity,
-	envelopes *[]contract.Envelope,
-) error {
-	payload, ok := channelProfilePayload(input.Spec().SubjectKey, result.Profile)
-	if err := r.appendBuiltEnvelope(input, contract.KindChannelProfile, enabled, completeness, continuity, payload, ok, envelopes); err != nil {
-		return fmt.Errorf("append built envelope: %w", err)
-	}
-
-	return nil
-}
-
-func (r *ChannelRunner) appendChannelPhoto(
-	input *collectutil.RunInput,
-	result *youtubejs.ChannelResult,
-	enabled map[contract.ObservationKind]bool,
-	completeness contract.Completeness,
-	continuity contract.Continuity,
-	envelopes *[]contract.Envelope,
-) error {
-	payload, ok := channelPhotoPayload(input.Spec().SubjectKey, result.Photo)
-	if err := r.appendBuiltEnvelope(input, contract.KindChannelPhoto, enabled, completeness, continuity, payload, ok, envelopes); err != nil {
-		return fmt.Errorf("append built envelope: %w", err)
-	}
-
-	return nil
-}
-
-func (r *ChannelRunner) appendBuiltEnvelope(
+func appendBuiltEnvelope(
 	input *collectutil.RunInput,
 	kind contract.ObservationKind,
 	enabled map[contract.ObservationKind]bool,
@@ -285,7 +181,7 @@ func (r *ChannelRunner) appendBuiltEnvelope(
 		return nil
 	}
 
-	envelope, err := r.envelope(input, kind, completeness, continuity, payload)
+	envelope, err := subjectEnvelope(input, kind, completeness, continuity, payload)
 	if err != nil {
 		return fmt.Errorf("envelope: %w", err)
 	}
@@ -295,7 +191,9 @@ func (r *ChannelRunner) appendBuiltEnvelope(
 	return nil
 }
 
-func (r *ChannelRunner) envelope(
+// subjectEnvelope은 lease가 배정한 수집 슬롯과 요청 subject로 envelope 하나를 만듭니다.
+// 공유 계약이 payload를 거부하면 원천 응답과 계약의 불일치로 분류합니다.
+func subjectEnvelope(
 	input *collectutil.RunInput,
 	kind contract.ObservationKind,
 	completeness contract.Completeness,

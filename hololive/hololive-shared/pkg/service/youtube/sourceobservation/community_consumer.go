@@ -208,6 +208,10 @@ func (c *Consumer) domainReconcile(kind contract.ObservationKind) (func(context.
 		return fn, true
 	}
 
+	if fn, ok := c.liveCheckReconcile(kind); ok {
+		return fn, true
+	}
+
 	return c.channelReconcile(kind)
 }
 

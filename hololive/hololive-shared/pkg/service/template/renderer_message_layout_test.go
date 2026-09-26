@@ -104,7 +104,6 @@ func TestSeedTemplates_EmptyStatesDoNotInventEntries(t *testing.T) {
 		data map[string]any
 		want string
 	}{
-		{domain.TemplateKeyCmdLiveStreams, map[string]any{fieldCount: 0}, "🔴 방송 중인 스트림이 없습니다."},
 		{domain.TemplateKeyCmdUpcomingStreams, map[string]any{fieldCount: 0, "Hours": 24}, "📅 24시간 이내 예정된 방송이 없습니다."},
 		{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: ""}, "❌ 채널 정보를 찾을 수 없습니다."},
 		{domain.TemplateKeyCmdChannelSchedule, map[string]any{fieldChannelName: "미코", fieldCount: 0, "Days": 7}, "📅 미코\n7일 이내 예정된 방송이 없습니다."},

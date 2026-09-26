@@ -1,5 +1,5 @@
 INSERT INTO youtube_collection_projection_generations(status,row_count,projection_sha256,valid_until,activated_at)
-VALUES('CURRENT',12,repeat('a',64),now()+interval '1 hour',now()),
+VALUES('CURRENT',16,repeat('a',64),now()+interval '1 hour',now()),
       ('RETIRED',2,repeat('b',64),now()+interval '1 hour',now()-interval '1 hour');
 INSERT INTO youtube_collection_targets(projection_generation,subject_key,observation_kind,priority,poll_interval_ms,enabled,valid_until,created_at)
 SELECT generation, subject, kind,20,120000,enabled,now()+duration,now()-interval '10 minutes'
@@ -8,6 +8,10 @@ FROM youtube_collection_projection_generations CROSS JOIN (VALUES
  ('fresh','live_snapshot',true,interval '1 hour'),
  ('missing','live_snapshot',true,interval '1 hour'),
  ('deferred','live_snapshot',true,interval '1 hour'),
+ ('stale','channel_live_check',true,interval '1 hour'),
+ ('fresh','channel_live_check',true,interval '1 hour'),
+ ('disabled','channel_live_check',false,interval '1 hour'),
+ ('video-stale','video_live_check',true,interval '1 hour'),
  ('disabled','live_snapshot',false,interval '1 hour'),
  ('expired','live_snapshot',true,interval '-1 second'),
  ('content','video_list',true,interval '1 hour'),
@@ -55,3 +59,9 @@ FROM youtube_collection_projection_generations CROSS JOIN (VALUES
  ('deferred','DEFERRED',interval '10 minutes',null)
 ) AS seed(subject,state,age,owner)
 WHERE status='CURRENT';
+-- 같은 채널의 방송 탭 lease가 오래됐어도 채널 확인 job은 자기 key의 최근 완료로 집계된다.
+INSERT INTO youtube_collection_job_leases(job_key,provider,job_class,collection_job_kind,subject_key,
+projection_generation,poll_interval_ms,slot_state,scheduled_for,next_due_at,last_completed_at)
+SELECT 'collector:youtubejs:youtubejs_channel_live_check:stale','youtubejs','SUBJECT','youtubejs_channel_live_check','stale',
+generation,120000,'IDLE',now()-interval '1 minute',now()+interval '1 minute',now()-interval '30 seconds'
+FROM youtube_collection_projection_generations WHERE status='CURRENT';

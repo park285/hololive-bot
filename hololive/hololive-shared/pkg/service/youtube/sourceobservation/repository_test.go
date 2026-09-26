@@ -19,6 +19,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/dbx"
 )
 
+const testAPILeaseOwner = "api-a"
+
 func TestPublishBatchDuplicateKeepsOneEvidenceAndQueueRow(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
@@ -1834,7 +1836,7 @@ func publishInput(envelope *contract.Envelope) *PublishBatchInput {
 func claimOptions() ClaimOptions {
 	return ClaimOptions{
 		ConsumerName:  "youtube-community-processor",
-		LeaseOwner:    "api-a",
+		LeaseOwner:    testAPILeaseOwner,
 		Kinds:         []contract.ObservationKind{contract.KindCommunityPage},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,

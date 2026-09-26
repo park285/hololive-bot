@@ -36,8 +36,8 @@ type MessageFormatter struct {
 	f *format.MessageFormatter
 }
 
-func newMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger, messageStrings *messagestrings.Store) *MessageFormatter {
-	return &MessageFormatter{f: format.NewMessageFormatter(renderer, cacheClient, logger, messageStrings)}
+func newMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger, messageStrings *messagestrings.Store, seeMoreFold bool) *MessageFormatter {
+	return &MessageFormatter{f: format.NewMessageFormatter(renderer, cacheClient, logger, messageStrings, seeMoreFold)}
 }
 
 func (mf *MessageFormatter) inner() *format.MessageFormatter {

@@ -10,8 +10,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/format"
 )
 
-func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	msg, err := format.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, payload)
+func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
+	msg, err := format.FormatYouTubeOutboxPayload(ctx, renderer, messageStrings, seeMoreFold, payload)
 	if err != nil {
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}

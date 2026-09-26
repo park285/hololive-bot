@@ -10,6 +10,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// collectionTargetJobCount는 collection_target_observability.sql mapping의 실행 job 수입니다.
+// 일부 job만 담긴 snapshot을 성공으로 기록하지 않습니다.
+const collectionTargetJobCount = 6
+
 type collectionTargetSample struct {
 	kind                                            string
 	valid                                           bool
@@ -103,7 +107,7 @@ func scanCollectionTargets(rows pgx.Rows) ([]collectionTargetSample, error) {
 }
 
 func (m *collectionTargetMetrics) observe(samples []collectionTargetSample, now time.Time, err error) {
-	if err != nil || len(samples) != 4 {
+	if err != nil || len(samples) != collectionTargetJobCount {
 		m.success.Set(0)
 
 		return

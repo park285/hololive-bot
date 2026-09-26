@@ -76,3 +76,6 @@
 076 215_drop_source_observations_kind_id_index.sql
 077 216_drop_source_observation_queue_terminal_retention_index.sql
 078 217_template_compact_separators.sql
+079 218_live_absence_evidence_contract.sql
+080 219_drop_live_query_coverage_time_index.sql
+081 220_live_query_confirmed_empty_message.sql

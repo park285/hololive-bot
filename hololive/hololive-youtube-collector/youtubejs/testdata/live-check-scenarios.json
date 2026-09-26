@@ -1,0 +1,1068 @@
+{
+  "now": "2026-09-26T12:00:00.000Z",
+  "provenance_legend": {
+    "measured_20260926": "docs/review/live-absence-evidence-20260926.md 공개 요청 소표본의 기록된 사실만 재구성했다. 기록되지 않은 필드와 renderer 본문은 생략했다. 추가 네트워크 요청 없이 작성했다.",
+    "measured_20260926_sanitized": "위 소표본의 기록된 사실을 재구성하되 문서에 없는 채널 ID·시각은 sanitized 값으로 대체했다.",
+    "documented_shape": "docs/current/plans/2026-09-26-live-absence-evidence.md 근거 절의 응답 해석 서술을 따른 형태이며 ID·시각은 sanitized 값이다.",
+    "synthetic": "판정 경계를 고정하기 위해 만든 합성 응답이며 관측 표본이 아니다.",
+    "synthetic_factual_boundary": "원시 isPrivate=true와 identity가 함께 온 경우의 계약 경계다. 익명 player에서 이 조합의 도달 가능성은 실측하지 않았고 실제 비공개 표본이 아니다."
+  },
+  "video": [
+    {
+      "name": "public_live_measured",
+      "category": "public_live",
+      "provenance": "measured_20260926",
+      "note": "AHko7cC9LuA: isLive/isLiveNow=true, UNPLAYABLE. isPrivate는 기록되지 않아 가용성은 availability_unclassified로 남고 LIVE 사실은 보존된다.",
+      "video_id": "AHko7cC9LuA",
+      "player": {
+        "playabilityStatus": { "status": "UNPLAYABLE" },
+        "videoDetails": { "videoId": "AHko7cC9LuA", "channelId": "UC1DCedRgGHBdm81E1llLhOQ", "isLive": true },
+        "microformat": { "playerMicroformatRenderer": { "liveBroadcastDetails": { "isLiveNow": true } } }
+      },
+      "expected": {
+        "video_id": "AHko7cC9LuA",
+        "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+        "identity_confirmed": true,
+        "is_live": true,
+        "is_live_now": true,
+        "has_live_broadcast_details": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "availability_unclassified"
+      }
+    },
+    {
+      "name": "members_live_measured",
+      "category": "members_live",
+      "provenance": "measured_20260926",
+      "note": "maPfvoIK-MU: UCGzTVXqMQHa4AgJVJIVvtDQ의 멤버 한정 방송. isLive/isLiveNow=true와 멤버 offer renderer. status는 기존 helper 멤버 fixture 형태를 따른다.",
+      "video_id": "maPfvoIK-MU",
+      "player": {
+        "playabilityStatus": {
+          "status": "UNPLAYABLE",
+          "errorScreen": { "playerLegacyDesktopYpcOfferRenderer": {} }
+        },
+        "videoDetails": { "videoId": "maPfvoIK-MU", "channelId": "UCGzTVXqMQHa4AgJVJIVvtDQ", "isLive": true },
+        "microformat": { "playerMicroformatRenderer": { "liveBroadcastDetails": { "isLiveNow": true } } }
+      },
+      "expected": {
+        "video_id": "maPfvoIK-MU",
+        "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+        "identity_confirmed": true,
+        "is_live": true,
+        "is_live_now": true,
+        "has_live_broadcast_details": true,
+        "availability": "MEMBERS_ONLY",
+        "method": "player_members_only"
+      }
+    },
+    {
+      "name": "upcoming_waiting_measured",
+      "category": "upcoming",
+      "provenance": "measured_20260926_sanitized",
+      "note": "wnjd9XuuXg0: isUpcoming=true, isLiveNow=false, 2027-12-31 예정, LIVE_STREAM_OFFLINE/offline slate. 예정 시각은 날짜만 기록되어 12:00Z로 sanitized.",
+      "video_id": "wnjd9XuuXg0",
+      "player": {
+        "playabilityStatus": {
+          "status": "LIVE_STREAM_OFFLINE",
+          "liveStreamability": {
+            "liveStreamabilityRenderer": {
+              "videoId": "wnjd9XuuXg0",
+              "offlineSlate": { "liveStreamOfflineSlateRenderer": { "scheduledStartTime": "1830254400" } }
+            }
+          }
+        },
+        "videoDetails": { "videoId": "wnjd9XuuXg0", "channelId": "UCGzTVXqMQHa4AgJVJIVvtDQ", "isUpcoming": true },
+        "microformat": { "playerMicroformatRenderer": { "liveBroadcastDetails": { "isLiveNow": false } } }
+      },
+      "expected": {
+        "video_id": "wnjd9XuuXg0",
+        "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_upcoming": true,
+        "has_live_broadcast_details": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "availability_unclassified"
+      }
+    },
+    {
+      "name": "ended_premiere_measured",
+      "category": "ended_premiere",
+      "provenance": "measured_20260926_sanitized",
+      "note": "H9Sutl-r6YY: 종료 최초공개. isLiveContent=false, isLiveNow=false, start/endTimestamp, 원시 isPrivate=false, UNPLAYABLE. P_mClWKeOOU·v6Y1HIFKVac·w669NEAkl5s도 같은 사실. 채널 ID와 시각은 sanitized.",
+      "video_id": "H9Sutl-r6YY",
+      "player": {
+        "playabilityStatus": { "status": "UNPLAYABLE" },
+        "videoDetails": {
+          "videoId": "H9Sutl-r6YY",
+          "channelId": "UC_SANITIZED_PREMIERE_CHANNEL",
+          "isLiveContent": false,
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-20T10:00:00+00:00",
+              "endTimestamp": "2026-09-20T10:05:00+00:00"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "H9Sutl-r6YY",
+        "channel_id": "UC_SANITIZED_PREMIERE_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_live_content": false,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-20T10:00:00.000Z",
+        "ended_at": "2026-09-20T10:05:00.000Z",
+        "availability": "PUBLIC",
+        "method": "player_public"
+      }
+    },
+    {
+      "name": "ended_normal_is_live_absent",
+      "category": "ended_normal",
+      "provenance": "documented_shape",
+      "note": "종료 영상은 isLive를 생략하고 isLiveNow=false와 endTimestamp를 준다.",
+      "video_id": "ended-normal-fixture",
+      "player": {
+        "playabilityStatus": { "status": "UNPLAYABLE" },
+        "videoDetails": {
+          "videoId": "ended-normal-fixture",
+          "channelId": "UC_SANITIZED_ENDED_CHANNEL",
+          "isLiveContent": true,
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-25T09:00:00+00:00",
+              "endTimestamp": "2026-09-25T11:30:00+00:00"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "ended-normal-fixture",
+        "channel_id": "UC_SANITIZED_ENDED_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_live_content": true,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-25T09:00:00.000Z",
+        "ended_at": "2026-09-25T11:30:00.000Z",
+        "availability": "PUBLIC",
+        "method": "player_public"
+      }
+    },
+    {
+      "name": "ended_normal_is_live_false",
+      "category": "ended_normal",
+      "provenance": "synthetic",
+      "note": "명시적 isLive=false도 유효한 종료 시각과 함께면 종료 사실이다.",
+      "video_id": "ended-normal-fixture",
+      "player": {
+        "playabilityStatus": { "status": "OK" },
+        "videoDetails": {
+          "videoId": "ended-normal-fixture",
+          "channelId": "UC_SANITIZED_ENDED_CHANNEL",
+          "isLive": false,
+          "isLiveContent": true,
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-25T09:00:00Z",
+              "endTimestamp": "2026-09-25T11:30:00Z"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "ended-normal-fixture",
+        "channel_id": "UC_SANITIZED_ENDED_CHANNEL",
+        "identity_confirmed": true,
+        "is_live": false,
+        "is_live_now": false,
+        "is_live_content": true,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-25T09:00:00.000Z",
+        "ended_at": "2026-09-25T11:30:00.000Z",
+        "availability": "PUBLIC",
+        "method": "player_public"
+      }
+    },
+    {
+      "name": "members_ended",
+      "category": "members_ended",
+      "provenance": "synthetic",
+      "note": "멤버 offer renderer와 종료 사실이 함께 있으면 MEMBERS_ONLY로 종료 시각을 보존한다.",
+      "video_id": "members-ended-fixture",
+      "player": {
+        "playabilityStatus": {
+          "status": "UNPLAYABLE",
+          "errorScreen": { "playerLegacyDesktopYpcOfferRenderer": {} }
+        },
+        "videoDetails": {
+          "videoId": "members-ended-fixture",
+          "channelId": "UC_SANITIZED_MEMBERS_CHANNEL",
+          "isLiveContent": true,
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-24T12:00:00+00:00",
+              "endTimestamp": "2026-09-24T14:00:00+00:00"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "members-ended-fixture",
+        "channel_id": "UC_SANITIZED_MEMBERS_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_live_content": true,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-24T12:00:00.000Z",
+        "ended_at": "2026-09-24T14:00:00.000Z",
+        "availability": "MEMBERS_ONLY",
+        "method": "player_members_only"
+      }
+    },
+    {
+      "name": "private_raw_is_private_true",
+      "category": "private",
+      "provenance": "synthetic_factual_boundary",
+      "note": "원시 isPrivate=true와 정확한 identity만 PUBLIC_UNAVAILABLE이다. messages·reason 문자열은 판정에 쓰지 않는다.",
+      "video_id": "private-boundary-fixture",
+      "player": {
+        "playabilityStatus": {
+          "status": "LOGIN_REQUIRED",
+          "reason": "Private video",
+          "messages": ["Private video"]
+        },
+        "videoDetails": {
+          "videoId": "private-boundary-fixture",
+          "channelId": "UC_SANITIZED_PRIVATE_CHANNEL",
+          "isPrivate": true
+        }
+      },
+      "expected": {
+        "video_id": "private-boundary-fixture",
+        "channel_id": "UC_SANITIZED_PRIVATE_CHANNEL",
+        "identity_confirmed": true,
+        "is_private": true,
+        "availability": "PUBLIC_UNAVAILABLE",
+        "method": "player_private"
+      }
+    },
+    {
+      "name": "private_status_only_without_identity",
+      "category": "private",
+      "provenance": "documented_shape",
+      "note": "비공개 응답의 LOGIN_REQUIRED·messages만으로는 공개 불가가 아니다. identity가 없으면 identity_missing이다.",
+      "video_id": "private-status-fixture",
+      "player": {
+        "playabilityStatus": {
+          "status": "LOGIN_REQUIRED",
+          "reason": "Private video",
+          "messages": ["Private video"]
+        }
+      },
+      "expected": {
+        "video_id": "private-status-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "identity_missing"
+      }
+    },
+    {
+      "name": "login_required_with_identity_without_is_private",
+      "category": "private",
+      "provenance": "synthetic",
+      "note": "identity가 있어도 원시 isPrivate가 없으면 LOGIN_REQUIRED는 분류하지 않는다.",
+      "video_id": "private-status-fixture",
+      "player": {
+        "playabilityStatus": { "status": "LOGIN_REQUIRED", "messages": ["Private video"] },
+        "videoDetails": { "videoId": "private-status-fixture", "channelId": "UC_SANITIZED_PRIVATE_CHANNEL" }
+      },
+      "expected": {
+        "video_id": "private-status-fixture",
+        "channel_id": "UC_SANITIZED_PRIVATE_CHANNEL",
+        "identity_confirmed": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "login_required_unclassified"
+      }
+    },
+    {
+      "name": "error_status_only_without_identity",
+      "category": "error",
+      "provenance": "documented_shape",
+      "note": "이용 불가 응답의 ERROR만으로는 공개 불가가 아니다.",
+      "video_id": "error-status-fixture",
+      "player": {
+        "playabilityStatus": { "status": "ERROR", "reason": "Video unavailable" }
+      },
+      "expected": {
+        "video_id": "error-status-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "identity_missing"
+      }
+    },
+    {
+      "name": "error_status_with_identity",
+      "category": "error",
+      "provenance": "synthetic",
+      "note": "identity가 있어도 ERROR 상태는 error_unclassified다.",
+      "video_id": "error-status-fixture",
+      "player": {
+        "playabilityStatus": { "status": "ERROR", "reason": "Video unavailable" },
+        "videoDetails": { "videoId": "error-status-fixture", "channelId": "UC_SANITIZED_ERROR_CHANNEL" }
+      },
+      "expected": {
+        "video_id": "error-status-fixture",
+        "channel_id": "UC_SANITIZED_ERROR_CHANNEL",
+        "identity_confirmed": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "error_unclassified"
+      }
+    },
+    {
+      "name": "robot_check",
+      "category": "robot",
+      "provenance": "synthetic",
+      "note": "로봇 확인 형태의 합성 응답이다. 상태와 번역 문구는 판정에 쓰지 않고 identity 부재로 남긴다.",
+      "video_id": "robot-check-fixture",
+      "player": {
+        "playabilityStatus": {
+          "status": "LOGIN_REQUIRED",
+          "reason": "Sign in to confirm you're not a bot"
+        }
+      },
+      "expected": {
+        "video_id": "robot-check-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "identity_missing"
+      }
+    },
+    {
+      "name": "contradictory_live_with_end",
+      "category": "contradictory",
+      "provenance": "synthetic",
+      "note": "LIVE 사실과 종료 시각의 공존은 모순이며 원시 사실은 UNKNOWN으로만 보존한다.",
+      "video_id": "contradictory-fixture",
+      "player": {
+        "playabilityStatus": { "status": "OK" },
+        "videoDetails": {
+          "videoId": "contradictory-fixture",
+          "channelId": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+          "isLive": true,
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": true,
+              "startTimestamp": "2026-09-26T10:00:00+00:00",
+              "endTimestamp": "2026-09-26T11:00:00+00:00"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "contradictory-fixture",
+        "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+        "identity_confirmed": true,
+        "is_live": true,
+        "is_live_now": true,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-26T10:00:00.000Z",
+        "ended_at": "2026-09-26T11:00:00.000Z",
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "contradictory_fields"
+      }
+    },
+    {
+      "name": "contradictory_live_flags_disagree",
+      "category": "contradictory",
+      "provenance": "synthetic",
+      "video_id": "contradictory-fixture",
+      "player": {
+        "videoDetails": {
+          "videoId": "contradictory-fixture",
+          "channelId": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+          "isLive": true,
+          "isPrivate": false
+        },
+        "microformat": { "playerMicroformatRenderer": { "liveBroadcastDetails": { "isLiveNow": false } } }
+      },
+      "expected": {
+        "video_id": "contradictory-fixture",
+        "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+        "identity_confirmed": true,
+        "is_live": true,
+        "is_live_now": false,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "contradictory_fields"
+      }
+    },
+    {
+      "name": "contradictory_upcoming_with_end",
+      "category": "contradictory",
+      "provenance": "synthetic",
+      "video_id": "contradictory-fixture",
+      "player": {
+        "videoDetails": {
+          "videoId": "contradictory-fixture",
+          "channelId": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+          "isUpcoming": true,
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": { "isLiveNow": false, "endTimestamp": "2026-09-26T11:00:00Z" }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "contradictory-fixture",
+        "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_upcoming": true,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "ended_at": "2026-09-26T11:00:00.000Z",
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "contradictory_fields"
+      }
+    },
+    {
+      "name": "contradictory_end_before_start",
+      "category": "contradictory",
+      "provenance": "synthetic",
+      "video_id": "contradictory-fixture",
+      "player": {
+        "videoDetails": {
+          "videoId": "contradictory-fixture",
+          "channelId": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-26T10:00:00Z",
+              "endTimestamp": "2026-09-26T09:00:00Z"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "contradictory-fixture",
+        "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-26T10:00:00.000Z",
+        "ended_at": "2026-09-26T09:00:00.000Z",
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "contradictory_fields"
+      }
+    },
+    {
+      "name": "contradictory_end_after_receipt",
+      "category": "contradictory",
+      "provenance": "synthetic",
+      "note": "수신 시각(now)보다 늦은 종료 시각은 모순이다.",
+      "video_id": "contradictory-fixture",
+      "player": {
+        "videoDetails": {
+          "videoId": "contradictory-fixture",
+          "channelId": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+          "isPrivate": false
+        },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-26T10:00:00Z",
+              "endTimestamp": "2026-09-26T12:00:01Z"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "contradictory-fixture",
+        "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "is_private": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-26T10:00:00.000Z",
+        "ended_at": "2026-09-26T12:00:01.000Z",
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "contradictory_fields"
+      }
+    },
+    {
+      "name": "availability_unclassified_keeps_end_facts",
+      "category": "availability_unclassified",
+      "provenance": "synthetic",
+      "note": "isPrivate가 없고 제한 상태도 없으면 가용성만 UNKNOWN이며 신뢰 가능한 종료 사실은 유지한다.",
+      "video_id": "unclassified-fixture",
+      "player": {
+        "playabilityStatus": { "status": "UNPLAYABLE" },
+        "videoDetails": { "videoId": "unclassified-fixture", "channelId": "UC_SANITIZED_UNCLASSIFIED_CHANNEL" },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": {
+              "isLiveNow": false,
+              "startTimestamp": "2026-09-25T09:00:00Z",
+              "endTimestamp": "2026-09-25T10:00:00Z"
+            }
+          }
+        }
+      },
+      "expected": {
+        "video_id": "unclassified-fixture",
+        "channel_id": "UC_SANITIZED_UNCLASSIFIED_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_now": false,
+        "has_live_broadcast_details": true,
+        "started_at": "2026-09-25T09:00:00.000Z",
+        "ended_at": "2026-09-25T10:00:00.000Z",
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "availability_unclassified"
+      }
+    },
+    {
+      "name": "no_live_broadcast_details_in_renderer",
+      "category": "public_upload",
+      "provenance": "synthetic",
+      "note": "microformat renderer가 있고 liveBroadcastDetails가 없으면 has_live_broadcast_details=false다.",
+      "video_id": "upload-fixture",
+      "player": {
+        "playabilityStatus": { "status": "OK" },
+        "videoDetails": {
+          "videoId": "upload-fixture",
+          "channelId": "UC_SANITIZED_UPLOAD_CHANNEL",
+          "isLiveContent": false,
+          "isPrivate": false
+        },
+        "microformat": { "playerMicroformatRenderer": {} }
+      },
+      "expected": {
+        "video_id": "upload-fixture",
+        "channel_id": "UC_SANITIZED_UPLOAD_CHANNEL",
+        "identity_confirmed": true,
+        "is_live_content": false,
+        "is_private": false,
+        "has_live_broadcast_details": false,
+        "availability": "PUBLIC",
+        "method": "player_public"
+      }
+    },
+    {
+      "name": "malformed_boolean",
+      "category": "malformed",
+      "provenance": "synthetic",
+      "video_id": "malformed-fixture",
+      "player": {
+        "videoDetails": {
+          "videoId": "malformed-fixture",
+          "channelId": "UC_SANITIZED_MALFORMED_CHANNEL",
+          "isLive": "true"
+        }
+      },
+      "expected": {
+        "video_id": "malformed-fixture",
+        "channel_id": "UC_SANITIZED_MALFORMED_CHANNEL",
+        "identity_confirmed": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "structure_unrecognized"
+      }
+    },
+    {
+      "name": "malformed_end_timestamp",
+      "category": "malformed",
+      "provenance": "synthetic",
+      "video_id": "malformed-fixture",
+      "player": {
+        "videoDetails": { "videoId": "malformed-fixture", "channelId": "UC_SANITIZED_MALFORMED_CHANNEL" },
+        "microformat": {
+          "playerMicroformatRenderer": { "liveBroadcastDetails": { "isLiveNow": false, "endTimestamp": "yesterday" } }
+        }
+      },
+      "expected": {
+        "video_id": "malformed-fixture",
+        "channel_id": "UC_SANITIZED_MALFORMED_CHANNEL",
+        "identity_confirmed": true,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "structure_unrecognized"
+      }
+    },
+    {
+      "name": "malformed_video_details",
+      "category": "malformed",
+      "provenance": "synthetic",
+      "video_id": "malformed-fixture",
+      "player": { "videoDetails": [] },
+      "expected": {
+        "video_id": "malformed-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "structure_unrecognized"
+      }
+    },
+    {
+      "name": "malformed_player_body",
+      "category": "malformed",
+      "provenance": "synthetic",
+      "video_id": "malformed-fixture",
+      "player": "not-an-object",
+      "expected": {
+        "video_id": "malformed-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "structure_unrecognized"
+      }
+    },
+    {
+      "name": "missing_channel_identity",
+      "category": "missing_identity",
+      "provenance": "synthetic",
+      "note": "channelId가 없으면 identity 미확인이며 다른 사실을 싣지 않는다.",
+      "video_id": "identity-fixture",
+      "player": {
+        "videoDetails": { "videoId": "identity-fixture", "isLive": true, "isPrivate": false }
+      },
+      "expected": {
+        "video_id": "identity-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "identity_missing"
+      }
+    },
+    {
+      "name": "video_identity_mismatch",
+      "category": "missing_identity",
+      "provenance": "synthetic",
+      "video_id": "identity-fixture",
+      "player": {
+        "videoDetails": { "videoId": "other-video", "channelId": "UC_SANITIZED_OTHER_CHANNEL", "isLive": true }
+      },
+      "expected": {
+        "video_id": "identity-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "identity_mismatch"
+      }
+    },
+    {
+      "name": "offline_slate_identity_mismatch",
+      "category": "missing_identity",
+      "provenance": "synthetic",
+      "video_id": "identity-fixture",
+      "player": {
+        "playabilityStatus": {
+          "status": "LIVE_STREAM_OFFLINE",
+          "liveStreamability": { "liveStreamabilityRenderer": { "videoId": "other-video" } }
+        },
+        "videoDetails": { "videoId": "identity-fixture", "channelId": "UC_SANITIZED_OTHER_CHANNEL", "isUpcoming": true }
+      },
+      "expected": {
+        "video_id": "identity-fixture",
+        "identity_confirmed": false,
+        "availability": "UNKNOWN",
+        "method": "unknown",
+        "unknown_reason": "identity_mismatch"
+      }
+    }
+  ],
+  "channel": [
+    {
+      "name": "upcoming_waiting_measured",
+      "category": "upcoming",
+      "provenance": "measured_20260926_sanitized",
+      "note": "UCGzTVXqMQHa4AgJVJIVvtDQ/live → wnjd9XuuXg0 대기실. 요청 2회.",
+      "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "url": "/watch?v=wnjd9XuuXg0", "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "wnjd9XuuXg0" }
+        }
+      },
+      "player_scenario": "upcoming_waiting_measured",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+        "outcome": "UPCOMING_VIDEO",
+        "selected_video_id": "wnjd9XuuXg0",
+        "channel_identity_confirmed": true
+      }
+    },
+    {
+      "name": "public_live_measured",
+      "category": "public_live",
+      "provenance": "measured_20260926",
+      "note": "UC1DCedRgGHBdm81E1llLhOQ/live → AHko7cC9LuA. LIVE_VIDEO는 음성이 아니며 reducer 입력도 아니다.",
+      "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "url": "/watch?v=AHko7cC9LuA", "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "AHko7cC9LuA" }
+        }
+      },
+      "player_scenario": "public_live_measured",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+        "outcome": "LIVE_VIDEO",
+        "selected_video_id": "AHko7cC9LuA",
+        "channel_identity_confirmed": true
+      }
+    },
+    {
+      "name": "channel_page_measured",
+      "category": "channel_page",
+      "provenance": "measured_20260926",
+      "note": "UC1CfXB_kRs3C-zaeTG3oGyg/live: WEB_PAGE_TYPE_CHANNEL, browseId 정확히 일치, browse apiUrl. 요청 1회.",
+      "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": {
+            "webCommandMetadata": {
+              "url": "/channel/UC1CfXB_kRs3C-zaeTG3oGyg/live",
+              "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+              "apiUrl": "/youtubei/v1/browse"
+            }
+          },
+          "browseEndpoint": { "browseId": "UC1CfXB_kRs3C-zaeTG3oGyg" }
+        }
+      },
+      "expected_calls": 1,
+      "expected": {
+        "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+        "outcome": "CHANNEL_PAGE",
+        "channel_identity_confirmed": true
+      }
+    },
+    {
+      "name": "channel_page_browse_mismatch",
+      "category": "missing_identity",
+      "provenance": "synthetic",
+      "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_CHANNEL" } },
+          "browseEndpoint": { "browseId": "UC_SANITIZED_OTHER_CHANNEL" }
+        }
+      },
+      "expected_calls": 1,
+      "expected": {
+        "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+        "outcome": "UNKNOWN",
+        "channel_identity_confirmed": false,
+        "unknown_reason": "identity_mismatch"
+      }
+    },
+    {
+      "name": "channel_page_without_browse_identity",
+      "category": "missing_identity",
+      "provenance": "synthetic",
+      "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+      "resolve": {
+        "endpoint": { "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_CHANNEL" } } }
+      },
+      "expected_calls": 1,
+      "expected": {
+        "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+        "outcome": "UNKNOWN",
+        "channel_identity_confirmed": false,
+        "unknown_reason": "identity_missing"
+      }
+    },
+    {
+      "name": "channel_page_with_watch_endpoint",
+      "category": "malformed",
+      "provenance": "synthetic",
+      "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_CHANNEL" } },
+          "browseEndpoint": { "browseId": "UC1CfXB_kRs3C-zaeTG3oGyg" },
+          "watchEndpoint": { "videoId": "wnjd9XuuXg0" }
+        }
+      },
+      "expected_calls": 1,
+      "expected": {
+        "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+        "outcome": "UNKNOWN",
+        "channel_identity_confirmed": false,
+        "unknown_reason": "structure_unrecognized"
+      }
+    },
+    {
+      "name": "resolve_unrecognized_page_type",
+      "category": "malformed",
+      "provenance": "synthetic",
+      "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_UNKNOWN" } },
+          "urlEndpoint": { "url": "https://example.invalid/" }
+        }
+      },
+      "expected_calls": 1,
+      "expected": {
+        "channel_id": "UC1CfXB_kRs3C-zaeTG3oGyg",
+        "outcome": "UNKNOWN",
+        "channel_identity_confirmed": false,
+        "unknown_reason": "structure_unrecognized"
+      }
+    },
+    {
+      "name": "watch_target_from_other_channel",
+      "category": "missing_identity",
+      "provenance": "synthetic",
+      "note": "선택 영상이 다른 채널이면 요청 채널 음성이 아니다.",
+      "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "wnjd9XuuXg0" }
+        }
+      },
+      "player_scenario": "upcoming_waiting_measured",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC1DCedRgGHBdm81E1llLhOQ",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "wnjd9XuuXg0",
+        "channel_identity_confirmed": false,
+        "unknown_reason": "identity_mismatch"
+      }
+    },
+    {
+      "name": "upcoming_without_offline_state",
+      "category": "upcoming",
+      "provenance": "synthetic",
+      "note": "예정 시각과 isLiveNow=false가 있어도 LIVE_STREAM_OFFLINE 또는 offline slate가 없으면 대기 상태가 아니다.",
+      "channel_id": "UC_SANITIZED_WAITING_CHANNEL",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "waiting-fixture" }
+        }
+      },
+      "player": {
+        "playabilityStatus": { "status": "OK" },
+        "videoDetails": { "videoId": "waiting-fixture", "channelId": "UC_SANITIZED_WAITING_CHANNEL", "isUpcoming": true },
+        "microformat": {
+          "playerMicroformatRenderer": {
+            "liveBroadcastDetails": { "isLiveNow": false, "startTimestamp": "2027-01-01T00:00:00Z" }
+          }
+        }
+      },
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC_SANITIZED_WAITING_CHANNEL",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "waiting-fixture",
+        "channel_identity_confirmed": true,
+        "unknown_reason": "not_waiting_state"
+      }
+    },
+    {
+      "name": "upcoming_without_is_live_now",
+      "category": "upcoming",
+      "provenance": "synthetic",
+      "note": "isLiveNow가 생략되면 false로 간주하지 않는다.",
+      "channel_id": "UC_SANITIZED_WAITING_CHANNEL",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "waiting-fixture" }
+        }
+      },
+      "player": {
+        "playabilityStatus": {
+          "status": "LIVE_STREAM_OFFLINE",
+          "liveStreamability": {
+            "liveStreamabilityRenderer": {
+              "videoId": "waiting-fixture",
+              "offlineSlate": { "liveStreamOfflineSlateRenderer": { "scheduledStartTime": "1830254400" } }
+            }
+          }
+        },
+        "videoDetails": { "videoId": "waiting-fixture", "channelId": "UC_SANITIZED_WAITING_CHANNEL", "isUpcoming": true }
+      },
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC_SANITIZED_WAITING_CHANNEL",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "waiting-fixture",
+        "channel_identity_confirmed": true,
+        "unknown_reason": "not_waiting_state"
+      }
+    },
+    {
+      "name": "upcoming_without_start_time",
+      "category": "upcoming",
+      "provenance": "synthetic",
+      "channel_id": "UC_SANITIZED_WAITING_CHANNEL",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "waiting-fixture" }
+        }
+      },
+      "player": {
+        "playabilityStatus": { "status": "LIVE_STREAM_OFFLINE" },
+        "videoDetails": { "videoId": "waiting-fixture", "channelId": "UC_SANITIZED_WAITING_CHANNEL", "isUpcoming": true },
+        "microformat": { "playerMicroformatRenderer": { "liveBroadcastDetails": { "isLiveNow": false } } }
+      },
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC_SANITIZED_WAITING_CHANNEL",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "waiting-fixture",
+        "channel_identity_confirmed": true,
+        "unknown_reason": "not_waiting_state"
+      }
+    },
+    {
+      "name": "selected_video_already_ended",
+      "category": "ended_premiere",
+      "provenance": "synthetic",
+      "note": "종료 영상으로 연결되면 음성도 LIVE도 아니다.",
+      "channel_id": "UC_SANITIZED_PREMIERE_CHANNEL",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "H9Sutl-r6YY" }
+        }
+      },
+      "player_scenario": "ended_premiere_measured",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC_SANITIZED_PREMIERE_CHANNEL",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "H9Sutl-r6YY",
+        "channel_identity_confirmed": true,
+        "unknown_reason": "not_waiting_state"
+      }
+    },
+    {
+      "name": "robot_check_on_selected_video",
+      "category": "robot",
+      "provenance": "synthetic",
+      "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "robot-check-fixture" }
+        }
+      },
+      "player_scenario": "robot_check",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UCGzTVXqMQHa4AgJVJIVvtDQ",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "robot-check-fixture",
+        "channel_identity_confirmed": false,
+        "unknown_reason": "identity_missing"
+      }
+    },
+    {
+      "name": "contradictory_selected_video",
+      "category": "contradictory",
+      "provenance": "synthetic",
+      "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "contradictory-fixture" }
+        }
+      },
+      "player_scenario": "contradictory_live_with_end",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC_SANITIZED_CONTRADICTION_CHANNEL",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "contradictory-fixture",
+        "channel_identity_confirmed": true,
+        "unknown_reason": "contradictory_fields"
+      }
+    },
+    {
+      "name": "login_required_selected_video",
+      "category": "private",
+      "provenance": "synthetic",
+      "channel_id": "UC_SANITIZED_PRIVATE_CHANNEL",
+      "resolve": {
+        "endpoint": {
+          "commandMetadata": { "webCommandMetadata": { "webPageType": "WEB_PAGE_TYPE_WATCH" } },
+          "watchEndpoint": { "videoId": "private-status-fixture" }
+        }
+      },
+      "player_scenario": "login_required_with_identity_without_is_private",
+      "expected_calls": 2,
+      "expected": {
+        "channel_id": "UC_SANITIZED_PRIVATE_CHANNEL",
+        "outcome": "UNKNOWN",
+        "selected_video_id": "private-status-fixture",
+        "channel_identity_confirmed": true,
+        "unknown_reason": "login_required_unclassified"
+      }
+    }
+  ],
+  "counterexamples": [
+    {
+      "name": "members_live_while_live_resolves_upcoming",
+      "provenance": "measured_20260926",
+      "note": "maPfvoIK-MU가 isLiveNow=true인 동안 같은 채널 /live는 2027년 예정 대기실을 골랐다. 채널 음성은 멤버 한정 방송 부재를 보장하지 않는다.",
+      "channel_scenario": "upcoming_waiting_measured",
+      "video_scenario": "members_live_measured"
+    }
+  ]
+}

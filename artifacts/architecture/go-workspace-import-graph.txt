@@ -93,6 +93,7 @@ github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-shared/pkg/service/youtube/timestamp
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-shared/pkg/service/youtube/tracking/observation
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-shared/pkg/sqlassets
+github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/park285/iris-client-go/v2/iris
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/park285/shared-go/v2/pkg/panicguard
 github.com/kapu/hololive-alarm-worker/internal/egress/youtubedispatch -> github.com/park285/shared-go/v2/pkg/runtime/lifecycle
@@ -1259,6 +1260,7 @@ github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> 
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/providers
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/server/httpserver
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/database
+github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/service/youtube/sourceobservation
 github.com/kapu/hololive-youtube-collector/internal/runtime/collectorruntime -> github.com/kapu/hololive-shared/pkg/sqlassets

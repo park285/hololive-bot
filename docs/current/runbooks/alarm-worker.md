@@ -33,6 +33,7 @@ proactive notification egress의 배타성은 별도 lease가 아니라 PostgreS
 | `STACK_WORKER_PROFILE_FILE` | strict `hololive/alarm-worker` profile containing `alarm_dispatch`, `notification_delivery`, `youtube_delivery` | yes |
 | `YOUTUBE_OUTBOX_V3_HANDOFF_MODE` | `off`, `shadow`, `cutover`; v1 delivery rows를 v3 ledger로 넘기는 모드 | no; default `off` |
 | `BOT_MARKDOWN_REPLIES` | 확인된 오픈채팅의 카카오 네이티브 Markdown 전송 여부; 기본값 `false`. 명령 응답과 알림에 공통 적용 | no |
+| `BOT_SEE_MORE_FOLD` | 긴 여러 항목 알림을 머리 문단과 전체보기로 접음; 기본 `true`. 단일 알림·짧은 메시지 제외 | no |
 | `ALARM_SHORT_LINK_BASE_URL` | grouped message path의 YouTube short-link origin | no |
 | `BIRTHDAY_STREAM_RUNNER_ENABLED` | matching birthday greeting이 sent인 방에만 birthday stream event를 생산 | production policy |
 | `BIRTHDAY_STREAM_POLL_INTERVAL_MS` | birthday stream session 평가 주기; 기본 30분 | no |
@@ -53,6 +54,8 @@ Alarm-worker는 기본적으로 오픈채팅과 일반채팅 모두 기존 `kaka
 | Twitch-only, Chzzk-only, celebration, delivery digest, YouTube milestone, generic notification delivery | 위 방 유형 규칙 적용; Karing 비활성 |
 
 일반 텍스트는 `kakaoformat.Render`를 거칩니다. Markdown 전용 resolver는 오픈채팅 여부만 제공하며 일반채팅 eligibility를 노출하지 않습니다. Karing 구현과 handoff 검증 코드는 남아 있지만 runtime 알림 경로에서는 선택되지 않습니다.
+
+긴 쇼츠·영상·커뮤니티 묶음 및 여러 방송 알람 텍스트는 `BOT_SEE_MORE_FOLD`를 따라 머리 문단 끝에 공통 ZWSP 패딩을 넣습니다. 단일 알림·상태·오류·celebration은 그대로 유지합니다. `kakaoformat.Render` 뒤에도 패딩과 모든 항목·URL이 보존되어야 합니다. 사용자 지정 template/채널 override는 저장값을 바꾸지 않고 렌더 결과만 같은 목록 정책으로 접습니다. 변경 배포 때 API뿐 아니라 실제 알림 렌더 소유자인 alarm-worker의 설정과 바이너리도 확인합니다. 운영 메시지 발송은 승인된 테스트 방에서 별도로 수행합니다.
 
 이전 Karing 전송의 `outcome_unknown`이나 `SENDING` 기록은 텍스트 전환을 이유로 재발송하지 않습니다. 기존 quarantine 및 stale sweeper 계약을 유지합니다.
 
