@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-11.3",
+  "version": "2026-09-26.1",
   "units": {
     "unit-b": {
       "channel_id": "UC3OH5FKQ3qtl4uRme_vZTgA"
@@ -71,6 +71,9 @@
     "視点",
     "パート",
     "の枠"
+  ],
+  "role_prefixes": [
+    "メン限"
   ],
   "pairs": [
     {
