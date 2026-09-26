@@ -1229,6 +1229,14 @@ CREATE INDEX CONCURRENTLY idx_source_observation_replay_pending
     WHERE status = 'PENDING';
 ```
 
+2026-09-26 운영 통계와 현재 SQL 소비자 대조 결과, `idx_source_observation_queue_terminal_retention`,
+`idx_source_observations_subject_time`, `idx_source_observations_received`,
+`idx_source_observations_kind_id`는 운영 조회가 선택하지 않았습니다. 2026-08-23 통계 초기화 이후
+각각 2·98·64·3회만 scan됐고 마지막 사용은 수동 조회였습니다. migration `213`–`216`에서 하나씩
+`DROP INDEX CONCURRENTLY`로 제거합니다. 보존 삭제는 `idx_source_observations_kind_received_id`를,
+shorts claim은 활성 queue partial index를 사용합니다. 현재 live slot 재조회를 위한
+`idx_youtube_live_absence_slots_scheduled_for`는 migration `212`가 추가합니다.
+
 ### 9.8 Grants
 
 `hololive_scraper` 최소 권한은 다음과 같다.
