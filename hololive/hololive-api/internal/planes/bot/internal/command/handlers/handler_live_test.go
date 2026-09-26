@@ -22,7 +22,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"testing"
 
@@ -30,151 +29,21 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
-type liveStreamProviderStub struct {
-	liveStreams []*domain.Stream
+type liveQueryStub struct {
+	result livequery.Result
+	err    error
+	state  trackedContextState
 }
 
-func (s *liveStreamProviderStub) GetLiveStreams(context.Context) ([]*domain.Stream, error) {
-	return s.liveStreams, nil
-}
+func (s *liveQueryStub) Query(ctx context.Context, _ livequery.Request) (livequery.Result, error) {
+	s.state.record(ctx)
 
-func (s *liveStreamProviderStub) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (s *liveStreamProviderStub) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (s *liveStreamProviderStub) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, errTestStubNoChannel
-}
-
-func TestBuildChzzkLiveStreams(t *testing.T) {
-	t.Parallel()
-
-	streams := buildChzzkLiveStreams(
-		[]*domain.Member{
-			{
-				ChannelID:      testYouTubeChannelID,
-				Name:           "미코",
-				ChzzkChannelID: testChzzkChannelID,
-			},
-			{
-				ChannelID:      "yt-2",
-				Name:           "졸업멤버",
-				ChzzkChannelID: "cz-2",
-				IsGraduated:    true,
-			},
-		},
-		[]chzzk.LiveData{
-			{ChannelID: testChzzkChannelID, LiveTitle: "치지직 방송"},
-			{ChannelID: "cz-2", LiveTitle: "보이면 안됨"},
-			{ChannelID: "unknown", LiveTitle: "무시"},
-		},
-	)
-
-	if len(streams) != 1 {
-		t.Fatalf("expected 1 stream, got %d", len(streams))
-	}
-
-	if streams[0].ChannelID != testYouTubeChannelID {
-		t.Fatalf("channel_id = %q, want yt-1", streams[0].ChannelID)
-	}
-
-	if streams[0].Title != "치지직 방송" {
-		t.Fatalf("title = %q, want 치지직 방송", streams[0].Title)
-	}
-
-	if !streams[0].IsChzzkOnly {
-		t.Fatal("expected chzzk-only stream")
-	}
-}
-
-func TestCollectChzzkLiveStreams_UsesBatchResult(t *testing.T) {
-	t.Parallel()
-
-	members := []*domain.Member{
-		{ChannelID: testYouTubeChannelID, Name: "미코", ChzzkChannelID: testChzzkChannelID},
-		{ChannelID: "yt-2", Name: "스이세이", ChzzkChannelID: "cz-2"},
-	}
-
-	batchCalls := 0
-
-	streams := collectChzzkLiveStreams(
-		members,
-		func(channelIDs []string) ([]chzzk.LiveData, error) {
-			batchCalls++
-
-			if len(channelIDs) != 2 {
-				t.Fatalf("unexpected channelIDs: %#v", channelIDs)
-			}
-
-			return []chzzk.LiveData{
-				{ChannelID: testChzzkChannelID, LiveTitle: "batch-live-1"},
-				{ChannelID: "cz-2", LiveTitle: "batch-live-2"},
-			}, nil
-		},
-	)
-
-	if batchCalls != 1 {
-		t.Fatalf("batchCalls = %d, want 1", batchCalls)
-	}
-
-	if len(streams) != 2 {
-		t.Fatalf("expected 2 streams, got %d", len(streams))
-	}
-
-	if streams[0].Title != "batch-live-1" {
-		t.Fatalf("title = %q, want batch-live-1", streams[0].Title)
-	}
-
-	if streams[1].Title != "batch-live-2" {
-		t.Fatalf("title = %q, want batch-live-2", streams[1].Title)
-	}
-}
-
-func TestCollectChzzkLiveStreams_ReturnsNilOnBatchError(t *testing.T) {
-	t.Parallel()
-
-	streams := collectChzzkLiveStreams(
-		[]*domain.Member{
-			{ChannelID: testYouTubeChannelID, Name: "미코", ChzzkChannelID: testChzzkChannelID},
-		},
-		func([]string) ([]chzzk.LiveData, error) {
-			return nil, errors.New("batch failed")
-		},
-	)
-
-	if streams != nil {
-		t.Fatalf("expected nil streams on batch error, got %#v", streams)
-	}
-}
-
-func TestCollectChzzkLiveStreams_ReturnsEmptySliceWhenNoStreams(t *testing.T) {
-	t.Parallel()
-
-	streams := collectChzzkLiveStreams(
-		[]*domain.Member{
-			{ChannelID: testYouTubeChannelID, Name: "미코", ChzzkChannelID: testChzzkChannelID},
-		},
-		func([]string) ([]chzzk.LiveData, error) {
-			return nil, nil
-		},
-	)
-
-	if streams == nil {
-		t.Fatal("expected non-nil empty stream slice")
-	}
-
-	if len(streams) != 0 {
-		t.Fatalf("len(streams) = %d, want 0", len(streams))
-	}
+	return s.result, s.err
 }
 
 func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore.Dependencies, single *[]byte, text *string) {
@@ -186,7 +55,7 @@ func liveCardTestDeps(t *testing.T, members []*domain.Member) (deps *handlercore
 	)
 
 	deps = &handlercore.Dependencies{
-		Holodex:   &liveStreamProviderStub{},
+		LiveQuery: &liveQueryStub{result: livequery.Result{Status: livequery.Complete}},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), newContextAwareMemberProvider(members), nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, msg string) error {
@@ -209,9 +78,7 @@ func TestLiveCommand_Execute_AllLiveSendsText(t *testing.T) {
 
 	deps, singleSent, textSent := liveCardTestDeps(t, nil)
 
-	deps.Holodex = &liveStreamProviderStub{liveStreams: []*domain.Stream{
-		{ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"},
-	}}
+	deps.LiveQuery = &liveQueryStub{result: livequery.Result{Status: livequery.Complete, Items: []livequery.Item{{VideoID: "video-x", ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"}}}}
 
 	err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, map[string]any{})
 	if err != nil {
@@ -235,7 +102,7 @@ func TestLiveCommand_MemberLookupPropagatesRequestContextToMatcher(t *testing.T)
 		Name:      testMemberAqua,
 	}})
 	deps := &handlercore.Dependencies{
-		Holodex:   &liveStreamProviderStub{},
+		LiveQuery: &liveQueryStub{result: livequery.Result{Status: livequery.Complete}},
 		Matcher:   matcher.NewMatcher(nilBaseContext(), memberProvider, nil, nil, nil, slog.New(slog.DiscardHandler)),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(context.Context, string, string) error {

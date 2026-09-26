@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
-
-	"github.com/park285/shared-go/v2/pkg/httputil"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -18,8 +15,6 @@ import (
 )
 
 func InitAlarmDependencies(
-	chzzkConfig settings.ChzzkConfig,
-	twitchConfig *settings.TwitchConfig,
 	settingsFilePath string,
 	advanceMinutes []int,
 	scraperProxyEnabled bool,
@@ -28,14 +23,11 @@ func InitAlarmDependencies(
 	memberServiceAdapter domain.MemberDataProvider, alarmRepository *alarm.Repository,
 	logger *slog.Logger,
 ) (*AlarmDependencies, error) {
-	httpClient := httputil.NewExternalAPIClient(10 * time.Second)
-	chzzkClient := ProvideChzzkClient(httpClient, chzzkConfig, logger)
-	twitchClient := ProvideTwitchClient(twitchConfig, logger)
 	memberDataProvider := memberServiceAdapter
 
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(settingsFilePath, advanceMinutes, scraperProxyEnabled, logger)
 
-	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, chzzkClient, twitchClient, memberDataProvider, alarmRepository, logger)
+	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, memberDataProvider, alarmRepository, logger)
 	if err != nil {
 		return nil, fmt.Errorf("provide alarm service: %w", err)
 	}
@@ -43,8 +35,6 @@ func InitAlarmDependencies(
 	return &AlarmDependencies{
 		AlarmService:       alarmService,
 		MemberDataProvider: memberDataProvider,
-		ChzzkClient:        chzzkClient,
-		TwitchClient:       twitchClient,
 	}, nil
 }
 
@@ -62,19 +52,13 @@ func InitAlarmModeComponents(
 			return nil, fmt.Errorf("configure alarm worker client: %w", err)
 		}
 
-		httpClient := httputil.NewExternalAPIClient(10 * time.Second)
-
 		return &AlarmModeComponents{
 			AlarmCRUD:        alarmClient,
-			ChzzkClient:      ProvideChzzkClient(httpClient, appConfig.Chzzk, logger),
-			TwitchClient:     ProvideTwitchClient(&appConfig.Twitch, logger),
 			MemberDataSource: memberServiceAdapter,
 		}, nil
 	}
 
 	alarmDeps, alarmErr := InitAlarmDependencies(
-		appConfig.Chzzk,
-		&appConfig.Twitch,
 		appConfig.SettingsFilePath,
 		appConfig.Notification.AdvanceMinutes,
 		appConfig.Scraper.ProxyEnabled,
@@ -95,8 +79,6 @@ func InitAlarmModeComponents(
 	return &AlarmModeComponents{
 		AlarmCRUD:        alarmDeps.AlarmService,
 		AlarmService:     alarmDeps.AlarmService,
-		ChzzkClient:      alarmDeps.ChzzkClient,
-		TwitchClient:     alarmDeps.TwitchClient,
 		MemberDataSource: alarmDeps.MemberDataProvider,
 	}, nil
 }

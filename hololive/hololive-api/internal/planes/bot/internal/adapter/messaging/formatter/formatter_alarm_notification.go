@@ -59,27 +59,11 @@ func (f *ResponseFormatter) AlarmNotification(ctx context.Context, notification 
 }
 
 func alarmNotificationURLText(stream *domain.Stream) string {
-	if stream.IsTwitchOnly {
-		return stream.GetTwitchLiveURL()
-	}
-
-	if isIntegratedYouTubeChzzkStream(stream) {
-		return stream.GetYouTubeURL() + "\n" + stream.GetChzzkLiveURL()
-	}
-
-	if isChzzkOnlyAlarmStream(stream) {
-		return stream.GetChzzkLiveURL()
+	if stream.IsChzzkOnly || stream.IsTwitchOnly || !stream.HasYouTubeInfo() {
+		return ""
 	}
 
 	return stream.GetYouTubeURL()
-}
-
-func isIntegratedYouTubeChzzkStream(stream *domain.Stream) bool {
-	return stream.IsIntegrated && stream.HasYouTubeInfo() && stream.ChzzkChannelID != ""
-}
-
-func isChzzkOnlyAlarmStream(stream *domain.Stream) bool {
-	return stream.IsChzzkOnly || (!stream.HasYouTubeInfo() && stream.ChzzkChannelID != "")
 }
 
 func alarmNotificationScheduledKST(stream *domain.Stream) string {

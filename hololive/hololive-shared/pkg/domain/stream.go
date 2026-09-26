@@ -68,7 +68,7 @@ type Stream struct {
 	IsPremiere         bool         `json:"is_premiere"`
 	CollaboTalentNames []string     `json:"collabo_talent_names,omitempty"`
 
-	// Chzzk 관련 필드
+	// 기존 Stream HTTP 응답과 보관된 dispatch payload의 필드다. 제공자 조회에는 사용하지 않는다.
 	ChzzkChannelID string `json:"chzzk_channel_id,omitempty"` // Chzzk 채널 ID
 	ChzzkLiveID    int    `json:"chzzk_live_id"`              // Chzzk 예약 방송 ID (0이면 예고 없는 OPEN)
 	ChzzkLiveURL   string `json:"chzzk_live_url,omitempty"`   // Chzzk 라이브 URL
@@ -121,14 +121,6 @@ func (s *Stream) TimeUntilStart() *time.Duration {
 
 func (s *Stream) MinutesUntilStart() int {
 	return sharedtime.MinutesUntilFloorPtr(s.StartScheduled, time.Now())
-}
-
-func (s *Stream) GetChzzkLiveURL() string {
-	return s.ChzzkLiveURL
-}
-
-func (s *Stream) GetTwitchLiveURL() string {
-	return s.TwitchLiveURL
 }
 
 func (s *Stream) HasYouTubeInfo() bool {

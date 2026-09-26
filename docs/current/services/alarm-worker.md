@@ -18,7 +18,7 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 ## Owns
 
 - Alarm HTTP provider route registration for `/internal/alarm/*` during the staged provider migration
-- Alarm checking and scheduling loops
+- YouTube alarm checking and scheduling loops
 - Dispatch queue publish path
 - Dispatch queue consume/render/send path, serialized by PostgreSQL `FOR UPDATE SKIP LOCKED` row claims and the single Compose instance
 - Generic `notification_delivery_outbox` consume/send path for major event/member news notification rows
@@ -54,6 +54,8 @@ Alarm checker/scheduler, alarm HTTP provider, alarm dispatch queue publishing/co
 - LLM summary generation, owned by `llm-scheduler`
 
 ## Startup requirements
+
+`DEC-20260926-youtube-only-stream-providers`에 따라 Chzzk·Twitch client와 조회 루프, platform mapping 동기화는 제거했습니다. 관련 자격 증명과 `ALARM_TWITCH_ENABLED`를 소비하지 않습니다. 보관된 비유튜브 방송 envelope는 전송 전에 기존 실패 경로로 거부하며 YouTube URL로 바꾸지 않습니다. 기존 retry 상한과 DLQ 전이는 유지합니다. X Spaces·celebration·digest 알림과 YouTube 상태 소유권은 별도 계약대로 유지합니다.
 
 - PostgreSQL and Valkey availability
 - `NOTIFICATION_SCHEDULER_ROLE=worker` in the current deployment; the production validator accepts `worker|off`, and Compose pins `worker` so the single instance always runs the alarm checker/scheduler

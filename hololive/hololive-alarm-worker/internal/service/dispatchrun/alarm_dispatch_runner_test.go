@@ -256,9 +256,6 @@ func TestAlarmDispatchRunnerPinsResolvedTextPathForWholeDrain(t *testing.T) {
 		envelopes = append(envelopes, alarmDispatchKaringIdentityTestEnvelope(testAlarmRoomID, int64(id+1)))
 	}
 
-	envelopes[1].Notification.Stream.IsTwitchOnly = true
-	envelopes[1].Notification.Stream.TwitchLiveURL = testTwitchLiveURL
-
 	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
 	// 첫 unknown 뒤 조회가 회복돼도 같은 drain의 나머지 YouTube 알림을 Karing으로 뒤집으면 안 된다.
 	sender := &alarmDispatchChangingRoomSender{regularAfter: 1}
@@ -677,7 +674,7 @@ func TestAlarmDispatchRunnerUsesMessagePathOutsideRegularChat(t *testing.T) {
 	assert.Len(t, consumer.markDispatched, 1)
 }
 
-func TestAlarmDispatchRunnerUsesPlainTextForNonYouTubeOnlyStreams(t *testing.T) {
+func TestAlarmDispatchRunnerRejectsRetiredStreamProviders(t *testing.T) {
 	testCases := []struct {
 		name      string
 		configure func(*domain.Stream)
@@ -703,6 +700,8 @@ func TestAlarmDispatchRunnerUsesPlainTextForNonYouTubeOnlyStreams(t *testing.T) 
 			envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 			tc.configure(envelope.Notification.Stream)
 
+			envelope.Retry = &domain.AlarmQueueRetryMetadata{Attempt: alarmDispatchMaxAttempts}
+
 			consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{envelope}}}
 			sender := &alarmDispatchRunnerTestSender{}
 			runner := Runner{consumer: consumer, sender: sender, renderer: newAlarmDispatchTestRenderer(t), maxBatch: 10}
@@ -711,9 +710,12 @@ func TestAlarmDispatchRunnerUsesPlainTextForNonYouTubeOnlyStreams(t *testing.T) 
 
 			require.NoError(t, err)
 			assert.True(t, processed)
-			assert.Len(t, sender.messages, 1)
+			assert.Empty(t, sender.messages)
 			assert.Empty(t, sender.karingRequests)
-			assert.Len(t, consumer.markDispatched, 1)
+			assert.Empty(t, consumer.markSending)
+			assert.Empty(t, consumer.markDispatched)
+			require.Len(t, consumer.movedDLQ, 1)
+			assert.Empty(t, consumer.scheduledRetry)
 		})
 	}
 }
@@ -907,12 +909,12 @@ func TestAlarmDispatchRunnerQuarantinesRoomScopedKaringTransportFailure(t *testi
 }
 
 func TestAlarmDispatchRunnerQuarantinesRoomScopedTextDeadlineBeforePathCanFlip(t *testing.T) {
-	intrinsic := alarmDispatchRunnerIntrinsicTextEnvelope()
+	first := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 	dynamic := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
 
 	dynamic.DispatchOutboxID = 2
 
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{intrinsic, dynamic}}}
+	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{{first, dynamic}}}
 	sender := &alarmDispatchRunnerTestSender{
 		regularRooms: map[string]bool{},
 		messageErr:   fmt.Errorf("send iris text: %w", context.DeadlineExceeded),
@@ -1104,10 +1106,6 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 	second.Notification.Stream.ID = "def"
 	first.Notification.Stream.Title = "Title1"
 	second.Notification.Stream.Title = "Title2"
-	first.Notification.Stream.IsTwitchOnly = true
-	second.Notification.Stream.IsTwitchOnly = true
-	first.Notification.Stream.TwitchLiveURL = "https://twitch.tv/member1"
-	second.Notification.Stream.TwitchLiveURL = "https://twitch.tv/member2"
 	first.Notification.Stream.StartScheduled = &start
 	second.Notification.Stream.StartScheduled = &start
 
@@ -1117,8 +1115,8 @@ func TestRenderAlarmDispatchNotificationGroupUsesCanonicalTemplate(t *testing.T)
 
 	require.NoError(t, err)
 	assert.Equal(t, "⏰ 방송 1분 전 · 2개\n\n"+
-		"1 · ⏰ Member1 방송 3분 전\n\u200bTitle1\nhttps://twitch.tv/member1\n\n──────────\n\n"+
-		"2 · ⏰ Member2 방송 예정\n\u200bTitle2\nhttps://twitch.tv/member2", message)
+		"1 · ⏰ Member1 방송 3분 전\n\u200bTitle1\nhttps://youtube.com/watch?v=abc\n\n──────────\n\n"+
+		"2 · ⏰ Member2 방송 예정\n\u200bTitle2\nhttps://youtube.com/watch?v=def", message)
 }
 
 func TestRenderAlarmDispatchNotificationGroupAllLiveCatchupUsesStartingHeader(t *testing.T) {
@@ -1264,7 +1262,7 @@ func TestRenderAlarmDispatchNotificationSeparatesLongTitleAndURL(t *testing.T) {
 	)
 }
 
-func TestRenderAlarmDispatchNotificationKeepsIntegratedURLsReadable(t *testing.T) {
+func TestRenderAlarmDispatchNotificationOmitsRetiredSimulcastLink(t *testing.T) {
 	notification := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
 
 	notification.MinutesUntil = 5
@@ -1279,12 +1277,12 @@ func TestRenderAlarmDispatchNotificationKeepsIntegratedURLsReadable(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t,
 		"⏰ 비비 방송 5분 전\n"+util.KakaoZeroWidthSpace+
-			"동시송출 방송\nhttps://youtube.com/watch?v=integrated-1\nhttps://chzzk.naver.com/live/integrated-1",
+			"동시송출 방송\nhttps://youtube.com/watch?v=integrated-1",
 		got,
 	)
 }
 
-func TestRenderAlarmDispatchNotificationSeparatesDirectPlatformTitles(t *testing.T) {
+func TestRenderAlarmDispatchNotificationOmitsRetiredPlatformLinks(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		configure func(*domain.Stream)
@@ -1296,7 +1294,7 @@ func TestRenderAlarmDispatchNotificationSeparatesDirectPlatformTitles(t *testing
 				stream.IsTwitchOnly = true
 				stream.TwitchLiveURL = "https://www.twitch.tv/holomember"
 			},
-			want: "⏰ 비비 방송 5분 전\n\u200b플랫폼 방송\nhttps://www.twitch.tv/holomember",
+			want: "⏰ 비비 방송 5분 전\n\u200b플랫폼 방송",
 		},
 		{
 			name: "chzzk",
@@ -1304,7 +1302,7 @@ func TestRenderAlarmDispatchNotificationSeparatesDirectPlatformTitles(t *testing
 				stream.IsChzzkOnly = true
 				stream.ChzzkLiveURL = "https://chzzk.naver.com/live/abcdef"
 			},
-			want: "⏰ 비비 방송 5분 전\n\u200b플랫폼 방송\nhttps://chzzk.naver.com/live/abcdef",
+			want: "⏰ 비비 방송 5분 전\n\u200b플랫폼 방송",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1323,7 +1321,7 @@ func TestRenderAlarmDispatchNotificationSeparatesDirectPlatformTitles(t *testing
 	}
 }
 
-func TestResolveAlarmDispatchURLFallsBackToYouTubeWhenPlatformURLMissing(t *testing.T) {
+func TestResolveAlarmDispatchURLDoesNotInventYouTubeLinkForRetiredProvider(t *testing.T) {
 	twitchOnlyWithoutURL := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil).Notification
 
 	twitchOnlyWithoutURL.Stream.IsTwitchOnly = true
@@ -1332,8 +1330,8 @@ func TestResolveAlarmDispatchURLFallsBackToYouTubeWhenPlatformURLMissing(t *test
 
 	chzzkOnlyWithoutURL.Stream.IsChzzkOnly = true
 
-	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(&twitchOnlyWithoutURL))
-	assert.Equal(t, "https://youtube.com/watch?v=stream-1", resolveAlarmDispatchURL(&chzzkOnlyWithoutURL))
+	assert.Empty(t, resolveAlarmDispatchURL(&twitchOnlyWithoutURL))
+	assert.Empty(t, resolveAlarmDispatchURL(&chzzkOnlyWithoutURL))
 }
 
 func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
@@ -1465,12 +1463,7 @@ type alarmDispatchRunnerBlockingSender struct {
 }
 
 func alarmDispatchRunnerIntrinsicTextEnvelope() domain.AlarmQueueEnvelope {
-	envelope := alarmDispatchRunnerTestEnvelope(testAlarmRoomID, nil)
-
-	envelope.Notification.Stream.IsTwitchOnly = true
-	envelope.Notification.Stream.TwitchLiveURL = testTwitchLiveURL
-
-	return envelope
+	return alarmDispatchRunnerPreRenderedTextEnvelope(testAlarmRoomID)
 }
 
 // attempt deadline 검증은 렌더러의 실제 DB I/O와 분리한다.

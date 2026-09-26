@@ -2,10 +2,12 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 50건: proposed 0, accepted 36, rejected 0, withdrawn 2, superseded 12
+레코드 52건: proposed 0, accepted 38, rejected 0, withdrawn 2, superseded 12
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260926-hololive-live-query-read-model](records/DEC-20260926-hololive-live-query-read-model.json) | 방송 조회를 확정 상태와 명시적 coverage로 분리하고 기존 durable evidence 재사용을 우선한다 | accepted | in_progress | hololive-bot | 2026-09-26 | trigger | - | [2026-09-26-live-query-read-model.md](../current/plans/2026-09-26-live-query-read-model.md) |
+| [DEC-20260926-youtube-only-stream-providers](records/DEC-20260926-youtube-only-stream-providers.json) | 방송 제공자는 YouTube만 지원하고 Chzzk·Twitch 실행 로직을 제거한다 | accepted | verified | hololive-bot | 2026-09-26 | - | - | [2026-09-26-youtube-only-stream-providers.md](../current/plans/2026-09-26-youtube-only-stream-providers.md) |
 | [DEC-20260924-hololive-template-cache-consistency](records/DEC-20260924-hololive-template-cache-consistency.json) | 템플릿 렌더링은 저장 완료 후 DB 버전을 확인한다 | accepted | verified | hololive-bot | 2026-09-24 | - | - | - |
 | [DEC-20260924-hololive-template-cache-load-bounds](records/DEC-20260924-hololive-template-cache-load-bounds.json) | 템플릿 소스 재확인은 1회로 제한하고 파싱을 캐시 잠금과 분리한다 | accepted | verified | hololive-bot | 2026-09-24 | - | - | - |
 | [DEC-20260919-hololive-x-spaces](records/DEC-20260919-hololive-x-spaces.json) | 홀로봇 스페이스는 무료 웹 내부 API와 기존 발송 원장으로 처리한다 | accepted | implemented | hololive-bot | 2026-09-19 | trigger | - | [2026-09-19-x-spaces.md](../current/plans/2026-09-19-x-spaces.md) |

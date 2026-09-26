@@ -91,26 +91,6 @@ func DefaultYouTubeOperationalConfig() YouTubeConfig {
 	}
 }
 
-func DefaultTwitchOperationalConfig() TwitchConfig {
-	return TwitchConfig{
-		BaseURL:            "https://api.twitch.tv/helix",
-		AuthURL:            "https://id.twitch.tv/oauth2/token",
-		Timeout:            10 * time.Second,
-		PollInterval:       60 * time.Second,
-		TokenRefreshSkew:   5 * time.Minute,
-		MarkerTTL:          7 * 24 * time.Hour,
-		MaxUsersPerRequest: 100,
-	}
-}
-
-func DefaultChzzkOperationalConfig() ChzzkConfig {
-	return ChzzkConfig{
-		MaxLivesPageSize:          20,
-		BatchLookupThreshold:      4,
-		MaxConcurrentStatusChecks: 4,
-	}
-}
-
 func DefaultOfficialScheduleConfig() OfficialScheduleConfig {
 	return OfficialScheduleConfig{
 		BaseURL:      "https://schedule.hololive.tv",

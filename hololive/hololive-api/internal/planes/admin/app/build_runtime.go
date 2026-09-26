@@ -17,10 +17,8 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/xspaces"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
@@ -34,8 +32,6 @@ type scraperHolodexFoundation struct {
 type alarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
 	AlarmService     *alarmservice.AlarmService
-	ChzzkClient      *chzzk.Client
-	TwitchClient     *twitch.Client
 	MemberDataSource domain.MemberDataProvider
 }
 

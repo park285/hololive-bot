@@ -27,14 +27,11 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/internal/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 const (
@@ -50,8 +47,6 @@ var (
 func NewAlarmService(
 	cacheClient cache.Client,
 	holodexService *holodexprovider.Service,
-	chzzkClient *chzzk.Client,
-	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
@@ -78,8 +73,6 @@ func NewAlarmService(
 	service := &AlarmService{
 		cache:           cacheClient,
 		holodex:         holodexService,
-		chzzk:           chzzkClient,
-		twitch:          twitchClient,
 		memberData:      memberData,
 		alarmRepository: alarmRepository,
 		alarmWriter:     writer,
@@ -89,7 +82,6 @@ func NewAlarmService(
 	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
 
 	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
-	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
 
 	return service, nil
 }

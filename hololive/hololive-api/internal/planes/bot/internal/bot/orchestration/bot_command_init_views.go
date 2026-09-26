@@ -34,16 +34,15 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/info"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/news"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/render"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
 type commandInitView struct {
 	holodex               domain.StreamProvider
-	chzzk                 *chzzk.Client
 	cache                 cache.Client
 	postgres              database.Client
 	alarm                 domain.AlarmCRUD
@@ -69,7 +68,6 @@ func (b *Bot) commandInitView() commandInitView {
 
 	return commandInitView{
 		holodex:               b.holodex,
-		chzzk:                 b.chzzk,
 		cache:                 b.cache,
 		postgres:              b.postgres,
 		alarm:                 b.alarm,
@@ -92,7 +90,7 @@ func (b *Bot) commandInitView() commandInitView {
 func (v *commandInitView) toCommandDependencies(registry *handlers.Registry) *handlercore.Dependencies {
 	deps := &handlercore.Dependencies{
 		Holodex:             v.holodex,
-		Chzzk:               v.chzzk,
+		LiveQuery:           livequery.New(v.postgres),
 		Cache:               v.cache,
 		Alarm:               v.alarm,
 		Matcher:             v.matcher,

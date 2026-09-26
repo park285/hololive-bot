@@ -431,7 +431,7 @@ func TestAlarmServiceClose(t *testing.T) {
 	ctx := t.Context()
 	cache := sharedtestutil.NewTestCacheService(ctx, t)
 
-	service, err := NewAlarmService(cache, nil, nil, nil, nil, nil, nil, []int{5, 3, 1})
+	service, err := NewAlarmService(cache, nil, nil, nil, nil, []int{5, 3, 1})
 	require.NoError(t, err)
 
 	err = service.Close(ctx)

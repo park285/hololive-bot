@@ -1157,6 +1157,7 @@ TABLE youtube_live_absence_slots
   CONSTRAINT chk_youtube_live_absence_slots_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (jsonb_typeof((coverage -> 'requested_channel_ids'::text)) = 'array'::text)))
   CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
+  INDEX CREATE INDEX idx_youtube_live_absence_slots_live_time ON public.youtube_live_absence_slots USING btree (effective_at DESC) WHERE (((coverage -> 'filters'::text) -> 'statuses'::text) ? 'LIVE'::text)
 
 TABLE youtube_live_pending_ends
   COLUMN video_id text NOT NULL

@@ -45,8 +45,6 @@ func TestNewAlarmServiceAndClose(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
 		newDiscardAlarmLogger(),
 		[]int{10, 3, 1, 3},
 	)
@@ -82,7 +80,6 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, added)
-	assertPlatformMappings(ctx, t, as, testChannelID, "chzzk-1", "miko_live")
 
 	// 중복 등록은 false여야 한다.
 	added, err = as.AddAlarm(ctx, &domain.AddAlarmRequest{
@@ -114,7 +111,6 @@ func TestAlarmService_AddRemoveAndGetRoomAlarms(t *testing.T) {
 	removed, err := as.RemoveAlarm(ctx, testRoomID, testChannelID, nil)
 	require.NoError(t, err)
 	assert.True(t, removed)
-	assertPlatformMappings(ctx, t, as, testChannelID, "", "")
 
 	removed, err = as.RemoveAlarm(ctx, testRoomID, testChannelID, nil)
 	require.NoError(t, err)
@@ -160,8 +156,6 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	count, err = as.ClearRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
-	assertPlatformMappings(ctx, t, as, testChannelID, "", "")
-	assertPlatformMappings(ctx, t, as, testOtherChannelID, "", "")
 
 	alarms, err := as.GetRoomAlarms(ctx, testRoomID)
 	require.NoError(t, err)
@@ -174,27 +168,6 @@ func TestAlarmService_ClearRoomAlarms(t *testing.T) {
 	channelRegistry, err := as.cache.SMembers(ctx, sharedalarmkeys.AlarmChannelRegistryKey)
 	require.NoError(t, err)
 	assert.Empty(t, channelRegistry)
-}
-
-func assertPlatformMappings(ctx context.Context, t *testing.T, as *AlarmService, channelID, wantChzzk, wantTwitchLogin string) {
-	t.Helper()
-
-	chzzkMap, err := as.cache.HGetAll(ctx, sharedalarmkeys.ChzzkChannelMapKey)
-	require.NoError(t, err)
-	assert.Equal(t, wantChzzk, chzzkMap[channelID])
-
-	twitchMap, err := as.cache.HGetAll(ctx, sharedalarmkeys.TwitchLoginMapKey)
-	require.NoError(t, err)
-
-	if wantTwitchLogin == "" {
-		for _, mappedChannelID := range twitchMap {
-			assert.NotEqual(t, channelID, mappedChannelID)
-		}
-
-		return
-	}
-
-	assert.Equal(t, channelID, twitchMap[wantTwitchLogin])
 }
 
 func TestWarmCacheFromDB_UsesAuthoritativeRebuildPath(t *testing.T) {

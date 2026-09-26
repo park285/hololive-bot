@@ -21,7 +21,6 @@
 package formatter
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -129,103 +128,18 @@ func TestAlarmChannelName_WithStelliveOrg(t *testing.T) {
 	}
 }
 
-func TestAlarmNotification_IntegratedURLs(t *testing.T) {
-	tests := []struct {
-		name            string
-		stream          *domain.Stream
-		wantContains    []string
-		wantNotContains []string
+func TestAlarmNotification_YouTubeURLOnly(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		stream *domain.Stream
+		want   string
 	}{
-		{
-			name: "Integrated broadcast (YouTube + Chzzk)",
-			stream: &domain.Stream{
-				ID:             "abc123",
-				Title:          "테스트 방송",
-				ChannelName:    "아야츠노 유니",
-				ChzzkChannelID: "f997979606554ef4827038e244845582",
-				ChzzkLiveURL:   testChzzkLiveURL,
-				IsIntegrated:   true,
-			},
-			wantContains: []string{
-				"https://youtube.com/watch?v=abc123",
-				testChzzkLiveURL,
-			},
-			wantNotContains: []string{
-				"📺",
-			},
-		},
-		{
-			name: "Chzzk only broadcast",
-			stream: &domain.Stream{
-				Title:          "치지직 전용 방송",
-				ChannelName:    "아야츠노 유니",
-				ChzzkChannelID: "f997979606554ef4827038e244845582",
-				ChzzkLiveURL:   testChzzkLiveURL,
-				IsChzzkOnly:    true,
-			},
-			wantContains: []string{
-				testChzzkLiveURL,
-			},
-			wantNotContains: []string{
-				"youtube.com",
-				"📺",
-			},
-		},
-		{
-			name: "YouTube only broadcast (no Chzzk info)",
-			stream: &domain.Stream{
-				ID:          "xyz789",
-				Title:       "YouTube 전용 방송",
-				ChannelName: testMemberSakuraMiko,
-			},
-			wantContains: []string{
-				"https://youtube.com/watch?v=xyz789",
-			},
-			wantNotContains: []string{
-				"chzzk.naver.com",
-				"📺",
-			},
-		},
-		{
-			name: "Chzzk info present but no YouTube ID",
-			stream: &domain.Stream{
-				Title:          "치지직만",
-				ChannelName:    testDisplayName,
-				ChzzkChannelID: "f997979606554ef4827038e244845582",
-				ChzzkLiveURL:   testChzzkLiveURL,
-			},
-			wantContains: []string{
-				testChzzkLiveURL,
-			},
-			wantNotContains: []string{
-				"youtube.com",
-				"📺",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assertAlarmNotificationURLText(t, tt.stream, tt.wantContains, tt.wantNotContains)
-		})
-	}
-}
-
-func assertAlarmNotificationURLText(t *testing.T, stream *domain.Stream, wantContains, wantNotContains []string) {
-	t.Helper()
-
-	urlText := alarmNotificationURLText(stream)
-
-	for _, want := range wantContains {
-		if !strings.Contains(urlText, want) {
-			t.Errorf("URL text missing expected string %q\nGot: %s", want, urlText)
-		}
-	}
-
-	for _, notWant := range wantNotContains {
-		if strings.Contains(urlText, notWant) {
-			t.Errorf("URL text contains unexpected string %q\nGot: %s", notWant, urlText)
-		}
+		{name: "YouTube ignores retired simulcast link", stream: &domain.Stream{ID: "abc123", IsIntegrated: true, ChzzkLiveURL: testChzzkLiveURL}, want: "https://youtube.com/watch?v=abc123"},
+		{name: "retired Chzzk", stream: &domain.Stream{ID: "old", IsChzzkOnly: true, ChzzkLiveURL: testChzzkLiveURL}},
+		{name: "retired Twitch", stream: &domain.Stream{ID: "old", IsTwitchOnly: true, TwitchLiveURL: "https://twitch.tv/old"}},
+		{name: "no YouTube identity", stream: &domain.Stream{ChzzkLiveURL: testChzzkLiveURL}},
+	} {
+		t.Run(tt.name, func(t *testing.T) { assert.Equal(t, tt.want, alarmNotificationURLText(tt.stream)) })
 	}
 }
 

@@ -65,8 +65,6 @@ func ProvideBotDependencies(modules *BotDependencyModules) *orchestration.Depend
 		MemberRepository:      modules.Data.MemberRepository,
 		MemberCache:           modules.Data.MemberCache,
 		Holodex:               modules.Stream.Holodex,
-		Chzzk:                 modules.Stream.ChzzkClient,
-		Twitch:                modules.Stream.TwitchClient,
 		Alarm:                 modules.Stream.Alarm,
 		Matcher:               modules.Stream.MemberMatch,
 		MembersData:           modules.Data.MembersData,

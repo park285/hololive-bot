@@ -292,84 +292,26 @@ func resolveAlarmDispatchURL(notification *domain.AlarmNotification) string {
 	}
 
 	stream := notification.Stream
-	if url, ok := resolveAlarmDispatchDirectPlatformURL(stream); ok {
-		return url
-	}
-
-	if stream.IsIntegrated {
-		return resolveAlarmDispatchIntegratedURL(stream)
+	if stream.IsChzzkOnly || stream.IsTwitchOnly || !stream.HasYouTubeInfo() {
+		return ""
 	}
 
 	return stream.GetYouTubeURL()
 }
 
-func resolveAlarmDispatchKaringURL(notification *domain.AlarmNotification) string {
+func resolveAlarmDispatchGroupURL(notification *domain.AlarmNotification, shortLinks shortlinkservice.YouTubeBuilder) string {
 	if notification == nil || notification.Stream == nil {
 		return ""
 	}
 
-	stream := notification.Stream
-	if url, ok := resolveAlarmDispatchDirectPlatformURL(stream); ok {
-		return url
-	}
-
-	if youtubeURL := stream.GetYouTubeURL(); youtubeURL != "" {
-		return youtubeURL
-	}
-
-	return stream.GetChzzkLiveURL()
-}
-
-func resolveAlarmDispatchGroupURL(notification *domain.AlarmNotification, shortLinks shortlinkservice.YouTubeBuilder) string {
-	if notification == nil {
-		return ""
-	}
-
 	resolved := resolveAlarmDispatchURL(notification)
-	if notification.Stream == nil || !shortLinks.Enabled() {
+	if resolved == "" || !shortLinks.Enabled() {
 		return resolved
 	}
 
-	stream := notification.Stream
-	if _, direct := resolveAlarmDispatchDirectPlatformURL(stream); direct {
-		return resolved
+	if shortURL, ok := shortLinks.URL(notification.Stream.ID); ok {
+		return shortURL
 	}
 
-	shortURL, ok := shortLinks.URL(stream.ID)
-	if !ok {
-		return resolved
-	}
-
-	if stream.IsIntegrated {
-		if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
-			return fmt.Sprintf("%s | %s", shortURL, chzzkURL)
-		}
-	}
-
-	return shortURL
-}
-
-func resolveAlarmDispatchDirectPlatformURL(stream *domain.Stream) (string, bool) {
-	if stream.IsTwitchOnly && stream.GetTwitchLiveURL() != "" {
-		return stream.GetTwitchLiveURL(), true
-	}
-
-	if stream.IsChzzkOnly && stream.GetChzzkLiveURL() != "" {
-		return stream.GetChzzkLiveURL(), true
-	}
-
-	return "", false
-}
-
-func resolveAlarmDispatchIntegratedURL(stream *domain.Stream) string {
-	youtubeURL := stream.GetYouTubeURL()
-	if youtubeURL == "" {
-		return ""
-	}
-
-	if chzzkURL := stream.GetChzzkLiveURL(); chzzkURL != "" {
-		return fmt.Sprintf("%s | %s", youtubeURL, chzzkURL)
-	}
-
-	return youtubeURL
+	return resolved
 }

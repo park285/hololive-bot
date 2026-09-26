@@ -38,12 +38,10 @@ import (
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
@@ -96,8 +94,6 @@ type botWiringFixture struct {
 	memberRepository *member.Repository
 	memberCache      *member.Cache
 	holodex          *holodexprovider.Service
-	chzzk            *chzzk.Client
-	twitch           *twitch.Client
 	memberMatch      *matcher.Matcher
 	youtube          youtube.Service
 	activity         *activity.Logger
@@ -123,8 +119,6 @@ func newBotWiringFixture() *botWiringFixture {
 		memberRepository: &member.Repository{},
 		memberCache:      &member.Cache{},
 		holodex:          &holodexprovider.Service{},
-		chzzk:            &chzzk.Client{},
-		twitch:           &twitch.Client{},
 		memberMatch:      &matcher.Matcher{},
 		youtube:          &mockYouTubeService{},
 		activity:         &activity.Logger{},
@@ -157,12 +151,10 @@ func (f *botWiringFixture) modules() *appbootstrap.BotDependencyModules {
 			MembersData:      nil,
 		},
 		Stream: appbootstrap.BotStreamModule{
-			Holodex:      f.holodex,
-			ChzzkClient:  f.chzzk,
-			TwitchClient: f.twitch,
-			Alarm:        nil,
-			MemberMatch:  f.memberMatch,
-			YTStack:      &providers.YouTubeStack{Service: f.youtube},
+			Holodex:     f.holodex,
+			Alarm:       nil,
+			MemberMatch: f.memberMatch,
+			YTStack:     &providers.YouTubeStack{Service: f.youtube},
 		},
 		Support: appbootstrap.BotSupportModule{
 			ActivityLogger: f.activity,
@@ -186,8 +178,6 @@ func (f *botWiringFixture) checks(deps *orchestration.Dependencies) []botWiringC
 		{name: "MemberRepository", ok: deps.MemberRepository == f.memberRepository},
 		{name: "MemberCache", ok: deps.MemberCache == f.memberCache},
 		{name: "Holodex", ok: deps.Holodex == f.holodex},
-		{name: "Chzzk", ok: deps.Chzzk == f.chzzk},
-		{name: "Twitch", ok: deps.Twitch == f.twitch},
 		{name: "YouTubeService", ok: deps.Service == f.youtube},
 		{name: "Activity", ok: deps.Activity == f.activity},
 		{name: "Settings", ok: deps.Settings == f.settings},

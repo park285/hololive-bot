@@ -39,6 +39,8 @@ type Service struct {
 	retry        *retryScheduler
 	concurrency  settings.HolodexConcurrencyConfig
 
+	streamCacheFills streamCacheFillGate
+
 	liveFallbackMu      sync.Mutex
 	liveFallbackCursors map[liveFallbackSetKey]liveFallbackCursorState
 	liveFallbackClock   uint64

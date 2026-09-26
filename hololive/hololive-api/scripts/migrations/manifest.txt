@@ -69,3 +69,4 @@
 069 208_template_displayline.sql
 070 209_template_row_version.sql
 071 210_youtube_live_active_head_index.sql
+072 211_live_query_coverage_time_index.sql

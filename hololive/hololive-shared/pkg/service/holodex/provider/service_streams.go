@@ -151,6 +151,14 @@ type streamFetchPlan struct {
 	retry              func(ctx context.Context, org string, hours int)
 }
 
+func (p *streamFetchPlan) cacheKey() string {
+	if p.status == constants.HolodexAPIParams.StatusLive {
+		return buildLiveStreamsCacheKey(p.resolvedOrg)
+	}
+
+	return buildUpcomingStreamsCacheKey(p.resolvedOrg, p.hours)
+}
+
 func (h *Service) fetchStreamsByOrg(ctx context.Context, org, status string, hours int) ([]*domain.Stream, error) {
 	if org == constants.HolodexAPIParams.OrgIndie {
 		streams, err := h.fetchIndieStreams(ctx)

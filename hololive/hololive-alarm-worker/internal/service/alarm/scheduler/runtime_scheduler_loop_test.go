@@ -121,7 +121,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		require.NoError(t, s.dispatchNotifications(t.Context(), "youtube", nil))
+		require.NoError(t, s.dispatchNotifications(t.Context(), nil))
 		assert.Equal(t, int32(0), calls.Load())
 	})
 
@@ -148,7 +148,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		require.NoError(t, s.dispatchNotifications(t.Context(), runtimeSchedulerLoopNameTwitch, notifications))
+		require.NoError(t, s.dispatchNotifications(t.Context(), notifications))
 		assert.Equal(t, int32(1), calls.Load())
 		assert.Equal(t, notifications, gotNotifications)
 	})
@@ -172,7 +172,7 @@ func TestRuntimeSchedulerDispatchNotifications(t *testing.T) {
 			logger: testSchedulerLogger(),
 		}
 
-		err := s.dispatchNotifications(t.Context(), "youtube", notifications)
+		err := s.dispatchNotifications(t.Context(), notifications)
 
 		require.ErrorIs(t, err, sendErr)
 		assert.Contains(t, err.Error(), "partially failed")
@@ -319,72 +319,4 @@ func TestIsCacheFailure(t *testing.T) {
 
 		assert.False(t, isCacheFailure(err))
 	})
-}
-
-const (
-	testPlatformMappingKey      = "platform:key"
-	testPlatformMappingEmptyKey = "platform:empty"
-)
-
-func TestRuntimeSchedulerPlatformMappingMissing(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name        string
-		existsByKey map[string]bool
-		want        bool
-		wantCalls   []string
-	}{
-		{
-			name:        "returns false when key exists",
-			existsByKey: map[string]bool{testPlatformMappingKey: true},
-			want:        false,
-			wantCalls:   []string{testPlatformMappingKey},
-		},
-		{
-			name:        "returns false when key missing but empty marker exists",
-			existsByKey: map[string]bool{testPlatformMappingEmptyKey: true},
-			want:        false,
-			wantCalls:   []string{testPlatformMappingKey, testPlatformMappingEmptyKey},
-		},
-		{
-			name:        "returns true when key and empty marker are missing",
-			existsByKey: map[string]bool{},
-			want:        true,
-			wantCalls:   []string{testPlatformMappingKey, testPlatformMappingEmptyKey},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var calls []string
-
-			cache := cachemocks.NewStrictClient()
-
-			cache.ExistsFunc = func(_ context.Context, key string) (bool, error) {
-				calls = append(calls, key)
-
-				exists, ok := tc.existsByKey[key]
-
-				if ok {
-					return exists, nil
-				}
-
-				return false, nil
-			}
-
-			s := &RuntimeScheduler{cacheClient: cache}
-
-			got, err := s.platformMappingMissing(t.Context(), alarmPlatformMappingKeys{
-				key:            testPlatformMappingKey,
-				emptyMarkerKey: testPlatformMappingEmptyKey,
-			})
-
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, got)
-			assert.Equal(t, tc.wantCalls, calls)
-		})
-	}
 }

@@ -4,35 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/constants"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/member"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
-
-func ProvideChzzkClient(httpClient *http.Client, chzzkConfig settings.ChzzkConfig, logger *slog.Logger) *chzzk.Client {
-	return chzzk.NewClientWithConfig(&chzzk.ClientConfig{
-		HTTPClient:   httpClient,
-		BaseURL:      chzzk.DefaultBaseURL,
-		ClientID:     chzzkConfig.ClientID,
-		ClientSecret: chzzkConfig.ClientSecret,
-		Logger:       logger,
-	})
-}
-
-func ProvideTwitchClient(twitchConfig *settings.TwitchConfig, logger *slog.Logger) *twitch.Client {
-	if twitchConfig == nil {
-		return twitch.NewClient(&twitch.ClientConfig{}, logger)
-	}
-
-	return twitch.NewClient(&twitch.ClientConfig{
-		ClientID:     twitchConfig.ClientID,
-		ClientSecret: twitchConfig.ClientSecret,
-	}, logger)
-}
 
 func ProvideMemberCacheWithoutValkey(
 	ctx context.Context,

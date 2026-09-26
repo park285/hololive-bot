@@ -12,10 +12,8 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
@@ -67,23 +65,6 @@ func buildAlarmModeComponents(
 	memberData domain.MemberDataProvider, alarmRepository *sharedalarm.Repository,
 	logger *slog.Logger,
 ) (*alarmModeComponents, error) {
-	chzzkClient := chzzk.NewClient(nil, "", logger)
-
-	if strings.TrimSpace(appConfig.Chzzk.ClientID) != "" || strings.TrimSpace(appConfig.Chzzk.ClientSecret) != "" {
-		chzzkClient = chzzk.NewClientWithConfig(&chzzk.ClientConfig{
-			HTTPClient:   nil,
-			ClientID:     appConfig.Chzzk.ClientID,
-			ClientSecret: appConfig.Chzzk.ClientSecret,
-			Logger:       logger,
-		})
-	}
-
-	twitchClient := twitch.NewClient(&twitch.ClientConfig{
-		HTTPClient:   nil,
-		ClientID:     appConfig.Twitch.ClientID,
-		ClientSecret: appConfig.Twitch.ClientSecret,
-	}, logger)
-
 	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {
 		alarmClient, err := sharedalarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger)
 		if err != nil {
@@ -92,15 +73,13 @@ func buildAlarmModeComponents(
 
 		return &alarmModeComponents{
 			AlarmCRUD:        alarmClient,
-			ChzzkClient:      chzzkClient,
-			TwitchClient:     twitchClient,
 			MemberDataSource: memberData,
 		}, nil
 	}
 
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 
-	alarmService, err := alarmservice.NewAlarmService(cacheClient, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
+	alarmService, err := alarmservice.NewAlarmService(cacheClient, holodexService, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -112,8 +91,6 @@ func buildAlarmModeComponents(
 	return &alarmModeComponents{
 		AlarmCRUD:        alarmService,
 		AlarmService:     alarmService,
-		ChzzkClient:      chzzkClient,
-		TwitchClient:     twitchClient,
 		MemberDataSource: memberData,
 	}, nil
 }

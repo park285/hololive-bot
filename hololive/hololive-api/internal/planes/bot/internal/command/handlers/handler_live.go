@@ -22,16 +22,13 @@ package handlers
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type LiveCommand struct {
@@ -94,257 +91,32 @@ func (c *LiveCommand) executeMemberLive(ctx context.Context, cmdCtx *domain.Comm
 }
 
 func (c *LiveCommand) sendMemberLiveStreams(ctx context.Context, room string, channel *domain.Channel) error {
-	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
-	if err != nil {
-		if err := c.Deps().SendError(ctx, room, messaging.ErrLiveStreamQueryFailed); err != nil {
-			return fmt.Errorf("send error: %w", err)
-		}
-
-		return nil
-	}
-
-	memberStreams := filterLiveStreamsByChannel(streams, channel.ID)
-	if len(memberStreams) == 0 {
-		memberStreams = c.memberChzzkLiveStreams(ctx, channel.ID)
-	}
-
-	if len(memberStreams) == 0 {
-		if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.FormatMemberNotLive(ctx, channel.Name)); err != nil {
-			return fmt.Errorf("send message: %w", err)
-		}
-
-		return nil
-	}
-
-	message := c.Deps().Formatter.FormatLiveStreams(ctx, memberStreams)
-
-	if err := c.Deps().SendMessage(ctx, room, message); err != nil {
-		return fmt.Errorf("send message: %w", err)
-	}
-
-	return nil
-}
-
-func filterLiveStreamsByChannel(streams []*domain.Stream, channelID string) []*domain.Stream {
-	memberStreams := make([]*domain.Stream, 0, len(streams))
-	for _, stream := range streams {
-		if stream.ChannelID == channelID {
-			memberStreams = append(memberStreams, stream)
-		}
-	}
-
-	return memberStreams
-}
-
-func (c *LiveCommand) memberChzzkLiveStreams(ctx context.Context, channelID string) []*domain.Stream {
-	member := c.Deps().Matcher.GetMemberByChannelID(ctx, channelID)
-	if member == nil || member.ChzzkChannelID == "" || c.Deps().Chzzk == nil {
-		return nil
-	}
-
-	chzzkStream := c.checkChzzkLive(ctx, member)
-	if chzzkStream == nil {
-		return nil
-	}
-
-	return []*domain.Stream{chzzkStream}
+	return c.sendLiveQuery(ctx, room, livequery.Request{Scope: livequery.Member, ChannelID: channel.ID, MemberName: channel.Name, Limit: livequery.MaxItems})
 }
 
 func (c *LiveCommand) executeAllLive(ctx context.Context, cmdCtx *domain.CommandContext) error {
-	streams, err := c.Deps().Holodex.GetLiveStreams(ctx)
+	return c.sendLiveQuery(ctx, cmdCtx.Room, livequery.Request{Scope: livequery.All, Limit: livequery.MaxItems})
+}
+
+func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request livequery.Request) error {
+	result, err := c.Deps().LiveQuery.Query(ctx, request)
 	if err != nil {
-		if err := c.Deps().SendError(ctx, cmdCtx.Room, messaging.ErrLiveStreamQueryFailed); err != nil {
-			return fmt.Errorf("send error: %w", err)
+		if ctx.Err() != nil {
+			return fmt.Errorf("live query canceled: %w", ctx.Err())
+		}
+
+		if sendErr := c.Deps().SendError(ctx, room, messaging.ErrLiveStreamQueryFailed); sendErr != nil {
+			return fmt.Errorf("send live query error: %w", sendErr)
 		}
 
 		return nil
 	}
 
-	chzzkStreams := c.getAllChzzkLiveStreams(ctx)
-
-	streams = append(streams, chzzkStreams...)
-
-	message := c.Deps().Formatter.FormatLiveStreams(ctx, streams)
-
-	if err := c.Deps().SendMessage(ctx, cmdCtx.Room, message); err != nil {
-		return fmt.Errorf("send message: %w", err)
+	if err := c.Deps().SendMessage(ctx, room, c.Deps().Formatter.LiveQuery(ctx, result, request.MemberName)); err != nil {
+		return fmt.Errorf("send live query result: %w", err)
 	}
 
 	return nil
-}
-
-// checkChzzkLive: 특정 멤버의 Chzzk 방송 상태를 확인합니다.
-func (c *LiveCommand) checkChzzkLive(ctx context.Context, member *domain.Member) *domain.Stream {
-	if member.ChzzkChannelID == "" || c.Deps().Chzzk == nil || !c.Deps().Chzzk.HasOpenAPICredentials() {
-		return nil
-	}
-
-	lives, err := c.Deps().Chzzk.GetLivesByChannelIDs(ctx, []string{member.ChzzkChannelID})
-	if err != nil {
-		return nil
-	}
-
-	streams := buildChzzkLiveStreams([]*domain.Member{member}, lives)
-	if len(streams) == 0 {
-		return nil
-	}
-
-	return streams[0]
-}
-
-// getAllChzzkLiveStreams: Chzzk ID를 가진 모든 멤버의 방송 상태를 확인합니다.
-func (c *LiveCommand) getAllChzzkLiveStreams(ctx context.Context) []*domain.Stream {
-	if c.Deps().Chzzk == nil || c.Deps().MembersData == nil {
-		return []*domain.Stream{}
-	}
-
-	if !c.Deps().Chzzk.HasOpenAPICredentials() {
-		return []*domain.Stream{}
-	}
-
-	provider := c.Deps().MembersData.WithContext(ctx)
-	if provider == nil {
-		return []*domain.Stream{}
-	}
-
-	members := provider.GetAllMembers()
-
-	streams := collectChzzkLiveStreams(
-		members,
-		func(channelIDs []string) ([]chzzk.LiveData, error) {
-			return c.Deps().Chzzk.GetLivesByChannelIDs(ctx, channelIDs)
-		},
-	)
-	if streams == nil {
-		return []*domain.Stream{}
-	}
-
-	return streams
-}
-
-func buildChzzkLiveStreams(members []*domain.Member, lives []chzzk.LiveData) []*domain.Stream {
-	if len(members) == 0 || len(lives) == 0 {
-		return []*domain.Stream{}
-	}
-
-	byChzzkChannelID := buildLiveMemberByChzzkChannelID(members)
-
-	streams := make([]*domain.Stream, 0, len(lives))
-	for i := range lives {
-		member, ok := byChzzkChannelID[lives[i].ChannelID]
-		if !ok {
-			continue
-		}
-
-		stream := newChzzkStream(member, lives[i].LiveTitle)
-		if stream == nil {
-			continue
-		}
-
-		streams = append(streams, stream)
-	}
-
-	return streams
-}
-
-func buildLiveMemberByChzzkChannelID(members []*domain.Member) map[string]*domain.Member {
-	byChzzkChannelID := make(map[string]*domain.Member, len(members))
-	for _, member := range members {
-		if isEligibleChzzkLiveMember(member) {
-			byChzzkChannelID[member.ChzzkChannelID] = member
-		}
-	}
-
-	return byChzzkChannelID
-}
-
-func isEligibleChzzkLiveMember(member *domain.Member) bool {
-	return member != nil && member.ChzzkChannelID != "" && !member.IsGraduated
-}
-
-func collectChzzkLiveStreams(
-	members []*domain.Member,
-	fetchBatch func([]string) ([]chzzk.LiveData, error),
-) []*domain.Stream {
-	eligibleMembers := make([]*domain.Member, 0, len(members))
-
-	channelIDs := make([]string, 0, len(members))
-	for _, member := range members {
-		if member == nil || member.ChzzkChannelID == "" || member.IsGraduated {
-			continue
-		}
-
-		eligibleMembers = append(eligibleMembers, member)
-		channelIDs = append(channelIDs, member.ChzzkChannelID)
-	}
-
-	if len(eligibleMembers) == 0 {
-		return []*domain.Stream{}
-	}
-
-	if fetchBatch == nil {
-		return []*domain.Stream{}
-	}
-
-	lives, err := fetchBatch(channelIDs)
-	if err != nil {
-		return nil
-	}
-
-	return buildChzzkLiveStreams(eligibleMembers, lives)
-}
-
-func newChzzkStream(member *domain.Member, title string) *domain.Stream {
-	if member == nil || strings.TrimSpace(member.ChzzkChannelID) == "" {
-		return nil
-	}
-
-	title = strings.TrimSpace(title)
-	if title == "" {
-		title = "치지직 라이브"
-	}
-
-	now := time.Now().UTC().Truncate(time.Minute)
-	liveURL := member.GetChzzkLiveURL()
-	link := liveURL
-	org := member.GetOrg()
-
-	return &domain.Stream{
-		ID:             buildChzzkDisplayStreamID(member.ChzzkChannelID, "live", title),
-		Title:          title,
-		ChannelID:      member.ChannelID,
-		ChannelName:    member.Name,
-		Status:         domain.StreamStatusLive,
-		StartScheduled: &now,
-		StartActual:    &now,
-		Link:           &link,
-		Channel: &domain.Channel{
-			ID:   member.ChannelID,
-			Name: member.Name,
-			Org:  &org,
-		},
-		ChzzkChannelID: member.ChzzkChannelID,
-		ChzzkLiveURL:   liveURL,
-		IsChzzkOnly:    true,
-	}
-}
-
-func buildChzzkDisplayStreamID(chzzkChannelID, kind, seed string) string {
-	chzzkChannelID = strings.TrimSpace(chzzkChannelID)
-	kind = strings.TrimSpace(kind)
-	seed = strings.TrimSpace(seed)
-
-	if kind == "" {
-		kind = "unknown"
-	}
-
-	if seed == "" {
-		seed = kind
-	}
-
-	sum := sha256.Sum256([]byte(chzzkChannelID + "|" + kind + "|" + seed))
-
-	return fmt.Sprintf("chzzk:%s:%s:%x", chzzkChannelID, kind, sum[:8])
 }
 
 func (c *LiveCommand) ensureDeps() error {
@@ -352,7 +124,7 @@ func (c *LiveCommand) ensureDeps() error {
 		return fmt.Errorf("failed to ensure base dependencies: %w", err)
 	}
 
-	if c.Deps().Matcher == nil || c.Deps().Holodex == nil || c.Deps().Formatter == nil {
+	if c.Deps().Matcher == nil || c.Deps().LiveQuery == nil || c.Deps().Formatter == nil {
 		return errors.New("live command services not configured")
 	}
 

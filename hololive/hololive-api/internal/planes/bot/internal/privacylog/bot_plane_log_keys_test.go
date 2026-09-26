@@ -123,8 +123,11 @@ func TestScannedRootsCoverReachablePrivacylogServices(t *testing.T) {
 		}
 	}
 
-	if count < 36 {
-		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least 36", count)
+	// Chzzk/Twitch 두 제공자 퇴역을 반영한다. 실제 의존성 탐색과 모든 log/taint 검사는 유지한다.
+	const minimumServicePackages = 34
+
+	if count < minimumServicePackages {
+		t.Fatalf("scanner covers %d production-reachable shared-service packages, want at least %d", count, minimumServicePackages)
 	}
 }
 

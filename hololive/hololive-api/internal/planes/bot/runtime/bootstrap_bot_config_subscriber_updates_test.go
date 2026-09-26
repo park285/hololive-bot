@@ -293,7 +293,7 @@ func TestBuildBotConfigSubscriber_AlarmAdvanceMinutesUpdate_UpdatesAlarmServiceT
 			ScraperProxyEnabled: false,
 		},
 	}
-	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, logger, []int{5, 3, 1})
+	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, logger, []int{5, 3, 1})
 	require.NoError(t, err)
 
 	deps := appbootstrap.BotConfigSubscriberDependencies{

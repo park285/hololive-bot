@@ -247,13 +247,13 @@ func buildAlarmDispatchNotificationKaringContentItem(ctx context.Context, store 
 
 	return iris.KaringContentItem{
 		Title:        karingDisplayTitle(resolveAlarmDispatchTitle(ctx, store, notification)),
-		URL:          resolveAlarmDispatchKaringURL(notification),
+		URL:          resolveAlarmDispatchURL(notification),
 		MemberName:   karingDisplayLine(memberName),
 		ChannelName:  karingDisplayLine(resolveAlarmDispatchKaringChannelName(notification, memberName)),
 		Status:       "",
 		StartAt:      resolveAlarmDispatchKaringStartAt(notification.Stream),
 		ThumbnailURL: resolveAlarmDispatchKaringThumbnailURL(notification),
-		Platform:     resolveAlarmDispatchKaringPlatform(notification.Stream),
+		Platform:     "youtube",
 	}
 }
 
@@ -335,20 +335,4 @@ func resolveAlarmDispatchKaringThumbnailURL(notification *domain.AlarmNotificati
 	}
 
 	return ""
-}
-
-func resolveAlarmDispatchKaringPlatform(stream *domain.Stream) string {
-	if stream == nil {
-		return "youtube"
-	}
-
-	if stream.IsTwitchOnly {
-		return "twitch"
-	}
-
-	if stream.IsChzzkOnly {
-		return "chzzk"
-	}
-
-	return "youtube"
 }

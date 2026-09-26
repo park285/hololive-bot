@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-live-query-read-model",
+  "title": "방송 조회를 확정 상태와 명시적 coverage로 분리하고 기존 durable evidence 재사용을 우선한다",
+  "decision_status": "accepted",
+  "delivery_status": "in_progress",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "사용자가 구현·최적화 및 차집합 확인 뒤 우이를 포함한 활성 등록 Hololive 채널 scope(실측 74개)를 승인했다. LiveQuery는 bot pool에서 단일 snapshot의 roster/projection, canonical sessions/positive heads/durable LIVE absence slots를 읽고 complete/partial/unavailable을 구분한다. freshness는 min(5분, 2×대상 poll interval+30초), DB query budget은 1초로 구현·검증한다. 150만 행 실측에 따라 LIVE coverage effective_at 부분 인덱스의 migration 코드 준비도 승인됐다. 비유튜브 provider/cache는 후속 퇴역 결정대로 제거한다. 외부 Stream API·예정/일정·canonical writer·알림·retention을 유지하고 원천 fallback·새 poller/pool/cache를 추가하지 않는다. 운영 migration·배포·데이터 정정은 별도다.",
+  "sources": [
+    "docs/current/plans/2026-09-26-live-query-read-model.md#제안 범위"
+  ],
+  "evidence": [
+    "docs/current/plans/2026-09-26-live-query-read-model.md",
+    "docs/review/live-query-read-model-20260926.md",
+    "docs/current/plans/2026-09-26-live-query-release.md"
+  ],
+  "implementation": [
+    "hololive/hololive-api/internal/planes/bot/internal/service/livequery/repository.go",
+    "hololive/hololive-api/internal/planes/bot/internal/service/livequery/queries/snapshot.sql",
+    "hololive/hololive-api/internal/planes/bot/internal/service/livequery/repository_test.go",
+    "hololive/hololive-api/internal/planes/bot/internal/service/livequery/repository_benchmark_test.go",
+    "hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_live.go",
+    "hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_live_db_test.go",
+    "hololive/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter/formatter_live_query.go",
+    "hololive/hololive-api/scripts/migrations/211_live_query_coverage_time_index.sql",
+    "hololive/hololive-shared/pkg/service/holodex/provider/service_streams_cache_fill.go"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "조회 대상·as-of freshness·부분 응답 계약을 수용하고 실제 coverage 및 대표 데이터 query plan으로 DB 전환 가능성을 판단할 때"
+  }
+}

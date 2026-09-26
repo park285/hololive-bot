@@ -26,12 +26,10 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/configsub"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 )
 
@@ -44,8 +42,6 @@ const (
 
 type alarmFoundation struct {
 	HolodexService *holodexprovider.Service
-	ChzzkClient    *chzzk.Client
-	TwitchClient   *twitch.Client
 	AlarmService   *alarmservice.AlarmService
 	Outbox         dispatchoutbox.Writer
 }
@@ -339,14 +335,11 @@ func buildRuntimeScheduler(
 	scheduler, err := alarmscheduler.NewRuntimeScheduler(alarmscheduler.Dependencies{
 		Cache:          infra.Cache,
 		HolodexService: foundation.HolodexService,
-		ChzzkClient:    foundation.ChzzkClient,
-		TwitchClient:   foundation.TwitchClient,
 		AlarmCRUD:      foundation.AlarmService,
 		Postgres:       infra.Postgres,
 		Notification:   appConfig.Notification,
 		Outbox:         foundation.Outbox,
 		Publish:        publishConfig,
-		TwitchEnabled:  envutil.Bool("ALARM_TWITCH_ENABLED", true),
 		Logger:         logger,
 	})
 	if err != nil {
@@ -399,21 +392,11 @@ func buildAlarmFoundation(
 		return nil, fmt.Errorf("provide holodex service: %w", err)
 	}
 
-	chzzkClient := chzzk.NewClientWithConfig(&chzzk.ClientConfig{
-		ClientID:     appConfig.Chzzk.ClientID,
-		ClientSecret: appConfig.Chzzk.ClientSecret,
-		Logger:       logger,
-	})
-	twitchClient := twitch.NewClient(&twitch.ClientConfig{
-		ClientID:     appConfig.Twitch.ClientID,
-		ClientSecret: appConfig.Twitch.ClientSecret,
-	}, logger)
-
 	alarmRepository := sharedalarm.NewRepository(infra.Postgres, logger)
 	outboxRepository := dispatchoutbox.NewPgxRepository(infra.Postgres, logger)
 	resolved := sharedmodules.ResolvePersistedTargetMinutes(appConfig.SettingsFilePath, appConfig.Notification.AdvanceMinutes, appConfig.Scraper.ProxyEnabled, logger)
 
-	alarmService, err := alarmservice.NewAlarmService(infra.Cache, holodexService, chzzkClient, twitchClient, memberData, alarmRepository, logger, resolved)
+	alarmService, err := alarmservice.NewAlarmService(infra.Cache, holodexService, memberData, alarmRepository, logger, resolved)
 	if err != nil {
 		return nil, fmt.Errorf("create alarm service: %w", err)
 	}
@@ -422,8 +405,6 @@ func buildAlarmFoundation(
 
 	return &alarmFoundation{
 		HolodexService: holodexService,
-		ChzzkClient:    chzzkClient,
-		TwitchClient:   twitchClient,
 		AlarmService:   alarmService,
 		Outbox:         outboxRepository,
 	}, nil
@@ -434,10 +415,6 @@ func warmAlarmService(ctx context.Context, alarmService *alarmservice.AlarmServi
 		logger.Warn("Failed to warm alarm cache from DB", slog.Any("error", err))
 
 		return
-	}
-
-	if err := alarmService.SyncPlatformMappings(ctx); err != nil {
-		logger.Warn("Failed to sync platform alarm mappings", slog.Any("error", err))
 	}
 }
 

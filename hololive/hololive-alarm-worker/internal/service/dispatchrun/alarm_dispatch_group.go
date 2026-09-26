@@ -391,8 +391,9 @@ func alarmDispatchStreamEgressPath(
 		return alarmDispatchEgressUnresolved, false, errors.New("alarm notification stream is nil")
 	}
 
+	// 보관된 구형 envelope를 YouTube 알림으로 오인해 발송하지 않는다.
 	if stream.IsTwitchOnly || stream.IsChzzkOnly {
-		return alarmDispatchEgressText, false, nil
+		return alarmDispatchEgressUnresolved, false, errors.New("non-YouTube stream provider is no longer supported")
 	}
 
 	if !stream.HasYouTubeInfo() {

@@ -88,12 +88,10 @@ func buildBotStreamModule(
 	youTubeStack *providers.YouTubeStack,
 ) BotStreamModule {
 	return BotStreamModule{
-		Holodex:      holodexService,
-		ChzzkClient:  alarmMode.ChzzkClient,
-		TwitchClient: alarmMode.TwitchClient,
-		Alarm:        alarmMode.AlarmCRUD,
-		MemberMatch:  memberMatcher,
-		YTStack:      youTubeStack,
+		Holodex:     holodexService,
+		Alarm:       alarmMode.AlarmCRUD,
+		MemberMatch: memberMatcher,
+		YTStack:     youTubeStack,
 	}
 }
 

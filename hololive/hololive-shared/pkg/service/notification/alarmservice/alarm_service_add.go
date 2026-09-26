@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/domain/mekparkhost"
-	"github.com/kapu/hololive-shared/pkg/privacylog"
 )
 
 // AddAlarm은 채팅방의 채널·멤버별 알림 종류를 저장하고 캐시를 갱신하며 새 종류가 추가됐는지 반환한다.
@@ -66,7 +64,7 @@ func (as *AlarmService) AddAlarm(ctx context.Context, req *domain.AddAlarmReques
 		return false, fmt.Errorf("cache add alarm mutation: %w", err)
 	}
 
-	as.afterAddAlarm(ctx, normalizedReq, mutation.newlyAddedTypes)
+	as.logAlarmAdded(normalizedReq, mutation.newlyAddedTypes)
 
 	return added > 0 || mutation.existing || mekparkhost.SupportsSubscriptions(normalizedReq.ChannelID), nil
 }
@@ -171,18 +169,4 @@ func (as *AlarmService) persistAddAlarmMutation(ctx context.Context, mutation *a
 	}
 
 	return nil
-}
-
-func (as *AlarmService) afterAddAlarm(ctx context.Context, req *domain.AddAlarmRequest, newlyAddedTypes domain.AlarmTypes) {
-	as.logAlarmAdded(req, newlyAddedTypes)
-
-	if syncErr := as.syncPlatformMappingForChannel(ctx, req.ChannelID); syncErr != nil && as.logger != nil {
-		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
-			"sync platform alarm mapping after add.failed",
-			"Failed to sync platform alarm mapping after add",
-			syncErr,
-			slog.String("channel_id", req.ChannelID),
-			privacylog.RoomIDAttr(req.RoomID),
-		)
-	}
 }

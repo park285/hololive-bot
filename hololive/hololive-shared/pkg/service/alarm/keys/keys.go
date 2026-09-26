@@ -67,8 +67,6 @@ const (
 	RoomScheduleTransitionKeyPrefix    = "notified:schedule:transition:room:"
 	LogicalScheduleIndexKeyPrefix      = "notified:schedule:index:"
 	LogicalScheduleTransitionKeyPrefix = "notified:schedule:transition:event:"
-	ChzzkLiveNotifiedKeyPrefix         = "notified:chzzk:live:"
-	IntegratedNotifiedKeyPrefix        = "notified:integrated:"
 	NotificationCategoryLiveCatchup    = "live_catchup"
 )
 
@@ -77,6 +75,7 @@ func BuildRoomAlarmKey(roomID string) string {
 }
 
 func IsReservedAlarmKey(key string) bool {
+	// 퇴역한 매핑 키가 운영 캐시에 남아 있어도 방별 구독으로 읽지 않는다.
 	switch strings.TrimSpace(key) {
 	case AlarmRegistryKey,
 		AlarmChannelRegistryKey,

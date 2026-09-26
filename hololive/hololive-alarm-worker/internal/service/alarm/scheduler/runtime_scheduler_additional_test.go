@@ -92,22 +92,14 @@ func (s *targetMinutesUpdaterStub) UpdateTargetMinutes(targets []int) {
 }
 
 type alarmCacheWarmerStub struct {
-	calls     atomic.Int32
-	syncCalls atomic.Int32
-	err       error
-	syncErr   error
+	calls atomic.Int32
+	err   error
 }
 
 func (s *alarmCacheWarmerStub) WarmCacheFromDB(context.Context) error {
 	s.calls.Add(1)
 
 	return s.err
-}
-
-func (s *alarmCacheWarmerStub) SyncPlatformMappings(context.Context) error {
-	s.syncCalls.Add(1)
-
-	return s.syncErr
 }
 
 func testSchedulerLogger() *slog.Logger {
@@ -169,8 +161,6 @@ func TestRuntimeSchedulerRunIterations(t *testing.T) {
 	t.Run("youtube iteration syncs target minutes before check", testYouTubeIterationSyncsTargetMinutes)
 	t.Run("youtube iteration picks up updated alarm service targets", testYouTubeIterationUpdatedServiceTargets)
 	t.Run("youtube cache failure triggers immediate cache recovery", testYouTubeIterationCacheFailureRecovery)
-	t.Run("chzzk success", testChzzkIterationSuccess)
-	t.Run("twitch success empty notifications short-circuit", testTwitchIterationEmptyNotifications)
 }
 
 func testYouTubeIterationCheckFailure(t *testing.T) {
@@ -241,7 +231,7 @@ func testYouTubeIterationSyncsTargetMinutes(t *testing.T) {
 func testYouTubeIterationUpdatedServiceTargets(t *testing.T) {
 	t.Parallel()
 
-	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
+	alarmService, err := alarmservice.NewAlarmService(cachemocks.NewLenientClient(), nil, nil, nil, testSchedulerLogger(), []int{5, 3, 1})
 	require.NoError(t, err)
 
 	youtubeUpdater := &targetMinutesUpdaterStub{}
@@ -289,132 +279,28 @@ func testYouTubeIterationCacheFailureRecovery(t *testing.T) {
 				return nil, sharedcache.NewCacheError("smembers", sharedalarmkeys.AlarmChannelRegistryKey, errors.New("EOF"))
 			},
 		},
-		cacheClient:           cache,
-		alarmCacheWarmer:      warmer,
-		platformMappingSyncer: warmer,
-		notifier:              &senderFunc{},
-		logger:                testSchedulerLogger(),
+		cacheClient:      cache,
+		alarmCacheWarmer: warmer,
+		notifier:         &senderFunc{},
+		logger:           testSchedulerLogger(),
 	}
 
 	require.Error(t, s.runYouTubeIteration(t.Context()))
 	assert.Equal(t, int32(1), waitUntilReadyCalls.Load())
 	assert.Equal(t, int32(1), warmer.calls.Load())
-	assert.Equal(t, int32(1), warmer.syncCalls.Load())
-}
-
-func testChzzkIterationSuccess(t *testing.T) {
-	t.Parallel()
-
-	sent := atomic.Int32{}
-	s := &RuntimeScheduler{
-		chzzkChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
-				return []*domain.AlarmNotification{{RoomID: "room-1"}}, nil
-			},
-		},
-		notifier: &senderFunc{
-			send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
-				sent.Add(1)
-
-				return delivery.SendResult{Sent: 1}, nil
-			},
-		},
-		logger: testSchedulerLogger(),
-	}
-
-	require.NoError(t, s.runChzzkIteration(t.Context()))
-	assert.Equal(t, int32(1), sent.Load())
-}
-
-func testTwitchIterationEmptyNotifications(t *testing.T) {
-	t.Parallel()
-
-	sent := atomic.Int32{}
-	s := &RuntimeScheduler{
-		twitchChecker: &runnerFunc{
-			check: func(context.Context) ([]*domain.AlarmNotification, error) {
-				return nil, nil
-			},
-		},
-		notifier: &senderFunc{
-			send: func(context.Context, []*domain.AlarmNotification) (delivery.SendResult, error) {
-				sent.Add(1)
-
-				return delivery.SendResult{}, nil
-			},
-		},
-		logger: testSchedulerLogger(),
-	}
-
-	require.NoError(t, s.runTwitchIteration(t.Context()))
-	assert.Equal(t, int32(0), sent.Load())
 }
 
 type recoverAlarmCacheCase struct {
 	name          string
 	existsByKey   map[string]bool
 	wantWarmCalls int32
-	wantSyncCalls int32
 }
 
 func recoverAlarmCacheCases() []recoverAlarmCacheCase {
 	return []recoverAlarmCacheCase{
-		{
-			name: "rebuilds subscriber cache and platform mappings when channel registry key is missing",
-			existsByKey: map[string]bool{
-				sharedalarmkeys.AlarmChannelRegistryKey:      false,
-				sharedalarmkeys.AlarmSubscriberCacheEmptyKey: false,
-			},
-			wantWarmCalls: 1,
-			wantSyncCalls: 1,
-		},
-		{
-			name: "does not rebuild when channel registry is missing because DB alarm state is empty",
-			existsByKey: map[string]bool{
-				sharedalarmkeys.AlarmChannelRegistryKey:      false,
-				sharedalarmkeys.AlarmSubscriberCacheEmptyKey: true,
-			},
-			wantWarmCalls: 0,
-			wantSyncCalls: 0,
-		},
-		{
-			name: "does not warm cache when registry key exists",
-			existsByKey: map[string]bool{
-				sharedalarmkeys.AlarmChannelRegistryKey:       true,
-				sharedalarmkeys.ChzzkChannelMapKey:            true,
-				sharedalarmkeys.ChzzkChannelMapEmptyKey:       true,
-				sharedalarmkeys.TwitchLoginMapKey:             true,
-				sharedalarmkeys.TwitchLoginMapEmptyKey:        true,
-				sharedalarmkeys.TwitchChannelLoginMapKey:      true,
-				sharedalarmkeys.TwitchChannelLoginMapEmptyKey: true,
-			},
-			wantWarmCalls: 0,
-			wantSyncCalls: 0,
-		},
-		{
-			name: "syncs platform mappings when registry exists but platform keys are missing",
-			existsByKey: map[string]bool{
-				sharedalarmkeys.AlarmChannelRegistryKey:  true,
-				sharedalarmkeys.ChzzkChannelMapKey:       false,
-				sharedalarmkeys.ChzzkChannelMapEmptyKey:  false,
-				sharedalarmkeys.TwitchLoginMapKey:        true,
-				sharedalarmkeys.TwitchChannelLoginMapKey: true,
-			},
-			wantWarmCalls: 0,
-			wantSyncCalls: 1,
-		},
-		{
-			name: "skips platform sync when missing mapping has empty marker",
-			existsByKey: map[string]bool{
-				sharedalarmkeys.AlarmChannelRegistryKey:  true,
-				sharedalarmkeys.ChzzkChannelMapKey:       false,
-				sharedalarmkeys.ChzzkChannelMapEmptyKey:  true,
-				sharedalarmkeys.TwitchLoginMapKey:        true,
-				sharedalarmkeys.TwitchChannelLoginMapKey: true,
-			},
-			wantWarmCalls: 0,
-			wantSyncCalls: 0,
-		},
+		{name: "rebuilds missing subscriber cache", existsByKey: map[string]bool{sharedalarmkeys.AlarmChannelRegistryKey: false, sharedalarmkeys.AlarmSubscriberCacheEmptyKey: false}, wantWarmCalls: 1},
+		{name: "confirmed empty subscriber cache", existsByKey: map[string]bool{sharedalarmkeys.AlarmChannelRegistryKey: false, sharedalarmkeys.AlarmSubscriberCacheEmptyKey: true}},
+		{name: "existing registry needs no platform mappings", existsByKey: map[string]bool{sharedalarmkeys.AlarmChannelRegistryKey: true}},
 	}
 }
 
@@ -444,15 +330,13 @@ func TestRuntimeSchedulerRecoverAlarmCacheIfRegistryEmpty(t *testing.T) {
 			cache.ExistsFunc = alarmCacheExistsFunc(t, tc.existsByKey)
 
 			s := &RuntimeScheduler{
-				cacheClient:           cache,
-				alarmCacheWarmer:      warmer,
-				platformMappingSyncer: warmer,
-				logger:                testSchedulerLogger(),
+				cacheClient:      cache,
+				alarmCacheWarmer: warmer,
+				logger:           testSchedulerLogger(),
 			}
 
 			require.NoError(t, s.recoverAlarmCacheIfRegistryEmpty(t.Context(), "test"))
 			assert.Equal(t, tc.wantWarmCalls, warmer.calls.Load())
-			assert.Equal(t, tc.wantSyncCalls, warmer.syncCalls.Load())
 		})
 	}
 }
@@ -484,10 +368,9 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 	}
 
 	s := &RuntimeScheduler{
-		cacheClient:           cache,
-		alarmCacheWarmer:      warmer,
-		platformMappingSyncer: warmer,
-		logger:                testSchedulerLogger(),
+		cacheClient:      cache,
+		alarmCacheWarmer: warmer,
+		logger:           testSchedulerLogger(),
 	}
 
 	err := s.recoverAlarmCacheAfterCheckFailure(
@@ -496,7 +379,6 @@ func TestRuntimeSchedulerRecoverAlarmCacheAfterCheckFailureUsesRecoveryTimeout(t
 	)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), warmer.calls.Load())
-	assert.Equal(t, int32(1), warmer.syncCalls.Load())
 }
 
 func TestRuntimeSchedulerRunLoop_StopsOnContextCancel(t *testing.T) {

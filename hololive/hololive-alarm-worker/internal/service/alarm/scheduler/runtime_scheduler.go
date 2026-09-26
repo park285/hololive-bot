@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking"
-	chzzk2 "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/chzzk"
 	checknotifier "github.com/kapu/hololive-alarm-worker/internal/service/alarm/checker/checking/notifier"
 	"github.com/kapu/hololive-alarm-worker/internal/service/alarm/tier"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
@@ -38,19 +37,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 const (
 	defaultYouTubeInterval = 60 * time.Second
-	defaultLiveInterval    = 120 * time.Second
 
-	defaultYouTubeTimeout  = 45 * time.Second
-	defaultPlatformTimeout = 30 * time.Second
-	evaluationWindowSlack  = 15 * time.Second
+	defaultYouTubeTimeout = 45 * time.Second
+	evaluationWindowSlack = 15 * time.Second
 )
 
 type targetMinutesSource interface {
@@ -64,24 +59,17 @@ type targetMinutesUpdater interface {
 // RuntimeScheduler는 런타임 알람 체크 루프를 관리한다.
 type RuntimeScheduler struct {
 	youtubeChecker checking.Runner
-	chzzkChecker   checking.Runner
-	twitchChecker  checking.Runner
 	notifier       checking.Sender
 	cacheClient    cache.Client
 
-	youtubeTargetUpdater  targetMinutesUpdater
-	dedupTargetUpdater    targetMinutesUpdater
-	targetMinutesSource   targetMinutesSource
-	alarmCacheWarmer      alarmCacheWarmer
-	platformMappingSyncer alarmPlatformMappingSyncer
+	youtubeTargetUpdater targetMinutesUpdater
+	dedupTargetUpdater   targetMinutesUpdater
+	targetMinutesSource  targetMinutesSource
+	alarmCacheWarmer     alarmCacheWarmer
 
 	youtubeInterval time.Duration
-	chzzkInterval   time.Duration
-	twitchInterval  time.Duration
 
 	youtubeTimeout time.Duration
-	chzzkTimeout   time.Duration
-	twitchTimeout  time.Duration
 
 	logger *slog.Logger
 }
@@ -91,20 +79,17 @@ type RuntimeScheduler struct {
 type Dependencies struct {
 	Cache          cache.Client
 	HolodexService *holodexprovider.Service
-	ChzzkClient    *chzzk.Client
-	TwitchClient   *twitch.Client
 	AlarmCRUD      domain.AlarmCRUD
 	Postgres       database.Client
 	Notification   settings.NotificationConfig
 	Outbox         dispatchoutbox.Writer
 	Publish        queue.PublishConfig
-	TwitchEnabled  bool
 	Logger         *slog.Logger
 }
 
 // NewRuntimeScheduler는 의존성을 검증하고 루프를 구성하며 실행은 시작하지 않습니다.
 func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
-	if err := validateRuntimeSchedulerDeps(deps.Cache, deps.HolodexService, deps.ChzzkClient, deps.TwitchClient, deps.AlarmCRUD); err != nil {
+	if err := validateRuntimeSchedulerDeps(deps.Cache, deps.HolodexService, deps.AlarmCRUD); err != nil {
 		return nil, fmt.Errorf("validate runtime scheduler deps: %w", err)
 	}
 
@@ -131,47 +116,12 @@ func NewRuntimeScheduler(deps Dependencies) (*RuntimeScheduler, error) {
 		return nil, fmt.Errorf("runtime scheduler youtube checker: %w", err)
 	}
 
-	chzzkChecker, err := chzzk2.NewChzzkChecker(deps.Cache, deps.ChzzkClient, logger)
-	if err != nil {
-		return nil, fmt.Errorf("new runtime scheduler: create chzzk checker: %w", err)
-	}
-
-	twitchResult := buildOptionalTwitchChecker(deps.Cache, deps.TwitchClient, deps.TwitchEnabled, logger)
-	if twitchResult.err != nil {
-		return nil, fmt.Errorf("build optional twitch checker: %w", twitchResult.err)
-	}
-
 	notifierService, err := checknotifier.NewNotifier(dedupService, queuePublisher, tierScheduler, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new runtime scheduler: create notifier: %w", err)
 	}
 
-	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmCRUD, youtubeChecker, chzzkChecker, twitchResult.checker, notifierService, dedupService, youtubeInterval, logger), nil
-}
-
-type optionalTwitchCheckerResult struct {
-	checker checking.Runner
-	err     error
-}
-
-func buildOptionalTwitchChecker(
-	cacheClient cache.Client,
-	twitchClient *twitch.Client,
-	enabled bool,
-	logger *slog.Logger,
-) optionalTwitchCheckerResult {
-	if !enabled {
-		logger.Info("Twitch alarm loop disabled")
-
-		return optionalTwitchCheckerResult{}
-	}
-
-	checker, err := newTwitchChecker(cacheClient, twitchClient, logger)
-	if err != nil {
-		return optionalTwitchCheckerResult{err: fmt.Errorf("new twitch checker: %w", err)}
-	}
-
-	return optionalTwitchCheckerResult{checker: checker}
+	return newRuntimeSchedulerInstance(deps.Cache, deps.AlarmCRUD, youtubeChecker, notifierService, dedupService, youtubeInterval, logger), nil
 }
 
 func newRuntimeSchedulerYouTubeChecker(
@@ -220,8 +170,6 @@ func runtimeSchedulerLogger(logger *slog.Logger) *slog.Logger {
 func validateRuntimeSchedulerDeps(
 	cacheClient cache.Client,
 	holodexService *holodexprovider.Service,
-	chzzkClient *chzzk.Client,
-	twitchClient *twitch.Client,
 	alarmCRUD domain.AlarmCRUD,
 ) error {
 	if cacheClient == nil {
@@ -230,14 +178,6 @@ func validateRuntimeSchedulerDeps(
 
 	if holodexService == nil {
 		return errors.New("new runtime scheduler: holodex service is nil")
-	}
-
-	if chzzkClient == nil {
-		return errors.New("new runtime scheduler: chzzk client is nil")
-	}
-
-	if twitchClient == nil {
-		return errors.New("new runtime scheduler: twitch client is nil")
 	}
 
 	if alarmCRUD == nil {
@@ -275,8 +215,6 @@ func newRuntimeSchedulerInstance(
 	cacheClient cache.Client,
 	alarmCRUD domain.AlarmCRUD,
 	youtubeChecker *checking.YouTubeChecker,
-	chzzkChecker checking.Runner,
-	twitchChecker checking.Runner,
 	notifierService checking.Sender,
 	dedupService targetMinutesUpdater,
 	youtubeInterval time.Duration,
@@ -284,24 +222,17 @@ func newRuntimeSchedulerInstance(
 ) *RuntimeScheduler {
 	return &RuntimeScheduler{
 		youtubeChecker: youtubeChecker,
-		chzzkChecker:   chzzkChecker,
-		twitchChecker:  twitchChecker,
 		notifier:       notifierService,
 		cacheClient:    cacheClient,
 
-		youtubeTargetUpdater:  youtubeChecker,
-		dedupTargetUpdater:    dedupService,
-		targetMinutesSource:   alarmCRUD,
-		alarmCacheWarmer:      alarmCRUD,
-		platformMappingSyncer: alarmPlatformMappingSyncerFrom(alarmCRUD),
+		youtubeTargetUpdater: youtubeChecker,
+		dedupTargetUpdater:   dedupService,
+		targetMinutesSource:  alarmCRUD,
+		alarmCacheWarmer:     alarmCRUD,
 
 		youtubeInterval: youtubeInterval,
-		chzzkInterval:   defaultLiveInterval,
-		twitchInterval:  defaultLiveInterval,
 
 		youtubeTimeout: defaultYouTubeTimeout,
-		chzzkTimeout:   defaultPlatformTimeout,
-		twitchTimeout:  defaultPlatformTimeout,
 
 		logger: logger,
 	}

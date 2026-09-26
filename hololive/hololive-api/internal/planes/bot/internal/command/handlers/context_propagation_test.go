@@ -34,9 +34,9 @@ import (
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	alarmcmd "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/alarm"
 	handlercore "github.com/kapu/hololive-api/internal/planes/bot/internal/command/handlers/handlercore"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 func newCommandTestLogger() *slog.Logger {
@@ -149,29 +149,6 @@ func (p *trackedMemberProvider) FindMembersByAlias(string) []*domain.Member {
 	return nil
 }
 
-type trackedStreamProvider struct {
-	state   trackedContextState
-	streams []*domain.Stream
-}
-
-func (p *trackedStreamProvider) GetLiveStreams(ctx context.Context) ([]*domain.Stream, error) {
-	p.state.record(ctx)
-
-	return p.streams, nil
-}
-
-func (p *trackedStreamProvider) GetUpcomingStreams(context.Context, int) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (p *trackedStreamProvider) GetChannelSchedule(context.Context, string, int, bool) ([]*domain.Stream, error) {
-	return nil, nil
-}
-
-func (p *trackedStreamProvider) GetChannel(context.Context, string) (*domain.Channel, error) {
-	return nil, errTestStubNoChannel
-}
-
 func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 	t.Parallel()
 
@@ -260,7 +237,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	var baseCtx context.Context
 
 	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
-	streamProvider := &trackedStreamProvider{}
+	streamProvider := &liveQueryStub{result: livequery.Result{Status: livequery.Complete}}
 
 	var (
 		sendMessageState trackedContextState
@@ -268,7 +245,7 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 	)
 
 	cmd := NewLiveCommand(&handlercore.Dependencies{
-		Holodex:   streamProvider,
+		LiveQuery: streamProvider,
 		Matcher:   matcherService,
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(ctx context.Context, _, message string) error {
@@ -290,44 +267,8 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		paramMember: testMemberAqua,
 	})
 	require.NoError(t, err)
-	require.True(t, streamProvider.state.saw(reqCtx), "stream provider must observe the request context")
+	require.True(t, streamProvider.state.saw(reqCtx), "live query must observe the request context")
 	require.True(t, sendMessageState.saw(reqCtx), "SendMessage must receive the request context")
 	assert.Equal(t, cmd.Deps().Formatter.FormatMemberNotLive(reqCtx, testMemberAqua), sendMessageMsg)
-	require.True(t, provider.state.sawOnly(reqCtx), "matcher provider must observe only the request context")
-}
-
-func TestLiveCommand_Execute_UsesRequestContextForMembersData(t *testing.T) {
-	t.Parallel()
-
-	reqCtx := context.WithValue(t.Context(), commandContextKey{}, "request")
-	provider := newTrackedMemberProvider(&domain.Member{
-		ChannelID: testChannelAqua,
-		Name:      testMemberAqua,
-	})
-	streamProvider := &trackedStreamProvider{}
-
-	cmd := NewLiveCommand(&handlercore.Dependencies{
-		Holodex: streamProvider,
-		Chzzk: chzzk.NewClientWithConfig(&chzzk.ClientConfig{
-			ClientID:     "test-client",
-			ClientSecret: "test-secret",
-			Logger:       newCommandTestLogger(),
-		}),
-		MembersData: provider,
-		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, newCommandTestLogger()),
-		Formatter:   formatter.NewResponseFormatter("!", setupAlarmCommandTestRenderer(t)),
-		SendMessage: func(context.Context, string, string) error {
-			return nil
-		},
-		SendError: func(context.Context, string, string) error {
-			t.Fatal("unexpected SendError call")
-
-			return nil
-		},
-		Logger: newCommandTestLogger(),
-	})
-
-	err := cmd.Execute(reqCtx, &domain.CommandContext{Room: testRoomID}, map[string]any{})
-	require.NoError(t, err)
 	require.True(t, provider.state.sawOnly(reqCtx), "matcher provider must observe only the request context")
 }
