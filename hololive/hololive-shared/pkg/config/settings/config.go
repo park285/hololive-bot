@@ -219,6 +219,11 @@ func LoadLoggingConfig() LoggingConfig {
 	}
 }
 
+// LoadSeeMoreFold는 bot·llm plane이 공유하는 '전체보기' 접기 스위치를 읽는다. 기본값은 접기다.
+func LoadSeeMoreFold() bool {
+	return sharedenv.Bool("BOT_SEE_MORE_FOLD", true)
+}
+
 func loadBotConfig() BotConfig {
 	return BotConfig{
 		Prefix:                sharedenv.String("BOT_PREFIX", "!"),
@@ -226,7 +231,7 @@ func loadBotConfig() BotConfig {
 		MentionPrefix:         sharedenv.String("BOT_MENTION_PREFIX", "#kapu봇"),
 		CalendarImageCacheDir: sharedenv.String("BOT_CALENDAR_IMAGE_CACHE_DIR", "data/calendar-cache"),
 		CalendarEntryCacheTTL: time.Duration(sharedenv.Int("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", 86400)) * time.Second,
-		SeeMoreFold:           sharedenv.Bool("BOT_SEE_MORE_FOLD", false),
+		SeeMoreFold:           LoadSeeMoreFold(),
 		MarkdownReplies:       sharedenv.Bool("BOT_MARKDOWN_REPLIES", false),
 	}
 }

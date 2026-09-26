@@ -80,12 +80,14 @@ func (f *ResponseFormatter) BroadcastHistory(ctx context.Context, filter Broadca
 		b.WriteByte('\n')
 	}
 
+	// 머리 문단 뒤에만 빈 줄을 두고, 항목 사이는 구분선 한 줄로 경계를 표시한다.
+	b.WriteByte('\n')
+
 	for i := range entries {
 		if i > 0 {
-			b.WriteString("\n──────────\n")
+			b.WriteString("──────────\n")
 		}
 
-		b.WriteByte('\n')
 		f.writeBroadcastHistoryEntry(ctx, &b, i+1, &entries[i])
 	}
 

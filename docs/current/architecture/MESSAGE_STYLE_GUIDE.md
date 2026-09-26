@@ -6,7 +6,7 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 ## 1. 범위와 SSOT
 
 - 문구의 SSOT는 DB 카탈로그 2개다: `notification_templates`(Go text/template 본문, template_key), `message_strings`(namespace/key/value). 코드 인라인 문구는 허용하지 않으며, 남은 인라인 라벨은 `timefmt`/`karing` 네임스페이스로 추출한다.
-- 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/internal/app/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), shared youtube outbox(`hololive-shared/pkg/service/youtube/outbox/`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
+- 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), shared youtube outbox(`hololive-shared/pkg/service/youtube/outbox/`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
 
 ## 2. 톤 원칙
 
@@ -45,11 +45,11 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 4. 구조 패턴
 
-- 목록형 메시지 1행 헤더: `<글리프> <제목> (<N>)`. 괄호 안은 숫자만 — `(3개)`·`(3건)`·`(3명)`이 아니라 `(3)`.
+- 목록형 메시지 1행 헤더: `<글리프> <제목> · <N>개`(단위는 `개`·`건`·`명` 중 대상에 맞게). 기간·표시 한도 같은 헤더 보조 행은 헤더 바로 아래에 두고, 머리 문단 끝에는 빈 줄 1개를 둔다.
 - 메시지 내부 섹션 구분: `[섹션명]` 브래킷, 글리프 없음. (예: 도움말 명령 그룹, 멤버 목록 기수 그룹)
-- 번호 목록: `1. ` 마커, 연속 상세 행은 3칸 들여쓰기. 비번호 상세 행은 2칸 들여쓰기.
+- 번호 목록: `N · ` 마커. 카카오 일반채팅이 `1. ` Markdown 목록의 빈 줄을 합치므로 쓰지 않는다. 상세 행은 들여쓰지 않는다.
 - URL은 단독 행에 bare로 둔다. 접두 글리프·라벨 금지. 항목의 마지막 행에 배치.
-- 구분선(`━━━`, `---` 등) 금지. 블록 구분은 빈 줄 1개.
+- 여러 줄 항목의 경계는 `──────────` 한 줄이며 앞뒤에 빈 줄을 두지 않는다. 첫 항목 앞과 마지막 항목 뒤에는 넣지 않는다. 한 줄 항목끼리는 구분선 없이 이어 쓴다(예: 다음 방송이 없는 알람). `━━━`·`---` 등 다른 구분선은 금지.
 - 빈 결과는 한 줄: `<글리프> <대상>이(가) 없습니다.` (+ 필요 시 사용 안내 1줄).
 - 사용 안내는 글리프 없이 `예) {{.Prefix}}알람 추가 페코라` 형식, 또는 명령 나열. 안내 예시 멤버명은 `페코라`로 고정.
 
@@ -79,10 +79,12 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 8. '전체보기' 접기(fold) 정책
 
-- `util.FoldForSeeMore(text, KakaoSeeMoreThreshold)` — 임계(250 rune) 이하 no-op, 초과 시 첫 줄 뒤에 ZWSP×`KakaoSeeMorePadding`을 삽입해 KakaoTalk이 헤더 한 줄 + '전체보기'로 접게 한다.
-- fold-in (긴 목록·다이제스트): `FormatHelp`, `FormatLiveStreams`, `UpcomingStreams`, `ChannelSchedule`, `FormatAlarmList`, `MemberDirectory`, `FormatMemberNewsDigest`, `CelebrationCalendar`, `FormatMajorEventWeeklySummary`, `FormatMajorEventMonthlySummary` — bot plane 10곳 + llm plane 동명 3곳(weekly/monthly/digest)은 bot과 fold parity를 유지한다.
-- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 알림 푸시 전문(CMD_ALARM_NOTIFICATION*, ALARM_DISPATCH_*, OUTBOX_*, CELEBRATION_*, karing 카드), `FormatStatsTopGainers`·`FormatTalentProfile`(이미지 카드 전환 예정).
-- ZWSP 부재를 단언하던 테스트 9사이트/5파일은 fold 적용 커밋에서 경계 회귀 테스트(임계 이하 무패딩·초과 시 패딩)로 전환한다.
+- `util.FoldForSeeMore(text, KakaoSeeMoreThreshold)` — 임계(250 rune) 이하 no-op. 초과 시 머리 문단(첫 빈 줄 앞의 줄, 최대 `KakaoSeeMoreHeadMaxLines`=4줄)의 마지막 줄 끝에 ZWSP×`KakaoSeeMorePadding`을 붙여 KakaoTalk이 머리 문단 + '전체보기'로 접게 한다. 4줄 안에 빈 줄이 없으면 첫 줄만 남긴다. 펼친 화면의 가시 문자는 원문과 같다.
+- 운영 기본값은 접기 ON(`BOT_SEE_MORE_FOLD` 기본 `true`)이다. `false`는 bot·llm plane 접기를 함께 끄는 운영 스위치다.
+- fold-in (긴 목록·다이제스트): `FormatHelp`(이미지 실패 시 텍스트), `LiveQuery`(`!라이브`, 표시 한도 안내는 머리 문단), `UpcomingStreams`, `ChannelSchedule`, `FormatAlarmList`, `MemberDirectory`, `FormatMemberInfo`(`!정보`), `FormatMemberNewsDigest`, `CelebrationCalendar`(이미지 실패 시 텍스트), `FormatMajorEventWeeklySummary`, `FormatMajorEventMonthlySummary`, `BroadcastHistory` — llm plane 동명 3곳(weekly/monthly/digest)은 bot과 fold parity를 유지한다.
+- 헤더 보조 행(개수·기간·표시 한도·일부 결과 안내)은 머리 문단 안에 두어 접힌 화면에서도 보이게 한다.
+- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 알림 푸시 전문(CMD_ALARM_NOTIFICATION*, ALARM_DISPATCH_*, OUTBOX_*, CELEBRATION_*, karing 카드).
+- 명령 응답은 일반 방에서 `kakaoformat.Render`를 거친다. 이 변환은 연속 ZWSP 패딩을 보존한다(shared-go `TestRenderNeutralizedTextKeepsMarkdownCodeURLsAndFoldPadding`).
 
 ## 9. 에러·알림 단문 규칙
 

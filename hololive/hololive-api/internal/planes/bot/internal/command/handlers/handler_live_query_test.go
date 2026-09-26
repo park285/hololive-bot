@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging"
@@ -70,7 +73,39 @@ func TestLiveCommand_RetiredProviderMetadataDoesNotRequireRosterLookup(t *testin
 		t.Fatal(err)
 	}
 
-	if *message != deps.Formatter.FormatLiveStreams(t.Context(), nil) {
+	if *message != deps.Formatter.LiveQuery(t.Context(), livequery.Result{Status: livequery.Complete}, "") {
 		t.Fatalf("unexpected empty YouTube response: %q", *message)
+	}
+}
+
+func TestLiveCommand_IncompleteResultLogsDiagnosticsInsteadOfReplying(t *testing.T) {
+	deps, _, message := liveCardTestDeps(t, []*domain.Member{{ChannelID: testYouTubeChannelID, Name: testMemberAqua}})
+
+	var logs bytes.Buffer
+
+	deps.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	deps.LiveQuery = &liveQueryStub{result: livequery.Result{
+		Status: livequery.Partial,
+		Items:  []livequery.Item{{VideoID: "video-x", ChannelID: "ch-x", ChannelName: "Member X", Title: "방송"}},
+		Channels: []livequery.Channel{
+			{ChannelID: "ch-x", Reason: livequery.Covered},
+			{ChannelID: "ch-y", Reason: livequery.Inconsistent},
+			{ChannelID: "ch-z", Reason: livequery.Inconsistent},
+		},
+	}}
+
+	if err := NewLiveCommand(deps).Execute(t.Context(), &domain.CommandContext{Room: testRoomID}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// 실제 목록 레이아웃은 handler_live_db_test가 검증한다. 여기서는 진단이 응답 대신 로그로 가는지만 본다.
+	if *message == "" || strings.Contains(*message, "조회 미완료") {
+		t.Fatalf("reply must not carry coverage diagnostics: %q", *message)
+	}
+
+	for _, want := range []string{`"msg":"live query incomplete"`, `"status":"partial"`, `"inconsistent":2`, `"covered":1`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("operator log missing %s: %s", want, logs.String())
+		}
 	}
 }

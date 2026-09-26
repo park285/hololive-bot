@@ -1439,6 +1439,26 @@ func TestLoadBotConfig_MarkdownReplies(t *testing.T) {
 	}
 }
 
+func TestLoadBotConfig_SeeMoreFold(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "default folds long lists", want: true},
+		{name: "explicit kill switch", value: "false"},
+		{name: "explicit fold", value: strconv.FormatBool(true), want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("BOT_SEE_MORE_FOLD", tc.value)
+
+			if got := loadBotConfig().SeeMoreFold; got != tc.want {
+				t.Fatalf("SeeMoreFold = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadBotConfig_CalendarImageCacheDir(t *testing.T) {
 	t.Setenv("BOT_CALENDAR_IMAGE_CACHE_DIR", "/tmp/calendar-cache")
 	t.Setenv("BOT_CALENDAR_ENTRY_CACHE_TTL_SECONDS", "3600")

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-list-reply-fold-default",
+  "title": "카카오톡 목록 응답은 머리 문단을 남긴 '전체보기' 접기와 한 줄 구분선을 기본으로 하고 !라이브 조회 진단은 응답에 붙이지 않는다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자 요청과 승인에 근거한다. 250 rune을 넘는 목록형 응답은 머리 문단(첫 빈 줄 앞, 최대 4줄) 끝에 ZWSP 500개를 붙여 제목·개수·기간·표시 한도 안내만 보이고 '전체보기'로 접는다. BOT_SEE_MORE_FOLD 기본값은 true이며 bot·llm plane이 settings.LoadSeeMoreFold를 공유하고 false는 운영 차단 스위치다. !정보도 접는다. 여러 줄 항목 사이는 앞뒤 빈 줄 없는 구분선 한 줄로 줄이고(migration 217은 208 표준 본문만 바꾸며 사용자 지정 본문·채널 override는 보존), 알람 목록은 다음 방송이 없는 알람을 한 줄로 쓰고 제한된 알림 종류만 표시한다. !라이브는 채널별 조회 사유('조회 미완료: …')와 조회 시각('기준:')을 응답에 붙이지 않고 'live query incomplete' 운영 로그로 남긴다. 미확인 빈 결과를 방송 없음으로 바꾸지 않는 DEC-20260926-hololive-live-query-read-model의 읽기 계약은 대체하지 않는다. 기각한 대안: 첫 줄만 남기는 접기(개수·기간이 숨음), 조회 진단을 머리 문단으로 올리기(상시 잡음 노출). coverage 불일치 데이터와 계약의 근본 해소는 별도 결정이다.",
+  "sources": [
+    "docs/current/architecture/MESSAGE_STYLE_GUIDE.md#8. '전체보기' 접기(fold) 정책",
+    "docs/current/services/hololive-api.md#Live query behavior"
+  ],
+  "evidence": [
+    "hololive/hololive-shared/pkg/util/kakao_test.go",
+    "hololive/hololive-shared/pkg/service/template/renderer_compact_separator_migration_test.go",
+    "hololive/hololive-dbtest/compact_separator_migration_test.go",
+    "hololive/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter/formatter_readability_test.go",
+    "hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_live_query_test.go"
+  ],
+  "implementation": [
+    "hololive/hololive-shared/pkg/util/kakao.go",
+    "hololive/hololive-shared/pkg/config/settings/config.go",
+    "hololive/hololive-shared/pkg/config/settings/apiplane/llm_scheduler.go",
+    "hololive/hololive-api/scripts/migrations/217_template_compact_separators.sql",
+    "hololive/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter/formatter_live_query.go",
+    "hololive/hololive-api/internal/planes/bot/internal/command/handlers/handler_live.go"
+  ],
+  "supersedes": [],
+  "review": {
+    "trigger": "카카오톡 '전체보기' 판정이 바뀌어 ZWSP 패딩이 접기를 만들지 못하거나, 라이브 조회 coverage가 대부분 complete로 수렴해 조회 진단 노출을 다시 판단할 때"
+  }
+}

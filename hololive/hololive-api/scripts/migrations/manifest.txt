@@ -75,3 +75,4 @@
 075 214_drop_source_observations_received_index.sql
 076 215_drop_source_observations_kind_id_index.sql
 077 216_drop_source_observation_queue_terminal_retention_index.sql
+078 217_template_compact_separators.sql

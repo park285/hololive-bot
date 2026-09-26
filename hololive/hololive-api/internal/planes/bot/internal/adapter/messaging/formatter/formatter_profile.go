@@ -63,7 +63,7 @@ func (f *ResponseFormatter) FormatMemberInfo(ctx context.Context, member *domain
 		return messagestrings.FallbackSentinel
 	}
 
-	return rendered
+	return f.foldSeeMore(rendered)
 }
 
 func memberInfoTemplateData(member *domain.Member) profileTemplateData {

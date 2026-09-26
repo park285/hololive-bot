@@ -2,10 +2,11 @@
 
 iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하는 파일입니다. 직접 편집하지 말고 레코드를 고친 뒤 다시 생성하십시오. 규칙은 iris-stack의 `docs/agent-workflows/decisions/README.md`에 있고, 둘 이상의 저장소에 걸치는 결정은 그쪽 색인에 있습니다.
 
-레코드 53건: proposed 0, accepted 39, rejected 0, withdrawn 2, superseded 12
+레코드 54건: proposed 0, accepted 40, rejected 0, withdrawn 2, superseded 12
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
+| [DEC-20260926-hololive-list-reply-fold-default](records/DEC-20260926-hololive-list-reply-fold-default.json) | 카카오톡 목록 응답은 머리 문단을 남긴 '전체보기' 접기와 한 줄 구분선을 기본으로 하고 !라이브 조회 진단은 응답에 붙이지 않는다 | accepted | implemented | hololive-bot | 2026-09-26 | trigger | - | [MESSAGE_STYLE_GUIDE.md](../current/architecture/MESSAGE_STYLE_GUIDE.md) |
 | [DEC-20260926-hololive-live-query-read-model](records/DEC-20260926-hololive-live-query-read-model.json) | 방송 조회를 확정 상태와 명시적 coverage로 분리하고 기존 durable evidence 재사용을 우선한다 | accepted | verified | hololive-bot | 2026-09-26 | trigger | - | [2026-09-26-live-query-read-model.md](../current/plans/2026-09-26-live-query-read-model.md) |
 | [DEC-20260926-hololive-x-spaces-helper-diagnostics](records/DEC-20260926-hololive-x-spaces-helper-diagnostics.json) | X 스페이스 helper 실패는 원문 없이 실패 단계와 오류 종류를 로그에 남긴다 | accepted | verified | hololive-bot | 2026-09-26 | - | - | [x-spaces.md](../current/services/x-spaces.md) |
 | [DEC-20260926-youtube-only-stream-providers](records/DEC-20260926-youtube-only-stream-providers.json) | 방송 제공자는 YouTube만 지원하고 Chzzk·Twitch 실행 로직을 제거한다 | accepted | verified | hololive-bot | 2026-09-26 | - | - | [2026-09-26-youtube-only-stream-providers.md](../current/plans/2026-09-26-youtube-only-stream-providers.md) |

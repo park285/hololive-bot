@@ -51,7 +51,7 @@ func TestFormatYouTubeOutboxPayloadRendersSSOT(t *testing.T) {
 		t.Fatalf("FormatYouTubeOutboxPayload(grouped) error = %v", err)
 	}
 
-	wantGrouped := "🔔 멤버 커뮤니티 글 · 2개\n\n1 · 첫 글\nhttps://www.youtube.com/post/post-a\n\n──────────\n\n2 · 둘째 글\nhttps://www.youtube.com/post/post-b"
+	wantGrouped := "🔔 멤버 커뮤니티 글 · 2개\n\n1 · 첫 글\nhttps://www.youtube.com/post/post-a\n──────────\n2 · 둘째 글\nhttps://www.youtube.com/post/post-b"
 	if grouped != wantGrouped {
 		t.Fatalf("grouped message = %q, want %q", grouped, wantGrouped)
 	}
