@@ -6,7 +6,7 @@ iris-stack의 `bash tools/checks/check-decision-catalog.sh render`가 생성하�
 
 | ID | 제목 | 결정 상태 | 이행 상태 | scope | 결정일 | 재검토 | 대체 관계 | 원본 |
 |---|---|---|---|---|---|---|---|---|
-| [DEC-20260926-hololive-live-query-read-model](records/DEC-20260926-hololive-live-query-read-model.json) | 방송 조회를 확정 상태와 명시적 coverage로 분리하고 기존 durable evidence 재사용을 우선한다 | accepted | in_progress | hololive-bot | 2026-09-26 | trigger | - | [2026-09-26-live-query-read-model.md](../current/plans/2026-09-26-live-query-read-model.md) |
+| [DEC-20260926-hololive-live-query-read-model](records/DEC-20260926-hololive-live-query-read-model.json) | 방송 조회를 확정 상태와 명시적 coverage로 분리하고 기존 durable evidence 재사용을 우선한다 | accepted | verified | hololive-bot | 2026-09-26 | trigger | - | [2026-09-26-live-query-read-model.md](../current/plans/2026-09-26-live-query-read-model.md) |
 | [DEC-20260926-youtube-only-stream-providers](records/DEC-20260926-youtube-only-stream-providers.json) | 방송 제공자는 YouTube만 지원하고 Chzzk·Twitch 실행 로직을 제거한다 | accepted | verified | hololive-bot | 2026-09-26 | - | - | [2026-09-26-youtube-only-stream-providers.md](../current/plans/2026-09-26-youtube-only-stream-providers.md) |
 | [DEC-20260924-hololive-template-cache-consistency](records/DEC-20260924-hololive-template-cache-consistency.json) | 템플릿 렌더링은 저장 완료 후 DB 버전을 확인한다 | accepted | verified | hololive-bot | 2026-09-24 | - | - | - |
 | [DEC-20260924-hololive-template-cache-load-bounds](records/DEC-20260924-hololive-template-cache-load-bounds.json) | 템플릿 소스 재확인은 1회로 제한하고 파싱을 캐시 잠금과 분리한다 | accepted | verified | hololive-bot | 2026-09-24 | - | - | - |

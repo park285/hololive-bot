@@ -6,11 +6,12 @@
   "delivery_status": "verified",
   "scope": ["hololive-bot"],
   "decided_at": "2026-09-26",
-  "summary": "사용자의 비유튜브 제공자 미지원·삭제 지시에 따라 Chzzk/Twitch 원천 client, 설정 소비, DI, 명령 병합, 주기 알림 조회와 표시 로직을 제거했다. 기존 LiveQuery 제안의 Chzzk adapter는 구현하지 않는다. 외부 Stream API 직렬화와 저장된 멤버 식별자는 보존하며 별도 X Spaces 알림·YouTube canonical writer를 유지한다. 승인된 기본 조회 scope 변경은 별도 LiveQuery 결정이 소유한다. 검증은 로컬 코드·회귀 검사이며 운영 secret/DB/queue 정리와 배포는 포함하지 않는다.",
+  "summary": "사용자의 비유튜브 제공자 미지원·삭제 지시에 따라 Chzzk/Twitch 원천 client, 설정 소비, DI, 명령 병합, 주기 알림 조회와 표시 로직을 제거했다. 기존 LiveQuery 제안의 Chzzk adapter는 구현하지 않는다. 외부 Stream API 직렬화와 저장된 멤버 식별자는 보존하며 별도 X Spaces 알림·YouTube canonical writer를 유지한다. 승인된 기본 조회 scope 변경은 별도 LiveQuery 결정이 소유한다. 독립 리뷰·로컬 회귀·필수 원격 CI를 통과하고 후속 명시 승인으로 중앙 API/worker에 반영하여 revision·health를 확인했다. 운영 secret/DB/queue 정리는 하지 않았다.",
   "sources": ["docs/current/plans/2026-09-26-youtube-only-stream-providers.md#작업"],
   "evidence": [
     "docs/current/plans/2026-09-26-youtube-only-stream-providers.md",
-    "docs/review/live-query-read-model-20260926.md"
+    "docs/review/live-query-read-model-20260926.md",
+    "docs/review/live-query-release-20260926.md"
   ],
   "implementation": [
     "hololive/hololive-api/internal/planes/bot/internal/app/bootstrap/services_modules.go",
