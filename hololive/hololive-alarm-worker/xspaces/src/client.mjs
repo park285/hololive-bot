@@ -37,8 +37,9 @@ export function boundedFetch(fetchImpl) {
     const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const api = url.origin === 'https://x.com' && [fleetPath, spacePath].includes(url.pathname);
     const asset = url.origin === 'https://abs.twimg.com' && /^\/responsive-web\/client-web\/[^/]+\.js$/.test(url.pathname);
-    const home = url.href === 'https://x.com/home';
-    if (method !== 'GET' || url.username || url.password || (!api && !asset && !home)) {
+    // 로그아웃 상태의 /home은 로그인 화면으로 redirect되므로 요청 ID 라이브러리는 /i/jf/ 앱 셸만 읽는다.
+    const appShell = url.href === 'https://x.com/i/jf/';
+    if (method !== 'GET' || url.username || url.password || (!api && !asset && !appShell)) {
       throw new CollectionError('forbidden_endpoint');
     }
     const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
