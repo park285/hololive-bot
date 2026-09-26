@@ -1,4 +1,4 @@
-package dispatchrun
+package workerapp
 
 import (
 	"context"
@@ -15,12 +15,90 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-alarm-worker/internal/egress"
+	"github.com/kapu/hololive-alarm-worker/internal/service/dispatchrun"
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/template"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
+
+const (
+	testAlarmRoomID    = "room-1"
+	testAlarmChannelID = "UCtest"
+)
+
+// seeMoreFoldConsumer는 한 배치 뒤 idle에서 끝내며 예상하지 않은 실패 경로는 기록하고 중단한다.
+type seeMoreFoldConsumer struct {
+	batch      []domain.AlarmQueueEnvelope
+	dispatched int
+	failures   []string
+	cancel     context.CancelFunc
+}
+
+func (c *seeMoreFoldConsumer) DrainBatch(context.Context, int) ([]domain.AlarmQueueEnvelope, error) {
+	batch := c.batch
+
+	c.batch = nil
+
+	return batch, nil
+}
+
+func (*seeMoreFoldConsumer) MarkSending(context.Context, []domain.AlarmQueueEnvelope) error {
+	return nil
+}
+
+func (c *seeMoreFoldConsumer) MarkDispatched(_ context.Context, envelopes []domain.AlarmQueueEnvelope) error {
+	c.dispatched += len(envelopes)
+	return nil
+}
+
+func (*seeMoreFoldConsumer) ReleaseClaimKeys(context.Context, []string) error {
+	return nil
+}
+
+func (c *seeMoreFoldConsumer) unexpected(route string) error {
+	c.failures = append(c.failures, route)
+	c.cancel()
+
+	return fmt.Errorf("unexpected dispatch route: %s", route)
+}
+
+func (c *seeMoreFoldConsumer) RouteFailures(context.Context, []domain.AlarmQueueEnvelope, []domain.AlarmQueueEnvelope) error {
+	return c.unexpected("retry or dead letter")
+}
+
+func (c *seeMoreFoldConsumer) RouteSendingFailures(context.Context, []domain.AlarmQueueEnvelope, []domain.AlarmQueueEnvelope) error {
+	return c.unexpected("sending retry or dead letter")
+}
+
+func (c *seeMoreFoldConsumer) RequeuePreSend(context.Context, []domain.AlarmQueueEnvelope) error {
+	return c.unexpected("pre-send requeue")
+}
+
+func (c *seeMoreFoldConsumer) Requeue(context.Context, []domain.AlarmQueueEnvelope) error {
+	return c.unexpected("requeue")
+}
+
+func (c *seeMoreFoldConsumer) Quarantine(context.Context, []domain.AlarmQueueEnvelope, error) error {
+	return c.unexpected("quarantine")
+}
+
+func (*seeMoreFoldConsumer) Wait(context.Context) bool { return false }
+
+func (*seeMoreFoldConsumer) Reset() {}
+
+func alarmDispatchRunnerTestEnvelope(roomID string, retry *domain.AlarmQueueRetryMetadata) domain.AlarmQueueEnvelope {
+	return domain.AlarmQueueEnvelope{
+		Notification: domain.AlarmNotification{
+			AlarmType: domain.AlarmTypeLive,
+			RoomID:    roomID,
+			Channel:   &domain.Channel{Name: "Test Member"},
+			Stream:    &domain.Stream{ID: "stream-1", Title: "Test Stream"},
+		},
+		Retry: retry,
+	}
+}
 
 // seeMoreFoldIrisClient는 실제 egress.IrisMessageSender 뒤의 Kakao 텍스트 lane 최종 payload만 기록한다.
 type seeMoreFoldIrisClient struct {
@@ -65,16 +143,17 @@ func newSeeMoreFoldRendering(t *testing.T, overrides map[domain.TemplateKey]stri
 func runSeeMoreFoldFinalPayload(t *testing.T, renderer *template.Renderer, store *messagestrings.Store, fold bool, envelopes ...domain.AlarmQueueEnvelope) string {
 	t.Helper()
 
-	client := &seeMoreFoldIrisClient{}
-	consumer := &alarmDispatchRunnerTestConsumer{batches: [][]domain.AlarmQueueEnvelope{envelopes}}
-	runner := NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, nil,
-		RunnerConfig{MaxBatch: len(envelopes), SeeMoreFold: fold}, slog.New(slog.DiscardHandler))
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 
-	processed, err := runner.runOnce(t.Context())
-	require.NoError(t, err)
-	require.True(t, processed)
-	require.Empty(t, consumer.quarantined)
-	require.Len(t, consumer.markDispatched, len(envelopes))
+	client := &seeMoreFoldIrisClient{}
+	consumer := &seeMoreFoldConsumer{batch: envelopes, cancel: cancel}
+	runner := dispatchrun.NewRunner(consumer, egress.NewIrisMessageSender(client), renderer, store, consumer,
+		dispatchrun.RunnerConfig{MaxBatch: len(envelopes), SeeMoreFold: fold}, slog.New(slog.DiscardHandler))
+
+	require.NoError(t, runner.Start(ctx))
+	require.Empty(t, consumer.failures)
+	require.Equal(t, len(envelopes), consumer.dispatched)
 	require.Len(t, client.texts, 1, "grouped envelopes must leave as one Kakao text message")
 
 	return client.texts[0]

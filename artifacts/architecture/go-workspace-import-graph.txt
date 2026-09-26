@@ -51,6 +51,7 @@ github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/template
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/xspaces
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping
+github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/iris-client-go/v2/iris
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/v2/pkg/envutil
 github.com/kapu/hololive-alarm-worker/internal/app/workerapp -> github.com/park285/shared-go/v2/pkg/panicguard
