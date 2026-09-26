@@ -30,6 +30,23 @@ export class CollectionError extends Error {
   }
 }
 
+// 라이브러리가 정한 오류 이름은 임의 문자열일 수 있으므로 JavaScript 내장 종류만 진단에 남긴다.
+const builtinErrorNames = new Set(['Error', 'TypeError', 'SyntaxError', 'RangeError', 'ReferenceError', 'AbortError', 'TimeoutError']);
+
+/**
+ * helper 실패를 stdout 결과 문서로 바꾼다. 예외 메시지·stack·요청 객체에는 인증 정보가 포함될 수 있으므로
+ * 고정 오류 코드, 실패 단계, 내장 오류 종류와 Node 오류 코드 형식의 값만 남긴다.
+ */
+export function failureReport(error, stage) {
+  if (error instanceof CollectionError) {
+    return { error: error.code, stage, cooldown_seconds: error.cooldownSeconds, http_status: error.httpStatus, api_codes: error.apiCodes };
+  }
+  const errorName = builtinErrorNames.has(error?.name) ? error.name : 'other';
+  // fetch 실패는 TypeError 하나로 감싸이므로 DNS·연결 원인은 cause의 코드에서만 구분된다.
+  const errorCode = [error?.code, error?.cause?.code].find((value) => typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(value)) ?? '';
+  return { error: 'collector_failed', stage, error_name: errorName, error_code: errorCode, cooldown_seconds: 0, http_status: 0, api_codes: [] };
+}
+
 /** 요청 ID 라이브러리의 통신까지 공개 웹 자료와 두 읽기 경로로 한정한다. */
 export function boundedFetch(fetchImpl) {
   return async (input, init = {}) => {
