@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { boundedFetch, collectSpaces, validateCookies } from './client.mjs';
+import { boundedFetch, collectSpaces, CollectionError, failureReport, validateCookies } from './client.mjs';
 
 const cookies = { auth_token: 'a'.repeat(40), ct0: 'b'.repeat(64) };
 const transaction = { generateTransactionId: async () => 'test-transaction' };
@@ -118,4 +118,23 @@ test('고정된 요청 ID 라이브러리의 앱 셸 조회만 인증 없이 허
 test('redirect와 과도한 응답을 거부한다', async () => {
   await assert.rejects(boundedFetch(async () => new Response('redirect', { status: 302 }))('https://x.com/i/jf/'), { code: 'redirect' });
   await assert.rejects(boundedFetch(async () => new Response('x'.repeat(2 * 1024 * 1024 + 1)))('https://x.com/i/jf/'), { code: 'response_too_large' });
+});
+
+test('실패 보고는 코드·단계·내장 오류 종류만 남기고 예외 원문을 버린다', () => {
+  const secret = cookies.auth_token;
+  assert.deepEqual(failureReport(new CollectionError('redirect'), 'app_shell'), { error: 'redirect', stage: 'app_shell', cooldown_seconds: 0, http_status: 0, api_codes: [] });
+
+  const fetchFailure = new TypeError(`fetch failed ${secret}`, { cause: Object.assign(new Error(secret), { code: 'ENOTFOUND' }) });
+  const report = failureReport(fetchFailure, 'app_shell');
+  assert.deepEqual(report, { error: 'collector_failed', stage: 'app_shell', error_name: 'TypeError', error_code: 'ENOTFOUND', cooldown_seconds: 0, http_status: 0, api_codes: [] });
+
+  class LibraryError extends Error {}
+  const named = Object.assign(new LibraryError(secret), { name: secret, code: `x-${secret}` });
+  for (const [error, stage] of [[named, 'transaction'], [secret, 'input'], [null, 'collect']]) {
+    const fallback = failureReport(error, stage);
+    assert.equal(fallback.error_name, 'other');
+    assert.equal(fallback.error_code, '');
+    assert.ok(!JSON.stringify(fallback).includes(secret));
+  }
+  assert.ok(!JSON.stringify(report).includes(secret));
 });
