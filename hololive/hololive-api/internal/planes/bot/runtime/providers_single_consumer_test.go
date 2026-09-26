@@ -23,14 +23,12 @@ package botruntime
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	appbootstrap "github.com/kapu/hololive-api/internal/planes/bot/internal/app/bootstrap"
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	dbmocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
@@ -38,20 +36,6 @@ import (
 
 func TestSingleConsumerProviders_Smoke(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
-
-	t.Run("stream clients", func(t *testing.T) {
-		chzzkClient := appbootstrap.ProvideChzzkClient(http.DefaultClient, settings.ChzzkConfig{
-			ClientID:     "cid",
-			ClientSecret: "sec",
-		}, logger)
-		require.NotNil(t, chzzkClient)
-
-		twitchClient := appbootstrap.ProvideTwitchClient(&settings.TwitchConfig{
-			ClientID:     "tid",
-			ClientSecret: "tsec",
-		}, logger)
-		require.NotNil(t, twitchClient)
-	})
 
 	t.Run("alarm repository", func(t *testing.T) {
 		repository := appbootstrap.ProvideAlarmRepository(&dbmocks.Client{}, logger)
@@ -62,8 +46,6 @@ func TestSingleConsumerProviders_Smoke(t *testing.T) {
 		service, err := appbootstrap.ProvideAlarmService(
 			[]int{10, 3},
 			cachemocks.NewStrictClient(),
-			nil,
-			nil,
 			nil,
 			&stubMemberDataProvider{},
 			&alarm.Repository{},

@@ -56,6 +56,14 @@ bot/admin/llm plane과 YouTube Community consume plane을 한 프로세스에서
 - Proactive alarm dispatch queue consumption owned by `alarm-worker`
 - Proactive Iris/Kakao notification egress owned by `alarm-worker`
 
+## Live query behavior
+
+- `!라이브`는 기존 bot DB pool의 단일 snapshot으로 확정 방송과 수집 coverage를 읽습니다. 무인자는 우이를 포함한 활성 등록 Hololive 채널, 멤버 지정은 해석된 채널을 직접 조회합니다. freshness는 대상 주기의 두 배에 30초를 더하되 최대 5분이며 DB 조회 예산은 1초입니다. `DEC-20260926-hololive-live-query-read-model`과 [실행 계획](../plans/2026-09-26-live-query-read-model.md)이 소유합니다. 운영 migration·배포는 별도 승인과 coverage 확인 뒤 수행합니다.
+- fresh positive만 표시하며 미수집·만료·종료 확인 중·저장 상태 불일치는 조회 미완료로 표시합니다. fresh 목록 0건을 방송 없음으로 바꾸지 않습니다. 전체 scope가 확인된 빈 결과만 방송 없음이며 표시 한도는 100개입니다. `!예정`·`!일정`과 Stream HTTP API는 기존 Holodex 원천과 조직·기간·5분 캐시·응답 계약을 유지합니다.
+- Holodex live/upcoming 목록은 Service 인스턴스 안에서 같은 cache key의 미스를 조정합니다. owner가 조회·저장을 마치면 대기 caller가 캐시를 다시 읽습니다. caller의 취소/기한을 유지하고 결과 포인터나 오류를 공유하지 않습니다. cache write 실패·원천 실패·서로 다른 인스턴스의 요청까지 한 번으로 합친다는 보장은 없습니다.
+- `DEC-20260926-youtube-only-stream-providers`에 따라 `!라이브`는 YouTube만 조회합니다. Chzzk·Twitch client/설정/DI와 명령 내 플랫폼 병합은 제거했습니다. YouTube 조회 실패는 기존 조회 실패 응답으로 전달합니다. 멤버 저장 데이터와 프로필의 정적 링크, Stream HTTP JSON 필드는 보존하며 해당 필드가 제공자 지원을 뜻하지는 않습니다.
+- 새로운 자동 재시도·DB 실패 시 원천 전환·부분 결과 fallback은 추가하지 않습니다. 기존 org=all의 부분 캐시와 예약 retry 의미도 이번 cache-fill 개선에서는 변경하지 않습니다.
+
 ## Shorts observation processing
 
 - 쇼츠 알림 초기화는 `SHORT` watermark와 저장된 canonical 영상이 소유합니다. 비어 있지 않은 유효 목록은 `PARTIAL / GAP_UNRESOLVED`여도 최초 기준 목록으로 저장하며 알리지 않습니다. 빈 부분 목록은 초기화하지 않고, 검증된 complete-empty 목록은 초기화합니다.

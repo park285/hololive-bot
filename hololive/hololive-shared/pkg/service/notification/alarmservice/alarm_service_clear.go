@@ -114,14 +114,4 @@ func (as *AlarmService) cleanupClearedRoomAlarmChannel(ctx context.Context, room
 			slog.String("channel_id", channelID),
 		)
 	}
-
-	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
-		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
-			"sync platform alarm mapping after clear.failed",
-			"Failed to sync platform alarm mapping after clear",
-			syncErr,
-			privacylog.RoomIDAttr(roomID),
-			slog.String("channel_id", channelID),
-		)
-	}
 }

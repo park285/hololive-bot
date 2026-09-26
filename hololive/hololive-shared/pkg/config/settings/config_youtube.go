@@ -38,23 +38,3 @@ type IngestionConfig struct {
 	PhotoSyncEnabled                bool
 	CommunityShortsBigBangCutoverAt time.Time
 }
-
-type ChzzkConfig struct {
-	ClientID                  string
-	ClientSecret              string
-	MaxLivesPageSize          int
-	BatchLookupThreshold      int
-	MaxConcurrentStatusChecks int
-}
-
-type TwitchConfig struct {
-	ClientID           string
-	ClientSecret       string
-	BaseURL            string
-	AuthURL            string
-	Timeout            time.Duration
-	PollInterval       time.Duration
-	TokenRefreshSkew   time.Duration
-	MarkerTTL          time.Duration
-	MaxUsersPerRequest int
-}

@@ -9,19 +9,15 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 func ProvideAlarmService(
 	advanceMinutes []int,
 	cacheClient cache.Client,
 	holodexService *holodexprovider.Service,
-	chzzkClient *chzzk.Client,
-	twitchClient *twitch.Client,
 	memberData domain.MemberDataProvider,
 	alarmRepository *alarm.Repository,
 	logger *slog.Logger,
@@ -29,8 +25,6 @@ func ProvideAlarmService(
 	service, err := alarmservice.NewAlarmService(
 		cacheClient,
 		holodexService,
-		chzzkClient,
-		twitchClient,
 		memberData,
 		alarmRepository,
 		logger,

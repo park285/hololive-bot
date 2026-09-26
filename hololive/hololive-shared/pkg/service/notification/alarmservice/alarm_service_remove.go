@@ -73,7 +73,7 @@ func (as *AlarmService) removeAlarm(ctx context.Context, roomID, channelID, host
 		return false, fmt.Errorf("remove alarm cache mutation: %w", err)
 	}
 
-	as.afterRemoveAlarm(ctx, roomID, channelID, mutation)
+	as.logAlarmRemoved(roomID, channelID, mutation)
 
 	if as.alarmRepository != nil {
 		return true, nil
@@ -204,17 +204,7 @@ func (as *AlarmService) removeAlarmCacheMutation(ctx context.Context, roomID, ch
 	return removed, nil
 }
 
-func (as *AlarmService) afterRemoveAlarm(ctx context.Context, roomID, channelID string, mutation removeAlarmMutation) {
-	if syncErr := as.syncPlatformMappingForChannel(ctx, channelID); syncErr != nil && as.logger != nil {
-		sharedlogging.LogWarnWithErrorAttrs(ctx, as.logger,
-			"sync platform alarm mapping after remove.failed",
-			"Failed to sync platform alarm mapping after remove",
-			syncErr,
-			slog.String("channel_id", channelID),
-			privacylog.RoomIDAttr(roomID),
-		)
-	}
-
+func (as *AlarmService) logAlarmRemoved(roomID, channelID string, mutation removeAlarmMutation) {
 	if as.logger != nil {
 		as.logger.Info("Alarm removed",
 			privacylog.RoomIDAttr(roomID),

@@ -14,7 +14,6 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/internal/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/privacylog"
 	sharedalarm "github.com/kapu/hololive-shared/pkg/service/alarm"
@@ -240,7 +239,6 @@ func TestCacheAddAlarmMutationFailureLogsWrappedEvent(t *testing.T) {
 	memberDataFn := func() domain.MemberDataProvider { return as.memberData }
 
 	as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, logger)
-	as.platformMapper = platformmap.NewMapper(cacheMock, memberDataFn, logger)
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
 	mutation := addAlarmMutation{
@@ -483,31 +481,6 @@ type alarmBackgroundWarningCase struct {
 func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 	return []alarmBackgroundWarningCase{
 		{
-			name: "after_add_sync_platform_mapping",
-			run: func(ctx context.Context, as *AlarmService) {
-				as.afterAddAlarm(ctx, &domain.AddAlarmRequest{
-					RoomID:    testRoomID,
-					ChannelID: testChannelID,
-				}, domain.AlarmTypes{domain.AlarmTypeLive})
-			},
-			wantEvent:    "sync platform alarm mapping after add.failed",
-			wantMessage:  "Failed to sync platform alarm mapping after add",
-			wantErrorTyp: "wrapError",
-			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
-		},
-		{
-			name: "after_remove_sync_platform_mapping",
-			run: func(ctx context.Context, as *AlarmService) {
-				as.afterRemoveAlarm(ctx, testRoomID, testChannelID, removeAlarmMutation{
-					effectiveRemovalTypes: domain.AlarmTypes{domain.AlarmTypeLive},
-				})
-			},
-			wantEvent:    "sync platform alarm mapping after remove.failed",
-			wantMessage:  "Failed to sync platform alarm mapping after remove",
-			wantErrorTyp: "wrapError",
-			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
-		},
-		{
 			name: "clear_room_cleanup_channel_registry",
 			setup: func(cacheMock *cachemocks.Client) {
 				cacheMock.SRemFunc = func(context.Context, string, []string) (int64, error) {
@@ -522,16 +495,6 @@ func alarmBackgroundWarningCases() []alarmBackgroundWarningCase {
 			wantMessage:  "Failed to cleanup channel registry during room alarm clear",
 			wantErrorTyp: "wrapError",
 			wantErrorMsg: "cleanup channel registry: remove channel registry entry: srem failed",
-		},
-		{
-			name: "clear_room_sync_platform_mapping",
-			run: func(ctx context.Context, as *AlarmService) {
-				as.cleanupClearedRoomAlarmChannel(ctx, testRoomID, testChannelID)
-			},
-			wantEvent:    "sync platform alarm mapping after clear.failed",
-			wantMessage:  "Failed to sync platform alarm mapping after clear",
-			wantErrorTyp: "wrapError",
-			wantErrorMsg: "sync platform mapping for channel: member data provider not configured",
 		},
 	}
 }
@@ -557,7 +520,6 @@ func TestAlarmMutationBackgroundWarningsUseStructuredErrorAttrs(t *testing.T) {
 			memberDataFn := func() domain.MemberDataProvider { return as.memberData }
 
 			as.cacheState = alarmcache.NewState(cacheMock, memberDataFn, warnLogger)
-			as.platformMapper = platformmap.NewMapper(cacheMock, memberDataFn, warnLogger)
 
 			tt.run(ctx, as)
 
@@ -661,7 +623,6 @@ func TestAddAlarm_PartialCacheFailure_RebuildsFromRepository(t *testing.T) {
 	rebuildMemberDataFn := func() domain.MemberDataProvider { return as.memberData }
 
 	as.cacheState = alarmcache.NewState(cacheMock, rebuildMemberDataFn, discardLogger)
-	as.platformMapper = platformmap.NewMapper(cacheMock, rebuildMemberDataFn, discardLogger)
 	cacheMock.GetClientFunc = func() valkey.Client { return nil }
 
 	originalRebuild := rebuildSubscriberCacheFromRepository

@@ -36,13 +36,11 @@ import (
 	configsettings "github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 )
 
@@ -69,8 +67,6 @@ type Dependencies struct {
 	MemberRepository      *member.Repository
 	MemberCache           *member.Cache
 	Holodex               domain.StreamProvider
-	Chzzk                 *chzzk.Client
-	Twitch                *twitch.Client
 	Alarm                 domain.AlarmCRUD
 	Matcher               *matcher.Matcher
 	MembersData           domain.MemberDataProvider
@@ -109,8 +105,6 @@ type dataDependencies struct {
 
 type streamDependencies struct {
 	holodex     domain.StreamProvider
-	chzzk       *chzzk.Client
-	twitch      *twitch.Client
 	alarm       domain.AlarmCRUD
 	matcher     *matcher.Matcher
 	membersData domain.MemberDataProvider
@@ -178,8 +172,6 @@ func (d *Dependencies) streamDeps() streamDependencies {
 
 	return streamDependencies{
 		holodex:     d.Holodex,
-		chzzk:       d.Chzzk,
-		twitch:      d.Twitch,
 		alarm:       d.Alarm,
 		matcher:     d.Matcher,
 		membersData: d.MembersData,

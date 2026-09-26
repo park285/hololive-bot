@@ -14,7 +14,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-// Start는 3개 플랫폼 루프를 병렬 실행하고 context 취소 시 종료한다.
+// Start는 YouTube 조회와 캐시 복구 루프를 실행하고 context 취소 시 종료한다.
 func (s *RuntimeScheduler) Start(ctx context.Context) error {
 	if s == nil {
 		return errors.New("runtime scheduler is nil")
@@ -31,12 +31,6 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 		})
 	})
 	eg.Go(func() error {
-		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-chzzk", func() error {
-			return s.runLoop(egCtx, "chzzk", s.chzzkInterval, s.chzzkTimeout, true, s.runChzzkIteration)
-		})
-	})
-	s.startTwitchLoop(egCtx, eg)
-	eg.Go(func() error {
 		return panicguard.RunE(s.logger, panicguard.BackgroundTask, "alarm-scheduler-cache-recovery", func() error {
 			return s.runAlarmCacheRecoveryLoop(egCtx)
 		})
@@ -52,8 +46,6 @@ func (s *RuntimeScheduler) Start(ctx context.Context) error {
 
 	return nil
 }
-
-const runtimeSchedulerLoopNameTwitch = "twitch"
 
 func (s *RuntimeScheduler) runLoop(
 	ctx context.Context,
@@ -192,7 +184,7 @@ func (s *RuntimeScheduler) runYouTubeIteration(ctx context.Context) error {
 		return fmt.Errorf("run youtube iteration: check notifications: %w", err)
 	}
 
-	if err := s.dispatchNotifications(ctx, "youtube", notifications); err != nil {
+	if err := s.dispatchNotifications(ctx, notifications); err != nil {
 		return fmt.Errorf("dispatch notifications: %w", err)
 	}
 
@@ -214,35 +206,8 @@ func (s *RuntimeScheduler) syncYouTubeTargetMinutes() {
 	}
 }
 
-func (s *RuntimeScheduler) runChzzkIteration(ctx context.Context) error {
-	notifications, err := s.chzzkChecker.Check(ctx)
-	if err != nil {
-		return fmt.Errorf("run chzzk iteration: check notifications: %w", err)
-	}
-
-	if err := s.dispatchNotifications(ctx, "chzzk", notifications); err != nil {
-		return fmt.Errorf("dispatch notifications: %w", err)
-	}
-
-	return nil
-}
-
-func (s *RuntimeScheduler) runTwitchIteration(ctx context.Context) error {
-	notifications, err := s.twitchChecker.Check(ctx)
-	if err != nil {
-		return fmt.Errorf("run twitch iteration: check notifications: %w", err)
-	}
-
-	if err := s.dispatchNotifications(ctx, "twitch", notifications); err != nil {
-		return fmt.Errorf("dispatch notifications: %w", err)
-	}
-
-	return nil
-}
-
 func (s *RuntimeScheduler) dispatchNotifications(
 	ctx context.Context,
-	loopName string,
 	notifications []*domain.AlarmNotification,
 ) error {
 	if len(notifications) == 0 {
@@ -254,7 +219,7 @@ func (s *RuntimeScheduler) dispatchNotifications(
 		attrs := make([]slog.Attr, 0, 5)
 
 		attrs = append(attrs,
-			slog.String("loop", loopName),
+			slog.String("loop", "youtube"),
 			slog.Int("notifications", len(notifications)),
 			slog.Int("sent", sendResult.Sent),
 			slog.Int("skipped", sendResult.Skipped),
@@ -267,7 +232,7 @@ func (s *RuntimeScheduler) dispatchNotifications(
 	}
 
 	sharedlog.Info(ctx, s.logger, EventAlarmNotificationDispatchSucceeded, "alarm notifications dispatched",
-		slog.String("loop", loopName),
+		slog.String("loop", "youtube"),
 		slog.Int("notifications", len(notifications)),
 		slog.Int("sent", sendResult.Sent),
 		slog.Int("skipped", sendResult.Skipped),

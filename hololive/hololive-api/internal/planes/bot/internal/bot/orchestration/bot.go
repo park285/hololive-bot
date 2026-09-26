@@ -42,11 +42,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/kakaoroom"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 type streamRuntime interface {
@@ -67,8 +65,6 @@ type Bot struct {
 	cache                 cache.Client
 	postgres              database.Client
 	holodex               streamRuntime
-	chzzk                 *chzzk.Client
-	twitch                *twitch.Client
 	alarm                 domain.AlarmCRUD
 	matcher               *matcher.Matcher
 	commandRegistry       *command.Registry
@@ -111,8 +107,6 @@ func NewBot(deps *Dependencies) (*Bot, error) {
 		cache:                data.cache,
 		postgres:             data.postgres,
 		holodex:              holodexRuntime,
-		chzzk:                stream.chzzk,
-		twitch:               stream.twitch,
 		alarm:                stream.alarm,
 		matcher:              stream.matcher,
 		acl:                  support.acl,

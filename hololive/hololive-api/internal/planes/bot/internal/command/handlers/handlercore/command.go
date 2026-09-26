@@ -29,11 +29,11 @@ import (
 	"github.com/park285/iris-client-go/v2/iris"
 
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/livequery"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/service/matcher"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 )
 
 type Command interface {
@@ -123,7 +123,7 @@ type BroadcastThumbnailDownloader interface {
 
 type Dependencies struct {
 	Holodex             domain.StreamProvider
-	Chzzk               *chzzk.Client
+	LiveQuery           livequery.Reader
 	Cache               cache.Client
 	Alarm               domain.AlarmCRUD
 	Matcher             *matcher.Matcher

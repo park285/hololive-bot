@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/internal/service/notification/alarmcache"
-	"github.com/kapu/hololive-shared/internal/service/notification/platformmap"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	sharedchecker "github.com/kapu/hololive-shared/pkg/service/alarm/checker"
 	dedup "github.com/kapu/hololive-shared/pkg/service/alarm/dedup"
@@ -105,7 +104,6 @@ func newTestAlarmService(t *testing.T) *AlarmService {
 	memberDataFn := func() domain.MemberDataProvider { return service.memberData }
 
 	service.cacheState = alarmcache.NewState(cacheClient, memberDataFn, logger)
-	service.platformMapper = platformmap.NewMapper(cacheClient, memberDataFn, logger)
 
 	return service
 }

@@ -43,12 +43,10 @@ import (
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 )
 
 func testBootstrapGuardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
@@ -148,8 +146,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	memberRepository := &member.Repository{}
 	memberCache := &member.Cache{}
 	memberData := &stubMemberDataProvider{}
-	chzzkClient := &chzzk.Client{}
-	twitchClient := &twitch.Client{}
 	matcherService := &matcher.Matcher{}
 	ytStack := &providers.YouTubeStack{}
 	activityLogger := &activity.Logger{}
@@ -168,7 +164,7 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 			HolodexService: &holodexprovider.Service{},
 		},
 		&appbootstrap.AlarmYouTubeStackComponents{
-			AlarmMode:       &appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, ChzzkClient: chzzkClient, TwitchClient: twitchClient, MemberDataSource: memberData},
+			AlarmMode:       &appbootstrap.AlarmModeComponents{AlarmCRUD: testAlarmCRUD{}, MemberDataSource: memberData},
 			Matcher:         matcherService,
 			YouTubeStack:    ytStack,
 			ActivityLogger:  activityLogger,
@@ -194,8 +190,6 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Same(t, memberRepository, modules.Data.MemberRepository)
 	assert.Same(t, memberCache, modules.Data.MemberCache)
 	assert.Same(t, memberData, modules.Data.MembersData)
-	assert.Same(t, chzzkClient, modules.Stream.ChzzkClient)
-	assert.Same(t, twitchClient, modules.Stream.TwitchClient)
 	assert.Same(t, matcherService, modules.Stream.MemberMatch)
 	assert.Same(t, ytStack, modules.Stream.YTStack)
 	assert.Same(t, activityLogger, modules.Support.ActivityLogger)
@@ -210,8 +204,6 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 
 	memberData := &stubMemberDataProvider{}
 	deps, err := initAlarmDependencies(
-		configsettings.ChzzkConfig{},
-		&configsettings.TwitchConfig{},
 		filepath.Join(t.TempDir(), "settings.json"),
 		[]int{5},
 		false,
@@ -225,8 +217,6 @@ func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
 	require.NotNil(t, deps)
 	t.Cleanup(func() { require.NoError(t, deps.AlarmService.Close(context.WithoutCancel(t.Context()))) })
 	assert.Same(t, memberData, deps.MemberDataProvider)
-	assert.NotNil(t, deps.ChzzkClient)
-	assert.NotNil(t, deps.TwitchClient)
 	assert.NotNil(t, deps.AlarmService)
 }
 
@@ -251,6 +241,4 @@ func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, components.AlarmService.Close(context.WithoutCancel(t.Context()))) })
 	assert.Same(t, memberData, components.MemberDataSource)
 	assert.NotNil(t, components.AlarmService)
-	assert.NotNil(t, components.ChzzkClient)
-	assert.NotNil(t, components.TwitchClient)
 }

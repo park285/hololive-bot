@@ -38,8 +38,6 @@ func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {
 	t.Parallel()
 
 	deps, err := InitAlarmDependencies(
-		settings.ChzzkConfig{},
-		&settings.TwitchConfig{},
 		filepath.Join(t.TempDir(), "settings.json"),
 		[]int{10, 5, 1},
 		false,
@@ -60,8 +58,6 @@ func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
 	memberProvider := &membermocks.DataProvider{}
 
 	deps, err := InitAlarmDependencies(
-		settings.ChzzkConfig{},
-		&settings.TwitchConfig{},
 		filepath.Join(t.TempDir(), "settings.json"),
 		[]int{10, 5, 1},
 		false,
@@ -76,8 +72,6 @@ func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
 	require.NotNil(t, deps)
 	require.NotNil(t, deps.AlarmService)
 	assert.Same(t, memberProvider, deps.MemberDataProvider)
-	assert.NotNil(t, deps.ChzzkClient)
-	assert.NotNil(t, deps.TwitchClient)
 }
 
 func TestInitAlarmModeComponentsWrapsAlarmServiceAsCRUD(t *testing.T) {
@@ -106,6 +100,4 @@ func TestInitAlarmModeComponentsWrapsAlarmServiceAsCRUD(t *testing.T) {
 	require.NotNil(t, components.AlarmService)
 	assert.Same(t, components.AlarmService, components.AlarmCRUD)
 	assert.Same(t, memberProvider, components.MemberDataSource)
-	assert.NotNil(t, components.ChzzkClient)
-	assert.NotNil(t, components.TwitchClient)
 }

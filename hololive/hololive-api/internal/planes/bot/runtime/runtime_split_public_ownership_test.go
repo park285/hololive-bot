@@ -25,8 +25,6 @@ func TestNoLegacyRuntimeSplitInternalImportsRemain(t *testing.T) {
 	forbiddenImports := map[string]string{
 		legacyRoot + "service/acl":          sharedServiceRoot + "acl",
 		legacyRoot + "service/activity":     sharedServiceRoot + "activity",
-		legacyRoot + "service/chzzk":        sharedServiceRoot + "chzzk",
-		legacyRoot + "service/twitch":       sharedServiceRoot + "twitch",
 		legacyRoot + "service/notification": sharedServiceRoot + "notification",
 		legacyRoot + "errors":               "github.com/kapu/hololive-shared/pkg/apperrors",
 	}

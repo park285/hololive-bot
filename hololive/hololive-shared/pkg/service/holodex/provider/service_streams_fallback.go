@@ -20,8 +20,27 @@ type streamFetchState struct {
 }
 
 func (h *Service) getStreamsByOrgWithFallback(ctx context.Context, plan *streamFetchPlan) ([]*domain.Stream, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("get streams: %w", err)
+	}
+
 	if cached, found := getCachedStreamsByOrg(ctx, plan); found {
 		return cached, nil
+	}
+
+	cacheKey := plan.cacheKey()
+	if err := h.streamCacheFills.acquire(ctx, cacheKey); err != nil {
+		return nil, fmt.Errorf("acquire stream cache fill: %w", err)
+	}
+
+	defer h.streamCacheFills.release(cacheKey)
+
+	if cached, found := getCachedStreamsByOrg(ctx, plan); found {
+		return cached, nil
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("fetch streams: %w", err)
 	}
 
 	state := newStreamFetchState()

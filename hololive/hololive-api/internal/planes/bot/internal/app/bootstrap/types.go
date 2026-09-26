@@ -19,14 +19,12 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 	providers "github.com/kapu/hololive-shared/pkg/providers"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	"github.com/kapu/hololive-shared/pkg/service/chzzk"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/twitch"
 	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
@@ -49,16 +47,12 @@ type IrisRoomLister interface {
 type AlarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
 	AlarmService     *alarmservice.AlarmService
-	ChzzkClient      *chzzk.Client
-	TwitchClient     *twitch.Client
 	MemberDataSource domain.MemberDataProvider
 }
 
 type AlarmDependencies struct {
 	AlarmService       *alarmservice.AlarmService
 	MemberDataProvider domain.MemberDataProvider
-	ChzzkClient        *chzzk.Client
-	TwitchClient       *twitch.Client
 }
 
 type ScraperHolodexFoundation struct {
@@ -100,12 +94,10 @@ type BotDataModule struct {
 }
 
 type BotStreamModule struct {
-	Holodex      *holodexprovider.Service
-	ChzzkClient  *chzzk.Client
-	TwitchClient *twitch.Client
-	Alarm        domain.AlarmCRUD
-	MemberMatch  *matcher.Matcher
-	YTStack      *providers.YouTubeStack
+	Holodex     *holodexprovider.Service
+	Alarm       domain.AlarmCRUD
+	MemberMatch *matcher.Matcher
+	YTStack     *providers.YouTubeStack
 }
 
 type BotSupportModule struct {

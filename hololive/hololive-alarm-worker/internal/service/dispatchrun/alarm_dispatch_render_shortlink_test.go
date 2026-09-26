@@ -31,7 +31,7 @@ func TestBuildAlarmDispatchGroupViewUsesShortLinksForYouTube(t *testing.T) {
 	assert.Equal(t, "https://go.example.com/l/abcdefghijk", view.Entries[1].URL)
 }
 
-func TestBuildAlarmDispatchGroupViewPreservesDirectPlatformLinks(t *testing.T) {
+func TestBuildAlarmDispatchGroupViewOmitsRetiredPlatformLinks(t *testing.T) {
 	t.Parallel()
 
 	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
@@ -48,7 +48,7 @@ func TestBuildAlarmDispatchGroupViewPreservesDirectPlatformLinks(t *testing.T) {
 	}, builder)
 
 	require.Len(t, view.Entries, 1)
-	assert.Equal(t, testTwitchLiveURL, view.Entries[0].URL)
+	assert.Empty(t, view.Entries[0].URL)
 }
 
 func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
@@ -67,7 +67,7 @@ func TestBuildAlarmDispatchGroupViewFallsBackForInvalidVideoID(t *testing.T) {
 	assert.Equal(t, domain.YouTubeWatchURL("invalid"), view.Entries[0].URL)
 }
 
-func TestBuildAlarmDispatchGroupViewPreservesIntegratedSecondaryLink(t *testing.T) {
+func TestBuildAlarmDispatchGroupViewOmitsRetiredSimulcastLink(t *testing.T) {
 	t.Parallel()
 
 	builder, err := shortlinkservice.NewYouTubeBuilder("https://go.example.com")
@@ -84,7 +84,7 @@ func TestBuildAlarmDispatchGroupViewPreservesIntegratedSecondaryLink(t *testing.
 	}, builder)
 
 	require.Len(t, view.Entries, 1)
-	assert.Equal(t, "https://go.example.com/l/dQw4w9WgXcQ | https://chzzk.naver.com/live/channel", view.Entries[0].URL)
+	assert.Equal(t, "https://go.example.com/l/dQw4w9WgXcQ", view.Entries[0].URL)
 }
 
 func TestBuildAlarmDispatchItemViewKeepsSingleNotificationURL(t *testing.T) {

@@ -38,8 +38,6 @@ type Config struct {
 	Holodex      HolodexConfig
 	YouTube      YouTubeConfig
 	Ingestion    IngestionConfig
-	Chzzk        ChzzkConfig
-	Twitch       TwitchConfig
 	Valkey       ValkeyConfig
 	Postgres     PostgresConfig
 	Notification NotificationConfig
@@ -294,34 +292,6 @@ func loadYouTubeConfig() (YouTubeConfig, error) {
 			BucketBase: sharedenv.String("YOUTUBE_DISTRIBUTED_RATELIMIT_BUCKET_BASE", d.DistributedRateLimit.BucketBase),
 		},
 	}, nil
-}
-
-func loadChzzkConfig() ChzzkConfig {
-	d := DefaultChzzkOperationalConfig()
-
-	return ChzzkConfig{
-		ClientID:                  sharedenv.String("CHZZK_CLIENT_ID", ""),
-		ClientSecret:              sharedenv.String("CHZZK_CLIENT_SECRET", ""),
-		MaxLivesPageSize:          sharedenv.Int("CHZZK_MAX_LIVES_PAGE_SIZE", d.MaxLivesPageSize),
-		BatchLookupThreshold:      sharedenv.Int("CHZZK_BATCH_LOOKUP_THRESHOLD", d.BatchLookupThreshold),
-		MaxConcurrentStatusChecks: sharedenv.Int("CHZZK_MAX_CONCURRENT_STATUS_CHECKS", d.MaxConcurrentStatusChecks),
-	}
-}
-
-func loadTwitchConfig() TwitchConfig {
-	d := DefaultTwitchOperationalConfig()
-
-	return TwitchConfig{
-		ClientID:           sharedenv.String("TWITCH_CLIENT_ID", ""),
-		ClientSecret:       sharedenv.String("TWITCH_CLIENT_SECRET", ""),
-		BaseURL:            sharedenv.String("TWITCH_BASE_URL", d.BaseURL),
-		AuthURL:            sharedenv.String("TWITCH_AUTH_URL", d.AuthURL),
-		Timeout:            time.Duration(sharedenv.Int("TWITCH_TIMEOUT_SECONDS", int(d.Timeout/time.Second))) * time.Second,
-		PollInterval:       time.Duration(sharedenv.Int("TWITCH_POLL_INTERVAL_SECONDS", int(d.PollInterval/time.Second))) * time.Second,
-		TokenRefreshSkew:   time.Duration(sharedenv.Int("TWITCH_TOKEN_REFRESH_SKEW_SECONDS", int(d.TokenRefreshSkew/time.Second))) * time.Second,
-		MarkerTTL:          time.Duration(sharedenv.Int("TWITCH_MARKER_TTL_HOURS", int(d.MarkerTTL/time.Hour))) * time.Hour,
-		MaxUsersPerRequest: sharedenv.Int("TWITCH_MAX_USERS_PER_REQUEST", d.MaxUsersPerRequest),
-	}
 }
 
 func loadOfficialScheduleConfig() OfficialScheduleConfig {

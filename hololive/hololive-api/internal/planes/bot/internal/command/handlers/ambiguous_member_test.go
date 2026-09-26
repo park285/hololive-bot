@@ -109,7 +109,7 @@ func TestLiveCommand_Execute_AmbiguousMember_SendsSameMessageAsAlarm(t *testing.
 	)
 
 	deps := &handlercore.Dependencies{
-		Holodex:   &liveStreamProviderStub{},
+		LiveQuery: &liveQueryStub{},
 		Matcher:   newAmbiguousMatcher(),
 		Formatter: formatter.NewResponseFormatter("!", nil),
 		SendMessage: func(_ context.Context, _, message string) error {
