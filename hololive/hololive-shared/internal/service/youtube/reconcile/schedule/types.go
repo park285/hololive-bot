@@ -39,7 +39,6 @@ type Evidence struct {
 }
 
 type State struct {
-	Items    map[string]Item
 	Sessions map[string]Session
 }
 
@@ -65,14 +64,6 @@ func ItemIdentity(provider contract.Provider, item *Item) string {
 
 func (s *State) clone() State {
 	cloned := *s
-
-	cloned.Items = make(map[string]Item, len(s.Items))
-
-	for key := range s.Items {
-		item := s.Items[key]
-
-		cloned.Items[key] = item.clone()
-	}
 
 	cloned.Sessions = make(map[string]Session, len(s.Sessions))
 	for key := range s.Sessions {

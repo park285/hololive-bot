@@ -240,6 +240,10 @@ services:
       - "track_io_timing=on"
       - "-c"
       - "track_wal_io_timing=on"
+      # 기본 10min에서는 대부분의 autovacuum이 로그에 남지 않는다. 실행별 WAL/FPI·not-yet-removable·소요시간을
+      # Loki로 남기려고 10초 이상 걸린 실행만 기록한다. compose와 drift가 생기므로 ALTER SYSTEM으로 바꾸지 않는다.
+      - "-c"
+      - "log_autovacuum_min_duration=10s"
       - "-c"
       - "shared_buffers=512MB"
       - "-c"

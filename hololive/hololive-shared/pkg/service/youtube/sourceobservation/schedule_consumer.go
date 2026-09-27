@@ -24,7 +24,7 @@ func (c *Consumer) reconcileSchedule(
 		return ReconcileResult{}, fmt.Errorf("lock schedule subject: %w", lockErr)
 	}
 
-	state, err := loadScheduleState(ctx, tx, evidence.GroupKey, evidence.Items)
+	state, err := loadScheduleState(ctx, tx, evidence.Items)
 	if err != nil {
 		return ReconcileResult{}, fmt.Errorf("load schedule state: %w", err)
 	}

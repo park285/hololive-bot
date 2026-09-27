@@ -841,13 +841,8 @@ func TestACLService_AddRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	count, err := store.CountRooms(t.Context(), testRoomX, listTypeWhitelist)
-	if err != nil {
-		t.Fatalf("count rooms: %v", err)
-	}
-
-	if count != 0 {
-		t.Fatalf("expected room rollback in store, count=%d", count)
+	if store.hasRoom(testRoomX, listTypeWhitelist) {
+		t.Fatal("expected room rollback in store")
 	}
 }
 
@@ -890,13 +885,8 @@ func TestACLService_RemoveRoomRollsBackStateOnCacheSyncError(t *testing.T) {
 		t.Fatalf("expected in-memory room rollback, got %v", rooms)
 	}
 
-	count, err := store.CountRooms(t.Context(), testRoomX, listTypeWhitelist)
-	if err != nil {
-		t.Fatalf("count rooms: %v", err)
-	}
-
-	if count != 1 {
-		t.Fatalf("expected room restored in store, count=%d", count)
+	if !store.hasRoom(testRoomX, listTypeWhitelist) {
+		t.Fatal("expected room restored in store")
 	}
 }
 

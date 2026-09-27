@@ -82,7 +82,6 @@ Compose 설정과 런타임 readiness/health smoke test 스크립트입니다.
 수동 적용용 PostgreSQL 유지보수 SQL입니다.
 
 - `hololive_msa_hot_path_observability.sql`
-- `pg18_db_usage_optional_concurrent_indexes.sql`
 
 ## 9. ops/
 Valkey self-heal 및 PostgreSQL failover 운영 자산입니다.

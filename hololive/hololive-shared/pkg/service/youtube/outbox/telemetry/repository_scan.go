@@ -9,6 +9,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
+// scanTelemetryRow의 열 순서는 queries/repository_fetch_lock_pending.sql의 RETURNING 목록과 같아야 한다.
 func scanTelemetryRow(row pgx.CollectableRow) (domain.YouTubeNotificationDeliveryTelemetry, error) {
 	var (
 		item                                              domain.YouTubeNotificationDeliveryTelemetry

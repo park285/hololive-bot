@@ -24,7 +24,7 @@ func (c *Consumer) reconcileContent(
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("lock content subject: %w", lockErr)
 	}
 
-	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey)
+	state, err := loadContentState(ctx, tx, claimed.ObservationKind, claimed.SubjectKey, &evidence)
 	if err != nil {
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("load content state: %w", err)
 	}
@@ -34,7 +34,7 @@ func (c *Consumer) reconcileContent(
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("reduce: %w", err)
 	}
 
-	if persistErr := persistContentDecision(ctx, tx, c.writer, claimed, &decision); persistErr != nil {
+	if persistErr := persistContentDecision(ctx, tx, c.writer, claimed, &state, &decision); persistErr != nil {
 		return content.Decision{}, ReconcileResult{}, fmt.Errorf("persist content decision: %w", persistErr)
 	}
 

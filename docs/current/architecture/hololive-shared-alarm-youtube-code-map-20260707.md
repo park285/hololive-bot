@@ -886,6 +886,7 @@ YouTube watch URL
 - `SQLLockSession(c *sql.Conn)`은 단일 SQL connection을 받는다.
 - `releaseAdvisoryLock`은 `context.WithoutCancel(ctx)` 위에 release timeout을 씌워 cleanup이 parent cancel에 같이 취소되지 않게 한다.
 - `ledger.Record`는 migration 적용 기록을 남긴다.
+- `Manifest(fs.FS)`는 `manifest.txt`를 엄격하게 해석한다(필드 2개, 순서 오름차순, order·파일명 중복 거부). `hololive-dbtest` 하니스도 같은 함수를 써서 러너와 적용 목록 해석이 갈리지 않는다.
 
 `ledger.go` 주석의 핵심 계약:
 

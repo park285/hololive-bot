@@ -376,6 +376,17 @@ func cleanupCandidateGuard(
 			return "", fmt.Errorf("child identity: %w", err)
 		}
 
+		// FAILED는 provider 미전달이 확인된 상태라 ledger가 보존하지 않습니다(L-001).
+		// 계약은 FAILED owner 삭제에 같은 논리 키의 PENDING/SENDING sibling 부재만 요구하므로
+		// ledger 증거를 요구하면 FAILED 자식이 있는 outbox가 영구히 남습니다.
+		if children[i].Status == lifecycle.StatusFailed {
+			if activeSiblingOutsideOutbox(siblings, key, children[i].OutboxID) {
+				return CleanupGuardActiveLogicalGroup, nil
+			}
+
+			continue
+		}
+
 		record, ok := ledger[key]
 
 		if !ok {

@@ -26,6 +26,24 @@
 - 운영 조회가 선택하지 않는 source observation·queue 인덱스 네 개를 `DROP INDEX CONCURRENTLY`로 제거합니다(migration 213–216). 보존 기간과 보존 삭제·claim 경로는 유지합니다.
 - 로컬 통합 검사가 PostgreSQL·Valkey 일회용 컨테이너를 지울 때 이미지가 선언한 익명 volume도 함께 지웁니다.
 - 중앙 compose wrapper의 release version export 검사를 gate에 연결된 `ap-deploy-version_test.sh`로 옮깁니다. `compose-version-contract_test.sh`는 어떤 gate에도 연결되지 않은 채 2026-09-14 admin 통합 이후 Compose 문구 개수 불일치로 실패해 왔으므로 삭제합니다. 두 VERSION 읽기와 호출자 버전 불일치의 fail-closed는 계속 검사합니다.
+- YouTube 발송 정리에서 FAILED 자식에 존재하지 않는 ledger 증거를 요구해 terminal outbox가 영구 보류되던 문제를 수정합니다. 같은 논리 키의 PENDING/SENDING 자식은 계속 보류하고, SENT/QUARANTINED 자식의 ledger 검증도 유지합니다.
+- alarm dispatch 보존 삭제가 행 잠금을 기다리는 동안 DLQ 행이 retry로 재등록되면 삭제하지 않도록 상태·보존 시각을 다시 검사합니다. 수동 보존 삭제 스크립트에도 같은 조건을 적용합니다.
+- YouTube PENDING claim·stale SENDING 조회에 상태 리터럴을 명시해 generic plan에서도 부분 인덱스 조건을 증명하고, aggregate sync 후보는 EXISTS/NOT EXISTS로 조회합니다. 후보 집합·순서·배치 상한은 유지합니다.
+- 운영 호출자가 없는 `alarmread.Reader`, `ProvideAlarmReader`, `alarm.Repository.GetAllChannelIDs`와 대응 SQL을 제거합니다. YouTube plane의 projection transaction과 llm plane membernews의 직접 구독 조회는 유지합니다.
+- source observation claim 후보를 PENDING과 만료 PROCESSING 가지로 나눕니다. PENDING 가지는 partial index 순서로 LIMIT까지만 읽고, 만료 PROCESSING 가지는 만료 행만 정렬합니다. 활성 backlog 5만 행 fixture에서 후보 선택이 읽는 행이 약 9.8만에서 10행 안팎으로 줄고, claim 순서·`SKIP LOCKED`·replay epoch·shorts 순서 계약은 유지합니다. 한 claim은 최대 2×LIMIT행을 claim transaction이 끝날 때까지 잠급니다.
+- 발행 검증(fence·projection·target) 조회 세 개를 pgx 파이프라인 한 번으로 보냅니다. 잠금 순서와 판정 우선순위는 그대로이며 발행당 왕복이 두 번 줄어듭니다.
+- content 관측은 로드 값과 달라진 evidence clock만 한 번의 배치로 저장하고, clock upsert에 값 열 14개의 `IS DISTINCT FROM` 가드를 둡니다. 상태 로드는 관측된 영상·clock 보유 영상과 현재·이후 absence slot만 잠그며 slot을 `scheduled_for` 순으로 적용합니다. 역순으로 저장된 slot을 sequential scan으로 읽어도 첫째·둘째 부재와 철회 시각이 유지되는지 PostgreSQL 회귀 테스트로 검증합니다.
+- schedule 관측이 읽지 않던 누적 schedule item 전체 `FOR UPDATE` 조회를 제거하고, claim 예산은 남은 lease가 예산보다 짧을 때만 연장합니다. live 종료 finalizer는 due 조회에서 DB 시각을 함께 읽고, content 충돌 기록은 공용 reconcile 충돌 SQL을 씁니다. migration은 없습니다.
+- 커뮤니티 게시물을 다시 관측했을 때 좋아요·댓글 수와 `published_at` 보강값이 그대로면 행을 다시 쓰지 않습니다. 따라서 `youtube_community_posts.last_seen_at`은 마지막 관측 시각이 아니라 마지막 값 변화 시각을 뜻하며, 이 열을 읽는 곳은 없습니다.
+- 발송 telemetry의 기록 대상 선택과 lease 획득을 `FOR UPDATE SKIP LOCKED` 한 문장으로 합칩니다. 다른 인스턴스가 잡은 행은 기다리지 않고 건너뛰므로 한 번에 배치 한도보다 적게 반환할 수 있습니다. 반환 순서는 `(event_at, id)`입니다.
+- bot 원장 보존 삭제의 cutoff를 문장 시작 시각(`statement_timestamp()`) 기준으로 계산하고 outbox 조건을 부분 인덱스 술어별로 나눠, 보존 기간 안의 이력을 훑지 않고 만료 행만 terminal 부분 인덱스로 읽습니다. 보존 기간, manual_review 분리 보존, 배치 한도와 `SKIP LOCKED`는 그대로입니다.
+- Kakao 방 정보가 이미 저장값과 같으면 명령마다 하던 upsert 쓰기 트랜잭션을 만들지 않습니다. collector job lease 획득은 claim UPDATE가 돌려준 식별자로 job identity를 검증해 같은 행을 다시 읽는 왕복 한 번을 없애며, 불일치는 계속 `ErrInvalidJob`으로 롤백합니다.
+- 호출자가 없는 hololive-shared·API 코드를 삭제합니다: `ViewerSampleCleaner`와 viewer 표본 보존 삭제 SQL, `dbx.WithSessionAdvisoryLock`, 발송 telemetry의 로그·경로 사용량·채널 게시물 요약·지연 기간 요약 조회, 게시물 타임라인의 기간 조회 두 개와 발송 수의 게시 구간 조회, ACL `CountRooms`. viewer 표본 데이터와 스키마는 DEC-20260925에 따라 유지하며 migration은 없습니다.
+- `POSTGRES_POOL_MIN_CONNS=0`을 idle 연결 없음으로 그대로 적용합니다. 이전에는 plane 검증이 허용한 0을 풀 생성 시 2로 바꿔 `MIN=0·MAX=1` 조합이 기동에 실패했습니다. 음수는 연결 전에 거부합니다. 운영 compose 기본값(MIN 1·2)에는 영향이 없습니다.
+- PostgreSQL 용량 gate의 reserve를 superuser 예약 3(`@superuser-reserved`)을 뺀 비슈퍼유저 여유로 계산하고 하한을 2로 둡니다. 현재 할당 55에서 통과·거부 판정은 이전과 같으며, compose가 `superuser_reserved_connections`를 바꾸면 policy 불일치로 거부합니다. collector 기본 max(8)는 바꾸지 않습니다.
+- `holo-postgres`에 `log_autovacuum_min_duration=10s`를 추가해 10초 이상 걸린 autovacuum의 WAL/FPI·소요시간을 로그로 남깁니다. compose command 값이라 `holo-postgres` 재생성 뒤에 적용되며, 재생성은 별도 운영 승인으로 수행합니다. 전체 compose `up`뿐 아니라 서비스별 배포 wrapper의 선행 `run --rm hololive-db-migrate`도 의존 DB를 재생성할 수 있으므로, 최종 앱 `up --no-deps`만 보고 DB 무중단 배포로 판단하지 않습니다.
+- 참조가 없거나 실행하면 해로운 수동 SQL(`seed_member_celebration_dates.sql`, `audit_message_contract_087_090.sql`, 주석뿐인 `pg18_db_usage_optional_concurrent_indexes.sql`)과 PK 때문에 항상 0행인 점검 쿼리, 호출자가 없는 `dbx` 배치 삭제 helper를 삭제합니다. dbtest 하니스는 러너와 같은 `dbmigrate.Manifest`로 manifest를 해석합니다.
+- `.env.example`의 YouTube plane 보존 주기 예시값을 코드 기본값·DEC-20260824와 같은 120초로 맞춥니다. 300초에서는 보존 삭제 상한(1회 1,000행)이 하루 28.8만 행이라 2026-09-27에 실측한 application 유입(하루 약 42만 행)을 따라가지 못합니다. 운영 `compose.env`는 같은 날 120초로 바꿨습니다.
 
 ## v4.0.1 - 2026-09-25
 

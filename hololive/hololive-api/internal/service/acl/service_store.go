@@ -46,9 +46,6 @@ type aclRoomStore interface {
 	CreateRoom(ctx context.Context, roomID, listType string) error
 	// DeleteRoom은 (roomID, listType) 방 행을 삭제한다.
 	DeleteRoom(ctx context.Context, roomID, listType string) error
-	// CountRooms는 roomID(+ 선택적 listType)에 해당하는 행 수를 센다.
-	// listType이 빈 문자열이면 listType 조건 없이 roomID만으로 센다.
-	CountRooms(ctx context.Context, roomID, listType string) (int64, error)
 }
 
 // aclStore는 ACL 영속 저장소 연산을 추상화한다.
@@ -137,23 +134,4 @@ func (s *pgxACLStore) DeleteRoom(ctx context.Context, roomID, listType string) e
 	}
 
 	return nil
-}
-
-func (s *pgxACLStore) CountRooms(ctx context.Context, roomID, listType string) (int64, error) {
-	var (
-		count int64
-		err   error
-	)
-
-	if listType == "" {
-		err = s.pool.QueryRow(ctx, mustSQL("service_store_0142_07.sql"), roomID).Scan(&count)
-	} else {
-		err = s.pool.QueryRow(ctx, mustSQL("service_store_0144_08.sql"), roomID, listType).Scan(&count)
-	}
-
-	if err != nil {
-		return 0, fmt.Errorf("count acl rooms %q/%q: %w", roomID, listType, err)
-	}
-
-	return count, nil
 }

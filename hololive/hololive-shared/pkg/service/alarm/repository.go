@@ -198,34 +198,6 @@ func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 	return out, nil
 }
 
-func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
-	query := mustSQL("repository_0207_09.sql")
-
-	rows, err := r.pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("get all channel ids: %w", err)
-	}
-	defer rows.Close()
-
-	channelIDs := make([]string, 0, 64)
-
-	for rows.Next() {
-		var channelID string
-
-		if err := rows.Scan(&channelID); err != nil {
-			return nil, fmt.Errorf("scan channel id: %w", err)
-		}
-
-		channelIDs = append(channelIDs, channelID)
-	}
-
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, fmt.Errorf("iterate channel ids: %w", rowsErr)
-	}
-
-	return channelIDs, nil
-}
-
 func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
 	query := mustSQL("repository_0231_10.sql")
 

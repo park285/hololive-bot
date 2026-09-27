@@ -445,6 +445,208 @@ func TestTransitionCleanupGuardsTerminalOutboxWithActiveLogicalSibling(t *testin
 	require.Equal(t, 1, activeDeliveryCount)
 }
 
+func TestTransitionCleanupDeletesTerminalOutboxWithOnlyFailedChildren(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	seedCompletedLedgerState(t, pool)
+
+	ownerID, followerID := seedTransitionLogicalGroup(
+		t, pool, "video-transition-cleanup-failed", "room-transition-cleanup-failed",
+	)
+	terminalAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
+	markTransitionDeliveriesTerminalFailed(t, pool, terminalAt, ownerID, followerID)
+
+	transition := newTestTransitionStore(t, pool)
+	result, err := transition.CleanupTerminalOutboxes(ctx, terminalAt.Add(24*time.Hour), CleanupCursor{}, 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.ExaminedOutboxes)
+	require.Equal(t, 2, result.DeletedOutboxes)
+	require.Zero(t, result.GuardedOutboxes)
+	require.Empty(t, result.Guards)
+
+	var physicalCount int
+
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM youtube_notification_delivery
+		WHERE id = ANY($1::bigint[])
+	`, []int64{ownerID, followerID}).Scan(&physicalCount))
+	require.Zero(t, physicalCount)
+}
+
+func TestTransitionCleanupMixedFailedOutboxRequiresSentChildLedger(t *testing.T) {
+	tests := []struct {
+		name          string
+		recordLedger  bool
+		wantDeleted   int
+		wantGuards    map[CleanupGuardReason]int
+		wantRemaining int
+	}{
+		{
+			name:         "sent child ledger present",
+			recordLedger: true,
+			wantDeleted:  1,
+			wantGuards:   map[CleanupGuardReason]int{},
+		},
+		{
+			name:          "sent child ledger missing",
+			wantGuards:    map[CleanupGuardReason]int{CleanupGuardLedgerMissing: 1},
+			wantRemaining: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			pool := dbtest.NewPool(t)
+			seedCompletedLedgerState(t, pool)
+
+			const (
+				contentID    = "video-transition-cleanup-mixed"
+				failedRoomID = "room-transition-cleanup-mixed-failed"
+				sentRoomID   = "room-transition-cleanup-mixed-sent"
+			)
+
+			terminalAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
+			outboxID, sentDeliveryID := seedTransitionMixedFailedOutbox(t, pool, contentID, failedRoomID, sentRoomID, terminalAt)
+			sentKey := ytcontentid.LogicalKey{Kind: domain.OutboxKindNewVideo, LogicalID: contentID, RoomID: sentRoomID}
+
+			if tt.recordLedger {
+				require.NoError(t, RecordDeliveryLedgerWrites(ctx, pool, LedgerStatusSent, []LedgerWrite{{
+					Key: sentKey, ObservedAt: terminalAt, SourceDeliveryID: sentDeliveryID,
+				}}))
+			}
+
+			transition := newTestTransitionStore(t, pool)
+			result, err := transition.CleanupTerminalOutboxes(ctx, terminalAt.Add(24*time.Hour), CleanupCursor{}, 10)
+			require.NoError(t, err)
+			require.Equal(t, 1, result.ExaminedOutboxes)
+			require.Equal(t, tt.wantDeleted, result.DeletedOutboxes)
+			require.Equal(t, 1-tt.wantDeleted, result.GuardedOutboxes)
+			require.Equal(t, tt.wantGuards, result.Guards)
+
+			var remaining, sentLedgerCount int
+
+			require.NoError(t, pool.QueryRow(ctx, `
+				SELECT COUNT(*)
+				FROM youtube_notification_delivery
+				WHERE outbox_id = $1
+			`, outboxID).Scan(&remaining))
+			require.Equal(t, tt.wantRemaining, remaining)
+
+			// 물리 행을 지워도 SENT 자식의 논리 ledger는 남아야 같은 논리 키의 재전송을 막습니다.
+			require.NoError(t, pool.QueryRow(ctx, `
+				SELECT COUNT(*)
+				FROM youtube_notification_delivery_ledger
+				WHERE kind = $1 AND logical_id = $2 AND room_id = $3 AND status = $4
+			`, sentKey.Kind, sentKey.LogicalID, sentKey.RoomID, LedgerStatusSent).Scan(&sentLedgerCount))
+			require.Equal(t, tt.wantDeleted, sentLedgerCount)
+		})
+	}
+}
+
+// seedTransitionMixedFailedOutbox는 FAILED 자식과 SENT 자식을 함께 가진 FAILED terminal outbox를 만듭니다.
+// 집계 규칙상 활성 자식이 없고 FAILED 자식이 하나라도 있으면 outbox는 FAILED입니다.
+// FAILED 자식을 먼저 넣어 guard가 FAILED 자식을 처리한 뒤에도 SENT 자식의 ledger 증거를 검사하는지 드러냅니다.
+func seedTransitionMixedFailedOutbox(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	contentID, failedRoomID, sentRoomID string,
+	terminalAt time.Time,
+) (int64, int64) {
+	t.Helper()
+
+	createdAt := terminalAt.Add(-time.Hour)
+
+	var outboxID int64
+
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		INSERT INTO youtube_notification_outbox (
+			kind, channel_id, content_id, payload, status, attempt_count, next_attempt_at, created_at, terminal_at, error
+		) VALUES ($1, $2, $3, '{}'::jsonb, $4, 0, $5, $5, $6, 'retry exhausted')
+		RETURNING id
+	`, domain.OutboxKindNewVideo, "channel-transition", contentID, domain.OutboxStatusFailed, createdAt, terminalAt).Scan(&outboxID))
+
+	_, err := pool.Exec(t.Context(), `
+		INSERT INTO youtube_notification_delivery (
+			outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, row_version, error
+		) VALUES ($1, $2, $3, 3, $4, $4, 1, 'retry exhausted')
+	`, outboxID, failedRoomID, domain.OutboxStatusFailed, createdAt)
+	require.NoError(t, err)
+
+	var sentDeliveryID int64
+
+	require.NoError(t, pool.QueryRow(t.Context(), `
+		INSERT INTO youtube_notification_delivery (
+			outbox_id, room_id, status, attempt_count, next_attempt_at, created_at, sent_at, row_version
+		) VALUES ($1, $2, $3, 1, $4, $4, $5, 1)
+		RETURNING id
+	`, outboxID, sentRoomID, domain.OutboxStatusSent, createdAt, terminalAt).Scan(&sentDeliveryID))
+
+	return outboxID, sentDeliveryID
+}
+
+func TestTransitionCleanupGuardsFailedChildWithActiveLogicalSibling(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	seedCompletedLedgerState(t, pool)
+
+	failedDeliveryID, activeDeliveryID := seedTransitionLogicalGroup(
+		t, pool, "video-transition-cleanup-failed-guard", "room-transition-cleanup-failed-guard",
+	)
+	terminalAt := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
+	markTransitionDeliveriesTerminalFailed(t, pool, terminalAt, failedDeliveryID)
+
+	transition := newTestTransitionStore(t, pool)
+	result, err := transition.CleanupTerminalOutboxes(ctx, terminalAt.Add(24*time.Hour), CleanupCursor{}, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ExaminedOutboxes)
+	require.Zero(t, result.DeletedOutboxes)
+	require.Equal(t, 1, result.GuardedOutboxes)
+	require.Equal(t, map[CleanupGuardReason]int{CleanupGuardActiveLogicalGroup: 1}, result.Guards)
+
+	var failedDeliveryCount, activeDeliveryCount int
+
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM youtube_notification_delivery
+		WHERE id = $1 AND status = $2
+	`, failedDeliveryID, domain.OutboxStatusFailed).Scan(&failedDeliveryCount))
+	require.Equal(t, 1, failedDeliveryCount)
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM youtube_notification_delivery
+		WHERE id = $1 AND status = $2
+	`, activeDeliveryID, domain.OutboxStatusPending).Scan(&activeDeliveryCount))
+	require.Equal(t, 1, activeDeliveryCount)
+}
+
+// markTransitionDeliveriesTerminalFailed는 delivery와 부모 outbox를 retry 소진 FAILED terminal로 만듭니다.
+// FAILED는 ledger에 기록되지 않으므로 ledger 행은 만들지 않습니다(L-001).
+func markTransitionDeliveriesTerminalFailed(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	terminalAt time.Time,
+	deliveryIDs ...int64,
+) {
+	t.Helper()
+
+	_, err := pool.Exec(t.Context(), `
+		UPDATE youtube_notification_delivery
+		SET status = $1, attempt_count = 3, row_version = 1,
+		    locked_at = NULL, error = 'retry exhausted'
+		WHERE id = ANY($2::bigint[])
+	`, domain.OutboxStatusFailed, deliveryIDs)
+	require.NoError(t, err)
+
+	_, err = pool.Exec(t.Context(), `
+		UPDATE youtube_notification_outbox
+		SET status = $1, terminal_at = $2, error = 'retry exhausted'
+		WHERE id IN (SELECT outbox_id FROM youtube_notification_delivery WHERE id = ANY($3::bigint[]))
+	`, domain.OutboxStatusFailed, terminalAt, deliveryIDs)
+	require.NoError(t, err)
+}
+
 func TestTransitionCleanupFailsClosedWithoutCompletedLedgerState(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	transition := newTestTransitionStore(t, pool)

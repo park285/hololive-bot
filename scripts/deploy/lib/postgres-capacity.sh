@@ -44,6 +44,9 @@ postgres_capacity_assert_policy_target() {
     local scale raw line owner service_name _env_key source_key instances default_value
     local pipes effective_instances capacity reserve
     local server_limit="" server_limit_rows=0 used=0 owner_inventory=""
+    local superuser_reserved="" superuser_reserved_rows=0
+    # reserve 하한: 현재 할당 55에서 보장되는 비슈퍼유저 여유. CI gate와 같은 값을 유지한다.
+    local min_reserve=2
     local expected_owner_inventory=$'bot\nadmin-api\nllm-scheduler\nyoutube-plane\nalarm-worker\nyoutube-collector\ndb-migrate\n'
     local -A scale_overrides=() scaled_services_seen=() seen_owners=()
     shift 2
@@ -83,6 +86,16 @@ postgres_capacity_assert_policy_target() {
             server_limit="${line#*|}"
             [[ "${server_limit}" =~ ^[1-9][0-9]*$ ]] || {
                 echo "[pg-capacity] policy has an invalid @server-limit" >&2
+                return 1
+            }
+            continue
+        fi
+        if [[ "${line}" == @superuser-reserved\|* ]]; then
+            ((superuser_reserved_rows += 1))
+            superuser_reserved="${line#*|}"
+            # 앞자리 0은 bash 산술에서 8진수로 해석되므로 허용하지 않는다.
+            [[ "${superuser_reserved}" =~ ^(0|[1-9][0-9]*)$ ]] || {
+                echo "[pg-capacity] policy has an invalid @superuser-reserved" >&2
                 return 1
             }
             continue
@@ -138,6 +151,10 @@ postgres_capacity_assert_policy_target() {
         echo "[pg-capacity] policy must pin exactly one @server-limit" >&2
         return 1
     fi
+    if (( superuser_reserved_rows != 1 )); then
+        echo "[pg-capacity] policy must pin exactly one @superuser-reserved" >&2
+        return 1
+    fi
     if [[ "${owner_inventory}" != "${expected_owner_inventory}" ]]; then
         echo "[pg-capacity] owner inventory mismatch: policy owner set or order changed" >&2
         return 1
@@ -149,12 +166,13 @@ postgres_capacity_assert_policy_target() {
         fi
     done
 
-    reserve=$((server_limit - used))
-    if (( reserve < 5 )); then
-        echo "[pg-capacity] connection budget exhausted: max=${server_limit} allocated=${used} reserve=${reserve}, want reserve >= 5" >&2
+    # superuser 예약 슬롯은 비슈퍼유저 앱 역할이 쓸 수 없으므로 reserve에서 뺀다(PG 거부 조건과 같은 기준).
+    reserve=$((server_limit - superuser_reserved - used))
+    if (( reserve < min_reserve )); then
+        echo "[pg-capacity] connection budget exhausted: max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}, want reserve >= ${min_reserve}" >&2
         return 1
     fi
-    echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} allocated=${used} reserve=${reserve}; central, optional X login and four AP pools are inventoried"
+    echo "[pg-capacity] source=target-env:${target_env_file} max=${server_limit} superuser_reserved=${superuser_reserved} allocated=${used} reserve=${reserve}; central, optional X login and four AP pools are inventoried"
 }
 
 postgres_capacity_assert_target() {
