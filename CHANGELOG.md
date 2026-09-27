@@ -27,6 +27,7 @@
 - PostgreSQL 용량 gate의 reserve를 superuser 예약 3(`@superuser-reserved`)을 뺀 비슈퍼유저 여유로 계산하고 하한을 2로 둡니다. 현재 할당 55에서 통과·거부 판정은 이전과 같으며, compose가 `superuser_reserved_connections`를 바꾸면 policy 불일치로 거부합니다. collector 기본 max(8)는 바꾸지 않습니다.
 - `holo-postgres`에 `log_autovacuum_min_duration=10s`를 추가해 10초 이상 걸린 autovacuum의 WAL/FPI·소요시간을 로그로 남깁니다. compose command 값이라 `holo-postgres` 재생성 뒤에 적용되며, 재생성은 별도 운영 승인으로 수행합니다.
 - 참조가 없거나 실행하면 해로운 수동 SQL(`seed_member_celebration_dates.sql`, `audit_message_contract_087_090.sql`, 주석뿐인 `pg18_db_usage_optional_concurrent_indexes.sql`)과 PK 때문에 항상 0행인 점검 쿼리, 호출자가 없는 `dbx` 배치 삭제 helper를 삭제합니다. dbtest 하니스는 러너와 같은 `dbmigrate.Manifest`로 manifest를 해석합니다.
+- `.env.example`의 YouTube plane 보존 주기 예시값을 코드 기본값·DEC-20260824와 같은 120초로 맞춥니다. 300초에서는 보존 삭제 상한(1회 1,000행)이 하루 28.8만 행이라 2026-09-27에 실측한 application 유입(하루 약 42만 행)을 따라가지 못합니다. 운영 `compose.env`는 같은 날 120초로 바꿨습니다.
 
 ## v4.0.1 - 2026-09-25
 
