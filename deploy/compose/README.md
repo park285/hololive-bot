@@ -104,8 +104,8 @@ Deploy this repo-side contract after `tools/sync-host.sh <host> --apply` has mir
 `scripts/deploy/lib/postgres-capacity.sh`가 production mutation entrypoint의 공통 owner입니다.
 `scripts/deploy/compose.sh ... up`, `build-all.sh`, `scripts/deploy/compose-redeploy-service.sh`는
 build/migration/up보다 먼저 이 gate를 호출해 `COMPOSE_ENV_FILE`의 PostgreSQL pool override key만 읽고
-stack 전체 connection budget을 다시 계산합니다. Target-rendered allocation이 `max_connections=60`에서 최소 5개
-reserve를 남기지 않으면 어떤 표준 배포 경로도 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용하며 CI용 uv/Python runtime을 요구하지 않습니다. Default policy만 확인할 때는
+stack 전체 connection budget을 다시 계산합니다. Target-rendered allocation이 `max_connections=60`에서 superuser 예약
+3(`@superuser-reserved`)을 뺀 비슈퍼유저 슬롯 대비 최소 2개 reserve를 남기지 않으면 어떤 표준 배포 경로도 진행하지 않습니다. 이 배포-host preflight는 Bash와 전송된 policy만 사용하며 CI용 uv/Python runtime을 요구하지 않습니다. Default policy만 확인할 때는
 `scripts/ci/check-postgres-capacity.sh`를, 특정 render 결과를 확인할 때는 세 번째 인자로 해당
 Compose env file을 전달합니다. 이 검사는 다른 env 값이나 secret을 출력하지 않습니다.
 

@@ -1,5 +1,6 @@
 # owner|compose service|service environment key|compose source key|instances|max default
 @server-limit|60
+@superuser-reserved|3
 bot|hololive-api|BOT_POSTGRES_POOL_MAX_CONNS|BOT_POSTGRES_POOL_MAX_CONNS|1|4
 admin-api|hololive-api|ADMIN_API_POSTGRES_POOL_MAX_CONNS|ADMIN_API_POSTGRES_POOL_MAX_CONNS|1|4
 llm-scheduler|hololive-api|LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS|LLM_SCHEDULER_POSTGRES_POOL_MAX_CONNS|1|4

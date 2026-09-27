@@ -353,7 +353,7 @@ run_reusable_phase() {
     scripts/architecture/check-internal-route-hardcoding.sh
   run_self_test scripts/ci/check-postgres-capacity_test.sh \
     scripts/ci/check-postgres-capacity.sh scripts/ci/postgres-capacity-policy.tsv \
-    deploy/compose/docker-compose.prod.yml
+    scripts/deploy/lib/postgres-capacity.sh deploy/compose/docker-compose.prod.yml
   run_self_test scripts/deploy/test-postgres-capacity-entrypoints.sh \
     scripts/ci/check-postgres-capacity.sh scripts/deploy/compose-redeploy-service.sh \
     scripts/deploy/compose.sh scripts/deploy/lib/postgres-capacity.sh deploy/compose/docker-compose.prod.yml

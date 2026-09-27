@@ -101,7 +101,7 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 - 테스트 영향은 두 부류로 갈린다 — 반드시 같은 커밋에서 처리한다:
   - **REAL-SEED**(시드 본문을 실제 렌더/조회 — 바꾸면 깨짐): alarm_dispatch 골든, celebration 골든, `store_test.go` 값 핀, `messages_seed_parity_test.go`(키셋·글리프), 라벨 lookup 테스트.
   - **INLINE-TEMPLATE**(테스트 로컬 본문 주입 — 안 깨지지만 미러가 낡음): formatter/llm/outbox 골든의 로컬 본문 상수는 시드의 의도적 미러이므로 lockstep으로 갱신한다.
-- channel별 override 행(`channel_id IS NOT NULL`)은 보존이 정책이다 — 새 톤이 자동 적용되지 않으므로 재작성 시 override 감사 SQL로 대상 방을 기록한다.
+- channel별 override 행(`channel_id IS NOT NULL`)은 보존이 정책이다 — 새 톤이 자동 적용되지 않으므로 재작성 시 키별 override 목록(`GET /api/holo/templates/:key`의 `overrides`, 조회 SQL `hololive-shared/pkg/repository/queries/template_list_overrides.sql`)으로 대상 방을 기록한다.
 - 롤아웃: 템플릿/문자열 캐시는 프로세스별 무기한이므로 `hololive-api`와 `hololive-alarm-worker` **둘 다** 재시작해야 반영된다. (캘린더 PNG 디스크 캐시는 별도 — 렌더러 버전 bump가 담당.)
 
 ## 11. 소비자 매트릭스 (2026-07 기준)

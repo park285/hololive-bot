@@ -157,7 +157,6 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_profile.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_v1.go
 hololive/hololive-shared/pkg/contracts/trigger/errors.go
 hololive/hololive-shared/pkg/contracts/trigger/routes.go
-hololive/hololive-shared/pkg/dbx/batch_delete.go
 hololive/hololive-shared/pkg/dbx/sqlhelpers.go
 hololive/hololive-shared/pkg/dbx/tx.go
 hololive/hololive-shared/pkg/domain/alarm.go

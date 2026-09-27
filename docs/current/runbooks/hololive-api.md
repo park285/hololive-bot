@@ -122,7 +122,7 @@ docker exec holo-postgres psql -U postgres_admin -d hololive -c \
 ```
 
 - **중요**: pgx DSN에 `application_name`을 설정하지 않으므로, `hololive-api`의 bot/admin/llm 3 plane은 같은 process·같은 usename(`hololive_runtime`)·같은 `client_addr`(컨테이너 IP 1개)로 보입니다 → **plane 단위 구분은 pg_stat_activity로 불가능**합니다. 구분 가능한 경계는 `client_addr`(hololive-api vs alarm-worker vs migrate) 수준입니다. plane별 budget은 정의값(bot/admin/llm 각 max 4, 합 최대 12)으로 추적합니다.
-- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector AP 4×8=32 + migrator 1 = 55, `max_connections=60` 대비 reserve 5로 고정합니다.
+- 전체 budget은 `scripts/ci/check-postgres-capacity.sh`가 `hololive-api` bot/admin/llm 12 + YouTube plane 2 + `alarm-worker` 8 + collector AP 4×8=32 + migrator 1 = 55로 셉니다. reserve는 `max_connections=60`에서 superuser 예약 3(`superuser_reserved_connections` PostgreSQL 기본값, policy `@superuser-reserved|3`)을 뺀 비슈퍼유저 슬롯 57 대비 여유이며, 앱 역할(NOSUPERUSER)이 실제로 접속 거부당하는 조건과 같은 기준입니다. 현재 여유는 2이고 gate 하한도 2입니다. 이 2개를 policy에 없는 비슈퍼유저 접속(exporter·backup 역할이 비슈퍼유저인 경우, 수동 도구)이 나눠 쓰므로, 하한 상향과 collector 기본 max 축소는 풀 사용 지표(acquire 대기, 최대 사용 연결)를 확인한 뒤 같은 변경에서 결정합니다. compose가 `superuser_reserved_connections`를 바꾸면 `--verify-compose`가 policy pin과 불일치로 거부합니다.
 
 ### Valkey latency / slowlog
 

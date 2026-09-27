@@ -23,6 +23,10 @@
 - bot 원장 보존 삭제의 cutoff를 문장 시작 시각(`statement_timestamp()`) 기준으로 계산하고 outbox 조건을 부분 인덱스 술어별로 나눠, 보존 기간 안의 이력을 훑지 않고 만료 행만 terminal 부분 인덱스로 읽습니다. 보존 기간, manual_review 분리 보존, 배치 한도와 `SKIP LOCKED`는 그대로입니다.
 - Kakao 방 정보가 이미 저장값과 같으면 명령마다 하던 upsert 쓰기 트랜잭션을 만들지 않습니다. collector job lease 획득은 claim UPDATE가 돌려준 식별자로 job identity를 검증해 같은 행을 다시 읽는 왕복 한 번을 없애며, 불일치는 계속 `ErrInvalidJob`으로 롤백합니다.
 - 호출자가 없는 hololive-shared·API 코드를 삭제합니다: `ViewerSampleCleaner`와 viewer 표본 보존 삭제 SQL, `dbx.WithSessionAdvisoryLock`, 발송 telemetry의 로그·경로 사용량·채널 게시물 요약·지연 기간 요약 조회, 게시물 타임라인의 기간 조회 두 개와 발송 수의 게시 구간 조회, ACL `CountRooms`. viewer 표본 데이터와 스키마는 DEC-20260925에 따라 유지하며 migration은 없습니다.
+- `POSTGRES_POOL_MIN_CONNS=0`을 idle 연결 없음으로 그대로 적용합니다. 이전에는 plane 검증이 허용한 0을 풀 생성 시 2로 바꿔 `MIN=0·MAX=1` 조합이 기동에 실패했습니다. 음수는 연결 전에 거부합니다. 운영 compose 기본값(MIN 1·2)에는 영향이 없습니다.
+- PostgreSQL 용량 gate의 reserve를 superuser 예약 3(`@superuser-reserved`)을 뺀 비슈퍼유저 여유로 계산하고 하한을 2로 둡니다. 현재 할당 55에서 통과·거부 판정은 이전과 같으며, compose가 `superuser_reserved_connections`를 바꾸면 policy 불일치로 거부합니다. collector 기본 max(8)는 바꾸지 않습니다.
+- `holo-postgres`에 `log_autovacuum_min_duration=10s`를 추가해 10초 이상 걸린 autovacuum의 WAL/FPI·소요시간을 로그로 남깁니다. compose command 값이라 `holo-postgres` 재생성 뒤에 적용되며, 재생성은 별도 운영 승인으로 수행합니다.
+- 참조가 없거나 실행하면 해로운 수동 SQL(`seed_member_celebration_dates.sql`, `audit_message_contract_087_090.sql`, 주석뿐인 `pg18_db_usage_optional_concurrent_indexes.sql`)과 PK 때문에 항상 0행인 점검 쿼리, 호출자가 없는 `dbx` 배치 삭제 helper를 삭제합니다. dbtest 하니스는 러너와 같은 `dbmigrate.Manifest`로 manifest를 해석합니다.
 
 ## v4.0.1 - 2026-09-25
 

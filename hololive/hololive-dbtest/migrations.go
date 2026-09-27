@@ -36,6 +36,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 
 	"github.com/kapu/hololive-shared/pkg/pgxutil"
 	"github.com/kapu/hololive-shared/pkg/sqlsplit"
@@ -47,17 +48,16 @@ func migrationFingerprint() (string, error) {
 		return "", fmt.Errorf("resolve migrations dir: %w", err)
 	}
 
-	manifestPath := filepath.Join(dir, manifestFileName)
+	migrationFiles := os.DirFS(dir)
 
-	entries, err := readManifest(manifestPath)
+	entries, err := dbmigrate.Manifest(migrationFiles)
 	if err != nil {
 		return "", fmt.Errorf("read manifest: %w", err)
 	}
 
-	migrationFiles := os.DirFS(dir)
 	hash := sha256.New()
 
-	manifest, err := fs.ReadFile(migrationFiles, manifestFileName)
+	manifest, err := fs.ReadFile(migrationFiles, dbmigrate.ManifestName)
 	if err != nil {
 		return "", fmt.Errorf("read migration manifest fingerprint: %w", err)
 	}
@@ -86,9 +86,6 @@ const (
 	// 모노레포 루트 기준 prod migration SSOT 경로다.
 	migrationsRelDir = "hololive/hololive-api/scripts/migrations"
 
-	// 적용 순서를 규정하는 파일이다("NNN filename.sql" 형식).
-	manifestFileName = "manifest.txt"
-
 	// 자동 탐색을 우회하는 override env다.
 	migrationsDirEnv = "HOLOLIVE_MIGRATIONS_DIR"
 
@@ -107,7 +104,8 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("apply migrations: resolve dir: %w", err)
 	}
 
-	entries, err := readManifest(filepath.Join(dir, manifestFileName))
+	// manifest 해석은 러너와 같은 dbmigrate.Manifest가 소유한다(필드 수·순서·중복 검증 포함).
+	entries, err := dbmigrate.Manifest(os.DirFS(dir))
 	if err != nil {
 		return fmt.Errorf("apply migrations: read manifest: %w", err)
 	}
@@ -374,52 +372,4 @@ func findRepoRoot() (string, error) {
 
 		dir = parent
 	}
-}
-
-// readManifest는 manifest.txt를 읽어 적용 순서대로 .sql 파일명 슬라이스를 반환한다.
-// 각 라인은 "NNN filename.sql" 형식이며, 빈 줄과 '#' 주석은 무시한다.
-func readManifest(path string) ([]string, error) {
-	dir, name := filepath.Split(path)
-
-	content, err := fs.ReadFile(os.DirFS(dir), name)
-	if err != nil {
-		return nil, fmt.Errorf("read manifest: %w", err)
-	}
-
-	var filenames []string
-
-	for line := range strings.SplitSeq(string(content), "\n") {
-		name, skip, parseErr := parseManifestLine(line)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse manifest line: %w", parseErr)
-		}
-
-		if skip {
-			continue
-		}
-
-		filenames = append(filenames, name)
-	}
-
-	if len(filenames) == 0 {
-		return nil, fmt.Errorf("manifest %q has no entries", path)
-	}
-
-	return filenames, nil
-}
-
-// parseManifestLine은 manifest 한 줄을 파싱한다. 빈 줄·'#' 주석은 skip=true,
-// "NNN filename.sql" 형식이면 마지막 필드(파일명)를 반환한다.
-func parseManifestLine(raw string) (name string, skip bool, err error) {
-	line := strings.TrimSpace(raw)
-	if line == "" || strings.HasPrefix(line, "#") {
-		return "", true, nil
-	}
-
-	fields := strings.Fields(line)
-	if len(fields) < 2 {
-		return "", false, fmt.Errorf("malformed manifest line %q (want \"NNN filename.sql\")", line)
-	}
-
-	return fields[len(fields)-1], false, nil
 }

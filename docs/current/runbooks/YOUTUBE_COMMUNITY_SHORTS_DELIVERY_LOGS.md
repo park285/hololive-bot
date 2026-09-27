@@ -124,16 +124,22 @@ standalone producer ops CLI는 Task 9에서 모듈과 함께 제거됐다. `yout
 
 ## Fallback SQL
 
-compose 운영 기준 Postgres는 `localhost:5433` 입니다.
+1차 경로는 위 alarm-worker 구조화 로그입니다. 로그로 판단할 수 없을 때만 DB를 조회합니다.
+DB 조회는 stack-platform-ops의 guarded read 경로(iris-stack
+`.agents/skills/stack-platform-ops/references/postgres.md`)를 따릅니다. `hololive-osaka`의
+`holo-postgres`에 컨테이너 socket으로 접속하고, 조회 전에 read-only guard를 먼저 증명합니다.
+비밀 env 파일을 셸에 source하거나 `PGPASSWORD`를 쓰지 않습니다.
 
 최근 구간 조회:
 
 ```bash
-set -a
-source "${HOLOLIVE_BOT_ENV_FILE:-/etc/stack-secrets/hololive-bot/env}"
-set +a
+# 1. read-only guard 증명: 결과가 정확히 `on`이 아니면 중단합니다.
+ssh 100.100.1.8 \
+  'sudo docker exec -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1 -At -c "show transaction_read_only"'
 
-PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5433 -U "${HOLOLIVE_DB_USER:-hololive_runtime}" -d hololive <<'SQL'
+# 2. 같은 guard로 조회합니다. SQL을 표준 입력으로 넘기므로 docker exec에 -i를 씁니다.
+ssh 100.100.1.8 \
+  'sudo docker exec -i -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s" holo-postgres psql -U hololive_runtime -d hololive --no-psqlrc -v ON_ERROR_STOP=1' <<'SQL'
 SELECT
     alarm_type,
     channel_id,
