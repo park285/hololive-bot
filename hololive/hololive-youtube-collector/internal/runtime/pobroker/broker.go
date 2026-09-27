@@ -151,36 +151,6 @@ func (b *Broker) Serve(listener net.Listener) error {
 	return errors.Join(err, b.retireErr)
 }
 
-func (b *Broker) initializeWorker(ctx context.Context) error {
-	worker, err := startWorker(ctx, b.node, b.script)
-	if err != nil {
-		return err
-	}
-
-	b.mu.Lock()
-
-	if b.retiring || ctx.Err() != nil {
-		b.mu.Unlock()
-
-		return errors.Join(errWorker, worker.stop())
-	}
-
-	b.worker = worker
-	b.mu.Unlock()
-
-	go func() { <-worker.done; b.retire() }()
-
-	var loaded struct {
-		Type string `json:"type"`
-	}
-
-	if err := worker.exchange(ctx, nil, &loaded); err != nil || loaded.Type != "loaded" {
-		return errors.Join(errWorker, err)
-	}
-
-	return nil
-}
-
 // retire always completes: a cleanup failure never keeps the generation or its
 // listener alive, and is reported only through Serve.
 func (b *Broker) retire() {

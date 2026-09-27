@@ -30,6 +30,36 @@ type worker struct {
 	frame   []byte
 }
 
+func (b *Broker) initializeWorker(ctx context.Context) error {
+	worker, err := startWorker(ctx, b.node, b.script)
+	if err != nil {
+		return err
+	}
+
+	b.mu.Lock()
+
+	if b.retiring || ctx.Err() != nil {
+		b.mu.Unlock()
+
+		return errors.Join(errWorker, worker.stop())
+	}
+
+	b.worker = worker
+	b.mu.Unlock()
+
+	go func() { <-worker.done; b.retire() }()
+
+	var loaded struct {
+		Type string `json:"type"`
+	}
+
+	if err := worker.exchange(ctx, nil, &loaded); err != nil || loaded.Type != "loaded" {
+		return errors.Join(errWorker, err)
+	}
+
+	return nil
+}
+
 // worker는 generation이 소유합니다. 시작 전 취소는 거부하되, 장수 VM에
 // 요청 context의 값·참조를 보존하지 않습니다. 종료는 stop/retirement가 담당합니다.
 func startWorker(ctx context.Context, node, script string) (*worker, error) {
