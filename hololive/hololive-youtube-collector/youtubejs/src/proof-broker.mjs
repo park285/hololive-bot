@@ -30,7 +30,8 @@ export class ProofBrokerClient {
 
   /** @param {AbortSignal} signal */
   async freshGeneration(signal) {
-    const readySignal = AbortSignal.any([signal, AbortSignal.timeout(3_000)]);
+    // worker의 30초 SDK 기동과 이전 세대 종료·서비스 재시작을 기다립니다. 발급 요청 예산과는 별개입니다.
+    const readySignal = AbortSignal.any([signal, AbortSignal.timeout(40_000)]);
     let retiredGeneration;
     // reset은 한 번만 보냅니다. 응답 유실은 새 generation 관측으로 판정하며 재전송하지 않습니다.
     while (!readySignal.aborted) {

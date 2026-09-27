@@ -66,6 +66,19 @@ test("prepared health phase is recognized and retired before a new generation", 
   assert.equal(retired, true);
 });
 
+test("generation acquisition waits for trusted SDK startup beyond three seconds", async (t) => {
+  let timer;
+  t.after(() => clearTimeout(timer));
+  const client = await brokerServer(t, (req, res) => {
+    req.resume();
+    timer = setTimeout(() => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ protocol_version: 1, generation: "loaded-generation", state: "IDLE", revision: "revision" }));
+    }, 4_000);
+  });
+  assert.equal(await client.freshGeneration(new AbortController().signal), "loaded-generation");
+});
+
 for (const [name, mutation] of [
   ["another generation", { generation: "new-generation" }],
   ["another video", { video_id: "different-video" }],

@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	protocolVersion = 1
-	operationLimit  = 8 * time.Second
-	requestLimit    = 1 << 20
+	protocolVersion    = 1
+	operationLimit     = 8 * time.Second
+	workerStartupLimit = 30 * time.Second
+	requestLimit       = 1 << 20
 )
 
 type State string
@@ -127,6 +128,19 @@ func (b *Broker) Serve(listener net.Listener) error {
 	}
 	b.server.SetKeepAlivesEnabled(false)
 
+	// 신뢰된 SDK의 cold import는 서비스 준비 단계가 소유한다. 요청의 8초
+	// 예산에 VM 기동을 섞지 않고 loaded 확인 전에는 health도 제공하지 않는다.
+	ctx, cancel := context.WithTimeout(context.Background(), workerStartupLimit)
+	initErr := b.initializeWorker(ctx)
+
+	cancel()
+
+	if initErr != nil {
+		b.retire()
+
+		return errors.Join(initErr, b.retireErr, listener.Close())
+	}
+
 	err := b.server.Serve(listener)
 	b.retire()
 
@@ -135,6 +149,36 @@ func (b *Broker) Serve(listener net.Listener) error {
 	}
 
 	return errors.Join(err, b.retireErr)
+}
+
+func (b *Broker) initializeWorker(ctx context.Context) error {
+	worker, err := startWorker(ctx, b.node, b.script)
+	if err != nil {
+		return err
+	}
+
+	b.mu.Lock()
+
+	if b.retiring || ctx.Err() != nil {
+		b.mu.Unlock()
+
+		return errors.Join(errWorker, worker.stop())
+	}
+
+	b.worker = worker
+	b.mu.Unlock()
+
+	go func() { <-worker.done; b.retire() }()
+
+	var loaded struct {
+		Type string `json:"type"`
+	}
+
+	if err := worker.exchange(ctx, nil, &loaded); err != nil || loaded.Type != "loaded" {
+		return errors.Join(errWorker, err)
+	}
+
+	return nil
 }
 
 // retire always completes: a cleanup failure never keeps the generation or its
@@ -414,17 +458,17 @@ func validText(value string, limit int) bool {
 	return value != "" && len(value) <= limit && utf8.ValidString(value)
 }
 
-func (b *Broker) reserveSession() bool {
+func (b *Broker) reserveSession() *worker {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.state != Idle || b.used || b.retiring {
-		return false
+	if b.worker == nil || b.state != Idle || b.used || b.retiring {
+		return nil
 	}
 
 	b.used, b.state = true, Starting
 
-	return true
+	return b.worker
 }
 
 func validChallenge(v *challengeRequest) bool {
@@ -439,29 +483,16 @@ func (b *Broker) session(ctx context.Context, w http.ResponseWriter, v *sessionR
 		return
 	}
 
-	if !b.reserveSession() {
+	worker := b.reserveSession()
+	if worker == nil {
 		failure(w, http.StatusConflict, "invalid_state")
 
 		return
 	}
 
-	worker, err := startWorker(ctx, b.node, b.script)
-	if err != nil {
-		b.workerFailure(w, err)
-
-		return
-	}
-
-	b.mu.Lock()
-
-	b.worker = worker
-	b.mu.Unlock()
-
-	go func() { <-worker.done; b.retire() }()
-
 	var result workerPrepared
 
-	err = worker.exchange(ctx, struct {
+	err := worker.exchange(ctx, struct {
 		Type      string `json:"type"`
 		UserAgent string `json:"user_agent"`
 	}{"prepare", v.UserAgent}, &result)

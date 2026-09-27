@@ -22,6 +22,10 @@ let minter;
 const signals = [];
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
+// 신뢰된 SDK import 완료를 먼저 알린다. UA/JSDOM 준비와 외부 interpreter는
+// 이후 generation에 묶인 별도 명령에서만 실행한다.
+reply({ type: 'loaded' });
+
 try {
   for await (const line of input) {
     if (Buffer.byteLength(line, 'utf8') > 1024 * 1024) throw new Error('frame too large');

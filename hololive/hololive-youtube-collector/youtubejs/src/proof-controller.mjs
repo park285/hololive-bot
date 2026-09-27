@@ -121,10 +121,13 @@ export class ProofController {
     this.nextAttempt = now + minimumAttemptInterval;
     this.nextAttemptWall = this.wallClock() + minimumAttemptInterval;
     this.bootstrapAttempts += 1;
-    const signal = AbortSignal.any([this.stop.signal, AbortSignal.timeout(15_000)]);
     this.attempt = runWithoutRequestContext(async () => {
       try {
-        const session = await this.issue(signal);
+        const generation = await this.broker.freshGeneration(this.stop.signal);
+        this.ownedGeneration = generation;
+        // 신뢰된 SDK의 교체 기동을 마친 뒤 prepare부터 발급 전체에 15초를 적용합니다.
+        const signal = AbortSignal.any([this.stop.signal, AbortSignal.timeout(15_000)]);
+        const session = await this.issue(generation, signal);
         signal.throwIfAborted();
         if (this.clock() >= session.deadline) throw new ProofError("proof_expired");
         this.session = session;
@@ -139,10 +142,8 @@ export class ProofController {
     }).finally(() => { this.attempt = undefined; });
   }
 
-  /** @param {AbortSignal} signal @returns {Promise<ProofSession>} */
-  async issue(signal) {
-    const generation = await this.broker.freshGeneration(signal);
-    this.ownedGeneration = generation;
+  /** @param {string} generation @param {AbortSignal} signal @returns {Promise<ProofSession>} */
+  async issue(generation, signal) {
     await this.broker.prepare(generation, this.userAgent, signal);
     signal.throwIfAborted();
     let calls = 0;

@@ -53,6 +53,64 @@ async function warm(f) {
   assert.equal(f.controller.status().state, "READY");
 }
 
+function deadlineClock(t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(AbortSignal, "timeout", (ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+}
+
+test("replacement SDK startup does not consume the issuance deadline", async (t) => {
+  deadlineClock(t);
+  const ready = Promise.withResolvers();
+  const waiting = Promise.withResolvers();
+  let generations = 0;
+  const f = fixture(t, {
+    broker: {
+      async freshGeneration(signal) {
+        if (++generations === 1) return "generation-1";
+        waiting.resolve();
+        signal.addEventListener("abort", () => ready.reject(signal.reason), { once: true });
+        await ready.promise;
+        signal.throwIfAborted();
+        return "generation-2";
+      },
+    },
+  });
+  await warm(f);
+  f.advance(3_270_000);
+  await f.player();
+  await waiting.promise;
+  t.mock.timers.tick(16_000);
+  await tick();
+  ready.resolve();
+  await f.controller.attempt;
+  assert.equal(f.controller.status().state, "READY");
+  assert.equal(f.controller.status().generation, "generation-2");
+  await f.player();
+  assert.deepEqual(f.sent, [false, false, true]);
+  assert.equal(f.requests.length, 4);
+});
+
+test("issuance still expires at fifteen seconds after worker readiness", async (t) => {
+  deadlineClock(t);
+  const release = Promise.withResolvers();
+  const fetching = Promise.withResolvers();
+  const f = fixture(t, { beforeFetch: async () => { fetching.resolve(); await release.promise; } });
+  await f.player();
+  await fetching.promise;
+  t.mock.timers.tick(15_000);
+  release.resolve();
+  await f.controller.attempt;
+  assert.equal(f.controller.status().state, "UNAVAILABLE");
+  assert.deepEqual(f.retired, ["generation-1"]);
+  assert.equal(f.requests.length, 1);
+  await f.player();
+  assert.deepEqual(f.sent, [false, false]);
+});
+
 test("upstream Create waits for confirmed preparation", async (t) => {
   const prepared = Promise.withResolvers();
   const preparing = Promise.withResolvers();

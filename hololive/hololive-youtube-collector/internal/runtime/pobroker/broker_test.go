@@ -30,6 +30,15 @@ func fakeNode(t *testing.T, name, script string) string {
 	return path
 }
 
+func initializeTestWorker(t *testing.T, broker *Broker) {
+	t.Helper()
+	t.Cleanup(broker.retire)
+
+	if err := broker.initializeWorker(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // errorCode returns the broker error code, or "" when body is not an error.
 func errorCode(body map[string]any) string {
 	envelope, ok := body["error"].(map[string]any)
@@ -134,11 +143,13 @@ func TestExpiredMintRetiresWorkerWithoutIssuing(t *testing.T) {
 func phaseBroker(t *testing.T) (*Broker, string, string, string) {
 	t.Helper()
 
-	script := "#!/bin/sh\nIFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"snapshot\",\"snapshot\":\"snapshot-value\"}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"ready\",\"ready\":true}'\nsleep 30\n"
 
 	b := New("revision", fakeNode(t, "phase-node", script), "unused")
+	initializeTestWorker(t, b)
 
 	prepare, err := json.Marshal(sessionRequest{ProtocolVersion: protocolVersion, Generation: b.Generation(), UserAgent: "UA"})
 	if err != nil {
@@ -265,10 +276,12 @@ func TestCanceledChallengeBeforeDispatchPreservesPreparedWorker(t *testing.T) {
 }
 
 func TestMalformedWorkerFrameFailsAndRetires(t *testing.T) {
-	script := "#!/bin/sh\nIFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\n" +
+		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"prepared\",\"prepared\":true}'\n" +
 		"IFS= read -r request\nprintf '%s\\n' '{\"type\":\"snapshot\",\"snapshot\":\"x\",\"extra\":true}'\nsleep 30\n"
 
 	b := New("revision", fakeNode(t, "invalid-node", script), "unused")
+	initializeTestWorker(t, b)
 
 	prepare, err := json.Marshal(sessionRequest{ProtocolVersion: protocolVersion, Generation: b.Generation(), UserAgent: "UA"})
 	if err != nil {
@@ -307,7 +320,9 @@ func TestMalformedWorkerFrameFailsAndRetires(t *testing.T) {
 }
 
 func TestActiveCancellationRetiresWorker(t *testing.T) {
-	b := New("revision", fakeNode(t, "blocked-node", silentNode), "unused")
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"loaded\"}'\nsleep 30\n"
+	b := New("revision", fakeNode(t, "blocked-node", script), "unused")
+	initializeTestWorker(t, b)
 
 	body, err := json.Marshal(sessionRequest{ProtocolVersion: protocolVersion, Generation: b.Generation(), UserAgent: "UA"})
 	if err != nil {

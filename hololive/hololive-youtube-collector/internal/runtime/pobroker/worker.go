@@ -85,16 +85,23 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 		return errBeforeDispatch
 	}
 
-	data, err := json.Marshal(input)
-	if err != nil || len(data)+1 > 1<<20 {
-		return errWorker
+	// nil input은 최초 loaded frame 수신 전용이며 worker에 명령을 쓰지 않는다.
+	var data []byte
+
+	if input != nil {
+		var err error
+
+		data, err = json.Marshal(input)
+		if err != nil || len(data)+1 > 1<<20 {
+			return errWorker
+		}
+
+		data = append(data, '\n')
 	}
 
 	if ctx.Err() != nil {
 		return errBeforeDispatch
 	}
-
-	data = append(data, '\n')
 
 	result := make(chan error, 1)
 
@@ -117,8 +124,10 @@ func (w *worker) exchange(ctx context.Context, input, output any) error {
 }
 
 func (w *worker) exchangeFrame(data []byte, output any) error {
-	if _, err := w.stdin.Write(data); err != nil {
-		return errWorker
+	if len(data) > 0 {
+		if _, err := w.stdin.Write(data); err != nil {
+			return errWorker
+		}
 	}
 
 	line, err := w.readFrame()
