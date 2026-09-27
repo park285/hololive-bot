@@ -12,7 +12,7 @@
 - native/Compose collector와 issuer를 같은 full SHA로 빌드·검증·교체하고 실패 시 함께 복원합니다. AP 소스는 staging 검증 뒤 승격하고 snapshot으로 중단 전 상태를 복원합니다. 중앙 개별 collector/issuer 재배포는 paired entrypoint로 통합하며 `compose-redeploy-service.sh all`은 지원하지 않습니다.
 - issuer rootfs의 소켓 디렉터리 권한(0770)과 `/tmp` sticky bit(1777)를 이미지 복사·일반 사용자 압축 해제에서도 보존합니다. 빌드 호스트 umask에 따라 배포 검증이 실패하던 원인을 수정하며 기존 무결성 검사는 유지합니다.
 - native 배포의 두 필수 스크립트를 각각 검사해 정상 payload의 잘못된 거부를 고치고, 어느 파일이 빠져도 운영 변경 전에 중단합니다.
-- native 설치·재검증·복원에서 root 소유 issuer archive의 hash는 root 권한으로 읽습니다. archive의 0600 보호 권한은 유지합니다.
+- native 설치·재검증·복원에서 root 소유 issuer archive의 hash는 root 권한으로 읽고 0600 보호 권한을 유지합니다. `systemd-analyze verify`에는 RootDirectory 안의 실제 실행 경로를 해석한 검사용 사본을 제공하며, 설치 unit의 격리 설정과 실행 파일 부재 거부는 보존합니다.
 - 배포 검사에서 스크립트 문자열·등장 횟수·옛 함수 위치와 main 호출 배선만 비교하던 스냅샷을 제거하고, 버전 불일치·구성 실패·아티팩트 무결성·잘못된 배포 대상의 거부 검증은 유지합니다. 실제 broker CLI의 인수 거부·live socket 보존·강제 종료 뒤 stale socket 복구를 확인합니다.
 - X가 로그아웃 상태의 `/home`을 로그인 화면으로 redirect하여 X 스페이스 수집이 요청 ID 초기화 단계에서 `collector_failed`로 반복 실패하던 문제를 수정합니다. `x-client-transaction-id`를 `0.3.2`로 올리고, helper 허용 목록을 인증 없는 앱 셸 `https://x.com/i/jf/`로 바꿉니다. 쿠키 전송 경로·오류 계약·런타임 설정은 변경하지 않습니다.
 - X 스페이스 helper 실패 로그에 실패 단계(`input`·`library`·`app_shell`·`transaction`·`collect`)를 남기고, 분류되지 않은 `collector_failed`에는 내장 오류 종류와 Node 오류 코드만 덧붙입니다. helper가 결과 문서를 끝내지 못하면 worker가 관측한 종료 상태를 `helper_output`으로 기록합니다. 예외 원문·stderr는 계속 버리며 세션 상태의 오류 코드·재시도 간격은 바꾸지 않습니다. helper와 worker의 결과 문서 형식이 함께 바뀌므로 alarm worker 이미지 단위로 배포합니다.

@@ -55,7 +55,7 @@ native_rollback_validate() {
       sudo -n test -r "$contract_dir/hololive-youtube-po.service"
       sudo -n test -r "$contract_dir/hololive-youtube-po.socket"
       po_validate_release "$previous_target"
-      sudo -n systemd-analyze verify "$contract_dir/hololive-youtube-po.service" "$contract_dir/hololive-youtube-po.socket"
+      po_verify_units "$previous_target" "$contract_dir/hololive-youtube-po.service" "$contract_dir/hololive-youtube-po.socket"
       ;;
     absent)
       sudo -n test ! -e "$contract_dir/hololive-youtube-po.service"

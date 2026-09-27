@@ -18,6 +18,27 @@ po_validate_release() {
     python3 -c 'import json,sys; obj=json.load(sys.stdin); assert (obj["revision"],obj["version"],obj["goos"],obj["goarch"]) == (sys.argv[1],sys.argv[2],"linux","amd64")' "$revision" "$version"
 }
 
+po_verify_units() (
+  set -e
+  local release="$1" service_file="$2" socket_file="$3" working
+  working="$(mktemp -d)" || exit
+  trap 'rm -rf "$working"' EXIT
+  # systemd-analyze는 RootDirectory를 무시하고 host에서 ExecStart를 검사한다.
+  # 설치 unit은 보존하고 검사용 복사본의 실행 경로만 실제 rootfs로 해석한다.
+  python3 - "$service_file" "$working/hololive-youtube-po.service" "$release" <<'PY' || exit
+from pathlib import Path
+import sys
+source, target, release = sys.argv[1:]
+text = Path(source).read_text()
+command = "ExecStart=/app/bin/po-broker "
+if text.count(command) != 1:
+    raise SystemExit("unexpected issuer command; refusing unverifiable unit")
+Path(target).write_text(text.replace(command, f"ExecStart={release}/po-sandbox/rootfs/app/bin/po-broker ", 1))
+PY
+  cp "$socket_file" "$working/hololive-youtube-po.socket" || exit
+  sudo -n systemd-analyze verify "$working/hololive-youtube-po.service" "$working/hololive-youtube-po.socket"
+)
+
 po_snapshot_previous() {
   local previous="$1" contract="$1/rollback-contract" state
   if sudo -n test -e "$po_unit_file" || sudo -n test -e "$po_socket_file"; then
@@ -73,7 +94,7 @@ po_install_release() {
   po_validate_release "$release"
   sudo -n install -m 0644 -o root -g root "$release/hololive-youtube-po.service" "$po_unit_file"
   sudo -n install -m 0644 -o root -g root "$release/hololive-youtube-po.socket" "$po_socket_file"
-  sudo -n systemd-analyze verify "$po_unit_file" "$po_socket_file"
+  po_verify_units "$release" "$po_unit_file" "$po_socket_file"
   sudo -n systemctl daemon-reload
   sudo -n systemctl enable --now "$po_socket"
   sudo -n systemctl restart "$po_service"
