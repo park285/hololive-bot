@@ -29,7 +29,7 @@ gateway 허용 목록 우회 경로는 사용하지 않습니다.
 목록 query는 `status`, `roomId`, `channelId`, `beforeId`만 허용합니다.
 상태 생략 시 `dlq`와 `quarantined`를 함께 조회합니다. 단일 상태는
 `shadowed`, `pending`, `retry`, `leased`, `sending`, `sent`, `dlq`,
-`quarantined`, `cancelled` 중 하나입니다. `shadowed` 행은 v3 handoff 삭제와 migration 225로
+`quarantined`, `cancelled` 중 하나입니다. `shadowed` 행은 v3 handoff 삭제와 migration 226으로
 더 이상 존재하지 않아 항상 빈 목록입니다. iris-console `DispatchStatus` enum이 이 값을 아직 보내므로
 입력으로만 남기며, iris-console이 값을 뺀 뒤 이 API에서도 삭제합니다. 채팅방과 채널은 정확히 일치하는 값을 사용합니다.
 명시적인 빈 query, 알 수 없는 query 및 중복 query는 400입니다.
@@ -80,12 +80,12 @@ backend가 사용자 세션을 검증한 값이라는 의미가 아닙니다. Ir
 같은 send unit의 **모든 항목**이 DLQ 또는 격리 상태여야 합니다. 이미 전송되거나 취소된
 표식이 남은 항목도 차단합니다. 일부만 선택하거나 리비전이 달라진 요청은 409입니다.
 send unit이 없는 migration 141 이전 발송은 조회만 단일 항목으로 보여 주고 재처리는 `replayBlocked: "group_identity_mismatch"`로
-막습니다. worker claim은 send unit 없는 행을 읽지 않고, migration 223의 `alarm_dispatch_deliveries_active_send_unit_check`가
+막습니다. worker claim은 send unit 없는 행을 읽지 않고, migration 224의 `alarm_dispatch_deliveries_active_send_unit_check`가
 send unit 없는 행의 pending·retry·leased·sending 기록을 거절합니다. `scripts/runtime/alarm-dispatch-outbox-requeue.sh`로
 이런 행을 되돌리려 해도 같은 CHECK 위반(SQLSTATE 23514)으로 실패합니다(2026-09-26 T18에서 활성 행 0건 확인). 여러 독립
 묶음을 한 요청에 섞을 수 없습니다.
 
-migration 223 적용 전 확인과 종단 NULL 행 소멸 확인은 authoritative DB의 read-only 세션에서 건수만 봅니다.
+migration 224 적용 전 확인과 종단 NULL 행 소멸 확인은 authoritative DB의 read-only 세션에서 건수만 봅니다.
 
 ```sql
 SELECT status, count(*), max(created_at)
@@ -95,7 +95,7 @@ GROUP BY status
 ORDER BY status;
 ```
 
-pending·retry·leased·sending 행이 있으면 migration 223의 VALIDATE가 실패하므로 원인을 조사해 종단으로 정리한 뒤 적용합니다.
+pending·retry·leased·sending 행이 있으면 migration 224의 VALIDATE가 실패하므로 원인을 조사해 종단으로 정리한 뒤 적용합니다.
 모든 행이 사라지면 조회용 단일 항목 분기의 제거 조건(계획 T11 `holo-api-dispatchops-legacy-send-unit`)이 충족됩니다.
 
 직렬화 트랜잭션에서 ID 순서로 행을 잠그고 현재 리비전을 비교한 후, 상태 전환과

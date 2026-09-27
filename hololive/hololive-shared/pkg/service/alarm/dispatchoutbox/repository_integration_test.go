@@ -579,7 +579,7 @@ func TestPgxRepositoryInsertBatch_DoesNotCompareLegacyDedupeKey(t *testing.T) {
 		t.Fatalf("insert legacy event: %v", err)
 	}
 
-	// send unit 없는 이전 형식 행은 종단 상태로만 남는다(migration 223 active send unit CHECK).
+	// send unit 없는 이전 형식 행은 종단 상태로만 남는다(migration 224 active send unit CHECK).
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO alarm_dispatch_deliveries (
 			event_id, room_id, dedupe_key, claim_keys, delivery_context, status, sent_at

@@ -906,7 +906,7 @@ type SupportedContractSet interface {
 - `topic_id`
 - `thumbnail_url`
 
-generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. 위 4단계 cleanup은 끝났다(2026-09-26 T18에서 current generation `2`·미처리 generation `1` 관측 0건 확인, stack-audit 2026-09-26 T11 C6). API의 supported set은 generation `2`만 담고 generation `1` 관측은 `unsupported_contract`로 처리하며, collector는 current generation이 `2`가 아니면 구성 오류로 수집을 끝낸다. migration `221`은 빈 DB의 `live_snapshot` seed를 generation `2`로 맞춘다.
+generation `2` metadata는 positive evidence일 때만 canonical `youtube_live_sessions`에 반영하며, 빈 후속 관측값은 이미 저장된 metadata를 지우지 않는다. Holodex는 세 필드를, YouTube.js는 upstream에서 확인한 title과 HTTPS thumbnail을 제공한다. 위 4단계 cleanup은 끝났다(2026-09-26 T18에서 current generation `2`·미처리 generation `1` 관측 0건 확인, stack-audit 2026-09-26 T11 C6). API의 supported set은 generation `2`만 담고 generation `1` 관측은 `unsupported_contract`로 처리하며, collector는 current generation이 `2`가 아니면 구성 오류로 수집을 끝낸다. migration `225`는 빈 DB의 `live_snapshot` seed를 generation `2`로 맞춘다.
 
 ### 9.2 Collection checkpoint
 

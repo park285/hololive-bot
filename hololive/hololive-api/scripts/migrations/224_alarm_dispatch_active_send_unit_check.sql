@@ -4,7 +4,7 @@
 -- 활성 0건임을 확인했다. 종단 행과 send unit 없이 기록하는 shadowed 행은 대상이 아니므로 retention 소거를 기다리지 않는다.
 -- VALIDATE가 실패하면 활성 NULL 행이 남아 있다는 뜻이다. 행을 조사해 종단으로 정리한 뒤 다시 적용한다.
 -- 전체 NOT NULL 승격은 종단 NULL 행이 retention으로 소멸하고 shadowed 기록 방식이 정리된 뒤 따로 검토한다.
--- 번호는 운영 적용된 live-evidence 218~220 다음(221·222 뒤)이다.
+-- 번호는 운영 적용된 live-evidence 218~220과 부재 증거 보존 221 다음(222·223 뒤)이다.
 DO $migration$
 BEGIN
     IF NOT EXISTS (

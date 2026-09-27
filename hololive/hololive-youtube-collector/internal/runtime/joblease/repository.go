@@ -338,7 +338,7 @@ func releaseLeaseTx(
 	delay time.Duration,
 ) error {
 	// release는 last_failure_*를 건드리지 않는다. 177 trigger가 DEFERRED release를 legacy_collector로 덮어쓰던 때는 잠근
-	// 사전 값을 되돌렸지만, migration 221이 trigger를 지워 복원 단계도 함께 지웠다(stack-audit 2026-09-26 T17).
+	// 사전 값을 되돌렸지만, migration 222가 trigger를 지워 복원 단계도 함께 지웠다(stack-audit 2026-09-26 T17).
 	var jobKey string
 
 	err := tx.QueryRow(

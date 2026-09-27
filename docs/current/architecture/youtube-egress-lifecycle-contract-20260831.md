@@ -7,7 +7,7 @@
 - Logical ledger: [`youtube-egress-logical-delivery-ledger-20260831.md`](youtube-egress-logical-delivery-ledger-20260831.md)
 - Commit 판정: [`youtube-egress-lifecycle-commit-adjudication-20260831.md`](youtube-egress-lifecycle-commit-adjudication-20260831.md)
 - 구현 선택 근거: [`youtube-egress-lifecycle-library-review-20260831.md`](youtube-egress-lifecycle-library-review-20260831.md)
-- Ledger backfill 현재 상태(2026-09-26): 운영 완료. backfill 명령과 writer·cleanup의 completion marker 확인은 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠고 migration `226_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 완료를 확인합니다. 아래 backfill·completion 조항은 설계 근거입니다.
+- Ledger backfill 현재 상태(2026-09-26): 운영 완료. backfill 명령과 writer·cleanup의 completion marker 확인은 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠고 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 완료를 확인합니다. 아래 backfill·completion 조항은 설계 근거입니다.
 
 ## 규범 용어
 

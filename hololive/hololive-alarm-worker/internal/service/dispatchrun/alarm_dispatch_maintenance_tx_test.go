@@ -77,7 +77,7 @@ func TestAlarmDispatchMaintenancePGObservationFailureDoesNotContaminateDeletionT
 			}
 
 			require.NoError(t, runner.RunOnce(t.Context()))
-			// 종단 상태 네 개(sent·dlq·quarantined·취소)마다 한 번씩 지운다. shadowed 대상은 migration 225와 함께 없어졌다.
+			// 종단 상태 네 개(sent·dlq·quarantined·취소)마다 한 번씩 지운다. shadowed 대상은 migration 226과 함께 없어졌다.
 			require.Equal(t, 4, store.deletedTerminal)
 			require.Equal(t, 1, store.deletedSendUnits)
 			require.Equal(t, 1, store.deletedEvents)

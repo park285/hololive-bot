@@ -126,7 +126,7 @@ func TestAlarmDispatchClaimUsesDeliveryBudgetAcrossUnits(t *testing.T) {
 }
 
 // 저장된 send unit 없는 migration 141 이전 delivery를 먼저 claim하던 legacy_head는 지웠다(stack-audit 2026-09-26 T17, T18에서
-// 활성 NULL 행 0건 확인). 이제 claim이 읽지 않는 활성 NULL 행이 조용히 멈추지 않도록 migration 223의 CHECK가 쓰기 시점에 거절한다.
+// 활성 NULL 행 0건 확인). 이제 claim이 읽지 않는 활성 NULL 행이 조용히 멈추지 않도록 migration 224의 CHECK가 쓰기 시점에 거절한다.
 // 종단 NULL 행(T18 기준 sent·취소 상태 437건)은 retention 소거까지 유효하고, 수동 requeue로 활성 상태로 되돌리는 것은 거절된다.
 func TestAlarmDispatchDeliveriesRequirePersistedSendUnitWhileActive(t *testing.T) {
 	pool := NewPool(t)
@@ -170,7 +170,7 @@ func requireActiveSendUnitViolation(t *testing.T, err error) {
 	require.Equal(t, "alarm_dispatch_deliveries_active_send_unit_check", pgErr.ConstraintName)
 }
 
-// migration 225가 v3 handoff의 비교 전용 shadowed 상태를 CHECK에서 뺐다(DEC-20260926-hololive-outbox-v3-convergence).
+// migration 226이 v3 handoff의 비교 전용 shadowed 상태를 CHECK에서 뺐다(DEC-20260926-hololive-outbox-v3-convergence).
 // 쓰기 경로가 다시 shadowed를 기록하면 DB가 거절해야 한다.
 func TestAlarmDispatchDeliveryStatusRejectsShadowed(t *testing.T) {
 	pool := NewPool(t)

@@ -358,7 +358,7 @@ func insertAlarmDispatchEvents(t *testing.T, pool liveSessionPool, events []test
 func insertAlarmDispatchDeliveries(t *testing.T, pool liveSessionPool, deliveries []testAlarmDispatchDelivery) {
 	t.Helper()
 
-	// 활성 delivery는 저장된 send unit이 있어야 하므로(migration 223) 운영 행과 같이 delivery마다 send unit을 둔다.
+	// 활성 delivery는 저장된 send unit이 있어야 하므로(migration 224) 운영 행과 같이 delivery마다 send unit을 둔다.
 	for index, delivery := range deliveries {
 		_, err := pool.Exec(t.Context(), `
 			WITH unit AS (

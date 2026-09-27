@@ -30,7 +30,7 @@ var (
 )
 
 // statuses는 조회 필터로 받는 상태다. 비교 전용 shadowed 행은 v3 handoff 삭제(DEC-20260926-hololive-outbox-v3-convergence)와
-// migration 225로 더 이상 존재하지 않아 항상 빈 목록을 돌려준다. 그래도 iris-console의 DispatchStatus enum
+// migration 226으로 더 이상 존재하지 않아 항상 빈 목록을 돌려준다. 그래도 iris-console의 DispatchStatus enum
 // (contracts/hololive/openapi.json, DispatchPage 필터)이 이 값을 보낼 수 있어 입력으로만 남긴다. 제거 조건: iris-console이
 // enum과 필터에서 shadowed를 뺀 release가 배포된 뒤 이 값과 문서의 필터 목록을 함께 지운다. 재검토 기한: 2026-12-31.
 var statuses = [...]string{"shadowed", "pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
@@ -243,7 +243,7 @@ func replayBlock(group []Delivery) string {
 		}
 
 		// 서로 다른 발송 식별자를 섞지 않습니다. send unit이 없는 migration 141 이전 행은 worker claim이 더 이상 읽지
-		// 않고(legacy_head 삭제, stack-audit 2026-09-26 T17) 활성 상태로 되돌리면 migration 223 CHECK가 거절하므로,
+		// 않고(legacy_head 삭제, stack-audit 2026-09-26 T17) 활성 상태로 되돌리면 migration 224 CHECK가 거절하므로,
 		// 저장된 외부 발송 식별자가 없다는 뜻으로 같은 차단 사유를 씁니다.
 		// 조회용 단일 행 묶음(group.sql·group_locked.sql의 send_unit_id IS NULL 분기)은 이 행들의 드레인 종단입니다
 		// (분기 도입 2088fa5f0, send unit 도입 333665c1a). 제거 조건: authoritative DB의 alarm_dispatch_deliveries에서

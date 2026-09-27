@@ -23,7 +23,7 @@ const (
 	alarmDispatchRetentionLockKey  = 781512042
 )
 
-// shadowed 행 retention은 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence, migration 225).
+// shadowed 행 retention은 v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence, migration 226).
 var alarmDispatchTerminalTimestampColumns = map[dispatchoutbox.Status]string{
 	dispatchoutbox.StatusSent:        "sent_at",
 	dispatchoutbox.StatusDLQ:         "dlq_at",

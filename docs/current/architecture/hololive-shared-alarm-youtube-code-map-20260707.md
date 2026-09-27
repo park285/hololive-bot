@@ -612,7 +612,7 @@ sent_at / dlq_at / quarantined_at / cancelled_at
 last_error_code / last_error
 ```
 
-허용 상태(비교 전용 `shadowed`는 v3 handoff와 함께 삭제했고 migration 225가 CHECK에서 뺐다):
+허용 상태(비교 전용 `shadowed`는 v3 handoff와 함께 삭제했고 migration 226이 CHECK에서 뺐다):
 
 ```text
 pending

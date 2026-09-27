@@ -60,7 +60,7 @@ export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
 
 4. 출력의 `activated=true`와 non-zero `cutoff_received_at`을 확인합니다. 재실행에서 `activated=false`이면 기존 cutoff와 attribution이 그대로인지 확인하며 새 epoch로 간주하지 않습니다.
 5. 같은 epoch-aware `hololive-api`를 `--no-build --no-deps`로 시작하고 health/readiness와 `replay_epoch_expired` audit를 확인한 뒤 collector를 재개합니다.
-6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. 완료 전제는 migration `226_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인하며, 미완료 state가 있거나 backfill 없이 delivery 행이 있는 DB에서는 migration이 실패합니다.
+6. 이 epoch를 기준으로 하던 YouTube delivery ledger backfill은 운영에서 2026-09-01 완료됐고(T18 2026-09-26 재확인: singleton `schema_version=1`, `completed_at` 있음), backfill 명령과 alarm-worker의 완료 gate는 `DEC-20260926-hololive-retired-rollback-tooling`으로 지웠습니다. 완료 전제는 migration `227_youtube_delivery_ledger_backfill_closed.sql`이 적용 시점에 확인하며, 미완료 state가 있거나 backfill 없이 delivery 행이 있는 DB에서는 migration이 실패합니다.
 
 Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 시작하지 않습니다. 기존 image rollback tag는 더 이상 안전한 rollback target이 아니며, 사전 관찰한 epoch-aware image를 유지하거나 source processing을 중지한 채 fix-forward합니다.
 
@@ -228,7 +228,7 @@ Durable runtime binary보다 migration 123~136을 먼저 적용해야 합니다.
 
 Migration 133은 runtime cutover 전에 terminal payload scrub trigger를 먼저 설치하고 기존 `dead`/`succeeded` row를 backfill한 뒤 CHECK를 validate합니다. 따라서 이전 runtime의 `inbox_complete` writer가 migration 적용 중이나 cutover 전에 `status`만 `succeeded`로 변경해도 trigger가 `payload`를 `{}`로 scrub하며 CHECK에 거부되지 않습니다.
 이 호환 trigger는 드레인 종단입니다. 현재 terminal writer(`inbox_complete.sql`, `inbox_abandon.sql`, `inbox_release.sql`, `inbox_reclaim_expired.sql`)는 같은 UPDATE에서 `payload`를
-`{}`로 쓰므로, migration 222 이후 trigger가 비어 있지 않은 payload를 scrub하면 PostgreSQL WARNING
+`{}`로 쓰므로, migration 223 이후 trigger가 비어 있지 않은 payload를 scrub하면 PostgreSQL WARNING
 `bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger`를 남깁니다(stack-audit 2026-09-26 T17).
 제거 조건은 두 가지입니다. ① 중앙 호스트의 이미지와 보존 이미지·rollback 대상 목록에 migration 133 이전 writer
 이미지(terminal 전이에서 payload를 비우지 않는 hololive-api 또는 퇴역 bot runtime)가 0개임을 hololive-bot-ops로 대조합니다.
