@@ -720,6 +720,8 @@ WHERE job_key = $1
     )
   AND (owner_instance IS NULL OR lease_expires_at <= NOW())
 RETURNING job_key,
+          provider,
+          job_class,
           collection_job_kind,
           subject_key,
           owner_instance,
@@ -733,6 +735,7 @@ RETURNING job_key,
 
 새 job row 생성과 acquisition을 같은 helper가 소유할 수 있지만, concurrent `INSERT ... ON CONFLICT` 뒤에는 반드시 row lock과 epoch increment를 거쳐야 한다.
 acquisition transaction은 UPDATE 전에 current projection과 이 job이 대표하는 target 집합의 enable/validity를 검증한다. caller가 전달한 `$3`만 신뢰해 stale generation을 lease row에 기록하지 않는다.
+acquire는 같은 row를 다시 읽지 않고 이 UPDATE의 RETURNING `provider`, `job_class`, `collection_job_kind`, `subject_key`로 job identity를 검증한다. 요청한 job spec과 다르면 `ErrInvalidJob`으로 transaction을 롤백한다.
 
 #### Missed-slot coalescing
 

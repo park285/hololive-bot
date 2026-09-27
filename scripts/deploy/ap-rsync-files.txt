@@ -157,11 +157,7 @@ hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_profile.go
 hololive/hololive-shared/pkg/contracts/sourceobservation/payloads_v1.go
 hololive/hololive-shared/pkg/contracts/trigger/errors.go
 hololive/hololive-shared/pkg/contracts/trigger/routes.go
-hololive/hololive-shared/pkg/dbx/advisory_lock.go
 hololive/hololive-shared/pkg/dbx/batch_delete.go
-hololive/hololive-shared/pkg/dbx/queries/session_advisory_lock_acquire.sql
-hololive/hololive-shared/pkg/dbx/queries/session_advisory_lock_release.sql
-hololive/hololive-shared/pkg/dbx/sql.go
 hololive/hololive-shared/pkg/dbx/sqlhelpers.go
 hololive/hololive-shared/pkg/dbx/tx.go
 hololive/hololive-shared/pkg/domain/alarm.go
@@ -416,12 +412,9 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/repository_batch_writes.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo/sql.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/budget.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/cleaner.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/cleaner_state.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/helpers.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/job_claim.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/metrics.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/queries/cleaner_0176_03.sql
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/rate_limiter.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_admission.go
@@ -436,7 +429,6 @@ hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_timing.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker.go
 hololive/hololive-shared/pkg/service/youtube/poller/runtime/scheduler/scheduler_worker_loop.go
-hololive/hololive-shared/pkg/service/youtube/poller/runtime/sql.go
 hololive/hololive-shared/internal/service/youtube/reconcile/content/coverage.go
 hololive/hololive-shared/internal/service/youtube/reconcile/content/decision.go
 hololive/hololive-shared/internal/service/youtube/reconcile/content/negative.go
@@ -726,7 +718,6 @@ hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_defer_0144_12.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_failure_lock_0144_14.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_insert_0144_06.sql
-hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_lock_0144_07.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_release_0144_10.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_release_restore_0144_13.sql
 hololive/hololive-youtube-collector/internal/runtime/joblease/queries/repository_lease_renew_0144_09.sql

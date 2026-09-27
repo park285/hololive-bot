@@ -41,24 +41,6 @@ type ChannelPostDeliverySummary struct {
 	ShortsDetectedPostCount    int64      `json:"shorts_detected_post_count"`
 }
 
-type PostDeliveryPathUsage struct {
-	OutboxKind         domain.OutboxKind `db:"outbox_kind"`
-	AlarmType          domain.AlarmType  `db:"alarm_type"`
-	ChannelID          string            `db:"channel_id"`
-	PostID             string            `db:"post_id"`
-	ContentID          string            `db:"content_id"`
-	DeliveryPath       string            `db:"delivery_path"`
-	ActualPublishedAt  *time.Time        `db:"actual_published_at"`
-	DetectedAt         *time.Time        `db:"detected_at"`
-	FirstEventAt       *time.Time        `db:"first_event_at"`
-	LastEventAt        *time.Time        `db:"last_event_at"`
-	FirstSuccessAt     *time.Time        `db:"first_success_at"`
-	LastSuccessAt      *time.Time        `db:"last_success_at"`
-	SuccessSendCount   int64             `db:"success_send_count"`
-	SuccessRoomCount   int64             `db:"success_room_count"`
-	FailedAttemptCount int64             `db:"failed_attempt_count"`
-}
-
 type PostLatencyPeriod struct {
 	Label   string
 	StartAt time.Time

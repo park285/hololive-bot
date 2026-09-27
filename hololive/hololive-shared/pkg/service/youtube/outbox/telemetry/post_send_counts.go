@@ -43,7 +43,7 @@ func (r *Repository) ListPostSendCountsSince(ctx context.Context, since time.Tim
 		return nil, errors.New("list post send counts since: since is empty")
 	}
 
-	rows, err := r.listPostSendCounts(ctx, since.UTC(), nil)
+	rows, err := r.listPostSendCounts(ctx, since.UTC())
 	if err != nil {
 		return nil, fmt.Errorf("list post send counts since: %w", err)
 	}
@@ -51,43 +51,7 @@ func (r *Repository) ListPostSendCountsSince(ctx context.Context, since time.Tim
 	return rows, nil
 }
 
-func (r *Repository) ListPostSendCountsWithinPublishedWindow(
-	ctx context.Context,
-	windowStart time.Time,
-	windowEnd time.Time,
-) ([]analytics.PostSendCount, error) {
-	if r == nil || r.db == nil {
-		return nil, errors.New("list post send counts within published window: db is nil")
-	}
-
-	if windowStart.IsZero() {
-		return nil, errors.New("list post send counts within published window: window start is empty")
-	}
-
-	if windowEnd.IsZero() {
-		return nil, errors.New("list post send counts within published window: window end is empty")
-	}
-
-	startUTC := windowStart.UTC()
-	endUTC := windowEnd.UTC()
-
-	if !startUTC.Before(endUTC) {
-		return nil, errors.New("list post send counts within published window: window start must be before window end")
-	}
-
-	rows, err := r.listPostSendCounts(ctx, startUTC, &endUTC)
-	if err != nil {
-		return nil, fmt.Errorf("list post send counts within published window: %w", err)
-	}
-
-	return rows, nil
-}
-
-func (r *Repository) listPostSendCounts(
-	ctx context.Context,
-	windowStart time.Time,
-	windowEnd *time.Time,
-) ([]analytics.PostSendCount, error) {
+func (r *Repository) listPostSendCounts(ctx context.Context, since time.Time) ([]analytics.PostSendCount, error) {
 	var scanned []postSendCountScanRow
 
 	postKinds := []domain.OutboxKind{domain.OutboxKindCommunityPost, domain.OutboxKindNewShort}
@@ -97,19 +61,12 @@ func (r *Repository) listPostSendCounts(
 		LEFT JOIN youtube_notification_delivery_telemetry t ON t.outbox_id = o.id AND t.event_at >= ?
 		WHERE ` + deliverysql.DeliveryInClause("track.kind", len(postKinds)) + `
 		  AND COALESCE(track.actual_published_at, track.detected_at) >= ?
-	`
-	args := []any{windowStart.UTC()}
+	` + postSendCountsGroupOrderSQL()
+	args := []any{since}
 
 	args = deliverysql.AppendDeliveryOutboxKindArgs(args, postKinds...)
-	args = append(args, windowStart.UTC())
+	args = append(args, since)
 
-	if windowEnd != nil {
-		query += " AND COALESCE(track.actual_published_at, track.detected_at) < ?"
-
-		args = append(args, windowEnd.UTC())
-	}
-
-	query += postSendCountsGroupOrderSQL()
 	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &scanned, "scan rows", query, args...); err != nil {
 		return nil, fmt.Errorf("scan rows: %w", err)
 	}

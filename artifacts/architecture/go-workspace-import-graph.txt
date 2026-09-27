@@ -931,7 +931,6 @@ github.com/kapu/hololive-shared/pkg/contracts/settings -> github.com/kapu/hololi
 github.com/kapu/hololive-shared/pkg/contracts/trigger -> github.com/kapu/hololive-shared/pkg/contracts/trigger
 github.com/kapu/hololive-shared/pkg/dbx -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/pkg/dbx -> github.com/kapu/hololive-shared/pkg/pgxutil
-github.com/kapu/hololive-shared/pkg/dbx -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/domain -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/domain -> github.com/kapu/hololive-shared/pkg/util
 github.com/kapu/hololive-shared/pkg/domain/mekparkhost/cmd/classify-titles -> github.com/kapu/hololive-shared/pkg/domain/mekparkhost
@@ -1092,6 +1091,7 @@ github.com/kapu/hololive-shared/pkg/service/holodex/provider -> github.com/park2
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/v2/pkg/h3
 github.com/kapu/hololive-shared/pkg/service/internalhttp -> github.com/park285/shared-go/v2/pkg/httputil
+github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/park285/iris-client-go/v2/iris
 github.com/kapu/hololive-shared/pkg/service/kakaoroom -> github.com/park285/shared-go/v2/pkg/kakaoformat
@@ -1166,13 +1166,10 @@ github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry -> github.c
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry -> github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/youtube/outbox/timeline -> github.com/kapu/hololive-shared/pkg/domain
-github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-dbtest
-github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-shared/pkg/dbx
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-shared/pkg/service/youtube/contentid
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/parser
-github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime -> github.com/kapu/hololive-shared/pkg/sqlassets
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo -> github.com/kapu/hololive-dbtest
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo -> github.com/kapu/hololive-shared/pkg/dbx
 github.com/kapu/hololive-shared/pkg/service/youtube/poller/runtime/batchrepo -> github.com/kapu/hololive-shared/pkg/domain

@@ -59,7 +59,6 @@ type fakeACLStore struct {
 	afterCreateRoom   func(roomID, listType string)
 	deleteRoomHook    func(roomID, listType string) error
 	afterDeleteRoom   func(roomID, listType string)
-	countRoomsHook    func(roomID, listType string) error
 }
 
 type roomKey struct {
@@ -193,31 +192,14 @@ func (f *fakeACLStore) DeleteRoom(_ context.Context, roomID, listType string) er
 	return nil
 }
 
-func (f *fakeACLStore) CountRooms(_ context.Context, roomID, listType string) (int64, error) {
-	if f.countRoomsHook != nil {
-		if err := f.countRoomsHook(roomID, listType); err != nil {
-			return 0, fmt.Errorf("count rooms hook: %w", err)
-		}
-	}
-
+// hasRoom은 fake 저장소에 (roomID, listType) 방 행이 남아 있는지 잠금 아래에서 확인한다.
+func (f *fakeACLStore) hasRoom(roomID, listType string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var count int64
+	_, ok := f.rooms[roomKey{roomID: roomID, listType: listType}]
 
-	for k := range f.rooms {
-		if k.roomID != roomID {
-			continue
-		}
-
-		if listType != "" && k.listType != listType {
-			continue
-		}
-
-		count++
-	}
-
-	return count, nil
+	return ok
 }
 
 func (f *fakeACLStore) settingValue(key string) string {

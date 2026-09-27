@@ -516,6 +516,81 @@ func TestPgxBatchRepositoryPersistCommunityPostsPreservesExistingPublishedAt(t *
 	require.EqualValues(t, 3, post.CommentCount)
 }
 
+type communityPostRowVersion struct {
+	ctid        string
+	lastSeenAt  time.Time
+	publishedAt *time.Time
+	likeCount   int64
+}
+
+const reobservedCommunityPostID = "post-reobserved"
+
+func readReobservedCommunityPostRowVersion(t *testing.T, db *batchTestDB) communityPostRowVersion {
+	t.Helper()
+
+	var version communityPostRowVersion
+
+	require.NoError(t, db.Pool.QueryRow(t.Context(), `
+		SELECT ctid::text, last_seen_at, published_at, like_count
+		FROM youtube_community_posts
+		WHERE post_id = $1
+	`, reobservedCommunityPostID).Scan(&version.ctid, &version.lastSeenAt, &version.publishedAt, &version.likeCount))
+
+	return version
+}
+
+// 불변 재관측은 기존 행 버전을 그대로 두고, 카운터 변화나 published_at 보강이 있을 때만 새 행 버전을 쓴다.
+func TestPgxBatchRepositoryPersistCommunityPostsSkipsUnchangedReobservation(t *testing.T) {
+	db := newBatchTestDB(t,
+		&domain.YouTubeCommunityPost{},
+		&domain.YouTubeNotificationOutbox{},
+		&domain.YouTubeContentWatermark{},
+	)
+	repository := NewBatchRepository(db)
+	ctx := t.Context()
+	publishedAt := time.Date(2026, time.April, 10, 1, 11, 12, 0, time.UTC)
+	observe := func(publishedAt *time.Time, likeCount int64) {
+		t.Helper()
+
+		require.NoError(t, persistCommunityPosts(ctx, repository, []*domain.YouTubeCommunityPost{{
+			PostID:        reobservedCommunityPostID,
+			ChannelID:     testChannelID,
+			AuthorName:    testAuthorName,
+			ContentText:   testContentText,
+			PublishedText: testPublishedText,
+			PublishedAt:   publishedAt,
+			LikeCount:     likeCount,
+			CommentCount:  2,
+		}}, nil, &domain.YouTubeContentWatermark{
+			ChannelID:     testChannelID,
+			WatermarkType: domain.WatermarkTypeCommunityPost,
+			Initialized:   true,
+			LastContentID: reobservedCommunityPostID,
+		}))
+	}
+
+	observe(nil, 10)
+
+	first := readReobservedCommunityPostRowVersion(t, db)
+
+	observe(nil, 10)
+	require.Equal(t, first, readReobservedCommunityPostRowVersion(t, db), "unchanged reobservation must not write a new row version")
+
+	observe(&publishedAt, 10)
+
+	enriched := readReobservedCommunityPostRowVersion(t, db)
+	require.NotEqual(t, first.ctid, enriched.ctid)
+	require.NotNil(t, enriched.publishedAt)
+	require.Equal(t, publishedAt, enriched.publishedAt.UTC())
+
+	observe(&publishedAt, 11)
+
+	counted := readReobservedCommunityPostRowVersion(t, db)
+	require.NotEqual(t, enriched.ctid, counted.ctid)
+	require.EqualValues(t, 11, counted.likeCount)
+	require.True(t, counted.lastSeenAt.After(first.lastSeenAt))
+}
+
 func TestPgxBatchRepositoryPersistCommunityPostsUpsertsAlarmState(t *testing.T) {
 	db := newBatchTestDB(t,
 		&domain.YouTubeCommunityPost{},
