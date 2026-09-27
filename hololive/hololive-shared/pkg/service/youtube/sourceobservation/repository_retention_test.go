@@ -38,6 +38,52 @@ func TestRetentionTickDeletesAtMostBatchSize(t *testing.T) {
 	assertTableCount(t, pool, "source_observations", 3)
 }
 
+func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	repo := NewRepository(pool)
+	now := time.Now().UTC()
+
+	for _, slot := range []struct {
+		id  int64
+		age time.Duration
+	}{
+		{id: 91001, age: 32 * 24 * time.Hour},
+		{id: 91002, age: 31 * 24 * time.Hour},
+		{id: 91003, age: 29 * 24 * time.Hour},
+	} {
+		at := now.Add(-slot.age)
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO youtube_live_absence_slots (
+				observation_id, scheduled_for, evidence_sha256, effective_at,
+				received_at, scope_sha256, coverage
+			) VALUES ($1, $2, repeat('a', 64), $2, $2, repeat('b', 64),
+				'{"requested_channel_ids": ["UC_TEST"]}'::jsonb)
+		`, slot.id, at); err != nil {
+			t.Fatalf("insert slot %d: %v", slot.id, err)
+		}
+	}
+
+	config := RetentionConfig{LiveAbsenceSlotAge: 30 * 24 * time.Hour, BatchSize: 1}
+	for tick := range 2 {
+		result, err := repo.RunRetentionTick(ctx, config, now)
+		if err != nil {
+			t.Fatalf("tick %d: %v", tick, err)
+		}
+		if result.Table != "youtube_live_absence_slots" || result.Deleted != 1 {
+			t.Fatalf("tick %d result = %#v", tick, result)
+		}
+	}
+
+	var remainingID int64
+	if err := pool.QueryRow(ctx, `SELECT observation_id FROM youtube_live_absence_slots`).Scan(&remainingID); err != nil {
+		t.Fatalf("load remaining slot: %v", err)
+	}
+	if remainingID != 91003 {
+		t.Fatalf("remaining slot = %d, want 91003", remainingID)
+	}
+}
+
 func TestDeleteFirstRetentionBatchRunsEveryTable(t *testing.T) {
 	t.Parallel()
 

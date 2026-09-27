@@ -75,6 +75,13 @@ Activation 뒤에는 epoch row를 update/delete하거나 pre-epoch API image를 
 | `PHOTO_SYNC_ENABLED=true` | admin plane `members.photo` Holodex PhotoSync | yes |
 | `BOT_SEE_MORE_FOLD` | bot·llm plane의 긴 목록 응답을 머리 문단과 카카오톡 '전체보기'로 접음; 기본값 `true`, `false`는 접기를 끄는 운영 스위치 (`docs/current/architecture/MESSAGE_STYLE_GUIDE.md` §8) | no |
 | `CACHE_*`, `POSTGRES_*` | state dependencies | yes |
+| `YOUTUBE_PLANE_RETENTION_LIVE_ABSENCE_SLOTS_DAYS` | `youtube_live_absence_slots` 보존 기간; 기본 30일, production에서는 양수 | production YouTube plane |
+
+## YouTube 관측 보존
+
+`youtube_live_absence_slots`는 30일이 지난 `scheduled_for` 행을 retention tick당 최대 1000건 삭제합니다. 과거 positive 재처리는 삭제된 slot을 복원할 수 없으므로 30일 밖의 absence 역재생 결과는 보장하지 않습니다. 이미 session/head에 반영된 absence clock과 `youtube_live_pending_ends`는 이 삭제에 포함되지 않습니다. 30일보다 오래된 `live_snapshot`이 queue에서 대기·처리 중이거나 replay 요청이 pending이면 slot 삭제를 보류합니다. 오래된 작업이 장기간 남으면 slot 크기가 계속 증가할 수 있으므로 상태를 함께 확인합니다.
+
+운영 보존 기간을 바꿀 때는 stack-secrets master의 `hosts/hololive-osaka/hololive-bot/compose.env`를 수정해 sync한 뒤 `hololive-api`를 `--no-build --no-deps`로 재생성합니다. `hololive_youtube_plane_retention_deleted_total{table="youtube_live_absence_slots"}`와 retention 오류·tick 시간, `pg_stat_user_tables`의 `n_dead_tup`·autovacuum, DB/`pg_wal`/호스트 여유를 함께 봅니다. `hololive_youtube_plane_retention_backlog_age_seconds`는 현재 값을 채우지 않아 backlog 판단에 사용하지 않습니다. 물리적 파일 축소는 별도 유지보수입니다.
 
 ## Logs
 
