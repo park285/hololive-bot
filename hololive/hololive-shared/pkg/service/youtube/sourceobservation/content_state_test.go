@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/internal/service/youtube/reconcile/content"
 	contract "github.com/kapu/hololive-shared/pkg/contracts/sourceobservation"
 )
 
@@ -173,6 +174,66 @@ func TestContentLoaderScopePermutationsConverge(t *testing.T) {
 			}
 		})
 	}
+}
+
+// heap 삽입 순서와 index 순서에 기대지 않고, 늦은 positive가 부재 slot을 시간순으로 재적용해야 한다.
+func TestContentLoaderReplaysAbsenceSlotsInScheduledOrder(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+	base := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
+	first, second := base.Add(time.Hour), base.Add(2*time.Hour)
+	coverage := contract.ChannelListCoverageV1{ChannelID: testChannelID, MaxResults: 10, Exhausted: true}
+	rawCoverage, err := contract.MarshalPayloadV1(coverage)
+	require.NoError(t, err)
+
+	// 두 번째 부재를 먼저 저장해 순서 없는 sequential scan은 역순을 반환하게 한다.
+	for _, at := range []time.Time{second, first} {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO youtube_content_absence_slots (
+				channel_id, observation_kind, scheduled_for, evidence_sha256, effective_at, received_at, scope_sha256, coverage
+			) VALUES ($1, 'video_list', $2, $3, $2, $2, $3, $4)
+		`, testChannelID, at, strings.Repeat("ee", 32), rawCoverage)
+		require.NoError(t, err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, tx.Rollback(context.WithoutCancel(ctx)))
+	})
+
+	_, err = tx.Exec(ctx, `SET LOCAL enable_indexscan = off; SET LOCAL enable_indexonlyscan = off; SET LOCAL enable_bitmapscan = off`)
+	require.NoError(t, err)
+
+	state := content.State{ChannelID: testChannelID, Kind: contract.KindVideoList}
+	evidence := content.Evidence{
+		Kind:         contract.KindVideoList,
+		ScheduledFor: base,
+		EffectiveAt:  base,
+		ReceivedAt:   base,
+		Completeness: contract.CompletenessPartial,
+		Videos:       []content.Entity{{VideoID: testVideoID, ChannelID: testChannelID, Title: "late positive"}},
+		Coverage:     content.CoverageValue{Videos: &coverage},
+	}
+	require.NoError(t, loadContentAbsenceSlots(ctx, tx, &state, &evidence))
+
+	decision, err := content.Reduce(state, evidence, time.Hour)
+	require.NoError(t, err)
+	require.Len(t, decision.Clocks, 1)
+
+	clock := decision.Clocks[0]
+	require.Equal(t, testVideoID, clock.VideoID)
+	require.NotNil(t, clock.FirstAbsenceScheduledFor)
+	require.NotNil(t, clock.SecondAbsenceScheduledFor)
+	require.NotNil(t, clock.Clock.MissingSinceEffectiveAt)
+	require.NotNil(t, clock.Clock.LastNegativeEffectiveAt)
+	require.Equal(t, first, clock.FirstAbsenceScheduledFor.UTC())
+	require.Equal(t, second, clock.SecondAbsenceScheduledFor.UTC())
+	require.Equal(t, first, clock.Clock.MissingSinceEffectiveAt.UTC())
+	require.Equal(t, second, clock.Clock.LastNegativeEffectiveAt.UTC())
+	require.Equal(t, 2, clock.ConsecutiveAbsenceSlots)
+	require.NotNil(t, clock.WithdrawnAt)
+	require.Equal(t, second, clock.WithdrawnAt.UTC())
 }
 
 // 부재 판정에 쓰이지 않는 이력(clock 없는 레거시 영상, 이번 관측보다 이른 slot)은 적재하거나 잠그지 않는다.

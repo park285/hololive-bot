@@ -11,7 +11,7 @@
 | `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (admin/bot planes) | internal HTTP contract `majorevent.subscription` |
 | `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | internal HTTP contracts `membernews.subscription`, `membernews.digest` |
 | alarm queue state | `alarm-worker` | `alarm-worker` | `alarm-worker`, observability consumers | queue contract `alarm.dispatch` or documented API |
-| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`, llm plane membernews read SQL, bot/admin plane in-process alarm 모드의 `pkg/service/alarm.Repository` |
+| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`, llm plane membernews read SQL. bot/admin plane은 필수 `ALARM_INTERNAL_URL`의 `alarm.http`를 사용하며 in-process 주입 분기는 정상 기동에서 도달 불가 |
 | YouTube outbox/tracking | `hololive-api` YouTube plane production, `alarm-worker` egress | `hololive-api` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `hololive-api` writes notification intent, `alarm-worker` owns final send state |
 
 Structured allowlist: `repository-ownership.allowlist`.

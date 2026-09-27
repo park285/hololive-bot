@@ -30,6 +30,12 @@
 | selected LLM provider | partial | digest/summary generation fails where enabled |
 | `alarm-worker` | partial | alarm API and proactive delivery drain depend on alarm-worker |
 
+## Compose 재생성 주의
+
+R-12의 `log_autovacuum_min_duration=10s`는 `holo-postgres`의 compose `command` 변경입니다. 변경된 compose를 사용하는 전체 `up`이나 의존성을 시작하는 명령은 DB 컨테이너를 재생성할 수 있으며, DB 중단·재연결을 포함한 별도 운영 승인이 필요합니다.
+
+특히 `compose-redeploy-service.sh hololive-api`도 앱의 최종 `up -d --no-deps` 전에 `run --rm hololive-db-migrate`를 실행합니다. 이 선행 명령에는 `--no-deps`가 없고 migrator는 `holo-postgres`에 의존하므로, 앱만 지정했다고 DB 재생성이 배제되는 것은 아닙니다. DB 재생성 승인이 없다면 이 compose 변경을 포함한 배포를 시작하지 않습니다. SQL 최적화 wave의 로컬 코드 승인은 R-12의 운영 활성화 승인이 아닙니다.
+
 ## Source observation replay epoch activation
 
 Migration 191과 epoch-aware `hololive-api`/`hololive-alarm-worker` image를 epoch 부재 상태로 먼저 배포하고 normal health, source observation 처리, delivery compatibility writer를 관찰합니다. 이 단계에서는 historical coverage가 성립하지 않으며 ledger completion one-shot을 실행하지 않습니다.

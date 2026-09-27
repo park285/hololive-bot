@@ -29,7 +29,7 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 - `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 다음 경로로 직접 읽습니다.
   - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
   - llm plane membernews: `repository_query_0080_03.sql`이 방별 구독 멤버 이름을 읽습니다.
-  - bot/admin plane: `AlarmServiceURL`이 비어 있는 in-process alarm 모드에서만 `pkg/service/alarm.Repository`를 `AlarmService`에 직접 주입합니다. `AlarmServiceURL`이 있으면 `alarm.http`를 사용합니다.
+  - bot/admin plane은 `alarm.http`를 사용합니다. 통합 API의 `apiplane.RuntimeConfig.Validate`가 빈 `ALARM_INTERNAL_URL`을 거부하므로, bootstrap에 남은 `AlarmServiceURL` 미설정 시 in-process `pkg/service/alarm.Repository` 주입 분기는 정상 기동에서 도달할 수 없고 운영 직접 읽기 계약에 포함하지 않습니다.
   - `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 youtube-collector와 YouTube plane에는 주입하지 않습니다. `check-repository-ownership.sh`는 youtube-collector의 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery, YouTube outbox handoff
 
