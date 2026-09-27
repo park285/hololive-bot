@@ -828,6 +828,7 @@ github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/pgxutil
 github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/sqlsplit
+github.com/kapu/hololive-dbtest -> github.com/park285/shared-go/v2/pkg/dbmigrate
 github.com/kapu/hololive-dbtest -> github.com/park285/shared-go/v2/pkg/retry
 github.com/kapu/hololive-shared/internal/service/fallback -> github.com/park285/shared-go/v2/pkg/panicguard
 github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient -> github.com/kapu/hololive-shared/pkg/config/settings
