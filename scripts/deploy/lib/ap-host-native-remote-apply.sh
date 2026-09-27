@@ -141,7 +141,7 @@ normalize_runtime_payload_permissions "$release_dir"
 [[ "$(cat "$release_dir/po-sandbox/revision")" == "${EXPECTED_REVISION:?expected native source SHA missing}" ]]
 po_install_root="$release_dir/po-sandbox/rootfs"
 sudo -n mkdir -p "$po_install_root"
-(cd "$release_dir/po-sandbox" && sha256sum --check --strict rootfs.tar.sha256)
+(cd "$release_dir/po-sandbox" && sudo -n sha256sum --check --strict rootfs.tar.sha256)
 sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-same-owner --same-permissions
 sudo -n chown -R -P root:root "$po_install_root"
 po_validate_release "$release_dir"
