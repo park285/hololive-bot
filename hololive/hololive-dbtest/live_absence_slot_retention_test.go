@@ -17,6 +17,7 @@ func TestLiveAbsenceSlotRetentionWaitsForActiveOldSnapshot(t *testing.T) {
 	`, observationID); err != nil {
 		t.Fatalf("insert pending old snapshot: %v", err)
 	}
+
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO public.youtube_live_absence_slots (
 			observation_id, scheduled_for, evidence_sha256, effective_at,
@@ -28,11 +29,13 @@ func TestLiveAbsenceSlotRetentionWaitsForActiveOldSnapshot(t *testing.T) {
 	}
 
 	var deleted int
+
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*) FROM public.delete_youtube_live_absence_slot_retention_batch($1, 1000)
 	`, now.Add(-30*24*time.Hour)).Scan(&deleted); err != nil {
 		t.Fatalf("retain with pending snapshot: %v", err)
 	}
+
 	if deleted != 0 {
 		t.Fatalf("deleted %d slots while an old snapshot is pending", deleted)
 	}
@@ -44,11 +47,13 @@ func TestLiveAbsenceSlotRetentionWaitsForActiveOldSnapshot(t *testing.T) {
 	`, observationID, now); err != nil {
 		t.Fatalf("complete old snapshot: %v", err)
 	}
+
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*) FROM public.delete_youtube_live_absence_slot_retention_batch($1, 1000)
 	`, now.Add(-30*24*time.Hour)).Scan(&deleted); err != nil {
 		t.Fatalf("delete after completion: %v", err)
 	}
+
 	if deleted != 1 {
 		t.Fatalf("deleted %d slots after completion, want 1", deleted)
 	}

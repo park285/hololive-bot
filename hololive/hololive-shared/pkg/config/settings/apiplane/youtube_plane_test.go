@@ -304,6 +304,7 @@ func assertRetentionOverrideAuditAges(t *testing.T, retention YouTubePlaneRetent
 	if retention.ApplicationAuditGrace != 61*24*time.Hour || retention.CheckpointHistoryAge != 8*24*time.Hour {
 		t.Fatalf("dependent retention ages = %s %s", retention.ApplicationAuditGrace, retention.CheckpointHistoryAge)
 	}
+
 	if retention.LiveAbsenceSlotAge != 39*24*time.Hour {
 		t.Fatalf("live absence slot age = %s", retention.LiveAbsenceSlotAge)
 	}
@@ -476,6 +477,7 @@ func TestYouTubePlaneRetentionDefaultsBoundDependentTables(t *testing.T) {
 	if cfg.ApplicationAuditGrace != 60*24*time.Hour {
 		t.Fatalf("application audit grace = %s, want 60d", cfg.ApplicationAuditGrace)
 	}
+
 	if cfg.LiveAbsenceSlotAge != 30*24*time.Hour {
 		t.Fatalf("live absence slot age = %s, want 30d", cfg.LiveAbsenceSlotAge)
 	}

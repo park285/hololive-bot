@@ -65,20 +65,24 @@ func TestRetentionTickBoundsLiveAbsenceSlots(t *testing.T) {
 	}
 
 	config := RetentionConfig{LiveAbsenceSlotAge: 30 * 24 * time.Hour, BatchSize: 1}
+
 	for tick := range 2 {
 		result, err := repo.RunRetentionTick(ctx, config, now)
 		if err != nil {
 			t.Fatalf("tick %d: %v", tick, err)
 		}
+
 		if result.Table != "youtube_live_absence_slots" || result.Deleted != 1 {
 			t.Fatalf("tick %d result = %#v", tick, result)
 		}
 	}
 
 	var remainingID int64
+
 	if err := pool.QueryRow(ctx, `SELECT observation_id FROM youtube_live_absence_slots`).Scan(&remainingID); err != nil {
 		t.Fatalf("load remaining slot: %v", err)
 	}
+
 	if remainingID != 91003 {
 		t.Fatalf("remaining slot = %d, want 91003", remainingID)
 	}
