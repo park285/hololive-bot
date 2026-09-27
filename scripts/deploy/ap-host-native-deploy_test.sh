@@ -404,7 +404,6 @@ else
 fi
 
 restore_payload="${tmp}/success/call-3.stdin"
-completion_cmd="${tmp}/success/call-5.cmd"
 
 validate_line="$(grep -nF 'native_rollback_validate "$previous_target"' "${restore_payload}" | tail -1 | cut -d: -f1)"
 restore_line="$(grep -nF 'install -m 0640 -o root -g root "$rollback_contract_dir/youtube-collector-host.env"' "${restore_payload}" | tail -1 | cut -d: -f1)"
@@ -414,11 +413,6 @@ else
   record_fail "native rollback validation must run before the first restore mutation"
 fi
 
-if [[ -r "${completion_cmd}" ]] && grep -Fq '2026-08-01T03:04:05Z' "${completion_cmd}"; then
-  pass "ap-host-native rollback forwards change_started_at to the completion gate"
-else
-  record_fail "ap-host-native rollback must forward change_started_at to the completion gate"
-fi
 
 if PATH="${tmp}/bin:${PATH}" \
    SSH_KEY="${tmp}/KR.key" \

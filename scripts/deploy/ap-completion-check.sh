@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 CHANGE_STARTED_AT="${CHANGE_STARTED_AT:-}"
+PO_EXPECTED_PRESENCE="${PO_EXPECTED_PRESENCE:-present}"
 AP_REQUIRED_UDP_BUFFER_BYTES="${AP_REQUIRED_UDP_BUFFER_BYTES:-7500000}"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
 READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
@@ -19,6 +20,10 @@ if [[ ! "$AP_REQUIRED_UDP_BUFFER_BYTES" =~ ^[0-9]+$ ]]; then
   echo "AP_REQUIRED_UDP_BUFFER_BYTES must be an integer" >&2
   exit 2
 fi
+case "$PO_EXPECTED_PRESENCE" in
+  present|absent) ;;
+  *) echo 'PO_EXPECTED_PRESENCE must be present or absent' >&2; exit 2 ;;
+esac
 
 remote() {
   "${AP_SSH[@]}" "$@"
@@ -43,6 +48,7 @@ set -euo pipefail
 service="$1"
 port="$2"
 change_started_at="$3"
+po_expected_presence="$4"
 unit="hololive-youtube-collector@${service}.service"
 current_link="/opt/hololive-bot/youtube-collector/current"
 
@@ -55,12 +61,20 @@ sudo -n test -x "$current_link/bin/healthcheck"
 sudo -n test -f "$current_link/youtubejs/src/server.mjs"
 require_node_version node
 
-po_validate_release "$current_link"
-systemctl is-active --quiet hololive-youtube-po.socket
-systemctl is-active --quiet hololive-youtube-po.service
-sudo -n -u hololive "$current_link/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock
-python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert (m["source_revision"],m["version"],m["go"]["goarch"]) == (open(sys.argv[2]).read().strip(),open(sys.argv[3]).read().strip(),"amd64")' \
-  "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
+if [[ "$po_expected_presence" == present ]]; then
+  po_validate_release "$current_link"
+  systemctl is-active --quiet hololive-youtube-po.socket
+  systemctl is-active --quiet hololive-youtube-po.service
+  sudo -n -u hololive "$current_link/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock
+  python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert (m["source_revision"],m["version"],m["go"]["goarch"]) == (open(sys.argv[2]).read().strip(),open(sys.argv[3]).read().strip(),"amd64")' \
+    "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
+else
+  [[ "$(sudo -n cat "$current_link/rollback-contract/po-unit-presence")" == absent ]]
+  sudo -n test ! -e /etc/systemd/system/hololive-youtube-po.service
+  sudo -n test ! -e /etc/systemd/system/hololive-youtube-po.socket
+  [[ "$(systemctl show hololive-youtube-po.service -p LoadState --value)" == not-found ]]
+  [[ "$(systemctl show hololive-youtube-po.socket -p LoadState --value)" == not-found ]]
+fi
 systemctl is-active --quiet "$unit"
 active_state="$(systemctl show "$unit" -p ActiveState --value)"
 sub_state="$(systemctl show "$unit" -p SubState --value)"
@@ -83,16 +97,18 @@ fi
 sudo -n grep -qx 'YOUTUBE_COLLECTOR_RUNTIME_ALLOWED=true' /etc/hololive-bot/youtube-collector-host.env
 sudo -n grep -qx 'POSTGRES_USER=hololive_scraper' /etc/hololive-bot/youtube-collector-host.env
 
+collector_readiness_fetch() {
+  systemctl is-active --quiet "$unit" || return 1
+  sudo -n -u hololive env \
+    HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
+    HEALTHCHECK_SERVER_NAME=127.0.0.1 \
+    "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
+}
+ready="$(collector_readiness_poll 90 2 collector_readiness_fetch)"
 sudo -n -u hololive env \
   HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
   HEALTHCHECK_SERVER_NAME=127.0.0.1 \
   "$current_link/bin/healthcheck" "https://127.0.0.1:${port}/health" >/dev/null
-ready="$(
-  sudo -n -u hololive env \
-  HEALTHCHECK_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt \
-  HEALTHCHECK_SERVER_NAME=127.0.0.1 \
-  "$current_link/bin/healthcheck" --body "https://127.0.0.1:${port}/ready"
-)"
 printf '%s\n' "$ready"
 collector_readiness_validate "$ready"
 
@@ -112,13 +128,14 @@ fi
 
 echo 'collector AP completion check passed'
 REMOTE
-  } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT"
+  } | ap_remote_bash "$service" "$port" "$CHANGE_STARTED_AT" "$PO_EXPECTED_PRESENCE"
 }
 
 if [[ "${AP_RUNTIME_MODE:-compose}" == "native" ]]; then
   run_native_completion_check
   exit 0
 fi
+[[ "$PO_EXPECTED_PRESENCE" == present ]] || { echo 'issuer absence completion is only supported for recorded native rollback' >&2; exit 2; }
 
 services_list="${AP_SERVICES[*]}"
 containers_list="${AP_CONTAINERS[*]}"

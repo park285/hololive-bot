@@ -125,7 +125,12 @@ REMOTE
 } | ap_remote_bash "$service" "$rollback_started_at"
 
 if [[ "$rollback_mode" == "collector" ]]; then
-  CHANGE_STARTED_AT="$rollback_started_at" \
+  po_expected_presence="$(ap_remote_bash <<'REMOTE'
+set -euo pipefail
+sudo -n cat /opt/hololive-bot/youtube-collector/current/rollback-contract/po-unit-presence
+REMOTE
+  )"
+  PO_EXPECTED_PRESENCE="$po_expected_presence" CHANGE_STARTED_AT="$rollback_started_at" \
     "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"
 else
   echo "first-cutover producer runtime rollback verified"

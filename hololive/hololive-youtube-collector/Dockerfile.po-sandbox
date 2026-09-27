@@ -29,7 +29,8 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     GOWORK=off CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH}" \
     go build -trimpath -buildvcs=false -ldflags="-s -w -X main.revision=${REVISION} -X main.version=${VERSION}" \
     -o /po-broker ./cmd/po-broker
-RUN mkdir -p /issuer/rootfs/run/hololive-youtube-po /issuer/rootfs/tmp && \
+# systemd의 격리 mountpoint를 미리 넣어 기동 뒤에도 rootfs manifest를 보존한다.
+RUN mkdir -p /issuer/rootfs/run/hololive-youtube-po /issuer/rootfs/tmp /issuer/rootfs/root /issuer/rootfs/var/tmp && \
     chmod 0770 /issuer/rootfs/run/hololive-youtube-po && chmod 1777 /issuer/rootfs/tmp && \
     printf 'issuer:x:65532:1000:issuer:/tmp:/sbin/nologin\n' >/issuer/passwd && \
     printf 'issuer:x:1000:\n' >/issuer/group
