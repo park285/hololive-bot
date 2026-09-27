@@ -8,6 +8,8 @@
 
 ## 미출시
 
+## v5.0.0 - 2026-09-28
+
 - API·alarm-worker·shared·collector·DB 테스트 모듈의 `iris-client-go/v2`를 게시된 `v2.7.0`으로 고정합니다. 정본 Karing wire 이름과 결과 불명 오류 보존, 서버 퇴역 사전 이관 계약을 같은 SDK 버전으로 검증합니다.
 - `shared-go/v2`를 검증된 `v2.7.2`로 고정해 inbox prune의 호출당 삭제 상한을 보장합니다. 이 패치에는 S19 공개 API·TLS env 폴백 제거가 없으며, 소비자 TLS 명시 배포 뒤의 lockstep 릴리스와 구분합니다.
 - local CI의 standalone `staticcheck`를 `scripts/ci/staticcheck-facts/build.sh` 고정 profile로 바꿉니다. 원인: `staticcheck 2026.2.1`(`honnef.co/go/tools v0.8.1`)이 쓰는 x/tools `v0.44.1-0.20260420230617-19499e7caabc`의 objectpath는 source에서 선언 순서대로 보이는 generic method를 export data에서는 일반 method 뒤로 읽어, `iris-client-go/v2` `APIClient`의 `SendKaringHololive` 폐기 fact를 `SendReaction`에 붙이는 거짓 SA1019를 냈습니다(cold cache에서도 재현). profile은 두 module의 sumdb hash와 zip SHA-256을 검증한 archive에서 x/tools revision을 바꾸지 않고 method 순서 정규화 패치만 적용해 go1.27.1로 빌드하고, 정상 호출은 경고 없이·실제 폐기 호출은 SA1019 1건으로 끝나는 source/export 경계 CLI fixture를 통과한 binary만 cache합니다. 경고 억제나 app·SDK 우회는 없습니다. 제거 조건: upstream x/tools objectpath 수정이 staticcheck release에 반영되고 같은 fixture가 무패치 binary로 통과하면 profile을 지우고 pinned install로 돌아갑니다.
