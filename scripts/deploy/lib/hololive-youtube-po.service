@@ -8,7 +8,7 @@ StartLimitBurst=20
 [Service]
 Type=simple
 DynamicUser=yes
-RootDirectory=/opt/hololive-bot/youtube-collector/current/po-sandbox/rootfs
+RootDirectory=/opt/hololive-bot/youtube-collector/releases/@RELEASE_ID@/po-sandbox/rootfs
 ExecStart=/app/bin/po-broker --listen-fd 3
 Environment=HOME=/tmp TMPDIR=/tmp TZ=UTC LANG=C
 PrivateNetwork=yes

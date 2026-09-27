@@ -154,7 +154,7 @@ rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
 )
 write_host_env "$artifact_dir/youtube-collector-host.env"
 cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
-cp "$PO_UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-po.service"
+sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" > "$artifact_dir/hololive-youtube-po.service"
 cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
 
 RSYNC_RSH="$(ap_rsync_rsh)"

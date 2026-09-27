@@ -176,6 +176,8 @@ Channel 목록의 `UPCOMING` 행에 기계가독 `scheduled_at`이 없으면 hel
 
 issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 교체합니다. b의 소스는 별도 후보 디렉터리에 전송·대조한 뒤 승격하며, 실패 시 snapshot이 이전 파일 내용·mode·symlink·파일 부재까지 복원합니다. rollback은 이전 VERSION/실행 파일과 collector+issuer image/rootfs를 함께 복원하고, 최초 설치였던 issuer는 이전의 부재 상태로 돌립니다. 승인된 rollback artifact는 인수 완료 전 임의 삭제하지 않습니다.
 
+native issuer의 `RootDirectory`는 패키징 때 불변 release 경로로 확정합니다. systemd 249에서는 같은 rootfs라도 symlink 경유 시 226/NAMESPACE가 발생하고 실제 경로는 기동되는 것을 관측했으므로 `current` symlink를 쓰지 않습니다. 설치 unit은 변경 없이 보존하며, `systemd-analyze verify`가 RootDirectory를 고려하지 않는 실행 파일 검사에는 실제 rootfs 실행 경로로 해석한 임시 검사용 사본을 사용합니다. 실제 실행 파일 부재·unit 오류는 계속 차단합니다. verifier가 RootDirectory를 직접 해석하도록 바뀌면 이 검사용 경로 변환을 제거합니다.
+
 비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
 
 
