@@ -46,7 +46,28 @@ def verify_socket_owner(archive):
         raise ValueError("issuer socket directory ownership/mode must be 65532:1000 0770")
 
 
+def image_ids(archive, image_id):
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) is None:
+        raise ValueError("full image digest required")
+    with tarfile.open(archive) as payload:
+        manifest = json.load(payload.extractfile("manifest.json"))
+        if not isinstance(manifest, list) or len(manifest) != 1:
+            raise ValueError("one reviewed image per archive required")
+        config = payload.extractfile(manifest[0]["Config"]).read()
+        config_id = "sha256:" + hashlib.sha256(config).hexdigest()
+        if image_id != config_id:
+            descriptor = payload.extractfile("blobs/sha256/" + image_id[7:]).read()
+            if ("sha256:" + hashlib.sha256(descriptor).hexdigest() != image_id or
+                    json.loads(descriptor)["config"]["digest"] != config_id):
+                raise ValueError("image descriptor/config digest mismatch")
+    # containerd는 manifest digest, classic store는 config digest를 ID로 보고한다.
+    return sorted({image_id, config_id})
+
+
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "image-ids":
+        print("\n".join(image_ids(sys.argv[2], sys.argv[3])))
+        return
     if len(sys.argv) == 3 and sys.argv[1] == "verify-socket-owner":
         verify_socket_owner(sys.argv[2])
         print("issuer image socket directory ownership verified")
@@ -87,6 +108,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, OSError, tarfile.TarError, json.JSONDecodeError) as error:
+    except (ValueError, KeyError, OSError, tarfile.TarError, json.JSONDecodeError) as error:
         print(f"issuer artifact rejected: {error}", file=sys.stderr)
         sys.exit(1)

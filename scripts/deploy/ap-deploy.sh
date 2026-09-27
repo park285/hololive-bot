@@ -190,8 +190,7 @@ PY
 image_archive="$(mktemp)"
 docker save --output "$image_archive" "$IMAGE_REF"
 test -s "$image_archive"
-collector_image_id="$(docker image inspect -f '{{.Id}}' "$IMAGE_REF")"
-[[ "$collector_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+collector_image_id="$(python3 "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" image-ids "$image_archive" "$(docker image inspect -f '{{.Id}}' "$IMAGE_REF")")"
 collector_archive_sha="$(sha256sum "$image_archive")"
 collector_archive_sha="${collector_archive_sha%% *}"
 [[ "$collector_archive_sha" =~ ^[0-9a-f]{64}$ ]]
@@ -354,7 +353,7 @@ loaded_revision=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org
 [[ \"\$loaded_revision\" == '$REVISION' ]]
 loaded_platform=\$(sudo -n docker image inspect -f '{{.Os}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}' '$IMAGE_REF')
 [[ \"\$loaded_platform\" == '$TARGET_PLATFORM' ]]
-[[ \$(sudo -n docker image inspect -f '{{.Id}}' '$IMAGE_REF') == '$collector_image_id' ]]
+po_image_id_matches \"\$(sudo -n docker image inspect -f '{{.Id}}' '$IMAGE_REF')\" '$collector_image_id'
 [[ \$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.version\"}}' '$IMAGE_REF') == '$HOLO_API_VERSION' ]]"
 
 change_started_at="$(

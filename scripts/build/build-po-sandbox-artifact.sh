@@ -46,7 +46,8 @@ python3 "$root/scripts/build/po-sandbox-manifest.py" verify "$working/rootfs" "$
 # The image tar is transferred for Compose only; retain exact image identity before release.
 docker save --output "$output/image.tar" "$image"
 (cd "$output" && sha256sum image.tar > image.tar.sha256)
-docker image inspect -f '{{.Id}}' "$image" > "$output/image-id"
+python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$output/image.tar" \
+  "$(docker image inspect -f '{{.Id}}' "$image")" > "$output/image-id"
 printf '%s\n' "$revision" > "$output/revision"
 printf '%s\n' "$arch" > "$output/architecture"
 printf '%s\n' "$version" > "$output/version"

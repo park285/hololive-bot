@@ -43,7 +43,6 @@ if [[ "$mode" == deploy ]]; then
   docker cp "$collector_id:/app/bin/youtube-collector" "$local_stage/collector-binary"
   docker cp "$collector_id:/app/manifest.json" "$local_stage/collector-manifest.json"
   docker rm "$collector_id" >/dev/null
-  docker image inspect -f '{{.Id}}' hololive-youtube-collector:prod > "$local_stage/collector-image-id"
   python3 - "$local_stage/collector-manifest.json" "$local_stage/collector-binary" "$revision" <<'PY'
 import hashlib, json, sys
 m=json.load(open(sys.argv[1])); assert m['source_revision'] == sys.argv[3] and m['go']['goarch'] == 'arm64'
@@ -51,6 +50,8 @@ assert hashlib.sha256(open(sys.argv[2], 'rb').read()).hexdigest() == m['files'][
 PY
   docker save --output "$local_stage/collector-image.tar" hololive-youtube-collector:prod
   (cd "$local_stage" && sha256sum collector-image.tar > collector-image.tar.sha256)
+  python3 "$root/scripts/build/po-sandbox-manifest.py" image-ids "$local_stage/collector-image.tar" \
+    "$(docker image inspect -f '{{.Id}}' hololive-youtube-collector:prod)" > "$local_stage/collector-image-id"
   ssh "$ssh_target" "sudo -n install -d -o root -g root -m 0700 '$staging'"
   rsync -a --rsync-path='sudo -n rsync' \
     --files-from="$root/scripts/deploy/po-central-files.txt" "$root/" "$ssh_target:$staging/"

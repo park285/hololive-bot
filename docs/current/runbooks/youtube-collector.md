@@ -178,6 +178,8 @@ issuer를 먼저 기동·검증한 뒤 collector만 `--no-build --no-deps`로 �
 
 native issuer의 `RootDirectory`는 패키징 때 불변 release 경로로 확정합니다. systemd 249에서는 같은 rootfs라도 symlink 경유 시 226/NAMESPACE가 발생하고 실제 경로는 기동되는 것을 관측했으므로 `current` symlink를 쓰지 않습니다. 설치 unit은 변경 없이 보존하며, `systemd-analyze verify`가 RootDirectory를 고려하지 않는 실행 파일 검사에는 실제 rootfs 실행 경로로 해석한 임시 검사용 사본을 사용합니다. 실제 실행 파일 부재·unit 오류는 계속 차단합니다. verifier가 RootDirectory를 직접 해석하도록 바뀌면 이 검사용 경로 변환을 제거합니다.
 
+Compose의 `image-id` 근거는 검증한 단일 이미지 archive에 묶인 Docker identity 집합입니다. containerd store의 manifest digest와 classic store의 config digest를 최대 두 줄로 기록하고, manifest→config 결합도 검증합니다. 같은 daemon의 rollback snapshot은 실제 ID 한 줄을 기록합니다. 수신측은 이 집합에 없는 ID를 거부하며 full SHA·architecture·version·archive hash와 실행 중 image 일치 검사를 계속 적용합니다. 서울 classic store와 kapu/중앙 containerd store의 표현 차이만 처리하며 임의 image 대체나 검증 생략은 없습니다.
+
 비정상 generation/늦은 응답/취소는 해당 연산의 실제 admission 단계에 따라 처리합니다. 작업 시작 전 취소는 다른 호출의 준비된 세대를 폐기하지 않으며, 실제 worker 연산 중 실패는 전체 VM을 종료합니다. provider TTL 필드, 고정 시계 경계 시험, 실제 장시간 만료·갱신 관측은 서로 다른 증거입니다.
 
 

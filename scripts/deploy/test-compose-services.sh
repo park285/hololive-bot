@@ -272,3 +272,5 @@ if rg -n 'ap-(deploy|rollback)\.sh (osaka|osaka2)' \
 fi
 pass "current operator docs route Osaka and Osaka2 through host-native helpers"
 
+python3 -B "${ROOT_DIR}/scripts/build/po-sandbox-manifest_test.py"
+

@@ -36,12 +36,12 @@ verify_collector() {
   local image="$1" reviewed="$2" expected="$3" id_file="$4" expected_id actual_id actual_arch actual_revision
   [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || return 1
   expected_id="$(cat "$id_file")"
-  [[ "$expected_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
-  python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["source_revision"] == sys.argv[2] and m["go"]["goarch"] == "arm64" and m.get("image_id",sys.argv[3]) == sys.argv[3]' "$reviewed" "$expected" "$expected_id"
+  actual_id="$(docker image inspect -f '{{.Id}}' "$image")"
+  po_image_id_matches "$actual_id" "$expected_id" || return 1
+  python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["source_revision"] == sys.argv[2] and m["go"]["goarch"] == "arm64" and m.get("image_id",sys.argv[3]) == sys.argv[3]' "$reviewed" "$expected" "$actual_id"
   actual_arch="$(docker image inspect -f '{{.Os}}/{{.Architecture}}' "$image")"
   actual_revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
-  actual_id="$(docker image inspect -f '{{.Id}}' "$image")"
-  [[ "$actual_arch" == linux/arm64 && "$actual_revision" == "$expected" && "$actual_id" == "$expected_id" ]]
+  [[ "$actual_arch" == linux/arm64 && "$actual_revision" == "$expected" ]]
 }
 wait_issuer() {
   local started="$1" status socket_mount actual
