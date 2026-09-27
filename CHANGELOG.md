@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- 구독 대상 동시 조회 회귀를 `testing/synctest`로 검증해 전체 빌드 부하에서 100ms goroutine 시작 제한이 실패하던 문제를 제거합니다. 두 조회의 동시 진행과 타입별 반환 대상 검증은 유지하고 DB fixture는 가상 시계 밖에서 관리합니다.
 - YouTube 라이브 확인에 정상 PO Token 발급·갱신·영상별 첨부를 연결합니다. 외부 interpreter는 앱 비밀과 네트워크가 없는 별도 issuer에서 실행하며, challenge 요청 전에 동일 UA/JSDOM 준비를 완료합니다. 만료·취소·발급 실패에는 기존 단일 무토큰 조회와 UNKNOWN 판정을 보존합니다.
 - native/Compose collector와 issuer를 같은 full SHA로 빌드·검증·교체하고 실패 시 함께 복원합니다. AP 소스는 staging 검증 뒤 승격하고 snapshot으로 중단 전 상태를 복원합니다. 중앙 개별 collector/issuer 재배포는 paired entrypoint로 통합하며 `compose-redeploy-service.sh all`은 지원하지 않습니다.
 - issuer rootfs의 소켓 디렉터리 권한(0770)과 `/tmp` sticky bit(1777)를 이미지 복사·일반 사용자 압축 해제에서도 보존합니다. 빌드 호스트 umask에 따라 배포 검증이 실패하던 원인을 수정하며 기존 무결성 검사는 유지합니다.

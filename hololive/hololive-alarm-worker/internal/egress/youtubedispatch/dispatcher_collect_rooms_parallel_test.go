@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/require"
 
@@ -18,59 +18,70 @@ import (
 func TestCollectRoomsByChannel_PerformsTypedLookupsConcurrently(t *testing.T) {
 	t.Parallel()
 
-	shortsKey := sharedalarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeShorts)
-	communityKey := sharedalarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeCommunity)
-	shortsStarted := make(chan struct{})
-	communityStarted := make(chan struct{})
-	release := make(chan struct{})
-
+	// DB fixture의 실제 IO와 수명은 가상 시계 bubble 밖에서 소유한다.
 	cache := cachemocks.NewStrictClient()
-
-	cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
-		switch key {
-		case shortsKey:
-			close(shortsStarted)
-			<-release
-
-			return []string{testRoomShorts}, nil
-		case communityKey:
-			close(communityStarted)
-			<-release
-
-			return []string{testRoomCommunity}, nil
-		default:
-			return nil, nil
-		}
-	}
-
 	dispatcher := newDispatcherForTest(t, nil, cache, &testSender{failRoom: map[string]bool{}}, nil, slog.New(slog.DiscardHandler), &dispatchstate.Config{})
-	done := make(chan map[string]channelAlarmRoomTargets, 1)
 
-	go func() {
-		done <- dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
-			{ChannelID: "UCparallel", Kind: domain.OutboxKindNewShort},
-			{ChannelID: "UCparallel", Kind: domain.OutboxKindCommunityPost},
-		})
-	}()
+	synctest.Test(t, func(t *testing.T) {
+		shortsKey := sharedalarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeShorts)
+		communityKey := sharedalarmkeys.BuildChannelSubscriberKey("UCparallel", domain.AlarmTypeCommunity)
+		shortsStarted := make(chan struct{})
+		communityStarted := make(chan struct{})
+		release := make(chan struct{})
 
-	select {
-	case <-shortsStarted:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("shorts lookup did not start")
-	}
+		cache.SMembersFunc = func(_ context.Context, key string) ([]string, error) {
+			switch key {
+			case shortsKey:
+				close(shortsStarted)
+				<-release
 
-	select {
-	case <-communityStarted:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("community lookup did not start while shorts lookup was blocked")
-	}
+				return []string{testRoomShorts}, nil
+			case communityKey:
+				close(communityStarted)
+				<-release
 
-	close(release)
+				return []string{testRoomCommunity}, nil
+			default:
+				return nil, nil
+			}
+		}
 
-	roomsByChannel := <-done
-	require.Contains(t, roomsByChannel, "UCparallel")
-	require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeShorts], testRoomShorts)
-	require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeCommunity], testRoomCommunity)
+		done := make(chan map[string]channelAlarmRoomTargets, 1)
+
+		go func() {
+			done <- dispatcher.grouper.collectRoomsByChannel(t.Context(), []domain.YouTubeNotificationOutbox{
+				{ChannelID: "UCparallel", Kind: domain.OutboxKindNewShort},
+				{ChannelID: "UCparallel", Kind: domain.OutboxKindCommunityPost},
+			})
+		}()
+
+		// 두 조회가 모두 release를 기다리는지 확인하며 wall-clock 속도는 판정하지 않는다.
+		synctest.Wait()
+
+		shortsConcurrent, communityConcurrent := false, false
+
+		select {
+		case <-shortsStarted:
+			shortsConcurrent = true
+		default:
+		}
+
+		select {
+		case <-communityStarted:
+			communityConcurrent = true
+		default:
+		}
+
+		close(release)
+
+		roomsByChannel := <-done
+
+		require.True(t, shortsConcurrent, "shorts lookup did not start while lookups were blocked")
+		require.True(t, communityConcurrent, "community lookup did not start while lookups were blocked")
+		require.Contains(t, roomsByChannel, "UCparallel")
+		require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeShorts], testRoomShorts)
+		require.Contains(t, roomsByChannel["UCparallel"][domain.AlarmTypeCommunity], testRoomCommunity)
+	})
 }
 
 func TestCollectRoomsByChannelFallsBackToDBWhenCacheEmpty(t *testing.T) {
