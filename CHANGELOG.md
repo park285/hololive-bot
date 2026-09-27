@@ -14,6 +14,10 @@
 - 운영 조회가 선택하지 않는 source observation·queue 인덱스 네 개를 `DROP INDEX CONCURRENTLY`로 제거합니다(migration 213–216). 보존 기간과 보존 삭제·claim 경로는 유지합니다.
 - 로컬 통합 검사가 PostgreSQL·Valkey 일회용 컨테이너를 지울 때 이미지가 선언한 익명 volume도 함께 지웁니다.
 - 중앙 compose wrapper의 release version export 검사를 gate에 연결된 `ap-deploy-version_test.sh`로 옮깁니다. `compose-version-contract_test.sh`는 어떤 gate에도 연결되지 않은 채 2026-09-14 admin 통합 이후 Compose 문구 개수 불일치로 실패해 왔으므로 삭제합니다. 두 VERSION 읽기와 호출자 버전 불일치의 fail-closed는 계속 검사합니다.
+- source observation claim 후보를 PENDING과 만료 PROCESSING 가지로 나눕니다. PENDING 가지는 partial index 순서로 LIMIT까지만 읽고, 만료 PROCESSING 가지는 만료 행만 정렬합니다. 활성 backlog 5만 행 fixture에서 후보 선택이 읽는 행이 약 9.8만에서 10행 안팎으로 줄고, claim 순서·`SKIP LOCKED`·replay epoch·shorts 순서 계약은 유지합니다. 한 claim은 최대 2×LIMIT행을 claim transaction이 끝날 때까지 잠급니다.
+- 발행 검증(fence·projection·target) 조회 세 개를 pgx 파이프라인 한 번으로 보냅니다. 잠금 순서와 판정 우선순위는 그대로이며 발행당 왕복이 두 번 줄어듭니다.
+- content 관측은 로드 값과 달라진 evidence clock만 한 번의 배치로 저장하고, clock upsert에 값 열 14개의 `IS DISTINCT FROM` 가드를 둡니다. 상태 로드는 관측된 영상·clock 보유 영상과 현재·이후 absence slot만 잠그며 slot을 `scheduled_for` 순으로 적용합니다.
+- schedule 관측이 읽지 않던 누적 schedule item 전체 `FOR UPDATE` 조회를 제거하고, claim 예산은 남은 lease가 예산보다 짧을 때만 연장합니다. live 종료 finalizer는 due 조회에서 DB 시각을 함께 읽고, content 충돌 기록은 공용 reconcile 충돌 SQL을 씁니다. migration은 없습니다.
 
 ## v4.0.1 - 2026-09-25
 

@@ -78,6 +78,17 @@ func TestShortsLegacyEmptyPartialWatermarkDoesNotEstablishBaseline(t *testing.T)
 	assertNotifications(t, got, "short:new")
 }
 
+func TestShortsStoredCatalogOutsideLoadedVideosKeepsBaseline(t *testing.T) {
+	// 로더는 clock 없는 레거시 shorts를 Videos에 싣지 않는다. 저장 영상이 있으면 기준 목록을 유지해야 한다.
+	state := &State{ChannelID: testChannelID, Kind: contract.KindShortsList, Initialized: true, HasStoredVideos: true}
+	got := mustReduceAll(t, state, []Evidence{shortsAt(1, "new")}, 0)
+	assertNotifications(t, got, "short:new")
+
+	state.HasStoredVideos = false
+	got = mustReduceAll(t, state, []Evidence{shortsAt(1, "new")}, 0)
+	assertNotifications(t, got)
+}
+
 func TestShortsCompleteEmptyBaselineAllowsFirstContent(t *testing.T) {
 	state := &State{ChannelID: testChannelID, Kind: contract.KindShortsList}
 	baseline := shortsAt(1)

@@ -38,8 +38,9 @@ func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, erro
 	session.state.ChannelID = channelIDOf(session.state, session.evidence)
 
 	// 구버전의 빈 PARTIAL은 기준이 아니지만, 다른 종류로 저장된 영상도 last_content_id가 있으면 유효한 기준 목록입니다.
+	// 로더는 clock 없는 레거시 영상을 Videos에 싣지 않으므로 저장 영상 존재는 HasStoredVideos로도 판정합니다.
 	if evidence.Kind == contract.KindShortsList && session.state.LastContentID == "" &&
-		len(session.state.Videos) == 0 && session.state.EarliestCompleteAt == nil {
+		len(session.state.Videos) == 0 && !session.state.HasStoredVideos && session.state.EarliestCompleteAt == nil {
 		session.state.Initialized = false
 	}
 

@@ -15,27 +15,67 @@ type sqlPublishFenceVerifier struct {
 	jobs JobContractSet
 }
 
+// publishVerificationBatchSender는 pgx 트랜잭션의 파이프라인 전송 능력이다. 발행 트랜잭션은 항상
+// pgxpool에서 시작하므로 이 능력이 없으면 순차 경로로 바꾸지 않고 오류로 드러낸다.
+type publishVerificationBatchSender interface {
+	SendBatch(ctx context.Context, batch *pgx.Batch) pgx.BatchResults
+}
+
+// Verify는 fence(0001)·projection(0002)·target(0003) 조회를 한 번의 왕복으로 보낸다. 세 문장의 SQL 입력은
+// proof와 관측에서만 나오고, 서버가 입력 순서대로 실행하므로 잠금 순서(lease FOR UPDATE → projection FOR SHARE)는
+// 순차 실행과 같다. 판정은 결과를 순서대로 읽으며 기존 우선순위(fence → job kind/class/subject → projection →
+// membership → target)를 유지한다. 앞선 fence 판정이 실패해도 뒤 조회의 공유 잠금은 잡히지만 트랜잭션이 롤백된다.
 func (v sqlPublishFenceVerifier) Verify(
 	ctx context.Context,
 	tx dbx.Tx,
 	proof *contract.LeaseProof,
 	observations []contract.Envelope,
-) error {
-	job, err := v.loadPublishFence(ctx, tx, proof)
+) (err error) {
+	sender, ok := tx.(publishVerificationBatchSender)
+	if !ok {
+		return errors.New("verify publish fence: transaction does not support pipelined batches")
+	}
+
+	subjects, kinds := publishTargetKeys(observations)
+	batch := &pgx.Batch{}
+
+	batch.Queue(
+		mustSQL("repository_publish_fence_0001_01.sql"),
+		proof.JobKey,
+		proof.OwnerInstance,
+		proof.FenceEpoch,
+		proof.ProjectionGeneration,
+		proof.ScheduledFor,
+	)
+	batch.Queue(mustSQL("repository_projection_current_0002_02.sql"), proof.ProjectionGeneration)
+	batch.Queue(mustSQL("repository_target_enabled_0003_03.sql"), proof.ProjectionGeneration, subjects, kinds)
+
+	results := sender.SendBatch(ctx, batch)
+	if results == nil {
+		return errors.New("verify publish fence: batch results are nil")
+	}
+
+	// 판정이 앞에서 끝나도 남은 응답을 회수해 연결을 다음 문장에 쓸 수 있게 한다.
+	defer func() {
+		if closeErr := results.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close publish verification batch: %w", closeErr))
+		}
+	}()
+
+	job, err := v.loadPublishFence(results, proof)
 	if err != nil {
 		return fmt.Errorf("load publish fence: %w", err)
 	}
 
-	if projectionErr := v.verifyProjection(ctx, tx, proof.ProjectionGeneration); projectionErr != nil {
+	if projectionErr := verifyProjection(results); projectionErr != nil {
 		return fmt.Errorf("verify projection: %w", projectionErr)
 	}
 
-	subjects, kinds, err := v.collectPublishSubjects(&job, observations)
-	if err != nil {
-		return fmt.Errorf("collect publish subjects: %w", err)
+	if err := v.validatePublishObservations(&job, observations); err != nil {
+		return fmt.Errorf("validate publish observations: %w", err)
 	}
 
-	if err := v.verifyTargetsEnabled(ctx, tx, proof.ProjectionGeneration, subjects, kinds); err != nil {
+	if err := verifyTargetsEnabled(results); err != nil {
 		return fmt.Errorf("verify targets enabled: %w", err)
 	}
 
@@ -50,8 +90,7 @@ type publishFenceJob struct {
 }
 
 func (v sqlPublishFenceVerifier) loadPublishFence(
-	ctx context.Context,
-	tx dbx.Tx,
+	results pgx.BatchResults,
 	proof *contract.LeaseProof,
 ) (publishFenceJob, error) {
 	var (
@@ -59,15 +98,7 @@ func (v sqlPublishFenceVerifier) loadPublishFence(
 		jobClass string
 	)
 
-	err := tx.QueryRow(
-		ctx,
-		mustSQL("repository_publish_fence_0001_01.sql"),
-		proof.JobKey,
-		proof.OwnerInstance,
-		proof.FenceEpoch,
-		proof.ProjectionGeneration,
-		proof.ScheduledFor,
-	).Scan(&job.provider, &job.collectionJobKind, &jobClass, &job.jobSubject)
+	err := results.QueryRow().Scan(&job.provider, &job.collectionJobKind, &jobClass, &job.jobSubject)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return publishFenceJob{}, ErrCollectionFenceLost
@@ -91,10 +122,10 @@ func (v sqlPublishFenceVerifier) loadPublishFence(
 	return job, nil
 }
 
-func (v sqlPublishFenceVerifier) verifyProjection(ctx context.Context, tx dbx.Tx, generation int64) error {
+func verifyProjection(results pgx.BatchResults) error {
 	var current int64
 
-	err := tx.QueryRow(ctx, mustSQL("repository_projection_current_0002_02.sql"), generation).Scan(&current)
+	err := results.QueryRow().Scan(&current)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrProjectionStale
@@ -107,23 +138,26 @@ func (v sqlPublishFenceVerifier) verifyProjection(ctx context.Context, tx dbx.Tx
 	return nil
 }
 
-func (v sqlPublishFenceVerifier) collectPublishSubjects(
-	job *publishFenceJob,
-	observations []contract.Envelope,
-) (subjectKeys, kindNames []string, err error) {
-	subjects := make([]string, len(observations))
-	kinds := make([]string, len(observations))
+func publishTargetKeys(observations []contract.Envelope) (subjectKeys, kindNames []string) {
+	subjectKeys = make([]string, len(observations))
+	kindNames = make([]string, len(observations))
 
 	for i := range observations {
-		if err := v.validatePublishObservation(job, &observations[i], i); err != nil {
-			return nil, nil, fmt.Errorf("validate publish observation: %w", err)
-		}
-
-		subjects[i] = observations[i].SubjectKey
-		kinds[i] = string(observations[i].ObservationKind)
+		subjectKeys[i] = observations[i].SubjectKey
+		kindNames[i] = string(observations[i].ObservationKind)
 	}
 
-	return subjects, kinds, nil
+	return subjectKeys, kindNames
+}
+
+func (v sqlPublishFenceVerifier) validatePublishObservations(job *publishFenceJob, observations []contract.Envelope) error {
+	for i := range observations {
+		if err := v.validatePublishObservation(job, &observations[i], i); err != nil {
+			return fmt.Errorf("validate publish observation: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (v sqlPublishFenceVerifier) validatePublishObservation(job *publishFenceJob, observation *contract.Envelope, index int) error {
@@ -143,16 +177,10 @@ func (v sqlPublishFenceVerifier) validatePublishObservation(job *publishFenceJob
 	return nil
 }
 
-func (v sqlPublishFenceVerifier) verifyTargetsEnabled(
-	ctx context.Context,
-	tx dbx.Tx,
-	generation int64,
-	subjects, kinds []string,
-) error {
+func verifyTargetsEnabled(results pgx.BatchResults) error {
 	var allEnabled bool
 
-	err := tx.QueryRow(ctx, mustSQL("repository_target_enabled_0003_03.sql"), generation, subjects, kinds).Scan(&allEnabled)
-	if err != nil {
+	if err := results.QueryRow().Scan(&allEnabled); err != nil {
 		return fmt.Errorf("verify collection targets: %w", err)
 	}
 

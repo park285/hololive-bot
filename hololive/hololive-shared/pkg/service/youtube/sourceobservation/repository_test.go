@@ -1230,17 +1230,38 @@ func TestStaleHolderCannotCompleteDuplicateOrCollision(t *testing.T) {
 	}
 }
 
+// targetQueryCounter는 문장 수와 왕복 수를 따로 센다. 파이프라인 문장은 QueryTracer에 보이지 않으므로
+// BatchTracer로 배치 1회를 왕복 1회, 배치 안 문장을 각각 문장으로 센다.
 type targetQueryCounter struct {
-	queries atomic.Int32
+	queries    atomic.Int32
+	roundTrips atomic.Int32
 }
 
 func (c *targetQueryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
 	c.queries.Add(1)
+	c.roundTrips.Add(1)
 
 	return ctx
 }
 
 func (*targetQueryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func (c *targetQueryCounter) TraceBatchStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceBatchStartData) context.Context {
+	c.roundTrips.Add(1)
+
+	return ctx
+}
+
+func (c *targetQueryCounter) TraceBatchQuery(context.Context, *pgx.Conn, pgx.TraceBatchQueryData) {
+	c.queries.Add(1)
+}
+
+func (*targetQueryCounter) TraceBatchEnd(context.Context, *pgx.Conn, pgx.TraceBatchEndData) {}
+
+func (c *targetQueryCounter) reset() {
+	c.queries.Store(0)
+	c.roundTrips.Store(0)
+}
 
 func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 	ctx := t.Context()
@@ -1288,14 +1309,15 @@ func TestPublishTargetVerificationQueryCountIsConstantAtMaxBatch(t *testing.T) {
 		}
 	}()
 
-	counter.queries.Store(0)
+	counter.reset()
 
 	if err := (sqlPublishFenceVerifier{jobs: historicalViewerJobContracts()}).Verify(ctx, tx, &proof, observations); err != nil {
 		t.Fatalf("verify max batch: %v", err)
 	}
 
-	if got := counter.queries.Load(); got != 3 {
-		t.Fatalf("target fence queries = %d, want constant 3", got)
+	// fence·projection·target 3문장은 한 번의 파이프라인 왕복으로 간다.
+	if got, trips := counter.queries.Load(), counter.roundTrips.Load(); got != 3 || trips != 1 {
+		t.Fatalf("target fence statements = %d round trips = %d, want constant 3 statements in 1 round trip", got, trips)
 	}
 }
 
@@ -1358,16 +1380,17 @@ func assertPublishBatchStatementCount(
 		t.Fatal(err)
 	}
 
-	counter.queries.Store(0)
+	counter.reset()
 
 	if _, err := repository.publishPreparedTx(ctx, tx, &prepared, repository.completePublishTerminal); err != nil {
 		rollbackPublishTestTx(ctx, t, tx, "failed publish")
 		t.Fatalf("publish %d observations: %v", size, err)
 	}
 
-	if got := counter.queries.Load(); got != 6 {
+	// 검증 3문장(1왕복) + contract(0031) + publish_set(0032) + terminal = 6문장·4왕복.
+	if got, trips := counter.queries.Load(), counter.roundTrips.Load(); got != 6 || trips != 4 {
 		rollbackPublishTestTx(ctx, t, tx, "unexpected statement count")
-		t.Fatalf("publish statements = %d, want constant 6", got)
+		t.Fatalf("publish statements = %d round trips = %d, want constant 6 statements in 4 round trips", got, trips)
 	}
 
 	if err := tx.Rollback(ctx); err != nil {
@@ -1419,15 +1442,15 @@ func TestPublishBatchRejectsOversizedEncodedSetBeforeDatabaseAccess(t *testing.T
 		Observations: observations,
 	}
 
-	counter.queries.Store(0)
+	counter.reset()
 
 	_, err = NewRepository(tracedPool).PublishBatch(ctx, input)
 	if !errors.Is(err, ErrInvalidEnvelope) {
 		t.Fatalf("error = %v, want invalid envelope", err)
 	}
 
-	if got := counter.queries.Load(); got != 0 {
-		t.Fatalf("database statements = %d, want 0", got)
+	if got, trips := counter.queries.Load(), counter.roundTrips.Load(); got != 0 || trips != 0 {
+		t.Fatalf("database statements = %d round trips = %d, want 0", got, trips)
 	}
 }
 
