@@ -4,3 +4,4 @@ deploy/compose/docker-compose.prod.yml
 deploy/compose/docker-compose.live-compat.yml
 scripts/build/po-sandbox-manifest.py
 scripts/deploy/lib/po-sandbox-image.sh
+hololive/hololive-api/scripts/migrations/222_drop_youtube_job_lease_legacy_failure_trigger.sql

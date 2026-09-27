@@ -232,6 +232,7 @@ else
   [[ -z \$(docker ps -q --filter 'name=^hololive-youtube-collector-b$') ]]
 fi
 if sudo -n docker image inspect '$PO_IMAGE_REF' >/dev/null 2>&1; then
+  [[ -r '$backup_dir/rollback-image-tag' ]] || { echo 'issuer exists without a collector rollback baseline; refusing cutover' >&2; exit 1; }
   test -r '$po_manifest_active'
   test -r '$po_image_id_active'
   [[ \$(docker inspect -f '{{.State.Status}}' hololive-youtube-po-b) == running ]]
@@ -265,6 +266,17 @@ test -w /var/run/docker.sock || groups | grep -qw docker
 $(declare -f ap_prechange_config)
 ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_prechange_file\" -f \"\$ap_prechange_file\" config --quiet
 echo backup_dir='$backup_dir'"
+# rollback 기준점은 ap-rollback.sh와 같은 파일(rollback-image-tag)로 판정하고, trap을 걸기 전에 값을 확정한다.
+rollback_available="$(
+  remote "cd ~/hololive-bot && if [[ -r '$backup_dir/rollback-image-tag' ]]; then printf '%s\n' true; else printf '%s\n' false; fi"
+)"
+case "$rollback_available" in
+  true|false) ;;
+  *)
+    echo "unexpected rollback-image-tag probe result for $AP_NAME: $rollback_available" >&2
+    exit 1
+    ;;
+esac
 
 # 네트워크 전송은 live checkout을 덮지 않습니다. 완전한 후보를 먼저 준비합니다.
 remote "mkdir -p '$source_stage'"
@@ -300,16 +312,16 @@ restore_after_failed_deploy() {
   fi
   exit "$status"
 }
-# 기준점이 없는 첫 배포는 되돌릴 이전 collector가 없으므로 검증에 실패한 새 collector와 issuer를 멈추고 비활성을 확인한 뒤
-# fix-forward한다(stack-audit T05). 퇴역 producer의 첫 cutover 상태를 기록·복원하던 경로는 T18(2026-09-26)에서 모든 AP의
-# current·previous가 collector release이고 producer unit·컨테이너가 0개임을 확인해 지웠다
+# 기준점이 없는 첫 배포는 새 container·image tag·active receipt만 제거하고 source snapshot을 복원해
+# 다음 첫 배포의 사전 검증이 다시 성립하게 한다(stack-audit T05). rollback archive·volume은 보존한다.
+# 퇴역 producer 상태 복원은 T18(2026-09-26)의 부재 증거에 따라 제거한 채 유지한다
 # (stack-audit T11 holo-collector-retired-producer-cutover-tooling).
 stop_failed_first_deploy() {
   remote "set -euo pipefail
+cd ~/hololive-bot
 for container in $containers_list hololive-youtube-po-b; do
   active=\$(docker ps -q --filter \"name=^\${container}\$\")
   if [[ -n \"\$active\" ]]; then
-    echo \"[CUTOVER] Stopping failed first-deploy container: \${container}\"
     docker stop \"\$container\" >/dev/null
   fi
   active=\$(docker ps -q --filter \"name=^\${container}\$\")
@@ -317,11 +329,23 @@ for container in $containers_list hololive-youtube-po-b; do
     echo \"container still active: \${container}\" >&2
     exit 1
   fi
-done" || {
-    echo "AP first deploy failed and the new collector/issuer could not be confirmed stopped on $AP_NAME ($containers_list hololive-youtube-po-b); stop them before fixing forward" >&2
+  existing=\$(docker ps -aq --filter \"name=^\${container}\$\")
+  if [[ -n \"\$existing\" ]]; then
+    docker rm \"\$container\" >/dev/null
+  fi
+done
+for image in '$IMAGE_REF' '$PO_IMAGE_REF'; do
+  image_id=\$(sudo -n docker image ls --quiet --filter \"reference=\${image}\")
+  if [[ -n \"\$image_id\" ]]; then
+    sudo -n docker image rm \"\$image\" >/dev/null
+  fi
+done
+rm -f -- '$po_manifest_active' '$po_image_id_active'" || {
+    echo "AP first deploy cleanup failed on $AP_NAME; preserve and inspect $backup_dir before fixing forward" >&2
     return 1
   }
-  echo "AP first deploy failed; new collector and issuer stopped. $AP_NAME has no recorded rollback-image-tag, so fix forward" >&2
+  "${AP_SSH[@]}" "python3 - restore \"\$HOME\" \"\$HOME/$REMOTE_REPO_DIR/$backup_dir\"" < "$source_snapshot" || return 1
+  echo "AP first deploy failed; candidate state removed and previous source restored. $AP_NAME has no collector rollback baseline; fix forward" >&2
 }
 trap 'restore_after_failed_deploy $?' ERR
 trap 'restore_after_failed_deploy 130' INT
@@ -344,17 +368,6 @@ rsync -ai "$issuer_build_root/issuer/rootfs-manifest.json" \
 rsync -ai "$issuer_build_root/issuer/image-id" \
   -e "$RSYNC_RSH" "$(ap_rsync_target "./$po_remote_dir/po-sandbox-candidate.image-id")"
 
-# rollback 기준점은 ap-rollback.sh와 같은 파일(rollback-image-tag)로 판정하고, trap을 걸기 전에 값을 확정한다.
-rollback_available="$(
-  remote "cd ~/hololive-bot && if [[ -r '$backup_dir/rollback-image-tag' ]]; then printf '%s\n' true; else printf '%s\n' false; fi"
-)"
-case "$rollback_available" in
-  true|false) ;;
-  *)
-    echo "unexpected rollback-image-tag probe result for $AP_NAME: $rollback_available" >&2
-    exit 1
-    ;;
-esac
 
 # 기준점이 있는 재배포가 cutover 뒤 실패하면 ap-rollback.sh가 이전 collector와 issuer를 함께 복원해 AP에 collector가
 # 남는다(stack-audit T05, paired issuer rollback). 기준점이 없는 첫 배포 실패는 stop_failed_first_deploy가 처리한다.

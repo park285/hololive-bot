@@ -19,7 +19,9 @@ fi
 # Gate immediately before the first live mutation; the source SHA itself is checked below.
 gate_root="${PO_META_ROOT:-/home/kapu/work/iris-stack}"
 if [[ "$mode" != check ]]; then
-  (cd "$gate_root" && bash tools/checks/check-decision-catalog.sh plans gate PLN-20260927-hololive-egress-po-production --json) | \
+  plan_id="${PO_PLAN_ID:?set PO_PLAN_ID to the approved active execution plan}"
+  [[ "$plan_id" =~ ^PLN-[0-9]{8}-[a-z0-9-]+$ ]] || { echo 'invalid PO_PLAN_ID' >&2; exit 2; }
+  (cd "$gate_root" && bash tools/checks/check-decision-catalog.sh plans gate "$plan_id" --json) | \
     python3 -c 'import json,sys; g=json.load(sys.stdin); assert g["strict_validation"] == "passed" and g["gate_passed"] is True'
 fi
 version="$(cat "$root/hololive/hololive-api/VERSION")"

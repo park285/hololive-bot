@@ -109,6 +109,64 @@ restore() {
   wait_collector "$old_revision"
   echo "central previous collector/issuer restored from $backup"
 }
+require_collector_lease_migration() {
+  local migration=222_drop_youtube_job_lease_legacy_failure_trigger.sql expected observed
+  expected="$(sha256sum "$staging/hololive/hololive-api/scripts/migrations/$migration")"
+  expected="${expected%% *}"
+  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || return 1
+  # Compose가 해석한 migrator 접속을 그대로 사용한다. 로컬 socket ledger는 외부 DB override의 증거가 아니다.
+  observed="$(compose config --format json | python3 -c '
+import json, os, subprocess, sys, uuid
+config = json.load(sys.stdin)
+services = config["services"]
+migrator = services["hololive-db-migrate"]
+source = migrator["environment"]
+collector = services["youtube-collector"]["environment"]
+for pg, runtime in (("PGHOST", "POSTGRES_HOST"), ("PGPORT", "POSTGRES_PORT"), ("PGDATABASE", "POSTGRES_DB")):
+    if str(source[pg]) != str(collector[runtime]):
+        sys.exit("collector and migrator database routes differ")
+names = ("PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGSSLMODE", "PGSSLROOTCERT")
+if any(not source.get(name) for name in names):
+    sys.exit("collector migration proof requires complete migrator connection settings")
+networks = list(migrator["networks"])
+if len(networks) != 1:
+    sys.exit("collector migration proof requires one migrator network")
+network = config["networks"][networks[0]]["name"]
+roots = [v for v in migrator["volumes"] if v.get("type") == "bind" and v.get("target") == source["PGSSLROOTCERT"]]
+if len(roots) != 1 or not roots[0].get("read_only"):
+    sys.exit("collector migration proof requires the migrator read-only CA mount")
+env = os.environ.copy()
+env.update({name: str(source[name]) for name in names})
+env.update(PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5s -c lock_timeout=1s", PGCONNECT_TIMEOUT="5")
+owner = "hololive.collector-migration-proof=" + uuid.uuid4().hex
+command = ["docker", "create", "--label", owner, "--pull=never", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--network", network]
+for resolver in migrator.get("dns", []):
+    command.extend(("--dns", resolver))
+for name in (*names, "PGOPTIONS", "PGCONNECT_TIMEOUT"):
+    command.extend(("--env", name))
+command.extend(("--mount", "type=bind,src=" + roots[0]["source"] + ",dst=" + source["PGSSLROOTCERT"] + ",readonly", "--entrypoint", "psql", services["holo-postgres"]["image"], "--no-psqlrc", "-v", "ON_ERROR_STOP=1", "-At", "-c", sys.argv[1]))
+try:
+    created = subprocess.run(command, env=env, text=True, capture_output=True, timeout=15)
+    if created.returncode:
+        sys.exit("collector migration proof client creation failed")
+    container = created.stdout.strip()
+    if len(container) != 64 or any(c not in "0123456789abcdef" for c in container):
+        sys.exit("collector migration proof client identity is invalid")
+    result = subprocess.run(["docker", "start", "--attach", container], text=True, capture_output=True, timeout=15)
+    if result.returncode:
+        sys.exit("collector migration proof query failed")
+    print(result.stdout, end="")
+finally:
+    owned = subprocess.run(["docker", "ps", "--all", "--quiet", "--no-trunc", "--filter", "label=" + owner], check=True, text=True, capture_output=True, timeout=10).stdout.split()
+    for container in owned:
+        subprocess.run(["docker", "rm", "--force", "--volumes", container], check=True, stdout=subprocess.DEVNULL, timeout=10)
+' "SELECT current_setting('transaction_read_only'), COALESCE((SELECT checksum_sha256::text FROM schema_migration_checksums WHERE filename = '$migration'), '')")" || return 1
+  if [[ "$observed" != "on|$expected" ]]; then
+    echo "collector requires the reviewed $migration; apply central db-migrate before paired cutover" >&2
+    return 1
+  fi
+}
+
 issuer_container_service=youtube-po-c
 if [[ "$mode" == rollback ]]; then
   restore
@@ -133,6 +191,8 @@ if [[ "$mode" == check ]]; then
   echo "central collector/issuer completion verified revision=$revision backup=$backup"
   exit 0
 fi
+# W4 collector는 옛 lease failure 진단 복원 코드를 제거했으므로 222 적용 증명 전에는 교체하지 않는다.
+require_collector_lease_migration
 [[ -r "$staging/image.tar" && -r "$staging/image.tar.sha256" && -r "$staging/image-id" &&
    -r "$staging/collector-image.tar" && -r "$staging/collector-image.tar.sha256" && -r "$staging/collector-image-id" &&
    -r "$staging/rootfs-manifest.json" && -r "$staging/collector-manifest.json" ]] || exit 1

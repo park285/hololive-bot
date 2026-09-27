@@ -65,6 +65,10 @@ func TestAlarmDispatchMaintenancePGObservationFailureDoesNotContaminateDeletionT
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
+			// 관측과 삭제가 각자 idle 연결을 쓰게 미리 연다. timeout 관측은 자기 연결을 파기하므로,
+			// 예열이 없으면 삭제 250ms 예산에 새 DB로의 dial 비용이 섞여 SQL 경계가 아닌 연결 지연을 검증하게 된다.
+			warmAlarmDispatchPool(t, pool, 2)
+
 			pgStore := alarmDispatchMaintenancePgxStore{db: pool, beginner: pool}
 			store := &recordingAlarmDispatchMaintenanceStore{store: pgStore}
 			runner := &alarmDispatchMaintenanceRunner{
@@ -235,6 +239,23 @@ func seedAlarmDispatchRetentionDLQ(t *testing.T, pool *pgxpool.Pool, eventID int
 	`, eventID, dedupeKey, dlqAt).Scan(&deliveryID))
 
 	return deliveryID
+}
+
+// warmAlarmDispatchPool은 연결 n개를 동시에 잡았다 반납해 pool에 서로 다른 idle 연결 n개를 남긴다.
+func warmAlarmDispatchPool(t *testing.T, pool *pgxpool.Pool, n int) {
+	t.Helper()
+
+	conns := make([]*pgxpool.Conn, 0, n)
+	for range n {
+		conn, err := pool.Acquire(t.Context())
+		require.NoError(t, err)
+
+		conns = append(conns, conn)
+	}
+
+	for _, conn := range conns {
+		conn.Release()
+	}
 }
 
 type failingAlarmDispatchPGObserver struct {
