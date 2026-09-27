@@ -141,7 +141,7 @@ normalize_runtime_payload_permissions "$release_dir"
 po_install_root="$release_dir/po-sandbox/rootfs"
 sudo -n mkdir -p "$po_install_root"
 (cd "$release_dir/po-sandbox" && sha256sum --check --strict rootfs.tar.sha256)
-sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-same-owner
+sudo -n tar -xf "$release_dir/po-sandbox/rootfs.tar" -C "$po_install_root" --no-same-owner --same-permissions
 sudo -n chown -R -P root:root "$po_install_root"
 po_validate_release "$release_dir"
 sudo -n chmod 0755 "$release_dir" "$release_dir/bin" "$release_dir/bin/youtube-collector" "$release_dir/bin/healthcheck" "$release_dir/bin/youtube-collector-wrapper"

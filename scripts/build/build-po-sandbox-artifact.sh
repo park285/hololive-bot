@@ -39,7 +39,7 @@ container="$(docker create "$image")"
 mkdir -p "$working/rootfs"
 docker export "$container" --output "$output/rootfs.tar"
 python3 "$root/scripts/build/po-sandbox-manifest.py" verify-socket-owner "$output/rootfs.tar"
-tar -xf "$output/rootfs.tar" -C "$working/rootfs" --no-same-owner
+tar -xf "$output/rootfs.tar" -C "$working/rootfs" --no-same-owner --same-permissions
 python3 "$root/scripts/build/po-sandbox-manifest.py" create "$working/rootfs" "$output/rootfs-manifest.json" "$revision" "$arch"
 python3 "$root/scripts/build/po-sandbox-manifest.py" verify "$working/rootfs" "$output/rootfs-manifest.json" "$revision" "$arch"
 (cd "$output" && sha256sum rootfs.tar > rootfs.tar.sha256)

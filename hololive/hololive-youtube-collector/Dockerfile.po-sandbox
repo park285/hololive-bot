@@ -29,8 +29,8 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     GOWORK=off CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH}" \
     go build -trimpath -buildvcs=false -ldflags="-s -w -X main.revision=${REVISION} -X main.version=${VERSION}" \
     -o /po-broker ./cmd/po-broker
-RUN mkdir -p /issuer/run/hololive-youtube-po /issuer/tmp && \
-    chmod 0770 /issuer/run/hololive-youtube-po && chmod 1777 /issuer/tmp && \
+RUN mkdir -p /issuer/rootfs/run/hololive-youtube-po /issuer/rootfs/tmp && \
+    chmod 0770 /issuer/rootfs/run/hololive-youtube-po && chmod 1777 /issuer/rootfs/tmp && \
     printf 'issuer:x:65532:1000:issuer:/tmp:/sbin/nologin\n' >/issuer/passwd && \
     printf 'issuer:x:1000:\n' >/issuer/group
 
@@ -49,8 +49,8 @@ COPY --from=node-runtime --link /usr/lib/libstdc++.so.6* /usr/lib/
 COPY --from=node-runtime --link /usr/local/bin/node /usr/local/bin/node
 COPY --from=broker-build --link --chmod=0755 /po-broker /app/bin/po-broker
 COPY --from=package-build --link /app/po-sandbox /app/po-sandbox
-COPY --from=broker-build --link --chown=65532:1000 --chmod=0770 /issuer/run/hololive-youtube-po /run/hololive-youtube-po
-COPY --from=broker-build --link --chown=65532:1000 --chmod=1777 /issuer/tmp /tmp
+# 부모를 복사해 디렉터리 권한과 /tmp sticky bit를 그대로 보존한다.
+COPY --from=broker-build --link --chown=65532:1000 /issuer/rootfs/ /
 USER 65532:1000
 ENV HOME=/tmp TMPDIR=/tmp TZ=UTC LANG=C
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
