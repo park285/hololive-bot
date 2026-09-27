@@ -219,6 +219,7 @@ func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobser
 		CollisionAge:          cfg.CollisionAge,
 		ReplayAuditAge:        cfg.ReplayAuditAge,
 		ApplicationAuditGrace: cfg.ApplicationAuditGrace,
+		LiveAbsenceSlotAge:    cfg.LiveAbsenceSlotAge,
 		CheckpointHistoryAge:  cfg.CheckpointHistoryAge,
 		EvidenceAgeByKind:     evidenceRetentionAges(cfg),
 		BatchSize:             cfg.BatchSize,

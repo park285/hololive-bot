@@ -79,3 +79,4 @@
 079 218_live_absence_evidence_contract.sql
 080 219_drop_live_query_coverage_time_index.sql
 081 220_live_query_confirmed_empty_message.sql
+082 221_live_absence_slot_retention.sql

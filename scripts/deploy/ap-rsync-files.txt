@@ -614,6 +614,7 @@ hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repositor
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_checkpoints_0084_84.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_collisions_0077_77.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_evidence_0079_79.sql
+hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_live_absence_slots.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_queue_0076_76.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retention_delete_replay_0078_78.sql
 hololive/hololive-shared/pkg/service/youtube/sourceobservation/queries/repository_retry_0017_17.sql
