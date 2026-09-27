@@ -19,7 +19,6 @@ This file is the current runtime ownership authority. Completed handoffs, incide
 | `deploy/compose/docker-compose.osaka.yml` | YAML | `deploy/compose/docker-compose.osaka.yml` | Osaka split-host AP overlay (`youtube-collector-a`, host `<tailnet-osaka-a>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.osaka2.yml` | YAML | `deploy/compose/docker-compose.osaka2.yml` | Osaka second split-host AP overlay (`youtube-collector-d`, host `<tailnet-osaka2-d>`) for compose-path contract validation; live runtime is host-native `systemd` | - |
 | `deploy/compose/docker-compose.seoul.yml` | YAML | `deploy/compose/docker-compose.seoul.yml` | Seoul split-host AP (`youtube-collector-b`) | - |
-| `deploy/compose/docker-compose.main-ap.yml` | YAML | `deploy/compose/docker-compose.main-ap.yml` | Main-host AP overlay reserved for collector-c live-compat; central collector is `youtube-collector` in prod.yml | - |
 
 ## Runtime Operations Inventory
 

@@ -26,7 +26,6 @@ func TestDefaultConfigProvidesUsableDispatchDefaults(t *testing.T) {
 		"MaxRetries":                  config.MaxRetries,
 		"DeliveryParallelism":         config.DeliveryParallelism,
 		"SubscriberLookupParallelism": config.SubscriberLookupParallelism,
-		"TelemetryBackfillBatch":      config.TelemetryBackfillBatch,
 		"TelemetryFlushBatch":         config.TelemetryFlushBatch,
 	} {
 		if value <= 0 {

@@ -27,51 +27,19 @@ const retryableYouTubePaths = new Map([
 const retryDelayMinMs = 100;
 const retryDelayMaxMs = 300;
 
-export async function createFetchTransport(options) {
-  const proxyURL = validateProxy(options.proxy);
+export function createFetchTransport(options) {
   const retryOptions = {
     delayMs: validateRetryDelay(options.retryDelayMs),
     observe: typeof options.observeRetry === "function" ? options.observeRetry : logRetryEvent,
   };
-  if (!options.proxy.enabled) {
-    return {
-      fetch: effectiveFetch(options.currentSignal, undefined, undefined, retryOptions),
-      async close() {},
-      agentCount: 0,
-    };
-  }
-
-  const undici = await (options.loadUndici ?? (() => import("undici")))();
-  const { ProxyAgent } = undici;
-  let proxyAgent;
-  try {
-    proxyAgent = new ProxyAgent(proxyURL);
-  } catch (error) {
-    throw new FetchTransportError(
-      "helper_internal_invariant",
-      "INTERNAL",
-      `proxy transport construction failed for ${redactedProxyURL(proxyURL)}`,
-      { cause: error },
-    );
-  }
-  let closePromise;
-  let destroyed = false;
   return {
-    fetch: effectiveFetch(options.currentSignal, undici.fetch, proxyAgent, retryOptions),
-    close() {
-      closePromise ??= closeProxyAgent(proxyAgent, options.closeTimeoutMs, () => {
-        if (!destroyed) {
-          destroyed = true;
-          proxyAgent.destroy(new Error("proxy transport close failed"));
-        }
-      });
-      return closePromise;
-    },
-    agentCount: 1,
+    fetch: effectiveFetch(options.currentSignal, retryOptions),
+    // 라이브 확인 RPC는 물리 요청 상한을 지키도록 같은 요청 취소 신호를 쓰되 재시도하지 않습니다.
+    singleAttemptFetch: effectiveFetch(options.currentSignal, null),
   };
 }
 
-function effectiveFetch(currentSignal, proxyFetch, proxyAgent, retryOptions) {
+function effectiveFetch(currentSignal, retryOptions) {
   return async (input, init) => {
     if (input instanceof Request && (input.bodyUsed || input.body?.locked)) {
       throw new FetchTransportError(
@@ -83,6 +51,8 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent, retryOptions) {
     let effective;
     try {
       effective = new globalThis.Request(input, init);
+      // 자동 redirect도 추가 물리 요청이므로 새 확인의 단일 시도 경로에서는 허용하지 않습니다.
+      if (retryOptions == null) effective = new globalThis.Request(effective, { redirect: "error" });
     } catch (error) {
       throw new FetchTransportError(
         "helper_protocol_mismatch",
@@ -98,13 +68,13 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent, retryOptions) {
     if (combinedSignal.aborted) {
       throw abortError(requestSignal, effective.signal);
     }
-    const retry = retryRequest(effective);
+    const retry = retryOptions == null ? { endpoint: "", request: null } : retryRequest(effective);
     let request = effective;
     let retryAttempted = false;
     while (true) {
       let response;
       try {
-        response = await performFetch(request, combinedSignal, proxyFetch, proxyAgent);
+        response = await globalThis.fetch(request, { signal: combinedSignal });
       } catch (error) {
         if (combinedSignal.aborted) {
           throw abortError(requestSignal, effective.signal);
@@ -158,22 +128,6 @@ function effectiveFetch(currentSignal, proxyFetch, proxyAgent, retryOptions) {
       return await classifyUpstreamResponse(response);
     }
   };
-}
-
-async function performFetch(request, signal, proxyFetch, proxyAgent) {
-  if (proxyFetch == null || proxyAgent == null) {
-    return globalThis.fetch(request, { signal });
-  }
-  const proxyInit = {
-    method: request.method,
-    headers: Array.from(request.headers.entries()),
-    body: request.body,
-    redirect: request.redirect,
-    signal,
-    dispatcher: proxyAgent,
-    ...(request.body == null ? {} : { duplex: "half" }),
-  };
-  return proxyFetch(request.url, proxyInit);
 }
 
 function retryRequest(request) {
@@ -329,64 +283,4 @@ function isTransientNetworkError(error) {
   }
   const causeCode = "code" in cause ? cause.code : undefined;
   return typeof causeCode === "string" && transientNetworkCodes.has(causeCode);
-}
-
-async function closeProxyAgent(proxyAgent, closeTimeoutMs, destroy) {
-  const timeout = Number.isFinite(closeTimeoutMs) && Number(closeTimeoutMs) > 0
-    ? Number(closeTimeoutMs)
-    : 3_000;
-  let timer;
-  try {
-    await Promise.race([
-      proxyAgent.close(),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error("proxy transport close timed out")), timeout);
-      }),
-    ]);
-  } catch (error) {
-    destroy();
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function validateProxy(proxy) {
-  const raw = typeof proxy.url === "string" ? proxy.url.trim() : "";
-  if (!proxy.enabled) {
-    if (raw !== "") {
-      throw new FetchTransportError("helper_protocol_mismatch", "PROTOCOL", "proxy url must be empty when disabled");
-    }
-    return "";
-  }
-  if (raw === "") {
-    throw new FetchTransportError("helper_protocol_mismatch", "PROTOCOL", "proxy url is required when enabled");
-  }
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new FetchTransportError("helper_protocol_mismatch", "PROTOCOL", "proxy url is invalid");
-  }
-  if (
-    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
-    parsed.hostname === "" ||
-    (parsed.pathname !== "" && parsed.pathname !== "/") ||
-    parsed.search !== "" ||
-    parsed.hash !== ""
-  ) {
-    throw new FetchTransportError("helper_protocol_mismatch", "PROTOCOL", "proxy url is invalid");
-  }
-  return raw;
-}
-
-export function redactedProxyURL(raw) {
-  try {
-    const parsed = new URL(raw);
-    parsed.username = "";
-    parsed.password = "";
-    return parsed.origin + (parsed.pathname === "/" ? "" : parsed.pathname);
-  } catch {
-    return "[redacted-proxy]";
-  }
 }

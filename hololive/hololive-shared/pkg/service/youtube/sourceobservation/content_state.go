@@ -22,11 +22,14 @@ func lockContentSubject(ctx context.Context, tx dbx.Tx, kind contract.Observatio
 	return nil
 }
 
+// loadContentState는 reducer가 이번 관측에 읽는 범위만 적재하고 잠근다. 관측된 영상과 clock 보유 영상,
+// 현재 slot과 이번 관측보다 늦은 slot이 그 범위이며, 나머지 이력은 결정에 영향을 주지 않는다.
 func loadContentState(
 	ctx context.Context,
 	tx dbx.Tx,
 	kind contract.ObservationKind,
 	channelID string,
+	evidence *content.Evidence,
 ) (content.State, error) {
 	state := content.State{ChannelID: channelID, Kind: kind, Videos: map[string]content.EntityState{}}
 
@@ -42,11 +45,11 @@ func loadContentState(
 		return content.State{}, fmt.Errorf("load content head: %w", err)
 	}
 
-	if err := loadContentVideos(ctx, tx, &state); err != nil {
+	if err := loadContentVideos(ctx, tx, &state, evidenceVideoIDs(evidence)); err != nil {
 		return content.State{}, fmt.Errorf("load content videos: %w", err)
 	}
 
-	if err := loadContentAbsenceSlots(ctx, tx, &state); err != nil {
+	if err := loadContentAbsenceSlots(ctx, tx, &state, evidence); err != nil {
 		return content.State{}, fmt.Errorf("load content absence slots: %w", err)
 	}
 
@@ -71,8 +74,19 @@ func loadContentHead(ctx context.Context, tx dbx.Tx, state *content.State) error
 	return nil
 }
 
-func loadContentVideos(ctx context.Context, tx dbx.Tx, state *content.State) error {
-	rows, err := tx.Query(ctx, mustSQL("repository_content_videos_0035_35.sql"), state.ChannelID, state.Kind == contract.KindShortsList)
+func evidenceVideoIDs(evidence *content.Evidence) []string {
+	ids := make([]string, 0, len(evidence.Videos))
+	for i := range evidence.Videos {
+		ids = append(ids, evidence.Videos[i].VideoID)
+	}
+
+	return ids
+}
+
+func loadContentVideos(ctx context.Context, tx dbx.Tx, state *content.State, evidenceIDs []string) error {
+	isShort := state.Kind == contract.KindShortsList
+
+	rows, err := tx.Query(ctx, mustSQL("repository_content_videos_0035_35.sql"), state.ChannelID, isShort, evidenceIDs)
 	if err != nil {
 		return fmt.Errorf("load content videos: %w", err)
 	}
@@ -141,8 +155,15 @@ func loadContentClocks(ctx context.Context, tx dbx.Tx, state *content.State, ids
 	return nil
 }
 
-func loadContentAbsenceSlots(ctx context.Context, tx dbx.Tx, state *content.State) error {
-	rows, err := tx.Query(ctx, mustSQL("repository_content_absence_slots_0038_38.sql"), state.ChannelID, state.Kind)
+func loadContentAbsenceSlots(ctx context.Context, tx dbx.Tx, state *content.State, evidence *content.Evidence) error {
+	rows, err := tx.Query(
+		ctx,
+		mustSQL("repository_content_absence_slots_0038_38.sql"),
+		state.ChannelID,
+		state.Kind,
+		evidence.ScheduledFor,
+		evidence.EffectiveAt,
+	)
 	if err != nil {
 		return fmt.Errorf("load content absence slots: %w", err)
 	}

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260927-live-check-slot-isolation",
+  "title": "채널 live 확인은 별도 job 슬롯으로 진행하고 stale 영상은 DB 조회 시각으로 판정한다",
+  "decision_status": "accepted",
+  "delivery_status": "verified",
+  "scope": ["hololive-bot"],
+  "decided_at": "2026-09-27",
+  "summary": "적대적 리뷰의 P2/P3에 대한 사용자 수정 지시에 따라 channel_live_check를 youtubejs_channel_live_check exact-subject job으로 분리하고 youtubejs_channel_live는 live_snapshot만 발행한다. snapshot DEFERRED와 check COMPLETE 슬롯 진행을 독립화한다. stale video 선택은 DB statement_timestamp를 사용하고 외부 AsOf 입력을 제거한다. 원시 판정·D1~D6·pending 보존·absence 종료 정책은 유지한다. 미배포 로컬 구현 clean cutover이며 운영 적용은 별도 승인과 collector drain/API-first 전환을 필요로 한다.",
+  "sources": ["docs/current/plans/2026-09-27-live-check-slot-isolation.md#수정 경계"],
+  "evidence": ["docs/current/plans/2026-09-27-live-check-slot-isolation.md", "docs/review/live-check-slot-isolation-20260927.md"],
+  "implementation": [
+    "hololive/hololive-shared/pkg/service/youtube/sourceobservation/job_contract_initial.go",
+    "hololive/hololive-youtube-collector/internal/runtime/youtubejscollector/live_check.go",
+    "hololive/hololive-api/internal/planes/youtube/runtime/queries/stale_live_videos.sql",
+    "hololive/hololive-youtube-collector/internal/runtime/collectorruntime/channel_live_slot_test.go",
+    "docs/current/runbooks/youtube-collector.md"
+  ],
+  "supersedes": [],
+  "review": {"trigger": "독립 check가 snapshot 실패로 재차 정체되거나 DB 조회 시계로도 신선한 positive가 stale target으로 선택될 때"}
+}

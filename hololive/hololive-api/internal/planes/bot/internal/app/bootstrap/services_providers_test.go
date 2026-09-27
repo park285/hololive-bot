@@ -36,6 +36,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/providers"
 	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 type bootstrapTestContextKey struct{}
@@ -144,22 +145,27 @@ func newACLCacheSyncMock(t *testing.T, wantContextValue string) (*cachemocks.Cli
 		observedCalls.Add(1)
 	}
 
+	// ACL rooms 동기화는 RENAME으로 원자 교체하므로 raw valkey client가 필요하다. 호출 context만 기록하고
+	// 실제 연산은 miniredis 기반 cache에 위임한다(비원자 Del→SAdd 경로는 없다).
+	backing := sharedtestutil.NewTestCacheService(t.Context(), t)
 	cacheClient := &cachemocks.Client{
-		SetFunc: func(ctx context.Context, _ string, _ any, _ time.Duration) error {
+		SetFunc: func(ctx context.Context, key string, value any, ttl time.Duration) error {
 			recordContext(ctx)
 
-			return nil
+			return backing.Set(ctx, key, value, ttl)
 		},
-		DelFunc: func(ctx context.Context, _ string) error {
+		DelFunc: func(ctx context.Context, key string) error {
 			recordContext(ctx)
 
-			return nil
+			return backing.Del(ctx, key)
 		},
-		SAddFunc: func(ctx context.Context, _ string, members []string) (int64, error) {
+		SAddFunc: func(ctx context.Context, key string, members []string) (int64, error) {
 			recordContext(ctx)
 
-			return int64(len(members)), nil
+			return backing.SAdd(ctx, key, members)
 		},
+		GetClientFunc: backing.GetClient,
+		BFunc:         backing.B,
 	}
 
 	return cacheClient, &observedCalls

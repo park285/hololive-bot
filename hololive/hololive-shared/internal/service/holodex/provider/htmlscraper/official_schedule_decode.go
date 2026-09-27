@@ -32,22 +32,22 @@ func (s *Service) decodeOfficialScheduleAPI(body []byte) ([]*domain.Stream, offi
 func decodeOfficialScheduleGroups(body []byte) ([]jsontext.Value, error) {
 	trimmed := bytes.TrimSpace(body)
 	if !jsontext.Value(trimmed).IsValid() {
-		return nil, errors.Join(officialScheduleDecodeError(officialScheduleReasonDecode, errors.New("decode official schedule response: invalid JSON")))
+		return nil, officialScheduleDecodeError(officialScheduleReasonDecode, errors.New("decode official schedule response: invalid JSON"))
 	}
 
 	if len(trimmed) == 0 || trimmed[0] != 0x7b {
-		return nil, errors.Join(officialScheduleDecodeError(officialScheduleReasonSchema, errors.New("official schedule response root must be an object")))
+		return nil, officialScheduleDecodeError(officialScheduleReasonSchema, errors.New("official schedule response root must be an object"))
 	}
 
 	var root map[string]jsontext.Value
 
 	if err := jsonv2.Unmarshal(trimmed, &root); err != nil {
-		return nil, errors.Join(officialScheduleDecodeError(officialScheduleReasonDecode, fmt.Errorf("decode official schedule response: %w", err)))
+		return nil, officialScheduleDecodeError(officialScheduleReasonDecode, fmt.Errorf("decode official schedule response: %w", err))
 	}
 
 	rawGroups, ok := root["dateGroupList"]
 	if !ok {
-		return nil, errors.Join(officialScheduleDecodeError(officialScheduleReasonSchema, errors.New("official schedule response missing dateGroupList")))
+		return nil, officialScheduleDecodeError(officialScheduleReasonSchema, errors.New("official schedule response missing dateGroupList"))
 	}
 
 	groups, err := decodeRawJSONArray(rawGroups, "dateGroupList")
@@ -86,12 +86,12 @@ func decodeOfficialScheduleGroup(rawGroup jsontext.Value, index int) ([]jsontext
 	var group map[string]jsontext.Value
 
 	if err := jsonv2.Unmarshal(rawGroup, &group); err != nil {
-		return nil, errors.Join(officialScheduleDecodeError(officialScheduleReasonSchema, fmt.Errorf("decode official schedule group %d: %w", index, err)))
+		return nil, officialScheduleDecodeError(officialScheduleReasonSchema, fmt.Errorf("decode official schedule group %d: %w", index, err))
 	}
 
 	rawRows, ok := group["videoList"]
 	if !ok {
-		return nil, errors.Join(officialScheduleDecodeError(officialScheduleReasonSchema, fmt.Errorf("official schedule group %d missing videoList", index)))
+		return nil, officialScheduleDecodeError(officialScheduleReasonSchema, fmt.Errorf("official schedule group %d missing videoList", index))
 	}
 
 	groupRows, err := decodeRawJSONArray(rawRows, fmt.Sprintf("dateGroupList[%d].videoList", index))

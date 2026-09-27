@@ -98,7 +98,6 @@ func TestPublisherDoesNotPushLegacyQueue(t *testing.T) {
 
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	assert.Equal(t, 1, repository.insertBatchCalls)
-	assert.Equal(t, dispatchoutbox.StatusPending, repository.lastBatchInput.Status)
 	assert.Equal(t, 0, repository.insertPendingCalls)
 }
 
@@ -174,7 +173,6 @@ func TestPublisherPGFirstPublishBatchUsesOneRepositoryBatchAndPayloadFreeWakeup(
 	assert.Empty(t, queueItemsOrEmpty(t, mini))
 	assert.Equal(t, 1, repository.insertBatchCalls)
 	assert.Equal(t, 0, repository.insertPendingCalls)
-	assert.Equal(t, dispatchoutbox.StatusPending, repository.lastBatchInput.Status)
 	assert.Len(t, repository.lastBatchInput.Envelopes, 3)
 	assert.Equal(t, []string{"1"}, queueItemsByKeyOrEmpty(t, mini, AlarmDispatchWakeupQueue))
 }

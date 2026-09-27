@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-runtime-role-boundary-v2",
+  "title": "hololive runtime 소유권 분리는 runtime별 loader의 config 검증으로 강제하고 alarm-worker 밖의 runtime은 proactive egress·scheduler 역할을 거부한다",
+  "decision_status": "accepted",
+  "delivery_status": "implemented",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 확정한 DEC-20260926-hololive-legacy-env-config-retirement가 현재 코드와 맞지 않는 DEC-20260625-hololive-runtime-role-boundary의 정정 레코드를 PLN-20260926-stack-audit-refactoring T19에서 코드 확인과 함께 만들도록 정했다. 바뀐 조항: 호환용 일반 Load는 남아 있지 않다. core Config는 검증 함수를 반드시 받는 settings.LoadConfig로만 만들고, runtime별 loader는 hololive-api의 apiplane.LoadRuntime(bot plane은 settings.LoadBotRuntime, admin plane은 settings.LoadAdminAPIRuntime, llm plane은 apiplane LLM scheduler 설정으로 조립), alarm-worker의 alarmworker.LoadRuntime, youtube-collector의 collector.LoadRuntime 셋이다. LoadAlarmWorkerRuntime·LoadHololiveAPIRuntime이라는 이름은 없다. youtube-producer는 2026-08-25 퇴역해 loader와 검증 대상에서 빠졌다. 거부 대상도 코드대로 적는다: bot·admin-api·llm-scheduler plane은 load.ValidateNoNotificationEgressOwnership으로, youtube-collector는 load.RejectReservedEgressRoles로 NOTIFICATION_EGRESS_ROLE=owner와 NOTIFICATION_SCHEDULER_ROLE=worker를 기동 시 거부하고(internal/load/roles.go), collector는 production에서 NOTIFICATION_EGRESS_ROLE=off를 요구한다. 개별 dispatcher 활성화 플래그(DELIVERY_DISPATCHER_ENABLED 등)는 퇴역했고 CI gate(ci-notification-egress-gate.sh)가 재도입을 막는다. 유지하는 조항: proactive notification egress와 alarm scheduler 역할은 alarm-worker 하나만 소유하고, 다른 runtime의 소유 시도는 설정 오류로 기동을 멈춘다. DEC-20260730-hololive-alarm-egress-lease-removed의 scheduler role 축 완화와 DEC-20260626-hololive-api-three-runtime-consolidation의 hololive-api 통합은 그대로다. 원 요약(DEC-20260625): bot 바이너리는 LoadBotRuntime, alarm-worker는 LoadAlarmWorkerRuntime을 쓰고 일반 Load는 호환용으로만 남긴다. non-egress runtime은 시작 시 proactive egress ownership과 dispatcher activation을 거부한다. 이후 DEC-20260730-hololive-alarm-egress-lease-removed가 scheduler role 축만 완화했고, hololive-api 통합(DEC-20260626-hololive-api-three-runtime-consolidation)이 LoadHololiveAPIRuntime을 추가했다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [
+    "hololive/hololive-shared/pkg/config/settings/runtime_role_validation.go",
+    "hololive/hololive-shared/pkg/config/settings/config_validation.go",
+    "hololive/hololive-shared/pkg/config/settings/internal/load/roles.go",
+    "hololive/hololive-shared/pkg/config/settings/apiplane/runtime.go",
+    "hololive/hololive-shared/pkg/config/settings/collector/runtime.go",
+    "hololive/hololive-alarm-worker/cmd/alarm-worker/main.go"
+  ],
+  "supersedes": [
+    "DEC-20260625-hololive-runtime-role-boundary"
+  ]
+}

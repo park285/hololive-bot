@@ -21,13 +21,20 @@
   빈 DB의 fresh bootstrap은 전체 manifest 재생을 위해 plain drop을 허용한다.
 - 과거에 적용된 파일의 수정은 프로덕션에 영향이 없고(ledger skip) fresh bootstrap/dbtest 경로만 바꾼다.
   프로덕션을 바꾸려면 항상 새 번호의 파일을 추가한다.
-- 레거시 수동 경로 `apply-all.sh`와 `bootstrap-and-apply.sh`는 epoch-2 manifest에서 fail-closed 한다.
-  checksum, epoch residue, atomic baseline ledger 계약은 Go 러너만 소유하므로 local·production·복구 적용은
-  모두 `db-migrate`를 사용한다.
+- 적용 경로는 `db-migrate` 하나다. checksum, epoch residue, atomic baseline ledger 계약은 Go 러너만 소유하므로
+  local·production·복구 적용은 모두 `db-migrate`를 사용한다. epoch-2에서 거부만 하던 셸 러너 `apply-all.sh`와
+  `bootstrap-and-apply.sh`는 runbook과 호스트 절차에 실행 단계가 없음을 확인해 삭제했다(stack-audit 2026-09-26 T11).
+- manifest 밖 `schema_migrations` 행(이전 epoch 잔재 포함)이 있으면 러너는 SQL을 실행하기 전에 거부한다.
+  epoch-1 ledger 잔재를 `182_epoch2_legacy_ledger_cleanup.sql`이 같은 실행 안에서 지우도록 182 적용 전까지 허용하던
+  창과 epoch-1 checkpoint baseline 수용은 닫혔다. 제거 조건이던 "운영 `schema_migrations`에 001·182가 기록되고
+  epoch-1 파일명 행이 0건"은 T18(2026-09-26)에서 확인했고, `DEC-20260926-hololive-retired-rollback-tooling`이
+  epoch-1 rollback 창을 종료했다(stack-audit 2026-09-26 T17). 182보다 오래된 백업을 복원한 DB는 잔재 행의 출처를
+  확인해 수동으로 지운 뒤 다시 적용한다. 이 거부는 ledger 무결성 계약이라 제거 조건이 없다. 빈 ledger용
+  `MIGRATION_BASELINE_THROUGH` 경로는 복구 runbook이 소유하므로 유지한다.
 
 ## 번호
 
-- 새 파일은 `max(기존 번호)+1`. 번호 프리픽스가 중복되면 `check-migration-manifest.sh`가 거부한다(045/051/053은 병행 브랜치 유산으로 예외).
+- 새 파일은 `max(기존 번호)+1`. 번호 프리픽스가 중복되면 `check-migration-manifest.sh`가 예외 없이 거부한다.
 - 실행 순서의 SSOT는 manifest.txt이며 파일명 정렬이 아니다.
 
 ## 락과 시간복잡도 (문장 품질)
@@ -85,6 +92,20 @@ INSERT를 문장 단위로 쪼개면 커밋(fsync) N회 + 중간 실패 시 부�
 멱등 가드는 **대상 없는 `ON CONFLICT DO NOTHING`을 금지**하고 `ON CONFLICT (arbiter)` 또는
 `INSERT … SELECT … WHERE NOT EXISTS`(064/068/016/017/018 참조)를 쓴다.
 members 시드의 arbiter는 `idx_members_slug`(UNIQUE, 097 복원)다.
+
+### 템플릿 CAS 개정 — 병합 전 key당 한 파일 (권고)
+
+템플릿 본문 개정은 `(template_key, $old$…$old$, $new$…$new$)` 튜플과 `channel_id IS NULL AND body = old`
+가드의 CAS UPDATE로 쓴다(217 참고). 한 브랜치 안에서 같은 key를 여러 migration이 연달아 고치면 중간 본문은
+운영 DB에 머문 적이 없는데 파일과 테스트만 늘어난다(204–208 사례: 5파일 118,865 B, 튜플 101개가 key 45개를
+갱신했고 key마다 첫 old와 마지막 new만 남기면 약 42 KB). 그래서 **운영 ledger에 한 번도 기록되지 않은**
+템플릿 CAS migration은 병합 전에 key당 한 파일로 합치기를 권한다.
+
+- 판정 기준은 origin/main 존재 여부가 아니라 운영 ledger 기록 여부다. 브랜치에서 먼저 배포돼 운영에 적용된
+  파일(release checksum 기록)은 병합 전이라도 고정한다. 고치면 러너가 checksum mismatch로 거부한다.
+- 바이너리 선배포가 필요한 개정(새 렌더 함수에 기대는 본문 등)은 릴리스가 나뉘므로 PR을 나눈다.
+- 합칠 때는 파일별 dbtest(`hololive-dbtest/*_migration_test.go`)도 같은 변경에서 합친다.
+- 거부 게이트가 아닌 권고다. 템플릿을 seed 자산으로 옮기는 결정이 채택되면 이 권고는 폐기한다.
 
 ### 보존(retention) 삭제
 

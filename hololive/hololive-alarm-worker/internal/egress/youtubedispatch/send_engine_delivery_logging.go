@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
@@ -26,16 +25,6 @@ func deliveryAttemptOrdinal(row *domain.YouTubeNotificationDelivery) int {
 	}
 
 	return attemptOrdinal
-}
-
-func deliveryAttemptStartedAt(row *domain.YouTubeNotificationDelivery) *time.Time {
-	if row.LockedAt == nil || row.LockedAt.IsZero() {
-		return nil
-	}
-
-	startedAt := row.LockedAt.UTC()
-
-	return &startedAt
 }
 
 func (d *SendEngine) logCommunityShortsDeliveryAttemptStarted(
@@ -93,7 +82,7 @@ func collectCommunityShortsDeliveryResultSummary(
 	}
 }
 
-func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (result1, result2, result3, result4 int) {
+func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (successAlarms, failedAlarms, successRooms, failedRooms int) {
 	switch strings.TrimSpace(sendResult) {
 	case sendResultSuccess:
 		return alarmCount, 0, roomCount, 0
@@ -101,63 +90,5 @@ func deliveryResultCounts(sendResult string, alarmCount, roomCount int) (result1
 		return 0, alarmCount, 0, roomCount
 	default:
 		return 0, 0, 0, 0
-	}
-}
-
-func buildCommunityShortsDeliveryAuditEvents(
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sentAt time.Time,
-	deliveryPath string,
-	deliveryMode string,
-	sendResult string,
-	failureReason string,
-) []domain.YouTubeNotificationDeliveryTelemetry {
-	events := make([]domain.YouTubeNotificationDeliveryTelemetry, 0, len(outboxes))
-	for i := range outboxes {
-		if !telemetry.IsCommunityShortsDeliveryAuditKind(outboxes[i].Kind) {
-			continue
-		}
-
-		events = append(events, buildCommunityShortsDeliveryAuditEvent(&rows[i], &outboxes[i], sentAt,
-			deliveryPath,
-			deliveryMode,
-			sendResult,
-			failureReason,
-		))
-	}
-
-	return events
-}
-
-func buildCommunityShortsDeliveryAuditEvent(
-	row *domain.YouTubeNotificationDelivery,
-	outbox *domain.YouTubeNotificationOutbox,
-	sentAt time.Time,
-	deliveryPath string,
-	deliveryMode string,
-	sendResult string,
-	failureReason string,
-) domain.YouTubeNotificationDeliveryTelemetry {
-	attemptFinishedAt := sentAt.UTC()
-
-	return domain.YouTubeNotificationDeliveryTelemetry{
-		DeliveryID:        row.ID,
-		AttemptOrdinal:    deliveryAttemptOrdinal(row),
-		OutboxID:          outbox.ID,
-		ChannelID:         outbox.ChannelID,
-		ContentID:         strings.TrimSpace(outbox.ContentID),
-		PostID:            telemetry.ResolveTelemetryPostID(outbox.Kind, outbox.ContentID, outbox.Payload),
-		RoomID:            row.RoomID,
-		AlarmType:         outbox.Kind.ToAlarmType(),
-		DedupeKey:         telemetry.DedupeKeyLogValue(outbox),
-		DeliveryPath:      deliveryPath,
-		DeliveryMode:      deliveryMode,
-		SendResult:        sendResult,
-		FailureReason:     deliverysql.TruncateString(strings.TrimSpace(failureReason), 100),
-		AttemptStartedAt:  deliveryAttemptStartedAt(row),
-		AttemptFinishedAt: &attemptFinishedAt,
-		EventAt:           attemptFinishedAt,
-		NextAttemptAt:     time.Now().UTC(),
 	}
 }

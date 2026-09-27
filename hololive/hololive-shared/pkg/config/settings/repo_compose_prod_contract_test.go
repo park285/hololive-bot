@@ -35,36 +35,24 @@ func TestRepoComposeProdPreservesExplicitBlankACLValues(t *testing.T) {
 	}
 }
 
-func TestRepoComposeCollectorDropsRetiredCompatAliases(t *testing.T) {
-	for _, name := range []string{
-		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
-		"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
-		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
-		"YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
-	} {
+// collector loader는 명시적 빈 값을 기동 실패로 처리하므로, env가 없는 호스트에서는
+// compose의 documented default가 유일한 값 공급원이다.
+func TestRepoComposeCollectorRendersCanonicalDefaults(t *testing.T) {
+	defaults := map[string]string{
+		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES":        "1048576",
+		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS": "30",
+	}
+	for name := range defaults {
 		unsetEnvForTest(t, name)
 	}
-
-	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "4096")
-	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "11")
 
 	cfg := renderComposeConfig(t, composeProdFile)
 	env := composeEnvironment(t, cfg, load.RuntimeYouTubeCollector)
 
-	if got := env["YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES"]; got != "" {
-		t.Fatalf("retired aggregate bytes still rendered: %q", got)
-	}
-
-	if got := env["YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS"]; got != "" {
-		t.Fatalf("retired youtubejs timeout still rendered: %q", got)
-	}
-
-	if got := env["YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES"]; got != "1048576" {
-		t.Fatalf("YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES = %q, want documented default", got)
-	}
-
-	if got := env["YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS"]; got != "30" {
-		t.Fatalf("YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS = %q, want documented default", got)
+	for name, want := range defaults {
+		if got := env[name]; got != want {
+			t.Fatalf("%s = %q, want documented default %q", name, got, want)
+		}
 	}
 }
 
@@ -359,11 +347,15 @@ func assertProdRenderedEgressRuntimeKeys(t *testing.T, cfg renderedCompose) {
 			kakaoACLEnabledEnv,
 			kakaoACLModeEnv,
 			"HOLODEX_API_KEY",
-			"HOLODEX_API_KEY_1",
 		} {
 			if _, ok := env[key]; !ok {
 				t.Fatalf("%s missing egress runtime key %s", service, key)
 			}
+		}
+
+		// 퇴역 가드는 존재만으로 거절하므로 compose가 빈 값으로라도 주입하면 기동이 막힌다.
+		if _, ok := env["HOLODEX_API_KEY_1"]; ok {
+			t.Fatalf("%s must not receive retired HOLODEX_API_KEY_1", service)
 		}
 
 		if env["API_SECRET_KEY"] != "dummy" {
@@ -393,10 +385,12 @@ func assertProdRenderedScopedProducerKeys(t *testing.T, cfg renderedCompose) {
 	for _, service := range []string{load.RuntimeYouTubeCollector} {
 		env := composeEnvironment(t, cfg, service)
 
-		for _, key := range []string{"HOLODEX_API_KEY", "HOLODEX_API_KEY_1"} {
-			if _, ok := env[key]; !ok {
-				t.Fatalf("%s missing scoped %s mapping", service, key)
-			}
+		if _, ok := env["HOLODEX_API_KEY"]; !ok {
+			t.Fatalf("%s missing scoped HOLODEX_API_KEY mapping", service)
+		}
+
+		if _, ok := env["HOLODEX_API_KEY_1"]; ok {
+			t.Fatalf("%s must not receive retired HOLODEX_API_KEY_1", service)
 		}
 	}
 

@@ -111,8 +111,10 @@ func renderComposeConfigWithEnvFileAndOverrides(t *testing.T, composeEnvFile str
 		"COMPOSE_ENV_FILE="+composeEnvFile,
 		"HOLOLIVE_API_ENV_FILE="+appEnvFile,
 		"HOLOLIVE_ALARM_WORKER_ENV_FILE="+appEnvFile,
-		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
+		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeCollectorEnvFile(t),
 		"DB_PASSWORD=dummy",
+		"HOLOLIVE_DB_PASSWORD=dummy",
+		"HOLOLIVE_SCRAPER_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
 		"IRIS_WEBHOOK_TOKEN=dummy",
 		"IRIS_BOT_TOKEN=dummy",
@@ -175,11 +177,9 @@ func dockerComposeConfigCommand(ctx context.Context, t *testing.T, files []strin
 
 	switch strings.Join(files, "\x00") {
 	case composeProdFile:
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "--profile", "main-ap", "-f", composeProdFile, "config")
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "config")
 	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.live-compat.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "--profile", "main-ap", "-f", composeProdFile, "-f", composeLiveCompatFile, "config")
-	case "deploy/compose/docker-compose.prod.yml\x00deploy/compose/docker-compose.live-compat.yml\x00deploy/compose/docker-compose.main-ap.yml\x00deploy/compose/docker-compose.main-ap.live-compat.yml":
-		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "--profile", "main-ap", "-f", composeProdFile, "-f", composeLiveCompatFile, "-f", "deploy/compose/docker-compose.main-ap.yml", "-f", "deploy/compose/docker-compose.main-ap.live-compat.yml", "config")
+		return exec.CommandContext(ctx, "docker", "compose", "--profile", "oracle", "-f", composeProdFile, "-f", composeLiveCompatFile, "config")
 	default:
 		t.Fatalf("unsupported compose file set: %v", files)
 
@@ -218,8 +218,10 @@ func renderAPComposeConfig(t *testing.T, files ...string) renderedCompose {
 		"HOLOLIVE_CENTRAL_CACHE_PORT": "omit",
 	}),
 		"COMPOSE_ENV_FILE="+writeAPComposeEnvFile(t),
-		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeAPProducerEnvFile(t),
+		"HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="+writeCollectorEnvFile(t),
 		"DB_PASSWORD=dummy",
+		"HOLOLIVE_DB_PASSWORD=dummy",
+		"HOLOLIVE_SCRAPER_PASSWORD=dummy",
 		"CACHE_PASSWORD=dummy",
 		"ADMIN_PASS_BCRYPT=dummy",
 		"SESSION_SECRET=dummy",
@@ -269,6 +271,8 @@ func writeCentralComposeEnvFile(t *testing.T) string {
 		"ADMIN_PASS_BCRYPT=dummy",
 		"CACHE_PASSWORD=dummy",
 		"DB_PASSWORD=dummy",
+		"HOLOLIVE_DB_PASSWORD=dummy",
+		"HOLOLIVE_SCRAPER_PASSWORD=dummy",
 		"IRIS_WEBHOOK_TOKEN=dummy",
 		"IRIS_BOT_TOKEN=dummy",
 		"SESSION_SECRET=dummy",
@@ -292,6 +296,8 @@ func writeAPComposeEnvFile(t *testing.T) string {
 		"ADMIN_PASS_BCRYPT=dummy",
 		"CACHE_PASSWORD=dummy",
 		"DB_PASSWORD=dummy",
+		"HOLOLIVE_DB_PASSWORD=dummy",
+		"HOLOLIVE_SCRAPER_PASSWORD=dummy",
 		"HOLOLIVE_CENTRAL_POSTGRES_HOST=dummy",
 		"SESSION_SECRET=dummy",
 	})
@@ -310,29 +316,24 @@ func writeRenderableAPComposeFile(t *testing.T, sourceName, content string) stri
 		t.Fatalf("%s must not reference monolithic hololive env file", sourceName)
 	}
 
-	const producerEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
+	const collectorEnvFile = "${HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE:-/etc/stack-secrets/hololive-bot/youtube-collector.env}"
 
-	if !strings.Contains(content, producerEnvFile) {
-		t.Fatalf("%s missing AP youtube-collector env_file path %s", sourceName, producerEnvFile)
+	if !strings.Contains(content, collectorEnvFile) {
+		t.Fatalf("%s missing AP youtube-collector env_file path %s", sourceName, collectorEnvFile)
 	}
 
 	return sourceName
 }
 
-func writeAPProducerEnvFile(t *testing.T) string {
+// writeCollectorEnvFile은 youtube-collector가 읽는 키만 담는다. 퇴역 producer 키(HOLODEX_API_KEY_2~5,
+// YOUTUBE_ENABLE_QUOTA_BUILDING)를 env_file 공유 증거로 요구하던 단언은 지웠다(stack-audit 2026-09-26 T11).
+// 퇴역한 SCRAPER_PROXY_ENABLED는 collector가 존재만으로 거절하므로 담지 않는다(T19).
+func writeCollectorEnvFile(t *testing.T) string {
 	t.Helper()
 
 	return writeTempEnvFile(t, "youtube-collector-*.env", []string{
 		"METRICS_API_KEY=dummy",
 		"HOLODEX_API_KEY=dummy",
-		"HOLODEX_API_KEY_1=dummy",
-		"HOLODEX_API_KEY_2=dummy",
-		"HOLODEX_API_KEY_3=dummy",
-		"HOLODEX_API_KEY_4=dummy",
-		"HOLODEX_API_KEY_5=dummy",
-		"SCRAPER_PROXY_ENABLED=false",
-		"YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z",
-		"YOUTUBE_ENABLE_QUOTA_BUILDING=true",
 	})
 }
 

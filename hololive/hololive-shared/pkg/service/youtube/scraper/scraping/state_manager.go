@@ -143,17 +143,18 @@ func (cs *cacheState) unmark(ctx context.Context, key, stateKey string) {
 	}
 }
 
-const (
-	communityMissingKeyPrefix = "youtube:producer:community-missing:"
-	videoRSSBackoffKeyPrefix  = "youtube:producer:video-rss-backoff:"
-)
+// youtube:producer 접두사는 2026-08-25 퇴역한 producer 시절 이름이지만, hololive-api와 alarm-worker의 scraping client가
+// 지금도 같은 Valkey 키(분산 rate limit bucket의 기본 BucketBase, community-missing 상태, channel health,
+// snapshot 간격)를 함께 쓰는 운영 식별자다. 한쪽만 바꾸면 전환 중 두 runtime이 다른 bucket과 상태를 보게 되어 rate limit
+// 예산이 나뉘고 누적 상태가 사라지므로, 전환 계획 없이 접두사를 바꾸지 않는다(stack-audit 2026-09-26 C9, 파일명만 정리).
+// 변경 조건: 모든 소비 runtime을 한 release로 함께 바꾸고 기존 키의 TTL 만료 대기나 1회 이전을 정한 전환 계획이 DEC로
+// 확정될 때다. 이중 읽기 호환 경로는 두지 않는다.
+// RSS backoff 상태(youtube:producer:video-rss-backoff:*)는 GetRecentVideos의 RSS 폴백과 함께 삭제했다
+// (DEC-20260926-hololive-source-fallbacks-retirement). 남은 키는 TTL(기본 6시간)로 사라지고 읽는 코드가 없다.
+const communityMissingKeyPrefix = "youtube:producer:community-missing:"
 
 func (c *Client) communityMissingStateKey(channelID string) string {
 	return communityMissingKeyPrefix + strings.TrimSpace(channelID)
-}
-
-func (c *Client) videoRSSBackoffStateKey(channelID string) string {
-	return videoRSSBackoffKeyPrefix + strings.TrimSpace(channelID)
 }
 
 func (c *Client) isCommunityMissing(ctx context.Context, channelID string) bool {
@@ -183,40 +184,12 @@ func (c *Client) clearCommunityMissing(ctx context.Context, channelID string) {
 	c.communityMissing.unmark(ctx, key, c.communityMissingStateKey(key))
 }
 
-func (c *Client) isVideoRSSBackoff(ctx context.Context, channelID string) bool {
-	key := strings.TrimSpace(channelID)
-	if key == "" {
-		return false
-	}
-
-	return c.videoRSSBackoff.isSet(ctx, key, c.videoRSSBackoffStateKey(key))
-}
-
-func (c *Client) markVideoRSSBackoff(ctx context.Context, channelID string) {
-	key := strings.TrimSpace(channelID)
-	if key == "" {
-		return
-	}
-
-	c.videoRSSBackoff.mark(ctx, key, c.videoRSSBackoffStateKey(key))
-}
-
-func (c *Client) clearVideoRSSBackoff(ctx context.Context, channelID string) {
-	key := strings.TrimSpace(channelID)
-	if key == "" {
-		return
-	}
-
-	c.videoRSSBackoff.unmark(ctx, key, c.videoRSSBackoffStateKey(key))
-}
-
 func (c *Client) initStateManagers() {
 	if c == nil {
 		return
 	}
 
-	c.communityMissing = newCacheState(c.stateStore, ytDefaults.CommunityMissingTTL, "community missing")
-	c.videoRSSBackoff = newCacheState(c.stateStore, ytDefaults.VideoRSSBackoffTTL, "video rss backoff")
+	c.communityMissing = newCacheState(c.stateStore, c.config.CommunityMissingTTL, "community missing")
 
 	if c.channelHealthDisabled {
 		c.channelHealth = nil

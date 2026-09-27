@@ -50,13 +50,13 @@ type ClientRequestMessageSender interface {
 }
 
 type deliveryOutboxClaimer interface {
-	FetchAndLock(ctx context.Context, workerID string, batchSize int, lockTimeout, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
+	FetchAndLock(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.NotificationDeliveryOutbox, error)
 }
 
 type deliveryOutboxTransitioner interface {
 	MarkSending(ctx context.Context, id int64, workerID string, lease time.Duration) (bool, error)
-	MarkSent(ctx context.Context, id int64, workerID string, lockedAt time.Time) (bool, error)
-	MarkFailed(ctx context.Context, id int64, workerID string, lockedAt time.Time, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
+	MarkSent(ctx context.Context, id int64, workerID string) (bool, error)
+	MarkFailed(ctx context.Context, id int64, workerID string, maxRetries int, backoff time.Duration, errMsg string) (bool, error)
 }
 
 type deliveryOutboxMaintainer interface {
@@ -77,7 +77,6 @@ type DispatcherConfig struct {
 	BatchSize                 int
 	MaxConcurrent             int
 	MaxRetries                int
-	LockTimeout               time.Duration
 	PollInterval              time.Duration
 	RetryBackoff              time.Duration
 	CleanupAfter              time.Duration
@@ -93,7 +92,6 @@ func DefaultDispatcherConfig() DispatcherConfig {
 		BatchSize:                 50,
 		MaxConcurrent:             4,
 		MaxRetries:                3,
-		LockTimeout:               5 * time.Minute,
 		PollInterval:              30 * time.Second,
 		RetryBackoff:              1 * time.Minute,
 		CleanupAfter:              7 * 24 * time.Hour,
@@ -126,7 +124,9 @@ func (d *Dispatcher) SetWorkerInstrumentation(tracker *workercontract.ExecutorTr
 	d.workerTotals = totals
 }
 
-func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config *DispatcherConfig) *Dispatcher {
+// NewDispatcher는 "delivery-dispatcher:hostname:pid"를 lease owner로 쓴다. 호스트 이름을 얻지 못하면 다른 이름으로
+// 바꾸지 않고 생성 오류다(DEC-20260926-hololive-legacy-env-config-retirement).
+func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *slog.Logger, config *DispatcherConfig) (*Dispatcher, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -139,7 +139,12 @@ func NewDispatcher(repository deliveryRepository, sender MessageSender, logger *
 
 	cfg.applyDefaults()
 
-	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: util.InstanceID("delivery-dispatcher")}
+	workerID, err := util.InstanceID("delivery-dispatcher")
+	if err != nil {
+		return nil, fmt.Errorf("new delivery dispatcher: %w", err)
+	}
+
+	return &Dispatcher{repository: repository, sender: sender, logger: logger, config: cfg, workerID: workerID}, nil
 }
 
 func (c *DispatcherConfig) applyDefaults() {
@@ -148,7 +153,6 @@ func (c *DispatcherConfig) applyDefaults() {
 	c.BatchSize = positiveOr(c.BatchSize, defaults.BatchSize)
 	c.MaxConcurrent = positiveOr(c.MaxConcurrent, defaults.MaxConcurrent)
 	c.MaxRetries = positiveOr(c.MaxRetries, defaults.MaxRetries)
-	c.LockTimeout = positiveOr(c.LockTimeout, defaults.LockTimeout)
 	c.PollInterval = positiveOr(c.PollInterval, defaults.PollInterval)
 	c.RetryBackoff = positiveOr(c.RetryBackoff, defaults.RetryBackoff)
 	c.CleanupAfter = positiveOr(c.CleanupAfter, defaults.CleanupAfter)
@@ -189,7 +193,7 @@ func (d *Dispatcher) run(ctx context.Context) {
 func (d *Dispatcher) processOnce(ctx context.Context) {
 	d.quarantineStaleSendingIfDue(ctx)
 
-	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, d.config.LockTimeout, deliveryLease)
+	items, err := d.repository.FetchAndLock(ctx, d.workerID, d.config.BatchSize, deliveryLease)
 	if err != nil {
 		d.logger.Error("Failed to fetch outbox items", slog.String("error", err.Error()))
 
@@ -369,7 +373,7 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 		d.logger.Error("Failed to unmarshal outbox payload",
 			slog.Int64("id", item.ID),
 			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, "payload unmarshal: "+err.Error())
+		d.markItemFailed(ctx, item.ID, "payload unmarshal: "+err.Error())
 
 		return
 	}
@@ -384,12 +388,12 @@ func (d *Dispatcher) processItem(ctx context.Context, item *domain.NotificationD
 			slog.Int64("id", item.ID),
 			privacylog.RoomIDAttr(item.RoomID),
 			slog.String("error", err.Error()))
-		d.markItemFailed(ctx, item.ID, item.LockedAt.Time, err.Error())
+		d.markItemFailed(ctx, item.ID, err.Error())
 
 		return
 	}
 
-	if d.markItemSent(ctx, item.ID, item.LockedAt.Time) {
+	if d.markItemSent(ctx, item.ID) {
 		outcome = workercontract.AttemptSuccess
 	}
 }
@@ -423,8 +427,8 @@ func (d *Dispatcher) markItemSending(ctx context.Context, id int64) bool {
 	return true
 }
 
-func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.Time) bool {
-	fenced, err := d.repository.MarkSent(ctx, id, d.workerID, lockedAt)
+func (d *Dispatcher) markItemSent(ctx context.Context, id int64) bool {
+	fenced, err := d.repository.MarkSent(ctx, id, d.workerID)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item as sent", slog.Int64("id", id), slog.String("error", err.Error()))
 
@@ -440,8 +444,8 @@ func (d *Dispatcher) markItemSent(ctx context.Context, id int64, lockedAt time.T
 	return true
 }
 
-func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, lockedAt time.Time, reason string) {
-	fenced, err := d.repository.MarkFailed(ctx, id, d.workerID, lockedAt, d.config.MaxRetries, d.config.RetryBackoff, reason)
+func (d *Dispatcher) markItemFailed(ctx context.Context, id int64, reason string) {
+	fenced, err := d.repository.MarkFailed(ctx, id, d.workerID, d.config.MaxRetries, d.config.RetryBackoff, reason)
 	if err != nil {
 		d.logger.Error("Failed to mark outbox item failed", slog.Int64("id", id), slog.String("error", err.Error()))
 

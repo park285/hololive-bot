@@ -59,11 +59,24 @@ func TestRuntimeAllowsAlarmScheduler(t *testing.T) {
 func TestLoadAlarmDispatchPublishConfigDefaults(t *testing.T) {
 	t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", "")
 
-	appConfig := loadAlarmDispatchPublishConfig(&settings.AlarmWorkerProfile{
+	appConfig, err := loadAlarmDispatchPublishConfig(&settings.AlarmWorkerProfile{
 		AlarmDispatch: settings.AlarmDispatchWorkerSettings{WakeupEnabled: true},
 	})
+	require.NoError(t, err)
 	assert.True(t, appConfig.WakeupEnabled)
 	assert.Equal(t, 1000, appConfig.MaxDeliveriesPerBatch)
+}
+
+// 잘못된 batch 한도는 기본값 1000으로 바뀌지 않고 설정 오류가 된다(holo-alarm-worker-envconfig-silent-defaults).
+func TestLoadAlarmDispatchPublishConfigRejectsInvalidMaxDeliveries(t *testing.T) {
+	for _, value := range []string{"many", "0", "-10"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH", value)
+
+			_, err := loadAlarmDispatchPublishConfig(&settings.AlarmWorkerProfile{})
+			require.ErrorContains(t, err, "ALARM_DISPATCH_MAX_DELIVERIES_PER_BATCH")
+		})
+	}
 }
 
 func TestRuntimeSchedulerRejectsMissingServiceBeforeInterfaceConversion(t *testing.T) {

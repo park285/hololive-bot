@@ -2,6 +2,8 @@
 Description=Hololive youtube-collector AP (%i)
 After=network-online.target
 Wants=network-online.target
+Wants=hololive-youtube-po.service
+After=hololive-youtube-po.service
 
 [Service]
 Type=simple

@@ -24,10 +24,11 @@
 
 `hololive-shared/pkg`는 외부 안정 API 전체가 아니라 monorepo 내부 cross-runtime 계약면입니다. 단일 runtime만 소비하는 실행 구현은 해당 module의 `internal/`로 이동하지만, 다음 범주는 shared에 남습니다.
 
-- 진성 다중 소비자: `service/delivery`, `service/notification/alarmservice`, `service/scraper/**`, `service/youtube/outbox/{analytics,telemetry}`, `service/youtube/poller/runtime/scheduler`.
+- 진성 다중 소비자: `service/delivery`, `service/scraper/**`, `service/youtube/outbox/{analytics,telemetry}`. 퇴역 producer의 poll scheduler(`service/youtube/poller/runtime/scheduler`)와 budget·job claim 타입은 production 소비자가 없어 DEC-20260926-hololive-legacy-env-config-retirement(퇴역 producer budget 계약 종료 포함)로 삭제했습니다.
+- `service/notification/alarmservice`는 stack-audit T05에서 `hololive-api` bot·admin plane의 in-process AlarmService 분기를 제거한 뒤 production 소비자가 `alarm-worker` 하나입니다. 위 규칙상 `hololive-alarm-worker/internal/` 이동 대상이며, 이동 시점과 범위는 `검토 필요`입니다.
 - producer/consumer 양측 계약면: `service/youtube/outbox/{store,format,deliverysql,dispatchstate}`.
 - shared 내부 소비 그래프가 여러 runtime에 걸치는 기반 패키지: `service/youtube/{admission,batchrepo,poller/runtime,tracking/observation}`, `service/youtube/outbox/timeline`.
-- alarm HTTP migration facade가 공동으로 사용하는 계약·handler: `service/alarm/{checker,queue,handoff,dispatchoutbox}`. 이 범주는 facade 제거 뒤에도 실제 다중 소비가 남는지 다시 확인하며 자동 삭제하지 않습니다.
+- alarm HTTP migration facade가 공동으로 사용하는 계약·handler: `service/alarm/{checker,queue,dispatchoutbox}`(v3 handoff mode 패키지 `service/alarm/handoff`는 DEC-20260926-hololive-outbox-v3-convergence로 삭제). 이 범주는 facade 제거 뒤에도 실제 다중 소비가 남는지 다시 확인하며 자동 삭제하지 않습니다.
 
 YouTube dispatcher와 poller 구현처럼 단일 owner로 확정된 코드는 각각 `hololive-alarm-worker/internal/egress/youtubedispatch`와 `hololive-youtube-collector/internal/runtime/pollers`가 소유합니다. public package 잔류는 구현 ownership을 공유한다는 뜻이 아니며, 새 single-owner 실행 구현을 `hololive-shared/pkg`에 추가할 근거로 사용할 수 없습니다.
 

@@ -23,6 +23,7 @@ package llm
 import (
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +35,11 @@ const (
 
 func testObjectSchema() map[string]any {
 	return map[string]any{"type": "object"}
+}
+
+// testPromptLayers는 계층 지시 경로의 최소 입력(developer 지시와 user 입력)이다.
+func testPromptLayers() openaipreset.PromptLayers {
+	return openaipreset.PromptLayers{Developer: "developer instructions", User: "user request"}
 }
 
 func TestOptionWithSchemaName(t *testing.T) {

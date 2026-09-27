@@ -8,10 +8,8 @@ WITH locked AS MATERIALIZED (
 	FROM locked
 	JOIN notification_delivery_outbox o ON o.id = locked.id
 	WHERE o.status IN ($5, $6)
-	  AND (
-		(o.locked_by = $7 AND (o.status = $6 OR o.lock_expires_at > clock_timestamp()))
-		OR (o.locked_by IS NULL AND o.status = $5 AND o.locked_at = $8)
-	  )
+	  AND o.locked_by = $7
+	  AND (o.status = $6 OR o.lock_expires_at > clock_timestamp())
 )
 UPDATE notification_delivery_outbox o
 SET attempt_count = o.attempt_count + 1,

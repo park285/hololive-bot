@@ -50,7 +50,7 @@ func TestMemberInfoCommand_Execute_SendsTextProfile(t *testing.T) {
 	)
 
 	deps := &handlercore.Dependencies{
-		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:     matcher.NewMatcher(provider, nil, nil, slog.New(slog.DiscardHandler)),
 		MembersData: provider,
 		Formatter:   formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error {
@@ -94,7 +94,7 @@ func TestMemberInfoCommandPrefersRequestedSharedChannelMember(t *testing.T) {
 	var textSent string
 
 	deps := &handlercore.Dependencies{
-		Matcher:     matcher.NewMatcher(nilBaseContext(), provider, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		Matcher:     matcher.NewMatcher(provider, nil, nil, slog.New(slog.DiscardHandler)),
 		MembersData: provider,
 		Formatter:   formatter.NewResponseFormatter("!", setupProfileCommandTestRenderer(t)),
 		SendMessage: func(_ context.Context, _, msg string) error { textSent = msg; return nil },

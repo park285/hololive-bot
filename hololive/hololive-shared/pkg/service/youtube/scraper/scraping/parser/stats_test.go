@@ -55,26 +55,6 @@ func TestParseChannelStatsFromInitialData_GarbageInput(t *testing.T) {
 	assert.Empty(t, stats.Handle)
 }
 
-func TestParseChannelSnippetFromInitialData_HappyPath(t *testing.T) {
-	data := gjson.Parse(`{"header":{"pageHeaderRenderer":{"content":{"pageHeaderViewModel":{
-		"image":{"decoratedAvatarViewModel":{"avatar":{"avatarViewModel":{"image":{"sources":[{"url":"https://a/avatar.jpg","width":100,"height":100}]}}}}},
-		"banner":{"imageBannerViewModel":{"image":{"sources":[{"url":"https://a/banner.jpg","width":1280,"height":351}]}}}
-	}}}}}`)
-	snippet := ParseChannelSnippetFromInitialData(&data)
-	require.Len(t, snippet.Avatar, 1)
-	require.Len(t, snippet.Banner, 1)
-	assert.Equal(t, "https://a/avatar.jpg", snippet.Avatar[0].URL)
-	assert.Equal(t, "https://a/banner.jpg", snippet.Banner[0].URL)
-}
-
-func TestParseChannelSnippetFromInitialData_EmptyInput(t *testing.T) {
-	snippet := ParseChannelSnippetFromInitialData(parseGJSONResultPtr(`{}`))
-	assert.Empty(t, snippet.Avatar)
-	assert.Empty(t, snippet.Banner)
-	assert.NotNil(t, snippet.Avatar)
-	assert.NotNil(t, snippet.Banner)
-}
-
 func TestParseChannelHandle(t *testing.T) {
 	tests := []struct {
 		name string

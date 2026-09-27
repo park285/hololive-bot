@@ -161,7 +161,7 @@ func assertAuthCode(t *testing.T, err error, want ErrorCode) {
 func TestRegister_DuplicateEmail(t *testing.T) {
 	db := newTestDB(t)
 
-	service, err := NewService(t.Context(), db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, nil, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestLogin_SessionFlow(t *testing.T) {
 	config.SessionTTL = 30 * time.Minute
 	config.UserSessionsTTL = 2 * time.Hour
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestLogin_RateLimited(t *testing.T) {
 	config.LoginRateLimitPerMinute = 2
 	config.LoginFailLimit = 100 // 레이트리밋 테스트에서 락 영향 제거
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestLogin_AccountLocked(t *testing.T) {
 	config.LoginFailWindow = 10 * time.Minute
 	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestLogin_UnknownEmailRecordsFailureAndLocksAccount(t *testing.T) {
 	config.LoginFailWindow = 10 * time.Minute
 	config.LoginLockDuration = 10 * time.Minute
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestMe_ReturnsUnauthorizedWhenSessionUserIsMissing(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestPasswordReset_RevokesSessions(t *testing.T) {
 
 	config.LoginRateLimitPerMinute = 1000
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -441,7 +441,7 @@ func TestPasswordResetRequest_UnknownEmailReturnsEmptyToken(t *testing.T) {
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestPasswordResetRequest_RateLimited(t *testing.T) {
 
 	config.PasswordResetRequestRateLimitPerMinute = 2
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -501,7 +501,7 @@ func TestResetPassword_RollsBackPasswordUpdateWhenMarkTokenUsedFails(t *testing.
 
 	config.BcryptCost = bcrypt.MinCost
 
-	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -610,7 +610,7 @@ func newPasswordResetRaceFixture(t *testing.T) (*Service, string) {
 	config.BcryptCost = bcrypt.MinCost
 	config.LoginRateLimitPerMinute = 1000
 
-	service, err := NewService(ctx, db, cacheClient, sharedlogging.NewTestLogger(), config)
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), config)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -680,7 +680,7 @@ func TestCreateSession_RollsBackSessionWhenIndexAddFails(t *testing.T) {
 		failDelKeys: map[string]error{},
 	}
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -714,7 +714,7 @@ func TestCreateSession_RollsBackSessionWhenIndexExpireFails(t *testing.T) {
 		failDelKeys:   map[string]error{},
 	}
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -742,7 +742,7 @@ func TestRefresh_RejectsWhenSessionAlreadyClaimed(t *testing.T) {
 	db := newTestDB(t)
 	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(t.Context(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -785,7 +785,7 @@ func TestRefresh_KeepsNewSessionWhenOldIndexRemovalFails(t *testing.T) {
 	db := newTestDB(t)
 	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(t.Context(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -847,7 +847,7 @@ func TestResetPassword_IgnoresSessionRevocationFailureAfterCommit(t *testing.T) 
 	db := newTestDB(t)
 	baseCache := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(t.Context(), db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, baseCache, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

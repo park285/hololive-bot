@@ -27,15 +27,17 @@ const (
 type ObservationKind string
 
 const (
-	KindCommunityPage  ObservationKind = "community_page"
-	KindVideoList      ObservationKind = "video_list"
-	KindShortsList     ObservationKind = "shorts_list"
-	KindLiveSnapshot   ObservationKind = "live_snapshot"
-	KindViewerSample   ObservationKind = "viewer_sample"
-	KindChannelStats   ObservationKind = "channel_stats"
-	KindChannelProfile ObservationKind = "channel_profile"
-	KindChannelPhoto   ObservationKind = "channel_photo"
-	KindSchedule       ObservationKind = "schedule_snapshot"
+	KindCommunityPage    ObservationKind = "community_page"
+	KindVideoList        ObservationKind = "video_list"
+	KindShortsList       ObservationKind = "shorts_list"
+	KindLiveSnapshot     ObservationKind = "live_snapshot"
+	KindViewerSample     ObservationKind = "viewer_sample"
+	KindChannelStats     ObservationKind = "channel_stats"
+	KindChannelProfile   ObservationKind = "channel_profile"
+	KindChannelPhoto     ObservationKind = "channel_photo"
+	KindSchedule         ObservationKind = "schedule_snapshot"
+	KindChannelLiveCheck ObservationKind = "channel_live_check"
+	KindVideoLiveCheck   ObservationKind = "video_live_check"
 )
 
 type Completeness string
@@ -135,13 +137,7 @@ func DecodeEnvelopeStrict(raw []byte) (Envelope, error) {
 }
 
 func PrepareEnvelope(envelope Envelope) (Envelope, error) {
-	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(
-		envelope.ObservationKind,
-		envelope.SubjectKey,
-		envelope.Completeness,
-		envelope.ContractGeneration,
-		envelope.Payload,
-	)
+	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(&envelope)
 	if err != nil {
 		return Envelope{}, fmt.Errorf("prepare source observation envelope: %w", err)
 	}
@@ -214,6 +210,10 @@ func (e *Envelope) validateEnvelopeIdentity() error {
 
 	if !e.ObservationKind.Valid() {
 		return fmt.Errorf("validate source observation envelope: unsupported observation kind %q", e.ObservationKind)
+	}
+
+	if err := validateLiveCheckEnvelope(e.Provider, e.ObservationKind, e.Continuity); err != nil {
+		return fmt.Errorf("validate live check envelope: %w", err)
 	}
 
 	if err := validateBoundedText("subject key", e.SubjectKey, 256); err != nil {
@@ -290,13 +290,7 @@ func validateEnvelopeSHA256s(e *Envelope) error {
 }
 
 func (e *Envelope) verifyCanonicalPayload() ([]byte, error) {
-	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(
-		e.ObservationKind,
-		e.SubjectKey,
-		e.Completeness,
-		e.ContractGeneration,
-		e.Payload,
-	)
+	canonicalPayload, canonicalScope, err := canonicalPayloadAndScope(e)
 	if err != nil {
 		return nil, fmt.Errorf("validate source observation envelope: %w", err)
 	}

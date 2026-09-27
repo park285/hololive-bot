@@ -41,14 +41,17 @@ type MessageFormatter struct {
 	Cache          cache.Client
 	Logger         *slog.Logger
 	MessageStrings *messagestrings.Store
+
+	// SeeMoreFold는 여러 항목 묶음 알림을 머리 문단과 '전체보기'로 접는다. 단일 알림에는 적용하지 않는다.
+	SeeMoreFold bool
 }
 
-func NewMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger, messageStrings *messagestrings.Store) *MessageFormatter {
+func NewMessageFormatter(renderer *template.Renderer, cacheClient cache.Client, logger *slog.Logger, messageStrings *messagestrings.Store, seeMoreFold bool) *MessageFormatter {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	return &MessageFormatter{Renderer: renderer, Cache: cacheClient, Logger: logger, MessageStrings: messageStrings}
+	return &MessageFormatter{Renderer: renderer, Cache: cacheClient, Logger: logger, MessageStrings: messageStrings, SeeMoreFold: seeMoreFold}
 }
 
 func (mf *MessageFormatter) logger() *slog.Logger {
@@ -70,9 +73,9 @@ func (mf *MessageFormatter) FormatMessage(ctx context.Context, item *domain.YouT
 			slog.String("channel_id", item.ChannelID),
 			slog.Any("error", err))
 
-		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
+		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	} else if memberName == "" {
-		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
+		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	}
 
 	data, err := mf.BuildTemplateData(memberName, item)
@@ -127,11 +130,11 @@ func (mf *MessageFormatter) BuildTemplateData(memberName string, item *domain.Yo
 func populateTemplateData(data *TemplateData, item *domain.YouTubeNotificationOutbox) error {
 	switch item.Kind {
 	case domain.OutboxKindNewVideo, domain.OutboxKindNewShort, domain.OutboxKindLiveStream:
-		return errors.Join(populateVideoTemplateData(data, item))
+		return populateVideoTemplateData(data, item)
 	case domain.OutboxKindCommunityPost:
-		return errors.Join(populateCommunityTemplateData(data, item.Payload))
+		return populateCommunityTemplateData(data, item.Payload)
 	case domain.OutboxKindMilestone:
-		return errors.Join(populateMilestoneTemplateData(data, item.Payload))
+		return populateMilestoneTemplateData(data, item.Payload)
 	default:
 		return nil
 	}
@@ -284,6 +287,10 @@ func (mf *MessageFormatter) FormatGroupedMessage(ctx context.Context, memberName
 	out, err := mf.renderTemplate(ctx, groupedTemplateKey(kind), channelID, data)
 	if err != nil {
 		return out, fmt.Errorf("render template: %w", err)
+	}
+
+	if mf.SeeMoreFold {
+		return util.FoldForSeeMore(out, util.KakaoSeeMoreThreshold), nil
 	}
 
 	return out, nil

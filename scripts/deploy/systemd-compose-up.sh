@@ -33,7 +33,6 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "${ROOT_DIR}/scripts/deploy/systemd-compose-up.sh"
     "${ROOT_DIR}/scripts/deploy/compose.sh"
     "${ROOT_DIR}/scripts/deploy/lib/compose-env.sh"
-    "${ROOT_DIR}/scripts/deploy/lib/removed-runtimes.sh"
     "${ROOT_DIR}/scripts/deploy/lib/health-gate.sh"
   )
   while IFS= read -r yml; do
@@ -88,12 +87,6 @@ fi
 wait_for_tailscale_ip "$bind_ip"
 export HOLOLIVE_BOT_PORT_BIND_IP="$bind_ip"
 
-if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" != "1" ]]; then
-  echo "[SECURITY] this host requires the live-compat overlay but HOLOLIVE_ENABLE_LIVE_COMPAT is unset (drop-in missing?)." >&2
-  echo "           refusing to start: prod-only bindings would drop valkey/postgres off ${bind_ip} (2026-06-27 incident)." >&2
-  exit 1
-fi
-
 for file in \
   /etc/stack-secrets/hololive-bot/compose.env \
   /etc/stack-secrets/hololive-bot/bot.env \
@@ -111,11 +104,12 @@ done
 
 export COMPOSE_ENV_FILE
 
+# 중앙 호스트는 live-compat overlay 없이 띄우면 valkey/postgres가 ${bind_ip}에서 빠진다(2026-06-27 incident). 그래서
+# overlay를 항상 넣는다. 이 판정을 대신하던 HOLOLIVE_ENABLE_LIVE_COMPAT drop-in 토글은 항상 켜져 있어 지웠다
+# (stack-audit 2026-09-26 T11 holo-live-compat-toggle-dead-branch).
 base_files=(
   -f deploy/compose/docker-compose.prod.yml
+  -f deploy/compose/docker-compose.live-compat.yml
 )
-if [[ "${HOLOLIVE_ENABLE_LIVE_COMPAT:-}" == "1" ]]; then
-  base_files+=(-f deploy/compose/docker-compose.live-compat.yml)
-fi
 
 ./scripts/deploy/compose.sh "${base_files[@]}" up -d --no-build

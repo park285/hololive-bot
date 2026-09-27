@@ -236,9 +236,9 @@ func broadcastHistoryFilterLine(filter BroadcastHistoryFilter) string {
 	return strings.Join(parts, " / ")
 }
 
-func broadcastHistoryTime(ctx context.Context, f *ResponseFormatter, t time.Time) string {
+func broadcastHistoryTime(_ context.Context, f *ResponseFormatter, t time.Time) string {
 	if t.IsZero() {
-		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceMisc, "time_unknown")
+		return f.messageStrings.Text(messagestrings.MiscTimeUnknown)
 	}
 
 	return util.FormatKST(t, "2006/01/02 15:04")

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -280,7 +281,7 @@ func TestDispatcherRunWaitsForDelayedBackgroundLoopExit(t *testing.T) {
 	}
 }
 
-func openDispatcherStartTestDB(t *testing.T, name string) *deliveryTestDB {
+func openDispatcherStartTestDB(t *testing.T, name string) *pgxpool.Pool {
 	t.Helper()
 
 	_ = name

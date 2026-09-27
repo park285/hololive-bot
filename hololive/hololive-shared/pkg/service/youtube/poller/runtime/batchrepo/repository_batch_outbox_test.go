@@ -171,8 +171,8 @@ func TestPgxBatchRepositoryPersistVideosConflictWithSentOutboxBackfillsTrackingS
 	require.NoError(t, db.Create(&domain.YouTubeNotificationOutbox{
 		Kind:          domain.OutboxKindNewShort,
 		ChannelID:     testChannelID,
-		ContentID:     testVideoID,
-		Payload:       buildShortNotificationPayload(shortVideo, testVideoID),
+		ContentID:     testCanonicalShortFromVideoID,
+		Payload:       buildShortNotificationPayload(shortVideo, testCanonicalShortFromVideoID),
 		Status:        domain.OutboxStatusSent,
 		AttemptCount:  1,
 		NextAttemptAt: createdAt,
@@ -202,7 +202,7 @@ func TestPgxBatchRepositoryPersistVideosConflictWithSentOutboxBackfillsTrackingS
 
 	var trackingRow domain.YouTubeContentAlarmTracking
 
-	require.NoError(t, db.First(&trackingRow, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, testVideoID).Error)
+	require.NoError(t, db.First(&trackingRow, "kind = ? AND content_id = ?", domain.OutboxKindNewShort, testCanonicalShortFromVideoID).Error)
 	require.Equal(t, testCanonicalShortFromVideoID, trackingRow.CanonicalContentID)
 	require.NotNil(t, trackingRow.AlarmSentAt)
 	require.Equal(t, sentAt, trackingRow.AlarmSentAt.UTC())

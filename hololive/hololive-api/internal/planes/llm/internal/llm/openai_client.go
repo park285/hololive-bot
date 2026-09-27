@@ -33,6 +33,7 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/httputil"
 	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 
 	"github.com/kapu/hololive-shared/pkg/constants"
@@ -139,13 +140,10 @@ func (r costTrackerUsageReporter) RecordUsage(ctx context.Context, provider, mod
 }
 
 // chatCompletions=true이면 Chat Completions API, 아니면 Responses API를 사용합니다.
-func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
+// 지시는 InvariantPrompt/DeveloperPrompt 계층으로만 보내며 provider별 역할 매핑은 shared-go가 소유합니다.
+func (c *OpenAIClient) GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error) {
 	if c == nil {
 		return "", errors.New("openai client is nil")
-	}
-
-	if ctx == nil {
-		return "", errors.New("openai context is nil")
 	}
 
 	if strings.TrimSpace(c.model) == "" {
@@ -156,7 +154,7 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 		return "", errors.New("json schema is nil")
 	}
 
-	attrs := llmPromptSummaryAttrs("openai", c.model, systemPrompt, userPrompt)
+	attrs := llmPromptSummaryAttrs("openai", c.model, prompts)
 	sharedlog.Debug(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
 
@@ -164,8 +162,9 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 
 	resp, err := sharedllm.RunJSON(ctx, c.generator, sharedllm.JSONRequest{
 		TaskName:        c.schemaName,
-		SystemPrompt:    systemPrompt,
-		UserPrompt:      userPrompt,
+		InvariantPrompt: prompts.Invariant,
+		DeveloperPrompt: prompts.Developer,
+		UserPrompt:      prompts.User,
 		SchemaName:      c.schemaName,
 		Schema:          schema,
 		Model:           c.model,
@@ -195,8 +194,9 @@ func (c *OpenAIClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	return resp.Text, nil
 }
 
-func llmPromptSummaryAttrs(provider, model, systemPrompt, userPrompt string) []slog.Attr {
-	prompt := strings.TrimSpace(systemPrompt + "\n" + userPrompt)
+// 로그에는 원문 대신 계층을 순서대로 이은 길이와 해시 앞 8바이트만 남긴다.
+func llmPromptSummaryAttrs(provider, model string, prompts openaipreset.PromptLayers) []slog.Attr {
+	prompt := strings.TrimSpace(prompts.Invariant + "\n" + prompts.Developer + "\n" + prompts.User)
 	attrs := []slog.Attr{
 		slog.String("provider", strings.TrimSpace(provider)),
 		slog.String("model", strings.TrimSpace(model)),

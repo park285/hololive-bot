@@ -25,21 +25,25 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func TestRenderOrError_SeeMoreFoldToggle(t *testing.T) {
+func TestRenderNotification_SeeMoreFoldToggle(t *testing.T) {
 	t.Parallel()
 
 	longBody := "다이제스트 헤더\n" + strings.Repeat("뉴스 항목 행입니다\n", 40)
 	renderer := setupFormatterRenderer(t, domain.TemplateKeyCmdMemberNewsDigest, longBody)
 
 	on := newLLMSchedulerFormatter("!", renderer, nil, true)
-	folded := on.renderOrError(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
+	folded, err := on.renderNotification(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
+	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(folded, "다이제스트 헤더\u200b"), "padding must follow the head line")
 	assert.Contains(t, folded, "\u200b")
 
 	off := newLLMSchedulerFormatter("!", renderer, nil, false)
-	assert.NotContains(t, off.renderOrError(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn"), "\u200b")
+	unfolded, err := off.renderNotification(t.Context(), domain.TemplateKeyCmdMemberNewsDigest, nil, "warn")
+	require.NoError(t, err)
+	assert.NotContains(t, unfolded, "\u200b")
 }

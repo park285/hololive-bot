@@ -31,6 +31,9 @@ func validateOwnership(environment string) error {
 }
 
 // validateProductionExecutors: production alarm-worker는 모든 worker executor가 켜져 있어야 한다.
+// DEC-20260926-hololive-outbox-v3-convergence로 v1(youtube_delivery)과 v2(notification_delivery)는 v3(alarm_dispatch)로
+// 넘기지 않는 정본 파이프라인이므로 세 executor가 모두 각자의 발송을 소유한다. 그래서 v3 cutover 뒤 v2 executor를 끄는 절차는
+// handoff와 함께 없어졌다.
 func validateProductionExecutors(profile *settings.AlarmWorkerProfile) error {
 	if profile == nil {
 		return errors.New("alarm worker profile is nil")

@@ -23,6 +23,7 @@ package delivery
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -45,21 +46,27 @@ type NotificationLocker interface {
 	ReleaseRoomClaims(ctx context.Context, claimKeys []string) error
 }
 
-func NewLocker(cache lockCache, logger *slog.Logger) NotificationLocker {
+// NewLocker는 Valkey 기반 locker만 만든다. 캐시가 없으면 dedup을 끈 채 진행하던 noop locker로 내려가지 않고 생성
+// 오류를 돌려준다(stack-audit 2026-09-26 T11 holo-delivery-noop-locker-fallback). 중복 발송 방지가 꺼진 상태를 기동
+// 성공으로 숨기지 않기 위해서다.
+func NewLocker(cache lockCache, logger *slog.Logger) (NotificationLocker, error) {
 	if cache == nil {
-		return noopNotificationLocker{}
+		return nil, errors.New("new notification locker: cache is nil")
 	}
 
-	return &valkeyNotificationLocker{cache: cache, logger: logger}
+	return &valkeyNotificationLocker{cache: cache, logger: logger}, nil
 }
 
 // valkeyNotificationLocker: Valkey 기반 NotificationLocker 구현.
+// Valkey 오류는 모두 호출자에게 돌려준다. 경고만 남기고 lock·claim 없이 진행하던 graceful degradation은 계약 없는
+// 폴백이라 지웠다(stack-audit 2026-09-26 T19 holo-delivery-valkey-locker-warn-proceed). 이제 lock 획득 실패는 digest 실행
+// 실패로 남아 다음 주기에 다시 시도되고, 해제 실패는 lock이 TTL로 만료될 때까지 같은 작업을 막는다.
 type valkeyNotificationLocker struct {
 	cache  lockCache
 	logger *slog.Logger
 }
 
-func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (value0 string, ok1 bool, err error) {
+func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey string, ttl time.Duration) (string, bool, error) {
 	token := uuid.New().String()
 	// jsonv2.Marshal로 직렬화 (cache.Get이 jsonv2.Unmarshal 사용)
 	tokenJSON, err := jsonv2.Marshal(token)
@@ -71,12 +78,7 @@ func (l *valkeyNotificationLocker) TryAcquire(ctx context.Context, lockKey strin
 
 	acquired, err := l.cache.SetNX(ctx, lockKey, value, ttl)
 	if err != nil {
-		// Valkey 장애 시 graceful degradation: 락 없이 진행
-		l.logger.Warn("Lock SetNX failed, proceeding without lock",
-			privacylog.CacheKeyAttr(lockKey),
-			slog.String("error", err.Error()))
-
-		return token, true, nil
+		return "", false, fmt.Errorf("acquire notification lock: set nx: %w", err)
 	}
 
 	return token, acquired, nil
@@ -93,11 +95,7 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 
 	deleted, err := l.cache.CompareAndDelete(ctx, lockKey, value)
 	if err != nil {
-		l.logger.Warn("Lock CompareAndDelete failed during release",
-			privacylog.CacheKeyAttr(lockKey),
-			slog.String("error", err.Error()))
-
-		return nil
+		return fmt.Errorf("release notification lock: compare and delete: %w", err)
 	}
 
 	if !deleted {
@@ -111,12 +109,7 @@ func (l *valkeyNotificationLocker) Release(ctx context.Context, lockKey, token s
 func (l *valkeyNotificationLocker) ClaimRoom(ctx context.Context, claimKey string, ttl time.Duration) (bool, error) {
 	acquired, err := l.cache.SetNX(ctx, claimKey, "1", ttl)
 	if err != nil {
-		// Valkey 장애 시 graceful degradation: claim 없이 진행
-		l.logger.Warn("Room claim SetNX failed, proceeding",
-			privacylog.CacheKeyAttr(claimKey),
-			slog.String("error", err.Error()))
-
-		return true, nil
+		return false, fmt.Errorf("claim notification room: set nx: %w", err)
 	}
 
 	return acquired, nil
@@ -128,29 +121,8 @@ func (l *valkeyNotificationLocker) ReleaseRoomClaims(ctx context.Context, claimK
 	}
 
 	if _, err := l.cache.DelMany(ctx, claimKeys); err != nil {
-		l.logger.Warn("ReleaseRoomClaims failed",
-			slog.Int("count", len(claimKeys)),
-			slog.String("error", err.Error()))
+		return fmt.Errorf("release notification room claims: del many (count=%d): %w", len(claimKeys), err)
 	}
 
-	return nil
-}
-
-// noopNotificationLocker: cache nil 시 fallback (dedup 비활성화).
-type noopNotificationLocker struct{}
-
-func (noopNotificationLocker) TryAcquire(_ context.Context, _ string, _ time.Duration) (value0 string, ok1 bool, err error) {
-	return "", true, nil
-}
-
-func (noopNotificationLocker) Release(_ context.Context, _, _ string) error {
-	return nil
-}
-
-func (noopNotificationLocker) ClaimRoom(_ context.Context, _ string, _ time.Duration) (bool, error) {
-	return true, nil
-}
-
-func (noopNotificationLocker) ReleaseRoomClaims(_ context.Context, _ []string) error {
 	return nil
 }

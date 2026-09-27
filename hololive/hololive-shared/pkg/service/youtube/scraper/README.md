@@ -37,84 +37,33 @@ onResponseReceivedEndpoints.0.showEngagementPanelEndpoint.engagementPanel
 
 ---
 
-### 2. `GetChannelSnippet(ctx, channelID)` → `*ChannelSnippet`
+### 2. `GetRecentVideos(ctx, channelID, maxResults)` → `[]*Video`
 
-채널 프로필 이미지 조회 (YouTube 채널 메인 페이지에서 추출)
+채널 `/videos` 탭 HTML에서 최근 영상 목록을 추출합니다. 원천은 이 HTML 하나이며, 조회·파싱 실패나 parser drift는
+RSS 결과나 빈 성공으로 바꾸지 않고 오류로 돌려줍니다(`DEC-20260926-hololive-source-fallbacks-retirement`).
+RSS feed는 `GetRecentVideoPublishedTimes`의 게시 시각 보강에만 씁니다.
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `Avatar` | `[]Thumbnail` | 프로필 이미지 (여러 해상도) |
-| `Banner` | `[]Thumbnail` | 배너 이미지 (여러 해상도) |
-
-**JSON 경로** (YouTube 2025 구조 - `pageHeaderRenderer`):
-```
-# Avatar
-header.pageHeaderRenderer.content.pageHeaderViewModel.image
-  .decoratedAvatarViewModel.avatar.avatarViewModel.image.sources
-
-# Banner
-header.pageHeaderRenderer.content.pageHeaderViewModel.banner
-  .imageBannerViewModel.image.sources
-```
-
-**폴백 경로** (이전 `c4TabbedHeaderRenderer` 구조):
-```
-header.c4TabbedHeaderRenderer.avatar.thumbnails
-header.c4TabbedHeaderRenderer.banner.thumbnails
-```
-
----
-
-### 3. `GetUpcomingEvents(ctx, channelID)` → `[]*UpcomingEvent`
-
-예정/라이브 방송 목록 조회 (채널 Home 탭에서 추출)
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `VideoID` | `string` | 비디오 ID |
-| `Title` | `string` | 방송 제목 |
-| `Thumbnail` | `[]Thumbnail` | 썸네일 이미지 |
-| `Status` | `string` | 상태 (`"LIVE"`, `"UPCOMING"`, `"DEFAULT"`) |
-| `StartTime` | `*int64` | 예정 시작 시간 (Unix timestamp, optional) |
-| `ViewCountText` | `string` | 시청자 수 텍스트 |
-| `ChannelTitle` | `string` | 채널 이름 |
-
-**탐색 영역**:
-1. `channelFeaturedContentRenderer.items` - Featured 영역
-2. `shelfRenderer.content.horizontalListRenderer.items` - Shelf 영역
-   - `videoRenderer` (새 구조)
-   - `gridVideoRenderer` (이전 구조)
-
-**상태 판단 로직**:
-```go
-// thumbnailOverlays에서 LIVE/UPCOMING 체크
-overlay.thumbnailOverlayTimeStatusRenderer.style == "LIVE" || "UPCOMING"
-
-// 또는 upcomingEventData 존재 여부
-video.upcomingEventData.Exists() → "UPCOMING"
-```
+채널 snippet(아바타·배너)과 Home 탭 예정/라이브 이벤트 조회(`GetChannelSnippet`, `GetUpcomingEvents`)는 Holodex
+채널·일정 폴백 전용이었고, 그 폴백과 함께 삭제했습니다.
 
 ---
 
 ## 사용법
 
 ```go
-import "github.com/kapu/hololive-shared/pkg/service/youtube/scraper"
+import scraper "github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping"
 
-client := scraper.NewClient()
+// runtime이 읽은 appConfig.YouTube를 넘긴다. HTTP timeout, 본문 상한, 상태 TTL, bucket 접두사가 여기서 온다.
+client := scraper.NewClient(appConfig.YouTube, scraper.WithRateLimiter(sharedRL))
 
 // 채널 통계 조회
 stats, err := client.GetChannelStats(ctx, "UC1DCedRgGHBdm81E1llLhOQ")
 fmt.Printf("구독자: %d\n", stats.SubscriberCount)
 
-// 채널 프로필 이미지 조회
-snippet, err := client.GetChannelSnippet(ctx, "UC1DCedRgGHBdm81E1llLhOQ")
-fmt.Printf("아바타 URL: %s\n", snippet.Avatar[0].URL)
-
-// 예정/라이브 방송 조회
-events, err := client.GetUpcomingEvents(ctx, "UCJFZiqLMntJufDCHc6bQixg")
-for _, e := range events {
-    fmt.Printf("[%s] %s\n", e.Status, e.Title)
+// 최근 영상 조회(HTML 단일 원천, 실패는 오류)
+videos, err := client.GetRecentVideos(ctx, "UCJFZiqLMntJufDCHc6bQixg", 10)
+for _, v := range videos {
+    fmt.Printf("%s %s\n", v.VideoID, v.Title)
 }
 ```
 
@@ -158,22 +107,19 @@ go test -tags=integration -v ./pkg/service/youtube/scraper/...
 ```
 scraper/
 ├── client.go      # HTTP 클라이언트 (Client 구조체, fetchPage)
-├── channel.go     # GetChannelStats, GetChannelSnippet
-├── videos.go      # GetUpcomingEvents, GetRecentVideos, GetPopularVideos
+├── channel.go     # GetChannelStats
+├── videos.go      # GetRecentVideos, GetPopularVideos
 ├── yt_initial_data.go # ytInitialData root package wrapper
 ├── internal/initialdata/ # ytInitialData 추출/후보 점수화
-├── internal/browserfetcher/ # browser snapshot HTTP client 구현
 ├── alerts.go      # alertRenderer 처리
-├── stats_parser.go # 채널 통계/스니펫 파서
-├── upcoming_parser.go # 예정/라이브 이벤트 파서
+├── stats_parser.go # 채널 통계 파서
 ├── recent_videos_parser.go # recent videos 파서
 ├── community.go   # GetCommunityPosts
 ├── playlists.go   # GetPlaylists
 ├── shorts.go      # GetShorts
 ├── types.go       # 타입 정의 (ChannelStats, Video, CommunityPost, Playlist, Short)
 ├── parser_test.go # ytInitialData/숫자 파싱 테스트
-├── stats_parser_test.go # 채널 통계/스니펫 파서 테스트
-├── upcoming_parser_test.go # 예정/라이브 이벤트 파서 테스트
+├── stats_parser_test.go # 채널 통계 파서 테스트
 ├── recent_videos_parser_test.go # bounded scan 회귀 테스트
 ├── client_test.go # 통합 테스트 (실제 YouTube 호출, -tags=integration)
 └── README.md      # 이 문서
@@ -194,16 +140,11 @@ scraper/
 // 2. 스크래핑 실패 채널만 YouTube Data API로 폴백
 ```
 
-### Holodex 폴백 통합 (`internal/service/holodex/scraper.go`)
+### Holodex 조회와의 관계
 
-Holodex API 실패 시 3단계 폴백 체계로 안정성 확보:
-
-```
-폴백 순서:
-1. Holodex API (주요 소스)
-2. YouTube HTML 스크래핑 (1차 폴백) ← 이 scraper 패키지 사용
-3. 홀로라이브 공식 스케줄 페이지 (2차 폴백)
-```
+Holodex 채널·채널 일정·live-status 조회는 이 scraper를 보조 원천으로 쓰지 않습니다. Holodex 원천 실패는 오류로
+돌려주고, YouTube HTML이나 공식 일정 페이지로 보충하거나 그 결과를 캐시하지 않습니다
+(`DEC-20260926-hololive-source-fallbacks-retirement`, `DEC-20260926-hololive-live-status-scraper-fallback-removal`).
 
 ---
 
@@ -222,5 +163,3 @@ Holodex API 실패 시 3단계 폴백 체계로 안정성 확보:
 - [gjson 문서](https://github.com/tidwall/gjson)
 - YouTube 페이지 구조 분석 (2026-01-19 기준):
   - `aboutChannelViewModel`: 구독자 수, 조회수, 비디오 수
-  - `pageHeaderRenderer`: 아바타, 배너
-  - `channelFeaturedContentRenderer`: 라이브/예정 방송

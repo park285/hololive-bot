@@ -49,6 +49,10 @@ const (
 	MaxDetailBytes = 2048
 )
 
+// ErrInvalidFailureTuple은 호출 코드가 durable 계약 밖 code/class tuple을 만들었음을 알린다. 이런 오류는 미분류
+// Internal/ClassInternal로 닫히고, collector는 youtube_collection_invalid_failure_tuple_total로 위반을 센다.
+var ErrInvalidFailureTuple = errors.New("invalid collection failure tuple")
+
 type Error struct {
 	code         ErrorCode
 	class        FailureClass
@@ -254,16 +258,19 @@ func newError(code ErrorCode, class FailureClass, hint RetryHint, cause error) *
 		return typed
 	}
 
-	if repaired, ok := repairFailureTuple(code, class); ok {
-		typed.code = repaired.code
-		typed.class = repaired.class
-
+	if contract.ValidDurableFailureTuple(code, class) {
 		return typed
 	}
 
+	// 계약 밖 code/class tuple은 code의 기본 class로 조용히 고치지 않는다(구 helper class 수리, stack-audit 2026-09-26 T11
+	// holo-collector-failure-class-repair에서 삭제). helper 응답은 youtubejs.mapHelperFailure가 고정 tuple로만 옮기므로
+	// 여기 닿는 비정규 tuple은 호출 코드 결함이다. 호출자가 붙인 분류를 믿을 수 없으므로 미분류 Internal로 닫아(치명이 아닌
+	// 지연 처리) 원래 tuple을 원인에 남기고, scheduler가 ErrInvalidFailureTuple로 위반 metric을 센다.
 	typed.code = Internal
 	typed.class = ClassInternal
 	typed.retry = defaultRetryHint()
+	typed.err = fmt.Errorf("%w %s/%s: %w", ErrInvalidFailureTuple, code, class, cause)
+	typed.unclassified = true
 
 	return typed
 }
@@ -278,8 +285,8 @@ func (e *Error) normalized() *Error {
 		hint = defaultRetryHint()
 	}
 
-	if repaired, ok := repairFailureTuple(e.code, e.class); ok {
-		return &Error{code: repaired.code, class: repaired.class, retry: hint, err: e.err, unclassified: e.unclassified}
+	if contract.ValidDurableFailureTuple(e.code, e.class) {
+		return &Error{code: e.code, class: e.class, retry: hint, err: e.err, unclassified: e.unclassified}
 	}
 
 	if errors.Is(e.err, context.DeadlineExceeded) {
@@ -291,23 +298,6 @@ func (e *Error) normalized() *Error {
 	}
 
 	return &Error{code: Internal, class: ClassInternal, retry: defaultRetryHint(), err: e.err, unclassified: e.unclassified}
-}
-
-type repairedFailure struct {
-	code  ErrorCode
-	class FailureClass
-}
-
-func repairFailureTuple(code ErrorCode, class FailureClass) (repairedFailure, bool) {
-	if contract.ValidDurableFailureTuple(code, class) {
-		return repairedFailure{code: code, class: class}, true
-	}
-
-	if repaired, ok := contract.DefaultFailureClass(code); ok {
-		return repairedFailure{code: code, class: repaired}, true
-	}
-
-	return repairedFailure{}, false
 }
 
 func recognizedTransientNetwork(err error) bool {

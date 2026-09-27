@@ -10,14 +10,14 @@ import (
 func TestBuildEventKeyCelebrationUsesIdentity(t *testing.T) {
 	input := DedupeInput{
 		SourceKind:     domain.AlarmDispatchSourceKindCelebration,
-		SourceIdentity: "birthday:UC_test:2026-05-26",
+		SourceIdentity: "birthday:member-101:2026-05-26",
 		ChannelID:      testYouTubeChannelID,
 		AlarmType:      domain.AlarmTypeBirthday,
 		Category:       string(domain.AlarmDispatchSourceKindCelebration),
 	}
 
 	got := BuildEventKey(&input)
-	want := "celebration:birthday:UC_test:2026-05-26"
+	want := "celebration:birthday:member-101:2026-05-26"
 
 	if got != want {
 		t.Fatalf("BuildEventKey() = %q, want %q", got, want)
@@ -27,11 +27,11 @@ func TestBuildEventKeyCelebrationUsesIdentity(t *testing.T) {
 func TestBuildEventKeyCelebrationIncludesDate(t *testing.T) {
 	day1 := DedupeInput{
 		SourceKind:     domain.AlarmDispatchSourceKindCelebration,
-		SourceIdentity: "birthday:UC_test:2026-05-26",
+		SourceIdentity: "birthday:member-101:2026-05-26",
 	}
 	day2 := DedupeInput{
 		SourceKind:     domain.AlarmDispatchSourceKindCelebration,
-		SourceIdentity: "birthday:UC_test:2027-05-26",
+		SourceIdentity: "birthday:member-101:2027-05-26",
 	}
 
 	key1 := BuildEventKey(&day1)
@@ -52,6 +52,7 @@ func TestEnvelopeDedupeInputCelebration(t *testing.T) {
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:      domain.CelebrationKindBirthday,
+			MemberID:  101,
 			ChannelID: testYouTubeChannelID,
 			Date:      "2026-05-26",
 		},
@@ -63,8 +64,8 @@ func TestEnvelopeDedupeInputCelebration(t *testing.T) {
 		t.Fatalf("SourceKind = %q, want %q", input.SourceKind, domain.AlarmDispatchSourceKindCelebration)
 	}
 
-	if input.SourceIdentity != "birthday:UC_test:2026-05-26" {
-		t.Fatalf("SourceIdentity = %q, want %q", input.SourceIdentity, "birthday:UC_test:2026-05-26")
+	if input.SourceIdentity != "birthday:member-101:2026-05-26" {
+		t.Fatalf("SourceIdentity = %q, want %q", input.SourceIdentity, "birthday:member-101:2026-05-26")
 	}
 
 	if input.ChannelID != testYouTubeChannelID {
@@ -86,6 +87,7 @@ func TestBuildLedgerRowsCelebrationEventKey(t *testing.T) {
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
+			MemberID:   101,
 			MemberName: "Test",
 			ChannelID:  testYouTubeChannelID,
 			Date:       "2026-05-26",
@@ -93,12 +95,12 @@ func TestBuildLedgerRowsCelebrationEventKey(t *testing.T) {
 		Version: 1,
 	}
 
-	event, delivery, err := buildLedgerRows(&envelope, StatusPending)
+	event, delivery, err := buildLedgerRows(&envelope)
 	if err != nil {
 		t.Fatalf("buildLedgerRows() error = %v", err)
 	}
 
-	wantEventKey := "celebration:birthday:UC_test:2026-05-26"
+	wantEventKey := "celebration:birthday:member-101:2026-05-26"
 	if event.EventKey != wantEventKey {
 		t.Fatalf("EventKey = %q, want %q", event.EventKey, wantEventKey)
 	}
@@ -136,6 +138,7 @@ func TestBuildLedgerRowsCelebrationSameEventKeyAcrossRooms(t *testing.T) {
 			SourceKind: domain.AlarmDispatchSourceKindCelebration,
 			Celebration: &domain.CelebrationDispatchPayload{
 				Kind:       domain.CelebrationKindBirthday,
+				MemberID:   101,
 				MemberName: "Test",
 				ChannelID:  testYouTubeChannelID,
 				Date:       "2026-05-26",
@@ -146,14 +149,14 @@ func TestBuildLedgerRowsCelebrationSameEventKeyAcrossRooms(t *testing.T) {
 
 	room1 := makeEnvelope(testRoomID)
 
-	event1, delivery1, err := buildLedgerRows(&room1, StatusPending)
+	event1, delivery1, err := buildLedgerRows(&room1)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room1: %v", err)
 	}
 
 	room2 := makeEnvelope(testOtherRoomID)
 
-	event2, delivery2, err := buildLedgerRows(&room2, StatusPending)
+	event2, delivery2, err := buildLedgerRows(&room2)
 	if err != nil {
 		t.Fatalf("buildLedgerRows room2: %v", err)
 	}

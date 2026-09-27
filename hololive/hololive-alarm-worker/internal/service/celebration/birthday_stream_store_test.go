@@ -26,7 +26,6 @@ func (p *birthdayStreamRepositoryPublisher) PublishDispatchBatch(
 ) (dispatchoutbox.PublishBatchResult, error) {
 	result, err := p.repository.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
-		Status:    dispatchoutbox.StatusPending,
 	})
 	if err != nil {
 		return result, fmt.Errorf("insert birthday stream dispatch batch: %w", err)
@@ -37,20 +36,21 @@ func (p *birthdayStreamRepositoryPublisher) PublishDispatchBatch(
 	return result, nil
 }
 
+const testMissingMemberID = 999
+
 func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T) {
 	t.Parallel()
 
 	pool := dbtest.NewPool(t)
 	repository := dispatchoutbox.NewPgxRepositoryFromPool(pool, nil)
-	eventKey := birthdayGreetingEventKey(testChannelA, testBirthdayDate)
+	eventKey := birthdayGreetingEventKey(testMemberIDA, testBirthdayDate)
 	envelopes := []domain.AlarmQueueEnvelope{
-		birthdayGreetingTestEnvelope(testChannelA, "room-sent"),
-		birthdayGreetingTestEnvelope(testChannelA, "room-retry"),
-		birthdayGreetingTestEnvelope(testChannelB, "room-other-member"),
+		birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, "room-sent"),
+		birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, "room-retry"),
+		birthdayGreetingTestEnvelope(testMemberIDB, testChannelB, "room-other-member"),
 	}
 	_, err := repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: envelopes,
-		Status:    dispatchoutbox.StatusPending,
 	})
 	require.NoError(t, err)
 
@@ -69,15 +69,15 @@ func TestPgxStoreFindSentRoomsByEventKeysUsesBirthdayDeliveryLedger(t *testing.T
 	store := NewPgxStore(pool)
 	roomsByEventKey, err := store.FindSentRoomsByEventKeys(t.Context(), []string{
 		eventKey,
-		birthdayGreetingEventKey(testChannelB, testBirthdayDate),
-		birthdayGreetingEventKey("UC_missing", testBirthdayDate),
+		birthdayGreetingEventKey(testMemberIDB, testBirthdayDate),
+		birthdayGreetingEventKey(testMissingMemberID, testBirthdayDate),
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"room-sent"}, roomsByEventKey[eventKey])
 	assert.NotContains(t, roomsByEventKey[eventKey], "room-retry")
-	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey(testChannelB, testBirthdayDate))
-	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey("UC_missing", testBirthdayDate))
+	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey(testMemberIDB, testBirthdayDate))
+	assert.NotContains(t, roomsByEventKey, birthdayGreetingEventKey(testMissingMemberID, testBirthdayDate))
 }
 
 func TestBirthdayStreamRunnerReusesPublishedPayloadWhenTitleChanges(t *testing.T) {
@@ -93,7 +93,7 @@ func TestBirthdayStreamRunnerReusesPublishedPayloadWhenTitleChanges(t *testing.T
 
 	runner := NewBirthdayStreamRunner(
 		&birthdayStreamTestMemberRepo{membersByDay: map[[2]int][]*domain.Member{
-			{7, 10}: {{ChannelID: testChannelA, Name: testMemberName}},
+			{7, 10}: {{ID: testMemberIDA, ChannelID: testChannelA, Name: testMemberName}},
 		}},
 		store,
 		publisher,
@@ -139,10 +139,9 @@ func seedBirthdayStreamTitleDrift(
 
 	_, err = repository.InsertBatch(t.Context(), dispatchoutbox.PublishBatchInput{
 		Envelopes: []domain.AlarmQueueEnvelope{
-			birthdayGreetingTestEnvelope(testChannelA, testRoom1),
-			birthdayGreetingTestEnvelope(testChannelA, testRoom2),
+			birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, testRoom1),
+			birthdayGreetingTestEnvelope(testMemberIDA, testChannelA, testRoom2),
 		},
-		Status: dispatchoutbox.StatusPending,
 	})
 	require.NoError(t, err)
 
@@ -159,7 +158,7 @@ func markBirthdayGreetingSent(t *testing.T, pool *pgxpool.Pool, sentAt time.Time
 		WHERE d.event_id = e.id
 		  AND e.event_key = $2
 		  AND d.room_id = $3
-	`, sentAt, birthdayGreetingEventKey(testChannelA, testBirthdayDate), roomID)
+	`, sentAt, birthdayGreetingEventKey(testMemberIDA, testBirthdayDate), roomID)
 	require.NoError(t, err)
 }
 
@@ -177,7 +176,7 @@ func setBirthdayStreamTitle(t *testing.T, pool *pgxpool.Pool, title string) {
 func assertBirthdayStreamCanonicalState(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
-	streamEventKey := birthdayStreamEventKey(testChannelA, testBirthdayDate, testVideoA)
+	streamEventKey := birthdayStreamEventKey(testMemberIDA, testBirthdayDate, testVideoA)
 
 	var (
 		persistedTitle string
@@ -212,7 +211,7 @@ func assertBirthdayStreamCanonicalState(t *testing.T, pool *pgxpool.Pool) {
 	assert.Zero(t, collisionCount)
 }
 
-func birthdayGreetingTestEnvelope(channelID, roomID string) domain.AlarmQueueEnvelope {
+func birthdayGreetingTestEnvelope(memberID int, channelID, roomID string) domain.AlarmQueueEnvelope {
 	return domain.AlarmQueueEnvelope{
 		Notification: domain.AlarmNotification{
 			AlarmType: domain.AlarmTypeBirthday,
@@ -222,6 +221,7 @@ func birthdayGreetingTestEnvelope(channelID, roomID string) domain.AlarmQueueEnv
 		SourceKind: domain.AlarmDispatchSourceKindCelebration,
 		Celebration: &domain.CelebrationDispatchPayload{
 			Kind:       domain.CelebrationKindBirthday,
+			MemberID:   memberID,
 			MemberName: channelID,
 			ChannelID:  channelID,
 			Date:       testBirthdayDate,

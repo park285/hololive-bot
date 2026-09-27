@@ -91,6 +91,9 @@ command = postgres.get("command", []) or []
 if "max_connections=60" not in [str(item) for item in command]:
     print("[FAIL] holo-postgres command must pin max_connections=60 with the PG18 memory GUCs")
     sys.exit(1)
+if "log_autovacuum_min_duration=10s" not in [str(item) for item in command]:
+    print("[FAIL] holo-postgres command must log autovacuum runs of 10s or longer")
+    sys.exit(1)
 postgres_env = env_map(postgres)
 if "--data-checksums" not in str(postgres_env.get("POSTGRES_INITDB_ARGS", "")):
     print("[FAIL] holo-postgres must initialize fresh PG18 clusters with data checksums")
@@ -219,10 +222,10 @@ docker run --rm --platform linux/amd64 \
   || fail "holoshi public ingress nginx -t failed"
 pass "holoshi public ingress template passes nginx -t with the pinned image"
 
-merged_main_ap="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml:docker-compose.main-ap.yml:docker-compose.main-ap.live-compat.yml COMPOSE_PROFILES=main-ap docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
-  || fail "prod+main-ap compose failed to render"
+merged_live="$(cd "${COMPOSE_DIR}" && COMPOSE_FILE=docker-compose.prod.yml:docker-compose.live-compat.yml docker compose config --no-interpolate --no-env-resolution --format json 2>/dev/null)" \
+  || fail "prod+live-compat compose failed to render"
 
-"${CI_PYTHON_BIN}" - "${merged_main_ap}" <<'PY'
+"${CI_PYTHON_BIN}" - "${merged_live}" <<'PY'
 import json, sys
 
 merged = json.loads(sys.argv[1])

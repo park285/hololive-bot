@@ -227,23 +227,21 @@ func validateLiveDispatchAlarmType(alarmType AlarmType) error {
 }
 
 type AlarmQueueEnvelope struct {
-	DispatchOutboxID  int64                          `json:"dispatch_outbox_id"`
-	DispatchGroupKey  string                         `json:"dispatch_group_key,omitempty"`
-	SendUnitID        int64                          `json:"send_unit_id"`
-	ClientRequestID   string                         `json:"client_request_id,omitempty"`
-	Notification      AlarmNotification              `json:"notification"`
-	SourceKind        AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
-	YouTubeOutbox     *YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
-	Celebration       *CelebrationDispatchPayload    `json:"celebration,omitempty"`
-	DeliveryDigest    *DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
-	XSpace            *XSpaceDispatchPayload         `json:"x_space,omitempty"`
-	ClaimKeys         []string                       `json:"claim_keys"`
-	EnqueuedAt        string                         `json:"enqueued_at"`
-	Version           uint8                          `json:"version"`
-	Retry             *AlarmQueueRetryMetadata       `json:"retry,omitempty"`
-	SourcePayloadRaw  string                         `json:"source_payload,omitempty"`
-	rawPayload        string                         `json:"-"`
-	normalizedPayload string                         `json:"-"`
+	DispatchOutboxID int64                          `json:"dispatch_outbox_id"`
+	DispatchGroupKey string                         `json:"dispatch_group_key,omitempty"`
+	SendUnitID       int64                          `json:"send_unit_id"`
+	ClientRequestID  string                         `json:"client_request_id,omitempty"`
+	Notification     AlarmNotification              `json:"notification"`
+	SourceKind       AlarmDispatchSourceKind        `json:"source_kind,omitempty"`
+	YouTubeOutbox    *YouTubeOutboxDispatchPayload  `json:"youtube_outbox,omitempty"`
+	Celebration      *CelebrationDispatchPayload    `json:"celebration,omitempty"`
+	DeliveryDigest   *DeliveryDigestDispatchPayload `json:"delivery_digest,omitempty"`
+	XSpace           *XSpaceDispatchPayload         `json:"x_space,omitempty"`
+	ClaimKeys        []string                       `json:"claim_keys"`
+	EnqueuedAt       string                         `json:"enqueued_at"`
+	Version          uint8                          `json:"version"`
+	Retry            *AlarmQueueRetryMetadata       `json:"retry,omitempty"`
+	SourcePayloadRaw string                         `json:"source_payload,omitempty"`
 }
 
 type AlarmQueueRetryMetadata struct {
@@ -280,38 +278,12 @@ type alarmQueueEnvelopeWire struct {
 	SourcePayload    string                             `json:"source_payload,omitempty"`
 }
 
-func (e *AlarmQueueEnvelope) OriginalPayload() string {
-	if e == nil {
-		return ""
-	}
-
-	return e.rawPayload
-}
-
-func (e *AlarmQueueEnvelope) NormalizedPayload() string {
-	if e == nil {
-		return ""
-	}
-
-	return e.normalizedPayload
-}
-
 func (e *AlarmQueueEnvelope) SourcePayload() string {
 	if e == nil {
 		return ""
 	}
 
 	return e.SourcePayloadRaw
-}
-
-func (e *AlarmQueueEnvelope) EnsureSourcePayloadFromRaw() {
-	if e == nil {
-		return
-	}
-
-	if e.SourcePayloadRaw == "" && e.rawPayload != "" {
-		e.SourcePayloadRaw = e.rawPayload
-	}
 }
 
 func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
@@ -321,15 +293,16 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unmarshal alarm queue envelope: %w", err)
 	}
 
-	alarmType := wire.Notification.AlarmType
-	if alarmType == "" {
-		alarmType = AlarmTypeLive
+	// 저장 payload는 발행 시점에 alarm_type을 채운다. 누락을 Live로 간주하던 구형 payload 호환은 T18(2026-09-26)에서
+	// 누락 0건을 확인해 지웠으므로, 누락은 다른 알림 종류로 오인해 보내지 않도록 decode 오류로 드러낸다.
+	if wire.Notification.AlarmType == "" {
+		return errors.New("unmarshal alarm queue envelope: notification.alarm_type is empty")
 	}
 
 	*e = AlarmQueueEnvelope{
 		DispatchOutboxID: wire.DispatchOutboxID,
 		Notification: AlarmNotification{
-			AlarmType:                   alarmType,
+			AlarmType:                   wire.Notification.AlarmType,
 			RoomID:                      wire.Notification.RoomID,
 			Channel:                     wire.Notification.Channel,
 			Stream:                      wire.Notification.Stream,
@@ -348,15 +321,7 @@ func (e *AlarmQueueEnvelope) UnmarshalJSON(data []byte) error {
 		Version:          wire.Version,
 		Retry:            wire.Retry,
 		SourcePayloadRaw: wire.SourcePayload,
-		rawPayload:       string(data),
 	}
-
-	normalizedPayload, err := jsonv2.Marshal(*e)
-	if err != nil {
-		return fmt.Errorf("marshal alarm queue envelope: %w", err)
-	}
-
-	e.normalizedPayload = string(normalizedPayload)
 
 	return nil
 }

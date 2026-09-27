@@ -22,8 +22,8 @@ package llm
 
 import "context"
 
-// CostTracker는 LLM provider 응답의 토큰 사용량을 누적 관측한다. 구현체(ValkeyCostCeiling)는
-// 월 단위 토큰 카운터를 공유 저장소에 누적하고 임계 초과 시 경고만 남긴다(호출은 차단하지 않음).
+// CostTracker는 LLM provider 응답의 토큰 사용량을 관측한다. 운영 구현체(TokenMetricsRecorder)는
+// Prometheus counter만 올리고 호출을 차단하지 않는다.
 // RecordUsage는 LLM 응답 경로에서 호출되므로 절대 에러를 전파하거나 패닉하지 않아야 한다.
 type CostTracker interface {
 	RecordUsage(ctx context.Context, provider, model string, tokens int64)

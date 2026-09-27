@@ -97,7 +97,7 @@ log "ownership normalized (exec tree root, runtime data uid 1000)"
 # 된다. $STAGING 은 tracked HEAD 만 담으므로 untracked 주입과 assert_clean 이후 TOCTOU 를 함께 막는다.
 install -m0755 -o root -g root "$STAGING/scripts/deploy/systemd-compose-up.sh" "$SBIN_DIR/hololive-compose-up"
 install -m0755 -o root -g root "$STAGING/scripts/deploy/systemd-compose-down.sh" "$SBIN_DIR/hololive-compose-down"
-log "wrappers installed (opt-in live-compat + verifier self-check)"
+log "wrappers installed (live-compat overlay + verifier self-check)"
 
 mkdir -p "$DROPIN_DIR"
 install -m0644 -o root -g root "$STAGING"/scripts/systemd/hololive-compose.service.d/*.conf "$DROPIN_DIR/"
@@ -123,7 +123,6 @@ exec_tree=(
   "$OPT_CURRENT/scripts/deploy/compose.sh"
   "$OPT_CURRENT/scripts/deploy/lib/compose-env.sh"
   "$OPT_CURRENT/scripts/deploy/lib/compose-paths.sh"
-  "$OPT_CURRENT/scripts/deploy/lib/removed-runtimes.sh"
   "$OPT_CURRENT/scripts/deploy/lib/health-gate.sh"
 )
 while IFS= read -r yml; do
@@ -132,8 +131,5 @@ done < <(find "$OPT_CURRENT/deploy/compose" -maxdepth 1 -type f -name 'docker-co
 bash "$verifier" "${exec_tree[@]}" || die "exec-tree ownership verification failed"
 log "exec-tree ownership verified"
 
-if ! systemctl show -p Environment "$UNIT" | grep -q 'HOLOLIVE_ENABLE_LIVE_COMPAT=1'; then
-  die "drop-in did not surface HOLOLIVE_ENABLE_LIVE_COMPAT=1 in merged unit Environment"
-fi
-log "live-compat drop-in asserted; SSOT sync complete (HEAD=$HEAD_SHA)"
+log "SSOT sync complete (HEAD=$HEAD_SHA)"
 log "next: sudo systemctl restart $UNIT  (recreates stack from /opt current with live-compat)"

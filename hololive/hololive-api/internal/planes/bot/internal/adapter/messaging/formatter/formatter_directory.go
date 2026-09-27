@@ -27,7 +27,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type MemberDirectoryGroup struct {
@@ -72,7 +71,7 @@ func (f *ResponseFormatter) MemberDirectory(ctx context.Context, groups []Member
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberDirectory, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)

@@ -9,13 +9,6 @@ import (
 	"github.com/park285/shared-go/v2/pkg/httputil"
 )
 
-type FetcherEngine string
-
-const (
-	FetcherEngineNetHTTP         FetcherEngine = "nethttp"
-	FetcherEngineBrowserSnapshot FetcherEngine = "browser_snapshot"
-)
-
 type pageFetcher interface {
 	FetchPage(ctx context.Context, req pageFetchRequest) (pageFetchResponse, error)
 }
@@ -34,17 +27,6 @@ type pageFetchResponse struct {
 
 type netHTTPPageFetcher struct {
 	client *Client
-}
-
-func normalizeFetcherEngine(engine FetcherEngine) FetcherEngine {
-	switch engine {
-	case FetcherEngineNetHTTP:
-		return FetcherEngineNetHTTP
-	case FetcherEngineBrowserSnapshot:
-		return FetcherEngineBrowserSnapshot
-	default:
-		return FetcherEngineNetHTTP
-	}
 }
 
 func (f netHTTPPageFetcher) FetchPage(ctx context.Context, fetchReq pageFetchRequest) (pageFetchResponse, error) {
@@ -74,7 +56,7 @@ func (f netHTTPPageFetcher) FetchPage(ctx context.Context, fetchReq pageFetchReq
 		return fetchResp, nil
 	}
 
-	body, err := readSuccessfulFetchResponse(resp)
+	body, err := readSuccessfulFetchResponse(resp, f.client.config.MaxPageBodyBytes)
 	if err != nil {
 		return pageFetchResponse{}, fmt.Errorf("read successful fetch response: %w", err)
 	}
@@ -128,8 +110,8 @@ func closeUnsuccessfulFetchResponse(resp *http.Response) error {
 	return nil
 }
 
-func readSuccessfulFetchResponse(resp *http.Response) ([]byte, error) {
-	body, err := httputil.ReadAllLimited(resp.Body, ytDefaults.MaxPageBodyBytes)
+func readSuccessfulFetchResponse(resp *http.Response, maxBodyBytes int64) ([]byte, error) {
+	body, err := httputil.ReadAllLimited(resp.Body, maxBodyBytes)
 	closeErr := resp.Body.Close()
 
 	if err != nil {

@@ -54,7 +54,7 @@ func (r *deliveryStateRepository) applyAlarmSentMarks(ctx context.Context, marks
 		missingStateInserted    int64
 	)
 
-	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, inputs.kinds, inputs.contentIDs, inputs.canonicalContentIDs, inputs.rawContentIDs, inputs.alarmSentAts, inputs.authorizedAts, updatedAt).Scan(
+	if err := r.db.QueryRow(ctx, bulkApplyAlarmSentMarksSQL, inputs.kinds, inputs.canonicalContentIDs, inputs.alarmSentAts, inputs.authorizedAts, updatedAt).Scan(
 		&trackingUpdated,
 		&claimedStateFinalized,
 		&authorizationMismatches,

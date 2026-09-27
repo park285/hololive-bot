@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,7 +34,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/domain"
 )
 
-func cleanupTestClaimManager(t *testing.T, db *deliveryTestDB, cfg *dispatchstate.Config) *ClaimManager {
+func cleanupTestClaimManager(t *testing.T, db *pgxpool.Pool, cfg *dispatchstate.Config) *ClaimManager {
 	t.Helper()
 
 	logger := slog.Default()
@@ -63,7 +64,7 @@ func cleanupTestClaimManager(t *testing.T, db *deliveryTestDB, cfg *dispatchstat
 	}
 }
 
-func outboxRowCount(t *testing.T, db *deliveryTestDB, id int64) int64 {
+func outboxRowCount(t *testing.T, db *pgxpool.Pool, id int64) int64 {
 	t.Helper()
 
 	var count int64
@@ -73,56 +74,7 @@ func outboxRowCount(t *testing.T, db *deliveryTestDB, id int64) int64 {
 	return count
 }
 
-func TestCompatibilityCleanupPreservesOutboxWhileLedgerStateIsIncomplete(t *testing.T) {
-	db := newDeliveryPool(t)
-	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
-		CleanupAfter:         7 * 24 * time.Hour,
-		ClaimFreshnessWindow: 2 * time.Hour,
-		LockTimeout:          5 * time.Minute,
-	})
-	ctx := t.Context()
-	_, err := db.Exec(ctx, `DELETE FROM youtube_notification_delivery_ledger_state`)
-	require.NoError(t, err)
-
-	now := time.Now().UTC()
-	veryOld := now.Add(-30 * 24 * time.Hour)
-	recent := now.Add(-5 * time.Minute)
-	liveLock := now.Add(-1 * time.Minute)
-
-	newPending := func(contentID string, createdAt time.Time, lockedAt *time.Time) *domain.YouTubeNotificationOutbox {
-		row := &domain.YouTubeNotificationOutbox{
-			Kind: domain.OutboxKindNewVideo, ChannelID: "ch-clean", ContentID: contentID,
-			Payload: `{"id":"` + contentID + `"}`, Status: domain.OutboxStatusPending,
-			NextAttemptAt: createdAt, CreatedAt: createdAt, LockedAt: lockedAt,
-		}
-		require.NoError(t, insertDeliveryTestRows(db, row).Error)
-
-		return row
-	}
-
-	orphan := newPending("orphan-old", veryOld, nil)
-	freshPending := newPending("fresh-pending", recent, nil)
-	lockedOrphan := newPending("locked-orphan", veryOld, &liveLock)
-
-	orphanWithDelivery := newPending("orphan-with-delivery", veryOld, nil)
-	require.NoError(t, insertDeliveryTestRows(db, &domain.YouTubeNotificationDelivery{
-		OutboxID: orphanWithDelivery.ID, RoomID: testRoomOne, Status: domain.OutboxStatusPending,
-	}).Error)
-
-	cm.cleanupOutbox(ctx)
-
-	assert.Equal(t, int64(1), outboxRowCount(t, db, orphan.ID), "incomplete ledger에서는 orphan cleanup도 동결")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, freshPending.ID), "incomplete ledger에서는 최근 PENDING도 보존")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, lockedOrphan.ID), "incomplete ledger에서는 lock 상태와 무관하게 보존")
-	assert.Equal(t, int64(1), outboxRowCount(t, db, orphanWithDelivery.ID), "incomplete ledger에서는 delivery가 있는 PENDING도 보존")
-
-	var deliveryCount int64
-
-	require.NoError(t, countDeliveryTestRowsWhere(db, &domain.YouTubeNotificationDelivery{}, &deliveryCount, "outbox_id = ?", orphanWithDelivery.ID).Error)
-	assert.Equal(t, int64(1), deliveryCount, "보존된 PENDING의 delivery 행도 CASCADE로 삭제되지 않음")
-}
-
-func TestLifecycleCleanupRemovesOnlyUnclaimableOrphanWithCompletedLedgerState(t *testing.T) {
+func TestLifecycleCleanupRemovesOnlyUnclaimableOrphan(t *testing.T) {
 	db := newDeliveryPool(t)
 	cm := cleanupTestClaimManager(t, db, &dispatchstate.Config{
 		CleanupAfter:         1 * time.Hour,

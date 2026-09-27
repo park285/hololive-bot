@@ -6,15 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/park285/shared-go/v2/pkg/jsonutil"
-	"github.com/stretchr/testify/assert"
+	"github.com/park285/shared-go/v2/pkg/httputil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/internal/service/youtube/scraper/ua"
@@ -24,7 +22,7 @@ import (
 func TestFetchPageRetriesEmptySuccessfulResponse(t *testing.T) {
 	var attempts atomic.Int32
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				statusBody := ""
@@ -62,7 +60,7 @@ func TestFetchPageDoesNotRetryBlockedSuccessfulResponse(t *testing.T) {
 	sorryURL, err := url.Parse("https://www.google.com/sorry/index?continue=...")
 	require.NoError(t, err)
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				attempts.Add(1)
@@ -119,7 +117,7 @@ func TestFinalURLLooksBlockedDetectsRedirectToSorry(t *testing.T) {
 func TestFetchPagePerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 	var attempts atomic.Int32
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if attempts.Add(1) == 1 {
@@ -154,7 +152,7 @@ func TestFetchPagePerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 func TestFetchPageBodyReadPerAttemptTimeoutRecoversOnRetry(t *testing.T) {
 	var attempts atomic.Int32
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if attempts.Add(1) == 1 {
@@ -263,7 +261,7 @@ func TestHB05BodySubstringRejectsParserInputWithoutBlockCooldown_9e234216(t *tes
 func TestFetchPageSuspiciousBlockedBodyDoesNotRetryOrHardCooldown(t *testing.T) {
 	var attempts atomic.Int32
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithHTTPClient(&http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				attempts.Add(1)
@@ -293,53 +291,6 @@ func TestFetchPageSuspiciousBlockedBodyDoesNotRetryOrHardCooldown(t *testing.T) 
 	require.Zero(t, client.backoffState.HardCooldownRemaining())
 }
 
-func TestFetchPageSuspiciousBlockedBodyUsesBrowserSnapshotFallback(t *testing.T) {
-	var (
-		originAttempts   atomic.Int32
-		snapshotAttempts atomic.Int32
-	)
-
-	snapshotServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		snapshotAttempts.Add(1)
-		assert.Equal(t, http.MethodPost, r.Method)
-		w.Header().Set("Content-Type", "application/json")
-		mustWriteResponse(t, w, `{"status_code":200,"html":"<html>ytInitialData = {\"ok\":true};</html>"}`)
-	}))
-
-	defer snapshotServer.Close()
-
-	client := NewClient(
-		WithHTTPClient(&http.Client{
-			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				originAttempts.Add(1)
-
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header:     make(http.Header),
-					Body:       io.NopCloser(strings.NewReader(`location.replace("https://www.youtube.com/sorry/index?continue=...")`)),
-					Request:    req,
-				}, nil
-			}),
-		}),
-		WithRateLimiter(ratelimiter.New(0)),
-		WithUAProvider(ua.NewStaticProvider("test-agent")),
-		WithBrowserSnapshotFetcher(NewBrowserSnapshotFetcher(snapshotServer.URL, time.Second)),
-	)
-
-	body, err := client.fetchPage(t.Context(), "https://www.youtube.com/test", FetchPolicy{
-		MaxAttempts:       3,
-		PerAttemptTimeout: time.Second,
-		BaseDelay:         time.Millisecond,
-		MaxDelay:          time.Millisecond,
-	})
-
-	require.NoError(t, err)
-	require.Contains(t, body, "ytInitialData")
-	require.Equal(t, int32(1), originAttempts.Load())
-	require.Equal(t, int32(1), snapshotAttempts.Load())
-	require.Zero(t, client.backoffState.HardCooldownRemaining())
-}
-
 func TestHB05FinalURLSorryTriggersCooldown_9e234216(t *testing.T) {
 	err := validateSuccessfulFetchBody(
 		"https://www.youtube.com/@channel/videos",
@@ -358,7 +309,7 @@ func TestResponseBodyReadErrorDoesNotMisclassifyTransportErrors(t *testing.T) {
 		"transport error mentioning 'limit' must stay retryable, not become non-retryable too-large")
 	require.ErrorIs(t, got, transportErr)
 
-	typed := fmt.Errorf("read body: %w", jsonutil.ErrBodyTooLarge)
+	typed := fmt.Errorf("read body: %w", httputil.ErrResponseBodyTooLarge)
 	require.ErrorIs(t, responseBodyReadError(typed), ErrResponseTooLarge)
 }
 

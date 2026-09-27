@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "$(hostname -s)" == kapu ]] || { echo 'native issuer artifact builds are restricted to kapu' >&2; exit 1; }
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 MODE="${2:---dry-run}"
@@ -20,11 +21,12 @@ esac
 . "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
 . "$REPO_ROOT/scripts/deploy/lib/source-revision.sh"
 NODE_VERSION_LIB="$REPO_ROOT/scripts/deploy/lib/youtubejs-node-version.sh"
-RETIRED_PRODUCER_LIB="$REPO_ROOT/scripts/deploy/lib/retired-producer-cutover.sh"
 REMOTE_APPLY_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-remote-apply.sh"
 COLLECTOR_WRAPPER_LIB="$REPO_ROOT/scripts/deploy/lib/ap-host-native-collector-wrapper.sh"
 READINESS_LIB="$REPO_ROOT/scripts/deploy/lib/ap-collector-readiness.sh"
 UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-collector.service"
+PO_UNIT_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.service"
+PO_SOCKET_TEMPLATE="$REPO_ROOT/scripts/deploy/lib/hololive-youtube-po.socket"
 ap_host_load "$REPO_ROOT" "${1:-}"
 
 if [[ "$AP_RUNTIME_MODE" != "native" ]]; then
@@ -77,7 +79,6 @@ write_host_env() {
     printf 'HOLOLIVE_H3_ADDR=127.0.0.1:%s\n' "$port"
     printf 'HOLOLIVE_H3_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_H3_KEY_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.key\n'
-    printf 'HOLOLIVE_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_INTERNAL_H3_CA_CERT_FILE=/etc/stack-secrets/hololive-bot/certs/hololive-h3.crt\n'
     printf 'HOLOLIVE_INTERNAL_H3_SERVER_NAME=127.0.0.1\n'
     printf 'HOLOLIVE_METRICS_ADDR=%s:30096\n' "$AP_SSH_HOST"
@@ -113,6 +114,7 @@ write_wrapper() {
 mkdir -p "$artifact_dir/bin"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
 cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh" "$artifact_dir/bin/ap-host-native-release-path.sh"
+cp "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh" "$artifact_dir/bin/ap-host-native-po.sh"
 
 native_revision="$(deploy_source_revision "$REPO_ROOT")"
 sh "$REPO_ROOT/scripts/build/build-youtube-collector-go.sh" \
@@ -128,6 +130,14 @@ sh "$REPO_ROOT/scripts/build/check-youtube-collector-go-artifact.sh" "$artifact_
   --goos linux \
   --goarch amd64 \
   --goamd64 "${GOAMD64:-v1}"
+issuer_artifact="$artifact_dir/po-sandbox-build"
+"$REPO_ROOT/scripts/build/build-po-sandbox-artifact.sh" amd64 "$native_revision" "$version" "$issuer_artifact"
+mkdir -p "$artifact_dir/po-sandbox"
+cp "$issuer_artifact/rootfs.tar" "$issuer_artifact/rootfs.tar.sha256" \
+  "$issuer_artifact/rootfs-manifest.json" "$issuer_artifact/revision" \
+  "$issuer_artifact/architecture" "$issuer_artifact/version" "$artifact_dir/po-sandbox/"
+cp "$REPO_ROOT/scripts/build/po-sandbox-manifest.py" "$artifact_dir/bin/po-sandbox-manifest.py"
+rm -rf "$issuer_artifact"
 write_wrapper "$artifact_dir/bin/youtube-collector-wrapper"
 rm -rf "$artifact_dir/youtubejs"
 mkdir -p "$artifact_dir/youtubejs"
@@ -138,10 +148,12 @@ cp -R "$REPO_ROOT/hololive/hololive-youtube-collector/youtubejs/src" "$artifact_
 rm -f "$artifact_dir/youtubejs/src/"*.test.mjs
 (
   cd "$artifact_dir/youtubejs"
-  npm_config_engine_strict=true npm ci --omit=dev --no-audit --no-fund
+  npm_config_engine_strict=true npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 )
 write_host_env "$artifact_dir/youtube-collector-host.env"
 cp "$UNIT_TEMPLATE" "$artifact_dir/hololive-youtube-collector@.service"
+sed "s/@RELEASE_ID@/$release_id/g" "$PO_UNIT_TEMPLATE" > "$artifact_dir/hololive-youtube-po.service"
+cp "$PO_SOCKET_TEMPLATE" "$artifact_dir/hololive-youtube-po.socket"
 
 RSYNC_RSH="$(ap_rsync_rsh)"
 
@@ -158,11 +170,12 @@ REMOTE
 )"
 
 {
+  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-release-path.sh"
+  cat "$REPO_ROOT/scripts/deploy/lib/ap-host-native-po.sh"
   cat "$NODE_VERSION_LIB"
-  cat "$RETIRED_PRODUCER_LIB"
   cat "$READINESS_LIB"
   cat "$REMOTE_APPLY_LIB"
-} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB"
+} | ap_remote_bash "$payload_name" "$release_id" "$service" "$port" "$change_started_at" "$AP_REQUIRED_UDP_BUFFER_BYTES" "$AP_SWAPFILE_SIZE_MIB" "$native_revision"
 
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/logs/ap-host-native-status.sh" "$AP_NAME"
 CHANGE_STARTED_AT="$change_started_at" "$REPO_ROOT/scripts/deploy/ap-completion-check.sh" "$AP_NAME"

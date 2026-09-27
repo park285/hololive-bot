@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -80,7 +81,7 @@ func runRetrySelectiveSendCase(t *testing.T, tc recoverySelectiveSendCase, fixed
 
 func assertRecoverySelectiveSendPersistedState(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	fixture recoveryInputFixture,
 	spec recoveryInputFixtureSpec,
 	fixedSentAt time.Time,
@@ -93,7 +94,7 @@ func assertRecoverySelectiveSendPersistedState(
 
 func assertRecoverySelectiveSendDeliveries(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	fixture recoveryInputFixture,
 	spec recoveryInputFixtureSpec,
 	fixedSentAt time.Time,
@@ -148,7 +149,7 @@ func assertRecoverySelectiveSendDeliveries(
 
 func assertRecoverySelectiveSendTracking(
 	t *testing.T,
-	db *deliveryTestDB,
+	db *pgxpool.Pool,
 	fixture recoveryInputFixture,
 	spec recoveryInputFixtureSpec,
 	fixedSentAt time.Time,

@@ -8,18 +8,22 @@ import { emptyCommunityPage } from "./fetch-community.mjs";
 import { createHelperRuntime, RuntimeState } from "./helper-runtime.mjs";
 import { createRealFetchers, stubFetchers } from "./real-fetchers.mjs";
 import {
+  handleChannelLiveCheckRequest,
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
+  handleVideoLiveCheckRequest,
 } from "./rpc-boundary.mjs";
 import { rpcErrorResult, rpcErrorResultFor } from "./rpc-validation.mjs";
 import { runWithRequestContext } from "./request-context.mjs";
 import { encodeResponseBody } from "./response-encoding.mjs";
 
 export {
+  handleChannelLiveCheckRequest,
   handleChannelRequest,
   handleCommunityRequest,
   handleContentRequest,
+  handleVideoLiveCheckRequest,
   RuntimeState,
 };
 
@@ -45,15 +49,17 @@ class RequestTimeoutError extends Error {}
  */
 export function createHelperServer(overrides = {}) {
   const runtime = createHelperRuntime({
-    createFetchers: (fetchImpl) => ({ ...createRealFetchers({ fetchImpl }), ...overrides }),
-    transportCloseTimeoutMs: 3_000,
+    createFetchers: (fetchImpl, singleAttemptFetchImpl) => ({
+      ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }),
+      ...overrides,
+    }),
   });
   return attachHelperServer(runtime, 30_000);
 }
 
 /**
  * @param {string} socketPath
- * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, transportCloseTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
+ * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} [options]
  * @returns {Promise<import("node:http").Server>}
  */
 export async function listenUnix(socketPath, options = {}) {
@@ -63,13 +69,12 @@ export async function listenUnix(socketPath, options = {}) {
   process.umask(0o077);
   const opts = normalizeListenOptions(options);
   const runtime = createHelperRuntime({
-    createFetchers: (fetchImpl) => {
+    createFetchers: (fetchImpl, singleAttemptFetchImpl) => {
       if (opts.stub) {
         return stubFetchers;
       }
-      return { ...createRealFetchers({ fetchImpl }), ...opts.fetchers };
+      return { ...createRealFetchers({ fetchImpl, singleAttemptFetchImpl }), ...opts.fetchers };
     },
-    transportCloseTimeoutMs: opts.transportCloseTimeoutMs,
   });
   const server = attachHelperServer(runtime, opts.requestReadTimeoutMs);
   applyServerLimits(server, opts.requestReadTimeoutMs, 0);
@@ -194,7 +199,9 @@ function isCollectionPath(req) {
   return req.method === "POST" && (
     req.url === "/v1/community" ||
     req.url === "/v1/content" ||
-    req.url === "/v1/channel"
+    req.url === "/v1/channel" ||
+    req.url === "/v1/channel_live_check" ||
+    req.url === "/v1/video_live_check"
   );
 }
 
@@ -213,6 +220,12 @@ async function dispatchCollection(url, raw, fetchers, maximumSuccessResponseByte
   }
   if (url === "/v1/content") {
     return handleContentRequest(raw, fetchers.fetchContent, maximumSuccessResponseBytes);
+  }
+  if (url === "/v1/channel_live_check") {
+    return handleChannelLiveCheckRequest(raw, fetchers.fetchChannelLiveCheck, maximumSuccessResponseBytes);
+  }
+  if (url === "/v1/video_live_check") {
+    return handleVideoLiveCheckRequest(raw, fetchers.fetchVideoLiveCheck, maximumSuccessResponseBytes);
   }
   return handleChannelRequest(raw, fetchers.fetchChannel, maximumSuccessResponseBytes);
 }
@@ -370,14 +383,13 @@ function disarmPipeUnlink(server) {
 }
 
 /**
- * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, transportCloseTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
+ * @param {Partial<FetcherSet> | { stub?: boolean, requestReadTimeoutMs?: number, fetchers?: Partial<FetcherSet>, manageProcess?: boolean }} options
  */
 function normalizeListenOptions(options) {
   if (options && typeof options === "object" && "fetchCommunity" in options) {
     return {
       stub: false,
       requestReadTimeoutMs: 30_000,
-      transportCloseTimeoutMs: 3_000,
       fetchers: options,
       manageProcess: false,
     };
@@ -388,9 +400,6 @@ function normalizeListenOptions(options) {
     requestReadTimeoutMs: "requestReadTimeoutMs" in record && typeof record.requestReadTimeoutMs === "number"
       ? record.requestReadTimeoutMs
       : 30_000,
-    transportCloseTimeoutMs: "transportCloseTimeoutMs" in record && typeof record.transportCloseTimeoutMs === "number"
-      ? record.transportCloseTimeoutMs
-      : 3_000,
     fetchers: "fetchers" in record && record.fetchers ? record.fetchers : {},
     manageProcess: Boolean("manageProcess" in record && record.manageProcess),
   };
@@ -403,7 +412,6 @@ function parseArgs(argv) {
     stub: false,
     protocolVersion: 1,
     requestReadTimeoutMs: 30_000,
-    transportCloseTimeoutMs: 3_000,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -422,11 +430,6 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === "--shutdown-timeout-ms") {
-      args.transportCloseTimeoutMs = Number(argv[i + 1] ?? 3_000);
-      i += 1;
-      continue;
-    }
     if (arg === "--stub") {
       args.stub = true;
     }
@@ -441,15 +444,10 @@ if (isMain) {
     process.stderr.write("unsupported protocol version\n");
     process.exit(1);
   }
-  if (!Number.isSafeInteger(args.transportCloseTimeoutMs) || args.transportCloseTimeoutMs <= 0) {
-    process.stderr.write("invalid shutdown timeout\n");
-    process.exit(1);
-  }
   process.umask(0o077);
   await listenUnix(args.socket, {
     stub: args.stub,
     requestReadTimeoutMs: args.requestReadTimeoutMs,
-    transportCloseTimeoutMs: args.transportCloseTimeoutMs,
     manageProcess: true,
   });
 }

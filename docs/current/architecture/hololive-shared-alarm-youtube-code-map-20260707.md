@@ -37,7 +37,7 @@ alarm dispatch runner
   -> dispatchoutbox.Consumer DrainBatch / ClaimDue
   -> group and render
   -> MarkSending
-  -> Iris SendMessage / SendKaringContentList
+  -> Iris SendMessage (오픈채팅 + BOT_MARKDOWN_REPLIES=true는 SendMarkdown)
   -> MarkSent or retry/dlq/quarantine
 ```
 
@@ -516,7 +516,6 @@ dedupService.MarkUpcomingEventNotified(roomID, channelID, stream)
 주요 상수:
 
 ```go
-const AlarmDispatchQueue = contractsalarm.DispatchQueueKey
 const AlarmDispatchWakeupQueue = "alarm:dispatch:wakeup"
 const alarmDispatchWakeupGuardKey = "alarm:dispatch:wakeup:guard"
 ```
@@ -613,10 +612,9 @@ sent_at / dlq_at / quarantined_at / cancelled_at
 last_error_code / last_error
 ```
 
-허용 상태:
+허용 상태(비교 전용 `shadowed`는 v3 handoff와 함께 삭제했고 migration 226이 CHECK에서 뺐다):
 
 ```text
-shadowed
 pending
 retry
 leased
@@ -774,7 +772,7 @@ consumer.DrainBatch(ctx, maxBatch)
   -> dispatchGroup
 ```
 
-`dispatchGroup`은 room facts와 content compatibility를 함께 확인해 message path와 Karing content-list path를 나눕니다. 확인된 일반채팅의 YouTube target이 있는 broadcast/video/Shorts/community와 integrated 알림만 Karing을 사용합니다. 오픈채팅과 미확인 방은 기존 message path를 사용하고, Twitch/Chzzk-only, celebration, delivery digest와 YouTube milestone도 message path를 사용합니다. 알 수 없는 source/kind나 불완전한 YouTube target은 fallback 없이 pre-send failure로 처리합니다.
+`dispatchGroup`은 모든 그룹을 message path로 보냅니다. Karing content-list path는 `DEC-20260926-hololive-karing-egress-disposition`에 따라 삭제했습니다. 오픈채팅의 Markdown 선택은 sender가 방 유형으로 정합니다. 알 수 없는 source/kind, 퇴역 제공자(Twitch/Chzzk-only), 불완전한 YouTube target은 fallback 없이 pre-send failure로 처리합니다.
 
 text path:
 
@@ -785,17 +783,7 @@ SendMessage / SendMessageWithClientRequestID
 MarkDispatched
 ```
 
-Karing path:
-
-```text
-buildAlarmDispatchKaringContentListRequests
-MarkSending
-SendKaringContentList
-  -> Iris 202 Accepted의 requestId 검증
-  -> /reply-status/{requestId} polling
-  -> handoff_completed 확인
-MarkDispatched
-```
+Markdown lane은 Iris 202 Accepted의 requestId를 검증하고 `/reply-status/{requestId}`를 polling해 `handoff_completed`를 확인한 뒤에만 성공으로 봅니다.
 
 `sendAlarmDispatchMessage`는 sender가 `SendMessageWithClientRequestID`를 지원하면 client request ID를 붙여 보낸다. 이 값은 다운스트림 멱등성 키 역할을 한다.
 
@@ -811,9 +799,9 @@ render/build 실패
 ```text
 admission 전 HTTP 429/502/503
   -> RouteSendingFailures
-동일 ClientRequestID를 재생산할 수 있는 bounded transport/deadline failure
+저장된 send-unit ClientRequestID로 보낸 bounded transport/deadline failure
   -> RouteSendingFailures
-Karing outcome_unknown 또는 status 확인 불가
+Markdown handoff outcome_unknown 또는 status 확인 불가
   -> Quarantine (같은 알림 재post 없음)
 기타 post-send failure
   -> Quarantine
@@ -832,11 +820,9 @@ MarkSending 실패는 발송 전이지만 UPDATE가 이미 커밋된 'sending' �
 
 중요 규칙:
 
-- celebration, delivery digest, YouTube outbox milestone과 Twitch/Chzzk-only는 message path를 쓴다.
-- YouTube target이 있는 일반 알림도 방 유형이 일반채팅으로 확인된 경우에만 feature flag 없이 Karing path를 쓴다.
-- 오픈채팅은 기존 Markdown/message grouping을 유지하고 방 유형 미확인은 일반 텍스트를 사용한다.
-- live alarm의 Karing 그룹 키는 room, alarm type, phase, minutes를 포함한다.
-- `phase`는 `prelive` 또는 `starting`이다.
+- 모든 source는 message path를 쓴다. 저장된 send unit(`send_unit_id`)이 발송 경계이며, send unit이 없는 봉투는 source/시간 그룹 키로 묶이지만 발송하지 않는다.
+- Twitch/Chzzk-only 보관 봉투는 발송하지 않고 pre-send failure(드레인 종단)로 보낸다.
+- 오픈채팅은 sender가 Markdown을 선택하고 방 유형 미확인은 일반 텍스트를 사용한다.
 
 `alarmDispatchNotificationIsStarting` 기준:
 
@@ -886,6 +872,7 @@ YouTube watch URL
 - `SQLLockSession(c *sql.Conn)`은 단일 SQL connection을 받는다.
 - `releaseAdvisoryLock`은 `context.WithoutCancel(ctx)` 위에 release timeout을 씌워 cleanup이 parent cancel에 같이 취소되지 않게 한다.
 - `ledger.Record`는 migration 적용 기록을 남긴다.
+- `Manifest(fs.FS)`는 `manifest.txt`를 엄격하게 해석한다(필드 2개, 순서 오름차순, order·파일명 중복 거부). `hololive-dbtest` 하니스도 같은 함수를 써서 러너와 적용 목록 해석이 갈리지 않는다.
 
 `ledger.go` 주석의 핵심 계약:
 

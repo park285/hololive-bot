@@ -38,10 +38,6 @@ func TestSettingsPubSubContractConstants(t *testing.T) {
 		t.Fatalf("ConfigUpdateVersionV1 = %d", contractssettings.ConfigUpdateVersionV1)
 	}
 
-	if contractssettings.UpdateTypeScraperProxy != "scraper_proxy" {
-		t.Fatalf("UpdateTypeScraperProxy = %q", contractssettings.UpdateTypeScraperProxy)
-	}
-
 	if contractssettings.UpdateTypeAlarmAdvanceMinutes != "alarm_advance_minutes" {
 		t.Fatalf("UpdateTypeAlarmAdvanceMinutes = %q", contractssettings.UpdateTypeAlarmAdvanceMinutes)
 	}
@@ -54,13 +50,13 @@ func TestSettingsPubSubContractConstants(t *testing.T) {
 func TestConfigUpdateV1_JSONContract(t *testing.T) {
 	t.Parallel()
 
-	payload, err := jsonv2.Marshal(contractssettings.ScraperProxyPayloadV1{Enabled: true})
+	payload, err := jsonv2.Marshal(contractssettings.AlarmAdvanceMinutesPayloadV1{Minutes: 7})
 	if err != nil {
 		t.Fatalf("Marshal payload error = %v", err)
 	}
 
 	update := contractssettings.ConfigUpdateV1{
-		Type:    contractssettings.UpdateTypeScraperProxy,
+		Type:    contractssettings.UpdateTypeAlarmAdvanceMinutes,
 		Payload: payload,
 	}
 
@@ -75,17 +71,17 @@ func TestConfigUpdateV1_JSONContract(t *testing.T) {
 		t.Fatalf("Unmarshal update error = %v", err)
 	}
 
-	if decoded.Type != contractssettings.UpdateTypeScraperProxy {
+	if decoded.Type != contractssettings.UpdateTypeAlarmAdvanceMinutes {
 		t.Fatalf("decoded.Type = %q", decoded.Type)
 	}
 
-	var decodedPayload contractssettings.ScraperProxyPayloadV1
+	var decodedPayload contractssettings.AlarmAdvanceMinutesPayloadV1
 
 	if err := jsonv2.Unmarshal(decoded.Payload, &decodedPayload); err != nil {
 		t.Fatalf("Unmarshal payload error = %v", err)
 	}
 
-	if decodedPayload.Enabled != true {
-		t.Fatalf("decodedPayload.Enabled = %v", decodedPayload.Enabled)
+	if decodedPayload.Minutes != 7 {
+		t.Fatalf("decodedPayload.Minutes = %v", decodedPayload.Minutes)
 	}
 }

@@ -1,11 +1,31 @@
+// Copyright (c) 2025 Kapu
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package messagestrings
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -20,50 +40,76 @@ type failingQuerier struct {
 
 func (q *failingQuerier) Query(context.Context, string, ...any) (pgx.Rows, error) {
 	q.calls++
+
 	return nil, q.err
 }
 
-type emptyRows struct{}
-
-func (emptyRows) Close()                                       {}
-func (emptyRows) Err() error                                   { return nil }
-func (emptyRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
-func (emptyRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
-func (emptyRows) Next() bool                                   { return false }
-func (emptyRows) Scan(...any) error                            { return nil }
-func (emptyRows) Values() ([]any, error)                       { return nil, nil }
-func (emptyRows) RawValues() [][]byte                          { return nil }
-func (emptyRows) Conn() *pgx.Conn                              { return nil }
-
-// TypeMap은 값이 없는 Rows의 pgx 계약에 따라 nil을 반환한다.
-func (emptyRows) TypeMap() *pgtype.Map { return nil }
-
-type emptyQuerier struct{}
-
-func (emptyQuerier) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return emptyRows{}, nil
+// valueRows는 (namespace, key, value) 행을 순서대로 돌려주는 pgx.Rows 대역이다.
+type valueRows struct {
+	rows [][3]string
+	next int
 }
 
-type fallbackCounts struct {
+func (r *valueRows) Close()                                       {}
+func (r *valueRows) Err() error                                   { return nil }
+func (r *valueRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *valueRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *valueRows) Values() ([]any, error)                       { return nil, nil }
+func (r *valueRows) RawValues() [][]byte                          { return nil }
+func (r *valueRows) Conn() *pgx.Conn                              { return nil }
+
+// TypeMap은 값이 없는 Rows의 pgx 계약에 따라 nil을 반환한다.
+func (r *valueRows) TypeMap() *pgtype.Map { return nil }
+
+func (r *valueRows) Next() bool {
+	r.next++
+
+	return r.next <= len(r.rows)
+}
+
+func (r *valueRows) Scan(dest ...any) error {
+	row := r.rows[r.next-1]
+
+	for i := range dest {
+		target, ok := dest[i].(*string)
+		if !ok {
+			return errors.New("valueRows scans strings only")
+		}
+
+		*target = row[i]
+	}
+
+	return nil
+}
+
+type valueQuerier struct {
+	rows [][3]string
+}
+
+func (q valueQuerier) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return &valueRows{rows: q.rows}, nil
+}
+
+type lookupCounts struct {
 	loadFailures float64
 	unloaded     float64
 	missing      float64
 }
 
-func snapshotFallbackCounts(namespace string) fallbackCounts {
+func snapshotLookupCounts(namespace string) lookupCounts {
 	initMetrics()
 
-	return fallbackCounts{
+	return lookupCounts{
 		loadFailures: testutil.ToFloat64(loadFailuresTotal),
-		unloaded:     testutil.ToFloat64(lookupFallbackTotal.WithLabelValues(fallbackReasonUnloaded, namespace)),
-		missing:      testutil.ToFloat64(lookupFallbackTotal.WithLabelValues(fallbackReasonMissing, namespace)),
+		unloaded:     testutil.ToFloat64(lookupMissTotal.WithLabelValues(lookupMissReasonUnloaded, namespace)),
+		missing:      testutil.ToFloat64(lookupMissTotal.WithLabelValues(lookupMissReasonMissing, namespace)),
 	}
 }
 
-func assertFallbackDelta(t *testing.T, before, after, want fallbackCounts) {
+func assertLookupDelta(t *testing.T, before, after, want lookupCounts) {
 	t.Helper()
 
-	got := fallbackCounts{
+	got := lookupCounts{
 		loadFailures: after.loadFailures - before.loadFailures,
 		unloaded:     after.unloaded - before.unloaded,
 		missing:      after.missing - before.missing,
@@ -73,82 +119,112 @@ func assertFallbackDelta(t *testing.T, before, after, want fallbackCounts) {
 	}
 }
 
-func TestGetContextCountsUnloadedFallbackAndLoadFailure(t *testing.T) {
+// 조회는 DB를 다시 읽지 않는다. Load를 부르지 않은 store는 빈 값과 unloaded metric만 남기고 query를 하지 않는다.
+func TestTextOnUnloadedStoreDoesNotLazyLoad(t *testing.T) {
 	q := &failingQuerier{err: errors.New("connection refused")}
-	store := &Store{pool: q, logger: slog.Default(), loadTimeout: time.Second}
+	store := &Store{pool: q, logger: slog.Default()}
 
-	before := snapshotFallbackCounts(NamespaceMisc)
-	if got := store.Get(NamespaceMisc, "vtuber_fallback"); got != "" {
-		t.Fatalf("Get on failed load = %q, want empty", got)
+	before := snapshotLookupCounts(NamespaceMisc)
+
+	if got := store.Text(MiscVTuberFallback); got != "" {
+		t.Fatalf("Text on unloaded store = %q, want empty", got)
 	}
 
-	assertFallbackDelta(t, before, snapshotFallbackCounts(NamespaceMisc), fallbackCounts{loadFailures: 1, unloaded: 1})
+	assertLookupDelta(t, before, snapshotLookupCounts(NamespaceMisc), lookupCounts{unloaded: 1})
 
-	before = snapshotFallbackCounts(NamespaceMisc)
-	if got := store.GetOrContext(t.Context(), NamespaceMisc, "vtuber_fallback", "code-fallback"); got != "code-fallback" {
-		t.Fatalf("GetOrContext on failed load = %q, want code-fallback", got)
-	}
-
-	assertFallbackDelta(t, before, snapshotFallbackCounts(NamespaceMisc), fallbackCounts{unloaded: 1})
-
-	if q.calls != 1 {
-		t.Fatalf("reload attempts = %d, want 1 (retry suppressed within retry interval)", q.calls)
+	if q.calls != 0 {
+		t.Fatalf("query calls = %d, want 0 (no lazy load)", q.calls)
 	}
 }
 
-func TestLoadCountsFailureWithoutLookupFallback(t *testing.T) {
+func TestLoadCountsFailure(t *testing.T) {
 	q := &failingQuerier{err: errors.New("connection refused")}
-	store := &Store{pool: q, logger: slog.Default(), loadTimeout: time.Second}
+	store := &Store{pool: q, logger: slog.Default()}
 
-	before := snapshotFallbackCounts(NamespaceMisc)
+	before := snapshotLookupCounts(NamespaceMisc)
 	err := store.Load(t.Context())
 
 	if err == nil || !errors.Is(err, q.err) {
 		t.Fatalf("Load error = %v, want wrapped %v", err, q.err)
 	}
 
-	assertFallbackDelta(t, before, snapshotFallbackCounts(NamespaceMisc), fallbackCounts{loadFailures: 1})
+	assertLookupDelta(t, before, snapshotLookupCounts(NamespaceMisc), lookupCounts{loadFailures: 1})
 }
 
-func TestLookupFallbackSeriesPreRegisteredAtZero(t *testing.T) {
+func TestLookupMissSeriesPreRegisteredAtZero(t *testing.T) {
 	initMetrics()
 
-	if got, want := testutil.CollectAndCount(lookupFallbackTotal), 2*len(knownNamespaces); got != want {
-		t.Fatalf("lookup_fallback series = %d, want %d (unloaded+missing x every Namespace* constant)", got, want)
+	if got, want := testutil.CollectAndCount(lookupMissTotal), 2*len(knownNamespaces); got != want {
+		t.Fatalf("lookup series = %d, want %d (unloaded+missing x every Namespace* constant)", got, want)
 	}
 
-	fresh := lookupFallbackTotal.WithLabelValues(fallbackReasonMissing, NamespaceKaring)
+	fresh := lookupMissTotal.WithLabelValues(lookupMissReasonMissing, NamespaceTimeFmt)
 	if v := testutil.ToFloat64(fresh); v != 0 {
 		t.Fatalf("pre-registered series value = %v, want 0", v)
 	}
 }
 
-func TestGetContextCountsMissingFallbackWhenLoaded(t *testing.T) {
-	store := &Store{pool: emptyQuerier{}, logger: slog.Default(), loadTimeout: time.Second}
+func TestLookupCountsMissingWhenLoaded(t *testing.T) {
+	store := &Store{pool: valueQuerier{}, logger: slog.Default()}
 	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 
-	before := snapshotFallbackCounts(NamespaceOrg)
-	if got := store.Get(NamespaceOrg, "nonexistent"); got != "" {
-		t.Fatalf("Get missing key = %q, want empty", got)
+	before := snapshotLookupCounts(NamespaceOrg)
+	if got, ok := store.Lookup(NamespaceOrg, "nonexistent"); ok || got != "" {
+		t.Fatalf("Lookup missing key = (%q, %t), want (\"\", false)", got, ok)
 	}
 
-	assertFallbackDelta(t, before, snapshotFallbackCounts(NamespaceOrg), fallbackCounts{missing: 1})
+	assertLookupDelta(t, before, snapshotLookupCounts(NamespaceOrg), lookupCounts{missing: 1})
 }
 
-func TestGetContextDoesNotCountHit(t *testing.T) {
-	store := &Store{pool: emptyQuerier{}, logger: slog.Default(), loadTimeout: time.Second}
-	store.mu.Lock()
-
-	store.cache = map[string]map[string]string{NamespaceOrg: {"Hololive": "Holo"}}
-	store.loaded = true
-	store.mu.Unlock()
-
-	before := snapshotFallbackCounts(NamespaceOrg)
-	if got := store.Get(NamespaceOrg, "Hololive"); got != "Holo" {
-		t.Fatalf("Get hit = %q, want Holo", got)
+func TestLookupDoesNotCountHit(t *testing.T) {
+	store := &Store{pool: valueQuerier{rows: [][3]string{{NamespaceOrg, "Hololive", "Holo"}}}, logger: slog.Default()}
+	if err := store.Load(t.Context()); err != nil {
+		t.Fatalf("Load: %v", err)
 	}
 
-	assertFallbackDelta(t, before, snapshotFallbackCounts(NamespaceOrg), fallbackCounts{})
+	before := snapshotLookupCounts(NamespaceOrg)
+	if got, ok := store.Lookup(NamespaceOrg, "Hololive"); !ok || got != "Holo" {
+		t.Fatalf("Lookup hit = (%q, %t), want (Holo, true)", got, ok)
+	}
+
+	assertLookupDelta(t, before, snapshotLookupCounts(NamespaceOrg), lookupCounts{})
+}
+
+// 기동 검증은 빈 값·없는 key·빈 namespace를 모두 모아 한 번에 실패시킨다.
+func TestValidateReportsEveryMissingEntry(t *testing.T) {
+	store := &Store{pool: valueQuerier{rows: [][3]string{
+		{NamespaceMisc, "vtuber_fallback", "VTuber"},
+		{NamespaceMisc, "time_unknown", "  "},
+	}}, logger: slog.Default()}
+	if err := store.Load(t.Context()); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	err := store.Validate(Requirements{
+		Keys:       []Key{MiscVTuberFallback, MiscTimeUnknown, MiscAlarmNoTitle},
+		Namespaces: []string{NamespaceNewsCat},
+	})
+	if err == nil {
+		t.Fatal("Validate() error = nil, want missing entries")
+	}
+
+	for _, want := range []string{"misc/time_unknown", "misc/alarm_no_title", "newscat/*"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Validate() error = %v, want mention of %s", err, want)
+		}
+	}
+
+	if strings.Contains(err.Error(), "misc/vtuber_fallback") {
+		t.Errorf("Validate() error = %v, must not report present key", err)
+	}
+}
+
+func TestValidateRequiresLoad(t *testing.T) {
+	store := &Store{pool: valueQuerier{}, logger: slog.Default()}
+
+	if err := store.Validate(Requirements{Keys: []Key{MiscVTuberFallback}}); err == nil {
+		t.Fatal("Validate() on unloaded store must fail")
+	}
 }

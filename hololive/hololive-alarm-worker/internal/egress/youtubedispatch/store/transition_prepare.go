@@ -28,10 +28,6 @@ func (s *TransitionStore) PrepareClaimed(
 		return PrepareClaimsResult{}, nil
 	}
 
-	if err := s.ensureReady(ctx); err != nil {
-		return PrepareClaimsResult{}, fmt.Errorf("prepare claimed: %w", err)
-	}
-
 	at, err := lifecycle.CanonicalTime(time.Now())
 	if err != nil {
 		return PrepareClaimsResult{}, fmt.Errorf("prepare claimed: at: %w", err)
@@ -415,10 +411,6 @@ type DeferCommand struct {
 }
 
 func (s *TransitionStore) DeferFollower(ctx context.Context, command DeferCommand) (ApplyResult, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("defer follower: %w", err)
-	}
-
 	if command.Delivery.ID <= 0 || command.Delivery.LockedAt == nil || command.Delivery.RowVersion <= 0 {
 		return newApplyResult(ApplyConflict, nil), errors.New("defer follower: invalid preparation fence")
 	}

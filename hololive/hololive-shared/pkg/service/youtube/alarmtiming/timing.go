@@ -28,7 +28,7 @@ func Build(actualPublishedAt, alarmSentAt *time.Time) Snapshot {
 	}
 }
 
-func CalculateLatency(actualPublishedAt, alarmSentAt *time.Time) (result1 *int64, result2 *bool) {
+func CalculateLatency(actualPublishedAt, alarmSentAt *time.Time) (*int64, *bool) {
 	if actualPublishedAt == nil || alarmSentAt == nil {
 		return nil, nil
 	}

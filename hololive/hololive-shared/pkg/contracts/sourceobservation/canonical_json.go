@@ -196,7 +196,7 @@ func appendCanonicalJSON(destination []byte, value any, depth int) ([]byte, erro
 	default:
 		out, err := appendCanonicalJSONOther(destination, value, depth)
 
-		return out, errors.Join(err)
+		return out, err
 	}
 }
 
@@ -222,15 +222,15 @@ func appendCanonicalJSONNumberOrComposite(destination []byte, value any, depth i
 	case canonicalJSONNumber:
 		out, err := appendCanonicalNumberValue(destination, typed)
 
-		return out, errors.Join(err)
+		return out, err
 	case []any:
 		out, err := appendCanonicalArrayValue(destination, typed, depth)
 
-		return out, errors.Join(err)
+		return out, err
 	case map[string]any:
 		out, err := appendCanonicalObjectValue(destination, typed, depth)
 
-		return out, errors.Join(err)
+		return out, err
 	default:
 		return nil, errors.New("canonical json contains unsupported value type")
 	}

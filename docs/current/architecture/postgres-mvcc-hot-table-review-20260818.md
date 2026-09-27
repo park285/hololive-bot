@@ -369,7 +369,7 @@ snapshot마다 분명해집니다. 이 값이 바뀐 구간의 `idx_scan=0`은 �
 
 ### 6.2 `dead-tuples-autovacuum.txt` (확장)
 
-이 artifact는 `table`, `index`, `transaction` 세 section으로 구성됩니다.
+이 artifact는 `table`, `toast`, `index`, `transaction` 네 section으로 구성됩니다.
 
 `table` section:
 
@@ -379,6 +379,18 @@ snapshot마다 분명해집니다. 이 값이 바뀐 구간의 `idx_scan=0`은 �
 - HOT update 비율과 newpage update 비율
 - manual/auto VACUUM 및 ANALYZE 횟수와 마지막 실행 시각
 - table reloption
+
+`toast` section:
+
+- 대상 테이블의 TOAST relation 이름과 total size(TOAST index 포함)
+- TOAST live/dead tuple 및 dead tuple 비율
+- TOAST insert/delete 누적량과 마지막 VACUUM 이후 insert 수
+- manual/auto VACUUM 횟수와 마지막 실행 시각
+- TOAST reloption
+
+`table` section의 total size는 TOAST 바이트를 포함하지만, `pg_stat_user_tables`는 `pg_toast` schema를
+제외하므로 TOAST의 dead tuple과 VACUUM 이력은 `toast` section에만 나타납니다. `toast.*` reloption도
+heap이 아니라 TOAST relation에 저장됩니다. TOAST relation이 없는 테이블은 이 section에 행이 없습니다.
 
 `index` section:
 
@@ -399,6 +411,22 @@ snapshot마다 분명해집니다. 이 값이 바뀐 구간의 `idx_scan=0`은 �
 - `source_collection_checkpoints`
 - `youtube_collection_job_leases`
 - `source_observations`
+
+2026-09-27에 수집·투영·알림 경로의 테이블 9개를 더했습니다. 이 테이블들의 인덱스 사용량과
+HOT·TOAST 추세를 별도 조회 없이 같은 snapshot에서 확인하기 위해서입니다.
+
+- `source_observation_applications`
+- `youtube_collection_targets`
+- `youtube_collection_target_reasons`
+- `youtube_live_sessions`
+- `youtube_live_pending_ends`
+- `youtube_content_evidence_clocks`
+- `youtube_community_posts`
+- `youtube_content_alarm_tracking`
+- `bot_reply_outbox`
+
+`table`, `toast`, `index` section은 같은 대상 목록을 씁니다. `pg-hotpath-catalog-sql_test.sh`가 세 목록이
+서로 같은지 검사합니다.
 
 `transaction` section은 `idle in transaction` 세션만이 아니라 xmin을 잡고 있는 backend 전체를
 대상으로 합니다. VACUUM horizon을 붙잡는 주체는 idle 세션에 한정되지 않기 때문입니다.

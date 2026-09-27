@@ -20,7 +20,6 @@ func buildAdminAPIYouTubeStack(
 ) *providers.YouTubeStack {
 	return sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   appConfig.YouTube,
-		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,

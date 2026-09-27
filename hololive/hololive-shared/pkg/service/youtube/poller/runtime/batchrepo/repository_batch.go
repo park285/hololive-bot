@@ -216,9 +216,7 @@ func (r *PgxBatchRepository) persistReconciledVideosTx(
 		return nil, fmt.Errorf("batch upsert videos: %w", err)
 	}
 
-	if err := r.resolveShortPersistedContentIDs(ctx, tx, notifications, trackingRows); err != nil {
-		return nil, fmt.Errorf("resolve short persisted content ids: %w", err)
-	}
+	canonicalizeShortContentIDs(notifications, trackingRows)
 
 	sourcePosts := buildShortSourcePosts(videos, trackingRows)
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {
@@ -284,9 +282,7 @@ func (r *PgxBatchRepository) persistVideosTx(
 		return nil, fmt.Errorf("batch upsert videos: %w", err)
 	}
 
-	if err := r.resolveShortPersistedContentIDs(ctx, tx, notifications, trackingRows); err != nil {
-		return nil, fmt.Errorf("resolve short persisted content ids: %w", err)
-	}
+	canonicalizeShortContentIDs(notifications, trackingRows)
 
 	sourcePosts := buildShortSourcePosts(videos, trackingRows)
 	if err := observation.NewRepositoryContext(ctx, tx).UpsertSourcePostsBatch(ctx, sourcePosts); err != nil {

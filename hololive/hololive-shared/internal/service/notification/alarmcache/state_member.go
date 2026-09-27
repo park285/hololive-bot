@@ -28,14 +28,6 @@ func (s *State) GetMemberName(ctx context.Context, channelID string) (string, er
 	return name, nil
 }
 
-func (s *State) ResolveCacheMemberName(ctx context.Context, channelID, fallback string) string {
-	if name := s.ResolveMemberDataName(ctx, channelID); name != "" {
-		return name
-	}
-
-	return stringutil.TrimSpace(fallback)
-}
-
 func (s *State) ResolveMemberDataName(ctx context.Context, channelID string) string {
 	provider := s.memberData()
 	if provider == nil {

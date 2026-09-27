@@ -29,6 +29,10 @@ var (
 	ErrUnavailable = errors.New("dispatch operations unavailable")
 )
 
+// statuses는 조회 필터로 받는 상태다. 비교 전용 shadowed 행은 v3 handoff 삭제(DEC-20260926-hololive-outbox-v3-convergence)와
+// migration 226으로 더 이상 존재하지 않아 항상 빈 목록을 돌려준다. 그래도 iris-console의 DispatchStatus enum
+// (contracts/hololive/openapi.json, DispatchPage 필터)이 이 값을 보낼 수 있어 입력으로만 남긴다. 제거 조건: iris-console이
+// enum과 필터에서 shadowed를 뺀 release가 배포된 뒤 이 값과 문서의 필터 목록을 함께 지운다. 재검토 기한: 2026-12-31.
 var statuses = [...]string{"shadowed", "pending", "retry", "leased", "sending", "sent", "dlq", "quarantined", "cancelled"} //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
 
 // Delivery는 본문과 전송용 내부 식별자를 제외한 발송 상태입니다. Bigint는 문자열로 유지합니다.
@@ -238,8 +242,15 @@ func replayBlock(group []Delivery) string {
 			return "group_not_terminal_failure"
 		}
 
-		// 이전 형식의 단일 발송은 자체 묶음입니다. 서로 다른 발송 식별자를 섞지 않습니다.
-		if item.RoomID != first.RoomID || item.SendUnitID != first.SendUnitID || (first.SendUnitID == "" && len(group) != 1) {
+		// 서로 다른 발송 식별자를 섞지 않습니다. send unit이 없는 migration 141 이전 행은 worker claim이 더 이상 읽지
+		// 않고(legacy_head 삭제, stack-audit 2026-09-26 T17) 활성 상태로 되돌리면 migration 224 CHECK가 거절하므로,
+		// 저장된 외부 발송 식별자가 없다는 뜻으로 같은 차단 사유를 씁니다.
+		// 조회용 단일 행 묶음(group.sql·group_locked.sql의 send_unit_id IS NULL 분기)은 이 행들의 드레인 종단입니다
+		// (분기 도입 2088fa5f0, send unit 도입 333665c1a). 제거 조건: authoritative DB의 alarm_dispatch_deliveries에서
+		// send_unit_id IS NULL 행이 0건이다(T18 2026-09-26 기준 종단 437건, 최신 created_at 2026-08-10, sent·취소
+		// 상태 90일 retention으로 소멸 예정). 그 뒤 계획 T11(holo-api-dispatchops-legacy-send-unit)이 두 분기와 이 조건의 NULL
+		// 표현을 지웁니다. 재검토 기한: remove_after = "2026-12-31".
+		if item.RoomID != first.RoomID || item.SendUnitID != first.SendUnitID || first.SendUnitID == "" {
 			return "group_identity_mismatch"
 		}
 	}

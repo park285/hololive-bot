@@ -5,11 +5,10 @@ import (
 )
 
 var (
-	parseChannelStatsFromInitialData   = parser.ParseChannelStatsFromInitialData
-	parseChannelSnippetFromInitialData = parser.ParseChannelSnippetFromInitialData
-	parseShortNumber                   = parser.ParseShortNumber
-	parseViewCount                     = parser.ParseViewCount
-	parseVideoCount                    = parser.ParseVideoCount
-	parseSubscriberCount               = parser.ParseSubscriberCount
-	parseJoinedDate                    = parser.ParseJoinedDate
+	parseChannelStatsFromInitialData = parser.ParseChannelStatsFromInitialData
+	parseShortNumber                 = parser.ParseShortNumber
+	parseViewCount                   = parser.ParseViewCount
+	parseVideoCount                  = parser.ParseVideoCount
+	parseSubscriberCount             = parser.ParseSubscriberCount
+	parseJoinedDate                  = parser.ParseJoinedDate
 )

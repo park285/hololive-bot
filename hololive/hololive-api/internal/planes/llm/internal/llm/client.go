@@ -20,10 +20,16 @@
 
 package llm
 
-import "context"
+import (
+	"context"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+)
+
+// Client는 LLM 지시를 invariant/developer/user 계층으로만 받는다
+// (DEC-20260926-stack-llm-instruction-layering-sole-path). 단일 system prompt 경로는 없다.
 type Client interface {
-	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
+	GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error)
 }
 
 type Options struct {
@@ -73,7 +79,8 @@ func WithReasoningEffort(effort string) Option {
 	}
 }
 
-// WithCostTracker는 토큰 사용량 관측기를 주입한다. 인자가 nil이면 관측이 비활성화된다(no-op).
+// WithCostTracker는 토큰 사용량 관측기를 주입한다. 운영 runtime은 항상 non-nil TokenMetricsRecorder를 넘긴다.
+// 인자가 nil이면 관측기를 바꾸지 않는다(테스트용 no-op).
 func WithCostTracker(tracker CostTracker) Option {
 	return func(o *Options) {
 		if tracker != nil {

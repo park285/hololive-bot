@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-legacy-env-config-retirement",
+  "title": "퇴역 env·설정 alias와 퇴역 producer 시대 설정을 거절·삭제한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "2026-09-26 사용자가 권장안대로 확정했다. 삭제된 env(SCRAPER_VIDEOS_SECONDS, SCRAPER_WORKER_COUNT, IRIS_SHARED_TOKEN, collector alias)를 가드 없이 무시하는 동작과 이를 고정하는 테스트, 정본 없이 StringAny로 폴백하는 HOLODEX_API_KEY/HOLODEX_API_KEY_1, 소비자 없이 alarm-worker가 파싱하는 YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT, 소비자 없는 ScraperConfig의 producer 시대 필드·env·검증(SCRAPER_SCHEDULER_WORKER_COUNT 포함), C2 proxy 퇴역과 묶인 admin 설정 API의 scraperProxyEnabled 공개 필드, rate limiter instance ID의 hostname→random→local 폴백 체인이 대상이다. 퇴역 env는 존재 기준 퇴역 가드와 제거 조건으로 거절하고, 무시 동작 테스트는 거절 테스트로 바꾼다. HOLODEX_API_KEY 하나를 정본으로 하고 HOLODEX_API_KEY_1은 퇴역 가드로 막는다. scraperProxyEnabled는 iris-console 소비자와 함께 삭제한다. rate limiter instance ID는 T18에서 운영 INSTANCE_ID 설정 여부를 확인해 INSTANCE_ID 또는 hostname 하나를 필수 출처로 정하고 random·'local'·'unknown-host' 폴백을 삭제한다. 표준 OTel endpoint env(OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) 거부는 퇴역 가드가 아니라 외부 표준 이름을 막는 영구 계약이므로 이름과 문서를 그렇게 고친다. 퇴역 producer의 AP당 worker 수와 phase별 rollback 플래그 유지를 요구한 DEC-20260604와 같은 producer의 resilience 계약 DEC-20260605는 DEC-20260926-hololive-youtube-producer-budget-retired가 대체하며, 남은 producer 시대 코드(poller/runtime budget, scraper_scheduler_options.go, ProvideScraperScheduler)는 collector가 쓰지 않으므로 함께 삭제한다. YOUTUBE_PRODUCER_* env는 기존 존재 기준 퇴역 가드(config_youtube_producer_retired.go)의 제거 조건을 따른다. 현재 코드와 맞지 않는 DEC-20260512-hololive-alarm-http-provider-ownership과 DEC-20260625-hololive-runtime-role-boundary의 정정 레코드도 T19에서 코드 확인과 함께 만든다. T18 결과(2026-09-26): INSTANCE_ID는 어느 env에도 없어 hostname을 필수 출처로 정한다. YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT·SCRAPER_PROXY_ENABLED·SCRAPER_PROXY_URL이 모든 youtube-collector.env에, HOLODEX_API_KEY_1이 모든 env에 빈 값으로 남아 있어 가드 배포 전에 키를 지운다. SCRAPER_SCHEDULER_WORKER_COUNT·YOUTUBE_PRODUCER_*·표준 OTel endpoint env는 없다. 근거는 iris-stack의 2026-09-26 감사와 fade-out 재조사(docs/agent-workflows/evidence/2026-09-26-stack-audit/의 iris-audit.md, fadeout-recheck.md, fadeout-candidates.tsv의 dec 열)이고 PLN-20260926-stack-audit-refactoring T19에서 수행한다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

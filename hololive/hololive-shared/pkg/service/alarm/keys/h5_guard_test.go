@@ -17,9 +17,6 @@ func TestH5_KeyConstantValuePins(t *testing.T) {
 		{"NotifiedKeyPrefix", NotifiedKeyPrefix, "notified:"},
 		{"UpcomingEventKeyPrefix", UpcomingEventKeyPrefix, "notified:upcoming:event:"},
 		{"ScheduleTransitionKeyPrefix", ScheduleTransitionKeyPrefix, "notified:schedule:transition:"},
-		{"DispatchQueueKey", DispatchQueueKey, "alarm:dispatch:queue"},
-		{"DispatchRetryQueueKey", DispatchRetryQueueKey, "alarm:dispatch:retry"},
-		{"DispatchDLQKey", DispatchDLQKey, "alarm:dispatch:dlq"},
 	}
 	for _, c := range checks {
 		if c.got != c.want {

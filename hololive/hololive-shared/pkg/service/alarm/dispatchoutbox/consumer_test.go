@@ -24,7 +24,7 @@ func TestConsumerDrainBatch_QuarantinesStaleSendingBeforeClaiming(t *testing.T) 
 			return nil, nil
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"), WithLease(30*time.Second))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"), WithLease(30*time.Second))
 
 	if _, err := consumer.DrainBatch(t.Context(), 10); err != nil {
 		t.Fatalf("DrainBatch() error = %v", err)
@@ -76,7 +76,7 @@ func TestConsumerQuarantineThresholdSeparatedFromLease(t *testing.T) {
 			repository := &consumerTestRepository{}
 
 			opts := append([]ConsumerOption{WithWorkerID("worker-1")}, tc.opts...)
-			consumer := NewConsumer(repository, slog.Default(), opts...)
+			consumer := mustNewConsumer(t, repository, nil, slog.Default(), opts...)
 
 			if _, err := consumer.DrainBatch(t.Context(), 10); err != nil {
 				t.Fatalf("DrainBatch() error = %v", err)
@@ -98,7 +98,7 @@ func TestConsumerDrainBatch_ThrottlesRecovery(t *testing.T) {
 		},
 	}
 	now := time.Date(2026, time.May, 12, 3, 0, 0, 0, time.UTC)
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
 
 	consumer.now = func() time.Time { return now }
 
@@ -136,7 +136,7 @@ func TestConsumerDrainBatch_RecoveryFailureDoesNotBlockClaimAndIsThrottled(t *te
 		},
 	}
 	now := time.Date(2026, time.May, 12, 3, 0, 0, 0, time.UTC)
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"), WithRecoveryInterval(30*time.Second))
 
 	consumer.now = func() time.Time { return now }
 
@@ -175,7 +175,7 @@ func TestConsumerDrainBatch_RecoveryRowsUseLeasedAndSendingMetricLabels(t *testi
 			return 3, nil
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(),
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(),
 		WithWorkerID("worker-1"),
 		WithLease(45*time.Second),
 		WithRecoveryBatchSize(7),
@@ -225,7 +225,7 @@ func TestConsumerDrainBatch_SendingRecoveryFailureUsesFailureLabelAndStillClaims
 			return 0, errors.New("postgres unavailable")
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	consumer.now = func() time.Time { return now }
 
@@ -268,7 +268,7 @@ func TestConsumerMarkDispatchedPassesWorkerID(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
 	if err != nil {
@@ -289,7 +289,7 @@ func TestConsumerMarkDispatchedPropagatesPostSendOwnershipChange(t *testing.T) {
 			return partialErr
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	err := consumer.MarkDispatched(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
 	if !errors.Is(err, partialErr) {
@@ -301,7 +301,7 @@ func TestConsumerMarkSendingPassesWorkerID(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	err := consumer.MarkSending(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 42}})
 	if err != nil {
@@ -338,7 +338,7 @@ func TestConsumerDrainBatchLoadsDistinctEventsAndRehydratesDeliveryContext(t *te
 			7: {ID: 7, Payload: eventPayload},
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	envelopes, err := consumer.DrainBatch(t.Context(), 10)
 	if err != nil {
@@ -388,7 +388,7 @@ func TestConsumerDrainBatchRestoresAttemptCountForRetryRows(t *testing.T) {
 			8: {ID: 8, Payload: eventPayload},
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	envelopes, err := consumer.DrainBatch(t.Context(), 10)
 	if err != nil {
@@ -600,7 +600,7 @@ func TestConsumerRouteFailuresConvertsEnvelopesToTargetedUpdates(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	nextVisible := time.Date(2026, time.July, 30, 10, 0, 0, 0, time.UTC)
 	retryEnvelope := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
@@ -658,7 +658,7 @@ func TestConsumerRouteFailuresPartialObservesAppliedSubsets(t *testing.T) {
 		}
 	}
 
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	nextVisible := time.Date(2026, time.July, 30, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
 	retryApplied := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
@@ -699,7 +699,7 @@ func TestConsumerRouteFailuresInfraErrorObservesNothing(t *testing.T) {
 		return errors.New("connection reset")
 	}
 
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	retry := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 11,
 		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "boom"},
@@ -725,7 +725,7 @@ func TestConsumerRouteSendingFailuresUsesSendingVariant(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	envelope := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 7,
 		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 1, LastError: "502"},
@@ -748,7 +748,7 @@ func TestConsumerRequeuePreSendPreservesAttemptCount(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	envelope := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 7,
 		Retry:            &domain.AlarmQueueRetryMetadata{Attempt: 2, LastError: "mark sending"},
@@ -771,7 +771,7 @@ func TestConsumerRequeueRoutesAllEnvelopesAsRetry(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	envelopes := []domain.AlarmQueueEnvelope{
 		{DispatchOutboxID: 1, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}},
 		{DispatchOutboxID: 2, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 3}},
@@ -801,7 +801,7 @@ func TestConsumerRouteFailuresPropagatesRepositoryError(t *testing.T) {
 			return repositoryErr
 		},
 	}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 
 	err := consumer.RouteFailures(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 1, Retry: &domain.AlarmQueueRetryMetadata{Attempt: 1}}}, nil)
 	if !errors.Is(err, repositoryErr) {
@@ -813,7 +813,7 @@ func TestConsumerRouteFailuresSanitizesErrorAndPassesCodeThrough(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	envelope := domain.AlarmQueueEnvelope{
 		DispatchOutboxID: 5,
 		Retry: &domain.AlarmQueueRetryMetadata{
@@ -849,7 +849,7 @@ func TestConsumerQuarantineStoresSanitizedCauseAndCode(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, nil, slog.Default(), WithWorkerID("worker-1"))
 	cause := fmt.Errorf("send karing content list: %w", &iris.HTTPError{StatusCode: 500, URL: "https://iris.internal/reply?auth=abc123"})
 
 	if err := consumer.Quarantine(t.Context(), []domain.AlarmQueueEnvelope{{DispatchOutboxID: 9}}, cause); err != nil {
@@ -878,7 +878,7 @@ func TestConsumerMoveRecordToDLQUsesPayloadCode(t *testing.T) {
 	t.Parallel()
 
 	repository := &consumerTestRepository{}
-	consumer := NewConsumer(repository, slog.Default(), WithWorkerID("worker-1"))
+	consumer := mustNewConsumer(t, repository, &fakeClaimKeyReleaser{}, slog.Default(), WithWorkerID("worker-1"))
 
 	if err := consumer.moveRecordToDLQ(t.Context(), &Record{ID: 3}, "invalid payload: unexpected EOF", "move invalid payload to dlq"); err != nil {
 		t.Fatalf("moveRecordToDLQ() error = %v", err)

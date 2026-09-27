@@ -65,6 +65,10 @@ func rpcOperation(path string) string {
 		return "content"
 	case "/v1/channel":
 		return "channel"
+	case "/v1/channel_live_check":
+		return "channel_live_check"
+	case "/v1/video_live_check":
+		return "video_live_check"
 	default:
 		return "unknown"
 	}

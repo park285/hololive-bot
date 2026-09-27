@@ -34,6 +34,10 @@ import (
 	serviceTemplate "github.com/kapu/hololive-shared/pkg/service/template"
 )
 
+// renderFailureMessage는 시드 message_strings error/command_processing_failed 문구다. 템플릿 렌더 실패 응답은
+// 코드 대체 문구 대신 이 DB 정본 문구를 쓴다(DEC-20260926-hololive-message-strings-startup-validation).
+const renderFailureMessage = "❌ 명령 처리 중 오류가 발생했습니다."
+
 func setupFormatterTestStore(t *testing.T) *messagestrings.Store {
 	t.Helper()
 
@@ -153,18 +157,18 @@ func TestFormatHelp(t *testing.T) {
 		t.Parallel()
 
 		renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{})
-		formatter := NewResponseFormatter("!", renderer)
+		formatter := NewResponseFormatter("!", renderer, WithMessageStrings(setupFormatterTestStore(t)))
 
 		got := formatter.FormatHelp(t.Context())
-		assert.Equal(t, messagestrings.FallbackSentinel, got)
+		assert.Equal(t, renderFailureMessage, got)
 	})
 }
 
 func TestMemberNotFound(t *testing.T) {
 	t.Parallel()
 
-	nilRenderer := NewResponseFormatter("!", nil)
-	assert.Equal(t, messagestrings.FallbackSentinel, nilRenderer.MemberNotFound(t.Context(), "후부키"))
+	nilRenderer := NewResponseFormatter("!", nil, WithMessageStrings(setupFormatterTestStore(t)))
+	assert.Equal(t, renderFailureMessage, nilRenderer.MemberNotFound(t.Context(), "후부키"))
 
 	renderer := setupFormatterTestRenderer(t, map[domain.TemplateKey]string{
 		domain.TemplateKeyCmdMemberNotFound: "❌ '{{.MemberName}}' 멤버를 찾을 수 없습니다.",

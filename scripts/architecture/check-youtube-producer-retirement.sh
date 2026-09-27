@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 영구 계약(재도입 방지): 2026-08-25 퇴역한 youtube producer 이름이 저장소에 다시 들어오지 않게 막는 gate다.
+# 퇴역 가드가 아니므로 gate 자체의 제거 조건은 없다(stack-audit 2026-09-26 T17 분류). allowlist 항목은 대상 경로가
+# 사라지거나 더 이상 이름을 담지 않으면 함께 지우며, 아래 stale 검사가 이를 강제한다.
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ALLOWLIST="${ROOT_DIR}/docs/current/architecture/youtube-producer-retirement.allowlist"
 tmp_dir="$(mktemp -d)"

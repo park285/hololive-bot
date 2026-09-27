@@ -43,12 +43,12 @@ func (c *APIClient) doRequestWithRetry(ctx context.Context, method, path string,
 		if done {
 			out, finishErr := c.finishHolodexRequestResult(body, err)
 
-			return out, errors.Join(finishErr)
+			return out, finishErr
 		}
 
 		stop, retryErr := c.prepareHolodexRequestRetry(ctx, path, attempt, err, &state)
 		if retryErr != nil {
-			return nil, errors.Join(retryErr)
+			return nil, retryErr
 		}
 
 		if stop {
@@ -84,7 +84,7 @@ func (c *APIClient) prepareHolodexRequestRetry(ctx context.Context, path string,
 	return false, nil
 }
 
-func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
+func (c *APIClient) runHolodexRequestAttempt(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) ([]byte, bool, error) {
 	if waitErr := c.waitForRateLimiter(ctx, path); waitErr != nil {
 		return nil, true, fmt.Errorf("wait for rate limiter: %w", waitErr)
 	}
@@ -117,7 +117,7 @@ func (c *APIClient) finishHolodexRequestAttempt(body []byte, err error) ([]byte,
 	return body, nil
 }
 
-func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) (result0 []byte, ok1 bool, err error) {
+func (c *APIClient) tryHolodexRequest(ctx context.Context, method, path string, params url.Values, attempt, maxAttempts int) ([]byte, bool, error) {
 	attemptCtx, cancel := context.WithTimeout(ctx, c.perAttemptTimeout)
 	defer cancel()
 

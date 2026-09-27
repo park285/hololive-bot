@@ -45,7 +45,6 @@ type BotRuntime struct {
 	Bot *orchestration.Bot
 
 	ConfigSubscriber *configsub.Subscriber
-	AlarmService     interface{ Close(context.Context) error }
 
 	ServerAddr      string
 	H3Server        *http3.Server

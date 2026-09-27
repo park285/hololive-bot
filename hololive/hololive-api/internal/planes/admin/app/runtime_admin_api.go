@@ -21,7 +21,6 @@
 package app
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/park285/shared-go/v2/pkg/runtime/lifecycle"
@@ -37,10 +36,9 @@ type AdminAPIRuntime struct {
 	Config *settings.Config
 	Logger *slog.Logger
 
-	ServerAddr   string
-	HTTPServers  *sharedserver.RuntimeHTTPServers
-	AlarmService interface{ Close(context.Context) error }
-	PhotoSync    *holodexprovider.PhotoSyncService
+	ServerAddr  string
+	HTTPServers *sharedserver.RuntimeHTTPServers
+	PhotoSync   *holodexprovider.PhotoSyncService
 }
 
 // Close는 nil outer runtime에서도 안전하며 등록된 자원 정리를 한 번만 실행한다.

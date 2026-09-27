@@ -96,16 +96,8 @@ export COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/compose.env
   up -d --no-deps <service>...
 ```
 
-main-host active-active AP는 main-ap overlay 2종과 profile을 함께 넣습니다:
-
-```bash
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh \
-  -f deploy/compose/docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.live-compat.yml \
-  -f deploy/compose/docker-compose.main-ap.yml \
-  -f deploy/compose/docker-compose.main-ap.live-compat.yml \
-  up -d --no-deps youtube-collector
-```
+main-host collector-c는 prod.yml의 `youtube-collector`이므로 위 명령에 서비스 이름을 넣어 같은 파일 조합으로
+재생성합니다. 이를 재선언만 하던 빈 main-ap overlay 2종과 profile은 삭제했습니다(stack-audit 2026-09-26 T11).
 
 ### 4. 수용 증거
 
@@ -188,7 +180,7 @@ The script requires the PostgreSQL 18 `pg_stat_statements` schema. It verifies t
 
 The artifact retains the complete whitespace-normalized `pg_stat_statements` representative SQL for those two static runtime claims so the fingerprint can be revalidated; it does not truncate the query text. Bind values remain parameter placeholders and the owned claim SQL contains no dynamic comments or identifiers, so application values and credentials are not expected in this artifact. It still exposes internal table and column names: keep it as internal operational evidence, review it before external sharing, and never place secrets in SQL comments or identifiers.
 
-The stats window is fresh only when at least one `alarm_dispatch_deliveries` claim and one `youtube_notification_outbox` claim complete during the interval. No matching call for either required hot path, a global `pg_stat_statements` reset, entry deallocation, a per-statement `stats_since` change, or a decreasing counter makes the result inconclusive and fails the gate. This also rejects a statement reset whose counters recover past the starting values before the second snapshot. Rerun during a representative active window instead of treating missing evidence as a pass. The script also fails when the fresh delta mean exceeds 5ms, any index contract is broken, any invalid index exists, or `Rows Removed by Filter` exceeds 1000. The dead-tuple snapshot remains review evidence rather than a fixed threshold. The EXPLAIN statements run in a transaction and end with `ROLLBACK`, but they still use `ANALYZE`; run them during a low-risk verification window.
+The stats window is fresh only when at least one `alarm_dispatch_deliveries` claim and one `youtube_notification_outbox` claim complete during the interval. No matching call for either required hot path, a global `pg_stat_statements` reset, entry deallocation, a per-statement `stats_since` change, or a decreasing counter makes the result inconclusive and fails the gate. This also rejects a statement reset whose counters recover past the starting values before the second snapshot. Rerun during a representative active window instead of treating missing evidence as a pass. The script also fails when the fresh delta mean exceeds 5ms, any index contract is broken, any invalid index exists, or `Rows Removed by Filter` exceeds 1000. The dead-tuple snapshot records heap, TOAST, and index statistics for a fixed hot-path table list and remains review evidence rather than a fixed threshold. The EXPLAIN statements run in a transaction and end with `ROLLBACK`, but they still use `ANALYZE`; run them during a low-risk verification window.
 
 ## 계약 변경 릴리즈 규칙
 
@@ -242,7 +234,7 @@ Equivalent manual checks:
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30006/health
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-alarm-worker ./bin/healthcheck https://127.0.0.1:30007/health
 ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T hololive-api ./bin/healthcheck https://127.0.0.1:30003/health
-COMPOSE_PROFILES=main-ap ./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml -f deploy/compose/docker-compose.main-ap.yml exec -T youtube-collector ./bin/healthcheck https://127.0.0.1:30025/health
+./scripts/deploy/compose.sh -f deploy/compose/docker-compose.prod.yml exec -T youtube-collector ./bin/healthcheck https://127.0.0.1:30025/health
 ```
 
 ## 관련 문서

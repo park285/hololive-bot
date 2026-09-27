@@ -115,6 +115,74 @@ func TestScheduleConsumerPreservesPremiereAndDoesNotAdvanceLiveLastSeenAt(t *tes
 	assertLiveSessionPremiere(t, pool, domain.LiveStatusLive, new(true))
 }
 
+// schedule reducer는 누적 item을 읽지 않으므로 consume은 과거 item 행을 읽거나 잠그지 않아야 한다.
+// FOR UPDATE는 커밋 뒤에도 튜플 xmax에 잠금 트랜잭션을 남기므로 xmax=0이 잠금 부재의 증거다.
+func TestScheduleConsumerDoesNotLockRetainedItemHistory(t *testing.T) {
+	ctx := t.Context()
+	pool := dbtest.NewPool(t)
+
+	const historyCount = 50
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO youtube_schedule_items (
+			group_key, provider, external_id, video_id, channel_id, title, scheduled_at, updated_at
+		)
+		SELECT 'global:hololive-schedule', 'hololive_official', 'history-' || n, 'history-' || n, 'UC_TEST',
+		       'History ' || n, TIMESTAMPTZ '2026-08-01 00:00:00+00' + n * INTERVAL '1 hour',
+		       TIMESTAMPTZ '2026-08-02 00:00:00+00'
+		FROM generate_series(1, $1::int) AS n
+	`, historyCount); err != nil {
+		t.Fatalf("seed schedule history: %v", err)
+	}
+
+	repo := NewRepository(pool)
+	proof := seedPublishLease(t.Context(), t, pool, contract.ProviderHololiveOfficial, contract.KindSchedule, "global:hololive-schedule", "official_schedule")
+	consumer := NewConsumerWithGraces(repo, NewBatchCanonicalWriter(batchrepo.NewPgxBatchRepositoryWithPersister(pool, nil)), nil, 0, 0)
+
+	if _, err := repo.PublishBatch(ctx, publishInput(scheduleEnvelope(t, &proof, contract.ScheduleItemV1{
+		ExternalID: testVideoID, VideoID: testVideoID, ChannelID: testChannelID, Title: "Official Upcoming",
+		ScheduledAt: time.Date(2026, time.August, 14, 9, 0, 0, 0, time.UTC),
+	}))); err != nil {
+		t.Fatalf("publish schedule: %v", err)
+	}
+
+	if err := consumer.Consume(ctx, liveClaimOptions()); err != nil {
+		t.Fatalf("consume schedule: %v", err)
+	}
+
+	if liveSessionStatus(t, pool) != string(domain.LiveStatusUpcoming) {
+		t.Fatal("schedule consume must still merge the observed item into its live session")
+	}
+
+	var retained, locked, touched int
+
+	if err := pool.QueryRow(ctx, `
+		SELECT count(external_id),
+		       count(external_id) FILTER (WHERE xmax::text <> '0'),
+		       count(external_id) FILTER (WHERE updated_at <> TIMESTAMPTZ '2026-08-02 00:00:00+00')
+		FROM youtube_schedule_items
+		WHERE external_id LIKE 'history-%'
+	`).Scan(&retained, &locked, &touched); err != nil {
+		t.Fatalf("load schedule history: %v", err)
+	}
+
+	if retained != historyCount || locked != 0 || touched != 0 {
+		t.Fatalf("retained history = %d locked = %d touched = %d, want %d unlocked and untouched rows", retained, locked, touched, historyCount)
+	}
+
+	var observedTitle string
+
+	if err := pool.QueryRow(ctx, `
+		SELECT title FROM youtube_schedule_items WHERE external_id = $1
+	`, testVideoID).Scan(&observedTitle); err != nil {
+		t.Fatalf("load observed schedule item: %v", err)
+	}
+
+	if observedTitle != "Official Upcoming" {
+		t.Fatalf("observed schedule item title = %q", observedTitle)
+	}
+}
+
 func TestScheduleConsumerTemporaryItemDoesNotMergeSession(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

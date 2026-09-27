@@ -66,12 +66,13 @@ TABLE alarm_dispatch_deliveries
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   COLUMN dispatch_group_key text
   COLUMN send_unit_id bigint
+  CONSTRAINT alarm_dispatch_deliveries_active_send_unit_check CHECK (((send_unit_id IS NOT NULL) OR (status <> ALL (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text]))))
   CONSTRAINT alarm_dispatch_deliveries_attempt_check CHECK ((attempt_count >= 0))
   CONSTRAINT alarm_dispatch_deliveries_dedupe_key_check CHECK (((length(dedupe_key) > 0) AND (length(dedupe_key) <= 768)))
   CONSTRAINT alarm_dispatch_deliveries_dispatch_group_key_check CHECK (((dispatch_group_key IS NULL) OR ((length(dispatch_group_key) > 0) AND (length(dispatch_group_key) <= 768))))
   CONSTRAINT alarm_dispatch_deliveries_room_id_check CHECK (((length((room_id)::text) > 0) AND (length((room_id)::text) <= 100)))
   CONSTRAINT alarm_dispatch_deliveries_send_unit_pair_check CHECK (((dispatch_group_key IS NULL) = (send_unit_id IS NULL)))
-  CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['shadowed'::text, 'pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
+  CONSTRAINT alarm_dispatch_deliveries_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'retry'::text, 'leased'::text, 'sending'::text, 'sent'::text, 'dlq'::text, 'quarantined'::text, 'cancelled'::text])))
   CONSTRAINT chk_alarm_dispatch_deliveries_last_error_size CHECK ((octet_length(last_error) <= 8192))
   CONSTRAINT chk_alarm_dispatch_deliveries_state_shape CHECK ((((status <> 'leased'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL))) AND ((status <> 'sending'::text) OR ((locked_by IS NOT NULL) AND (locked_at IS NOT NULL) AND (lock_expires_at IS NOT NULL) AND (sending_started_at IS NOT NULL))) AND ((status <> 'sent'::text) OR (sent_at IS NOT NULL)) AND ((status <> 'dlq'::text) OR (dlq_at IS NOT NULL)) AND ((status <> 'quarantined'::text) OR (quarantined_at IS NOT NULL)) AND ((status <> 'cancelled'::text) OR (cancelled_at IS NOT NULL))))
   CONSTRAINT alarm_dispatch_deliveries_event_id_fkey FOREIGN KEY (event_id) REFERENCES alarm_dispatch_events(id) ON DELETE RESTRICT
@@ -493,7 +494,7 @@ TABLE observation_contract_generations
   COLUMN current_generation bigint NOT NULL
   COLUMN updated_by text NOT NULL
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_observation_contract_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_observation_contract_provider_vocab CHECK ((provider = ANY (ARRAY['holodex'::text, 'youtubejs'::text, 'hololive_official'::text])))
   CONSTRAINT chk_observation_contract_updated_by CHECK (((length(updated_by) >= 1) AND (length(updated_by) <= 128)))
   CONSTRAINT observation_contract_generations_current_generation_check CHECK ((current_generation > 0))
@@ -583,7 +584,7 @@ TABLE source_observation_consumer_offsets
   COLUMN last_processed_at timestamp with time zone
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT chk_source_observation_consumer_offset_bounds CHECK (((length(consumer_name) >= 1) AND (length(consumer_name) <= 128)))
-  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_source_observation_consumer_offset_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT source_observation_consumer_offsets_last_processed_id_check CHECK ((last_processed_id >= 0))
   CONSTRAINT source_observation_consumer_offsets_pkey PRIMARY KEY (consumer_name, observation_kind)
 
@@ -775,6 +776,31 @@ TABLE youtube_channel_latest_stats
   COLUMN updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
   CONSTRAINT youtube_channel_latest_stats_pkey PRIMARY KEY (channel_id)
 
+TABLE youtube_channel_live_checks
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN outcome text NOT NULL
+  COLUMN selected_video_id character varying(20)
+  COLUMN channel_identity_confirmed boolean NOT NULL
+  COLUMN unknown_reason text
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_channel_live_checks_effective_clock CHECK ((effective_at = scheduled_for))
+  CONSTRAINT chk_youtube_channel_live_checks_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_youtube_channel_live_checks_identity CHECK ((((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64)) AND ((selected_video_id IS NULL) OR ((length((selected_video_id)::text) >= 1) AND (length((selected_video_id)::text) <= 20)))))
+  CONSTRAINT chk_youtube_channel_live_checks_outcome_shape CHECK ((((outcome = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((outcome = 'UNKNOWN'::text) OR channel_identity_confirmed) AND ((outcome <> 'CHANNEL_PAGE'::text) OR (selected_video_id IS NULL)) AND ((outcome <> ALL (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text])) OR (selected_video_id IS NOT NULL)) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT channel_identity_confirmed))))
+  CONSTRAINT chk_youtube_channel_live_checks_outcome_vocab CHECK ((outcome = ANY (ARRAY['LIVE_VIDEO'::text, 'UPCOMING_VIDEO'::text, 'CHANNEL_PAGE'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_youtube_channel_live_checks_provider CHECK ((provider = 'youtubejs'::text))
+  CONSTRAINT chk_youtube_channel_live_checks_unknown_reason_vocab CHECK (((unknown_reason IS NULL) OR (unknown_reason = ANY (ARRAY['identity_missing'::text, 'identity_mismatch'::text, 'contradictory_fields'::text, 'structure_unrecognized'::text, 'not_waiting_state'::text, 'login_required_unclassified'::text, 'error_unclassified'::text, 'request_failed'::text]))))
+  CONSTRAINT fk_youtube_channel_live_checks_observation FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_channel_live_checks_pkey PRIMARY KEY (channel_id)
+  CONSTRAINT uq_youtube_channel_live_checks_observation UNIQUE (observation_id)
+
 TABLE youtube_channel_photo_heads
   COLUMN channel_id text NOT NULL
   COLUMN kind text NOT NULL
@@ -961,7 +987,6 @@ TABLE youtube_collection_job_leases
   CONSTRAINT youtube_collection_job_leases_pkey PRIMARY KEY (job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_due ON public.youtube_collection_job_leases USING btree (slot_state, next_due_at, retry_not_before, lease_expires_at, job_key)
   INDEX CREATE INDEX idx_youtube_collection_job_projection_generation ON public.youtube_collection_job_leases USING btree (projection_generation, job_key)
-  TRIGGER CREATE TRIGGER youtube_collection_job_lease_failure_diagnostics_backfill BEFORE UPDATE OF slot_state, last_error_code, last_failure_code, last_failure_class, last_failure_detail, last_failure_at ON youtube_collection_job_leases FOR EACH ROW EXECUTE FUNCTION populate_youtube_collection_job_lease_failure_diagnostics()
 
 TABLE youtube_collection_projection_generations
   COLUMN generation bigint NOT NULL GENERATED ALWAYS AS IDENTITY
@@ -998,7 +1023,7 @@ TABLE youtube_collection_targets
   COLUMN enabled boolean NOT NULL
   COLUMN valid_until timestamp with time zone NOT NULL
   COLUMN created_at timestamp with time zone NOT NULL DEFAULT now()
-  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text])))
+  CONSTRAINT chk_youtube_collection_target_kind_vocab CHECK ((observation_kind = ANY (ARRAY['community_page'::text, 'video_list'::text, 'shorts_list'::text, 'live_snapshot'::text, 'viewer_sample'::text, 'channel_stats'::text, 'channel_profile'::text, 'channel_photo'::text, 'schedule_snapshot'::text, 'channel_live_check'::text, 'video_live_check'::text])))
   CONSTRAINT chk_youtube_collection_target_subject CHECK (((length(subject_key) >= 1) AND (length(subject_key) <= 256)))
   CONSTRAINT youtube_collection_targets_poll_interval_ms_check CHECK (((poll_interval_ms >= 1000) AND (poll_interval_ms <= 86400000)))
   CONSTRAINT youtube_collection_targets_priority_check CHECK (((priority >= 0) AND (priority <= 100)))
@@ -1153,7 +1178,6 @@ TABLE youtube_live_absence_slots
   CONSTRAINT chk_youtube_live_absence_slots_coverage CHECK (((jsonb_typeof(coverage) = 'object'::text) AND (jsonb_typeof((coverage -> 'requested_channel_ids'::text)) = 'array'::text)))
   CONSTRAINT youtube_live_absence_slots_pkey PRIMARY KEY (observation_id)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_channels ON public.youtube_live_absence_slots USING gin (((coverage -> 'requested_channel_ids'::text)))
-  INDEX CREATE INDEX idx_youtube_live_absence_slots_live_time ON public.youtube_live_absence_slots USING btree (effective_at DESC) WHERE (((coverage -> 'filters'::text) -> 'statuses'::text) ? 'LIVE'::text)
   INDEX CREATE INDEX idx_youtube_live_absence_slots_scheduled_for ON public.youtube_live_absence_slots USING btree (scheduled_for)
 
 TABLE youtube_live_pending_ends
@@ -1457,6 +1481,33 @@ TABLE youtube_stream_stats
   COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
   CONSTRAINT youtube_stream_stats_pkey PRIMARY KEY (video_id)
 
+TABLE youtube_video_availability
+  COLUMN video_id character varying(20) NOT NULL
+  COLUMN channel_id character varying(64) NOT NULL
+  COLUMN provider text NOT NULL
+  COLUMN identity_confirmed boolean NOT NULL
+  COLUMN availability text NOT NULL
+  COLUMN method text NOT NULL
+  COLUMN unknown_reason text
+  COLUMN observation_id bigint
+  COLUMN evidence_sha256 text NOT NULL
+  COLUMN scheduled_for timestamp with time zone NOT NULL
+  COLUMN effective_at timestamp with time zone NOT NULL
+  COLUMN observed_at timestamp with time zone NOT NULL
+  COLUMN received_at timestamp with time zone NOT NULL
+  COLUMN updated_at timestamp with time zone NOT NULL DEFAULT now()
+  CONSTRAINT chk_youtube_video_availability_availability_vocab CHECK ((availability = ANY (ARRAY['PUBLIC'::text, 'MEMBERS_ONLY'::text, 'PUBLIC_UNAVAILABLE'::text, 'UNKNOWN'::text])))
+  CONSTRAINT chk_youtube_video_availability_effective_clock CHECK ((effective_at = scheduled_for))
+  CONSTRAINT chk_youtube_video_availability_hash CHECK ((evidence_sha256 ~ '^[0-9a-f]{64}$'::text))
+  CONSTRAINT chk_youtube_video_availability_identity CHECK ((((length((video_id)::text) >= 1) AND (length((video_id)::text) <= 20)) AND ((length((channel_id)::text) >= 1) AND (length((channel_id)::text) <= 64))))
+  CONSTRAINT chk_youtube_video_availability_method_vocab CHECK ((method = ANY (ARRAY['player_public'::text, 'player_members_only'::text, 'player_private'::text, 'unknown'::text])))
+  CONSTRAINT chk_youtube_video_availability_provider CHECK ((provider = 'youtubejs'::text))
+  CONSTRAINT chk_youtube_video_availability_shape CHECK (((((availability = 'PUBLIC'::text) AND (method = 'player_public'::text)) OR ((availability = 'MEMBERS_ONLY'::text) AND (method = 'player_members_only'::text)) OR ((availability = 'PUBLIC_UNAVAILABLE'::text) AND (method = 'player_private'::text)) OR ((availability = 'UNKNOWN'::text) AND (method = 'unknown'::text))) AND ((availability = 'UNKNOWN'::text) = (unknown_reason IS NOT NULL)) AND ((availability = 'UNKNOWN'::text) OR identity_confirmed) AND ((unknown_reason IS DISTINCT FROM 'availability_unclassified'::text) OR identity_confirmed) AND ((unknown_reason IS NULL) OR (unknown_reason <> ALL (ARRAY['identity_missing'::text, 'identity_mismatch'::text])) OR (NOT identity_confirmed))))
+  CONSTRAINT chk_youtube_video_availability_unknown_reason_vocab CHECK (((unknown_reason IS NULL) OR (unknown_reason = ANY (ARRAY['identity_missing'::text, 'identity_mismatch'::text, 'contradictory_fields'::text, 'structure_unrecognized'::text, 'not_waiting_state'::text, 'login_required_unclassified'::text, 'error_unclassified'::text, 'request_failed'::text, 'availability_unclassified'::text]))))
+  CONSTRAINT fk_youtube_video_availability_observation FOREIGN KEY (observation_id) REFERENCES source_observations(id) ON DELETE SET NULL
+  CONSTRAINT youtube_video_availability_pkey PRIMARY KEY (video_id)
+  CONSTRAINT uq_youtube_video_availability_observation UNIQUE (observation_id)
+
 TABLE youtube_videos
   COLUMN video_id character varying(20) NOT NULL
   COLUMN channel_id character varying(64) NOT NULL
@@ -1552,6 +1603,8 @@ FUNCTION delete_source_observation_application_retention_batch(requested_kinds t
 
 FUNCTION delete_source_observation_retention_batch(requested_kinds text[], requested_cutoffs timestamp with time zone[], requested_limit integer) RETURNS TABLE(deleted_id bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    WITH policies AS (\n        SELECT requested_kinds[policy.position] AS observation_kind,\n               requested_cutoffs[policy.position] AS cutoff\n        FROM pg_catalog.generate_subscripts(requested_kinds, 1) AS policy(position)\n        WHERE pg_catalog.cardinality(requested_kinds) BETWEEN 1 AND 16\n          AND pg_catalog.cardinality(requested_kinds) = pg_catalog.cardinality(requested_cutoffs)\n    ),\n    per_policy_candidates AS (\n        SELECT candidate.id,\n               candidate.received_at\n        FROM policies AS policy\n        CROSS JOIN LATERAL (\n            SELECT observation.id,\n                   observation.received_at\n            FROM public.source_observations AS observation\n            WHERE observation.observation_kind = policy.observation_kind\n              AND observation.received_at < policy.cutoff\n              AND NOT EXISTS (\n                  SELECT 1\n                  FROM public.source_observation_queue AS queue\n                  WHERE queue.observation_id = observation.id\n              )\n              AND NOT EXISTS (\n                  SELECT 1\n                  FROM public.source_observation_replay_requests AS replay\n                  WHERE replay.observation_id = observation.id\n                    AND replay.status = 'PENDING'\n              )\n              AND NOT EXISTS (\n                  SELECT 1\n                  FROM public.youtube_live_reconciliation_heads AS head\n                  WHERE head.end_candidate_observation_id = observation.id\n              )\n            ORDER BY observation.received_at, observation.id\n            LIMIT CASE\n                WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n                ELSE 0\n            END\n            FOR UPDATE OF observation SKIP LOCKED\n        ) AS candidate\n    ),\n    candidates AS (\n        SELECT candidate.id\n        FROM per_policy_candidates AS candidate\n        ORDER BY candidate.received_at, candidate.id\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n    )\n    DELETE FROM public.source_observations AS observation\n    USING candidates\n    WHERE observation.id = candidates.id\n      AND NOT EXISTS (\n          SELECT 1\n          FROM public.source_observation_queue AS live_queue\n          WHERE live_queue.observation_id = observation.id\n      )\n      AND NOT EXISTS (\n          SELECT 1\n          FROM public.source_observation_replay_requests AS live_replay\n          WHERE live_replay.observation_id = observation.id\n            AND live_replay.status = 'PENDING'\n      )\n      AND NOT EXISTS (\n          SELECT 1\n          FROM public.youtube_live_reconciliation_heads AS live_head\n          WHERE live_head.end_candidate_observation_id = observation.id\n      )\n    RETURNING observation.id\n"
 
+FUNCTION delete_youtube_live_absence_slot_retention_batch(requested_cutoff timestamp with time zone, requested_limit integer) RETURNS TABLE(deleted_id bigint) LANGUAGE sql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\n    WITH active_old_live AS (\n        SELECT 1\n        FROM public.source_observation_queue AS queue\n        JOIN public.source_observations AS observation\n          ON observation.id = queue.observation_id\n        WHERE queue.status = 'PENDING'\n          AND observation.observation_kind = 'live_snapshot'\n          AND COALESCE(observation.source_event_at, observation.scheduled_for) < requested_cutoff\n        LIMIT 1\n    ),\n    processing_old_live AS (\n        SELECT 1\n        FROM public.source_observation_queue AS queue\n        JOIN public.source_observations AS observation\n          ON observation.id = queue.observation_id\n        WHERE queue.status = 'PROCESSING'\n          AND observation.observation_kind = 'live_snapshot'\n          AND COALESCE(observation.source_event_at, observation.scheduled_for) < requested_cutoff\n        LIMIT 1\n    ),\n    replaying_old_live AS (\n        SELECT 1\n        FROM public.source_observation_replay_requests AS replay\n        JOIN public.source_observations AS observation\n          ON observation.id = replay.observation_id\n        WHERE replay.status = 'PENDING'\n          AND observation.observation_kind = 'live_snapshot'\n          AND COALESCE(observation.source_event_at, observation.scheduled_for) < requested_cutoff\n        LIMIT 1\n    ),\n    candidates AS (\n        SELECT slot.observation_id\n        FROM public.youtube_live_absence_slots AS slot\n        WHERE slot.scheduled_for < requested_cutoff\n          AND NOT EXISTS (SELECT 1 FROM active_old_live)\n          AND NOT EXISTS (SELECT 1 FROM processing_old_live)\n          AND NOT EXISTS (SELECT 1 FROM replaying_old_live)\n        ORDER BY slot.scheduled_for, slot.observation_id\n        LIMIT CASE\n            WHEN requested_limit BETWEEN 1 AND 1000 THEN requested_limit\n            ELSE 0\n        END\n        FOR UPDATE OF slot SKIP LOCKED\n    )\n    DELETE FROM public.youtube_live_absence_slots AS slot\n    USING candidates AS candidate\n    WHERE slot.observation_id = candidate.observation_id\n      AND slot.scheduled_for < requested_cutoff\n    RETURNING slot.observation_id\n"
+
 FUNCTION discard_bot_reply_outbox_manual_review(requested_outbox_id bigint, operator_actor text, operator_reason text, observed_iris_state text) RETURNS text LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nDECLARE\n    decided_at TIMESTAMPTZ := clock_timestamp();\n    normalized_actor TEXT := btrim(operator_actor);\n    normalized_reason TEXT := btrim(operator_reason);\n    normalized_iris_state TEXT := btrim(observed_iris_state);\n    target_id BIGINT;\n    target_status TEXT;\nBEGIN\n    SELECT id, status\n    INTO target_id, target_status\n    FROM public.bot_reply_outbox\n    WHERE id = requested_outbox_id\n    FOR UPDATE;\n\n    IF NOT FOUND THEN\n        RETURN 'not_found';\n    END IF;\n    IF target_status <> 'manual_review' THEN\n        RETURN 'not_manual_review';\n    END IF;\n    IF normalized_actor IS NULL\n        OR normalized_actor !~ '^[A-Za-z0-9._:@-]{1,64}$'\n        OR normalized_reason IS NULL\n        OR octet_length(normalized_reason) NOT BETWEEN 1 AND 256\n        OR normalized_reason ~ '[[:cntrl:]]'\n    THEN\n        RETURN 'invalid_operator_metadata';\n    END IF;\n    IF normalized_iris_state IS NULL\n        OR normalized_iris_state NOT IN (\n            'queued',\n            'preparing',\n            'prepared',\n            'sending',\n            'handoff_completed',\n            'failed',\n            'outcome_unknown',\n            'not_found'\n        )\n    THEN\n        RETURN 'invalid_iris_state';\n    END IF;\n\n    INSERT INTO public.bot_reply_outbox_resolution_audit (\n        outbox_id,\n        decision,\n        observed_iris_state,\n        actor,\n        reason,\n        recorded_at\n    ) VALUES (\n        target_id,\n        'discarded_without_replay',\n        normalized_iris_state,\n        normalized_actor,\n        normalized_reason,\n        decided_at\n    );\n\n    UPDATE public.bot_reply_outbox\n    SET status = 'discarded',\n        payload = NULL,\n        claim_token = NULL,\n        lease_until = NULL,\n        last_error = 'operator discarded manual review without replay',\n        updated_at = decided_at\n    WHERE id = target_id;\n\n    RETURN 'discarded';\nEND\n"
 
 FUNCTION enforce_bot_reply_outbox_discard_audit() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF NEW.status <> 'discarded' THEN\n        RETURN NEW;\n    END IF;\n    IF TG_OP = 'INSERT' THEN\n        RAISE EXCEPTION 'discarded reply transition requires an audited manual-review decision'\n            USING ERRCODE = '23514';\n    END IF;\n    IF OLD.status = 'discarded' THEN\n        RETURN NEW;\n    END IF;\n    IF OLD.status <> 'manual_review'\n        OR NEW.payload IS NOT NULL\n        OR NEW.claim_token IS NOT NULL\n        OR NEW.lease_until IS NOT NULL\n        OR NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox_resolution_audit AS audit\n            WHERE audit.outbox_id = NEW.id\n              AND audit.decision = 'discarded_without_replay'\n        )\n    THEN\n        RAISE EXCEPTION 'discarded reply transition requires an audited manual-review decision'\n            USING ERRCODE = '23514';\n    END IF;\n\n    RETURN NEW;\nEND\n"
@@ -1568,14 +1621,12 @@ FUNCTION lock_youtube_collection_projection(requested_generation bigint) RETURNS
 
 FUNCTION notification_template_row_version() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF (NEW.body, NEW.template_key, NEW.channel_id, NEW.id)\n        IS DISTINCT FROM (OLD.body, OLD.template_key, OLD.channel_id, OLD.id) THEN\n        NEW.row_version := OLD.row_version + 1;\n    ELSE\n        NEW.row_version := OLD.row_version;\n    END IF;\n    RETURN NEW;\nEND;\n"
 
-FUNCTION populate_youtube_collection_job_lease_failure_diagnostics() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF OLD.slot_state = 'DEFERRED'\n        AND OLD.last_error_code IS NOT NULL\n        AND OLD.last_error_code <> 'shutdown_release'\n        AND OLD.last_failure_code IS NULL\n        AND OLD.last_failure_class IS NULL\n        AND OLD.last_failure_detail IS NULL\n        AND OLD.last_failure_at IS NULL\n    THEN\n        NEW.last_failure_code := OLD.last_error_code;\n        NEW.last_failure_class := 'legacy_collector';\n        NEW.last_failure_detail := 'legacy_collector';\n        NEW.last_failure_at := OLD.updated_at;\n    ELSIF OLD.slot_state = 'ACTIVE'\n        AND NEW.slot_state = 'DEFERRED'\n        AND NEW.last_error_code IS NOT NULL\n        AND NEW.last_error_code <> 'shutdown_release'\n        AND OLD.last_failure_code IS NOT DISTINCT FROM NEW.last_failure_code\n        AND OLD.last_failure_class IS NOT DISTINCT FROM NEW.last_failure_class\n        AND OLD.last_failure_detail IS NOT DISTINCT FROM NEW.last_failure_detail\n        AND OLD.last_failure_at IS NOT DISTINCT FROM NEW.last_failure_at\n    THEN\n        NEW.last_failure_code := NEW.last_error_code;\n        NEW.last_failure_class := 'legacy_collector';\n        NEW.last_failure_detail := 'legacy_collector';\n        NEW.last_failure_at := clock_timestamp();\n    END IF;\n    RETURN NEW;\nEND\n"
-
 FUNCTION reject_bot_reply_outbox_replay_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_replay_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION reject_bot_reply_outbox_resolution_audit_mutation() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER true LEAKPROOF false PARALLEL u CONFIG search_path=pg_catalog BODY "\nBEGIN\n    IF TG_OP = 'DELETE'\n        AND NOT EXISTS (\n            SELECT 1\n            FROM public.bot_reply_outbox\n            WHERE id = OLD.outbox_id\n        )\n    THEN\n        RETURN OLD;\n    END IF;\n\n    RAISE EXCEPTION 'bot_reply_outbox_resolution_audit events are immutable'\n        USING ERRCODE = '55000';\nEND\n"
 
 FUNCTION scrub_bot_command_execution_terminal_summary() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.result_summary := NEW.status;\n    RETURN NEW;\nEND\n"
 
-FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
+FUNCTION scrub_bot_webhook_inbox_terminal_payload() RETURNS trigger LANGUAGE plpgsql VOLATILITY v SECURITY_DEFINER false LEAKPROOF false PARALLEL u BODY "\nBEGIN\n    IF NEW.payload IS DISTINCT FROM '{}'::jsonb THEN\n        RAISE WARNING 'bot_webhook_inbox terminal payload was scrubbed by the compatibility trigger; a writer that does not clear payload is running';\n    END IF;\n    NEW.payload := '{}'::jsonb;\n    RETURN NEW;\nEND\n"
 
 FUNCTION youtube_schedule_collabo_talent_names_valid(names text[]) RETURNS boolean LANGUAGE sql VOLATILITY i SECURITY_DEFINER false LEAKPROOF false PARALLEL s CONFIG search_path=pg_catalog BODY "\n    SELECT COALESCE(pg_catalog.array_ndims(names), 1) = 1\n       AND COALESCE(pg_catalog.array_lower(names, 1), 1) = 1\n       AND pg_catalog.cardinality(names) <= 32\n       AND NOT EXISTS (\n           SELECT 1\n           FROM pg_catalog.unnest(names) AS name\n           WHERE name IS NULL\n              OR pg_catalog.octet_length(name) < 1\n              OR pg_catalog.octet_length(name) > 256\n       );\n"

@@ -21,8 +21,8 @@
 ├── scripts/                        # architecture, deploy, log, runtime, CI helpers
 └── deploy/compose/                 # Docker Compose baselines and overlays
     ├── docker-compose.prod.yml     # production compose baseline
-    ├── docker-compose.seoul.yml    # Seoul split-host AP (youtube-collector-b)
-    └── docker-compose.main-ap.yml  # main-host AP overlay reserved for collector-c live-compat; service remains youtube-collector
+    ├── docker-compose.live-compat.yml # main-host live wiring overlay (always applied; owns collector-c ports/volumes)
+    └── docker-compose.seoul.yml    # Seoul split-host AP (youtube-collector-b)
 ```
 
 `go.work` ties the root module, the Go runtime/shared modules under `hololive/`, and `shared-go/` together. The three production runtime binaries (`hololive-api`, `alarm-worker`, `youtube-collector`) are implemented in Go 1.27.x; `admin-dashboard/` contains the dashboard frontend/backend assets outside the Go runtime count.
@@ -109,7 +109,7 @@ The production baseline is Docker Compose, not Kubernetes. The main files are:
 
 - `deploy/compose/docker-compose.prod.yml`: production service shape;
 - `deploy/compose/docker-compose.seoul.yml`: Seoul split-host active-active AP (`youtube-collector-b`);
-- `deploy/compose/docker-compose.main-ap.yml`: main-host AP overlay reserved for collector-c live-compat; Compose service remains `youtube-collector`;
+- `deploy/compose/docker-compose.live-compat.yml`: main-host live wiring overlay applied with every central up/down; the main-host collector-c is `youtube-collector` in prod.yml;
 - `scripts/deploy/`: deployment and compose validation helpers;
 - `scripts/logs/`: status and smoke-check helpers;
 - `docs/current/runbooks/`: current service runbooks (`youtube-collector.md` is the YouTube collect runtime);

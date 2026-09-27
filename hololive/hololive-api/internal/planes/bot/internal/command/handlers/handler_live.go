@@ -113,11 +113,13 @@ func (c *LiveCommand) sendLiveQuery(ctx context.Context, room string, request li
 		return nil
 	}
 
-	if result.Status != livequery.Complete {
-		// 사용자 응답에서 뺀 조회 범위 진단은 운영자가 부분·미확인 결과를 추적하도록 로그로 남긴다.
+	diagnostics := result.DiagnosticCounts()
+	if result.Status != livequery.Complete || diagnostics != (livequery.Diagnostics{}) {
+		// D1/D2 보존 증거는 조회를 막지 않지만 불일치 조사를 위해 기존 운영 로그에 남긴다.
 		c.Deps().Logger.InfoContext(ctx, "live query incomplete",
 			slog.String("status", string(result.Status)),
 			slog.Any("reasons", result.ReasonCounts()),
+			slog.Any("nonblocking_diagnostics", diagnostics),
 			slog.Int("items", len(result.Items)),
 			slog.Time("as_of", result.AsOf),
 		)

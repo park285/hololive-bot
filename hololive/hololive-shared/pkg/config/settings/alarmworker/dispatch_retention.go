@@ -24,11 +24,12 @@ type DispatchRetentionConfig struct {
 }
 
 func loadDispatchRetentionConfig() (DispatchRetentionConfig, error) {
-	config := DispatchRetentionConfig{
-		Enabled: sharedenv.Bool("ALARM_DISPATCH_RETENTION_ENABLED", true),
+	enabled, err := sharedenv.BoolE("ALARM_DISPATCH_RETENTION_ENABLED", true)
+	if err != nil {
+		return DispatchRetentionConfig{}, fmt.Errorf("alarm dispatch retention enabled: %w", err)
 	}
 
-	var err error
+	config := DispatchRetentionConfig{Enabled: enabled}
 
 	if config.Interval, err = load.RequiredMillisDurationEnv("ALARM_DISPATCH_RETENTION_INTERVAL_MS", time.Hour); err != nil {
 		return DispatchRetentionConfig{}, fmt.Errorf("required millis duration env: %w", err)

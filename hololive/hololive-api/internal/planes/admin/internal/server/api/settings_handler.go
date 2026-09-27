@@ -50,7 +50,6 @@ type SettingsActivityLogger interface {
 type SettingsReadRecentLogsFunc func(limit int) (any, error)
 
 type ConfigPublisher interface {
-	PublishScraperProxy(ctx context.Context, enabled bool) error
 	PublishAlarmAdvanceMinutes(ctx context.Context, minutes int) error
 }
 
@@ -65,9 +64,10 @@ type SettingsHandler struct {
 	ConfigPublisher ConfigPublisher
 }
 
+// updateSettingsRequest의 scraperProxyEnabled 필드는 DEC-20260926-hololive-legacy-env-config-retirement로 지웠다. 소비자인
+// iris-console이 먼저 이 필드를 보내지 않고 요청에 넣으면 거절하도록 바뀌었다.
 type updateSettingsRequest struct {
-	AlarmAdvanceMinutes *int  `json:"alarmAdvanceMinutes"`
-	ScraperProxyEnabled *bool `json:"scraperProxyEnabled"`
+	AlarmAdvanceMinutes *int `json:"alarmAdvanceMinutes"`
 }
 
 type updateLLMSettingsRequest struct {
@@ -222,8 +222,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	}
 
 	s := h.Settings.Get()
-	runtimeState := h.ScraperProxyRuntimeState(s.ScraperProxyEnabled)
-	runtime := runtimeState.AsMap()
+	runtime := h.SettingsRuntimeState().AsMap()
 	ginjson.Respond(c, 200, settingsResponse{Status: "ok", Settings: s, Runtime: runtime})
 }
 
@@ -248,7 +247,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	runtime := h.applySettingsRuntime(c.Request.Context(), current, alarmAdvanceUpdated)
-	h.publishUpdateResult(c.Request.Context(), runtime, req.ScraperProxyEnabled, req.AlarmAdvanceMinutes)
+	h.publishUpdateResult(c.Request.Context(), runtime, req.AlarmAdvanceMinutes)
 	h.logSettingsUpdate(current, runtime)
 
 	ginjson.Respond(c, 200, settingsUpdateResponse{Status: "ok", Message: "Settings updated", Settings: current, Runtime: runtime})
@@ -289,16 +288,11 @@ func (req updateSettingsRequest) applyTo(current *settingssvc.Settings) bool {
 		current.TargetMinutes = sharedchecker.BuildRuntimeTargetMinutes(*req.AlarmAdvanceMinutes)
 	}
 
-	if req.ScraperProxyEnabled != nil {
-		current.ScraperProxyEnabled = *req.ScraperProxyEnabled
-	}
-
 	return alarmAdvanceUpdated
 }
 
 func (h *SettingsHandler) applySettingsRuntime(ctx context.Context, current settingssvc.Settings, alarmAdvanceUpdated bool) map[string]any {
-	scraperProxyResult := h.ApplyScraperProxy(ctx, current.ScraperProxyEnabled)
-	runtime := scraperProxyResult.AsMap()
+	runtime := map[string]any{}
 
 	if alarmAdvanceUpdated {
 		alarmAdvanceResult := h.ApplyAlarmAdvanceMinutes(ctx, current.AlarmAdvanceMinutes)
@@ -310,25 +304,14 @@ func (h *SettingsHandler) applySettingsRuntime(ctx context.Context, current sett
 
 func (h *SettingsHandler) logSettingsUpdate(current settingssvc.Settings, runtime map[string]any) {
 	h.logActivity("settings_update", "Settings updated", map[string]any{
-		"alarm_advance_minutes":  current.AlarmAdvanceMinutes,
-		"scraper_proxy_enabled":  current.ScraperProxyEnabled,
-		"scraper_runtime_status": runtime,
+		"alarm_advance_minutes": current.AlarmAdvanceMinutes,
+		"runtime_status":        runtime,
 	})
 }
 
-func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[string]any, scraperProxyEnabled *bool, alarmAdvanceMinutes *int) {
+func (h *SettingsHandler) publishUpdateResult(ctx context.Context, runtime map[string]any, alarmAdvanceMinutes *int) {
 	if h.ConfigPublisher == nil {
 		return
-	}
-
-	if scraperProxyEnabled != nil {
-		if err := h.ConfigPublisher.PublishScraperProxy(ctx, *scraperProxyEnabled); err != nil {
-			runtime["config_publish_scraper_proxy"] = false
-			runtime["config_publish_scraper_proxy_error"] = fmt.Sprint(err)
-			h.safeLogger().Warn("Failed to publish scraper proxy update", slog.Any("error", err))
-		} else {
-			runtime["config_publish_scraper_proxy"] = true
-		}
 	}
 
 	if alarmAdvanceMinutes != nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/kapu/hololive-api/internal/planes/admin/internal/server/api"
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
+	sharedtestutil "github.com/kapu/hololive-shared/pkg/testutil"
 )
 
 func adminAllowlistRouter(t *testing.T, allowedIPs []string) *gin.Engine {
@@ -25,7 +26,7 @@ func adminAllowlistRouter(t *testing.T, allowedIPs []string) *gin.Engine {
 		slog.New(slog.DiscardHandler),
 		(&api.Handler{}).DomainHandlers(),
 		&api.AuthHandler{},
-		nil,
+		sharedtestutil.NewTestCacheService(t.Context(), t),
 	)
 	if err != nil {
 		t.Fatalf("ProvideAPIRouter() error = %v", err)

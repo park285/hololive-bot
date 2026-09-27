@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	fallbackReasonUnloaded = "unloaded"
-	fallbackReasonMissing  = "missing"
+	lookupMissReasonUnloaded = "unloaded"
+	lookupMissReasonMissing  = "missing"
 )
 
 var knownNamespaces = []string{
@@ -25,14 +25,13 @@ var knownNamespaces = []string{
 	NamespaceProfileCard,
 	NamespaceRankCard,
 	NamespaceTimeFmt,
-	NamespaceKaring,
 }
 
 var (
 	metricsInitOnce sync.Once
 
-	loadFailuresTotal   prometheus.Counter
-	lookupFallbackTotal *prometheus.CounterVec
+	loadFailuresTotal prometheus.Counter
+	lookupMissTotal   *prometheus.CounterVec
 )
 
 func initMetrics() {
@@ -40,20 +39,21 @@ func initMetrics() {
 		loadFailuresTotal = promauto.NewCounter(
 			prometheus.CounterOpts{
 				Name: "hololive_messagestrings_load_failures_total",
-				Help: "Total failed message_strings loads from PostgreSQL (explicit Load or lazy load on lookup).",
+				Help: "Total failed message_strings loads from PostgreSQL at runtime startup.",
 			},
 		)
-		lookupFallbackTotal = promauto.NewCounterVec(
+		// metric 이름은 대시보드 연속성을 위해 유지한다. 코드 대체 문구는 없어졌으므로 값은 "조회했지만 값이 없음"을 뜻한다.
+		lookupMissTotal = promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "hololive_messagestrings_lookup_fallback_total",
-				Help: "Total message_strings lookups that returned empty so the caller used a code-side fallback, by reason (unloaded: store not loaded, missing: namespace/key absent) and namespace.",
+				Help: "Total message_strings lookups that found no value, by reason (unloaded: Load was not called, missing: namespace/key absent) and namespace. Required keys are validated at startup, so increases on validated keys indicate a wiring defect; dynamic label lookups use the raw value.",
 			},
 			[]string{"reason", "namespace"},
 		)
 
-		for _, reason := range []string{fallbackReasonUnloaded, fallbackReasonMissing} {
+		for _, reason := range []string{lookupMissReasonUnloaded, lookupMissReasonMissing} {
 			for _, namespace := range knownNamespaces {
-				lookupFallbackTotal.WithLabelValues(reason, namespace)
+				lookupMissTotal.WithLabelValues(reason, namespace)
 			}
 		}
 	})
@@ -69,12 +69,12 @@ func observeLoadFailure() {
 	loadFailuresTotal.Inc()
 }
 
-func observeLookupFallback(reason, namespace string) {
+func observeLookupMiss(reason, namespace string) {
 	initMetrics()
 
-	if lookupFallbackTotal == nil {
+	if lookupMissTotal == nil {
 		return
 	}
 
-	lookupFallbackTotal.WithLabelValues(reason, namespace).Inc()
+	lookupMissTotal.WithLabelValues(reason, namespace).Inc()
 }

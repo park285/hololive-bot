@@ -170,7 +170,7 @@ func (c *MemberInfoCommand) ensureDeps() error {
 }
 
 func (c *MemberInfoCommand) resolveMember(ctx context.Context, channelID, englishName, query string) (*domain.Member, error) {
-	members, err := domain.LoadAllMembers(c.Deps().MembersData.WithContext(ctx))
+	members, err := c.Deps().MembersData.WithContext(ctx).LoadAllMembers()
 	if err != nil {
 		return nil, fmt.Errorf("load member information snapshot: %w", err)
 	}

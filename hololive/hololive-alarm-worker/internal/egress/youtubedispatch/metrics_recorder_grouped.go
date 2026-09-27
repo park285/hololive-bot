@@ -35,7 +35,6 @@ func (mr *MetricsRecorder) recordGroupedRequestBuildFailure(
 		slog.Int("count", len(validOutboxes)),
 		dedupeKeyLogAttrForOutboxes(validOutboxes),
 		slog.Any("error", err))
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key", err)
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", "dedupe key")
 
 	for i := range validRows {
@@ -69,7 +68,6 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 		slog.Int("count", len(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys),
 		slog.Any("error", sendErr))
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, failedAt, "grouped", "failure", reason, sendErr)
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, failedAt, "grouped", "failure", reason)
 
 	for i := range validRows {
@@ -78,7 +76,6 @@ func (mr *MetricsRecorder) recordGroupedSendFailure(
 }
 
 func (mr *MetricsRecorder) recordGroupedSuccess(
-	ctx context.Context,
 	group *deliveryGroup,
 	validRows []domain.YouTubeNotificationDelivery,
 	validOutboxes []domain.YouTubeNotificationOutbox,
@@ -96,7 +93,6 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 		slog.String("kind", string(kind)),
 		slog.Int("count", len(validRows)),
 		dedupeKeyLogAttr(sendReq.dedupeKeys))
-	mr.auditLogger.logCommunityShortsDeliveryAudit(ctx, validRows, validOutboxes, sentAt, "grouped", "success", "", nil)
 	mr.auditLogger.logCommunityShortsDeliveryResult(validRows, validOutboxes, sentAt, "grouped", "success", "")
 
 	mu.Lock()
@@ -110,7 +106,7 @@ func (mr *MetricsRecorder) recordGroupedSuccess(
 	mu.Unlock()
 }
 
-func groupedDeliveryFields(group *deliveryGroup) (result1, result2 string, result3 domain.OutboxKind) {
+func groupedDeliveryFields(group *deliveryGroup) (roomID, channelID string, kind domain.OutboxKind) {
 	if group == nil {
 		return "", "", ""
 	}

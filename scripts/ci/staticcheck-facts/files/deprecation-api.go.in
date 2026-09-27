@@ -1,0 +1,17 @@
+// Package api는 source 선언 순서와 export data method 순서가 다른 SDK 모양을 재현한다.
+package api
+
+type Client struct{}
+
+// Decode는 일반 method보다 먼저 선언된 generic method다. export data는 generic method를 뒤에 둔다.
+func (c *Client) Decode[T any](value T) T {
+	return value
+}
+
+// Legacy는 호출자가 SA1019를 계속 받아야 하는 실제 폐기 API다.
+//
+// Deprecated: use Healthy instead.
+func (c *Client) Legacy() {}
+
+// Healthy는 source 순서상 Legacy 다음이며 export data에서는 Legacy의 source index를 차지한다.
+func (c *Client) Healthy() {}

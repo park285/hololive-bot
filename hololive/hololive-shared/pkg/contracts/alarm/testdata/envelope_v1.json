@@ -24,8 +24,7 @@
         "content_id": "video:fixture-001",
         "payload": "{\"video_id\":\"fixture-001\",\"title\":\"Fixture Stream\"}"
       }
-    ],
-    "render_template_key": "OUTBOX_VIDEO"
+    ]
   },
   "claim_keys": [
     "notified:claim:room-1",

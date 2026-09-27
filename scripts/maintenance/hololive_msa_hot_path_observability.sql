@@ -37,20 +37,6 @@ WHERE authorized_at IS NOT NULL
 GROUP BY kind, delivery_status
 ORDER BY rows DESC;
 
-\echo 'community/shorts duplicate sent-state candidates'
-SELECT
-    kind,
-    post_id,
-    count(post_id) AS rows,
-    min(alarm_sent_at) AS first_alarm_sent_at,
-    max(alarm_sent_at) AS last_alarm_sent_at
-FROM youtube_community_shorts_alarm_states
-WHERE alarm_sent_at IS NOT NULL
-GROUP BY kind, post_id
-HAVING count(post_id) > 1
-ORDER BY rows DESC, last_alarm_sent_at DESC
-LIMIT 50;
-
 \echo 'sent tracking rows missing canonical alarm state'
 SELECT
     t.kind,

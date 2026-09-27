@@ -20,7 +20,7 @@ type reduceSession struct {
 }
 
 func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time) (Decision, error) {
-	if evidence.Kind != contract.KindLiveSnapshot {
+	if !reducibleKind(evidence.Kind) {
 		return Decision{}, fmt.Errorf("live reducer received kind %q", evidence.Kind)
 	}
 
@@ -45,6 +45,12 @@ func Reduce(state State, evidence Evidence, grace time.Duration, dbNow time.Time
 	applyFacts(&session)
 
 	return session.decision(), nil
+}
+
+// reducibleKind는 수명 사실을 전달하는 kind만 reducer에 들인다.
+// 영상 확인은 POSITIVE_ONLY이므로 absence slot을 만들지 않는다.
+func reducibleKind(kind contract.ObservationKind) bool {
+	return kind == contract.KindLiveSnapshot || kind == contract.KindVideoLiveCheck
 }
 
 func applyFacts(session *reduceSession) {

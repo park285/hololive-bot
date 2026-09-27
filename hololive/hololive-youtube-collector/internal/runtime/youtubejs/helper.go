@@ -155,7 +155,7 @@ func (h *Helper) spawn(cfg *Config) error {
 		timeoutMS = defaultHelperTimeout.Milliseconds()
 	}
 
-	args := make([]string, 0, 10+len(cfg.extraArgs))
+	args := make([]string, 0, 8+len(cfg.extraArgs))
 
 	args = append(args,
 		cfg.NodePath,
@@ -163,7 +163,6 @@ func (h *Helper) spawn(cfg *Config) error {
 		"--socket", h.socketPath,
 		"--protocol-version", strconv.Itoa(int(ProtocolVersion)),
 		"--request-read-timeout-ms", strconv.FormatInt(timeoutMS, 10),
-		"--shutdown-timeout-ms", strconv.FormatInt(cfg.ShutdownTimeout.Milliseconds(), 10),
 	)
 	args = append(args, cfg.extraArgs...)
 
@@ -229,7 +228,7 @@ func (h *Helper) waitForSocketEvent(ctx context.Context, tick <-chan time.Time) 
 	case <-tick:
 		out, err := helperSocketReadyResult(ctx, h.socketPath)
 
-		return out, errors.Join(err)
+		return out, err
 	}
 }
 
@@ -362,10 +361,6 @@ func helperExitedBeforeReady(waitErr error) error {
 }
 
 func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	if timeout <= 0 {
 		return context.WithCancel(ctx)
 	}

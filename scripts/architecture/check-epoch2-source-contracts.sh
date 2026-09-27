@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-MIGRATIONS_DIR="${ROOT_DIR}/hololive/hololive-api/scripts/migrations"
 EPOCH2_CONTRACT="${SCRIPT_DIR}/epoch2_legacy_contract.sha256"
 
 check_sources() {
@@ -35,23 +34,10 @@ check_sources() {
   done
 }
 
-check_sources \
-  "epoch-1 message-contract repair" \
-  "${MIGRATIONS_DIR}/manual/epoch1_message_contract_repair_sources" \
-  074_create_message_strings.sql \
-  076_seed_new_command_templates.sql \
-  077_seed_notification_celebration_templates.sql \
-  078_unify_outbox_header_body_templates.sql \
-  079_seed_error_strings.sql \
-  080_refresh_help_and_ambiguous.sql \
-  081_seed_canonical_alarm_templates.sql \
-  082_seed_calendar_image_strings.sql
-
-check_sources \
-  "epoch-1 recovery" \
-  "${MIGRATIONS_DIR}/manual/epoch1_recovery_sources" \
-  114_drop_unused_indexes.sql
-
+# epoch-1 message-contract repair(074-082)와 114 복구 소스 사본은 repair_message_contract_074_082.sh·preflight-114-restore.sh와
+# 함께 지웠다(DEC-20260926-hololive-retired-rollback-tooling, stack-audit 2026-09-26 T19). T18에서 운영 schema_migrations에
+# 001_schema_epoch2_baseline·182_epoch2_legacy_ledger_cleanup이 기록되고 epoch-1 파일명 행이 0건, epoch-1 이미지 보존이 없음을
+# 확인해 epoch-1 rollback 창을 닫았다. 아래는 integration test가 쓰는 epoch-1 fixture의 checksum 고정만 남긴다.
 check_sources \
   "epoch-1 integration" \
   "${ROOT_DIR}/hololive/hololive-shared/pkg/service/alarm/dispatchoutbox/testdata/epoch1_migrations" \

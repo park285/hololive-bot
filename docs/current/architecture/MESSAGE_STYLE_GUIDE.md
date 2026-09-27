@@ -5,7 +5,8 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 
 ## 1. 범위와 SSOT
 
-- 문구의 SSOT는 DB 카탈로그 2개다: `notification_templates`(Go text/template 본문, template_key), `message_strings`(namespace/key/value). 코드 인라인 문구는 허용하지 않으며, 남은 인라인 라벨은 `timefmt`/`karing` 네임스페이스로 추출한다.
+- 문구의 SSOT는 DB 카탈로그 2개다: `notification_templates`(Go text/template 본문, template_key), `message_strings`(namespace/key/value). 코드 인라인 문구는 허용하지 않으며, 남은 인라인 라벨은 `timefmt` 네임스페이스로 추출한다.
+- `message_strings`는 bot plane·llm plane·alarm-worker가 기동 때 한 번 적재하고, 코드가 쓰는 타입 있는 key(`messagestrings.Key`)와 동적 조회 namespace를 검증한다. 누락되면 기동에 실패하며, 코드 대체 문구·조회 중 재적재·`FallbackSentinel`은 없다. 템플릿 렌더 실패 응답은 `error/command_processing_failed` 문구를 쓰고, 예약 알림은 렌더에 실패하면 발송하지 않는다(`DEC-20260926-hololive-message-strings-startup-validation`). 새 key를 추가하면 `messagestrings` key 목록과 시드 SQL 계약 테스트(format 인자 수 포함)를 함께 갱신한다.
 - 소비 plane은 4곳: bot plane formatter(`hololive-api/internal/planes/bot/.../formatter/`), llm plane scheduler(`hololive-api/internal/planes/llm/runtime/formatter_llm_scheduler.go`), alarm-worker(`hololive-alarm-worker/internal/app/workerapp/`), shared youtube outbox(`hololive-shared/pkg/service/youtube/outbox/`). 같은 키를 복수 plane이 렌더하므로 문구 변경 전에 §11 소비자 매트릭스를 확인한다.
 
 ## 2. 톤 원칙
@@ -80,11 +81,15 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 ## 8. '전체보기' 접기(fold) 정책
 
 - `util.FoldForSeeMore(text, KakaoSeeMoreThreshold)` — 임계(250 rune) 이하 no-op. 초과 시 머리 문단(첫 빈 줄 앞의 줄, 최대 `KakaoSeeMoreHeadMaxLines`=4줄)의 마지막 줄 끝에 ZWSP×`KakaoSeeMorePadding`을 붙여 KakaoTalk이 머리 문단 + '전체보기'로 접게 한다. 4줄 안에 빈 줄이 없으면 첫 줄만 남긴다. 펼친 화면의 가시 문자는 원문과 같다.
-- 운영 기본값은 접기 ON(`BOT_SEE_MORE_FOLD` 기본 `true`)이다. `false`는 bot·llm plane 접기를 함께 끄는 운영 스위치다.
+- 운영 기본값은 접기 ON(`BOT_SEE_MORE_FOLD` 기본 `true`)이다. bot·llm plane과 alarm-worker의 목록 렌더 경로가 같은 설정을 읽으며 `false`는 해당 프로세스의 접기를 끄는 운영 스위치다.
 - fold-in (긴 목록·다이제스트): `FormatHelp`(이미지 실패 시 텍스트), `LiveQuery`(`!라이브`, 표시 한도 안내는 머리 문단), `UpcomingStreams`, `ChannelSchedule`, `FormatAlarmList`, `MemberDirectory`, `FormatMemberInfo`(`!정보`), `FormatMemberNewsDigest`, `CelebrationCalendar`(이미지 실패 시 텍스트), `FormatMajorEventWeeklySummary`, `FormatMajorEventMonthlySummary`, `BroadcastHistory` — llm plane 동명 3곳(weekly/monthly/digest)은 bot과 fold parity를 유지한다.
+- 2026-09-27 사용자 요청으로 긴 여러 항목 알림도 fold-in에 포함한다: `OUTBOX_VIDEO_GROUP`, `OUTBOX_SHORTS_GROUP`, `OUTBOX_COMMUNITY_GROUP` 및 여러 방송을 묶은 알람 텍스트. 명령 목록과 동일한 helper·임계·머리 문단·패딩을 사용한다. 일반 전송층에서 모든 메시지를 무조건 접지 않는다.
 - 헤더 보조 행(개수·기간·표시 한도·일부 결과 안내)은 머리 문단 안에 두어 접힌 화면에서도 보이게 한다.
-- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 알림 푸시 전문(CMD_ALARM_NOTIFICATION*, ALARM_DISPATCH_*, OUTBOX_*, CELEBRATION_*, karing 카드).
+- fold-out (전문이 즉시 보여야 함): 상태·확인·에러 단문, 단일 알림, celebration 카드. 여러 항목 묶음 알림은 위 fold-in 규칙을 적용한다. 임계 이하·한 줄 메시지는 기존 helper의 no-op 규칙을 유지한다.
 - 명령 응답은 일반 방에서 `kakaoformat.Render`를 거친다. 이 변환은 연속 ZWSP 패딩을 보존한다(shared-go `TestRenderNeutralizedTextKeepsMarkdownCodeURLsAndFoldPadding`).
+- 사용자 지정 template/채널 override의 저장 본문과 펼친 가시 문자를 변경하지 않는다. 이미 접힌 본문에는 패딩을 중복 삽입하지 않는다. 로컬 검증은 실제 template→최종 text payload에서 수행하며 카카오톡 클라이언트의 접힌 화면은 별도 승인된 테스트 방 수신으로 확인한다.
+
+`!라이브`의 확인 완료 빈 결과는 '현재 방송 중인 멤버가 없습니다.' 한 문장입니다. 미확인 빈 결과는 '현재 방송 상태를 확인할 수 없습니다.'이며 두 결과를 바꾸어 쓰지 않습니다. 공개 방송 범위 설명·조회 미완료 채널·기준 시각은 붙이지 않고 운영 로그로 남깁니다. 멤버 지정 조회는 기존 `CMD_MEMBER_NOT_LIVE`를 유지합니다. migration 220은 217 표준 전역 본문만 바꾸고 사용자 지정 본문·채널 override를 보존합니다.
 
 ## 9. 에러·알림 단문 규칙
 
@@ -101,7 +106,7 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 - 테스트 영향은 두 부류로 갈린다 — 반드시 같은 커밋에서 처리한다:
   - **REAL-SEED**(시드 본문을 실제 렌더/조회 — 바꾸면 깨짐): alarm_dispatch 골든, celebration 골든, `store_test.go` 값 핀, `messages_seed_parity_test.go`(키셋·글리프), 라벨 lookup 테스트.
   - **INLINE-TEMPLATE**(테스트 로컬 본문 주입 — 안 깨지지만 미러가 낡음): formatter/llm/outbox 골든의 로컬 본문 상수는 시드의 의도적 미러이므로 lockstep으로 갱신한다.
-- channel별 override 행(`channel_id IS NOT NULL`)은 보존이 정책이다 — 새 톤이 자동 적용되지 않으므로 재작성 시 override 감사 SQL로 대상 방을 기록한다.
+- channel별 override 행(`channel_id IS NOT NULL`)은 보존이 정책이다 — 새 톤이 자동 적용되지 않으므로 재작성 시 키별 override 목록(`GET /api/holo/templates/:key`의 `overrides`, 조회 SQL `hololive-shared/pkg/repository/queries/template_list_overrides.sql`)으로 대상 방을 기록한다.
 - 롤아웃: 템플릿/문자열 캐시는 프로세스별 무기한이므로 `hololive-api`와 `hololive-alarm-worker` **둘 다** 재시작해야 반영된다. (캘린더 PNG 디스크 캐시는 별도 — 렌더러 버전 bump가 담당.)
 
 ## 11. 소비자 매트릭스 (2026-07 기준)
@@ -117,8 +122,9 @@ KakaoTalk 사용자 노출 문구(텍스트 메시지·알림 푸시·에러/안
 | `error` ns | 37 | bot | messages_seed_parity(글리프·키셋) | — |
 | `notify` ns | 8 | bot | messages_seed_parity(키셋) | — |
 | `org`/`alarmtype`/`newscat`/`social`/`misc` | 25 | bot + llm + worker + outbox | store_test.go 값 핀, 라벨 lookup 테스트 | — |
-| `calendar` ns | 8(코드 사용 7 — `overflow_footer`는 단일 페이지 전환으로 미사용 시드 잔존) | bot(render) | calendar_strings_test.go (fallback byte-parity) | — |
-| `timefmt`/`karing` ns (신규) | 087에서 시드 | bot / alarm-worker | `%d` 포맷 계약 테스트(087 co-commit) | — |
+| `calendar` ns | 8(코드 사용 7 — `overflow_footer`는 단일 페이지 전환으로 미사용 시드 잔존) | bot(render) | calendar_strings_test.go (시드 store byte-equal, 코드 대체 문구 없음), seed_sql_contract_test.go(시드 존재·format 인자 수) | — |
+| `timefmt` ns (신규) | 087에서 시드 | bot | seed_sql_contract_test.go(타입 key의 시드 존재·format 인자 수), 세 runtime 기동 검증 | — |
+| `karing` ns (087·188) | **미사용 시드 잔존** (alarm-worker Karing 발송 삭제, `DEC-20260926-hololive-karing-egress-disposition`) | — | seed parser 표본(migration 188 행)만 | — |
 | `livecard` ns (092) | 4 — **미사용 시드 잔존** (라이브 카드 제거, `!라이브` 텍스트 회귀) | — | — | — |
 | `profilecard` ns (093) | 1 — **미사용 시드 잔존** (프로필 카드 제거, `!멤버` 텍스트 회귀) | — | — | — |
 | `rankcard` ns (094) | 3 | bot(render 순위 카드) | rank_test.go parity | — |

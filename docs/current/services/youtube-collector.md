@@ -23,6 +23,15 @@ AP fleet collector입니다. Holodex, Official Schedule, YouTube.js fetch/normal
 - DB job lease/fence and `PublishBatch` (checkpoint + observation insert)
 - Collector DB role `hololive_scraper`
 
+## 라이브 채널·영상 확인
+
+`DEC-20260926-hololive-live-absence-evidence`, `DEC-20260927-live-check-slot-isolation`과 [관측 계약 §3.4](../architecture/youtube-three-provider-convergence-contract-v2-20260814.md#34-라이브-채널영상-확인-관측-2026-09-26)를 따릅니다. `youtubejs_channel_live`는 `live_snapshot`만, 별도 lease의 `youtubejs_channel_live_check`는 `/v1/channel_live_check`의 `channel_live_check`만 발행합니다. snapshot 재시도는 성공한 채널 확인의 다음 슬롯을 막지 않습니다. 영상 확인은 canonical LIVE의 신선한 positive가 없을 때 projection이 만드는 `youtubejs_video_live` → `/v1/video_live_check` → `video_live_check` 경로입니다. 두 새 kind는 youtubejs 전용 schema 1/generation 1이며 기존 live_snapshot 세대는 바꾸지 않습니다.
+
+기본 cadence는 2분, evidence freshness는 270초입니다. 채널 확인은 resolve_url 1회와 선택 영상 player 최대 1회, 영상 확인은 player 1회이며 초기화용 config 조회·HTML·browse 보완·transport retry·자동 redirect를 사용하지 않습니다. 기존 목록 실패로 인한 job-level PARTIAL/defer는 아래 Atomic publish 계약을 유지하며, 새 확인의 UNKNOWN 자체를 추가 재시도의 이유로 삼지 않습니다.
+
+원시 영상·채널 identity, isLive/isLiveNow와 시작·종료 시각을 먼저 판정합니다. UNPLAYABLE은 LIVE/종료 모두에 올 수 있습니다. 회원 offer renderer는 MEMBERS_ONLY, 명시적인 isPrivate=false는 PUBLIC, identity와 isPrivate=true가 함께 확인된 경우만 PUBLIC_UNAVAILABLE입니다. LOGIN_REQUIRED·ERROR·messages·번역 문구만으로 공개 불가를 추정하지 않습니다. 모순·해석 불가와 요청/응답 계약 실패는 UNKNOWN으로 기록하여 과거 음성을 유지하지 않습니다. 취소·lease 상실·설정/내부 불변식 오류는 publish하지 않습니다. Collector는 canonical 테이블에 접근하거나 종료를 직접 적용하지 않습니다.
+
+
 ## 시청자 수 전용 수집
 
 `DEC-20260925-hololive-viewer-collection-retirement`에 따라 신규 `viewer_sample`을 수집하지 않습니다. YouTube.js의 `youtubejs_viewer` 작업과 `/v1/viewer` RPC를 제거했으며, `holodex_live`는 `live_snapshot`만 발행합니다. Holodex의 기존 `/live` 조회와 방송 상태·일정·채널 메타데이터는 유지합니다. 응답에 포함된 시청자 수를 표본으로 만드는 비용은 별개이므로 더 이상 viewer envelope·checkpoint·queue를 생성하지 않습니다.
@@ -35,7 +44,7 @@ Holodex live/schedule 작업은 채널 통계·사진 payload를 만들지 않�
 
 ## Atomic publish
 
-`PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 `DEFERRED` 및 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177 trigger가 DEFERRED release를 `legacy_collector`로 덮으면 같은 release transaction이 잠근 값을 복원합니다.
+`PublishBatch`는 `COMPLETE` terminal을 유지합니다. Scheduler는 `PARTIAL` output에 `PublishBatchAndDefer`를 사용하여 observation/checkpoint/queue와 `DEFERRED` 및 typed `last_failure_*`를 같은 PostgreSQL transaction에서 기록합니다. 성공한 `COMPLETE`/`PARTIAL` terminal commit 뒤에는 별도 defer를 수행하지 않습니다. collision complete는 `observation_collision/DATA_CONTRACT` durable diagnostic을 남기고, 성공 complete는 `last_error_code`만 지웁니다. Release는 `shutdown_release`/`renew_failed_release`/`superseded_release` shape이며 `last_failure_*`는 보존합니다. migration 177/189의 `legacy_collector` backfill trigger는 migration 218에서 지웠고, 기존 행의 `legacy_collector` 값은 이력으로 남습니다.
 
 Runner input의 `TargetSnapshot`은 canonical job contract가 요청한 kind를 한 번에 읽는 immutable view입니다. 요청 kind가 누락되면 fail-closed로 오류를 반환하며, 최종 authority는 계속 publish transaction의 lease fence/current projection/enabled target 검증입니다. Snapshot은 fallback이나 publish 검증 대체 경로가 아닙니다.
 
@@ -84,7 +93,7 @@ YouTube.js helper는 `RuntimeBaseDir` 아래 unique `0700` directory의 private 
 
 Canonical success-response ceiling env는 `YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES`입니다. 없으면 documented default입니다. 명시적 empty는 startup fail입니다.
 
-Helper proxy는 `/v1/bootstrap`에서만 설정되고 bootstrap당 `ProxyAgent` 하나를 공유합니다. Collection RPC는 `protocol_version`과 `max_success_response_bytes`를 전달하며 `proxy_url`이나 `max_aggregate_bytes`를 받지 않습니다. Success와 error envelope는 분리되고 unknown field, trailing JSON value, HTTP status/error tuple mismatch는 protocol mismatch로 fail-closed됩니다. Go request cancellation이나 client disconnect는 해당 RPC의 `AbortSignal`에만 전파됩니다.
+Helper bootstrap(`/v1/bootstrap`)은 `protocol_version`과 `limits`만 받고, bootstrap·`/health` 응답에는 proxy 항목이 없습니다. Helper는 proxy 없이 Node 내장 `fetch`로만 YouTube에 접속하며 upstream proxy 설정 경로는 없습니다. `SCRAPER_PROXY_*` 퇴역(`DEC-20260926-hololive-legacy-env-config-retirement`) 뒤 production에서 도달할 수 없던 helper proxy 프로토콜(Go `youtubejs.ProxyConfig`·bootstrap/health proxy 필드, Node proxy bootstrap·`ProxyAgent`·`--shutdown-timeout-ms` transport close 한도)과 `undici` 의존성을 matched pair로 지웠습니다. 두 쪽이 exact-key로 decode하므로 `proxy` 필드를 보내는 이전 collector와 새 helper, 또는 그 반대 조합은 bootstrap protocol mismatch로 fail-closed됩니다(helper는 같은 image의 collector가 띄우므로 정상 배포에서 섞이지 않습니다). Collection RPC는 `protocol_version`과 `max_success_response_bytes`를 전달하며 `proxy_url`이나 `max_aggregate_bytes`를 받지 않습니다. Success와 error envelope는 분리되고 unknown field, trailing JSON value, HTTP status/error tuple mismatch는 protocol mismatch로 fail-closed됩니다. Go request cancellation이나 client disconnect는 해당 RPC의 `AbortSignal`에만 전파됩니다.
 
 Channel live snapshot은 정규화 중 출력 크기의 하한을 검사하고, 예정 영상의 metadata가 해결될 때마다 scheduled/LIVE/unavailable 표현으로 하한을 갱신합니다. 한도 초과가 확정되면 다음 player 요청을 중단합니다. 미해결 restricted 중복은 고유 identity로 축소될 수 있으므로 원문의 큰 제목을 그대로 예산에 넣어 거절하지 않습니다. 최종 RPC 검증이 전체 응답 크기를 확인하며 raw upstream 응답의 최대 메모리까지 이 예산으로 제한하지는 않습니다.
 

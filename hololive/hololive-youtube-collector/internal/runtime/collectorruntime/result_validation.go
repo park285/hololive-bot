@@ -46,7 +46,7 @@ func ValidateCollectResult(
 	}
 
 	if result.Kind() == collectutil.CollectComplete {
-		return errors.Join(validateCompleteResult(result))
+		return validateCompleteResult(result)
 	}
 
 	if err := validatePartialResult(registration, result, observations); err != nil {
@@ -58,7 +58,7 @@ func ValidateCollectResult(
 
 func validateCompleteResult(result *collectutil.CollectResult) error {
 	if _, ok := result.PartialFailure(); ok {
-		return errors.Join(wrappedInvariantError("complete result contains a partial failure"))
+		return wrappedInvariantError("complete result contains a partial failure")
 	}
 
 	return nil
@@ -195,19 +195,19 @@ func validateEnvelopeContract(job sourceobservation.JobContract, envelope *contr
 
 func validateEnvelopeLease(spec *joblease.JobSpec, lease *contract.LeaseProof, envelope *contract.Envelope) error {
 	if envelope.Lease != *lease {
-		return errors.Join(wrappedInvariantError("observation lease or contract binding is invalid"))
+		return wrappedInvariantError("observation lease or contract binding is invalid")
 	}
 
 	if envelope.Lease.JobKey != spec.JobKey || envelope.Lease.CollectionJobKind != spec.CollectionJobKind {
-		return errors.Join(wrappedInvariantError("observation lease or contract binding is invalid"))
+		return wrappedInvariantError("observation lease or contract binding is invalid")
 	}
 
 	if envelope.CollectorInstance != lease.OwnerInstance || envelope.Lease.ProjectionGeneration != lease.ProjectionGeneration {
-		return errors.Join(wrappedInvariantError("observation lease or contract binding is invalid"))
+		return wrappedInvariantError("observation lease or contract binding is invalid")
 	}
 
 	if !envelope.ScheduledFor.Equal(lease.ScheduledFor) {
-		return errors.Join(wrappedInvariantError("observation lease or contract binding is invalid"))
+		return wrappedInvariantError("observation lease or contract binding is invalid")
 	}
 
 	return nil

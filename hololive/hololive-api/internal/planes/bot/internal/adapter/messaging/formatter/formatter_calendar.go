@@ -24,7 +24,6 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type calendarEntryView struct {
@@ -57,7 +56,7 @@ func (f *ResponseFormatter) CelebrationCalendar(ctx context.Context, month, year
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdCalendar, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)

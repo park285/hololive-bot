@@ -9,6 +9,8 @@
 
 기본 gate는 architecture gates, Go toolchain pin, `go work sync` drift, `gofmt`, `go fix` drift, `go mod tidy -diff`, `go vet`, `staticcheck`, stage-3 `golangci-lint`, NilAway, `go build`, PGO-off production policy, `go test -count=1`, race detector, `govulncheck`를 포함합니다. PostgreSQL integration test는 `TEST_DATABASE_URL`이 설정된 경우 추가 실행합니다.
 
+`staticcheck`는 `scripts/ci/staticcheck-facts/build.sh`가 검증·빌드한 binary만 씁니다. 인자 없이 실행하면 stdout에 binary 경로만 출력하고, 입력 manifest(`SHA256SUMS`)·module sum·zip hash·`-stack-profile-version` 신원이 어긋나면 재빌드 없이 실패합니다. 고정 x/tools objectpath 패치의 원인과 제거 조건은 `CHANGELOG.md`에 있습니다.
+
 ## 2. architecture/
 PR/릴리스 전 경계 게이트와 운영 검증 기록 렌더링 도구입니다. 공개 GitHub Release 본문은 [릴리즈 runbook](../docs/current/runbooks/release.md)의 GitHub 자동 생성 절차를 따릅니다. `render-release-notes.sh`는 별도 운영 기록용입니다.
 
@@ -53,7 +55,6 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/logs/ap-status.sh <host>` (osaka, seoul)
 - `./scripts/logs/ap-logs.sh <host> [youtube-collector|all]`
 - `./scripts/logs/ap-smoke.sh <host>`
-- `./scripts/logs/osaka-install-log-rollup.sh` - legacy Osaka log rollup timer를 masked 상태로 유지합니다.
 
 ## 5. review/
 리뷰 전달용 source/full bundle export와 사후 검증 스크립트입니다.
@@ -69,7 +70,6 @@ Compose 로그 조회/테일/보조 미러링 단일 진입점입니다.
 - `./scripts/runtime/alarm-dispatch-outbox-status.sh`
 - `./scripts/runtime/alarm-dispatch-outbox-requeue.sh`
 - `./scripts/runtime/alarm-dispatch-outbox-retention.sh`
-- `./scripts/runtime/requeue-alarm-dlq.sh`
 - `./scripts/runtime/set-iris-base-url.sh`
 
 ## 7. smoke/
@@ -82,7 +82,6 @@ Compose 설정과 런타임 readiness/health smoke test 스크립트입니다.
 수동 적용용 PostgreSQL 유지보수 SQL입니다.
 
 - `hololive_msa_hot_path_observability.sql`
-- `pg18_db_usage_optional_concurrent_indexes.sql`
 
 ## 9. ops/
 Valkey self-heal 및 PostgreSQL failover 운영 자산입니다.

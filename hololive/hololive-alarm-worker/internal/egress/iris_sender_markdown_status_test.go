@@ -16,9 +16,9 @@ func TestMarkdownAdmissionWaitsForExactHandoffOutcome(t *testing.T) {
 		want  error
 	}{
 		{name: "confirmed", state: "handoff_completed"},
-		{name: "failed", state: "failed", want: ErrKaringStatusFailed},
-		{name: "unknown", state: "outcome_unknown", want: ErrKaringOutcomeUnknown},
-		{name: "timeout", state: "sending", want: ErrKaringOutcomeUnknown},
+		{name: "failed", state: "failed", want: ErrReplyHandoffFailed},
+		{name: "unknown", state: "outcome_unknown", want: ErrReplyHandoffOutcomeUnknown},
+		{name: "timeout", state: "sending", want: ErrReplyHandoffOutcomeUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
@@ -36,7 +36,7 @@ func TestMarkdownAdmissionWaitsForExactHandoffOutcome(t *testing.T) {
 			sender := NewIrisMessageSender(client, WithMarkdownReplies(true),
 				WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
 
-			sender.karingStatusPollInterval = time.Nanosecond
+			sender.replyStatusPollInterval = time.Nanosecond
 
 			err := sender.SendMessage(ctx, testIrisSenderRoomID, "synthetic markdown")
 
@@ -64,7 +64,7 @@ func TestMarkdownMalformedAdmissionCannotReportSuccess(t *testing.T) {
 		sender := NewIrisMessageSender(client, WithMarkdownReplies(true),
 			WithMarkdownRoomChat(staticRooms{testIrisSenderRoomID: testIrisSenderOpenRoomKind}))
 		err := sender.SendMessage(t.Context(), testIrisSenderRoomID, "synthetic markdown")
-		require.ErrorIs(t, err, ErrKaringOutcomeUnknown)
+		require.ErrorIs(t, err, ErrReplyHandoffOutcomeUnknown)
 		require.Zero(t, client.statusCalls)
 		require.Len(t, client.markdownCalls, 1)
 	}

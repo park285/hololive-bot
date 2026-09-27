@@ -436,7 +436,7 @@ func TestHLP006(t *testing.T) {
 	})
 
 	if helper.bootstrap.State != StateReady || helper.bootstrap.RequestBodyBytes != 32<<10 ||
-		helper.bootstrap.ResponseBodyBytes != 256<<10 || helper.bootstrap.MaxInflight != 3 || helper.bootstrap.ProxyEnabled {
+		helper.bootstrap.ResponseBodyBytes != 256<<10 || helper.bootstrap.MaxInflight != 3 {
 		t.Fatalf("bootstrap = %#v", helper.bootstrap)
 	}
 
@@ -740,26 +740,6 @@ func testHLP012SpawnFail(t *testing.T) {
 	assertNoResidue(t, base)
 }
 
-func TestBootstrapErrorOmitsProxyUserinfo(t *testing.T) {
-	const secret = "super-secret"
-
-	base := t.TempDir()
-	cfg := fixtureConfig(t, base, "leak-proxy")
-
-	cfg.Proxy = ProxyConfig{Enabled: true, URL: "http://user:" + secret + "@127.0.0.1:9"}
-
-	_, _, err := Start(t.Context(), cfg)
-	if err == nil {
-		t.Fatal("expected bootstrap failure")
-	}
-
-	if strings.Contains(err.Error(), secret) {
-		t.Fatalf("Go error leaked proxy userinfo: %v", err)
-	}
-
-	assertNoResidue(t, base)
-}
-
 func liveHelperConfig(t *testing.T, base string) *Config {
 	t.Helper()
 
@@ -791,7 +771,6 @@ func fixtureConfig(t *testing.T, base, mode string) *Config {
 func matchingBootstrap(cfg *Config) BootstrapRequest {
 	return BootstrapRequest{
 		ProtocolVersion: ProtocolVersion,
-		Proxy:           BootstrapProxy{Enabled: cfg.Proxy.Enabled, URL: cfg.Proxy.URL},
 		Limits: BootstrapLimits{
 			RequestBodyBytes:  cfg.RequestBodyLimit,
 			ResponseBodyBytes: cfg.ResponseBodyLimit,

@@ -13,9 +13,17 @@ import (
 func (n *Notifier) claimDedup(ctx context.Context, payload *sendInput) (claimKeys []string, claimed bool, err error) {
 	notifyKey, logicalKey := n.notificationDedupKeys(payload)
 
-	notifyClaimed, logicalClaimed := n.dedupService.TryClaimPair(
+	notifyClaimed, logicalClaimed, err := n.dedupService.TryClaimPair(
 		ctx, notifyKey, logicalKey, constants.CacheTTL.NotificationSent,
 	)
+	if err != nil {
+		// 저장소 오류는 skip이 아니라 실패다. 이미 잡은 key1은 풀어 다음 시도가 다시 선점할 수 있게 한다.
+		if notifyClaimed {
+			n.releaseClaimsBestEffort(ctx, []string{notifyKey}, "release notification claim after dedup store error")
+		}
+
+		return nil, false, fmt.Errorf("claim notification dedup pair: %w", err)
+	}
 
 	if !notifyClaimed {
 		if logicalClaimed {

@@ -142,25 +142,9 @@ func (p *Publisher) PublishBatch(ctx context.Context, notifications []*domain.Al
 	return result, nil
 }
 
+// PublishDispatchBatch는 envelope을 pending delivery로 저장한다. 비교 전용 shadowed 행을 쓰던 PublishShadowDispatchBatch는
+// v3 handoff와 함께 삭제했다(DEC-20260926-hololive-outbox-v3-convergence).
 func (p *Publisher) PublishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
-	out, err := p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusPending)
-	if err != nil {
-		return out, fmt.Errorf("publish dispatch batch: %w", err)
-	}
-
-	return out, nil
-}
-
-func (p *Publisher) PublishShadowDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
-	out, err := p.publishDispatchBatch(ctx, envelopes, dispatchoutbox.StatusShadowed)
-	if err != nil {
-		return out, fmt.Errorf("publish dispatch batch: %w", err)
-	}
-
-	return out, nil
-}
-
-func (p *Publisher) publishDispatchBatch(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	startedAt := time.Now()
 
 	if len(envelopes) == 0 {
@@ -177,9 +161,9 @@ func (p *Publisher) publishDispatchBatch(ctx context.Context, envelopes []domain
 		observeAlarmDispatchPublishBatch(time.Since(startedAt), &result)
 	}()
 
-	result, err := p.publishEnvelopesWithStatus(ctx, envelopes, status)
+	result, err := p.publishEnvelopes(ctx, envelopes)
 	if err != nil {
-		return result, fmt.Errorf("publish envelopes with status: %w", err)
+		return result, fmt.Errorf("publish dispatch batch: %w", err)
 	}
 
 	return result, nil
@@ -195,8 +179,10 @@ func (p *Publisher) prepareDispatchEnvelopes(envelopes []domain.AlarmQueueEnvelo
 			envelopes[i].EnqueuedAt = p.now().UTC().Format(time.RFC3339)
 		}
 
-		if envelopes[i].Version == 0 {
-			envelopes[i].Version = contractsalarm.QueueEnvelopeVersionV1
+		// 버전이 없는 envelope을 V1으로 채우던 기본값은 지웠다. 모든 생산자가 버전을 명시하므로 다른 값은 생산자 결함이다.
+		if envelopes[i].Version != contractsalarm.QueueEnvelopeVersionV1 {
+			return fmt.Errorf("publish alarm dispatch batch: envelope %d: envelope version %d is unsupported (want %d)",
+				i, envelopes[i].Version, contractsalarm.QueueEnvelopeVersionV1)
 		}
 	}
 
@@ -244,35 +230,26 @@ func (p *Publisher) publishEnvelopes(
 	ctx context.Context,
 	envelopes []domain.AlarmQueueEnvelope,
 ) (dispatchoutbox.PublishBatchResult, error) {
-	out, err := p.publishEnvelopesWithStatus(ctx, envelopes, dispatchoutbox.StatusPending)
-	if err != nil {
-		return out, fmt.Errorf("publish envelopes with status: %w", err)
-	}
-
-	return out, nil
-}
-
-func (p *Publisher) publishEnvelopesWithStatus(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
 	if p.outbox == nil {
 		return dispatchoutbox.PublishBatchResult{RequestedDeliveries: len(envelopes)}, errors.New("publish alarm queue batch: pg_first requires outbox repository")
 	}
 
-	result, err := p.insertOutboxChunks(ctx, envelopes, status)
+	result, err := p.insertOutboxChunks(ctx, envelopes)
 
 	result.RequestedDeliveries = len(envelopes)
 
 	if err != nil {
-		return result, fmt.Errorf("publish alarm queue batch: insert %s outbox: %w", status, err)
+		return result, fmt.Errorf("publish alarm queue batch: insert pending outbox: %w", err)
 	}
 
-	if status == dispatchoutbox.StatusPending && result.InsertedDeliveries > 0 && p.publishConfig.WakeupEnabled {
+	if result.InsertedDeliveries > 0 && p.publishConfig.WakeupEnabled {
 		p.publishWakeup(ctx)
 	}
 
 	return result, nil
 }
 
-func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.AlarmQueueEnvelope, status dispatchoutbox.Status) (dispatchoutbox.PublishBatchResult, error) {
+func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.AlarmQueueEnvelope) (dispatchoutbox.PublishBatchResult, error) {
 	var total dispatchoutbox.PublishBatchResult
 
 	limit := p.publishConfig.MaxDeliveriesPerBatch
@@ -284,7 +261,7 @@ func (p *Publisher) insertOutboxChunks(ctx context.Context, envelopes []domain.A
 	for start := 0; start < len(envelopes); start += limit {
 		end := min(start+limit, len(envelopes))
 
-		result, err := p.outbox.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes[start:end], Status: status})
+		result, err := p.outbox.InsertBatch(ctx, dispatchoutbox.PublishBatchInput{Envelopes: envelopes[start:end]})
 		if err != nil {
 			return total, fmt.Errorf("insert batch: %w", err)
 		}

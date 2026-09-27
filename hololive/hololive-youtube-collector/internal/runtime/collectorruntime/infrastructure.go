@@ -41,7 +41,7 @@ func initInfrastructure(ctx context.Context, appConfig *collectorconfig.RuntimeC
 
 	collector := appConfig.Collector
 
-	helper, rpc, err := startYouTubeJSHelper(ctx, &appConfig.Proxy, &collector, ratelimiter.New(collector.RequestInterval))
+	helper, rpc, err := startYouTubeJSHelper(ctx, &collector, ratelimiter.New(collector.RequestInterval))
 	if err != nil {
 		cleanupDB()
 
@@ -157,21 +157,10 @@ func (i *collectorInfrastructure) closeResources(ctx context.Context) error {
 
 func startYouTubeJSHelper(
 	ctx context.Context,
-	proxy *collectorconfig.ProxyConfig,
 	collector *collectorconfig.Config,
 	limiter *ratelimiter.RateLimiter,
 ) (*youtubejs.Helper, *youtubejs.RPC, error) {
-	proxyConfig := collectorconfig.ProxyConfig{}
-
-	if proxy != nil {
-		proxyConfig = *proxy
-	}
-
 	helper, rpc, err := youtubejs.Start(ctx, &youtubejs.Config{
-		Proxy: youtubejs.ProxyConfig{
-			Enabled: proxyConfig.Enabled,
-			URL:     proxyConfig.URL,
-		},
 		StartupTimeout:    collector.YouTubeJSStartupTimeout,
 		RequestTimeout:    collector.YouTubeJSRequestTimeout,
 		HealthTimeout:     collector.HelperHealthTimeout,

@@ -57,21 +57,15 @@ func (t *startCountingTracer) Start(ctx context.Context, _ string, _ ...trace.Sp
 	return noop.NewTracerProvider().Tracer("test-noop").Start(ctx, "test-noop")
 }
 
-func TestCreateHTTPClient_UsesHTTP1Only(t *testing.T) {
-	for _, proxyConfig := range []ProxyConfig{
-		{},
-		{Enabled: true, URL: "socks5://proxy.internal:1080"},
-	} {
-		client, transport, err := createHTTPClient(proxyConfig)
-		require.NoError(t, err)
-		require.NotNil(t, client)
-		require.NotNil(t, transport, "base transport should be returned")
-		require.NotNil(t, transport.Protocols)
-		assert.Equal(t, "{HTTP1}", transport.Protocols.String())
-	}
+func TestNewDirectHTTPClient_UsesHTTP1Only(t *testing.T) {
+	client, transport := newDirectHTTPClient(new(testYouTubeConfig()))
+	require.NotNil(t, client)
+	require.NotNil(t, transport, "base transport should be returned")
+	require.NotNil(t, transport.Protocols)
+	assert.Equal(t, "{HTTP1}", transport.Protocols.String())
 }
 
-func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *testing.T) {
+func TestNewDirectHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *testing.T) {
 	provider := &startCountingTracerProvider{}
 	previousProvider := otel.GetTracerProvider()
 
@@ -93,8 +87,7 @@ func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *test
 
 	defer server.Close()
 
-	client, transport, err := createHTTPClient(ProxyConfig{})
-	require.NoError(t, err)
+	client, transport := newDirectHTTPClient(new(testYouTubeConfig()))
 	require.Same(t, transport, client.Transport, "scraper client must retain the configured base transport")
 
 	const sentinelURI = "/youtube/videos/sensitive-video-id?channel=sensitive-channel-id&q=sensitive-query"
@@ -118,31 +111,6 @@ func TestCreateHTTPClient_OutboundTracingDisabledUntilAttributeAllowlist(t *test
 	assert.Equal(t, int64(1), provider.starts.Load(), "scraper request must not create an outbound client span")
 }
 
-func TestCreateHTTPClient_RejectsInvalidProxyURL(t *testing.T) {
-	tests := []struct {
-		name string
-		url  string
-	}{
-		{name: "unsupported scheme", url: "http://proxy.internal:1080"},
-		{name: "missing host", url: "socks5://:1080"},
-		{name: "missing port", url: "socks5://proxy.internal"},
-		{name: "unbracketed ipv6 host", url: "socks5://2001:db8::1:1080"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client, transport, err := createHTTPClient(ProxyConfig{
-				Enabled: true,
-				URL:     tt.url,
-			})
-
-			require.Error(t, err)
-			assert.Nil(t, client)
-			assert.Nil(t, transport)
-		})
-	}
-}
-
 type nilResponseTransport struct{}
 
 func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
@@ -150,7 +118,7 @@ func (nilResponseTransport) RoundTrip(*http.Request) (*http.Response, error) {
 }
 
 func TestNetHTTPPageFetcherNilResponse(t *testing.T) {
-	client := NewClient(WithHTTPClient(&http.Client{Transport: nilResponseTransport{}}))
+	client := NewClient(testYouTubeConfig(), WithHTTPClient(&http.Client{Transport: nilResponseTransport{}}))
 	fetcher := netHTTPPageFetcher{client: client}
 
 	_, err := fetcher.FetchPage(t.Context(), pageFetchRequest{URL: "https://youtube.example/@test/videos"})
@@ -172,7 +140,7 @@ func TestNetHTTPPageFetcherReturnsFinalURLAfterRedirect(t *testing.T) {
 
 	defer server.Close()
 
-	client := NewClient(WithHTTPClient(server.Client()))
+	client := NewClient(testYouTubeConfig(), WithHTTPClient(server.Client()))
 	resp, err := netHTTPPageFetcher{client: client}.FetchPage(t.Context(), pageFetchRequest{URL: server.URL + "/start"})
 
 	require.NoError(t, err)

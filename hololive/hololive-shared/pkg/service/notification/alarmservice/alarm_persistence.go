@@ -82,11 +82,11 @@ func (as *AlarmService) updateAlarmTypes(ctx context.Context, alarm *domain.Alar
 	defer cancel()
 
 	if writer, ok := as.alarmWriter.(alarmTypesUpdater); ok {
-		return errors.Join(persistUpdatedAlarmTypes(persistCtx, writer, alarm))
+		return persistUpdatedAlarmTypes(persistCtx, writer, alarm)
 	}
 
 	if writer, ok := as.alarmWriter.(alarmUpsertWriter); ok {
-		return errors.Join(persistUpsertedAlarmTypes(persistCtx, writer, alarm))
+		return persistUpsertedAlarmTypes(persistCtx, writer, alarm)
 	}
 
 	if err := as.alarmWriter.Add(persistCtx, alarm); err != nil {
@@ -167,10 +167,6 @@ func (as *AlarmService) deleteRoomAlarms(ctx context.Context, roomID string) err
 }
 
 func alarmPersistenceContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		return context.WithTimeout(context.Background(), alarmPersistTaskTimeout)
-	}
-
 	return context.WithTimeout(ctx, alarmPersistTaskTimeout)
 }
 

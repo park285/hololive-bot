@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-live-status-scraper-fallback-removal",
+  "title": "alarm-worker의 live-status scraper fallback을 전부 삭제한다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "사용자가 2026-09-26 확정했다. scraper 2차 경로의 원 소비자인 LivePoller(producer)는 2026-08-25 퇴역했고, alarm-worker는 persisted live source(checking.NewPgYouTubeLiveSessionSource)를 항상 연결하므로 이 경로는 계약과 독립 근거가 없는 fallback이다. service_channels_live_fallback.go, internal/service/youtube/livestatus, htmlscraper.FetchYouTubeScheduleWaitAdmission, scraping.GetUpcomingEventsWaitAdmission·LiveStatusFallbackFetchPolicy, Service.liveFallback* 필드, HolodexLiveStatusFallbackConfig와 HOLODEX_LIVE_STATUS_FALLBACK_* env를 삭제하고, env는 퇴역 가드로 거절한다. service_channels_live.go의 오래된 fallback 주석도 정리한다. DEC-20260926-hololive-live-query-read-model의 원천 fallback 추가 금지와 같은 방향이다. 근거는 iris-stack의 2026-09-26 비-Iris 감사 결과(docs/agent-workflows/evidence/2026-09-26-stack-audit/non-iris-audit.md A2)이고 실행은 PLN-20260926-stack-audit-refactoring T09가 맡는다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

@@ -219,6 +219,7 @@ func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobser
 		CollisionAge:          cfg.CollisionAge,
 		ReplayAuditAge:        cfg.ReplayAuditAge,
 		ApplicationAuditGrace: cfg.ApplicationAuditGrace,
+		LiveAbsenceSlotAge:    cfg.LiveAbsenceSlotAge,
 		CheckpointHistoryAge:  cfg.CheckpointHistoryAge,
 		EvidenceAgeByKind:     evidenceRetentionAges(cfg),
 		BatchSize:             cfg.BatchSize,
@@ -226,7 +227,7 @@ func planeRetentionConfig(cfg *apiplane.YouTubePlaneRetentionConfig) sourceobser
 }
 
 func evidenceRetentionAges(cfg *apiplane.YouTubePlaneRetentionConfig) map[contract.ObservationKind]time.Duration {
-	ages := make(map[contract.ObservationKind]time.Duration, 9)
+	ages := make(map[contract.ObservationKind]time.Duration, 11)
 	addEvidenceRetentionAge(ages, contract.KindCommunityPage, cfg.CommunityPageAge)
 	addEvidenceRetentionAge(ages, contract.KindVideoList, cfg.VideoListAge)
 	addEvidenceRetentionAge(ages, contract.KindShortsList, cfg.ShortsListAge)
@@ -236,6 +237,8 @@ func evidenceRetentionAges(cfg *apiplane.YouTubePlaneRetentionConfig) map[contra
 	addEvidenceRetentionAge(ages, contract.KindChannelProfile, cfg.ChannelProfileAge)
 	addEvidenceRetentionAge(ages, contract.KindChannelPhoto, cfg.ChannelPhotoAge)
 	addEvidenceRetentionAge(ages, contract.KindSchedule, cfg.ScheduleSnapshotAge)
+	addEvidenceRetentionAge(ages, contract.KindChannelLiveCheck, cfg.ChannelLiveCheckAge)
+	addEvidenceRetentionAge(ages, contract.KindVideoLiveCheck, cfg.VideoLiveCheckAge)
 
 	return ages
 }

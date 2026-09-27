@@ -163,6 +163,18 @@ func (r *Repository) FindByChannelAndType(ctx context.Context, channelID string,
 	return out, nil
 }
 
+// GetMemberName은 채널 하나의 알림 표시명을 돌려준다. 표시명 폴백(memberDisplayNameExceptionContract)은
+// DEC-20260926-hololive-source-fallbacks-retirement가 남긴 유일한 원천·표시 폴백 예외이며, members에 등록되지 않았거나
+// 한국어 표시명이 빈 채널(예: 홀로라이브 외 구독 채널)을 표시하기 위한 것이다.
+//   - trigger: members의 short_korean_name·korean_name이 모두 비었거나 행이 없음.
+//   - 순서와 한도: members(short_korean_name→korean_name) → 같은 채널의 최신 비어 있지 않은 alarms.member_name(host_id가 빈 행,
+//     채널당 1행) → alarm cache 기록 때 호출자 값(alarmservice) → 표시 단계의 misc/vtuber_fallback 문구(종단). 표시 전용이며
+//     식별·dedup·라우팅에 쓰지 않고, 외부 호출이나 재시도가 없다.
+//   - telemetry: hololive_alarm_member_name_fallback_channels(cache warm·rebuild 때 alarms.member_name으로 채운 채널 수),
+//     hololive_alarm_member_name_caller_fallback_total(alarm cache 기록 때 호출자 값을 쓴 횟수).
+//   - owner: hololive-bot alarm(hololive-shared pkg/service/alarm, pkg/service/notification/alarmservice).
+//   - 제거 조건: 두 지표가 0으로 유지되고 구독 채널 전부가 members 한국어 표시명을 가질 때 폴백 단계를 지운다.
+//     재검토 기한: remove_after = "2026-12-31".
 func (r *Repository) GetMemberName(ctx context.Context, channelID string) (string, error) {
 	query := mustSQL("repository_0155_07.sql")
 
@@ -198,34 +210,8 @@ func (r *Repository) LoadAll(ctx context.Context) ([]*domain.Alarm, error) {
 	return out, nil
 }
 
-func (r *Repository) GetAllChannelIDs(ctx context.Context) ([]string, error) {
-	query := mustSQL("repository_0207_09.sql")
-
-	rows, err := r.pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("get all channel ids: %w", err)
-	}
-	defer rows.Close()
-
-	channelIDs := make([]string, 0, 64)
-
-	for rows.Next() {
-		var channelID string
-
-		if err := rows.Scan(&channelID); err != nil {
-			return nil, fmt.Errorf("scan channel id: %w", err)
-		}
-
-		channelIDs = append(channelIDs, channelID)
-	}
-
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, fmt.Errorf("iterate channel ids: %w", rowsErr)
-	}
-
-	return channelIDs, nil
-}
-
+// GetAllMemberNames는 알림 채널별 표시명을 돌려준다. 표시명 폴백은 memberDisplayNameExceptionContract를 따르며,
+// alarms.member_name으로 채운 채널 수를 hololive_alarm_member_name_fallback_channels로 남긴다.
 func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, error) {
 	query := mustSQL("repository_0231_10.sql")
 
@@ -236,20 +222,30 @@ func (r *Repository) GetAllMemberNames(ctx context.Context) (map[string]string, 
 	defer rows.Close()
 
 	result := make(map[string]string)
+	fromAlarmRecord := 0
 
 	for rows.Next() {
-		var channelID, memberName string
+		var (
+			channelID, memberName string
+			fromAlarm             bool
+		)
 
-		if err := rows.Scan(&channelID, &memberName); err != nil {
+		if err := rows.Scan(&channelID, &memberName, &fromAlarm); err != nil {
 			return nil, fmt.Errorf("scan member name: %w", err)
 		}
 
 		result[channelID] = memberName
+
+		if fromAlarm {
+			fromAlarmRecord++
+		}
 	}
 
 	if rowsErr := rows.Err(); rowsErr != nil {
 		return nil, fmt.Errorf("iterate member names: %w", rowsErr)
 	}
+
+	observeAlarmMemberNameFallbackChannels(fromAlarmRecord)
 
 	return result, nil
 }

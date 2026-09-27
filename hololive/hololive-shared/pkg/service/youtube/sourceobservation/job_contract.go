@@ -287,9 +287,9 @@ func cloneObservationKinds(kinds []contract.ObservationKind) []contract.Observat
 func validateClassMembership(class JobClass, membership JobMembership, leaseSubject string, roster []contract.ObservationKind) error {
 	switch class {
 	case JobClassSubject:
-		return errors.Join(validateSubjectClassMembership(membership, leaseSubject))
+		return validateSubjectClassMembership(membership, leaseSubject)
 	case JobClassGlobal:
-		return errors.Join(validateGlobalClassMembership(membership, leaseSubject, roster))
+		return validateGlobalClassMembership(membership, leaseSubject, roster)
 	default:
 		return errors.New("validate job contract: class is invalid")
 	}

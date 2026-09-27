@@ -12,9 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kapu/hololive-api/internal/planes/bot/internal/adapter/messaging/formatter"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/bot/orchestration/transport"
 	"github.com/kapu/hololive-api/internal/planes/bot/internal/durability"
 	dbtest "github.com/kapu/hololive-dbtest"
+	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 type repositoryReplyOutboxWriter struct {
@@ -52,9 +54,13 @@ func TestCommandErrorResponseRepositoryFailureDoesNotLogReplyIdentity(t *testing
 
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	writer := repositoryReplyOutboxWriter{repo: durability.NewReplyOutboxRepository(pool)}
+	// 오류 응답 문구는 message_strings(DB 정본)에서만 나온다. formatter 없이 보내는 코드 대체 문구는 없다.
+	messageStrings := messagestrings.NewStore(pool, slog.New(slog.DiscardHandler))
+	require.NoError(t, messageStrings.Load(t.Context()))
+
 	bot := &Bot{
 		logger: logger,
-		transport: transport.NewCommandTransport(&testIrisClient{}, nil,
+		transport: transport.NewCommandTransport(&testIrisClient{}, formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings)),
 			transport.WithReplyOutboxWriter(writer)),
 	}
 	ctx := transport.WithReplyIdentity(t.Context(), rawID)

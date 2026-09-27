@@ -49,10 +49,6 @@ func WithThreadID(ctx context.Context, threadID string) context.Context {
 }
 
 func ThreadIDFromContext(ctx context.Context) (string, bool) {
-	if ctx == nil {
-		return "", false
-	}
-
 	raw := ctx.Value(threadIDContextKey{})
 
 	id, ok := raw.(string)
@@ -86,10 +82,6 @@ func WithImageContentType(ctx context.Context, contentType string) context.Conte
 }
 
 func ImageContentTypeFromContext(ctx context.Context) (string, bool) {
-	if ctx == nil {
-		return "", false
-	}
-
 	value, ok := ctx.Value(imageContentTypeContextKey{}).(string)
 
 	return value, ok && value != ""
@@ -114,10 +106,6 @@ func ReplyIdentityFromContext(ctx context.Context) (string, bool) {
 }
 
 func replyIdentityStateFromContext(ctx context.Context) *replyIdentityState {
-	if ctx == nil {
-		return nil
-	}
-
 	state, ok := ctx.Value(replyIdentityContextKey{}).(*replyIdentityState)
 	if !ok {
 		return nil

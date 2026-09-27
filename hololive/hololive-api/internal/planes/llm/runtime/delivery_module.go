@@ -24,51 +24,31 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/park285/shared-go/v2/pkg/envutil"
-
-	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/handoff"
-	"github.com/kapu/hololive-shared/pkg/service/alarm/queue"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
-
-const deliveryOutboxV3HandoffModeEnv = "DELIVERY_OUTBOX_V3_HANDOFF_MODE"
 
 type DeliveryModule struct {
 	Locker     delivery.NotificationLocker
 	Repository *delivery.OutboxRepository
 }
 
+// BuildDeliveryModule은 digest 발송을 v2 notification_delivery_outbox에만 적재한다. 예전에 v3 ledger로 넘기던
+// DELIVERY_OUTBOX_V3_HANDOFF_MODE는 DEC-20260926-hololive-outbox-v3-convergence로 삭제했고, 키가 남아 있으면
+// settings의 퇴역 가드(config_outbox_v3_handoff_retired_env.go)가 기동을 거절한다.
 func BuildDeliveryModule(
 	cacheClient cache.Client,
 	postgres database.Client,
 	logger *slog.Logger,
 ) (*DeliveryModule, error) {
-	locker := delivery.NewLocker(cacheClient, logger)
-
-	mode, err := handoff.ParseMode(envutil.String(deliveryOutboxV3HandoffModeEnv, "off"))
+	locker, err := delivery.NewLocker(cacheClient, logger)
 	if err != nil {
-		return nil, fmt.Errorf("parse mode: %w", err)
+		return nil, fmt.Errorf("build delivery module: %w", err)
 	}
-
-	var options []delivery.RepositoryOption
-
-	if mode != handoff.ModeOff {
-		publisher := queue.NewPublisher(
-			cacheClient,
-			logger,
-			queue.WithOutbox(dispatchoutbox.NewPgxRepository(postgres, logger)),
-		)
-
-		options = append(options, delivery.WithDispatchHandoff(mode, deliveryDispatchPublisher{publisher: publisher}))
-	}
-
-	repository := delivery.NewOutboxRepository(postgres, logger, options...)
 
 	return &DeliveryModule{
 		Locker:     locker,
-		Repository: repository,
+		Repository: delivery.NewOutboxRepository(postgres, logger),
 	}, nil
 }

@@ -12,7 +12,7 @@ fail() {
 }
 
 fixture="${TEST_TMP_DIR}/fixture"
-mkdir -p "${fixture}/hololive" "${fixture}/admin-dashboard" "${fixture}/scripts" "${fixture}/internal"
+mkdir -p "${fixture}/hololive" "${fixture}/scripts" "${fixture}/internal"
 : >"${fixture}/go.mod"
 
 ROOT_DIR="${fixture}" "${CHECKER}" \

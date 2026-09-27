@@ -38,6 +38,8 @@ type PostgresService struct {
 	logger *slog.Logger
 }
 
+// PostgresConfig의 SSLRootCert는 pgxdb Config.SSLRootCert로 그대로 넘긴다. 이 경로는 shared-go pgxdb의
+// POSTGRES_SSLROOTCERT env 폴백에 기대지 않는다(DEC-20260926-stack-shared-go-compat-api-retirement).
 type PostgresConfig struct {
 	Host          string
 	Port          int
@@ -46,6 +48,7 @@ type PostgresConfig struct {
 	Password      string
 	Database      string
 	SSLMode       string
+	SSLRootCert   string
 	QueryExecMode string
 	PoolMinConns  int
 	PoolMaxConns  int
@@ -63,14 +66,9 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		sslMode = "verify-full"
 	}
 
-	minConns := config.PoolMinConns
-	if minConns <= 0 {
-		minConns = constants.DatabaseConfig.MaxIdleConns
-	}
-
-	maxConns := config.PoolMaxConns
-	if maxConns <= 0 {
-		maxConns = constants.DatabaseConfig.MaxOpenConns
+	minConns, maxConns, err := resolvePoolConns(config)
+	if err != nil {
+		return nil, fmt.Errorf("resolve pool conns: %w", err)
 	}
 
 	pool, err := pgxdb.OpenPool(ctx, pgxdb.Config{
@@ -81,6 +79,7 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		Password:      config.Password,
 		Name:          config.Database,
 		SSLMode:       sslMode,
+		SSLRootCert:   config.SSLRootCert,
 		QueryExecMode: config.QueryExecMode,
 	}, pgxdb.Options{
 		Logger: logger,
@@ -101,6 +100,24 @@ func NewPostgresService(ctx context.Context, config *PostgresConfig, logger *slo
 		pool:   pool,
 		logger: logger,
 	}, nil
+}
+
+// resolvePoolConns는 pgxdb에 넘길 풀 크기를 정한다.
+// MinConns=0은 plane 검증(validatePlanePool·validatePool)이 허용하는 "idle 연결 없음" 선택이고
+// pgxdb도 0을 그대로 pgx에 넘기는 계약이므로 기본값으로 바꾸지 않는다. 미설정 기본값은
+// env loader(LoadPostgresConfig)가 이미 채운다. 음수는 pgxdb가 0으로 조용히 흡수하므로
+// 여기서 거부해 설정 오류를 기동 시점에 드러낸다.
+func resolvePoolConns(config *PostgresConfig) (minConns, maxConns int, err error) {
+	if config.PoolMinConns < 0 {
+		return 0, 0, fmt.Errorf("postgres pool min conns must not be negative: %d", config.PoolMinConns)
+	}
+
+	maxConns = config.PoolMaxConns
+	if maxConns <= 0 {
+		maxConns = constants.DatabaseConfig.MaxOpenConns
+	}
+
+	return config.PoolMinConns, maxConns, nil
 }
 
 func (ps *PostgresService) GetPool() *pgxpool.Pool {

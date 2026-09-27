@@ -40,7 +40,7 @@ func (s *stubMemberDataProvider) FindMemberByAlias(_ string) *domain.Member     
 func (s *stubMemberDataProvider) GetChannelIDs() []string {
 	return append([]string(nil), s.channelIDs...)
 }
-func (s *stubMemberDataProvider) GetAllMembers() []*domain.Member { return nil }
+func (s *stubMemberDataProvider) LoadAllMembers() ([]*domain.Member, error) { return nil, nil }
 func (s *stubMemberDataProvider) WithContext(_ context.Context) domain.MemberDataProvider {
 	return s
 }

@@ -146,20 +146,3 @@ func TestLiveQueryKeepsTruncationNoticeAboveFold(t *testing.T) {
 		}
 	}
 }
-
-func TestAlarmListShowsOnlyRestrictedTypeLabels(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	f := NewResponseFormatter("!", template.NewRenderer(pool, slog.Default()),
-		WithMessageStrings(messagestrings.NewStore(pool, slog.Default())))
-
-	out := f.FormatAlarmList(t.Context(), []AlarmListEntry{
-		{MemberName: "미오"},
-		{MemberName: "비비", AlarmTypes: domain.AlarmTypes(domain.AllAlarmTypes)},
-		{MemberName: "이로하", AlarmTypes: domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts}},
-	})
-
-	want := "🔔 설정된 알람 · 3개\n\n1 · 미오\n2 · 비비\n3 · 이로하 (방송+쇼츠)"
-	if out != want {
-		t.Fatalf("alarm list labels:\ngot =%q\nwant=%q", out, want)
-	}
-}

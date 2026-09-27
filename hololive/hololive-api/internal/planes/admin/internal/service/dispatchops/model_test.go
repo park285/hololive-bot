@@ -114,7 +114,7 @@ func TestRequestValidation(t *testing.T) {
 func TestReplayRejectsEveryNonFailureState(t *testing.T) {
 	for _, status := range statuses {
 		t.Run(status, func(t *testing.T) {
-			group := []Delivery{delivery("1", "", status)}
+			group := []Delivery{delivery("1", "10", status)}
 			err := validateReplay(group, validRequest())
 			allowed := status == "dlq" || status == "quarantined"
 
@@ -177,6 +177,7 @@ func TestReplayBlocksMixedAndOversizedGroups(t *testing.T) {
 		{"different_room", []Delivery{delivery("1", "10", "dlq"), {ID: "2", RoomID: "other", SendUnitID: "10", Status: "dlq"}}, "group_identity_mismatch"},
 		{"different_unit", []Delivery{delivery("1", "10", "dlq"), delivery("2", "11", "dlq")}, "group_identity_mismatch"},
 		{"multiple_legacy", []Delivery{delivery("1", "", "dlq"), delivery("2", "", "dlq")}, "group_identity_mismatch"},
+		{"single_legacy_without_send_unit", []Delivery{delivery("1", "", "dlq")}, "group_identity_mismatch"},
 		{"oversized", make([]Delivery, MaxReplaySize+1), "group_too_large"},
 	}
 	for _, test := range tests {
@@ -209,7 +210,7 @@ func TestReplayBlocksMixedAndOversizedGroups(t *testing.T) {
 }
 
 func TestReplayDoesNotMutateInputs(t *testing.T) {
-	group := []Delivery{delivery("1", "", "dlq")}
+	group := []Delivery{delivery("1", "10", "dlq")}
 	r := validRequest()
 
 	if err := validateReplay(group, r); err != nil {
@@ -223,7 +224,7 @@ func TestReplayDoesNotMutateInputs(t *testing.T) {
 
 func TestReplayRejectsPriorSentOrCancelledMarker(t *testing.T) {
 	for _, marker := range []string{"sent", "cancelled"} { //nolint:misspell // PostgreSQL 정본의 영국식 상태 철자입니다.
-		item := delivery("1", "", "dlq")
+		item := delivery("1", "10", "dlq")
 
 		if marker == "sent" {
 			item.SentAt = &revisionTime

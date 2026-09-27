@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
@@ -34,13 +35,9 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
-var ytDefaults = settings.DefaultYouTubeOperationalConfig()
-
 type scraperClient interface {
 	GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error)
 	GetChannelStats(ctx context.Context, channelID string) (*parser.ChannelStats, error)
-	SetProxyEnabled(enabled bool) bool
-	ProxyEnabled() bool
 }
 
 type serviceImpl struct {
@@ -49,20 +46,26 @@ type serviceImpl struct {
 	logger        *slog.Logger
 	channelToName map[string]string // channelID -> memberName (ChannelTitle 조회용)
 	channelMu     sync.RWMutex
+
+	// runtime YouTube 설정에서 온 timeout이다(YOUTUBE_CACHE_SAVE_TIMEOUT_SECONDS, YOUTUBE_SCRAPER_PHASE_TIMEOUT_SECONDS).
+	cacheSaveTimeout    time.Duration
+	scraperPhaseTimeout time.Duration
 }
 
 func New(
 	ctx context.Context,
 	cacheClient cache.Client,
-	scraperProxyConfig scraper.ProxyConfig,
+	youtubeConfig settings.YouTubeConfig,
 	sharedRL *ratelimiter.RateLimiter,
 	logger *slog.Logger,
 ) (youtube.Service, error) {
 	ys := &serviceImpl{
-		scraper:       scraper.NewClient(scraper.WithProxy(scraperProxyConfig), scraper.WithRateLimiter(sharedRL)),
-		cache:         cacheClient,
-		logger:        logger,
-		channelToName: make(map[string]string),
+		scraper:             scraper.NewClient(youtubeConfig, scraper.WithRateLimiter(sharedRL)),
+		cache:               cacheClient,
+		logger:              logger,
+		channelToName:       make(map[string]string),
+		cacheSaveTimeout:    youtubeConfig.CacheSaveTimeout,
+		scraperPhaseTimeout: youtubeConfig.ScraperPhaseTimeout,
 	}
 
 	// 캐시에서 채널 ID -> 멤버 이름 맵 초기화
@@ -73,22 +76,6 @@ func New(
 	logger.Info("YouTube scraper service initialized")
 
 	return ys, nil
-}
-
-func (ys *serviceImpl) SetScraperProxyEnabled(enabled bool) bool {
-	if ys == nil || ys.scraper == nil {
-		return false
-	}
-
-	return ys.scraper.SetProxyEnabled(enabled)
-}
-
-func (ys *serviceImpl) ScraperProxyEnabled() bool {
-	if ys == nil || ys.scraper == nil {
-		return false
-	}
-
-	return ys.scraper.ProxyEnabled()
 }
 
 // loadChannelNameMap: 캐시에서 멤버 정보를 읽어 channelID -> memberName 맵을 구성.

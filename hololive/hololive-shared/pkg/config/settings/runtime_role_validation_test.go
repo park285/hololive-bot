@@ -3,7 +3,6 @@ package settings
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings/internal/load"
 	"github.com/kapu/hololive-shared/pkg/config/settings/internal/settingstest"
@@ -32,20 +31,11 @@ func validRuntimeRoleConfig(t *testing.T) *Config {
 			WebhookToken: "x",
 			BotToken:     "x",
 		},
-		Webhook: WebhookConfig{RequireHMAC: true},
 		Holodex: HolodexConfig{
 			APIKey:  "x",
 			Timeout: DefaultHolodexOperationalConfig().Timeout,
-			LiveStatusFallback: HolodexLiveStatusFallbackConfig{
-				MaxPerCycle:     1,
-				WallClockBudget: time.Second,
-			},
 		},
-		Postgres: PostgresConfig{SSLMode: load.PostgresSSLModeVerifyFull},
-		Scraper: ScraperConfig{
-			FetcherEngine: ScraperFetcherEngineNetHTTP,
-			Backfill:      ScraperBackfillConfig{TargetGroup: "notification"},
-		},
+		Postgres:             PostgresConfig{SSLMode: load.PostgresSSLModeVerifyFull},
 		OfficialSchedule:     DefaultOfficialScheduleConfig(),
 		MaxResponseBodyBytes: DefaultMaxResponseBodyBytes,
 		Environment:          load.EnvironmentProduction,

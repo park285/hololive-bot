@@ -27,7 +27,6 @@ import (
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
 
-	"github.com/kapu/hololive-shared/pkg/constants"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/util"
 )
@@ -73,20 +72,6 @@ func preferHololiveCandidate(provider domain.MemberDataProvider, candidates []*m
 	return nil
 }
 
-// tryPartialStaticMatch: 정적 멤버 데이터에서 부분 매칭을 시도함.
-func (mm *Matcher) tryPartialStaticMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
-	if provider != nil {
-		for _, member := range provider.GetAllMembers() {
-			nameNorm := stringutil.Normalize(member.Name)
-			if strings.Contains(nameNorm, queryNorm) || strings.Contains(queryNorm, nameNorm) {
-				return mm.candidateFromMember(member, "static-partial")
-			}
-		}
-	}
-
-	return nil
-}
-
 // tryPartialValkeyMatch: 동적 Valkey 데이터에서 부분 매칭을 시도함.
 func (mm *Matcher) tryPartialValkeyMatch(provider domain.MemberDataProvider, queryNorm string, dynamicMembers map[string]string) *matchCandidate {
 	for name, channelID := range dynamicMembers {
@@ -97,30 +82,6 @@ func (mm *Matcher) tryPartialValkeyMatch(provider domain.MemberDataProvider, que
 	}
 
 	return nil
-}
-
-// tryPartialAliasMatch: 모든 별칭에서 부분 매칭을 시도함.
-func (mm *Matcher) tryPartialAliasMatch(provider domain.MemberDataProvider, queryNorm string) *matchCandidate {
-	if provider != nil {
-		for _, member := range provider.GetAllMembers() {
-			if memberHasPartialAliasMatch(member, queryNorm) {
-				return mm.candidateFromMember(member, "alias-partial")
-			}
-		}
-	}
-
-	return nil
-}
-
-func memberHasPartialAliasMatch(member *domain.Member, queryNorm string) bool {
-	for _, alias := range member.GetAllAliases() {
-		aliasNorm := stringutil.Normalize(alias)
-		if strings.Contains(aliasNorm, queryNorm) || strings.Contains(queryNorm, aliasNorm) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (mm *Matcher) candidateFromMember(member *domain.Member, source string) *matchCandidate {
@@ -171,88 +132,10 @@ func (mm *Matcher) candidateFromDynamic(provider domain.MemberDataProvider, name
 	}
 }
 
-func (mm *Matcher) hydrateChannel(ctx context.Context, candidate *matchCandidate) *domain.Channel {
-	if candidate == nil {
-		return nil
-	}
-
-	fallback := fallbackChannelFromCandidate(candidate)
-
-	if mm.holodex == nil {
-		return fallback
-	}
-
-	channel, err := mm.holodex.GetChannel(ctx, candidate.channelID)
-	if err != nil {
-		mm.logger.Warn("Failed to fetch channel from Holodex",
-			slog.String("channel_id", candidate.channelID),
-			slog.String("source", candidate.source),
-			slog.Any("error", err),
-		)
-
-		mm.applyCachedChannelNameFallback(ctx, fallback, candidate)
-
-		return fallback
-	}
-
-	if channel == nil {
-		mm.logger.Warn("Holodex returned empty channel",
-			slog.String("channel_id", candidate.channelID),
-			slog.String("source", candidate.source),
-		)
-
-		return fallback
-	}
-
-	applyCandidateNameFallback(channel, candidate)
-
-	return channel
-}
-
-func fallbackChannelFromCandidate(candidate *matchCandidate) *domain.Channel {
-	fallback := &domain.Channel{
-		ID:   candidate.channelID,
-		Name: candidate.memberName,
-	}
-	if candidate.memberName != "" {
-		fallback.EnglishName = toStringPtr(candidate.memberName)
-	}
-
-	return fallback
-}
-
-func (mm *Matcher) applyCachedChannelNameFallback(ctx context.Context, fallback *domain.Channel, candidate *matchCandidate) {
-	if mm.cache == nil {
-		return
-	}
-
-	cachedName, cacheErr := mm.cache.HGet(ctx, constants.RedisKeys.AlarmMemberNames, candidate.channelID)
-	if cacheErr != nil || cachedName == "" {
-		return
-	}
-
-	fallback.Name = cachedName
-	mm.logger.Debug("Using cached channel name as fallback",
-		slog.String("channel_id", candidate.channelID),
-		slog.String("cached_name", cachedName),
-	)
-}
-
-func applyCandidateNameFallback(channel *domain.Channel, candidate *matchCandidate) {
-	if candidate.memberName == "" {
-		return
-	}
-
-	if channel.Name == "" {
-		channel.Name = candidate.memberName
-	}
-
-	if channel.EnglishName == nil {
-		channel.EnglishName = toStringPtr(candidate.memberName)
-	}
-}
-
-func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandidate) *domain.Channel {
+// finalizeCandidate는 roster 후보(멤버 데이터, Valkey 동적 멤버)에서 채널을 만든다. 채널명 정본은 roster다.
+// Holodex GetChannel로 보강하던 경로와, 그 실패 시 후보명·Valkey 알림 멤버명 캐시로 채우던 폴백 체인은
+// DEC-20260926-hololive-source-fallbacks-retirement로 지웠다. 정확 일치 경로(memberToChannel)와 같은 roster 값을 쓴다.
+func (mm *Matcher) finalizeCandidate(candidate *matchCandidate) *domain.Channel {
 	if candidate == nil {
 		return nil
 	}
@@ -266,13 +149,18 @@ func (mm *Matcher) finalizeCandidate(ctx context.Context, candidate *matchCandid
 		return nil
 	}
 
-	channel := mm.hydrateChannel(ctx, candidate)
-	if channel != nil {
-		mm.logger.Debug("Match candidate resolved",
-			slog.String("channel_id", candidate.channelID),
-			slog.String("member", candidate.memberName),
-			slog.String("source", candidate.source),
-		)
+	mm.logger.Debug("Match candidate resolved",
+		slog.String("channel_id", candidate.channelID),
+		slog.String("member", candidate.memberName),
+		slog.String("source", candidate.source),
+	)
+
+	channel := &domain.Channel{
+		ID:   candidate.channelID,
+		Name: candidate.memberName,
+	}
+	if candidate.org != "" {
+		channel.Org = toStringPtr(candidate.org)
 	}
 
 	return channel

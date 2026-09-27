@@ -26,7 +26,7 @@ func insertClaimedEnvelope(t *testing.T, repository *PgxRepository, workerID str
 		},
 		Version: 1,
 	}
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}, Status: StatusPending})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: []domain.AlarmQueueEnvelope{envelope}})
 	require.NoError(t, err)
 
 	records, err := repository.ClaimDue(ctx, workerID, 10, time.Minute)
@@ -88,12 +88,12 @@ func TestLoadExistingEventRows_ReturnsRowsInEventKeyOrder(t *testing.T) {
 			Version: 1,
 		})
 	}
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes, Status: StatusPending})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes})
 	require.NoError(t, err)
 
 	events := make([]eventInsert, 0, len(envelopes))
 	for i := range envelopes {
-		event, _, buildErr := buildLedgerRows(&envelopes[i], StatusPending)
+		event, _, buildErr := buildLedgerRows(&envelopes[i])
 		require.NoError(t, buildErr)
 		events = append(events, event)
 	}

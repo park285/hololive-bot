@@ -1,21 +1,10 @@
-		WITH legacy_head AS (
-			SELECT d.id
-			FROM alarm_dispatch_deliveries d
-			WHERE $1::INT > 0
-			  AND d.send_unit_id IS NULL
-			  AND d.status IN ('pending', 'retry')
-			  AND d.next_attempt_at <= NOW()
-			ORDER BY d.next_attempt_at ASC, d.id ASC
-			LIMIT 1
-			FOR UPDATE SKIP LOCKED
-		), due_window AS MATERIALIZED (
+		WITH due_window AS MATERIALIZED (
 			SELECT d.send_unit_id, d.next_attempt_at, d.id AS delivery_id
 			FROM alarm_dispatch_deliveries d
 			WHERE $1::INT > 0
 			  AND d.send_unit_id IS NOT NULL
 			  AND d.status IN ('pending', 'retry')
 			  AND d.next_attempt_at <= NOW()
-			  AND NOT EXISTS (SELECT 1 FROM legacy_head)
 			ORDER BY d.next_attempt_at ASC, d.id ASC
 			LIMIT $1::INT * $4::INT
 		), unit_candidates AS (
@@ -52,8 +41,6 @@
 			WHERE d.send_unit_id IN (SELECT id FROM next_units)
 			  AND d.status IN ('pending', 'retry')
 			  AND d.next_attempt_at <= NOW()
-			UNION ALL
-			SELECT id FROM legacy_head
 		), updated AS (
 			UPDATE alarm_dispatch_deliveries d
 			SET status = 'leased',

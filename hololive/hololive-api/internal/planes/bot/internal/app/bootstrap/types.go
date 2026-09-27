@@ -23,16 +23,13 @@ import (
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
-	"github.com/kapu/hololive-shared/pkg/service/notification/alarmservice"
 	"github.com/kapu/hololive-shared/pkg/service/settings"
-	"github.com/kapu/hololive-shared/pkg/service/youtube"
 	"github.com/kapu/hololive-shared/pkg/service/youtube/scraper/scraping/ratelimiter"
 )
 
 type BotInfrastructure struct {
 	Deps           *orchestration.Dependencies
 	AlarmCRUD      domain.AlarmCRUD
-	AlarmService   *alarmservice.AlarmService
 	HolodexService *holodexprovider.Service
 	IrisRoomLister IrisRoomLister
 	Postgres       database.Client
@@ -46,13 +43,7 @@ type IrisRoomLister interface {
 
 type AlarmModeComponents struct {
 	AlarmCRUD        domain.AlarmCRUD
-	AlarmService     *alarmservice.AlarmService
 	MemberDataSource domain.MemberDataProvider
-}
-
-type AlarmDependencies struct {
-	AlarmService       *alarmservice.AlarmService
-	MemberDataProvider domain.MemberDataProvider
 }
 
 type ScraperHolodexFoundation struct {
@@ -131,8 +122,6 @@ type BotConfigSubscriberDependencies struct {
 }
 
 type BotConfigSubscriberRuntimeDependencies struct {
-	YouTubeService youtube.Service
-	HolodexService *holodexprovider.Service
-	AlarmCRUD      domain.AlarmCRUD
-	ACL            *acl.Service
+	AlarmCRUD domain.AlarmCRUD
+	ACL       *acl.Service
 }

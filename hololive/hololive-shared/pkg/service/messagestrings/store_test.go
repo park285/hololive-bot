@@ -28,11 +28,19 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
-func TestStore_GetSeededValues(t *testing.T) {
+func loadSeededStore(t *testing.T) *messagestrings.Store {
+	t.Helper()
+
 	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
 	if err := store.Load(t.Context()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
+
+	return store
+}
+
+func TestStore_LookupSeededValues(t *testing.T) {
+	store := loadSeededStore(t)
 
 	cases := []struct {
 		namespace string
@@ -47,41 +55,52 @@ func TestStore_GetSeededValues(t *testing.T) {
 		{messagestrings.NamespaceNewsCat, "other", "기타"},
 		{messagestrings.NamespaceSocial, "歌の再生リスト", "음악 플레이리스트"},
 		{messagestrings.NamespaceMisc, "chzzk_title", "치지직 라이브"},
-		{messagestrings.NamespaceMisc, "vtuber_fallback", "VTuber"},
 	}
 	for _, c := range cases {
-		if got := store.Get(c.namespace, c.key); got != c.want {
-			t.Errorf("Get(%q, %q) = %q, want %q", c.namespace, c.key, got, c.want)
+		if got, ok := store.Lookup(c.namespace, c.key); !ok || got != c.want {
+			t.Errorf("Lookup(%q, %q) = (%q, %t), want (%q, true)", c.namespace, c.key, got, ok, c.want)
 		}
+	}
+
+	if got := store.Text(messagestrings.MiscVTuberFallback); got != "VTuber" {
+		t.Errorf("Text(%s) = %q, want VTuber", messagestrings.MiscVTuberFallback, got)
 	}
 }
 
-func TestStore_MissingReturnsEmpty(t *testing.T) {
-	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
+func TestStore_LookupMissingReturnsNotFound(t *testing.T) {
+	store := loadSeededStore(t)
 
-	if got := store.Get(messagestrings.NamespaceOrg, "nonexistent"); got != "" {
-		t.Errorf("missing key = %q, want empty string", got)
+	if got, ok := store.Lookup(messagestrings.NamespaceOrg, "nonexistent"); ok || got != "" {
+		t.Errorf("missing key = (%q, %t), want (\"\", false)", got, ok)
 	}
 
-	if got := store.Get("no_such_namespace", "x"); got != "" {
-		t.Errorf("missing namespace = %q, want empty string", got)
+	if got, ok := store.Lookup("no_such_namespace", "x"); ok || got != "" {
+		t.Errorf("missing namespace = (%q, %t), want (\"\", false)", got, ok)
 	}
 }
 
 func TestStore_NilReceiverSafe(t *testing.T) {
 	var store *messagestrings.Store
 
-	if got := store.Get(messagestrings.NamespaceOrg, "Hololive"); got != "" {
-		t.Errorf("nil store Get = %q, want empty string", got)
+	if got := store.Text(messagestrings.MiscVTuberFallback); got != "" {
+		t.Errorf("nil store Text = %q, want empty string", got)
 	}
 
 	if got := store.GetMap(messagestrings.NamespaceOrg); got != nil {
 		t.Errorf("nil store GetMap = %v, want nil", got)
 	}
+
+	if err := store.Load(t.Context()); err == nil {
+		t.Error("nil store Load must fail")
+	}
+
+	if err := store.Validate(messagestrings.Requirements{}); err == nil {
+		t.Error("nil store Validate must fail")
+	}
 }
 
 func TestStore_GetMap(t *testing.T) {
-	store := messagestrings.NewStore(dbtest.NewPool(t), slog.Default())
+	store := loadSeededStore(t)
 
 	alarmTypes := store.GetMap(messagestrings.NamespaceAlarmType)
 	if len(alarmTypes) != 6 {
@@ -97,56 +116,11 @@ func TestStore_GetMap(t *testing.T) {
 	}
 }
 
-func TestStore_VTuberFallbackContextReadsSSOT(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	store := messagestrings.NewStore(pool, slog.Default())
-	ctx := t.Context()
+// 운영 runtime 계약(alarm-worker egress)은 실제 적재된 시드로 검증을 통과해야 한다.
+func TestStore_SeedSatisfiesAlarmWorkerEgressRequirements(t *testing.T) {
+	store := loadSeededStore(t)
 
-	if got := store.VTuberFallbackContext(ctx); got != "VTuber" {
-		t.Fatalf("seeded VTuberFallbackContext = %q, want VTuber", got)
-	}
-
-	if _, err := pool.Exec(ctx,
-		`UPDATE message_strings SET value = '버튜버' WHERE namespace = 'misc' AND key = 'vtuber_fallback'`,
-	); err != nil {
-		t.Fatalf("update vtuber_fallback row: %v", err)
-	}
-
-	store.Invalidate()
-
-	if got := store.VTuberFallbackContext(ctx); got != "버튜버" {
-		t.Errorf("VTuberFallbackContext after row update = %q, want 버튜버 (proves SSOT read, not literal)", got)
-	}
-
-	var nilStore *messagestrings.Store
-
-	if got := nilStore.VTuberFallbackContext(ctx); got != "VTuber" {
-		t.Errorf("nil store VTuberFallbackContext = %q, want VTuber literal fallback", got)
-	}
-}
-
-func TestStore_InvalidateReloadsAfterMutation(t *testing.T) {
-	pool := dbtest.NewPool(t)
-	store := messagestrings.NewStore(pool, slog.Default())
-	ctx := t.Context()
-
-	if got := store.Get(messagestrings.NamespaceMisc, "vtuber_fallback"); got != "VTuber" {
-		t.Fatalf("prime read = %q, want VTuber", got)
-	}
-
-	if _, err := pool.Exec(ctx,
-		`INSERT INTO message_strings(namespace, key, value) VALUES ('test', 'k', 'v')`,
-	); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-
-	if got := store.Get("test", "k"); got != "" {
-		t.Errorf("cached read before invalidate = %q, want empty string", got)
-	}
-
-	store.Invalidate()
-
-	if got := store.Get("test", "k"); got != "v" {
-		t.Errorf("read after invalidate = %q, want v", got)
+	if err := store.Validate(messagestrings.AlarmWorkerEgressRequirements()); err != nil {
+		t.Fatalf("Validate(alarm-worker egress) error = %v", err)
 	}
 }

@@ -97,12 +97,33 @@ func (f *ResponseFormatter) Prefix() string {
 	return "!"
 }
 
-func (f *ResponseFormatter) ResolveError(ctx context.Context, key string) string {
-	return f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceError, key, messagestrings.FallbackSentinel)
+// ResolveError는 message_strings error namespace의 문구를 돌려준다. 인자 key는 messaging.Err* 상수이며 bot plane
+// 기동 검증이 모든 상수의 값을 보장한다. 코드 대체 문구는 두지 않는다
+// (DEC-20260926-hololive-message-strings-startup-validation).
+func (f *ResponseFormatter) ResolveError(_ context.Context, key string) string {
+	if f == nil {
+		return ""
+	}
+
+	return f.messageStrings.Text(messagestrings.Key{Namespace: messagestrings.NamespaceError, Name: key})
 }
 
-func (f *ResponseFormatter) GraduatedMemberWarning(ctx context.Context) string {
-	return f.messageStrings.GetContext(ctx, messagestrings.NamespaceNotify, "graduated_member_warning")
+// renderFailureText는 템플릿을 렌더하지 못했을 때 사용자에게 보내는 문구다. 코드에 둔 대체 문구 대신
+// message_strings의 command_processing_failed(기동 검증 대상)를 쓴다.
+func (f *ResponseFormatter) renderFailureText() string {
+	if f == nil {
+		return ""
+	}
+
+	return f.messageStrings.Text(RenderFailureMessageKey)
+}
+
+func (f *ResponseFormatter) GraduatedMemberWarning(_ context.Context) string {
+	if f == nil {
+		return ""
+	}
+
+	return f.messageStrings.Text(messagestrings.NotifyGraduatedMemberWarning)
 }
 
 type memberNotFoundTemplateData struct {
@@ -112,7 +133,7 @@ type memberNotFoundTemplateData struct {
 func (f *ResponseFormatter) MemberNotFound(ctx context.Context, memberName string) string {
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNotFound, memberNotFoundTemplateData{MemberName: memberName})
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

@@ -2,7 +2,6 @@ package youtubejscollector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -59,7 +58,7 @@ func (r *CommunityRunner) Collect(ctx context.Context, input *collectutil.RunInp
 	if result.MissingTab {
 		out, completeErr := completeEmptyCollection(started)
 
-		return out, errors.Join(completeErr)
+		return out, completeErr
 	}
 
 	envelope, err := r.communityEnvelope(input, &result)

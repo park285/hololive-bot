@@ -58,7 +58,6 @@ func TestAlarmDispatchMaintenanceDeletesTerminalRowsAndOrphanEventsInChunks(t *t
 
 	require.NoError(t, runner.RunOnce(t.Context()))
 	assert.Equal(t, []dispatchoutbox.Status{
-		dispatchoutbox.StatusShadowed,
 		dispatchoutbox.StatusSent,
 		dispatchoutbox.StatusDLQ,
 		dispatchoutbox.StatusQuarantined,
@@ -74,7 +73,6 @@ func TestAlarmDispatchMaintenanceDoesNotDeleteActiveStatuses(t *testing.T) {
 	assert.False(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusLeased))
 	assert.False(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusSending))
 	assert.True(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusSent))
-	assert.True(t, alarmDispatchMaintenanceStatusIsDeletable(dispatchoutbox.StatusShadowed))
 }
 
 func TestAlarmDispatchMaintenanceClampsRetentionLimit(t *testing.T) {
@@ -144,7 +142,7 @@ func TestAlarmDispatchMaintenanceObservationFailuresDoNotBlockDeletion(t *testin
 			require.NotPanics(t, func() {
 				require.NoError(t, runner.RunOnce(t.Context()))
 			})
-			assert.Len(t, store.deletedTerminal, 5)
+			assert.Len(t, store.deletedTerminal, 4)
 			assert.Equal(t, 1, store.deletedSendUnits)
 			assert.Equal(t, 1, store.deletedEvents)
 			require.NotNil(t, store.observationDone)

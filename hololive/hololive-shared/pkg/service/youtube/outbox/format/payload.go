@@ -2,7 +2,6 @@ package format
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -15,8 +14,9 @@ type DispatchPayloadFormatter interface {
 	FormatYouTubeOutboxPayload(ctx context.Context, payload *domain.YouTubeOutboxDispatchPayload) (string, error)
 }
 
-func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
-	out, err := (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings}).FormatYouTubeOutboxPayload(ctx, payload)
+// FormatYouTubeOutboxPayload는 dispatch payload를 최종 알림 본문으로 렌더링한다. 접기는 여러 항목 묶음에만 적용된다.
+func FormatYouTubeOutboxPayload(ctx context.Context, renderer *template.Renderer, messageStrings *messagestrings.Store, seeMoreFold bool, payload *domain.YouTubeOutboxDispatchPayload) (string, error) {
+	out, err := (&MessageFormatter{Renderer: renderer, MessageStrings: messageStrings, SeeMoreFold: seeMoreFold}).FormatYouTubeOutboxPayload(ctx, payload)
 	if err != nil {
 		return out, fmt.Errorf("format youtube outbox payload: %w", err)
 	}
@@ -29,20 +29,16 @@ func (mf *MessageFormatter) FormatYouTubeOutboxPayload(ctx context.Context, payl
 		return "", fmt.Errorf("format youtube outbox payload: %w", err)
 	}
 
-	if msg := strings.TrimSpace(payload.PreRenderedMessage); msg != "" {
-		return msg, nil
-	}
-
 	memberName := strings.TrimSpace(payload.MemberName)
 	if memberName == "" {
-		memberName = mf.MessageStrings.VTuberFallbackContext(ctx)
+		memberName = mf.MessageStrings.Text(messagestrings.MiscVTuberFallback)
 	}
 
 	items := notificationOutboxItemsFromDispatchPayload(payload)
 	if len(items) == 1 {
 		out, itemErr := mf.formatSingleOutboxItem(ctx, memberName, &items[0])
 
-		return out, errors.Join(itemErr)
+		return out, itemErr
 	}
 
 	out, err := mf.FormatGroupedMessage(ctx, memberName, payload.ChannelID, payload.Kind, items)

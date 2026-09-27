@@ -2,9 +2,7 @@ package scraping
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -22,143 +20,22 @@ var (
 	fallbackPickMetadata      = parser.FallbackPickMetadata
 )
 
-func (c *Client) GetUpcomingEvents(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
-	out, err := c.getUpcomingEvents(ctx, channelID)
-	if err != nil {
-		return out, fmt.Errorf("get upcoming events: %w", err)
-	}
-
-	return out, nil
-}
-
-func (c *Client) GetUpcomingEventsWaitAdmission(ctx context.Context, channelID string) ([]*parser.UpcomingEvent, error) {
-	out, err := c.getUpcomingEvents(ctx, channelID, LiveStatusFallbackFetchPolicy)
-	if err != nil {
-		return out, fmt.Errorf("get upcoming events: %w", err)
-	}
-
-	return out, nil
-}
-
-func (c *Client) getUpcomingEvents(ctx context.Context, channelID string, policy ...FetchPolicy) ([]*parser.UpcomingEvent, error) {
-	url := fmt.Sprintf("https://www.youtube.com/channel/%s", channelID)
-
-	html, err := c.fetchChannelSourcePage(ctx, "upcoming_events", channelID, url, FailureSourceHTML, policy...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch channel page: %w", err)
-	}
-
-	jsonStr, err := initialdata.Extract(html)
-	if err != nil {
-		logStructureWarning("upcoming_events", channelID, "ytInitialData extraction failed", "error", err)
-
-		if driftErr := c.recordParserDrift(ctx, "upcoming_events", "extract_yt_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, nil
-	}
-
-	data := gjson.Parse(jsonStr)
-
-	events, err := parseUpcomingEventsFromInitialData(&data)
-	if err != nil {
-		logStructureWarning("upcoming_events", channelID, "failed to parse initial data", "error", err)
-
-		if driftErr := c.recordParserDrift(ctx, "upcoming_events", "parse_initial_data", channelID, url, FailureSourceHTML, html, err); driftErr != nil {
-			return nil, fmt.Errorf("record parser drift: %w", driftErr)
-		}
-
-		return nil, nil
-	}
-
-	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)
-
-	return events, nil
-}
-
+// GetRecentVideos는 채널 /videos HTML 하나만 원천으로 쓴다. 실패와 parser drift는 오류로 돌려주고, RSS로 보충하거나
+// 빈 결과를 성공으로 돌려주지 않는다(DEC-20260926-hololive-source-fallbacks-retirement). RSS backoff 상태와
+// YOUTUBE_VIDEO_RSS_BACKOFF_TTL_SECONDS도 이 결정으로 퇴역했다.
 func (c *Client) GetRecentVideos(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, error) {
 	if maxResults <= 0 {
 		return []*parser.Video{}, nil
-	}
-
-	if rssVideos, ok := c.getRecentVideosFromRSSBackoff(ctx, channelID, maxResults); ok {
-		return rssVideos, nil
 	}
 
 	url := fmt.Sprintf("https://www.youtube.com/channel/%s/videos", channelID)
 
 	videos, err := c.getRecentVideosFromPage(ctx, url, channelID, maxResults)
 	if err != nil {
-		if !isRetryableVideoPageError(err) {
-			return nil, fmt.Errorf("get recent videos from page: %w", err)
-		}
-	} else {
-		c.clearVideoRSSBackoff(ctx, channelID)
-
-		return videos, nil
+		return nil, fmt.Errorf("get recent videos from page: %w", err)
 	}
 
-	if isRetryableVideoPageError(err) {
-		c.markVideoRSSBackoff(ctx, channelID)
-	}
-
-	rssVideos, recovered, rssErr := c.getRecentVideosFromRSSFallback(ctx, channelID, maxResults)
-	if rssErr != nil {
-		return nil, fmt.Errorf("get recent videos: html page and rss fallback failed: %w", errors.Join(err, rssErr))
-	}
-
-	if recovered {
-		return rssVideos, nil
-	}
-
-	return []*parser.Video{}, nil
-}
-
-func (c *Client) getRecentVideosFromRSSBackoff(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, bool) {
-	if !c.isVideoRSSBackoff(ctx, channelID) {
-		return nil, false
-	}
-
-	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults, RSSFetchPolicy)
-	if rssErr == nil && len(rssVideos) > 0 {
-		return rssVideos, true
-	}
-
-	if rssErr == nil {
-		slog.Debug("video rss backoff returned no videos, retrying html scraping",
-			"channel_id", channelID)
-		c.clearVideoRSSBackoff(ctx, channelID)
-
-		return nil, false
-	}
-
-	slog.Warn("video rss backoff path failed, retrying html scraping",
-		"channel_id", channelID,
-		"error", rssErr.Error())
-
-	return nil, false
-}
-
-func (c *Client) getRecentVideosFromRSSFallback(ctx context.Context, channelID string, maxResults int) ([]*parser.Video, bool, error) {
-	rssVideos, rssErr := c.getRecentVideosFromRSS(ctx, channelID, maxResults, RSSFetchPolicy)
-	if rssErr != nil {
-		slog.Debug("recent videos rss fallback failed",
-			"channel_id", channelID,
-			"error", rssErr.Error())
-
-		return nil, false, fmt.Errorf("get recent videos from RSS: %w", rssErr)
-	}
-
-	if len(rssVideos) == 0 {
-		return nil, false, nil
-	}
-
-	logStructureWarning("recent_videos", channelID, "html parser recovered via rss fallback",
-		"channel_id", channelID,
-		"count", len(rssVideos))
-
-	return rssVideos, true, nil
+	return videos, nil
 }
 
 func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID string, maxResults int) ([]*parser.Video, error) {
@@ -175,7 +52,7 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 			return nil, fmt.Errorf("record parser drift: %w", driftErr)
 		}
 
-		return nil, nil
+		return nil, fmt.Errorf("extract yt initial data: %w", err)
 	}
 
 	data := gjson.Parse(jsonStr)
@@ -188,7 +65,7 @@ func (c *Client) getRecentVideosFromPage(ctx context.Context, pageURL, channelID
 			return nil, fmt.Errorf("record parser drift: %w", driftErr)
 		}
 
-		return nil, nil
+		return nil, fmt.Errorf("parse initial data: %w", err)
 	}
 
 	c.recordChannelSourceSuccess(ctx, channelID, FailureSourceHTML)

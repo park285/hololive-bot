@@ -77,7 +77,6 @@
         "subscriber_lookup_parallelism": 16,
         "aggregate_sync_interval_ms": 30000,
         "telemetry_poll_interval_ms": 30000,
-        "telemetry_backfill_batch": 200,
         "telemetry_flush_batch": 200,
         "telemetry_retry_backoff_ms": 30000,
         "telemetry_retention_ms": 86400000

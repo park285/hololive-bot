@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "DEC-20260926-hololive-message-strings-startup-validation",
+  "title": "message_strings는 DB 정본을 유지하고 필수 key 검증에 실패하면 기동을 실패시킨다",
+  "decision_status": "accepted",
+  "delivery_status": "planned",
+  "scope": [
+    "hololive-bot"
+  ],
+  "decided_at": "2026-09-26",
+  "summary": "사용자가 2026-09-26 확정했다. message_strings는 baseline 시드(114행, 13 namespace)와 이후 마이그레이션(예: 188)으로만 바뀌며 운영 중 쓰기 경로와 Invalidate 호출자가 없고, 코드 대체 문구 20개 key는 모두 시드에 있다. hololive-api bot plane, llm plane, alarm-worker egress는 기동 시 타입 있는 key 상수 전체를 검증하고 GetMap 소비 namespace(org, alarmtype 등)가 비어 있지 않은지 확인하며, 실패하면 기동에 실패한다. GetOrContext 28곳과 VTuberFallbackContext 1곳의 코드 대체 문구, lazy 재적재, FallbackSentinel을 제거하고 시드 SQL 기반 format 인자 수 테스트를 둔다. 모든 runtime은 PostgreSQL 없이 동작하지 않으므로 기동 검증이 가용성을 줄이지 않는다. 문구를 코드로 옮기는 안은 114행 이관, 테이블 폐기, notification_templates와의 정본 분리가 필요해 이번 범위에서 제외했다. 근거는 iris-stack의 2026-09-26 비-Iris 감사 결과(docs/agent-workflows/evidence/2026-09-26-stack-audit/non-iris-audit.md B6)이고 실행은 PLN-20260926-stack-audit-refactoring T09가 맡는다.",
+  "sources": [],
+  "evidence": [],
+  "implementation": [],
+  "supersedes": []
+}

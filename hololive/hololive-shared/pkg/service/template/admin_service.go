@@ -66,7 +66,7 @@ func (s *AdminService) List(ctx context.Context, key *domain.TemplateKey, channe
 	return templates, nil
 }
 
-func (s *AdminService) GetByKey(ctx context.Context, key domain.TemplateKey) (result0 *domain.NotificationTemplate, result1 []*domain.NotificationTemplate, err error) {
+func (s *AdminService) GetByKey(ctx context.Context, key domain.TemplateKey) (*domain.NotificationTemplate, []*domain.NotificationTemplate, error) {
 	if !sampledata.IsValidTemplateKey(key) {
 		return nil, nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}
@@ -126,7 +126,7 @@ func (s *AdminService) DeleteOverride(ctx context.Context, key domain.TemplateKe
 	return nil
 }
 
-func (s *AdminService) Preview(_ context.Context, key domain.TemplateKey, body string) (value0 string, result1 any, err error) {
+func (s *AdminService) Preview(_ context.Context, key domain.TemplateKey, body string) (string, any, error) {
 	if !sampledata.IsValidTemplateKey(key) {
 		return "", nil, fmt.Errorf("%w: %s", ErrTemplateKeyNotFound, key)
 	}

@@ -116,7 +116,7 @@ func (i *MessageIngress) prepare(ctx context.Context, message *webhook.Message, 
 		return nil, false
 	}
 
-	if i.isRoomBlocked(ctx, roomName, chatID, roomAttr) {
+	if i.isRoomBlocked(ctx, chatID, roomAttr) {
 		return nil, false
 	}
 
@@ -183,8 +183,8 @@ func (i *MessageIngress) shouldSkipSender(ctx context.Context, message *webhook.
 	return true
 }
 
-func (i *MessageIngress) isRoomBlocked(ctx context.Context, roomName, chatID string, roomAttr slog.Attr) bool {
-	if i.acl == nil || i.acl.IsRoomAllowed(roomName, chatID) {
+func (i *MessageIngress) isRoomBlocked(ctx context.Context, chatID string, roomAttr slog.Attr) bool {
+	if i.acl == nil || i.acl.IsRoomAllowed(chatID) {
 		return false
 	}
 

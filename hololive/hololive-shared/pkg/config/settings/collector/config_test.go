@@ -12,12 +12,13 @@ import (
 
 func TestDefaultYouTubeCollectorConfigMatchesCurrentBehavior(t *testing.T) {
 	cfg := DefaultConfig()
-	workers := settings.DefaultScraperWorkerCount()
+	// 기본값은 퇴역 producer 설정에서 옮겨 온 값(worker 4, retry 30초~5분)을 그대로 유지한다.
+	workers := 4
 
 	assertCollectorWorkerDefaults(t, cfg, workers)
 	assertCollectorLeaseDefaults(t, cfg)
 	assertCollectorTimeoutDefaults(t, cfg)
-	assertCollectorRetryDefaults(t, cfg, settings.DefaultScraperSchedulerConfig())
+	assertCollectorRetryDefaults(t, cfg, 30*time.Second, 5*time.Minute)
 	assertCollectorLimitDefaults(t, cfg, workers)
 
 	cfg.InstanceID = settingstest.CollectorInstanceC
@@ -67,10 +68,10 @@ func assertCollectorTimeoutDefaults(t *testing.T, cfg Config) {
 	}
 }
 
-func assertCollectorRetryDefaults(t *testing.T, cfg Config, retry settings.ScraperSchedulerConfig) {
+func assertCollectorRetryDefaults(t *testing.T, cfg Config, retryMin, retryMax time.Duration) {
 	t.Helper()
 
-	if cfg.RetryMin != retry.ErrorBackoffMin || cfg.RetryMax != retry.ErrorBackoffMax {
+	if cfg.RetryMin != retryMin || cfg.RetryMax != retryMax {
 		t.Fatalf("retry = %s %s", cfg.RetryMin, cfg.RetryMax)
 	}
 
@@ -134,34 +135,6 @@ func TestLoadYouTubeCollectorConfigNonDefaultOverride(t *testing.T) {
 
 	if cfg.InstanceID != settingstest.CollectorInstanceC {
 		t.Fatalf("InstanceID = %q, want youtube-collector-c", cfg.InstanceID)
-	}
-}
-
-func TestLoadYouTubeCollectorConfigIgnoresRetiredAliasEnv(t *testing.T) {
-	for _, name := range []string{
-		"YOUTUBE_COLLECTOR_MAX_SUCCESS_RESPONSE_BYTES",
-		"YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES",
-		"YOUTUBE_COLLECTOR_YOUTUBEJS_REQUEST_TIMEOUT_SECONDS",
-		"YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS",
-	} {
-		settingstest.UnsetEnv(t, name)
-	}
-
-	t.Setenv("YOUTUBE_COLLECTOR_MAX_AGGREGATE_BYTES", "4096")
-	t.Setenv("YOUTUBE_COLLECTOR_YOUTUBEJS_TIMEOUT_SECONDS", "11")
-
-	cfg, err := loadConfig()
-	if err != nil {
-		t.Fatalf("loadConfig() error = %v", err)
-	}
-
-	defaults := DefaultConfig()
-	if cfg.MaxSuccessResponseBytes != defaults.MaxSuccessResponseBytes {
-		t.Fatalf("MaxSuccessResponseBytes = %d, want default %d", cfg.MaxSuccessResponseBytes, defaults.MaxSuccessResponseBytes)
-	}
-
-	if cfg.YouTubeJSRequestTimeout != defaults.YouTubeJSRequestTimeout {
-		t.Fatalf("YouTubeJSRequestTimeout = %s, want default %s", cfg.YouTubeJSRequestTimeout, defaults.YouTubeJSRequestTimeout)
 	}
 }
 

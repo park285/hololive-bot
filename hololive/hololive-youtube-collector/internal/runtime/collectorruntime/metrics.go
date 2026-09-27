@@ -43,6 +43,7 @@ type Metrics struct {
 	leaseLost    *prometheus.CounterVec
 	publish      *prometheus.CounterVec
 	enqueue      *prometheus.CounterVec
+	invalidTuple *prometheus.CounterVec
 
 	mu            sync.Mutex
 	lastSuccessAt map[string]time.Time
@@ -92,9 +93,14 @@ func NewMetrics(registerer prometheus.Registerer) *Metrics {
 		Name: "youtube_collection_enqueue_total",
 		Help: "YouTube collection local queue enqueue results.",
 	}, []string{"result"})
+	metrics.invalidTuple = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "youtube_collection_invalid_failure_tuple_total",
+		Help: "YouTube collection attempts that ended with a code/class tuple outside the durable failure contract.",
+	}, []string{labelProvider, labelKind})
 	registerer.MustRegister(
 		metrics.attempts, metrics.duration, metrics.lastSuccess, metrics.freshness,
 		metrics.completeness, metrics.leaseAcquire, metrics.leaseLost, metrics.publish, metrics.enqueue,
+		metrics.invalidTuple,
 	)
 
 	return metrics
@@ -169,6 +175,16 @@ func (m *Metrics) ObservePublish(provider contract.Provider, kind, outcome strin
 	}
 
 	m.publish.WithLabelValues(string(provider), kind, boundedOutcome(outcome)).Inc()
+}
+
+// ObserveInvalidFailureTuple은 호출 코드가 계약 밖 failure tuple을 만든 시도를 센다. 오류 자체는 미분류 Internal로
+// 지연 처리되므로 이 counter가 위반 추세를 드러내는 유일한 신호다.
+func (m *Metrics) ObserveInvalidFailureTuple(provider contract.Provider, kind string) {
+	if m == nil {
+		return
+	}
+
+	m.invalidTuple.WithLabelValues(string(provider), kind).Inc()
 }
 
 func (m *Metrics) ObserveEnqueue(result EnqueueResult) {

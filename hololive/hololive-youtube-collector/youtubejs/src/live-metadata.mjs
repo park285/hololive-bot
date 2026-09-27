@@ -34,7 +34,10 @@ export async function fetchLiveMetadata(innertube, videoId) {
   return parseRawLiveMetadata(response.data, id);
 }
 
-/** 요청 영상의 엄격한 live 상태·예정 시각과, 시각이 가려진 경우의 확인된 접근 제한 사유를 추출합니다. */
+/**
+ * 요청 영상의 엄격한 live 상태·예정 시각과, 시각이 가려진 경우의 확인된 접근 제한 사유를 추출합니다.
+ * channelId·isLiveNow·endTimestamp는 형식이 맞을 때만 덧붙이는 부가 사실이며 기존 거부·수용 판정에 쓰지 않습니다.
+ */
 export function parseRawLiveMetadata(raw, expectedVideoId) {
   if (!isRecord(raw)) {
     throw parserDrift("raw player data is not an object");
@@ -55,6 +58,8 @@ export function parseRawLiveMetadata(raw, expectedVideoId) {
   }
 
   let startTimestamp;
+  let isLiveNow;
+  let endTimestamp;
   if (raw.microformat != null) {
     if (!isRecord(raw.microformat)) {
       throw parserDrift("raw player microformat is not an object");
@@ -72,6 +77,10 @@ export function parseRawLiveMetadata(raw, expectedVideoId) {
         if (Object.hasOwn(liveDetails, "startTimestamp")) {
           startTimestamp = normalizedRFC3339(liveDetails.startTimestamp);
         }
+        if (typeof liveDetails.isLiveNow === "boolean") {
+          isLiveNow = liveDetails.isLiveNow;
+        }
+        endTimestamp = optionalValidRFC3339(liveDetails.endTimestamp);
       }
     }
   }
@@ -84,14 +93,30 @@ export function parseRawLiveMetadata(raw, expectedVideoId) {
 
   return {
     videoId: expectedVideoId,
+    ...(typeof details.channelId === "string" && details.channelId.trim() !== "" ? { channelId: details.channelId } : {}),
     ...(isLive == null ? {} : { isLive }),
+    ...(isLiveNow == null ? {} : { isLiveNow }),
     ...(isUpcoming == null ? {} : { isUpcoming }),
     ...(isLiveContent == null ? {} : { isLiveContent }),
     ...(startTimestamp == null ? {} : { startTimestamp }),
+    ...(endTimestamp == null ? {} : { endTimestamp }),
     ...(startTimestamp == null && isUpcoming === true && isLiveContent === true && hasPaidAccessRestriction(raw.playabilityStatus)
       ? { scheduleUnavailableReason: "access_restricted" }
       : {}),
   };
+}
+
+// 부가 종료 시각은 기존 판정을 바꾸지 않도록 형식 오류를 거부 대신 생략으로 처리합니다.
+function optionalValidRFC3339(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const match = rfc3339Pattern.exec(value);
+  const parsed = Date.parse(value);
+  if (match == null || !validDateTime(match) || !Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return new Date(parsed).toISOString();
 }
 
 // 멤버십 안내가 예정 시각을 가린 실제 응답만 분류하며 번역된 reason 문자열은 판정에 쓰지 않습니다.

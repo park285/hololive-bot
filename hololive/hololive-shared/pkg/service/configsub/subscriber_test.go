@@ -47,7 +47,7 @@ func TestHandleMessageRecoversApplyPanicAndKeepsSubscribing(t *testing.T) {
 		},
 	}
 
-	payload, err := jsonv2.Marshal(contractssettings.ConfigUpdateV1{Type: "scraper_proxy"})
+	payload, err := jsonv2.Marshal(contractssettings.ConfigUpdateV1{Type: contractssettings.UpdateTypeACL})
 	require.NoError(t, err)
 
 	msg := valkey.PubSubMessage{Channel: defaultChannel, Message: string(payload)}

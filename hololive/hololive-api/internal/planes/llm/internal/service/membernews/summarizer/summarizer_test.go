@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -45,7 +47,7 @@ type fakeLLM struct {
 	err      error
 }
 
-func (f *fakeLLM) GenerateJSON(_ context.Context, _, _ string, _ map[string]any) (string, error) {
+func (f *fakeLLM) GenerateJSON(_ context.Context, _ openaipreset.PromptLayers, _ map[string]any) (string, error) {
 	if f.err != nil {
 		return "", f.err
 	}
@@ -180,23 +182,26 @@ func TestSummarizer_DropsInvalidItemsByValidator(t *testing.T) {
 	}
 }
 
-func TestSummarizer_LLMFailureUsesFallback(t *testing.T) {
+// LLM 실패는 오류로만 알린다. 결정적 fallback digest는 membernews.Service가 한 곳에서 만든다.
+func TestSummarizer_LLMFailureReturnsErrorForServiceFallback(t *testing.T) {
 	validator := mustValidatorWithAllowlist(t)
 	s := NewSummarizer(&fakeLLM{err: errors.New("llm down")}, nil, validator, nil)
 
 	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
 
 	digest, err := s.Summarize(t.Context(), &input)
-	if err != nil {
-		t.Fatalf("summarize error: %v", err)
+	if err == nil || digest != nil {
+		t.Fatalf("Summarize() = (%#v, %v), want (nil, LLM error)", digest, err)
 	}
+}
 
-	if len(digest.TopItems) == 0 {
-		t.Fatal("fallback should provide non-empty top items")
-	}
+func TestSummarizer_NilLLMReturnsUnavailable(t *testing.T) {
+	s := NewSummarizer(nil, nil, mustValidatorWithAllowlist(t), nil)
 
-	if digest.ResultType != sharedmodel.SummaryResultFallback {
-		t.Fatalf("result_type = %q, want %q", digest.ResultType, sharedmodel.SummaryResultFallback)
+	input := model.SummarizeInput{Period: model.PeriodWeekly, Now: time.Date(2026, time.February, 16, 10, 0, 0, 0, util.KSTZone), Candidates: sampleCandidates()}
+
+	if _, err := s.Summarize(t.Context(), &input); !errors.Is(err, ErrLLMUnavailable) {
+		t.Fatalf("Summarize() error = %v, want ErrLLMUnavailable", err)
 	}
 }
 

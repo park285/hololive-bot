@@ -22,9 +22,8 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,6 +41,8 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/database"
 )
 
+// initMemberNewsService는 member news runtime을 조립한다. 활성인 LLM client나 설정된 X allowlist를 초기화하지
+// 못하면 조용히 기능을 줄이지 않고 오류를 돌려 기동을 실패시킨다(stack audit B5).
 func initMemberNewsService(
 	ctx context.Context,
 	provider settings.LLMProviderConfig,
@@ -51,20 +52,27 @@ func initMemberNewsService(
 	cacheClient cache.Client,
 	membersData domain.MemberDataProvider, guards *llmGuards,
 	logger *slog.Logger,
-) *membernews.Service {
+) (*membernews.Service, error) {
 	if llmConfig == nil {
 		llmConfig = &settings.LLMConfig{}
 	}
 
+	clients, err := provideMemberNewsLLMClients(provider, llmConfig, ProvideLLMCostTracker(), logger)
+	if err != nil {
+		return nil, fmt.Errorf("provide member news LLM clients: %w", err)
+	}
+
+	validator, err := initMemberNewsSourceValidator(membersData, logger)
+	if err != nil {
+		return nil, fmt.Errorf("init member news source validator: %w", err)
+	}
+
 	repository := membernews.NewRepository(postgres, cacheClient, logger)
-	costTracker := ProvideLLMCostTracker(cacheClient, llmConfig.MonthlyTokenCeiling, logger)
-	llmClient := guardLLMClient(ProvideMemberNewsLLMClient(provider, llmConfig, costTracker, logger), guards)
-	reviewer := guardLLMClient(ProvideMemberNewsReviewerClient(provider, llmConfig, costTracker, logger), guards)
-	adjudicator := guardLLMClient(ProvideMemberNewsAdjudicatorClient(provider, llmConfig, costTracker, logger), guards)
+	llmClient := guardLLMClient(clients.summary, guards)
+	reviewer := guardLLMClient(clients.reviewer, guards)
+	adjudicator := guardLLMClient(clients.adjudicator, guards)
 
 	searcher := provideExaSearcher(exaConfig, logger)
-
-	validator := initMemberNewsSourceValidator(membersData, logger)
 
 	var promptGuard *promptguard.Guard
 
@@ -72,25 +80,31 @@ func initMemberNewsService(
 		promptGuard = guards.prompt
 	}
 
-	baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger, mnsummarizer.WithPromptGuard(promptGuard))
+	// 요약 LLM이 꺼져 있으면 summarizer를 두지 않는다. 그때 결정적 digest는 membernews.Service가
+	// llm_disabled 사유로 만든다.
+	var summarizer model.Summarizer
 
-	var summarizer model.Summarizer = baseSummarizer
+	if llmClient != nil {
+		baseSummarizer := mnsummarizer.NewSummarizer(llmClient, searcher, validator, logger, mnsummarizer.WithPromptGuard(promptGuard))
 
-	if llmConfig.MemberNews.Enabled && reviewer != nil {
-		summarizer = mnsummarizer.NewConsensusSummarizer(
-			baseSummarizer, reviewer, adjudicator, validator,
-			consensus.Config{
-				ConfidenceThreshold: llmConfig.MemberNews.Confidence,
-				ReviewTimeout:       time.Duration(llmConfig.MemberNews.ReviewTimeout) * time.Second,
-				AdjudicateTimeout:   time.Duration(llmConfig.MemberNews.AdjudicateTimeout) * time.Second,
-			},
-			logger,
-		)
-		logger.Info("Consensus summarizer enabled",
-			slog.Float64("confidence_threshold", llmConfig.MemberNews.Confidence),
-			slog.Int("review_timeout_sec", llmConfig.MemberNews.ReviewTimeout),
-			slog.Int("adjudicate_timeout_sec", llmConfig.MemberNews.AdjudicateTimeout),
-		)
+		summarizer = baseSummarizer
+
+		if llmConfig.MemberNews.Enabled && reviewer != nil {
+			summarizer = mnsummarizer.NewConsensusSummarizer(
+				baseSummarizer, reviewer, adjudicator, validator,
+				consensus.Config{
+					ConfidenceThreshold: llmConfig.MemberNews.Confidence,
+					ReviewTimeout:       time.Duration(llmConfig.MemberNews.ReviewTimeout) * time.Second,
+					AdjudicateTimeout:   time.Duration(llmConfig.MemberNews.AdjudicateTimeout) * time.Second,
+				},
+				logger,
+			)
+			logger.Info("Consensus summarizer enabled",
+				slog.Float64("confidence_threshold", llmConfig.MemberNews.Confidence),
+				slog.Int("review_timeout_sec", llmConfig.MemberNews.ReviewTimeout),
+				slog.Int("adjudicate_timeout_sec", llmConfig.MemberNews.AdjudicateTimeout),
+			)
+		}
 	}
 
 	service := membernews.NewService(repository, summarizer, validator, membersData, logger, membernews.WithPromptGuard(promptGuard))
@@ -98,7 +112,41 @@ func initMemberNewsService(
 		logger.Warn("Member news subscription warmup failed", slog.String("error", warmErr.Error()))
 	}
 
-	return service
+	return service, nil
+}
+
+// memberNewsLLMClients는 member news가 쓰는 LLM client 묶음이다. 설정으로 꺼진 기능의 필드는 nil이다.
+type memberNewsLLMClients struct {
+	summary     llmclient.Client
+	reviewer    llmclient.Client
+	adjudicator llmclient.Client
+}
+
+func provideMemberNewsLLMClients(provider settings.LLMProviderConfig, llmConfig *settings.LLMConfig, tracker llmclient.CostTracker, logger *slog.Logger) (memberNewsLLMClients, error) {
+	var clients memberNewsLLMClients
+
+	summary, err := ProvideMemberNewsLLMClient(provider, llmConfig, tracker, logger)
+	if err != nil && !isLLMFeatureDisabled(err) {
+		return memberNewsLLMClients{}, fmt.Errorf("member news summary client: %w", err)
+	}
+
+	clients.summary = summary
+
+	reviewer, err := ProvideMemberNewsReviewerClient(provider, llmConfig, tracker, logger)
+	if err != nil && !isLLMFeatureDisabled(err) {
+		return memberNewsLLMClients{}, fmt.Errorf("member news reviewer client: %w", err)
+	}
+
+	clients.reviewer = reviewer
+
+	adjudicator, err := ProvideMemberNewsAdjudicatorClient(provider, llmConfig, tracker, logger)
+	if err != nil && !isLLMFeatureDisabled(err) {
+		return memberNewsLLMClients{}, fmt.Errorf("member news adjudicator client: %w", err)
+	}
+
+	clients.adjudicator = adjudicator
+
+	return clients, nil
 }
 
 func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client {
@@ -113,43 +161,16 @@ func guardLLMClient(client llmclient.Client, guards *llmGuards) llmclient.Client
 	return llmclient.NewGuardedClient(client, guards.output)
 }
 
-func initMemberNewsSourceValidator(membersData domain.MemberDataProvider, logger *slog.Logger) *membernews.SourceValidator {
-	allowlistPath := resolveMemberNewsXAllowlistPath()
+// initMemberNewsSourceValidator는 X allowlist 경로를 MEMBER_NEWS_X_ALLOWLIST_PATH 하나로만 받는다. 값이 없으면
+// X allowlist 없이(공식 도메인·YouTube 채널만) 검증한다. 값이 있는데 읽지 못하면 빈 allowlist로 내려가지 않고
+// 오류를 돌려 기동을 실패시킨다. 작업 디렉터리 기준 후보 경로 탐색은 두지 않는다(stack audit B5).
+func initMemberNewsSourceValidator(membersData domain.MemberDataProvider, logger *slog.Logger) (*membernews.SourceValidator, error) {
+	allowlistPath := strings.TrimSpace(envutil.StringRaw("MEMBER_NEWS_X_ALLOWLIST_PATH", ""))
 
 	validator, err := membernews.NewSourceValidator(allowlistPath, membersData, logger)
-	if err == nil {
-		return validator
-	}
-
-	logger.Warn("Failed to load member news x allowlist, fallback to empty allowlist",
-		slog.String("path", allowlistPath),
-		slog.String("error", err.Error()),
-	)
-
-	validator, err = membernews.NewSourceValidator("", membersData, logger)
 	if err != nil {
-		logger.Warn("Failed to initialize empty member news x allowlist",
-			slog.String("error", err.Error()),
-		)
+		return nil, fmt.Errorf("load member news x allowlist: %w", err)
 	}
 
-	return validator
-}
-
-func resolveMemberNewsXAllowlistPath() string {
-	if envPath := envutil.StringRaw("MEMBER_NEWS_X_ALLOWLIST_PATH", ""); strings.TrimSpace(envPath) != "" {
-		return envPath
-	}
-
-	candidates := []string{
-		filepath.Join("configs", "hololive_official_x_accounts.json"),
-		filepath.Join("..", "configs", "hololive_official_x_accounts.json"),
-	}
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-
-	return ""
+	return validator, nil
 }

@@ -33,46 +33,37 @@ func InitAlarmYouTubeStack(
 	_ *messageformatter.ResponseFormatter,
 	logger *slog.Logger,
 ) (*AlarmYouTubeStackComponents, error) {
-	alarmRepository := ProvideAlarmRepository(infra.Postgres, logger)
-
-	alarmMode, err := InitAlarmModeComponents(
-		ctx,
-		appConfig,
-		infra,
-		foundation.HolodexService,
-		foundation.MemberServiceAdapter,
-		alarmRepository,
-		logger,
-	)
+	alarmMode, err := InitAlarmModeComponents(appConfig, foundation.MemberServiceAdapter, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init alarm mode components: %w", err)
 	}
 
 	memberMatcher := ProvideMatcher(
-		ctx,
 		alarmMode.MemberDataSource,
 		infra.Cache,
-		foundation.HolodexService,
 		logger,
 	)
 	apiStack := sharedmodules.BuildYouTubeAPIStack(ctx, &sharedmodules.YouTubeAPIStackParams{
 		YouTubeConfig:   appConfig.YouTube,
-		ScraperConfig:   appConfig.Scraper,
 		CacheService:    infra.Cache,
 		SharedRateLimit: foundation.SharedRL,
 		Logger:          logger,
 	})
 
+	settingsService, err := sharedmodules.BuildSettingsService(
+		appConfig.SettingsFilePath,
+		appConfig.Notification.AdvanceMinutes,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build settings service: %w", err)
+	}
+
 	return &AlarmYouTubeStackComponents{
-		AlarmMode:      alarmMode,
-		Matcher:        memberMatcher,
-		YouTubeStack:   apiStack,
-		ActivityLogger: ProvideActivityLogger(logger),
-		SettingsService: sharedmodules.BuildSettingsService(
-			appConfig.SettingsFilePath,
-			appConfig.Notification.AdvanceMinutes,
-			appConfig.Scraper.ProxyEnabled,
-			logger,
-		),
+		AlarmMode:       alarmMode,
+		Matcher:         memberMatcher,
+		YouTubeStack:    apiStack,
+		ActivityLogger:  ProvideActivityLogger(logger),
+		SettingsService: settingsService,
 	}, nil
 }

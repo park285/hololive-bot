@@ -22,6 +22,7 @@ package dedup
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -73,16 +74,13 @@ func (s *Service) UpdateTargetMinutes(targetMinutes []int) {
 	s.targetPolicy = sharedchecker.NewTargetMinutePolicy(sharedchecker.NormalizeTargetMinutes(targetMinutes))
 }
 
-// SETNX 기반 키 선점(Valkey 장애 시 fail-closed).
-func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) bool {
+// SETNX 기반 키 선점. 저장소 오류는 "이미 선점됨"(false, nil)과 구분해 오류로 돌려준다.
+// 호출자가 이를 실패(sendOutcomeFailed)로 기록해야 Valkey 장애 동안 알림이 skip으로 사라지지 않는다.
+// 선점 key에는 room 식별자가 보간되므로 오류와 로그에는 가명 토큰만 남긴다.
+func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	acquired, err := s.cache.SetNX(ctx, key, "1", ttl)
 	if err != nil {
-		s.logger.Warn("dedup claim setnx failed",
-			slog.String("claim_key_token", privacylog.Pseudonym(key)),
-			slog.String("error", err.Error()),
-		)
-
-		return false
+		return false, fmt.Errorf("dedup claim setnx: claim_key_token=%s: %w", privacylog.Pseudonym(key), err)
 	}
 
 	s.logger.Debug("dedup claim result",
@@ -90,7 +88,7 @@ func (s *Service) tryClaimKey(ctx context.Context, key string, ttl time.Duration
 		slog.Bool("acquired", acquired),
 	)
 
-	return acquired
+	return acquired, nil
 }
 
 func (s *Service) targetMinutesSnapshot() []int {

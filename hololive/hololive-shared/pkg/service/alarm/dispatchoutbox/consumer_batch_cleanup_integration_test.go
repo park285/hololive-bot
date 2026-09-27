@@ -70,7 +70,7 @@ func prepareBatchCleanupIntegration(
 		})
 	}
 
-	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes, Status: StatusPending})
+	_, err := repository.InsertBatch(ctx, PublishBatchInput{Envelopes: envelopes})
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, "UPDATE alarm_dispatch_deliveries SET attempt_count=4")
@@ -146,7 +146,7 @@ func newBatchCleanupIntegrationConsumer(
 		releaser.err = sentinel
 	}
 
-	consumer := NewConsumer(wrapper, nil, WithWorkerID("batch-owner"), WithClaimKeyReleaser(releaser))
+	consumer := mustNewConsumer(t, wrapper, releaser, nil, WithWorkerID("batch-owner"))
 
 	return consumer, wrapper, releaser
 }

@@ -25,17 +25,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	sharedmodel "github.com/kapu/hololive-api/internal/planes/llm/internal/model"
 )
 
 type capturedMemberNewsLLM struct {
-	userPrompt string
+	userPrompt   string
+	instructions string
 }
 
-func (c *capturedMemberNewsLLM) GenerateJSON(_ context.Context, _, userPrompt string, _ map[string]any) (string, error) {
-	c.userPrompt = userPrompt
+func (c *capturedMemberNewsLLM) GenerateJSON(_ context.Context, prompts openaipreset.PromptLayers, _ map[string]any) (string, error) {
+	c.userPrompt = prompts.User
+	c.instructions = prompts.Invariant + prompts.Developer
+
 	return `{"period":"weekly","headline":"헤드라인","top_items":[{"member":"사쿠라 미코","category":"event","title":"EXPO","date_text":"2/20(금)","summary":"공식 일정","source_url":"https://hololive.hololivepro.com/news/1"}],"more_summary":"","omitted_count":0}`, nil
 }
 
@@ -66,14 +70,20 @@ func TestSummarizerSkipsBlockedSearchResult(t *testing.T) {
 	if strings.Contains(llm.userPrompt, "오염된 검색 결과") {
 		t.Fatalf("user prompt = %q, blocked search result leaked", llm.userPrompt)
 	}
+
+	// 외부 검색 결과는 데이터라 지시 계층(invariant·developer)에 들어가지 않는다.
+	if llm.instructions == "" || strings.Contains(llm.instructions, "정상 검색 결과") {
+		t.Fatalf("instruction layers = %q, want developer instructions without search data", llm.instructions)
+	}
 }
 
 func TestSummarizerFailsClosedWithoutSearchGuard(t *testing.T) {
 	llm := &capturedMemberNewsLLM{}
 	summarizer := NewSummarizer(llm, memberNewsSearchStub{results: []sharedmodel.SearchResult{{Title: "검색 결과", Content: "정상 본문"}}}, mustValidatorWithAllowlist(t), nil)
 
-	if _, err := summarizer.Summarize(t.Context(), promptFixtureInput()); err != nil {
-		t.Fatalf("Summarize() error = %v", err)
+	// guard가 없으면 LLM을 부르지 않고 오류를 돌려준다. fallback digest 결정은 membernews.Service가 소유한다.
+	if _, err := summarizer.Summarize(t.Context(), promptFixtureInput()); err == nil {
+		t.Fatal("Summarize() error = nil, want guard unavailable error")
 	}
 
 	if llm.userPrompt != "" {

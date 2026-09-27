@@ -22,31 +22,20 @@ package settings
 
 import "testing"
 
-func TestScraperProxyApplyResultAsMap(t *testing.T) {
+func TestSettingsRuntimeStateResultAsMap(t *testing.T) {
 	t.Parallel()
 
-	youtubeApplied := true
-	pollersApplied := 3
-	got := (&ScraperProxyApplyResult{
-		Requested:               true,
-		YoutubeApplied:          &youtubeApplied,
-		SchedulerPollersApplied: &pollersApplied,
-	}).AsMap()
+	got := (SettingsRuntimeStateResult{AlarmTargetMinutes: []int{5, 1}}).AsMap()
 
-	if got["requested"] != true {
-		t.Fatalf("requested key mismatch: %+v", got)
+	if minutes, ok := got["alarm_target_minutes"].([]int); !ok || len(minutes) != 2 {
+		t.Fatalf("alarm_target_minutes key mismatch: %+v", got)
 	}
 
-	if got["youtube_applied"] != true {
-		t.Fatalf("youtube_applied key mismatch: %+v", got)
-	}
-
-	if got["scheduler_pollers_applied"] != 3 {
-		t.Fatalf("scheduler_pollers_applied key mismatch: %+v", got)
-	}
-
-	if _, exists := got["reason"]; exists {
-		t.Fatalf("reason key should not exist: %+v", got)
+	// 퇴역한 scraper proxy runtime 키는 다시 노출하지 않는다.
+	for _, key := range []string{"requested", "youtube_enabled", "holodex_enabled", "scheduler_enabled", "scheduler_known"} {
+		if _, exists := got[key]; exists {
+			t.Fatalf("retired key %q should not exist: %+v", key, got)
+		}
 	}
 }
 

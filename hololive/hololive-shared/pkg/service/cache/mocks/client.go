@@ -122,7 +122,7 @@ func (m *Client) Get(ctx context.Context, key string, dest any) error {
 	return nil
 }
 
-func (m *Client) GetString(ctx context.Context, key string) (value0 string, ok1 bool, err error) {
+func (m *Client) GetString(ctx context.Context, key string) (string, bool, error) {
 	if m.GetStringFunc != nil {
 		out1, out2, err := m.GetStringFunc(ctx, key)
 		if err != nil {

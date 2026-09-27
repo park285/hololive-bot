@@ -18,6 +18,7 @@ type RetentionConfig struct {
 	CollisionAge          time.Duration
 	ReplayAuditAge        time.Duration
 	ApplicationAuditGrace time.Duration
+	LiveAbsenceSlotAge    time.Duration
 	CheckpointHistoryAge  time.Duration
 	BatchSize             int
 }
@@ -53,7 +54,7 @@ func (c RetentionConfig) Validate() error {
 
 func (c RetentionConfig) hasNegativeAge() bool {
 	return c.QueueProcessedAge < 0 || c.QueueDLQAge < 0 || c.CollisionAge < 0 || c.ReplayAuditAge < 0 ||
-		c.ApplicationAuditGrace < 0 || c.CheckpointHistoryAge < 0
+		c.ApplicationAuditGrace < 0 || c.LiveAbsenceSlotAge < 0 || c.CheckpointHistoryAge < 0
 }
 
 func retentionApplicationAgeOverflows(age, grace time.Duration) bool {
@@ -190,6 +191,13 @@ func (r *Repository) runRetentionSteps(
 			table: "source_observation_applications",
 			age:   minApplicationAuditAge(cfg),
 			run:   func() (int64, error) { return r.deleteApplicationBatch(ctx, cfg, now) },
+		},
+		{
+			table: "youtube_live_absence_slots",
+			age:   cfg.LiveAbsenceSlotAge,
+			run: func() (int64, error) {
+				return r.deleteAgedBatch(ctx, "repository_retention_delete_live_absence_slots.sql", cfg.LiveAbsenceSlotAge, now, cfg.BatchSize)
+			},
 		},
 		{
 			table: "source_collection_checkpoints",

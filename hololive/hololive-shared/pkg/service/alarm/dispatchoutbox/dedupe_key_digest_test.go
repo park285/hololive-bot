@@ -25,12 +25,12 @@ func TestBuildLedgerRowsDeliveryDigestSharesRoomAgnosticEvent(t *testing.T) {
 
 	second.Notification.RoomID = testOtherRoomID
 
-	firstEvent, firstDelivery, err := buildLedgerRows(&first, StatusShadowed)
+	firstEvent, firstDelivery, err := buildLedgerRows(&first)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(first) error = %v", err)
 	}
 
-	secondEvent, secondDelivery, err := buildLedgerRows(&second, StatusShadowed)
+	secondEvent, secondDelivery, err := buildLedgerRows(&second)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(second) error = %v", err)
 	}
@@ -43,12 +43,9 @@ func TestBuildLedgerRowsDeliveryDigestSharesRoomAgnosticEvent(t *testing.T) {
 		t.Fatal("per-room delivery dedupe keys are equal")
 	}
 
-	if firstDelivery.Status != StatusShadowed || secondDelivery.Status != StatusShadowed {
-		t.Fatalf("statuses = %q/%q", firstDelivery.Status, secondDelivery.Status)
-	}
-
-	if firstDelivery.DispatchGroupKey != "" || firstDelivery.SendUnitKey != "" {
-		t.Fatalf("shadow delivery allocated send identity: %#v", firstDelivery)
+	// shadowed 행을 없앤 뒤 모든 delivery는 pending이라 dispatch group key를 가진다. send unit은 batch 단위로 나중에 배정한다.
+	if firstDelivery.DispatchGroupKey == "" || firstDelivery.SendUnitKey != "" {
+		t.Fatalf("pending delivery send identity: %#v", firstDelivery)
 	}
 }
 
@@ -66,12 +63,12 @@ func TestBuildLedgerRowsDeliveryDigestSeparatesRenderedMessages(t *testing.T) {
 	second.Notification.RoomID = testOtherRoomID
 	second.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: testDigestPeriodKey, PreRenderedMessage: "8월 멤버 뉴스 B"}
 
-	firstEvent, _, err := buildLedgerRows(&first, StatusShadowed)
+	firstEvent, _, err := buildLedgerRows(&first)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(first) error = %v", err)
 	}
 
-	secondEvent, _, err := buildLedgerRows(&second, StatusShadowed)
+	secondEvent, _, err := buildLedgerRows(&second)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(second) error = %v", err)
 	}
@@ -98,12 +95,12 @@ func TestDeliveryDigestContentIdentityPropagatesThroughPendingSendIdentity(t *te
 
 	second.DeliveryDigest = &domain.DeliveryDigestDispatchPayload{Kind: domain.DeliveryKindMemberNewsMonthly, PeriodKey: testDigestPeriodKey, PreRenderedMessage: "8월 멤버 뉴스 B"}
 
-	firstEvent, firstDelivery, err := buildLedgerRows(&first, StatusPending)
+	firstEvent, firstDelivery, err := buildLedgerRows(&first)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(first) error = %v", err)
 	}
 
-	secondEvent, secondDelivery, err := buildLedgerRows(&second, StatusPending)
+	secondEvent, secondDelivery, err := buildLedgerRows(&second)
 	if err != nil {
 		t.Fatalf("buildLedgerRows(second) error = %v", err)
 	}

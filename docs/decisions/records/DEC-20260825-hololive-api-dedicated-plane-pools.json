@@ -18,7 +18,7 @@
   "implementation": [
     "hololive/hololive-api/internal/app/runtime.go",
     "hololive/hololive-api/internal/planes/admin/app/build_runtime.go",
-    "hololive/hololive-api/internal/planes/bot/runtime/bootstrap_core_tools.go",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-api/internal/planes/bot/runtime/bootstrap_core_tools.go",
     "hololive/hololive-api/internal/planes/llm/runtime/bootstrap_llm_scheduler.go",
     "hololive/hololive-api/internal/planes/youtube/runtime/runtime.go",
     "hololive/hololive-shared/pkg/config/settings/apiplane/runtime.go",

@@ -1,10 +1,10 @@
 package settings
 
 import (
+	"errors"
 	"os"
 	"strings"
 
-	sharedenv "github.com/park285/shared-go/v2/pkg/envutil"
 	sharedh3 "github.com/park285/shared-go/v2/pkg/h3"
 )
 
@@ -18,14 +18,15 @@ type IrisRuntimeValidationConfig struct {
 }
 
 // LoadIrisRuntimeValidationConfig는 호출 시점의 URL 검증 설정을 읽는다.
-// 기존 파일 재조회 시점의 환경 해석과 production의 stat 검사 조건을 유지한다.
+// APP_ENV=production이면 IRIS_BASE_URL_FILE의 경로·소유·권한 stat 검사를 항상 한다. 우회 플래그
+// IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS(live-compat이 주입하던 값)는 T18(2026-09-26)에서 중앙 runtime-config/iris_base_url이 root 소유 0644로
+// 검사를 통과함을 확인해 지웠다(stack-audit T11 holo-iris-base-url-skip-stat-compat, 퇴역 가드는 config_iris_retired_env.go).
 func LoadIrisRuntimeValidationConfig() IrisRuntimeValidationConfig {
 	return IrisRuntimeValidationConfig{
-		Transport:    os.Getenv("IRIS_TRANSPORT"),
-		ServerName:   strings.TrimSpace(os.Getenv("IRIS_H3_SERVER_NAME")),
-		AllowedHosts: strings.Split(os.Getenv("IRIS_BASE_URL_ALLOWED_HOSTS"), ","),
-		ValidateFileStat: strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") &&
-			!strings.EqualFold(strings.TrimSpace(os.Getenv("IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS")), "true"),
+		Transport:        os.Getenv("IRIS_TRANSPORT"),
+		ServerName:       strings.TrimSpace(os.Getenv("IRIS_H3_SERVER_NAME")),
+		AllowedHosts:     strings.Split(os.Getenv("IRIS_BASE_URL_ALLOWED_HOSTS"), ","),
+		ValidateFileStat: strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production"),
 	}
 }
 
@@ -34,16 +35,19 @@ func (c IrisRuntimeValidationConfig) HostAllowlistConfigured() bool {
 	return c.ServerName != "" || strings.TrimSpace(strings.Join(c.AllowedHosts, ",")) != ""
 }
 
-// LoadInternalH3ClientOptions는 내부 서비스 전용 값, 공통 H3 값 순으로 TLS 경로와 이름을 고른다.
-// 파일 검증과 client 생성은 호출자가 소유한다.
-func LoadInternalH3ClientOptions() sharedh3.ClientOptions {
-	return sharedh3.ClientOptions{
-		CACertFile: sharedenv.StringAny("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "HOLOLIVE_H3_CERT_FILE"),
-		ServerName: sharedenv.StringAny("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "HOLOLIVE_H3_SERVER_NAME"),
+// LoadInternalH3ClientOptions는 내부 서비스 H3 client의 TLS 경로와 이름을 전용 키 두 개에서만 읽는다.
+// 공통 서버 키(HOLOLIVE_H3_CERT_FILE, HOLOLIVE_H3_SERVER_NAME)로 내려가던 폴백은 지웠다(stack audit 2026-09-26).
+// 두 키 중 하나라도 비어 있으면 오류다. 파일 검증과 client 생성은 호출자가 소유한다.
+func LoadInternalH3ClientOptions() (sharedh3.ClientOptions, error) {
+	caCertFile := strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE"))
+	if caCertFile == "" {
+		return sharedh3.ClientOptions{}, errors.New("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE is required")
 	}
-}
 
-// RateLimiterInstanceID는 명시된 limiter 식별자를 읽는다. 빈 값의 host/random 선택은 limiter가 소유한다.
-func RateLimiterInstanceID() string {
-	return strings.TrimSpace(os.Getenv("INSTANCE_ID"))
+	serverName := strings.TrimSpace(os.Getenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME"))
+	if serverName == "" {
+		return sharedh3.ClientOptions{}, errors.New("HOLOLIVE_INTERNAL_H3_SERVER_NAME is required")
+	}
+
+	return sharedh3.ClientOptions{CACertFile: caCertFile, ServerName: serverName}, nil
 }

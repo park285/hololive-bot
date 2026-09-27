@@ -28,6 +28,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 )
@@ -249,8 +251,10 @@ func (c *ConsensusSummarizer) review(
 ) (*consensus.ReviewVerdict, error) {
 	raw, err := c.reviewer.GenerateJSON(
 		ctx,
-		reviewSystemPrompt(),
-		buildReviewUserPrompt(input, digest),
+		openaipreset.PromptLayers{
+			Developer: reviewSystemPrompt(),
+			User:      buildReviewUserPrompt(input, digest),
+		},
 		consensus.ReviewVerdictSchema(),
 	)
 	if err != nil {
@@ -284,8 +288,10 @@ func (c *ConsensusSummarizer) adjudicate(
 ) (*summaryResponse, error) {
 	raw, err := c.adjudicator.GenerateJSON(
 		ctx,
-		adjudicatorSystemPrompt(),
-		buildAdjudicatorUserPrompt(input, digest, verdict),
+		openaipreset.PromptLayers{
+			Developer: adjudicatorSystemPrompt(),
+			User:      buildAdjudicatorUserPrompt(input, digest, verdict),
+		},
 		memberNewsSummarySchema(),
 	)
 	if err != nil {

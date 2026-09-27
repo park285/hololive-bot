@@ -28,9 +28,14 @@ func (r *Repository) FinalizeNextDueLiveEnd(ctx context.Context, grace time.Dura
 }
 
 func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duration) (bool, error) {
-	var videoID string
+	var (
+		videoID string
+		dbNow   time.Time
+	)
 
-	err := tx.QueryRow(ctx, mustSQL("repository_live_due_one_0049_49.sql")).Scan(&videoID)
+	// NOW()는 트랜잭션 시작 시각이라 due 조회에서 함께 읽어도 아래 잠금 대기 뒤의 재확인과
+	// FinalizeDue 입력이 같은 값으로 유지된다.
+	err := tx.QueryRow(ctx, mustSQL("repository_live_due_one_0049_49.sql")).Scan(&videoID, &dbNow)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -45,12 +50,6 @@ func finalizeNextDueLiveEndTx(ctx context.Context, tx dbx.Tx, grace time.Duratio
 	state, err := loadLiveState(ctx, tx, nil, []string{videoID})
 	if err != nil {
 		return false, fmt.Errorf("load live state: %w", err)
-	}
-
-	var dbNow time.Time
-
-	if nowErr := tx.QueryRow(ctx, mustSQL("repository_live_now_0050_50.sql")).Scan(&dbNow); nowErr != nil {
-		return false, fmt.Errorf("load database now: %w", nowErr)
 	}
 
 	session, ok := state.Sessions[videoID]

@@ -20,50 +20,6 @@
 
 package settings
 
-type ScraperProxyApplyResult struct {
-	Requested               bool   `json:"requested"`
-	Applied                 *bool  `json:"applied,omitempty"`
-	Reason                  string `json:"reason,omitempty"`
-	YoutubeApplied          *bool  `json:"youtube_applied,omitempty"`
-	YoutubeEnabled          *bool  `json:"youtube_enabled,omitempty"`
-	HolodexApplied          *bool  `json:"holodex_applied,omitempty"`
-	HolodexEnabled          *bool  `json:"holodex_enabled,omitempty"`
-	SchedulerPollersApplied *int   `json:"scheduler_pollers_applied,omitempty"`
-	SchedulerEnabled        *bool  `json:"scheduler_enabled,omitempty"`
-	SchedulerKnown          *bool  `json:"scheduler_known,omitempty"`
-}
-
-func (r *ScraperProxyApplyResult) AsMap() map[string]any {
-	if r == nil {
-		return map[string]any{}
-	}
-
-	out := map[string]any{
-		"requested": r.Requested,
-	}
-	putOptionalPtr(out, "applied", r.Applied)
-
-	if r.Reason != "" {
-		out["reason"] = r.Reason
-	}
-
-	putOptionalPtr(out, "youtube_applied", r.YoutubeApplied)
-	putOptionalPtr(out, "youtube_enabled", r.YoutubeEnabled)
-	putOptionalPtr(out, "holodex_applied", r.HolodexApplied)
-	putOptionalPtr(out, "holodex_enabled", r.HolodexEnabled)
-	putOptionalPtr(out, "scheduler_pollers_applied", r.SchedulerPollersApplied)
-	putOptionalPtr(out, "scheduler_enabled", r.SchedulerEnabled)
-	putOptionalPtr(out, "scheduler_known", r.SchedulerKnown)
-
-	return out
-}
-
-func putOptionalPtr[T any](out map[string]any, key string, value *T) {
-	if value != nil {
-		out[key] = *value
-	}
-}
-
 type AlarmAdvanceMinutesApplyResult struct {
 	AlarmRequestedAdvanceMinutes int    `json:"alarm_requested_advance_minutes"`
 	AlarmApplied                 bool   `json:"alarm_applied"`
@@ -113,48 +69,13 @@ func (r MemberNewsWeeklyRunNowResult) AsMap() map[string]any {
 	return out
 }
 
-type ScraperProxyRuntimeStateResult struct {
-	Requested          bool   `json:"requested"`
-	Known              *bool  `json:"known,omitempty"`
-	Reason             string `json:"reason,omitempty"`
-	YoutubeEnabled     *bool  `json:"youtube_enabled,omitempty"`
-	HolodexEnabled     *bool  `json:"holodex_enabled,omitempty"`
-	SchedulerEnabled   *bool  `json:"scheduler_enabled,omitempty"`
-	SchedulerKnown     *bool  `json:"scheduler_known,omitempty"`
-	AlarmTargetMinutes []int  `json:"alarm_target_minutes,omitempty"`
+// SettingsRuntimeStateResult는 GET 설정 응답의 runtime 구획이다. 적용 중인 알림 시점만 담는다.
+type SettingsRuntimeStateResult struct {
+	AlarmTargetMinutes []int `json:"alarm_target_minutes,omitempty"`
 }
 
-func (r *ScraperProxyRuntimeStateResult) AsMap() map[string]any {
-	if r == nil {
-		return map[string]any{}
-	}
-
-	out := map[string]any{
-		"requested": r.Requested,
-	}
-	if r.Known != nil {
-		out["known"] = *r.Known
-	}
-
-	if r.Reason != "" {
-		out["reason"] = r.Reason
-	}
-
-	if r.YoutubeEnabled != nil {
-		out["youtube_enabled"] = *r.YoutubeEnabled
-	}
-
-	if r.HolodexEnabled != nil {
-		out["holodex_enabled"] = *r.HolodexEnabled
-	}
-
-	if r.SchedulerEnabled != nil {
-		out["scheduler_enabled"] = *r.SchedulerEnabled
-	}
-
-	if r.SchedulerKnown != nil {
-		out["scheduler_known"] = *r.SchedulerKnown
-	}
+func (r SettingsRuntimeStateResult) AsMap() map[string]any {
+	out := map[string]any{}
 
 	if len(r.AlarmTargetMinutes) > 0 {
 		out["alarm_target_minutes"] = r.AlarmTargetMinutes

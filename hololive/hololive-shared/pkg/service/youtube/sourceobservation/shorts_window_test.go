@@ -77,28 +77,6 @@ func TestShortsWindowClaimsCannotOvertakePendingOrProcessingBaseline(t *testing.
 	assertShortWindowOutboxes(t, pool, "new")
 }
 
-func TestShortsWindowLegacyEmptyPartialWatermarkInitializesSilently(t *testing.T) {
-	ctx := t.Context()
-	pool := dbtest.NewPool(t)
-	_, err := pool.Exec(ctx, `INSERT INTO youtube_content_watermarks (channel_id, watermark_type, initialized) VALUES ($1, 'SHORT', TRUE)`, testChannelID)
-	require.NoError(t, err)
-
-	repo := NewRepository(pool)
-	consumer := newContentTestConsumer(pool, repo, 0)
-	proof := seedPublishLease(ctx, t, pool, contract.ProviderYouTubeJS, contract.KindShortsList, testChannelID, "youtubejs_content")
-	publishShortWindow(t, repo, &proof, "known-a", "known-b")
-	require.NoError(t, consumer.Consume(ctx, contentClaimOptions()))
-	assertTableCount(t, pool, "youtube_videos", 2)
-	assertTableCount(t, pool, "youtube_notification_outbox", 0)
-	assertTableCount(t, pool, "youtube_community_shorts_alarm_states", 0)
-
-	proof = advanceLease(ctx, t, pool, &proof, time.Minute)
-	publishShortWindow(t, repo, &proof, "known-a", "known-b", "new")
-	require.NoError(t, newContentTestConsumer(pool, repo, 0).Consume(ctx, contentClaimOptions()))
-	assertShortWindowOutboxes(t, pool, "new")
-	assertTableCount(t, pool, "youtube_videos", 3)
-}
-
 func TestShortsWindowBaselineWithExistingVideoKind(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)

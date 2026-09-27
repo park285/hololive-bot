@@ -14,15 +14,12 @@ func TestPointIndexMatchesIdentityScan(t *testing.T) {
 		nil,
 		{ID: 2, ChannelID: "shared", Name: "Second"},
 		{ID: 1, ChannelID: "shared", Name: "First"},
-		{ID: 3, ChannelID: "legacy", Name: "Persisted"},
-		{ChannelID: "legacy", Name: "Legacy A"},
-		{ChannelID: "legacy", Name: "Legacy B"},
-		{Name: "Name only"},
+		{ID: 3, ChannelID: "persisted", Name: "Persisted"},
 		{ID: 1, ChannelID: "other", Name: "Duplicate identity"},
 	}
 	index := buildMemberPointIndex(members)
 
-	for _, cached := range append(members[1:], &domain.Member{ID: 99}, &domain.Member{Name: "Missing"}) {
+	for _, cached := range append(members[1:], &domain.Member{ID: 99}) {
 		var want []*domain.Member
 
 		for _, current := range members {
@@ -31,9 +28,9 @@ func TestPointIndexMatchesIdentityScan(t *testing.T) {
 			}
 		}
 
-		got := index.byIdentity[pointKey(cached)]
+		got := index.byID[cached.ID]
 		if len(got) != len(want) {
-			t.Fatalf("identity=%+v: got %d want %d", pointKey(cached), len(got), len(want))
+			t.Fatalf("id=%d: got %d want %d", cached.ID, len(got), len(want))
 		}
 
 		for i := range got {
@@ -45,6 +42,29 @@ func TestPointIndexMatchesIdentityScan(t *testing.T) {
 
 	if index.representatives["shared"] != members[2] {
 		t.Fatal("shared channel must preserve the smallest persistent ID representative")
+	}
+}
+
+// ID 없는 멤버를 채널·이름으로 대신 식별하던 호환 체인을 지웠다. 같은 채널·이름이라도 ID가 없으면 인덱싱하지 않고
+// 소유를 인정하지 않는다.
+func TestPointIndexRejectsMembersWithoutID(t *testing.T) {
+	persisted := &domain.Member{ID: 3, ChannelID: "legacy", Name: "Persisted"}
+	withoutID := &domain.Member{ChannelID: "legacy", Name: "Persisted"}
+	index := buildMemberPointIndex([]*domain.Member{persisted, withoutID})
+
+	if got := index.byID[0]; len(got) != 0 {
+		t.Fatalf("members without ID must not be indexed, got %d", len(got))
+	}
+
+	if samePointMemberIdentity(persisted, withoutID) || samePointMemberIdentity(withoutID, withoutID) {
+		t.Fatal("channel or name must not stand in for a missing member ID")
+	}
+
+	cache := &Cache{}
+	cache.allMembersSnapshot.Store(&allMembersState{members: []*domain.Member{persisted, withoutID}, generation: 1, hasSuccessful: true})
+
+	if cache.snapshotOwnedNameMemberLocked("Persisted", withoutID, 1) != nil {
+		t.Fatal("cached member without ID must not be owned by the snapshot")
 	}
 }
 

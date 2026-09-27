@@ -169,6 +169,7 @@ assert_count "seoul Compose bind" 1 "\"$seoul:30096:30096\"" "$root_dir/deploy/c
 assert_count "prod Iris host aliases" 2 ":$seoul\"" "$root_dir/deploy/compose/docker-compose.prod.yml"
 assert_count "standby primary default" 1 "HOLOLIVE_PRIMARY_HOST:-$central" "$root_dir/deploy/compose/docker-compose.standby.yml"
 assert_count "live-compat PostgreSQL bind" 1 "POSTGRES_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
+# 영구 계약(재도입 방지): live-compat Valkey의 tailnet bind는 다시 생기지 않는다. 퇴역 가드가 아니라 제거 조건이 없다.
 assert_count "retired tailnet Valkey bind" 0 "VALKEY_PORT_BIND_IP:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat Iris allowlist" 2 "IRIS_BASE_URL_ALLOWED_HOSTS:-$seoul" "$root_dir/deploy/compose/docker-compose.live-compat.yml"
 assert_count "live-compat H3 identity" 1 "HOLOLIVE_H3_SERVER_NAME:-$workstation" "$root_dir/deploy/compose/docker-compose.live-compat.yml"

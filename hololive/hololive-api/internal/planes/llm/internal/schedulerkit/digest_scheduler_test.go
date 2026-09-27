@@ -281,15 +281,26 @@ func TestRunDigest_LockReleasedOnExecuteError(t *testing.T) {
 	}
 }
 
-func TestNewDigestScheduler_NilLocker_UsesNoop(t *testing.T) {
+// locker 없이 NewDigestScheduler를 만들면 noop locker를 끼워 넣던 폴백을 지웠다. 실행은 lock 없이 진행하지 않고 실패한다.
+func TestDigestScheduler_RunDigestWithoutLockerFailsClosed(t *testing.T) {
 	ds := NewDigestScheduler(nil, discardLogger())
-	if ds.Locker == nil {
-		t.Fatal("Locker should not be nil after NewDigestScheduler(nil, ...)")
+	collected := false
+
+	err := ds.RunDigest(t.Context(), DigestOp[struct{}]{
+		LockKey: "k",
+		Collect: func(context.Context) (struct{}, bool, error) {
+			collected = true
+
+			return struct{}{}, true, nil
+		},
+		Execute: func(context.Context, struct{}) error { return nil },
+	})
+	if err == nil {
+		t.Fatal("RunDigest() error = nil, want missing locker error")
 	}
 
-	token, acquired, err := ds.Locker.TryAcquire(t.Context(), "k", time.Minute)
-	if err != nil || !acquired {
-		t.Fatalf("noop locker should always acquire, got token=%q acquired=%v err=%v", token, acquired, err)
+	if collected {
+		t.Fatal("RunDigest must not collect or execute without a locker")
 	}
 }
 

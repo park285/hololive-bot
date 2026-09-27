@@ -233,15 +233,15 @@ func retrySchedule(retry joblease.RetryDecision) (sourceobservation.RetrySchedul
 	case joblease.RetryDecisionDelay:
 		out, err := retryDelaySchedule(retry)
 
-		return out, errors.Join(err)
+		return out, err
 	case joblease.RetryDecisionAt:
 		out, err := retryAtSchedule(retry)
 
-		return out, errors.Join(err)
+		return out, err
 	default:
 		err := validateEmptyRetrySchedule(retry)
 
-		return sourceobservation.RetrySchedule{}, errors.Join(err)
+		return sourceobservation.RetrySchedule{}, err
 	}
 }
 

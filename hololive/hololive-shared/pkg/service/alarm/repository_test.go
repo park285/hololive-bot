@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	dbtest "github.com/kapu/hololive-dbtest"
 	"github.com/kapu/hololive-shared/pkg/domain"
@@ -116,6 +117,11 @@ func TestMemberNameQueriesUseMemberDisplayNameAndLatestNonEmptyAlarmFallback(t *
 
 	if names["UC_alarm_fallback"] != "New Fallback" {
 		t.Fatalf("all member names fallback = %q, want New Fallback", names["UC_alarm_fallback"])
+	}
+
+	// 예외 계약 telemetry: alarms.member_name으로 채운 채널(UC_alarm_fallback)만 센다.
+	if got := testutil.ToFloat64(alarmMemberNameFallbackChannels); got != 1 {
+		t.Fatalf("hololive_alarm_member_name_fallback_channels = %v, want 1", got)
 	}
 }
 

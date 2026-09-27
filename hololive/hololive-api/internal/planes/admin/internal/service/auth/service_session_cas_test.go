@@ -10,13 +10,13 @@ import (
 	"github.com/kapu/hololive-shared/pkg/testutil"
 )
 
-func newRefreshTestService(t *testing.T) (result0 *Service, value1 string) {
+func newRefreshTestService(t *testing.T) (*Service, string) {
 	t.Helper()
 
 	db := newTestDB(t)
 	cacheClient := testutil.NewTestCacheService(t.Context(), t)
 
-	service, err := NewService(t.Context(), db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
+	service, err := NewService(db, cacheClient, sharedlogging.NewTestLogger(), DefaultConfig())
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}

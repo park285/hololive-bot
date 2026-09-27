@@ -25,8 +25,6 @@ const (
 	lifecycleReasonRateLimited  ytlifecycle.Reason = "provider_rate_limited"
 	lifecycleReasonTransport    ytlifecycle.Reason = "provider_transport"
 	lifecycleReasonPermanent    ytlifecycle.Reason = "provider_permanent"
-	lifecycleReasonHandoff      ytlifecycle.Reason = "handoff_publish"
-	lifecycleReasonKaring       ytlifecycle.Reason = "karing_send"
 	lifecycleReasonUnknownError ytlifecycle.Reason = "provider_outcome_unknown"
 )
 
@@ -57,10 +55,11 @@ func (d *SendEngine) applyPreparedLifecycleFailure(
 	outboxes []domain.YouTubeNotificationOutbox,
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
+	mode store.DeliveryMode,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0)
+	applied, err := d.transition.ApplyPreparedFailure(ctx, rows, outboxMap(outboxes), kind, reason, 0, mode)
 	observeLifecycleApply("prepared_failure", applied, err, len(rows))
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -80,10 +79,11 @@ func (d *SendEngine) applyStartedLifecycleFailure(
 	kind ytlifecycle.FailureKind,
 	reason ytlifecycle.Reason,
 	retryAfter time.Duration,
+	mode store.DeliveryMode,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	applied, err := d.transition.ApplyStartedFailure(ctx, operation, kind, reason, retryAfter)
+	applied, err := d.transition.ApplyStartedFailure(ctx, operation, kind, reason, retryAfter, mode)
 	observeLifecycleApply("provider_failure", applied, err, operation.OwnerCount())
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -101,10 +101,11 @@ func (d *SendEngine) completeLifecycleSent(
 	ctx context.Context,
 	operation store.StartedOperation,
 	claimTokens []dispatchstate.ClaimToken,
+	mode store.DeliveryMode,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) bool {
-	applied, err := d.transition.CompleteSent(ctx, operation, claimTokens)
+	applied, err := d.transition.CompleteSent(ctx, operation, claimTokens, mode)
 	observeLifecycleApply("complete_sent", applied, err, operation.OwnerCount())
 
 	if err != nil || applied.Outcome != store.ApplyApplied {
@@ -122,6 +123,7 @@ func (d *SendEngine) completeLifecycleSent(
 func (d *SendEngine) applyLifecycleClaimSelection(
 	ctx context.Context,
 	selection *deliveryClaimSelection,
+	mode store.DeliveryMode,
 	result *dispatchstate.DispatchResult,
 	mu *sync.Mutex,
 ) {
@@ -135,6 +137,7 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 		selection.retryOutboxes,
 		ytlifecycle.FailureRetryable,
 		lifecycleReasonPreSendClaim,
+		mode,
 		result,
 		mu,
 	) {
@@ -177,8 +180,12 @@ func (d *SendEngine) applyLifecycleClaimSelection(
 	mu.Unlock()
 }
 
-func lifecycleProviderFailure(err error, defaultReason ytlifecycle.Reason) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
-	if errors.Is(err, egress.ErrKaringStatusFailed) {
+// lifecycleProviderFailure는 발송 오류를 lifecycle 실패 종류와 사유로 나눈다. 기본 사유는 provider_outcome_unknown이다.
+// Karing 경로가 넘기던 karing_send 기본 사유는 Karing 발송 삭제와 함께 없어졌다(DEC-20260926-hololive-karing-egress-disposition).
+func lifecycleProviderFailure(err error) (ytlifecycle.FailureKind, ytlifecycle.Reason, time.Duration) {
+	const defaultReason = lifecycleReasonUnknownError
+
+	if errors.Is(err, egress.ErrReplyHandoffFailed) {
 		return ytlifecycle.FailurePermanent, defaultReason, 0
 	}
 

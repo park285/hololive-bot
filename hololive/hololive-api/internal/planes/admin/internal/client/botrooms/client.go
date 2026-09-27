@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -22,13 +21,18 @@ type Client struct {
 	httpClient *httputil.JSONClient
 }
 
-func NewClient(baseURL, apiKey string, logger *slog.Logger) (*Client, error) {
+func NewClient(baseURL, apiKey string) (*Client, error) {
 	validatedBaseURL, err := validateInternalBotRoomsBaseURL(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("validate internal bot rooms base URL: %w", err)
 	}
 
-	return &Client{httpClient: internalhttp.NewJSONClient(validatedBaseURL, apiKey, 30*time.Second, logger)}, nil
+	httpClient, err := internalhttp.NewJSONClient(validatedBaseURL, apiKey, 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("configure internal bot rooms transport: %w", err)
+	}
+
+	return &Client{httpClient: httpClient}, nil
 }
 
 func (c *Client) GetRooms(ctx context.Context) (*iris.RoomListResponse, error) {

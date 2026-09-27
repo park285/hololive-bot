@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	dispatchstate "github.com/kapu/hololive-alarm-worker/internal/service/youtube/outbox/dispatchstate"
@@ -14,7 +15,7 @@ import (
 	telemetry "github.com/kapu/hololive-shared/pkg/service/youtube/outbox/telemetry"
 )
 
-func openTelemetryLoopTestDB(t *testing.T) *deliveryTestDB {
+func openTelemetryLoopTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
 	return newDeliveryPool(t)
@@ -197,7 +198,7 @@ func telemetryLoopTestRow(deliveryID, outboxID int64, contentID, roomID string) 
 	}
 }
 
-func telemetryLoopRowLogged(t *testing.T, db *deliveryTestDB, deliveryID int64) bool {
+func telemetryLoopRowLogged(t *testing.T, db *pgxpool.Pool, deliveryID int64) bool {
 	t.Helper()
 
 	var row deliveryTelemetryTestBufferModel

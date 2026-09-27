@@ -11,16 +11,17 @@ STUB_MIGRATION_OVERRIDE_ENV="$(mktemp)"
 STUB_COLLECTOR_DISABLED_ENV="$(mktemp)"
 STUB_AP_COMPOSE_ENV="$(mktemp)"
 STUB_APP_ENV="$(mktemp)"
-STUB_YOUTUBE_PRODUCER_ENV="$(mktemp)"
+STUB_YOUTUBE_COLLECTOR_ENV="$(mktemp)"
 cleanup() {
-    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_COLLECTOR_DISABLED_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_PRODUCER_ENV}"
+    rm -f "${STUB_COMPOSE_ENV}" "${STUB_MIGRATION_OVERRIDE_ENV}" "${STUB_COLLECTOR_DISABLED_ENV}" "${STUB_AP_COMPOSE_ENV}" "${STUB_APP_ENV}" "${STUB_YOUTUBE_COLLECTOR_ENV}"
 }
 trap cleanup EXIT
 cat >"${STUB_COMPOSE_ENV}" <<'EOF'
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
+HOLOLIVE_DB_PASSWORD=stub
+HOLOLIVE_SCRAPER_PASSWORD=stub
 HOLODEX_API_KEY=stub
-HOLODEX_API_KEY_1=stub
 IRIS_BOT_TOKEN=stub
 IRIS_WEBHOOK_TOKEN=stub
 LIVE_LOGS_PATH=/srv/hololive-logs-stub
@@ -37,6 +38,8 @@ EOF
 cat >"${STUB_AP_COMPOSE_ENV}" <<'EOF'
 CACHE_PASSWORD=stub
 DB_PASSWORD=stub
+HOLOLIVE_DB_PASSWORD=stub
+HOLOLIVE_SCRAPER_PASSWORD=stub
 HOLOLIVE_CENTRAL_CACHE_HOST=stub
 HOLOLIVE_CENTRAL_POSTGRES_HOST=stub
 CLIPROXY_BASE_URL=https://cliproxy.invalid
@@ -46,28 +49,14 @@ cp "${STUB_COMPOSE_ENV}" "${STUB_APP_ENV}"
 cat >>"${STUB_APP_ENV}" <<'EOF'
 API_SECRET_KEY=stub
 EOF
-cat >"${STUB_YOUTUBE_PRODUCER_ENV}" <<'EOF'
+cat >"${STUB_YOUTUBE_COLLECTOR_ENV}" <<'EOF'
 METRICS_API_KEY=stub
 HOLODEX_API_KEY=stub
-HOLODEX_API_KEY_1=stub
-HOLODEX_API_KEY_2=stub
-HOLODEX_API_KEY_3=stub
-HOLODEX_API_KEY_4=stub
-HOLODEX_API_KEY_5=stub
-SCRAPER_PROXY_ENABLED=false
-SCRAPER_PROXY_URL=http://proxy.invalid
-YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT=2026-04-10T01:11:12Z
-YOUTUBE_ENABLE_QUOTA_BUILDING=true
 EOF
 
 PROD_OVERLAYS=(
     -f deploy/compose/docker-compose.prod.yml
     -f deploy/compose/docker-compose.live-compat.yml
-)
-MAIN_AP_OVERLAYS=(
-    "${PROD_OVERLAYS[@]}"
-    -f deploy/compose/docker-compose.main-ap.yml
-    -f deploy/compose/docker-compose.main-ap.live-compat.yml
 )
 renderable_ap_compose() {
     printf '%s\n' "$1"
@@ -81,7 +70,7 @@ render() {
     COMPOSE_ENV_FILE="${compose_env_file}" \
         HOLOLIVE_API_ENV_FILE="${STUB_APP_ENV}" \
         HOLOLIVE_ALARM_WORKER_ENV_FILE="${STUB_APP_ENV}" \
-        HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="${STUB_YOUTUBE_PRODUCER_ENV}" \
+        HOLOLIVE_YOUTUBE_COLLECTOR_ENV_FILE="${STUB_YOUTUBE_COLLECTOR_ENV}" \
         COMPOSE_PROFILES="${profiles}" \
         "${ROOT_DIR}/scripts/deploy/compose.sh" "$@" config --format json
 }
@@ -90,12 +79,11 @@ main_render="$(render oracle "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 default_render="$(render "" "${STUB_COMPOSE_ENV}" "${PROD_OVERLAYS[@]}")"
 migration_override_render="$(render oracle "${STUB_MIGRATION_OVERRIDE_ENV}" "${PROD_OVERLAYS[@]}")"
 collector_disabled_render="$(render oracle "${STUB_COLLECTOR_DISABLED_ENV}" "${PROD_OVERLAYS[@]}")"
-ap_render="$(render main-ap "${STUB_COMPOSE_ENV}" "${MAIN_AP_OVERLAYS[@]}")"
 osaka_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka.yml)")"
 osaka2_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.osaka2.yml)")"
 seoul_render="$(render oracle "${STUB_AP_COMPOSE_ENV}" -f deploy/compose/docker-compose.prod.yml -f "$(renderable_ap_compose deploy/compose/docker-compose.seoul.yml)")"
 
-MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" COLLECTOR_DISABLED_RENDER="${collector_disabled_render}" AP_RENDER="${ap_render}" \
+MAIN_RENDER="${main_render}" DEFAULT_RENDER="${default_render}" MIGRATION_OVERRIDE_RENDER="${migration_override_render}" COLLECTOR_DISABLED_RENDER="${collector_disabled_render}" \
     OSAKA_RENDER="${osaka_render}" OSAKA2_RENDER="${osaka2_render}" SEOUL_RENDER="${seoul_render}" "${CI_PYTHON_BIN}" - <<'PY'
 import json
 import os
@@ -112,9 +100,11 @@ def check(label, ok):
         print(f"[FAIL] {label}", file=sys.stderr)
 
 
+# SCRAPER_* 키는 모두 퇴역했고 runtime은 존재만으로 기동을 거절한다(config_scraper_config_retired_env.go,
+# collector/retired_env.go). compose가 다시 주입하지 않는지 고정한다. HOLOLIVE_SCRAPER_*(DB role)는 접두사가 달라 대상이 아니다.
 def check_no_unused_scraper_env(name, env):
-    offenders = sorted(key for key in env if key.startswith("SCRAPER_POLL_") or key == "SCRAPER_FETCHER_ENGINE")
-    check(f"{name} has no SCRAPER_POLL_/SCRAPER_FETCHER_ENGINE", not offenders)
+    offenders = sorted(key for key in env if key.startswith("SCRAPER_"))
+    check(f"{name} has no retired SCRAPER_* env", not offenders)
     for key in offenders:
         check(f"{name} does not receive {key}", False)
 
@@ -143,7 +133,6 @@ main = json.loads(os.environ["MAIN_RENDER"])["services"]
 default_services = json.loads(os.environ["DEFAULT_RENDER"])["services"]
 migration_override = json.loads(os.environ["MIGRATION_OVERRIDE_RENDER"])["services"]
 collector_disabled = json.loads(os.environ["COLLECTOR_DISABLED_RENDER"])["services"]
-ap = json.loads(os.environ["AP_RENDER"])["services"]
 
 migration_env = (main.get("hololive-db-migrate") or {}).get("environment") or {}
 check(
@@ -208,8 +197,8 @@ if collector is not None:
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
     check_no_unused_scraper_env("youtube-collector", env)
-    for holodex_key in ("HOLODEX_API_KEY", "HOLODEX_API_KEY_1"):
-        check(f"youtube-collector receives {holodex_key}", env.get(holodex_key) == "stub")
+    check("youtube-collector receives HOLODEX_API_KEY", env.get("HOLODEX_API_KEY") == "stub")
+    check("youtube-collector does not receive retired HOLODEX_API_KEY_1", "HOLODEX_API_KEY_1" not in env)
     check("youtube-collector receives METRICS_API_KEY", env.get("METRICS_API_KEY") == "stub")
     check("youtube-collector does not receive API_SECRET_KEY", "API_SECRET_KEY" not in env)
 
@@ -245,8 +234,10 @@ def has_tcp_published(svc, target_port, published_port, host_ip=None):
     return False
 
 
-pc = ap.get("youtube-collector")
-check("youtube-collector present in main-ap render", pc is not None)
+# 중앙 youtube-collector-c는 prod+live-compat 기본 render의 youtube-collector다. 빈 main-ap overlay 2종은 지웠다
+# (stack-audit 2026-09-26 T11 holo-main-ap-empty-overlays).
+pc = default_services.get("youtube-collector")
+check("youtube-collector present in default central render", pc is not None)
 if pc is not None:
     check(
         "youtube-collector healthcheck is https://127.0.0.1:30025/ready",
@@ -263,10 +254,6 @@ if pc is not None:
     check("youtube-collector HOLOLIVE_METRICS_ADDR is :30096", metrics_addr_aligned(pc))
     check("youtube-collector publishes metrics on 30096/tcp", has_tcp_published(pc, 30096, 30096))
     env = pc.get("environment") or {}
-    check(
-        "youtube-collector receives community shorts cutover from scoped collector env",
-        env.get("YOUTUBE_COMMUNITY_SHORTS_BIGBANG_CUTOVER_AT") == "2026-04-10T01:11:12Z",
-    )
     for iris_key in ("IRIS_WEBHOOK_TOKEN", "IRIS_BOT_TOKEN"):
         check(f"youtube-collector does not receive {iris_key}", iris_key not in env)
     check_no_unused_scraper_env("youtube-collector", env)
@@ -317,7 +304,7 @@ for render_env, name, port, metrics_host_ip in AP_PRODUCERS:
 
 CLEARTEXT_INTERNAL_URL_PATTERNS = ("http://llm-scheduler", "http://hololive-admin-api")
 
-for render_name, services in (("oracle", main), ("main-ap", ap)):
+for render_name, services in (("oracle", main), ("default", default_services)):
     offenders = [
         f"{name}.{key}={value}"
         for name, svc in services.items()
@@ -346,11 +333,6 @@ if grep -nE 'http://127\.0\.0\.1' "${AP_VERIFY_SCRIPTS[@]/#/${ROOT_DIR}/}"; then
 fi
 echo "[PASS] AP verify scripts are h3-only"
 
-if ! grep -Eq 'bin/healthcheck.*https://127\.0\.0\.1[^"]*/health' "${ROOT_DIR}/scripts/deploy/ap-rollback.sh"; then
-    echo "[FAIL] ap-rollback.sh must verify AP rollback health via H3 ./bin/healthcheck" >&2
-    exit 1
-fi
-echo "[PASS] ap-rollback.sh verifies rollback health via H3 healthcheck"
 
 SMOKE_SCRIPT="${ROOT_DIR}/scripts/smoke/smoke-runtime-health.sh"
 if grep -nE '(bot|admin-api|llm-scheduler|alarm-worker|alarm-worker-ready|youtube-collector-c)[^|]*\|http://127\.0\.0\.1:300(01|03|06|07|25)' "${SMOKE_SCRIPT}"; then

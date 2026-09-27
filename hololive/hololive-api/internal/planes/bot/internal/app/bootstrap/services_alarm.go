@@ -1,84 +1,36 @@
 package bootstrap
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/domain"
-	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	"github.com/kapu/hololive-shared/pkg/service/alarm"
-	"github.com/kapu/hololive-shared/pkg/service/cache"
-	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 )
 
-func InitAlarmDependencies(
-	settingsFilePath string,
-	advanceMinutes []int,
-	scraperProxyEnabled bool,
-	cacheService cache.Client,
-	holodexService *holodexprovider.Service,
-	memberServiceAdapter domain.MemberDataProvider, alarmRepository *alarm.Repository,
-	logger *slog.Logger,
-) (*AlarmDependencies, error) {
-	memberDataProvider := memberServiceAdapter
-
-	resolved := sharedmodules.ResolvePersistedTargetMinutes(settingsFilePath, advanceMinutes, scraperProxyEnabled, logger)
-
-	alarmService, err := ProvideAlarmService(resolved, cacheService, holodexService, memberDataProvider, alarmRepository, logger)
-	if err != nil {
-		return nil, fmt.Errorf("provide alarm service: %w", err)
-	}
-
-	return &AlarmDependencies{
-		AlarmService:       alarmService,
-		MemberDataProvider: memberDataProvider,
-	}, nil
-}
-
+// Alarm 데이터 원천은 alarm-worker HTTP provider 하나다(hololive-api bot·admin plane 공통).
+// ALARM_INTERNAL_URL은 apiplane.LoadRuntime이 필수로 검증하므로 in-process AlarmService 분기는 두지 않고,
+// URL이 비면 오류로 끝낸다.
 func InitAlarmModeComponents(
-	ctx context.Context,
 	appConfig *settings.Config,
-	infra *sharedmodules.InfraModule,
-	holodexService *holodexprovider.Service,
-	memberServiceAdapter domain.MemberDataProvider, alarmRepository *alarm.Repository,
+	memberServiceAdapter domain.MemberDataProvider,
 	logger *slog.Logger,
 ) (*AlarmModeComponents, error) {
-	if providerURL := strings.TrimSpace(appConfig.AlarmServiceURL); providerURL != "" {
-		alarmClient, err := alarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger)
-		if err != nil {
-			return nil, fmt.Errorf("configure alarm worker client: %w", err)
-		}
-
-		return &AlarmModeComponents{
-			AlarmCRUD:        alarmClient,
-			MemberDataSource: memberServiceAdapter,
-		}, nil
+	providerURL := strings.TrimSpace(appConfig.AlarmServiceURL)
+	if providerURL == "" {
+		return nil, errors.New("alarm provider URL (ALARM_INTERNAL_URL) is required")
 	}
 
-	alarmDeps, alarmErr := InitAlarmDependencies(
-		appConfig.SettingsFilePath,
-		appConfig.Notification.AdvanceMinutes,
-		appConfig.Scraper.ProxyEnabled,
-		infra.Cache,
-		holodexService,
-		memberServiceAdapter,
-		alarmRepository,
-		logger,
-	)
-	if alarmErr != nil {
-		return nil, fmt.Errorf("init alarm dependencies: %w", alarmErr)
-	}
-
-	if warnErr := alarmDeps.AlarmService.WarmCacheFromDB(ctx); warnErr != nil {
-		logger.Warn("Failed to warm alarm cache from DB", "error", warnErr)
+	alarmClient, err := alarm.NewClientWithAPIKeyStrict(providerURL, appConfig.Server.APIKey, logger)
+	if err != nil {
+		return nil, fmt.Errorf("configure alarm worker client: %w", err)
 	}
 
 	return &AlarmModeComponents{
-		AlarmCRUD:        alarmDeps.AlarmService,
-		AlarmService:     alarmDeps.AlarmService,
-		MemberDataSource: alarmDeps.MemberDataProvider,
+		AlarmCRUD:        alarmClient,
+		MemberDataSource: memberServiceAdapter,
 	}, nil
 }

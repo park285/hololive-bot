@@ -90,19 +90,19 @@ func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 		want      []alarmDispatchGroupSummary
 	}{
 		{
-			name: "groups Karing notifications by alarm type",
+			name: "groups text notifications by scheduled minute bucket",
 			envelopes: []domain.AlarmQueueEnvelope{
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, firstStart),
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeCommunity, 5, secondStart),
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
 			},
 			want: []alarmDispatchGroupSummary{
-				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
 				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 1, notificationCount: 1},
+				{roomID: testAlarmRoomID, minutesUntil: 5, envelopeCount: 2, notificationCount: 2},
 			},
 		},
 		{
-			name: "splits Karing live catchup and prelive",
+			name: "splits live catchup and prelive minute buckets",
 			envelopes: []domain.AlarmQueueEnvelope{
 				alarmDispatchGroupTestStartedEnvelope(domain.AlarmTypeLive, 5, firstStart),
 				alarmDispatchGroupTestScheduledEnvelope(domain.AlarmTypeLive, 5, secondStart),
@@ -134,7 +134,7 @@ func TestGroupAlarmDispatchEnvelopesForDelivery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			groups := groupAlarmDispatchEnvelopesForDelivery(t.Context(), &alarmDispatchRunnerTestSender{}, tc.envelopes)
+			groups := groupAlarmDispatchEnvelopesForDelivery(tc.envelopes)
 
 			assert.Equal(t, tc.want, summarizeAlarmDispatchGroups(groups))
 		})
@@ -186,54 +186,6 @@ func TestAlarmDispatchGroupKey(t *testing.T) {
 			t.Parallel()
 
 			assert.Equal(t, tc.want, alarmDispatchGroupKey(&tc.envelope))
-		})
-	}
-}
-
-func TestAlarmDispatchKaringGroupKey(t *testing.T) {
-	t.Parallel()
-
-	start := time.Date(2026, time.May, 14, 10, 0, 0, 0, time.UTC)
-	youtubeOutbox := alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeCommunity, 0)
-
-	youtubeOutbox.SourceKind = domain.AlarmDispatchSourceKindYouTubeOutbox
-	youtubeOutbox.YouTubeOutbox = &domain.YouTubeOutboxDispatchPayload{
-		Kind:      domain.OutboxKindCommunityPost,
-		AlarmType: domain.AlarmTypeCommunity,
-		ChannelID: testAlarmChannelID,
-		Items: []domain.YouTubeOutboxItem{{
-			ContentID: "post-1",
-			Payload:   `{"post_id":"post-1","content_text":"hello"}`,
-		}},
-	}
-
-	testCases := []struct {
-		name     string
-		envelope domain.AlarmQueueEnvelope
-		want     string
-	}{
-		{
-			name:     "youtube outbox source delegates to regular key",
-			envelope: youtubeOutbox,
-			want:     alarmDispatchGroupKey(&youtubeOutbox),
-		},
-		{
-			name:     "non-outbox uses karing format",
-			envelope: alarmDispatchGroupTestEnvelope(testAlarmRoomID, domain.AlarmTypeCommunity, 3),
-			want:     "room-1|karing|COMMUNITY|prelive|minutes|3",
-		},
-		{
-			name:     "live catchup includes starting phase",
-			envelope: alarmDispatchGroupTestStartedEnvelope(domain.AlarmTypeLive, 5, start),
-			want:     "room-1|karing|LIVE|starting|minutes|5",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(t, tc.want, alarmDispatchKaringGroupKey(&tc.envelope))
 		})
 	}
 }

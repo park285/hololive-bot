@@ -23,10 +23,12 @@ package summarizer
 import (
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	"github.com/park285/shared-go/v2/pkg/promptguard"
 
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/guardrail"
@@ -53,8 +55,19 @@ var normalizedCategories = map[string]model.Category{
 	string(model.CategoryGoods):        model.CategoryGoods,
 }
 
+// ErrLLMUnavailable은 요약 LLM client 없이 Summarize가 호출됐음을 뜻한다.
+// ErrNoValidatedItems는 LLM 출력이 재검증에서 모두 버려졌음을 뜻한다.
+// 요약기는 결정적 digest를 스스로 만들지 않고 이 오류들을 돌려준다. 결정적 fallback digest는 membernews.Service가
+// 한 곳에서 소유한다(stack audit B5).
+var (
+	ErrLLMUnavailable   = errors.New("member news summarizer LLM unavailable")
+	ErrNoValidatedItems = errors.New("member news summary has no validated items")
+)
+
+// LLMClient는 지시를 계층으로만 받는다(DEC-20260926-stack-llm-instruction-layering-sole-path).
+// 요약·검토·판정 지시는 작업 절차·출력 형식이라 developer 계층이고, 후보·검색 결과는 user 계층이다.
 type LLMClient interface {
-	GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error)
+	GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error)
 }
 
 type SummarizerImpl struct {
@@ -108,36 +121,31 @@ func (s *SummarizerImpl) Summarize(ctx context.Context, input *model.SummarizeIn
 	}
 
 	if s == nil || s.llm == nil {
-		return BuildDeterministicFallback(input.Period, input.Candidates), nil
+		return nil, ErrLLMUnavailable
 	}
 
 	searchContext, err := s.searchContext(ctx, input)
 	if err != nil {
-		s.logger.Error("MemberNews external content guard unavailable", slog.String("error", err.Error()))
-
-		return newEmptyDigest(input.Period, len(input.Candidates)), nil
+		return nil, fmt.Errorf("member news search context: %w", err)
 	}
 
-	raw, err := s.llm.GenerateJSON(ctx, memberNewsSystemPrompt(), buildMemberNewsUserPrompt(input, searchContext), memberNewsSummarySchema())
+	raw, err := s.llm.GenerateJSON(ctx, openaipreset.PromptLayers{
+		Developer: memberNewsSystemPrompt(),
+		User:      buildMemberNewsUserPrompt(input, searchContext),
+	}, memberNewsSummarySchema())
 	if err != nil {
-		s.logger.Warn("MemberNews LLM failed, using fallback", slog.String("error", err.Error()))
-
-		return BuildDeterministicFallback(input.Period, input.Candidates), nil
+		return nil, fmt.Errorf("generate member news summary: %w", err)
 	}
 
 	var response summaryResponse
 
 	if err := jsonv2.Unmarshal([]byte(raw), &response); err != nil {
-		s.logger.Warn("MemberNews schema parse failed, using fallback", slog.String("error", err.Error()))
-
-		return BuildDeterministicFallback(input.Period, input.Candidates), nil
+		return nil, fmt.Errorf("parse member news summary: %w", err)
 	}
 
 	digest := s.validateAndBuildDigest(input, &response)
 	if len(digest.TopItems) == 0 {
-		s.logger.Warn("MemberNews validator dropped all items, using fallback")
-
-		return BuildDeterministicFallback(input.Period, input.Candidates), nil
+		return nil, ErrNoValidatedItems
 	}
 
 	return digest, nil

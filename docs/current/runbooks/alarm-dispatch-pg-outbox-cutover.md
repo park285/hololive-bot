@@ -161,5 +161,5 @@ rollback window is closed by explicit decision.
 | stop producer, keep PG consumer running, drain PG | yes | record active status counts and oldest ages before and after drain |
 | redeploy previous image (image-level rollback) | yes, with operator approval | the prior image still expects PG; do not reintroduce legacy mode env |
 
-Never promote any historical `shadowed` rows to `pending`. Never automatically retry `sending` rows. Never
+Never promote any historical `shadowed` rows to `pending` (migration 226 now rejects the value; investigate and remove any residue instead). Never automatically retry `sending` rows. Never
 replay `quarantined` rows without explicit duplicate-risk acknowledgement.

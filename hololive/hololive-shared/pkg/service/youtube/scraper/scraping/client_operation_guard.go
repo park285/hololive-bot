@@ -2,7 +2,6 @@ package scraping
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,7 +30,7 @@ func (c *Client) fetchChannelSourcePage(ctx context.Context, operation, channelI
 
 	html, err := c.fetchPage(ctx, pageURL, policy...)
 	if err != nil {
-		return "", errors.Join(c.handleChannelSourceFetchError(ctx, channelID, source, err))
+		return "", c.handleChannelSourceFetchError(ctx, channelID, source, err)
 	}
 
 	if strings.TrimSpace(html) == "" {

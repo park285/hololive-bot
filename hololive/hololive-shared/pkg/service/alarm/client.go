@@ -255,12 +255,6 @@ func (c *Client) GetNextStreamInfo(ctx context.Context, channelID string) (*doma
 }
 
 func (c *Client) UpdateAlarmAdvanceMinutes(ctx context.Context, minutes int) []int {
-	if ctx == nil {
-		c.logger.Warn("UpdateAlarmAdvanceMinutes skipped: nil context", slog.Int("minutes", minutes))
-
-		return []int{}
-	}
-
 	body := updateAdvanceMinutesReq{Minutes: minutes}
 
 	resp, err := c.putJSON[minutesResp](ctx, contractsalarm.SettingsPath, body)

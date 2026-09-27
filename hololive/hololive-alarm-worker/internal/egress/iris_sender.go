@@ -11,20 +11,20 @@ import (
 	"github.com/park285/shared-go/v2/pkg/kakaoformat"
 )
 
-const karingStatusPollInterval = 250 * time.Millisecond
+const replyStatusPollInterval = 250 * time.Millisecond
 
 var (
-	// ErrKaringOutcomeUnknown은 Karing/Markdown의 Iris 접수 뒤 Kakao handoff 결과를 확정할 수 없음을 나타냅니다.
-	ErrKaringOutcomeUnknown = errors.New("iris karing outcome unknown")
-	// ErrKaringStatusFailed는 Karing/Markdown에서 Iris가 Kakao handoff 실패를 확정했음을 나타냅니다.
-	ErrKaringStatusFailed = errors.New("iris karing handoff failed")
+	// ErrReplyHandoffOutcomeUnknown은 Markdown 발송의 Iris 접수 뒤 Kakao handoff 결과를 확정할 수 없음을 나타냅니다.
+	ErrReplyHandoffOutcomeUnknown = errors.New("iris reply handoff outcome unknown")
+	// ErrReplyHandoffFailed는 Markdown 발송에서 Iris가 Kakao handoff 실패를 확정했음을 나타냅니다.
+	ErrReplyHandoffFailed = errors.New("iris reply handoff failed")
 )
 
-// IrisClient는 alarm-worker가 알림 전송과 Karing handoff 확인에 사용하는 Iris 계약입니다.
+// IrisClient는 alarm-worker가 알림 전송과 Markdown handoff 확인에 사용하는 Iris 계약입니다.
+// Karing template은 보내지 않습니다(DEC-20260926-hololive-karing-egress-disposition).
 type IrisClient interface {
 	SendMessage(ctx context.Context, roomID, message string, opts ...iris.SendOption) error
 	SendMarkdown(ctx context.Context, roomID, markdown string, opts ...iris.SendOption) (*iris.ReplyAcceptedResponse, error)
-	SendKaringContentList(ctx context.Context, req iris.KaringContentListRequest) (*iris.KaringDryRunResponse, error)
 	GetReplyStatus(ctx context.Context, requestID string) (*iris.ReplyStatusSnapshot, error)
 }
 
@@ -33,19 +33,13 @@ type OpenChat interface {
 	OpenChat(ctx context.Context, roomID string) bool
 }
 
-// RoomChat은 Karing과 Markdown lane을 결정하는 확인된 Kakao 방 유형을 제공합니다.
-type RoomChat interface {
-	OpenChat(ctx context.Context, roomID string) bool
-	RegularChat(ctx context.Context, roomID string) bool
-}
-
-// IrisMessageSender는 방 유형별 message와 확인 가능한 Karing 알림을 Iris로 전송합니다.
+// IrisMessageSender는 방 유형별 message를 Iris로 전송합니다. 오픈채팅은 BOT_MARKDOWN_REPLIES에 따라 Markdown,
+// 그 밖의 방은 일반 텍스트 경로를 씁니다.
 type IrisMessageSender struct {
-	client                   IrisClient
-	markdownReplies          bool
-	markdownRooms            OpenChat
-	rooms                    RoomChat
-	karingStatusPollInterval time.Duration
+	client                  IrisClient
+	markdownReplies         bool
+	markdownRooms           OpenChat
+	replyStatusPollInterval time.Duration
 }
 
 // IrisMessageSenderOption은 alarm-worker message lane 구성을 적용합니다.
@@ -58,27 +52,18 @@ func WithMarkdownReplies(enabled bool) IrisMessageSenderOption {
 	}
 }
 
-// WithMarkdownRoomChat은 Markdown lane 판정에 사용할 오픈채팅 resolver만 연결합니다.
-// 일반채팅 resolver를 노출하지 않아 이 옵션만으로는 Karing eligibility가 활성화되지 않습니다.
+// WithMarkdownRoomChat은 Markdown lane 판정에 사용할 오픈채팅 resolver를 연결합니다.
 func WithMarkdownRoomChat(rooms OpenChat) IrisMessageSenderOption {
 	return func(sender *IrisMessageSender) {
 		sender.markdownRooms = rooms
 	}
 }
 
-// WithRoomChat은 방 유형 정본을 sender의 Markdown 및 Karing 판정에 연결합니다.
-func WithRoomChat(rooms RoomChat) IrisMessageSenderOption {
-	return func(sender *IrisMessageSender) {
-		sender.markdownRooms = rooms
-		sender.rooms = rooms
-	}
-}
-
 // NewIrisMessageSender는 typed Iris client로 alarm-worker 전송기를 만듭니다.
 func NewIrisMessageSender(client IrisClient, opts ...IrisMessageSenderOption) *IrisMessageSender {
 	sender := &IrisMessageSender{
-		client:                   client,
-		karingStatusPollInterval: karingStatusPollInterval,
+		client:                  client,
+		replyStatusPollInterval: replyStatusPollInterval,
 	}
 
 	for _, option := range opts {
@@ -110,7 +95,7 @@ func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message st
 	}
 
 	if accepted == nil {
-		return fmt.Errorf("%w: markdown admission response is empty", ErrKaringOutcomeUnknown)
+		return fmt.Errorf("%w: markdown admission response is empty", ErrReplyHandoffOutcomeUnknown)
 	}
 
 	requestID, err := acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
@@ -127,11 +112,6 @@ func (s *IrisMessageSender) sendMarkdown(ctx context.Context, roomID, message st
 
 func (s *IrisMessageSender) useMarkdown(ctx context.Context, roomID string) bool {
 	return s != nil && s.markdownReplies && s.markdownRooms != nil && s.markdownRooms.OpenChat(ctx, roomID)
-}
-
-// RegularChat은 room facts로 확인된 일반채팅인지 반환합니다.
-func (s *IrisMessageSender) RegularChat(ctx context.Context, roomID string) bool {
-	return s != nil && s.rooms != nil && s.rooms.RegularChat(ctx, roomID)
 }
 
 // SendMessage는 방 유형에 따라 오픈채팅 Markdown 또는 Kakao 일반 텍스트로 전송합니다.
@@ -161,63 +141,23 @@ func (s *IrisMessageSender) SendMessageWithClientRequestID(ctx context.Context, 
 	return nil
 }
 
-// SendKaringContentList는 Iris 접수 뒤 exact request ID가 handoff_completed가 될 때까지 확인합니다.
-func (s *IrisMessageSender) SendKaringContentList(ctx context.Context, roomID string, req *iris.KaringContentListRequest) error {
-	if s == nil || s.client == nil {
-		return errors.New("iris message sender: client is nil")
-	}
-
-	if req == nil {
-		return errors.New("iris message sender: karing request is nil")
-	}
-
-	request := *req
-	if strings.TrimSpace(request.ReceiverName) == "" && request.ReceiverRoomID == 0 {
-		request.ReceiverName = roomID
-	}
-
-	accepted, err := s.client.SendKaringContentList(ctx, request)
-	if err != nil {
-		return fmt.Errorf("iris send karing content list: %w", err)
-	}
-
-	requestID, err := acceptedKaringRequestID(accepted)
-	if err != nil {
-		return fmt.Errorf("validate iris karing admission: %w", err)
-	}
-
-	if err := s.waitForReplyHandoff(ctx, requestID); err != nil {
-		return fmt.Errorf("confirm iris karing handoff: %w", err)
-	}
-
-	return nil
-}
-
-func acceptedKaringRequestID(accepted *iris.KaringDryRunResponse) (string, error) {
-	if accepted == nil {
-		return "", fmt.Errorf("%w: admission response is empty", ErrKaringOutcomeUnknown)
-	}
-
-	return acceptedReplyRequestID(accepted.Success, accepted.Delivery, accepted.RequestID)
-}
-
 func acceptedReplyRequestID(success bool, delivery, rawRequestID string) (string, error) {
 	if !success || !strings.EqualFold(strings.TrimSpace(delivery), "queued") {
-		return "", fmt.Errorf("%w: admission response is not queued", ErrKaringOutcomeUnknown)
+		return "", fmt.Errorf("%w: admission response is not queued", ErrReplyHandoffOutcomeUnknown)
 	}
 
 	requestID := strings.TrimSpace(rawRequestID)
 	if requestID == "" {
-		return "", fmt.Errorf("%w: admission response has no request id", ErrKaringOutcomeUnknown)
+		return "", fmt.Errorf("%w: admission response has no request id", ErrReplyHandoffOutcomeUnknown)
 	}
 
 	return requestID, nil
 }
 
 func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID string) error {
-	interval := s.karingStatusPollInterval
+	interval := s.replyStatusPollInterval
 	if interval <= 0 {
-		interval = karingStatusPollInterval
+		interval = replyStatusPollInterval
 	}
 
 	ticks := time.Tick(interval)
@@ -225,7 +165,7 @@ func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID s
 	for {
 		status, pollErr := s.client.GetReplyStatus(ctx, requestID)
 
-		complete, statusErr := assessKaringHandoffPoll(requestID, status, pollErr)
+		complete, statusErr := assessReplyHandoffPoll(requestID, status, pollErr)
 		if statusErr != nil {
 			return statusErr
 		}
@@ -238,7 +178,7 @@ func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID s
 		case <-ctx.Done():
 			return fmt.Errorf(
 				"%w: status polling ended before handoff: %w",
-				ErrKaringOutcomeUnknown,
+				ErrReplyHandoffOutcomeUnknown,
 				ctx.Err(),
 			)
 		case <-ticks:
@@ -246,43 +186,43 @@ func (s *IrisMessageSender) waitForReplyHandoff(ctx context.Context, requestID s
 	}
 }
 
-func assessKaringHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot, pollErr error) (bool, error) {
+func assessReplyHandoffPoll(requestID string, status *iris.ReplyStatusSnapshot, pollErr error) (bool, error) {
 	if pollErr != nil {
 		return false, nil //nolint:nilerr // 상태 조회 실패는 handoff 실패가 아니므로 bounded context까지 재조회합니다.
 	}
 
 	if status == nil {
-		return false, fmt.Errorf("%w: reply status response is empty", ErrKaringOutcomeUnknown)
+		return false, fmt.Errorf("%w: reply status response is empty", ErrReplyHandoffOutcomeUnknown)
 	}
 
-	if err := validateKaringReplyStatus(requestID, status); err != nil {
+	if err := validateReplyHandoffStatus(requestID, status); err != nil {
 		return false, err
 	}
 
-	return karingReplyState(status.State) == "handoff_completed", nil
+	return normalizedReplyState(status.State) == "handoff_completed", nil
 }
 
-func validateKaringReplyStatus(requestID string, status *iris.ReplyStatusSnapshot) error {
+func validateReplyHandoffStatus(requestID string, status *iris.ReplyStatusSnapshot) error {
 	if status == nil {
-		return fmt.Errorf("%w: reply status response is empty", ErrKaringOutcomeUnknown)
+		return fmt.Errorf("%w: reply status response is empty", ErrReplyHandoffOutcomeUnknown)
 	}
 
 	if strings.TrimSpace(status.RequestID) != requestID {
-		return fmt.Errorf("%w: reply status request id does not match", ErrKaringOutcomeUnknown)
+		return fmt.Errorf("%w: reply status request id does not match", ErrReplyHandoffOutcomeUnknown)
 	}
 
-	switch karingReplyState(status.State) {
+	switch normalizedReplyState(status.State) {
 	case "queued", "preparing", "prepared", "sending", "handoff_completed":
 		return nil
 	case "failed":
-		return ErrKaringStatusFailed
+		return ErrReplyHandoffFailed
 	case "outcome_unknown":
-		return ErrKaringOutcomeUnknown
+		return ErrReplyHandoffOutcomeUnknown
 	default:
-		return fmt.Errorf("%w: reply status state is not recognized", ErrKaringOutcomeUnknown)
+		return fmt.Errorf("%w: reply status state is not recognized", ErrReplyHandoffOutcomeUnknown)
 	}
 }
 
-func karingReplyState(state string) string {
+func normalizedReplyState(state string) string {
 	return strings.ToLower(strings.TrimSpace(state))
 }

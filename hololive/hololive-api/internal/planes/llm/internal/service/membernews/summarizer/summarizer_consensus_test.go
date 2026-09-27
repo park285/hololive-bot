@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
+
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/consensus"
 	"github.com/kapu/hololive-api/internal/planes/llm/internal/service/membernews/model"
 	"github.com/kapu/hololive-shared/pkg/util"
@@ -50,7 +52,7 @@ type fakeLLMWithCounter struct {
 	callCount atomic.Int32
 }
 
-func (f *fakeLLMWithCounter) GenerateJSON(_ context.Context, _, _ string, _ map[string]any) (string, error) {
+func (f *fakeLLMWithCounter) GenerateJSON(_ context.Context, _ openaipreset.PromptLayers, _ map[string]any) (string, error) {
 	f.callCount.Add(1)
 
 	if f.err != nil {

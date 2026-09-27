@@ -141,12 +141,14 @@ func newReplyCaptureBot(t *testing.T, capacity int) (bot *Bot, replies <-chan ir
 	t.Cleanup(srv.Close)
 
 	irisClient := iris.NewAPIClient(srv.URL, "bot-token", iris.WithTransport("http1"))
+	messageStrings := loadSeededBotMessageStrings(t)
 	b := &Bot{
 		logger:          newBotTestLogger(),
 		commandRegistry: command.NewRegistry(),
 		messageAdapter:  messaging.NewMessageAdapter("!", ""),
 		irisClient:      irisClient,
-		formatter:       formatter.NewResponseFormatter("!", nil),
+		formatter:       formatter.NewResponseFormatter("!", nil, formatter.WithMessageStrings(messageStrings)),
+		messageStrings:  messageStrings,
 	}
 
 	return b, reqCh

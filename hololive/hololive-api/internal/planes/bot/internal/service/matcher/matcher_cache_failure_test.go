@@ -18,7 +18,7 @@ func TestStaticExactMatchesSurviveDynamicCacheFailure(t *testing.T) {
 	cache.GetAllMembersFunc = func(context.Context) (map[string]string, error) { return nil, cacheFailure }
 
 	provider := newStubMemberProvider([]*domain.Member{{Name: testMemberAqua, ChannelID: testChannelHolo, Org: orgHololive}})
-	matcher := NewMatcher(t.Context(), provider, cache, nil, nil, newMatcherTestLogger())
+	matcher := NewMatcher(provider, cache, nil, newMatcherTestLogger())
 
 	for _, query := range []string{testMemberAqua, "Aqua (Hololive)"} {
 		channel, found, err := matcher.FindBestMatchWithCandidates(t.Context(), query)

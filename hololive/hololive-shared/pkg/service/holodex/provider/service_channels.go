@@ -24,7 +24,6 @@ import (
 	"cmp"
 	"context"
 	jsonv2 "encoding/json/v2"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -44,14 +43,16 @@ func (h *Service) GetChannelSchedule(ctx context.Context, channelID string, hour
 
 	statusStr := channelScheduleStatus(includeLive)
 
+	// Holodex /live 실패는 YouTube scraper·공식 일정으로 보충하거나 그 결과를 캐시하지 않고 그대로 돌려준다
+	// (DEC-20260926-hololive-source-fallbacks-retirement).
 	body, err := h.requester.DoRequest(ctx, http.MethodGet, "/live", channelScheduleParams(channelID, hours, statusStr))
 	if err != nil {
-		schedule, scheduleErr := h.handleChannelScheduleRequestError(ctx, channelID, hours, includeLive, statusStr, err)
-		if scheduleErr != nil {
-			return nil, fmt.Errorf("handle channel schedule request error: %w", scheduleErr)
-		}
+		h.logger.Error("Failed to get channel schedule",
+			slog.String("channel_id", channelID),
+			slog.String("status", statusStr),
+			slog.Any("error", err))
 
-		return schedule, nil
+		return nil, fmt.Errorf("get channel schedule: %w", err)
 	}
 
 	var rawStreams []streammapping.StreamRaw
@@ -118,34 +119,6 @@ func channelScheduleParams(channelID string, hours int, statusStr string) url.Va
 	params.Set("max_upcoming_hours", fmt.Sprintf("%d", hours))
 
 	return params
-}
-
-func (h *Service) handleChannelScheduleRequestError(
-	ctx context.Context,
-	channelID string,
-	hours int,
-	includeLive bool,
-	statusStr string,
-	primaryErr error,
-) ([]*domain.Stream, error) {
-	h.logger.Error("Failed to get channel schedule",
-		slog.String("channel_id", channelID),
-		slog.String("status", statusStr),
-		slog.Any("error", primaryErr))
-
-	if !h.shouldUseFallback(ctx, primaryErr) || h.scraper == nil {
-		return nil, fmt.Errorf("get channel schedule: %w", primaryErr)
-	}
-
-	streams, err := h.scraper.FetchChannel(ctx, channelID, hours, includeLive)
-	if err != nil {
-		return nil, fmt.Errorf("get channel schedule fallbacks: %w", errors.Join(primaryErr, err))
-	}
-
-	sortStreamsByScheduledTime(streams)
-	h.cacheManager.SetChannelSchedule(ctx, channelID, hours, includeLive, streams, constants.CacheTTL.ChannelSchedule)
-
-	return streams, nil
 }
 
 func (h *Service) buildChannelSchedule(rawStreams []streammapping.StreamRaw, includeLive bool) []*domain.Stream {

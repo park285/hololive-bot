@@ -24,7 +24,6 @@ func TestGoProtocolJSONTagsMatchContractsDTS(t *testing.T) {
 		value any
 	}{
 		{"Pagination", Pagination{}},
-		{"BootstrapProxy", BootstrapProxy{}},
 		{"BootstrapLimits", BootstrapLimits{}},
 		{"BootstrapRequest", BootstrapRequest{}},
 		{"BootstrapResponse", BootstrapResponse{}},
@@ -41,6 +40,10 @@ func TestGoProtocolJSONTagsMatchContractsDTS(t *testing.T) {
 		{"ChannelProfileItem", ChannelProfileItem{}},
 		{"ChannelPhotoVariant", ChannelPhotoVariant{}},
 		{"ChannelResult", ChannelResult{}},
+		{"ChannelLiveCheckRequest", ChannelLiveCheckRequest{}},
+		{"ChannelLiveCheckResult", ChannelLiveCheckResult{}},
+		{"VideoLiveCheckRequest", VideoLiveCheckRequest{}},
+		{"VideoLiveCheckResult", VideoLiveCheckResult{}},
 	}
 
 	for _, test := range cases {

@@ -18,7 +18,7 @@ Valkey is an ephemeral cache, wakeup, index, and fast-path layer. PostgreSQL is 
 ## Dispatch Invariants
 
 - `alarm_dispatch_events` stores room-agnostic payload once; `alarm_dispatch_deliveries` stores per-room state.
-- `shadowed` delivery rows are observation-only and must not be claimed by the PG consumer.
+- `shadowed` delivery rows no longer exist: the v3 handoff was removed (`DEC-20260926-hololive-outbox-v3-convergence`) and migration 226 drops the value from the status CHECK.
 - `pending` and `retry` rows are the only claimable states.
 - `leased`, `sending`, and terminal state updates must be owned by the worker that holds the row lease.
 - External send failures after `sending` are ambiguous by default and must quarantine in the PG consumer path.

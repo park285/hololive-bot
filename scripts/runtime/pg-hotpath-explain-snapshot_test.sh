@@ -41,7 +41,7 @@ require "idx_yno_pending_due_created_id"
 require "definition_ok"
 require "INTERVAL '5 minutes'"
 require "INTERVAL '2 hours'"
-require "FOR UPDATE SKIP LOCKED"
+require "FOR UPDATE OF u SKIP LOCKED"
 require "ROLLBACK;"
 require "idle_in_transaction_session_timeout"
 require "pg_stat_user_tables"
@@ -60,7 +60,7 @@ require "start_stats_since"
 require "finish_stats_since"
 require "start_stats_since IS DISTINCT FROM finish_stats_since"
 require "statement_stats_reset"
-require_twice "statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm"
+require_twice "statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+u[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_alarm"
 require_twice "statements.query ~* 'FOR[[:space:]]+UPDATE[[:space:]]+OF[[:space:]]+outbox[[:space:]]+SKIP[[:space:]]+LOCKED' AS is_youtube"
 require_twice "statements.query !~* '(^|[^[:alnum:]_])EXPLAIN([^[:alnum:]_]|\$)'"
 require_twice "statements.query NOT ILIKE '%pg_stat_statements%'"
@@ -123,8 +123,7 @@ if [[ "${alarm_late_fragment_prefix}" == "${alarm_claim_source}" \
 fi
 
 for fragment in \
-  "WITH legacy_head AS (" \
-  "), due_window AS MATERIALIZED (" \
+  "WITH due_window AS MATERIALIZED (" \
   "), locked_units AS (" \
   "), ranked_units AS (" \
   "), next_units AS (" \
@@ -213,7 +212,7 @@ assert_not_a_claim "/* pg_stat_statements */ ${alarm_claim_source}"
 assert_not_a_claim "${alarm_claim_source} ${youtube_claim_source}"
 assert_not_a_claim "${youtube_claim_source/FOR UPDATE OF outbox SKIP LOCKED/FOR UPDATE OF other SKIP LOCKED}"
 assert_not_a_claim "${youtube_claim_source/FOR UPDATE OF outbox SKIP LOCKED/FOR UPDATE SKIP LOCKED}"
-assert_not_a_claim "${alarm_claim_source//FOR UPDATE SKIP LOCKED/FOR UPDATE OF other SKIP LOCKED}"
+assert_not_a_claim "${alarm_claim_source//FOR UPDATE OF u SKIP LOCKED/FOR UPDATE OF other SKIP LOCKED}"
 if claim_query_matches_target alarm_dispatch "${youtube_claim_source}" \
   || claim_query_matches_target youtube_outbox "${alarm_claim_source}"; then
   echo "claim matcher accepted the other target's query" >&2

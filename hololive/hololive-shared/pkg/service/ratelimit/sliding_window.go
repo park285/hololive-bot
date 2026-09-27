@@ -22,8 +22,6 @@ package ratelimit
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,7 +33,6 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/kapu/hololive-shared/pkg/config/settings"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
 )
 
@@ -101,11 +98,16 @@ func NewSlidingWindowLimiter(cacheClient cache.LowLevelCache, keyPrefix string, 
 		logger = slog.Default()
 	}
 
+	instanceID, err := resolveInstanceID(os.Hostname)
+	if err != nil {
+		return nil, fmt.Errorf("new sliding window limiter: %w", err)
+	}
+
 	return &SlidingWindowLimiter{
 		cacheClient: cacheClient,
 		keyPrefix:   keyPrefix,
 		logger:      logger,
-		instanceID:  resolveInstanceID(),
+		instanceID:  instanceID,
 		now:         time.Now,
 	}, nil
 }
@@ -172,7 +174,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 	limit int,
 	member string,
 	ttlSeconds int64,
-) (ok0 bool, result1 int, result2 time.Duration, err error) {
+) (bool, int, time.Duration, error) {
 	cmd := l.cacheClient.B().
 		Eval().
 		Script(allowScript).
@@ -204,7 +206,7 @@ func (l *SlidingWindowLimiter) allowByScript(
 	return out1, out2, out3, nil
 }
 
-func parseAllowScriptResult(result valkey.ValkeyResult) (ok0 bool, result1 int, result2 time.Duration, err error) {
+func parseAllowScriptResult(result valkey.ValkeyResult) (bool, int, time.Duration, error) {
 	values, err := result.ToArray()
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse allow script result: %w", err)
@@ -262,22 +264,21 @@ func (l *SlidingWindowLimiter) memberID(nowMS int64) string {
 	return strconv.FormatInt(nowMS, 10) + ":" + l.instanceID + ":" + strconv.FormatUint(seq, 10)
 }
 
-func resolveInstanceID() string {
-	if value := settings.RateLimiterInstanceID(); value != "" {
-		return sanitizeInstanceID(value)
+// resolveInstanceID는 sorted set member의 인스턴스 구분자로 hostname 하나만 쓴다. T18(2026-09-26)에서 INSTANCE_ID가
+// 어느 운영 env에도 없음을 확인해 hostname을 필수 출처로 정했다(DEC-20260926-hololive-legacy-env-config-retirement).
+// 퇴역한 INSTANCE_ID 키의 존재 거절은 settings.LoadConfig runtime(config_ratelimit_retired_env.go)이 소유한다.
+// 호스트 이름을 얻지 못하면 random이나 "local"로 바꾸지 않고 오류다. 같은 member를 두 인스턴스가 만들면 한도 판정이 어긋나기 때문이다.
+func resolveInstanceID(hostname func() (string, error)) (string, error) {
+	host, err := hostname()
+	if err != nil {
+		return "", fmt.Errorf("resolve instance id: hostname: %w", err)
 	}
 
-	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
-		return sanitizeInstanceID(host)
+	if strings.TrimSpace(host) == "" {
+		return "", errors.New("resolve instance id: hostname is empty")
 	}
 
-	var raw [8]byte
-
-	if _, err := rand.Read(raw[:]); err == nil {
-		return hex.EncodeToString(raw[:])
-	}
-
-	return "local"
+	return sanitizeInstanceID(host), nil
 }
 
 func sanitizeInstanceID(value string) string {
@@ -293,10 +294,6 @@ func sanitizeInstanceID(value string) string {
 		}
 
 		b.WriteByte('_')
-	}
-
-	if b.Len() == 0 {
-		return "local"
 	}
 
 	return b.String()

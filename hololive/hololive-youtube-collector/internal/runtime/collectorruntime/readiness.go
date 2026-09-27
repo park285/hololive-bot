@@ -239,10 +239,6 @@ func notReady(body *readinessResponse, state ReadinessState, dependency string) 
 }
 
 func withRemainingTimeout(ctx context.Context, limit time.Duration) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	remaining := limit
 
 	if deadline, ok := ctx.Deadline(); ok {

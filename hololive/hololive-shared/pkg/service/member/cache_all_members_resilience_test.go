@@ -252,10 +252,10 @@ func TestCachePointLookup_DoesNotBlockSnapshotRefresh(t *testing.T) {
 		return nil
 	}
 
-	c := &Cache{
+	c := withTestEpochAuthority(&Cache{
 		cache:  cacheClient,
 		logger: slog.New(slog.DiscardHandler),
-	}
+	})
 
 	lookupDone := make(chan *domain.Member, 1)
 

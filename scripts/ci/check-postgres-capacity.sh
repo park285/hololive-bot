@@ -79,6 +79,16 @@ limit_rows = [line for line in policy if line.startswith("@server-limit|")]
 if len(limit_rows) != 1:
     raise SystemExit("[pg-capacity] policy must pin exactly one @server-limit")
 server_limit = int(limit_rows[0].split("|", 1)[1])
+# superuser 예약 슬롯은 비슈퍼유저 앱 역할이 쓸 수 없으므로 reserve에서 뺀다.
+superuser_rows = [line for line in policy if line.startswith("@superuser-reserved|")]
+if len(superuser_rows) != 1:
+    raise SystemExit("[pg-capacity] policy must pin exactly one @superuser-reserved")
+superuser_reserved_text = superuser_rows[0].split("|", 1)[1]
+if not re.fullmatch(r"0|[1-9][0-9]*", superuser_reserved_text):
+    raise SystemExit("[pg-capacity] policy has an invalid @superuser-reserved")
+superuser_reserved = int(superuser_reserved_text)
+# compose가 superuser_reserved_connections를 지정하지 않으면 PostgreSQL 기본값 3이 적용된다.
+postgres_default_superuser_reserved = 3
 if verify_compose:
     postgres = services.get("holo-postgres", {})
     command = [str(value) for value in postgres.get("command", [])]
@@ -86,6 +96,12 @@ if verify_compose:
     limits = [int(match.group(1)) for match in matches if match]
     if limits != [server_limit]:
         raise SystemExit(f"[pg-capacity] holo-postgres max_connections={limits}, want [{server_limit}]")
+    matches = [re.fullmatch(r"superuser_reserved_connections=(\d+)", value) for value in command]
+    reserved = [int(match.group(1)) for match in matches if match] or [postgres_default_superuser_reserved]
+    if reserved != [superuser_reserved]:
+        raise SystemExit(
+            f"[pg-capacity] holo-postgres superuser_reserved_connections={reserved}, want [{superuser_reserved}]"
+        )
 
 used = 0
 seen = set()
@@ -153,9 +169,19 @@ if owner_inventory_sha256 != expected_owner_inventory_sha256:
         "[pg-capacity] owner inventory mismatch: policy owner set changed; "
         "review the topology and update expected_owner_inventory_sha256 intentionally"
     )
-reserve = server_limit - used
-if reserve < 5:
-    raise SystemExit(f"[pg-capacity] connection budget exhausted: max={server_limit} allocated={used} reserve={reserve}, want reserve >= 5")
+# reserve는 비슈퍼유저 역할이 실제로 접속 거부당하기 전까지 남는 슬롯이다(PG 거부 조건과 같은 기준).
+# 하한 2는 현재 할당 55에서 보장되는 값이며, 하한 상향은 풀 사용 지표로 collector max 축소를
+# 결정한 뒤 같은 변경에서 한다.
+min_reserve = 2
+reserve = server_limit - superuser_reserved - used
+if reserve < min_reserve:
+    raise SystemExit(
+        f"[pg-capacity] connection budget exhausted: max={server_limit} superuser_reserved={superuser_reserved} "
+        f"allocated={used} reserve={reserve}, want reserve >= {min_reserve}"
+    )
 source = f"target-env:{target_env_path}" if target_env_path is not None else "compose-defaults"
-print(f"[pg-capacity] source={source} max={server_limit} allocated={used} reserve={reserve}; central and four AP pools are inventoried")
+print(
+    f"[pg-capacity] source={source} max={server_limit} superuser_reserved={superuser_reserved} "
+    f"allocated={used} reserve={reserve}; central and four AP pools are inventoried"
+)
 PY

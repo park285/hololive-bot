@@ -135,8 +135,6 @@ func TestAlarmNotification_YouTubeURLOnly(t *testing.T) {
 		want   string
 	}{
 		{name: "YouTube ignores retired simulcast link", stream: &domain.Stream{ID: "abc123", IsIntegrated: true, ChzzkLiveURL: testChzzkLiveURL}, want: "https://youtube.com/watch?v=abc123"},
-		{name: "retired Chzzk", stream: &domain.Stream{ID: "old", IsChzzkOnly: true, ChzzkLiveURL: testChzzkLiveURL}},
-		{name: "retired Twitch", stream: &domain.Stream{ID: "old", IsTwitchOnly: true, TwitchLiveURL: "https://twitch.tv/old"}},
 		{name: "no YouTube identity", stream: &domain.Stream{ChzzkLiveURL: testChzzkLiveURL}},
 	} {
 		t.Run(tt.name, func(t *testing.T) { assert.Equal(t, tt.want, alarmNotificationURLText(tt.stream)) })

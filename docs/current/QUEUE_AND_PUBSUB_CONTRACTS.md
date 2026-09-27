@@ -2,17 +2,17 @@
 
 ## Scope
 
-Alarm dispatch queue와 settings/config Pub/Sub의 current contract를 기록합니다.
+Alarm dispatch outbox와 settings/config Pub/Sub의 current contract를 기록합니다.
 
-## Alarm Dispatch Queue
+## Alarm Dispatch Outbox
 
 | Field | Value |
 |---|---|
 | Producer | `alarm-worker` |
 | Consumer | `alarm-worker` |
-| Active queue | `alarm:dispatch:queue` |
-| Delayed retry queue | `alarm:dispatch:retry` |
-| DLQ | `alarm:dispatch:dlq` |
+| Storage | `alarm_dispatch_events` (room-agnostic payload), `alarm_dispatch_deliveries` (per-room state) |
+| Retry / DLQ / quarantine | delivery `status` `retry` (`next_attempt_at`), `dlq`, `quarantined` |
+| Wakeup | `alarm:dispatch:wakeup` payload-free Valkey list token; polling still claims due rows without it |
 | Current envelope version | `QueueEnvelopeVersionV1 = 1` |
 | Contract package | `hololive/hololive-shared/pkg/contracts/alarm` |
 | Fixtures | `hololive/hololive-shared/pkg/contracts/alarm/testdata/envelope_v1.json`, `envelope_unsupported_version.json` |
@@ -43,14 +43,12 @@ type AlarmQueueRetryMetadata struct {
 
 Consumer behavior:
 
-- Accepts version `0` and `QueueEnvelopeVersionV1`.
-- YouTube live/video/community/shorts proactive notifications do not use this Valkey queue in the current production split; `alarm-worker` consumes `youtube_notification_outbox` directly.
-- Rejects unsupported version payloads and preserves raw payloads in `alarm:dispatch:dlq`.
-- Invalid JSON from the active queue is preserved raw in `alarm:dispatch:dlq`.
-- Invalid delayed retry wrapper payload is preserved raw in `alarm:dispatch:dlq`.
-- `MoveToDLQ` preserves original legacy raw payload when available.
-- Retry scheduling stores wrapped members in `alarm:dispatch:retry`.
-- Retry metadata fields are `attempt`, `retry_after_ms`, `next_visible_at`, `last_error`, and optional `last_error_code`; consumers must round-trip unknown envelope fields when possible.
+- The publisher accepts only `QueueEnvelopeVersionV1`; a missing (`0`) or other version fails the batch before insert.
+- YouTube live/video/community/shorts proactive notifications do not use this dispatch outbox in the current production split; `alarm-worker` consumes `youtube_notification_outbox` directly.
+- An undecodable event payload, delivery context, or missing event row moves the delivery to `dlq` with the decode error; the event payload stays in `alarm_dispatch_events`.
+- Retry returns the delivery to `retry` with `next_attempt_at`; the claimed envelope carries `attempt`, `last_error`, and optional `last_error_code` from the delivery row.
+- Replay of `dlq`/`quarantined` deliveries uses the audited requeue in `runbooks/admin-dispatch-operations.md`.
+- The retired Redis queue keys `alarm:dispatch:queue`, `alarm:dispatch:retry`, and `alarm:dispatch:dlq` have no reader or writer; their reserved constants were removed in stack-audit 2026-09-26 T11.
 - `last_error_code` values are `timeout`, `canceled`, `http_4xx`, `http_5xx`, `network`, `pg`, `payload`, `unknown`, `lease_expired`, `stale_sending`, and `lease_released`.
 
 ## X 스페이스 시작 알림
@@ -82,9 +80,11 @@ type ConfigUpdateV1 struct {
 
 Known update types:
 
-- `scraper_proxy`
 - `alarm_advance_minutes`
 - `membernews_weekly_run_now`
+- `acl`
+
+`scraper_proxy` was retired with the scraper proxy (DEC-20260926-hololive-legacy-env-config-retirement); subscribers now treat it as an unknown type.
 
 Subscriber behavior:
 

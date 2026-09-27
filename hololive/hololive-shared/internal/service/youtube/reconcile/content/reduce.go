@@ -37,12 +37,9 @@ func Reduce(state State, evidence Evidence, grace time.Duration) (Decision, erro
 	session.state.Kind = evidence.Kind
 	session.state.ChannelID = channelIDOf(session.state, session.evidence)
 
-	// 구버전의 빈 PARTIAL은 기준이 아니지만, 다른 종류로 저장된 영상도 last_content_id가 있으면 유효한 기준 목록입니다.
-	if evidence.Kind == contract.KindShortsList && session.state.LastContentID == "" &&
-		len(session.state.Videos) == 0 && session.state.EarliestCompleteAt == nil {
-		session.state.Initialized = false
-	}
-
+	// 구버전 writer가 남긴 빈 PARTIAL Shorts watermark(initialized인데 기준 영상·last_content_id·complete 근거가 없는 행)를
+	// 기준이 아닌 것으로 되돌리던 분기는 T18(2026-09-26)에서 그런 행 0건을 확인해 지웠다(stack-audit 2026-09-26 T11).
+	// 현재 writer는 contentWindowInitialized에서 빈 부분 목록으로 기준을 세우지 않는다.
 	applyPositives(&session)
 
 	if scopedNegative(session.evidence) {

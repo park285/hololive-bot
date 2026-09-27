@@ -132,7 +132,7 @@ func (f *ResponseFormatter) UpcomingStreams(ctx context.Context, streams []*doma
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdUpcomingStreams, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -151,7 +151,7 @@ func (f *ResponseFormatter) ChannelSchedule(ctx context.Context, channel *domain
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdChannelSchedule, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -190,10 +190,8 @@ func (f *ResponseFormatter) scheduleEntryViews(ctx context.Context, streams []*d
 
 func (f *ResponseFormatter) scheduleEntryView(ctx context.Context, stream *domain.Stream) scheduleEntryView {
 	title := stream.Title
-	if !stream.IsChzzkOnly && !stream.IsTwitchOnly {
-		if label := mekparkhost.Identify(stream.ChannelID, title).Label(); label != "" {
-			title = label + " · " + title
-		}
+	if label := mekparkhost.Identify(stream.ChannelID, title).Label(); label != "" {
+		title = label + " · " + title
 	}
 
 	entry := scheduleEntryView{
@@ -217,9 +215,9 @@ func (f *ResponseFormatter) truncateTitle(title string) string {
 	return stringutil.TruncateString(title, constants.StringLimits.StreamTitle)
 }
 
-func (f *ResponseFormatter) streamTimeInfo(ctx context.Context, stream *domain.Stream) string {
+func (f *ResponseFormatter) streamTimeInfo(_ context.Context, stream *domain.Stream) string {
 	if stream == nil || stream.StartScheduled == nil {
-		return f.messageStrings.GetContext(ctx, messagestrings.NamespaceMisc, "time_unknown")
+		return f.messageStrings.Text(messagestrings.MiscTimeUnknown)
 	}
 
 	kstTime := util.FormatKST(*stream.StartScheduled, "01/02 15:04")
@@ -235,11 +233,11 @@ func (f *ResponseFormatter) streamTimeInfo(ctx context.Context, stream *domain.S
 	switch {
 	case hoursUntil > 24:
 		daysUntil := hoursUntil / 24
-		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_days", "%s (%d일 후)"), kstTime, daysUntil)
+		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtStreamTimeDays), kstTime, daysUntil)
 	case hoursUntil > 0:
-		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_hours_minutes", "%s (%d시간 %d분 후)"), kstTime, hoursUntil, minutesRem)
+		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtStreamTimeHoursMinutes), kstTime, hoursUntil, minutesRem)
 	default:
-		return fmt.Sprintf(f.messageStrings.GetOrContext(ctx, messagestrings.NamespaceTimeFmt, "stream_time_minutes", "%s (%d분 후)"), kstTime, minutesRem)
+		return fmt.Sprintf(f.messageStrings.Text(messagestrings.TimeFmtStreamTimeMinutes), kstTime, minutesRem)
 	}
 }
 
@@ -248,10 +246,7 @@ func (f *ResponseFormatter) formatChannelName(ctx context.Context, stream *domai
 		return ""
 	}
 
-	name := stream.ChannelName
-	if !stream.IsChzzkOnly && !stream.IsTwitchOnly {
-		name = mekparkhost.DisplayName(stream.ChannelID, stream.Title, name)
-	}
+	name := mekparkhost.DisplayName(stream.ChannelID, stream.Title, stream.ChannelName)
 
 	displayOrg := f.streamDisplayOrg(ctx, stream)
 
@@ -270,12 +265,12 @@ func (f *ResponseFormatter) streamDisplayOrg(ctx context.Context, stream *domain
 	return f.formatStreamOrg(ctx, *stream.Channel.Org)
 }
 
-func (f *ResponseFormatter) formatStreamOrg(ctx context.Context, org string) string {
+func (f *ResponseFormatter) formatStreamOrg(_ context.Context, org string) string {
 	if org == "" || org == constants.HolodexAPIParams.OrgHololive {
 		return ""
 	}
 
-	if label := f.messageStrings.GetContext(ctx, messagestrings.NamespaceOrg, org); label != "" {
+	if label, ok := f.messageStrings.Lookup(messagestrings.NamespaceOrg, org); ok {
 		return label
 	}
 
@@ -294,7 +289,7 @@ type memberNoUpcomingTemplateData struct {
 func (f *ResponseFormatter) FormatMemberNotLive(ctx context.Context, memberName string) string {
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNotLive, memberNotLiveTemplateData{MemberName: memberName})
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered
@@ -303,7 +298,7 @@ func (f *ResponseFormatter) FormatMemberNotLive(ctx context.Context, memberName 
 func (f *ResponseFormatter) FormatMemberNoUpcoming(ctx context.Context, memberName string, hours int) string {
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdMemberNoUpcoming, memberNoUpcomingTemplateData{MemberName: memberName, Hours: hours})
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

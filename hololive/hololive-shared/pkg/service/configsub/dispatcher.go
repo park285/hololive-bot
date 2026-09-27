@@ -29,7 +29,6 @@ import (
 
 // nil 핸들러는 해당 타입을 무시하며, Unknown이 nil이면 기본 경고 로깅을 사용한다.
 type ApplyHandlers struct {
-	ScraperProxy        func(contractssettings.ScraperProxyPayloadV1)
 	AlarmAdvanceMinutes func(contractssettings.AlarmAdvanceMinutesPayloadV1)
 	ACL                 func(contractssettings.ACLPayloadV1)
 	Unknown             func(updateType string)
@@ -47,8 +46,6 @@ func NewApplyFn(logger *slog.Logger, handlers ApplyHandlers) func(contractssetti
 
 func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
 	switch update.Type {
-	case contractssettings.UpdateTypeScraperProxy:
-		applyScraperProxyUpdate(logger, handlers, update)
 	case contractssettings.UpdateTypeAlarmAdvanceMinutes:
 		applyAlarmAdvanceMinutesUpdate(logger, handlers, update)
 	case contractssettings.UpdateTypeACL:
@@ -56,22 +53,6 @@ func dispatchConfigUpdate(logger *slog.Logger, handlers ApplyHandlers, update co
 	default:
 		applyUnknownConfigUpdate(logger, handlers, update)
 	}
-}
-
-func applyScraperProxyUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {
-	if handlers.ScraperProxy == nil {
-		logConfigUpdateHandlerMissing(logger, update.Type)
-
-		return
-	}
-
-	var payload contractssettings.ScraperProxyPayloadV1
-
-	if !decodeConfigUpdatePayload(logger, update, &payload) {
-		return
-	}
-
-	handlers.ScraperProxy(payload)
 }
 
 func applyAlarmAdvanceMinutesUpdate(logger *slog.Logger, handlers ApplyHandlers, update contractssettings.ConfigUpdateV1) {

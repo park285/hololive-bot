@@ -19,12 +19,22 @@ native_rollback_validate() {
     echo "previous host-native youtubejs helper is missing" >&2
     return 1
   fi
-  for rel in youtube-collector-host.env hololive-youtube-collector@.service SHA256SUMS; do
+  for rel in youtube-collector-host.env hololive-youtube-collector@.service SHA256SUMS previous-before-cutover; do
     if ! sudo -n test -r "$contract_dir/$rel"; then
       echo "previous host-native rollback contract is incomplete: $rel" >&2
       return 1
     fi
   done
+  if ! sudo -n test -r "$contract_dir/po-unit-presence"; then
+    echo 'previous issuer unit presence snapshot is missing' >&2
+    return 1
+  fi
+  local earlier_previous
+  earlier_previous="$(sudo -n cat "$contract_dir/previous-before-cutover")"
+  if [[ "$earlier_previous" != absent ]]; then
+    [[ "$earlier_previous" =~ ^/opt/hololive-bot/youtube-collector/releases/[A-Za-z0-9._-]+$ ]] || return 1
+    sudo -n test -d "$earlier_previous" && sudo -n test ! -L "$earlier_previous" || return 1
+  fi
 
   if ! sudo -n sh -n "$previous_target/bin/youtube-collector-wrapper"; then
     echo "previous host-native wrapper failed syntax validation" >&2
@@ -38,4 +48,19 @@ native_rollback_validate() {
     echo "previous host-native systemd unit failed validation" >&2
     return 1
   fi
+  local po_state
+  po_state="$(sudo -n cat "$contract_dir/po-unit-presence")"
+  case "$po_state" in
+    present)
+      sudo -n test -r "$contract_dir/hololive-youtube-po.service"
+      sudo -n test -r "$contract_dir/hololive-youtube-po.socket"
+      po_validate_release "$previous_target"
+      po_verify_units "$previous_target" "$contract_dir/hololive-youtube-po.service" "$contract_dir/hololive-youtube-po.socket"
+      ;;
+    absent)
+      sudo -n test ! -e "$contract_dir/hololive-youtube-po.service"
+      sudo -n test ! -e "$contract_dir/hololive-youtube-po.socket"
+      ;;
+    *) echo 'invalid previous issuer unit presence state' >&2; return 1 ;;
+  esac
 }

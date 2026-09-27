@@ -23,7 +23,6 @@ package botruntime
 import (
 	"context"
 	"log/slog"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,7 +41,6 @@ import (
 	sharedmodules "github.com/kapu/hololive-shared/pkg/providers/modules"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
 	"github.com/kapu/hololive-shared/pkg/service/cache"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	holodexprovider "github.com/kapu/hololive-shared/pkg/service/holodex/provider"
 	"github.com/kapu/hololive-shared/pkg/service/member"
@@ -86,26 +84,6 @@ func TestInitInfraResources_ContextCanceled(t *testing.T) {
 	assert.Contains(t, err.Error(), "provide infra resources")
 }
 
-func TestInitializeWarmMemberCache_ContextCanceled(t *testing.T) {
-	t.Parallel()
-
-	memberCache, cleanup, err := InitializeWarmMemberCache(canceledContext(), &configsettings.Config{}, testBootstrapGuardLogger())
-	require.Error(t, err)
-	assert.Nil(t, memberCache)
-	assert.Nil(t, cleanup)
-	assert.Contains(t, err.Error(), "provide database resources")
-}
-
-func TestInitializeDBIntegrationRuntime_ContextCanceled(t *testing.T) {
-	t.Parallel()
-
-	runtime, cleanup, err := InitializeDBIntegrationRuntime(canceledContext(), &configsettings.PostgresConfig{}, testBootstrapGuardLogger())
-	require.Error(t, err)
-	assert.Nil(t, runtime)
-	assert.Nil(t, cleanup)
-	assert.Contains(t, err.Error(), "provide database resources")
-}
-
 func TestProvideTriggerHandler_ReturnsHandler(t *testing.T) {
 	t.Parallel()
 
@@ -125,16 +103,34 @@ func TestBuildBotRuntime_FailsFastWhenBotDependenciesMissing(t *testing.T) {
 func TestResolveLLMSchedulerClients_Guards(t *testing.T) {
 	t.Parallel()
 
-	major, news := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{}, testBootstrapGuardLogger())
+	major, news, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{}, testBootstrapGuardLogger())
+	require.NoError(t, err)
 	assert.Nil(t, major)
 	assert.Nil(t, news)
 
-	major, news = appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
+	major, news, err = appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
 		LLMSchedulerURL: "http://localhost:18080",
 		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
 	}, testBootstrapGuardLogger())
+	require.NoError(t, err)
 	assert.NotNil(t, major)
 	assert.NotNil(t, news)
+}
+
+// https LLM scheduler URL이 설정됐는데 내부 H3 env가 없으면 명령을 조용히 끄거나 TCP client로 내려가지 않고
+// 기동 오류다(stack audit 2026-09-26).
+func TestResolveLLMSchedulerClientsFailsWithoutInternalH3Env(t *testing.T) {
+	t.Setenv("HOLOLIVE_INTERNAL_H3_CA_CERT_FILE", "")
+	t.Setenv("HOLOLIVE_INTERNAL_H3_SERVER_NAME", "")
+
+	major, news, err := appbootstrap.ResolveLLMSchedulerClients(&configsettings.Config{
+		LLMSchedulerURL: "https://127.0.0.1:30003",
+		Server:          configsettings.ServerConfig{APIKey: "test-api-key"},
+	}, testBootstrapGuardLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HOLOLIVE_INTERNAL_H3_CA_CERT_FILE")
+	assert.Nil(t, major)
+	assert.Nil(t, news)
 }
 
 func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
@@ -197,48 +193,4 @@ func TestBuildBotDependencyModules_MapsInputs(t *testing.T) {
 	assert.Same(t, aclService, modules.Support.ACL)
 	require.Len(t, modules.Feature.CommandBuilders, 1)
 	assert.NotNil(t, modules.Feature.CommandBuilders[0])
-}
-
-func TestInitAlarmDependencies_SuccessWithMinimalInputs(t *testing.T) {
-	t.Parallel()
-
-	memberData := &stubMemberDataProvider{}
-	deps, err := initAlarmDependencies(
-		filepath.Join(t.TempDir(), "settings.json"),
-		[]int{5},
-		false,
-		cachemocks.NewLenientClient(),
-		nil,
-		memberData,
-		nil,
-		testBootstrapGuardLogger(),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, deps)
-	t.Cleanup(func() { require.NoError(t, deps.AlarmService.Close(context.WithoutCancel(t.Context()))) })
-	assert.Same(t, memberData, deps.MemberDataProvider)
-	assert.NotNil(t, deps.AlarmService)
-}
-
-func TestInitAlarmModeComponents_SuccessWithNilRepository(t *testing.T) {
-	t.Parallel()
-
-	memberData := &stubMemberDataProvider{}
-	components, err := initAlarmModeComponents(
-		t.Context(),
-		&configsettings.Config{
-			Notification: configsettings.NotificationConfig{AdvanceMinutes: []int{5}},
-			Scraper:      configsettings.ScraperConfig{},
-		},
-		&sharedmodules.InfraModule{Cache: cachemocks.NewLenientClient()},
-		&holodexprovider.Service{},
-		memberData,
-		nil,
-		testBootstrapGuardLogger(),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, components)
-	t.Cleanup(func() { require.NoError(t, components.AlarmService.Close(context.WithoutCancel(t.Context()))) })
-	assert.Same(t, memberData, components.MemberDataSource)
-	assert.NotNil(t, components.AlarmService)
 }

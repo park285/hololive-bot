@@ -17,6 +17,7 @@ func TestProviderAndObservationKindVocabulary(t *testing.T) {
 	for _, kind := range []ObservationKind{
 		KindCommunityPage, KindVideoList, KindShortsList, KindLiveSnapshot,
 		KindViewerSample, KindChannelStats, KindChannelProfile, KindChannelPhoto, KindSchedule,
+		KindChannelLiveCheck, KindVideoLiveCheck,
 	} {
 		if !kind.Valid() {
 			t.Fatalf("kind %q is invalid", kind)
@@ -332,8 +333,9 @@ func TestLiveSnapshotMetadataRequiresGenerationTwo(t *testing.T) {
 	})
 	envelope := newPaginatedEnvelope(t, KindLiveSnapshot, payload, CompletenessComplete)
 
+	envelope.ContractGeneration = 1
 	if _, err := PrepareEnvelope(envelope); err == nil {
-		t.Fatal("generation one must reject live metadata fields")
+		t.Fatal("generation one must be rejected")
 	}
 
 	envelope.ContractGeneration = LiveSnapshotMetadataContractGeneration
@@ -877,9 +879,16 @@ func newPaginatedEnvelope(t *testing.T, kind ObservationKind, payload jsontext.V
 
 	scheduledFor := time.Date(2026, time.August, 14, 1, 0, 0, 0, time.UTC)
 
+	// live_snapshot은 contract generation 2만 받는다(generation 1 decoder 삭제, stack-audit 2026-09-26 T11 C6).
+	generation := int64(1)
+
+	if kind == KindLiveSnapshot {
+		generation = LiveSnapshotMetadataContractGeneration
+	}
+
 	return Envelope{
 		Provider: ProviderYouTubeJS, ObservationKind: kind,
-		SubjectKey: testChannelID, SchemaVersion: SchemaVersionV1, ContractGeneration: 1,
+		SubjectKey: testChannelID, SchemaVersion: SchemaVersionV1, ContractGeneration: generation,
 		ScheduledFor: scheduledFor, ObservedAt: scheduledFor.Add(time.Second),
 		Completeness: completeness, Continuity: ContinuityContiguous,
 		Payload: payload, CollectorInstance: testCollectorInstance,

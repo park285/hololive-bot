@@ -18,13 +18,14 @@ func (s *TransitionStore) CompleteSent(
 	ctx context.Context,
 	operation StartedOperation,
 	claimTokens []dispatchstate.ClaimToken,
+	mode DeliveryMode,
 ) (ApplyResult, error) {
 	if !operation.Valid() {
 		return newApplyResult(ApplyConflict, nil), errors.New("complete sent: invalid operation")
 	}
 
-	if err := s.ensureReady(ctx); err != nil {
-		return newApplyResult(ApplyIndeterminate, nil), fmt.Errorf("complete sent: %w", err)
+	if err := mode.validateCallerMode(); err != nil {
+		return newApplyResult(ApplyConflict, nil), fmt.Errorf("complete sent: %w", err)
 	}
 
 	sentAt, err := lifecycle.CanonicalTime(time.Now())
@@ -40,7 +41,7 @@ func (s *TransitionStore) CompleteSent(
 	var priorAdjudication CommitAdjudication
 
 	for attempt := 0; attempt <= transitionOperationRetryLimit; attempt++ {
-		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, claimTokens, sentAt)
+		touched, applyErr := s.completeSentOnce(ctx, operation, transitions, claimTokens, sentAt, mode)
 		if applyErr == nil {
 			result := newApplyResult(ApplyApplied, touched)
 
@@ -150,6 +151,7 @@ func (s *TransitionStore) completeSentOnce(
 	transitions []rowTransition,
 	claimTokens []dispatchstate.ClaimToken,
 	sentAt time.Time,
+	mode DeliveryMode,
 ) ([]int64, error) {
 	var touched []int64
 
@@ -165,15 +167,8 @@ func (s *TransitionStore) completeSentOnce(
 			return fmt.Errorf("complete sent: apply rows: %w", err)
 		}
 
-		ownerIDs := startedOwnerIDs(operation)
-
-		marks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, ownerIDs, sentAt, claimTokens)
-		if err != nil {
-			return fmt.Errorf("complete sent: load tracking marks: %w", err)
-		}
-
-		if err := persistSentDeliveryTracking(ctx, tx, marks); err != nil {
-			return fmt.Errorf("complete sent: persist tracking: %w", err)
+		if err := recordSentTrackingAndTelemetry(ctx, tx, operation, claimTokens, sentAt, mode); err != nil {
+			return err
 		}
 
 		writes := make([]LedgerWrite, 0, len(operation.groups))
@@ -195,6 +190,37 @@ func (s *TransitionStore) completeSentOnce(
 	}
 
 	return touched, nil
+}
+
+// recordSentTrackingAndTelemetry는 CompleteSent 트랜잭션 안에서 tracking 발송 표시, 성공 시도 telemetry, 지연 분류를
+// 차례로 저장한다. 성공 시도 telemetry는 tracking의 alarm_sent_at을 반영한 뒤, 분류 저장보다 먼저 기록해 분류가 이 시도를
+// 포함하게 한다.
+func recordSentTrackingAndTelemetry(
+	ctx context.Context,
+	tx dbx.Querier,
+	operation StartedOperation,
+	claimTokens []dispatchstate.ClaimToken,
+	sentAt time.Time,
+	mode DeliveryMode,
+) error {
+	marks, err := LoadAlarmSentMarksForDeliveryIDs(ctx, tx, startedOwnerIDs(operation), sentAt, claimTokens)
+	if err != nil {
+		return fmt.Errorf("complete sent: load tracking marks: %w", err)
+	}
+
+	if err := markSentDeliveryTracking(ctx, tx, marks); err != nil {
+		return fmt.Errorf("complete sent: persist tracking: %w", err)
+	}
+
+	if err := recordAttemptTelemetry(ctx, tx, mode, ownerAttempts(operation.groups, attemptResultSuccess, ""), sentAt); err != nil {
+		return fmt.Errorf("complete sent: record telemetry: %w", err)
+	}
+
+	if err := persistSentTrackingLatencyClassifications(ctx, tx, marks); err != nil {
+		return fmt.Errorf("complete sent: persist tracking classifications: %w", err)
+	}
+
+	return nil
 }
 
 func validateTrackingRequirements(

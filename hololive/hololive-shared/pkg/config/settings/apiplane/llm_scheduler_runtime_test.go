@@ -53,65 +53,56 @@ func TestLoadLLMSchedulerRuntimeAllowsMissingIrisInputs(t *testing.T) {
 	}
 }
 
-func TestLoadLLMSchedulerStillRequiresIrisTokens(t *testing.T) {
+// llm plane은 DELIVERY_OUTBOX_V3_HANDOFF_MODE를 읽던 delivery module을 소유했다. 퇴역한 키는 빈 값이어도 기동을 거절한다.
+func TestLoadLLMSchedulerRuntimeRejectsRetiredOutboxV3HandoffMode(t *testing.T) {
 	settingstest.ClearIrisAndRoomEnv(t)
 	settingstest.SetRuntimeH3ServerEnv(t)
 	t.Setenv("API_SECRET_KEY", "dummy-secret")
+	t.Setenv("DELIVERY_OUTBOX_V3_HANDOFF_MODE", "")
 
-	_, err := LoadLLMScheduler()
-	if err == nil || !strings.Contains(err.Error(), settingstest.IrisWebhookTokenEnv) {
-		t.Fatalf("LoadLLMScheduler() error = %v, want IRIS_WEBHOOK_TOKEN requirement", err)
+	_, err := LoadLLMSchedulerRuntime()
+	if err == nil || !strings.Contains(err.Error(), "DELIVERY_OUTBOX_V3_HANDOFF_MODE is retired") {
+		t.Fatalf("LoadLLMSchedulerRuntime() error = %v, want retired DELIVERY_OUTBOX_V3_HANDOFF_MODE rejection", err)
 	}
 }
 
-func TestLoadLLMSchedulerProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
-	settingstest.SetH3CertificateEnv(t)
-	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
-	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
+// 아래 세 테스트는 비-runtime 로더(LoadLLMScheduler, stack-audit 2026-09-26 T11에서 삭제)로 검증하던 동작을 실제 runtime
+// 로더에서 확인한다. 이 로더는 Iris 입력을 받지 않으므로 Iris env를 비운다.
+func TestLoadLLMSchedulerRuntimeProductionRejectsInsecurePostgresSSLMode(t *testing.T) {
+	settingstest.ClearIrisAndRoomEnv(t)
+	settingstest.SetRuntimeH3ServerEnv(t)
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("POSTGRES_SSLMODE", "require")
 
-	_, err := LoadLLMScheduler()
-	if err == nil {
-		t.Fatal("LoadLLMScheduler() expected production sslmode validation error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := LoadLLMSchedulerRuntime()
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_SSLMODE=require is not allowed in production") {
+		t.Fatalf("LoadLLMSchedulerRuntime() error = %v, want production sslmode rejection", err)
 	}
 }
 
-func TestLoadLLMSchedulerProductionRequiresAPISecretKey(t *testing.T) {
-	settingstest.SetH3CertificateEnv(t)
-	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
+func TestLoadLLMSchedulerRuntimeProductionRequiresAPISecretKey(t *testing.T) {
+	settingstest.ClearIrisAndRoomEnv(t)
+	settingstest.SetRuntimeH3ServerEnv(t)
 	t.Setenv("APP_ENV", load.EnvironmentProduction)
 	t.Setenv("API_SECRET_KEY", "")
 
-	_, err := LoadLLMScheduler()
-	if err == nil {
-		t.Fatal("LoadLLMScheduler() expected production API key validation error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := LoadLLMSchedulerRuntime()
+	if err == nil || !strings.Contains(err.Error(), "API_SECRET_KEY is required in production") {
+		t.Fatalf("LoadLLMSchedulerRuntime() error = %v, want production API key requirement", err)
 	}
 }
 
-func TestLoadLLMSchedulerEnvApplied(t *testing.T) {
-	settingstest.SetH3CertificateEnv(t)
-	t.Setenv(settingstest.IrisWebhookTokenEnv, "test-webhook-token")
-	t.Setenv(settingstest.IrisBotTokenEnv, "test-bot-token")
-	t.Setenv("IRIS_BASE_URL_FILE", "/tmp/iris_base_url")
+func TestLoadLLMSchedulerRuntimeEnvApplied(t *testing.T) {
+	settingstest.ClearIrisAndRoomEnv(t)
+	settingstest.SetRuntimeH3ServerEnv(t)
 	t.Setenv("API_SECRET_KEY", "test-api-key")
 	t.Setenv("LLM_SCHEDULER_PORT", "39003")
 	t.Setenv("BOT_PREFIX", "#")
 
-	config, err := LoadLLMScheduler()
+	config, err := LoadLLMSchedulerRuntime()
 	if err != nil {
-		t.Fatalf("LoadLLMScheduler() error = %v", err)
+		t.Fatalf("LoadLLMSchedulerRuntime() error = %v", err)
 	}
 
 	if config.Server.Port != 39003 {
@@ -120,23 +111,6 @@ func TestLoadLLMSchedulerEnvApplied(t *testing.T) {
 
 	if config.Bot.Prefix != "#" {
 		t.Fatalf("Bot.Prefix = %q, want %q", config.Bot.Prefix, "#")
-	}
-}
-
-func TestLoadLLMSchedulerIrisSharedTokenNoLongerProvidesFallback(t *testing.T) {
-	settingstest.SetH3CertificateEnv(t)
-	t.Setenv("IRIS_SHARED_TOKEN", "shared-token")
-	t.Setenv(settingstest.IrisWebhookTokenEnv, "")
-	t.Setenv(settingstest.IrisBotTokenEnv, "")
-	t.Setenv("API_SECRET_KEY", "test-api-key")
-
-	_, err := LoadLLMScheduler()
-	if err == nil {
-		t.Fatal("LoadLLMScheduler() expected missing webhook token error, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "IRIS_WEBHOOK_TOKEN is required") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

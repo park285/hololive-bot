@@ -45,21 +45,12 @@ func newCommandTestLogger() *slog.Logger {
 
 type commandContextKey struct{}
 
-// staticcheck literal nil 경고를 피하면서 nil base context 계약을 유지한다.
-func nilBaseContext() context.Context {
-	return nil
-}
-
 type trackedContextState struct {
 	mu   sync.Mutex
 	seen []context.Context
 }
 
 func (s *trackedContextState) record(ctx context.Context) {
-	if ctx == nil {
-		return
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -71,6 +62,14 @@ func (s *trackedContextState) snapshot() []context.Context {
 	defer s.mu.Unlock()
 
 	return slices.Clone(s.seen)
+}
+
+// reset은 생성 단계의 기록을 지워 이후 요청 구간만 보게 한다.
+func (s *trackedContextState) reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.seen = nil
 }
 
 func (s *trackedContextState) saw(want context.Context) bool {
@@ -127,8 +126,8 @@ func (p *trackedMemberProvider) GetChannelIDs() []string {
 	return ids
 }
 
-func (p *trackedMemberProvider) GetAllMembers() []*domain.Member {
-	return p.members
+func (p *trackedMemberProvider) LoadAllMembers() ([]*domain.Member, error) {
+	return p.members, nil
 }
 
 func (p *trackedMemberProvider) WithContext(ctx context.Context) domain.MemberDataProvider {
@@ -158,9 +157,7 @@ func TestFindActiveMemberOrError_UsesRequestContextForMatcher(t *testing.T) {
 		Name:      testMemberAqua,
 	})
 
-	var baseCtx context.Context
-
-	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(provider, nil, nil, newCommandTestLogger())
 
 	deps := &handlercore.Dependencies{
 		Matcher:   matcherService,
@@ -189,7 +186,7 @@ func TestAlarmCommand_HandleAdd_UsesRequestContextForMatcher(t *testing.T) {
 		IsGraduated: true,
 		Org:         "Hololive",
 	})
-	matcherService := matcher.NewMatcher(t.Context(), provider, nil, nil, nil, newCommandTestLogger())
+	matcherService := matcher.NewMatcher(provider, nil, nil, newCommandTestLogger())
 
 	var (
 		sendErrorState trackedContextState
@@ -234,9 +231,10 @@ func TestLiveCommand_Execute_UsesRequestContextForMatcher(t *testing.T) {
 		Name:      testMemberAqua,
 	})
 
-	var baseCtx context.Context
+	matcherService := matcher.NewMatcher(provider, nil, nil, newCommandTestLogger())
+	// NewMatcher는 생성 로그의 멤버 수를 base ctx로 읽는다. 명령 실행 구간의 ctx만 검사한다.
+	provider.state.reset()
 
-	matcherService := matcher.NewMatcher(baseCtx, provider, nil, nil, nil, newCommandTestLogger())
 	streamProvider := &liveQueryStub{result: livequery.Result{Status: livequery.Complete}}
 
 	var (

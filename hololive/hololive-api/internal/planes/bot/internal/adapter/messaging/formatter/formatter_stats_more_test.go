@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 const cmdStatsCountBody = `📊 {{.MemberName}} 구독자 {{.Subscribers}}명`
@@ -47,9 +46,9 @@ func TestFormatSubscriberCount(t *testing.T) {
 func TestFormatSubscriberCount_Fallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
 
 	assert.Equal(t,
-		messagestrings.FallbackSentinel,
+		renderFailureMessage,
 		formatter.FormatSubscriberCount(t.Context(), "호시마치 스이세이", 2050000))
 }

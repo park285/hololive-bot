@@ -60,11 +60,6 @@ compose_service_redeploy_usage_lines() { :; }
 compose_service_resolve_build_target() { printf '%s\n' "$1"; }
 compose_service_build_targets_text() { :; }
 EOF
-cat >"${repo}/scripts/deploy/lib/removed-runtimes.sh" <<'EOF'
-#!/usr/bin/env bash
-removed_runtime_cleanup_before_cutover() { :; }
-removed_runtime_assert_absent() { :; }
-EOF
 cat >"${repo}/scripts/deploy/lib/health-gate.sh" <<'EOF'
 #!/usr/bin/env bash
 cutover_service_uses_app_writable_bind_mount() { return 1; }
@@ -283,7 +278,7 @@ env "${common_env[@]}" FAKE_REVISION_LABEL="${revision}" \
     || fail "build-all --no-bump full cutover must accept exact built and live revisions"
 built_line="$(grep -n ' image inspect .*hololive-api:prod' "${docker_log}" | tail -n1 | cut -d: -f1)"
 config_line="$(grep -n ' compose .* run --rm --no-deps hololive-api --check-config' "${docker_log}" | tail -n1 | cut -d: -f1)"
-up_line="$(grep -nE ' compose .* up -d ' "${docker_log}" | tail -n1 | cut -d: -f1)"
+up_line="$(grep -nE ' compose .* up -d ' "${docker_log}" | head -n1 | cut -d: -f1)"
 live_line="$(grep -n ' container inspect ' "${docker_log}" | head -n1 | cut -d: -f1)"
 [[ "${built_line}" -lt "${config_line}" && "${config_line}" -lt "${up_line}" && "${up_line}" -lt "${live_line}" ]] \
     || fail "build-all ordering must be build-image, config-check, up, live-container"

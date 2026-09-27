@@ -48,7 +48,7 @@ func TestParseGridPlaylistRenderer_Normal(t *testing.T) {
 		"shortBylineText": {"runs": [{"text": "Test Channel"}]}
 	}`
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
@@ -67,7 +67,7 @@ func TestParseGridPlaylistRenderer_EmptyPlaylistID(t *testing.T) {
 	t.Parallel()
 
 	jsonStr := `{"playlistId": ""}`
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 	assert.Nil(t, playlist)
 }
@@ -81,7 +81,7 @@ func TestParseGridPlaylistRenderer_SimpleTextTitle(t *testing.T) {
 		"videoCountText": {"runs": [{"text": "5 videos"}]}
 	}`
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
@@ -96,7 +96,7 @@ func TestParseGridPlaylistRenderer_NoThumbnails(t *testing.T) {
 		"title": {"runs": [{"text": "No Thumb Playlist"}]}
 	}`
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
@@ -115,7 +115,7 @@ func TestParseGridPlaylistRenderer_MultipleThumbnails(t *testing.T) {
 		]}
 	}`
 
-	client := NewClient()
+	client := NewClient(testYouTubeConfig())
 	playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 
 	require.NotNil(t, playlist)
@@ -144,7 +144,7 @@ func TestParseGridPlaylistRenderer_VideoCountFormats(t *testing.T) {
 				"title": {"runs": [{"text": "Test"}]},
 				"videoCountText": {"runs": [{"text": "` + tc.countText + `"}]}
 			}`
-			client := NewClient()
+			client := NewClient(testYouTubeConfig())
 			playlist := client.parseGridPlaylistRenderer(parseGJSONResultPtr(jsonStr), "UC_TEST")
 			require.NotNil(t, playlist)
 			assert.Equal(t, tc.want, playlist.VideoCount)
@@ -196,7 +196,7 @@ func TestGetPlaylists_GridRenderer(t *testing.T) {
 
 	htmlBody := "<script>var ytInitialData = " + ytInitialData + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -260,7 +260,7 @@ func TestGetPlaylists_ShelfRenderer(t *testing.T) {
 
 	htmlBody := "<script>var ytInitialData = " + ytInitialData + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -433,7 +433,7 @@ func TestGetPlaylists_NoPlaylistsTab(t *testing.T) {
 
 	htmlBody := "<script>var ytInitialData = " + ytInitialData + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -488,7 +488,7 @@ func TestGetPlaylists_MaxResultsLimit(t *testing.T) {
 
 	htmlBody := "<script>var ytInitialData = " + ytInitialData + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -596,7 +596,7 @@ func TestGetPlaylists_EmptyGrid(t *testing.T) {
 
 	htmlBody := "<script>var ytInitialData = " + ytInitialData + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -622,7 +622,7 @@ func TestGetPlaylists_ChannelNotFound(t *testing.T) {
 	ytInitialData := `{"alerts":[{"alertRenderer":{"type":"ERROR","text":{"simpleText":"This channel does not exist."}}}]}`
 	htmlBody := "<script>var ytInitialData = " + ytInitialData + ";</script>"
 
-	client := NewClient(
+	client := NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,
@@ -644,7 +644,7 @@ func TestGetPlaylists_ChannelNotFound(t *testing.T) {
 }
 
 func newPlaylistMockClient(htmlBody string) *Client {
-	return NewClient(
+	return NewClient(testYouTubeConfig(),
 		WithRateLimiter(ratelimiter.New(0)),
 		WithHTTPClient(&http.Client{
 			Timeout: 5 * time.Second,

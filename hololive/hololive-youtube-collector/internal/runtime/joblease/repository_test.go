@@ -614,8 +614,9 @@ func assertRetainedDiagnostics(t *testing.T, row, deferred leaseDiagnostics) {
 	}
 }
 
-func TestLegacyDeferBackfillsDiagnosticsWithoutOverwritingNewWriter(t *testing.T) {
-	ctx := t.Context()
+// 177/189의 legacy_collector backfill 트리거는 222에서 지웠다(stack-audit 2026-09-26 T17). 이제 typed failure 없이
+// DEFERRED로 바꾸는 이전 collector 형태의 갱신은 더 이상 진단을 합성하지 않고 기존 typed 진단을 그대로 둔다.
+func TestLegacyShapedDeferNoLongerSynthesizesDiagnostics(t *testing.T) {
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
 
@@ -625,57 +626,17 @@ func TestLegacyDeferBackfillsDiagnosticsWithoutOverwritingNewWriter(t *testing.T
 	first := mustAcquireLease(t, repository, spec, "collector-a")
 	mustDeferLease(t, first, string(contract.ErrorCollectionFailed), string(contract.ClassTransient), "first detail")
 
-	stale := readFailureDiagnostics(t, pool, spec.JobKey)
+	typed := readFailureDiagnostics(t, pool, spec.JobKey)
 
 	makeRetryDue(t, pool, spec.JobKey)
 
 	second := mustAcquireLease(t, repository, spec, "collector-b")
 	legacyDefer(t, pool, repository, second, "legacy_failure")
 
-	legacy := readFailureDiagnostics(t, pool, spec.JobKey)
-	if legacy.code != "legacy_failure" || legacy.class != "legacy_collector" || legacy.detail != "legacy_collector" {
-		t.Fatalf("legacy diagnostics = code:%q class:%q detail:%q", legacy.code, legacy.class, legacy.detail)
-	}
-
-	if !legacy.at.After(stale.at) {
-		t.Fatalf("legacy failure timestamp = %s, stale timestamp = %s", legacy.at, stale.at)
-	}
-
-	makeRetryDue(t, pool, spec.JobKey)
-
-	third := mustAcquireLease(t, repository, spec, "collector-c")
-	mustDeferLease(t, third, string(contract.ErrorCollectionTimeout), string(contract.ClassTimeout), "second detail")
-
-	current := readFailureDiagnostics(t, pool, spec.JobKey)
-	if current.code != string(contract.ErrorCollectionTimeout) || current.class != string(contract.ClassTimeout) || current.detail != "second detail" {
-		t.Fatalf("new-writer diagnostics = code:%q class:%q detail:%q", current.code, current.class, current.detail)
-	}
-
-	if !current.at.After(legacy.at) {
-		t.Fatalf("new-writer timestamp = %s, legacy timestamp = %s", current.at, legacy.at)
-	}
-
-	makeRetryDue(t, pool, spec.JobKey)
-
-	fourth := mustAcquireLease(t, repository, spec, "collector-d")
-	if err := fourth.Complete(ctx); err != nil {
-		t.Fatalf("complete after new-writer defer: %v", err)
-	}
-
-	assertFailureDiagnostics(t, pool, spec.JobKey, current.code, current.class, current.detail, current.at)
-
-	if _, err := pool.Exec(ctx, mustTestSQL("make_lease_overdue.sql"), spec.JobKey); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := repository.Acquire(ctx, spec, "collector-e"); err != nil {
-		t.Fatalf("acquire after legacy-compatible complete: %v", err)
-	}
-
-	assertFailureDiagnostics(t, pool, spec.JobKey, current.code, current.class, current.detail, current.at)
+	assertFailureDiagnostics(t, pool, spec.JobKey, typed.code, typed.class, typed.detail, typed.at)
 }
 
-func TestAcquirePreservesLegacyDeferredFailureDuringMigrationBackfill(t *testing.T) {
+func TestAcquireLeavesUntypedDeferredFailureWithoutDiagnostics(t *testing.T) {
 	ctx := t.Context()
 	pool := dbtest.NewPool(t)
 	seedProjection(t, pool, []leaseTarget{{subjectChannelA, contract.KindCommunityPage, time.Minute, true}})
@@ -688,23 +649,32 @@ func TestAcquirePreservesLegacyDeferredFailureDuringMigrationBackfill(t *testing
 		t.Fatalf("complete initial lease: %v", err)
 	}
 
-	var failureAt time.Time
-
-	if err := pool.QueryRow(ctx, `
+	if _, err := pool.Exec(ctx, `
 		UPDATE youtube_collection_job_leases
 		SET slot_state = 'DEFERRED',
 		    retry_not_before = clock_timestamp() - INTERVAL '1 second',
-		    last_error_code = 'pretrigger_failure',
+		    last_error_code = 'untyped_failure',
 		    updated_at = clock_timestamp() - INTERVAL '1 minute'
 		WHERE job_key = $1
-		RETURNING updated_at
-	`, spec.JobKey).Scan(&failureAt); err != nil {
-		t.Fatalf("seed legacy deferred failure: %v", err)
+	`, spec.JobKey); err != nil {
+		t.Fatalf("seed untyped deferred failure: %v", err)
 	}
 
 	mustAcquireLease(t, repository, spec, "collector-b")
-	assertFailureDiagnostics(t, pool, spec.JobKey,
-		"pretrigger_failure", "legacy_collector", "legacy_collector", failureAt)
+
+	var diagnosticsNull bool
+
+	if err := pool.QueryRow(ctx, `
+		SELECT last_failure_code IS NULL AND last_failure_class IS NULL
+		   AND last_failure_detail IS NULL AND last_failure_at IS NULL
+		FROM youtube_collection_job_leases WHERE job_key = $1
+	`, spec.JobKey).Scan(&diagnosticsNull); err != nil {
+		t.Fatal(err)
+	}
+
+	if !diagnosticsNull {
+		t.Fatal("acquire synthesized legacy_collector diagnostics for an untyped deferred failure")
+	}
 }
 
 type failureDiagnostics struct {

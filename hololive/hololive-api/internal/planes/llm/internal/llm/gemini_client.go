@@ -36,6 +36,8 @@ import (
 	"strings"
 	"time"
 
+	sharedllm "github.com/park285/shared-go/v2/pkg/llm"
+	"github.com/park285/shared-go/v2/pkg/llm/openaipreset"
 	sharedlog "github.com/park285/shared-go/v2/pkg/logging"
 )
 
@@ -235,26 +237,22 @@ func normalizeGeminiThinkingLevel(level string) (string, error) {
 	}
 }
 
-func (c *GeminiClient) GenerateJSON(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
+func (c *GeminiClient) GenerateJSON(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, error) {
 	if c == nil {
 		return "", errors.New("gemini client is nil")
-	}
-
-	if ctx == nil {
-		return "", errors.New("gemini context is nil")
 	}
 
 	if schema == nil {
 		return "", errors.New("json schema is nil")
 	}
 
-	attrs := llmPromptSummaryAttrs("gemini", c.model, systemPrompt, userPrompt)
+	attrs := llmPromptSummaryAttrs("gemini", c.model, prompts)
 	sharedlog.Debug(ctx, c.logger, "llm.prompt.built", "llm prompt built", attrs...)
 	sharedlog.Info(ctx, c.logger, "llm.provider.request.started", "llm provider request started", attrs...)
 
 	started := time.Now()
 
-	text, usage, err := c.generate(ctx, systemPrompt, userPrompt, schema)
+	text, usage, err := c.generate(ctx, prompts, schema)
 	if err != nil {
 		failedAttrs := append([]slog.Attr{}, attrs...)
 
@@ -278,8 +276,27 @@ func (c *GeminiClient) GenerateJSON(ctx context.Context, systemPrompt, userPromp
 	return text, nil
 }
 
-func (c *GeminiClient) generate(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, int64, error) {
-	req, err := c.newInteractionRequest(ctx, systemPrompt, userPrompt, schema)
+// geminiSystemInstruction은 invariant·developer 계층을 Gemini의 단일 system instruction으로 묶는다.
+// 섹션 순서·라벨·순서 위반 거절은 shared-go canonical adapter가 소유한다
+// (DEC-20260926-stack-llm-instruction-layering-sole-path의 Gemini 매핑).
+func geminiSystemInstruction(prompts openaipreset.PromptLayers) (string, error) {
+	messages, err := sharedllm.AdaptInstructionMessages([]sharedllm.Message{
+		{Role: "system", Content: prompts.Invariant},
+		{Role: "developer", Content: prompts.Developer},
+	}, sharedllm.InstructionProfileSingleSystem)
+	if err != nil {
+		return "", fmt.Errorf("adapt instruction messages: %w", err)
+	}
+
+	if len(messages) == 0 {
+		return "", nil
+	}
+
+	return messages[0].Content, nil
+}
+
+func (c *GeminiClient) generate(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (string, int64, error) {
+	req, err := c.newInteractionRequest(ctx, prompts, schema)
 	if err != nil {
 		return "", 0, fmt.Errorf("create gemini interaction request: %w", err)
 	}
@@ -308,11 +325,16 @@ func (c *GeminiClient) generate(ctx context.Context, systemPrompt, userPrompt st
 	return text, usage, nil
 }
 
-func (c *GeminiClient) newInteractionRequest(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (*http.Request, error) {
+func (c *GeminiClient) newInteractionRequest(ctx context.Context, prompts openaipreset.PromptLayers, schema map[string]any) (*http.Request, error) {
+	systemInstruction, err := geminiSystemInstruction(prompts)
+	if err != nil {
+		return nil, fmt.Errorf("build gemini system instruction: %w", err)
+	}
+
 	reqBody := geminiInteractionRequest{
 		Model:             c.model,
-		Input:             userPrompt,
-		SystemInstruction: systemPrompt,
+		Input:             prompts.User,
+		SystemInstruction: systemInstruction,
 		Store:             false,
 		ResponseFormat: geminiResponseFormat{
 			Type:     "text",
@@ -327,7 +349,7 @@ func (c *GeminiClient) newInteractionRequest(ctx context.Context, systemPrompt, 
 
 	var body bytes.Buffer
 
-	if err := jsonv2.MarshalWrite(&body, reqBody); err != nil {
+	if err = jsonv2.MarshalWrite(&body, reqBody); err != nil {
 		return nil, fmt.Errorf("marshal gemini interaction: %w", err)
 	}
 

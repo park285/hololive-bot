@@ -91,7 +91,6 @@ type WebhookConfig struct {
 	MaxBodyBytes   int64
 	DedupTTL       time.Duration
 	DedupTimeout   time.Duration
-	RequireHMAC    bool
 }
 
 type WorkerPoolConfig struct {

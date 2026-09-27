@@ -24,14 +24,8 @@ package scraping
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strconv"
-	"sync"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,46 +33,10 @@ import (
 // 통합 테스트 - 실제 YouTube 호출
 // 실행: go test -tags=integration -v ./internal/service/youtube/scraper/...
 
-var loadDotEnvOnce sync.Once
-
-func loadRootDotEnv() {
-	loadDotEnvOnce.Do(func() {
-		// Best-effort: monorepo 루트(.env)가 있으면 로드해서 프록시 설정을 테스트에서 재사용한다.
-		// (개발 환경에서만 사용되며, integration 태그 테스트만 영향을 받는다.)
-		_, file, _, ok := runtime.Caller(0)
-		if !ok {
-			return
-		}
-
-		// hololive-kakao-bot-go/internal/service/youtube/scraper -> monorepo root
-		envPath := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../../.env"))
-		_ = godotenv.Load(envPath)
-	})
-}
-
 func newIntegrationClient(t *testing.T) *Client {
 	t.Helper()
 
-	loadRootDotEnv()
-
-	enabled, _ := strconv.ParseBool(os.Getenv("SCRAPER_PROXY_ENABLED"))
-	proxyURL := os.Getenv("SCRAPER_PROXY_URL")
-
-	if enabled && proxyURL != "" {
-		t.Log("Integration proxy enabled (SCRAPER_PROXY_ENABLED=true)")
-		return NewClient(WithProxy(ProxyConfig{
-			Enabled: true,
-			URL:     proxyURL,
-		}))
-	}
-
-	if enabled && proxyURL == "" {
-		t.Log("Integration proxy enabled but SCRAPER_PROXY_URL is empty; falling back to direct")
-		return NewClient()
-	}
-
-	t.Log("Integration proxy disabled (direct connection)")
-	return NewClient()
+	return NewClient(testYouTubeConfig())
 }
 
 func TestGetChannelStats_Integration(t *testing.T) {
@@ -96,36 +54,6 @@ func TestGetChannelStats_Integration(t *testing.T) {
 	assert.Equal(t, "Japan", stats.Country)
 
 	t.Logf("Channel Stats: %+v", stats)
-}
-
-func TestGetChannelSnippet_Integration(t *testing.T) {
-	client := newIntegrationClient(t)
-	ctx := context.Background()
-
-	snippet, err := client.GetChannelSnippet(ctx, "UC1DCedRgGHBdm81E1llLhOQ")
-	require.NoError(t, err)
-
-	assert.NotEmpty(t, snippet.Avatar, "avatar should not be empty")
-	assert.NotEmpty(t, snippet.Banner, "banner should not be empty")
-
-	t.Logf("Avatar count: %d, Banner count: %d", len(snippet.Avatar), len(snippet.Banner))
-	if len(snippet.Avatar) > 0 {
-		t.Logf("Avatar[0]: %s (%dx%d)", snippet.Avatar[0].URL, snippet.Avatar[0].Width, snippet.Avatar[0].Height)
-	}
-}
-
-func TestGetUpcomingEvents_Integration(t *testing.T) {
-	client := newIntegrationClient(t)
-	ctx := context.Background()
-
-	// Hololive 공식 채널 (라이브/예정 방송이 있을 가능성 높음)
-	events, err := client.GetUpcomingEvents(ctx, "UCJFZiqLMntJufDCHc6bQixg")
-	require.NoError(t, err)
-
-	t.Logf("Found %d upcoming events", len(events))
-	for _, event := range events {
-		t.Logf("  - [%s] %s (%s)", event.Status, event.Title, event.VideoID)
-	}
 }
 
 func TestGetShorts_Integration(t *testing.T) {

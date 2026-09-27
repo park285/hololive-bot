@@ -115,7 +115,7 @@ func collectAlarmEntries(
 	roomIDs []string,
 	roomChannels [][]string,
 	roomNamesMap map[string]string,
-) (result0 []*domain.AlarmEntry, result1 []string) {
+) ([]*domain.AlarmEntry, []string) {
 	alarms := make([]*domain.AlarmEntry, 0)
 	channelIDsForNames := make([]string, 0)
 

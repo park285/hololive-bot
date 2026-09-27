@@ -83,7 +83,7 @@ func resolveChannelSubscribersFromCache(
 	channelID string,
 	alarmType domain.AlarmType,
 	requireCacheSuccess bool,
-) (result0 []string, ok1 bool, err error) {
+) ([]string, bool, error) {
 	subscribers, err := LookupChannelSubscribersByType(ctx, cacheClient, channelID, alarmType)
 	if err != nil {
 		observeAlarmSubscriberCacheError("lookup")
@@ -183,11 +183,9 @@ func loadChannelSubscriberAlarms(ctx context.Context, db dbx.Querier, channelID 
 }
 
 func waitForChannelSubscriberAlarms(ctx context.Context, resultCh <-chan singleflight.Result) ([]*domain.Alarm, error) {
-	waitCtx := channelSubscriberWaitContext(ctx)
-
 	select {
-	case <-waitCtx.Done():
-		return nil, fmt.Errorf("load channel subscriber alarms: wait for shared query: %w", waitCtx.Err())
+	case <-ctx.Done():
+		return nil, fmt.Errorf("load channel subscriber alarms: wait for shared query: %w", ctx.Err())
 	case result := <-resultCh:
 		out, err := resolveChannelSubscriberLoadResult(result)
 		if err != nil {
@@ -196,14 +194,6 @@ func waitForChannelSubscriberAlarms(ctx context.Context, resultCh <-chan singlef
 
 		return out, nil
 	}
-}
-
-func channelSubscriberWaitContext(ctx context.Context) context.Context {
-	if ctx != nil {
-		return ctx
-	}
-
-	return context.Background()
 }
 
 func resolveChannelSubscriberLoadResult(result singleflight.Result) ([]*domain.Alarm, error) {

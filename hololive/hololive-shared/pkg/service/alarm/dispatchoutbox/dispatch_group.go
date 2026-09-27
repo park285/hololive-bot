@@ -43,12 +43,7 @@ func dispatchGroupSourceParts(envelope *domain.AlarmQueueEnvelope) []string {
 	}
 
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindCelebration && envelope.Celebration != nil {
-		memberIdentity := envelope.Celebration.ChannelID
-		if envelope.Celebration.MemberID > 0 {
-			memberIdentity = strconv.Itoa(envelope.Celebration.MemberID)
-		}
-
-		return []string{"celebration", string(envelope.Celebration.Kind), memberIdentity, envelope.Celebration.VideoID}
+		return []string{"celebration", string(envelope.Celebration.Kind), strconv.Itoa(envelope.Celebration.MemberID), envelope.Celebration.VideoID}
 	}
 
 	if envelope.SourceKind == domain.AlarmDispatchSourceKindYouTubeOutbox && envelope.YouTubeOutbox != nil {

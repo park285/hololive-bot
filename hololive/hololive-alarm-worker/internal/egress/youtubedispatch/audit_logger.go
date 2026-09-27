@@ -21,16 +21,18 @@ const (
 	sendResultSuccess = "success"
 	sendResultFailure = "failure"
 
-	deliveryModeGrouped = "grouped"
-	deliveryModePerRoom = "per_room"
+	deliveryModeGrouped = string(store.DeliveryModeGrouped)
+	deliveryModePerRoom = string(store.DeliveryModePerRoom)
 )
 
+// AuditLogger는 시도 시작·결과 요약·최종 결과 로그만 남긴다. 시도 telemetry 행은 TransitionStore가 lifecycle 전이
+// 트랜잭션 안에서 한 번 기록하며, 여기서 하던 prepare·enqueue·direct_fallback 로그와 commit 뒤 분류 재저장은
+// DEC-20260926-hololive-delivery-telemetry-single-path로 삭제했다.
 type AuditLogger struct {
-	telemetry          *telemetry.Repository
-	delivery           *store.DeliveryRepository
-	logger             *slog.Logger
-	config             dispatchstate.Config
-	telemetryProcessor *TelemetryProcessor
+	telemetry *telemetry.Repository
+	delivery  *store.DeliveryRepository
+	logger    *slog.Logger
+	config    dispatchstate.Config
 }
 
 func newAuditLogger(
@@ -38,14 +40,12 @@ func newAuditLogger(
 	deliveryRepo *store.DeliveryRepository,
 	logger *slog.Logger,
 	config *dispatchstate.Config,
-	telemetryProcessor *TelemetryProcessor,
 ) *AuditLogger {
 	return &AuditLogger{
-		telemetry:          telemetryRepo,
-		delivery:           deliveryRepo,
-		logger:             logger,
-		config:             *config,
-		telemetryProcessor: telemetryProcessor,
+		telemetry: telemetryRepo,
+		delivery:  deliveryRepo,
+		logger:    logger,
+		config:    *config,
 	}
 }
 
@@ -144,114 +144,6 @@ func (al *AuditLogger) logCommunityShortsDeliveryResult(
 	}
 
 	al.logger.Info(deliveryResultLogMessage, attrs...)
-}
-
-func (al *AuditLogger) logCommunityShortsDeliveryAudit(
-	ctx context.Context,
-	rows []domain.YouTubeNotificationDelivery,
-	outboxes []domain.YouTubeNotificationOutbox,
-	sentAt time.Time,
-	deliveryMode string,
-	sendResult string,
-	failureReason string,
-	sendErr error,
-) {
-	limit := min(len(outboxes), len(rows))
-	if limit == 0 {
-		return
-	}
-
-	sentAt = sentAt.UTC()
-
-	deliveryPath := telemetry.NormalizeCommunityShortsDeliveryPath(telemetry.CommunityShortsDeliveryPath)
-	events := buildCommunityShortsDeliveryAuditEvents(
-		rows[:limit],
-		outboxes[:limit],
-		sentAt,
-		deliveryPath,
-		deliveryMode,
-		sendResult,
-		failureReason,
-	)
-
-	if len(events) == 0 {
-		return
-	}
-
-	preparedEvents, telemetryAvailable := al.prepareCommunityShortsDeliveryAuditEvents(ctx, events)
-	if telemetryAvailable && al.enqueueCommunityShortsDeliveryAuditEvents(ctx, preparedEvents) {
-		return
-	}
-
-	al.logCommunityShortsDeliveryAuditFallback(ctx, preparedEvents, sendErr)
-}
-
-func (al *AuditLogger) prepareCommunityShortsDeliveryAuditEvents(
-	ctx context.Context,
-	events []domain.YouTubeNotificationDeliveryTelemetry,
-) ([]domain.YouTubeNotificationDeliveryTelemetry, bool) {
-	if al.telemetry == nil {
-		return events, false
-	}
-
-	prepared, err := al.telemetry.PrepareRows(ctx, events)
-	if err != nil {
-		al.logger.Warn("Failed to enrich persistent delivery audit",
-			slog.Int("events", len(events)),
-			slog.Any("error", err))
-
-		return events, false
-	}
-
-	return prepared, true
-}
-
-func (al *AuditLogger) enqueueCommunityShortsDeliveryAuditEvents(
-	ctx context.Context,
-	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
-) bool {
-	enqueueErr := al.telemetry.EnqueuePrepared(ctx, preparedEvents)
-	if enqueueErr != nil {
-		al.logger.Warn("Failed to enqueue persistent delivery audit",
-			slog.Int("events", len(preparedEvents)),
-			slog.Any("error", enqueueErr))
-
-		return false
-	}
-
-	if err := al.telemetry.PersistPostLatencyClassificationsByOutboxIDs(ctx, telemetry.CollectTelemetryOutboxIDs(preparedEvents)); err != nil {
-		al.logger.Warn("Failed to persist post latency classifications",
-			slog.Int("events", len(preparedEvents)),
-			slog.Any("error", err))
-	}
-
-	return true
-}
-
-func (al *AuditLogger) logCommunityShortsDeliveryAuditFallback(
-	ctx context.Context,
-	preparedEvents []domain.YouTubeNotificationDeliveryTelemetry,
-	sendErr error,
-) {
-	fallbackClassificationsByOutboxID, err := al.telemetryProcessor.loadDeliveryTelemetryLatencyClassifications(ctx, preparedEvents)
-	if err != nil {
-		al.logger.Warn("Failed to load fallback delivery telemetry latency classifications",
-			slog.Int("events", len(preparedEvents)),
-			slog.Any("error", err))
-	}
-
-	for i := range preparedEvents {
-		classification := fallbackClassificationsByOutboxID[preparedEvents[i].OutboxID]
-		attrs := buildDeliveryAuditLogAttrsWithClassification(&preparedEvents[i], &classification)
-
-		attrs = append(attrs, slog.String(logschema.FieldTelemetrySource, "direct_fallback"))
-
-		if sendErr != nil {
-			attrs = append(attrs, slog.String("error", sendErr.Error()))
-		}
-
-		al.logger.Info(deliveryAuditLogMessage, attrs...)
-	}
 }
 
 func (al *AuditLogger) logFinalizedCommunityShortsOutboxResults(ctx context.Context, outboxIDs []int64) error {

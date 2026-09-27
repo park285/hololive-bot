@@ -17,7 +17,7 @@ Runtime settings changes are broadcast through Valkey Pub/Sub channel `config:up
 ## Consumers
 
 - Services: `hololive-api`, `alarm-worker`
-- Usage: scraper proxy toggles, alarm advance minutes updates, member news run-now event
+- Usage: alarm advance minutes updates, member news run-now event, ACL reload notice
 
 ## Transport
 
@@ -40,10 +40,6 @@ type ConfigUpdateV1 struct {
     Payload json.RawMessage `json:"payload"`
 }
 
-type ScraperProxyPayloadV1 struct {
-    Enabled bool `json:"enabled"`
-}
-
 type AlarmAdvanceMinutesPayloadV1 struct {
     Minutes int `json:"minutes"`
 }
@@ -51,9 +47,13 @@ type AlarmAdvanceMinutesPayloadV1 struct {
 
 Known update types:
 
-- `scraper_proxy`
 - `alarm_advance_minutes`
 - `membernews_weekly_run_now`
+- `acl`
+
+The `scraper_proxy` type and `ScraperProxyPayloadV1` were removed together with the scraper proxy toggle and the admin
+settings `scraperProxyEnabled` field (DEC-20260926-hololive-legacy-env-config-retirement). A `scraper_proxy` message now
+reaches the unknown-type path.
 
 ## Response
 

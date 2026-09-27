@@ -163,12 +163,6 @@ func TestRequestContextPrefersRequestThenFallback(t *testing.T) {
 		t.Fatal("RequestContext(fallback, nil) did not return fallback")
 	}
 
-	var nilFallback context.Context
-
-	if got := RequestContext(nilFallback, nil); got == nil {
-		t.Fatal("RequestContext(nil, nil) = nil, want background")
-	}
-
 	gin.SetMode(gin.ReleaseMode)
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())

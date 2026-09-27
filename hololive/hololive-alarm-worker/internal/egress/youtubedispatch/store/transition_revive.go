@@ -26,10 +26,6 @@ func (s *TransitionStore) ReviveFailedLogicalGroups(
 	freshnessWindow time.Duration,
 	limit int,
 ) (ReviveResult, error) {
-	if err := s.ensureReady(ctx); err != nil {
-		return ReviveResult{ApplyResult: newApplyResult(ApplyIndeterminate, nil)}, fmt.Errorf("revive failed logical groups: %w", err)
-	}
-
 	policy, err := lifecycle.NewRevivePolicy(true, freshnessWindow, s.config.LogicalGroupLimit)
 	if err != nil {
 		return ReviveResult{ApplyResult: newApplyResult(ApplyConflict, nil)}, fmt.Errorf("revive failed logical groups: policy: %w", err)

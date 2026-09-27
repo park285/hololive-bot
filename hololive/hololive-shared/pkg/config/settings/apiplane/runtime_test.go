@@ -120,7 +120,7 @@ func TestConfigureHololiveAPIPlanesSetsBotInternalURL(t *testing.T) {
 	adminConfig := &settings.Config{}
 	llmConfig := &LLMSchedulerConfig{}
 
-	configurePlanes(botConfig, adminConfig, llmConfig)
+	require.NoError(t, configurePlanes(botConfig, adminConfig, llmConfig))
 
 	require.Equal(t, 31001, botConfig.Server.Port)
 	require.Equal(t, "https://127.0.0.1:31001", adminConfig.BotInternalURL)
@@ -133,7 +133,7 @@ func TestConfigureHololiveAPIPlanesPreservesBotInternalURLOverride(t *testing.T)
 	adminConfig := &settings.Config{BotInternalURL: "https://bot.internal:3443"}
 	llmConfig := &LLMSchedulerConfig{}
 
-	configurePlanes(botConfig, adminConfig, llmConfig)
+	require.NoError(t, configurePlanes(botConfig, adminConfig, llmConfig))
 
 	require.Equal(t, "https://bot.internal:3443", adminConfig.BotInternalURL)
 }

@@ -91,3 +91,24 @@ func TestBuildDispatchGroupKeyDeliveryDigestUsesContentIdentity(t *testing.T) {
 		t.Fatal("same rendered message in different rooms must not share a dispatch group")
 	}
 }
+
+func TestBuildDispatchGroupKeyCelebrationUsesMemberIDOnly(t *testing.T) {
+	t.Parallel()
+
+	envelope := func(memberID int, channelID string) *domain.AlarmQueueEnvelope {
+		return &domain.AlarmQueueEnvelope{
+			Notification: domain.AlarmNotification{RoomID: testRoomID, AlarmType: domain.AlarmTypeBirthday},
+			SourceKind:   domain.AlarmDispatchSourceKindCelebration,
+			Celebration:  &domain.CelebrationDispatchPayload{Kind: domain.CelebrationKindBirthday, MemberID: memberID, ChannelID: channelID, Date: "2026-05-26"},
+		}
+	}
+
+	// 채널을 공유하거나 채널이 바뀐 멤버도 MemberID로만 묶는다. ChannelID로 대신 묶던 폴백은 지웠다.
+	if BuildDispatchGroupKeyFromEnvelope(envelope(101, "UC_old")) != BuildDispatchGroupKeyFromEnvelope(envelope(101, "UC_new")) {
+		t.Fatal("channel change must not split one member's celebration group")
+	}
+
+	if BuildDispatchGroupKeyFromEnvelope(envelope(101, "UC_shared")) == BuildDispatchGroupKeyFromEnvelope(envelope(202, "UC_shared")) {
+		t.Fatal("members sharing a channel must not share a celebration group")
+	}
+}

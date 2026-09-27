@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"sync"
 
 	"github.com/park285/shared-go/v2/pkg/stringutil"
@@ -90,6 +91,41 @@ func parseACLEnabledStrict(s string) (bool, error) {
 	default:
 		return false, fmt.Errorf("unsupported acl enabled value: %q", s)
 	}
+}
+
+// ErrInvalidRoomChatID는 새 ACL 등록값이 정확한 signed i64 chatID 문자열이 아님을 뜻한다.
+// IsRoomAllowed는 chatID만 비교하므로 방 이름 같은 값은 어떤 방과도 매칭되지 않고, 그런 값이 들어가면
+// whitelist는 조용히 모든 방을 막고 blacklist는 조용히 차단을 놓친다. 그래서 저장 전에 거절한다.
+// 이미 저장된 비-chatID 값은 조회·제거만 할 수 있다(DEC-20260926-stack-hololive-room-acl-and-console-contract).
+var ErrInvalidRoomChatID = errors.New("ACL room must be a canonical signed 64-bit chat ID")
+
+// validateRoomChatID는 console roomRegistration(canonicalI64)과 같은 규칙으로 부호·앞자리 0·범위를 본다.
+// 값이 방 이름일 수 있어 오류에는 원문을 넣지 않는다.
+func validateRoomChatID(room string) error {
+	id, err := strconv.ParseInt(room, 10, 64)
+	if err != nil || strconv.FormatInt(id, 10) != room {
+		return ErrInvalidRoomChatID
+	}
+
+	return nil
+}
+
+// validateDefaultRooms는 KAKAO_ROOMS seed 전체를 첫 초기화 여부와 무관하게 검증한다. 잘못된 seed는
+// DB가 비는 순간(새 DB·빈 복원) 죽은 whitelist 행이 되므로 평소 기동에서 먼저 드러낸다.
+func validateDefaultRooms(rooms []string) error {
+	invalid := 0
+
+	for _, room := range rooms {
+		if validateRoomChatID(room) != nil {
+			invalid++
+		}
+	}
+
+	if invalid > 0 {
+		return fmt.Errorf("%d of %d default rooms: %w", invalid, len(rooms), ErrInvalidRoomChatID)
+	}
+
+	return nil
 }
 
 func normalizeRoomList(input []string) []string {
@@ -194,6 +230,9 @@ func NewACLService(
 	}
 
 	normalizedRooms := normalizeRoomList(defaultRooms)
+	if err := validateDefaultRooms(normalizedRooms); err != nil {
+		return nil, fmt.Errorf("validate default rooms: %w", err)
+	}
 
 	service := &Service{
 		store:          store,
@@ -250,10 +289,10 @@ func (s *Service) roomsMapForMode(mode ACLMode) map[string]struct{} {
 	return s.whitelistRooms
 }
 
-// loadFromDatabase PostgreSQL에서 ACL 설정 로드.
-// IsRoomAllowed 방 접근 허용 여부 확인 (빠른 메모리 조회).
-func (s *Service) IsRoomAllowed(roomName, chatID string) bool {
-	roomName = stringutil.TrimSpace(roomName)
+// IsRoomAllowed는 방 접근 허용 여부를 chatID 하나로 판정한다(빠른 메모리 조회).
+// 방 이름은 같은 이름의 방을 모두 허용하는 비결정적 식별자라 매칭하지 않는다
+// (DEC-20260926-stack-hololive-room-acl-and-console-contract).
+func (s *Service) IsRoomAllowed(chatID string) bool {
 	chatID = stringutil.TrimSpace(chatID)
 
 	s.mu.RLock()
@@ -266,28 +305,22 @@ func (s *Service) IsRoomAllowed(roomName, chatID string) bool {
 	switch s.mode {
 	case ACLModeBlacklist:
 		// 블랙리스트: 목록에 있으면 차단, 없으면 허용
-		return !isInRoomSet(s.blacklistRooms, roomName, chatID)
+		return !isInRoomSet(s.blacklistRooms, chatID)
 	case ACLModeWhitelist:
 		// 화이트리스트: 목록에 있으면 허용, 없으면 차단
-		return isInRoomSet(s.whitelistRooms, roomName, chatID)
+		return isInRoomSet(s.whitelistRooms, chatID)
 	default:
 		return false
 	}
 }
 
-// isInRoomSet: 주어진 방 목록에 roomName 또는 chatID가 존재하는지 확인한다.
-func isInRoomSet(rooms map[string]struct{}, roomName, chatID string) bool {
-	if chatID != "" {
-		if _, ok := rooms[chatID]; ok {
-			return true
-		}
+// isInRoomSet: 주어진 방 목록에 chatID가 존재하는지 확인한다.
+func isInRoomSet(rooms map[string]struct{}, chatID string) bool {
+	if chatID == "" {
+		return false
 	}
 
-	if roomName != "" {
-		if _, ok := rooms[roomName]; ok {
-			return true
-		}
-	}
+	_, ok := rooms[chatID]
 
-	return false
+	return ok
 }

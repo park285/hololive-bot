@@ -30,9 +30,11 @@ func TestPrimaryOutcome(t *testing.T) {
 		attempted int
 		succeeded int
 		failed    int
+		canceled  int
 		want      string
 	}{
 		{name: "skipped", attempted: 0, succeeded: 0, failed: 0, want: "skipped"},
+		{name: "canceled", attempted: 3, succeeded: 1, failed: 0, canceled: 2, want: "canceled"},
 		{name: "success", attempted: 3, succeeded: 3, failed: 0, want: "success"},
 		{name: "partial", attempted: 3, succeeded: 2, failed: 1, want: "partial"},
 		{name: "empty", attempted: 3, succeeded: 0, failed: 0, want: "empty"},
@@ -43,7 +45,7 @@ func TestPrimaryOutcome(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := primaryOutcome(tt.attempted, tt.succeeded, tt.failed); got != tt.want {
+			if got := primaryOutcome(tt.attempted, tt.succeeded, tt.failed, tt.canceled); got != tt.want {
 				t.Fatalf("primaryOutcome() = %q, want %q", got, tt.want)
 			}
 		})

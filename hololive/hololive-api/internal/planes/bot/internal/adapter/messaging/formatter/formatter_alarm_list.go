@@ -24,7 +24,6 @@ import (
 	"context"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmListEntry) string {
@@ -49,7 +48,7 @@ func (f *ResponseFormatter) FormatAlarmList(ctx context.Context, alarms []AlarmL
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmList, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return f.foldSeeMore(rendered)
@@ -60,7 +59,7 @@ func (f *ResponseFormatter) FormatAlarmCleared(ctx context.Context, count int) s
 
 	rendered, err := f.render(ctx, domain.TemplateKeyCmdAlarmCleared, data)
 	if err != nil {
-		return messagestrings.FallbackSentinel
+		return f.renderFailureText()
 	}
 
 	return rendered

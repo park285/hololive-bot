@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	contractsalarm "github.com/kapu/hololive-shared/pkg/contracts/alarm"
 	"github.com/kapu/hololive-shared/pkg/domain"
 	"github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox"
 	sessions "github.com/kapu/hololive-shared/pkg/service/xspaces"
@@ -233,7 +234,9 @@ func (r *Runner) publishStart(ctx context.Context, payload domain.XSpaceDispatch
 	for _, room := range rooms {
 		envelopes = append(envelopes, domain.AlarmQueueEnvelope{
 			Notification: domain.AlarmNotification{RoomID: room, AlarmType: domain.AlarmTypeLive},
-			SourceKind:   domain.AlarmDispatchSourceKindXSpace, XSpace: &stored,
+			SourceKind:   domain.AlarmDispatchSourceKindXSpace,
+			XSpace:       &stored,
+			Version:      contractsalarm.QueueEnvelopeVersionV1,
 		})
 	}
 

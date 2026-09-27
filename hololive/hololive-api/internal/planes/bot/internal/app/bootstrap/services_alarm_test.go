@@ -22,7 +22,6 @@ package bootstrap
 
 import (
 	"log/slog"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,74 +29,32 @@ import (
 
 	membermocks "github.com/kapu/hololive-api/internal/service/member/mocks"
 	"github.com/kapu/hololive-shared/pkg/config/settings"
-	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
-	databasemocks "github.com/kapu/hololive-shared/pkg/service/database/mocks"
+	"github.com/kapu/hololive-shared/pkg/service/alarm"
 )
 
-func TestInitAlarmDependenciesReturnsErrorWhenCacheIsNil(t *testing.T) {
+// alarm provider URL이 없으면 in-process AlarmService로 대신하지 않고 기동을 실패시킨다.
+func TestInitAlarmModeComponentsRequiresAlarmProviderURL(t *testing.T) {
 	t.Parallel()
 
-	deps, err := InitAlarmDependencies(
-		filepath.Join(t.TempDir(), "settings.json"),
-		[]int{10, 5, 1},
-		false,
-		nil,
-		nil,
-		nil,
-		nil,
-		slog.New(slog.DiscardHandler),
-	)
+	components, err := InitAlarmModeComponents(&settings.Config{}, &membermocks.DataProvider{}, slog.New(slog.DiscardHandler))
 
-	require.Nil(t, deps)
-	require.EqualError(t, err, "provide alarm service: failed to create alarm service: new alarm service: cache client is nil")
+	require.Nil(t, components)
+	require.EqualError(t, err, "alarm provider URL (ALARM_INTERNAL_URL) is required")
 }
 
-func TestInitAlarmDependenciesBuildsAlarmDependencies(t *testing.T) {
+func TestInitAlarmModeComponentsUsesAlarmWorkerClient(t *testing.T) {
 	t.Parallel()
 
 	memberProvider := &membermocks.DataProvider{}
-
-	deps, err := InitAlarmDependencies(
-		filepath.Join(t.TempDir(), "settings.json"),
-		[]int{10, 5, 1},
-		false,
-		cachemocks.NewLenientClient(),
-		nil,
-		memberProvider,
-		nil,
-		slog.New(slog.DiscardHandler),
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, deps)
-	require.NotNil(t, deps.AlarmService)
-	assert.Same(t, memberProvider, deps.MemberDataProvider)
-}
-
-func TestInitAlarmModeComponentsWrapsAlarmServiceAsCRUD(t *testing.T) {
-	t.Parallel()
-
-	memberProvider := &membermocks.DataProvider{}
-	infra := (&sharedInfraForBootstrapTest{
-		cacheClient: cachemocks.NewLenientClient(),
-		postgres:    &databasemocks.Client{},
-	}).module()
 
 	components, err := InitAlarmModeComponents(
-		t.Context(),
-		&settings.Config{
-			Notification: settings.NotificationConfig{AdvanceMinutes: []int{10, 5, 1}},
-		},
-		infra,
-		nil,
+		&settings.Config{AlarmServiceURL: "http://127.0.0.1:8081"},
 		memberProvider,
-		nil,
 		slog.New(slog.DiscardHandler),
 	)
 
 	require.NoError(t, err)
 	require.NotNil(t, components)
-	require.NotNil(t, components.AlarmService)
-	assert.Same(t, components.AlarmService, components.AlarmCRUD)
+	assert.IsType(t, &alarm.Client{}, components.AlarmCRUD)
 	assert.Same(t, memberProvider, components.MemberDataSource)
 }

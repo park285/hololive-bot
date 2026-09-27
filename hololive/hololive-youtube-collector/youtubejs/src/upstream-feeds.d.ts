@@ -1,1 +1,1 @@
-export type InnertubeFetch = (input: unknown, init?: unknown) => Promise<unknown>;
+export type InnertubeFetch = typeof globalThis.fetch;

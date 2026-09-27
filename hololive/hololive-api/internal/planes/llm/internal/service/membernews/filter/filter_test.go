@@ -111,8 +111,8 @@ func (m *mockMemberDataForFilter) FindMemberByAlias(alias string) *domain.Member
 
 	return m.byAlias[alias]
 }
-func (m *mockMemberDataForFilter) GetChannelIDs() []string         { return nil }
-func (m *mockMemberDataForFilter) GetAllMembers() []*domain.Member { return nil }
+func (m *mockMemberDataForFilter) GetChannelIDs() []string                   { return nil }
+func (m *mockMemberDataForFilter) LoadAllMembers() ([]*domain.Member, error) { return nil, nil }
 func (m *mockMemberDataForFilter) WithContext(_ context.Context) domain.MemberDataProvider {
 	return m
 }

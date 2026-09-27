@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestFormatMajorEventCommandMessages(t *testing.T) {
@@ -73,8 +72,8 @@ func TestFormatMajorEventCommandMessages(t *testing.T) {
 func TestFormatMajorEventCommandMessages_Fallback(t *testing.T) {
 	t.Parallel()
 
-	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}))
-	want := messagestrings.FallbackSentinel
+	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
+	want := renderFailureMessage
 
 	assert.Equal(t, want, formatter.FormatMajorEventSubscribed(t.Context()))
 	assert.Equal(t, want, formatter.FormatMajorEventUnsubscribed(t.Context()))

@@ -20,8 +20,6 @@ type deliveryTestSQLResult struct {
 	RowsAffected int64
 }
 
-type deliveryTestDB = pgxpool.Pool
-
 func insertDeliveryTestRows(pool *pgxpool.Pool, value any) deliveryTestSQLResult {
 	rows, err := insertDeliveryIntegrationRows(context.Background(), pool, value)
 	return deliveryTestSQLResult{Error: err, RowsAffected: rows}

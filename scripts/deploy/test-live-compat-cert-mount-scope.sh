@@ -250,35 +250,19 @@ PY
 assert_no_dir_mount "prod+live-compat" "" \
   docker-compose.prod.yml docker-compose.live-compat.yml
 
-assert_no_dir_mount "main-ap+live-compat" "main-ap" \
-  docker-compose.prod.yml docker-compose.live-compat.yml \
-  docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
-
 pass "hb06: live-compat overlays mount cert files individually, no directory-wide certs mount (a691472f)"
 
 assert_sslrootcert_mounted "prod+live-compat" "" \
   docker-compose.prod.yml docker-compose.live-compat.yml
-
-assert_sslrootcert_mounted "main-ap+live-compat" "main-ap" \
-  docker-compose.prod.yml docker-compose.live-compat.yml \
-  docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
 
 pass "hb07: every verify-full DB service bind-mounts its POSTGRES_SSLROOTCERT/PGSSLROOTCERT file (a691472f)"
 
 assert_postgres_not_host_networked "prod+live-compat" "" \
   docker-compose.prod.yml docker-compose.live-compat.yml
 
-assert_postgres_not_host_networked "main-ap+live-compat" "main-ap" \
-  docker-compose.prod.yml docker-compose.live-compat.yml \
-  docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
-
 pass "hb08: live-compat postgres uses bridge networking with explicit host port binding (2b45b8a7/faa876be)"
 
 assert_worker_profiles_mounted "prod+live-compat" "" \
   docker-compose.prod.yml docker-compose.live-compat.yml
-
-assert_worker_profiles_mounted "main-ap+live-compat" "main-ap" \
-  docker-compose.prod.yml docker-compose.live-compat.yml \
-  docker-compose.main-ap.yml docker-compose.main-ap.live-compat.yml
 
 pass "hb09: live-compat overrides retain role-specific Stack Worker Profile bind mounts"

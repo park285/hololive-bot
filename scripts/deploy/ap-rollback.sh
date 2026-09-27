@@ -1,206 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 BACKUP_DIR="${BACKUP_DIR:-}"
-
 . "$REPO_ROOT/scripts/deploy/lib/ap-host.sh"
-. "$REPO_ROOT/scripts/deploy/lib/ap-prechange-config.sh"
-
-AP_HOST_ARG="${1:-}"
+ap_host_load "$REPO_ROOT" "${1:-}"
 MODE="${2:---dry-run}"
-
-case "$MODE" in
-  --dry-run|--apply) ;;
-  *)
-    echo "Usage: $0 <ap-host> [--dry-run|--apply]" >&2
-    exit 2
-    ;;
-esac
-
-ap_host_load "$REPO_ROOT" "$AP_HOST_ARG"
-
-if [[ "$AP_RUNTIME_MODE" != "compose" ]]; then
-  echo "Refusing Compose AP rollback for $AP_NAME (runtime=$AP_RUNTIME_MODE); use ./scripts/deploy/ap-host-native-rollback.sh $AP_NAME" >&2
+[[ "$MODE" == --dry-run || "$MODE" == --apply ]] || { echo "Usage: $0 <ap-host> [--dry-run|--apply]" >&2; exit 2; }
+[[ "$AP_RUNTIME_MODE" == compose && "$AP_NAME" == seoul && ${#AP_SERVICES[@]} -eq 1 ]] || {
+  echo 'PO rollback supports only the Seoul Compose collector; use native rollback on a/d' >&2
   exit 2
-fi
-
-if [[ "$MODE" == "--apply" && "${!AP_APPROVE_ROLLBACK_VAR:-}" != "true" ]]; then
+}
+if [[ "$MODE" == --apply && "${!AP_APPROVE_ROLLBACK_VAR:-}" != true ]]; then
   echo "Refusing rollback without $AP_APPROVE_ROLLBACK_VAR=true" >&2
   exit 2
 fi
-
-remote() {
-  "${AP_SSH[@]}" "$@"
+if [[ -z "$BACKUP_DIR" ]]; then
+  BACKUP_DIR="$("${AP_SSH[@]}" "find ~/hololive-bot/backups -maxdepth 1 -type d -name '$AP_BACKUP_PREFIX-*' | sort | tail -n 1" | sed 's#^.*/backups/#backups/#')"
+fi
+[[ "$BACKUP_DIR" =~ ^backups/${AP_BACKUP_PREFIX}-[0-9]{8}T[0-9]{6}Z$ ]] || {
+  echo "Invalid or unavailable AP rollback directory: $BACKUP_DIR" >&2
+  exit 2
 }
-
-if [[ -z "$BACKUP_DIR" ]]; then
-  BACKUP_DIR="$(
-    remote "set -euo pipefail
-cd ~/hololive-bot
-find backups -maxdepth 1 -type d -name '$AP_BACKUP_PREFIX-*' 2>/dev/null | sort | tail -n 1" || true
-  )"
-fi
-
-if [[ -z "$BACKUP_DIR" ]]; then
-  echo "No $AP_BACKUP_PREFIX backup found. Set BACKUP_DIR=backups/$AP_BACKUP_PREFIX-<timestamp>." >&2
-  exit 1
-fi
-
-case "$BACKUP_DIR" in
-  *[!A-Za-z0-9._/-]*)
-    echo "Refusing BACKUP_DIR with unsafe characters: $BACKUP_DIR" >&2
-    exit 2
-    ;;
-  backups/"$AP_BACKUP_PREFIX"-*) ;;
-  *)
-    echo "Refusing suspicious BACKUP_DIR: $BACKUP_DIR" >&2
-    exit 2
-    ;;
-esac
-
-services_list="${AP_SERVICES[*]}"
-containers_list="${AP_CONTAINERS[*]}"
-ports_list="${AP_PORTS[*]}"
-PROD_COMPOSE_FILE="deploy/compose/docker-compose.prod.yml"
-PROD_COMPOSE_LEGACY_FILE="docker-compose.prod.yml"
-PROD_BACKUP_FILE="$BACKUP_DIR/$PROD_COMPOSE_FILE.prechange"
-PROD_BACKUP_LEGACY_FILE="$BACKUP_DIR/$PROD_COMPOSE_LEGACY_FILE.prechange"
-AP_BACKUP_FILE="$BACKUP_DIR/$AP_COMPOSE_FILE.prechange"
-AP_BACKUP_LEGACY_FILE="$BACKUP_DIR/$(basename "$AP_COMPOSE_FILE").prechange"
-AP_COMPOSE_BASENAME="$(basename "$AP_COMPOSE_FILE")"
-IMAGE_REF="hololive-youtube-collector:prod"
-ROLLBACK_IMAGE_TAG_FILE="$BACKUP_DIR/rollback-image-tag"
-PRODUCER_STATE_FILE="$BACKUP_DIR/retired-producer-runtime.state"
-
-remote "set -euo pipefail
-cd ~/hololive-bot
-prod_backup_file='$PROD_BACKUP_FILE'
-if [[ ! -r \"\$prod_backup_file\" && -r '$PROD_BACKUP_LEGACY_FILE' ]]; then
-  prod_backup_file='$PROD_BACKUP_LEGACY_FILE'
-fi
-ap_backup_file='$AP_BACKUP_FILE'
-rollback_image_tag=''
-if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
-  ap_backup_file='$AP_BACKUP_LEGACY_FILE'
-fi
-test -r \"\$prod_backup_file\"
-test -r \"\$ap_backup_file\"
-if [[ -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then
-  rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
-  case \"\$rollback_image_tag\" in
-    hololive-youtube-collector:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
-    *) echo 'invalid rollback image tag' >&2; exit 1 ;;
-  esac
-  sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
-else
-  . scripts/deploy/lib/retired-producer-cutover.sh
-  validate_retired_producer_runtime_state '$PRODUCER_STATE_FILE'
-  echo 'first-cutover producer rollback path selected'
-fi
-sudo -n test -r /etc/stack-secrets/hololive-bot/ap-compose.env
-sudo -n test -r /etc/stack-secrets/hololive-bot/youtube-collector.env
-test -w /var/run/docker.sock || groups | grep -qw docker
-preflight_root=\$(mktemp -d)
-trap 'rm -rf \"\$preflight_root\"' EXIT
-preflight_compose_dir=\"\$preflight_root/deploy/compose\"
-mkdir -p \"\$preflight_compose_dir\"
-prod_preflight_file=\"\$preflight_compose_dir/docker-compose.prod.yml\"
-ap_preflight_file=\"\$preflight_compose_dir/$AP_COMPOSE_BASENAME\"
-cp \"\$prod_backup_file\" \"\$prod_preflight_file\"
-cp \"\$ap_backup_file\" \"\$ap_preflight_file\"
-echo backup_dir='$BACKUP_DIR'
-echo rollback_image_tag=\"\$rollback_image_tag\"
-echo would_restore=\"\$prod_backup_file\"
-echo would_restore=\"\$ap_backup_file\"
-$(declare -f ap_prechange_config)
-ap_prechange_config sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f \"\$prod_preflight_file\" -f \"\$ap_preflight_file\" config --quiet"
-
-if [[ "$MODE" == "--dry-run" ]]; then
-  echo "[DRY-RUN] Rollback preflight passed; no remote files or containers changed."
+remote_script="\$HOME/hololive-bot/$BACKUP_DIR/source-candidate/hololive-bot/scripts/deploy/lib/po-ap-rollback-remote.sh"
+remote_args="$(printf '%q ' "$BACKUP_DIR" "$AP_COMPOSE_FILE" "${AP_SERVICES[0]}" "${AP_CONTAINERS[0]}" "${AP_PORTS[0]}")"
+"${AP_SSH[@]}" "bash \"$remote_script\" check $remote_args ''"
+if [[ "$MODE" == --dry-run ]]; then
+  echo "[DRY-RUN] Both previous image/rootfs manifests and Compose config verified: $BACKUP_DIR"
   exit 0
 fi
-
-rollback_mode="$(
-  remote "if [[ -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then printf '%s\n' collector; else printf '%s\n' producer; fi"
-)"
-
-rollback_started_at="$(
-  remote 'date -u +%Y-%m-%dT%H:%M:%SZ'
-)"
-
-remote "set -euo pipefail
-cd ~/hololive-bot
-prod_backup_file='$PROD_BACKUP_FILE'
-if [[ ! -r \"\$prod_backup_file\" && -r '$PROD_BACKUP_LEGACY_FILE' ]]; then
-  prod_backup_file='$PROD_BACKUP_LEGACY_FILE'
-fi
-ap_backup_file='$AP_BACKUP_FILE'
-if [[ ! -r \"\$ap_backup_file\" && -r '$AP_BACKUP_LEGACY_FILE' ]]; then
-  ap_backup_file='$AP_BACKUP_LEGACY_FILE'
-fi
-if [[ -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then
-  rollback_image_tag=\$(cat '$ROLLBACK_IMAGE_TAG_FILE')
-  case \"\$rollback_image_tag\" in
-    hololive-youtube-collector:rollback-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
-    *) echo 'invalid rollback image tag' >&2; exit 1 ;;
-  esac
-  sudo -n docker image inspect \"\$rollback_image_tag\" >/dev/null
-  sudo -n docker tag \"\$rollback_image_tag\" '$IMAGE_REF'
-  mkdir -p \"\$(dirname '$PROD_COMPOSE_FILE')\" \"\$(dirname '$AP_COMPOSE_FILE')\"
-  cp \"\$prod_backup_file\" '$PROD_COMPOSE_FILE'
-  cp \"\$ap_backup_file\" '$AP_COMPOSE_FILE'
-  sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' config --quiet
-  docker stop $containers_list >/dev/null 2>&1 || true
-  sudo -n env COMPOSE_ENV_FILE=/etc/stack-secrets/hololive-bot/ap-compose.env COMPOSE_PROFILES=oracle ./scripts/deploy/compose.sh -f '$PROD_COMPOSE_FILE' -f '$AP_COMPOSE_FILE' up -d --no-build --no-deps --force-recreate $services_list
-else
-  . scripts/deploy/lib/retired-producer-cutover.sh
-  stop_named_containers_and_require_inactive $containers_list
-  restore_retired_producer_runtime '$PRODUCER_STATE_FILE'
-fi
-echo rollback_started_at='$rollback_started_at'"
-
-remote "set -euo pipefail
-if [[ ! -r '$ROLLBACK_IMAGE_TAG_FILE' ]]; then
-  cd ~/hololive-bot
-  . scripts/deploy/lib/retired-producer-cutover.sh
-  retired_producer_runtime_matches_state '$PRODUCER_STATE_FILE'
-  for container in $containers_list; do
-    [[ -z \"\$(docker ps -q --filter \"name=^\${container}$\" 2>/dev/null || true)\" ]]
-  done
-  exit 0
-fi
-since='$rollback_started_at'
-since_epoch=\$(date -u -d \"\$since\" +%s)
-expected_revision=\$(sudo -n docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' '$IMAGE_REF')
-for container in $containers_list; do
-  for _ in \$(seq 1 30); do
-    status=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \"\$container\")
-    [[ \"\$status\" == healthy ]] && break
-    sleep 2
-  done
-  status=\$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \"\$container\")
-  [[ \"\$status\" == healthy ]]
-  started_at=\$(docker inspect -f '{{.State.StartedAt}}' \"\$container\")
-  started_epoch=\$(date -u -d \"\$started_at\" +%s)
-  [[ \"\$started_epoch\" -ge \"\$since_epoch\" ]]
-  actual_revision=\$(docker inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"\$container\")
-  [[ \"\$actual_revision\" == \"\$expected_revision\" ]]
-done
-ports=($ports_list)
-idx=0
-for container in $containers_list; do
-  docker exec \"\$container\" ./bin/healthcheck \"https://127.0.0.1:\${ports[\$idx]}/health\" >/dev/null
-  idx=\$((idx + 1))
-done
-for container in $containers_list; do
-  if docker logs --since \"\$since\" \"\$container\" 2>&1 | grep -E 'ERR|panic|permission denied|x509|no such file'; then
-    exit 1
-  fi
-done"
-
-if [[ "$rollback_mode" == "collector" ]]; then
-  "$REPO_ROOT/scripts/logs/ap-status.sh" "$AP_NAME"
-else
-  echo "first-cutover producer runtime rollback verified"
-fi
+rollback_started_at="$("${AP_SSH[@]}" 'date -u +%Y-%m-%dT%H:%M:%SZ')"
+"${AP_SSH[@]}" "bash \"$remote_script\" apply $remote_args $(printf '%q' "$rollback_started_at")"
+# 원격 check가 rollback-image-tag 없는 백업을 거절하므로 적용 뒤에는 이전 collector가 실행 중이다.
+"$REPO_ROOT/scripts/logs/ap-status.sh" "$AP_NAME"

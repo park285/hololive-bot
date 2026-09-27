@@ -34,6 +34,10 @@ is_allowed_exception() {
     scripts/ci/nilaway-models/models.patch)
       return 0
       ;;
+    # 검증된 입력 목록과 SHA256SUMS로 고정된 staticcheck x/tools objectpath 패치다.
+    scripts/ci/staticcheck-facts/objectpath.patch)
+      return 0
+      ;;
     artifacts/architecture/go-workspace-import-graph.txt|\
     logs/.gitkeep|\
     runtime-config/.gitkeep|\

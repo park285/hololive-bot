@@ -91,7 +91,7 @@ func (c *Cache) snapshotOwnedPointMemberLocked(
 		return nil
 	}
 
-	for _, current := range snap.pointLookup().byIdentity[pointKey(cached)] {
+	for _, current := range snap.pointLookup().byID[cached.ID] {
 		if current != nil && matches(current) && samePointMemberIdentity(current, cached) {
 			return current
 		}
@@ -108,16 +108,11 @@ func pointMemberWithoutSnapshot(cached *domain.Member, generation uint64) *domai
 	return cached
 }
 
+// samePointMemberIdentity는 영속 ID 하나로만 같은 멤버인지 본다. 스냅샷은 repository가 members.id와 함께 적재하므로
+// ID 없는 멤버가 나오지 않는다. ID가 없으면 채널, 이름 순으로 대신 식별하던 호환 체인은 지웠다(stack-audit 2026-09-26
+// T11 holo-member-point-identity-fallback-chain). ID가 없는 cached 값은 소유를 인정받지 못해 캐시에 다시 쓰이지 않는다.
 func samePointMemberIdentity(current, cached *domain.Member) bool {
-	if current.ID != 0 || cached.ID != 0 {
-		return current.ID != 0 && current.ID == cached.ID
-	}
-
-	if current.ChannelID != "" || cached.ChannelID != "" {
-		return current.ChannelID != "" && current.ChannelID == cached.ChannelID
-	}
-
-	return current.Name == cached.Name
+	return current.ID > 0 && current.ID == cached.ID
 }
 
 func memberMatchesPointAlias(member *domain.Member, alias string) bool {
@@ -135,44 +130,23 @@ func memberMatchesPointAlias(member *domain.Member, alias string) bool {
 		(slices.Contains(member.Aliases.Ko, alias) || slices.Contains(member.Aliases.Ja, alias))
 }
 
-// ID가 있으면 ID만 식별에 사용한다. ID가 없는 호환 데이터는 채널, 이름 순이다.
-// 각 버킷의 순서를 보존하여 중복 ID를 가진 테스트/호환 데이터도 기존 탐색과 일치한다.
-type pointMemberKey struct {
-	id        int
-	channelID string
-	name      string
-}
-
+// memberPointIndex는 영속 ID를 키로 쓴다. 각 버킷은 snapshot 순서를 보존하고, ID가 없는 멤버는 인덱스에 넣지 않는다.
 type memberPointIndex struct {
-	byIdentity      map[pointMemberKey][]*domain.Member
+	byID            map[int][]*domain.Member
 	representatives map[string]*domain.Member
-}
-
-func pointKey(member *domain.Member) pointMemberKey {
-	if member.ID != 0 {
-		return pointMemberKey{id: member.ID}
-	}
-
-	if member.ChannelID != "" {
-		return pointMemberKey{channelID: member.ChannelID}
-	}
-
-	return pointMemberKey{name: member.Name}
 }
 
 func buildMemberPointIndex(members []*domain.Member) *memberPointIndex {
 	index := &memberPointIndex{
-		byIdentity:      make(map[pointMemberKey][]*domain.Member, len(members)),
+		byID:            make(map[int][]*domain.Member, len(members)),
 		representatives: channelRepresentatives(members),
 	}
 	for _, member := range members {
-		if member == nil {
+		if member == nil || member.ID <= 0 {
 			continue
 		}
 
-		key := pointKey(member)
-
-		index.byIdentity[key] = append(index.byIdentity[key], member)
+		index.byID[member.ID] = append(index.byID[member.ID], member)
 	}
 
 	return index

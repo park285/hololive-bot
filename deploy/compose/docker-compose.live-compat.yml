@@ -6,8 +6,6 @@ x-live-postgres-env: &live-postgres-env
   POSTGRES_HOST: ${HOLOLIVE_CENTRAL_POSTGRES_HOST:-holo-postgres}
   POSTGRES_PORT: "${HOLOLIVE_CENTRAL_POSTGRES_PORT:-5432}"
   POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
-  # 라이브 호스트의 runtime-config 마운트 특성상 파일 stat 검사를 건너뛰는 호환 플래그.
-  IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS: ${IRIS_BASE_URL_FILE_SKIP_STAT_CHECKS:-true}
 
 services:
   admin-dashboard-ingress:
@@ -140,12 +138,13 @@ services:
       - /etc/stack-secrets/hololive-bot/certs/hololive-h3.key:/run/hololive-bot/certs/hololive-h3.key:ro
       - /etc/stack-secrets/hololive-bot/certs/postgres-ca.pem:/run/hololive-bot/certs/postgres-ca.pem:ro
       - /etc/stack-secrets/hololive-bot/worker-profiles/youtube-collector-c.json:/run/hololive-bot/worker-profiles/youtube-collector-c.json:ro
+      - youtube-po-c-socket:/run/hololive-youtube-po:ro
     networks:
       observability-traces: {}
 
 networks:
   # 기존 central network 주소를 유지합니다. down→up 재생성에서
-  # 두 네트워크가 대역을 서로 맞바꿔 잡은 사례(2026-07-05)가 있어 둘 다 핀한다. central/main-ap
+  # 두 네트워크가 대역을 서로 맞바꿔 잡은 사례(2026-07-05)가 있어 둘 다 핀한다. 중앙 호스트
   # 전용 오버레이라 AP 호스트의 동적 할당에는 영향 없다.
   hololive-net:
     ipam:

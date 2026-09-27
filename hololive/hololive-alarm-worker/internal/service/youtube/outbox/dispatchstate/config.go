@@ -41,7 +41,6 @@ type Config struct {
 	SubscriberLookupParallelism int           // 채널별 구독자 조회 제한 병렬성
 	AggregateSyncInterval       time.Duration // aggregate 동기화 유지보수 주기
 	TelemetryPollInterval       time.Duration // telemetry loop 폴링 주기
-	TelemetryBackfillBatch      int           // delivery 상태에서 telemetry 버퍼로 역보강할 최대 건수
 	TelemetryFlushBatch         int           // telemetry 버퍼 플러시 최대 건수
 	TelemetryRetryBackoff       time.Duration // telemetry 플러시 실패 재시도 간격
 	TelemetryRetention          time.Duration // telemetry 버퍼 최소 보존 기간
@@ -66,7 +65,6 @@ func DefaultConfig() Config {
 		SubscriberLookupParallelism: 16,
 		AggregateSyncInterval:       30 * time.Second,
 		TelemetryPollInterval:       30 * time.Second,
-		TelemetryBackfillBatch:      200,
 		TelemetryFlushBatch:         200,
 		TelemetryRetryBackoff:       30 * time.Second,
 		TelemetryRetention:          defaultTelemetryRetention,
@@ -138,10 +136,6 @@ func normalizeDispatcherDeliveryConfig(config, defaults *Config) {
 }
 
 func normalizeDispatcherTelemetryConfig(config, defaults *Config) {
-	if config.TelemetryBackfillBatch <= 0 {
-		config.TelemetryBackfillBatch = defaults.TelemetryBackfillBatch
-	}
-
 	if config.TelemetryPollInterval <= 0 {
 		config.TelemetryPollInterval = defaults.TelemetryPollInterval
 	}

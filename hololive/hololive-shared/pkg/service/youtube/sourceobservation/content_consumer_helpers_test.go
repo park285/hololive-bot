@@ -46,7 +46,7 @@ func videoListEnvelope(
 func contentClaimOptions() ClaimOptions {
 	return ClaimOptions{
 		ConsumerName:  "youtube-content-processor",
-		LeaseOwner:    "api-a",
+		LeaseOwner:    testAPILeaseOwner,
 		Kinds:         []contract.ObservationKind{contract.KindVideoList, contract.KindShortsList},
 		Limit:         10,
 		LeaseDuration: 30 * time.Second,

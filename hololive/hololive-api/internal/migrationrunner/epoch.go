@@ -12,12 +12,9 @@ import (
 	"github.com/park285/shared-go/v2/pkg/dbmigrate"
 )
 
-const (
-	epoch2Baseline            = "001_schema_epoch2_baseline.sql"
-	epoch2LegacyLedgerCleanup = "182_epoch2_legacy_ledger_cleanup.sql"
-)
+const epoch2Baseline = "001_schema_epoch2_baseline.sql"
 
-// reconcileBaseline은 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
+// reconcileBaseline은 삭제된 셸 러너 apply-all.sh의 ledger 결정 블록을 포팅한다. 핵심 제약: 기존
 // 스키마 + 빈 ledger + watermark 미지정이면 전체 manifest를 applied로 stamp해 아직
 // 미적용인 마이그레이션이 조용히 skip되는 사고(073 DB에 074-082 유실)가 나므로 거부한다.
 func reconcileBaseline(ctx context.Context, conn *pgxpool.Conn, fsys fs.FS, ledger dbmigrate.Ledger, entries []string, cfg Config) error {
@@ -127,35 +124,32 @@ func recordBaselineEntry(ctx context.Context, fsys fs.FS, ledger dbmigrate.Ledge
 	return nil
 }
 
-// manifest 밖 ledger 항목(이전 epoch 잔재)이 있는 DB는 checkpoint를 거친 경우에만
-// 진행한다. 잔재는 epoch2LegacyLedgerCleanup이 같은 실행 안에서 지우므로 그 전까지만
-// 허용하고, 정리가 적용된 뒤에도 남은 잔재는 출처를 알 수 없는 행이라 거부한다 —
-// reconcileBaseline은 빈 ledger만 다룬다.
+// 현재 manifest 밖 ledger 항목은 출처를 증명할 수 없으므로 존재하면 즉시 거부한다. 빈 ledger는 reconcileBaseline이 다룬다.
+// 예전에는 epoch-1 ledger 잔재를 182_epoch2_legacy_ledger_cleanup.sql이 같은 실행 안에서 지우도록 182 적용 전까지 허용하고
+// epoch-1 checkpoint baseline도 받았다. T18(2026-09-26)에서 운영 schema_migrations에 001·182가 기록되고 epoch-1 파일명
+// 행이 0건임을 확인했고, DEC-20260926-hololive-retired-rollback-tooling이 epoch-1 rollback 창을 닫아 그 허용 분기를
+// 지웠다(stack-audit 2026-09-26 T17). 이 거부는 드레인 종단이 아니라 ledger 무결성 계약이라 제거 조건이 없다.
 func guardEpochResidue(ctx context.Context, conn *pgxpool.Conn, ledger dbmigrate.Ledger, entries []string) error {
 	if len(entries) == 0 {
 		return nil
 	}
-
-	baseline := entries[0]
 
 	residue, err := hasLegacyResidue(ctx, conn, entries)
 	if err != nil {
 		return fmt.Errorf("has legacy residue: %w", err)
 	}
 
-	querier := pgxRowQuerier{conn: conn}
-
-	applied, err := ledger.Applied(ctx, querier, baseline)
-	if err != nil {
-		return fmt.Errorf("applied: %w", err)
+	if residue {
+		return errors.New(
+			"schema_migrations has entries outside the current manifest; the epoch-1 ledger window is closed, " +
+				"so confirm where those rows came from and remove them manually before rerunning")
 	}
 
-	if residue {
-		if err := validateLegacyResidue(ctx, ledger, querier, baseline, applied); err != nil {
-			return fmt.Errorf("validate legacy residue: %w", err)
-		}
+	baseline := entries[0]
 
-		return nil
+	applied, err := ledger.Applied(ctx, pgxRowQuerier{conn: conn}, baseline)
+	if err != nil {
+		return fmt.Errorf("applied: %w", err)
 	}
 
 	if err := validateCurrentEpochBaseline(ctx, conn, baseline, applied); err != nil {
@@ -175,33 +169,6 @@ func hasLegacyResidue(ctx context.Context, conn *pgxpool.Conn, entries []string)
 	return residue, nil
 }
 
-func validateLegacyResidue(ctx context.Context, ledger dbmigrate.Ledger, querier dbmigrate.RowQuerier, baseline string, applied bool) error {
-	if !applied {
-		return fmt.Errorf(
-			"schema_migrations has entries outside the current manifest but epoch baseline %s is not recorded; "+
-				"this database predates the epoch squash without the checkpoint migration — deploy the checkpoint release first",
-			baseline)
-	}
-
-	if baseline != epoch2Baseline {
-		return nil
-	}
-
-	cleanupApplied, err := ledger.Applied(ctx, querier, epoch2LegacyLedgerCleanup)
-	if err != nil {
-		return fmt.Errorf("applied: %w", err)
-	}
-
-	if cleanupApplied {
-		return fmt.Errorf(
-			"schema_migrations still has entries outside the current manifest after %s was applied; "+
-				"they are not the epoch-2 legacy ledger, so remove them manually before rerunning",
-			epoch2LegacyLedgerCleanup)
-	}
-
-	return nil
-}
-
 func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, baseline string, applied bool) error {
 	if baseline != epoch2Baseline || !applied {
 		return nil
@@ -217,7 +184,7 @@ func validateCurrentEpochBaseline(ctx context.Context, conn *pgxpool.Conn, basel
 	}
 
 	return fmt.Errorf(
-		"epoch baseline %s is recorded without its checksum and no legacy ledger residue remains; "+
+		"epoch baseline %s is recorded without its checksum; "+
 			"refusing to trust a marker that cannot be proven by a completed R2 application",
 		baseline)
 }

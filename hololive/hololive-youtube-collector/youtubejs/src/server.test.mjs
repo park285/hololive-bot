@@ -175,7 +175,6 @@ test("health is 503 until bootstrap and collection is helper_not_ready", async (
     assert.equal(collection.body.error.code, "helper_not_ready");
     const boot = await request(http, server, "POST", "/v1/bootstrap", JSON.stringify({
       protocol_version: 1,
-      proxy: { enabled: false },
       limits: { request_body_bytes: 65536, response_body_bytes: 1048576, max_inflight: 2 },
     }));
     assert.equal(boot.status, 200);
@@ -196,7 +195,6 @@ test("RPC-009 and RPC-010 reject declared and chunked request overflow once", as
   try {
     await request(http, server, "POST", "/v1/bootstrap", JSON.stringify({
       protocol_version: 1,
-      proxy: { enabled: false },
       limits: { request_body_bytes: 64, response_body_bytes: 1048576, max_inflight: 2 },
     }));
     const oversized = JSON.stringify({
@@ -264,7 +262,6 @@ test("RPC-012 client disconnect aborts only the matching request context", async
   try {
     await request(http, server, "POST", "/v1/bootstrap", JSON.stringify({
       protocol_version: 1,
-      proxy: { enabled: false },
       limits: { request_body_bytes: 65536, response_body_bytes: 1048576, max_inflight: 2 },
     }));
     const address = server.address();

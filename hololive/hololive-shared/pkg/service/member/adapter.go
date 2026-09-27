@@ -40,7 +40,7 @@ type ServiceAdapter struct {
 func NewMemberServiceAdapter(ctx context.Context, cache *Cache, logger *slog.Logger) *ServiceAdapter {
 	return &ServiceAdapter{
 		cache:  cache,
-		ctx:    memberAdapterContext(ctx),
+		ctx:    ctx,
 		logger: memberAdapterLogger(logger),
 	}
 }
@@ -95,17 +95,6 @@ func (a *ServiceAdapter) GetChannelIDs() []string {
 	return channelIDs
 }
 
-func (a *ServiceAdapter) GetAllMembers() []*domain.Member {
-	members, err := a.LoadAllMembers()
-	if err != nil {
-		a.logger.Warn("repository lookup failed in GetAllMembers", "error", err)
-
-		return nil
-	}
-
-	return members
-}
-
 func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 	if a == nil {
 		return nil, errors.New("member adapter is nil")
@@ -115,7 +104,7 @@ func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 		return nil, errors.New("member cache is nil")
 	}
 
-	members, err := a.cache.AllMembers(memberAdapterContext(a.ctx))
+	members, err := a.cache.AllMembers(a.ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -124,13 +113,9 @@ func (a *ServiceAdapter) LoadAllMembers() ([]*domain.Member, error) {
 }
 
 func (a *ServiceAdapter) WithContext(ctx context.Context) domain.MemberDataProvider {
-	if ctx == nil {
-		return a
-	}
-
 	return &ServiceAdapter{
 		cache:  a.cache,
-		ctx:    memberAdapterContext(ctx),
+		ctx:    ctx,
 		logger: memberAdapterLogger(a.logger),
 	}
 }
@@ -175,12 +160,21 @@ func (a *ServiceAdapter) FindMembersByAlias(alias string) []*domain.Member {
 	return cloneMemberSlice(matched)
 }
 
+// MemberMultiFinder(FindMembersByName/Alias)의 조회 원천이다. Finder 계약은 오류를 돌려주지 않으므로 다른 Find* 메서드처럼
+// cache 실패를 경고로 남기고 빈 결과를 쓴다. 전체 멤버가 필요한 호출자는 LoadAllMembers로 오류를 받는다.
 func (a *ServiceAdapter) searchableMembers() []*domain.Member {
 	if a == nil || a.cache == nil {
 		return []*domain.Member{}
 	}
 
-	return a.GetAllMembers()
+	members, err := a.LoadAllMembers()
+	if err != nil {
+		a.logger.Warn("cache lookup failed in searchableMembers", "error", err)
+
+		return nil
+	}
+
+	return members
 }
 
 func memberHasAlias(member *domain.Member, needle string) bool {
@@ -216,14 +210,6 @@ func cloneMemberSlice(in []*domain.Member) []*domain.Member {
 	copy(out, in)
 
 	return out
-}
-
-func memberAdapterContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-
-	return ctx
 }
 
 func memberAdapterLogger(logger *slog.Logger) *slog.Logger {

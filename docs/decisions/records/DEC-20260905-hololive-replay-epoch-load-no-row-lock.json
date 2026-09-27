@@ -16,7 +16,7 @@
     "hololive/hololive-dbtest/migrations_p1_test.go"
   ],
   "implementation": [
-    "hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/queries/replay_epoch_load.sql",
+    "hololive-bot@cdd8302036321430e2d325d27ae056c87b3ae503:hololive/hololive-alarm-worker/internal/egress/youtubedispatch/backfill/queries/replay_epoch_load.sql",
     "hololive/hololive-dbtest/migrations_p1_test.go"
   ],
   "supersedes": [],

@@ -22,6 +22,7 @@ package holodexprovider
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -219,6 +220,81 @@ func TestRetryScheduler_SkipAfterStopped(t *testing.T) {
 
 		if got := called.Load(); got != 0 {
 			t.Fatalf("callback should not execute after stop: got %d", got)
+		}
+	})
+}
+
+// 재시도는 예약한 요청이 끝난 뒤에 실행되므로 부모 ctx 취소가 재시도 ctx를 끝내면 안 된다.
+// 부모 ctx의 값(trace 등)은 그대로 전달되어야 한다.
+func TestRetryScheduler_ParentCancelDoesNotCancelRetry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		scheduler := newRetryScheduler(20*time.Millisecond, 50*time.Millisecond, 10, slog.Default())
+		defer scheduler.stop()
+
+		type traceKey struct{}
+
+		parent, cancelParent := context.WithCancel(context.WithValue(t.Context(), traceKey{}, "trace-1"))
+		done := make(chan struct{})
+
+		var (
+			fnErr   error
+			fnValue any
+		)
+
+		scheduler.schedule(parent, "k1", func(ctx context.Context) {
+			fnErr = ctx.Err()
+			fnValue = ctx.Value(traceKey{})
+
+			close(done)
+		})
+		cancelParent()
+
+		synctest.Sleep(20 * time.Millisecond)
+
+		select {
+		case <-done:
+		default:
+			t.Fatal("retry callback did not execute at delay")
+		}
+
+		if fnErr != nil {
+			t.Fatalf("retry ctx must stay valid after parent cancel: got %v", fnErr)
+		}
+
+		if fnValue != "trace-1" {
+			t.Fatalf("retry ctx must keep parent values: got %v", fnValue)
+		}
+	})
+}
+
+// stop()은 scheduler가 소유한 취소 수명(stopCh)을 닫아 실행 중인 재시도를 끝낸다.
+func TestRetryScheduler_Stop_CancelsExecutingContext(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		scheduler := newRetryScheduler(10*time.Millisecond, time.Hour, 10, slog.Default())
+		started := make(chan struct{})
+
+		var fnErr error
+
+		scheduler.schedule(t.Context(), "k1", func(ctx context.Context) {
+			close(started)
+
+			<-ctx.Done()
+
+			fnErr = ctx.Err()
+		})
+
+		synctest.Sleep(10 * time.Millisecond)
+
+		select {
+		case <-started:
+		default:
+			t.Fatal("retry callback did not start at delay")
+		}
+
+		scheduler.stop()
+
+		if !errors.Is(fnErr, context.Canceled) {
+			t.Fatalf("stop must cancel executing retry ctx: got %v", fnErr)
 		}
 	})
 }

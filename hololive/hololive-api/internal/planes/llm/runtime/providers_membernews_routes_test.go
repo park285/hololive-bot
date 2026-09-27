@@ -27,7 +27,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/park285/shared-go/v2/pkg/httputil"
@@ -40,6 +39,7 @@ import (
 	"github.com/kapu/hololive-shared/pkg/contracts/common"
 	membernewscontracts "github.com/kapu/hololive-shared/pkg/contracts/membernews"
 	sharedserver "github.com/kapu/hololive-shared/pkg/server/httpserver"
+	cachemocks "github.com/kapu/hololive-shared/pkg/service/cache/mocks"
 	"github.com/kapu/hololive-shared/pkg/service/database"
 	"github.com/kapu/hololive-shared/pkg/service/delivery"
 )
@@ -63,31 +63,25 @@ func TestBuildDeliveryModuleAndTriggerProviders(t *testing.T) {
 
 	logger := sharedlogging.NewTestLogger()
 
-	module, err := BuildDeliveryModule(nil, postgres, logger)
+	module, err := BuildDeliveryModule(cachemocks.NewLenientClient(), postgres, logger)
 	require.NoError(t, err)
 	require.NotNil(t, module)
 	require.NotNil(t, module.Repository)
-
-	locker := module.Locker
-	require.NotNil(t, locker)
-
-	token, acquired, err := locker.TryAcquire(t.Context(), "test-lock", time.Second)
-	require.NoError(t, err)
-	assert.True(t, acquired)
-	assert.Empty(t, token)
+	require.NotNil(t, module.Locker)
 
 	triggerHandler := sharedserver.NewTriggerHandler(nil, nil, nil, logger)
 	require.NotNil(t, triggerHandler)
 }
 
-func TestBuildDeliveryModuleRejectsInvalidHandoffMode(t *testing.T) {
-	t.Setenv(deliveryOutboxV3HandoffModeEnv, "dual-write")
+// cache가 없으면 dedup 없는 noop locker로 내려가지 않고 기동이 실패한다.
+func TestBuildDeliveryModuleRejectsNilCache(t *testing.T) {
+	t.Parallel()
 
 	module, err := BuildDeliveryModule(nil, &fakePostgresClient{}, sharedlogging.NewTestLogger())
 
 	require.Error(t, err)
 	assert.Nil(t, module)
-	assert.Contains(t, err.Error(), "unsupported mode")
+	assert.Contains(t, err.Error(), "cache is nil")
 }
 
 func TestConvertMemberNewsDigest(t *testing.T) {

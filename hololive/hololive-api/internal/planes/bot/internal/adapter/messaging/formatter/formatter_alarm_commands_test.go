@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kapu/hololive-shared/pkg/domain"
-	"github.com/kapu/hololive-shared/pkg/service/messagestrings"
 )
 
 func TestAlarmFormatters_CommandPaths(t *testing.T) {
@@ -108,14 +107,14 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	t.Parallel()
 
 	formatter := NewResponseFormatter("!", setupFormatterTestRenderer(t, map[domain.TemplateKey]string{}), WithMessageStrings(setupFormatterTestStore(t)))
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmRemoved(t.Context(), "미코", true))
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAlarmCleared(t.Context(), 1))
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
+	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmAdded(t.Context(), "미코", true, nil))
+	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmRemoved(t.Context(), "미코", true))
+	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmList(t.Context(), []AlarmListEntry{{MemberName: "미코"}}))
+	assert.Equal(t, renderFailureMessage, formatter.FormatAlarmCleared(t.Context(), 1))
+	assert.Equal(t, renderFailureMessage, formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 1, Stream: &domain.Stream{ID: "yt", Title: "t", ChannelName: "c"}}))
 
 	fallbackLive := formatter.AlarmNotification(t.Context(), &domain.AlarmNotification{MinutesUntil: 0, Channel: &domain.Channel{Name: "미코"}, Stream: &domain.Stream{ID: "yt", Title: "제목", ChannelName: "미코"}})
-	assert.Equal(t, messagestrings.FallbackSentinel, fallbackLive)
+	assert.Equal(t, renderFailureMessage, fallbackLive)
 
 	assert.Nil(t, summarizeNextStreamInfo(nil))
 	assert.Nil(t, summarizeNextStreamInfo(&domain.NextStreamInfo{Status: domain.NextStreamStatusUpcoming}))
@@ -145,5 +144,5 @@ func TestAlarmFormatters_FallbackAndHelpers(t *testing.T) {
 	assert.Equal(t, "전체", formatter.formatAlarmTypesLabel(t.Context(), domain.AlarmTypes(domain.AllAlarmTypes)))
 	assert.Equal(t, "방송+쇼츠", formatter.formatAlarmTypesLabel(t.Context(), domain.AlarmTypes{domain.AlarmTypeLive, domain.AlarmTypeShorts}))
 
-	assert.Equal(t, messagestrings.FallbackSentinel, formatter.FormatAmbiguousMembers(t.Context(), []*domain.Member{{Name: "미코", Org: "Hololive"}, {Name: "미코", Org: "Nijisanji"}}, "알람 추가"))
+	assert.Equal(t, renderFailureMessage, formatter.FormatAmbiguousMembers(t.Context(), []*domain.Member{{Name: "미코", Org: "Hololive"}, {Name: "미코", Org: "Nijisanji"}}, "알람 추가"))
 }
