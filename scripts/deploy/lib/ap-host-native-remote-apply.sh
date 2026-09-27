@@ -33,7 +33,8 @@ normalize_runtime_payload_permissions() {
     \( -type d -o -type f \) -exec chmod a+rX -- {} +
 }
 
-test -r "$release_path_lib" "$po_apply_lib"
+test -r "$release_path_lib"
+test -r "$po_apply_lib"
 
 if ! getent group opc >/dev/null; then
   sudo -n groupadd --system opc
