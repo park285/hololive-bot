@@ -65,7 +65,7 @@ if [[ "$po_expected_presence" == present ]]; then
   po_validate_release "$current_link"
   systemctl is-active --quiet hololive-youtube-po.socket
   systemctl is-active --quiet hololive-youtube-po.service
-  sudo -n -u hololive "$current_link/po-sandbox/rootfs/app/bin/po-broker" --healthcheck --socket /run/hololive-youtube-po/worker.sock
+  po_wait_ready "$current_link"
   python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert (m["source_revision"],m["version"],m["go"]["goarch"]) == (open(sys.argv[2]).read().strip(),open(sys.argv[3]).read().strip(),"amd64")' \
     "$current_link/manifest.json" "$current_link/po-sandbox/revision" "$current_link/po-sandbox/version"
 else

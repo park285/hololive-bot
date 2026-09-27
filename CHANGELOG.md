@@ -8,6 +8,7 @@
 
 ## 미출시
 
+- native 완료 검사도 기존 bounded issuer 준비 대기를 사용해 SDK 기동 중의 단발 health 실패를 피합니다. 실제 5초 worker 기동에서 단발 검사는 2초에 실패하고 준비 대기는 성공했습니다. SDK 기동 deadline과 세대 교체 준비 deadline의 종료·정리 회귀를 추가하며 발급·upstream 예산은 변경하지 않습니다.
 - issuer의 신뢰된 SDK import를 서비스 준비 단계로 옮겨 첫 prepare의 8초 예산에서 분리합니다. worker의 `loaded` 전에는 health를 제공하지 않고 native 배포/복원도 준비를 기다립니다. SDK 기동은 30초, helper의 세대 교체 준비는 종료·재시작을 포함해 40초로 제한합니다. 준비 뒤 prepare부터 발급 15초를 적용하며 개별 요청 8초·시도 간격 300초·격리 상한은 유지합니다. CPU 제한 재현과 실제 세대 교체 smoke를 통과했으며 운영 자원 경합 전반의 해결을 보장하지는 않습니다.
 - PO 발급 실패 뒤 generation 정리 오류가 최초 원인을 덮어쓰던 진단 결함을 수정합니다. `last_error`와 `cleanup_error`를 분리하고, 새 발급 cycle에서 이전 오류를 초기화합니다. 요청·시간 상한과 재발급 간격은 변경하지 않습니다.
 - 구독 대상 동시 조회 회귀를 `testing/synctest`로 검증해 전체 빌드 부하에서 100ms goroutine 시작 제한이 실패하던 문제를 제거합니다. 두 조회의 동시 진행과 타입별 반환 대상 검증은 유지하고 DB fixture는 가상 시계 밖에서 관리합니다.

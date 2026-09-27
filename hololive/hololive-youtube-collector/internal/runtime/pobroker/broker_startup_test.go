@@ -2,6 +2,7 @@ package pobroker
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -90,6 +91,51 @@ func TestInvalidStartupFrameClosesListenerAndReapsWorker(t *testing.T) {
 	case <-broker.worker.done:
 	default:
 		t.Fatal("failed startup left the worker running")
+	}
+}
+
+func TestServeStartupDeadlineClosesListenerAndReapsWorker(t *testing.T) {
+	broker := New("revision", fakeNode(t, "silent-startup-node", "#!/bin/sh\nsleep 60\n"), "unused")
+
+	var config net.ListenConfig
+
+	listener, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+
+	go func() {
+		done <- broker.Serve(listener)
+
+		close(done)
+	}()
+
+	t.Cleanup(func() {
+		broker.retire()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("silent startup did not retire")
+		}
+	})
+
+	process := waitForStartedWorker(t, broker)
+
+	// 실제 30초 기동 deadline을 사용한다. 테스트용 가변 상한이나 runtime 분기는 추가하지 않는다.
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(40 * time.Second):
+		t.Fatal("silent worker exceeded the startup bound")
+	}
+
+	require.ErrorIs(t, listener.Close(), net.ErrClosed)
+
+	select {
+	case <-process.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed-out startup left the worker running")
 	}
 }
 

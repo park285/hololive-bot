@@ -79,6 +79,25 @@ test("generation acquisition waits for trusted SDK startup beyond three seconds"
   assert.equal(await client.freshGeneration(new AbortController().signal), "loaded-generation");
 });
 
+test("generation acquisition stops when worker readiness exhausts its bound", { timeout: 10_000 }, async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(AbortSignal, "timeout", (ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+  const entered = Promise.withResolvers();
+  const stopped = new AbortController();
+  t.after(() => stopped.abort());
+  const client = await brokerServer(t, (req) => { req.resume(); entered.resolve(); });
+  const rejected = assert.rejects(client.freshGeneration(stopped.signal), { code: "broker_unavailable" });
+  await entered.promise;
+  t.mock.timers.tick(40_000);
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(50);
+  await rejected;
+});
+
 for (const [name, mutation] of [
   ["another generation", { generation: "new-generation" }],
   ["another video", { video_id: "different-video" }],

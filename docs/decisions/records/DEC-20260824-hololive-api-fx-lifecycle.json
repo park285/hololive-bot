@@ -17,7 +17,7 @@
     "hololive/hololive-api/internal/fxapp/lifecycle_test.go",
     "hololive/hololive-api/internal/fxapp/runner_test.go",
     "hololive/hololive-api/internal/fxapp/supervisor_test.go",
-    "internal/workspace/testdata/entrypoint_contracts.json"
+    "hololive-bot@8c86146a803e14fef5c255ed261fa7d84693c43a:internal/workspace/testdata/entrypoint_contracts.json"
   ],
   "implementation": [
     "docs/current/runbooks/hololive-api.md",
