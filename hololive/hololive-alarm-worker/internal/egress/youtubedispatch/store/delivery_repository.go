@@ -95,7 +95,7 @@ func (r *DeliveryRepository) FindPendingOutboxIDsForAggregateSync(ctx context.Co
 
 	var outboxIDs []int64
 
-	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), domain.OutboxStatusPending, domain.OutboxStatusPending, DeliveryStatusSending, batchSize); err != nil {
+	if err := deliverysql.SelectDeliverySQL(ctx, r.db, &outboxIDs, "find pending outbox ids for aggregate sync", mustSQL("delivery_repository_0373_10.sql"), batchSize); err != nil {
 		return nil, fmt.Errorf("find pending outbox ids for aggregate sync: %w", err)
 	}
 

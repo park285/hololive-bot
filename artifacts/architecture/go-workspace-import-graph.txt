@@ -829,8 +829,6 @@ github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/pgxutil
 github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/service/alarm/dispatchoutbox
 github.com/kapu/hololive-dbtest -> github.com/kapu/hololive-shared/pkg/sqlsplit
 github.com/kapu/hololive-dbtest -> github.com/park285/shared-go/v2/pkg/retry
-github.com/kapu/hololive-shared/internal/service/alarmread -> github.com/kapu/hololive-shared/internal/service/alarmread
-github.com/kapu/hololive-shared/internal/service/alarmread -> github.com/kapu/hololive-shared/pkg/domain
 github.com/kapu/hololive-shared/internal/service/fallback -> github.com/park285/shared-go/v2/pkg/panicguard
 github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/internal/service/holodex/provider/apiclient -> github.com/kapu/hololive-shared/pkg/constants
@@ -939,13 +937,11 @@ github.com/kapu/hololive-shared/pkg/domain -> github.com/kapu/hololive-shared/pk
 github.com/kapu/hololive-shared/pkg/domain/mekparkhost/cmd/classify-titles -> github.com/kapu/hololive-shared/pkg/domain/mekparkhost
 github.com/kapu/hololive-shared/pkg/observability -> github.com/park285/shared-go/v2/pkg/logging
 github.com/kapu/hololive-shared/pkg/observability -> github.com/park285/shared-go/v2/pkg/telemetry
-github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/internal/service/alarmread
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/internal/service/holodex/provider/htmlscraper
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/internal/service/youtube/livestatus
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/config/settings
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/constants
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/domain
-github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/alarm
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/cache/mocks
 github.com/kapu/hololive-shared/pkg/providers -> github.com/kapu/hololive-shared/pkg/service/database

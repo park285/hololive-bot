@@ -193,7 +193,6 @@ hololive/hololive-shared/pkg/observability/runtime.go
 hololive/hololive-shared/pkg/pgxutil/rollback.go
 hololive/hololive-shared/pkg/privacylog/cachekey.go
 hololive/hololive-shared/pkg/privacylog/privacylog.go
-hololive/hololive-shared/pkg/providers/alarm_reader_provider.go
 hololive/hololive-shared/pkg/providers/helpers.go
 hololive/hololive-shared/pkg/providers/holodex_provider.go
 hololive/hololive-shared/pkg/providers/infra_providers.go
@@ -250,7 +249,6 @@ hololive/hololive-shared/pkg/service/alarm/queries/repository_0117_05.sql
 hololive/hololive-shared/pkg/service/alarm/queries/repository_0134_06.sql
 hololive/hololive-shared/pkg/service/alarm/queries/repository_0155_07.sql
 hololive/hololive-shared/pkg/service/alarm/queries/repository_0191_08.sql
-hololive/hololive-shared/pkg/service/alarm/queries/repository_0207_09.sql
 hololive/hololive-shared/pkg/service/alarm/queries/repository_0231_10.sql
 hololive/hololive-shared/pkg/service/alarm/queries/repository_rooms_0009_01.sql
 hololive/hololive-shared/pkg/service/alarm/queries/targets_0188_01.sql
@@ -260,7 +258,6 @@ hololive/hololive-shared/pkg/service/alarm/repository_targets.go
 hololive/hololive-shared/pkg/service/alarm/routes.go
 hololive/hololive-shared/pkg/service/alarm/sql.go
 hololive/hololive-shared/pkg/service/alarm/targets.go
-hololive/hololive-shared/internal/service/alarmread/reader.go
 hololive/hololive-shared/pkg/service/cache/connection.go
 hololive/hololive-shared/pkg/service/cache/errors.go
 hololive/hololive-shared/pkg/service/cache/hash.go

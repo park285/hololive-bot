@@ -444,7 +444,9 @@ func (s alarmDispatchMaintenancePgxStore) DeleteTerminal(
 		return 0, fmt.Errorf("unsupported alarm dispatch retention status: %s", status)
 	}
 
-	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column)
+	// picked CTE는 행을 잠그지 않고 EvalPlanQual 때 다시 계산되지 않습니다. 바깥 DELETE가 status와
+	// 보존 시각을 다시 검사해야 대기 중에 requeue로 commit된 행을 최신 버전 기준으로 건너뜁니다.
+	query := fmt.Sprintf(mustSQL("alarm_dispatch_maintenance_0348_04.sql"), column, column, column)
 
 	tag, err := s.db.Exec(ctx, query, string(status), retentionDays, clampAlarmDispatchRetentionLimit(limit))
 	if err != nil {

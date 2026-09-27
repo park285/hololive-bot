@@ -26,7 +26,11 @@ X 스페이스 시작은 `source_kind=x_space`와 `x_space` payload로 저장한
 
 - HTTP consumers: `hololive-api` (bot + admin-plane facade paths)
 - Queue consumer: `alarm-worker`.
-- `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 `alarmread.Reader`(`GetAllChannelIDs`, `LoadAll`)로만 읽습니다. `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 collector/API YouTube plane에 직접 주입하지 않으며, `check-repository-ownership.sh`가 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
+- `alarm_state` read consumer: `hololive-api` — `alarms` 테이블을 다음 경로로 직접 읽습니다.
+  - YouTube plane: `internal/planes/youtube/runtime/queries/notification_channel_ids.sql`을 projection transaction 안에서 실행합니다. `members` JOIN으로 졸업 멤버를 제외하고 `MaxInputChannelCount+1`로 상한을 둡니다.
+  - llm plane membernews: `repository_query_0080_03.sql`이 방별 구독 멤버 이름을 읽습니다.
+  - bot/admin plane: `AlarmServiceURL`이 비어 있는 in-process alarm 모드에서만 `pkg/service/alarm.Repository`를 `AlarmService`에 직접 주입합니다. `AlarmServiceURL`이 있으면 `alarm.http`를 사용합니다.
+  - `pkg/service/alarm.Repository`는 `Add`/`Remove`/`ClearByRoom`을 함께 노출하므로 youtube-collector와 YouTube plane에는 주입하지 않습니다. `check-repository-ownership.sh`는 youtube-collector의 해당 import와 `alarm.NewRepository` 호출을 차단합니다.
 - Usage: alarm CRUD/query, next stream lookup, settings updates, dispatch delivery, YouTube outbox handoff
 
 ## Transport

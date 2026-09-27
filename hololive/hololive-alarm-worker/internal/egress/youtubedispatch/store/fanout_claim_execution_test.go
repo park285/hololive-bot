@@ -15,8 +15,16 @@ import (
 	"github.com/kapu/hololive-shared/pkg/service/youtube/outbox/deliverysql"
 )
 
+const (
+	planModeForceGeneric = "force_generic_plan"
+	planModeForceCustom  = "force_custom_plan"
+)
+
+// preparedPlanModes는 cache_statement exec mode에서 한 연결이 거칠 수 있는 두 계획 경로입니다.
+var preparedPlanModes = []string{planModeForceGeneric, planModeForceCustom}
+
 func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
-	for _, mode := range []string{"force_generic_plan", "force_custom_plan"} {
+	for _, mode := range preparedPlanModes {
 		t.Run(mode, func(t *testing.T) {
 			pool := dbtest.NewPool(t)
 			failedID := seedTransitionFanoutOutbox(t, pool, "video-sql-failed")
@@ -32,7 +40,7 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 			require.NoError(t, err)
 
 			id := seedTransitionFanoutOutbox(t, pool, "video-sql-plan")
-			tx := prepareFanoutSQLTest(t, pool, mode)
+			tx := preparePlanModeSQLTest(t, pool, mode, "fanout_sql_v2", "fanout_claim.sql")
 			at := time.Now().UTC().Truncate(time.Microsecond)
 
 			for _, rejected := range []any{domain.OutboxStatusFailed, domain.OutboxStatusSent, nil, "PENDING' OR 1=1 --"} {
@@ -40,12 +48,9 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 				require.Empty(t, rows)
 			}
 
-			var plan []byte
-
-			require.NoError(t, tx.QueryRow(t.Context(), `EXPLAIN (FORMAT JSON, COSTS ON)
+			logPreparedPlan(t, tx, mode+" fanout", `EXPLAIN (FORMAT JSON, COSTS ON)
 				EXECUTE fanout_sql_v2('PENDING', NOW() - INTERVAL '1 minute', NOW(),
-				NOW() - INTERVAL '1 hour', 1, NOW())`).Scan(&plan))
-			t.Logf("%s fanout plan: %s", mode, plan)
+				NOW() - INTERVAL '1 hour', 1, NOW())`)
 
 			claimed := runFanoutSQLTest(t, tx, domain.OutboxStatusPending, at)
 			require.Len(t, claimed, 1)
@@ -53,18 +58,7 @@ func TestFanoutSQLPreparedModesPreservePendingGuard(t *testing.T) {
 			require.NotNil(t, claimed[0].LockedAt)
 			require.Empty(t, runFanoutSQLTest(t, tx, domain.OutboxStatusPending, at))
 
-			var genericPlans, customPlans int64
-
-			require.NoError(t, tx.QueryRow(t.Context(), `SELECT generic_plans, custom_plans
-				FROM pg_prepared_statements WHERE name = 'fanout_sql_v2'`).Scan(&genericPlans, &customPlans))
-
-			if mode == "force_generic_plan" {
-				require.Positive(t, genericPlans)
-				require.Zero(t, customPlans)
-			} else {
-				require.Positive(t, customPlans)
-				require.Zero(t, genericPlans)
-			}
+			requirePreparedPlanMode(t, tx, "fanout_sql_v2", mode)
 		})
 	}
 }
@@ -78,7 +72,7 @@ func TestFanoutSQLSkipsLockedRowAndReclaimsAfterRollback(t *testing.T) {
 	transition := newTestTransitionStore(t, pool)
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
-	t.Cleanup(func() { rollbackFanoutSQLTest(t, tx) })
+	t.Cleanup(func() { rollbackPlanModeSQLTest(t, tx) })
 
 	var lockedID int64
 
@@ -102,12 +96,14 @@ func TestFanoutSQLSkipsLockedRowAndReclaimsAfterRollback(t *testing.T) {
 	require.Equal(t, firstID, claimed[0].ID)
 }
 
-func prepareFanoutSQLTest(t *testing.T, pool *pgxpool.Pool, mode string) pgx.Tx {
+// preparePlanModeSQLTest는 plan_cache_mode를 고정한 tx에서 SQL 자산을 named prepared statement로 준비합니다.
+// 운영 기본 exec mode(cache_statement)의 generic/custom plan 양쪽에서 상태 가드를 검증하는 데 씁니다.
+func preparePlanModeSQLTest(t *testing.T, pool *pgxpool.Pool, mode, name, sqlFile string) pgx.Tx {
 	t.Helper()
 
 	tx, err := pool.Begin(t.Context())
 	require.NoError(t, err)
-	t.Cleanup(func() { rollbackFanoutSQLTest(t, tx) })
+	t.Cleanup(func() { rollbackPlanModeSQLTest(t, tx) })
 
 	_, err = tx.Exec(t.Context(), `SELECT set_config('plan_cache_mode', $1, true)`, mode)
 	require.NoError(t, err)
@@ -115,18 +111,44 @@ func prepareFanoutSQLTest(t *testing.T, pool *pgxpool.Pool, mode string) pgx.Tx 
 	_, err = tx.Exec(t.Context(), `SET LOCAL statement_timeout = '5s'`)
 	require.NoError(t, err)
 
-	_, err = tx.Conn().Prepare(t.Context(), "fanout_sql_v2", mustSQL("fanout_claim.sql"))
+	_, err = tx.Conn().Prepare(t.Context(), name, mustSQL(sqlFile))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
 		defer cancel()
 
-		if err := tx.Conn().Deallocate(ctx, "fanout_sql_v2"); err != nil {
-			t.Errorf("deallocate fanout SQL test: %v", err)
+		if err := tx.Conn().Deallocate(ctx, name); err != nil {
+			t.Errorf("deallocate %s SQL test: %v", name, err)
 		}
 	})
 
 	return tx
+}
+
+func logPreparedPlan(t *testing.T, tx pgx.Tx, label, explain string) {
+	t.Helper()
+
+	var plan []byte
+
+	require.NoError(t, tx.QueryRow(t.Context(), explain).Scan(&plan))
+	t.Logf("%s plan: %s", label, plan)
+}
+
+func requirePreparedPlanMode(t *testing.T, tx pgx.Tx, name, mode string) {
+	t.Helper()
+
+	var genericPlans, customPlans int64
+
+	require.NoError(t, tx.QueryRow(t.Context(), `SELECT generic_plans, custom_plans
+		FROM pg_prepared_statements WHERE name = $1`, name).Scan(&genericPlans, &customPlans))
+
+	if mode == planModeForceGeneric {
+		require.Positive(t, genericPlans)
+		require.Zero(t, customPlans)
+	} else {
+		require.Positive(t, customPlans)
+		require.Zero(t, genericPlans)
+	}
 }
 
 func runFanoutSQLTest(t *testing.T, tx pgx.Tx, status any, at time.Time) []domain.YouTubeNotificationOutbox {
@@ -142,13 +164,13 @@ func runFanoutSQLTest(t *testing.T, tx pgx.Tx, status any, at time.Time) []domai
 	return claimed
 }
 
-func rollbackFanoutSQLTest(t *testing.T, tx pgx.Tx) {
+func rollbackPlanModeSQLTest(t *testing.T, tx pgx.Tx) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
 	defer cancel()
 
 	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-		t.Errorf("rollback fanout SQL test: %v", err)
+		t.Errorf("rollback plan mode SQL test: %v", err)
 	}
 }

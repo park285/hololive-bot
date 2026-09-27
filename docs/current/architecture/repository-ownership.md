@@ -11,7 +11,7 @@
 | `major_event_subscriptions` | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (admin/bot planes) | internal HTTP contract `majorevent.subscription` |
 | `membernews` state | `hololive-api` (llm plane) | `hololive-api` (llm plane) | `hololive-api` (bot plane) | internal HTTP contracts `membernews.subscription`, `membernews.digest` |
 | alarm queue state | `alarm-worker` | `alarm-worker` | `alarm-worker`, observability consumers | queue contract `alarm.dispatch` or documented API |
-| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `hololive-api`는 `alarmread.Reader` 계약(`ProvideAlarmReader`)으로만 읽는다 |
+| `alarm_state` (`alarms` table) | `alarm-worker` | `alarm-worker` | `hololive-api` | `alarm.state.read`: YouTube plane `notification_channel_ids.sql`, llm plane membernews read SQL, bot/admin plane in-process alarm 모드의 `pkg/service/alarm.Repository` |
 | YouTube outbox/tracking | `hololive-api` YouTube plane production, `alarm-worker` egress | `hololive-api` writes rows; `alarm-worker` writes delivery/terminal state | observability consumers | `hololive-api` writes notification intent, `alarm-worker` owns final send state |
 
 Structured allowlist: `repository-ownership.allowlist`.
@@ -28,7 +28,7 @@ Structured allowlist: `repository-ownership.allowlist`.
 - The `hololive-api` bot plane must not import `hololive-alarm-worker/internal`; cross-runtime access uses documented internal HTTP/queue contracts.
 - `shared-go` must not import any `hololive/*` module.
 - The `hololive-api` bot and admin planes must not import major event repository/storage internals directly; they use documented internal HTTP contracts.
-- `youtube-collector` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 read 소비자는 `internal/service/alarmread`의 `Reader`를 `pkg/providers.ProvideAlarmReader`로 주입받는다. `pkg/service/alarm/keys`는 제외 대상이 아니다.
+- `youtube-collector` must not import `pkg/service/alarm` or call `alarm.NewRepository`; `Repository`는 `Add`/`Remove`/`ClearByRoom` write 메서드를 함께 노출하므로 alarms를 읽어야 하는 read 전용 경로는 소유 plane의 SQL asset으로 직접 읽는다(예: YouTube plane `notification_channel_ids.sql`). `pkg/service/alarm/keys`는 제외 대상이 아니다.
 - Shared data ownership changes must update `repository-ownership.allowlist`.
 
 ## YouTube Runtime Role Separation
